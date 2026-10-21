@@ -28,7 +28,9 @@ fn object(s: &str, b: &mut Builder) -> Option<Sel> {
         return Some(b.it.clone());
     }
     // "that creature": the trigger's object.
-    if s == "that creature" && matches!(b.it, Sel::TriggerObject) {
+    if s.strip_prefix("that ").is_some_and(|n| !n.contains(' ') && n != "player")
+        && matches!(b.it, Sel::TriggerObject)
+    {
         return Some(Sel::TriggerObject);
     }
     // "another target creature with the same controller": a different object than the
@@ -113,7 +115,10 @@ fn move_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(Effect::seq(vec![
         Effect::Choose {
             who: PlayerRef::You,
-            kind: ChoiceKind::Number { min: 0, max: 1000 },
+            kind: ChoiceKind::Number {
+                min: 0,
+                max: crate::choices::MAX_CHOSEN_NUMBER,
+            },
         },
         mv,
     ]))
@@ -220,7 +225,10 @@ fn move_group(
         Effect::seq(vec![
             Effect::Choose {
                 who: PlayerRef::You,
-                kind: ChoiceKind::Number { min: 0, max: 1000 },
+                kind: ChoiceKind::Number {
+                min: 0,
+                max: crate::choices::MAX_CHOSEN_NUMBER,
+            },
             },
             mv,
         ])

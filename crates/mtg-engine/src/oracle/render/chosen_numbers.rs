@@ -9,10 +9,10 @@ use super::*;
 use crate::choices::{HIGHEST_NUMBER, LOWEST_NUMBER, NUMBERS_MATCH, OWN_NUMBER};
 
 impl Renderer<'_> {
-    /// "a number" (any number 0 or greater, capped by the engine at 1000), "a number
+    /// "a number" (any number 0 or greater, capped by the engine), "a number
     /// greater than 0", "1, 2, or 3".
     pub(crate) fn number_choice(&mut self, min: i32, max: i32) -> String {
-        if max == 1000 {
+        if max == crate::choices::MAX_CHOSEN_NUMBER {
             return match min {
                 0 => "{alt:a number|a number 0 or greater}".into(),
                 n => format!(

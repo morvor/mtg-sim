@@ -66,7 +66,7 @@ impl Renderer<'_> {
         } else {
             "library"
         };
-        let whose = match &s.whose {
+        let whose = match &s.player {
             Some(p) => {
                 let p = self.player(p, Case::Poss);
                 format!("{p} {zones}")
@@ -82,7 +82,11 @@ impl Renderer<'_> {
         let mut used = 2;
         // "..., then that player shuffles": the player whose library was searched.
         if let Some(Effect::Shuffle { who }) = v.get(i + 2) {
-            if format!("{who:?}") == format!("{:?}", s.player()) {
+            let player = s
+                .player
+                .clone()
+                .unwrap_or_else(|| PlayerRef::ControllerOf(Box::new(s.object.clone())));
+            if format!("{who:?}") == format!("{player:?}") {
                 out.push_str("{alt:. then that player shuffles|, then that player shuffles}");
                 used = 3;
             }

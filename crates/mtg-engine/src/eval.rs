@@ -102,6 +102,9 @@ pub struct EntryMods {
     pub on_entry: Vec<Effect>,
     /// Modifications to its copiable values ([`Effect::EnterAs`], CR 707.2).
     pub copiable: Vec<Modification>,
+    /// It enters as a copy of this object (CR 707.9), chosen by the effect.
+    #[serde(default)]
+    pub copy_of: Option<ObjectId>,
 }
 
 impl Ctx {
@@ -894,8 +897,14 @@ impl Game {
             // CR 700.9: counters, being equipped (by anyone's Equipment), or being
             // enchanted by an Aura its controller controls.
             Filter::Modified => {
+                // A permanent that left the battlefield: as it last existed there, with the
+                // permanents attached to it then (CR 608.2h).
+                let attached = match o.left_battlefield.as_deref() {
+                    Some(l) if o.next.is_some() => l.attachments.clone(),
+                    _ => self.attachments_of(Entity::Object(id)),
+                };
                 o.counters.values().any(|n| *n > 0)
-                    || self.attachments_of(Entity::Object(id)).iter().any(|a| {
+                    || attached.iter().any(|a| {
                         let ao = self.obj(*a);
                         ao.chars.has_subtype("Equipment")
                             || (ao.controller == o.controller && ao.chars.has_subtype("Aura"))
@@ -1485,6 +1494,9 @@ impl Game {
                             .count() as i64;
                     }
                 }
+                if !colors.is_colorless() {
+                    n += crate::game_terms::devotion_bonus(self, ctx.controller);
+                }
                 n
             }
             Value::Domain => {
@@ -1679,6 +1691,14 @@ impl Game {
                     (n + d - 1).div_euclid(d)
                 } else {
                     n.div_euclid(d)
+                }
+            }
+            Value::DivBy(a, d) => {
+                let d = self.eval_value(d, ctx);
+                if d <= 0 {
+                    0
+                } else {
+                    self.eval_value(a, ctx).div_euclid(d)
                 }
             }
             Value::Min(a, b) => self.eval_value(a, ctx).min(self.eval_value(b, ctx)),

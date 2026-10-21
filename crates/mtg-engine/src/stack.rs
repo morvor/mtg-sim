@@ -835,6 +835,11 @@ impl Game {
                 continue;
             }
             let mut cands = self.legal_target_candidates(spec, ctx, stack_obj);
+            // CR 801.5a: another player choosing the targets chooses among those within
+            // their own range of influence too.
+            if chooser != ctx.controller {
+                cands.retain(|c| crate::multiplayer::range::entity_in_range(self, chooser, *c));
+            }
             // "another target": exclude entities chosen in the listed slots.
             for d in &spec.distinct_from {
                 if let Some(prev) = out.get(*d as usize) {
@@ -931,6 +936,7 @@ impl Game {
                 // "target ... chosen at random": nobody chooses.
                 use rand::seq::SliceRandom;
                 let mut v = cands.clone();
+                self.sort_apnap(&mut v);
                 v.shuffle(&mut self.rng);
                 v.truncate(max as usize);
                 v
@@ -962,7 +968,11 @@ impl Game {
             };
             out[i] = match &spec.together {
                 Some(grp) => {
-                    crate::target_groups::fit(self, grp, picked, &cands, min as usize, ctx)?
+                    // Targets that don't go together are replaced by a group found among
+                    // the candidates in an order that doesn't depend on seats.
+                    let mut ordered = cands.clone();
+                    self.sort_apnap(&mut ordered);
+                    crate::target_groups::fit(self, grp, picked, &ordered, min as usize, ctx)?
                 }
                 None => picked,
             };
@@ -1308,7 +1318,7 @@ impl Game {
             }
         }
         let (chosen, all_illegal) = self.recheck_targets(id, &body, &ctx);
-        if all_illegal {
+        if all_illegal && !crate::kw::resolves_despite_illegal_targets(self, id, &body) {
             // CR 608.2b: doesn't resolve.
             self.remove_from_stack(id);
             self.state_triggers_active.remove(&(src, uid));
@@ -1691,7 +1701,7 @@ impl Game {
         if !self.is_live(id) || self.obj(id).zone != Zone::Stack {
             return false;
         }
-        if self.cant_be_countered(id) {
+        if self.cant_be_countered(id) || crate::kw::cant_be_countered_by(self, id, cause.obj) {
             return false;
         }
         self.counter_or_fizzle(id, MoveCause::Counter);

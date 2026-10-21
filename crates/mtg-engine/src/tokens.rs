@@ -52,6 +52,12 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
     }
 }
 
+/// Placeholder subtypes of a [`TokenSpec`]: the token's color, or a creature type, is the
+/// one chosen for the source of the effect creating it ("a 1/1 creature token of the
+/// chosen color and type").
+pub const CHOSEN_COLOR: &str = "\u{1}chosen color";
+pub const CHOSEN_TYPE: &str = "\u{1}chosen type";
+
 /// Characteristics of a token the resolving effect `ctx` creates from `spec`: a P/T given
 /// by values ("an X/X ... token, where X is ...") is determined now, once, and is part of
 /// the token's characteristics as created — its copiable values (CR 111.3, 107.3, 608.2h).
@@ -60,6 +66,45 @@ pub fn token_characteristics_in(
     spec: &TokenSpec,
     ctx: &crate::eval::Ctx,
 ) -> Characteristics {
+    // "a 1/1 creature token of the chosen color and type": the choices made for the
+    // source (CR 607.2d); an undefined choice gives none (CR 607.5a).
+    let resolved;
+    let spec = if spec
+        .subtypes
+        .iter()
+        .any(|t| t.as_str() == CHOSEN_COLOR || t.as_str() == CHOSEN_TYPE)
+    {
+        let choices = g.source_choices(ctx);
+        let own = ctx.source.map(|s| &g.obj(s).choices);
+        let color = choices
+            .and_then(|ch| ch.color)
+            .or_else(|| own.and_then(|ch| ch.color));
+        let creature_type = choices
+            .and_then(|ch| ch.creature_type.clone())
+            .or_else(|| own.and_then(|ch| ch.creature_type.clone()));
+        let mut s = spec.clone();
+        let mut subtypes = Vec::new();
+        for t in &spec.subtypes {
+            match t.as_str() {
+                CHOSEN_COLOR => {
+                    if let Some(c) = color {
+                        s.colors = ColorSet::from_iter([c]);
+                    }
+                }
+                CHOSEN_TYPE => {
+                    if let Some(ct) = creature_type.clone() {
+                        subtypes.push(ct);
+                    }
+                }
+                _ => subtypes.push(t.clone()),
+            }
+        }
+        s.subtypes = subtypes;
+        resolved = s;
+        &resolved
+    } else {
+        spec
+    };
     let mut chars = token_characteristics(spec);
     // "This token's power and toughness are each equal to the number of slime counters on
     // Gutter Grime": that specific object, the one creating the token; as part of the

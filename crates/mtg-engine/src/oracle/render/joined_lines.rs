@@ -51,6 +51,12 @@ fn join_same_subject(a: &str, b: &str) -> Option<String> {
     if let (Some(x), Some(y)) = (a.strip_prefix(cause), b.strip_prefix(cause)) {
         return Some(format!("{cause}{x} or {y}."));
     }
+    // "You may spend white mana as though it were mana of any color. You may spend other
+    // mana only as though it were colorless mana." (one ability on the card: "other" is
+    // the mana the first sentence doesn't name).
+    if a.starts_with("You may spend ") && b.starts_with("You may spend other mana only ") {
+        return Some(format!("{a}. {b}."));
+    }
     let look = "You may look at ";
     if let (Some(x), Some(y)) = (
         a.strip_prefix(look)

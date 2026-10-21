@@ -33,7 +33,10 @@ fn choose_number_or_greater(l: &str, _b: &mut Builder) -> Option<Effect> {
     };
     (end(r) == "or greater").then_some(Effect::Choose {
         who: PlayerRef::You,
-        kind: ChoiceKind::Number { min, max: 1000 },
+        kind: ChoiceKind::Number {
+            min,
+            max: crate::choices::MAX_CHOSEN_NUMBER,
+        },
     })
 }
 
@@ -56,7 +59,10 @@ fn hide_items(l: &str, _b: &mut Builder) -> Option<Effect> {
                 Effect::Custom(SmolStr::new(SECRET_NEXT)),
                 Effect::Choose {
                     who: PlayerRef::You,
-                    kind: ChoiceKind::Number { min: 1, max: 1000 },
+                    kind: ChoiceKind::Number {
+                        min: 1,
+                        max: crate::choices::MAX_CHOSEN_NUMBER,
+                    },
                 },
             ])),
         }),

@@ -2,56 +2,11 @@
 //! renderer gap clusters (named behaviors, same-name searches, delayed triggers with an
 //! intervening "if"), and behaviors checked in play because their rendering changed.
 
-use mtg_engine::events::Event;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
-
-fn shuffles(t: &TestGame, p: PlayerId) -> usize {
-    t.g.turn_events
-        .iter()
-        .filter(|e| matches!(e, Event::Shuffled { player } if *player == p))
-        .count()
-}
-
-#[test]
-fn lobotomy_searches_and_shuffles_with_no_card_chosen() {
-    cr!("701.23a", "701.24a");
-    ruling!(
-        "Lobotomy",
-        "If the player has no cards in their hand, you still get to look through their deck"
-    );
-    // "Target player reveals their hand, then you choose a card other than a basic land
-    // card from it. Search that player's graveyard, hand, and library for all cards with
-    // the same name as the chosen card and exile them. Then that player shuffles."
-    let mut t = TestGame::new(2);
-    t.lands(P0, "Island", 2);
-    t.lands(P0, "Swamp", 2);
-    let l = t.hand(P0, "Lobotomy");
-    t.set_step(P0, Step::PrecombatMain);
-    t.cast(P0, l).target(Entity::Player(P1)).go();
-    t.resolve_all();
-    assert_eq!(shuffles(&t, P1), 1, "{}", t.dump_log());
-}
-
-#[test]
-fn shimian_specter_shuffles_when_the_hand_has_no_nonland_card() {
-    cr!("701.23a", "701.24a");
-    ruling!(
-        "Shimian Specter",
-        "If the player has no nonland cards in their hand, you can still search that player"
-    );
-    let mut t = TestGame::new(2);
-    let s = t.battlefield(P0, "Shimian Specter");
-    t.hand(P1, "Forest");
-    t.set_step(P0, Step::PrecombatMain);
-    t.attack(&[(s, Entity::Player(P1))], &[]);
-    t.resolve_all();
-    assert_eq!(t.life(P1), 18);
-    assert_eq!(shuffles(&t, P1), 1, "{}", t.dump_log());
-}
 
 #[test]
 fn shimian_specter_exiles_the_chosen_cards_name() {

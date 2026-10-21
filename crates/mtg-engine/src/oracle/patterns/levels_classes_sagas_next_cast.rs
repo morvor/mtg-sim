@@ -85,7 +85,10 @@ fn p_copy_next_spell(l: &str, _b: &mut Builder) -> Option<Effect> {
     let spell = l
         .strip_prefix("copy the next ")?
         .strip_suffix(" you cast this turn when you cast it")?;
-    if !spell.ends_with("spell") || spell.contains(" or activate ") {
+    // "the next instant or sorcery spell with mana value 2 or less" (Sea Gate Stormcaller).
+    if !(spell.ends_with("spell") || spell.contains(" spell with "))
+        || spell.contains(" or activate ")
+    {
         return None;
     }
     let article = if spell.starts_with(['a', 'e', 'i', 'o', 'u']) {
@@ -132,8 +135,7 @@ fn spell_next_cast_line(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
     }
     let text = block.trim();
     let lower = text.to_lowercase();
-    if !lower.starts_with("when you next cast ") && !lower.starts_with("when you cast your next ")
-    {
+    if !lower.starts_with("when you next cast ") && !lower.starts_with("when you cast your next ") {
         return None;
     }
     let body = crate::oracle::effects::parse_body(text, ctx)?;
@@ -162,7 +164,9 @@ fn p_spell_enters_with_counters(l: &str, b: &mut Builder) -> Option<Effect> {
             let (n, x) = parse_number(r)?;
             // "X additional +1/+1 counters, where X is ..." (the value locked in as the
             // ability resolves, see `prevention::lock_def`).
-            if n.as_const().is_none() && !(matches!(n, Value::X) && super::value_grammar::x_defined()) {
+            if n.as_const().is_none()
+                && !(matches!(n, Value::X) && super::value_grammar::x_defined())
+            {
                 return None;
             }
             (n, x.trim_start().strip_prefix("additional ")?)
@@ -240,9 +244,7 @@ fn f_next_cast_new_targets(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool
     // "If you do, when you next cast ...": the delayed trigger inside the conditional.
     let last = match last_effect_mut(prev) {
         Some(Effect::If {
-            then,
-            otherwise,
-            ..
+            then, otherwise, ..
         }) if matches!(**otherwise, Effect::Noop) => last_effect_mut(then),
         other => other,
     };

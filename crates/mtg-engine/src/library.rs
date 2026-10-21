@@ -141,6 +141,9 @@ pub fn search(
     }
     // CR 701.23f: an effect may replace searching the library with searching its top
     // cards.
+    if searcher == owner {
+        crate::kw::searching_library(g, searcher);
+    }
     let portion = crate::search_rules::portion(g, searcher, owner).unwrap_or(usize::MAX);
     let cands: Vec<ObjectId> = g
         .player(owner)

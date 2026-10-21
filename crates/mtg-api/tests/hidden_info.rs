@@ -366,3 +366,135 @@ fn every_players_mana_pool_is_public() {
     let obs = observe(&t.g, Some(P0));
     assert_eq!(obs.players[1].mana_pool.get("R"), Some(&1));
 }
+
+#[test]
+fn other_players_dont_see_the_order_of_cards_put_on_the_bottom() {
+    cr!("401.2", "701.20a");
+    ruling!(
+        "Sages of the Anima",
+        "Other players don’t get to see the order that you put the cards on the bottom of your library."
+    );
+    // Sages of the Anima: "If you would draw a card, instead reveal the top three cards of
+    // your library. Put all creature cards revealed this way into your hand and the rest
+    // on the bottom of your library in any order."
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    t.battlefield(P0, "Sages of the Anima");
+    t.g.players[0].library.clear();
+    for name in ["Wastes", "Forest", "Plains", "Swamp", "Island"] {
+        t.library_top(P0, name);
+    }
+    let before = t.g.event_feed.len();
+    let asked = t.asked().len();
+    t.g.draw_cards(P0, 1);
+    t.g.flush_events();
+    t.settle();
+    // Island, Swamp and Plains were revealed (everyone saw them) and put on the bottom in
+    // an order P0 chose.
+    let order: Vec<_> = t.asked()[asked..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::Order { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(order, vec![P0]);
+    let all = observe(&t.g, None);
+    let bottom: Vec<_> = all.players[0].library_known[2..]
+        .iter()
+        .map(|(_, v)| v.card.name.clone().unwrap_or_default())
+        .collect();
+    let mut sorted = bottom.clone();
+    sorted.sort();
+    assert_eq!(sorted, vec!["Island", "Plains", "Swamp"]);
+    // P1's observation shows no card of that library, and the event feed doesn't tell P1
+    // where in it each revealed card went.
+    let p1 = observe(&t.g, Some(P1));
+    assert_eq!(p1.players[0].library_count, 5);
+    assert!(
+        p1.players[0].library_known.is_empty(),
+        "{:?}",
+        p1.players[0].library_known
+    );
+    let events = t.g.event_feed.since(before);
+    for e in describe_events(&t.g, Some(P1), &events) {
+        assert!(
+            !e.text.contains("bottom") || !bottom.iter().any(|n| e.text.contains(n.as_str())),
+            "{e:?}"
+        );
+    }
+}
+
+/// P1's agent: when asked to choose objects, records how P0 and P1 each see the choices
+/// made for the permanents (`ObjectView::choices`), then chooses the first candidate.
+struct ChoiceSpy(std::sync::Arc<std::sync::Mutex<Vec<(PlayerId, Vec<String>)>>>);
+
+impl mtg_engine::decision::Agent for ChoiceSpy {
+    fn decide(
+        &mut self,
+        game: &mtg_engine::game::Game,
+        _player: PlayerId,
+        decision: &Decision,
+    ) -> mtg_engine::decision::Answer {
+        if let Decision::ChooseEntities { candidates, .. } = decision {
+            let mut seen = self.0.lock().unwrap();
+            for v in [P0, P1] {
+                let choices = observe(game, Some(v))
+                    .battlefield
+                    .into_iter()
+                    .flat_map(|o| o.choices)
+                    .collect();
+                seen.push((v, choices));
+            }
+            return mtg_engine::decision::Answer::Entities(vec![candidates[0]]);
+        }
+        mtg_engine::decision::Answer::Default
+    }
+}
+
+#[test]
+fn objects_chosen_secretly_are_hidden_from_the_other_player_until_revealed() {
+    cr!("101.4", "608.2c");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.set_agent(P1, Box::new(ChoiceSpy(seen.clone())));
+    // "you and target opponent each secretly choose a creature that player controls":
+    // P0 chooses the Giant, then P1 (the spy) chooses.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let malik = t.enter(P0, "Malik, Grim Manipulator");
+    t.resolve_all();
+    let seen = seen.lock().unwrap().clone();
+    // While P1 chooses, P0 sees its own choice; P1 sees only that P0 chose.
+    assert_eq!(
+        seen,
+        vec![
+            (P0, vec!["P0 chose Hill Giant".to_string()]),
+            (P1, vec!["P0 chose secretly".to_string()]),
+        ]
+    );
+    // Then the choices are revealed: everyone sees both, and both creatures were
+    // sacrificed.
+    let picked = if t.on_battlefield(bears) {
+        "Hill Giant"
+    } else {
+        "Grizzly Bears"
+    };
+    for v in [P0, P1] {
+        let choices = observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == malik.0)
+            .unwrap()
+            .choices;
+        assert_eq!(
+            choices,
+            vec![
+                "P0 chose Hill Giant".to_string(),
+                format!("P1 chose {picked}"),
+            ]
+        );
+    }
+    assert!(!t.on_battlefield(giant));
+}

@@ -1508,6 +1508,7 @@ impl Game {
                         .map(|_| EventInfo {
                             object: Some(*o),
                             amount,
+                            counter_kind: Some(k.clone()),
                             ..Default::default()
                         })
                         .collect()

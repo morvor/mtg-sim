@@ -702,6 +702,7 @@ impl Game {
                     self,
                     new_id,
                     copy_effect,
+                    m.etb.copy_of,
                     &m.etb.copy_extras,
                     &mut counters_to_add,
                 );
@@ -995,8 +996,19 @@ impl Game {
         }
     }
 
+    /// Runs the instructions replacement effects left for after their modified events, in
+    /// the order they were queued: the order the effects were applied (interpretation
+    /// `rider-order`). Instructions queued while one runs come before the rest.
     pub(crate) fn run_post_replacement_effects(&mut self) {
-        while let Some((mut c, e)) = self.post_replacement_effects.pop() {
+        let mut batch = std::collections::VecDeque::new();
+        loop {
+            let queued = std::mem::take(&mut self.post_replacement_effects);
+            for item in queued.into_iter().rev() {
+                batch.push_front(item);
+            }
+            let Some((mut c, e)) = batch.pop_front() else {
+                break;
+            };
             if c.nums.remove(&crate::replacement::FOLLOW_IT).is_some() {
                 if let Some(v) = c.vars.get_mut(&vars::IT) {
                     for e in v.iter_mut() {
@@ -1590,6 +1602,10 @@ impl Game {
         {
             return k;
         }
+        // "[Counters] can't be removed from ..." (see `kw::counters_cant_be_removed`).
+        if crate::kw::counters_cant_be_removed(self, target, kind) {
+            return 0;
+        }
         let have = match target {
             // An object that has left its zone is a new object (CR 400.7); counters can't
             // be removed from its last known information.
@@ -1715,7 +1731,7 @@ impl Game {
         if !self.can_pay_life(p, n) {
             return false;
         }
-        if n > 0 {
+        if n > 0 && !crate::kw::pay_life_instead(self, p, n) {
             self.perform_lose_life(p, n);
             // "Whenever you pay life" (CR 119.4).
             self.emit(Event::Custom {

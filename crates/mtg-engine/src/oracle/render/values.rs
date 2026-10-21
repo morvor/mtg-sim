@@ -473,6 +473,11 @@ impl Renderer<'_> {
                 let r = if *up { "up" } else { "down" };
                 format!("{v} divided by {n}, rounded {r}")
             }
+            Value::DivBy(v, d) => {
+                let v = self.value(v);
+                let d = self.value(d);
+                format!("{v} divided evenly by {d}, rounded down")
+            }
             Value::Min(a, b) => {
                 let a = self.value(a);
                 let b = self.value(b);

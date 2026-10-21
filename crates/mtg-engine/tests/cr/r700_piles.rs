@@ -25,6 +25,7 @@ fn stack_library(t: &mut TestGame) -> Vec<ObjectId> {
 #[test]
 fn fact_or_fiction_separates_revealed_cards_into_two_piles() {
     cr!("700.3", "700.3a", "700.3b", "700.3c");
+    cr_example!("700.3c", "Fact or Fiction reads");
     supported("Fact or Fiction");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 4);

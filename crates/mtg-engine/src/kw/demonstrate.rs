@@ -61,6 +61,7 @@ impl KeywordRules for Demonstrate {
         if crate::copy::copy_spell(g, spell, you, true).is_none() {
             return true;
         }
+        crate::copy::additional_copies(g, spell, you);
         let opponents: Vec<Entity> = g
             .opponents(you)
             .into_iter()
@@ -77,7 +78,9 @@ impl KeywordRules for Demonstrate {
         );
         if let Some(Entity::Player(opp)) = chosen.first().copied() {
             g.log(|g| format!("{opp} copies {}", g.describe(spell)));
-            crate::copy::copy_spell(g, spell, opp, true);
+            if crate::copy::copy_spell(g, spell, opp, true).is_some() {
+                crate::copy::additional_copies(g, spell, opp);
+            }
         }
         true
     }
