@@ -158,6 +158,21 @@ fn ends_with_exiling_from_library(e: &Effect) -> bool {
     }
 }
 
+/// Whether the effect ends by exiling chosen or random cards face up ("exile three cards
+/// at random from your graveyard", "exile all opponents' graveyards"; they are
+/// `vars::IT`).
+fn ends_with_exiling_cards(e: &Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what: Sel::AtRandom { .. } | Sel::All(_) | Sel::Choose { .. },
+            face_down: false,
+            ..
+        } => true,
+        Effect::Seq(v) => v.last().is_some_and(ends_with_exiling_cards),
+        _ => ends_with_exiling_from_library(e),
+    }
+}
+
 /// The card chosen by "choose an instant or sorcery card exiled this way and copy it".
 const CHOSEN_EXILED: Var = vars::USER + 7356;
 
@@ -172,7 +187,12 @@ fn choose_exiled_and_copy_it(l: &str, prev: &mut Effect, _b: &mut Builder) -> bo
     else {
         return false;
     };
-    let Some((card, copy)) = r.split_once(" exiled this way and ") else {
+    // "Choose a noncreature, nonland card from among them and copy it." (Capricious
+    // Hellraiser): the cards just exiled.
+    let Some((card, copy)) = r
+        .split_once(" exiled this way and ")
+        .or_else(|| r.split_once(" from among them and "))
+    else {
         return false;
     };
     let times = match copy {
@@ -192,7 +212,7 @@ fn choose_exiled_and_copy_it(l: &str, prev: &mut Effect, _b: &mut Builder) -> bo
     let Some((f, false, tail)) = crate::oracle::phrases::parse_object_phrase(card) else {
         return false;
     };
-    if !end(tail).is_empty() || !ends_with_exiling_from_library(prev) {
+    if !end(tail).is_empty() || !ends_with_exiling_cards(prev) {
         return false;
     }
     let mut seq = vec![

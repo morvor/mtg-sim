@@ -61,7 +61,16 @@ fn look_at_top(l: &str, b: &mut Builder) -> Option<Effect> {
         // Or an X the ability defines (an X in its activation cost, "where X is ...").
         let spell_x = matches!(n, Value::X)
             && ((b.ctx.is_spell() && !b.in_trigger)
-                || super::value_grammar::x_defined());
+                || super::value_grammar::x_defined()
+                // "You may pay {X}. If you do, reveal the top X cards ...": the X paid.
+                || crate::oracle::raw_text().to_lowercase().contains("pay {x}. if you do, ")
+                // "When this creature enters, reveal the top X cards of your library." (a
+                // permanent's X is the X paid for it, CR 107.3m).
+                || (b.in_trigger
+                    && b.ctx.is_permanent()
+                    && ["enters, reveal the top x cards", "enters, look at the top x cards"]
+                        .iter()
+                        .any(|p| crate::oracle::raw_text().to_lowercase().contains(p))));
         if n.as_const().is_none() && !spell_x {
             return None;
         }

@@ -121,12 +121,13 @@ fn parse_counters_put(r: &str) -> Option<Parsed> {
         )
     };
     // "a counter is put on a creature you control" (Hollowmurk Siege): of any kind.
-    let (kind, rest) = if x.starts_with("counter is put on ") || x.starts_with("counters are put on ") {
-        (None, x)
-    } else {
-        let (k, r) = crate::oracle::costs::counter_kind(x)?;
-        (Some(k), r)
-    };
+    let (kind, rest) =
+        if x.starts_with("counter is put on ") || x.starts_with("counters are put on ") {
+            (None, x)
+        } else {
+            let (k, r) = crate::oracle::costs::counter_kind(x)?;
+            (Some(k), r)
+        };
     let rest = if plural {
         rest.strip_prefix("counters are put on ")?
     } else {
@@ -254,7 +255,14 @@ fn parse_conjunction(r: &str) -> Option<Parsed> {
             other => parts.push(other),
         }
     }
-    Some(merge(parts))
+    // "When ~ enters and whenever you expend 4, put a stash counter on it." (Hoarder's
+    // Overflow): "it" is the object the first condition names when the other names none.
+    let self_or_none = parts.iter().all(|p| matches!(p.1, Sel::This | Sel::None));
+    let mut merged = merge(parts);
+    if first.starts_with("~ ") && self_or_none && matches!(merged.1, Sel::None) {
+        merged.1 = Sel::This;
+    }
+    Some(merged)
 }
 
 fn is_batch(c: &TriggerCond) -> bool {

@@ -1455,6 +1455,7 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
                 .cloned()
                 .collect();
             let mut damaged: Vec<Entity> = Vec::new();
+            let mut players: Vec<Entity> = Vec::new();
             let mut total = 0i64;
             for ev in &mine {
                 if let Event::Damage {
@@ -1466,16 +1467,19 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
                 {
                     if srcs.contains(source) {
                         total += *amount as i64;
-                        if let Entity::Object(o) = target {
-                            if *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
-                                damaged.push(Entity::Object(*o));
-                            }
+                        let list = match target {
+                            Entity::Object(_) => &mut damaged,
+                            Entity::Player(_) => &mut players,
+                        };
+                        if *amount > 0 && !list.contains(target) {
+                            list.push(*target);
                         }
                     }
                 }
             }
             ctx.prev_affected = damaged.clone();
             ctx.set_var(vars::DAMAGED, damaged);
+            ctx.set_var(vars::DAMAGED_PLAYERS, players);
             ctx.prev_value = total;
             ctx.nums
                 .insert(vars::EXCESS, crate::excess_damage::excess_in(&mine));

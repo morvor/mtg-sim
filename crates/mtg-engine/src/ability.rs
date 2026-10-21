@@ -744,6 +744,10 @@ pub struct TargetSpec {
     pub distinct_from: Vec<u8>,
     /// "Divide N damage among any number of targets" (CR 601.2d).
     pub divide: Option<Value>,
+    /// With `divide`: "distribute up to N counters": the amount divided is chosen too,
+    /// from the number of targets up to N.
+    #[serde(default)]
+    pub divide_up_to: bool,
     /// Targets chosen by an opponent (CR 601.7).
     pub chosen_by_opponent: bool,
     /// Human-readable description ("target creature you control").
@@ -903,6 +907,7 @@ impl TargetSpec {
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
+            divide_up_to: false,
             chosen_by_opponent: false,
             text: text.into(),
             condition: None,
@@ -1019,6 +1024,12 @@ pub mod vars {
     /// Permanents the most recent phase-out instruction phased out, directly or
     /// indirectly (CR 702.26g): "each creature that phased out this way".
     pub const PHASED_OUT: Var = USER + 12_100;
+    /// Players dealt damage by the most recent damage effect ("if a player is dealt
+    /// damage this way", "the number of opponents dealt damage this way").
+    pub const DAMAGED_PLAYERS: Var = USER + 14_000;
+    /// Objects the most recent "becomes"/"gets" instruction (`Effect::Modify`) applied to
+    /// ("each artifact that became a creature this way").
+    pub const MODIFIED: Var = USER + 14_020;
 }
 
 /// Selects players and/or objects.
@@ -1940,6 +1951,8 @@ pub enum Among {
     /// Card types that are permanent types (CR 110.4a).
     PermanentTypes,
     CreatureTypes,
+    /// Planeswalker types (CR 205.3j) of planeswalkers.
+    PlaneswalkerTypes,
     /// Plains, Island, Swamp, Mountain, Forest (CR 205.3i).
     BasicLandTypes,
     Colors,

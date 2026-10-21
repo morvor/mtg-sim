@@ -1951,6 +1951,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         max,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent,
         text: String::new(),
         condition: None,

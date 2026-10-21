@@ -51,7 +51,10 @@ fn chooser(l: &str, b: &mut Builder) -> Option<Chooser> {
         pre: None,
         rest: rest.to_string(),
     };
-    if let Some(r) = l.strip_prefix("choose ").or_else(|| l.strip_prefix("you choose ")) {
+    if let Some(r) = l
+        .strip_prefix("choose ")
+        .or_else(|| l.strip_prefix("you choose "))
+    {
         return Some(simple(PlayerRef::You, r));
     }
     if let Some(r) = l.strip_prefix("an opponent chooses ") {
@@ -71,7 +74,10 @@ fn chooser(l: &str, b: &mut Builder) -> Option<Chooser> {
     }
     let each = matches!(
         who,
-        PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer | PlayerRef::Each(_)
+        PlayerRef::EachOpponent
+            | PlayerRef::EachPlayer
+            | PlayerRef::EachOtherPlayer
+            | PlayerRef::Each(_)
     );
     Some(Chooser {
         chooser: PlayerRef::Iterated,
@@ -104,10 +110,7 @@ fn head_word(phrase: &str) -> &'static str {
     if (phrase.contains(" and/or ") || phrase.contains(" or ")) && !phrase.contains("card") {
         return "permanent";
     }
-    let words: Vec<&str> = phrase
-        .split([' ', ','])
-        .filter(|w| !w.is_empty())
-        .collect();
+    let words: Vec<&str> = phrase.split([' ', ',']).filter(|w| !w.is_empty()).collect();
     for w in words.iter() {
         let w = w.trim_end_matches('s');
         match w {
@@ -117,7 +120,11 @@ fn head_word(phrase: &str) -> &'static str {
             }
             "land" if !words.contains(&"card") && !words.contains(&"cards") => return "land",
             "permanent" => return "permanent",
-            "artifact" if !words.iter().any(|x| x.starts_with("card") || x.starts_with("creature")) => {
+            "artifact"
+                if !words
+                    .iter()
+                    .any(|x| x.starts_with("card") || x.starts_with("creature")) =>
+            {
                 return "artifact"
             }
             _ => {}
@@ -131,11 +138,7 @@ fn head_word(phrase: &str) -> &'static str {
 }
 
 /// What may be chosen: the filter (with its zone), the head noun, and the rest.
-fn chosen_kind(
-    s: &str,
-    c: &Chooser,
-    b: &mut Builder,
-) -> Option<(Filter, &'static str, String)> {
+fn chosen_kind(s: &str, c: &Chooser, b: &mut Builder) -> Option<(Filter, &'static str, String)> {
     let subject = c.each.clone().unwrap_or_else(|| c.chooser.clone());
     // "one of them", "two of those cards".
     for p in [
@@ -160,14 +163,21 @@ fn chosen_kind(
     let probe = format!("a {}", s.trim_start());
     if let Some((cs, rest)) = cards(&probe, b, Some(&subject)) {
         // Cards you choose are the zone-move grammar's (`zone_move_grammar::p_choose_card`).
-        if cs.zone.is_some() && matches!(cs.qty, Qty::Exactly(_)) && !matches!(c.chooser, PlayerRef::You) {
+        if cs.zone.is_some()
+            && matches!(cs.qty, Qty::Exactly(_))
+            && !matches!(c.chooser, PlayerRef::You)
+        {
             let word = head_word(&s[..s.len() - rest.trim_start().len().min(s.len())]);
             let filter = if c.each.is_some() {
                 cs.filter
             } else {
                 cs.filter
             };
-            return Some((filter, if word == "permanent" { "card" } else { word }, rest));
+            return Some((
+                filter,
+                if word == "permanent" { "card" } else { word },
+                rest,
+            ));
         }
     }
     b.targets.truncate(saved.0);
@@ -201,7 +211,12 @@ fn chosen_kind(
 
 fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+    let saved = (
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.named.len(),
+    );
     let restore = |b: &mut Builder| {
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
@@ -241,6 +256,8 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         count
     };
+    let exactly = l.contains(" exactly ");
+    let count_value = count.clone();
     let choose = Sel::Choose {
         chooser: c.chooser.clone(),
         filter: filter.clone(),
@@ -264,6 +281,25 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
                     var: CHOSEN,
                     sel: Sel::Union(vec![Sel::Var(CHOSEN), choose]),
                 }),
+            });
+        }
+        // "Choose exactly two creatures you control": if there aren't that many, none
+        // are chosen (Spry and Mighty's ruling: the spell won't do anything).
+        None if exactly && !up_to => {
+            out.push(Effect::Store {
+                var: CHOSEN,
+                sel: choose,
+            });
+            out.push(Effect::Store {
+                var: CHOSEN,
+                sel: Sel::Matching(
+                    Box::new(Sel::Var(CHOSEN)),
+                    Filter::ValueCmp(
+                        Box::new(Value::CountSel(Box::new(Sel::Var(CHOSEN)))),
+                        Cmp::Ge,
+                        Box::new(count_value.clone()),
+                    ),
+                ),
             });
         }
         None => out.push(Effect::Store {
@@ -379,7 +415,9 @@ fn exclude_chosen(e: &mut Effect, drop_other: bool) -> bool {
             what: Sel::All(f), ..
         }
         | Effect::Tap { what: Sel::All(f) }
-        | Effect::PhaseOut { what: Sel::All(f), .. }
+        | Effect::PhaseOut {
+            what: Sel::All(f), ..
+        }
         | Effect::SacrificeObjects { what: Sel::All(f) } => {
             fix(f);
             true
@@ -538,7 +576,12 @@ fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
         let Some(k) = l.find(others) else { continue };
         let first = &l[..k];
         let second = format!("{verb}{}", &l[k + " and ".len()..]);
-        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+        let saved = (
+            b.targets.len(),
+            b.it.clone(),
+            b.it_player.clone(),
+            b.named.len(),
+        );
         let restore = |b: &mut Builder| {
             b.targets.truncate(saved.0);
             (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
@@ -562,11 +605,22 @@ fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
         return Some(Effect::seq(vec![a, c]));
     }
     // "... and return the other to the battlefield tapped": the second verb is given.
-    for others in [" and return the other ", " and put the other ", " and exile the other ", " and put the rest ", " and return the rest "] {
+    for others in [
+        " and return the other ",
+        " and put the other ",
+        " and exile the other ",
+        " and put the rest ",
+        " and return the rest ",
+    ] {
         let Some(k) = l.find(others) else { continue };
         let first = &l[..k];
         let second = &l[k + " and ".len()..];
-        let saved = (b.targets.len(), b.it.clone(), b.it_player.clone(), b.named.len());
+        let saved = (
+            b.targets.len(),
+            b.it.clone(),
+            b.it_player.clone(),
+            b.named.len(),
+        );
         let restore = |b: &mut Builder| {
             b.targets.truncate(saved.0);
             (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
@@ -608,9 +662,15 @@ fn continues_otherwise_choice(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
     if !ends_with_choice(otherwise) {
         return false;
     }
-    let mentions = ["the chosen ", "the rest", "the other", "those ", "that card"]
-        .iter()
-        .any(|m| l.contains(m));
+    let mentions = [
+        "the chosen ",
+        "the rest",
+        "the other",
+        "those ",
+        "that card",
+    ]
+    .iter()
+    .any(|m| l.contains(m));
     if !mentions {
         return false;
     }
