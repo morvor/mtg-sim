@@ -17,6 +17,8 @@ pub use crate::r_s01_common::{
 };
 pub use crate::r_s02_common::{can_activate, can_cast, destroy};
 pub use crate::r_s05_common::{enter, move_to, run_from};
+pub use crate::r_s06_common::give_control;
+pub use crate::r_s35_common::{creature_type_options, pick_options};
 pub use crate::r_s25_common::{cast_new, lands_for_cost};
 
 /// The damage dealt this turn by `source` (followed by id): (recipient, amount, combat).
@@ -82,4 +84,80 @@ pub fn graveyard_names(t: &TestGame, p: PlayerId) -> Vec<String> {
         .iter()
         .map(|c| t.g.obj(*c).chars.name.to_string())
         .collect()
+}
+
+/// Wraps `p`'s agent so that each "choose entities" decision whose candidates include some
+/// of `ids` is answered with those of `ids` among the candidates (followed by id); every
+/// other decision gets the scripted answer. The decisions are still logged.
+pub fn prefer(t: &mut TestGame, p: PlayerId, ids: &[ObjectId]) {
+    use mtg_engine::decision::{Agent, Answer, Decision};
+    struct Prefer {
+        inner: Box<dyn Agent>,
+        ids: Vec<ObjectId>,
+    }
+    impl Agent for Prefer {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            let scripted = self.inner.decide(g, p, d);
+            if let Decision::ChooseEntities { candidates, .. } = d {
+                let picked: Vec<Entity> = candidates
+                    .iter()
+                    .filter(|c| {
+                        self.ids
+                            .iter()
+                            .any(|i| Entity::Object(g.current(*i)) == **c)
+                    })
+                    .copied()
+                    .collect();
+                if !picked.is_empty() {
+                    return Answer::Entities(picked);
+                }
+            }
+            scripted
+        }
+    }
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(Prefer {
+        inner,
+        ids: ids.to_vec(),
+    });
+}
+
+/// Puts the real card `name` onto the battlefield tapped under `p`'s control through a
+/// real zone change, and settles.
+pub fn enter_tapped(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
+    use mtg_engine::object::Zone;
+    let id = t
+        .g
+        .create_card_object(mtg_engine::card::card(name), p, Zone::Nowhere);
+    let id = t
+        .g
+        .move_object_ev(mtg_engine::replacement::MoveEv {
+            obj: id,
+            to: Zone::Battlefield,
+            pos: mtg_engine::ability::LibraryPosition::Top,
+            cause: mtg_engine::events::MoveCause::Effect,
+            by: Some(p),
+            etb: mtg_engine::replacement::EtbInfo {
+                controller: Some(p),
+                tapped: true,
+                ..Default::default()
+            },
+            source: None,
+        })
+        .expect("failed to enter the battlefield");
+    t.g.flush_events();
+    t.settle();
+    id
+}
+
+/// Taps the permanent (as an effect would) and settles.
+pub fn tap(t: &mut TestGame, id: ObjectId) {
+    let id = t.g.current(id);
+    t.g.tap(id);
+    t.g.flush_events();
+    t.settle();
 }
