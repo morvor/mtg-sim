@@ -2,7 +2,7 @@
 
 /// `Event::Custom` name of a player investigating (CR 701.16a): "whenever you
 /// investigate".
-pub const INVESTIGATED: &str = "investigated";
+pub const INVESTIGATED: &str = "investigate";
 
 use crate::ability::*;
 use crate::eval::Ctx;

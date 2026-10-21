@@ -92,3 +92,33 @@ fn pure_intentions_returns_cards_an_opponent_made_you_discard_this_turn() {
         1
     );
 }
+
+#[test]
+fn font_of_agonies_counts_life_paid_not_life_lost() {
+    cr!("119.4", "603.2");
+    ruling!(
+        "Font of Agonies",
+        "If an effect allows you to choose to lose life or to be dealt damage without using the word “pay,” you’re not paying life."
+    );
+    supported("Font of Agonies");
+    let mut t = TestGame::new(2);
+    let font = t.battlefield(P0, "Font of Agonies");
+    // Paying life as a cost: Arid Mesa ({T}, Pay 1 life, Sacrifice it: search ...).
+    let mesa = t.battlefield(P0, "Arid Mesa");
+    t.activate(P0, mesa, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.counters(font, "blood"), 1);
+    // Losing life isn't paying it.
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    mana(&mut t, P1);
+    t.cast_with(P1, bolt, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 16);
+    assert_eq!(t.counters(font, "blood"), 1);
+    // That many: the amount paid.
+    assert!(t.g.pay_life(P0, 3));
+    t.resolve_all();
+    assert_eq!(t.counters(font, "blood"), 4);
+}

@@ -381,6 +381,8 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         // The result of the die roll (CR 706.4).
         | TriggerCond::RollDie(_)
         | TriggerCond::Batched { .. } => true,
+        // "Whenever you pay life, put that many blood counters on ~": the life paid.
+        TriggerCond::PlayerAction { name, .. } => name == crate::life_totals::PAID_LIFE,
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)
         | TriggerCond::Noncombat(trigger) => has_event_amount(trigger),

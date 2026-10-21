@@ -1699,6 +1699,13 @@ impl Game {
         }
         if n > 0 {
             self.perform_lose_life(p, n);
+            // "Whenever you pay life" (CR 119.4).
+            self.emit(Event::Custom {
+                name: crate::life_totals::PAID_LIFE.into(),
+                player: Some(p),
+                obj: None,
+                amount: n as i32,
+            });
         }
         true
     }

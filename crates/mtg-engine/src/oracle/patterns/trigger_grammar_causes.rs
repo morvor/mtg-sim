@@ -140,3 +140,24 @@ fn your_opponents_are_attacked(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)>
 }
 
 inventory::submit! { TriggerPattern { name: "one or more of your opponents are attacked", priority: 100, parse: your_opponents_are_attacked } }
+
+/// "Whenever you pay life" (Font of Agonies): paying life is a kind of losing life the
+/// word "pay" names (CR 119.4; Font of Agonies's rulings); "that many" is the amount paid.
+fn you_pay_life(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let who = match end(t) {
+        "you pay life" => PlayerRel::You,
+        "a player pays life" => PlayerRel::Any,
+        "an opponent pays life" => PlayerRel::Opponent,
+        _ => return None,
+    };
+    Some((
+        TriggerCond::PlayerAction {
+            name: crate::life_totals::PAID_LIFE.into(),
+            who,
+        },
+        Sel::None,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "whenever you pay life", priority: 100, parse: you_pay_life } }
