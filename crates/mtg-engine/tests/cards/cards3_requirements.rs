@@ -34,3 +34,25 @@ fn noctis_warp_strike_returns_attacking_and_unblockable_that_combat() {
     to_end_of_combat(&mut t);
     assert_eq!(t.life(P1), 18);
 }
+
+#[test]
+fn slicer_goes_to_the_opponent_goaded_and_unsacrificeable() {
+    cr!("701.15a");
+    supported("Slicer, Hired Muscle // Slicer, High-Speed Antagonist");
+    let mut t = TestGame::new(2);
+    let slicer = t.battlefield(P0, "Slicer, Hired Muscle // Slicer, High-Speed Antagonist");
+    t.g.objects[slicer.0 as usize].tapped = true;
+    t.set_step(P0, Step::End);
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    let o = t.g.obj(slicer);
+    assert_eq!(o.controller, P1);
+    assert!(!o.tapped);
+    assert!(t.g.goaders(slicer).contains(&P0));
+    assert!(t.g.cant_be_sacrificed(slicer));
+    // Back under P0's control next turn, and sacrificeable again.
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(t.g.obj(slicer).controller, P0);
+    assert!(!t.g.cant_be_sacrificed(slicer));
+}
