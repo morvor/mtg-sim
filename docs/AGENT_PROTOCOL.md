@@ -32,6 +32,34 @@ variable `MTG_AGENT_SEAT`). `--auto-pass` answers priority for external agents w
 can do nothing but pass (or activate mana abilities, or concede), which removes most
 requests. External agents work with `--deck` and `--random-decks`.
 
+## Which cards a game may use
+
+Games served to agents use only **verified** cards by default: cards that pass every
+check (every ability compiled, the Oracle round trip, every ability structure exercised
+by a test, and a clean every-card sweep; see `docs/CARD_COVERAGE.md`). Each card's tier
+(`unsupported` < `compiled` < `round-trip` < `verified`) and the checks it fails are in
+`docs/verified-cards.tsv` (`mtg_engine::card_tiers`). A card the file doesn't list counts
+as at most `compiled`, and a card that no longer compiles or round-trips drops at once.
+
+* `mtg-sim`: `--cards verified|round-trip|compiled` sets the bar for `--deck` files and the
+  default deck (default `verified`). A deck with a card below the bar is rejected before
+  the game starts (exit status 2), listing each such card and the checks it fails.
+  `--random-decks` keeps every fully supported card unless given `--cards`.
+* Rust: `ProtocolOptions::min_card_tier` (default `Tier::Verified`; `Tier::Compiled` lets
+  in any fully supported card, `Tier::Unsupported` checks nothing). `Session::start`
+  returns `Err(DeckError::BelowBar(..))` (per seat, each card with its tier and failed
+  checks) instead of starting a game; `Session::start_with_tiers` takes another tier
+  table. `mtg_api::decks::parse_decklist` reads "4 Lightning Bolt" decklists and
+  `mtg_api::decks::check_decks` checks decks against a bar.
+
+```rust
+let deck = mtg_api::decks::parse_decklist(&std::fs::read_to_string("deck.txt")?)?.main;
+let options = ProtocolOptions { min_card_tier: Tier::Compiled, ..Default::default() };
+let session = Session::start(GameConfig::default(), vec![deck.clone(), deck], seats, options)?;
+```
+
+The protocol's messages don't change: the bar is checked before the first request.
+
 ## Messages
 
 Every message is one line of JSON. The engine sends two kinds of messages, told apart
@@ -367,7 +395,8 @@ use mtg_engine::{GameConfig, PlayerId};
 
 let mut session = Session::start(GameConfig::default(), decks,
     vec![Seat::External, Seat::Agent(Box::new(mtg_engine::agents::RandomAgent::new(1)))],
-    ProtocolOptions::default());
+    ProtocolOptions::default())
+    .expect("every card verified");  // or lower ProtocolOptions::min_card_tier
 while let Some(request) = session.next() {
     // request.options, request.observation, request.events, request.error ...
     session.answer(PlayerId(request.seat), JsonAnswer::index(0)).unwrap();
@@ -375,8 +404,9 @@ while let Some(request) = session.next() {
 println!("{:?}", session.result());
 ```
 
-`session.answer_json(seat, line)` takes a line of JSON. `ProtocolOptions` sets the retry
-count (`max_retries`), `auto_pass`, whether requests carry the observation and events,
+`session.answer_json(seat, line)` takes a line of JSON. `ProtocolOptions` sets the lowest
+card tier the decks may hold (`min_card_tier`, see above), the retry count
+(`max_retries`), `auto_pass`, whether requests carry the observation and events,
 and which extra priority options to list (`present.priority`: `verify`,
 `mana_abilities`, `concede`). `mtg_api::prepare(&game, seat, player, &decision, id,
 &options)` turns any engine `Decision` into a request and `Prepared::convert` checks an

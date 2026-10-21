@@ -6,7 +6,7 @@
 //! # use mtg_api::request::JsonAnswer;
 //! # let decks = vec![];
 //! let mut s = Session::start(Default::default(), decks, vec![Seat::External, Seat::External],
-//!                            Default::default());
+//!                            Default::default()).expect("verified cards only");
 //! while let Some(req) = s.next() {
 //!     // Decide, e.g. take the first option.
 //!     s.answer(mtg_engine::PlayerId(req.seat), JsonAnswer::index(0)).unwrap();
@@ -15,9 +15,11 @@
 //! ```
 
 use crate::agent::{Closed, GameOver, ProtocolAgent, ProtocolOptions, Transport};
+use crate::decks::{check_decks, DeckError};
 use crate::request::{JsonAnswer, Request};
 use crate::view::ResultView;
 use mtg_engine::card::CardDef;
+use mtg_engine::card_tiers::TierTable;
 use mtg_engine::decision::Agent;
 use mtg_engine::turn::Stage;
 use mtg_engine::{Game, GameConfig, GameResult, PlayerId};
@@ -92,19 +94,46 @@ pub struct Session {
 
 impl Session {
     /// Starts a game with `decks` (one per seat) and `seats`. Each external seat's
-    /// decisions come out of [`Session::next`].
+    /// decisions come out of [`Session::next`]. Every card must be at
+    /// `options.min_card_tier` or above (verified by default) in `docs/verified-cards.tsv`
+    /// ([`crate::decks`]); otherwise no game starts and the error lists each card below
+    /// the bar with the checks it fails.
     pub fn start(
         config: GameConfig,
         decks: Vec<Vec<Arc<CardDef>>>,
         seats: Vec<Seat>,
         options: ProtocolOptions,
-    ) -> Session {
+    ) -> Result<Session, DeckError> {
         Self::start_with(config, decks, seats, options, |_| {})
     }
 
     /// Like [`Session::start`], with `setup` run on the game before it starts (e.g. to
-    /// add sideboards).
+    /// add sideboards; cards `setup` adds aren't checked against the bar).
     pub fn start_with(
+        config: GameConfig,
+        decks: Vec<Vec<Arc<CardDef>>>,
+        seats: Vec<Seat>,
+        options: ProtocolOptions,
+        setup: impl FnOnce(&mut Game) + Send + 'static,
+    ) -> Result<Session, DeckError> {
+        Self::start_with_tiers(config, decks, seats, options, TierTable::global(), setup)
+    }
+
+    /// Like [`Session::start_with`], with the card tiers read from `tiers` instead of
+    /// `docs/verified-cards.tsv`.
+    pub fn start_with_tiers(
+        config: GameConfig,
+        decks: Vec<Vec<Arc<CardDef>>>,
+        seats: Vec<Seat>,
+        options: ProtocolOptions,
+        tiers: &TierTable,
+        setup: impl FnOnce(&mut Game) + Send + 'static,
+    ) -> Result<Session, DeckError> {
+        check_decks(tiers, &decks, options.min_card_tier)?;
+        Ok(Self::launch(config, decks, seats, options, setup))
+    }
+
+    fn launch(
         config: GameConfig,
         decks: Vec<Vec<Arc<CardDef>>>,
         seats: Vec<Seat>,
