@@ -81,8 +81,7 @@ pub fn parse_decklist(text: &str) -> DeckList {
 }
 
 /// The default deck: red-green creatures and burn, every card verified
-/// (`docs/verified-cards.tsv`; Mountain Bandit replaced Raging Goblin, an Arena-only
-/// printing that the tier file doesn't list).
+/// (`docs/verified-cards.tsv`).
 pub fn default_deck() -> DeckList {
     parse_decklist(
         "12 Mountain\n12 Forest\n4 Grizzly Bears\n4 Lightning Bolt\n4 Hill Giant\n4 Shock\n4 Mountain Bandit\n4 Gray Ogre\n4 Giant Growth\n4 Llanowar Elves\n4 Craw Wurm",
@@ -96,10 +95,7 @@ fn pool() -> &'static [(String, u8)] {
     POOL.get_or_init(|| {
         let mut v = Vec::new();
         for c in mtg_data::cards().iter() {
-            if !c.is_playable_card() || !c.is_legal_somewhere() {
-                continue;
-            }
-            if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+            if !c.is_playable_card() || !c.is_legal_somewhere() || !c.is_paper_card() {
                 continue;
             }
             let front = c.type_line.as_deref().unwrap_or("");

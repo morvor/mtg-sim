@@ -91,9 +91,7 @@ cycled card (CR 702.29d), so the two are the same.\n\n";
 
 /// Cards the coverage reports count: playable paper cards legal somewhere.
 pub fn counted(c: &mtg_data::scryfall::ScryfallCard) -> bool {
-    c.is_playable_card()
-        && c.is_legal_somewhere()
-        && !(c.games.iter().all(|g| g != "paper") && !c.games.is_empty())
+    c.is_playable_card() && c.is_legal_somewhere() && c.is_paper_card()
 }
 
 /// A short description of how a mismatching card differs, used to group mismatches.
