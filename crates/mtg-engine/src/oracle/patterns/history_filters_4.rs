@@ -189,6 +189,47 @@ fn cast_status(pred: &str) -> Option<Filter> {
 }
 
 /// "that [past predicate] [window]" after an object phrase.
+/// "[was put there from a zone] this turn": the core's named quality
+/// (`kw/hand_graveyard_actions.rs`); otherwise the history clause.
+fn object_filter(pred: &str, window: &str, so_far: &Filter) -> Option<Filter> {
+    use crate::kw::hand_graveyard_actions::PUT_THERE_THIS_TURN;
+    for (neg, pos) in [("wasn't ", "was "), ("weren't ", "were ")] {
+        if let Some(r) = pred.strip_prefix(neg) {
+            return Some(Filter::not(object_filter(&format!("{pos}{r}"), window, so_far)?));
+        }
+    }
+    if let Some((a, b)) = pred.split_once(" or ") {
+        if let Some(aux) = ["was ", "were "].into_iter().find(|x| a.starts_with(x)) {
+            if !b.starts_with("was ") && !b.starts_with("were ") {
+                let fa = object_filter(a, window, so_far)?;
+                let fb = object_filter(&format!("{aux}{b}"), window, so_far)?;
+                return Some(Filter::Or(vec![fa, fb]));
+            }
+        }
+    }
+    if window == " this turn" && so_far.zone() == Some(ZoneKind::Graveyard) {
+        let put = pred
+            .strip_prefix("was put there")
+            .or_else(|| pred.strip_prefix("were put there"));
+        let from = match put.map(str::trim) {
+            Some("" | "from anywhere") => Some(""),
+            Some("from the battlefield") => Some("battlefield"),
+            Some("from a library" | "from your library" | "from their library") => {
+                Some("library")
+            }
+            _ => None,
+        };
+        if let Some(from) = from {
+            return Some(Filter::Custom(
+                format!("{PUT_THERE_THIS_TURN}{from}").into(),
+            ));
+        }
+    }
+    Some(Filter::History(Box::new(object_predicate(
+        pred, window, so_far,
+    )?)))
+}
+
 fn that_clause<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
     let body = t.strip_prefix("that ")?;
     for w in ["was cast this turn", "were cast this turn"] {
@@ -200,8 +241,8 @@ fn that_clause<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
         if pred.is_empty() {
             continue;
         }
-        if let Some(c) = object_predicate(pred, window, so_far) {
-            return Some((Filter::History(Box::new(c)), rest));
+        if let Some(f) = object_filter(pred, window, so_far) {
+            return Some((f, rest));
         }
     }
     None

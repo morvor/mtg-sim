@@ -495,13 +495,17 @@ pub fn listed_kinds(s: &str) -> Option<(Filter, bool, &str)> {
             return None;
         }
         // Without a comma, only one item before the conjunction ("legendary or").
-        if !w.ends_with(',') && words.get(i + 1).is_some_and(|n| !matches!(*n, "or" | "and" | "and/or")) {
+        if !w.ends_with(',')
+            && words
+                .get(i + 1)
+                .is_some_and(|n| !matches!(*n, "or" | "and" | "and/or"))
+        {
             return None;
         }
         items.push(bare);
         i += 1;
     }
-    conj?;
+    let conj = conj?;
     // The last item's words up to its head noun: the longest run of kind words.
     let core_len = words[i..]
         .iter()
@@ -515,15 +519,33 @@ pub fn listed_kinds(s: &str) -> Option<(Filter, bool, &str)> {
     if head_noun(head).is_none() {
         return None;
     }
-    // A qualified last item ("Tamiyo planeswalker cards"), or items of another kind of
-    // word than the last item's first word ("legendary or Rat card": an adjective and a
-    // noun): not a plain list of adjectives ("white or black creature").
-    let class = |w: &str| (head_noun(w).is_some(), adjective(w).is_some());
-    let qualified_last = core_len >= 3;
-    let mixed = items.iter().any(|w| class(w) != class(core[0]));
-    if !qualified_last && !mixed {
+    // Which lists: items that are adjectives only, before a last item starting with a
+    // noun ("legendary or Rat card"); or items that are nouns, joined by "and" ("and/or"),
+    // before a qualified last item ("instant, sorcery, and/or Tamiyo planeswalker cards")
+    // or one starting with an adjective ("Spider and legendary creature"). Not a list of
+    // adjectives of one kind ("blue or black noncreature permanent": both noncreature),
+    // nor complete alternatives joined by "or" ("land or nonblack creature", "spell or
+    // nonland permanent": the core grammar's).
+    let noun_only = |w: &str| head_noun(w).is_some() && adjective(w).is_none();
+    let adjective_only = |w: &str| head_noun(w).is_none() && adjective(w).is_some();
+    let ok = if items.iter().all(|w| adjective_only(w)) {
+        noun_only(core[0])
+    } else if items.iter().all(|w| head_noun(w).is_some()) {
+        conj != "or" && (core_len >= 3 || adjective_only(core[0]))
+    } else {
+        false
+    };
+    if !ok {
         return None;
     }
+    // A generic head ("card", "permanent", "spell") goes with every item ("legendary or
+    // Rat card": legendary cards; "instant ... cards": instant cards); a type or subtype
+    // head doesn't go with an item that's a noun itself ("Spider and legendary creature":
+    // Spiders).
+    let generic = matches!(
+        head_noun(head),
+        Some(Filter::Card | Filter::Permanent | Filter::Spell)
+    );
     let last_text = words[i..].join(" ");
     let (f_last, plural, rest) = parse_object_phrase(&last_text)?;
     let consumed = &last_text[..last_text.len() - rest.len()];
@@ -533,7 +555,11 @@ pub fn listed_kinds(s: &str) -> Option<(Filter, bool, &str)> {
         .to_string();
     let mut alts = Vec::new();
     for x in &items {
-        let phrase = format!("{x} {head}{tail}");
+        let phrase = if generic || head_noun(x).is_none() {
+            format!("{x} {head}{tail}")
+        } else {
+            format!("{x}{tail}")
+        };
         let (f, _, r) = parse_object_phrase(&phrase)?;
         if !r.trim().is_empty() {
             return None;
@@ -549,8 +575,7 @@ pub fn listed_kinds(s: &str) -> Option<(Filter, bool, &str)> {
         }
     };
     let key = |f: &Filter| serde_json::to_string(f).unwrap_or_default();
-    let first = parts(&alts[0]);
-    let common: Vec<Filter> = first
+    let common: Vec<Filter> = parts(&alts[0])
         .into_iter()
         .filter(|c| alts.iter().all(|a| parts(a).iter().any(|x| key(x) == key(c))))
         .collect();
