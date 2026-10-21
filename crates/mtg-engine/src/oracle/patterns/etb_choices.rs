@@ -1070,7 +1070,10 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
         "a land type" => ChoiceKind::OneOf(crate::types::land_types()),
         "a card type" => ChoiceKind::CardType,
         "odd or even" => ChoiceKind::OddOrEven,
-        "a number" => ChoiceKind::Number { min: 0, max: 1000 },
+        "a number" => ChoiceKind::Number {
+            min: 0,
+            max: crate::choices::MAX_CHOSEN_NUMBER,
+        },
         _ => {
             // "a noncreature, nonland card name", "a nonbasic land card name"
             if let Some(words) = s

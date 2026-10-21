@@ -7,6 +7,13 @@ use crate::game::Game;
 use crate::types::*;
 use smol_str::SmolStr;
 
+/// The greatest number a player may choose when the text sets no upper limit ("choose a
+/// number", "a number 0 or greater", "a number greater than 0", hidden items): far beyond
+/// any life total, library or mana value in a game, and small enough that the engine's
+/// arithmetic on it (life totals, damage) can't overflow (interpretation
+/// `unbounded-number-ceiling`).
+pub const MAX_CHOSEN_NUMBER: i32 = 1_000_000;
+
 pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) {
     let Some(src) = ctx.source else { return };
     match kind {

@@ -6659,6 +6659,12 @@ impl Renderer<'_> {
             // "choose any card name": any card in the Oracle card reference (CR 201.4).
             ChoiceKind::CardName => "{alt:a|any} card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
+            ChoiceKind::Number { min: 0, max } if *max == crate::choices::MAX_CHOSEN_NUMBER => {
+                "a number".into()
+            }
+            ChoiceKind::Number { min, max } if *max == crate::choices::MAX_CHOSEN_NUMBER => {
+                format!("a number {min} or greater")
+            }
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),
             ChoiceKind::Opponent => "an opponent".into(),
             ChoiceKind::Player => "a player".into(),

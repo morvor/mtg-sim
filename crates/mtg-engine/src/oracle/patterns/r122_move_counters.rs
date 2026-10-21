@@ -113,7 +113,10 @@ fn move_counters(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(Effect::seq(vec![
         Effect::Choose {
             who: PlayerRef::You,
-            kind: ChoiceKind::Number { min: 0, max: 1000 },
+            kind: ChoiceKind::Number {
+                min: 0,
+                max: crate::choices::MAX_CHOSEN_NUMBER,
+            },
         },
         mv,
     ]))
@@ -220,7 +223,10 @@ fn move_group(
         Effect::seq(vec![
             Effect::Choose {
                 who: PlayerRef::You,
-                kind: ChoiceKind::Number { min: 0, max: 1000 },
+                kind: ChoiceKind::Number {
+                min: 0,
+                max: crate::choices::MAX_CHOSEN_NUMBER,
+            },
             },
             mv,
         ])
