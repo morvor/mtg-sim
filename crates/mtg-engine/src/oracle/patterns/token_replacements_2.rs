@@ -1000,3 +1000,64 @@ fn copy_of_one_of_those_creatures(l: &str, prev: &mut Effect, _b: &mut Builder) 
 }
 
 inventory::submit! { super::FollowupPattern { name: "token replacements 2: copy of one of those creatures, except", priority: 90, apply: copy_of_one_of_those_creatures } }
+
+/// The permanents copied by "for each [permanent] attached to it, create a token that's a
+/// copy of that permanent attached to that creature".
+const ATTACHED_COPIED: Var = vars::USER + 5107;
+
+/// "for each nontoken permanent attached to it, create a token that's a copy of that
+/// permanent attached to that creature" (Arna Kennerüd, Skycaptain): a copy of each,
+/// entering attached to the creature (CR 707.2, 303.4f, 301.5e).
+fn for_each_attached_copy_attached(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = l.strip_prefix("for each ")?;
+    let (noun, rest) = r.split_once(" attached to ")?;
+    let (holder, create) = rest.split_once(", ")?;
+    let holder_sel = match holder {
+        "~" => Sel::This,
+        "it" | "that creature"
+            if matches!(b.it, Sel::TriggerObject | Sel::Target(_) | Sel::Var(_)) =>
+        {
+            b.it.clone()
+        }
+        _ => return None,
+    };
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let (copied, to) = create
+        .strip_prefix("create a token that's a copy of ")?
+        .split_once(" attached to ")?;
+    if !matches!(copied, "it" | "that permanent") {
+        return None;
+    }
+    let to = match to {
+        "~" => Sel::This,
+        "it" | "that creature" if !matches!(holder_sel, Sel::This) => holder_sel.clone(),
+        _ => return None,
+    };
+    Some(Effect::ForEach {
+        sel: Sel::All(Filter::and(vec![
+            f,
+            Filter::AttachedToAnyOf(Box::new(holder_sel)),
+        ])),
+        var: ATTACHED_COPIED,
+        effect: Box::new(Effect::TokensEnterAttached {
+            to,
+            effect: Box::new(Effect::CreateTokenCopy {
+                of: Sel::Var(ATTACHED_COPIED),
+                count: Value::c(1),
+                controller: PlayerRef::You,
+                tapped: false,
+                attacking: false,
+                mods: vec![],
+            }),
+        }),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: for each permanent attached, a copy attached", priority: 90, parse: for_each_attached_copy_attached } }

@@ -413,3 +413,33 @@ fn benthic_anomaly_copies_one_chosen_creature_with_their_total_power() {
     assert!(o.has_keyword(KeywordKind::Flying));
     assert!(o.chars.card_types.contains(CardType::Creature));
 }
+
+#[test]
+fn arna_kennerud_copies_each_nontoken_attachment_attached_to_the_attacker() {
+    cr!("707.2", "303.4f", "301.5e", "701.10e");
+    ruling!(
+        "Arna Kennerüd, Skycaptain",
+        "To double the number of each kind of counter on a permanent, put another counter on it for each counter it already has."
+    );
+    supported("Arna Kennerüd, Skycaptain");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Arna Kennerüd, Skycaptain");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 1, None);
+    let aura = t.battlefield(P0, "Holy Strength");
+    assert!(t.g.attach(aura, Entity::Object(bears)));
+    let eq = t.battlefield(P0, "Bonesplitter");
+    assert!(t.g.attach(eq, Entity::Object(bears)));
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    assert_eq!(t.counters(bears, "+1/+1"), 2);
+    let strengths = t.named_on_battlefield("Holy Strength");
+    let splitters = t.named_on_battlefield("Bonesplitter");
+    assert_eq!(strengths.len(), 2);
+    assert_eq!(splitters.len(), 2);
+    for o in strengths.iter().chain(splitters.iter()) {
+        assert_eq!(t.obj_now(*o).attached_to, Some(Entity::Object(bears)));
+    }
+    // 2/2, two +1/+1 counters, Holy Strength twice (+1/+2 each), Bonesplitter twice.
+    assert_eq!(t.pt(bears), (10, 8));
+    assert_eq!(t.life(P1), 10);
+}

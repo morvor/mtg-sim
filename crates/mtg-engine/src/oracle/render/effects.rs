@@ -2755,6 +2755,11 @@ impl Renderer<'_> {
                     format!("{{alt:{s}, {e}|{e} {s}}}")
                 }
             }
+            Effect::TokensEnterAttached { to, effect } => {
+                let e = self.effect(effect);
+                let t = self.sel(to, Case::Obj);
+                format!("{e} attached to {t}")
+            }
             Effect::TokensEnterWithCounters { counters, effect } => {
                 let e = self.effect(effect);
                 let mut parts = Vec::new();

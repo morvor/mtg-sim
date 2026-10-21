@@ -4386,6 +4386,13 @@ pub enum Effect {
         counters: Vec<(CounterKind, Value)>,
         effect: Box<Effect>,
     },
+    /// "create a token that's a copy of that permanent attached to that creature" (Arna
+    /// Kennerüd, Skycaptain): the tokens `effect` creates enter attached to `to` (CR
+    /// 303.4f–i, 301.5e); an Aura token that can't legally enchant it isn't created.
+    TokensEnterAttached {
+        to: Sel,
+        effect: Box<Effect>,
+    },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
     /// attached to an object or player (CR 111.10j, 303.4f–i, 301.5e). An Aura token that
     /// can't legally enchant it isn't created.

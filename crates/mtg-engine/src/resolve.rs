@@ -2317,6 +2317,12 @@ impl Game {
             Effect::TokensEnterWithCounters { counters, effect } => {
                 crate::tokens::enter_with_counters(self, counters, effect, ctx)
             }
+            Effect::TokensEnterAttached { to, effect } => {
+                let to = self.resolve_sel(to, ctx).into_iter().next();
+                let prev = self.token_attach.replace(to);
+                self.exec(effect, ctx);
+                self.token_attach = prev;
+            }
         }
     }
 
