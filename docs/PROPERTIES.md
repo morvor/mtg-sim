@@ -181,7 +181,7 @@ The replay run allowed 8,000 requests per game (now 4,000) and stopped ten games
 two-minute limit (replays answer every request through JSON with whole observations, and
 the random answerer, unlike the property agents, doesn't hold back from repeating
 actions, so some games pile up effects and slow down). Checked again one by one with a
-longer limit, nine of them held (four with 8,000 requests, five with 4,000); game 1178
+longer limit, nine of them held (five with up to 8,000 requests, four with up to 4,000); game 1178
 was still going after 30 minutes, its requests ever slower — a slow game, not a
 difference (`mtg-sim --properties --property replay --seed 10 --only 1178`). So 1,999 of
 2,000 replays held and none differed.
