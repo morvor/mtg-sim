@@ -540,3 +540,49 @@ fn chosen_names_cant_be_cast(
 }
 
 inventory::submit! { super::StaticPattern { name: "spells with the chosen names can't be cast", priority: 60, parse: chosen_names_cant_be_cast } }
+
+/// "exile each permanent unless it's colorless or it's only the color its controller
+/// chose" (Selective Obliteration): the permanents that are neither.
+fn each_unless_its(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, cond) = l.split_once(" unless it's ")?;
+    let mut quals = Vec::new();
+    for q in cond.split(" or it's ") {
+        quals.push(match q {
+            "colorless" => Filter::Colorless,
+            "only the color its controller chose" => {
+                Filter::Custom(crate::choices::ONLY_COLOR_ITS_CONTROLLER_CHOSE.into())
+            }
+            _ => return None,
+        });
+    }
+    let noun = head
+        .strip_prefix("exile each ")
+        .or_else(|| head.strip_prefix("destroy each "))?;
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let what = Sel::All(Filter::and(vec![
+        f,
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::not(Filter::Or(quals)),
+    ]));
+    let _ = b;
+    Some(if head.starts_with("exile") {
+        Effect::Exile {
+            what,
+            face_down: false,
+            link: false,
+        }
+    } else {
+        Effect::Destroy {
+            what,
+            no_regen: false,
+        }
+    })
+}
+
+inventory::submit! { EffectPattern { name: "exile each permanent unless it's [qualities]", priority: 120, parse: each_unless_its } }

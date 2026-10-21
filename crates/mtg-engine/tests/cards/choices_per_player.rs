@@ -290,3 +290,25 @@ fn day_of_the_moon_goads_every_creature_with_a_name_chosen_for_it() {
     assert_eq!(t.obj_now(bears).goaded_by, vec![P0], "still goaded");
     assert_eq!(t.g.obj(saga).choices.list.len(), 2, "both names are chosen for it");
 }
+
+#[test]
+fn selective_obliteration_keeps_colorless_and_the_color_each_controller_chose() {
+    cr!("101.4", "105.2");
+    compiles("Selective Obliteration");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 5);
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let mage = t.battlefield(P1, "Boros Guildmage");
+    let spell = t.hand(P0, "Selective Obliteration");
+    t.advance_to(P0, Step::PrecombatMain);
+    pick(&mut t, P0, 0); // white
+    pick(&mut t, P1, 3); // red
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(lions) && t.on_battlefield(goblin) && t.on_battlefield(thopter));
+    assert!(!t.on_battlefield(bears), "green");
+    assert!(!t.on_battlefield(mage), "red and white isn't only red");
+}

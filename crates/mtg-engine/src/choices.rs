@@ -863,3 +863,31 @@ impl crate::kw::KeywordRules for ChosenNames {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChosenNames) }
+
+/// `Filter::Custom`: "it's only the color its controller chose" (Selective Obliteration):
+/// exactly that one color, the one its controller chose for the source.
+pub const ONLY_COLOR_ITS_CONTROLLER_CHOSE: &str = "choices: only the color its controller chose";
+
+pub struct ControllerChoice;
+
+impl crate::kw::KeywordRules for ControllerChoice {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name != ONLY_COLOR_ITS_CONTROLLER_CHOSE {
+            return None;
+        }
+        let o = g.obj(id);
+        let chosen = g.source_choices(ctx).and_then(|ch| {
+            ch.by_player
+                .iter()
+                .find(|(p, _)| *p == o.controller)
+                .and_then(|(_, c)| c.color)
+        });
+        Some(chosen.is_some_and(|c| o.chars.colors == ColorSet::single(c)))
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ControllerChoice) }
