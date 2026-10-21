@@ -279,3 +279,35 @@ fn viral_spawning_has_flashback_only_while_an_opponent_is_corrupted() {
     );
     assert!(t.in_exile("Viral Spawning"));
 }
+
+#[test]
+fn spark_rupture_turns_planeswalkers_into_creatures_sized_by_loyalty() {
+    cr!("613.1d", "613.4b");
+    ruling!(
+        "Spark Rupture",
+        "A planeswalker that becomes a creature due to Spark Rupture is no longer a planeswalker"
+    );
+    ruling!(
+        "Spark Rupture",
+        "The resulting creature's power and toughness will change if the number of loyalty counters on it changes"
+    );
+    supported("Spark Rupture");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Spark Rupture");
+    let pw = t.battlefield(P1, "Ajani Goldmane");
+    t.g.objects[pw.0 as usize]
+        .counters
+        .insert("loyalty".into(), 4);
+    t.settle();
+    let o = t.g.obj(pw);
+    assert!(o.is_creature());
+    assert!(!o.chars.is(mtg_engine::types::CardType::Planeswalker));
+    assert!(o.chars.abilities.is_empty());
+    assert_eq!(t.pt(pw), (4, 4));
+    t.g.objects[pw.0 as usize]
+        .counters
+        .insert("loyalty".into(), 2);
+    t.g.dirty = true;
+    t.settle();
+    assert_eq!(t.pt(pw), (2, 2));
+}
