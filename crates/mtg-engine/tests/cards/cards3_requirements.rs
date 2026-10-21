@@ -119,3 +119,24 @@ fn portal_manipulator_redirects_attackers_to_the_chosen_player() {
     assert_eq!(c.attack_target(bears), Some(Entity::Player(P2)));
     assert_eq!(c.attack_target(giant), Some(Entity::Player(P0)));
 }
+
+#[test]
+fn galactus_must_attack_the_opponent_with_the_most_life_unless_the_herald_is_around() {
+    cr!("508.1d");
+    supported("Galactus, Devourer of Worlds");
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let g = t.battlefield(P0, "Galactus, Devourer of Worlds");
+    t.g.player_mut(P2).life = 15;
+    to_combat(&mut t, P0);
+    assert!(!legal_attack(&mut t, &[]));
+    assert!(!legal_attack(&mut t, &[(g, Entity::Player(P2))]));
+    assert!(legal_attack(&mut t, &[(g, Entity::Player(P1))]));
+    t.battlefield(P0, "Silver Surfer, Galactus's Herald");
+    assert!(legal_attack(&mut t, &[]));
+}

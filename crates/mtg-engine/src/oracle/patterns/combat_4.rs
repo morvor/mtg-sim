@@ -813,3 +813,56 @@ fn p_prevent_combat_damage_this_combat(l: &str, b: &mut Builder) -> Option<Effec
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: prevent all combat damage that would be dealt this combat by [it and each creature it's blocking]", priority: 90, parse: p_prevent_combat_damage_this_combat } }
+
+/// "~ attacks an opponent with the most life among your opponents each combat if able
+/// [unless you control a creature named N]" (Galactus, Devourer of Worlds): a requirement
+/// to attack one of those opponents (CR 508.1d); with ties, attacking any of them obeys it.
+fn s_attacks_opponent_with_most_life(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l.trim());
+    let rest = l.strip_prefix(
+        "~ attacks an opponent with the most life among your opponents each combat if able",
+    )?;
+    let condition = if rest.is_empty() {
+        None
+    } else {
+        rest.strip_prefix(" unless you control a creature named ")?;
+        // The name as printed (it may contain the card's own name).
+        let raw = crate::oracle::raw_text();
+        let at = raw.find(" unless you control a creature named ")?;
+        let name = raw[at + " unless you control a creature named ".len()..]
+            .trim()
+            .trim_end_matches('.');
+        if name.is_empty() || name.contains('\n') || name.contains('"') {
+            return None;
+        }
+        crate::card::CardDb::global().get(name)?;
+        Some(Condition::Not(Box::new(Condition::Exists(Filter::and(vec![
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::Named(name.into()),
+            Filter::ControlledBy(PlayerRel::You),
+        ])))))
+    };
+    let most = PlayerFilter::And(vec![
+        PlayerFilter::Opponent,
+        PlayerFilter::Life(
+            Cmp::Ge,
+            Box::new(Value::OverPlayers(
+                AggOp::Max,
+                PlayerFilter::Opponent,
+                Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+            )),
+        ),
+    ]);
+    let mut st = StaticAbility::new(StaticEffect::Restriction(Restriction::MustAttackPlayer {
+        attackers: Filter::Source,
+        defender: most,
+    }));
+    st.condition = condition;
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { super::StaticPattern { name: "combat 4: ~ attacks an opponent with the most life each combat if able", priority: 90, parse: s_attacks_opponent_with_most_life } }
