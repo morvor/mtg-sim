@@ -90,13 +90,34 @@ fn crystalline_giant_gets_a_kind_it_does_not_have() {
     t.resolve_all();
     assert_eq!(t.counters(giant, "reach"), 1);
     assert_eq!(t.counters(giant, "+1/+1"), 1);
-    // With all ten, nothing more is put on it.
+    // With none, exactly one counter of one of the kinds.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Crystalline Giant");
     t.advance_to(P0, Step::BeginningOfCombat);
     t.resolve_all();
     let total: u32 = t.obj_now(giant).counters.values().sum();
     assert_eq!(total, 1);
+    // With all ten, nothing more is put on it.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Crystalline Giant");
+    for k in [
+        "flying",
+        "first strike",
+        "deathtouch",
+        "hexproof",
+        "lifelink",
+        "menace",
+        "reach",
+        "trample",
+        "vigilance",
+        "+1/+1",
+    ] {
+        add(&mut t, giant, k, 1);
+    }
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let total: u32 = t.obj_now(giant).counters.values().sum();
+    assert_eq!(total, 10);
 }
 
 #[test]

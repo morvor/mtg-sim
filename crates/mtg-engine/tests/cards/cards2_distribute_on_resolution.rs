@@ -84,6 +84,29 @@ fn blessing_of_frost_distributes_one_counter_per_snow_mana_then_draws() {
 }
 
 #[test]
+fn blessing_of_frost_without_snow_mana_distributes_nothing() {
+    cr!("608.2d", "107.4h");
+    ruling!(
+        "Blessing of Frost",
+        "If you cast Blessing of Frost without spending snow mana, no +1/+1 counters will be distributed."
+    );
+    supported("Blessing of Frost");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Craw Wurm");
+    t.lands(P0, "Forest", 4);
+    t.answer_choose(P0, &[obj(a)]);
+    let hand = t.hand_size(P0);
+    let s = t.hand(P0, "Blessing of Frost");
+    t.cast(P0, s).go();
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 0);
+    assert_eq!(t.counters(b, "+1/+1"), 0);
+    // Craw Wurm (6/4) still has power 4 or greater: one card.
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
 fn invoke_justice_distributes_among_creatures_the_target_player_controls() {
     cr!("608.2d", "115.1");
     ruling!(

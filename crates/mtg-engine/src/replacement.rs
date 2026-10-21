@@ -1717,9 +1717,14 @@ impl Game {
                 } else {
                     let labels = specs
                         .iter()
-                        .map(|s| crate::tokens::token_characteristics_in(self, s, &ctx).name.to_string())
+                        .map(|s| {
+                            crate::tokens::token_characteristics_in(self, s, &ctx)
+                                .name
+                                .to_string()
+                        })
                         .collect();
-                    let i = self.ask_option(ctx.controller, ctx.source, "Create which tokens", labels);
+                    let i =
+                        self.ask_option(ctx.controller, ctx.source, "Create which tokens", labels);
                     specs.get(i).cloned().into_iter().collect()
                 };
                 chosen

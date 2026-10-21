@@ -80,7 +80,11 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bo
     }
     let json = name.strip_prefix(COPIED_MATCHES)?;
     let f: Filter = serde_json::from_str(json).ok()?;
-    let copied = ctx.vars.get(&COPIED).and_then(|v| v.first()).and_then(|e| e.object());
+    let copied = ctx
+        .vars
+        .get(&COPIED)
+        .and_then(|v| v.first())
+        .and_then(|e| e.object());
     Some(copied.is_some_and(|o| g.matches(o, &f, ctx)))
 }
 
