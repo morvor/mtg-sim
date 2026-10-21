@@ -87,7 +87,9 @@ fn one_of_each(s: &str) -> Option<Vec<Filter>> {
 /// "each player chooses from among the permanents they control an artifact, a creature, an
 /// enchantment, and a land, then sacrifices the rest" and "each player chooses an
 /// artifact, a creature, an enchantment, and a planeswalker from among the nonland
-/// permanents they control, then sacrifices the rest" ("each opponent chooses ..." too).
+/// permanents they control, then sacrifices the rest" ("each opponent chooses ..." too);
+/// "each opponent chooses a permanent they control of each permanent type and sacrifices
+/// the rest".
 fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (who, r) = if let Some(r) = l.strip_prefix("each player chooses ") {
@@ -95,6 +97,20 @@ fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
     } else {
         (PlayerRef::EachOpponent, l.strip_prefix("each opponent chooses ")?)
     };
+    // "chooses a permanent they control of each permanent type and sacrifices the rest":
+    // one of each of the six permanent types (CR 110.4).
+    if r == "a permanent they control of each permanent type and sacrifices the rest" {
+        use crate::types::CardType::*;
+        return Some(Effect::KeepAndSacrificeRest {
+            who,
+            among: Filter::Any,
+            keep: [Artifact, Battle, Creature, Enchantment, Land, Planeswalker]
+                .into_iter()
+                .map(Filter::Type)
+                .collect(),
+            up_to: false,
+        });
+    }
     let r = r.strip_suffix(", then sacrifices the rest")?;
     let (among, list) = if let Some(list) = r.strip_prefix("from among the permanents they control ") {
         (Filter::Any, list)

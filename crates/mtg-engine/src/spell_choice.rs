@@ -46,6 +46,18 @@ pub fn choose_cards_to_cast(
     what: &Sel,
     ctx: &mut Ctx,
 ) -> Option<Vec<(ObjectId, Vec<FaceState>)>> {
+    // "You may cast the exiled card ... if it's an instant spell": each of the cards in a
+    // zone that would be such a spell (judged as the spell, also for a face-down card).
+    if let Sel::All(filter) = what {
+        let zone = filter.zone().filter(|z| *z != ZoneKind::Battlefield)?;
+        return Some(
+            g.objects_in_zone_kind(zone)
+                .into_iter()
+                .map(|o| (o, matching_faces(g, o, filter, ctx)))
+                .filter(|(_, f)| !f.is_empty())
+                .collect(),
+        );
+    }
     let Sel::Choose {
         chooser,
         filter,
