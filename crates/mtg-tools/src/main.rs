@@ -854,7 +854,9 @@ fn interpretations(args: &[String]) {
             std::fs::read_to_string(root.join("docs/INTERPRETATIONS.md")).unwrap_or_default();
         if current != index {
             stale = true;
-            println!("docs/INTERPRETATIONS.md is out of date: run `mtg-tools interpretations --write`");
+            println!(
+                "docs/INTERPRETATIONS.md is out of date: run `mtg-tools interpretations --write`"
+            );
         }
     }
     if check && (!problems.is_empty() || stale) {

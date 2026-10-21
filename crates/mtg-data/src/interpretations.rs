@@ -237,10 +237,7 @@ pub fn check(root: &Path) -> Vec<String> {
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
         if !slug {
-            problems.push(format!(
-                "{at}: id {:?} is not a slug (a-z, 0-9, -)",
-                e.id
-            ));
+            problems.push(format!("{at}: id {:?} is not a slug (a-z, 0-9, -)", e.id));
         }
         if e.title.is_empty() {
             problems.push(format!("{at}: {:?} has no title", e.id));
@@ -336,7 +333,9 @@ pub fn render_index(entries: &[Entry]) -> String {
             e.fields.get("Decision").map(String::as_str).unwrap_or("")
         ));
     }
-    s.push_str("\n## All entries\n\n| Id | Title | Kind | Status | Area |\n|---|---|---|---|---|\n");
+    s.push_str(
+        "\n## All entries\n\n| Id | Title | Kind | Status | Area |\n|---|---|---|---|---|\n",
+    );
     let mut all: Vec<&Entry> = entries.iter().collect();
     all.sort_by(|a, b| (&a.area, &a.id).cmp(&(&b.area, &b.id)));
     for e in all {

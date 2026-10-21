@@ -162,6 +162,7 @@ impl Agent for Looper {
 #[test]
 fn a_fragmented_loop_is_broken_by_the_active_player() {
     cr!("732.3");
+    interp!("mandatory-loop-detection");
     let mut t = TestGame::new(2);
     let tapper = custom_card("Tapping Rod", "Artifact", None, "{0}: Tap target creature.");
     let untapper = custom_card("Untapping Rod", "Artifact", None, "{0}: Untap target creature.");
@@ -262,6 +263,7 @@ fn a_loop_with_a_declined_unless_payment_continues_as_though_mandatory() {
 #[test]
 fn a_fragmented_loop_is_broken_by_the_first_player_in_turn_order_involved_in_it() {
     cr!("732.3", "732.5");
+    interp!("mandatory-loop-detection");
     let mut t = TestGame::new(3);
     let tapper = custom_card("Tapping Rod", "Artifact", None, "{0}: Tap target creature.");
     let untapper = custom_card("Untapping Rod", "Artifact", None, "{0}: Untap target creature.");
