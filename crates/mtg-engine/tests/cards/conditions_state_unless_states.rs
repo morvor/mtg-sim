@@ -232,7 +232,7 @@ fn brainwash_taxes_an_attack_on_a_battle_too() {
 
 #[test]
 fn myr_prototype_pays_for_each_counter_on_it() {
-    cr!("508.1d", "509.1c", "509.1d");
+    cr!("508.1d", "509.1c", "509.1d", "118.5");
     assert_supported(&["Myr Prototype", "Phyrexian Marauder"]);
     let mut t = TestGame::new(2);
     let myr = t.battlefield(P0, "Myr Prototype");
@@ -241,9 +241,10 @@ fn myr_prototype_pays_for_each_counter_on_it() {
     assert_eq!(cost.and_then(|c| c.mana).map(|m| m.mana_value()), Some(2));
     let block = mtg_engine::combat::required_block_cost(&t.g, myr);
     assert_eq!(block.and_then(|c| c.mana).map(|m| m.mana_value()), Some(2));
-    // Without counters, nothing to pay.
+    // Without counters, a cost of {0}: still a cost to attack (CR 118.5).
     let other = t.battlefield(P0, "Myr Prototype");
-    assert!(mtg_engine::combat::required_attack_cost(&t.g, other, Entity::Player(P1)).is_none());
+    let zero = mtg_engine::combat::required_attack_cost(&t.g, other, Entity::Player(P1));
+    assert!(zero.is_some_and(|c| c.is_free()));
 }
 
 #[test]

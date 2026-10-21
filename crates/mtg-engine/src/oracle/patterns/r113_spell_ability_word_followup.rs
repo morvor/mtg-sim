@@ -49,6 +49,12 @@ fn is_followup(text: &str) -> bool {
     let Some(body) = text.strip_suffix('.') else {
         return false;
     };
+    // "... instead destroy that creature. It can't be regenerated.": a rider about the
+    // instruction before it (CR 701.19c) belongs to the same sentence's instruction.
+    let body = ["It", "They", "Creatures destroyed this way", "The creature"]
+        .iter()
+        .find_map(|s| body.strip_suffix(&format!(". {s} can't be regenerated")))
+        .unwrap_or(body);
     if body.contains(". ") || body.contains('"') {
         return false;
     }

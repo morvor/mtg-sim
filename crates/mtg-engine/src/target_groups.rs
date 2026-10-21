@@ -47,7 +47,7 @@ fn pairwise(objs: &[&GameObject], pair: impl Fn(&GameObject, &GameObject) -> boo
 /// information for one that left its zone).
 fn stat(g: &Game, group: &TargetGroup, o: &GameObject) -> i64 {
     match group {
-        TargetGroup::TotalAtMost(stat, _) => {
+        TargetGroup::TotalAtMost(stat, _) | TargetGroup::TotalAtLeast(stat, _) => {
             crate::relational::total(g, *stat, &[Entity::Object(o.id)])
         }
         _ => 0,
@@ -110,6 +110,41 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
         // CR 601.2c: "with total mana value 6 or less" limits even a single object.
         TargetGroup::TotalAtMost(stat, n) => {
             crate::relational::total(g, *stat, targets) <= g.eval_value(n, ctx)
+        }
+        TargetGroup::TotalAtLeast(stat, n) => {
+            crate::relational::total(g, *stat, targets) >= g.eval_value(n, ctx)
+        }
+        // CR 201.2a: a name all of them have.
+        TargetGroup::SameName => match objs.first() {
+            None => true,
+            Some(first) => {
+                first
+                    .chars
+                    .names()
+                    .any(|n| objs.iter().all(|o| o.chars.has_name(n)))
+                    || (objs.len() == 1 && first.chars.has_a_name())
+                    || objs.iter().all(|o| o.chars.all_creature_names)
+            }
+        },
+        TargetGroup::ShareColor => {
+            objs.len() < 2
+                || objs[0]
+                    .chars
+                    .colors
+                    .iter()
+                    .any(|c| objs.iter().all(|o| o.chars.colors.contains(c)))
+        }
+        // CR 205.2a: the card types among them.
+        TargetGroup::CardTypesAmong(n) => {
+            let mut types = Vec::new();
+            for o in &objs {
+                for t in o.chars.card_types.iter() {
+                    if !types.contains(&t) {
+                        types.push(t);
+                    }
+                }
+            }
+            types.len() as i64 >= g.eval_value(n, ctx)
         }
         TargetGroup::ShareCreatureType => {
             if objs.len() < 2 {
@@ -194,6 +229,8 @@ pub fn holds_on_resolution(
         | TargetGroup::ShareCardType
         | TargetGroup::ShareCardTypeAmong(_)
         | TargetGroup::SharePermanentType
+        | TargetGroup::SameName
+        | TargetGroup::ShareColor
         | TargetGroup::ShareLandType => group_ok(g, group, all, ctx),
         TargetGroup::DifferentControllers
         | TargetGroup::DifferentNames
@@ -201,7 +238,9 @@ pub fn holds_on_resolution(
         | TargetGroup::DifferentPowers
         | TargetGroup::EqualToughness
         | TargetGroup::OnePerCardType
-        | TargetGroup::TotalAtMost(..) => group_ok(g, group, legal, ctx),
+        | TargetGroup::TotalAtMost(..)
+        | TargetGroup::TotalAtLeast(..)
+        | TargetGroup::CardTypesAmong(_) => group_ok(g, group, legal, ctx),
     }
 }
 
@@ -214,10 +253,17 @@ pub fn find_group(
     ctx: &Ctx,
 ) -> Option<Vec<Entity>> {
     if n == 0 {
-        return Some(vec![]);
+        return group_ok(g, group, &[], ctx).then(Vec::new);
     }
     if cands.len() < n {
         return None;
+    }
+    // A total is largest with the largest values.
+    if matches!(group, TargetGroup::TotalAtLeast(..)) {
+        let mut v: Vec<Entity> = cands.to_vec();
+        v.sort_by_key(|e| -e.object().map_or(0, |o| stat(g, group, g.obj(o))));
+        v.truncate(n);
+        return group_ok(g, group, &v, ctx).then_some(v);
     }
     // A total is smallest with the smallest values (a value may be negative, so partial
     // totals don't rule anything out).
@@ -230,14 +276,24 @@ pub fn find_group(
     // The other relationships hold for every part of a group that has them.
     let mut chosen = Vec::new();
     let mut budget = 10_000u32;
+    let whole = is_whole_only(group);
     search(
-        &|v: &[Entity]| group_ok(g, group, v, ctx),
+        &|v: &[Entity]| (whole && v.len() < n) || group_ok(g, group, v, ctx),
         cands,
         n,
         &mut chosen,
         &mut budget,
     )
     .then_some(chosen)
+}
+
+/// Whether only a whole group needs to have the relationship (a total that must be
+/// reached, card types among them), not each part of it.
+fn is_whole_only(group: &TargetGroup) -> bool {
+    matches!(
+        group,
+        TargetGroup::TotalAtLeast(..) | TargetGroup::CardTypesAmong(_)
+    )
 }
 
 /// A group of `n` of the candidates for which `ok` holds of every part (in candidate
@@ -279,6 +335,9 @@ pub fn fit(
 ) -> Option<Vec<Entity>> {
     if group_ok(g, group, &picked, ctx) {
         return Some(picked);
+    }
+    if is_whole_only(group) {
+        return find_group(g, group, cands, min, ctx);
     }
     let mut kept: Vec<Entity> = Vec::new();
     for e in picked {
@@ -430,6 +489,7 @@ fn find_all(
     match groups {
         [] => (cands.len() >= n).then(|| cands[..n].to_vec()),
         [one] => find_group(g, one, cands, n, ctx),
+        _ if n == 0 => all_ok(g, groups, &[], ctx).then(Vec::new),
         _ => {
             // Smallest totals first, so a total limit is met whenever a group meets it.
             let mut cands = cands.to_vec();
@@ -441,8 +501,9 @@ fn find_all(
             }
             let mut chosen = Vec::new();
             let mut budget = 10_000u32;
+            let whole = groups.iter().any(is_whole_only);
             search(
-                &|v: &[Entity]| all_ok(g, groups, v, ctx),
+                &|v: &[Entity]| (whole && v.len() < n) || all_ok(g, groups, v, ctx),
                 &cands,
                 n,
                 &mut chosen,
@@ -476,6 +537,9 @@ pub fn fit_together(
 ) -> Vec<ObjectId> {
     let groups = together_of(f);
     if groups.is_empty() {
+        return picked;
+    }
+    if picked.len() >= min && all_ok(g, &groups, &entities(&picked), ctx) {
         return picked;
     }
     let mut kept: Vec<Entity> = Vec::new();

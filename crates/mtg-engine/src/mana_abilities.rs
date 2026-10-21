@@ -1190,7 +1190,11 @@ pub fn mana_sources_with(
             if act.timing == ActivationTiming::AsInstant {
                 continue;
             }
-            if o.controller != p
+            if let Some(f) = &act.activator {
+                if !g.player_filter_matches(f, p, &Ctx::new(Some(o.id), o.controller)) {
+                    continue;
+                }
+            } else if o.controller != p
                 && !act.any_player
                 && !act.only_opponents
                 && !crate::kw::may_activate_others_mana_ability(g, p, o.id, a)

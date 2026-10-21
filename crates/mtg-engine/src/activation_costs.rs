@@ -63,7 +63,12 @@ impl CostChanges {
                 crate::casting::add_cost(cost, &Cost::mana(ManaCost::generic(n(v))))
             }
             CostChange::IncreaseMana(m) => crate::casting::add_cost(cost, &Cost::mana(m.clone())),
-            CostChange::AdditionalCost(c) => crate::casting::add_cost(cost, c),
+            // A part repeated for each of something ("for each black mana symbol in their
+            // activation costs") is counted now, for this spell or ability.
+            CostChange::AdditionalCost(c) => crate::casting::add_cost(
+                cost,
+                &crate::kw::cumulative_upkeep::expand_repeated(g, c, ctx),
+            ),
             CostChange::ReduceGeneric(v) => self.reductions.push(Reduction::Generic(n(v))),
             CostChange::ReduceGenericMinOne(v) => {
                 self.reductions.push(Reduction::GenericMinOne(n(v)))
@@ -228,7 +233,42 @@ pub fn scope_matches(
             return false;
         }
     }
-    !(scope.first_each_turn && activated_one_this_turn(g, p, scope, ctx))
+    if !scope.first_each_turn {
+        return true;
+    }
+    match &scope.targeting {
+        // "The first activated ability you activate during your turn that targets a
+        // creature you control": the first one this turn with such a target.
+        Some(t) => !activated_one_targeting_this_turn(g, p, stack, t, ctx),
+        None => !activated_one_this_turn(g, p, scope, ctx),
+    }
+}
+
+/// Whether `p` activated an ability earlier this turn (not the one being activated,
+/// `current`) that targeted an object matching `t` as it became its target.
+fn activated_one_targeting_this_turn(
+    g: &Game,
+    p: PlayerId,
+    current: Option<ObjectId>,
+    t: &Filter,
+    ctx: &Ctx,
+) -> bool {
+    g.turn_events.iter().any(|e| match e {
+        crate::events::Event::BecameTarget {
+            target: Entity::Object(o),
+            by,
+            controller,
+        } => {
+            *controller == p
+                && Some(*by) != current
+                && matches!(
+                    g.obj(*by).stack.as_deref().map(|si| &si.kind),
+                    Some(crate::object::StackKind::Activated { .. })
+                )
+                && g.matches(*o, t, ctx)
+        }
+        _ => false,
+    })
 }
 
 fn is_reduction(c: &CostChange) -> bool {

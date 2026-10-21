@@ -220,7 +220,7 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             b.it_player = PlayerRef::Target(slot);
             (PlayerRef::Target(slot), r.to_string())
         } else if let Some(r) = r.strip_prefix("the attacking player each ") {
-            (PlayerRef::ActivePlayer, r.to_string())
+            (PlayerRef::AttackingPlayer, r.to_string())
         } else {
             let (who, rest) = player_ref(r, b)?;
             let rest = rest.trim_start().strip_prefix("each ")?.to_string();

@@ -2108,10 +2108,33 @@ pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
         ("with different powers", TargetGroup::DifferentPowers),
         ("with equal toughness", TargetGroup::EqualToughness),
     ];
+    // "with the same name" and "that share a color" on their own, not "with the same
+    // name as ~" or "that share a color with it".
+    for (p, g) in [
+        ("with the same name", TargetGroup::SameName),
+        ("that share a color", TargetGroup::ShareColor),
+    ] {
+        if let Some(rest) = t.strip_prefix(p) {
+            if rest.is_empty() || rest.starts_with([',', '.', ':']) {
+                return Some((rest, g));
+            }
+        }
+    }
     groups
         .iter()
         .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
         .or_else(|| total_at_most(t))
+        .or_else(|| card_types_among(t))
+}
+
+/// "with four or more card types among them" (CR 205.2a).
+fn card_types_among(t: &str) -> Option<(&str, TargetGroup)> {
+    let r = t.strip_prefix("with ")?;
+    let (n, r) = parse_number(r)?;
+    let r = r
+        .trim_start()
+        .strip_prefix("or more card types among them")?;
+    Some((r, TargetGroup::CardTypesAmong(Box::new(n))))
 }
 
 /// The first relationship phrase (see [`group_phrase`]) in `l`, after a space: its start,
@@ -2135,12 +2158,15 @@ fn total_at_most(t: &str) -> Option<(&str, TargetGroup)> {
         (t.strip_prefix("with total power ")?, false)
     };
     let (n, r) = parse_number(r)?;
-    let r = r.trim_start().strip_prefix("or less")?;
     let stat = if mana_value {
         TotalStat::ManaValue
     } else {
         TotalStat::Power
     };
+    if let Some(r) = r.trim_start().strip_prefix("or greater") {
+        return Some((r, TargetGroup::TotalAtLeast(stat, Box::new(n))));
+    }
+    let r = r.trim_start().strip_prefix("or less")?;
     let grp = TargetGroup::TotalAtMost(stat, Box::new(n));
     Some((r, grp))
 }
@@ -2180,9 +2206,9 @@ pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
     let pairs: [(&str, PlayerRef); 16] = [
         ("you ", PlayerRef::You),
-        // CR 506.2: the active player is the attacking player.
-        ("the attacking player ", PlayerRef::ActivePlayer),
-        ("attacking player ", PlayerRef::ActivePlayer),
+        // CR 506.2, 805.10c.
+        ("the attacking player ", PlayerRef::AttackingPlayer),
+        ("attacking player ", PlayerRef::AttackingPlayer),
         // Internal form of "that player" in an ability linked to one that targeted a
         // player (CR 607.1, see `patterns::r607_linked_targets`).
         ("the noted player ", PlayerRef::LinkedNoted),
