@@ -358,7 +358,12 @@ fn night_shift_on_the_planar_die_pays_life_but_changes_nothing() {
     );
     supported("Night Shift of the Living Dead");
     supported("Xenosquirrels");
-    for name in ["Night Shift of the Living Dead", "Xenosquirrels"] {
+    supported("Snickering Squirrel");
+    for name in [
+        "Night Shift of the Living Dead",
+        "Xenosquirrels",
+        "Snickering Squirrel",
+    ] {
         let mut t = planechase_game(2);
         start_planar_deck(&mut t, P0, &["Goldmeadow", "Krosa"]);
         let src = t.battlefield(P0, name);
@@ -368,14 +373,28 @@ fn night_shift_on_the_planar_die_pays_life_but_changes_nothing() {
                 .insert(counters::PLUS1.into(), 2);
         }
         t.answer_yes(P0, true);
-        // A blank face (natural 4).
-        t.g.dice.loaded.push_back(4);
+        // A blank face (natural 3); were it decreased to 2 it would be chaos (Goldmeadow's
+        // chaos ability creates a Goat).
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+        t.g.dice.loaded.push_back(3);
         let face = mtg_engine::planechase::roll_planar_die(&mut t.g, P0);
         t.settle();
+        t.resolve_all();
         assert_eq!(face, mtg_engine::planechase::PlanarFace::Blank, "{name}");
-        if name == "Xenosquirrels" {
-            assert_eq!(t.counters(src, counters::PLUS1), 1);
-            continue;
+        assert!(tokens(&t, P0).is_empty(), "{name}");
+        t.clear_answers();
+        match name {
+            "Xenosquirrels" => {
+                assert_eq!(t.counters(src, counters::PLUS1), 1);
+                continue;
+            }
+            // "You may tap this creature to increase the result of a die any player
+            // rolled by 1": tapped, nothing changed.
+            "Snickering Squirrel" => {
+                assert!(t.obj_now(src).tapped);
+                continue;
+            }
+            _ => {}
         }
         assert_eq!(t.life(P0), 19);
         // Used up: a later six-sided roll of 5 isn't offered the change.
