@@ -179,3 +179,43 @@ fn clone_copying_dryad_arbor_under_worms_of_the_earth_goes_to_the_graveyard() {
     assert!(t.in_graveyard(P0, "Clone"));
     assert_eq!(t.stack_len(), 0);
 }
+
+/// P0 casts Soulfire Eruption targeting P1 and P1's Craw Wurm (6/4); the top two cards of
+/// P0's library are Hill Giant (mana value 4) over Grizzly Bears (2). P0 considers
+/// `first` first. Returns the game and the Wurm.
+fn soulfire(first_wurm: bool) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 9);
+    let eruption = t.hand(P0, "Soulfire Eruption");
+    t.cast(P0, eruption)
+        .targets(&[Entity::Player(P1), Entity::Object(wurm)])
+        .go();
+    let first = if first_wurm {
+        Entity::Object(wurm)
+    } else {
+        Entity::Player(P1)
+    };
+    t.answer_choose(P0, &[first]);
+    t.resolve();
+    (t, wurm)
+}
+
+#[test]
+fn soulfire_eruption_exiles_and_deals_damage_one_target_at_a_time() {
+    cr!("608.2f", "608.2c");
+    cr_example!("608.2f", "Soulfire Eruption");
+    supported("Soulfire Eruption");
+    // The Wurm first: the top card (Hill Giant, 4) for it, then Grizzly Bears (2) for P1.
+    let (t, wurm) = soulfire(true);
+    assert!(!t.on_battlefield(wurm));
+    assert_eq!(t.life(P1), 18);
+    assert!(t.in_exile("Hill Giant") && t.in_exile("Grizzly Bears"));
+    // P1 first: 4 damage to P1, then 2 to the Wurm, which survives.
+    let (t, wurm) = soulfire(false);
+    assert!(t.on_battlefield(wurm));
+    assert_eq!(t.obj(wurm).damage, 2);
+    assert_eq!(t.life(P1), 16);
+}
