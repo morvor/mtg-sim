@@ -2671,6 +2671,17 @@ impl Game {
                         None => m.clone(),
                     }
                 }
+                // "becomes the second chosen type" (`choices.rs`): locked in likewise.
+                Modification::Custom { name, .. } if name == crate::choices::SECOND_CHOSEN_TYPE => {
+                    match ctx
+                        .source
+                        .and_then(|s| self.obj(s).choices.list.get(1).cloned())
+                        .filter(|t| crate::types::is_basic_land_type(t))
+                    {
+                        Some(t) => Modification::SetBasicLandType(vec![t]),
+                        None => m.clone(),
+                    }
+                }
                 // "except it has this ability" (CR 707.9a): the resolving ability.
                 // For a reflexive trigger, the ability that created it (CR 603.12).
                 Modification::AddThisAbility => {

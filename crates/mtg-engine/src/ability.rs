@@ -1141,6 +1141,12 @@ pub enum PlayerRef {
     TriggerPlayer,
     /// The active player.
     ActivePlayer,
+    /// "The attacking player": the active player (CR 506.2). With shared team turns, one
+    /// specific attacking player: for an ability of a blocking creature, or one that refers
+    /// to a blocking creature, the controller of the attacking creature that blocking
+    /// creature is blocking; otherwise (or if that leaves several) the one the ability's
+    /// controller chooses (CR 805.10c). See `teams::attacking_player_candidates`.
+    AttackingPlayer,
     /// The defending player (CR 508.5).
     DefendingPlayer,
     /// A player chosen during resolution by the controller.
@@ -1232,6 +1238,17 @@ pub enum PlayerFilter {
     /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
     /// `kwa::vote::voted_like`.
     VotedLikeYou(bool),
+    /// A player who chose this word for the source ("players who chose war", "each
+    /// opponent who chose silence"): that player's own choice among the source's
+    /// per-player choices (CR 607.2d; see `choices::player_choice_matches`).
+    Chose(SmolStr),
+    /// A player whose chosen number for the source compares so with the value ("each
+    /// player with the highest number", "each player who didn't choose the lowest
+    /// number"; see `choices.rs`).
+    ChoseNumber(Cmp, Box<Value>),
+    /// One of the players chosen for the source by "choose two players" ("one of the
+    /// chosen players").
+    ChosenPlayers,
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
@@ -5049,6 +5066,12 @@ pub enum ChoiceKind {
     /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
     /// Dragons", CR 607.2f, 607.2m, 614.12b).
     Word(Vec<String>),
+    /// "choose two basic land types", "choose two abilities from among first strike,
+    /// vigilance, and lifelink": that many different ones of the listed words, in order
+    /// (kept as the chosen list, see `object::Choices::list`).
+    Distinct(u8, Vec<String>),
+    /// "choose two players": that many different players (`object::Choices::players`).
+    Players(u8),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

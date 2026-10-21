@@ -412,6 +412,16 @@ impl Game {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
             PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
+            PlayerFilter::ChosenPlayers => self
+                .source_choices(ctx)
+                .is_some_and(|ch| ch.players.contains(&p)),
+            PlayerFilter::ChoseNumber(c, v) => {
+                let n = self.eval_value(v, ctx);
+                crate::choices::number_chosen_by(self, ctx, p).is_some_and(|x| c.eval(x, n))
+            }
+            PlayerFilter::Chose(w) => self
+                .source_choices(ctx)
+                .is_some_and(|ch| crate::choices::player_choice_matches(ch, p, w)),
             PlayerFilter::VotedLikeYou(like) => {
                 crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
             }
@@ -519,6 +529,19 @@ impl Game {
                 .get(&crate::teams::ACTIVE_PLAYER_VAR)
                 .and_then(|v| v.iter().find_map(|e| e.player()))
                 .map_or_else(|| vec![self.turn.active], |p| vec![p]),
+            // CR 506.2, 805.10c: the attacking player chosen as the effect began to apply,
+            // or the one the ability's blocking creature determines.
+            PlayerRef::AttackingPlayer => ctx
+                .vars
+                .get(&crate::teams::ATTACKING_PLAYER_VAR)
+                .and_then(|v| v.iter().find_map(|e| e.player()))
+                .or_else(|| {
+                    crate::teams::attacking_player_candidates(self, ctx)
+                        .first()
+                        .copied()
+                })
+                .into_iter()
+                .collect(),
             PlayerRef::DefendingPlayer => self.defending_player_for(ctx).into_iter().collect(),
             PlayerRef::ChosenPlayer(v) | PlayerRef::Var(v) => ctx
                 .vars
