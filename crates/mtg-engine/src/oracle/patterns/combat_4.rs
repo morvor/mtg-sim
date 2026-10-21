@@ -866,3 +866,73 @@ fn s_attacks_opponent_with_most_life(
 }
 
 inventory::submit! { super::StaticPattern { name: "combat 4: ~ attacks an opponent with the most life each combat if able", priority: 90, parse: s_attacks_opponent_with_most_life } }
+
+/// "Whenever ~ attacks, if you attacked with exactly one other creature this combat, you
+/// may have that creature's base power and toughness become 4/3 until end of turn."
+/// (Creepy Puppeteer): "that creature" is the other creature declared as an attacker
+/// (CR 508.1) by you this combat.
+fn a_attacked_with_exactly_one_other(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let text = crate::oracle::strip_ability_word(block.trim());
+    let lower = text.to_lowercase();
+    let l = end(&lower);
+    let body = l.strip_prefix(
+        "whenever ~ attacks, if you attacked with exactly one other creature this combat, ",
+    )?;
+    if !body.contains("that creature") || body.contains('~') {
+        return None;
+    }
+    // Compiled about the source, then pointed at the other attacker.
+    let probe = format!(
+        "Whenever ~ attacks, {}.",
+        body.replacen("that creature's", "~'s", 1)
+            .replacen("that creature", "~", 1)
+    );
+    if probe.contains("that creature") {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(&probe, ctx)?;
+    let [a] = v.as_slice() else { return None };
+    let AbilityKind::Triggered(t) = &a.kind else {
+        return None;
+    };
+    if !matches!(t.trigger, TriggerCond::Attacks(Filter::Source)) || t.intervening_if.is_some() {
+        return None;
+    }
+    let others = Filter::and(vec![
+        Filter::Type(crate::types::CardType::Creature),
+        Filter::AttackedThisCombat,
+        Filter::ControlledBy(PlayerRel::You),
+        Filter::Other,
+    ]);
+    let other = serde_json::to_value(Sel::All(others.clone())).ok()?;
+    let this = serde_json::to_value(Sel::This).ok()?;
+    let mut json = serde_json::to_value(&t.body).ok()?;
+    let mut n = 0;
+    fn walk(v: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value, n: &mut u32) {
+        if v == from {
+            *v = to.clone();
+            *n += 1;
+            return;
+        }
+        match v {
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, from, to, n)),
+            serde_json::Value::Object(o) => o.values_mut().for_each(|x| walk(x, from, to, n)),
+            _ => {}
+        }
+    }
+    walk(&mut json, &this, &other, &mut n);
+    let s = json.to_string();
+    if n != 1 || s.contains("\"Source\"") {
+        return None;
+    }
+    let mut t = t.clone();
+    t.body = serde_json::from_value(json).ok()?;
+    t.intervening_if = Some(Condition::Compare(
+        Value::Count(others),
+        Cmp::Eq,
+        Value::Const(1),
+    ));
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(t), block)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "combat 4: if you attacked with exactly one other creature this combat, ... that creature", priority: 90, parse: a_attacked_with_exactly_one_other } }

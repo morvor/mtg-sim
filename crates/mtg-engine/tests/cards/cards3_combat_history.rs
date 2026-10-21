@@ -231,3 +231,43 @@ fn camel_prevents_desert_damage_to_itself_and_its_band_while_attacking() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Savannah Lions"));
 }
+
+#[test]
+fn creepy_puppeteer_resizes_the_only_other_attacker() {
+    cr!("508.1", "613.4b");
+    supported("Creepy Puppeteer");
+    let mut t = TestGame::new(2);
+    let pup = t.battlefield(P0, "Creepy Puppeteer");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    declare(
+        &mut t,
+        P0,
+        &[(pup, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (4, 3));
+    assert_eq!(t.pt(pup), (4, 3));
+}
+
+#[test]
+fn creepy_puppeteer_does_nothing_with_two_other_attackers() {
+    cr!("508.1");
+    let mut t = TestGame::new(2);
+    let pup = t.battlefield(P0, "Creepy Puppeteer");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    t.answer_yes(P0, true);
+    declare(
+        &mut t,
+        P0,
+        &[
+            (pup, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+            (lions, Entity::Player(P1)),
+        ],
+    );
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(lions), (2, 1));
+}
