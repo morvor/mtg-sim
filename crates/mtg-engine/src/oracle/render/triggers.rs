@@ -186,6 +186,7 @@ impl Renderer<'_> {
         } else if opponent_event(&t.trigger) {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
+        self.excess_trigger = matches!(t.trigger, TriggerCond::DealtExcessDamage { .. });
         let trig = self.trigger_text(&t.trigger);
         self.trigger_names_opponent =
             trig.contains("an opponent controls") || trig.contains("your opponents control");
@@ -596,6 +597,19 @@ impl Renderer<'_> {
                 } else {
                     format!("activate {kind} of {s}")
                 };
+                // "Whenever an ability of equipped creature is activated, if it isn't a
+                // mana ability, ...": by any player (CR 602.2).
+                if matches!(who, PlayerRel::Any)
+                    && !*include_mana
+                    && !matches!(source, Filter::Source)
+                {
+                    return Ev::new(
+                        "",
+                        format!(
+                            "{{alt:{w} {vp}|an ability of {s} is activated, if it isn't a mana ability}}"
+                        ),
+                    );
+                }
                 Ev::new(w, vp)
             }
             TriggerCond::Attacks(f) => Ev::new(obj(self, f), "attacks"),
@@ -1572,7 +1586,15 @@ impl Renderer<'_> {
                 // dealt damage" works anyway (CR 603.2c); once per batch or per player is
                 // "one or more".
                 let d = match (det, per) {
-                    (Det::A, BatchPer::Batch | BatchPer::Player) => Det::OneOrMore,
+                    (
+                        Det::A,
+                        BatchPer::Batch
+                        | BatchPer::Player
+                        | BatchPer::AnyPlayer
+                        | BatchPer::Recipient,
+                    ) => {
+                        Det::OneOrMore
+                    }
                     (other, _) => other,
                 };
                 let many = matches!(d, Det::OneOrMore);

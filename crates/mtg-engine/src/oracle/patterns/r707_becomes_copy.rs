@@ -132,9 +132,11 @@ fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     // "Each other creature you control becomes a copy of it": other than the object
-    // copied (the chosen or targeted creature), not only other than the source.
+    // copied (the chosen or targeted creature), not only other than the source; but
+    // "creatures you control other than ~" names the source (Deceiver of Form).
+    let names_source = l.split_once(" become").is_some_and(|(s, _)| s.contains("other than ~"));
     let what = match what {
-        Sel::All(f) => Sel::All(other_than(f, &of)),
+        Sel::All(f) if !names_source => Sel::All(other_than(f, &of)),
         w => w,
     };
     Some(if exceptions.is_empty() {

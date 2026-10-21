@@ -131,8 +131,16 @@ impl Renderer<'_> {
             let (_, kind) = head.rsplit_once(':')?;
             self.extra.x_paid = true;
             self.extra.x_energy = kind == "{e}";
-            let may = if may == "may" { "you may " } else { "" };
-            return Some(format!("{may}pay any amount of {}", paid_kind(kind)));
+            let k = paid_kind(kind);
+            // "You may pay one or more {E}": paying none is not paying (`kw::
+            // spell_cost_grammar`), so "if you do" means one or more was paid.
+            if may == "may" && kind == "{e}" {
+                return Some(format!("you may pay {{alt:any amount of|one or more}} {k}"));
+            }
+            if may == "may" {
+                return Some(format!("you may pay any amount of {k}"));
+            }
+            return Some(format!("pay any amount of {k}"));
         }
         if name == crate::search_rules::FOUND_ON_TOP_ANY_ORDER {
             return Some(
@@ -170,6 +178,12 @@ impl Renderer<'_> {
 
     /// `Value::Custom` names put into words here.
     pub(crate) fn custom_value_extra(&mut self, name: &str) -> Option<String> {
+        if name.starts_with(crate::kw::delayed_grammar_3::MANA_SPENT_ON_TARGET) {
+            return Some("the amount of mana spent to cast that spell".into());
+        }
+        if name == crate::kw::trigger_modifiers::LIFE_PAID_AMOUNT {
+            return Some("the life paid to activate it".into());
+        }
         if let Some((noun, done)) = self.paid_cost(name) {
             return Some(format!("the number of {} {done} this way", plural(&noun)));
         }

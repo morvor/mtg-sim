@@ -716,6 +716,10 @@ pub struct Game {
     pub play_grants: Vec<crate::casting::PlayGrant>,
     /// The permanent whose mana ability is resolving (for "tapped for mana" triggers).
     pub mana_ability_resolving: Option<ObjectId>,
+    /// The spell or ability resolving, while its events are performed and the triggers
+    /// they cause are detected ("whenever a spell or ability causes a player to shuffle
+    /// their library": see `kw/trigger_events.rs`).
+    pub resolving: Option<ObjectId>,
     /// Set while several players lose the game simultaneously, so the game's result is
     /// determined only once all of them have lost (CR 104.4a).
     pub losing_simultaneously: bool,
@@ -910,6 +914,7 @@ impl Game {
             saved_ctx: BTreeMap::new(),
             play_grants: vec![],
             mana_ability_resolving: None,
+            resolving: None,
             losing_simultaneously: false,
             named_exiles: vec![],
             mana_hint: None,

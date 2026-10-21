@@ -41,7 +41,7 @@ pub fn after_nth(main: bool, nth: u32, parts: &[TurnPart]) -> Option<String> {
     ))
 }
 
-fn parse_after(name: &str) -> Option<(bool, u32, Vec<TurnPart>)> {
+pub fn parse_after(name: &str) -> Option<(bool, u32, Vec<TurnPart>)> {
     let r = name.strip_prefix(AFTER_PREFIX)?;
     let mut it = r.split(':');
     let main = match it.next()? {

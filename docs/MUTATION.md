@@ -24,9 +24,10 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
   --shard 0/10 --sharding round-robin -o target/mutants/<stem>
 ```
 
-- `target/mutsrc` is a copy of the worktree (without `target/` and `.git`) refreshed before
-  each file, so one incremental build serves every mutant and an interrupted run never
-  leaves a mutation in the real tree. `--in-place` there also means one mutant at a time.
+- `target/mutsrc` is a copy of the committed tree (`git archive HEAD`, so commit the tests
+  first; uncommitted changes aren't measured) refreshed before each file, so one
+  incremental build serves every mutant and an interrupted run never leaves a mutation in
+  the real tree. `--in-place` there also means one mutant at a time.
 - A whole run over the 15 files would be about 5,200 mutants at roughly two minutes each
   (an incremental build of the engine and its seven test binaries takes ~50 s, the full
   `mtg-engine` suite ~105 s), i.e. a week. So each file is **sampled**: round-robin shard
@@ -37,8 +38,8 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
 - The re-run after adding tests (`RERUN=1`) finds each survivor again in the file's
   current mutant list (same function and mutation whose diff, the mutated line with the
   lines around it as saved in the earlier run's `mutants.out/diff/`, matches best; then
-  the same column and the nearest line, since merges move lines) and tests exactly those
-  (`-F '^<name>$'`). Matching by line distance alone picked a neighbouring identical
+  the same column and the nearest line, since merges move lines) and tests exactly those.
+  Matching by line distance alone picked a neighbouring identical
   mutation once code had moved by more than the distance between them. cargo-mutants
   27.1 applies neither `-F` nor `-E` to "delete field" mutants (it selected every one of
   them, 163 for triggers.rs), so the re-run applies each survivor's diff to
@@ -76,8 +77,8 @@ Each surviving mutant is classified as
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
 | casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
-| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 92.6% (75/81) |
-| **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.1%** (458/520) |
+| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 93.8% (76/81) |
+| **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.3%** (459/520) |
 
 "After new tests" re-tests the first run's survivors (`RERUN=1`, 2026-10-21, on the tree
 with all the new tests): each survivor now caught counts as caught. Some were killed by
@@ -155,7 +156,12 @@ player's results from another's.
   wins the game while each player draws for Burning Inquiry and nobody discards
   afterwards, CR 104.1, passes with the mutant). `Game::exec` performs nothing once the
   game has ended or is restarting, so the instructions after the one that ended it do
-  nothing whether or not the loop stops; the test stays as the CR 104.1 check.
+  nothing whether or not the loop stops; the test stays as the CR 104.1 check. The
+  planned instructions (`perform_plans`: sacrifices, discards, moves chosen by every
+  player and performed together) don't go through `Game::exec`, but a second test added in
+  review (Lore Broker, "each player draws a card, then discards a card": a chosen discard
+  after the winning draw) also passes with the mutant, so the claim holds for the cards
+  tried.
 - `simultaneous.rs:224:20: replace == with != in updates_number::reads`: **(b) missing
   test, not killed**. The mutant makes every instruction that stores a number count as one
   whose number is shared by all players. The cards whose per-player "that many" goes
@@ -543,9 +549,13 @@ Run 2026-10-21, 88 of 876 mutants (round-robin 0/10), 3 hours (the unmutated sui
 takes ~175 s). Tests for the (b) survivors were checked to fail with their mutant applied
 to the worktree and to pass without it.
 
-- `combat.rs:136:9: replace CombatState::attacked_alone -> bool with false`: **(a)
-  equivalent (dead code)**. The function has no caller (exalted and "attacks alone"
-  triggers use `TriggerCond::AttacksAlone` on the declaration event).
+- `combat.rs:136:9: replace CombatState::attacked_alone -> bool with false`: **(b)
+  missing test** (first triaged as dead code). No engine code calls it (exalted and
+  "attacks alone" triggers use `TriggerCond::AttacksAlone` on the declaration event), but
+  it's public API that `tests/cr/r506_combat_phase.rs` (`attacks_alone_and_attacking_alone`)
+  called only to check that it's false, which the mutant satisfies. Killed by the
+  assertions added there in review (Rogue Kavu declared alone attacked alone, the Bears
+  didn't).
 - `combat.rs:314:34: replace match guard self.obj(o).is(CardType::Battle) with false in
   Game::can_attack_target`: **(b) missing test**. An attack on a battle wasn't treated as
   an attack on its protector, so "~ can't attack unless defending player controls an
@@ -606,8 +616,9 @@ to the worktree and to pass without it.
 ## Status (2026-10-21)
 
 Done. All 15 core files are sampled (551 of 5,281 mutants, 520 viable): 427 killed
-before the new tests (**82.1%**), 458 after (**88.1%**), counting the first run's
-survivors that the re-run found caught. The 62 survivors left are each triaged above:
+before the new tests (**82.1%**), 459 after (**88.3%**), counting the first run's
+survivors that the re-run found caught (and `combat.rs:136`, killed by a test added in
+review and checked by hand). The 61 survivors left are each triaged above:
 equivalent (a), or behavior no card in the pool reaches yet (b, "not killed", with what a
 test would need). One engine bug was found and fixed (multi-player search moves,
 simultaneous.rs). Re-running a file later: `scripts/mutants.sh <stem>` for a new sample,

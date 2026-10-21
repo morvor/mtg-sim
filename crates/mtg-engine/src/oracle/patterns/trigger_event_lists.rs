@@ -49,7 +49,11 @@ fn same(x: &dyn std::fmt::Debug, y: &dyn std::fmt::Debug) -> bool {
 /// The parsed conditions, if each item is a whole trigger condition, or each later item
 /// is a verb phrase of the first item's subject.
 fn conditions(items: &[&str]) -> Option<Vec<Parsed>> {
-    if let Some(v) = items.iter().map(|s| condition(s)).collect::<Option<Vec<_>>>() {
+    if let Some(v) = items
+        .iter()
+        .map(|s| condition(s))
+        .collect::<Option<Vec<_>>>()
+    {
         return Some(v);
     }
     // A shared subject: the first words of the first item, the longest reading first
@@ -142,6 +146,32 @@ fn event_list(r: &str) -> Option<Parsed> {
                 TriggerCond::AnyOf(v) => conds.extend(v),
                 c => conds.push(c),
             }
+        }
+        // "Whenever one or more creatures you control fight or become blocked": one
+        // trigger event with alternatives, so a batch matching several of them triggers
+        // it once (CR 603.2c), with all of their events.
+        if batched.iter().all(|b| *b) {
+            let mut inner = Vec::new();
+            let mut per = None;
+            for c in &conds {
+                match c {
+                    TriggerCond::Batched { trigger, per: p }
+                        if !matches!(**trigger, TriggerCond::FirstTimeEachTurn(_)) =>
+                    {
+                        per = Some(*p);
+                        inner.push((**trigger).clone());
+                    }
+                    _ => return None,
+                }
+            }
+            return Some((
+                TriggerCond::Batched {
+                    trigger: Box::new(TriggerCond::AnyOf(inner)),
+                    per: per?,
+                },
+                it,
+                player,
+            ));
         }
         return Some((TriggerCond::AnyOf(conds), it, player));
     }

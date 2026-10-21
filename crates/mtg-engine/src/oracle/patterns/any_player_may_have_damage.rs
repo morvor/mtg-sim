@@ -13,7 +13,7 @@ use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::{end, parse_number};
 
 /// Whether a player chose to be dealt the damage (0 or 1).
-const CHOSE: Var = vars::USER + 1774;
+pub const CHOSE: Var = vars::USER + 1774;
 
 fn any_player_may_have_damage(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
