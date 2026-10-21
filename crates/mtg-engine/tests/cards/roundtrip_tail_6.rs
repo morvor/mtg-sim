@@ -252,3 +252,28 @@ fn gollum_reveals_the_top_card_the_guess_was_about() {
     assert!(t.in_hand(P0, "Forest"), "{log}");
     assert!(!t.in_hand(P0, "Grizzly Bears"), "{log}");
 }
+
+#[test]
+fn cherished_hatchlings_granted_ability_makes_the_dinosaur_fight() {
+    cr!("603.7c", "701.14a", "113.7");
+    // "When this creature dies, you may cast Dinosaur spells this turn as though they had
+    // flash, and whenever you cast a Dinosaur spell this turn, it gains "When this
+    // creature enters, you may have it fight another target creature."": "this creature"
+    // in the granted ability is the Dinosaur, not Cherished Hatchling.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let hatchling = t.battlefield(P0, "Cherished Hatchling");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.destroy_all(vec![hatchling], None, false);
+    t.settle();
+    t.resolve_all();
+    t.lands(P0, "Forest", 6);
+    let d = t.hand(P0, "Colossal Dreadmaw");
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.cast(P0, d).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"), "{}", t.dump_log());
+    let dreadmaw = t.named_on_battlefield("Colossal Dreadmaw")[0];
+    assert_eq!(t.obj_now(dreadmaw).damage, 2, "{}", t.dump_log());
+}
