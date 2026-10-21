@@ -103,6 +103,57 @@ fn p_next_spell_option(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "next spell options: the next spell can be cast without paying its mana cost / for life", priority: 110, parse: p_next_spell_option } }
 
+/// "the next instant spell and the next sorcery spell you cast this turn each have
+/// cascade": a waiting effect for each (CR 611.2f).
+fn p_next_two_spells(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("the next ")?;
+    let (a, rest) = r.split_once(" and the next ")?;
+    let (b_kind, granted) = rest.split_once(" you cast this turn each have ")?;
+    let first = crate::oracle::effects::parse_effect_text(
+        &format!("The next {a} you cast this turn has {granted}."),
+        b,
+    )?;
+    let second = crate::oracle::effects::parse_effect_text(
+        &format!("The next {b_kind} you cast this turn has {granted}."),
+        b,
+    )?;
+    if !matches!(first, Effect::NextSpell { .. }) || !matches!(second, Effect::NextSpell { .. }) {
+        return None;
+    }
+    Some(Effect::seq(vec![first, second]))
+}
+
+inventory::submit! { EffectPattern { name: "next spell options: the next A and the next B each have [keyword]", priority: 110, parse: p_next_two_spells } }
+
+/// "as you cast spells from your hand this turn, they gain cascade": each such spell this
+/// turn gains the keyword as it's cast (CR 611.2f, 601.2a).
+fn p_as_you_cast_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("as you cast ")?;
+    let (subject, granted) = r.split_once(" this turn, they gain ")?;
+    // "spells from your hand" → "spells you cast from your hand".
+    let (noun, zone) = match subject.split_once(" from ") {
+        Some((n, z)) => (n, format!(" from {z}")),
+        None => (subject, String::new()),
+    };
+    let subj = super::spell_cost_grammar::parse_subject(&format!("{noun} you cast{zone}"))?;
+    if subj.who != PlayerRel::You || subj.ordinal.is_some() || subj.singular || !subj.conds.is_empty() {
+        return None;
+    }
+    let _ = b;
+    let mods = crate::oracle::effects::keyword_mods(granted)?;
+    let mut parts = subj.parts;
+    parts.push(Filter::Custom(crate::next_spell::EACH_SPELL_THIS_TURN.into()));
+    Some(Effect::NextSpell {
+        filter: Filter::and(parts),
+        mods,
+        expires: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "next spell options: as you cast spells this turn, they gain [keyword]", priority: 110, parse: p_as_you_cast_this_turn } }
+
 /// The "next spell" effect an effect ends with.
 fn last_next_spell(e: &mut Effect) -> Option<&mut Vec<Modification>> {
     match e {

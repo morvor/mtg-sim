@@ -212,6 +212,20 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
         terms.graveyard_instead = Some(to);
         return true;
     }
+    // "If you cast a spell this way, you may spend mana as though it were mana of any color
+    // to cast it." (CR 609.4b)
+    if matches!(
+        l,
+        "if you cast a spell this way, you may spend mana as though it were mana of any color to cast it"
+            | "if you cast a spell this way, you may spend mana as though it were mana of any color to cast that spell"
+            | "you may spend mana as though it were mana of any color to cast spells this way"
+    ) {
+        if !spells || terms.spend_as_any_color {
+            return false;
+        }
+        terms.spend_as_any_color = true;
+        return true;
+    }
     // "Mana of any type can be spent to cast spells this way."
     if matches!(
         l,

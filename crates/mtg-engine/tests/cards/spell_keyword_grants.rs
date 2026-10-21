@@ -218,3 +218,61 @@ fn abaddon_spells_with_mana_value_up_to_the_life_lost_have_cascade() {
     t.g.recompute();
     assert_eq!(keyword_count(&t, spell, KeywordKind::Cascade), 0);
 }
+
+#[test]
+fn yidris_spells_from_hand_this_turn_gain_cascade() {
+    cr!("702.85a", "611.2f");
+    assert_supported(&["Yidris, Maelstrom Wielder"]);
+    let mut t = TestGame::new(2);
+    let y = t.battlefield(P0, "Yidris, Maelstrom Wielder");
+    t.attack(&[(y, Entity::Player(P1))], &[]);
+    t.advance_to(P0, Step::PostcombatMain);
+    t.lands(P0, "Forest", 4);
+    let a = t.hand(P0, "Grizzly Bears");
+    let b = t.hand(P0, "Grizzly Bears");
+    let s1 = t.cast(P0, a).go();
+    t.g.recompute();
+    assert_eq!(keyword_count(&t, s1, KeywordKind::Cascade), 1);
+    t.resolve_all();
+    // Every spell from the hand this turn, not only the first.
+    let s2 = t.cast(P0, b).go();
+    t.g.recompute();
+    assert_eq!(keyword_count(&t, s2, KeywordKind::Cascade), 1);
+}
+
+#[test]
+fn smoldering_stagecoach_next_instant_and_next_sorcery_have_cascade() {
+    cr!("702.85a", "611.2f");
+    assert_supported(&["Smoldering Stagecoach"]);
+    let mut t = TestGame::new(2);
+    let crew = t.battlefield(P0, "Hill Giant");
+    let sc = t.battlefield(P0, "Smoldering Stagecoach");
+    let _ = crew;
+    // Run the attack trigger's effect directly.
+    let e = mtg_engine::oracle::effects::parse_effect_text(
+        "The next instant spell and the next sorcery spell you cast this turn each have cascade.",
+        &mut mtg_engine::oracle::effects::Builder::new(&mtg_engine::oracle::CompileContext {
+            card_name: "x",
+            full_name: "x",
+            type_line: &mtg_engine::types::TypeLine::parse("Artifact"),
+            layout: mtg_engine::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        }),
+    )
+    .expect("parses");
+    let mut ctx = mtg_engine::eval::Ctx::new(Some(sc), P0);
+    t.g.exec(&e, &mut ctx);
+    t.lands(P0, "Mountain", 3);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let bolt2 = t.hand(P0, "Lightning Bolt");
+    let s = t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.g.recompute();
+    assert_eq!(keyword_count(&t, s, KeywordKind::Cascade), 1);
+    t.resolve_all();
+    let s = t.cast(P0, bolt2).target(Entity::Player(P1)).go();
+    t.g.recompute();
+    assert_eq!(keyword_count(&t, s, KeywordKind::Cascade), 0);
+}

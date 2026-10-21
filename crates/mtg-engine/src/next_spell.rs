@@ -84,6 +84,19 @@ pub fn is_cast_grant(s: &StaticAbility) -> bool {
         })
 }
 
+/// `Filter::Custom` conjunct of a waiting effect's filter: it applies to each matching
+/// spell its controller casts while it lasts ("as you cast spells from your hand this
+/// turn, they gain cascade"), rather than only to the next one. Matches every object.
+pub const EACH_SPELL_THIS_TURN: &str = "next spell:each spell this turn";
+
+fn filter_has_custom(f: &Filter, name: &str) -> bool {
+    match f {
+        Filter::Custom(n) => n == name,
+        Filter::And(v) => v.iter().any(|x| filter_has_custom(x, name)),
+        _ => false,
+    }
+}
+
 /// Whether the filter has `part` among its conjuncts.
 fn mentions(f: &Filter, part: &Filter) -> bool {
     match f {
@@ -117,7 +130,14 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
     for e in pending {
         let ctx = Ctx::new(e.source, e.player);
         if e.player == p && g.matches(spell, &e.filter, &ctx) {
-            apply.push((e.source, e.player, e.mods));
+            // "As you cast spells from your hand this turn, they gain cascade": every such
+            // spell this turn, not only the next.
+            if filter_has_custom(&e.filter, EACH_SPELL_THIS_TURN) {
+                apply.push((e.source, e.player, e.mods.clone()));
+                keep.push(e);
+            } else {
+                apply.push((e.source, e.player, e.mods));
+            }
         } else {
             keep.push(e);
         }
