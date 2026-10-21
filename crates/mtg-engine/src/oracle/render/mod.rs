@@ -44,6 +44,7 @@ mod library_top;
 mod more_terms;
 mod named_effects;
 mod named_qualities;
+mod named_replacements;
 mod named_statics;
 mod next_time;
 mod nouns;
@@ -55,6 +56,7 @@ mod play_terms;
 mod players;
 mod remembered_groups;
 mod replacement_terms;
+mod same_is_true;
 mod same_name_search;
 mod spell_cost_terms;
 mod statics;
@@ -185,6 +187,11 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
         if let Some((n, merged)) = off_battlefield_group(&abilities[i..]) {
             let line = r.ability(&merged);
             let line = line.replacen(" you own ", " you own that aren't on the battlefield ", 1);
+            out.lines.push(line);
+            skip = n - 1;
+            continue;
+        }
+        if let Some((n, line)) = r.same_is_true_group(&abilities[i..]) {
             out.lines.push(line);
             skip = n - 1;
             continue;

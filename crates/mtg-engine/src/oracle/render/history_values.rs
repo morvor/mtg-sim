@@ -100,6 +100,19 @@ impl Renderer<'_> {
             }
             (TriggerCond::Draws { who }, Tally::Events) => {
                 let p = self.rel_perfect(*who);
+                // "they've drawn" said as one phrase in each alternative.
+                let p = match p
+                    .strip_prefix("{alt:")
+                    .and_then(|r| r.strip_suffix('}'))
+                    .and_then(|r| r.split_once('|'))
+                {
+                    Some((a, b)) if !a.contains('{') && !b.contains('{') => {
+                        return format!(
+                            "the number of cards {{alt:{a} drawn|{b} drawn}} this turn"
+                        );
+                    }
+                    _ => p,
+                };
                 format!("the number of cards {p} drawn this turn")
             }
             (TriggerCond::Discards { who, filter }, Tally::Events) => {

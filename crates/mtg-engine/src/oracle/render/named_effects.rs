@@ -532,3 +532,39 @@ impl Renderer<'_> {
         Some((format!("each player {}, then {last}", parts.join(", ")), 1))
     }
 }
+
+impl Renderer<'_> {
+    /// "Double your life total" (CR 701.10d: the player gains or loses the life that
+    /// makes it twice what it was).
+    pub(crate) fn double_life_total(
+        &mut self,
+        cond: &Condition,
+        then: &Effect,
+        otherwise: &Effect,
+    ) -> Option<String> {
+        let Condition::Compare(Value::LifeTotal(p), Cmp::Ge, Value::Const(0)) = cond else {
+            return None;
+        };
+        let Effect::GainLife {
+            who: g,
+            n: Value::Mul(a, k),
+        } = then
+        else {
+            return None;
+        };
+        let Effect::LoseLife { who: l, n } = otherwise else {
+            return None;
+        };
+        let same = |x: &PlayerRef| format!("{x:?}") == format!("{p:?}");
+        if !same(g)
+            || !same(l)
+            || !matches!(a.as_ref(), Value::LifeTotal(x) if same(x))
+            || !matches!(k.as_ref(), Value::Const(1))
+            || !format!("{n:?}").contains("LifeTotal")
+        {
+            return None;
+        }
+        let w = self.player(p, Case::Poss);
+        Some(format!("double {w} life total"))
+    }
+}

@@ -3180,11 +3180,14 @@ impl Renderer<'_> {
                 *effect_only,
                 action,
             ),
-            (event, action) => self.gap(format!(
-                "replacement {:?} / {:?}",
-                std::mem::discriminant(event),
-                std::mem::discriminant(action)
-            )),
+            (event, action) => match self.replacement_named(def) {
+                Some(s) => s,
+                None => self.gap(format!(
+                    "replacement {:?} / {:?}",
+                    std::mem::discriminant(event),
+                    std::mem::discriminant(action)
+                )),
+            },
         }
     }
 

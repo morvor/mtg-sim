@@ -5,7 +5,6 @@
 //! players have lost the game" (CR 800.4), "you gain 1 life for each of the chosen colors
 //! it is", "for each black mana symbol in their mana costs".
 
-use super::players::Case;
 use super::*;
 use crate::choices::{HIGHEST_NUMBER, LOWEST_NUMBER, NUMBERS_MATCH, OWN_NUMBER};
 
@@ -215,25 +214,6 @@ impl Renderer<'_> {
             ),
             _ => return None,
         })
-    }
-
-    /// "If you are one of those players" (a player filter about the chosen numbers).
-    pub(crate) fn you_chose_number(&mut self, pf: &PlayerFilter) -> Option<String> {
-        let PlayerFilter::ChoseNumber(Cmp::Eq, v) = pf else {
-            return None;
-        };
-        matches!(v.as_ref(), Value::Custom(n) if n == HIGHEST_NUMBER)
-            .then(|| "{alt:you are one of those players|you chose the highest number}".into())
-    }
-
-    /// The subject for the players a player filter about chosen numbers names.
-    pub(crate) fn chosen_number_players(&mut self, pf: &PlayerFilter) -> Option<String> {
-        let PlayerFilter::ChoseNumber(c, v) = pf else {
-            return None;
-        };
-        let f = self.chose_number_filter(*c, v)?;
-        let _ = Case::Subj;
-        Some(format!("each player {f}"))
     }
 }
 

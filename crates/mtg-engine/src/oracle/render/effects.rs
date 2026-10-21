@@ -4486,7 +4486,10 @@ impl Renderer<'_> {
     }
 
     fn if_effect(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
-        if let Some(s) = self.skips_next_this_turn(cond, then, otherwise) {
+        if let Some(s) = self
+            .skips_next_this_turn(cond, then, otherwise)
+            .or_else(|| self.double_life_total(cond, then, otherwise))
+        {
             return s;
         }
         let pushed = super::compared_values(cond)
