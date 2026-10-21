@@ -231,3 +231,43 @@ fn kylox_voltstrider_casts_a_spell_exiled_with_it_and_puts_it_on_the_bottom() {
     // A card exiled some other way isn't among them.
     assert_eq!(t.zone(other), Zone::Exile);
 }
+
+#[test]
+fn arvinox_casts_permanent_spells_from_among_the_face_down_exiled_cards() {
+    cr!("406.3b", "611.2a", "609.4b");
+    assert_supported("Arvinox, the Mind Flail");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Arvinox, the Mind Flail");
+    t.lands(P0, "Island", 2);
+    let bears = t.library_top(P1, "Grizzly Bears");
+    mtg_engine::library::put_on_bottom(&mut t.g, P1, &[bears]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let bears_x = t.g.current(bears);
+    assert_eq!(t.zone(bears_x), Zone::Exile);
+    assert!(t.g.obj(bears_x).face_down);
+    // On a later turn, the Bears are cast with Islands (as though any color).
+    t.advance_to(P0, Step::PrecombatMain);
+    t.g.turn.priority = Some(P0);
+    assert!(t.cast_with(P0, bears_x, &[]).is_ok(), "{}", t.dump_log());
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+#[test]
+fn arvinox_doesnt_cast_nonpermanent_spells() {
+    cr!("601.3");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Arvinox, the Mind Flail");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    mtg_engine::library::put_on_bottom(&mut t.g, P1, &[bolt]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(bolt_x), Zone::Exile);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!can_cast_at(&mut t, P0, bolt_x, Entity::Player(P1)));
+}

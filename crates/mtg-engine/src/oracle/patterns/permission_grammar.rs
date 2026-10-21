@@ -1004,6 +1004,20 @@ pub fn parse(l: &str) -> Option<Perm> {
         _ => s,
     };
     let s = strip_spend(s, &mut p);
+    // "For as long as those cards remain exiled, you may look at them, you may cast
+    // permanent spells from among them, and ..." (Arvinox, the Mind Flail): looking at the
+    // face-down cards, and the permission (CR 406.3b).
+    let s = match s
+        .strip_prefix("look at them, you may ")
+        .or_else(|| s.strip_prefix("look at them and you may "))
+        .or_else(|| s.strip_prefix("look at them, and you may "))
+    {
+        Some(r) => {
+            p.look = true;
+            r.to_string()
+        }
+        None => s,
+    };
     let s = same_zone_twice(&s);
     let mut r: &str = &s;
     // The verb, and what it takes.
