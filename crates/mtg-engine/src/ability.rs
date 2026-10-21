@@ -2631,6 +2631,13 @@ pub enum ReplacementAction {
     /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
     /// shield that is used up.
     PreventPortion(Value),
+    /// The action, and then an instruction performed right after the modified event, with
+    /// the object the event was about as "it" (`vars::IT`): "exile it instead. When you
+    /// do, create a 2/2 green Wolf creature token" (a reflexive triggered ability each time
+    /// the effect applies, CR 603.12, 614.6), "exile it instead. Return it to the
+    /// battlefield ... at the beginning of the next end step" (a delayed triggered
+    /// ability for each object, CR 603.7).
+    Then(Box<ReplacementAction>, Box<Effect>),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.

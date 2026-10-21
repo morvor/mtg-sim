@@ -1221,6 +1221,18 @@ impl Game {
             ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
         };
         let mut action = cand.def.action.clone();
+        // "... instead. When you do, ...": the instruction after the modified event.
+        while let ReplacementAction::Then(inner, then) = action {
+            let mut c = ctx.clone();
+            let info = event_info_of(&ev);
+            if let Some(o) = info.object {
+                c.vars.insert(vars::IT, vec![Entity::Object(o)]);
+                c.nums.insert(FOLLOW_IT, 1);
+            }
+            c.event = Some(info);
+            self.post_replacement_effects.push((c, *then));
+            action = *inner;
+        }
         // "Reveal that card and put it on top of your library instead": the card is
         // revealed where it is (CR 701.20b) by the player it's moving away from, then the
         // event is modified as any other move elsewhere.
@@ -1971,6 +1983,11 @@ fn event_amount(ev: &ReplEvent) -> Option<u32> {
         _ => None,
     }
 }
+
+/// A context flag: "it" in an instruction performed after a replacement's modified event
+/// (`ReplacementAction::Then`) is the object the event moved, wherever it went ("exile it
+/// instead. Return it to the battlefield ...", CR 400.7: the same card, followed).
+pub const FOLLOW_IT: Var = vars::USER + 4242;
 
 pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
     let mut e = EventInfo::default();

@@ -978,6 +978,15 @@ impl Game {
 
     pub(crate) fn run_post_replacement_effects(&mut self) {
         while let Some((mut c, e)) = self.post_replacement_effects.pop() {
+            if c.nums.remove(&crate::replacement::FOLLOW_IT).is_some() {
+                if let Some(v) = c.vars.get_mut(&vars::IT) {
+                    for e in v.iter_mut() {
+                        if let Entity::Object(o) = e {
+                            *o = self.current(*o);
+                        }
+                    }
+                }
+            }
             self.exec(&e, &mut c);
         }
     }
