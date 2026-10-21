@@ -905,6 +905,16 @@ impl Renderer<'_> {
         self.default_head = Some("spell");
         let n = self.noun(f, Num::Many);
         (self.alt_and, self.plural_alts, self.default_head) = saved;
+        // "Dragon spells and artifact spells": each kind of spell said in full.
+        if let Filter::Or(v) = f {
+            if v.len() > 1 && v.iter().all(Self::is_type_like) {
+                let parts: Vec<String> = v.iter().map(|x| self.spell_noun_plural(x)).collect();
+                let each = join_list(&parts, "and");
+                if each != n {
+                    return format!("{{alt:{n}|{each}}}");
+                }
+            }
+        }
         if n.contains("spell") {
             n
         } else if n == "permanents" || n == "cards" {

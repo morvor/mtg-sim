@@ -240,6 +240,14 @@ fn outcome_cond(c: &Condition) -> Option<(Var, OutcomeCond)> {
         return Some((s, OutcomeCond::Some(f)));
     }
     match c {
+        // "Destroy target artifact or land. If an artifact is destroyed this way, ...":
+        // the snapshot is the one target, if it was destroyed.
+        Condition::And(v) => match v.as_slice() {
+            [Condition::SelNonEmpty(Sel::Var(s)), Condition::SelMatches(Sel::Target(_), f)] => {
+                Some((*s, OutcomeCond::Some(f.clone())))
+            }
+            _ => None,
+        },
         Condition::Compare(n, Cmp::Ge, Value::Const(k)) if *k >= 2 => {
             let (s, f) = snapshot_count(n)?;
             Some((s, OutcomeCond::AtLeast(*k, f)))

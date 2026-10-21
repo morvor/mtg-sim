@@ -579,6 +579,19 @@ impl Renderer<'_> {
                 } else {
                     format!("activate {kind} of {s}")
                 };
+                // "Whenever an ability of equipped creature is activated, if it isn't a
+                // mana ability, ...": by any player (CR 602.2).
+                if matches!(who, PlayerRel::Any)
+                    && !*include_mana
+                    && !matches!(source, Filter::Source)
+                {
+                    return Ev::new(
+                        "",
+                        format!(
+                            "{{alt:{w} {vp}|an ability of {s} is activated, if it isn't a mana ability}}"
+                        ),
+                    );
+                }
                 Ev::new(w, vp)
             }
             TriggerCond::Attacks(f) => Ev::new(obj(self, f), "attacks"),

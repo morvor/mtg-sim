@@ -8316,12 +8316,8 @@ impl Renderer<'_> {
                 match n {
                     Value::Const(1) => format!("{verb} the top card of {p} library"),
                     other => {
-                        let (c, w) = self.counted(other, "card");
-                        let c = c.split_once(' ').map(|x| x.0.to_string()).unwrap_or(c);
-                        format!(
-                            "{verb} the top {c} cards of {p} library{}",
-                            w.unwrap_or_default()
-                        )
+                        let top = self.top_cards(other, &p);
+                        format!("{verb} {top}")
                     }
                 }
             }

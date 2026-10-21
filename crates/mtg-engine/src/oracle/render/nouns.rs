@@ -306,7 +306,7 @@ impl Renderer<'_> {
         k.name().to_lowercase()
     }
 
-    fn is_type_like(f: &Filter) -> bool {
+    pub(crate) fn is_type_like(f: &Filter) -> bool {
         match f {
             Filter::Type(_)
             | Filter::Subtype(_)
@@ -462,6 +462,8 @@ impl Renderer<'_> {
                         Filter::Untapped => "untapped",
                         Filter::Blocked => "blocked",
                         Filter::Unblocked => "unblocked",
+                        Filter::Enchanted => "enchanted",
+                        Filter::Equipped => "equipped",
                         _ => return None,
                     })
                 };
@@ -2182,7 +2184,7 @@ fn distribute_or(f: &Filter) -> Filter {
                 && alts.iter().all(|a| is_double_faced(a) || matches!(a, Filter::Type(_))))
             && !alts.iter().all(|a| matches!(a, Filter::Color(_)))
             && !alts.iter().all(|a| matches!(a, Filter::Named(_)))
-            && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked)))
+            && !alts.iter().all(|a| matches!(a, Filter::Attacking | Filter::Blocking | Filter::Tapped | Filter::Untapped | Filter::Blocked | Filter::Unblocked | Filter::Enchanted | Filter::Equipped)))
     };
     let Some(pos) = v.iter().position(complex) else {
         return f.clone();

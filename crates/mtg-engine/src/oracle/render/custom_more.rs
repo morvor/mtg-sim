@@ -97,7 +97,19 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_condition_more(&mut self, name: &str) -> Option<String> {
+        // "defending player controls three or more creatures that share a creature type".
+        if let Some(k) = name.strip_prefix(crate::kw::combat_history_4::DEFENDING_SHARE_A_TYPE) {
+            let k: i32 = k.parse().ok()?;
+            let w = number_word(k);
+            return Some(format!(
+                "defending player controls {{alt:{w} or more|at least {w}}} creatures that share a creature type"
+            ));
+        }
         Some(match name {
+            // CR 701.43a.
+            crate::kw::exert::NOT_EXERTED_THIS_TURN => {
+                format!("{} hasn't been exerted this turn", self.me())
+            }
             "creature_died_under_an_opponents_control_this_turn" => {
                 "a creature died under an opponent's control this turn".into()
             }

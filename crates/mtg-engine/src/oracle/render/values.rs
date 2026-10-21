@@ -1207,6 +1207,31 @@ impl Renderer<'_> {
 
     /// "you control an artifact", "you control no Islands", "there are ... in your graveyard".
     pub(crate) fn exists(&mut self, f: &Filter, negated: bool) -> String {
+        // "if a card is exiled with it" (CR 607.2a: exiled by an ability of this object).
+        if let (Filter::And(v), false) = (f, negated) {
+            let linked =
+                |x: &Filter| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked));
+            if v.iter().any(linked) {
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| !linked(x) && !matches!(x, Filter::InZone(ZoneKind::Exile)))
+                        .cloned()
+                        .collect(),
+                );
+                let n = match rest {
+                    Filter::Any | Filter::Card => "a card".to_string(),
+                    r => self.noun_det(&r, Det::A),
+                };
+                let m = self.me();
+                let there = self.exists_plain(f, negated);
+                return format!("{{alt:{there}|{n} is exiled with {m}}}");
+            }
+        }
+        self.exists_plain(f, negated)
+    }
+
+    /// [`Self::exists`] without the alternative wordings above.
+    fn exists_plain(&mut self, f: &Filter, negated: bool) -> String {
         // "if a creature is attacking you".
         if let (Filter::And(v), false) = (f, negated) {
             if let [Filter::Type(CardType::Creature), Filter::Attacking, Filter::AttackingPlayer(r)] =
