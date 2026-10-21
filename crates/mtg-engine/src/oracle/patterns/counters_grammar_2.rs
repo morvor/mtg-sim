@@ -718,3 +718,91 @@ fn each_kind_among_on_either(l: &str, prev: &mut Effect, _b: &mut Builder) -> bo
 }
 
 inventory::submit! { FollowupPattern { name: "counters grammar 2: for each kind of counter among, on either of those tokens", priority: 45, apply: each_kind_among_on_either } }
+
+/// "Each other creature you control enters with a number of additional +1/+1 counters on
+/// it equal to ~'s power and as a Mutant in addition to its other types." (Master
+/// Biomancer): two modifications of how those permanents enter (CR 614.1c), each read on
+/// its own: the counters, and "as [another such permanent] enters, it becomes a Mutant in
+/// addition to its other types".
+fn enters_with_counters_and_as(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (subject, rest) = l.split_once(" enters with ")?;
+    let (counters, typ) = rest.rsplit_once(" and as ")?;
+    if !typ.ends_with(" in addition to its other types") {
+        return None;
+    }
+    let one = subject.strip_prefix("each other ")?;
+    let mut out =
+        crate::oracle::statics::parse_static(&format!("{subject} enters with {counters}."), ctx)?;
+    let types = crate::oracle::statics::parse_static(
+        &format!("As another {one} enters, it becomes {typ}."),
+        ctx,
+    )?;
+    out.extend(types);
+    for a in &mut out {
+        std::sync::Arc::make_mut(a).text = text.into();
+    }
+    Some(out)
+}
+
+inventory::submit! { super::StaticPattern { name: "counters grammar 2: others enter with counters and as a [type]", priority: 90, parse: enters_with_counters_and_as } }
+
+/// In an ability that triggers on casting a spell: "that creature enters with an
+/// additional +1/+1 counter on it for each Dog and/or Wolf you control" (Torgal), "~
+/// enters with two +1/+1 counters on it for each creature sacrificed this way" (Gluttonous
+/// Hellkite), "That planeswalker enters with an additional loyalty counter on it" (Dark
+/// Intimations): a replacement effect for the permanent that spell becomes (CR 614.1c,
+/// 400.7a). A number the resolving ability determines ("sacrificed this way") is locked
+/// in as it resolves (CR 608.2h); a count of permanents is taken as it enters.
+fn cast_spell_enters_with(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subject, rest) = l.split_once(" enters with ")?;
+    // "When you cast ~, ... ~ enters with ...": the spell is the trigger's.
+    let self_cast = subject == "~" && b.in_trigger && b.ctx.is_permanent() && b.sentences > 0;
+    if !matches!(b.it, Sel::TriggerSpell) && !self_cast {
+        return None;
+    }
+    let one_word_that = subject
+        .strip_prefix("that ")
+        .is_some_and(|n| !n.contains(' ') && n != "spell");
+    if !(one_word_that || subject == "~" || subject == "it") {
+        return None;
+    }
+    // Only counters: "an additional +1/+1 counter on it ...", "two +1/+1 counters on it".
+    let rest = rest.replacen(" additional ", " ", 1);
+    let rest = rest
+        .strip_prefix("an ")
+        .map_or(rest.clone(), |r| format!("a {r}"));
+    let (head, tail) = rest
+        .split_once(" counter on it")
+        .or_else(|| rest.split_once(" counters on it"))?;
+    let plural = rest.contains(" counters on it");
+    let saved = (b.targets.len(), b.it.clone());
+    let text = format!(
+        "put {head} {} on ~{tail}",
+        if plural { "counters" } else { "counter" }
+    );
+    let e = parse_clause(&text, b);
+    let ok = b.targets.len() == saved.0;
+    b.it = saved.1;
+    let Some(Effect::AddCounters { kind, n, .. }) = e.filter(|_| ok) else {
+        b.targets.truncate(saved.0);
+        return None;
+    };
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::In(Box::new(Sel::TriggerSpell))),
+            action: ReplacementAction::EnterWithCounters(kind, n),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::Permanent,
+        uses: Some(1),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counters grammar 2: the cast spell enters with counters", priority: 85, parse: cast_spell_enters_with } }

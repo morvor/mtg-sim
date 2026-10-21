@@ -199,7 +199,14 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
     let rest = match rest.strip_prefix("an additional ") {
         Some(r) => r,
         None if rest.contains(" additional ") => rest,
-        None => return None,
+        // "Face-down creatures you control enter with a flying counter on them."
+        None => match rest
+            .strip_prefix("a ")
+            .or_else(|| rest.strip_prefix("an "))
+        {
+            Some(r) if crate::oracle::costs::counter_kind(r).is_some() => r,
+            _ => return None,
+        },
     };
     // "+1/+1 counter on it", "two +1/+1 counters on them for each ..."
     let (n, r) = match parse_number(rest) {
@@ -233,6 +240,16 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
         Value::CountersOn(Box::new(Sel::This), Some(k.into()))
     } else {
         let each = r.strip_prefix("for each ")?;
+        // "for each Angel you already control" (Giada, Font of Hope): the others, which
+        // are what's on the battlefield as the replacement applies.
+        let already;
+        let each = match each.strip_suffix(" you already control") {
+            Some(n) => {
+                already = format!("{n} you control");
+                already.as_str()
+            }
+            None => each,
+        };
         let v = match each {
             // This turn's history (see `value_results`).
             _ if super::value_results::whole_history_count(each).is_some() => {
