@@ -2747,6 +2747,20 @@ impl Renderer<'_> {
                     format!("{t}, {b}")
                 }
             }
+            // Noting a choice for the linked ability: "Choose a creature card exiled with
+            // ~." (Koh, the Face Stealer; the linked ability says "the last chosen card").
+            Effect::NoteLinked {
+                what: what @ Sel::Choose { chooser, .. },
+                ..
+            } => {
+                let c = self.player(chooser, Case::Subj);
+                let s = self.sel(&strip_chooser(what), Case::Obj);
+                if c == "you" {
+                    format!("choose {s}")
+                } else {
+                    format!("{c} chooses {s}")
+                }
+            }
             // Noting what the ability affected has no words of its own: the linked
             // ability says "that player" (CR 607.1).
             Effect::NoteLinked { .. } => String::new(),
@@ -6792,6 +6806,12 @@ impl Renderer<'_> {
             // "choose any card name": any card in the Oracle card reference (CR 201.4).
             ChoiceKind::CardName => "{alt:a|any} card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
+            ChoiceKind::Number { min: 0, max } if *max == crate::choices::MAX_CHOSEN_NUMBER => {
+                "a number".into()
+            }
+            ChoiceKind::Number { min, max } if *max == crate::choices::MAX_CHOSEN_NUMBER => {
+                format!("a number {min} or greater")
+            }
             ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),
             ChoiceKind::Opponent => "an opponent".into(),
             ChoiceKind::Player => "a player".into(),

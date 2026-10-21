@@ -869,8 +869,10 @@ fn unsupported(args: &[String]) {
 /// All `ruling!("Card", "text")` citations.
 pub fn ruling_citations() -> Vec<(String, String, String)> {
     let mut files = Vec::new();
-    // Only the engine: mtg-data and mtg-tools mention the macro in docs and help text.
+    // Only the engine and the API's tests (hidden information): mtg-data and mtg-tools
+    // mention the macro in docs and help text.
     rust_files(&repo_root().join("crates/mtg-engine"), &mut files);
+    rust_files(&repo_root().join("crates/mtg-api/tests"), &mut files);
     let re =
         Regex::new(r#"(?s)ruling!\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)"#)
             .unwrap();
