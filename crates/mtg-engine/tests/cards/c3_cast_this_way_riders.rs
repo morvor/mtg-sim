@@ -851,3 +851,32 @@ fn glimpse_of_tomorrow_reveals_as_many_as_shuffled_in_and_puts_auras_last() {
     assert!(t.obj_now(r[0]).attached_to.is_some());
     assert_eq!(t.library_size(P0), 0);
 }
+
+#[test]
+fn hew_the_entwood_puts_chosen_nonlands_then_lands_tapped_onto_the_battlefield() {
+    cr!("701.20a", "701.21a");
+    assert_supported("Hew the Entwood");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 5);
+    let lands = t.lands(P0, "Forest", 3);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let forest = t.library_top(P0, "Forest");
+    let thopter = t.library_top(P0, "Ornithopter");
+    let spell = t.hand(P0, "Hew the Entwood");
+    // Sacrifice three lands: reveal three cards; choose the Ornithopter and the Forest.
+    let sac: Vec<Entity> = lands.iter().map(|l| Entity::Object(*l)).collect();
+    t.answer_choose(P0, &sac);
+    t.answer_choose(P0, &[Entity::Object(thopter), Entity::Object(forest)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let thopter_x = t.g.current(thopter);
+    let forest_x = t.g.current(forest);
+    assert!(t.on_battlefield(thopter_x), "{}", t.dump_log());
+    assert!(!t.obj_now(thopter_x).tapped);
+    assert!(t.on_battlefield(forest_x));
+    assert!(t.obj_now(forest_x).tapped);
+    let bears_x = t.g.current(bears);
+    assert_eq!(t.zone(bears_x), Zone::Library(P0));
+    assert_ne!(t.g.library_top(P0), Some(bears_x));
+}

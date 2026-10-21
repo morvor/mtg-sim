@@ -616,3 +616,76 @@ fn f_do_the_same_for(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "card flow 4: then do the same for [other] cards", priority: 5, apply: f_do_the_same_for } }
+
+/// Where "put ... [destination]" puts cards, for the destinations
+/// [`put_chosen_by_kind`] reads.
+fn simple_destination(s: &str) -> Option<Destination> {
+    Some(match s.trim() {
+        "onto the battlefield" => Destination::battlefield().under_your_control(),
+        "onto the battlefield tapped" => {
+            let mut d = Destination::battlefield().under_your_control();
+            d.tapped = true;
+            d
+        }
+        "into your hand" => Destination::zone(ZoneKind::Hand),
+        "into your graveyard" => Destination::zone(ZoneKind::Graveyard),
+        "on the bottom of your library in a random order" => {
+            let mut d = Destination::zone(ZoneKind::Library);
+            d.position = LibraryPosition::BottomRandom;
+            d
+        }
+        _ => return None,
+    })
+}
+
+/// "Put all nonland cards chosen this way onto the battlefield, then put all land cards
+/// chosen this way onto the battlefield tapped, then put the rest on the bottom of your
+/// library in a random order." (Hew the Entwood): after choosing among the cards revealed
+/// (which stay where they are), each kind of the chosen cards goes where it says, then the
+/// cards revealed and not chosen.
+fn put_chosen_by_kind(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    // (Only after "choose ... revealed this way": see `dig_grammar`.)
+    if !b.named.iter().any(|(n, _)| n == "\u{1}dig-chosen") {
+        return None;
+    }
+    let mut out = Vec::new();
+    let parts: Vec<&str> = l.split(", then ").collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    for (i, part) in parts.iter().enumerate() {
+        let r = part.strip_prefix("put ")?;
+        if let Some(dest) = r.strip_prefix("the rest ") {
+            if i + 1 != parts.len() {
+                return None;
+            }
+            out.push(Effect::Move {
+                what: Sel::All(Filter::and(vec![
+                    Filter::In(Box::new(Sel::Var(vars::DUG))),
+                    Filter::not(Filter::In(Box::new(Sel::Var(vars::DUG_CHOSEN)))),
+                    Filter::InZone(ZoneKind::Library),
+                ])),
+                to: simple_destination(dest)?,
+            });
+            continue;
+        }
+        let (q, dest) = r.strip_prefix("all ")?.split_once(" cards chosen this way ")?;
+        let phrase = format!("{q} cards");
+        let (f, _, rest) = crate::oracle::phrases::parse_object_phrase(&phrase)?;
+        if !end(rest).trim().is_empty() {
+            return None;
+        }
+        out.push(Effect::Move {
+            what: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(vars::DUG_CHOSEN))),
+                Filter::InZone(ZoneKind::Library),
+                f,
+            ])),
+            to: simple_destination(dest)?,
+        });
+    }
+    Some(Effect::seq(out))
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: put all [kind] cards chosen this way [there], then ...", priority: 90, parse: put_chosen_by_kind } }
