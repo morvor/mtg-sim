@@ -29,6 +29,24 @@ impl Renderer<'_> {
         if let Some(r) = self.caused_by_spell(trigger, cond) {
             return Some(r);
         }
+        // "Whenever you untap one or more permanents during your untap step".
+        if is_custom(cond, crate::kw::trigger_events::DURING_YOUR_UNTAP_STEP) {
+            if let TriggerCond::Batched { trigger: inner, .. } = trigger {
+                if let TriggerCond::BecomesUntapped(Filter::And(v)) = inner.as_ref() {
+                    let mine = |f: &Filter| matches!(f, Filter::ControlledBy(PlayerRel::You));
+                    if v.iter().any(mine) {
+                        let rest: Vec<Filter> = v.iter().filter(|f| !mine(f)).cloned().collect();
+                        let n = self.noun(&Filter::and(rest), Num::Many);
+                        return Some((
+                            "you".into(),
+                            format!("untap one or more {n} during your untap step"),
+                        ));
+                    }
+                }
+            }
+            let (s, vp) = self.trigger_event_parts(trigger);
+            return Some((s, format!("{vp} during your untap step")));
+        }
         // "Whenever one or more opponents each lose exactly 1 life" (`trigger_grammar_4.rs`).
         if let (
             TriggerCond::Batched {

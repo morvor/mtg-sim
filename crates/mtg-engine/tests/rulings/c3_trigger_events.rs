@@ -185,3 +185,54 @@ fn ob_nixilis_opponents_each_lose_exactly_one() {
     assert_eq!(t.stack_len(), 0);
     assert_eq!(t.counters(ob, "+1/+1"), 1);
 }
+
+#[test]
+fn millennium_calendar_counts_permanents_untapped_in_your_untap_step() {
+    cr!("502.3", "603.2c");
+    ruling!(
+        "The Millennium Calendar",
+        "The Millenium Calendar's first ability triggers during the untap step."
+    );
+    supported("The Millennium Calendar");
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::End);
+    let cal = t.battlefield(P0, "The Millennium Calendar");
+    for l in t.lands(P0, "Forest", 3) {
+        t.g.obj_mut(l).tapped = true;
+    }
+    // An opponent's tapped permanent isn't untapped by you.
+    let theirs = t.battlefield(P1, "Forest");
+    t.g.obj_mut(theirs).tapped = true;
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.counters(cal, "time"), 3);
+    // Untapping outside the untap step doesn't trigger it.
+    let land = t.named_on_battlefield("Forest")[0];
+    t.g.obj_mut(land).tapped = true;
+    t.g.untap(land);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn ninth_doctor_additional_upkeep_after_the_upkeep() {
+    cr!("502.3", "500.8");
+    ruling!(
+        "The Ninth Doctor",
+        "The additional upkeep is taken after that step, not after the untap step."
+    );
+    supported("The Ninth Doctor");
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::End);
+    let doc = t.battlefield(P0, "The Ninth Doctor");
+    t.g.obj_mut(doc).tapped = true;
+    t.advance_to(P0, Step::Draw);
+    // The trigger resolved in the upkeep: a second upkeep followed it, in the same turn.
+    assert_eq!(t.g.turn.upkeeps, 2);
+    assert_eq!(t.g.turn.step_log.iter().filter(|s| **s == Step::Upkeep).count(), 2);
+    // An untapped Doctor doesn't become untapped: one upkeep the next turn.
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Draw);
+    assert_eq!(t.g.turn.upkeeps, 1);
+}

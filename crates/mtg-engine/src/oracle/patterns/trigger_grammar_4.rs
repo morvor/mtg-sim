@@ -17,11 +17,17 @@
 //! event triggering it, CR 603.2c), "Whenever one or more opponents each lose exactly 1
 //! life" (Ob Nixilis, Captive Kingpin: each opponent's total loss in one batch of
 //! simultaneous events, triggering once, [`BatchPer::AnyPlayer`]).
+//!
+//! Untapping during the untap step (CR 502.3): "Whenever you untap one or more permanents
+//! during your untap step" (The Millennium Calendar: the permanents you control that
+//! become untapped then, as one batch), "Whenever ~ becomes untapped during your untap
+//! step" (The Ninth Doctor).
 
 use super::{EffectPattern, TriggerPattern};
 use crate::ability::*;
 use crate::kw::trigger_events::{
-    CAUSED_BY_EVENT_PLAYERS, CAUSED_BY_OPPONENTS, CAUSED_BY_SPELL_OR_ABILITY, THE_CAUSE,
+    CAUSED_BY_EVENT_PLAYERS, CAUSED_BY_OPPONENTS, CAUSED_BY_SPELL_OR_ABILITY,
+    DURING_YOUR_UNTAP_STEP, THE_CAUSE,
 };
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
@@ -238,6 +244,34 @@ fn damage_to_that_permanent_or_player(l: &str, b: &mut Builder) -> Option<Effect
 
 inventory::submit! { EffectPattern { name: "~ deals N damage to that permanent or player (the damaged one)", priority: 100, parse: damage_to_that_permanent_or_player } }
 
+/// "[untap event] during your untap step".
+fn during_untap_step(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t).strip_suffix(" during your untap step")?;
+    let ev = match r.strip_prefix("you untap one or more ") {
+        Some(objs) => format!("one or more {objs} you control become untapped"),
+        None => r.to_string(),
+    };
+    let (c, it, p) = parse_trigger_condition(&format!("whenever {ev}"))?;
+    let untap = |c: &TriggerCond| matches!(c, TriggerCond::BecomesUntapped(_));
+    let ok = match &c {
+        TriggerCond::Batched { trigger, .. } => untap(trigger),
+        c => untap(c),
+    };
+    if !ok {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(c),
+            cond: Condition::Custom(DURING_YOUR_UNTAP_STEP.into()),
+        },
+        it,
+        p,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: [untap event] during your untap step", priority: 100, parse: during_untap_step } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +295,17 @@ mod tests {
             );
         }
         assert!(caused_event("a creature causes you to gain life").is_none());
+    }
+
+    #[test]
+    fn reads_untap_step_events() {
+        for t in [
+            "you untap one or more permanents during your untap step",
+            "~ becomes untapped during your untap step",
+        ] {
+            assert!(matches!(during_untap_step(t), Some((TriggerCond::Where { .. }, _, _))), "{t}");
+        }
+        assert!(during_untap_step("you draw a card during your untap step").is_none());
     }
 
     #[test]
