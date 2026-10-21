@@ -76,6 +76,7 @@ pub type Divergences = Arc<Mutex<Vec<String>>>;
 pub struct ReplayTransport {
     seat: u8,
     state: Arc<Mutex<(SeatTranscript, usize)>>,
+    renaming: Arc<Mutex<AbilityRenaming>>,
     divergences: Divergences,
 }
 
@@ -84,6 +85,7 @@ impl ReplayTransport {
         ReplayTransport {
             seat,
             state: Arc::new(Mutex::new((recorded, 0))),
+            renaming: Arc::default(),
             divergences,
         }
     }
@@ -110,7 +112,8 @@ impl ReplayTransport {
         let line = serde_json::to_string(msg).unwrap_or_default();
         match recorded.unanswered.last() {
             Some(r) => {
-                if let Some(d) = json_difference(r, &line) {
+                let mut ren = self.renaming.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(d) = json_difference_renaming(r, &line, &mut ren) {
                     self.diverged(format!(
                         "seat {}: the game-over message differs at {d}",
                         self.seat
@@ -128,39 +131,109 @@ impl ReplayTransport {
 /// Where two JSON lines first differ (the paths of differing values), or `None` if they
 /// are equal as JSON.
 pub fn json_difference(a: &str, b: &str) -> Option<String> {
+    json_difference_renaming(a, b, &mut AbilityRenaming::default())
+}
+
+/// The ability ids of a recorded game and of its replay, paired as they're met. Ability
+/// ids come from a counter shared by the whole process and abilities are created as games
+/// go (a Clue's ability as a player investigates), so a replay may number them
+/// differently: requests are compared up to a consistent renaming of ability ids.
+#[derive(Clone, Debug, Default)]
+pub struct AbilityRenaming {
+    to: BTreeMap<u64, u64>,
+    from: BTreeMap<u64, u64>,
+}
+
+impl AbilityRenaming {
+    /// Whether `a` (recorded) and `b` (replayed) can name the same ability.
+    fn pair(&mut self, a: u64, b: u64) -> bool {
+        match (self.to.get(&a), self.from.get(&b)) {
+            (Some(x), Some(y)) => *x == b && *y == a,
+            (None, None) => {
+                self.to.insert(a, b);
+                self.from.insert(b, a);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+/// [`json_difference`], with `ability` ids compared up to `renaming`.
+pub fn json_difference_renaming(
+    a: &str,
+    b: &str,
+    renaming: &mut AbilityRenaming,
+) -> Option<String> {
     use serde_json::Value;
-    fn walk(a: &Value, b: &Value, path: &str) -> Option<String> {
+    fn short(v: &Value) -> String {
+        let s = v.to_string();
+        match s.char_indices().nth(400) {
+            Some((i, _)) => format!("{}…", &s[..i]),
+            None => s,
+        }
+    }
+    // The path of the first difference, and the objects containing it.
+    fn walk(a: &Value, b: &Value, path: &str, ren: &mut AbilityRenaming) -> Option<String> {
+        if path.ends_with(".ability") {
+            if let (Some(x), Some(y)) = (a.as_u64(), b.as_u64()) {
+                return (!ren.pair(x, y)).then(|| {
+                    format!("{path}: {x} vs {y} (ability ids paired differently before)")
+                });
+            }
+        }
         match (a, b) {
             (Value::Object(x), Value::Object(y)) => {
                 for k in x.keys().chain(y.keys()) {
-                    let (u, v) = (x.get(k), y.get(k));
-                    match (u, v) {
+                    match (x.get(k), y.get(k)) {
                         (Some(u), Some(v)) => {
-                            if let Some(d) = walk(u, v, &format!("{path}.{k}")) {
+                            if let Some(d) = walk(u, v, &format!("{path}.{k}"), ren) {
                                 return Some(d);
                             }
                         }
-                        _ => return Some(format!("{path}.{k}: {u:?} vs {v:?}")),
+                        (u, v) => return Some(format!("{path}.{k}: {u:?} vs {v:?}")),
                     }
                 }
                 None
             }
             (Value::Array(x), Value::Array(y)) => {
                 for (i, (u, v)) in x.iter().zip(y).enumerate() {
-                    if let Some(d) = walk(u, v, &format!("{path}[{i}]")) {
+                    if let Some(d) = walk(u, v, &format!("{path}[{i}]"), ren) {
                         return Some(d);
                     }
                 }
                 (x.len() != y.len()).then(|| format!("{path}: {} vs {} elements", x.len(), y.len()))
             }
-            _ => (a != b).then(|| format!("{path}: {a} vs {b}")),
+            _ => (a != b).then(|| format!("{path}: {} vs {}", short(a), short(b))),
         }
     }
     match (
         serde_json::from_str::<Value>(a),
         serde_json::from_str::<Value>(b),
     ) {
-        (Ok(x), Ok(y)) => walk(&x, &y, ""),
+        (Ok(x), Ok(y)) => walk(&x, &y, "", renaming).map(|d| {
+            // The top-level element the difference is in ("options[1]"), for context.
+            let top = d.trim_start_matches('.').split('.').next().unwrap_or("");
+            let (key, idx) = match top.split_once('[') {
+                Some((k, i)) => (
+                    k,
+                    i.trim_end_matches(']')
+                        .split(']')
+                        .next()
+                        .and_then(|i| i.parse::<usize>().ok()),
+                ),
+                None => (top, None),
+            };
+            let at = |v: &Value| -> String {
+                let e = v.get(key);
+                let e = match idx {
+                    Some(i) => e.and_then(|e| e.get(i)),
+                    None => e,
+                };
+                e.map(short).unwrap_or_default()
+            };
+            format!("{d} (in {} vs {})", at(&x), at(&y))
+        }),
         _ => (a.trim() != b.trim()).then(|| "unparsable line".to_string()),
     }
 }
@@ -181,7 +254,12 @@ impl Transport for ReplayTransport {
             return Err(Closed("the transcript is over".into()));
         };
         drop(st);
-        if let Some(d) = json_difference(&recorded, &line) {
+        let d = json_difference_renaming(
+            &recorded,
+            &line,
+            &mut self.renaming.lock().unwrap_or_else(|e| e.into_inner()),
+        );
+        if let Some(d) = d {
             self.diverged(format!(
                 "seat {}: request {asked} differs from the transcript at {d}",
                 self.seat

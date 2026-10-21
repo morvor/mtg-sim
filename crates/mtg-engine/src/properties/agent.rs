@@ -23,6 +23,9 @@ pub struct Recorder {
     pub lines: Vec<String>,
     pub states: bool,
     pub full_hashes: bool,
+    /// Record the whole game's debug output instead of its hash at this turn (to show
+    /// where two games differ).
+    pub full_text_turn: Option<u32>,
     last_turn: u32,
     /// Check that an action the engine reversed left the game as it was (CR 733.1).
     pub check_rollbacks: bool,
@@ -48,6 +51,7 @@ impl Recorder {
             canon: self.canon.clone(),
             states: self.states,
             full_hashes: self.full_hashes,
+            full_text_turn: self.full_text_turn,
             last_turn: self.last_turn,
             check_rollbacks: self.check_rollbacks,
             ..Default::default()
@@ -57,8 +61,13 @@ impl Recorder {
     fn before_decision(&mut self, g: &Game, p: PlayerId, d: &Decision) {
         if self.full_hashes && g.turn.number != self.last_turn {
             self.last_turn = g.turn.number;
-            self.lines
-                .push(format!("hash T{} {:016x}", g.turn.number, full_hash(g)));
+            if self.full_text_turn == Some(g.turn.number) {
+                self.lines
+                    .push(format!("hash T{} {}", g.turn.number, full_text(g)));
+            } else {
+                self.lines
+                    .push(format!("hash T{} {:016x}", g.turn.number, full_hash(g)));
+            }
         }
         if let Decision::Priority { .. } = d {
             if self.states {
@@ -105,8 +114,43 @@ impl Recorder {
 /// A hash of the whole game's debug output.
 pub fn full_hash(g: &Game) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    format!("{g:?}").hash(&mut h);
+    full_text(g).hash(&mut h);
     h.finish()
+}
+
+/// The whole game's debug output, with ability ids renamed by first appearance (see
+/// [`rename_uids`]).
+pub fn full_text(g: &Game) -> String {
+    rename_uids(&format!("{g:?}"))
+}
+
+/// Debug output with ability ids renamed in order of first appearance. Ability ids come
+/// from a counter shared by the whole process, and many abilities are created as a game
+/// goes (a delayed trigger as it triggers, a Clue's ability as it's investigated), so two
+/// runs of the same game in one process number them differently; they're compared up to
+/// renaming, like objects. Renamed: `uid: N` and `ability: N` fields, and map keys that
+/// are ability ids (`activations_this_turn: {N: 1}`).
+pub fn rename_uids(s: &str) -> String {
+    use regex::Regex;
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    static FIELD: OnceLock<Regex> = OnceLock::new();
+    static KEY: OnceLock<Regex> = OnceLock::new();
+    let field = FIELD.get_or_init(|| Regex::new(r"\b(uid|ability): (\d+)").unwrap());
+    let key = KEY.get_or_init(|| Regex::new(r"(\{|, )(\d+): ").unwrap());
+    let mut names: HashMap<String, usize> = HashMap::new();
+    for c in field.captures_iter(s) {
+        let n = names.len();
+        names.entry(c[2].to_string()).or_insert(n);
+    }
+    let s = field.replace_all(s, |c: &regex::Captures| {
+        format!("{}: u{}", &c[1], names[&c[2]])
+    });
+    key.replace_all(&s, |c: &regex::Captures| match names.get(&c[2]) {
+        Some(k) => format!("{}u{k}: ", &c[1]),
+        None => c[0].to_string(),
+    })
+    .into_owned()
 }
 
 /// The game for comparing it before an action and after the action was reversed: its
@@ -135,12 +179,17 @@ pub fn first_difference_text(a: &str, b: &str) -> String {
         .zip(b.bytes())
         .position(|(x, y)| x != y)
         .unwrap_or(a.len().min(b.len()));
-    let from = i.saturating_sub(150);
+    // MTG_PROPERTY_CONTEXT sets how much text is shown around the difference.
+    let ctx: usize = std::env::var("MTG_PROPERTY_CONTEXT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(150);
+    let from = i.saturating_sub(ctx);
     let snip = |s: &str| -> String {
         let lo = (from..=i.min(s.len()))
             .find(|k| s.is_char_boundary(*k))
             .unwrap_or(0);
-        let hi = ((i + 150).min(s.len())..=s.len())
+        let hi = ((i + ctx).min(s.len())..=s.len())
             .find(|k| s.is_char_boundary(*k))
             .unwrap_or(s.len());
         s[lo..hi].to_string()

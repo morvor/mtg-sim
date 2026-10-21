@@ -81,6 +81,7 @@ pub struct Run {
 pub struct Recording {
     pub states: bool,
     pub full_hashes: bool,
+    pub full_text_turn: Option<u32>,
     pub check_rollbacks: bool,
 }
 
@@ -133,6 +134,7 @@ pub fn build(setup: &GameSetup, rotation: usize, rec: Recording) -> Run {
         r.canon = Canon::new(&game, identity);
         r.states = rec.states;
         r.full_hashes = rec.full_hashes;
+        r.full_text_turn = rec.full_text_turn;
         r.check_rollbacks = rec.check_rollbacks;
     }
     Run {
@@ -270,26 +272,34 @@ pub fn seat_symmetry(setup: &GameSetup, rotation: usize) -> Result<Summary, Stri
 /// Snapshot equivalence: after `at` units of play, a copy of the game continued with
 /// copies of the agents plays out as the original does.
 pub fn snapshot_equivalence(setup: &GameSetup, at: u64) -> Result<Summary, String> {
-    let rec = Recording {
-        states: true,
-        full_hashes: true,
-        ..Default::default()
+    let play = |text_turn: Option<u32>| {
+        let rec = Recording {
+            states: true,
+            full_hashes: true,
+            full_text_turn: text_turn,
+            ..Default::default()
+        };
+        let mut a = build(setup, 0, rec);
+        let mut units = 0;
+        while units < at && a.step() {
+            units += 1;
+        }
+        let mut b = a.copy();
+        let from = a.recorder.lock().unwrap().lines.len();
+        a.finish();
+        b.finish();
+        let mut la = a.lines().split_off(from);
+        let mut lb = b.lines();
+        la.push(agent::full_text(&a.game));
+        lb.push(agent::full_text(&b.game));
+        (a.summary(), la, lb, units)
     };
-    let mut a = build(setup, 0, rec);
-    let mut units = 0;
-    while units < at && a.step() {
-        units += 1;
-    }
-    let mut b = a.copy();
-    let from = a.recorder.lock().unwrap().lines.len();
-    a.finish();
-    b.finish();
-    let mut la = a.lines().split_off(from);
-    let mut lb = b.lines();
-    la.push(format!("{:?}", a.game));
-    lb.push(format!("{:?}", b.game));
-    compare(&format!("snapshot after {units} units"), &la, &lb)?;
-    Ok(a.summary())
+    let (summary, la, lb, units) = play(None);
+    compare_hashed(&format!("snapshot after {units} units"), &la, &lb, |t| {
+        let (_, la, lb, _) = play(Some(t));
+        (la, lb)
+    })?;
+    Ok(summary)
 }
 
 /// Rollback identity: every action the engine reversed left the game as it was before
@@ -320,20 +330,59 @@ pub fn rollback_identity(setup: &GameSetup) -> Result<Summary, String> {
 
 /// Determinism: playing the same game twice gives the same decisions and the same game.
 pub fn determinism(setup: &GameSetup) -> Result<Summary, String> {
-    let rec = Recording {
-        states: true,
-        full_hashes: true,
-        ..Default::default()
+    let play = |text_turn: Option<u32>| {
+        let rec = Recording {
+            states: true,
+            full_hashes: true,
+            full_text_turn: text_turn,
+            ..Default::default()
+        };
+        let mut a = build(setup, 0, rec);
+        a.finish();
+        let mut l = a.lines();
+        l.push(agent::full_text(&a.game));
+        (a.summary(), l)
     };
-    let mut a = build(setup, 0, rec);
-    a.finish();
-    let mut b = build(setup, 0, rec);
-    b.finish();
-    let (mut la, mut lb) = (a.lines(), b.lines());
-    la.push(format!("{:?}", a.game));
-    lb.push(format!("{:?}", b.game));
-    compare("determinism", &la, &lb)?;
-    Ok(a.summary())
+    let (summary, la) = play(None);
+    let (_, lb) = play(None);
+    compare_hashed("determinism", &la, &lb, |t| {
+        (play(Some(t)).1, play(Some(t)).1)
+    })?;
+    Ok(summary)
+}
+
+/// [`compare`], and when the first difference is in the hash of the whole game at the
+/// beginning of a turn, the difference in the games' debug output (from `replay`, which
+/// plays both games again recording that turn's text).
+fn compare_hashed(
+    what: &str,
+    a: &[String],
+    b: &[String],
+    replay: impl Fn(u32) -> (Vec<String>, Vec<String>),
+) -> Result<(), String> {
+    let Err(e) = compare(what, a, b) else {
+        return Ok(());
+    };
+    let i = (0..a.len().min(b.len())).find(|i| a[*i] != b[*i]);
+    let turn = i
+        .and_then(|i| a[i].strip_prefix("hash T"))
+        .and_then(|r| r.split(' ').next())
+        .and_then(|t| t.parse::<u32>().ok());
+    let Some(t) = turn else {
+        return Err(e);
+    };
+    let (ra, rb) = replay(t);
+    let key = format!("hash T{t} ");
+    match (
+        ra.iter().find(|l| l.starts_with(&key)),
+        rb.iter().find(|l| l.starts_with(&key)),
+    ) {
+        (Some(x), Some(y)) => Err(format!(
+            "{e}\n    the games at the beginning of turn {t}: {}",
+            agent::first_difference_text(x, y)
+        )),
+        _ => Err(e),
+    }
 }
 
 /// Nonland cards for random decks: fully supported paper cards legal somewhere, with mana

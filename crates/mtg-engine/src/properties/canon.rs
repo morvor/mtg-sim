@@ -86,11 +86,11 @@ impl Canon {
     /// object numbers in descriptions ("Forest #53").
     pub fn text(&self, s: &str) -> String {
         static RE: OnceLock<Regex> = OnceLock::new();
-        let re = RE.get_or_init(|| Regex::new(r"(ObjectId|PlayerId)\((\d+)\)|#(\d+)").unwrap());
+        let re = RE.get_or_init(|| Regex::new(r"(ObjectId|PlayerId)\((\d+)\)| #(\d+)").unwrap());
         re.replace_all(s, |c: &regex::Captures| {
             if let Some(m) = c.get(3) {
                 let n: u32 = m.as_str().parse().unwrap_or(0);
-                return format!("#{}", self.obj(ObjectId(n)));
+                return format!(" #{}", self.obj(ObjectId(n)));
             }
             let n: u32 = c[2].parse().unwrap_or(0);
             if &c[1] == "ObjectId" {
@@ -356,7 +356,13 @@ impl Canon {
             c.name,
             self.player(o.owner),
             self.player(o.controller),
-            o.timestamp,
+            // Face-down cards in the command zone (planar, scheme and Attraction decks) get
+            // timestamps as they're turned face up (CR 613.7h).
+            if o.face_down && o.zone == crate::object::Zone::Command {
+                0
+            } else {
+                o.timestamp
+            },
             if o.tapped { "T" } else { "" },
             if o.flipped { "F" } else { "" },
             if o.face_down { "D" } else { "" },

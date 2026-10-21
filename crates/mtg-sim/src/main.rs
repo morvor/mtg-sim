@@ -24,7 +24,8 @@
 //! decision unless told otherwise (`--check 0` turns it off).
 //!
 //! `mtg-sim --every-card ...` plays games built around every fully supported card in turn
-//! (see `every_card.rs`).
+//! (see `every_card.rs`). `mtg-sim --properties ...` checks the metamorphic properties of
+//! `docs/PROPERTIES.md` over random games (see `properties.rs`).
 //!
 //! `--agent SEAT=KIND` chooses who plays a seat (0-based): `random` (the default),
 //! `passive` (always lets the engine choose), or `cmd:COMMAND`, an external program
@@ -32,11 +33,15 @@
 //! `--agent 1=cmd:'python3 examples/random_client.py'`. `--transcript FILE` appends every
 //! protocol line to FILE; `--auto-pass` passes priority for external agents that can only
 //! pass. With an external agent the `--slow` and `--timeout` limits default to a day.
+//! `--agent SEAT=replay:FILE` replays the answers seat SEAT gave in a transcript written
+//! by `--transcript` (run with the same seed, decks and other agents): every request must
+//! be the recorded one, or the game is reported as a rules violation.
 
 mod checks;
 mod coverage;
 mod decks;
 mod every_card;
+mod properties;
 mod runner;
 
 use decks::{default_deck, load_deck, random_deck, DeckList};
@@ -62,6 +67,10 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--every-card") {
         every_card::run(&args[1..]);
+        return;
+    }
+    if args.iter().any(|a| a == "--properties") {
+        properties::run(&args[1..]);
         return;
     }
     let mut games = 100u64;
@@ -133,7 +142,10 @@ fn main() {
         i += 2;
     }
     let players = players.max(deck_files.len()).max(specs.len()).max(2);
-    if specs.iter().any(|s| matches!(s, AgentSpec::Command(_))) {
+    if specs
+        .iter()
+        .any(|s| matches!(s, AgentSpec::Command(_) | AgentSpec::Replay(_)))
+    {
         // External agents (a language model, a person) may take their time.
         if !slow_set {
             slow = 86_400;
@@ -186,6 +198,7 @@ fn main() {
                     AgentSpec::Random => String::new(),
                     AgentSpec::Passive => format!(" --agent {p}=passive"),
                     AgentSpec::Command(c) => format!(" --agent {p}=cmd:'{c}'"),
+                    AgentSpec::Replay(f) => format!(" --agent {p}=replay:{f}"),
                 })
                 .collect::<String>()
         );
