@@ -192,3 +192,47 @@ fn nelly_borca_you_and_the_attacking_player_draw() {
         (hands.0 + 1, hands.1 + 1, hands.2)
     );
 }
+
+fn concussive(target_jace: bool) -> (TestGame, ObjectId) {
+    supported("Concussive Bolt");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Mountain", 5);
+    for _ in 0..3 {
+        t.battlefield(P0, "Ornithopter");
+    }
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    let spell = t.hand(P0, "Concussive Bolt");
+    let target = if target_jace {
+        Entity::Object(jace)
+    } else {
+        Entity::Player(P1)
+    };
+    t.cast(P0, spell).target(target).go();
+    t.resolve();
+    (t, bears)
+}
+
+#[test]
+fn concussive_bolt_that_players_creatures_cant_block() {
+    cr!("611.2c");
+    let (mut t, bears) = concussive(false);
+    assert_eq!(t.life(P1), 16);
+    assert!(!t.g.can_block_at_all(bears));
+    // A creature they control later this turn can't block either.
+    let later = t.battlefield(P1, "Hill Giant");
+    assert!(!t.g.can_block_at_all(later));
+    let other = t.battlefield(P2, "Hill Giant");
+    assert!(t.g.can_block_at_all(other));
+}
+
+#[test]
+fn concussive_bolt_that_planeswalkers_controllers_creatures_cant_block() {
+    cr!("611.2c", "306.8");
+    let (t, bears) = concussive(true);
+    assert_eq!(t.life(P1), 20);
+    // Four damage removed its three loyalty counters: it's gone, and its controller (as
+    // it last existed) is still the player whose creatures can't block.
+    assert!(t.in_graveyard(P1, "Jace Beleren"));
+    assert!(!t.g.can_block_at_all(bears));
+}

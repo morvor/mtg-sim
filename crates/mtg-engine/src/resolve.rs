@@ -3042,6 +3042,22 @@ impl Game {
                     .collect();
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
             }
+            // "creatures controlled by that player or by that planeswalker's controller":
+            // the target player, or the controller of the target permanent, as the effect
+            // begins.
+            Filter::ControlledBy(PlayerRel::TargetOrController(k)) => {
+                let ps = ctx
+                    .targets
+                    .get(*k as usize)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|e| match e {
+                        Entity::Player(p) => Some(PlayerFilter::Is(*p)),
+                        Entity::Object(o) => Some(PlayerFilter::Is(self.obj(*o).controller)),
+                    })
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
             // "creatures that player controls", "creatures the active player controls":
             // the players as the effect begins.
             Filter::ControlledByPlayer(r) => {

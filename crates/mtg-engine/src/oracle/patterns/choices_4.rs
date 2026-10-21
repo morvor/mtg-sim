@@ -399,6 +399,36 @@ fn gain_control_of_a_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: gain control of a [creature] of your choice [player] controls", priority: 120, parse: gain_control_of_a_chosen } }
 
+/// "creatures controlled by that player or by that planeswalker's controller can't block
+/// this turn" (Concussive Bolt), after "target player or planeswalker": the target player,
+/// or the target planeswalker's controller.
+fn controlled_by_that_player_or_controller(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let pred = [
+        "creatures controlled by that player or by that planeswalker's controller ",
+        "creatures that player or that planeswalker's controller controls ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p))?;
+    let k = b
+        .targets
+        .iter()
+        .rposition(|t| matches!(t.what, TargetKind::ObjectOrPlayer(..)))?;
+    let e = parse_clause(&format!("creatures you control {pred}"), b)?;
+    let json = serde_json::to_string(&e).ok()?;
+    let you = r#"{"ControlledBy":"You"}"#;
+    if json.matches(you).count() != 1 {
+        return None;
+    }
+    let theirs = serde_json::to_string(&Filter::ControlledBy(PlayerRel::TargetOrController(
+        k as u8,
+    )))
+    .ok()?;
+    serde_json::from_str(&json.replace(you, &theirs)).ok()
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: creatures controlled by that player or by that planeswalker's controller", priority: 120, parse: controlled_by_that_player_or_controller } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
