@@ -329,6 +329,10 @@ pub struct EventInfo {
     /// "whenever a land enters without being played"): see `kw::trigger_event_causes`.
     #[serde(default)]
     pub cause: Option<crate::events::MoveCause>,
+    /// For counters being put on something, the kind ("put the same number and kind of
+    /// counters on ~").
+    #[serde(default)]
+    pub counter_kind: Option<CounterKind>,
 }
 
 /// The kind of object on the stack.
