@@ -2389,6 +2389,23 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         p.who_ref = Some(b.it_player.clone());
     }
+    // "Exile a face-down permanent you control face up: You may play that card this turn."
+    // (Primordial Mist): the card the cost exiled (CR 400.7j).
+    if matches!(b.it, Sel::Var(v) if v == crate::zones::COST_EXILED)
+        && matches!(p.obj, Obj::Referent { limit: None })
+    {
+        let e = to_effect(&p, Some(ZoneKind::Exile), b.ctx)?;
+        return Some(Effect::seq(vec![
+            Effect::Store {
+                var: vars::IT,
+                sel: Sel::All(Filter::and(vec![
+                    Filter::In(Box::new(b.it.clone())),
+                    Filter::InZone(ZoneKind::Exile),
+                ])),
+            },
+            e,
+        ]));
+    }
     let zone = referent_zone(None, b);
     let e = to_effect(&p, zone, b.ctx)?;
     super::choice_grammar_objects::permission_for_chosen(e, None, b)

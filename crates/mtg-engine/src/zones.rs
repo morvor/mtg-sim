@@ -274,6 +274,14 @@ pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
             changed = true;
         }
     }
+    // "Exile a face-down permanent you control face up: You may play that card this
+    // turn." (Primordial Mist): "that card", before the effect names anything else.
+    if !changed
+        && (text.starts_with("You may play that card")
+            || text.starts_with("You may cast that card"))
+    {
+        changed = true;
+    }
     changed.then_some(text)
 }
 

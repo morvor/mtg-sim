@@ -271,3 +271,36 @@ fn arvinox_doesnt_cast_nonpermanent_spells() {
     t.advance_to(P1, Step::Upkeep);
     assert!(!can_cast_at(&mut t, P0, bolt_x, Entity::Player(P1)));
 }
+
+#[test]
+fn primordial_mist_plays_the_card_its_cost_exiled_this_turn() {
+    cr!("400.7j", "611.2a", "708.9");
+    ruling!(
+        "Primordial Mist",
+        "You'll still pay all costs for a spell cast this way, including additional costs."
+    );
+    assert_supported("Primordial Mist");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let mist = t.battlefield(P0, "Primordial Mist");
+    t.lands(P0, "Forest", 2);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    // Manifested at the end step.
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let manifested = t.g.current(bears);
+    assert!(t.on_battlefield(manifested), "{}", t.dump_log());
+    assert!(t.g.obj(manifested).face_down);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(manifested)]);
+    t.activate(P0, mist, 0, &[]).expect("exile the manifested card");
+    t.resolve_all();
+    let exiled = t.g.current(bears);
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    assert!(!t.g.obj(exiled).face_down);
+    t.g.turn.priority = Some(P0);
+    t.cast_with(P0, exiled, &[]).expect("cast the exiled Bears");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
