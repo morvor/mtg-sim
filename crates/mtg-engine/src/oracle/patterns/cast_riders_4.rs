@@ -116,6 +116,28 @@ fn f_if_you_dont_cast_it_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -
     true
 }
 
+/// "Put the exiled card into your hand if it wasn't cast this way." (Beseech the Mirror):
+/// "If you don't, put it into your hand." after a spell cast as the effect resolves.
+fn f_if_it_wasnt_cast_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l).trim();
+    let Some(x) = l.strip_suffix(" if it wasn't cast this way") else {
+        return false;
+    };
+    let x = x.replacen("the exiled card", "it", 1);
+    f_if_you_dont_cast_it_this_way(&format!("if you don't cast it this way, {x}"), prev, b)
+}
+
+/// "If you do, you can't cast additional spells this turn." (Conduit of Worlds): no more
+/// spells this turn.
+fn p_no_additional_spells(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l).trim() != "you can't cast additional spells this turn" {
+        return None;
+    }
+    parse_sentence("you can't cast other spells this turn", b)
+}
+
+inventory::submit! { FollowupPattern { name: "cast riders 4: [X] if it wasn't cast this way", priority: 90, apply: f_if_it_wasnt_cast_this_way } }
+inventory::submit! { super::EffectPattern { name: "cast riders 4: you can't cast additional spells this turn", priority: 90, parse: p_no_additional_spells } }
 inventory::submit! { FollowupPattern { name: "cast riders 4: if you cast a spell this way, X (after a spell cast as the effect resolves)", priority: 90, apply: f_if_cast_this_way } }
 inventory::submit! { FollowupPattern { name: "cast riders 4: if you don't cast it this way, X", priority: 90, apply: f_if_you_dont_cast_it_this_way } }
 inventory::submit! { FollowupPattern { name: "cast riders 4: when you cast that spell, X (after a spell cast as the effect resolves)", priority: 90, apply: f_when_you_cast_that_spell } }

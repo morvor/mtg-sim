@@ -1724,12 +1724,14 @@ fn referent_effect(
             // instant spell with mana value 2 or less": only if the spell it would become
             // has those qualities (CR 601.3e).
             let spell_quality = terms.what.take();
+            // "If you haven't cast a spell this turn, you may cast that card." (Conduit of
+            // Worlds): cast only if the condition holds as the effect resolves.
+            let condition = terms.condition.take();
             if p.look
                 || terms.flash
                 || terms.extra_cost.is_some()
                 || terms.spend_any_type
                 || terms.spend_as_any_color
-                || terms.condition.is_some()
                 || p.who != Who::You
                 || (terms.alt_cost.is_some() && p.free)
             {
@@ -1794,6 +1796,14 @@ fn referent_effect(
                 Some(terms) => Effect::WithPlayTerms {
                     terms,
                     effect: Box::new(cast),
+                },
+                None => cast,
+            };
+            let cast = match condition {
+                Some(c) => Effect::If {
+                    cond: c,
+                    then: Box::new(cast),
+                    otherwise: Box::new(Effect::Noop),
                 },
                 None => cast,
             };
@@ -2156,9 +2166,27 @@ pub(crate) fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         },
         None => (None, rest),
     };
+    // "If you haven't cast a spell this turn, you may cast that card." (Conduit of
+    // Worlds): a condition on the permission (or on the cast, as the effect resolves).
+    let (lead_cond, reworded) = match rest
+        .strip_prefix("if ")
+        .and_then(|r| r.split_once(", you may "))
+    {
+        Some((c, r)) if cond.is_none() && quality.is_none() && !c.starts_with("you do") => {
+            (Some(c.to_string()), format!("you may {r}"))
+        }
+        _ => (None, rest.to_string()),
+    };
+    let rest = reworded.as_str();
     let Some(mut p) = parse(rest).filter(|p| !p.linked_it) else {
         return false;
     };
+    if let Some(c) = lead_cond {
+        if p.cond_text.is_some() {
+            return false;
+        }
+        p.cond_text = Some(c);
+    }
     if let Some(q) = quality {
         if !matches!(p.obj, Obj::Referent { limit: None }) {
             return false;

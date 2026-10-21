@@ -386,3 +386,69 @@ fn taster_of_wares_permission_ends_when_you_lose_control() {
     t.settle();
     assert!(!can_cast(&mut t, P0, x, &[Entity::Player(P1)]));
 }
+
+#[test]
+fn beseech_the_mirror_casts_the_card_if_bargained_else_puts_it_into_your_hand() {
+    cr!("608.2g", "702.166a");
+    ruling!(
+        "Beseech the Mirror",
+        "Bargain represents an optional additional cost. A spell cast with that additional cost paid is \"bargained.\""
+    );
+    assert_supported("Beseech the Mirror");
+    for bargain in [true, false] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.lands(P0, "Swamp", 4);
+        let thopter = t.battlefield(P0, "Ornithopter");
+        let bears = t.library_top(P0, "Grizzly Bears");
+        let spell = t.hand(P0, "Beseech the Mirror");
+        t.answer(P0, DecisionKind::OptionalCost, mtg_engine::decision::Answer::Bool(bargain));
+        if bargain {
+            t.answer_choose(P0, &[Entity::Object(thopter)]);
+        }
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        t.answer_yes(P0, true);
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        if bargain {
+            assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+        } else {
+            assert!(t.in_hand(P0, "Grizzly Bears"), "{}", t.dump_log());
+        }
+    }
+}
+
+#[test]
+fn conduit_of_worlds_casts_the_card_only_before_any_spell_and_then_no_more() {
+    cr!("608.2g", "601.3");
+    ruling!(
+        "Conduit of Worlds",
+        "If you cast it, you can't cast any other spells this turn, even if another effect would allow you to."
+    );
+    assert_supported("Conduit of Worlds");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let conduit = t.battlefield(P0, "Conduit of Worlds");
+    t.lands(P0, "Forest", 4);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let other = t.hand(P0, "Llanowar Elves");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    t.activate(P0, conduit, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(!can_cast(&mut t, P0, other, &[]));
+    // After a spell was cast this turn: not cast.
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let conduit = t.battlefield(P0, "Conduit of Worlds");
+    t.lands(P0, "Forest", 4);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let elves = t.hand(P0, "Llanowar Elves");
+    assert!(can_cast(&mut t, P0, elves, &[]));
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    t.activate(P0, conduit, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 0);
+}
