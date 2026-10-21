@@ -1224,3 +1224,15 @@ fn p_attacks_the_other_chosen_player(l: &str, b: &mut Builder) -> Option<Effect>
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: each creature they control attacks the other chosen player each combat if able", priority: 90, parse: p_attacks_the_other_chosen_player } }
+
+/// "[creature you control] not declared as an attacking or blocking creature this combat"
+/// (Hollow Warrior's cost to attack or block).
+fn s_not_declared<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s.strip_prefix("not declared as an attacking or blocking creature this combat")?;
+    Some((
+        Filter::Custom(crate::kw::combat_history_4::NOT_DECLARED.into()),
+        r,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "combat 4: not declared as an attacking or blocking creature this combat", priority: 100, parse: s_not_declared } }

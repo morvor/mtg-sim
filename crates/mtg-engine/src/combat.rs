@@ -1173,7 +1173,12 @@ pub fn declare_attackers_step(g: &mut Game) {
         ) {
             Answer::Attackers(v)
                 if attack_declaration_legal_with(g, &options, &v, &reqs, max)
-                    && g.can_pay_cost(ap, &total_attack_cost(g, &v), None, &Ctx::new(None, ap)) =>
+                    && g.can_pay_cost(
+                        ap,
+                        &total_attack_cost(g, &v),
+                        None,
+                        &declaring_ctx(ap, v.iter().map(|(a, _)| *a)),
+                    ) =>
             {
                 v
             }
@@ -1202,6 +1207,18 @@ pub fn declare_attackers_step(g: &mut Game) {
         g.roll_back(snapshot);
         perform_attack_declaration(g, ap, best, &had_to, false);
     }
+}
+
+/// The context of a player's costs to attack or block: the creatures being declared as
+/// attackers or blockers ("tap an untapped creature you control not declared as an
+/// attacking or blocking creature this combat", see `kw::combat_history_4`).
+fn declaring_ctx(p: PlayerId, declared: impl Iterator<Item = ObjectId>) -> Ctx {
+    let mut ctx = Ctx::new(None, p);
+    ctx.set_var(
+        crate::kw::combat_history_4::BEING_DECLARED,
+        declared.map(Entity::Object).collect(),
+    );
+    ctx
 }
 
 /// Performs a declaration of attackers: taps (CR 508.1f), costs (508.1g–j), attacking
@@ -1249,7 +1266,14 @@ fn perform_attack_declaration(
     }
     // CR 508.1h–j: the total cost is locked in, then paid (mana abilities may be activated).
     let required = total_attack_cost(g, &declared);
-    if !required.is_free() && !g.pay_cost(ap, &required, None, &Ctx::new(None, ap)) {
+    if !required.is_free()
+        && !g.pay_cost(
+            ap,
+            &required,
+            None,
+            &declaring_ctx(ap, declared.iter().map(|(a, _)| *a)),
+        )
+    {
         return false;
     }
     for (a, cost, _) in &optional {
@@ -1947,9 +1971,14 @@ pub fn declare_blockers_step(g: &mut Game) {
                 Answer::Blockers(v)
                     if block_restrictions_ok(g, &rules, &options, &v)
                         && obeyed_block_requirements(&reqs, &v) >= max
-                        && block_costs_by_player(g, &v)
-                            .iter()
-                            .all(|(p, c)| g.can_pay_cost(*p, c, None, &Ctx::new(None, *p))) =>
+                        && block_costs_by_player(g, &v).iter().all(|(p, c)| {
+                            g.can_pay_cost(
+                                *p,
+                                c,
+                                None,
+                                &declaring_ctx(*p, v.iter().map(|(b, _)| *b)),
+                            )
+                        }) =>
                 {
                     v
                 }
@@ -1971,9 +2000,14 @@ pub fn declare_blockers_step(g: &mut Game) {
             blocks
         } else {
             let snapshot = g.clone();
-            let ok = costs
-                .iter()
-                .all(|(p, c)| g.pay_cost(*p, c, None, &Ctx::new(None, *p)));
+            let ok = costs.iter().all(|(p, c)| {
+                g.pay_cost(
+                    *p,
+                    c,
+                    None,
+                    &declaring_ctx(*p, blocks.iter().map(|(b, _)| *b)),
+                )
+            });
             if ok {
                 blocks
             } else {

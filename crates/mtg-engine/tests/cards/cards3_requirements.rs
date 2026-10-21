@@ -275,3 +275,37 @@ fn the_brothers_war_chapter_two_each_chosen_players_creatures_attack_the_other()
     assert!(!legal_attack(&mut t, &[(giant, Entity::Player(P0))]));
     assert!(legal_attack(&mut t, &[(giant, Entity::Player(P1))]));
 }
+
+#[test]
+fn hollow_warrior_cant_pay_its_attack_cost_with_a_creature_being_declared() {
+    cr!("508.1h");
+    supported("Hollow Warrior");
+    let mut t = TestGame::new(2);
+    let hw = t.battlefield(P0, "Hollow Warrior");
+    let angel = t.battlefield(P0, "Serra Angel");
+    let atk = declare(
+        &mut t,
+        P0,
+        &[(hw, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
+    // Only the vigilant Angel could be tapped, and it's being declared.
+    assert!(!atk.iter().any(|(a, _)| *a == hw));
+}
+
+#[test]
+fn hollow_warrior_attacks_by_tapping_a_creature_not_attacking() {
+    cr!("508.1h");
+    let mut t = TestGame::new(2);
+    let hw = t.battlefield(P0, "Hollow Warrior");
+    let angel = t.battlefield(P0, "Serra Angel");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let atk = declare(
+        &mut t,
+        P0,
+        &[(hw, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
+    assert!(atk.iter().any(|(a, _)| *a == hw));
+    assert!(t.g.obj(bears).tapped);
+    assert!(!t.g.obj(angel).tapped);
+}

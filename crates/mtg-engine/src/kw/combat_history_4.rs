@@ -27,6 +27,12 @@ pub const ATTACKING_A_PLANESWALKER: &str = "combat4:being declared attacking a p
 /// `Effect::Custom` prefix, followed by "[player slot]:[creatures slot]": the target
 /// attacking creatures are now attacking the target player (CR 508.7).
 pub const NOW_ATTACKING: &str = "combat4:now attacking:";
+/// While the costs to attack or block are paid: the creatures being declared as
+/// attackers or blockers (CR 508.1h, 509.1d).
+pub const BEING_DECLARED: Var = vars::USER + 13375;
+/// `Filter::Custom`: not one of the creatures being declared as attackers or blockers
+/// this combat (nor one declared earlier this combat).
+pub const NOT_DECLARED: &str = "combat4:not declared as an attacking or blocking creature";
 /// While an attack tax is determined: what the creature would attack.
 pub const ATTACK_TARGET: Var = vars::USER + 13373;
 
@@ -102,6 +108,17 @@ impl KeywordRules for CombatHistory4 {
                     (g.is_live(*b) && c.blockers_of(id).contains(b))
                         || g.left_combat_pair(*b, *b, id)
                 }))
+            }
+            NOT_DECLARED => {
+                let now = ctx
+                    .vars
+                    .get(&BEING_DECLARED)
+                    .is_some_and(|v| v.contains(&Entity::Object(id)));
+                let before = g.combat.as_ref().is_some_and(|c| {
+                    c.declared_attackers.iter().any(|(a, _)| *a == id)
+                        || c.declared_blockers.contains(&id)
+                });
+                Some(!now && !before)
             }
             ATTACKING_A_PLANESWALKER => Some(
                 ctx.vars
