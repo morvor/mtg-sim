@@ -251,7 +251,8 @@ fn codie_casts_the_found_card_free_and_puts_the_others_on_the_bottom() {
 
 #[test]
 fn dragons_approach_exiles_itself_and_four_more_to_find_a_dragon() {
-    cr!("608.2c", "701.23a");
+    // Choosing to exile five when there aren't five is choosing an impossible option.
+    cr!("608.2d", "701.23a");
     ruling!(
         "Dragon's Approach",
         "In most cases, you'll need to exile five cards named Dragon's Approach"
@@ -578,7 +579,7 @@ fn vault_13_returns_two_exiled_cards_and_puts_the_rest_on_the_bottom() {
 
 #[test]
 fn dubious_challenge_opponent_takes_one_exiled_creature_and_you_get_the_rest() {
-    cr!("608.2c", "701.24a");
+    cr!("608.2c", "608.2d");
     assert_supported("Dubious Challenge");
     let mut t = TestGame::new(2);
     t.advance_to(P0, Step::PrecombatMain);
