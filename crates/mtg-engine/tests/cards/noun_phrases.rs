@@ -681,3 +681,31 @@ fn scarlet_witch_casts_a_hero_or_noncreature_card_she_exiled() {
         assert_eq!(offered.iter().any(|n| *n == other), castable, "{other}: {names:?}");
     }
 }
+
+#[test]
+fn saga_or_enchantment_creature_is_a_saga_or_an_enchantment_creature() {
+    // "Return target Saga or enchantment creature you control to its owner's hand."
+    // (Satsuki, the Living Lore): "creature" describes only the enchantment, not the
+    // Saga (no Saga is a creature), so a Saga is a legal target and a creature that isn't
+    // an enchantment is not.
+    cr!("115.1", "205.3h");
+    assert_supported(&["Satsuki, the Living Lore"]);
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let satsuki = t.battlefield(P0, "Satsuki, the Living Lore");
+    let saga = t.battlefield(P0, "History of Benalia");
+    let satyr = t.battlefield(P0, "Boon Satyr");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.answer_targets(P0, &[Entity::Object(saga)]);
+    t.g.destroy(satsuki, None);
+    t.settle();
+    t.resolve_all();
+    let cands = target_candidates(&t, from);
+    let first = cands.first().expect("a target choice");
+    assert!(first.contains(&Entity::Object(saga)), "{cands:?}");
+    assert!(first.contains(&Entity::Object(satyr)));
+    assert!(!first.contains(&Entity::Object(bears)));
+    assert_eq!(t.zone(t.g.current(saga)), Zone::Hand(P0), "{}", t.dump_log());
+}

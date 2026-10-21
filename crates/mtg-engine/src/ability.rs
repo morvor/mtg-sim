@@ -3838,6 +3838,26 @@ pub struct PlayTerms {
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
     pub way: u32,
+    /// "Until your next end step, each player may play the card they exiled this way": a
+    /// duration said relative to the controller of the effect giving the permission, not
+    /// to the player who gets it (see `PlayGrant::duration_player`).
+    #[serde(default)]
+    pub controller_duration: bool,
+    /// For an effect's permission given with `controller_duration`: that controller (set
+    /// as the permission is given).
+    #[serde(default)]
+    pub duration_player: Option<PlayerId>,
+    /// "If that spell doesn't target a creature you control, it costs {8} more to cast
+    /// this way." (Mavinda, Students' Advocate): a generic increase (CR 601.2f) for a spell
+    /// cast with the permission that has no target with these qualities (relative to the
+    /// permission's source and player) once its targets are chosen (CR 601.2c).
+    #[serde(default)]
+    pub cost_increase_unless_targets: Option<(u32, Filter)>,
+    /// "You may cast creature spells from your graveyard using their sneak abilities."
+    /// (Ninja Teen): spells are cast with the permission only for that keyword's cost
+    /// (and its other rules), not their mana costs.
+    #[serde(default)]
+    pub only_keyword: Option<crate::keywords::KeywordKind>,
 }
 
 impl PlayTerms {
@@ -3906,6 +3926,13 @@ impl PlayTerms {
             self.spend_type_as_any_color = other.spend_type_as_any_color;
         }
         self.snow_as_any_color |= other.snow_as_any_color;
+        self.controller_duration |= other.controller_duration;
+        if other.only_keyword.is_some() {
+            self.only_keyword = other.only_keyword;
+        }
+        if other.cost_increase_unless_targets.is_some() {
+            self.cost_increase_unless_targets = other.cost_increase_unless_targets.clone();
+        }
         if other.cost_increase_each.is_some() {
             self.cost_increase_each = other.cost_increase_each.clone();
         }
