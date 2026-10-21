@@ -524,12 +524,37 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             };
         }
     }
+    let single_condition = earlier.is_empty();
     if !earlier.is_empty() {
         e = Effect::If {
             cond: Condition::Not(Box::new(Condition::Or(earlier))),
             then: Box::new(e),
             otherwise: Box::new(Effect::Noop),
         };
+    }
+    // "If it's a land card, you may put it onto the battlefield tapped. Otherwise, put it
+    // into your hand.": "otherwise" is about whether the optional instruction was done,
+    // not only about the condition — a player who declines it gets the alternative too
+    // (Fecund Greenshell, Treasure Chest and Aid from the Cowl rulings). The same holds
+    // for an optional cast or play ("You may cast that card without paying its mana cost
+    // if .... Otherwise, put it into your hand.", Bre of Clan Stoutarm).
+    if single_condition
+        && matches!(
+            **then,
+            Effect::May { .. }
+                | Effect::CastCard { optional: true, .. }
+                | Effect::PlayCard { optional: true, .. }
+        )
+    {
+        let may = std::mem::replace(&mut **then, Effect::Noop);
+        **then = Effect::Seq(vec![
+            may,
+            Effect::If {
+                cond: Condition::Not(Box::new(Condition::PrevHappened)),
+                then: Box::new(e.clone()),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]);
     }
     **otherwise = e;
     true
