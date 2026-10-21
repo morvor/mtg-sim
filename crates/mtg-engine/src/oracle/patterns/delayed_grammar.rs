@@ -63,6 +63,10 @@ struct Delay {
     /// "this turn's next end of combat", "your next main phase this turn": it ends with
     /// the turn if it hasn't triggered by then.
     this_turn: bool,
+    /// "the end step of that player's next turn", "the declare attackers step on your
+    /// next turn": that step of a turn the player begins after the delayed ability is
+    /// created (not this turn's).
+    next_turn: bool,
 }
 
 impl Delay {
@@ -82,13 +86,33 @@ impl Delay {
         } else {
             TriggerCond::AnyOf(conds)
         };
+        let t = match self.turns_taken() {
+            Some(v) if self.next_turn => TriggerCond::Where {
+                trigger: Box::new(t),
+                cond: Condition::Compare(v, Cmp::Eq, Value::Var(TURNS_TAKEN)),
+            },
+            _ => t,
+        };
         if self.this_turn {
             TriggerCond::ThisTurn(Box::new(t))
         } else {
             t
         }
     }
+
+    /// How many turns the player whose next turn it names has begun.
+    fn turns_taken(&self) -> Option<Value> {
+        match self.whose {
+            Whose::You => Some(Value::TurnsTaken(PlayerRef::You)),
+            Whose::ThatPlayer => Some(Value::TurnsTaken(PlayerRef::Var(WHOSE))),
+            Whose::Any => None,
+        }
+    }
 }
+
+/// The number of turns the player will have begun during their next turn, as a "next
+/// turn" delayed ability is created: it triggers only during that turn.
+const TURNS_TAKEN: Var = vars::USER + 6405;
 
 /// The step part of a delay phrase: "end step", "upkeep", "main phase", ...
 fn step_words(s: &str) -> Option<Vec<TriggerStep>> {
@@ -115,6 +139,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         steps: vec![TriggerStep::EndOfCombat],
         whose: Whose::Any,
         this_turn,
+        next_turn: false,
     };
     match s {
         "end of combat" | "the end of combat" => return Some(eoc(false)),
@@ -122,6 +147,26 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         _ => {}
     }
     let r = s.strip_prefix("the beginning of ")?;
+    // "the end step of that player's next turn", "the declare attackers step on your next
+    // turn".
+    for (sep, whose) in [
+        (" of that player's next turn", Whose::ThatPlayer),
+        (" of their next turn", Whose::ThatPlayer),
+        (" on your next turn", Whose::You),
+        (" of your next turn", Whose::You),
+    ] {
+        if let Some(step) = r.strip_suffix(sep).and_then(|x| x.strip_prefix("the ")) {
+            if step == "main phase" {
+                return None;
+            }
+            return Some(Delay {
+                steps: step_words(step)?,
+                whose,
+                this_turn: false,
+                next_turn: true,
+            });
+        }
+    }
     let (r, this_turn) = match r.strip_suffix(" this turn") {
         Some(x) => (x, true),
         None => (r, false),
@@ -142,6 +187,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         steps: step_words(step)?,
         whose,
         this_turn,
+        next_turn: false,
     })
 }
 
@@ -525,6 +571,12 @@ pub(crate) fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         stores.push(Effect::Store {
             var: WHOSE,
             sel: Sel::Players(p),
+        });
+    }
+    if delay.next_turn {
+        stores.push(Effect::StoreValue {
+            var: TURNS_TAKEN,
+            value: Value::Sum(vec![delay.turns_taken()?, Value::c(1)]),
         });
     }
     stores.push(Effect::DelayedTrigger {

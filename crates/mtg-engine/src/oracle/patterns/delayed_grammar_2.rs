@@ -207,3 +207,24 @@ pub(crate) fn delayed_with_duration(l: &str, b: &mut Builder) -> Option<Effect> 
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 2: until your next turn / this combat, whenever [referent] ...", priority: 95, parse: delayed_with_duration } }
+
+// ---------------------------------------------------------------------------------------
+// "Return ~ to the battlefield ... when that token dies."
+// ---------------------------------------------------------------------------------------
+
+/// "[instruction] when [referent] dies / leaves the battlefield" (Tatsumasa, the Dragon's
+/// Fang; Portcullis): the delayed triggered ability "When [referent] dies, [instruction]"
+/// (CR 603.7), created as the ability resolves.
+fn trailing_when(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, tail) = l.rsplit_once(" when ")?;
+    let (subject, event) = [" dies", " leaves the battlefield"]
+        .into_iter()
+        .find_map(|e| tail.strip_suffix(e).map(|s| (s, e)))?;
+    if !matches!(subject, "that token" | "~" | "that creature" | "it") || head.contains(',') {
+        return None;
+    }
+    super::delayed_grammar::referent_trigger(&format!("when {subject}{event}, {head}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 2: [instruction] when that token dies", priority: 990, parse: trailing_when } }
