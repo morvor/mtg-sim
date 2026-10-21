@@ -1572,7 +1572,15 @@ impl Renderer<'_> {
                 // dealt damage" works anyway (CR 603.2c); once per batch or per player is
                 // "one or more".
                 let d = match (det, per) {
-                    (Det::A, BatchPer::Batch | BatchPer::Player) => Det::OneOrMore,
+                    (
+                        Det::A,
+                        BatchPer::Batch
+                        | BatchPer::Player
+                        | BatchPer::AnyPlayer
+                        | BatchPer::Recipient,
+                    ) => {
+                        Det::OneOrMore
+                    }
                     (other, _) => other,
                 };
                 let many = matches!(d, Det::OneOrMore);

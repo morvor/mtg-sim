@@ -78,7 +78,9 @@ fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         main
     };
+    let first_target = b.targets.len();
     let (what, rest) = object_ref(main, b)?;
+    let subject_targets = first_target..b.targets.len();
     let rest = rest.trim();
     let (each, rest) = match rest.strip_prefix("each ") {
         Some(r) => (true, r),
@@ -117,6 +119,11 @@ fn p_pt_values(l: &str, b: &mut Builder) -> Option<Effect> {
             // CR 107.1b: a calculation yielding a negative X uses 0 instead ("+X/+X,
             // where X is its power" on a creature with negative power).
             let x = Value::Max(Box::new(x.clone()), Box::new(Value::c(0)));
+            // "Up to X target creatures you control get +X/+X ..., where X is ...": the
+            // defined X is also the number of targets (CR 107.3c, 601.2c).
+            for i in subject_targets.clone() {
+                b.targets[i] = super::r107_numbers::substitute_x_in_target(&b.targets[i], &x)?;
+            }
             (subst_x(p, &x), subst_x(t, &x))
         }
         None => {
