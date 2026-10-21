@@ -298,3 +298,47 @@ fn jurin_pumps_each_attacker_by_its_defenders_creature_count() {
     assert_eq!(t.pt(jurin), (jp + 2, jt));
     assert_eq!(t.pt(bears), (3, 2));
 }
+
+#[test]
+fn mishra_melds_with_an_attacking_dragon_engine_and_enters_attacking() {
+    cr!("701.42a", "508.4");
+    ruling!(
+        "Mishra, Claimed by Gix",
+        "You choose which player or planeswalker Mishra, Lost to Phyrexia is attacking"
+    );
+    supported("Mishra, Claimed by Gix");
+    let mut t = TestGame::new(2);
+    let mishra = t.battlefield(P0, "Mishra, Claimed by Gix");
+    let engine = t.battlefield(P0, "Phyrexian Dragon Engine");
+    // Mishra, Lost to Phyrexia's enters trigger: discard, menace and trample, Powerstones.
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![0, 3, 5]),
+    );
+    declare(
+        &mut t,
+        P0,
+        &[(mishra, Entity::Player(P1)), (engine, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 22);
+    let m = t.named_on_battlefield("Mishra, Lost to Phyrexia");
+    assert_eq!(m.len(), 1);
+    assert!(t.g.obj(m[0]).tapped);
+    assert!(t.g.is_attacking(m[0]));
+}
+
+#[test]
+fn mishra_doesnt_meld_when_the_engine_isnt_attacking() {
+    cr!("701.42a");
+    let mut t = TestGame::new(2);
+    let mishra = t.battlefield(P0, "Mishra, Claimed by Gix");
+    let engine = t.battlefield(P0, "Phyrexian Dragon Engine");
+    declare(&mut t, P0, &[(mishra, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Mishra, Lost to Phyrexia").is_empty());
+    assert!(t.on_battlefield(engine));
+    assert_eq!(t.life(P1), 19);
+}
