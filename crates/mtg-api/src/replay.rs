@@ -428,8 +428,9 @@ pub struct ReplaySummary {
 
 /// Plays a game through a [`Session`], every seat answered at random (seeded by
 /// `answer_seed`), recording the transcript; then replays the transcript in a new game
-/// and checks that every request and the game-over messages are the recorded ones.
-/// Returns the transcript's text with the summary, or the first divergence.
+/// and checks that every request and the game-over messages are the recorded ones. The
+/// decks may hold any fully supported card (`Tier::Compiled`). Returns the transcript's
+/// text with the summary, or the first divergence.
 pub fn replay_check(
     config: GameConfig,
     decks: Vec<Vec<Arc<CardDef>>>,
@@ -437,13 +438,18 @@ pub fn replay_check(
     max_requests: usize,
 ) -> Result<(ReplaySummary, String), String> {
     let n = decks.len();
-    let options = ProtocolOptions::default();
+    // The property games use any fully supported (compiled) card.
+    let options = ProtocolOptions {
+        min_card_tier: mtg_engine::card_tiers::Tier::Compiled,
+        ..Default::default()
+    };
     let mut s = Session::start(
         config.clone(),
         decks.clone(),
         (0..n).map(|_| Seat::External).collect(),
         options.clone(),
-    );
+    )
+    .map_err(|e| format!("the session didn't start: {e}"))?;
     let mut rng = ChaCha8Rng::seed_from_u64(answer_seed);
     let mut text = String::new();
     let mut requests = 0;

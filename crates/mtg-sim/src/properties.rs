@@ -5,7 +5,8 @@
 //!                [--players N] [--max-turns N] [--slow SECS] [--jobs N]
 //!
 //! NAME is `seat`, `snapshot`, `rollback`, `determinism`, `replay` or `all` (the default).
-//! Each game gets new random decks; without `--players`, games cycle through 2, 2, 3 and
+//! Each game gets new random decks of any fully supported cards (every tier from
+//! "compiled" up, `card_tiers.rs`: the properties are about the engine, on every card); without `--players`, games cycle through 2, 2, 3 and
 //! 4 players. A violation or a panic is reported with the command that reproduces it, and
 //! the process exits with status 1 at the end; a game still going after `--slow` seconds
 //! is reported as slow (a replay after three times as long). `--jobs N` checks N games
@@ -160,8 +161,9 @@ pub fn run(args: &[String]) {
                 let s = seed.wrapping_mul(1_000_003).wrapping_add(gi);
                 let n = players.unwrap_or([2, 2, 3, 4][(gi % 4) as usize]);
                 let mut deck_rng = StdRng::seed_from_u64(s ^ 0x5eed_dec5);
-                let decks: Vec<Vec<std::sync::Arc<CardDef>>> =
-                    (0..n).map(|_| random_deck(&mut deck_rng).main).collect();
+                let decks: Vec<Vec<std::sync::Arc<CardDef>>> = (0..n)
+                    .map(|_| random_deck(&mut deck_rng, None).main)
+                    .collect();
                 let mut setup = GameSetup::new(decks, s);
                 setup.max_turns = max_turns;
                 for &property in chosen {
