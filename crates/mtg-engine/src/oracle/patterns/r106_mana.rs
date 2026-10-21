@@ -522,6 +522,9 @@ fn mana_spent_trigger(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
         .unwrap_or(spell_s);
     let f = if spell_s == "spell" {
         Filter::Any
+    } else if spell_s == "your commander" {
+        // A commander its caster owns (CR 903.3d).
+        Filter::and(vec![Filter::Commander, Filter::OwnedBy(PlayerRel::You)])
     } else if let Some((f, _, rest)) =
         parse_object_phrase(spell_s).filter(|(_, _, rest)| end(rest).is_empty())
     {

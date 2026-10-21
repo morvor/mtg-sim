@@ -2591,6 +2591,16 @@ impl Renderer<'_> {
                     return format!("for each color among {n}, add one mana of that color");
                 }
                 let m = self.mana_production(mana);
+                // "Choose a color. Add an amount of mana of that color equal to the number
+                // of ..." (Three Tree City): X mana of any one color.
+                if let (ManaProduction::AnyOneColor(v @ Value::Count(_)), PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let val = self.value(v);
+                    return format!(
+                        "{{alt:add {m}|choose a color. add an amount of mana of that color equal to {val}}}"
+                    );
+                }
                 let mut s = self.with_subject(who, &format!("add {m}"), false);
                 if let Some(r) = restriction {
                     let r = self.mana_restriction(r);
@@ -2606,18 +2616,40 @@ impl Renderer<'_> {
                 additional,
             } => {
                 let a = self.effect(add);
+                // "your commander": a commander its caster owns (CR 903.3d).
+                let yours = matches!(spell_filter, Filter::And(v) if v.len() == 3
+                    && v.iter().any(|x| matches!(x, Filter::Commander))
+                    && v.iter().any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                    && v.iter().any(|x| matches!(x, Filter::Spell)));
                 let f = self.noun_det(spell_filter, Det::A);
                 let f = if f.contains("spell") {
                     f
                 } else {
                     format!("{f} spell")
                 };
-                let b = self.in_event_scope(|r| r.body(body));
+                // "that spell can't be countered" (Boseiju, Who Shelters All).
+                let uncounterable = matches!(&body.effect, Effect::Modify {
+                    what: Sel::TriggerSpell,
+                    mods,
+                    ..
+                } if matches!(mods.as_slice(), [Modification::AddAbility(x)]
+                    if format!("{:?}", x.kind) == format!("{:?}", crate::oracle::patterns::restriction_grammar::cant_be_countered_ability().kind)));
+                let b = if uncounterable && body.targets.is_empty() {
+                    "that spell can't be countered".to_string()
+                } else {
+                    self.in_event_scope(|r| r.body(body))
+                };
+                if yours && !*abilities {
+                    let verb = if *additional { "If" } else { "When" };
+                    return format!(
+                        "{a}. {verb} {{alt:you spend this mana|that mana is spent}} to cast your commander, {b}"
+                    );
+                }
                 if *abilities {
                     format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
                 } else if *additional {
                     // Mana spent "on" a spell is spent to cast it (CR 601.2h).
-                    format!("{a}. If that mana is spent {{alt:to cast|on}} {f}, {b}")
+                    format!("{a}. If {{opt:any of}} that mana is spent {{alt:to cast|on}} {f}, {b}")
                 } else {
                     format!(
                         "{a}. When {{alt:that mana is spent|you spend this mana}} to cast {f}, {b}"
@@ -2626,7 +2658,13 @@ impl Renderer<'_> {
             }
             Effect::PersistentMana(e) => {
                 let a = self.effect(e);
-                format!("{a}. Until end of turn, you don't lose this mana as steps and phases end")
+                // "they don't lose this mana" when another player adds it (Shizuko).
+                let who = if adds_for_you(e) { "you" } else { "{alt:they|that player}" };
+                format!("{a}. Until end of turn, {who} don't lose this mana as steps and phases end")
+            }
+            Effect::CombatMana(e) => {
+                let a = self.effect(e);
+                format!("{a}. Until end of combat, you don't lose this mana as steps end")
             }
             Effect::SetClassLevel { level } => format!("~'s level becomes {level}"),
             Effect::ActivateManaAbilities { who, filter } => {
@@ -3495,6 +3533,13 @@ impl Renderer<'_> {
                     // artifacts."
                     _ => self.mods_vp(mods, false),
                 };
+                // X is locked in as the effect is created (Kaza, Roil Chaser: "where X is
+                // the number of Wizards you control as this ability resolves").
+                let vp = if vp.contains("where X is") {
+                    format!("{vp} {{opt:as this ability resolves}}")
+                } else {
+                    vp
+                };
                 format!("the next {f} you cast{d} {vp}")
             }
             Effect::CopySpellRetargeted {
@@ -3955,6 +4000,43 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
+        // "[that player may pay any amount of mana.] ~ deals 2 damage to that player.
+        // Prevent X of that damage, where X is the amount of mana that player paid this
+        // way." (Errant Minion; `patterns/prevention_4.rs`).
+        if let [before @ .., Effect::AddReplacement {
+            def:
+                ReplacementDef {
+                    action: ReplacementAction::PreventAmount(Value::X),
+                    ..
+                },
+            uses: Some(1),
+            ..
+        }, dmg @ Effect::DealDamage { .. }] = v
+        {
+            let mut parts: Vec<String> = before.iter().map(|e| self.effect(e)).collect();
+            parts.push(self.effect(dmg));
+            return format!(
+                "{}. Prevent X of that damage, where X is the amount of mana that player paid this way",
+                parts.join(". ")
+            );
+        }
+        // "For each artifact or creature card in target opponent's graveyard, add {C} and
+        // you gain 1 life." (Spoils of Evil): mana and life scaled by one count.
+        if let [Effect::AddMana {
+            who: PlayerRef::You,
+            mana: ManaProduction::Amount(t, Value::Count(f)),
+            restriction: None,
+        }, Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::Count(g),
+        }] = v
+        {
+            if format!("{f:?}") == format!("{g:?}") {
+                let each = self.for_each_noun(f);
+                let sym = mana_symbol(*t);
+                return format!("for each {each}, add {sym} and you gain 1 life");
+            }
+        }
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
@@ -7607,8 +7689,10 @@ impl Renderer<'_> {
                     // ~": one color chosen for all of it (Selvala, Eager Trailblazer's
                     // rulings), the same as X mana of any one color.
                     match w.strip_prefix(", where X is the number of ") {
+                        // "Choose a color. Add an amount of mana of that color equal to
+                        // the number of ..." (Three Tree City) too.
                         Some(each) if a == "X" && !each.contains(['{', ',']) => format!(
-                            "{{alt:X mana of any one color{w}|one mana of the color of your choice for each {each}}}"
+                            "{{alt:X mana of any one color{w}|one mana of the color of your choice for each {each}|an amount of mana of the color of your choice equal to the number of {each}}}"
                         ),
                         _ => format!("{a} mana of any one color{w}"),
                     }
@@ -7681,7 +7765,7 @@ impl Renderer<'_> {
                 format!("one mana of any color that {n} could produce")
             }
             ManaProduction::ChosenColor(n) => match n {
-                Value::Const(1) => "one mana of the chosen color".into(),
+                Value::Const(1) => "one mana of {alt:the chosen color|that color}".into(),
                 Value::Const(k) => format!("{} mana of the chosen color", number_word(*k)),
                 other => {
                     let (a, w) = self.amount(other);
@@ -7695,6 +7779,12 @@ impl Renderer<'_> {
             ManaProduction::Amount(t, v) => {
                 let sym = mana_symbol(*t);
                 match v {
+                    // "add six {R}" (Avatar Roku): many of one symbol said as a number.
+                    Value::Const(k) if *k > 3 => format!(
+                        "{{alt:{}|{} {sym}}}",
+                        sym.repeat(*k as usize),
+                        number_word(*k)
+                    ),
                     Value::Const(k) if *k > 0 => sym.repeat(*k as usize),
                     Value::Count(f) => {
                         let n = self.for_each_noun(f);
@@ -7849,6 +7939,22 @@ impl Renderer<'_> {
                 }
             }
             M::CostWithColorless => "to pay a cost that contains {C}".into(),
+            M::TurnFaceUp(None) => {
+                "to turn {alt:permanents|a permanent|creatures|a creature} face up".into()
+            }
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Morph)) => "to pay a morph cost".into(),
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Disguise)) => {
+                "to pay a disguise cost".into()
+            }
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Manifest)) => {
+                "to pay a mana cost to turn a manifested creature face up".into()
+            }
+            M::TurnFaceUp(Some(crate::mana::FaceUpWay::Cloak)) => {
+                "to pay a mana cost to turn a cloaked creature face up".into()
+            }
+            M::Purpose(crate::mana::SpendPurpose::TurnFaceUp(_)) => {
+                "to turn permanents face up".into()
+            }
             // "This mana can't be spent to cast spells from your hand."
             M::NotCastSpell(f) => {
                 let saved = self.default_head.replace("spell");
@@ -8736,6 +8842,19 @@ fn same_life_amount(a: &Effect, b: &Effect) -> bool {
             na,
             Value::Const(_) | Value::X | Value::Prev | Value::EventAmount
         )
+}
+
+/// Whether every AddMana in `e` gives the mana to "you".
+fn adds_for_you(e: &Effect) -> bool {
+    match e {
+        Effect::AddMana { who, .. } => matches!(who, PlayerRef::You),
+        Effect::Seq(v) => v.iter().all(adds_for_you),
+        Effect::ChooseOne { options, .. } => options.iter().all(|(_, x)| adds_for_you(x)),
+        Effect::If { then, .. } => adds_for_you(then),
+        Effect::May { effect, .. } => adds_for_you(effect),
+        Effect::AddManaWithSpentTrigger { add, .. } => adds_for_you(add),
+        _ => true,
+    }
 }
 
 /// The ways to say a player's zone after the player was named ("that player's", "their"),

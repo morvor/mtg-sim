@@ -183,6 +183,7 @@ impl Renderer<'_> {
                 let poss = self.player(p, Case::Poss);
                 format!("since {poss} last upkeep")
             }
+            HistoryWindow::ThisGame => "this game".into(),
         }
     }
 

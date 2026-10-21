@@ -38,6 +38,7 @@ mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
 mod guesses;
+mod history_filters;
 mod history_values;
 mod joined_lines;
 mod keywords;
@@ -1186,6 +1187,7 @@ impl<'a> Renderer<'a> {
     pub fn ability(&mut self, a: &Ability) -> String {
         self.self_salient = false;
         self.extra.x_paid = false;
+        self.extra.x_energy = false;
         self.var_defs.clear();
         self.outer_vars.clear();
         self.it_done = None;
