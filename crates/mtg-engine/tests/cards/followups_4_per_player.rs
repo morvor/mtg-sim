@@ -95,3 +95,44 @@ fn wernog_investigates_one_plus_the_opponents_who_investigated() {
     assert_eq!((clues(&t, P1), clues(&t, P2), clues(&t, P3)), (1, 0, 1));
     assert_eq!((t.life(P1), t.life(P2), t.life(P3)), (20, 19, 20));
 }
+
+#[test]
+fn tangle_wire_player_taps_one_permanent_per_fade_counter() {
+    cr!("701.26a");
+    supported("Tangle Wire");
+    let mut t = TestGame::new(2);
+    let w = t.battlefield(P0, "Tangle Wire");
+    t.g.add_counters(Entity::Object(w), "fade", 2, None);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let lands = t.lands(P1, "Forest", 2);
+    let rock = t.battlefield(P1, "Mind Stone");
+    t.answer_choose(P1, &[Entity::Object(bears), Entity::Object(rock)]);
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped);
+    assert!(t.obj_now(rock).tapped);
+    assert!(lands.iter().all(|l| !t.obj_now(*l).tapped));
+    assert!(t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1
+            && matches!(d, decision::Decision::ChooseEntities { min: 2, max: 2, .. })));
+}
+
+#[test]
+fn malignant_growth_damage_equals_the_cards_drawn_this_way() {
+    cr!("504.1");
+    ruling!(
+        "Malignant Growth",
+        "The triggered ability is put onto the stack after you have already drawn your card for the turn."
+    );
+    supported("Malignant Growth");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Malignant Growth");
+    t.g.add_counters(Entity::Object(m), "growth", 2, None);
+    t.advance_to(P1, mtg_engine::turn::Step::Draw);
+    let hand = t.hand_size(P1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), hand + 2);
+    assert_eq!(t.life(P1), 18);
+}

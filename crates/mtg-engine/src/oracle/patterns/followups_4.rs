@@ -54,6 +54,22 @@ pub fn own_count_atom(s: &str, _b: &mut Builder) -> Option<(Value, String)> {
         return Some(v);
     }
     if !PER_PLAYER.with(|c| c.get()) {
+        // One player's draw: "~ deals damage to the player equal to the number of cards
+        // they drew this way" (Malignant Growth), the cards the latest draw instruction
+        // drew.
+        for p in [
+            "the number of cards they drew this way",
+            "the number of cards that player drew this way",
+        ] {
+            if let Some(r) = s.strip_prefix(p) {
+                if r.is_empty() || r.starts_with([' ', ',', '.']) {
+                    return Some((
+                        Value::Count(Filter::In(Box::new(Sel::Var(vars::REVEALED)))),
+                        r.to_string(),
+                    ));
+                }
+            }
+        }
         return None;
     }
     let r = s.strip_prefix("the number of cards ")?;
@@ -528,6 +544,67 @@ fn mill_then_those_cards(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "followups 4: mill, then ... those cards", priority: 120, parse: mill_then_those_cards } }
 
+/// "that player taps an untapped artifact, creature, or land they control for each fade
+/// counter on ~" (Tangle Wire), "tap two untapped creatures you control": the player
+/// chooses that many of the objects and taps them (as many as they can, CR 609.3).
+fn taps_untapped(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (who, r, own) = if let Some(r) = l.strip_prefix("that player taps ") {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            || matches!(b.it_player, PlayerRef::You)
+        {
+            return None;
+        }
+        (b.it_player.clone(), r, " they control")
+    } else if let Some(r) = l.strip_prefix("tap ") {
+        (PlayerRef::You, r, " you control")
+    } else {
+        return None;
+    };
+    let (n, r) = if let Some(r) = r.strip_prefix("an ").or_else(|| r.strip_prefix("a ")) {
+        (Value::c(1), r)
+    } else {
+        let (n, r) = parse_number(r)?;
+        n.as_const()?;
+        (n, r.trim_start())
+    };
+    if !r.starts_with("untapped ") {
+        return None;
+    }
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
+    let tail = tail.trim_start();
+    let tail = tail.strip_prefix(own.trim_start())?;
+    let count = if tail.is_empty() {
+        n
+    } else {
+        let thing = tail.strip_prefix(" for each ")?;
+        let (v, rest) = super::value_grammar::parse_value(&format!("the number of {thing}"), b)?;
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        match n.as_const() {
+            Some(1) => v,
+            _ => Value::Mul(Box::new(n), Box::new(v)),
+        }
+    };
+    let f = Filter::and(vec![
+        f,
+        Filter::Untapped,
+        Filter::ControlledByPlayer(Box::new(who.clone())),
+    ]);
+    Some(Effect::Tap {
+        what: Sel::Choose {
+            chooser: who,
+            filter: f,
+            count,
+            up_to: false,
+            store: None,
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: [player] taps N untapped [objects] they control", priority: 120, parse: taps_untapped } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -543,6 +620,8 @@ mod tests {
             ("Creature", "At the beginning of combat on each opponent's turn, if you're the monarch, that opponent may pay {X}, where X is the number of cards in their hand. If they don't, they can't attack you this combat."),
             ("Artifact Creature", "When ~ enters, target opponent may have you draw three cards. If the player doesn't, you mill three cards, then ~ deals damage to that player equal to the total mana value of those cards."),
             ("Legendary Artifact", "At the beginning of your end step, put an influence counter on ~ and scry 2. Then target opponent may have you draw a card. If that player doesn't, you mill X cards, where X is the number of influence counters on ~, and that player loses life equal to the total mana value of those cards."),
+            ("Artifact", "At the beginning of each player's upkeep, that player taps an untapped artifact, creature, or land they control for each fade counter on ~."),
+            ("Enchantment", "At the beginning of each opponent's draw step, that player draws an additional card for each growth counter on ~, then ~ deals damage to the player equal to the number of cards they drew this way."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
