@@ -1324,3 +1324,44 @@ fn p_each_attacker_gets_for_each_defender_creature(l: &str, _b: &mut Builder) ->
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: each creature you control attacking a player gets ... for each creature that player controls", priority: 90, parse: p_each_attacker_gets_for_each_defender_creature } }
+
+/// "Only creatures in the pile of their choice can attack this turn." (Fight or Flight):
+/// that player chooses one of the piles (CR 700.3); no creature outside it can attack
+/// (CR 508.1c).
+fn p_only_pile_can_attack(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("only creatures in the pile of ")?;
+    let (who, duration) = if let Some(w) = r.strip_suffix("'s choice can attack this turn") {
+        (w, Duration::EndOfTurn)
+    } else if let Some(w) = r.strip_suffix(" choice can attack this turn") {
+        (w, Duration::EndOfTurn)
+    } else {
+        return None;
+    };
+    let chooser = match who {
+        "their" | "that player" => {
+            if is_no_player_referent(&b.it_player) || matches!(b.it_player, PlayerRef::You) {
+                return None;
+            }
+            b.it_player.clone()
+        }
+        "your" => PlayerRef::You,
+        _ => return None,
+    };
+    Some(Effect::seq(vec![
+        Effect::Piles(Box::new(crate::piles::PileAction::Choose {
+            chooser,
+            picked_by: None,
+            of: None,
+            at_random: false,
+        })),
+        Effect::AddRestriction {
+            restriction: Restriction::CantAttack(Filter::not(Filter::In(Box::new(Sel::Var(
+                crate::piles::CHOSEN,
+            ))))),
+            duration,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: only creatures in the pile of their choice can attack", priority: 90, parse: p_only_pile_can_attack } }

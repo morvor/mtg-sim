@@ -346,3 +346,27 @@ fn tenuous_truce_ends_when_either_side_attacks_the_other() {
     t.resolve_all();
     assert!(!t.on_battlefield(truce));
 }
+
+#[test]
+fn fight_or_flight_only_the_chosen_pile_can_attack() {
+    cr!("700.3", "508.1c");
+    supported("Fight or Flight");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fight or Flight");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let lions = t.battlefield(P1, "Savannah Lions");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer(
+        P1,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    t.set_step(P1, Step::PrecombatMain);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.resolve_all();
+    let p0 = Entity::Player(P0);
+    // P1 chose the second pile: the Giant and the Lions.
+    assert!(!legal_attack(&mut t, &[(bears, p0)]));
+    assert!(legal_attack(&mut t, &[(giant, p0), (lions, p0)]));
+}
