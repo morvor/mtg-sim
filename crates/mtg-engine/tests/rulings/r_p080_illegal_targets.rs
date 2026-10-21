@@ -192,15 +192,25 @@ fn scriv_creates_no_contract_without_a_legal_target() {
         "If the target creature is an illegal target as Scriv's last ability tries to resolve, it won't resolve and none of its effects will happen. The Contract token won't be created."
     );
     supported("Scriv, the Obligator");
-    let mut t = TestGame::new(2);
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    t.answer_targets(P0, &[obj(bears)]);
-    t.enter(P0, "Scriv, the Obligator");
-    t.settle();
-    destroy(&mut t, bears);
-    t.resolve_all();
-    assert!(t.named_on_battlefield("Contract").is_empty());
-    assert!(t.g.exile.iter().all(|e| t.g.obj(*e).chars.name != "Contract"));
+    for illegal in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_targets(P0, &[obj(bears)]);
+        t.enter(P0, "Scriv, the Obligator");
+        t.settle();
+        if illegal {
+            destroy(&mut t, bears);
+        }
+        t.resolve_all();
+        let contracts = t.named_on_battlefield("Contract");
+        if illegal {
+            assert!(contracts.is_empty());
+            assert!(t.g.exile.iter().all(|e| t.g.obj(*e).chars.name != "Contract"));
+        } else {
+            assert_eq!(contracts.len(), 1, "a Contract on the legal target");
+            assert_eq!(t.obj_now(contracts[0]).attached_to, Some(obj(bears)));
+        }
+    }
 }
 
 #[test]
@@ -235,6 +245,7 @@ fn scriv_creates_no_contract_for_a_creature_it_cant_enchant() {
     t.answer_targets(P0, &[obj(wing)]);
     t.enter(P0, "Scriv, the Obligator");
     t.resolve_all();
+    assert!(t.on_battlefield(wing));
     assert!(t.named_on_battlefield("Contract").is_empty());
     assert!(crate::r_s01_common::tokens(&t, P0).is_empty());
     assert!(t.g.exile.iter().all(|e| t.g.obj(*e).chars.name != "Contract"));

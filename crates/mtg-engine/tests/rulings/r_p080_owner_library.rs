@@ -152,14 +152,14 @@ fn aetherspouts_active_player_chooses_first_then_turn_order() {
         "Aetherspouts",
         "The owner of each attacking creature chooses whether to put it on the top or bottom of their library. The active player (the player whose turn it is) makes all of their choices first, followed by each other player in turn order."
     );
-    // P1 attacks P0 with its own Grizzly Bears and P2's Hill Giant (stolen); both owners
-    // choose, P1 first.
+    // P2 attacks P0 with its own Hill Giant and P1's Grizzly Bears (stolen); both owners
+    // choose, the active player P2 first (not in seat order).
     let mut t = TestGame::new(3);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P2, "Hill Giant");
-    give_control(&mut t, giant, P1);
-    t.g.objects[giant.0 as usize].summoning_sick = false;
-    t.set_step(P1, Step::BeginningOfCombat);
+    give_control(&mut t, bears, P2);
+    t.g.objects[bears.0 as usize].summoning_sick = false;
+    t.set_step(P2, Step::BeginningOfCombat);
     attack_with(
         &mut t,
         &[(bears, Entity::Player(P0)), (giant, Entity::Player(P0))],
@@ -170,7 +170,7 @@ fn aetherspouts_active_player_chooses_first_then_turn_order() {
     let from = t.asked().len();
     cast_card(&mut t, P0, "Aetherspouts", &[]).unwrap();
     t.resolve_all();
-    assert_eq!(top_or_bottom_asks(&t, from), vec![P1, P2]);
+    assert_eq!(top_or_bottom_asks(&t, from), vec![P2, P1]);
     assert_eq!(bottom_name(&t, P1, 0), "Grizzly Bears");
     let lib2 = &t.g.player(P2).library;
     assert_eq!(t.g.obj(*lib2.last().unwrap()).chars.name, "Hill Giant");

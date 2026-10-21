@@ -75,8 +75,32 @@ pub fn for_each_player(g: &mut Game, players: Vec<PlayerId>, body: &Effect, ctx:
 /// Performs `body` for each of `objects`, bound to `var` ([`Effect::ForEach`]).
 pub fn for_each_object(g: &mut Game, objects: Vec<Entity>, var: Var, body: &Effect, ctx: &mut Ctx) {
     let items = objects.into_iter().map(|e| Item::Object(var, e)).collect();
-    let frames = Frames::new(g, items, None, ctx);
+    let mut frames = Frames::new(g, items, None, ctx);
+    // "For each attacking creature, its owner puts it on their choice of ...": the player
+    // who makes each object's choice does so in APNAP order (CR 101.4; Aetherspouts), not
+    // its controller.
+    if let Some(who) = deciding_player(body) {
+        let order = g.pregame_order_or_apnap();
+        let pos = |p: PlayerId| order.iter().position(|x| *x == p).unwrap_or(usize::MAX);
+        frames.frames.sort_by_cached_key(|f| match f.item {
+            Item::Object(v, e) => {
+                let mut c = ctx.clone();
+                c.vars.insert(v, vec![e]);
+                g.eval_player(who, &c).map_or(usize::MAX, pos)
+            }
+            Item::Player(p) => pos(p),
+        });
+    }
     run(g, frames, body, ctx);
+}
+
+/// The player named as making the choice in a "for each object" body that starts with
+/// one ("its owner chooses ...", "its owner puts it on their choice of ...").
+fn deciding_player(body: &Effect) -> Option<&PlayerRef> {
+    match body {
+        Effect::ChooseOne { who, .. } | Effect::AsPlayer { who, .. } => Some(who),
+        _ => None,
+    }
 }
 
 /// What an instruction is performed for.
