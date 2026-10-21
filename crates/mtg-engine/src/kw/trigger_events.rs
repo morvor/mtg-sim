@@ -50,6 +50,9 @@ pub const FINAL_CHAPTER_TRIGGERS: &str = "saga:final chapter ability of a saga y
 /// the source enters the battlefield attached to a creature, the trigger's other object
 /// ("that creature", as it was attached then: Infinite Reflection's rulings).
 pub const ENTERS_ATTACHED_TO_CREATURE: &str = "attach:~ enters attached to a creature";
+/// `Condition::Custom`: the trigger event's player is the player chosen for the source
+/// ("When the chosen player loses the game": even once they've left it, CR 800.4a).
+pub const EVENT_PLAYER_IS_CHOSEN: &str = "chosen:the event's player is the chosen player";
 /// `Filter::Custom`: the spell or ability that caused the trigger event.
 pub const THE_CAUSE: &str = "event cause:the spell or ability";
 
@@ -67,6 +70,10 @@ impl KeywordRules for TriggerEvents {
             CAUSED_BY_SPELL_OR_ABILITY => Some(cause.is_some()),
             DURING_YOUR_UNTAP_STEP => Some(
                 g.turn.step == crate::turn::Step::Untap && g.turn.active == ctx.controller,
+            ),
+            EVENT_PLAYER_IS_CHOSEN => Some(
+                g.chosen_player_of_source(ctx).is_some()
+                    && g.chosen_player_of_source(ctx) == ctx.event.as_ref().and_then(|e| e.player),
             ),
             CAUSED_BY_YOURS => Some(cause.is_some_and(|c| ctl(c) == ctx.controller)),
             CAUSED_BY_OPPONENTS => {

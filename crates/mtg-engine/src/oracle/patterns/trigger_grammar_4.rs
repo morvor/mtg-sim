@@ -800,6 +800,115 @@ fn spell_targeting_only_a_creature_deals_damage_to_it(t: &str) -> Option<(Trigge
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: a spell that targets only a single creature deals damage to that creature", priority: 100, parse: spell_targeting_only_a_creature_deals_damage_to_it } }
 
+// ---------------------------------------------------------------------------------------
+// The chosen creature and the chosen player (Zenos yae Galvus // Shinryu)
+// ---------------------------------------------------------------------------------------
+
+/// Whether the card's text has a triggered ability that chooses a creature for its other
+/// abilities ("When ~ enters, choose a creature an opponent controls. ... When the chosen
+/// creature leaves the battlefield, ...").
+fn card_refers_to_chosen_creature_leaving() -> bool {
+    crate::oracle::raw_text()
+        .to_lowercase()
+        .contains("when the chosen creature leaves the battlefield")
+}
+
+std::thread_local! {
+    static NOTING_CHOICE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "When ~ enters, choose a creature an opponent controls. Until end of turn, creatures
+/// other than ~ and the chosen creature get -2/-2." (Zenos yae Galvus): the chosen
+/// creature is noted for the linked ability ("When the chosen creature leaves the
+/// battlefield, transform ~", CR 607.2d), and "creatures other than ~ and the chosen
+/// creature" excludes both.
+fn enters_choose_creature_noted(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    if NOTING_CHOICE.with(|n| n.get())
+        || !lower.contains(", choose a creature ")
+        || lower.contains("the chosen creature leaves")
+        || !card_refers_to_chosen_creature_leaving()
+    {
+        return None;
+    }
+    NOTING_CHOICE.with(|n| n.set(true));
+    let parsed = crate::oracle::parse_ability(block, ctx);
+    NOTING_CHOICE.with(|n| n.set(false));
+    let parsed = parsed?;
+    let [a] = parsed.as_slice() else {
+        return None;
+    };
+    let mut kind = a.kind.clone();
+    let AbilityKind::Triggered(t) = &mut kind else {
+        return None;
+    };
+    let Effect::Seq(v) = &mut t.body.effect else {
+        return None;
+    };
+    let Some(Effect::Store {
+        var,
+        sel: Sel::Choose { .. },
+    }) = v.first()
+    else {
+        return None;
+    };
+    let var = *var;
+    // "creatures other than ~ and the chosen creature": neither of them.
+    if lower.contains("other than ~ and the chosen creature") {
+        for e in v.iter_mut() {
+            if let Effect::Modify { what, .. } = e {
+                if let Sel::Union(parts) = what {
+                    if let [Sel::All(f), Sel::Var(x)] = parts.as_slice() {
+                        if *x == var {
+                            *what = Sel::All(Filter::and(vec![
+                                f.clone(),
+                                Filter::not(Filter::In(Box::new(Sel::Var(var)))),
+                            ]));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    v.insert(
+        1,
+        Effect::NoteLinked {
+            what: Sel::Var(var),
+            replace: true,
+        },
+    );
+    Some(vec![AbilityDef::with_link(kind, a.text.clone(), a.link)])
+}
+
+inventory::submit! { AbilityPattern { name: "trigger grammar 4: when ~ enters, choose a creature (noted for the linked ability)", priority: 45, parse: enters_choose_creature_noted } }
+
+/// "the chosen creature leaves the battlefield" (the creature noted by the linked ability,
+/// as it last existed), "the chosen player loses the game" (the player chosen for the
+/// source, CR 607.2d).
+fn chosen_creature_or_player_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    match end(t) {
+        "the chosen creature leaves the battlefield" if card_refers_to_chosen_creature_leaving() => Some((
+            TriggerCond::LeavesBattlefield(Filter::and(vec![
+                Filter::creature(),
+                Filter::Custom(crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED.into()),
+            ])),
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )),
+        "the chosen player loses the game" => Some((
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::PlayerLoses),
+                cond: Condition::Custom(crate::kw::trigger_events::EVENT_PLAYER_IS_CHOSEN.into()),
+            },
+            Sel::None,
+            PlayerRef::TriggerPlayer,
+        )),
+        _ => None,
+    }
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: the chosen creature leaves / the chosen player loses", priority: 100, parse: chosen_creature_or_player_event } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

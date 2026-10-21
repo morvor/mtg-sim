@@ -705,3 +705,51 @@ fn imodane_spell_targeting_only_a_creature_dealing_damage_to_it() {
     assert_eq!(t.life(P1), 14);
     assert_eq!(t.life(P2), 17);
 }
+
+#[test]
+fn zenos_chosen_creature_and_chosen_player() {
+    cr!("607.2d", "701.27a", "104.2a");
+    ruling!(
+        "Zenos yae Galvus // Shinryu, Transcendent Rival",
+        "In the case where you can't choose a creature an opponent controls for Zenos's first ability (probably because your opponents control no creatures), other creatures will still get -2/-2 until end of turn when Zenos's first ability resolves."
+    );
+    supported("Zenos yae Galvus");
+    let mut t = TestGame::new(3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let angel = t.battlefield(P2, "Serra Angel");
+    t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let zenos = t.enter(P0, "Zenos yae Galvus");
+    t.settle();
+    t.resolve_all();
+    // Creatures other than Zenos and the chosen creature get -2/-2.
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(t.pt(angel), (2, 2));
+    assert_eq!(t.pt(giant), (3, 3));
+    // Another creature leaving doesn't transform it; the chosen one does.
+    crate::r_s02_common::destroy(&mut t, angel);
+    t.resolve_all();
+    assert_eq!(t.obj_now(zenos).chars.name.as_str(), "Zenos yae Galvus");
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    crate::r_s02_common::destroy(&mut t, giant);
+    t.resolve_all();
+    assert_eq!(t.obj_now(zenos).chars.name.as_str(), "Shinryu, Transcendent Rival");
+    // The chosen player loses: you win the game.
+    t.g.players[P1.idx()].life = 0;
+    t.settle();
+    t.resolve_all();
+    assert!(t.has_lost(P1));
+    assert!(t.has_lost(P2));
+    assert!(!t.has_lost(P0));
+}
+
+#[test]
+fn zenos_no_creature_to_choose() {
+    cr!("607.2d");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.enter(P0, "Zenos yae Galvus");
+    t.settle();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+}
