@@ -130,7 +130,23 @@ pub fn ignores(g: &Game, source: ObjectId, p: PlayerId) -> bool {
         .any(|(s, q, turn)| *s == source && *q == p && *turn == g.turn.number)
 }
 
+/// The variable recording the id of the delayed triggered ability an effect created last
+/// ([`SpecialActionEffect::StopDelayedTrigger`]).
+pub const LAST_DELAYED: Var = vars::USER + 6490;
+
+/// The delayed triggered ability a [`SpecialActionEffect::StopDelayedTrigger`] offer
+/// stops, if it hasn't triggered (or been stopped) yet.
+fn delayed_to_stop(g: &Game, o: &SpecialOffer) -> Option<u32> {
+    let id = u32::try_from(*o.ctx.nums.get(&LAST_DELAYED)?).ok()?;
+    g.delayed_triggers.iter().any(|d| d.id == id).then_some(id)
+}
+
 fn offer_active(g: &Game, o: &SpecialOffer) -> bool {
+    if matches!(o.def.action, SpecialActionEffect::StopDelayedTrigger)
+        && delayed_to_stop(g, o).is_none()
+    {
+        return false;
+    }
     match o.duration {
         Duration::EndOfTurn => o.created_turn == g.turn.number,
         _ => !g.effect_expired(&o.duration, o.ctx.source, o.ctx.controller),
@@ -143,6 +159,18 @@ pub fn end_of_turn(g: &mut Game) {
     g.special
         .offers
         .retain(|o| !(matches!(o.duration, Duration::EndOfTurn) && o.created_turn == turn));
+    // Offers to stop a delayed triggered ability that has triggered.
+    let stale: Vec<u32> = g
+        .special
+        .offers
+        .iter()
+        .filter(|o| {
+            matches!(o.def.action, SpecialActionEffect::StopDelayedTrigger)
+                && delayed_to_stop(g, o).is_none()
+        })
+        .map(|o| o.id)
+        .collect();
+    g.special.offers.retain(|o| !stale.contains(&o.id));
     g.special.ignoring.retain(|(_, _, t)| *t != turn);
 }
 
@@ -414,6 +442,8 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
                     g.recompute();
                 }
                 SpecialActionEffect::Effect(e) => g.exec(e, &mut ctx),
+                // Only offered by effects.
+                SpecialActionEffect::StopDelayedTrigger => {}
             }
             Some(Ok(()))
         }
@@ -437,9 +467,17 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
             if !o.repeatable {
                 g.special.offers.retain(|x| x.id != o.id);
             }
-            if let SpecialActionEffect::Effect(e) = &o.def.action {
-                ctx.controller = p;
-                g.exec(e, &mut ctx);
+            match &o.def.action {
+                SpecialActionEffect::Effect(e) => {
+                    ctx.controller = p;
+                    g.exec(e, &mut ctx);
+                }
+                SpecialActionEffect::StopDelayedTrigger => {
+                    if let Some(id) = delayed_to_stop(g, &o) {
+                        g.delayed_triggers.retain(|d| d.id != id);
+                    }
+                }
+                SpecialActionEffect::IgnoreSourceEffects => {}
             }
             Some(Ok(()))
         }
