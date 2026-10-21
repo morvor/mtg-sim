@@ -502,6 +502,9 @@ pub trait KeywordRules: Sync + Send {
     ) -> Option<crate::mana::ManaRestriction> {
         None
     }
+    /// `p` is about to planeswalk (CR 701.31, 901.8): "if you would planeswalk, instead
+    /// ..., then planeswalk" replacement effects do their part first.
+    fn before_planeswalk(&self, g: &mut Game, p: PlayerId) {}
     /// `obj` is adapting: returns true if it adapts as though it had no +1/+1 counters on
     /// it (CR 701.46a), using up the effect that says so ("the next time ... adapts").
     fn adapts_ignoring_counters(&self, g: &mut Game, obj: ObjectId) -> bool {
@@ -1330,6 +1333,13 @@ pub fn added_mana_restriction(
     registry()
         .iter()
         .find_map(|k| k.added_mana_restriction(g, p, src))
+}
+
+/// See [`KeywordRules::before_planeswalk`].
+pub fn before_planeswalk(g: &mut Game, p: PlayerId) {
+    for k in registry() {
+        k.before_planeswalk(g, p);
+    }
 }
 
 /// See [`KeywordRules::blocks_instead`].
