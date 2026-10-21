@@ -969,7 +969,8 @@ impl Game {
             }
             // Checked by whatever chooses the objects together (`relational.rs`).
             Filter::Together(_) => true,
-            Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
+            Filter::Custom(name) => crate::mana_value::custom_parity_filter(self, name, id, c)
+                .unwrap_or_else(|| crate::custom::custom_filter(self, name, id, ctx)),
         }
     }
 
