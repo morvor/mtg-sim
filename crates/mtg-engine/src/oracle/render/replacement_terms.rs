@@ -301,6 +301,17 @@ impl Renderer<'_> {
                     "the first time {w} would draw a card each turn, instead {e}"
                 ))
             }
+            // "The first time you would draw a card each turn except the first card you
+            // draw during each of your draw steps, you draw four cards instead."
+            (E::Draw(PlayerFilter::And(v)), Condition::Custom(n), A::Instead(e))
+                if n == crate::kw::first_draw_except_draw_step::FIRST_DRAW_EXCEPT_DRAW_STEP
+                    && matches!(v.as_slice(), [PlayerFilter::You, PlayerFilter::Not(_)]) =>
+            {
+                let e = self.effect(e);
+                Some(format!(
+                    "the first time you would draw a card each turn except the first card you draw during each of your draw steps, {e} instead"
+                ))
+            }
             _ => None,
         }
     }

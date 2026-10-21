@@ -37,6 +37,10 @@
 //! - "Choose a color. Add an amount of mana of that color equal to [value]." (Three Tree
 //!   City): that much mana of one color the player chooses, as "add X mana of any one
 //!   color" (CR 106.1b).
+//! - "If at least seven red mana was spent to cast ~, instead ~ deals 7 damage to each of
+//!   those permanents and/or players." (Sundering Stroke): after damage divided among
+//!   targets, the same targets are each dealt that damage instead when the condition
+//!   holds (the division announced as it was cast, CR 601.2d, is then not used).
 //! - Spending restrictions (CR 106.6): "This mana can't be spent to cast spells." (Thran
 //!   Turbine: it may pay for anything else, such as activating abilities), "Spend this
 //!   mana only to cast spells you don't own." (Thieving Varmint: "you" is the player
@@ -554,6 +558,51 @@ fn amount_of_chosen_color(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "mana 4: choose a color. add an amount of mana of that color equal to [count]", priority: 100, apply: amount_of_chosen_color } }
+
+/// "if [condition], instead ~ deals N damage to each of those permanents and/or players"
+/// after "~ deals N damage divided as you choose among ... targets".
+fn instead_damage_to_each_target(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Effect::DealDividedDamage { source, slot } = prev.clone() else {
+        return false;
+    };
+    let Some(r) = end(l).strip_prefix("if ") else {
+        return false;
+    };
+    let Some((cond_s, rest)) = r.split_once(", instead ~ deals ") else {
+        return false;
+    };
+    let Some((n, tail)) = parse_number(rest) else {
+        return false;
+    };
+    if !matches!(n, Value::Const(_))
+        || !matches!(
+            tail.trim(),
+            "damage to each of those permanents and/or players" | "damage to each of them"
+        )
+    {
+        return false;
+    }
+    let saved = b.targets.len();
+    let Some(cond) = super::conditions_referents::parse_condition_with(cond_s, b) else {
+        return false;
+    };
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return false;
+    }
+    *prev = Effect::If {
+        cond,
+        then: Box::new(Effect::DealDamage {
+            source,
+            amount: n,
+            to: Sel::Target(slot),
+        }),
+        otherwise: Box::new(prev.clone()),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "mana 4: if [condition], instead ~ deals N damage to each of those targets", priority: 100, apply: instead_damage_to_each_target } }
 
 #[cfg(test)]
 mod tests {

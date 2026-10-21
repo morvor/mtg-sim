@@ -7,6 +7,9 @@
 //!   Bone Shaman gains): a static restriction on the creatures the source has dealt damage
 //!   to this turn (CR 701.19c), which stops their regeneration shields from replacing
 //!   their destruction.
+//! - "The first time you would draw a card each turn except the first card you draw during
+//!   each of your draw steps, you draw four cards instead." (Reed Richards, Smartest Man;
+//!   CR 121.6, 614.1a; `kw/first_draw_except_draw_step.rs`).
 //! - "the creature an opponent controls" after "target creature an opponent controls" in
 //!   the same ability ("Target creature you control fights target creature an opponent
 //!   controls. If the creature an opponent controls would die this turn, exile it
@@ -98,3 +101,38 @@ fn dealt_damage_cant_regenerate(l: &str, text: &str, _ctx: &CompileContext) -> O
 }
 
 inventory::submit! { StaticPattern { name: "replacements 4: creatures dealt damage by ~ this turn can't be regenerated", priority: 100, parse: dealt_damage_cant_regenerate } }
+
+/// "the first time you would draw a card each turn except the first card you draw during
+/// each of your draw steps, you draw N cards instead".
+fn first_draw_except_draw_step(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix(
+        "the first time you would draw a card each turn except the first card you draw during each of your draw steps, you draw ",
+    )?;
+    let (n, tail) = crate::oracle::phrases::parse_number(r)?;
+    if tail.trim() != "cards instead" || !matches!(n, Value::Const(_)) {
+        return None;
+    }
+    let def = ReplacementDef {
+        event: ReplacementEvent::Where {
+            event: Box::new(ReplacementEvent::Draw(PlayerFilter::And(vec![
+                PlayerFilter::You,
+                PlayerFilter::Not(Box::new(PlayerFilter::FirstDrawInDrawStep)),
+            ]))),
+            cond: Condition::Custom(
+                crate::kw::first_draw_except_draw_step::FIRST_DRAW_EXCEPT_DRAW_STEP.into(),
+            ),
+        },
+        action: ReplacementAction::Instead(Box::new(Effect::Draw {
+            who: PlayerRef::You,
+            n,
+        })),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "replacements 4: the first time you would draw a card each turn except the first in each draw step", priority: 100, parse: first_draw_except_draw_step } }

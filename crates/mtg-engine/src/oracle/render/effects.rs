@@ -3773,9 +3773,10 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
-        // "~ deals 2 damage to that player. Prevent X of that damage, where X is the amount
-        // of mana that player paid this way." (Errant Minion; `patterns/prevention_4.rs`).
-        if let [Effect::AddReplacement {
+        // "[that player may pay any amount of mana.] ~ deals 2 damage to that player.
+        // Prevent X of that damage, where X is the amount of mana that player paid this
+        // way." (Errant Minion; `patterns/prevention_4.rs`).
+        if let [before @ .., Effect::AddReplacement {
             def:
                 ReplacementDef {
                     action: ReplacementAction::PreventAmount(Value::X),
@@ -3785,9 +3786,11 @@ impl Renderer<'_> {
             ..
         }, dmg @ Effect::DealDamage { .. }] = v
         {
-            let b = self.effect(dmg);
+            let mut parts: Vec<String> = before.iter().map(|e| self.effect(e)).collect();
+            parts.push(self.effect(dmg));
             return format!(
-                "{b}. Prevent X of that damage, where X is the amount of mana that player paid this way"
+                "{}. Prevent X of that damage, where X is the amount of mana that player paid this way",
+                parts.join(". ")
             );
         }
         // "For each artifact or creature card in target opponent's graveyard, add {C} and

@@ -194,3 +194,60 @@ fn bone_shaman_stops_regeneration_of_creatures_it_damaged() {
         }
     }
 }
+
+#[test]
+fn sundering_stroke_deals_full_damage_to_each_target_with_seven_red_mana() {
+    cr!("601.2d", "601.2h");
+    assert_supported("Sundering Stroke");
+    for all_red in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let a = t.battlefield(P1, "Hill Giant");
+        let b = t.battlefield(P1, "Hill Giant");
+        if all_red {
+            t.lands(P0, "Mountain", 7);
+        } else {
+            t.lands(P0, "Mountain", 6);
+            t.lands(P0, "Island", 1);
+        }
+        let stroke = t.hand(P0, "Sundering Stroke");
+        t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![3, 3, 1]));
+        t.cast(P0, stroke)
+            .targets(&[Entity::Object(a), Entity::Object(b), Entity::Player(P1)])
+            .go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+        assert_eq!(t.life(P1), if all_red { 13 } else { 19 });
+    }
+}
+
+#[test]
+fn reed_richards_replaces_the_first_draw_after_the_draw_step() {
+    cr!("504.1", "614.1a", "121.6");
+    assert_supported("Reed Richards, Smartest Man");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Reed Richards, Smartest Man");
+    for _ in 0..20 {
+        t.library_top(P0, "Forest");
+    }
+    t.advance_to(P1, Step::Upkeep);
+    // P1's turn: P0's first draw this turn is replaced.
+    let hand = t.hand_size(P0);
+    t.g.draw_cards(P0, 1);
+    t.g.flush_events();
+    assert_eq!(t.hand_size(P0), hand + 4);
+    t.g.draw_cards(P0, 1);
+    t.g.flush_events();
+    assert_eq!(t.hand_size(P0), hand + 5);
+    // P0's turn: the draw step's draw isn't; the next one is.
+    let before = t.hand_size(P0);
+    t.advance_to(P0, Step::PrecombatMain);
+    let hand = t.hand_size(P0);
+    assert_eq!(hand, before + 1);
+    t.g.draw_cards(P0, 1);
+    t.g.flush_events();
+    assert_eq!(t.hand_size(P0), hand + 4);
+    t.g.draw_cards(P0, 1);
+    t.g.flush_events();
+    assert_eq!(t.hand_size(P0), hand + 5);
+}
