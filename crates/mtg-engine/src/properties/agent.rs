@@ -80,7 +80,13 @@ impl Recorder {
                 self.lines.push(self.canon.state(g));
             }
             if let Some((q, before, attempts)) = self.pending.take() {
-                if q == p && g.turn.illegal_attempts == attempts + 1 {
+                if g.turn.illegal_attempts == attempts + 1 && q != p {
+                    self.violations.push(format!(
+                        "turn {}: an action of player {} was reversed but player {} got \
+                         priority (CR 733.2)",
+                        g.turn.number, q.0, p.0
+                    ));
+                } else if g.turn.illegal_attempts == attempts + 1 {
                     self.rollbacks_checked += 1;
                     let (a, b) = (rollback_view(&before), rollback_view(g));
                     if a != b {

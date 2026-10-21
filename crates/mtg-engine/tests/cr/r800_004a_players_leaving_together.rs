@@ -9,7 +9,7 @@ use mtg_engine::*;
 
 #[test]
 fn players_losing_at_once_are_treated_alike_whatever_their_seats() {
-    cr!("104.4a", "800.4a");
+    cr!("104.2a", "800.4a");
     let mut t = TestGame::new(3);
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P1, "Grizzly Bears");
@@ -17,7 +17,7 @@ fn players_losing_at_once_are_treated_alike_whatever_their_seats() {
     // P2 wins; the game is over, so neither loser's objects had to leave.
     assert_eq!(t.g.result, Some(GameResult::Win(vec![P2])));
     assert!(t.g.player(P0).left_game && t.g.player(P1).left_game);
-    assert_eq!(t.on_battlefield(a), t.on_battlefield(b));
+    assert!(t.on_battlefield(a) && t.on_battlefield(b));
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn players_losing_at_once_lose_in_apnap_order() {
     // Found by seat symmetry: players losing at once were handled in the order they were
     // listed, by seat, and what happened as the first of them lost (effects ending,
     // characteristics recomputed) depended on which one it was.
-    cr!("101.4", "104.4a");
+    cr!("101.4");
     let mut t = TestGame::new(4);
     t.set_step(P2, mtg_engine::turn::Step::PrecombatMain);
     let from = t.g.turn_events.len();

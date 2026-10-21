@@ -39,8 +39,7 @@ fn rotating_the_seats_of_four_players_changes_nothing() {
 
 #[test]
 fn per_player_randomness_follows_the_deck_not_the_seat() {
-    cr!("103.3");
-    // With per-player streams, each deck is shuffled alike wherever it sits.
+    // A harness option, not a rule: with per-player streams, each deck is shuffled alike wherever it sits.
     let s = setup(vec![red_green(), white_blue()], 9);
     let mut a = build(&s, 0, Default::default());
     let mut b = build(&s, 1, Default::default());
@@ -102,4 +101,17 @@ fn a_subgame_is_seat_symmetric() {
         .join()
         .unwrap();
     assert!(subgames > 0, "a subgame was played");
+}
+
+#[test]
+fn triggers_of_several_players_go_on_the_stack_in_apnap_order_whatever_the_seats() {
+    // "Whenever another creature enters, you gain 1 life": a creature entering triggers
+    // the Soul Wardens of every player at once, and the stack holds them in APNAP order
+    // (CR 603.3b), not in seat order.
+    cr!("603.3b", "101.4");
+    let warden = || deck("17 Plains, 8 Soul Warden, 8 Savannah Lions, 7 Serra Angel");
+    let s = setup(vec![warden(), warden(), warden()], 7);
+    for r in [1, 2] {
+        seat_symmetry(&s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
+    }
 }

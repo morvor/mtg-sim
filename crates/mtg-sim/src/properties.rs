@@ -6,8 +6,8 @@
 //!
 //! NAME is `seat`, `snapshot`, `rollback`, `determinism`, `replay` or `all` (the default).
 //! Each game gets new random decks of any fully supported cards (every tier from
-//! "compiled" up, `card_tiers.rs`: the properties are about the engine, on every card); without `--players`, games cycle through 2, 2, 3 and
-//! 4 players. A violation or a panic is reported with the command that reproduces it, and
+//! "compiled" up, `card_tiers.rs`: the properties are about the engine, on every card);
+//! without `--players`, games cycle through 2, 2, 3 and 4 players. A violation or a panic is reported with the command that reproduces it, and
 //! the process exits with status 1 at the end; a game still going after `--slow` seconds
 //! is reported as slow (a replay after three times as long). `--jobs N` checks N games
 //! at a time.
