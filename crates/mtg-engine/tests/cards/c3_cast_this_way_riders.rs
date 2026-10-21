@@ -248,3 +248,44 @@ fn codie_casts_the_found_card_free_and_puts_the_others_on_the_bottom() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn dragons_approach_exiles_itself_and_four_more_to_find_a_dragon() {
+    cr!("608.2c", "701.23a");
+    ruling!(
+        "Dragon's Approach",
+        "In most cases, you'll need to exile five cards named Dragon's Approach"
+    );
+    assert_supported("Dragon's Approach");
+    assert_supported("Sphinx's Approach");
+    for in_graveyard in [3, 4] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.lands(P0, "Mountain", 3);
+        for _ in 0..in_graveyard {
+            t.graveyard(P0, "Dragon's Approach");
+        }
+        t.library_top(P0, "Shivan Dragon");
+        let spell = t.hand(P0, "Dragon's Approach");
+        t.answer_yes(P0, true);
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        assert_eq!(t.life(P1), 17);
+        let found = t.named_on_battlefield("Shivan Dragon").len();
+        let left = t
+            .g
+            .player(P0)
+            .graveyard
+            .iter()
+            .filter(|c| t.g.obj(**c).chars.name == "Dragon's Approach")
+            .count();
+        if in_graveyard == 4 {
+            assert_eq!(found, 1, "{}", t.dump_log());
+            assert_eq!(left, 0);
+            assert_eq!(t.zone(t.g.current(spell)), Zone::Exile);
+        } else {
+            assert_eq!(found, 0);
+            assert_eq!(left, 4);
+        }
+    }
+}
