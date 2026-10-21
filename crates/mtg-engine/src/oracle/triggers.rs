@@ -29,7 +29,13 @@ fn that_player_is_the_triggers(eff: &str) -> bool {
         };
         let found = s.match_indices("that player").any(|(i, _)| {
             let before = &s[..i];
-            !(before.contains("each opponent ") || before.contains("each player ") || named(before))
+            // ("for each opponent, choose a nonland permanent that player controls": each
+            // of them too.)
+            !(before.contains("each opponent ")
+                || before.contains("each player ")
+                || before.contains("for each opponent, ")
+                || before.contains("for each player, ")
+                || named(before))
         });
         targeted = named(s);
         found

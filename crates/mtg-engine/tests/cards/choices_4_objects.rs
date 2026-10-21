@@ -104,3 +104,35 @@ fn nicol_bolas_each_opponent_exiles_a_hand_card_or_a_permanent() {
     assert!(t.in_exile("Grizzly Bears"));
     assert!(t.in_hand(P2, "Shock"));
 }
+
+#[test]
+fn chaos_defiler_chooses_one_per_opponent_then_destroys_one_at_random() {
+    cr!("608.2c", "603.10a");
+    supported("Chaos Defiler");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Swamp", 3);
+    t.lands(P0, "Mountain", 2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    t.battlefield(P2, "Forest");
+    let cd = t.hand(P0, "Chaos Defiler");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, cd).go();
+    t.resolve_all();
+    let left = [bears, giant]
+        .iter()
+        .filter(|o| t.on_battlefield(**o))
+        .count();
+    assert_eq!(left, 1);
+    // It also triggers when it dies.
+    let cd = t.named_on_battlefield("Chaos Defiler")[0];
+    let other = [bears, giant]
+        .into_iter()
+        .find(|o| t.on_battlefield(*o))
+        .unwrap();
+    t.answer_choose(P0, &[Entity::Object(other)]);
+    t.g.destroy(cd, None);
+    t.resolve_all();
+    assert!(!t.on_battlefield(other));
+}
