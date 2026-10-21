@@ -2,7 +2,7 @@
 //! and its known deviations (docs/interpretations/): automatic mana payment, the
 //! optimistic list of castable spells, conceding, the simulation's turn and action
 //! limits, loops the engine doesn't recognize, and scaled combat taxes that come to
-//! nothing.
+//! {0}.
 
 use mtg_engine::decision::{Action, Answer};
 use mtg_engine::game::{GameConfig, GameResult};
@@ -129,18 +129,31 @@ fn a_loop_that_grows_the_game_state_runs_until_the_action_limit() {
 }
 
 #[test]
-fn a_scaled_attack_tax_that_comes_to_nothing_isnt_a_cost() {
+fn a_scaled_attack_tax_that_comes_to_nothing_is_still_a_cost() {
     cr!("508.1d", "508.1h", "118.5");
-    interp!("combat-tax-scaled-to-nothing");
+    interp!("combat-tax-of-zero-is-a-cost");
     // Collective Restraint with no basic land types among P1's lands: X = 0, so the tax
-    // is nothing, and Bloodrock Cyclops ("attacks each combat if able") must attack.
+    // is {0}. That's still a cost to attack (CR 118.5), so Bloodrock Cyclops ("attacks
+    // each combat if able") doesn't have to attack (CR 508.1d).
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Collective Restraint");
     let cyclops = t.battlefield(P0, "Bloodrock Cyclops");
     t.set_step(P0, Step::BeginningOfCombat);
     t.advance_to(P0, Step::DeclareAttackers);
+    assert!(!t.g.is_attacking(cyclops));
+    // It still may attack, paying {0} (P0 has no mana at all).
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Collective Restraint");
+    let cyclops = t.battlefield(P0, "Bloodrock Cyclops");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(cyclops, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
     assert!(t.g.is_attacking(cyclops));
-    // With a Forest, X = 1: a real cost, so the Cyclops doesn't have to attack.
+    // With a Forest, X = 1: the Cyclops doesn't have to attack either.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Collective Restraint");
     t.battlefield(P1, "Forest");

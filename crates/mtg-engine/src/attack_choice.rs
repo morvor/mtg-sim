@@ -64,10 +64,11 @@ pub fn declaration_chosen_by(
             _ => return fallback.to_vec(),
         };
         let decl = choose_targets(g, ap, options, reqs, max, proposed);
-        let cost = total_attack_cost(g, &decl);
-        if cost.is_free() {
+        // A cost of {0} too is acknowledged, not paid automatically (CR 118.5, 508.1h).
+        if !crate::combat::attack_requires_cost(g, &decl) {
             return decl;
         }
+        let cost = total_attack_cost(g, &decl);
         let prompt = format!(
             "Pay {} for the attacks another player chose?",
             crate::resolve::describe_cost(&cost)

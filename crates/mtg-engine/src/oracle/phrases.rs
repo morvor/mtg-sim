@@ -2206,9 +2206,9 @@ pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     let t = s.trim_start();
     let pairs: [(&str, PlayerRef); 16] = [
         ("you ", PlayerRef::You),
-        // CR 506.2: the active player is the attacking player.
-        ("the attacking player ", PlayerRef::ActivePlayer),
-        ("attacking player ", PlayerRef::ActivePlayer),
+        // CR 506.2, 805.10c.
+        ("the attacking player ", PlayerRef::AttackingPlayer),
+        ("attacking player ", PlayerRef::AttackingPlayer),
         // Internal form of "that player" in an ability linked to one that targeted a
         // player (CR 607.1, see `patterns::r607_linked_targets`).
         ("the noted player ", PlayerRef::LinkedNoted),
