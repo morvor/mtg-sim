@@ -16,10 +16,13 @@
 //! * [`external`]: the newline-delimited JSON transport to a child process
 //!   ([`external::ExternalAgent`]).
 //! * [`session`]: a pull-style API running the game on its own thread.
+//! * [`decks`]: decklists into cards, and the card-tier bar decks must meet
+//!   ([`ProtocolOptions::min_card_tier`], verified by default).
 //!
 //! The protocol is documented in `docs/AGENT_PROTOCOL.md`.
 
 pub mod agent;
+pub mod decks;
 pub mod describe;
 pub mod events;
 pub mod external;

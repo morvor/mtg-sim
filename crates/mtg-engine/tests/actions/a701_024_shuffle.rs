@@ -18,6 +18,10 @@ fn shuffles(t: &TestGame, p: PlayerId) -> usize {
 #[test]
 fn a_library_is_shuffled_even_if_the_objects_to_shuffle_into_it_are_gone() {
     cr!("701.24", "701.24c");
+    // The CR 701.24c example's Guile, reduced to the ability the example is about (the
+    // card's countering replacement effect isn't supported): "When Guile is put into a
+    // graveyard from anywhere, shuffle it into its owner's library."
+    cr_example!("701.24c", "Guile says");
     supported("Cosi's Trickster");
     let mut t = TestGame::new(2);
     let relic = t.custom(

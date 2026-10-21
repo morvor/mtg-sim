@@ -320,7 +320,9 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             format!("{n} {kind} counter(s) removed from {}", ent(*target)),
         ),
         Event::Tapped { .. } | Event::Untapped { .. } => return None,
-        Event::AttackersDeclared { player, attackers } => {
+        Event::AttackersDeclared {
+            player, attackers, ..
+        } => {
             if attackers.is_empty() {
                 return None;
             }
@@ -402,7 +404,7 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             "cycle",
             format!("{} cycled {}", player_name(*player), name(g.current(*card))),
         ),
-        Event::TurnedFaceUp { obj } => ev(
+        Event::TurnedFaceUp { obj, .. } => ev(
             "face_up",
             format!("{} was turned face up", revealed_name(g, *obj)),
         ),

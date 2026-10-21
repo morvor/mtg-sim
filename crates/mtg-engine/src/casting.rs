@@ -467,7 +467,9 @@ impl Game {
             let Restriction::CantPlayLandCards { who, what } = r else {
                 return false;
             };
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            // The player the restriction is checked for ("from their graveyards").
+            ctx.iter_player = Some(p);
             self.player_filter_matches(who, p, &ctx) && self.matches_view(&view, card, what, &ctx)
         };
         self.statics
@@ -1035,7 +1037,9 @@ impl Game {
             .count() as u32;
         let view = WithChars { id: card, chars };
         let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            // The player the restriction is checked for ("from their graveyards").
+            ctx.iter_player = Some(p);
             match r {
                 Restriction::CantCast { who, what } => {
                     self.player_filter_matches(who, p, &ctx)
@@ -1619,6 +1623,8 @@ impl Game {
         // mana on X", "You can't spend mana to cast this spell").
         let cost_rules = crate::payment_rules::spell_rules(&chars);
         let x_min = crate::payment_rules::x_minimum(&cost_rules);
+        // "X can't be greater than ..." (CR 107.3a): determined as X is announced.
+        let x_cap = crate::payment_rules::x_maximum(self, &cost_rules, &Ctx::new(Some(id), p));
         let mut x: i64 = 0;
         if base_cost_has_x {
             let mut max = self.max_mana_available(p) as i64;
@@ -1660,6 +1666,9 @@ impl Game {
                     bound
                 };
             }
+            if let Some(cap) = x_cap {
+                max = max.min(cap);
+            }
             // (A value the alternative cost can't be paid with isn't a legal choice, nor is
             // one the spell's text forbids: "X can't be 0", CR 107.3a.)
             let answer = self.ask(
@@ -1677,7 +1686,7 @@ impl Game {
                 _ => true,
             };
             x = match answer {
-                Answer::Number(n) if n >= x_min && payable(n) => n,
+                Answer::Number(n) if n >= x_min && x_cap.is_none_or(|c| n <= c) && payable(n) => n,
                 // Otherwise the greatest legal value whose total cost could be paid.
                 _ => (x_min..=max)
                     .rev()
@@ -1692,7 +1701,9 @@ impl Game {
         }
         // CR 107.3a, 107.3b: "X can't be 0" leaves no legal value for an X that must be 0
         // (the spell is cast without paying a cost that includes it).
-        if x < x_min && (base_cost_has_x || chars.mana_cost.as_ref().is_some_and(|m| m.has_x())) {
+        if (x < x_min || x_cap.is_some_and(|c| x > c))
+            && (base_cost_has_x || chars.mana_cost.as_ref().is_some_and(|m| m.has_x()))
+        {
             return Err(Illegal("no legal value of X".into()));
         }
         // The spell's cast info records X only if a value was chosen for one of its costs:
@@ -2138,7 +2149,12 @@ impl Game {
             Zone::Battlefield | Zone::Stack => o.controller,
             _ => o.owner,
         };
-        if who != p && !act.any_player && !act.only_opponents {
+        // "Only the controller of the enchanted creature may activate this ability."
+        if let Some(f) = &act.activator {
+            if !self.player_filter_matches(f, p, &Ctx::new(Some(src), who)) {
+                return false;
+            }
+        } else if who != p && !act.any_player && !act.only_opponents {
             return false;
         }
         // "Only your opponents may activate this ability" (CR 602.2).
@@ -2289,17 +2305,38 @@ impl Game {
             pay_ctx.x_defined = true;
         }
         pay_ctx.ability_uid = a.uid;
-        let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
         let chars = o.chars.clone();
-        self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
-            // CR 118.9: or an alternative cost it could be activated for.
-            || crate::activation_costs::alternative_costs(self, p, src, a, act)
-                .iter()
-                .any(|(_, alt)| {
-                    let cost =
-                        self.ability_total_cost_with(p, src, a, act, None, x as u32, Some(alt));
-                    self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, &pay_ctx)
-                })
+        let payable_at = |x: i32, pay_ctx: &Ctx| {
+            let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
+            self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, pay_ctx)
+                // CR 118.9: or an alternative cost it could be activated for.
+                || crate::activation_costs::alternative_costs(self, p, src, a, act)
+                    .iter()
+                    .any(|(_, alt)| {
+                        let cost =
+                            self.ability_total_cost_with(p, src, a, act, None, x as u32, Some(alt));
+                        self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, pay_ctx)
+                    })
+        };
+        if payable_at(x, &pay_ctx) {
+            return true;
+        }
+        // CR 602.2b: X is announced before the cost is paid; a cost whose objects must
+        // reach a total ("exile any number of cards with total mana value 8 or greater")
+        // can be paid for some larger value.
+        if least_x.is_none() && act.cost.parts.iter().any(cost_part_has_x) {
+            let max_x = crate::activation_costs::x_bound(self, p, act).min(40) as i32;
+            return (1..=max_x).any(|x| {
+                let mut c = pay_ctx.clone();
+                c.x = x;
+                c.x_defined = true;
+                act.condition
+                    .as_ref()
+                    .is_none_or(|cond| self.eval_cond(cond, &c))
+                    && payable_at(x, &c)
+            });
+        }
+        false
     }
 
     /// Whether `uid` is a loyalty ability of `src`: one it has now, or one of any face of
@@ -2406,7 +2443,10 @@ impl Game {
         let mut changes = crate::activation_costs::CostChanges::default();
         let mut any_type = false;
         for (s, ctl, cm) in &self.statics.cost_modifiers {
-            let ctx = Ctx::new(Some(*s), *ctl);
+            let mut ctx = Ctx::new(Some(*s), *ctl);
+            // The ability whose cost this is ("for each black mana symbol in their
+            // activation costs", see `kw::cost_modifier_values`).
+            crate::kw::cost_modifier_values::note_ability(&mut ctx, src, a.uid);
             if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
                 // "Mana of any type can be spent to activate ~'s abilities" (CR 118.14).
                 any_type |= matches!(cm.change, CostChange::SpendAnyType);
@@ -2528,7 +2568,11 @@ impl Game {
             || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
-            let max = crate::activation_costs::x_bound(self, p, act);
+            let mut max = crate::activation_costs::x_bound(self, p, act);
+            let rules = crate::payment_rules::ability_rules(act);
+            if let Some(cap) = crate::payment_rules::x_maximum(self, &rules, &ctx) {
+                max = max.min(cap);
+            }
             // CR 107.3a, 602.2b: the announced value must satisfy a condition on X ("X
             // can't be 0"): the least value that does is the least that may be announced,
             // and the one announced otherwise.
@@ -2554,6 +2598,19 @@ impl Game {
                 },
             ) {
                 Answer::Number(n) if n >= min && holds(self, n) => n,
+                // The least value at which the cost can be paid ("exile any number of
+                // cards with total mana value 8 or greater").
+                _ if act.cost.parts.iter().any(cost_part_has_x) => (min..=max.min(min + 40))
+                    .find(|x| {
+                        let mut c = ctx.clone();
+                        c.x = *x as i32;
+                        c.x_defined = true;
+                        let cost =
+                            self.ability_total_cost_with(p, src, a, act, None, *x as u32, None);
+                        holds(self, *x)
+                            && self.can_pay_cost_optimistic_in(p, &cost, Some(src), &src_chars, &c)
+                    })
+                    .unwrap_or(min),
                 _ => min,
             };
         }
@@ -3143,14 +3200,15 @@ impl Game {
             // Summoning sickness doesn't matter: this isn't {T} (CR 302.6).
             CostPart::TapUntapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
-                self.objects_matching(filter, ctx)
+                let cands: Vec<ObjectId> = self
+                    .objects_matching(filter, ctx)
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
                         ob.controller == p && !ob.tapped && !(taps_src && Some(*o) == src)
                     })
-                    .count()
-                    >= n
+                    .collect();
+                crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
             }
             CostPart::UntapTapped { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
@@ -3178,15 +3236,32 @@ impl Game {
             CostPart::Mill(v) => self.player(p).library.len() as i64 >= self.eval_value(v, ctx),
             CostPart::RevealFromHand { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as usize;
-                self.player(p)
+                let cands: Vec<ObjectId> = self
+                    .player(p)
                     .hand
                     .iter()
+                    .copied()
                     .filter(|c| {
-                        Some(**c) != src
-                            && crate::draw_rules::usable_for_cost(self, **c, filter, ctx)
+                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
-                    .count()
-                    >= n
+                    .collect();
+                crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
+            }
+            CostPart::RevealSelf => so.is_some_and(|o| o.zone == Zone::Hand(p)),
+            CostPart::RemoveCountersFromOne {
+                kind,
+                filter,
+                count,
+            } => {
+                let n = self.eval_value(count, ctx).max(0) as u32;
+                self.objects_matching(filter, ctx).into_iter().any(|o| {
+                    let ob = self.obj(o);
+                    ob.controller == p
+                        && match kind {
+                            Some(k) => ob.counter(k),
+                            None => ob.counters.values().sum(),
+                        } >= n
+                })
             }
             CostPart::ExertSelf => so.is_some(),
             CostPart::CollectEvidence(n) => {
@@ -3241,7 +3316,14 @@ impl Game {
                 let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
                 let mut c = Ctx::new(src, p);
                 c.cost_of = ctx.cost_of;
+                c.ability_uid = ctx.ability_uid;
                 self.can_pay_cost_optimistic_in(p, &flat, src, &chars, &c)
+            }
+            CostPart::OneOf(costs) => {
+                let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
+                costs
+                    .iter()
+                    .any(|c| self.can_pay_cost_optimistic_in(p, c, src, &chars, ctx))
             }
         }
     }
@@ -3418,7 +3500,7 @@ impl Game {
         match part {
             CostPart::Tap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
-                if !self.tap(s) {
+                if !self.tap_with(s, false, Some(p), false) {
                     return bad("can't tap");
                 }
             }
@@ -3695,14 +3777,25 @@ impl Game {
                     .into_iter()
                     .filter(|o| self.obj(*o).controller == p && !self.obj(*o).tapped)
                     .collect();
-                if (cands.len() as u32) < n {
+                if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
+                {
                     return bad("not enough untapped permanents");
                 }
-                let pick = self.ask_objects(p, src, "Choose permanents to tap (cost)", cands, n, n);
+                let pick = crate::target_groups::choose_together(
+                    self,
+                    p,
+                    src,
+                    "Choose permanents to tap (cost)",
+                    filter,
+                    cands,
+                    n,
+                    n,
+                    ctx,
+                );
                 for o in pick {
                     paid.objects.push(o);
                     paid.tapped.push(o);
-                    self.tap(o);
+                    self.tap_with(o, false, Some(p), false);
                 }
             }
             // Crew (CR 702.122a): see `kw/crew.rs`.
@@ -3763,10 +3856,93 @@ impl Game {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
                     .collect();
-                let pick = self.ask_objects(p, src, "Choose cards to reveal (cost)", cands, n, n);
+                if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
+                {
+                    return bad("not enough cards to reveal");
+                }
+                let pick = crate::target_groups::choose_together(
+                    self,
+                    p,
+                    src,
+                    "Choose cards to reveal (cost)",
+                    filter,
+                    cands,
+                    n,
+                    n,
+                    ctx,
+                );
                 // CR 701.20a: revealed until the spell or ability leaves the stack.
                 crate::reveal::reveal_in(self, p, &pick, Some(ctx));
                 paid.objects.extend(pick);
+            }
+            CostPart::RevealSelf => {
+                let s = src.ok_or_else(|| Illegal("no source".into()))?;
+                if self.obj(s).zone != Zone::Hand(p) {
+                    return bad("not in hand");
+                }
+                crate::reveal::reveal_in(self, p, &[s], Some(ctx));
+            }
+            CostPart::RemoveCountersFromOne {
+                kind,
+                filter,
+                count,
+            } => {
+                // One permanent, then each counter's kind (CR 118.3).
+                let n = self.eval_value(count, ctx).max(0) as u32;
+                let total = |g: &Game, o: ObjectId| -> u32 {
+                    let ob = g.obj(o);
+                    match kind {
+                        Some(k) => ob.counter(k),
+                        None => ob.counters.values().sum(),
+                    }
+                };
+                let cands: Vec<ObjectId> = self
+                    .objects_matching(filter, ctx)
+                    .into_iter()
+                    .filter(|o| self.obj(*o).controller == p && total(self, *o) >= n)
+                    .collect();
+                if cands.is_empty() {
+                    return bad("not enough counters");
+                }
+                let o = self
+                    .ask_objects(
+                        p,
+                        src,
+                        "Choose a permanent to remove counters from (cost)",
+                        cands.clone(),
+                        1,
+                        1,
+                    )
+                    .into_iter()
+                    .next()
+                    .filter(|o| cands.contains(o))
+                    .unwrap_or(cands[0]);
+                for _ in 0..n {
+                    let kinds: Vec<CounterKind> = match kind {
+                        Some(k) => vec![k.clone()],
+                        None => self
+                            .obj(o)
+                            .counters
+                            .iter()
+                            .filter(|(_, c)| **c > 0)
+                            .map(|(k, _)| k.clone())
+                            .collect(),
+                    };
+                    if kinds.is_empty() {
+                        return bad("not enough counters");
+                    }
+                    let i = if kinds.len() == 1 {
+                        0
+                    } else {
+                        let names = kinds.iter().map(|k| k.to_string()).collect();
+                        self.ask_option(p, src, "Choose a kind of counter to remove (cost)", names)
+                    };
+                    let k = kinds[i.min(kinds.len() - 1)].clone();
+                    if self.remove_counters_by(Entity::Object(o), &k, 1, Some(p)) < 1 {
+                        return bad("not enough counters");
+                    }
+                }
+                paid.objects.push(o);
             }
             CostPart::ExertSelf => {
                 if let Some(s) = src {
@@ -3861,6 +4037,41 @@ impl Game {
                 };
                 let sub = self.pay_total_cost(p, &flat, src, &spend, ctx)?;
                 paid.mana_spent.extend(sub.mana_spent);
+            }
+            CostPart::OneOf(costs) => {
+                // The player chooses one of the costs they can pay (CR 118.3).
+                let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
+                let payable: Vec<&Cost> = costs
+                    .iter()
+                    .filter(|c| self.can_pay_cost_optimistic_in(p, c, src, &chars, ctx))
+                    .collect();
+                if payable.is_empty() {
+                    return bad("no cost can be paid");
+                }
+                let i = if payable.len() == 1 {
+                    0
+                } else {
+                    let names = payable
+                        .iter()
+                        .map(|c| crate::resolve::describe_cost(c))
+                        .collect();
+                    self.ask_option(p, src, "Choose which cost to pay", names)
+                        .min(payable.len() - 1)
+                };
+                let chosen = payable[i].clone();
+                let spend = SpendContext {
+                    is_ability: true,
+                    source: src,
+                    cost_of: ctx.cost_of,
+                    purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
+                    ..Default::default()
+                };
+                let sub = self.pay_total_cost(p, &chosen, src, &spend, ctx)?;
+                paid.mana_spent.extend(sub.mana_spent);
+                paid.objects.extend(sub.objects);
+                paid.sacrificed.extend(sub.sacrificed);
+                paid.exiled.extend(sub.exiled);
+                paid.tapped.extend(sub.tapped);
             }
         }
         Ok(())
@@ -3994,6 +4205,7 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         | CostPart::TapUntapped { count, filter } => is_x(count) || filter_mentions_x(filter),
         CostPart::RemoveCounters { count, .. }
         | CostPart::RemoveCountersFromAmong { count, .. }
+        | CostPart::RemoveCountersFromOne { count, .. }
         | CostPart::AddCounters { count, .. }
         | CostPart::UntapTapped { count, .. }
         | CostPart::PayPlayerCounters { count, .. }

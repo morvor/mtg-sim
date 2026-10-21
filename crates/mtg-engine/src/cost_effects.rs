@@ -153,6 +153,16 @@ pub fn note_paid(g: &mut Game, cost: &crate::ability::Cost, ctx: &mut Ctx) {
     let Some(paid) = g.last_paid.take() else {
         return;
     };
+    // "you may pay {2} and sacrifice an Aura ... When you sacrifice an Aura this way, ...
+    // a copy of that Aura" (Three Dog, Galaxy News DJ): as they last existed.
+    if !paid.sacrificed.is_empty() {
+        let sacrificed = paid
+            .sacrificed
+            .iter()
+            .map(|o| crate::types::Entity::Object(*o))
+            .collect();
+        ctx.set_var(crate::ability::vars::SACRIFICED, sacrificed);
+    }
     let discards = cost
         .parts
         .iter()

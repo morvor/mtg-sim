@@ -141,7 +141,11 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
 /// Value phrases used in damage amounts, on top of the shared value grammar.
 fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim_start();
-    if let Some(r) = s.strip_prefix("twice ") {
+    // ("twice N minus 2" is the shared grammar's: "twice" binds tighter.)
+    if let Some(r) = s
+        .strip_prefix("twice ")
+        .filter(|r| !r.contains(" minus ") && !r.contains(" plus "))
+    {
         let (v, rest) = value_phrase(r, b)?;
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }
@@ -931,6 +935,32 @@ fn p_exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("exile ")?;
     let (r, until) = if let Some(r) = r.strip_suffix(" until ~ leaves the battlefield") {
         (r, UntilEvent::SourceLeavesBattlefield)
+    } else if let Some((r, other)) = r
+        .strip_suffix(" leaves the battlefield")
+        .and_then(|x| x.split_once(" until target "))
+    {
+        // "Exile target creature ... until target enchantment you control leaves the
+        // battlefield" (Calix, Destiny's Hand): the other target, as the effect begins.
+        // The exiled object is named (and targeted) first.
+        let n = b.targets.len();
+        let (what, tail) = object_ref(r, b)?;
+        if !end(&tail).is_empty() || !matches!(what, Sel::Target(_)) {
+            b.targets.truncate(n);
+            return None;
+        }
+        let (o, tail) = object_ref(&format!("target {other}"), b)?;
+        let Sel::Target(slot) = o else {
+            b.targets.truncate(n);
+            return None;
+        };
+        if !end(&tail).is_empty() {
+            b.targets.truncate(n);
+            return None;
+        }
+        return Some(Effect::ExileUntil {
+            what,
+            until: UntilEvent::TargetLeavesBattlefield(slot),
+        });
     } else {
         let r = r.strip_suffix(" until an opponent becomes the monarch")?;
         (r, UntilEvent::OpponentBecomesMonarch)
@@ -1374,6 +1404,7 @@ fn f_no_regen(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         "it can't be regenerated"
             | "they can't be regenerated"
             | "that creature can't be regenerated"
+            | "the creature can't be regenerated"
             | "a creature destroyed this way can't be regenerated"
             | "creatures destroyed this way can't be regenerated"
             | "permanents destroyed this way can't be regenerated"
@@ -1566,6 +1597,60 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "damage_removal: return exiled", priority: 40, apply: f_return_exiled } }
+
+/// "Exile X target creatures, then investigate X times. Return the exiled cards to the
+/// battlefield tapped under their owners' control at the beginning of the next end step."
+/// (Disorder in the Court): "the exiled cards" are what the sentence's exile moved, even
+/// with another instruction after it; they're remembered right after the exile (CR 400.7,
+/// 603.7c).
+fn f_return_the_exiled_cards_later(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(rest) = l
+        .strip_prefix("return the exiled cards ")
+        .or_else(|| l.strip_prefix("return the exiled card "))
+    else {
+        return false;
+    };
+    let Some(dest_s) = rest.strip_suffix(" at the beginning of the next end step") else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let exiles: Vec<usize> = v
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| matches!(e, Effect::Exile { .. }))
+        .map(|(i, _)| i)
+        .collect();
+    // One exile, followed by other instructions (right after it, `f_return_exiled`).
+    let [i] = exiles[..] else {
+        return false;
+    };
+    if i + 1 == v.len() {
+        return false;
+    }
+    let Some(dest) = battlefield_destination(dest_s, Sel::Var(DELAYED)) else {
+        return false;
+    };
+    v.insert(
+        i + 1,
+        Effect::Store {
+            var: DELAYED,
+            sel: Sel::Var(vars::IT),
+        },
+    );
+    v.push(Effect::AtNext {
+        step: TriggerStep::End,
+        effect: Box::new(Effect::Move {
+            what: Sel::Var(DELAYED),
+            to: dest,
+        }),
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "damage_removal: return the exiled cards later, after other instructions", priority: 41, apply: f_return_the_exiled_cards_later } }
 
 /// "Exile up to one other target creature. At the beginning of the next end step, you may
 /// pay {3}{B}. If you don't, return that card to the battlefield under its owner's

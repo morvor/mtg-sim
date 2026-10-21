@@ -199,6 +199,11 @@ pub struct ActivatedAbility {
     /// source's controller may activate it, and its controller can't.
     #[serde(default)]
     pub only_opponents: bool,
+    /// "Only the controller of the enchanted creature may activate this ability." (CR
+    /// 602.2): the players who may activate it (relative to the source and its
+    /// controller), instead of its controller.
+    #[serde(default)]
+    pub activator: Option<PlayerFilter>,
     /// "Activate only once": how many times the ability may be activated over the
     /// object's existence (CR 400.7: a new object can activate it again).
     #[serde(default)]
@@ -240,6 +245,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             only_opponents: false,
+            activator: None,
             max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
@@ -308,6 +314,20 @@ pub struct TriggeredAbility {
     /// controller hasn't taken the optional action this turn (CR 603.2h).
     #[serde(default)]
     pub do_once_per_turn: bool,
+    /// "This ability triggers only once." / "This ability triggers only twice each turn."
+    /// (see `trigger_limits.rs`).
+    #[serde(default)]
+    pub limit: Option<TriggerLimit>,
+}
+
+/// How many times a triggered ability may trigger ([`TriggeredAbility::limit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerLimit {
+    /// "This ability triggers only once.": once for as long as its source is the same
+    /// object (CR 400.7; Acrobatic Cheerleader's rulings).
+    Once,
+    /// "This ability triggers only twice each turn.": that many times each turn.
+    PerTurn(u32),
 }
 
 /// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
@@ -319,6 +339,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
+            | TriggerCond::ThisCombat(t)
             | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
             _ => false,
         }
@@ -350,6 +371,7 @@ impl TriggeredAbility {
             zone: FunctionZone::Battlefield,
             cant_be_countered: false,
             do_once_per_turn: false,
+            limit: None,
         }
     }
 }
@@ -503,6 +525,16 @@ pub enum CostPart {
         filter: Filter,
         count: Value,
     },
+    /// "Reveal ~ from your hand": the card with the ability, which functions in its
+    /// owner's hand (CR 113.6, 701.20a).
+    RevealSelf,
+    /// "Remove X counters from an artifact or creature you control": counters (of `kind`,
+    /// or of any kinds) all from one permanent the player chooses (CR 118.3).
+    RemoveCountersFromOne {
+        kind: Option<CounterKind>,
+        filter: Filter,
+        count: Value,
+    },
     ExertSelf,
     /// "Collect evidence N" (CR 701.59).
     CollectEvidence(u32),
@@ -526,6 +558,9 @@ pub enum CostPart {
         cost: Box<Cost>,
         times: Value,
     },
+    /// "Discard a card or pay {2}": one of these costs, which the player chooses as the
+    /// cost is paid among those they can pay (CR 118.3, 601.2h; a ward cost, CR 702.21a).
+    OneOf(Vec<Cost>),
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +824,18 @@ pub enum TargetGroup {
     /// Their total of a value is at most the value ("with total mana value 6 or less",
     /// "with total mana value X or less", "with total power 10 or less").
     TotalAtMost(TotalStat, Box<Value>),
+    /// All have a name in common ("two nonland cards with the same name", CR 201.2a).
+    SameName,
+    /// There's a color all of them have ("two cards from your hand that share a color",
+    /// CR 105.2).
+    ShareColor,
+    /// Their total of a value is at least the value ("with total mana value 8 or
+    /// greater", "with total power 10 or greater"). Unlike the other relationships, a part
+    /// of such a group needn't have it.
+    TotalAtLeast(TotalStat, Box<Value>),
+    /// There are at least this many card types among them ("with four or more card types
+    /// among them", CR 205.2a). A part of such a group needn't have it.
+    CardTypesAmong(Box<Value>),
 }
 
 /// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library
@@ -1101,6 +1148,10 @@ pub enum SeatSide {
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
 pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+/// The counter kind of a [`ReplacementAction::EnterWithCounters`] that stands for each kind
+/// of counter on the replacement effect's source ("For each kind of counter on ~, each
+/// other Dinosaur you control enters with a counter of that kind on it").
+pub const EACH_KIND_ON_SOURCE: &str = "each-kind-on-source";
 
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1125,6 +1176,12 @@ pub enum PlayerRef {
     TriggerPlayer,
     /// The active player.
     ActivePlayer,
+    /// "The attacking player": the active player (CR 506.2). With shared team turns, one
+    /// specific attacking player: for an ability of a blocking creature, or one that refers
+    /// to a blocking creature, the controller of the attacking creature that blocking
+    /// creature is blocking; otherwise (or if that leaves several) the one the ability's
+    /// controller chooses (CR 805.10c). See `teams::attacking_player_candidates`.
+    AttackingPlayer,
     /// The defending player (CR 508.5).
     DefendingPlayer,
     /// A player chosen during resolution by the controller.
@@ -1216,6 +1273,17 @@ pub enum PlayerFilter {
     /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
     /// `kwa::vote::voted_like`.
     VotedLikeYou(bool),
+    /// A player who chose this word for the source ("players who chose war", "each
+    /// opponent who chose silence"): that player's own choice among the source's
+    /// per-player choices (CR 607.2d; see `choices::player_choice_matches`).
+    Chose(SmolStr),
+    /// A player whose chosen number for the source compares so with the value ("each
+    /// player with the highest number", "each player who didn't choose the lowest
+    /// number"; see `choices.rs`).
+    ChoseNumber(Cmp, Box<Value>),
+    /// One of the players chosen for the source by "choose two players" ("one of the
+    /// chosen players").
+    ChosenPlayers,
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
@@ -1345,6 +1413,10 @@ pub enum SpecialActionEffect {
     /// other static abilities don't apply to that player (or to objects they control)
     /// until end of turn.
     IgnoreSourceEffects,
+    /// "[delayed instruction] unless [that player] pays {2} before that step" (CR 116.2c):
+    /// stops the delayed triggered ability the effect offering it created just before
+    /// (Glass Asp); it can be taken only while that ability hasn't triggered.
+    StopDelayedTrigger,
 }
 
 /// How an effect changes the targets of a spell or ability (CR 115.7).
@@ -2043,12 +2115,28 @@ pub enum Duration {
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
+    /// "until end of combat on your next turn": until the first combat phase of the
+    /// controller's next turn ends, or that turn ends if it has none (see
+    /// `next_turn::expire_end_of_combat_on_next_turn`).
+    UntilEndOfCombatOnYourNextTurn,
+    /// "until the next end step": until the next end step (of any turn) begins (CR 500.4).
+    UntilNextStep(TriggerStep),
     /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
     /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
     /// end it).
     UntilPlaneswalk {
         away_from_plane: bool,
     },
+}
+
+/// Which part of a player's next turn an [`Effect::DuringNext`] effect applies during.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NextTurnPart {
+    /// "during [player]'s next turn": the whole turn.
+    Turn,
+    /// "during [player]'s next combat phase": the first combat phase of a turn of that
+    /// player that begins after the effect is created.
+    CombatPhase,
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
@@ -2596,6 +2684,22 @@ pub enum ReplacementAction {
     /// the event creates have these characteristics instead of their own; everything else
     /// the creating effect specifies (tapped, attacking) still applies.
     TokensInstead { spec: TokenSpec },
+    /// "If you would create a Clue, Food, or Treasure token, instead create one of each"
+    /// (`each`: that many of each of `specs`, Academy Manufactor), "you may instead create
+    /// that many 2/2 green Cat creature tokens with haste or that many 3/1 green Dog
+    /// creature tokens with vigilance" (the replacement's controller chooses one of
+    /// `specs`, Jinnie Fay) (CR 614.1a): as [`ReplacementAction::TokensInstead`], the
+    /// tokens' characteristics are replaced; how the effect creates them still applies.
+    TokensInsteadOf { specs: Vec<TokenSpec>, each: bool },
+    /// "instead create that many tokens that are copies of enchanted permanent" (Moonlit
+    /// Meditation; `of`), "instead choose a creature other than ~ and create that many
+    /// tokens that are copies of that creature" (Esix, Fractal Bloom; the replacement's
+    /// controller chooses an object matching `choose`) (CR 614.1a, 707.2): the tokens are
+    /// copies of that object instead. Nothing is replaced if there's nothing to copy.
+    TokenCopiesInstead {
+        of: Option<Sel>,
+        choose: Option<Filter>,
+    },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.
@@ -2631,6 +2735,13 @@ pub enum ReplacementAction {
     /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
     /// shield that is used up.
     PreventPortion(Value),
+    /// The action, and then an instruction performed right after the modified event, with
+    /// the object the event was about as "it" (`vars::IT`): "exile it instead. When you
+    /// do, create a 2/2 green Wolf creature token" (a reflexive triggered ability each time
+    /// the effect applies, CR 603.12, 614.6), "exile it instead. Return it to the
+    /// battlefield ... at the beginning of the next end step" (a delayed triggered
+    /// ability for each object, CR 603.7).
+    Then(Box<ReplacementAction>, Box<Effect>),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -2666,6 +2777,13 @@ pub enum Restriction {
     MustAttackPlayer {
         attackers: Filter,
         defender: PlayerFilter,
+    },
+    /// "[attackers] attack ~ (this turn) if able" (Gideon Jura): a requirement that each
+    /// such creature attacks each permanent matching `target` — a planeswalker or battle —
+    /// if able (CR 508.1d).
+    MustAttackObject {
+        attackers: Filter,
+        target: Filter,
     },
     /// "blocks each combat if able".
     MustBlock(Filter),
@@ -3254,10 +3372,13 @@ pub enum CostChange {
 
 /// A rule about announcing or paying the cost of the spell or activated ability whose text
 /// states it (see `payment_rules.rs`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CostRule {
     /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
     XAtLeast(u32),
+    /// "X can't be greater than the number of players in the game." (CR 107.3a, 601.2b):
+    /// the greatest value that may be announced for X, determined as X is announced.
+    XAtMost(Box<Value>),
     /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
     /// only colored mana on X.": only mana of these colors may pay the part of the cost
     /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
@@ -3277,6 +3398,15 @@ pub enum CostRule {
     /// cost; none may without a choice (CR 607.5a).
     OnlyChosenColor,
 }
+
+impl PartialEq for CostRule {
+    fn eq(&self, other: &Self) -> bool {
+        // (`Value` has no equality of its own: compared as data.)
+        serde_json::to_string(self).ok() == serde_json::to_string(other).ok()
+    }
+}
+
+impl Eq for CostRule {}
 
 /// Static abilities (CR 604) and what they do.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -3997,6 +4127,10 @@ pub enum TriggerCond {
     /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
     /// step is skipped.
     UntilYourNextTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts for the rest of the combat phase it was
+    /// created in ("whenever that creature deals combat damage to a player this combat",
+    /// CR 603.7b, 506.1): removed as that combat phase ends (CR 500.5a).
+    ThisCombat(Box<TriggerCond>),
     /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
     /// only: "whenever a source you control deals noncombat damage to an opponent".
     Noncombat(Box<TriggerCond>),
@@ -4266,6 +4400,44 @@ pub enum Effect {
         to: Sel,
         kind: Option<CounterKind>,
     },
+    /// Counters removed from among the objects (or players) of `from`, or moved from them
+    /// onto `to` (CR 122.5), the player choosing how many of each kind come from each:
+    /// "remove any number of counters from among permanents on the battlefield", "you may
+    /// remove three quest counters from among permanents you control", "move any number
+    /// of counters from among creatures you control onto that creature", "move one or
+    /// more counters from ~ onto another target permanent you control". At least `min` in
+    /// all (nothing happens if there aren't that many), at most `max` (`None`: no limit).
+    /// `each_missing_kind`: "move a counter of each kind not on ~ from [object] onto ~",
+    /// one counter of each kind the destination doesn't have. See
+    /// `kw/counter_groups.rs`.
+    CountersFromAmong {
+        from: Sel,
+        to: Option<Sel>,
+        kind: Option<CounterKind>,
+        min: Value,
+        max: Option<Value>,
+        each_missing_kind: bool,
+    },
+    /// "Distribute three +1/+1 counters among one, two, or three creatures you control",
+    /// "... among any number of creatures you control" with no targets: the objects (at
+    /// least `min_objects`, at most `max_objects` and `n`) and the division are chosen as
+    /// it resolves (CR 608.2d), each chosen object getting at least one counter. `up_to`:
+    /// "distribute up to N", the player chooses how many first.
+    DistributeCounters {
+        n: Value,
+        kind: CounterKind,
+        among: Sel,
+        min_objects: u32,
+        max_objects: Option<u32>,
+        up_to: bool,
+    },
+    /// "[they] put the same number and kind of counters on ~", "put one of each of those
+    /// kinds of counters on [object]" (`one_each`): counters of the kind the triggering
+    /// event put (CR 122.6), as many as it put or one.
+    PutEventCounters {
+        to: Sel,
+        one_each: bool,
+    },
     /// Apply layer modifications to the selected objects for a duration (CR 611.2).
     Modify {
         what: Sel,
@@ -4326,6 +4498,13 @@ pub enum Effect {
     /// than them are the creatures already there).
     TokensEnterWithCounters {
         counters: Vec<(CounterKind, Value)>,
+        effect: Box<Effect>,
+    },
+    /// "create a token that's a copy of that permanent attached to that creature" (Arna
+    /// Kennerüd, Skycaptain): the tokens `effect` creates enter attached to `to` (CR
+    /// 303.4f–i, 301.5e); an Aura token that can't legally enchant it isn't created.
+    TokensEnterAttached {
+        to: Sel,
         effect: Box<Effect>,
     },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
@@ -4425,6 +4604,14 @@ pub enum Effect {
     },
     Regenerate {
         what: Sel,
+    },
+    /// Regeneration with what happens when a shield this creates is used: "When it
+    /// regenerates this way, put a -1/-1 counter on it." (a reflexive triggered ability),
+    /// "You gain control of that creature if it regenerates this way." (part of the
+    /// regeneration). The regenerated permanent is `vars::IT` (CR 701.19a).
+    RegenerateWith {
+        what: Sel,
+        then: Box<Effect>,
     },
     /// Attach the source (or selection) to a target (CR 701.3).
     Attach {
@@ -4734,6 +4921,17 @@ pub enum Effect {
         step: TriggerStep,
         effect: Box<Effect>,
     },
+    /// "During [player]'s next turn, [effect]", "[effect] during its controller's next
+    /// combat phase": rule-modifying effects (restrictions, requirements, skips) that apply
+    /// only during that player's next turn (each player's, for several players) or the next
+    /// combat phase of that turn's player. `effect` lasts "this turn" (or until end of
+    /// combat); it's created as that turn (combat phase) begins, with "that player"
+    /// ([`PlayerRef::Iterated`]) the player whose turn it is. See `next_turn.rs`.
+    DuringNext {
+        who: PlayerRef,
+        part: NextTurnPart,
+        effect: Box<Effect>,
+    },
     /// "[Player] gets an emblem with [ability]" (CR 114.2): each such player puts an
     /// emblem with the abilities into the command zone; they own and control it.
     CreateEmblem {
@@ -4922,6 +5120,9 @@ pub enum UntilEvent {
     /// "until an opponent becomes the monarch" (an opponent of the effect's controller,
     /// CR 725): it ends when one does, not merely because an opponent is the monarch.
     OpponentBecomesMonarch,
+    /// "until [target enchantment you control] leaves the battlefield": the object chosen
+    /// as the target in that slot, as the effect begins (CR 610.3).
+    TargetLeavesBattlefield(u8),
 }
 
 impl Effect {
@@ -4988,6 +5189,12 @@ pub enum ChoiceKind {
     /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
     /// Dragons", CR 607.2f, 607.2m, 614.12b).
     Word(Vec<String>),
+    /// "choose two basic land types", "choose two abilities from among first strike,
+    /// vigilance, and lifelink": that many different ones of the listed words, in order
+    /// (kept as the chosen list, see `object::Choices::list`).
+    Distinct(u8, Vec<String>),
+    /// "choose two players": that many different players (`object::Choices::players`).
+    Players(u8),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

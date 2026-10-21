@@ -1603,10 +1603,35 @@ fn modifiers<'a>(
         } else if let Some((c, r)) = with_counters(t) {
             to.with_counters.extend(c);
             s = r;
+        } else if let Some((kind, r)) = with_one_fewer(t) {
+            // "return it to the battlefield with one fewer revival counter on it"
+            // (Nine-Lives Familiar): one fewer than it had (as it last existed).
+            to.with_counters.push((
+                kind.clone(),
+                Value::Max(
+                    Box::new(Value::c(0)),
+                    Box::new(Value::Diff(
+                        Box::new(Value::CountersOn(
+                            Box::new(Sel::Before(Box::new(owner_of.clone()))),
+                            Some(kind),
+                        )),
+                        Box::new(Value::c(1)),
+                    )),
+                ),
+            ));
+            s = r;
         } else {
             return s;
         }
     }
+}
+
+/// "with one fewer revival counter on it" → the kind and the rest.
+fn with_one_fewer(s: &str) -> Option<(CounterKind, &str)> {
+    let r = s.trim_start().strip_prefix("with one fewer ")?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counter on it")?;
+    Some((kind, r))
 }
 
 /// "Return a Pirate card from your graveyard to your hand, then do the same for Vampire,

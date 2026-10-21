@@ -287,6 +287,7 @@ fn effects_can_change_an_objects_color() {
 #[test]
 fn objects_with_no_mana_cost_have_mana_value_zero() {
     cr!("202.3", "202.3a");
+    cr_example!("202.3", "{3}{U}{U}");
     let mut t = TestGame::new(2);
     let forest = t.battlefield(P0, "Forest");
     let vision = t.hand(P0, "Ancestral Vision");
@@ -308,6 +309,8 @@ fn objects_with_no_mana_cost_have_mana_value_zero() {
 fn a_transformed_permanent_uses_its_front_faces_mana_cost() {
     // CR 202.3b and its examples.
     cr!("202.3b");
+    cr_example!("202.3b", "Huntmaster of the Fells is a nonmodal");
+    cr_example!("202.3b", "Insectile Aberration is the back face");
     ruling!(
         "Nicol Bolas, the Ravager",
         "For example, the mana value of Nicol Bolas, the Arisen is 4."
@@ -482,6 +485,8 @@ fn x_is_zero_except_on_the_stack() {
 #[test]
 fn hybrid_symbols_count_their_largest_component() {
     cr!("202.3f");
+    cr_example!("202.3f", "{1}{W/U}{W/U}");
+    cr_example!("202.3f", "{2/B}{2/B}{2/B}");
     ruling!(
         "Spectral Procession",
         "Thus, Spectral Procession has a mana value of 6, even if you spend {W}{W}{W} to cast"
@@ -503,6 +508,7 @@ fn hybrid_symbols_count_their_largest_component() {
 #[test]
 fn phyrexian_symbols_contribute_one() {
     cr!("202.3g");
+    cr_example!("202.3g", "{1}{W/P}{W/P}");
     ruling!(
         "Dismember",
         "A Phyrexian mana symbol contributes 1 toward the mana value of a card, even if life is paid for it."

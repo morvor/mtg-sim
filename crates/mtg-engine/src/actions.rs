@@ -57,6 +57,8 @@ impl Game {
                 m
             })
             .collect();
+        // CR 400.6: an object a state-based action is moving at the same time.
+        let moves = crate::zones::contradictory_moves(self, moves);
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         // CR 614.13a, 614.13c: while effects that modify how these objects enter are
@@ -552,6 +554,15 @@ impl Game {
             for (link, c) in linked {
                 n.linked_choices.entry(link).or_insert(c);
             }
+            // So are the cards exiled with it as it entered ("As this creature enters,
+            // exile a creature card from your graveyard", CR 607.2b, 614.12).
+            let n = &mut self.objects[new_id.0 as usize];
+            for (link, o) in m.etb.exiled_as_it_entered.iter() {
+                let v = n.linked.entry(*link).or_default();
+                if !v.contains(o) {
+                    v.push(*o);
+                }
+            }
             // So are the objects noted as it entered ("As this creature enters, choose
             // another creature you control", see `linked_notes`).
             crate::linked_notes::carry(self, old_id, new_id);
@@ -691,6 +702,7 @@ impl Game {
                     self,
                     new_id,
                     copy_effect,
+                    m.etb.copy_of,
                     &m.etb.copy_extras,
                     &mut counters_to_add,
                 );
@@ -986,6 +998,15 @@ impl Game {
 
     pub(crate) fn run_post_replacement_effects(&mut self) {
         while let Some((mut c, e)) = self.post_replacement_effects.pop() {
+            if c.nums.remove(&crate::replacement::FOLLOW_IT).is_some() {
+                if let Some(v) = c.vars.get_mut(&vars::IT) {
+                    for e in v.iter_mut() {
+                        if let Entity::Object(o) = e {
+                            *o = self.current(*o);
+                        }
+                    }
+                }
+            }
             self.exec(&e, &mut c);
         }
     }
@@ -1187,6 +1208,18 @@ impl Game {
     }
 
     pub fn tap_ex(&mut self, obj: ObjectId, for_mana: bool) -> bool {
+        self.tap_with(obj, for_mana, None, false)
+    }
+
+    /// Taps a permanent, recording who tapped it ("whenever you tap an untapped creature
+    /// an opponent controls") and whether it's being declared as an attacker (CR 508.1f).
+    pub fn tap_with(
+        &mut self,
+        obj: ObjectId,
+        for_mana: bool,
+        by: Option<PlayerId>,
+        attacking: bool,
+    ) -> bool {
         let o = self.obj(obj);
         // Only a permanent: an object that has left the battlefield keeps its zone as
         // last known information, but it's no longer there to tap (CR 400.7).
@@ -1195,7 +1228,12 @@ impl Game {
         }
         self.objects[obj.0 as usize].tapped = true;
         self.dirty = true;
-        self.emit(Event::Tapped { obj, for_mana });
+        self.emit(Event::Tapped {
+            obj,
+            for_mana,
+            by,
+            attacking,
+        });
         true
     }
 
@@ -1678,8 +1716,15 @@ impl Game {
         if !self.can_pay_life(p, n) {
             return false;
         }
-        if n > 0 {
+        if n > 0 && !crate::kw::pay_life_instead(self, p, n) {
             self.perform_lose_life(p, n);
+            // "Whenever you pay life" (CR 119.4).
+            self.emit(Event::Custom {
+                name: crate::life_totals::PAID_LIFE.into(),
+                player: Some(p),
+                obj: None,
+                amount: n as i32,
+            });
         }
         true
     }
@@ -2082,6 +2127,11 @@ impl Game {
             self.recompute();
         }
         if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
+            return false;
+        }
+        // CR 702.26b: a phased-out permanent is treated as though it doesn't exist; an
+        // effect can't attach it (Robe of Stars phased out in response to its equip).
+        if self.obj(obj).phased_out {
             return false;
         }
         if self.obj(obj).attached_to == Some(to) {

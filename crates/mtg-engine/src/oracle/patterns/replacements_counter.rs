@@ -87,7 +87,7 @@ fn counter_of(e: &mut Effect) -> Option<&mut Effect> {
     }
 }
 
-fn f_countered_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+fn f_countered_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // "If a permanent spell is countered this way, ..." (Thranduil's Decree): only a
     // permanent spell moves elsewhere.
     // "If an artifact or creature spell is countered this way, ..." (Desertion): only such
@@ -115,6 +115,25 @@ fn f_countered_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             (r, Some(f))
         }
     };
+    // "..., then you may cast it without paying its mana cost" (Transcendent Dragon): as
+    // part of the resolution, right after it's exiled (its ruling).
+    let (r, then) = match r.split_once(", then you may cast it ") {
+        Some((head, tail)) => {
+            let mut sub = Builder::new(b.ctx);
+            sub.it = Sel::Var(vars::IT);
+            let Some(cast) = crate::oracle::effects::parse_effect_text(
+                &format!("you may cast it {tail}."),
+                &mut sub,
+            ) else {
+                return false;
+            };
+            if !sub.targets.is_empty() {
+                return false;
+            }
+            (head, Some(cast))
+        }
+        None => (r, None),
+    };
     let Some(dest) = destination(r) else {
         return false;
     };
@@ -137,7 +156,13 @@ fn f_countered_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
                 from: Some(ZoneKind::Stack),
                 to: Some(ZoneKind::Graveyard),
             },
-            action: ReplacementAction::MoveInstead(dest),
+            action: match then {
+                Some(e) => ReplacementAction::Then(
+                    Box::new(ReplacementAction::MoveInstead(dest)),
+                    Box::new(e),
+                ),
+                None => ReplacementAction::MoveInstead(dest),
+            },
             self_replacement: true,
             optional: false,
         },

@@ -624,6 +624,10 @@ pub struct Game {
     pub replacements: Vec<ReplacementInstance>,
     pub delayed_triggers: Vec<DelayedTrigger>,
     pub pending_triggers: Vec<PendingTrigger>,
+    /// What happens when a regeneration shield is used ("When it regenerates this way,
+    /// ..."): the shield's replacement effect id, the context of the effect that created
+    /// it, and the instruction (see `Effect::Regenerate`).
+    pub regeneration_riders: Vec<(u32, crate::eval::Ctx, Effect)>,
     pub statics: ActiveStatics,
     pub history: TurnHistory,
     /// The previous turn's history ("if no spells were cast last turn").
@@ -718,6 +722,9 @@ pub struct Game {
     pub search_finds_by_default: bool,
     /// One-shot effects waiting "until" an event to undo themselves (CR 610.3, 610.4).
     pub untils: Vec<crate::until::UntilEffect>,
+    /// Effects waiting for a player's next turn or combat phase ("during target
+    /// opponent's next turn, ...", see `next_turn.rs`).
+    pub scheduled: Vec<crate::next_turn::Scheduled>,
     /// Continuous effects waiting for the next spell a player casts (CR 611.2f).
     pub next_spell_effects: Vec<crate::next_spell::NextSpellEffect>,
     /// Actions to take as the first thing in the next step that occurs, after a skip
@@ -846,6 +853,7 @@ impl Game {
             replacements: vec![],
             delayed_triggers: vec![],
             pending_triggers: vec![],
+            regeneration_riders: vec![],
             statics: ActiveStatics::default(),
             history: TurnHistory::default(),
             last_turn_history: TurnHistory::default(),
@@ -888,6 +896,7 @@ impl Game {
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
             untils: vec![],
+            scheduled: vec![],
             next_spell_effects: vec![],
             step_start_actions: vec![],
             entering: vec![],

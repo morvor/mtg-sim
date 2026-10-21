@@ -30,6 +30,64 @@ pub struct CopyExtra {
     pub effect: Effect,
 }
 
+/// `Filter::Custom` name: an object other than the current targets of the spell an
+/// ability triggered on that the spell could target, as each of its targets ("if you
+/// control one or more other creatures that spell could target", CR 115.9, 707.10e).
+pub const TRIGGER_SPELL_COULD_TARGET: &str = "copy rules:the triggering spell could target it";
+
+/// `Filter::Custom` name: in the filter of the objects a spell is copied for (an
+/// [`Effect::CopySpellRetargeted`]'s `among`, joined by `Or`), players are included too
+/// ("for each other permanent or player the spell could target"). It matches no object.
+pub const ANY_PLAYER: &str = "copy rules:or player";
+
+/// The object a permanent entering as a copy copies, for its copy exceptions ("if you
+/// control that creature", "When you do, tap the copied creature").
+pub const COPIED: Var = vars::USER + 5120;
+
+/// `Filter::Custom` prefix: the object the entering permanent copies ([`COPIED`]) matches
+/// the filter (JSON) that follows: "except it has vanishing 3 if that creature doesn't
+/// have vanishing" (CR 707.9f).
+pub const COPIED_MATCHES: &str = "copy rules:the copied object matches:";
+
+/// Evaluates [`COPIED_MATCHES`].
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    if name == ANY_PLAYER {
+        return Some(false);
+    }
+    if name == TRIGGER_SPELL_COULD_TARGET {
+        let spell = g
+            .eval_sel(&Sel::TriggerSpell, ctx)
+            .into_iter()
+            .find_map(|e| e.object())?;
+        let current: Vec<Entity> = g
+            .obj(spell)
+            .stack
+            .as_deref()
+            .map(|si| {
+                si.chosen
+                    .iter()
+                    .flat_map(|m| m.targets.iter().flatten().copied())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let e = Entity::Object(id);
+        return Some(
+            g.is_live(spell)
+                && g.obj(spell).zone == Zone::Stack
+                && !current.contains(&e)
+                && legal_for_each_target(g, spell, e),
+        );
+    }
+    let json = name.strip_prefix(COPIED_MATCHES)?;
+    let f: Filter = serde_json::from_str(json).ok()?;
+    let copied = ctx
+        .vars
+        .get(&COPIED)
+        .and_then(|v| v.first())
+        .and_then(|e| e.object());
+    Some(copied.is_some_and(|o| g.matches(o, &f, ctx)))
+}
+
 /// How a copy of a card defined by name is made.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NamedCopy {
@@ -47,10 +105,14 @@ pub enum NamedCopy {
 /// Performs the copy exception extras of a permanent that entered as a copy (`copy`: the
 /// copy effect it entered with). Counters it enters with are added to `counters`; other
 /// effects are returned to be performed as it enters.
+///
+/// `copied` is the object it copies, which the exceptions call "that creature" or "the
+/// copied creature" ([`COPIED`]).
 pub fn apply_copy_extras(
     g: &mut Game,
     id: ObjectId,
     copy: Option<u32>,
+    copied: Option<ObjectId>,
     extras: &[CopyExtra],
     counters: &mut Vec<(CounterKind, u32)>,
 ) -> Vec<(Ctx, Effect)> {
@@ -64,16 +126,50 @@ pub fn apply_copy_extras(
     // CR 707.9f: whether a conditional exception applies is determined from what the
     // permanent would be if the copy effect applied without it (its other exceptions
     // included): the characteristics it has now.
+    let copied_var: Vec<Entity> = copied.map(Entity::Object).into_iter().collect();
+    let extras: Vec<CopyExtra> = extras
+        .iter()
+        .map(|x| {
+            let mut x = x.clone();
+            x.ctx.set_var(COPIED, copied_var.clone());
+            x
+        })
+        .collect();
     let applying: Vec<&CopyExtra> = extras
         .iter()
         .filter(|x| {
             x.only_if.as_ref().is_none_or(|f| {
                 let ctl = g.obj(id).controller;
-                g.matches(id, f, &Ctx::new(Some(id), ctl))
+                let mut c = Ctx::new(Some(id), ctl);
+                c.set_var(COPIED, copied_var.clone());
+                g.matches(id, f, &c)
             })
         })
         .collect();
     let mods: Vec<Modification> = applying.iter().flat_map(|x| x.mods.clone()).collect();
+    // An exception adding an ability that makes it enter with counters ("it has vanishing
+    // 3"): it entered with that ability, so with those counters (CR 702.63a, 614.1c).
+    for m in &mods {
+        let abilities = match m {
+            Modification::AddKeyword(k) => crate::kw::derived(k),
+            Modification::AddAbility(a) => vec![a.clone()],
+            _ => vec![],
+        };
+        for a in abilities {
+            if let AbilityKind::Static(st) = &a.kind {
+                if let StaticEffect::Replacement(ReplacementDef {
+                    event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                    action: ReplacementAction::EnterWithCounters(kind, Value::Const(n)),
+                    ..
+                }) = &st.effect
+                {
+                    if *n > 0 {
+                        counters.push((kind.clone(), *n as u32));
+                    }
+                }
+            }
+        }
+    }
     if !mods.is_empty() {
         if let Some(e) = g.effects.iter_mut().find(|e| e.id == eid) {
             if let Some(Layer1::Copy { exceptions, .. }) = &mut e.layer1 {
@@ -216,7 +312,10 @@ pub fn copy_for_each_target(
         .filter(|e| match (among, e) {
             (None, _) => true,
             (Some((f, c)), Entity::Object(o)) => g.matches(*o, f, c),
-            (Some(_), _) => false,
+            // "for each other permanent or player the spell could target" (Radiate).
+            (Some((f, _)), Entity::Player(_)) => {
+                matches!(f, Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Custom(n) if n == ANY_PLAYER)))
+            }
         })
         .collect();
     if cands.len() > 1 {

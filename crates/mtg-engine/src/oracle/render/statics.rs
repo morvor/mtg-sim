@@ -614,6 +614,7 @@ impl Renderer<'_> {
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "that player ignores this effect until end of turn".into()
                     }
+                    SpecialActionEffect::StopDelayedTrigger => "that ability doesn't trigger".into(),
                 };
                 format!("{who} may {c} any time they could cast an instant. If they do, {what}")
             }
@@ -1298,6 +1299,10 @@ impl Renderer<'_> {
                 let n = self.noun(&f, Num::Many);
                 format!("spend only mana produced by {n} to cast ~")
             }
+            CostChange::Rule(CostRule::XAtMost(v)) => {
+                let v = self.value(v);
+                format!("X can't be greater than {v}")
+            }
             CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
@@ -1793,6 +1798,15 @@ impl Renderer<'_> {
                 let a = subj(self, attackers);
                 let d = self.player_filter_object(defender);
                 format!("{a} attacks {d} each combat if able")
+            }
+            Restriction::MustAttackObject { attackers, target } => {
+                let a = subj(self, attackers);
+                let t = if matches!(target, Filter::Source) {
+                    self.me()
+                } else {
+                    self.noun(target, Num::One)
+                };
+                format!("{a} attacks {t} each combat if able")
             }
             Restriction::MustBlock(f) => format!("{} blocks each combat if able", subj(self, f)),
             Restriction::MustBeBlocked(f) => {
@@ -2618,6 +2632,8 @@ impl Renderer<'_> {
                     | A::Add(_)
                     | A::PlusTokens { .. }
                     | A::TokensInstead { .. }
+                    | A::TokensInsteadOf { .. }
+                    | A::TokenCopiesInstead { .. }
                     | A::Subtract(_)
                     | A::Redirect(_)
                     | A::RedirectNext(..)
@@ -2625,7 +2641,8 @@ impl Renderer<'_> {
                     | A::PreventAndThen(..)
                     | A::LifeFloor(_)
                     | A::ManaTypeInstead(_)
-                    | A::RevealAndMoveInstead(_)) => {
+                    | A::RevealAndMoveInstead(_)
+                    | A::Then(..)) => {
                         let then = self.replacement_then(other, "it");
                         format!("if {subj} would enter, {then}")
                     }
@@ -3377,6 +3394,17 @@ impl Renderer<'_> {
                 let e = self.effect(e);
                 format!("{e} as well")
             }
+            A::Then(inner, e) => {
+                let first = self.replacement_then(inner, it);
+                let then = match e.as_ref() {
+                    Effect::Reflexive { body } => {
+                        let b = self.effect(&body.effect);
+                        format!("When you do, {b}")
+                    }
+                    other => capitalize(&self.effect(other)),
+                };
+                format!("{first}. {then}")
+            }
             A::Prevent => "prevent that event".into(),
             A::PreventAmount(v) | A::PreventPortion(v) => {
                 let v = self.value(v);
@@ -3411,6 +3439,34 @@ impl Renderer<'_> {
                 let (d, tail) = self.token_desc(spec);
                 format!("that many {d} tokens{tail} are created instead")
             }
+            A::TokensInsteadOf { specs, each } => {
+                if *each {
+                    "instead create one of each".to_string()
+                } else {
+                    let list: Vec<String> = specs
+                        .iter()
+                        .map(|s| {
+                            let (d, tail) = self.token_desc(s);
+                            format!("that many {d} tokens{tail}")
+                        })
+                        .collect();
+                    format!("instead create {}", list.join(" or "))
+                }
+            }
+            A::TokenCopiesInstead { of, choose } => match (of, choose) {
+                (Some(sel), _) => {
+                    let o = self.sel(sel, Case::Obj);
+                    format!("instead create that many tokens that are copies of {o}")
+                }
+                (None, Some(f)) => {
+                    let n = self.noun(f, Num::One);
+                    format!(
+                        "instead choose {} and create that many tokens that are copies of that creature",
+                        with_article(&n)
+                    )
+                }
+                (None, None) => self.gap("token copies instead of nothing"),
+            },
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
                 format!("that damage is dealt to {t} instead")
@@ -3832,6 +3888,8 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
             }
             s
         }
+        // (Rendered with its value where a renderer is at hand.)
+        CostRule::XAtMost(_) => "X can't be greater than that value".into(),
         CostRule::NoMana => "you can't spend mana to cast ~".into(),
         CostRule::OnlyManaFrom(_) => "spend only mana produced by permanents to cast ~".into(),
         CostRule::OnlyChosenColor => {

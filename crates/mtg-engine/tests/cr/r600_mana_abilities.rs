@@ -73,6 +73,7 @@ fn only_abilities_meeting_the_criteria_are_mana_abilities() {
 #[test]
 fn a_mana_ability_remains_one_even_if_it_cant_produce_mana() {
     cr!("605.2");
+    cr_example!("605.2", "{T}: Add {G} for each creature you control");
     // Gaea's Cradle: "{T}: Add {G} for each creature you control."
     let mut t = TestGame::new(2);
     let cradle = t.battlefield(P0, "Gaea's Cradle");

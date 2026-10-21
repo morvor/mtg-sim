@@ -8,14 +8,17 @@ use crate::oracle::phrases::{end, parse_object_phrase};
 use crate::oracle::CompileContext;
 use crate::types::Color;
 
-/// Rewrites the damage effects of a body so their excess is dealt to `excess_to`.
-fn with_excess(e: Effect, excess_to: &Sel) -> Option<Effect> {
+/// Rewrites the damage effects of a body so their excess is dealt to `excess_to` (or, with
+/// `None`, to the controller of the object dealt damage).
+fn with_excess(e: Effect, excess_to: &Option<Sel>) -> Option<Effect> {
     match e {
         Effect::DealDamage { source, amount, to } => Some(Effect::DealDamageExcess {
+            excess_to: excess_to
+                .clone()
+                .unwrap_or_else(|| Sel::Players(PlayerRef::ControllerOf(Box::new(to.clone())))),
             source,
             amount,
             to,
-            excess_to: excess_to.clone(),
         }),
         Effect::Seq(v) => {
             let mut found = false;
@@ -51,8 +54,19 @@ fn excess_to_controller(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
         let kind = match a.kind.clone() {
             AbilityKind::Spell(mut s) => {
                 let excess_to = Sel::Players(PlayerRef::ControllerOf(Box::new(Sel::Target(0))));
-                s.body.effect = with_excess(s.body.effect, &excess_to)?;
+                s.body.effect = with_excess(s.body.effect, &Some(excess_to))?;
                 AbilityKind::Spell(s)
+            }
+            // "Whenever ~ attacks, it deals damage equal to its power to up to one other
+            // target creature. Excess damage is dealt to that creature's controller
+            // instead." (Ravenous Tyrannosaurus): the damaged creature's controller.
+            AbilityKind::Triggered(mut tr) => {
+                tr.body.effect = with_excess(tr.body.effect, &None)?;
+                AbilityKind::Triggered(tr)
+            }
+            AbilityKind::Activated(mut act) => {
+                act.body.effect = with_excess(act.body.effect, &None)?;
+                AbilityKind::Activated(act)
             }
             _ => return None,
         };

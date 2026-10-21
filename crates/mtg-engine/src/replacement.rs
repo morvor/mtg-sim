@@ -21,6 +21,10 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct EtbInfo {
     pub tapped: bool,
+    /// Cards exiled with the entering object while it entered ("As this creature enters,
+    /// exile a creature card from your graveyard"): linked to the permanent's abilities
+    /// (CR 607.2b, 614.12), by link id.
+    pub exiled_as_it_entered: Vec<(u16, ObjectId)>,
     pub counters: Vec<(CounterKind, u32)>,
     /// Counters it enters with that the effect has a player other than its controller put
     /// on it (CR 122.6a: tribute's chosen opponent, CR 702.104a).
@@ -1224,6 +1228,18 @@ impl Game {
             ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
         };
         let mut action = cand.def.action.clone();
+        // "... instead. When you do, ...": the instruction after the modified event.
+        while let ReplacementAction::Then(inner, then) = action {
+            let mut c = ctx.clone();
+            let info = event_info_of(&ev);
+            if let Some(o) = info.object {
+                c.vars.insert(vars::IT, vec![Entity::Object(o)]);
+                c.nums.insert(FOLLOW_IT, 1);
+            }
+            c.event = Some(info);
+            self.post_replacement_effects.push((c, *then));
+            action = *inner;
+        }
         // "Reveal that card and put it on top of your library instead": the card is
         // revealed where it is (CR 701.20b) by the player it's moving away from, then the
         // event is modified as any other move elsewhere.
@@ -1383,7 +1399,25 @@ impl Game {
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;
-                if n > 0 {
+                if k.as_str() == crate::ability::EACH_KIND_ON_SOURCE {
+                    // "For each kind of counter on ~, each other Dinosaur you control
+                    // enters with a counter of that kind on it" (Blue, Loyal Raptor): that
+                    // many of each kind on the source as the permanent enters.
+                    if let Some(src) = cand.source.filter(|s| self.is_live(*s)) {
+                        let kinds: Vec<CounterKind> = self
+                            .obj(src)
+                            .counters
+                            .iter()
+                            .filter(|(_, n)| **n > 0)
+                            .map(|(k, _)| k.clone())
+                            .collect();
+                        for kind in kinds {
+                            if n > 0 {
+                                m.etb.counters.push((kind, n));
+                            }
+                        }
+                    }
+                } else if n > 0 {
                     m.etb.counters.push((k, n));
                 }
                 vec![ReplEvent::Move(m)]
@@ -1400,7 +1434,15 @@ impl Game {
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 c.entering = Some(crate::eval::EntryMods::default());
+                let linked_before = self.obj(m.obj).linked.clone();
                 self.exec(&e, &mut c);
+                for (link, objs) in self.obj(m.obj).linked.clone() {
+                    for o in objs {
+                        if !linked_before.get(&link).is_some_and(|v| v.contains(&o)) {
+                            m.etb.exiled_as_it_entered.push((link, o));
+                        }
+                    }
+                }
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
@@ -1558,6 +1600,13 @@ impl Game {
                 crate::combat::remove_from_combat(self, obj);
                 if let Some(id) = cand.instance {
                     self.replacements.retain(|r| r.id != id);
+                    // "When it regenerates this way, ...": the shield's rider, about the
+                    // regenerated permanent.
+                    if let Some(i) = self.regeneration_riders.iter().position(|r| r.0 == id) {
+                        let (_, mut c, e) = self.regeneration_riders.remove(i);
+                        c.vars.insert(vars::IT, vec![Entity::Object(obj)]);
+                        self.post_replacement_effects.push((c, e));
+                    }
                 }
                 vec![]
             }
@@ -1603,7 +1652,10 @@ impl Game {
                 }
             }
             (ReplacementAction::Add(v), ev) => {
-                let d = self.eval_value(&v, &ctx).max(0) as u32;
+                // (The amount may depend on the event's: "damage equal to ~'s power".)
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                let d = self.eval_value(&v, &c).max(0) as u32;
                 vec![scale_event(ev, |n| n + d)]
             }
             (
@@ -1650,6 +1702,106 @@ impl Game {
                         source,
                     },
                 ]
+            }
+            (
+                ReplacementAction::TokensInsteadOf { specs, each },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                let chosen: Vec<TokenSpec> = if each {
+                    specs
+                } else {
+                    let labels = specs
+                        .iter()
+                        .map(|s| {
+                            crate::tokens::token_characteristics_in(self, s, &ctx)
+                                .name
+                                .to_string()
+                        })
+                        .collect();
+                    let i =
+                        self.ask_option(ctx.controller, ctx.source, "Create which tokens", labels);
+                    specs.get(i).cloned().into_iter().collect()
+                };
+                chosen
+                    .iter()
+                    .map(|spec| ReplEvent::CreateTokens {
+                        controller,
+                        spec: Box::new(TokenCreate {
+                            chars: crate::tokens::token_characteristics_in(self, spec, &ctx),
+                            card: crate::tokens::predefined_card(spec),
+                            tapped: tokens.tapped,
+                            attacking: tokens.attacking,
+                            copy_of: None,
+                            copy_exceptions: vec![],
+                        }),
+                        count,
+                        source,
+                    })
+                    .collect()
+            }
+            (
+                ReplacementAction::TokenCopiesInstead { of, choose },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                let mut c = ctx.clone();
+                let target = match (&of, &choose) {
+                    (Some(sel), _) => crate::copy_rules::token_copy_sources(self, sel, &mut c)
+                        .into_iter()
+                        .next(),
+                    (None, Some(f)) => {
+                        let cands: Vec<ObjectId> = self
+                            .permanent_ids()
+                            .into_iter()
+                            .filter(|o| self.matches(*o, f, &c))
+                            .collect();
+                        self.ask_objects(
+                            c.controller,
+                            c.source,
+                            "Choose an object to copy",
+                            cands,
+                            1,
+                            1,
+                        )
+                        .into_iter()
+                        .next()
+                    }
+                    (None, None) => None,
+                };
+                let original = ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                };
+                let Some(t) = target else {
+                    return vec![original];
+                };
+                let ReplEvent::CreateTokens { spec: tokens, .. } = &original else {
+                    return vec![original];
+                };
+                vec![ReplEvent::CreateTokens {
+                    controller,
+                    spec: Box::new(TokenCreate {
+                        chars: self.obj(t).copiable.clone(),
+                        card: self.obj(t).card.clone(),
+                        tapped: tokens.tapped,
+                        attacking: tokens.attacking,
+                        copy_of: Some(t),
+                        copy_exceptions: vec![],
+                    }),
+                    count,
+                    source,
+                }]
             }
             (
                 ReplacementAction::TokensInstead { spec },
@@ -1978,6 +2130,11 @@ fn event_amount(ev: &ReplEvent) -> Option<u32> {
         _ => None,
     }
 }
+
+/// A context flag: "it" in an instruction performed after a replacement's modified event
+/// (`ReplacementAction::Then`) is the object the event moved, wherever it went ("exile it
+/// instead. Return it to the battlefield ...", CR 400.7: the same card, followed).
+pub const FOLLOW_IT: Var = vars::USER + 4242;
 
 pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
     let mut e = EventInfo::default();

@@ -65,6 +65,18 @@ pub fn x_minimum(rules: &[CostRule]) -> i64 {
         .unwrap_or(0)
 }
 
+/// The greatest value that may be announced for X ("X can't be greater than the number
+/// of players in the game", CR 107.3a), evaluated as X is announced (Open the Way ruling).
+pub fn x_maximum(g: &Game, rules: &[CostRule], ctx: &crate::eval::Ctx) -> Option<i64> {
+    rules
+        .iter()
+        .filter_map(|r| match r {
+            CostRule::XAtMost(v) => Some(g.eval_value(v, ctx).max(0)),
+            _ => None,
+        })
+        .min()
+}
+
 /// "Spend only [colors] mana on X" for `amount` generic mana of the cost that X still
 /// represents.
 pub fn x_spend(rules: &[CostRule], amount: u32) -> Option<XSpend> {

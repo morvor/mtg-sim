@@ -56,9 +56,20 @@ fn each_opponent_may(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved_targets);
         return None;
     };
+    Some(each_opponent_may_effect(effect, b))
+}
+
+/// The opponents who accepted an earlier "each opponent may [effect]" of the text.
+pub fn accepted_opponents(b: &Builder) -> Option<Sel> {
+    after_each_opponent_may(b).then_some(Sel::Var(ACCEPTED))
+}
+
+/// "each opponent may [effect]": each opponent chooses in APNAP order, then those who
+/// accepted perform it; they are remembered for "for each opponent who does".
+pub fn each_opponent_may_effect(effect: Effect, b: &mut Builder) -> Effect {
     b.named
         .push((ACCEPTED_NAME.to_string(), Sel::Var(ACCEPTED)));
-    Some(Effect::seq(vec![
+    Effect::seq(vec![
         // CR 101.4: they decide in APNAP order...
         Effect::Store {
             var: OPTED,
@@ -83,7 +94,7 @@ fn each_opponent_may(l: &str, b: &mut Builder) -> Option<Effect> {
                 effect: Box::new(effect),
             }),
         },
-    ]))
+    ])
 }
 
 inventory::submit! { EffectPattern { name: "each opponent may [effect]", priority: 150, parse: each_opponent_may } }
@@ -109,7 +120,13 @@ fn for_each_opponent_who_does(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     };
     if searches {
-        if !matches!(&effect, Effect::Search { who: PlayerRef::You, .. }) {
+        if !matches!(
+            &effect,
+            Effect::Search {
+                who: PlayerRef::You,
+                ..
+            }
+        ) {
             b.targets.truncate(saved_targets);
             return None;
         }
@@ -155,8 +172,8 @@ inventory::submit! { EffectPattern { name: "each player who searched a library t
 #[cfg(test)]
 mod tests {
     use crate::card::Layout;
-    use crate::types::TypeLine;
     use crate::oracle::{compile, CompileContext};
+    use crate::types::TypeLine;
 
     /// Whether a sorcery with oracle text `text` compiles completely.
     fn compiles(text: &str) -> bool {
@@ -180,7 +197,9 @@ mod tests {
             "Draw a card. Each opponent may draw a card. For each opponent who does, you gain 2 life."
         ));
         // Without "each opponent may", no opponent "does" anything.
-        assert!(!compiles("Draw a card. For each opponent who does, you gain 2 life."));
+        assert!(!compiles(
+            "Draw a card. For each opponent who does, you gain 2 life."
+        ));
         // A choice nobody was given (each player draws).
         assert!(!compiles(
             "Each player draws a card. For each opponent who does, you gain 2 life."

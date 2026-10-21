@@ -170,6 +170,14 @@ impl Game {
         self.run_post_replacement_effects();
     }
 
+    /// Whether a replacement effect would replace `p`'s loss of the game (CR 614.1a).
+    pub(crate) fn loss_would_be_replaced(&mut self, p: PlayerId) -> bool {
+        let who = self.team_loss_replacer(p);
+        !self
+            .applicable_replacements(&ReplEvent::LoseGame { player: who })
+            .is_empty()
+    }
+
     /// In Two-Headed Giant a player losing is their team losing (CR 810.8a), so a
     /// replacement effect on "you would lose the game" controlled by either teammate
     /// applies to it: the event is offered as the loss of the teammate whose replacement

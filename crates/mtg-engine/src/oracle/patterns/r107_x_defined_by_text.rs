@@ -38,12 +38,26 @@ fn x_defined_by_text(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     } else {
         def
     };
-    let mut b = Builder::new(ctx);
-    let (v, rest) = crate::oracle::statics::parse_value_phrase(&def, &mut b)?;
-    if !rest.trim().is_empty() || !b.targets.is_empty() {
-        return None;
-    }
-    let only = Condition::Compare(Value::X, Cmp::Eq, v);
+    // "X is the number of cards in an opponent's hand": an opponent is chosen as the
+    // ability is announced, before X (Bargaining Table ruling), so X may be the number of
+    // cards in any one opponent's hand.
+    let only = if def == "the number of cards in an opponent's hand" {
+        Condition::Compare(
+            Value::CountPlayers(PlayerFilter::And(vec![
+                PlayerFilter::Opponent,
+                PlayerFilter::HandSize(Cmp::Eq, Box::new(Value::X)),
+            ])),
+            Cmp::Ge,
+            Value::c(1),
+        )
+    } else {
+        let mut b = Builder::new(ctx);
+        let (v, rest) = crate::oracle::statics::parse_value_phrase(&def, &mut b)?;
+        if !rest.trim().is_empty() || !b.targets.is_empty() {
+            return None;
+        }
+        Condition::Compare(Value::X, Cmp::Eq, v)
+    };
     act.condition = Some(match act.condition.take() {
         Some(c) => Condition::And(vec![c, only]),
         None => only,

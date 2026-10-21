@@ -73,6 +73,7 @@ fn for_as_long_as_that_never_starts_does_nothing() {
     // CR 611.2b example: Master Thief ("gain control of target artifact for as long as you
     // control this creature") leaves before its ability resolves: nothing happens.
     cr!("611.2b");
+    cr_example!("611.2b", "Master Thief");
     ruling!(
         "Master Thief",
         "If Master Thief ceases to be under your control before its ability resolves"
@@ -110,6 +111,8 @@ fn affected_set_locked_for_characteristics_but_not_rules() {
     // or enter later. "Prevent all damage creatures would deal this turn" modifies the
     // rules and applies to creatures that enter later and permanents that become creatures.
     cr!("611.2c");
+    cr_example!("611.2c", "All white creatures get +1/+1 until end of turn");
+    cr_example!("611.2c", "Prevent all damage creatures would deal this turn");
     let mut t = TestGame::new(2);
     let w = t.custom(
         P0,
