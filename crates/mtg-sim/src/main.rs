@@ -3,7 +3,7 @@
 //! Usage: mtg-sim [--games N] [--seed S] [--deck FILE]... [--players N] [--random-decks]
 //!                [--only G] [--max-turns N] [--max-actions N] [--slow SECS]
 //!                [--timeout SECS] [--check N] [--log] [--agent SEAT=KIND]...
-//!                [--transcript FILE] [--auto-pass]
+//!                [--transcript FILE] [--auto-pass] [--cards TIER] [--tiers FILE]
 //!
 //! A deck file lists "4 Lightning Bolt" lines; the cards after a "Sideboard" line are the
 //! player's sideboard, from which a companion may be revealed as the game starts.
@@ -15,6 +15,12 @@
 //! (random agents can pile up effects) is stopped and reported as slow. A game in which no
 //! decision was made for `--timeout` seconds is reported as a hang and ends the run with
 //! status 2.
+//!
+//! `--cards verified|round-trip|compiled` (strict mode, `strict.rs`) sets the lowest card
+//! tier a deck may hold (`docs/verified-cards.tsv`, or `--tiers FILE`): `verified` by
+//! default for `--deck` files and the default deck, which are rejected before the first
+//! game if a card is below the bar. `--random-decks` keeps every fully supported card
+//! unless given `--cards`, and then draws only cards at the bar.
 //!
 //! `--check N` runs the rules checks of `checks.rs` before every Nth priority decision (no
 //! state-based action pending, CR 117.5; consistent zones; up-to-date characteristics;
@@ -38,6 +44,7 @@ mod coverage;
 mod decks;
 mod every_card;
 mod runner;
+mod strict;
 
 use decks::{default_deck, load_deck, random_deck, DeckList};
 use mtg_engine::*;
@@ -80,6 +87,7 @@ fn main() {
     let mut external = ExternalSettings::default();
     let mut slow_set = false;
     let mut timeout_set = false;
+    let mut strict = strict::Strict::default();
     let mut i = 1;
     let value = |i: usize, what: &str| -> String {
         args.get(i + 1)
@@ -87,6 +95,10 @@ fn main() {
             .unwrap_or_else(|| panic!("{} needs a value", what))
     };
     while i < args.len() {
+        if strict.parse_arg(&args, i) {
+            i += 2;
+            continue;
+        }
         match args[i].as_str() {
             "--games" => games = value(i, "--games").parse().expect("--games N"),
             "--seed" => seed = value(i, "--seed").parse().expect("--seed S"),
@@ -144,6 +156,25 @@ fn main() {
     }
     let check = check.unwrap_or(if random { 4 } else { 0 });
     let fixed: Vec<DeckList> = deck_files.iter().map(|f| load_deck(f)).collect();
+    // Strict mode: ordinary games default to verified cards; fuzzing keeps its pool.
+    let bar = strict.bar(if random {
+        None
+    } else {
+        Some(card_tiers::Tier::Verified)
+    });
+    let table = strict.table();
+    let default = default_deck();
+    if let Some(bar) = bar {
+        let mut decks: Vec<(String, &DeckList)> = deck_files
+            .iter()
+            .zip(&fixed)
+            .map(|(f, d)| (format!("--deck {f}"), d))
+            .collect();
+        if !random && fixed.len() < players {
+            decks.push(("the default deck".into(), &default));
+        }
+        strict::enforce(&table, &decks, bar);
+    }
     install_panic_hook();
 
     let start = Instant::now();
@@ -162,8 +193,8 @@ fn main() {
         let decks: Vec<DeckList> = (0..players)
             .map(|p| match fixed.get(p) {
                 Some(d) => d.clone(),
-                None if random => random_deck(&mut deck_rng),
-                None => default_deck(),
+                None if random => random_deck(&mut deck_rng, bar.map(|b| (&table, b))),
+                None => default.clone(),
             })
             .collect();
         let config = GameConfig {
@@ -173,8 +204,9 @@ fn main() {
             ..Default::default()
         };
         let repro = format!(
-            "mtg-sim --seed {seed} --only {gi} --players {players}{}{}{} --max-turns {max_turns} --log",
+            "mtg-sim --seed {seed} --only {gi} --players {players}{}{}{}{} --max-turns {max_turns} --log",
             if random { " --random-decks" } else { "" },
+            strict.repro_args(),
             deck_files
                 .iter()
                 .map(|f| format!(" --deck {f}"))

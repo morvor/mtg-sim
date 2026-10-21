@@ -376,8 +376,14 @@ impl TierTable {
         if recorded.tier == Tier::Unsupported {
             return recorded;
         }
+        // The live status can only lower the tier: a live round-trip pass says nothing
+        // about the checks that aren't live.
         let live = live_tier(def);
-        combine(recorded, live)
+        if live.tier == Tier::RoundTrip {
+            recorded
+        } else {
+            combine(recorded, live)
+        }
     }
 
     /// The cards of `cards` below `bar` (each name once, in first-seen order), with their
@@ -426,7 +432,7 @@ impl fmt::Display for BelowBar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "{} card(s) below the {} tier (lower the bar with --cards, or see {TIERS_FILE}):",
+            "{} card(s) below the {} tier (see {TIERS_FILE}; a lower bar lets them in):",
             self.cards.len(),
             self.bar
         )?;
@@ -579,6 +585,41 @@ mod tests {
         );
         assert_eq!(low.tier, Tier::Compiled);
         assert_eq!(low.failed_text(), "round-trip (fails now)");
+    }
+
+    #[test]
+    fn the_live_status_lowers_the_recorded_tier_and_unlisted_cards_are_at_most_compiled() {
+        let table = TierTable::parse("Grizzly Bears\tverified\t\t\n");
+        let bears = crate::card::CardDb::global().get("Grizzly Bears").unwrap();
+        assert_eq!(table.tier_of(&bears).tier, Tier::Verified);
+        // Its Oracle text changed, so the round trip fails now.
+        let mut changed = (*bears).clone();
+        changed.faces[0].chars.rules_text = "Flying".into();
+        let t = table.tier_of(&changed);
+        assert_eq!(t.tier, Tier::Compiled);
+        assert_eq!(t.failed_text(), "round-trip (fails now)");
+        // An ability no longer compiles.
+        let mut broken = (*bears).clone();
+        broken.faces[0].unsupported = vec!["Some new text.".into()];
+        let t = table.tier_of(&broken);
+        assert_eq!(
+            (t.tier, t.failed_text()),
+            (Tier::Unsupported, "compiled (1 unsupported)".into())
+        );
+        // A card the file doesn't list.
+        let giant = crate::card::CardDb::global().get("Hill Giant").unwrap();
+        let t = table.tier_of(&giant);
+        assert_eq!(t.tier, Tier::Compiled);
+        assert_eq!(t.failed[0].check, check::LISTED);
+        assert!(check_cards(&table, [bears.as_ref()], Tier::Verified).is_ok());
+        let e = check_cards(
+            &table,
+            [bears.as_ref(), giant.as_ref(), giant.as_ref()],
+            Tier::Verified,
+        )
+        .unwrap_err();
+        assert_eq!(e.cards.len(), 1);
+        assert!(e.to_string().contains("Hill Giant: compiled; fails listed"));
     }
 
     #[test]

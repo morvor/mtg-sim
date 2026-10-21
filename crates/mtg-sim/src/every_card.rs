@@ -9,7 +9,7 @@
 //! Usage: mtg-sim --every-card [--games-per-card K] [--from N] [--count M]
 //!                [--filter TEXT] [--kind KIND] [--game G] [--threads T] [--max-turns N]
 //!                [--check N] [--slow SECS] [--timeout SECS] [--report FILE] [--log]
-//!                [--list]
+//!                [--list] [--cards TIER] [--tiers FILE]
 //!
 //! Card N is the Nth card of the pool (sorted by name); its games' seeds are derived from
 //! N, so `--from N --count 1 --game G --log` replays game G of card N.
@@ -697,6 +697,8 @@ struct Options {
     report: Option<String>,
     log: bool,
     list: bool,
+    /// `--cards` / `--tiers`: only cards at that tier or above (the whole pool by default).
+    strict: crate::strict::Strict,
 }
 
 fn parse(args: &[String]) -> Options {
@@ -716,6 +718,7 @@ fn parse(args: &[String]) -> Options {
         report: None,
         log: false,
         list: false,
+        strict: Default::default(),
     };
     let mut i = 0;
     let value = |i: usize| -> String {
@@ -725,6 +728,10 @@ fn parse(args: &[String]) -> Options {
     };
     while i < args.len() {
         let mut step = 2;
+        if o.strict.parse_arg(args, i) {
+            i += step;
+            continue;
+        }
         match args[i].as_str() {
             "--every-card" => step = 1,
             "--log" => {
@@ -765,8 +772,9 @@ fn seed_of(index: usize, game: u32) -> u64 {
 
 fn repro(index: usize, game: u32, o: &Options) -> String {
     format!(
-        "mtg-sim --every-card --from {index} --count 1 --game {game} --max-turns {} --log",
-        o.max_turns
+        "mtg-sim --every-card --from {index} --count 1 --game {game} --max-turns {}{} --log",
+        o.max_turns,
+        o.strict.repro_args()
     )
 }
 
@@ -997,7 +1005,12 @@ pub fn run(args: &[String]) {
     let o = parse(args);
     crate::runner::install_panic_hook();
     let t0 = Instant::now();
-    let pool = pool(o.threads);
+    let mut pool = pool(o.threads);
+    if let Some(bar) = o.strict.bar(None) {
+        let table = o.strict.table();
+        pool.retain(|c| table.tier_of(&c.def).tier >= bar);
+        eprintln!("--cards {bar}: {} cards at the bar", pool.len());
+    }
     eprintln!(
         "pool: {} fully supported cards (compiled in {:.1?})",
         pool.len(),
