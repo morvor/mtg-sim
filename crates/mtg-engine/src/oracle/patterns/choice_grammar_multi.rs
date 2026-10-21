@@ -212,3 +212,100 @@ fn have_each_chosen_ability(l: &str, text: &str, ctx: &crate::oracle::CompileCon
 }
 
 inventory::submit! { super::StaticPattern { name: "have each of the chosen abilities", priority: 60, parse: have_each_chosen_ability } }
+
+/// "choose a nonland card name and a number greater than 0", "choose a number greater than
+/// 0 and a color": two choices, made in order.
+fn choose_two_kinds(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (a, c) = r.split_once(" and ")?;
+    let one = |s: &str, b: &mut Builder| -> Option<Effect> {
+        if let Some(n) = s.strip_prefix("a number greater than ") {
+            let (Value::Const(n), rest) = parse_number(n)? else {
+                return None;
+            };
+            if !end(rest).is_empty() {
+                return None;
+            }
+            return Some(Effect::Choose {
+                who: PlayerRef::You,
+                kind: ChoiceKind::Number {
+                    min: n + 1,
+                    max: 1000,
+                },
+            });
+        }
+        match parse_clause(&format!("choose {s}"), b)? {
+            e @ Effect::Choose { .. } => Some(e),
+            _ => None,
+        }
+    };
+    if !a.contains("number greater than") && !c.contains("number greater than") {
+        return None;
+    }
+    Some(Effect::seq(vec![one(a, b)?, one(c, b)?]))
+}
+
+inventory::submit! { EffectPattern { name: "choose a number greater than N and a [value]", priority: 60, parse: choose_two_kinds } }
+
+/// "with mana value equal to that number" / "... equal to the number" after "Choose a
+/// number.": the chosen number.
+fn that_number(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !(l.contains("equal to that number") || l.contains("equal to the number")) {
+        return None;
+    }
+    if !crate::oracle::raw_text()
+        .to_lowercase()
+        .contains("choose a number")
+    {
+        return None;
+    }
+    let text = l
+        .replace("equal to that number", "equal to the chosen number")
+        .replace("equal to the number", "equal to the chosen number");
+    parse_clause(&text, b)
+}
+
+inventory::submit! { EffectPattern { name: "that number (the chosen number)", priority: 130, parse: that_number } }
+
+/// "If that library contains exactly the chosen number of cards with the chosen name,
+/// [instruction]" (Mindblaze), "If that opponent reveals exactly the chosen number of cards
+/// of the chosen color, [instruction]" (Scrying Glass): the cards in that player's library
+/// or hand with the chosen quality, counted against the chosen number.
+fn exactly_the_chosen_number(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if that ")?;
+    let (c, rest) = r.split_once(", ")?;
+    let (zone, quality) = if let Some(q) = c.strip_prefix("library contains exactly the chosen number of cards ") {
+        (ZoneKind::Library, q)
+    } else if let Some(q) = c
+        .strip_prefix("opponent reveals exactly the chosen number of cards ")
+        .or_else(|| c.strip_prefix("player reveals exactly the chosen number of cards "))
+    {
+        (ZoneKind::Hand, q)
+    } else {
+        return None;
+    };
+    let quality = match quality {
+        "with the chosen name" => Filter::ChosenName,
+        "of the chosen color" => Filter::ChosenColor,
+        _ => return None,
+    };
+    let who = b.it_player.clone();
+    if super::oracle_hardening_referents::is_no_player_referent(&who) {
+        return None;
+    }
+    let e = parse_clause(rest, b)?;
+    let count = Value::Count(Filter::and(vec![
+        quality,
+        Filter::Card,
+        Filter::InZone(zone),
+        Filter::OwnedByPlayer(Box::new(who)),
+    ]));
+    Some(Effect::If {
+        cond: Condition::Compare(count, Cmp::Eq, Value::Chosen),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "if that library contains exactly the chosen number of cards ...", priority: 60, parse: exactly_the_chosen_number } }

@@ -124,6 +124,7 @@ pub mod replacement;
 pub mod resolve;
 pub mod restart;
 pub mod reveal;
+pub mod reveal_library;
 pub mod rooms;
 pub mod rule_statics;
 pub mod saga;

@@ -215,3 +215,79 @@ fn greymond_humans_have_each_of_the_two_chosen_abilities() {
     assert!(!h.has_keyword(KeywordKind::Vigilance));
     assert!(!t.obj_now(bears).chars.has_keyword(KeywordKind::FirstStrike), "not a Human");
 }
+
+#[test]
+fn void_destroys_and_discards_by_the_chosen_number() {
+    cr!("608.2d", "202.3");
+    ruling!("Void", "You can choose 0");
+    compiles("Void");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Badlands", 5);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let lions = t.battlefield(P1, "Savannah Lions");
+    t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Forest");
+    let void = t.hand(P0, "Void");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Number, Answer::Number(2));
+    t.cast(P0, void).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(lions));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_hand(P1, "Forest"), "lands aren't discarded");
+    assert!(!t.in_hand(P1, "Grizzly Bears"));
+    let min = t.asked().iter().find_map(|(_, d)| match d {
+        mtg_engine::decision::Decision::ChooseNumber { min, .. } => Some(*min),
+        _ => None,
+    });
+    assert_eq!(min, Some(0));
+}
+
+/// Mindblaze naming Lightning Bolt and `n` against P1 with two in their library.
+fn mindblaze(n: i64) -> i32 {
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 6);
+    t.library_top(P1, "Lightning Bolt");
+    t.library_top(P1, "Lightning Bolt");
+    let spell = t.hand(P0, "Mindblaze");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Name, Answer::Text("Lightning Bolt".into()));
+    t.answer(P0, DecisionKind::Number, Answer::Number(n));
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    t.life(P1)
+}
+
+#[test]
+fn mindblaze_deals_damage_if_the_library_has_exactly_the_chosen_number() {
+    cr!("701.20a", "608.2d");
+    compiles("Mindblaze");
+    assert_eq!(mindblaze(2), 12);
+    assert_eq!(mindblaze(3), 20);
+}
+
+/// Scrying Glass choosing `n` and red against P1 holding one red card and a land.
+fn scrying_glass(n: i64) -> usize {
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let glass = t.battlefield(P0, "Scrying Glass");
+    t.lands(P0, "Plains", 3);
+    t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Forest");
+    t.answer(P0, DecisionKind::Number, Answer::Number(n));
+    t.answer(P0, DecisionKind::Option, Answer::Index(3)); // red
+    let hand = t.hand_size(P0);
+    t.activate(P0, glass, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    t.hand_size(P0) - hand
+}
+
+#[test]
+fn scrying_glass_draws_if_exactly_the_chosen_number_of_the_chosen_color() {
+    cr!("608.2d");
+    ruling!("Scrying Glass", "You choose a number and color during resolution");
+    compiles("Scrying Glass");
+    assert_eq!(scrying_glass(1), 1);
+    assert_eq!(scrying_glass(2), 0);
+}

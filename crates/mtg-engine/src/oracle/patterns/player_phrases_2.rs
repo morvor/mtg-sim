@@ -106,3 +106,22 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
     }
     None
 }
+
+/// "target player reveals their library": that player reveals every card in it.
+fn reveals_their_library(l: &str, b: &mut Builder) -> Option<Effect> {
+    let subj = end(l).strip_suffix(" reveals their library")?;
+    let targets = b.targets.len();
+    let (who, rest) = crate::oracle::effects::player_ref(subj, b)?;
+    if !rest.trim().is_empty() || matches!(who, PlayerRef::You) {
+        b.targets.truncate(targets);
+        return None;
+    }
+    Some(Effect::AsPlayer {
+        who,
+        effect: Box::new(Effect::Custom(
+            crate::reveal_library::REVEAL_OWN_LIBRARY.into(),
+        )),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "[player] reveals their library", priority: 120, parse: reveals_their_library } }
