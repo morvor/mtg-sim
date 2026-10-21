@@ -133,3 +133,37 @@ fn sakashima_of_a_thousand_faces_copies_with_its_other_abilities() {
         .obj_now(s)
         .has_keyword(mtg_engine::keywords::KeywordKind::Partner));
 }
+
+#[test]
+fn march_from_velis_vel_lands_of_the_chosen_type_become_hasty_copies() {
+    cr!("707.2", "613.1a", "611.2c");
+    supported("March from Velis Vel");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let gate1 = t.battlefield(P0, "Azorius Guildgate");
+    let gate2 = t.battlefield(P0, "Dimir Guildgate");
+    let other = t.battlefield(P0, "Island");
+    t.lands(P0, "Island", 3);
+    let m = t.hand(P0, "March from Velis Vel");
+    t.cast(P0, m).target(bears).go();
+    // Choose "Gate".
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(2),
+    );
+    t.resolve_all();
+    for g in [gate1, gate2] {
+        assert_eq!(t.obj_now(g).chars.name, "Grizzly Bears");
+        assert_eq!(t.pt(g), (2, 2));
+        assert!(t
+            .obj_now(g)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    }
+    assert_eq!(t.obj_now(other).chars.name, "Island");
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.obj_now(gate1).chars.name, "Azorius Guildgate");
+    assert!(!t
+        .obj_now(gate1)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+}

@@ -11,6 +11,43 @@ use crate::ability::*;
 use crate::oracle::effects::{duration_suffix, object_ref, Builder};
 use crate::oracle::phrases::end;
 
+/// The permanents that become copies and also gain an ability.
+const BECAME_COPIES: Var = vars::USER + 5105;
+
+/// "Each land you control of that type becomes a copy of target creature you control
+/// until end of turn and gains haste until end of turn." (March from Velis Vel): the
+/// permanents are those that became copies, though they may no longer be lands.
+fn becomes_copy_and_gains(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, gains) = l.split_once(" until end of turn and gains ")?;
+    if !gains.ends_with(" until end of turn") || head.contains(", except ") {
+        return None;
+    }
+    let copy = becomes_copy(&format!("{head} until end of turn"), b)?;
+    let Effect::BecomeCopy { what, of, duration } = copy else {
+        return None;
+    };
+    let saved = b.it.clone();
+    b.it = Sel::Var(BECAME_COPIES);
+    let grant = crate::oracle::effects::parse_clause(&format!("it gains {gains}"), b);
+    b.it = saved;
+    let grant = grant?;
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: BECAME_COPIES,
+            sel: what,
+        },
+        Effect::BecomeCopy {
+            what: Sel::Var(BECAME_COPIES),
+            of,
+            duration,
+        },
+        grant,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "r707 becomes a copy of ... and gains", priority: 81, parse: becomes_copy_and_gains } }
+
 fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     if !l.contains(" a copy of ") && !l.contains(" copies of ") {
@@ -76,19 +113,19 @@ fn becomes_copy(l: &str, b: &mut Builder) -> Option<Effect> {
     let parsed = super::tokens_copies_copy::exiled_with_source(r, b)
         .or_else(|| object_ref(r, b).filter(|(_, t)| end(t).is_empty()))
         .or_else(|| {
-        // "the exiled card", "the sacrificed creature", "another creature you control"
-        // (one chosen as the effect happens): the objects a token copy can copy.
-        b.targets.truncate(n);
-        // "up to one target artifact, non-Aura enchantment, or land" (Absorbing Man).
-        if let Some((spec, tail)) = super::basic_effects_targets::target_alternatives(r)
-            .filter(|(_, t)| end(t).is_empty())
-        {
-            let text = spec.text.clone();
-            let slot = b.add_target(spec, &text);
-            return Some((Sel::Target(slot), tail.to_string()));
-        }
-        super::tokens_copies_copy::copied_object(r, b)
-    });
+            // "the exiled card", "the sacrificed creature", "another creature you control"
+            // (one chosen as the effect happens): the objects a token copy can copy.
+            b.targets.truncate(n);
+            // "up to one target artifact, non-Aura enchantment, or land" (Absorbing Man).
+            if let Some((spec, tail)) = super::basic_effects_targets::target_alternatives(r)
+                .filter(|(_, t)| end(t).is_empty())
+            {
+                let text = spec.text.clone();
+                let slot = b.add_target(spec, &text);
+                return Some((Sel::Target(slot), tail.to_string()));
+            }
+            super::tokens_copies_copy::copied_object(r, b)
+        });
     b.it = subject;
     let (of, tail) = parsed?;
     if !end(&tail).is_empty() {
