@@ -236,3 +236,81 @@ fn ninth_doctor_additional_upkeep_after_the_upkeep() {
     t.advance_to(P0, Step::Draw);
     assert_eq!(t.g.turn.upkeeps, 1);
 }
+
+#[test]
+fn diabolic_servitude_tracks_the_creature_it_returned() {
+    cr!("607.2a", "603.10a", "400.7");
+    supported("Diabolic Servitude");
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Diabolic Servitude");
+    t.settle();
+    t.resolve_all();
+    let returned = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(returned.len(), 1);
+    // Another creature dying doesn't trigger it.
+    let other = t.battlefield(P0, "Hill Giant");
+    crate::r_s02_common::destroy(&mut t, other);
+    assert_eq!(t.stack_len(), 0);
+    // The returned creature dies: it's exiled and Servitude returns to its owner's hand.
+    crate::r_s02_common::destroy(&mut t, returned[0]);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_hand(P0, "Diabolic Servitude"));
+}
+
+#[test]
+fn diabolic_servitude_leaving_exiles_the_creature() {
+    cr!("607.2a");
+    ruling!(
+        "Diabolic Servitude",
+        "If the creature is on the battlefield and is returned to its owner’s hand or is exiled, this card loses track of the creature and has no further effects in the future."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let servitude = t.enter(P0, "Diabolic Servitude");
+    t.settle();
+    t.resolve_all();
+    crate::r_s02_common::destroy(&mut t, servitude);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    // Returned to hand and recast: a new object Servitude doesn't track.
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let servitude = t.enter(P0, "Diabolic Servitude");
+    t.settle();
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant")[0];
+    let c = t.g.current(g);
+    t.g.move_object(c, mtg_engine::object::Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    let g2 = t.hand(P0, "Hill Giant");
+    let _ = g2;
+    t.settle();
+    crate::r_s02_common::destroy(&mut t, servitude);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Hill Giant"));
+}
+
+#[test]
+fn havengul_mystery_transforms_back_when_its_creature_leaves() {
+    cr!("607.2a", "701.27a");
+    supported("Havengul Laboratory");
+    let mut t = TestGame::new(2);
+    let lab = t.battlefield(P0, "Havengul Laboratory");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    assert!(mtg_engine::dfc::transform(&mut t.g, lab));
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(lab).chars.name.as_str(), "Havengul Mystery");
+    let returned = t.named_on_battlefield("Grizzly Bears")[0];
+    // It leaves the battlefield (bounced): Havengul Mystery transforms.
+    let c = t.g.current(returned);
+    t.g.move_object(c, mtg_engine::object::Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(lab).chars.name.as_str(), "Havengul Laboratory");
+}

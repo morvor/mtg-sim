@@ -33,6 +33,9 @@ pub const CAUSED_BY_EVENT_PLAYERS: &str = "event cause:its controller's";
 /// `Condition::Custom`: it's the untap step of the ability's controller's turn
 /// ("Whenever you untap one or more permanents during your untap step", CR 502.3).
 pub const DURING_YOUR_UNTAP_STEP: &str = "event time:during your untap step";
+/// `Filter::Custom`: an object the source's linked abilities noted, as it last existed
+/// (the creature put onto the battlefield with ~, as it dies: CR 603.10a, 607.2a).
+pub const NOTED_AS_IT_LAST_EXISTED: &str = "linked:noted, as it last existed";
 /// `Filter::Custom`: the spell or ability that caused the trigger event.
 pub const THE_CAUSE: &str = "event cause:the spell or ability";
 
@@ -65,7 +68,13 @@ impl KeywordRules for TriggerEvents {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
-        (name == THE_CAUSE).then(|| g.resolving == Some(id))
+        match name {
+            THE_CAUSE => Some(g.resolving == Some(id)),
+            NOTED_AS_IT_LAST_EXISTED => Some(
+                crate::linked_notes::noted(g, _ctx).contains(&crate::types::Entity::Object(id)),
+            ),
+            _ => None,
+        }
     }
 }
 

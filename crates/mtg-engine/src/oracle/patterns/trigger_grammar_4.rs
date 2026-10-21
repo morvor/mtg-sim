@@ -22,14 +22,24 @@
 //! during your untap step" (The Millennium Calendar: the permanents you control that
 //! become untapped then, as one batch), "Whenever ~ becomes untapped during your untap
 //! step" (The Ninth Doctor).
+//!
+//! The creature put onto the battlefield with ~ (CR 607.2a, linked abilities): "When ~
+//! enters, return target creature card from your graveyard to the battlefield." / "When
+//! the creature put onto the battlefield with ~ dies, exile it and return ~ to its owner's
+//! hand." / "When ~ leaves the battlefield, exile the creature put onto the battlefield
+//! with ~." (Diabolic Servitude; Havengul Mystery): the returning ability notes the
+//! permanent it put onto the battlefield ([`Effect::NoteLinked`]); the linked abilities
+//! refer to that object, which the source loses track of once it changes zones
+//! (CR 400.7).
 
-use super::{EffectPattern, TriggerPattern};
+use super::{AbilityPattern, EffectPattern, TriggerPattern};
 use crate::ability::*;
 use crate::kw::trigger_events::{
     CAUSED_BY_EVENT_PLAYERS, CAUSED_BY_OPPONENTS, CAUSED_BY_SPELL_OR_ABILITY,
     DURING_YOUR_UNTAP_STEP, THE_CAUSE,
 };
 use crate::oracle::effects::Builder;
+use crate::oracle::CompileContext;
 use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
 use crate::oracle::triggers::parse_trigger_condition;
 
@@ -271,6 +281,94 @@ fn during_untap_step(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: [untap event] during your untap step", priority: 100, parse: during_untap_step } }
+
+/// "the creature put onto the battlefield with ~".
+const PUT_WITH: &str = "the creature put onto the battlefield with ~";
+
+/// Whether the card refers to the creature an ability of it put onto the battlefield.
+fn card_refers_to_put_creature() -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.contains("the creature put onto the battlefield with ")
+}
+
+std::thread_local! {
+    static NOTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// An ability that returns a creature card to the battlefield ("When ~ enters, return
+/// target creature card from your graveyard to the battlefield.") on such a card: the
+/// permanent it returns is noted for the linked abilities.
+fn note_put_onto_battlefield(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    if NOTING.with(|n| n.get())
+        || !lower.contains("return target creature card ")
+        || !lower.contains(" to the battlefield")
+        || lower.contains("the creature put onto the battlefield with ")
+        || !card_refers_to_put_creature()
+    {
+        return None;
+    }
+    NOTING.with(|n| n.set(true));
+    let parsed = crate::oracle::parse_ability(block, ctx);
+    NOTING.with(|n| n.set(false));
+    let mut out = Vec::new();
+    for a in parsed? {
+        let mut kind = a.kind.clone();
+        let body = match &mut kind {
+            AbilityKind::Triggered(t) => &mut t.body,
+            AbilityKind::Activated(x) => &mut x.body,
+            _ => return None,
+        };
+        if !matches!(&body.effect, Effect::Move { what: Sel::Target(0), to } if to.zone == ZoneKind::Battlefield)
+            || body.modal.is_some()
+        {
+            return None;
+        }
+        let e = std::mem::take(&mut body.effect);
+        body.effect = Effect::seq(vec![
+            e,
+            Effect::NoteLinked {
+                what: Sel::Var(vars::IT),
+                replace: true,
+            },
+        ]);
+        out.push(AbilityDef::with_link(kind, a.text.clone(), a.link));
+    }
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "trigger grammar 4: return a creature card to the battlefield (noted for linked abilities)", priority: 45, parse: note_put_onto_battlefield } }
+
+/// "exile the creature put onto the battlefield with ~": the noted permanent.
+fn the_put_creature(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !l.contains(PUT_WITH) || b.named.iter().any(|(n, _)| n == PUT_WITH) {
+        return None;
+    }
+    b.named.push((PUT_WITH.into(), Sel::LinkedNoted));
+    let e = crate::oracle::effects::parse_sentence(l, b);
+    b.named.retain(|(n, _)| n != PUT_WITH);
+    e
+}
+
+inventory::submit! { EffectPattern { name: "trigger grammar 4: the creature put onto the battlefield with ~", priority: 30, parse: the_put_creature } }
+
+/// "the creature put onto the battlefield with ~ dies / leaves the battlefield".
+fn put_creature_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t).strip_prefix(PUT_WITH)?;
+    let (c, it, p) = parse_trigger_condition(&format!("whenever a creature{r}"))?;
+    // The noted permanent as it last existed on the battlefield (it has left).
+    let noted = |f: Filter| {
+        Filter::and(vec![f, Filter::Custom(crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED.into())])
+    };
+    let c = match c {
+        TriggerCond::Dies(f) => TriggerCond::Dies(noted(f)),
+        TriggerCond::LeavesBattlefield(f) => TriggerCond::LeavesBattlefield(noted(f)),
+        _ => return None,
+    };
+    Some((c, it, p))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: the creature put onto the battlefield with ~ dies", priority: 100, parse: put_creature_event } }
 
 #[cfg(test)]
 mod tests {
