@@ -122,3 +122,129 @@ fn haktos_has_protection_from_every_mana_value_but_the_chosen_one() {
     assert_eq!(unprotected.len(), 1, "{unprotected:?}");
     assert!((1..=3).contains(&unprotected[0]));
 }
+
+#[test]
+fn eon_frolicker_gives_you_and_your_planeswalkers_protection_from_that_player() {
+    cr!("702.16k");
+    ruling!(
+        "Eon Frolicker",
+        "Protection from a player means that you and each planeswalker you control have protection from each object controlled by that player"
+    );
+    supported("Eon Frolicker");
+    let mut t = TestGame::with_config(3, Default::default());
+    let otter = t.hand(P0, "Eon Frolicker");
+    let pw = t.battlefield(P0, "Ajani Goldmane");
+    let theirs = t.battlefield(P1, "Goblin Piker");
+    let other = t.battlefield(P2, "Goblin Piker");
+    t.lands(P0, "Island", 4);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, otter).go();
+    t.resolve_all();
+    t.g.recompute();
+    assert!(t.g.player_untargetable(P0, P1, Some(theirs)));
+    assert!(!t.g.player_untargetable(P0, P2, Some(other)));
+    assert!(t.g.protected_from(pw, theirs));
+    assert!(!t.g.protected_from(pw, other));
+}
+
+#[test]
+fn excavator_grants_landwalk_of_the_sacrificed_lands_types() {
+    cr!("702.14a", "702.14c");
+    ruling!("Excavator", "will gain landwalk of all those types");
+    supported("Excavator");
+    let mut t = TestGame::new(2);
+    let ex = t.battlefield(P0, "Excavator");
+    t.battlefield(P0, "Island");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, ex, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Island"));
+    crate::combat2_common::declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
+    assert!(crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
+    t.battlefield(P1, "Island");
+    assert!(!crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
+}
+
+/// The index of `word` among the options of the first "choose one of" instruction of
+/// `src`'s first activated ability.
+fn choice_index(t: &TestGame, src: ObjectId, word: &str) -> usize {
+    fn find(e: &ability::Effect, word: &str) -> Option<usize> {
+        match e {
+            ability::Effect::Seq(v) => v.iter().find_map(|x| find(x, word)),
+            ability::Effect::Choose {
+                kind: ability::ChoiceKind::OneOf(words),
+                ..
+            } => words.iter().position(|w| w == word),
+            _ => None,
+        }
+    }
+    t.g.obj(src)
+        .chars
+        .abilities
+        .iter()
+        .find_map(|a| match &a.kind {
+            ability::AbilityKind::Activated(act) => find(&act.body.effect, word),
+            _ => None,
+        })
+        .expect("no such choice")
+}
+
+#[test]
+fn barbarian_guides_snow_landwalk_of_the_chosen_type() {
+    cr!("702.14c");
+    ruling!(
+        "Barbarian Guides",
+        "if the defending player controls any snow lands with that subtype"
+    );
+    supported("Barbarian Guides");
+    let mut t = TestGame::new(2);
+    let guides = t.battlefield(P0, "Barbarian Guides");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 3);
+    let blocker = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Swamp");
+    t.set_step(P0, Step::PrecombatMain);
+    let i = choice_index(&t, guides, "Swamp");
+    t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+    t.activate(P0, guides, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    crate::combat2_common::declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
+    // A Swamp that isn't snow doesn't count.
+    assert!(crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
+    t.battlefield(P1, "Snow-Covered Swamp");
+    assert!(!crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
+    // The creature returns to its owner's hand at the beginning of the next end step.
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn teferi_phased_out_creatures_stay_out_until_after_your_next_turn() {
+    cr!("702.26a");
+    ruling!(
+        "Teferi, Timeless Voyager",
+        "they'll phase in during their controller's next untap step after your next turn"
+    );
+    supported("Teferi, Timeless Voyager");
+    let mut t = TestGame::new(2);
+    let teferi = t.battlefield(P0, "Teferi, Timeless Voyager");
+    t.g.objects[teferi.0 as usize]
+        .counters
+        .insert("loyalty".into(), 8);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, teferi, 2, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert!(t.g.obj(bears).phased_out);
+    // P1's next untap step: still phased out.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.g.obj(t.g.current(bears)).phased_out);
+    // After P0's next turn, P1's following untap step phases it in.
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.g.obj(t.g.current(bears)).phased_out);
+}

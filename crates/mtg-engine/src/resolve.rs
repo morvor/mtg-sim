@@ -903,6 +903,12 @@ impl Game {
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let mut effect = effect.clone();
+                // "protection from that player": the player as the effect begins.
+                if let PlayerModification::ProtectionFrom(f) | PlayerModification::HexproofFrom(f) =
+                    &mut effect
+                {
+                    *f = self.bind_target_players(f, ctx);
+                }
                 // CR 608.2h: amounts are determined as the effect begins.
                 crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
                 // "from that player's graveyard": that player, as the effect begins.
@@ -2650,6 +2656,33 @@ impl Game {
                         .map(Modification::AddKeyword)
                         .collect()
                 }
+                // "landwalk of each of the land types of the sacrificed land" (Excavator):
+                // one landwalk per land type it had as it last existed (CR 702.14a, 608.2h).
+                Modification::AddKeyword(k)
+                    if k.kind == KeywordKind::Landwalk
+                        && matches!(&k.filter, Some(Filter::Custom(n))
+                            if n.as_str() == crate::oracle::patterns::statics_4::LAND_TYPES_OF_SACRIFICED) =>
+                {
+                    let mut types: Vec<smol_str::SmolStr> = Vec::new();
+                    for e in ctx.vars.get(&vars::SACRIFICED).into_iter().flatten() {
+                        if let Some(o) = e.object() {
+                            for t in &self.obj(o).chars.subtypes {
+                                if crate::types::is_land_type(t) && !types.contains(t) {
+                                    types.push(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    types
+                        .into_iter()
+                        .map(|t| {
+                            let mut k = k.clone();
+                            k.text = Some(format!("{}walk", t.to_lowercase()).into());
+                            k.filter = Some(Filter::Subtype(t));
+                            Modification::AddKeyword(k)
+                        })
+                        .collect()
+                }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
                 Modification::AddAbilitiesOf { from, which, terms } => {
@@ -2691,6 +2724,14 @@ impl Game {
                     k.filter = Some(Filter::ControllerMatches(Box::new(PlayerFilter::Or(
                         opponents,
                     ))));
+                    Modification::AddKeyword(k)
+                }
+                // "gain protection from that player": the player as the effect begins.
+                Modification::AddKeyword(k)
+                    if matches!(&k.filter, Some(Filter::ControlledByPlayer(_))) =>
+                {
+                    let mut k = k.clone();
+                    k.filter = k.filter.as_ref().map(|f| self.bind_target_players(f, ctx));
                     Modification::AddKeyword(k)
                 }
                 // "Protection from each of that permanent's colors": the colors it has as
