@@ -299,3 +299,68 @@ fn f_loses_all_other_abilities(l: &str, prev: &mut Effect, b: &mut Builder) -> b
 }
 
 inventory::submit! { FollowupPattern { name: "statics 4: ~ loses all other abilities (after a characteristic rider)", priority: 1140, apply: f_loses_all_other_abilities } }
+
+/// The creature an "as enters" text-box exchange is with.
+const EXCHANGE_WITH: Var = vars::USER + 13374;
+
+/// "As ~ enters, you may exchange his text box and another creature's." (Deadpool, Trading
+/// Card): as it enters, its controller may choose another creature; the two exchange text
+/// boxes (CR 612.5) from then on.
+fn as_enters_exchange_text_box(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() || block.contains('\n') {
+        return None;
+    }
+    let text = crate::oracle::strip_ability_word(block.trim());
+    let lower = text.to_lowercase();
+    let l = end(&lower);
+    let r = l.strip_prefix("as ~ enters, you may exchange ")?;
+    if !matches!(
+        r,
+        "his text box and another creature's"
+            | "her text box and another creature's"
+            | "its text box and another creature's"
+            | "~'s text box and another creature's"
+    ) || !ctx.type_line.card_types.contains(crate::types::CardType::Creature)
+    {
+        return None;
+    }
+    let other = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: Filter::and(vec![
+            Filter::Other,
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::InZone(ZoneKind::Battlefield),
+        ]),
+        count: Value::c(1),
+        up_to: false,
+        store: None,
+    };
+    let body = Effect::May {
+        who: PlayerRef::You,
+        effect: Box::new(Effect::seq(vec![
+            Effect::Store {
+                var: EXCHANGE_WITH,
+                sel: other,
+            },
+            // Performed on the permanent as it's put onto the battlefield (CR 614.1c).
+            Effect::OnEntry(Box::new(Effect::Modify {
+                what: Sel::Union(vec![Sel::This, Sel::Var(EXCHANGE_WITH)]),
+                mods: vec![Modification::ExchangeText],
+                duration: Duration::Permanent,
+            })),
+        ])),
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::AsEnters(Box::new(body)),
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        block,
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "statics 4: as ~ enters, you may exchange its text box and another creature's", priority: 90, parse: as_enters_exchange_text_box } }

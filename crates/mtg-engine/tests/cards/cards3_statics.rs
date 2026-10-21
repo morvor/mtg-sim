@@ -397,3 +397,31 @@ fn old_growth_troll_returns_as_an_aura_whose_forest_can_make_a_troll() {
     // The Aura, attached to nothing, is put into the graveyard.
     assert!(t.in_graveyard(P0, "Old-Growth Troll"));
 }
+
+#[test]
+fn deadpool_exchanges_text_boxes_as_he_enters() {
+    cr!("612.5");
+    supported("Deadpool, Trading Card");
+    let mut t = TestGame::new(2);
+    let tim = t.battlefield(P1, "Prodigal Sorcerer");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(tim)]);
+    let dp = t.enter(P0, "Deadpool, Trading Card");
+    t.g.recompute();
+    let text = |t: &TestGame, o: ObjectId| -> Vec<String> {
+        t.g.obj(o)
+            .chars
+            .abilities
+            .iter()
+            .map(|a| a.text.to_string())
+            .collect()
+    };
+    let dp_text = text(&t, dp).join(" | ");
+    let tim_text = text(&t, tim).join(" | ");
+    assert!(dp_text.contains("damage"), "{dp_text}");
+    assert!(tim_text.contains("lose 3 life"), "{tim_text}");
+    // P1's Sorcerer now makes P1 lose 3 life in P1's upkeep.
+    t.advance_to(P1, Step::Draw);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20);
+}
