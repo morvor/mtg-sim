@@ -685,3 +685,23 @@ fn zurgo_and_ojutai_once_per_player_or_battle_dealt_damage() {
     assert_eq!(t.hand_size(P0), hand + 2);
     assert!(!t.in_hand(P0, "Shivan Dragon"));
 }
+
+#[test]
+fn imodane_spell_targeting_only_a_creature_dealing_damage_to_it() {
+    cr!("115.9c", "603.2");
+    supported("Imodane, the Pyrohammer");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Imodane, the Pyrohammer");
+    let giant = t.battlefield(P1, "Hill Giant");
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Object(giant)]);
+    t.resolve_all();
+    // 3 damage to each opponent.
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P2), 17);
+    // Targeting a player: no.
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(t.life(P2), 17);
+}

@@ -761,6 +761,45 @@ fn return_one_of_those(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "trigger grammar 4: you may return one of those [creatures] to its owner's hand", priority: 100, parse: return_one_of_those } }
 
+/// "an instant or sorcery spell you control that targets only a single creature deals
+/// damage to that creature" (Imodane, the Pyrohammer): the spell's only target is one
+/// creature (CR 115.9c), and the creature dealt damage is that target.
+fn spell_targeting_only_a_creature_deals_damage_to_it(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let spell = t.strip_suffix(" that targets only a single creature deals damage to that creature")?;
+    let (c, it, p) =
+        parse_trigger_condition(&format!("whenever {spell} deals damage to a creature"))?;
+    let TriggerCond::DealsDamage {
+        source,
+        to,
+        combat_only,
+    } = c
+    else {
+        return None;
+    };
+    let only = Filter::StackTargets(Box::new(TargetsFilter::Only {
+        objects: Some(Filter::creature()),
+        players: None,
+    }));
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::DealsDamage {
+                source: Filter::and(vec![source, only]),
+                to,
+                combat_only,
+            }),
+            cond: Condition::SelMatches(
+                Sel::TriggerObject,
+                Filter::TargetOf(Box::new(Sel::TriggerOtherObject)),
+            ),
+        },
+        it,
+        p,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: a spell that targets only a single creature deals damage to that creature", priority: 100, parse: spell_targeting_only_a_creature_deals_damage_to_it } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
