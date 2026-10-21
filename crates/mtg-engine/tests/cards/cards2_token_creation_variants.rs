@@ -274,3 +274,29 @@ fn liberated_livestock_may_attach_an_aura_to_each_token() {
         .unwrap();
     assert!(t.obj_now(host).is_token());
 }
+
+#[test]
+fn lucy_maclean_gives_another_player_a_copy_of_a_token_once_each_turn() {
+    cr!("115.1", "111.1", "603.2");
+    supported("Lucy MacLean, Positively Armed");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lucy MacLean, Positively Armed");
+    t.lands(P0, "Plains", 2);
+    let r = t.hand(P0, "Raise the Alarm");
+    let hand = t.hand_size(P0);
+    t.cast(P0, r).go();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    let soldiers = t.named_on_battlefield("Soldier Token");
+    let p1: Vec<_> = soldiers
+        .iter()
+        .filter(|o| t.obj_now(**o).controller == P1)
+        .collect();
+    // Only once each turn: one copy for P1, and P0 drew a card (P1 is an opponent).
+    assert_eq!(soldiers.len(), 3);
+    assert_eq!(p1.len(), 1);
+    assert_eq!(t.hand_size(P0), hand - 1 + 1);
+}
