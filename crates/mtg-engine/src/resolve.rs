@@ -1427,8 +1427,22 @@ impl Game {
                 }
             }
             Effect::EnterCopyExceptions(mods) => {
+                // A power and toughness given by a value ("equal to ~'s power and
+                // toughness") is fixed as the replacement applies, from the entering
+                // object as it is now (CR 707.9b).
+                let mods: Vec<Modification> = mods
+                    .iter()
+                    .map(|m| match m {
+                        Modification::SetPT(..) => self
+                            .fix_mods(std::slice::from_ref(m), ctx)
+                            .into_iter()
+                            .next()
+                            .unwrap_or_else(|| m.clone()),
+                        m => m.clone(),
+                    })
+                    .collect();
                 if let Some(e) = ctx.entering.as_mut() {
-                    e.copy_exceptions.extend(mods.iter().cloned());
+                    e.copy_exceptions.extend(mods);
                 }
             }
             Effect::EnterCopyExtra {
