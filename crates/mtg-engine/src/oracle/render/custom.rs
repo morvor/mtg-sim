@@ -445,8 +445,9 @@ impl Renderer<'_> {
                 number_word(min)
             ),
             "max_mana_spent_of_one_color" => format!(
-                "at least {} mana of the same color was spent to cast it",
-                number_word(min)
+                "at least {} mana of the same color was spent to cast {}",
+                number_word(min),
+                self.me()
             ),
             _ => return None,
         })
@@ -527,11 +528,13 @@ impl Renderer<'_> {
             "turn:this dealt damage to an opponent" => {
                 format!("{} dealt damage to an opponent this turn", me(self))
             }
+            // A spell's own cost: the spell isn't cast until its costs are paid (CR
+            // 601.2i), so "a spell" cast this turn is another one.
             "spell_costs:cast_another_spell_this_turn" => {
-                "you've cast another spell this turn".into()
+                "you've cast {alt:another|a} spell this turn".into()
             }
             "spell_costs:cast_another_instant_or_sorcery_this_turn" => {
-                "you've cast another instant or sorcery spell this turn".into()
+                "you've cast {alt:another|an} instant or sorcery spell this turn".into()
             }
             "dethrone:it's attacking the player with the most life" => {
                 "it's attacking the player with the most life or tied for most life".into()
