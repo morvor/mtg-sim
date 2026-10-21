@@ -243,10 +243,18 @@ pub fn trigger_in_range(g: &Game, t: &PendingTrigger) -> bool {
     }
     // "Whenever [a creature] becomes blocked": the event is the creature becoming blocked.
     // The blockers are recorded for reference, but they aren't part of it (unlike
-    // "becomes blocked by a creature"; CR 801.7's example).
+    // "becomes blocked by a creature"; CR 801.7's example). Likewise for "attacks",
+    // "blocks" and "blocks or becomes blocked": what the creature attacks, the other
+    // attackers, and the creature it blocks or is blocked by aren't part of the event
+    // (interpretation `range-combat-trigger-events`).
     if let crate::ability::AbilityKind::Triggered(ta) = &t.ability.kind {
-        if matches!(ta.trigger, crate::ability::TriggerCond::BecomesBlocked(_)) {
+        use crate::ability::TriggerCond as T;
+        if matches!(
+            ta.trigger,
+            T::Attacks(_) | T::Blocks(_) | T::BecomesBlocked(_) | T::BlocksOrBecomesBlocked(_)
+        ) {
             let mut ev = t.event.clone();
+            ev.player = None;
             ev.other = None;
             ev.objects.clear();
             return event_in_range(g, t.controller, &ev);
