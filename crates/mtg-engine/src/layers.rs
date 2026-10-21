@@ -2088,7 +2088,9 @@ fn copied_ability(a: &Ability, effect: u32) -> Ability {
 /// The link id an ability with link `link` has when an object has it through the copy
 /// effect `effect` (see [`copied_ability`]).
 pub(crate) fn copied_link(link: u16, effect: u32) -> u16 {
-    0x4000 | ((link as u32 * 131 + effect * 37) % 0x3fff) as u16
+    // 0x4000 to 0x7ffd: below haunt's and the pregame links (`kw::haunt::HAUNT_LINK`,
+    // `ability::PREGAME_LINK`).
+    0x4000 | ((link as u32 * 131 + effect * 37) % 0x3ffe) as u16
 }
 
 /// CR 205.3d: an object can't gain a subtype that doesn't correspond to one of its types.

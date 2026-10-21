@@ -16,10 +16,6 @@ fn p0_upkeep(t: &mut TestGame) {
 fn exiling_more_cards_than_the_library_has_cant_be_paid() {
     cr!("702.24a", "118.3");
     ruling!(
-        "Arctic Wolves",
-        "Partial payments of the total cumulative upkeep cost can’t be made"
-    );
-    ruling!(
         "Thought Lash",
         "If you don’t pay Thought Lash’s cumulative upkeep, you’ll sacrifice Thought Lash as normal"
     );

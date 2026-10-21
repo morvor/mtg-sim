@@ -41,7 +41,9 @@ fn library_costs_are_paid_after_every_other_cost() {
 
 #[test]
 fn a_reversed_action_also_reverses_a_draw_made_while_attempting_it() {
+    cr!("605.1b");
     interp!("illegal-action-reversal-restores-libraries");
+    interp!("reversal-undoes-mana-abilities");
     let mut t = TestGame::new(2);
     // A triggered mana ability may move cards from a library (CR 605.1b, unlike an
     // activated one, 605.1a).
@@ -93,4 +95,40 @@ fn a_reversed_action_also_reverses_a_draw_made_while_attempting_it() {
     let drawn = t.g.current(top);
     assert_eq!(t.g.obj(drawn).zone, Zone::Hand(P0));
     assert_eq!((t.hand_size(P0), t.library_size(P0)), (hand, library - 1));
+}
+
+#[test]
+fn a_reversed_cast_reverses_its_mana_abilities() {
+    cr!("733.1", "601.2g");
+    interp!("reversal-undoes-mana-abilities");
+    use mtg_engine::game::EventObserver;
+    use std::sync::{Arc, Mutex};
+    let mut t = TestGame::new(2);
+    // "{T}, Sacrifice Lotus Petal: Add one mana of any color." P0 controls no creature.
+    let petal = t.battlefield(P0, "Lotus Petal");
+    let mut offering = custom_card(
+        "Hollow Offering",
+        "Instant",
+        None,
+        "As an additional cost to cast this spell, sacrifice a creature.\nYou gain 1 life.",
+    );
+    let cost = mtg_engine::mana::ManaCost::parse("{W}").unwrap();
+    offering.faces[0].chars.colors = cost.colors();
+    offering.faces[0].chars.mana_cost = Some(cost);
+    let spell = t.custom(P0, offering, Zone::Hand(P0));
+    let sacrificed: Arc<Mutex<bool>> = Arc::default();
+    let s2 = sacrificed.clone();
+    t.g.observer = Some(EventObserver::new(move |_, ev| {
+        if matches!(ev, Event::ZoneChange { old, to: Zone::Graveyard(_), .. } if *old == petal) {
+            *s2.lock().unwrap() = true;
+        }
+    }));
+    let r = t.cast(P0, spell).method(CastMethod::Normal).try_go();
+    assert!(r.is_err());
+    // Paying {W} sacrificed the Petal for mana; then the creature to sacrifice was missing.
+    assert!(*sacrificed.lock().unwrap());
+    // The mana ability is reversed with the cast: the Petal is back, the mana is gone.
+    assert!(t.on_battlefield(petal));
+    assert!(t.g.player(P0).mana_pool.mana.is_empty());
+    assert_eq!(t.g.obj(spell).zone, Zone::Hand(P0));
 }

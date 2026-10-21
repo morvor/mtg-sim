@@ -122,7 +122,8 @@ fn gained_link(link: u16, granter: u32, from: u32) -> u16 {
 
 /// The links of the abilities a resolving effect gives ([`snapshot`]): from `0xC000` on,
 /// apart from printed links (below `0x4000`), the links of copied abilities (`0x4000` to
-/// `0x7ffe`, see `layers::copied_link`) and those of abilities a continuously
+/// `0x7ffd`, see `layers::copied_link`; haunt's and the pregame links are `0x7ffe` and
+/// `0x7fff`) and those of abilities a continuously
 /// reevaluated effect gives (`0x8000` to `0xbfff`, [`gained_link`]).
 pub const FRESH_LINK_BASE: u16 = 0xC000;
 const FRESH_LINK_COUNT: u32 = 0x4000;
@@ -144,8 +145,24 @@ fn links_in_use(g: &Game) -> std::collections::HashSet<u16> {
         used.extend(o.linked_choices.keys().copied());
         used.extend(o.linked.keys().copied());
         used.extend(o.created_by.map(|(_, l)| l));
+        // Abilities on the stack (their effects may still note data under their link).
+        if let Some(si) = o.stack.as_deref() {
+            if let crate::object::StackKind::Activated { ability, .. }
+            | crate::object::StackKind::Triggered { ability, .. } = &si.kind
+            {
+                used.insert(ability.link);
+            }
+        }
     }
     used.extend(g.linked_notes.links());
+    // Triggered abilities waiting to be put on the stack, delayed triggers and saved
+    // resolution contexts carry the link of the ability that created them.
+    for t in &g.pending_triggers {
+        used.insert(t.ability.link);
+        used.extend(t.saved.as_ref().map(|c| c.link));
+    }
+    used.extend(g.delayed_triggers.iter().map(|d| d.ctx.link));
+    used.extend(g.saved_ctx.values().map(|c| c.link));
     for e in &g.effects {
         for m in &e.mods {
             if let Modification::AddAbility(a) = m {

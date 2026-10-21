@@ -151,6 +151,12 @@ Not bugs in the rules, but found and handled by the properties:
   provisional deviation `illegal-action-reversal-restores-libraries`
   (docs/interpretations/stack-casting-costs.md, with the cards found). The scan also found
   that Thought Lash's cumulative upkeep could be paid in part; that's fixed.
+* **Links of abilities continuous effects give are hashes.** Abilities a static or
+  other continuously reevaluated effect gives (`layers::acquired_ability`,
+  `ability_grants::gained_link`) get links hashed from the ability, the granter and the
+  source into 0x8000–0xbfff, recomputed each time characteristics are; two such grants to
+  one object could, very rarely, hash to the same link (CR 607.5). Links resolving
+  effects give are numbered per game (0xc000 on) and can't collide.
 * **Ability ids depend on the process.** They come from a global counter (`ability.rs`)
   and are assigned as abilities are first needed, so the ids in protocol requests
   (`action.ability`) differ between processes unless both play the same games in the same
