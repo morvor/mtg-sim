@@ -9,6 +9,7 @@ use mtg_engine::*;
 #[test]
 fn a_player_who_keeps_attempting_illegal_actions_passes_priority() {
     cr!("733.2", "117.3d");
+    interp!("default-priority-pass");
     let mut t = TestGame::new(2);
     let giant = t.hand(P0, "Hill Giant");
     t.g.turn.passes = 0;

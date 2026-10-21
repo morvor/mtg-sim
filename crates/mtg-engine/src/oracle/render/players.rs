@@ -307,6 +307,7 @@ impl Renderer<'_> {
                     TargetGroup::ShareCreatureType => "that share a creature type".to_string(),
                     TargetGroup::ShareCardType => "that share a card type".to_string(),
                     TargetGroup::SharePermanentType => "that share a permanent type".to_string(),
+                    TargetGroup::ShareLandType => "that share a land type".to_string(),
                     g => self.target_group(g),
                 };
                 // "two target creature cards that share a creature type from your
@@ -351,6 +352,7 @@ impl Renderer<'_> {
             TargetGroup::ShareCreatureType => "that share a creature type".into(),
             TargetGroup::ShareCardType => "that share a card type".into(),
             TargetGroup::SharePermanentType => "that share a permanent type".into(),
+            TargetGroup::ShareLandType => "that share a land type".into(),
             TargetGroup::ShareNoCreatureType => "that share no creature types".into(),
             TargetGroup::DifferentNames => "with different names".into(),
             TargetGroup::DifferentControllers => "with different controllers".into(),
@@ -936,13 +938,30 @@ impl Renderer<'_> {
                 let p = self.player(p, Case::Poss);
                 decline(format!("the top card of {p} graveyard"), case)
             }
+            Sel::BottomOfLibrary(p, n) => {
+                let p = self.player(p, Case::Poss);
+                let s = match n {
+                    Value::Const(1) => format!("the bottom card of {p} library"),
+                    other => {
+                        let v = self.value(other);
+                        format!("the bottom {v} cards of {p} library")
+                    }
+                };
+                decline(s, case)
+            }
             Sel::TopOfLibrary(p, n) => {
                 let p = self.player(p, Case::Poss);
                 let s = match n {
                     Value::Const(_) | Value::EventAmount | Value::Prev => self.top_cards(n, &p),
                     other => {
                         let v = self.value(other);
-                        format!("the top {v} cards of {p} library")
+                        // "a number of cards from the top of your library equal to the
+                        // number of ...": the same cards, the number said after them.
+                        if !matches!(other, Value::X | Value::Var(_)) {
+                            format!("a number of cards from the top of {p} library equal to {v}")
+                        } else {
+                            format!("the top {v} cards of {p} library")
+                        }
                     }
                 };
                 decline(s, case)
@@ -1347,6 +1366,14 @@ impl Renderer<'_> {
             PlayerFilter::LessThanHalfStartingLife => {
                 "with less than half their starting life total".into()
             }
+            // "each player who does" (see `opt_in.rs`).
+            PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::Var(x) if self.opt_in_quality(*x, true).is_some()) =>
+            {
+                let PlayerRef::Var(x) = r.as_ref() else {
+                    return String::new();
+                };
+                self.opt_in_quality(*x, true).unwrap_or_default()
+            }
             PlayerFilter::Ref(r) => {
                 let p = self.player(r, Case::Obj);
                 format!("who is {p}")
@@ -1378,6 +1405,17 @@ impl Renderer<'_> {
                     PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::Var(vars::SACRIFICED)))) =>
             {
                 "who {alt:can't|didn't sacrifice a permanent this way}".into()
+            }
+            // "each player who doesn't" (see `opt_in.rs`).
+            PlayerFilter::Not(x) if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::Var(v) if self.opt_in_quality(*v, false).is_some())) =>
+            {
+                let PlayerFilter::Ref(r) = x.as_ref() else {
+                    return String::new();
+                };
+                let PlayerRef::Var(v) = r.as_ref() else {
+                    return String::new();
+                };
+                self.opt_in_quality(*v, false).unwrap_or_default()
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);

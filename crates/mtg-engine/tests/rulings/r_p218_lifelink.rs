@@ -23,8 +23,7 @@ fn a_spell_with_lifelink_gains_life_only_for_damage_it_deals() {
         "Soulfire Grand Master",
         "An instant or sorcery spell with lifelink causes its controller to gain life only if it’s the source of any damage that’s dealt. An instant or sorcery spell with lifelink that causes another source to deal damage won’t cause its controller to gain life."
     );
-    // Only its last ability doesn't compile; the lifelink grant does.
-    crate::r_p190_mana_costs::only_unsupported("Soulfire Grand Master", "The next time you cast");
+    supported("Soulfire Grand Master");
     // "Instant and sorcery spells you control have lifelink." Lightning Bolt deals the
     // damage itself: P0 gains 3.
     let mut t = TestGame::new(2);

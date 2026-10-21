@@ -329,7 +329,13 @@ impl Game {
                 if !self.is_live(*t) {
                     continue;
                 }
-                let mut v = (**values).clone();
+                // A flipped permanent copying a flip card has its alternative
+                // characteristics (CR 707.3, 110.5c).
+                let mut v = if self.objects[t.0 as usize].flipped {
+                    crate::flip::flipped_copy_values(values).unwrap_or_else(|| (**values).clone())
+                } else {
+                    (**values).clone()
+                };
                 v.abilities = v
                     .abilities
                     .iter()
@@ -1205,6 +1211,7 @@ impl Game {
                 Modification::AddAbility(_)
                     | Modification::AddKeyword(_)
                     | Modification::AddKeywordX(..)
+                    | Modification::AddKeywordOwnCost(..)
                     | Modification::AddKeywordsOf { .. }
                     | Modification::AddAbilitiesOf { .. }
             );
@@ -1367,12 +1374,40 @@ impl Game {
                 if !self.ability_functions(o, s.zone, s.is_cda) {
                     continue;
                 }
+                let ctl = o.controller;
+                // "You can't cast ~ unless an opponent lost life this turn", "cast ~ only
+                // during your turn": "you" is the player who would cast it (CR 109.5), not
+                // the card's owner while it's in a hidden or public zone, so the condition
+                // is checked for each player and the restriction applies to those it holds
+                // for.
+                if let (
+                    Some(c),
+                    StaticEffect::Restriction(Restriction::CantCast {
+                        who: PlayerFilter::Any,
+                        what: Filter::Source,
+                    }),
+                ) = (&s.condition, &s.effect)
+                {
+                    for p in self.player_ids() {
+                        if self.eval_cond(c, &Ctx::new(Some(id), p)) {
+                            crate::structure::record(a, &o.chars.name, "static");
+                            st.restrictions.push((
+                                id,
+                                ctl,
+                                Restriction::CantCast {
+                                    who: PlayerFilter::Is(p),
+                                    what: Filter::Source,
+                                },
+                            ));
+                        }
+                    }
+                    continue;
+                }
                 if let Some(c) = &s.condition {
                     if !self.eval_cond(c, &Ctx::new(Some(id), o.controller)) {
                         continue;
                     }
                 }
-                let ctl = o.controller;
                 if !matches!(
                     s.effect,
                     StaticEffect::Continuous { .. } | StaticEffect::Replacement(_)
@@ -1677,6 +1712,24 @@ pub fn keywords_of(g: &Game, kinds: &[KeywordKind], from: &Filter, ctx: &Ctx) ->
 }
 
 /// Applies a single layer modification to a set of characteristics.
+/// The keyword `k` with a cost equal to the mana cost of the object with characteristics
+/// `c`, reduced by {`reduce`} generic mana (`Modification::AddKeywordOwnCost`). An object
+/// without a mana cost gets a cost that can't be paid (CR 118.6).
+pub fn own_cost_keyword(
+    k: &crate::keywords::Keyword,
+    reduce: u32,
+    c: &Characteristics,
+) -> crate::keywords::Keyword {
+    let mut k = k.clone();
+    let mut m = c
+        .mana_cost
+        .clone()
+        .unwrap_or_else(crate::cost_rules::unpayable);
+    m.reduce_generic(reduce);
+    k.cost = Some(Cost::mana(m));
+    k
+}
+
 pub fn apply_mod(
     c: &mut Characteristics,
     m: &Modification,
@@ -1902,6 +1955,9 @@ pub fn apply_mod(
                 }
             }
             apply_mod(c, &Modification::AddKeyword(k), g, ctx, _target);
+        }
+        Modification::AddKeywordOwnCost(k, reduce) => {
+            apply_mod(c, &Modification::AddKeyword(own_cost_keyword(k, *reduce, c)), g, ctx, _target);
         }
         Modification::AddKeywordsOf { kinds, from } => {
             for k in keywords_of(g, kinds, from, ctx) {

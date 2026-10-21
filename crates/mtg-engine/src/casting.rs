@@ -225,7 +225,11 @@ pub fn cast_during_resolution_as(
     // CR 608.2g, 601.2b: a spell cast with its costs paid while an effect resolves may be
     // cast for an alternative cost the card has (evoke, emerge, ...) rather than its mana
     // cost.
-    if method == CastMethod::Normal && !keyword_way && face == FaceState::Front {
+    if method == CastMethod::Normal
+        && !keyword_way
+        && face == FaceState::Front
+        && crate::permissions::resolution_alt_cost(g).is_none()
+    {
         let mut alts = resolution_alternative_costs(g, p, card);
         if !alts.is_empty() {
             let mut names = vec![format!("Cast {}", g.obj(card).chars.name)];
@@ -237,11 +241,29 @@ pub fn cast_during_resolution_as(
         }
     }
     opt.any_time = true;
+    // "You may cast that card by paying {1} rather than paying its mana cost" (CR 118.9).
+    if let Some(cost) = crate::permissions::resolution_alt_cost(g)
+        .filter(|_| method == CastMethod::Normal && opt.alt_cost.is_none())
+    {
+        let mv = g
+            .face_characteristics(card, face)
+            .mana_cost
+            .as_ref()
+            .map_or(0, |m| m.mana_value_with_x(0));
+        opt.alt_cost = Some(crate::permissions::spell_relative_cost(&cost, mv));
+        if matches!(opt.method, CastMethod::Normal | CastMethod::Half(_)) {
+            opt.method = CastMethod::Alternative(PERMISSION_COST);
+        }
+    }
     if method == CastMethod::Free {
         if !keyword_way {
             opt.method = CastMethod::Free;
         }
         opt.alt_cost = Some(Cost::free());
+    }
+    // A land can't be cast, even by an effect that lets a player cast cards (CR 305.9).
+    if g.option_characteristics(card, &opt).is_land() {
+        return Err(Illegal("a land can't be cast".into()));
     }
     g.cast_with_option(p, card, opt)
 }
@@ -1398,6 +1420,14 @@ impl Game {
         // CR 307.5a: whether a sorcery could have been cast now (checked before the spell
         // is on the stack).
         let sorcery_time = !opt.any_time && self.has_priority(p) && self.is_sorcery_timing(p);
+        // Begun as though it had flash only because an effect lets spells with certain
+        // qualities be cast that way (CR 601.3b): checked again as proposed (below).
+        let by_flash_permission = !sorcery_time && !opt.any_time && !opt.flash && {
+            let c = self.option_characteristics(card, opt);
+            !c.is(CardType::Instant)
+                && !c.has_keyword(KeywordKind::Flash)
+                && self.flash_permitted(p, card, &c)
+        };
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -1737,6 +1767,17 @@ impl Game {
         {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
+        // CR 601.3b: a spell begun as though it had flash because an effect lets spells
+        // with certain qualities be cast that way ("if X is 3 or less", "if it targets a
+        // permanent you control") must have them as proposed.
+        if by_flash_permission
+            && !proposed.has_keyword(KeywordKind::Flash)
+            && !self.flash_permitted(p, id, &proposed)
+        {
+            return Err(Illegal(
+                "the proposed spell can't be cast as though it had flash".into(),
+            ));
+        }
         // The permission it's cast with must allow the spell as proposed: "a permanent
         // spell with mana value 2 or less" with the value chosen for X (CR 601.3e).
         if let Some(c) = &opt.permission {
@@ -1797,7 +1838,28 @@ impl Game {
             all_creature_types: crate::kw::changeling::every_creature_type(&chars),
             has_x: base_cost_has_x,
             source: Some(id),
-            any_color: self.any_color_mana(p, id, false),
+            any_color: {
+                let mut v = self.any_color_mana(p, id, false);
+                // "you may spend colorless mana as though it were mana of any color to cast
+                // that spell" (the permission it's cast with, CR 609.4b).
+                if let Some(t) = opt
+                    .permission
+                    .as_ref()
+                    .and_then(|c| c.terms.spend_type_as_any_color)
+                {
+                    v.push(t);
+                }
+                v
+            },
+            // "you may spend mana from snow sources as though it were mana of any color to
+            // cast those spells".
+            rules: crate::mana::SpendRules {
+                snow_any_color: opt
+                    .permission
+                    .as_ref()
+                    .is_some_and(|c| c.terms.snow_as_any_color),
+                ..Default::default()
+            },
             check_only: false,
             class_level: false,
             cost_of: Some(crate::rule_statics::payment::CostOf::Spell),
@@ -1942,7 +2004,15 @@ impl Game {
         // "A spell cast this way costs {2} more to cast": an increase that comes with the
         // permission it's cast with.
         let more = match &opt.permission {
-            Some(c) => c.terms.cost_increase,
+            Some(c) => {
+                // "if you pay {1} more to cast it for each other creature card in your
+                // graveyard" (counted as the cost is determined).
+                let each = c.terms.cost_increase_each.as_ref().map_or(0, |v| {
+                    let ctx = Ctx::new(c.source, p);
+                    self.eval_value(v, &ctx).max(0) as u32
+                });
+                c.terms.cost_increase + each
+            }
             None => crate::kw::play_permission_terms::cost_increase(self, card),
         };
         if more > 0 {
@@ -2006,6 +2076,18 @@ impl Game {
             if applies {
                 changes.add(self, &mut cost, &cm.change, &ctx);
             }
+        }
+        // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
+        // permission it's cast with.
+        if let Some(n) = opt
+            .permission
+            .as_ref()
+            .map(|c| c.terms.cost_reduction)
+            .filter(|n| *n > 0)
+        {
+            changes
+                .reductions
+                .push(crate::activation_costs::Reduction::Generic(n));
         }
         let generic = |c: &Cost| c.mana.as_ref().map_or(0, |m| m.generic_amount());
         let before = generic(&cost);

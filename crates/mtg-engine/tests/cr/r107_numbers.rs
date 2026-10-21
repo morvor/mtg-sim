@@ -52,6 +52,7 @@ fn aspect_of_wolf_rounds_x_down_and_y_up() {
 #[test]
 fn power_can_be_negative_but_deals_no_damage() {
     cr!("107.1b");
+    cr_example!("107.1b", "If a 3/4 creature gets -5/-0, it's a -2/4 creature.");
     let mut t = TestGame::new(2);
     // A 3/4 creature gets -5/-0: it's a -2/4 creature.
     let c = put(&mut t, P0, vanilla("Three Four", "{3}", 3, 4));
@@ -102,6 +103,7 @@ fn power_can_be_negative_but_deals_no_damage() {
 #[test]
 fn negative_calculation_yields_zero_viridian_joiner() {
     cr!("107.1b");
+    cr_example!("107.1b", "Viridian Joiner");
     let mut t = TestGame::new(2);
     // Viridian Joiner: "{T}: Add an amount of {G} equal to this creature's power."
     let joiner = t.battlefield(P0, "Viridian Joiner");
@@ -136,6 +138,7 @@ fn negative_calculation_yields_zero_viridian_joiner() {
 #[test]
 fn negative_calculation_yields_zero_chameleon_colossus() {
     cr!("107.1b", "107.3c");
+    cr_example!("107.1b", "Chameleon Colossus");
     let mut t = TestGame::new(2);
     // Chameleon Colossus: "{2}{G}{G}: This creature gets +X/+X until end of turn, where X
     // is its power." With -6/-0 it's a -2/4; activating keeps it -2/4 (not -4/2).

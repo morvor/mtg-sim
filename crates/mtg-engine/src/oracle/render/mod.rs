@@ -13,6 +13,7 @@
 mod ability_cost_terms;
 mod activation_triggers;
 mod block_pairs;
+mod cast_history_terms;
 mod chosen_from_targets;
 pub mod compare;
 mod condition_terms;
@@ -28,6 +29,7 @@ mod dig;
 mod each_player;
 mod effect_terms;
 mod effects;
+mod events_happened;
 mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
@@ -36,11 +38,14 @@ mod joined_lines;
 mod keywords;
 mod library_top;
 mod more_terms;
+mod next_time;
 mod nouns;
 mod once_each_turn;
+mod opt_in;
 mod outcomes;
 mod play_terms;
 mod players;
+mod remembered_groups;
 mod replacement_terms;
 mod spell_cost_terms;
 mod statics;
@@ -860,6 +865,13 @@ pub struct Renderer<'a> {
     pub(crate) play_terms: Option<PlayTerms>,
     /// An earlier instruction of the sequence being rendered exiled objects.
     pub(crate) after_exile: bool,
+    /// Rendering a permission given "during any turn [something happened]": the card
+    /// leaves its usual duration ("for as long as it remains exiled") unsaid.
+    pub(crate) any_turn_permission: bool,
+    /// The players an opt-in choice being rendered recorded (who accepted, who did it),
+    /// with what they did ("discarded a card" / "discard a card"), for "each player who
+    /// doesn't" (see `opt_in.rs`).
+    pub(crate) opt_in_vars: Vec<(Var, String, String)>,
     /// Variables an earlier instruction of the sequence being rendered filled with the
     /// objects it acted on, and what it did to them ("destroyed", "discarded"): "the
     /// number of creatures destroyed this way" (see `tail_parts.rs`).
@@ -911,6 +923,17 @@ pub struct Renderer<'a> {
 }
 
 impl<'a> Renderer<'a> {
+    /// Runs `f`; when it says nothing, undoes whatever it changed (targets mentioned,
+    /// gaps, the object last named), so another wording can be tried.
+    pub(crate) fn attempt<T>(&mut self, f: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
+        let before = self.clone();
+        let r = f(self);
+        if r.is_none() {
+            *self = before;
+        }
+        r
+    }
+
     /// Renders two wordings of the same thing from the same state (each sees the state
     /// as it was before either), keeping the state the second leaves and the gaps of both.
     pub(crate) fn two_ways(
@@ -992,6 +1015,8 @@ impl<'a> Renderer<'a> {
             plural_vars: Vec::new(),
             play_terms: None,
             after_exile: false,
+            any_turn_permission: false,
+            opt_in_vars: Vec::new(),
             this_way: Vec::new(),
             stored_this_way: Vec::new(),
             each_target: None,

@@ -178,6 +178,17 @@ impl KeywordRules for Foretell {
         ) {
             return Some(Err(Illegal("can't pay {2}".into())));
         }
+        // A foretell cost an effect gave the card in the hand ("Each nonland card in your
+        // hand without foretell has foretell. Its foretell cost is equal to its mana cost
+        // reduced by {2}."): the foretold card keeps it (CR 702.143a, 702.143e).
+        let printed = foretell_cost(g, card).map(|c| format!("{c:?}"));
+        let granted = g
+            .obj(card)
+            .chars
+            .keywords()
+            .filter(|k| k.kind == KeywordKind::Foretell)
+            .filter_map(|k| k.cost.clone())
+            .find(|c| Some(format!("{c:?}")) != printed);
         let new = g.move_object_ev(MoveEv {
             obj: card,
             to: Zone::Exile,
@@ -191,7 +202,7 @@ impl KeywordRules for Foretell {
             source: None,
         });
         if let Some(new) = new {
-            crate::special_actions::mark(g, new, KeywordKind::Foretell);
+            crate::special_actions::mark_with_cost(g, new, KeywordKind::Foretell, granted);
             // CR 702.143a, 406.3: the player may look at it as long as it remains exiled.
             crate::zones::allow_look(g, p, new);
             // CR 702.143c: the player foretold a card.

@@ -124,6 +124,7 @@ fn zero_symbol_costs_nothing() {
 #[test]
 fn hybrid_symbols() {
     cr!("107.4e");
+    cr_example!("107.4e", "{G/W}{G/W} can be paid by spending {G}{G}, {G}{W}, or {W}{W}");
     // Example: {G/W}{G/W} can be paid by spending {G}{G}, {G}{W}, or {W}{W}.
     for p in [[G, G], [G, W], [W, W]] {
         assert!(payable("{G/W}{G/W}", &p, 0).is_some());
@@ -149,6 +150,7 @@ fn hybrid_symbols() {
 #[test]
 fn phyrexian_symbols() {
     cr!("107.4f");
+    cr_example!("107.4f", "by spending {W} and paying 2 life, or by paying 4 life");
     // Example: {W/P}{W/P} can be paid by spending {W}{W}, by spending {W} and paying 2
     // life, or by paying 4 life.
     assert_eq!(payable("{W/P}{W/P}", &[W, W], 20), Some(0));

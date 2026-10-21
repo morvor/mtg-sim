@@ -114,6 +114,27 @@ thread_local! {
     static OWN_ONLY: Cell<bool> = const { Cell::new(false) };
 }
 
+/// Runs `f` (an effect that may cast spells as it resolves) with the terms those spells
+/// are cast with: "You may cast that card by paying {1} rather than paying its mana cost"
+/// (CR 608.2g, 118.9). The terms are kept on the game, not in the effect's context, so
+/// delayed triggers the effect creates (which copy its context) don't carry them.
+pub fn with_resolution_terms<R>(
+    g: &mut Game,
+    terms: &PlayTerms,
+    f: impl FnOnce(&mut Game) -> R,
+) -> R {
+    let prev = std::mem::replace(&mut g.resolution_alt_cost, terms.alt_cost.clone());
+    let r = f(g);
+    g.resolution_alt_cost = prev;
+    r
+}
+
+/// The alternative cost spells cast while an effect resolves are cast for, if its terms
+/// give one (see [`with_resolution_terms`]).
+pub fn resolution_alt_cost(g: &Game) -> Option<Cost> {
+    g.resolution_alt_cost.clone()
+}
+
 /// Whether only the card's own permissions (rules, its own abilities) count right now.
 pub fn own_only() -> bool {
     OWN_ONLY.with(|c| c.get())
@@ -161,6 +182,9 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
                 o.zone == Zone::Library(p)
             }
         }
+        // "from the top of your graveyard", "from any graveyard".
+        ZoneKind::Graveyard if perm.terms.any_owner => matches!(o.zone, Zone::Graveyard(_)),
+        ZoneKind::Graveyard if perm.top_only => g.player(p).graveyard.last() == Some(&card),
         ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
         ZoneKind::Exile => o.zone == Zone::Exile,
         ZoneKind::Hand => o.zone == Zone::Hand(p),
@@ -228,6 +252,7 @@ pub fn allowing(
             once: None,
             qualities,
         });
+        free_option(g, card, chars, land, &ctx, &mut out);
     }
     // CR 601.3f, 406.3b: a face-down card in exile can be cast because of a permission to
     // cast spells "with certain qualities" only by a player who may look at it (and then
@@ -274,6 +299,7 @@ pub fn allowing(
             once: once.clone().map(|slot| (*src, slot)),
             qualities: Some((spell_qualities(&f), Some(*src), *ctl)),
         });
+        free_option(g, card, chars, land, &ctx, &mut out);
     }
     out.sort_by_key(|c| {
         (
@@ -283,6 +309,40 @@ pub fn allowing(
         )
     });
     out
+}
+
+/// "You may cast Equipment spells this way without paying their mana costs": the
+/// permission just added to `out` also lets a spell with those qualities be cast without
+/// paying its mana cost (CR 118.9), offered as the same permission used that way.
+fn free_option(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    land: bool,
+    ctx: &Ctx,
+    out: &mut Vec<CastPermission>,
+) {
+    let Some(last) = out.last() else {
+        return;
+    };
+    let Some(f) = last.terms.free_option.as_ref() else {
+        return;
+    };
+    if land || last.free || last.terms.alt_cost.is_some() {
+        return;
+    }
+    let f = crate::casting::as_spell_filter(f);
+    if !matches_with_chars(g, card, chars, &f, ctx) {
+        return;
+    }
+    let mut free = last.clone();
+    free.free = true;
+    // The spell must still have those qualities once proposed (CR 601.2e).
+    free.qualities = Some(match free.qualities.take() {
+        Some((q, src, ctl)) => (Filter::and(vec![q, f]), src, ctl),
+        None => (f, ctx.source, ctx.controller),
+    });
+    out.push(free);
 }
 
 /// The qualities of a permission's filter a spell must still have once its proposal is
@@ -332,6 +392,14 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
                 } else {
                     g.player(p).library.clone()
                 }
+            }
+            ZoneKind::Graveyard if perm.terms.any_owner => g
+                .players
+                .iter()
+                .flat_map(|q| q.graveyard.iter().copied())
+                .collect(),
+            ZoneKind::Graveyard if perm.top_only => {
+                g.player(p).graveyard.last().copied().into_iter().collect()
             }
             ZoneKind::Graveyard => g.player(p).graveyard.clone(),
             ZoneKind::Exile => g.exile.clone(),
@@ -387,8 +455,17 @@ pub fn attach(
         }
         let chars = g.option_characteristics(card, &opt);
         for perm in allowing(g, p, card, &chars, false) {
+            // "as an Adventure": only that way (CR 715.3).
+            if perm.terms.cast_face.is_some_and(|f| f != opt.face) {
+                continue;
+            }
             let changes_the_way = perm.terms.flash
                 || perm.requires_cost()
+                || perm.terms.cost_reduction > 0
+                || perm.terms.cast_face.is_some()
+                || perm.terms.spend_type_as_any_color.is_some()
+                || perm.terms.snow_as_any_color
+                || perm.terms.cost_increase_each.is_some()
                 || perm.terms.spend_any_type
                 || perm.terms.spend_as_any_color;
             if is_own && !changes_the_way {
@@ -696,6 +773,29 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
         g.exec(e, &mut ctx);
         g.dirty = true;
     }
+    // "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    // library instead."
+    if let Some(d) = &c.terms.graveyard_instead {
+        let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
+        ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
+        g.exec(
+            &Effect::AddReplacement {
+                def: ReplacementDef {
+                    event: ReplacementEvent::ZoneChange {
+                        filter: Filter::In(Box::new(Sel::Var(vars::IT))),
+                        from: None,
+                        to: Some(ZoneKind::Graveyard),
+                    },
+                    action: ReplacementAction::MoveInstead(d.clone()),
+                    self_replacement: false,
+                    optional: false,
+                },
+                duration: Duration::Permanent,
+                uses: None,
+            },
+            &mut ctx,
+        );
+    }
     if c.terms.exile_instead {
         let mut ctx = Ctx::new(c.source, g.obj(spell).controller);
         ctx.set_var(vars::IT, vec![Entity::Object(spell)]);
@@ -717,6 +817,28 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
             &mut ctx,
         );
     }
+}
+
+/// A permission to play cards from a player's zone the effect names ("you may cast a
+/// creature spell from that player's graveyard this turn"): that player is the one the
+/// effect means as it begins (CR 608.2h), not whoever "that player" might be later.
+pub fn lock_permission_players(g: &Game, effect: &mut PlayerModification, ctx: &Ctx) {
+    let PlayerModification::PlayPermission(pp) = effect else {
+        return;
+    };
+    fn walk(g: &Game, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::OwnedByPlayer(r) => {
+                if let Some(p) = g.eval_player(r, ctx) {
+                    **r = PlayerRef::Player(p);
+                }
+            }
+            Filter::And(v) | Filter::Or(v) => v.iter_mut().for_each(|x| walk(g, x, ctx)),
+            Filter::Not(x) => walk(g, x, ctx),
+            _ => {}
+        }
+    }
+    walk(g, &mut pp.what, ctx);
 }
 
 /// The permissions `g.play_grants[before..]` were just given by the effect resolving with
@@ -743,6 +865,13 @@ pub fn land_played_with(g: &mut Game, perm: Option<&CastPermission>, land: Objec
             source: c.source,
             way: c.way,
         });
+        // "If you do, it gains \"...\"" (CR 400.7i).
+        if let Some(e) = &c.terms.on_land {
+            let mut ctx = Ctx::new(c.source, g.obj(land).controller);
+            ctx.set_var(vars::IT, vec![Entity::Object(land)]);
+            g.exec(e, &mut ctx);
+            g.dirty = true;
+        }
     }
 }
 

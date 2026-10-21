@@ -508,6 +508,19 @@ inventory::submit! { EffectPattern { name: "choice grammar: [player] chooses and
 fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("you ").unwrap_or(l);
+    // "Put the chosen cards into your graveyard and the rest onto the battlefield tapped,
+    // then shuffle."
+    if let Some(x) = l.strip_suffix(", then shuffle") {
+        if x.contains(" the rest ") || x.contains(" the other ") {
+            let e = chosen_and_the_rest(x, b)?;
+            return Some(Effect::seq(vec![
+                e,
+                Effect::Shuffle {
+                    who: PlayerRef::You,
+                },
+            ]));
+        }
+    }
     // "Leave the chosen cards in your graveyard and put the rest into your hand.":
     // leaving them where they are does nothing.
     if let Some(r) = l.strip_prefix("leave the chosen ") {
@@ -517,7 +530,8 @@ fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         return crate::oracle::effects::parse_simple(second, b);
     }
-    let verb = ["put ", "return ", "exile "]
+    // "Shuffle the chosen cards into your library and put the rest into your hand."
+    let verb = ["put ", "return ", "exile ", "shuffle "]
         .into_iter()
         .find(|v| l.starts_with(v))?;
     for others in [" and the rest ", " and the other ", " and the others "] {
@@ -539,6 +553,12 @@ fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
             restore(b);
             continue;
         };
+        // "Shuffle the chosen cards into your library and put the rest into your hand":
+        // the rest are moved first (revealed cards in a library that's shuffled become
+        // new objects, CR 701.20d).
+        if verb == "shuffle " {
+            return Some(Effect::seq(vec![c, a]));
+        }
         return Some(Effect::seq(vec![a, c]));
     }
     // "... and return the other to the battlefield tapped": the second verb is given.
@@ -560,6 +580,9 @@ fn chosen_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
             restore(b);
             continue;
         };
+        if verb == "shuffle " {
+            return Some(Effect::seq(vec![c, a]));
+        }
         return Some(Effect::seq(vec![a, c]));
     }
     None

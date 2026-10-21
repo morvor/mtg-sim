@@ -87,6 +87,7 @@ fn from_zones(z: &str) -> Option<Filter> {
     Some(match z {
         "anywhere other than your hand" => Filter::not(zone(ZoneKind::Hand)),
         "exile" => zone(ZoneKind::Exile),
+        "your hand" => Filter::and(vec![zone(ZoneKind::Hand), Filter::OwnedBy(PlayerRel::You)]),
         // A card in your graveyard is yours (CR 404.1).
         "your graveyard" => Filter::and(vec![
             zone(ZoneKind::Graveyard),
@@ -99,7 +100,7 @@ fn from_zones(z: &str) -> Option<Filter> {
 
 /// "~", "enchanted creature", "enchanted player", "a Merfolk you control": what a spell
 /// targets.
-fn targeted(s: &str) -> Option<Filter> {
+pub(crate) fn targeted(s: &str) -> Option<Filter> {
     let objects = |f: Filter| {
         Filter::StackTargets(Box::new(TargetsFilter::Targets {
             objects: Some(f),
@@ -140,7 +141,7 @@ fn take(s: &mut String, q: &str) -> bool {
 /// The spell phrase left once the qualifiers are taken out: "spells", "instant and
 /// sorcery spells", "Cleric, Rogue, Warrior, and Wizard spells", "green enchantment spells
 /// and white enchantment spells", "creature spell with flying", "kicked spell".
-fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
+pub(crate) fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
     let s = s.trim();
     let mut parts = Vec::new();
     let mut s = s.to_string();
@@ -168,6 +169,16 @@ fn spell_noun(s: &str, singular: bool) -> Option<Vec<Filter>> {
         }
         parts.push(Filter::Or(kinds));
         return Some(parts);
+    }
+    // "Elemental permanent spells": an Elemental spell that's a permanent spell.
+    for (marker, alone) in [(" permanent spells", "permanent spells"), (" permanent spell", "permanent spell")] {
+        if let Some(head) = s.strip_suffix(marker).filter(|h| !h.contains(' ')) {
+            let suffix = if alone.ends_with('s') { "spells" } else { "spell" };
+            let mut a = spell_noun(&format!("{head} {suffix}"), singular)?;
+            a.extend(spell_noun(alone, singular)?);
+            parts.extend(a);
+            return Some(parts);
+        }
     }
     let phrase = super::statics::union_nouns(&s);
     let (f, plural, tail) = super::statics::object_phrase(&phrase)?;

@@ -2416,6 +2416,10 @@ impl Renderer<'_> {
             } if format!("{s:?}") == format!("{what:?}") => {
                 let w = self.sel(what, Case::Obj);
                 let it = if is_plural_sel(what) { "them" } else { "it" };
+                // "Its owner shuffles it into their library" (the object just named).
+                if w == "~it" || w == "it" {
+                    return format!("{{alt:the owner of {w}|its owner}} shuffles {it} into their library");
+                }
                 format!("the owner of {w} shuffles {it} into their library")
             }
             // "Each player shuffles their hand and graveyard into their library": each
@@ -2546,7 +2550,7 @@ impl Renderer<'_> {
             }
             Effect::ExtraCombat { after_this } => {
                 if *after_this {
-                    "after this phase, there is an additional combat phase".into()
+                    "{alt:after this phase, there is an additional combat phase|there is an additional combat phase after this phase}".into()
                 } else {
                     "there is an additional combat phase".into()
                 }
@@ -2581,6 +2585,10 @@ impl Renderer<'_> {
                         let p = self.player(p, Case::Subj);
                         format!("{p} get {list} after {after}{t}")
                     }
+                    // "There is an additional combat phase after this phase" says the same.
+                    None if t.is_empty() => format!(
+                        "{{alt:after {after}, there is {list}|there is {list} after {after}}}"
+                    ),
                     None => format!("after {after}, there is {list}{t}"),
                 }
             }
@@ -2651,7 +2659,13 @@ impl Renderer<'_> {
             // ability says "that player" (CR 607.1).
             Effect::NoteLinked { .. } => String::new(),
             Effect::Reflexive { body } => {
-                let b = self.in_event_scope(|r| r.body(body));
+                // A reflexive trigger without targets of its own refers to the targets of
+                // the ability that created it ("destroy that permanent").
+                let b = if body.targets.is_empty() && body.modal.is_none() && !self.targets.is_empty() {
+                    self.in_event_scope(|r| r.effect_sentences(&body.effect))
+                } else {
+                    self.in_event_scope(|r| r.body(body))
+                };
                 format!("when you do, {}", lower_first(&b))
             }
             Effect::AtNext { step, effect } => {
@@ -2785,7 +2799,12 @@ impl Renderer<'_> {
                 let verb = self.permission_verb();
                 // A permission for an exiled card lasts as long as it's that object (CR
                 // 400.7): "for as long as it remains exiled".
-                let d = if matches!(duration, Duration::Permanent) && self.after_exile {
+                let d = if matches!(duration, Duration::Permanent)
+                    && self.after_exile
+                    && self.any_turn_permission
+                {
+                    "{opt:for as long as {alt:it remains|they remain} exiled}".to_string()
+                } else if matches!(duration, Duration::Permanent) && self.after_exile {
                     "{alt:for as long as it remains exiled|for as long as they remain exiled}"
                         .to_string()
                 } else {
@@ -2925,6 +2944,10 @@ impl Renderer<'_> {
                     } else {
                         format!("{{alt:{w} is no longer suspected|{w} becomes no longer suspected|have {w} become no longer suspected}}")
                     };
+                } else if spec.undo && spec.action == KeywordAction::Goad {
+                    // "Each creature you control is no longer goaded" (CR 701.15).
+                    let w = self.sel(&spec.what, Case::Subj);
+                    s = format!("{w} is no longer goaded");
                 } else if spec.undo {
                     s = format!("{s} (undo)");
                     s = self.gap(format!("keyword action undo: {s}"));
@@ -3301,6 +3324,11 @@ impl Renderer<'_> {
         {
             return "each token that would be created under an opponent's control this turn is created under your control instead".into();
         }
+        if *uses == Some(1) {
+            if let Some(s) = self.attempt(|r| r.next_time_damage(def, duration)) {
+                return s;
+            }
+        }
         let s = self.replacement(def, *uses);
         let d = self.duration(duration);
         // "All damage that would be dealt to target creature this turn is dealt to
@@ -3476,7 +3504,7 @@ impl Renderer<'_> {
                 let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
                 format!("that damage is dealt to {t} instead")
             }
-            _ => return None,
+            a => self.damage_then(a)?,
         };
         Some(match (uses, &def.action) {
             (Some(1), _) => {
@@ -4390,7 +4418,7 @@ impl Renderer<'_> {
         {
             let t = self.effect(then);
             if t.contains("after this phase") {
-                return t.replacen("after this phase", "after this main phase", 1);
+                return t.replace("after this phase", "after this main phase");
             }
         }
         match cond {
@@ -4504,17 +4532,71 @@ impl Renderer<'_> {
                 }
                 format!("{o}. If {c}, {t} instead")
             }
+            // "It deals 2 damage to you unless it came under your control this turn": an
+            // event that didn't happen.
+            Condition::Not(inner)
+                if else_empty
+                    && matches!(
+                        inner.as_ref(),
+                        Condition::Compare(
+                            Value::EventsThisTurn(..) | Value::EventsDuring(..),
+                            _,
+                            _
+                        )
+                    ) =>
+            {
+                let Condition::Compare(a, cmp, b) = inner.as_ref() else {
+                    return String::new();
+                };
+                let neg = self.attempt(|r| r.events_compare(a, *cmp, b, true));
+                let pos = self.attempt(|r| r.events_compare(a, *cmp, b, false));
+                let t = self.effect(then);
+                match (neg, pos) {
+                    (Some(neg), Some(pos)) => format!("{{alt:{t} unless {pos}|if {neg}, {t}}}"),
+                    _ => {
+                        let c = self.condition(cond);
+                        format!("if {c}, {t}")
+                    }
+                }
+            }
             _ => {
+                let form = |c: String, t: String| -> String {
+                    // "Discard a card unless you attacked this turn."
+                    if let Some(inner) = c.strip_prefix("it's not true that ") {
+                        return format!("{t} unless {inner}");
+                    }
+                    if trigger_body {
+                        return format!("{t} if {c}");
+                    }
+                    format!("if {c}, {t}")
+                };
+                // A condition about a target the instruction acts on: "Counter target
+                // spell if it was kicked" names the target in the instruction, "If target
+                // spell was kicked, counter it" in the condition.
+                let mut probe = self.clone();
+                let _ = probe.condition(cond);
+                if probe.introduced != self.introduced {
+                    let (a, b) = self.two_ways(
+                        |r| {
+                            let c = r.condition(cond);
+                            let t = r.effect(then);
+                            form(c, t)
+                        },
+                        |r| {
+                            let t = r.effect(then);
+                            let c = r.condition(cond);
+                            form(c, t)
+                        },
+                    );
+                    return if a == b {
+                        a
+                    } else {
+                        format!("{{alt:{a}|{b}}}")
+                    };
+                }
                 let c = self.condition(cond);
                 let t = self.effect(then);
-                // "Discard a card unless you attacked this turn."
-                if let Some(inner) = c.strip_prefix("it's not true that ") {
-                    return format!("{t} unless {inner}");
-                }
-                if trigger_body {
-                    return format!("{t} if {c}");
-                }
-                format!("if {c}, {t}")
+                form(c, t)
             }
         }
     }
@@ -4623,6 +4705,28 @@ impl Renderer<'_> {
         if matches!(who, PlayerRef::You) {
             if let Some(c) = self.cast_up_to_one(effect) {
                 return c;
+            }
+        }
+        // "You may exile target creature if it attacked or blocked this turn": the
+        // option, with a condition checked as it's taken.
+        if let Effect::If {
+            cond,
+            then,
+            otherwise,
+        } = effect
+        {
+            // (Only a condition about a target the instruction names.)
+            let mut probe = self.clone();
+            let _ = probe.condition(cond);
+            if matches!(otherwise.as_ref(), Effect::Noop)
+                && !matches!(cond, Condition::PrevHappened)
+                && !matches!(then.as_ref(), Effect::Reflexive { .. })
+                && probe.introduced != self.introduced
+            {
+                let p = self.player(who, Case::Subj);
+                let t = self.effect(then);
+                let c = self.condition(cond);
+                return format!("{p} may {t} if {c}");
             }
         }
         if let Some((w, vp, _)) = self.actor_vp(effect) {
@@ -4763,6 +4867,13 @@ impl Renderer<'_> {
                 format!("{{alt:{w}|{head} from among cards exiled with ~}}")
             }
             _ => w,
+        };
+        // An ability that functions in a graveyard casts the card from there ("you may cast
+        // ~ from your graveyard", CR 113.6m).
+        let w = if matches!(what, Sel::This) && matches!(self.zone, FunctionZone::Graveyard) {
+            format!("{w} {{opt:from your graveyard}}")
+        } else {
+            w
         };
         let f = if free {
             " without paying its mana cost"
@@ -5856,7 +5967,7 @@ impl Renderer<'_> {
                 _ => None,
             },
             Sel::All(f) | Sel::Choose { filter: f, .. } => f.zone(),
-            Sel::TopOfLibrary(..) => Some(ZoneKind::Library),
+            Sel::TopOfLibrary(..) | Sel::BottomOfLibrary(..) => Some(ZoneKind::Library),
             _ => None,
         }
     }
@@ -6019,6 +6130,20 @@ impl Renderer<'_> {
                         let n = k.kind.name().to_lowercase();
                         where_clauses.push(format!(". The {n} cost is equal to its mana cost"));
                     }
+                }
+                Modification::AddKeywordOwnCost(k, reduce) => {
+                    if keywords.is_empty() && abilities.is_empty() {
+                        parts.push(GRANTS.into());
+                    }
+                    let saved = std::mem::replace(&mut self.granted_keyword, true);
+                    keywords.push(self.keyword_lower(&crate::keywords::Keyword::new(k.kind)));
+                    self.granted_keyword = saved;
+                    let n = k.kind.name().to_lowercase();
+                    where_clauses.push(if *reduce == 0 {
+                        format!(". The {n} cost is equal to its mana cost")
+                    } else {
+                        format!(". Its {n} cost is equal to its mana cost reduced by {{{reduce}}}")
+                    });
                 }
                 Modification::AddKeywordX(k, v) => {
                     let s = self.keyword_lower(k);
@@ -7396,7 +7521,7 @@ pub(crate) fn is_plural_sel(s: &Sel) -> bool {
     match s {
         Sel::All(_) | Sel::TriggerObjects | Sel::Linked | Sel::Union(_) | Sel::AllTargets => true,
         Sel::Choose { count, .. } => !matches!(count, Value::Const(1)),
-        Sel::TopOfLibrary(_, n) => !matches!(n, Value::Const(1)),
+        Sel::TopOfLibrary(_, n) | Sel::BottomOfLibrary(_, n) => !matches!(n, Value::Const(1)),
         _ => false,
     }
 }

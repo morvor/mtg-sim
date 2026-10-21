@@ -767,6 +767,9 @@ pub enum TargetGroup {
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
+    /// There's a land type all of them have ("two basic land cards that share a land
+    /// type", CR 205.3i).
+    ShareLandType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
     /// No two of them are controlled by the same player ("with different controllers",
@@ -823,6 +826,15 @@ pub enum DigStep {
         filter: Filter,
         count: Value,
         exile: bool,
+        /// "until they have exiled cards with total mana value 4 or greater": the cards
+        /// matching `filter` are counted by this stat (a running total) instead of one
+        /// each.
+        #[serde(default)]
+        total: Option<TotalStat>,
+        /// "until an artifact card or X cards are revealed, whichever comes first": at most
+        /// this many cards are revealed.
+        #[serde(default)]
+        cap: Option<Value>,
     },
 }
 
@@ -1037,6 +1049,9 @@ pub enum Sel {
     /// The top N cards of each of the players' libraries ("the top two cards of your
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
+    /// The bottom N cards of each of the players' libraries ("the bottom card of your
+    /// library", CR 401.2), bottom first.
+    BottomOfLibrary(PlayerRef, Value),
     /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
     /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
     /// has since changed zones is a new object the note doesn't find (CR 400.7).
@@ -1490,6 +1505,10 @@ pub enum Filter {
     /// An object each of the selected objects could legally be attached to right now
     /// ("another permanent it can enchant", CR 301.5c, 303.4).
     CanBeAttachedBy(Box<Sel>),
+    /// An object (an Aura or Equipment card, say) that could legally be attached to each
+    /// of the selected objects or players right now ("an Aura card that could enchant that
+    /// creature", CR 303.4a, 301.5c): the reverse of [`Filter::CanBeAttachedBy`].
+    CouldAttachTo(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
@@ -2140,6 +2159,11 @@ pub enum Modification {
     /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
     /// becomes the keyword's N, and the value of {X} in its cost.
     AddKeywordX(Keyword, Value),
+    /// Adds a keyword whose cost is the object's mana cost reduced by {N} generic mana
+    /// ("Each creature spell you cast has emerge. The emerge cost is equal to its mana
+    /// cost.", "... has foretell. Its foretell cost is equal to its mana cost reduced by
+    /// {2}."; CR 702.119a, 702.143a, 702.94a): computed for each object it applies to.
+    AddKeywordOwnCost(Keyword, u32),
     /// Adds each keyword of these kinds, with all its variants and variables, that an
     /// object matching the filter has ("... has flying. The same is true for first strike,
     /// landwalk, protection, ...", CR 702.1c).
@@ -2233,6 +2257,7 @@ impl Modification {
             | AddThisAbility
             | AddKeyword(_)
             | AddKeywordX(..)
+            | AddKeywordOwnCost(..)
             | AddKeywordsOf { .. }
             | AddAbilitiesOf { .. }
             | RemoveKeyword(_)
@@ -3529,6 +3554,44 @@ pub struct PlayTerms {
     /// becomes.
     #[serde(default)]
     pub on_cast: Option<Box<Effect>>,
+    /// "If you do, it gains \"...\"" for a land played with the permission: done as it's
+    /// played, with `Var(IT)` the land (CR 305.1, 400.7i).
+    #[serde(default)]
+    pub on_land: Option<Box<Effect>>,
+    /// "Spells you cast this way cost {2} less to cast" (CR 601.2f): a generic reduction
+    /// for spells cast with the permission.
+    #[serde(default)]
+    pub cost_reduction: u32,
+    /// "You may cast Equipment spells this way without paying their mana costs": spells
+    /// with these qualities (relative to the permission's source and player) may also be
+    /// cast with the permission without paying their mana costs (CR 118.9).
+    #[serde(default)]
+    pub free_option: Option<Filter>,
+    /// "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    /// library instead": where each spell cast with the permission goes instead (CR 614.1a).
+    #[serde(default)]
+    pub graveyard_instead: Option<Destination>,
+    /// "from any graveyard": a static permission's zone is every player's, not only its
+    /// player's.
+    #[serde(default)]
+    pub any_owner: bool,
+    /// "you may cast it from your graveyard as an Adventure": spells are cast with the
+    /// permission only as that face or half (CR 715.3).
+    #[serde(default)]
+    pub cast_face: Option<crate::object::FaceState>,
+    /// "if you pay {1} more to cast it for each other creature card in your graveyard": a
+    /// generic cost increase for spells cast with the permission (CR 601.2f), counted
+    /// relative to the permission's source and player as the cost is determined.
+    #[serde(default)]
+    pub cost_increase_each: Option<Value>,
+    /// "you may spend colorless mana as though it were mana of any color to cast that
+    /// spell": mana of this type, for spells cast with the permission (CR 609.4b).
+    #[serde(default)]
+    pub spend_type_as_any_color: Option<ManaType>,
+    /// "you may spend mana from snow sources as though it were mana of any color to cast
+    /// those spells" (CR 609.4b, 106.3).
+    #[serde(default)]
+    pub snow_as_any_color: bool,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3579,6 +3642,33 @@ impl PlayTerms {
                 Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
                 None => e.clone(),
             });
+        }
+        if let Some(e) = &other.on_land {
+            self.on_land = Some(match self.on_land.take() {
+                Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
+                None => e.clone(),
+            });
+        }
+        self.cost_reduction += other.cost_reduction;
+        if let Some(f) = &other.free_option {
+            self.free_option = Some(match self.free_option.take() {
+                Some(w) => Filter::Or(vec![w, f.clone()]),
+                None => f.clone(),
+            });
+        }
+        self.any_owner |= other.any_owner;
+        if other.cast_face.is_some() {
+            self.cast_face = other.cast_face;
+        }
+        if other.spend_type_as_any_color.is_some() {
+            self.spend_type_as_any_color = other.spend_type_as_any_color;
+        }
+        self.snow_as_any_color |= other.snow_as_any_color;
+        if other.cost_increase_each.is_some() {
+            self.cost_increase_each = other.cost_increase_each.clone();
+        }
+        if other.graveyard_instead.is_some() {
+            self.graveyard_instead = other.graveyard_instead.clone();
         }
     }
 }

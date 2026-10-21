@@ -168,6 +168,7 @@ fn mimic_vat_keeps_one_card_and_its_token_is_hasty_and_exiled_at_end_of_turn() {
 #[test]
 fn mimic_vat_with_no_card_exiled_with_it_creates_no_token() {
     cr!("111.12", "607.2a");
+    cr_example!("111.12", "If no card has been exiled with Mimic Vat");
     let mut t = TestGame::new(2);
     let vat = t.battlefield(P0, "Mimic Vat");
     // A creature card exiled by something else isn't exiled with the Vat.
