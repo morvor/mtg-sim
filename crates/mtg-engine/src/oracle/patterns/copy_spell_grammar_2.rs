@@ -457,3 +457,68 @@ fn copy_a_card_in_revealed_hand(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "copy spell grammar 2: copy a card in the revealed hand", priority: 80, parse: copy_a_card_in_revealed_hand } }
+
+/// "Copy that spell for each other permanent or player the spell could target." after
+/// choosing a target spell (Radiate), "Copy that spell or ability for each other permanent
+/// or player the spell or ability could target." (Radiant Performer): CR 707.10d for the
+/// targeted spell or ability, the copies controlled by this ability's controller.
+fn copy_target_for_each_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let Sel::Target(n) = b.it.clone() else {
+        return None;
+    };
+    if !matches!(
+        b.targets.get(n as usize).map(|t| &t.what),
+        Some(TargetKind::Spell(_) | TargetKind::Ability(_) | TargetKind::SpellOrAbility(_))
+    ) {
+        return None;
+    }
+    let l = end(l);
+    let r = l
+        .strip_prefix("copy that spell for each other ")
+        .or_else(|| l.strip_prefix("copy that spell or ability for each other "))
+        .or_else(|| l.strip_prefix("copy that ability for each other "))?;
+    let kind = r
+        .strip_suffix(" the spell or ability could target")
+        .or_else(|| r.strip_suffix(" the spell could target"))
+        .or_else(|| r.strip_suffix(" that spell could target"))
+        .or_else(|| r.strip_suffix(" the ability could target"))?;
+    let among = if let Some(objects) = kind.strip_suffix(" or player") {
+        let (f, plural, tail) = parse_object_phrase(objects)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        Filter::Or(vec![
+            f,
+            Filter::Custom(crate::copy_rules::ANY_PLAYER.into()),
+        ])
+    } else {
+        let (f, plural, tail) = parse_object_phrase(kind)?;
+        if plural || !end(tail).is_empty() {
+            return None;
+        }
+        f
+    };
+    Some(Effect::CopySpellRetargeted {
+        what: Sel::Target(n),
+        target: None,
+        among: Some(among),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar 2: copy the target spell for each other thing it could target", priority: 80, parse: copy_target_for_each_other } }
+
+/// "Each copy targets a different one of those permanents and players." after copying a
+/// spell for each other permanent or player it could target (CR 707.10d).
+fn each_copy_targets_a_different_one_2(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = s.to_lowercase();
+    if !matches!(
+        end(&l),
+        "each copy targets a different one of those permanents and players"
+            | "each copy targets a different one of those permanents and/or players"
+    ) {
+        return false;
+    }
+    matches!(prev, Effect::CopySpellRetargeted { target: None, .. })
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: each copy targets a different one of those permanents and players", priority: 45, apply: each_copy_targets_a_different_one_2 } }

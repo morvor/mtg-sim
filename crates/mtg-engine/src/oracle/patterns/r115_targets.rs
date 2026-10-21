@@ -23,6 +23,22 @@ pub(crate) fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFi
             let (objects, _) = targeted_thing(&s["you or ".len()..])?;
             (objects, Some(PlayerFilter::You))
         }
+        // "a single permanent or player" (Radiate), "a single opponent or a single
+        // permanent an opponent controls" (Zevlor): an object of a kind or a player.
+        _ if s.ends_with(" or player") => {
+            let (objects, players) = targeted_thing(s.strip_suffix(" or player")?)?;
+            if players.is_some() {
+                return None;
+            }
+            (objects, Some(PlayerFilter::Any))
+        }
+        _ if s.starts_with("a single opponent or ") => {
+            let (objects, players) = targeted_thing(&s["a single opponent or ".len()..])?;
+            if players.is_some() {
+                return None;
+            }
+            (objects, Some(PlayerFilter::Opponent))
+        }
         _ => {
             let s = s.strip_prefix("a single ").unwrap_or(s);
             let s = s
@@ -40,7 +56,7 @@ pub(crate) fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFi
 
 /// Splits a qualifier describing a stack object's targets off a target phrase: "with a
 /// single target", "that targets only [...]", "that targets [...]" (CR 115.9).
-fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) {
+pub(crate) fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) {
     // Only at the end: "... with a single target unless its controller pays {2}" is
     // more than a target phrase.
     if let Some((head, tail)) = s.split_once(" with a single target") {

@@ -30,6 +30,11 @@ pub struct CopyExtra {
     pub effect: Effect,
 }
 
+/// `Filter::Custom` name: in the filter of the objects a spell is copied for (an
+/// [`Effect::CopySpellRetargeted`]'s `among`, joined by `Or`), players are included too
+/// ("for each other permanent or player the spell could target"). It matches no object.
+pub const ANY_PLAYER: &str = "copy rules:or player";
+
 /// The object a permanent entering as a copy copies, for its copy exceptions ("if you
 /// control that creature", "When you do, tap the copied creature").
 pub const COPIED: Var = vars::USER + 5120;
@@ -41,6 +46,9 @@ pub const COPIED_MATCHES: &str = "copy rules:the copied object matches:";
 
 /// Evaluates [`COPIED_MATCHES`].
 pub fn custom_filter(g: &Game, name: &str, _id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    if name == ANY_PLAYER {
+        return Some(false);
+    }
     let json = name.strip_prefix(COPIED_MATCHES)?;
     let f: Filter = serde_json::from_str(json).ok()?;
     let copied = ctx.vars.get(&COPIED).and_then(|v| v.first()).and_then(|e| e.object());
@@ -271,7 +279,10 @@ pub fn copy_for_each_target(
         .filter(|e| match (among, e) {
             (None, _) => true,
             (Some((f, c)), Entity::Object(o)) => g.matches(*o, f, c),
-            (Some(_), _) => false,
+            // "for each other permanent or player the spell could target" (Radiate).
+            (Some((f, _)), Entity::Player(_)) => {
+                matches!(f, Filter::Or(v) if v.iter().any(|x| matches!(x, Filter::Custom(n) if n == ANY_PLAYER)))
+            }
         })
         .collect();
     if cands.len() > 1 {

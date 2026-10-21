@@ -996,3 +996,37 @@ fn enters_with_and_with(
 }
 
 inventory::submit! { super::StaticPattern { name: "counters grammar 2: enters with A and with B", priority: 90, parse: enters_with_and_with } }
+
+/// "[+2]", "[-1]" as an instruction (Comet, Stellar Pup's die results): put or remove
+/// that many loyalty counters on or from ~, as the loyalty symbol in a cost would
+/// (CR 606.4); here they're part of the effect.
+fn loyalty_notation(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix('[')?.strip_suffix(']')?;
+    let (sign, n) = if let Some(n) = r.strip_prefix('+') {
+        (1, n)
+    } else if let Some(n) = r.strip_prefix('-').or_else(|| r.strip_prefix('\u{2212}')) {
+        (-1, n)
+    } else {
+        return None;
+    };
+    let n: i32 = n.parse().ok()?;
+    if n <= 0 {
+        return None;
+    }
+    let kind: CounterKind = "loyalty".into();
+    Some(if sign > 0 {
+        Effect::AddCounters {
+            what: Sel::This,
+            kind,
+            n: Value::c(n),
+        }
+    } else {
+        Effect::RemoveCounters {
+            what: Sel::This,
+            kind: Some(kind),
+            n: Value::c(n),
+        }
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counters grammar 2: loyalty notation as an instruction", priority: 70, parse: loyalty_notation } }

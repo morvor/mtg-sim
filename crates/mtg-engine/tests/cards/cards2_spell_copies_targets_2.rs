@@ -199,3 +199,57 @@ fn ancestral_communion_copies_itself_while_you_control_your_commander() {
     assert!(t.in_hand(P0, "Hill Giant"));
     assert!(t.in_hand(P0, "Craw Wurm"));
 }
+
+#[test]
+fn radiate_copies_a_spell_for_each_other_permanent_or_player_it_could_target() {
+    cr!("707.10d", "707.10", "115.9c");
+    supported("Radiate");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(bears).go();
+    t.lands(P0, "Mountain", 5);
+    let r = t.hand(P0, "Radiate");
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, r).target(spell).go();
+    t.resolve();
+    // Four copies (Hill Giant, Craw Wurm, each player), controlled by Radiate's caster.
+    assert_eq!(t.stack_len(), 5);
+    for c in t.g.stack.clone() {
+        if c != spell {
+            assert_eq!(t.g.obj(c).controller, P0);
+        }
+    }
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears) && !t.on_battlefield(giant));
+    assert_eq!(t.obj_now(wurm).damage, 3);
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn radiant_performer_copies_a_single_target_ability_for_each_other_target() {
+    cr!("707.10d", "707.10", "603.4");
+    supported("Radiant Performer");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Swamp", 3);
+    let kill = t.hand(P1, "Murder");
+    let spell = t.cast(P1, kill).target(a).go();
+    // Flash: P0 casts Radiant Performer from hand in response, targeting Murder.
+    t.lands(P0, "Mountain", 5);
+    let rp = t.hand(P0, "Radiant Performer");
+    t.g.turn.priority = Some(P0);
+    t.answer_targets(P0, &[Entity::Object(spell)]);
+    t.cast(P0, rp).go();
+    t.resolve_all();
+    // Murder's copies destroyed every other creature (Hill Giant, and Radiant Performer).
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+    assert!(t.named_on_battlefield("Radiant Performer").is_empty());
+}
