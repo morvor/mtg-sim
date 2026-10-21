@@ -50,6 +50,9 @@ pub fn own_count_atom(s: &str, _b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = accepted_count_atom(s) {
         return Some(v);
     }
+    if let Some(v) = super::notes_hidden_4::noted_atom(s) {
+        return Some(v);
+    }
     if !PER_PLAYER.with(|c| c.get()) {
         return None;
     }
