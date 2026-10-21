@@ -916,3 +916,87 @@ fn attacking_you_or_your_planeswalker<'a>(t: &'a str, f: &Filter) -> Option<(Fil
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "token replacements 2: attacking you or a planeswalker you control", priority: 90, parse: attacking_you_or_your_planeswalker } }
+
+/// The variable the last instruction of `e` stored chosen objects in ("for each opponent,
+/// choose a creature that player controls").
+fn last_stored_var(e: &Effect) -> Option<Var> {
+    match e {
+        Effect::Store { var, .. } => Some(*var),
+        Effect::ForEachPlayer { effect, .. } => last_stored_var(effect),
+        Effect::Seq(v) => v.last().and_then(last_stored_var),
+        _ => None,
+    }
+}
+
+/// "Create a token that's a copy of one of those creatures, except its power is equal to
+/// the total power of those creatures, its toughness is equal to the total toughness of
+/// those creatures, and it's a colorless Eldrazi creature." (Benthic Anomaly): one of the
+/// chosen creatures is copied, with those exceptions (CR 707.9b, locked in as the token
+/// is created).
+fn copy_of_one_of_those_creatures(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(exc) =
+        end(&lower).strip_prefix("create a token that's a copy of one of those creatures, except ")
+    else {
+        return false;
+    };
+    let Some(var) = last_stored_var(prev) else {
+        return false;
+    };
+    let those = Sel::Var(var);
+    let mut power = None;
+    let mut toughness = None;
+    let mut mods = Vec::new();
+    for part in exc.split(", ") {
+        let part = part.strip_prefix("and ").unwrap_or(part);
+        match part {
+            "its power is equal to the total power of those creatures" => {
+                power = Some(Value::PowerOf(Box::new(those.clone())))
+            }
+            "its toughness is equal to the total toughness of those creatures" => {
+                toughness = Some(Value::ToughnessOf(Box::new(those.clone())))
+            }
+            _ => {
+                let Some(r) = part.strip_prefix("it's a colorless ") else {
+                    return false;
+                };
+                let Some(sub) = r.strip_suffix(" creature") else {
+                    return false;
+                };
+                let Some(st) = subtype_word(sub) else {
+                    return false;
+                };
+                mods.push(Modification::SetColors(crate::types::ColorSet::NONE));
+                mods.push(Modification::SetTypes {
+                    types: vec![crate::types::CardType::Creature],
+                    subtypes: vec![st],
+                });
+            }
+        }
+    }
+    if power.is_none() && toughness.is_none() && mods.is_empty() {
+        return false;
+    }
+    if power.is_some() || toughness.is_some() {
+        mods.insert(0, Modification::SetPT(power, toughness));
+    }
+    let create = Effect::CreateTokenCopy {
+        of: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::In(Box::new(those)),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        count: Value::c(1),
+        controller: PlayerRef::You,
+        tapped: false,
+        attacking: false,
+        mods,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, create]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: copy of one of those creatures, except", priority: 90, apply: copy_of_one_of_those_creatures } }

@@ -377,3 +377,39 @@ fn mirage_phalanx_token_copies_have_haste_and_lose_soulbond() {
     assert_eq!(t.named_on_battlefield("Mirage Phalanx").len(), 1);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+#[test]
+fn benthic_anomaly_copies_one_chosen_creature_with_their_total_power() {
+    cr!("707.9b", "707.9d", "603.2");
+    ruling!(
+        "Benthic Anomaly",
+        "The token is an Eldrazi creature instead of its other types and subtypes and is colorless instead of retaining any of its colors."
+    );
+    supported("Benthic Anomaly");
+    let mut t = TestGame::new(3);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let angel = t.battlefield(P2, "Serra Angel");
+    t.lands(P0, "Island", 7);
+    let b = t.hand(P0, "Benthic Anomaly");
+    t.cast(P0, b).go();
+    // The creature each opponent controls, then the one to copy.
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    t.answer_choose(P0, &[Entity::Object(angel)]);
+    t.answer_choose(P0, &[Entity::Object(angel)]);
+    t.resolve_all();
+    let angels = t.named_on_battlefield("Serra Angel");
+    assert_eq!(angels.len(), 2);
+    let tok = angels
+        .iter()
+        .copied()
+        .find(|o| t.obj_now(*o).is_token())
+        .unwrap();
+    // 6/4 Wurm + 4/4 Angel.
+    assert_eq!(t.pt(tok), (10, 8));
+    let o = t.obj_now(tok);
+    assert!(o.chars.colors.is_colorless());
+    assert!(o.chars.subtypes.iter().any(|s| s.as_str() == "Eldrazi"));
+    assert!(!o.chars.subtypes.iter().any(|s| s.as_str() == "Angel"));
+    assert!(o.has_keyword(KeywordKind::Flying));
+    assert!(o.chars.card_types.contains(CardType::Creature));
+}
