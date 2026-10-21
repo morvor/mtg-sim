@@ -343,3 +343,37 @@ fn mirror_match_blocks_each_attacker_with_a_copy_of_it() {
     assert!(token_named(&t, "Grizzly Bears").is_empty());
     assert!(token_named(&t, "Ornithopter").is_empty());
 }
+
+#[test]
+fn mirage_phalanx_token_copies_have_haste_and_lose_soulbond() {
+    cr!("707.9b", "702.95a");
+    supported("Mirage Phalanx");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let ph = t.enter(P0, "Mirage Phalanx");
+    t.settle();
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.resolve();
+    assert_eq!(
+        mtg_engine::kw::soulbond::partner(&t.g, t.g.current(ph)),
+        Some(t.g.current(bears))
+    );
+    t.advance_to_step(Step::BeginningOfCombat);
+    t.resolve_all();
+    let phalanxes = t.named_on_battlefield("Mirage Phalanx");
+    assert_eq!(phalanxes.len(), 2);
+    let tok = phalanxes
+        .iter()
+        .copied()
+        .find(|o| t.obj_now(*o).is_token())
+        .unwrap();
+    assert!(t.obj_now(tok).has_keyword(KeywordKind::Haste));
+    assert!(!t.obj_now(tok).has_keyword(KeywordKind::Soulbond));
+    assert!(t.obj_now(ph).has_keyword(KeywordKind::Soulbond));
+    // Each paired creature has the ability: a Bears token too.
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+    t.advance_to_step(Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Mirage Phalanx").len(), 1);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}

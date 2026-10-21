@@ -58,7 +58,11 @@ fn exception_clauses(masked: &str) -> Vec<String> {
         // "except it's 0/0 and has this ability" (Mimeoplasm, Revered One).
         .replace(" and has this ability", "|it has this ability")
         // "except it's 1/1 and has toxic 1" (Kinzu of the Bleak Coven).
-        .replace(" and has ", "|it has ");
+        .replace(" and has ", "|it has ")
+        // "except it has haste and loses soulbond" (Mirage Phalanx).
+        .replace(" and loses all other card types", "\u{1}")
+        .replace(" and loses ", "|it loses ")
+        .replace('\u{1}', " and loses all other card types");
     for subj in SUBJECTS {
         for sep in [", and ", " and ", ", "] {
             s = s.replace(&format!("{sep}{subj}"), &format!("|{subj}"));
@@ -177,7 +181,8 @@ fn added_colors_and_types(s: &str) -> Option<Vec<Modification>> {
                 colors.insert(c);
                 false
             }
-            None => true,
+            // "a legendary blue and black Zombie" (Olag, Ludevic's Hubris).
+            None => *w != "and",
         })
         .collect();
     if colors.is_colorless() {
@@ -365,6 +370,17 @@ pub(crate) fn copy_exceptions(
             }
             if !any {
                 return None;
+            }
+            continue;
+        }
+        // "it loses soulbond" (Mirage Phalanx): the copy doesn't have that keyword.
+        if let Some(kw) = c.strip_prefix("it loses ") {
+            let mods = crate::oracle::effects::keyword_mods(kw)?;
+            for m in mods {
+                let Modification::AddKeyword(k) = m else {
+                    return None;
+                };
+                out.push(Modification::RemoveKeyword(k.kind));
             }
             continue;
         }
