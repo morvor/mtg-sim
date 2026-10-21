@@ -18,9 +18,9 @@ The paragraphs starting "Example:" that follow a rule. An example is **covered**
 
 | | Examples | % |
 |---|---:|---:|
-| Covered by tests | 195 | 70.4% |
+| Covered by tests | 228 | 82.3% |
 | Exempt (with reason) | 0 | 0.0% |
-| **Open** | **82** | 29.6% |
+| **Open** | **49** | 17.7% |
 | Total examples | 277 | |
 
 ## By section
