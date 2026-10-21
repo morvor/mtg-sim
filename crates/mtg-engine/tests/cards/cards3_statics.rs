@@ -151,7 +151,6 @@ fn eon_frolicker_gives_you_and_your_planeswalkers_protection_from_that_player() 
 #[test]
 fn excavator_grants_landwalk_of_the_sacrificed_lands_types() {
     cr!("702.14a", "702.14c");
-    ruling!("Excavator", "will gain landwalk of all those types");
     supported("Excavator");
     let mut t = TestGame::new(2);
     let ex = t.battlefield(P0, "Excavator");
@@ -165,6 +164,30 @@ fn excavator_grants_landwalk_of_the_sacrificed_lands_types() {
     crate::combat2_common::declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
     assert!(crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
     t.battlefield(P1, "Island");
+    assert!(!crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
+}
+
+#[test]
+fn excavator_grants_landwalk_of_each_type_of_a_multi_typed_basic_land() {
+    cr!("702.14a", "702.14c", "608.2h");
+    ruling!("Excavator", "will gain landwalk of all those types");
+    let mut t = TestGame::new(2);
+    let ex = t.battlefield(P0, "Excavator");
+    let island = t.battlefield(P0, "Island");
+    // A basic land that is somehow both an Island and a Swamp.
+    t.g.objects[island.0 as usize].base.subtypes.push("Swamp".into());
+    t.g.dirty = true;
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let blocker = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Forest");
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, ex, 0, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Island"));
+    crate::combat2_common::declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
+    assert!(crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
+    // A Swamp (not an Island) is enough: swampwalk.
+    t.battlefield(P1, "Swamp");
     assert!(!crate::combat2_common::legal_blocks(&mut t, &[(blocker, bears)]));
 }
 

@@ -61,7 +61,13 @@ fn the_wedding_of_river_song_suspends_both_exiled_cards() {
             .find(|o| t.g.obj(*o).chars.name == name)
             .unwrap_or_else(|| panic!("{name} not exiled"));
         assert!(t.g.obj(o).has_keyword(KeywordKind::Suspend), "{name}");
-        // Its mana value, then time travel may have added or removed one.
-        assert!((n - 1..=n + 1).contains(&t.counters(o, "time")), "{name}");
+        // Its mana value; P0's time travel may have added or removed one on P0's own
+        // card, but not on P1's.
+        let c = t.counters(o, "time");
+        if name == "Hill Giant" {
+            assert_eq!(c, n, "{name}");
+        } else {
+            assert!((n - 1..=n + 1).contains(&c), "{name}");
+        }
     }
 }
