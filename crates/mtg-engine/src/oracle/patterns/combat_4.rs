@@ -618,3 +618,59 @@ fn f_that_combat_after_delayed(l: &str, prev: &mut Effect, b: &mut Builder) -> b
 }
 
 inventory::submit! { FollowupPattern { name: "combat 4: that combat after a delayed combat-step ability", priority: 45, apply: f_that_combat_after_delayed } }
+
+/// "choose target player and any number of target attacking creatures their opponents
+/// control" (Portal Manipulator): the targets "those creatures" and "that player" refer to.
+fn p_choose_player_and_attackers(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("choose target player and ")?;
+    let creatures = r.strip_suffix(" their opponents control")?;
+    let (spec, tail) = crate::oracle::phrases::parse_target(creatures)?;
+    let TargetKind::Object(f) = spec.what.clone() else {
+        return None;
+    };
+    if !end(tail).is_empty() || matches!(spec.max, Value::Const(1)) {
+        return None;
+    }
+    let (pspec, ptail) = crate::oracle::phrases::parse_target("target player")?;
+    if !ptail.trim().is_empty() {
+        return None;
+    }
+    let p = b.add_target(pspec, "target player");
+    let mut spec = spec;
+    spec.what = TargetKind::Object(Filter::and(vec![
+        f,
+        Filter::ControllerMatches(Box::new(PlayerFilter::OpponentOf(Box::new(
+            PlayerRef::Target(p),
+        )))),
+    ]));
+    let text = format!("{creatures} their opponents control");
+    let c = b.add_target(spec, &text);
+    b.it_player = PlayerRef::Target(p);
+    b.named.push(("those creatures".into(), Sel::Target(c)));
+    Some(Effect::Noop)
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: choose target player and target attacking creatures their opponents control", priority: 90, parse: p_choose_player_and_attackers } }
+
+/// "Those creatures are now attacking that player." (CR 508.7): each reselects what it's
+/// attacking — that player — if it legally can.
+fn p_now_attacking(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (who, player) = l.split_once(" are now attacking ")?;
+    let (sel, rest) = object_ref(who, b)?;
+    let Sel::Target(c) = sel else {
+        return None;
+    };
+    if !rest.trim().is_empty() || player != "that player" {
+        return None;
+    }
+    let PlayerRef::Target(p) = b.it_player else {
+        return None;
+    };
+    Some(Effect::Custom(
+        format!("{}{p}:{c}", crate::kw::combat_history_4::NOW_ATTACKING).into(),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: those creatures are now attacking that player", priority: 90, parse: p_now_attacking } }

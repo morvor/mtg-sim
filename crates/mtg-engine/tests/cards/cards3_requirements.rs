@@ -90,3 +90,32 @@ fn capricopian_the_attacked_player_pays_to_grow_it_and_send_it_elsewhere() {
     // Now P1 isn't the player it's attacking.
     assert!(t.activate(P1, goat, 0, &[]).is_err());
 }
+
+#[test]
+fn portal_manipulator_redirects_attackers_to_the_chosen_player() {
+    cr!("508.7");
+    supported("Portal Manipulator");
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let pm = t.hand(P0, "Portal Manipulator");
+    t.lands(P0, "Island", 4);
+    declare(
+        &mut t,
+        P1,
+        &[(bears, Entity::Player(P0)), (giant, Entity::Player(P0))],
+    );
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.cast(P0, pm).go();
+    t.resolve_all();
+    let c = t.g.combat.as_ref().unwrap();
+    assert_eq!(c.attack_target(bears), Some(Entity::Player(P2)));
+    assert_eq!(c.attack_target(giant), Some(Entity::Player(P0)));
+}

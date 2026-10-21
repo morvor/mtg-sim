@@ -24,6 +24,9 @@ pub const DEFENDING_SHARE_A_TYPE: &str =
 /// `Filter::Custom`: in an attack tax, the creature is being declared attacking a
 /// planeswalker (the attack target is [`ATTACK_TARGET`]).
 pub const ATTACKING_A_PLANESWALKER: &str = "combat4:being declared attacking a planeswalker";
+/// `Effect::Custom` prefix, followed by "[player slot]:[creatures slot]": the target
+/// attacking creatures are now attacking the target player (CR 508.7).
+pub const NOW_ATTACKING: &str = "combat4:now attacking:";
 /// While an attack tax is determined: what the creature would attack.
 pub const ATTACK_TARGET: Var = vars::USER + 13373;
 
@@ -63,6 +66,26 @@ impl KeywordRules for CombatHistory4 {
             );
         }
         None
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        let Some(r) = name.strip_prefix(NOW_ATTACKING) else {
+            return false;
+        };
+        let Some((p, c)) = r
+            .split_once(':')
+            .and_then(|(p, c)| Some((p.parse::<u8>().ok()?, c.parse::<u8>().ok()?)))
+        else {
+            return true;
+        };
+        let Some(player) = g.resolve_sel(&Sel::Target(p), ctx).first().and_then(|e| e.player())
+        else {
+            return true;
+        };
+        for a in g.resolve_objects(&Sel::Target(c), ctx) {
+            crate::combat::reselect_attack_target(g, a, Entity::Player(player));
+        }
+        true
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
