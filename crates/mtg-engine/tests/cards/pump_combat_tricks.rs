@@ -437,10 +437,19 @@ fn cant_stay_away_grants_the_ability_to_the_returned_permanent() {
 #[test]
 fn a_pronoun_for_an_untracked_object_is_not_the_source() {
     // "You may sacrifice a creature. If you do, return that card ...": "that card" is the
-    // sacrificed creature, not Heart-Shaped Herb (sacrificed as a cost). The compiler
-    // doesn't track it, so the ability stays unsupported rather than returning the Herb.
-    let u = card("Heart-Shaped Herb").unsupported_text().join(" | ");
-    assert!(u.contains("return that card"), "{u}");
+    // sacrificed creature, not Heart-Shaped Herb (sacrificed as a cost).
+    cr!("701.21a", "400.7");
+    assert!(card("Heart-Shaped Herb").unsupported_text().is_empty());
+    let mut t = TestGame::new(2);
+    let herb = t.battlefield(P0, "Heart-Shaped Herb");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.activate(P0, herb, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Heart-Shaped Herb"), "the Herb stays put");
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
 
 #[test]
