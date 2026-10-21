@@ -59,6 +59,16 @@ fn iterated_players(x: &str, b: &Builder) -> Option<PlayerRef> {
         "opponent" => PlayerRef::EachOpponent,
         "player" => PlayerRef::EachPlayer,
         "other player" => PlayerRef::EachOtherPlayer,
+        // "Whenever ~ attacks a player, for each other opponent, ..." (Shredder, Shadow
+        // Master): the opponents other than the player the ability is about.
+        "other opponent" if matches!(b.it_player, PlayerRef::TriggerPlayer) => {
+            PlayerRef::Each(PlayerFilter::And(vec![
+                PlayerFilter::Opponent,
+                PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+                    PlayerRef::TriggerPlayer,
+                )))),
+            ]))
+        }
         _ => {
             let (base, cond) = if let Some(c) = x.strip_prefix("opponent who ") {
                 (PlayerFilter::Opponent, c)

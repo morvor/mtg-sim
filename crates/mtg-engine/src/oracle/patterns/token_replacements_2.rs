@@ -259,6 +259,15 @@ inventory::submit! { StaticPattern { name: "token replacements 2: the first time
 // Token creation variants
 // ---------------------------------------------------------------------------
 
+/// Whether `e` creates tokens that join combat ("... tapped and attacking that player").
+fn joins_combat(e: &Effect) -> bool {
+    match e {
+        Effect::TokensJoinCombat { .. } => true,
+        Effect::Seq(v) => v.iter().any(joins_combat),
+        _ => false,
+    }
+}
+
 /// Whether `e` creates tokens (and nothing else but storing values).
 fn creates_tokens(e: &Effect) -> bool {
     match e {
@@ -311,16 +320,23 @@ fn they_after_each_player_creation(l: &str, prev: &mut Effect, b: &mut Builder) 
     let Effect::ForEachPlayer { effect, .. } = prev else {
         return false;
     };
-    if !creates_tokens(effect) {
+    if !creates_tokens(effect) && !joins_combat(effect) {
         return false;
     }
     let lower = l.to_lowercase();
-    if !lower.starts_with("they ") && !lower.starts_with("those tokens ") {
+    let text = if lower.starts_with("they ") {
+        lower.clone()
+    } else if let Some(r) = lower.strip_prefix("those tokens ") {
+        format!("they {r}")
+    } else if lower.contains(" those tokens") {
+        // "Sacrifice those tokens at end of combat.", "At the beginning of your next end
+        // step, sacrifice those tokens."
+        lower.replacen(" those tokens", " them", 1)
+    } else {
         return false;
-    }
+    };
     let saved = (b.it.clone(), b.targets.len());
     b.it = Sel::Var(vars::CREATED);
-    let text = lower.replacen("those tokens ", "they ", 1);
     let e = crate::oracle::effects::parse_sentence(&text, b);
     b.it = saved.0;
     let Some(e) = e.filter(|_| b.targets.len() == saved.1) else {
@@ -778,3 +794,53 @@ fn another_one_of_those_tokens(l: &str, prev: &mut Effect, _b: &mut Builder) -> 
 }
 
 inventory::submit! { super::FollowupPattern { name: "token replacements 2: for each [player], another one of those tokens", priority: 45, apply: another_one_of_those_tokens } }
+
+/// "create a token that's a copy of ~ tapped and attacking that player, except it isn't
+/// legendary" (Shredder, Shadow Master), "create a tapped token that's a copy of the
+/// exiled card attacking that opponent" (Mardu Siegebreaker): token copies created tapped
+/// and attacking the player the instruction is about (CR 508.4).
+fn token_copy_attacking_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let defender = b.it_player.clone();
+    if !matches!(defender, PlayerRef::Iterated | PlayerRef::TriggerPlayer) {
+        return None;
+    }
+    let (body, except) = match l.split_once(", except ") {
+        Some((a, e)) => (a, Some(e)),
+        None => (l, None),
+    };
+    let (head, of) = if let Some(r) = body.strip_prefix("create a tapped token that's a copy of ") {
+        let of = ["attacking that opponent", "attacking that player"]
+            .iter()
+            .find_map(|p| r.strip_suffix(&format!(" {p}")))?;
+        ("create a tapped and attacking token that's a copy of ", of)
+    } else {
+        let r = body.strip_prefix("create a token that's a copy of ")?;
+        let of = [
+            "that's tapped and attacking that player",
+            "tapped and attacking that player",
+            "that's tapped and attacking that opponent",
+            "tapped and attacking that opponent",
+        ]
+        .iter()
+        .find_map(|p| r.strip_suffix(&format!(" {p}")))?;
+        ("create a tapped and attacking token that's a copy of ", of)
+    };
+    let text = match except {
+        Some(e) => format!("{head}{of}, except {e}"),
+        None => format!("{head}{of}"),
+    };
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(e) = super::tokens_copies_copy::token_copy_with_exceptions(&text, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    Some(Effect::TokensJoinCombat {
+        effect: Box::new(e),
+        attacking: Some(defender),
+        blocking: None,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: token copy tapped and attacking that player", priority: 85, parse: token_copy_attacking_that_player } }

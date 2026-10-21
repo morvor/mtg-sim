@@ -213,3 +213,56 @@ fn cephalid_facetaker_becomes_a_1_4_unblockable_copy_until_end_of_turn() {
     t.advance_to(P1, Step::Upkeep);
     assert_eq!(t.obj_now(ceph).chars.name, "Cephalid Facetaker");
 }
+
+#[test]
+fn shredder_attacks_each_other_opponent_with_nonlegendary_copies() {
+    cr!("508.4", "707.9b", "603.7");
+    supported("Shredder, Shadow Master");
+    let mut t = TestGame::new(3);
+    let sh = t.battlefield(P0, "Shredder, Shadow Master");
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(sh, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    let toks = token_named(&t, "Shredder, Shadow Master");
+    assert_eq!(toks.len(), 1);
+    assert!(!t.obj_now(toks[0]).chars.is_legendary());
+    assert!(t.obj_now(toks[0]).tapped);
+    let combat = t.g.combat.as_ref().unwrap();
+    assert_eq!(combat.attack_target(toks[0]), Some(Entity::Player(P2)));
+    t.advance_to(P0, Step::PostcombatMain);
+    assert!(token_named(&t, "Shredder, Shadow Master").is_empty());
+}
+
+#[test]
+fn mardu_siegebreaker_attacks_each_opponent_with_copies_of_the_exiled_card() {
+    cr!("508.4", "707.2", "603.7");
+    supported("Mardu Siegebreaker");
+    let mut t = TestGame::new(3);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_targets(P0, &[obj(giant)]);
+    let ms = t.enter(P0, "Mardu Siegebreaker");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(ms, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    let toks = token_named(&t, "Hill Giant");
+    assert_eq!(toks.len(), 2);
+    let combat = t.g.combat.as_ref().unwrap();
+    let mut defenders: Vec<Option<Entity>> =
+        toks.iter().map(|o| combat.attack_target(*o)).collect();
+    defenders.sort();
+    assert_eq!(
+        defenders,
+        vec![Some(Entity::Player(P1)), Some(Entity::Player(P2))]
+    );
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(token_named(&t, "Hill Giant").is_empty());
+}
