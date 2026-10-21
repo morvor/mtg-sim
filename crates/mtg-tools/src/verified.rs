@@ -14,12 +14,17 @@
 //! Options: `--write` (write `docs/verified-cards.tsv`), `--out PATH` (write there
 //! instead), `--card NAME` (print one card's tier and checks).
 //!
-//! The regeneration recipe (about an hour and a half, most of it the sweep):
+//! The regeneration recipe (about three hours, most of it the sweep, run in chunks):
 //!
 //! ```sh
 //! rm -rf target/structlog
-//! MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace
-//! cargo run --release -p mtg-sim -- --every-card --threads 3 --report target/every-card.tsv
+//! MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log
+//! # The every-card sweep: about 2.3 hours with 3 threads, so three chunks of ~46 min each
+//! cargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 10100 --report target/every-card-0.tsv
+//! cargo run --release -p mtg-sim -- --every-card --threads 3 --from 10100 --count 10100 --report target/every-card-1.tsv
+//! cargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 10100 --report target/every-card-2.tsv
+//! cat target/every-card-[012].tsv > target/every-card.tsv
+//! cargo run --release -p mtg-tools -- roundtrip --write docs/ROUNDTRIP.md     # if round trips changed
 //! cargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write
 //! cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
 //! ```
@@ -73,6 +78,80 @@ pub fn parse_report(text: &str) -> HashMap<String, FuzzOutcome> {
         );
     }
     out
+}
+
+/// The cards a failed game's message names as objects ("Sight Beyond Sight #53 is listed in
+/// ..."; the report writes the ids as `#N`): each object name is looked up in `names`
+/// (lowercased card and face names to the card's key), longest match first.
+pub fn named_in(message: &str, names: &HashMap<String, String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let bytes = message.as_bytes();
+    let mut i = 0;
+    while let Some(k) = message[i..].find(" #") {
+        let at = i + k;
+        i = at + 2;
+        if !bytes
+            .get(at + 2)
+            .is_some_and(|b| *b == b'N' || b.is_ascii_digit())
+        {
+            continue;
+        }
+        let before = &message[..at];
+        // Every start of a word before the id, longest name first.
+        let starts = std::iter::once(0).chain(
+            before
+                .char_indices()
+                .filter(|(_, c)| *c == ' ' || *c == '(' || *c == '[')
+                .map(|(j, _)| j + 1),
+        );
+        if let Some(card) = starts
+            .filter_map(|j| names.get(&before[j..].to_lowercase()))
+            .next()
+        {
+            if !out.contains(card) {
+                out.push(card.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Adds the report's failed games to the cards their messages name as objects (besides
+/// the card each game was built around, which its outcome line already charges): a card
+/// in a rules-check violation, panic or hang message was involved in it, so it isn't
+/// fuzz-clean either. (The report doesn't list the other cards of a failed game's decks,
+/// so those aren't charged.)
+pub fn charge_named(
+    text: &str,
+    names: &HashMap<String, String>,
+    fuzz: &mut HashMap<String, FuzzOutcome>,
+) {
+    for line in text.lines() {
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.first() != Some(&"failure") || cols.len() < 3 {
+            continue;
+        }
+        let around = cols[1]
+            .split(" (--from ")
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
+        let kind = cols[2].split(':').next().unwrap_or("").trim();
+        for card in named_in(cols[2], names) {
+            if card == around {
+                continue;
+            }
+            let what = format!(
+                "{kind} in a game of {}",
+                cols[1].split(" (--from ").next().unwrap_or("")
+            );
+            if let Some(FuzzOutcome::Swept { failures, .. }) = fuzz.get_mut(&card) {
+                if !failures.contains(&what) {
+                    failures.push(what);
+                }
+            }
+        }
+    }
 }
 
 /// The notes column: why a check doesn't apply.
@@ -166,8 +245,20 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         );
         std::process::exit(1);
     }
+    let mut names: HashMap<String, String> = HashMap::new();
+    for c in mtg_data::cards().iter().filter(|c| listed(c)) {
+        let key = c.name.to_lowercase();
+        for f in c.card_faces.iter().flatten() {
+            names.entry(f.name.to_lowercase()).or_insert(key.clone());
+        }
+        names.insert(key.clone(), key);
+    }
     let fuzz = match std::fs::read_to_string(&report) {
-        Ok(t) => parse_report(&t),
+        Ok(t) => {
+            let mut f = parse_report(&t);
+            charge_named(&t, &names, &mut f);
+            f
+        }
         Err(e) => {
             eprintln!(
                 "error: can't read the every-card report {}: {e} (run `mtg-sim --every-card --report FILE`)",
@@ -200,7 +291,15 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         if !listed(c) || !seen.insert(c.name.clone()) {
             continue;
         }
-        if card.as_ref().is_some_and(|n| *n != c.name.to_lowercase()) {
+        // `--card` takes the card's name or one of its faces' names.
+        if card.as_ref().is_some_and(|n| {
+            *n != c.name.to_lowercase()
+                && !c
+                    .card_faces
+                    .iter()
+                    .flatten()
+                    .any(|f| f.name.to_lowercase() == *n)
+        }) {
             continue;
         }
         let def = CardDef::from_scryfall(c);
@@ -266,8 +365,10 @@ fn evidence(
             fuzz: FuzzOutcome::Missing,
         };
     }
-    let round_trip =
-        passing.contains(&key) && mtg_engine::oracle::render::compare::check_card(def).pass;
+    // A card with hand-written abilities isn't in the passing list (`roundtrip` doesn't
+    // check those): it passes when all but its hand-written blocks render back.
+    let round_trip = (passing.contains(&key) || !def.manual_text().is_empty())
+        && mtg_engine::card_tiers::round_trip_passes(def);
     let mut names: Vec<&str> = vec![def.name.as_str()];
     names.extend(def.faces.iter().map(|f| f.chars.name.as_str()));
     let mut hashes: BTreeSet<u64> = BTreeSet::new();
@@ -349,6 +450,67 @@ mod tests {
             panic!()
         };
         assert_eq!(exempt.as_deref(), Some("no mana cost"));
+    }
+
+    #[test]
+    fn a_card_a_failed_game_names_as_an_object_is_not_fuzz_clean() {
+        let names: HashMap<String, String> = [
+            ("sight beyond sight", "sight beyond sight"),
+            ("sight", "sight"),
+            ("maelstrom nexus", "maelstrom nexus"),
+            (
+                "delver of secrets",
+                "delver of secrets // insectile aberration",
+            ),
+            (
+                "insectile aberration",
+                "delver of secrets // insectile aberration",
+            ),
+            ("grizzly bears", "grizzly bears"),
+        ]
+        .into_iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
+        assert_eq!(
+            named_in(
+                "as Cleanup ended: Insectile Aberration #12 and Sight Beyond Sight #N",
+                &names
+            ),
+            vec![
+                "delver of secrets // insectile aberration".to_string(),
+                "sight beyond sight".to_string()
+            ]
+        );
+        assert!(named_in("slow: stopped on turn N", &names).is_empty());
+        let text = "failure\tMaelstrom Nexus (--from 15350 --game 0)\trules: Sight Beyond Sight #N is listed in Library(PlayerId(N)) but has become a new object\n\
+            outcome\t15350\tMaelstrom Nexus\tcast\trules\n\
+            outcome\t20000\tSight Beyond Sight\tcast\t\n\
+            outcome\t9000\tGrizzly Bears\tcast\t\n";
+        let mut fuzz = parse_report(text);
+        charge_named(text, &names, &mut fuzz);
+        let failures = |k: &str| match &fuzz[k] {
+            FuzzOutcome::Swept { failures, .. } => failures.clone(),
+            FuzzOutcome::Missing => panic!(),
+        };
+        assert_eq!(failures("maelstrom nexus"), vec!["rules".to_string()]);
+        assert_eq!(
+            failures("sight beyond sight"),
+            vec!["rules in a game of Maelstrom Nexus".to_string()]
+        );
+        assert!(failures("grizzly bears").is_empty());
+        let t = classify(&Evidence {
+            unsupported: vec![],
+            round_trip: true,
+            manual_problems: vec![],
+            structures: 1,
+            unexercised: 0,
+            fuzz: fuzz["sight beyond sight"].clone(),
+        });
+        assert_eq!(t.tier, Tier::RoundTrip);
+        assert_eq!(
+            t.failed_text(),
+            "fuzz-clean (rules in a game of Maelstrom Nexus)"
+        );
     }
 
     #[test]

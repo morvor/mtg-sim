@@ -18,9 +18,10 @@
 //!
 //! `--cards verified|round-trip|compiled` (strict mode, `strict.rs`) sets the lowest card
 //! tier a deck may hold (`docs/verified-cards.tsv`, or `--tiers FILE`): `verified` by
-//! default for `--deck` files and the default deck, which are rejected before the first
-//! game if a card is below the bar. `--random-decks` keeps every fully supported card
-//! unless given `--cards`, and then draws only cards at the bar.
+//! default for `--deck` files (also alongside `--random-decks`) and the default deck, which
+//! are rejected before the first game if a card is below the bar. `--random-decks` keeps
+//! every fully supported card for its random decks unless given `--cards`, and then draws
+//! only cards at the bar.
 //!
 //! `--check N` runs the rules checks of `checks.rs` before every Nth priority decision (no
 //! state-based action pending, CR 117.5; consistent zones; up-to-date characteristics;
@@ -156,15 +157,13 @@ fn main() {
     }
     let check = check.unwrap_or(if random { 4 } else { 0 });
     let fixed: Vec<DeckList> = deck_files.iter().map(|f| load_deck(f)).collect();
-    // Strict mode: ordinary games default to verified cards; fuzzing keeps its pool.
-    let bar = strict.bar(if random {
-        None
-    } else {
-        Some(card_tiers::Tier::Verified)
-    });
+    // Strict mode: `--deck` files and the default deck default to verified cards; the
+    // random decks of fuzzing keep the whole pool unless given `--cards`.
+    let random_bar = strict.bar(None);
+    let deck_bar = strict.cards.unwrap_or(card_tiers::Tier::Verified);
     let table = strict.table();
     let default = default_deck();
-    if let Some(bar) = bar {
+    {
         let mut decks: Vec<(String, &DeckList)> = deck_files
             .iter()
             .zip(&fixed)
@@ -173,7 +172,7 @@ fn main() {
         if !random && fixed.len() < players {
             decks.push(("the default deck".into(), &default));
         }
-        strict::enforce(&table, &decks, bar);
+        strict::enforce(&table, &decks, deck_bar);
     }
     install_panic_hook();
 
@@ -193,7 +192,7 @@ fn main() {
         let decks: Vec<DeckList> = (0..players)
             .map(|p| match fixed.get(p) {
                 Some(d) => d.clone(),
-                None if random => random_deck(&mut deck_rng, bar.map(|b| (&table, b))),
+                None if random => random_deck(&mut deck_rng, random_bar.map(|b| (&table, b))),
                 None => default.clone(),
             })
             .collect();

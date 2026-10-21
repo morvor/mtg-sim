@@ -41,15 +41,16 @@ by a test, and a clean every-card sweep; see `docs/CARD_COVERAGE.md`). Each card
 `docs/verified-cards.tsv` (`mtg_engine::card_tiers`). A card the file doesn't list counts
 as at most `compiled`, and a card that no longer compiles or round-trips drops at once.
 
-* `mtg-sim`: `--cards verified|round-trip|compiled` sets the bar for `--deck` files and the
-  default deck (default `verified`). A deck with a card below the bar is rejected before
+* `mtg-sim`: `--cards verified|round-trip|compiled` sets the bar for `--deck` files
+  (sideboards included) and the default deck (default `verified`). A deck with a card below the bar is rejected before
   the game starts (exit status 2), listing each such card and the checks it fails.
   `--random-decks` keeps every fully supported card unless given `--cards`.
 * Rust: `ProtocolOptions::min_card_tier` (default `Tier::Verified`; `Tier::Compiled` lets
   in any fully supported card, `Tier::Unsupported` checks nothing). `Session::start`
   returns `Err(DeckError::BelowBar(..))` (per seat, each card with its tier and failed
-  checks) instead of starting a game; `Session::start_with_tiers` takes another tier
-  table. `mtg_api::decks::parse_decklist` reads "4 Lightning Bolt" decklists and
+  checks) instead of starting a game. `Session::start_with_sideboards` also takes each
+  seat's sideboard (held to the same bar); `Session::start_with_tiers` takes another tier
+  table. Cards added by `Session::start_with`'s `setup` closure aren't checked. `mtg_api::decks::parse_decklist` reads "4 Lightning Bolt" decklists and
   `mtg_api::decks::check_decks` checks decks against a bar.
 
 ```rust

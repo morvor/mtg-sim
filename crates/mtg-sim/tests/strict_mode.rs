@@ -56,6 +56,13 @@ fn a_deck_with_an_unverified_card_is_rejected_unless_the_bar_is_lowered() {
     assert!(!out.contains("Grizzly Bears:"), "{out}");
     assert!(!out.contains("1 games in"), "no game was played: {out}");
 
+    // A deck file is held to the bar alongside random decks too.
+    let mut with_random = base.to_vec();
+    with_random.push("--random-decks");
+    let (code, out) = sim(&with_random);
+    assert_eq!(code, 2, "{out}");
+    assert!(out.contains("Hill Giant: compiled"), "{out}");
+
     let mut lowered = base.to_vec();
     lowered.extend(["--cards", "compiled"]);
     let (code, out) = sim(&lowered);

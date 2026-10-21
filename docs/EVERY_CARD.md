@@ -166,8 +166,19 @@ failed games keep their cards from being verified (`fuzz-clean`): Charismatic Co
 two slow games (the open loop described above), one slow Shahrazad game (subgames
 inside subgames), and one Maelstrom Nexus game with a zone-consistency report ("Sight
 Beyond Sight #53 is listed in Library(P0) but has become a new object", from turn 27;
-replay with `mtg-sim --every-card --from 15350 --count 1 --game 0 --log`), not yet
-investigated.
+replay with `mtg-sim --every-card --from 15350 --count 1 --game 0 --log`). A card a
+failed game's message names as an object is charged too (`fuzz-clean (rules in a game of
+Maelstrom Nexus)` for Sight Beyond Sight); the other cards of a failed game's decks
+aren't, since the report doesn't list them.
+
+The Maelstrom Nexus violation was an engine bug, since fixed: Sight Beyond Sight resolved
+with Skill Borrower out (its controller may look at the top card of their library). Taking
+the top card into the hand uncovered the other card, which the top-card effect saw again
+and made a new object (CR 401.6), while the dig still held the old id and put that on the
+bottom: the stale id stayed listed in the library and the new object stayed on top.
+Library rearrangements (`library.rs`: put on top/bottom, the rest of a dig) now follow a
+card to the object it is now (`tests/cards/card_flow_sight_beyond_sight.rs`). The tier
+file still charges both cards until the next sweep.
 
 ### Earlier sweeps
 

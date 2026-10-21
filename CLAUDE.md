@@ -153,9 +153,13 @@ cargo run --release -p mtg-sim -- --games 200
 cargo run --release -p mtg-sim -- --random-decks --games 1000   # fuzz: random decks; panics/hangs print a repro command
 cargo run --release -p mtg-tools -- verified --card "Shock"      # a card's tier and failed checks
 # Regenerate docs/verified-cards.tsv and docs/CARD_COVERAGE.md (before each milestone, after a
-# new card set or CR update; the sweep takes about an hour, so run nothing else heavy alongside):
+# new card set or CR update). The sweep takes ~2.3 hours with 3 threads, so run it in three
+# chunks (one command each, ~46 min) and run nothing else heavy alongside:
 rm -rf target/structlog && MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace
-cargo run --release -p mtg-sim -- --every-card --threads 3 --report target/every-card.tsv
+cargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 10100 --report target/every-card-0.tsv
+cargo run --release -p mtg-sim -- --every-card --threads 3 --from 10100 --count 10100 --report target/every-card-1.tsv
+cargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 10100 --report target/every-card-2.tsv
+cat target/every-card-[012].tsv > target/every-card.tsv
 cargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write
 cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
 ```

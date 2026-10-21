@@ -42,6 +42,7 @@ fn a_session_with_a_card_below_the_bar_does_not_start() {
                 ..Default::default()
             },
             vec![good.clone(), bad.clone()],
+            vec![],
             vec![Seat::External, Seat::External],
             o,
             &t,
@@ -60,6 +61,34 @@ fn a_session_with_a_card_below_the_bar_does_not_start() {
     );
     assert!(start(options(Tier::RoundTrip)).is_err());
     // Lowered explicitly, the game starts.
+    let mut s = start(options(Tier::Compiled)).expect("compiled cards are allowed");
+    assert!(s.next().is_some());
+}
+
+#[test]
+fn sideboards_are_held_to_the_bar_too() {
+    let deck = parse_decklist("30 Forest\n10 Grizzly Bears\nSideboard\nHill Giant").unwrap();
+    let t = tiers();
+    let start = |o: ProtocolOptions| {
+        Session::start_with_tiers(
+            GameConfig {
+                max_turns: 2,
+                ..Default::default()
+            },
+            vec![deck.main.clone(), deck.main.clone()],
+            vec![vec![], deck.sideboard.clone()],
+            vec![Seat::External, Seat::External],
+            o,
+            &t,
+            |_| {},
+        )
+    };
+    let Err(DeckError::BelowBar(seats)) = start(ProtocolOptions::default()) else {
+        panic!("the sideboard's Hill Giant is rejected");
+    };
+    assert_eq!(seats.len(), 1);
+    assert_eq!(seats[0].0, 1);
+    assert_eq!(seats[0].1.cards[0].0, "Hill Giant");
     let mut s = start(options(Tier::Compiled)).expect("compiled cards are allowed");
     assert!(s.next().is_some());
 }

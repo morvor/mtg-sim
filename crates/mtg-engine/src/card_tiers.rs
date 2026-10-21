@@ -254,6 +254,37 @@ pub fn classify(e: &Evidence) -> CardTier {
     CardTier { tier, ..t }
 }
 
+/// Whether the card passes the Oracle round trip now. A card with hand-written abilities
+/// (`crate::cards`) passes when everything else on it renders back to its Oracle text: its
+/// only mismatches are the hand-written blocks themselves, whose behavior is in code the
+/// renderer can't put into words (they count once `manual-check` passes for the card, i.e.
+/// it has its test; see [`classify`]).
+pub fn round_trip_passes(def: &CardDef) -> bool {
+    use crate::oracle::render::compare;
+    let c = compare::check_card(def);
+    if c.pass {
+        return true;
+    }
+    if !c.hand_written {
+        return false;
+    }
+    let mut manual_units: Vec<String> = Vec::new();
+    for (i, f) in def.faces.iter().enumerate() {
+        let names = compare::self_names(def, i);
+        for m in &f.manual {
+            manual_units.extend(compare::oracle_units(m, &names));
+        }
+    }
+    // A hand-written ability's custom pieces render as "Custom(card:Name:...)".
+    let hand_written_piece = |s: &str| {
+        let s = s.to_lowercase();
+        s.contains("(card:") || s.contains("custom card ~")
+    };
+    c.gaps.iter().all(|g| hand_written_piece(g))
+        && c.unmatched_oracle.iter().all(|u| manual_units.contains(u))
+        && c.unmatched_rendered.iter().all(|r| hand_written_piece(r))
+}
+
 /// A card's live tier, from its compiled definition alone: unsupported, compiled, or (when
 /// the round trip passes now) round-trip. Structure coverage and fuzzing aren't live, so
 /// this is never [`Tier::Verified`]; it caps what the tier file says.
@@ -268,7 +299,7 @@ pub fn live_tier(def: &CardDef) -> CardTier {
             )],
         };
     }
-    if !crate::oracle::render::compare::check_card(def).pass {
+    if !round_trip_passes(def) {
         return CardTier {
             tier: Tier::Compiled,
             failed: vec![Failed::new(check::ROUND_TRIP, "fails now")],
@@ -622,6 +653,32 @@ mod tests {
         .unwrap_err();
         assert_eq!(e.cards.len(), 1);
         assert!(e.to_string().contains("Hill Giant: compiled; fails listed"));
+    }
+
+    #[test]
+    fn a_hand_written_card_round_trips_when_only_its_hand_written_blocks_differ() {
+        let db = crate::card::CardDb::global();
+        // Trinisphere's one ability is hand-written; Akroma's keywords render back and its
+        // hand-written trigger doesn't.
+        for name in ["Trinisphere", "Akroma, Vision of Ixidor"] {
+            let def = db.get(name).unwrap();
+            assert!(!def.manual_text().is_empty(), "{name}");
+            assert!(!crate::oracle::render::compare::check_card(&def).pass);
+            assert!(round_trip_passes(&def), "{name}");
+        }
+        // Another of its abilities stops rendering back: no longer passes.
+        let mut def = (*db.get("Akroma, Vision of Ixidor").unwrap()).clone();
+        let text = def.faces[0]
+            .chars
+            .rules_text
+            .replace("Partner", "Partner\nHexproof");
+        def.faces[0].chars.rules_text = text.into();
+        assert!(!round_trip_passes(&def));
+        // A card without hand-written abilities needs the plain round trip.
+        let mut bears = (*db.get("Grizzly Bears").unwrap()).clone();
+        assert!(round_trip_passes(&bears));
+        bears.faces[0].chars.rules_text = "Flying".into();
+        assert!(!round_trip_passes(&bears));
     }
 
     #[test]

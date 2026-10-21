@@ -296,7 +296,7 @@ fn pattern_of(text: &str) -> String {
 }
 
 /// How to regenerate the tier file and this report, for CARD_COVERAGE.md.
-const TIER_RECIPE: &str = "```sh\nexport CARGO_BUILD_JOBS=2\nrm -rf target/structlog\nMTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log\ncargo run --release -p mtg-sim -- --every-card --threads 3 --report target/every-card.tsv   # ~1 hour\ncargo run --release -p mtg-tools -- roundtrip --write docs/ROUNDTRIP.md     # if round trips changed\ncargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write\ncargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md\n```\n";
+const TIER_RECIPE: &str = "```sh\nexport CARGO_BUILD_JOBS=2\nrm -rf target/structlog\nMTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log\n# The every-card sweep: about 2.3 hours with 3 threads, so three chunks of ~46 min each\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 10100 --report target/every-card-0.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 10100 --count 10100 --report target/every-card-1.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 10100 --report target/every-card-2.tsv\ncat target/every-card-[012].tsv > target/every-card.tsv\ncargo run --release -p mtg-tools -- roundtrip --write docs/ROUNDTRIP.md     # if round trips changed\ncargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write\ncargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md\n```\n";
 
 fn card_coverage(args: &[String]) {
     use mtg_engine::card::CardDef;
@@ -406,7 +406,7 @@ fn card_coverage(args: &[String]) {
         "**Verified: {verified} of {total} cards ({:.1}%)** (paper cards legal in at least one format).\n\n",
         pct(verified, total)
     ));
-    md.push_str("A card is *verified* when it passes every check we have: every ability compiled (or hand-written and tested), the compiled abilities render back to the Oracle text (the round trip, `docs/ROUNDTRIP.md`), every ability structure on it is exercised by some test (`docs/STRUCTURE_COVERAGE.md`), and the latest every-card sweep cast or played it with no panic, hang, slow game or rules-check violation (`docs/EVERY_CARD.md`; a card the sweep can't cast, with no mana cost or in a supplementary deck, is exempt from being cast). Simulations use only verified cards by default (`mtg-sim --cards`, `mtg_api::ProtocolOptions::min_card_tier`).\n\n");
+    md.push_str("A card is *verified* when it passes every check we have: every ability compiled (or hand-written and tested), the compiled abilities render back to the Oracle text (the round trip, `docs/ROUNDTRIP.md`), every ability structure on it is exercised by some test (`docs/STRUCTURE_COVERAGE.md`), and the latest every-card sweep cast or played it with no panic, hang, slow game or rules-check violation involving it (in the games built around it, or naming it; `docs/EVERY_CARD.md`; a card the sweep can't cast, with no mana cost or in a supplementary deck, is exempt from being cast). Simulations use only verified cards by default (`mtg-sim --cards`, `mtg_api::ProtocolOptions::min_card_tier`).\n\n");
     md.push_str(
         "| Tier | Means | Cards | % | At least this tier | % |\n|---|---|---:|---:|---:|---:|\n",
     );
@@ -417,7 +417,7 @@ fn card_coverage(args: &[String]) {
         ),
         (
             Tier::RoundTrip,
-            "compiled, and the Oracle round trip passes",
+            "compiled, and the Oracle round trip passes (for a card with hand-written abilities: everything but those, once `manual-check` passes)",
         ),
         (
             Tier::Compiled,
@@ -445,7 +445,7 @@ fn card_coverage(args: &[String]) {
         (check::FUZZ_CAST, "the sweep never cast or played it"),
         (
             check::FUZZ_CLEAN,
-            "a panic, hang, slow game or rules violation in its games",
+            "a panic, hang, slow game or rules violation in its games, or in another game whose failure names it",
         ),
         (
             check::LISTED,
@@ -479,7 +479,7 @@ fn card_coverage(args: &[String]) {
     ));
     md.push_str("## Regenerating\n\nRegenerate the tier file and this report before each milestone, and after a new card set or a CR update (other work changes round trips and structure coverage all the time, so the numbers drift between regenerations; a card newer than the tier file counts as at most compiled, and a card that stops compiling or round-tripping drops at once). Run nothing else heavy alongside the sweep:\n\n");
     md.push_str(TIER_RECIPE);
-    md.push_str("\nWhere a command can't run for an hour, run the sweep in chunks (`--from 0 --count 10100 --report target/every-card-0.tsv`, `--from 10100 --count 10100 ...`, `--from 20200 ...`) and concatenate the reports into one file: `verified` reads only their `outcome` lines.\n");
+    md.push_str("\nEach chunk is a separate command because one run of the whole sweep takes longer than a command may run here (a pool larger than 30,300 cards needs a fourth chunk). `verified` reads the concatenated reports' `outcome` lines (whether each card was cast, and its failed games) and `failure` lines (a card a failed game's message names as an object, like a rules-check violation's, isn't fuzz-clean either).\n");
     md.push_str(
         "\n`mtg-tools verified --card \"Name\"` prints one card's tier and failed checks.\n",
     );
