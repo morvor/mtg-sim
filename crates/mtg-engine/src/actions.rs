@@ -2086,6 +2086,11 @@ impl Game {
         if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
             return false;
         }
+        // CR 702.26b: a phased-out permanent is treated as though it doesn't exist; an
+        // effect can't attach it (Robe of Stars phased out in response to its equip).
+        if self.obj(obj).phased_out {
+            return false;
+        }
         if self.obj(obj).attached_to == Some(to) {
             // CR 701.3b: already attached — nothing happens.
             return false;
