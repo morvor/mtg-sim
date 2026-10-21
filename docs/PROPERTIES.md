@@ -195,3 +195,7 @@ links, mana riders' ids and replacement keys drawn from the process-wide counter
 compared up to renaming); rollback identity found the loop watch recording reversed
 attempts, which it now ignores as bookkeeping. Rollback identity, snapshot equivalence
 and determinism found no engine bug.
+
+After merging the card-tier work (sessions and `mtg-sim` decks now default to verified
+cards; the property games keep using every fully supported card), 100 more games of each
+property (`--seed 20`) held.

@@ -429,8 +429,8 @@ pub struct ReplaySummary {
 /// Plays a game through a [`Session`], every seat answered at random (seeded by
 /// `answer_seed`), recording the transcript; then replays the transcript in a new game
 /// and checks that every request and the game-over messages are the recorded ones. The
-/// decks may hold any fully supported card (`Tier::Compiled`). Returns the transcript's
-/// text with the summary, or the first divergence.
+/// decks aren't checked against card tiers. Returns the transcript's text with the
+/// summary, or the first divergence.
 pub fn replay_check(
     config: GameConfig,
     decks: Vec<Vec<Arc<CardDef>>>,
@@ -438,9 +438,10 @@ pub fn replay_check(
     max_requests: usize,
 ) -> Result<(ReplaySummary, String), String> {
     let n = decks.len();
-    // The property games use any fully supported (compiled) card.
+    // The decks are the caller's (the property games use any fully supported card, which
+    // the recorded tiers of `docs/verified-cards.tsv` may lag behind): no tier bar.
     let options = ProtocolOptions {
-        min_card_tier: mtg_engine::card_tiers::Tier::Compiled,
+        min_card_tier: mtg_engine::card_tiers::Tier::Unsupported,
         ..Default::default()
     };
     let mut s = Session::start(
