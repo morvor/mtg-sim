@@ -203,6 +203,7 @@ fn a_creature_given_changeling_by_an_effect_is_not_every_creature_type() {
     // text-changing effect isn't a characteristic-defining ability (CR 604.3a(2)): it's
     // added in layer 6 (CR 613.1f), after creature types were set in layer 4 (CR 613.1d).
     cr!("604.3a", "613.1d", "613.1f");
+    interp!("changeling-cda-only");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P0, "Goblin King");
@@ -289,6 +290,7 @@ fn changeling_acquired_through_token_creation_or_a_copy_effect_is_every_creature
     // through a copy effect, is a characteristic-defining ability (unlike one granted by
     // any other effect), so the object is every creature type.
     cr!("604.3a", "702.73a");
+    interp!("changeling-cda-only");
     assert_supported("Irregular Cohort");
     assert_supported("Clone");
     assert_supported("Omni-Changeling");

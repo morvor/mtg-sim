@@ -210,7 +210,14 @@ impl Game {
                 }
             }
             Effect::Store { var, sel } => {
-                let v = self.resolve_sel(sel, ctx);
+                let mut v = self.resolve_sel(sel, ctx);
+                // "~" after its cost moved it (CR 400.7j).
+                if matches!(sel, Sel::This) {
+                    v = v
+                        .into_iter()
+                        .map(|e| self.found_after_move(e, ctx))
+                        .collect();
+                }
                 ctx.vars.insert(*var, v);
             }
             Effect::StoreValue { var, value } => {
@@ -821,6 +828,8 @@ impl Game {
                 let mut effect = effect.clone();
                 // CR 608.2h: amounts are determined as the effect begins.
                 crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
+                // "from that player's graveyard": that player, as the effect begins.
+                crate::permissions::lock_permission_players(self, &mut effect, ctx);
                 self.player_effects.push(PlayerEffect {
                     id,
                     players,
@@ -2065,7 +2074,8 @@ impl Game {
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.
                 let before = self.play_grants.len();
-                self.exec(effect, ctx);
+                // Spells cast as the effect resolves are cast with the terms too.
+                crate::permissions::with_resolution_terms(self, terms, |g| g.exec(effect, ctx));
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                 }
@@ -2412,10 +2422,13 @@ impl Game {
             return e;
         }
         let now = self.current(o);
-        let moved = ctx
-            .vars
-            .get(&vars::IT)
-            .is_some_and(|v| v.contains(&Entity::Object(now)));
+        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
+        // ~: ... Return ~ to the battlefield ...", CR 400.7j).
+        let moved = [vars::IT, crate::zones::COST_MOVED].iter().any(|v| {
+            ctx.vars
+                .get(v)
+                .is_some_and(|v| v.contains(&Entity::Object(now)))
+        });
         if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
             Entity::Object(now)
         } else {

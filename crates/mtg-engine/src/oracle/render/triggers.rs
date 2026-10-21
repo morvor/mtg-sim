@@ -668,6 +668,12 @@ impl Renderer<'_> {
                         format!("the beginning of combat on {p} turn")
                     }
                     (TriggerStep::EndOfCombat, PlayerRel::Any) => "end of combat".into(),
+                    // "At end of combat on your turn": as the end of combat step begins
+                    // (CR 511.2).
+                    (TriggerStep::EndOfCombat, PlayerRel::You) => {
+                        "{alt:{opt:the} end of combat on your turn|the beginning of your end of combat step}"
+                            .into()
+                    }
                     (TriggerStep::Turn, PlayerRel::You) => "the beginning of your turn".into(),
                     (TriggerStep::Turn, PlayerRel::Any) => "the beginning of each turn".into(),
                     (_, PlayerRel::You) => format!("the beginning of your {s}"),

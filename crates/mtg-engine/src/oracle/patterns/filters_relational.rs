@@ -223,8 +223,24 @@ pub fn unresolved(a: &AbilityDef) -> bool {
                 // (`target_groups::fit_together`); so are the objects a sacrifice, discard
                 // exile, tap or reveal cost is paid with
                 // (`target_groups::can_choose_together`).
-                for key in ["Search", "Choose", "Dig"] {
+                for key in ["Search", "Choose", "Dig", "Take"] {
                     strip_filter(m, key);
+                }
+                // The parts of a general search (`search_rules::choose`).
+                if let Some(serde_json::Value::Object(inner)) = m.get_mut("SearchCards") {
+                    if let Some(serde_json::Value::Array(parts)) = inner.get_mut("parts") {
+                        for part in parts {
+                            if let serde_json::Value::Object(pm) = part {
+                                let ok = pm.get("filter").is_some_and(|f| {
+                                    serde_json::from_value::<Filter>(f.clone())
+                                        .is_ok_and(|f| !crate::relational::has_nested_group(&f))
+                                });
+                                if ok {
+                                    pm.remove("filter");
+                                }
+                            }
+                        }
+                    }
                 }
                 if let Some(serde_json::Value::Array(parts)) = m.get_mut("parts") {
                     for part in parts {

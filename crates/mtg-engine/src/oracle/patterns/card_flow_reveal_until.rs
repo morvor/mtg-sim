@@ -41,6 +41,9 @@ fn reveal_until(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let filter = card_filter(desc, b)?;
+    // "that creature" is still the trigger's ("Put that card onto the battlefield
+    // attached to that creature").
+    super::dig_grammar::keep_that_creature(b);
     // "that card" is the card revealed last.
     b.it = Sel::Var(vars::IT);
     Some(Effect::RevealUntil {

@@ -44,6 +44,70 @@ pub fn parse_search(name: &str) -> Option<(u8, Var)> {
     Some((slot.parse().ok()?, var.parse().ok()?))
 }
 
+/// The general form: "search same name:{zones}:{any}:{object}:{var}" — the zones
+/// searched (`ghl`: graveyard, hand, and library; `l`: library), `all` or `any` (any
+/// number of cards), the object whose name it is (`t3`: the target in slot 3, `v65`: the
+/// object in variable 65), and the variable for the cards found. The zones are those of
+/// that object's controller (as it last existed; for a card, its owner).
+const PREFIX_GENERAL: &str = "search same name:";
+
+/// What a general same-name search searches for.
+pub struct SameNameSearch {
+    pub all_zones: bool,
+    pub any_number: bool,
+    pub object: Sel,
+    pub var: Var,
+}
+
+/// The instruction finding the cards named like `object` (a target or an object in a
+/// variable); `None` for other objects.
+pub fn general_effect(
+    all_zones: bool,
+    any_number: bool,
+    object: &Sel,
+    var: Var,
+) -> Option<crate::ability::Effect> {
+    let obj = match object {
+        Sel::Target(n) => format!("t{n}"),
+        Sel::Var(v) => format!("v{v}"),
+        _ => return None,
+    };
+    let zones = if all_zones { "ghl" } else { "l" };
+    let any = if any_number { "any" } else { "all" };
+    Some(crate::ability::Effect::Custom(
+        format!("{PREFIX_GENERAL}{zones}:{any}:{obj}:{var}").into(),
+    ))
+}
+
+/// The parts of a [`general_effect`] instruction.
+pub fn parse_general(name: &str) -> Option<SameNameSearch> {
+    let r = name.strip_prefix(PREFIX_GENERAL)?;
+    let mut it = r.split(':');
+    let all_zones = match it.next()? {
+        "ghl" => true,
+        "l" => false,
+        _ => return None,
+    };
+    let any_number = match it.next()? {
+        "any" => true,
+        "all" => false,
+        _ => return None,
+    };
+    let obj = it.next()?;
+    let object = if let Some(n) = obj.strip_prefix('t') {
+        Sel::Target(n.parse().ok()?)
+    } else {
+        Sel::Var(obj.strip_prefix('v')?.parse().ok()?)
+    };
+    let var = it.next()?.parse().ok()?;
+    Some(SameNameSearch {
+        all_zones,
+        any_number,
+        object,
+        var,
+    })
+}
+
 pub struct SearchSameName;
 
 impl KeywordRules for SearchSameName {
@@ -52,16 +116,39 @@ impl KeywordRules for SearchSameName {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-        let Some((slot, var)) = parse_search(name) else {
+        let search = if let Some((slot, var)) = parse_search(name) {
+            SameNameSearch {
+                all_zones: true,
+                any_number: name.starts_with(PREFIX_ANY),
+                object: Sel::Target(slot),
+                var,
+            }
+        } else if let Some(s) = parse_general(name) {
+            s
+        } else {
             return false;
         };
-        let any_number = name.starts_with(PREFIX_ANY);
+        run(g, &search, ctx);
+        true
+    }
+}
+
+/// Searches the zones of the controller of `search.object` for cards with its name
+/// (CR 701.23, 201.2), storing the cards found in `search.var`.
+fn run(g: &mut Game, search: &SameNameSearch, ctx: &mut Ctx) {
+    {
+        let SameNameSearch {
+            all_zones,
+            any_number,
+            ref object,
+            var,
+        } = *search;
         let searcher = ctx.controller;
-        let target = Sel::Target(slot);
+        let target = object.clone();
         let Some(owner) = g.eval_player(&PlayerRef::ControllerOf(Box::new(target.clone())), ctx)
         else {
             ctx.set_var(var, vec![]);
-            return true;
+            return;
         };
         let filter = Filter::and(vec![Filter::Card, Filter::SameNameAs(Box::new(target))]);
         let named = |g: &Game, zone: &[ObjectId], ctx: &Ctx| -> Vec<ObjectId> {
@@ -72,7 +159,14 @@ impl KeywordRules for SearchSameName {
         };
         // The graveyard: every such card ("all cards"), or those the searcher chooses
         // ("any number of cards").
-        let in_graveyard = named(g, &g.player(owner).graveyard.clone(), ctx);
+        let (in_graveyard, in_hand) = if all_zones {
+            (
+                named(g, &g.player(owner).graveyard.clone(), ctx),
+                named(g, &g.player(owner).hand.clone(), ctx),
+            )
+        } else {
+            (vec![], vec![])
+        };
         let mut found = if any_number {
             vec![]
         } else {
@@ -80,7 +174,6 @@ impl KeywordRules for SearchSameName {
         };
         // The hand (and the graveyard for "any number"): the searcher chooses which to
         // find (all by default).
-        let in_hand = named(g, &g.player(owner).hand.clone(), ctx);
         for cands in [
             if any_number { in_graveyard } else { vec![] },
             in_hand,
@@ -128,7 +221,6 @@ impl KeywordRules for SearchSameName {
             ctx,
         ));
         ctx.set_var(var, found.into_iter().map(Entity::Object).collect());
-        true
     }
 }
 

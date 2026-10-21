@@ -192,6 +192,7 @@ fn each_subtype_is_correlated_to_its_card_type() {
     // and Dryad a creature type. When it stops being a creature, it keeps Forest but
     // loses Dryad.
     cr!("205.3c");
+    cr_example!("205.3c", "Dryad Arbor");
     ruling!(
         "Dryad Arbor",
         "Forest is a land type and Dryad is a creature type."
@@ -221,6 +222,7 @@ fn each_subtype_is_correlated_to_its_card_type() {
 #[test]
 fn choosing_a_subtype_means_exactly_one_existing_subtype_of_the_right_kind() {
     cr!("205.3e");
+    cr_example!("205.3e", "Merfolk Wizard");
     ruling!(
         "Xenograft",
         "You must choose an existing _Magic_ creature type."

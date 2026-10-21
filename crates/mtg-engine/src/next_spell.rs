@@ -74,9 +74,27 @@ pub fn is_cast_grant(s: &StaticAbility) -> bool {
         && !mentions(affected, &Filter::SpellOnStack)
         && !mentions_source(affected)
         && !mods.is_empty()
-        && mods
-            .iter()
-            .all(|m| matches!(m, Modification::AddKeyword(_) | Modification::AddAbility(_)))
+        && mods.iter().all(|m| {
+            matches!(
+                m,
+                Modification::AddKeyword(_)
+                    | Modification::AddKeywordOwnCost(..)
+                    | Modification::AddAbility(_)
+            )
+        })
+}
+
+/// `Filter::Custom` conjunct of a waiting effect's filter: it applies to each matching
+/// spell its controller casts while it lasts ("as you cast spells from your hand this
+/// turn, they gain cascade"), rather than only to the next one. Matches every object.
+pub const EACH_SPELL_THIS_TURN: &str = "next spell:each spell this turn";
+
+fn filter_has_custom(f: &Filter, name: &str) -> bool {
+    match f {
+        Filter::Custom(n) => n == name,
+        Filter::And(v) => v.iter().any(|x| filter_has_custom(x, name)),
+        _ => false,
+    }
 }
 
 /// Whether the filter has `part` among its conjuncts.
@@ -112,7 +130,14 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
     for e in pending {
         let ctx = Ctx::new(e.source, e.player);
         if e.player == p && g.matches(spell, &e.filter, &ctx) {
-            apply.push((e.source, e.player, e.mods));
+            // "As you cast spells from your hand this turn, they gain cascade": every such
+            // spell this turn, not only the next.
+            if filter_has_custom(&e.filter, EACH_SPELL_THIS_TURN) {
+                apply.push((e.source, e.player, e.mods.clone()));
+                keep.push(e);
+            } else {
+                apply.push((e.source, e.player, e.mods));
+            }
         } else {
             keep.push(e);
         }
@@ -294,8 +319,17 @@ pub fn cast_grant_keywords(g: &Game, p: PlayerId, card: ObjectId) -> Vec<crate::
                 continue;
             }
             for m in mods {
-                if let Modification::AddKeyword(k) = m {
-                    out.push(k.clone());
+                match m {
+                    Modification::AddKeyword(k) => out.push(k.clone()),
+                    // "The emerge cost is equal to its mana cost."
+                    Modification::AddKeywordOwnCost(k, reduce) => {
+                        out.push(crate::layers::own_cost_keyword(
+                            k,
+                            *reduce,
+                            &g.characteristics_to_cast(card),
+                        ))
+                    }
+                    _ => {}
                 }
             }
         }

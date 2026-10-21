@@ -183,6 +183,19 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
         TargetGroup::ShareCardTypeAmong(types) => {
             objs.len() < 2 || types.iter().any(|t| objs.iter().all(|o| o.chars.is(*t)))
         }
+        TargetGroup::ShareLandType => {
+            let land_types = |c: &Characteristics| -> Vec<String> {
+                c.subtypes
+                    .iter()
+                    .map(|t| t.to_string())
+                    .filter(|t| crate::types::is_land_type(t))
+                    .collect()
+            };
+            objs.len() < 2
+                || land_types(&objs[0].chars)
+                    .iter()
+                    .any(|t| objs.iter().all(|o| land_types(&o.chars).contains(t)))
+        }
         TargetGroup::SharePermanentType => {
             objs.len() < 2
                 || objs[0]
@@ -217,7 +230,8 @@ pub fn holds_on_resolution(
         | TargetGroup::ShareCardTypeAmong(_)
         | TargetGroup::SharePermanentType
         | TargetGroup::SameName
-        | TargetGroup::ShareColor => group_ok(g, group, all, ctx),
+        | TargetGroup::ShareColor
+        | TargetGroup::ShareLandType => group_ok(g, group, all, ctx),
         TargetGroup::DifferentControllers
         | TargetGroup::DifferentNames
         | TargetGroup::DifferentManaValues
