@@ -6,7 +6,7 @@
 use super::{AbilityPattern, EffectPattern, StaticPattern, TriggerPattern};
 use crate::ability::*;
 use crate::keywords::{Keyword, KeywordKind};
-use crate::kw::exert::{EXERTED, EXERT_AS_ATTACKS};
+use crate::kw::exert::{EXERTED, EXERT_AS_ATTACKS, NOT_EXERTED_THIS_TURN};
 use crate::oracle::effects::{parse_effect_text, Builder};
 use crate::oracle::CompileContext;
 
@@ -16,15 +16,24 @@ const EXERT_LINK: u16 = 0x4001;
 fn exert_paragraph(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let t = block.trim();
     let lower = t.to_lowercase();
+    // "If ~ hasn't been exerted this turn, you may exert it as it attacks." (Combat
+    // Celebrant): the option exists only then.
+    let (condition, lower) = match lower.strip_prefix("if ~ hasn't been exerted this turn, ") {
+        Some(r) => (
+            Some(Condition::Custom(NOT_EXERTED_THIS_TURN.into())),
+            r.replacen("you may exert it as it attacks.", "you may exert ~ as it attacks.", 1),
+        ),
+        None => (None, lower.clone()),
+    };
     let r = lower
         .strip_prefix("you may exert ~ as it attacks.")
         .or_else(|| lower.strip_prefix("you may exert ~ as he attacks."))
         .or_else(|| lower.strip_prefix("you may exert ~ as she attacks."))?
         .trim();
+    let mut exert = StaticAbility::new(StaticEffect::Custom(EXERT_AS_ATTACKS.into()));
+    exert.condition = condition;
     let mut out = vec![AbilityDef::with_link(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
-            EXERT_AS_ATTACKS.into(),
-        ))),
+        AbilityKind::Static(exert),
         t,
         EXERT_LINK,
     )];
@@ -34,7 +43,16 @@ fn exert_paragraph(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let effect_text = r.strip_prefix("when you do, ")?;
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
-    let effect = parse_effect_text(effect_text, &mut b)?;
+    // "[effect] and after this phase, there is an additional combat phase" (two effects).
+    let effect = match parse_effect_text(effect_text, &mut b) {
+        Some(e) => e,
+        None => {
+            let (first, rest) = effect_text.split_once(" and after this phase, ")?;
+            let first = parse_effect_text(first, &mut b)?;
+            let rest = parse_effect_text(&format!("after this phase, {rest}"), &mut b)?;
+            Effect::Seq(vec![first, rest])
+        }
+    };
     let body = Body {
         targets: b.targets,
         effect,

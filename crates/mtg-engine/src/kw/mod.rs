@@ -638,6 +638,14 @@ pub trait KeywordRules: Sync + Send {
     ) -> Result<(), Illegal> {
         Ok(())
     }
+    /// Whether what [`Self::pay_mana_otherwise`] paid relies on the spell still having this
+    /// keyword as its total cost is paid (CR 601.2h): a static ability of the spell that
+    /// functions while it's on the stack ("rather than pay that mana": convoke, improvise,
+    /// delve), not part of determining the total cost (CR 601.2f). If the spell lost it
+    /// while mana abilities were activated (CR 601.2g), that payment can't be made.
+    fn pays_as_cost_is_paid(&self) -> bool {
+        false
+    }
     /// For the check whether `card` could be cast with `method`: takes out of `cost` what
     /// this keyword could pay other than with mana (see
     /// [`KeywordRules::pay_mana_otherwise`]).
@@ -1552,18 +1560,25 @@ fn distinct_kinds(chars: &Characteristics) -> Vec<Keyword> {
 }
 
 /// CR 601.2h: lets keywords of the spell pay part of its total cost other than with mana.
+/// Returns the keywords the spell must still have when the total cost is paid (see
+/// [`KeywordRules::pays_as_cost_is_paid`]).
 pub fn pay_mana_otherwise(
     g: &mut Game,
     p: PlayerId,
     spell: ObjectId,
     cost: &mut Cost,
-) -> Result<(), Illegal> {
+) -> Result<Vec<KeywordKind>, Illegal> {
     let kws = distinct_kinds(&g.obj(spell).chars);
+    let mut relied_on = Vec::new();
     for kw in &kws {
         for r in impls_for(kw.kind) {
-            let before = crate::structure::enabled().then(|| format!("{cost:?}"));
+            let unpaid = format!("{cost:?}");
             r.pay_mana_otherwise(g, p, spell, kw, cost)?;
-            if before.is_some_and(|b| b != format!("{cost:?}")) {
+            let changed = unpaid != format!("{cost:?}");
+            if changed && r.pays_as_cost_is_paid() && !relied_on.contains(&kw.kind) {
+                relied_on.push(kw.kind);
+            }
+            if changed && crate::structure::enabled() {
                 let c = &g.obj(spell).chars;
                 let want = format!("{kw:?}");
                 if let Some(a) = c
@@ -1576,7 +1591,7 @@ pub fn pay_mana_otherwise(
             }
         }
     }
-    Ok(())
+    Ok(relied_on)
 }
 
 /// A card seen as the spell its caster would put on the stack.

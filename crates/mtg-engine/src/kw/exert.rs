@@ -14,6 +14,9 @@ use crate::types::*;
 pub const EXERT_AS_ATTACKS: &str = "exert as it attacks";
 /// The linked triggered ability's condition (a `TriggerCond::Custom`).
 pub const EXERTED: &str = "exerted";
+/// `Condition::Custom` of "If ~ hasn't been exerted this turn, you may exert it as it
+/// attacks": the source hasn't been exerted this turn.
+pub const NOT_EXERTED_THIS_TURN: &str = "~ hasn't been exerted this turn";
 
 pub struct ExertAsItAttacks;
 
@@ -28,6 +31,7 @@ impl KeywordRules for ExertAsItAttacks {
             if g.obj(a).controller != ap {
                 continue;
             }
+            let ctx = crate::eval::Ctx::new(Some(a), ap);
             let statics: Vec<u16> = g
                 .obj(a)
                 .chars
@@ -35,7 +39,12 @@ impl KeywordRules for ExertAsItAttacks {
                 .iter()
                 .filter_map(|ab| match &ab.kind {
                     AbilityKind::Static(s) => match &s.effect {
-                        StaticEffect::Custom(n) if n.as_str() == EXERT_AS_ATTACKS => Some(ab.link),
+                        StaticEffect::Custom(n)
+                            if n.as_str() == EXERT_AS_ATTACKS
+                                && s.condition.as_ref().is_none_or(|c| g.eval_cond(c, &ctx)) =>
+                        {
+                            Some(ab.link)
+                        }
                         _ => None,
                     },
                     _ => None,
@@ -86,3 +95,24 @@ impl KeywordRules for ExertAsItAttacks {
 }
 
 inventory::submit! { KeywordRegistration(&ExertAsItAttacks) }
+
+/// "If ~ hasn't been exerted this turn" (Combat Celebrant).
+struct NotExertedThisTurn;
+
+impl KeywordRules for NotExertedThisTurn {
+    fn kinds(&self) -> &'static [KeywordKind] {
+        &[]
+    }
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<bool> {
+        if name != NOT_EXERTED_THIS_TURN {
+            return None;
+        }
+        let src = ctx.source?;
+        Some(!g.turn_events.iter().chain(g.events.iter()).any(|e| {
+            matches!(e, crate::events::Event::Custom { name, obj: Some(o), .. }
+                if name.as_str() == crate::kwa::exert::EXERTED_EVENT && *o == src)
+        }))
+    }
+}
+
+inventory::submit! { KeywordRegistration(&NotExertedThisTurn) }

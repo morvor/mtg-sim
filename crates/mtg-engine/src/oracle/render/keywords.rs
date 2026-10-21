@@ -307,6 +307,11 @@ impl Renderer<'_> {
             Filter::Multicolored => "multicolored".into(),
             Filter::Monocolored => "monocolored".into(),
             Filter::Colorless => "colorless".into(),
+            // In a static ability, the source's latest choice ("the last chosen color"
+            // where it's chosen again each time it becomes attached).
+            Filter::ChosenColor | Filter::LinkedChosenColor if self.in_static => {
+                "the {opt:last} chosen color".into()
+            }
             Filter::ChosenColor | Filter::LinkedChosenColor => "the chosen color".into(),
             Filter::ChosenCardType => "the chosen card type".into(),
             // "protection from the chosen card name" (Runed Halo).
