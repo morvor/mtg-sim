@@ -236,7 +236,6 @@ fn viviens_grizzly_puts_anything_not_taken_on_the_bottom() {
         mana(&mut t, P0, ManaType::C, 3);
         mana(&mut t, P0, ManaType::G, 1);
         t.answer_yes(P0, take);
-        t.answer_choose(P0, if take { &[] } else { &[] });
         act(&mut t, P0, g, "Look at the top card", &[]).unwrap();
         t.resolve_all();
         assert_eq!(t.hand_size(P0), 0, "{top}");
@@ -300,17 +299,15 @@ fn merchants_dockhand_x() {
         "Merchant's Dockhand",
         "Merchant’s Dockhand is tapped to pay the {T} cost. It can’t also be one of the X untapped artifacts you tap."
     );
-    let mut t = TestGame::new(2);
-    let d = t.battlefield(P0, "Merchant's Dockhand");
-    t.battlefield(P0, "Ornithopter");
-    set_library(&mut t, P0, &["Island", "Memnite", "Swamp"]);
-    assert!(dockhand(&mut t, d, 2).is_err() || {
-        t.resolve_all();
-        t.hand_size(P0) == 1 && t.library_size(P0) == 2 && {
-            // X was capped at 1: only the top card was looked at.
-            false
-        }
-    });
+    // With one other artifact, X can be 1 but not 2.
+    for (x, ok) in [(2, false), (1, true)] {
+        let mut t = TestGame::new(2);
+        let d = t.battlefield(P0, "Merchant's Dockhand");
+        let orni = t.battlefield(P0, "Ornithopter");
+        set_library(&mut t, P0, &["Island", "Memnite", "Swamp"]);
+        t.answer_choose(P0, &[obj(orni)]);
+        assert_eq!(dockhand(&mut t, d, x).is_ok(), ok, "X = {x}");
+    }
 }
 
 #[test]
@@ -618,5 +615,30 @@ fn otherwise_after_an_optional_instruction_covers_declining_it() {
         assert!(is_in(&t, lib[0], Zone::Library(P0)), "{top}");
         let first = library_top_first(&t, P0)[0];
         assert_eq!(first == t.g.current(lib[0]), !bottom, "{top} {bottom}");
+    }
+}
+
+#[test]
+fn otherwise_after_an_optional_cast_covers_declining_it() {
+    cr!("608.2c");
+    // Bre of Clan Stoutarm: "... exile cards from the top of your library until you exile
+    // a nonland card. You may cast that card without paying its mana cost if the spell's
+    // mana value is less than or equal to the amount of life you gained this turn.
+    // Otherwise, put it into your hand." Declining to cast it puts it into your hand too.
+    supported("Bre of Clan Stoutarm");
+    for (gained, cast) in [(3, true), (3, false), (1, true)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Bre of Clan Stoutarm");
+        let lib = set_library(&mut t, P0, &["Island", "Grizzly Bears", "Swamp"]);
+        t.set_step(P0, Step::PostcombatMain);
+        t.g.gain_life(P0, gained);
+        t.g.flush_events();
+        t.settle();
+        t.answer_yes(P0, cast);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        let want = if cast && gained >= 3 { Zone::Battlefield } else { Zone::Hand(P0) };
+        assert_eq!(t.zone(lib[1]), want, "gained {gained}, cast {cast}");
+        assert!(is_in(&t, lib[0], Zone::Exile));
     }
 }

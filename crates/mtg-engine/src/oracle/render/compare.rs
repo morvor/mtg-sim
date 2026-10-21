@@ -999,8 +999,8 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
         "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
     ),
     (
-        "\"If C, you may put Y. Otherwise, X.\" and \"You may put Y if C. Otherwise, X.\" -> \"If C, you may put Y. If you don't, X.\"",
-        "\"Otherwise\" after an optional instruction also covers not doing it (Fecund Greenshell, Treasure Chest and Aid from the Cowl rulings).",
+        "\"If C, you may put/cast Y. Otherwise, X.\" and \"You may put/cast Y if C. Otherwise, X.\" -> \"If C, you may put/cast Y. If you don't, X.\"",
+        "\"Otherwise\" after an optional instruction also covers not doing it (Fecund Greenshell, Treasure Chest and Aid from the Cowl rulings; Bre of Clan Stoutarm).",
     ),
     (
         "\"If C, Y. Otherwise, X.\" and \"Y if C. Otherwise, X.\" -> \"X. If C, Y instead.\" (not after \"If you do\", whose \"Otherwise\" is \"If you don't\")",
@@ -1538,10 +1538,10 @@ fn sentence_rewrites(s: &str) -> String {
     static MAY_OTHERWISE: OnceLock<[Option<Regex>; 2]> = OnceLock::new();
     let [leading, trailing_may] = MAY_OTHERWISE.get_or_init(|| {
         [
-            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), you may (put [^.]+)\. otherwise, ([^.]+)\.")
+            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), you may ((?:put|cast) [^.]+)\. otherwise, ([^.]+)\.")
                 .ok(),
             Regex::new(
-                r"(^|[.:—•] |\n|, )you may (put [^.,:]+?) if ([^,.]+)\. otherwise, ([^.]+)\.",
+                r"(^|[.:—•] |\n|, )you may ((?:put|cast) [^.,:]+?) if ([^,.]+)\. otherwise, ([^.]+)\.",
             )
             .ok(),
         ]

@@ -136,11 +136,16 @@ fn gishath_reveals_what_there_is_without_losing() {
     );
     let mut t = TestGame::new(2);
     let g = t.battlefield(P0, "Gishath, Sun's Avatar");
-    set_library(&mut t, P0, &["Island", "Memnite"]);
+    // Seven damage, two cards: both are revealed and the Dinosaur is put onto the
+    // battlefield.
+    let lib = set_library(&mut t, P0, &["Island", "Ancient Brontodon"]);
+    t.answer_choose(P0, &[obj(lib[1])]);
     fight(&mut t, &[g], Entity::Player(P1), &[]);
     t.resolve_all();
     t.settle();
-    assert_eq!(t.library_size(P0), 2);
+    assert_eq!(t.life(P1), 13);
+    assert!(t.on_battlefield(lib[1]));
+    assert_eq!(library_top_first(&t, P0), vec![t.g.current(lib[0])]);
     assert!(!t.has_lost(P0));
 }
 
@@ -269,4 +274,48 @@ fn garruk_ultimate_assigns_all_damage_one_way() {
         .any(|d| matches!(d, mtg_engine::decision::Decision::YesNo { .. })));
     assert_eq!(t.life(P1), 20);
     assert!(!t.on_battlefield(blocker));
+}
+
+#[test]
+fn doomskar_warrior_triggers_for_each_player_and_battle_dealt_damage() {
+    cr!("510.2", "603.2c", "614.9");
+    supported("Doomskar Warrior");
+    supported("Treacherous Link");
+    ruling!(
+        "Doomskar Warrior",
+        "In some unusual situations (mostly involving damage redirection), Doomskar Warrior may deal combat damage to multiple players and/or battles at the same time. If this happens, its ability will trigger for each of those players and/or battles."
+    );
+    // Doomskar Warrior (4/3 trample) attacks P0's Siege, protected by P1. P1 blocks with
+    // Grizzly Bears enchanted with Treacherous Link ("All damage that would be dealt to
+    // enchanted creature is dealt to its controller instead."): 2 damage is assigned to
+    // the Bears (dealt to P1 instead) and 2 tramples over to the battle.
+    let mut t = TestGame::new(2);
+    let w = t.battlefield(P0, "Doomskar Warrior");
+    let battle = t.battlefield(P0, "Invasion of Azgol");
+    t.g.objects[battle.0 as usize].choices.player = Some(P1);
+    t.g.dirty = true;
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let link = t.battlefield(P1, "Treacherous Link");
+    assert!(t.g.attach(link, obj(bears)));
+    t.g.recompute();
+    let defense = t.counters(battle, counters::DEFENSE);
+    let lib = set_library(&mut t, P0, &["Island", "Swamp", "Plains", "Forest", "Wastes"]);
+    declare(&mut t, P0, &[(w, obj(battle))]);
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(bears, w)]));
+    t.answer_choose(P0, &[]);
+    t.answer_choose(P0, &[]);
+    let from = n_asked(&t);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.counters(battle, counters::DEFENSE), defense - 2);
+    // Two triggers, each looking at two cards (put on the bottom in a random order).
+    let looks: Vec<usize> = entity_choices(&t, P0, from)
+        .iter()
+        .filter(|(_, _, c)| c.iter().all(|e| lib.iter().any(|l| *e == obj(*l))))
+        .map(|(_, _, c)| c.len())
+        .collect();
+    assert_eq!(looks, vec![2, 2]);
+    assert_eq!(library_top_first(&t, P0)[0], lib[4]);
 }

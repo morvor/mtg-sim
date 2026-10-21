@@ -187,6 +187,12 @@ fn caves_of_chaos_adventurer_checks_the_dungeon_as_it_exiles() {
     declare(&mut t, P0, &[(c, Entity::Player(P1))]);
     t.resolve_all();
     assert!(can_cast(&mut t, P0, lib[0], CastMethod::Free));
+    ruling!(
+        "Caves of Chaos Adventurer",
+        "If you have completed a dungeon when Caves of Chaos Adventurer's last ability resolves, you can only play the exiled card without paying its mana cost. You can't choose to play it normally."
+    );
+    mana(&mut t, P0, ManaType::R, 1);
+    assert!(!can_cast(&mut t, P0, lib[0], CastMethod::Normal));
 }
 
 #[test]

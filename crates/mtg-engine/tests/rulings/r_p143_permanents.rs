@@ -265,6 +265,9 @@ fn powerstone_tokens() {
         let bears = t.hand(P0, "Grizzly Bears");
         assert!(t.cast(P0, bears).try_go().is_err());
         assert!(is_in(t, bears, Zone::Hand(P0)));
+        // Only the Powerstone's {C} is left to pay for Sol Ring.
+        t.g.players[0].mana_pool.mana.retain(|m| m.ty == ManaType::C);
+        assert_eq!(t.g.player(P0).mana_pool.mana.len(), 1);
         let ring = t.hand(P0, "Sol Ring");
         t.cast(P0, ring).go();
         t.resolve_all();
