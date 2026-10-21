@@ -77,6 +77,13 @@ impl Renderer<'_> {
                 let d = self.it_done.clone().unwrap_or_default();
                 format!("the number of {d}")
             }
+            // "the number of cards exiled from their hand this way" (`search_rules`).
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Var(v) if *v == crate::search_rules::FROM_HAND) =>
+            {
+                let v = self.search_verb.unwrap_or("put");
+                format!("the number of cards {v} from their hand this way")
+            }
             Value::CountSel(s) => {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")

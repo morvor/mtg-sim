@@ -4750,6 +4750,34 @@ impl Renderer<'_> {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
+            // "Search your library for an Equipment card, put it onto the battlefield,
+            // attach it to a creature you control, then shuffle": the attachment said
+            // before the shuffle (nothing in between depends on the library's order).
+            if let (
+                Some(Effect::SearchCards(spec)),
+                Some(
+                    att @ Effect::Attach {
+                        what: Sel::Var(vars::IT),
+                        ..
+                    },
+                ),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if spec.shuffle == SearchShuffle::After
+                    && matches!(spec.dests.as_slice(), [d] if d.to.zone == ZoneKind::Battlefield)
+                {
+                    let mut no_shuffle = spec.clone();
+                    no_shuffle.shuffle = SearchShuffle::No;
+                    let plain = self.effect(&Effect::SearchCards(no_shuffle));
+                    let with_shuffle = self.effect(&v[i]);
+                    let a = self.effect(att);
+                    parts.push(format!(
+                        "{{alt:{with_shuffle}. {a}|{plain}, {a}, then shuffle}}"
+                    ));
+                    i += 2;
+                    continue;
+                }
+            }
             // "Two target players each draw a card": two different target players (CR
             // 115.3), each doing the same.
             if let (
