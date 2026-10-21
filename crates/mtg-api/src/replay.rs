@@ -165,6 +165,20 @@ pub fn json_difference_renaming(
     b: &str,
     renaming: &mut AbilityRenaming,
 ) -> Option<String> {
+    // Equal lines (the usual case) are equal as JSON; their ability ids still pair with
+    // themselves.
+    if a == b {
+        let ok = a.match_indices("\"ability\":").all(|(i, m)| {
+            let digits: String = a[i + m.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            digits.parse::<u64>().map_or(true, |n| renaming.pair(n, n))
+        });
+        if ok {
+            return None;
+        }
+    }
     use serde_json::Value;
     fn short(v: &Value) -> String {
         let s = v.to_string();

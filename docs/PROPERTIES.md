@@ -166,3 +166,24 @@ Not bugs in the rules, but found and handled by the properties:
 
 ## Results
 
+Latest runs (release build, 4-core machine), `--seed 10 --games 2000`: games cycle through
+2, 2, 3 and 4 players with new random 60-card decks, up to 40 turns or 4,000 decisions.
+
+| Property | Games | Held | Decisions | Violations | Time (CPU) |
+|---|---|---|---|---|---|
+| seat | 2,000 | 2,000 | 4,561,047 | 0 | 2,648 s |
+| snapshot | 2,000 | 2,000 | 4,625,498 | 0 | 3,585 s |
+| rollback | 2,000 | 2,000 | 2,431,653 (120,750 reversed actions checked) | 0 | 2,469 s |
+| determinism | 2,000 | 2,000 | 4,625,498 | 0 | 4,126 s |
+| replay | 2,000 | 1,990 + 10 slow | 1,455,369 requests | 0 | 14,799 s |
+
+The replay run allowed 8,000 requests per game (now 4,000) and stopped ten games at the
+two-minute limit (replays answer every request through JSON with whole observations);
+replayed alone without the limit, SLOW_RESULT.
+
+Earlier runs found the bugs above: seat symmetry 12 violations in 300 games (`--seed 3`)
+and 4 in 2,000 (`--seed 10`), all fixed; snapshot and determinism flagged ability ids,
+links, mana riders' ids and replacement keys drawn from the process-wide counter (now
+compared up to renaming); rollback identity found the loop watch recording reversed
+attempts, which it now ignores as bookkeeping. Rollback identity, snapshot equivalence
+and determinism found no engine bug.
