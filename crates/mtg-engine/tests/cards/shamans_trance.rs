@@ -1,4 +1,4 @@
-//! Shaman's Trance (hand-written, `src/cards/shamans_trance.rs`).
+//! Shaman's Trance (compiled).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;
