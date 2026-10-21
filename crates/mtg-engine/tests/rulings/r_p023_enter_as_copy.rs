@@ -10,6 +10,7 @@ use crate::r_s01_common::supported;
 use mtg_engine::ability::*;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -71,7 +72,7 @@ fn gigantoplasm_copying_a_token() {
 
 #[test]
 fn gigantoplasm_copying_another_gigantoplasm() {
-    cr!("707.3", "707.9b");
+    cr!("707.3", "707.9a");
     interp!("copy-exception-ability-stacks");
     ruling!(
         "Gigantoplasm",
@@ -87,6 +88,43 @@ fn gigantoplasm_copying_another_gigantoplasm() {
     // The ability the first one gained is part of its copiable values; the second gets
     // it again from its own exception.
     assert_eq!(abilities_with(&t, second, "base power and toughness X/X"), 2);
+}
+
+#[test]
+fn phantasmal_image_copying_a_phantasmal_image_has_two_sacrifice_triggers() {
+    cr!("707.9a", "113.2c");
+    interp!("copy-exception-ability-stacks");
+    ruling!(
+        "Phantasmal Image",
+        "The Illusion creature type and the triggered ability that Phantasmal Image gains as part of its copy effect are both copiable values that other effects may copy."
+    );
+    supported("Phantasmal Image");
+    // The second Image copies the first one's copiable values (Serra Angel plus the
+    // sacrifice trigger it gained) and gains the trigger again: targeting it triggers twice.
+    let mut t = TestGame::new(2);
+    let angel = t.battlefield(P1, "Serra Angel");
+    let first = enter_copying(&mut t, P1, "Phantasmal Image", angel);
+    assert_eq!(abilities_with(&t, first, "sacrifice it"), 1);
+    let second = enter_copying(&mut t, P0, "Phantasmal Image", first);
+    assert_angel(&t, second, true);
+    assert_eq!(abilities_with(&t, second, "sacrifice it"), 2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(second).go();
+    t.settle();
+    let triggers = t
+        .g
+        .stack
+        .iter()
+        .filter(|s| {
+            matches!(
+                t.g.obj(**s).stack.as_ref().map(|i| &i.kind),
+                Some(mtg_engine::object::StackKind::Triggered { .. })
+            )
+        })
+        .count();
+    assert_eq!(triggers, 2);
 }
 
 // --- Glasspool Mimic, Visage Bandit ------------------------------------------------------

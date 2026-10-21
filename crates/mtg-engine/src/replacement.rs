@@ -1162,8 +1162,11 @@ impl Game {
     }
 
     /// Checks an entering object against a filter "as it would exist on the battlefield"
-    /// (CR 614.12). We approximate with its current characteristics plus the
-    /// modifications already made to how it enters, and the player who will control it.
+    /// (CR 614.12), with the player who will control it. When `replace` gathers the
+    /// effects that modify how a permanent enters, this runs inside
+    /// `with_hypothetical_entry`, so the object's characteristics are those it would have
+    /// on the battlefield; the queries over all effects (`applicable_replacements` and the
+    /// like) see its current characteristics.
     fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
         let view = EnteringView {
             obj: m.obj,

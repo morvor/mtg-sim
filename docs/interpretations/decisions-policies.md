@@ -52,7 +52,7 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Why: Deterministic, always legal, and with "the minimum" the least commitment the rules allow.
 - Affects: every such decision.
 - Code: `crates/mtg-engine/src/game.rs` (`ask_entities`, `ask_option`); `crates/mtg-engine/src/stack.rs` (modes, targets); `crates/mtg-engine/src/casting.rs` (`ChooseCastingMethod`); `crates/mtg-engine/src/replacement.rs` (`ChooseReplacement`).
-- Tests: `tests/cr/interp_decision_defaults.rs` (`default_choices_take_the_first_listed_candidates`, `default_targets_and_modes_are_the_first_legal_ones`, `default_modes_are_the_first_available_ones`, `the_default_way_to_cast_is_the_first_that_can_be_begun`, `the_default_replacement_effect_is_the_first_listed`).
+- Tests: `tests/cr/interp_decision_defaults.rs` (`default_choices_take_the_first_listed_candidates`, `default_targets_are_the_first_legal_ones`, `default_modes_are_the_first_available_ones`, `the_default_way_to_cast_is_the_first_that_can_be_begun`, `the_default_replacement_effect_is_the_first_listed`).
 
 ## default-cost-helpers: Costs paid with permanents or cards (convoke, delve, improvise, crew, ...) use them only as needed by default
 - Kind: policy

@@ -81,6 +81,7 @@ pub fn parse_file(path: &Path, text: &str) -> Vec<Entry> {
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut out: Vec<Entry> = Vec::new();
     for (i, line) in text.lines().enumerate() {
         if let Some(h) = line.strip_prefix("## ") {
@@ -159,8 +160,8 @@ pub fn assert_interpretation_exists(id: &str) {
     );
 }
 
-/// Every `interp!("<id>")` citation in the `.rs` files under `dirs` (recursively):
-/// (id, file, line).
+/// Every id cited by `interp!("<id>", ...)` in the `.rs` files under `dirs` (recursively),
+/// outside `//` comments: (id, file, line).
 pub fn citations(dirs: &[PathBuf]) -> Vec<(String, PathBuf, usize)> {
     fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
         let Ok(rd) = std::fs::read_dir(dir) else {
@@ -183,16 +184,55 @@ pub fn citations(dirs: &[PathBuf]) -> Vec<(String, PathBuf, usize)> {
     let mut out = Vec::new();
     for f in files {
         let text = std::fs::read_to_string(&f).unwrap_or_default();
-        for (i, line) in text.lines().enumerate() {
-            let mut rest = line;
-            while let Some(pos) = rest.find("interp!(\"") {
-                rest = &rest[pos + "interp!(\"".len()..];
-                if let Some(end) = rest.find('"') {
-                    out.push((rest[..end].to_string(), f.clone(), i + 1));
-                    rest = &rest[end..];
-                }
+        for (line, ids) in citations_in(&text) {
+            for id in ids {
+                out.push((id, f.clone(), line));
             }
         }
+    }
+    out
+}
+
+/// The `interp!(...)` citations in one source text: (1-based line, the string literals in
+/// the macro's arguments). The arguments may span lines; text after `//` is ignored.
+pub fn citations_in(text: &str) -> Vec<(usize, Vec<String>)> {
+    // Drop line comments (a `//` outside a string literal), keeping line breaks.
+    let mut code = String::with_capacity(text.len());
+    for line in text.lines() {
+        let mut in_str = false;
+        let mut prev = '\0';
+        let mut cut = line.len();
+        for (j, c) in line.char_indices() {
+            if c == '"' && prev != '\\' {
+                in_str = !in_str;
+            } else if !in_str && c == '/' && prev == '/' {
+                cut = j - 1;
+                break;
+            }
+            prev = if prev == '\\' { '\0' } else { c };
+        }
+        code.push_str(&line[..cut]);
+        code.push('\n');
+    }
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(pos) = code[from..].find("interp!(") {
+        let start = from + pos;
+        let line = code[..start].matches('\n').count() + 1;
+        let args_start = start + "interp!(".len();
+        let end = code[args_start..]
+            .find(')')
+            .map_or(code.len(), |e| args_start + e);
+        let ids = code[args_start..end]
+            .split(',')
+            .filter_map(|a| {
+                let a = a.trim();
+                (a.len() >= 2 && a.starts_with('"') && a.ends_with('"'))
+                    .then(|| a[1..a.len() - 1].to_string())
+            })
+            .collect();
+        out.push((line, ids));
+        from = end;
     }
     out
 }

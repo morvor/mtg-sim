@@ -37,7 +37,8 @@ fn the_attacking_player_is_an_active_player_its_controller_chooses() {
 
 #[test]
 fn a_blockers_attacking_player_is_still_chosen_among_the_active_players() {
-    cr!("805.10c");
+    // Not cited: CR 805.10c, which this test shows the engine doesn't follow yet.
+    cr!("805.9", "810.9");
     interp!("attacking-player-is-an-active-player");
     // Souls of the Faultless: "Whenever this creature is dealt combat damage, you gain that
     // much life and the attacking player loses that much life." It blocks P1's Hill Giant.

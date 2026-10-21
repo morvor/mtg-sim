@@ -8,13 +8,13 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 4 | 2 |
-| deviation | 2 | 2 |
+| interpretation | 4 | 1 |
+| deviation | 2 | 3 |
 | policy | 20 | 0 |
 
 ## Provisional entries
 
-- **combat-tax-scaled-to-nothing** (interpretation, [combat](interpretations/combat.md)): A scaled tax to attack or block that comes to nothing isn't a cost
+- **combat-tax-scaled-to-nothing** (deviation, [combat](interpretations/combat.md)): A scaled tax to attack or block that comes to nothing isn't a cost
   - Question: A tax scaled by a count ("pays {X} for each creature they control that's attacking you, where X is the number of basic land types among lands you control", "{1} for each counter on it") can come to nothing. Is a creature under such a tax one that "can't attack unless a player pays a cost" (so requirements don't force it), or is there no cost?
   - Decision: No cost. When every applicable tax is a scaled amount that comes to nothing, the creature has no cost to attack or block, so "attacks each combat if able" and similar requirements force it.
 - **growing-loops-run-to-the-limit** (deviation, [game-end](interpretations/game-end.md)): A loop that grows the game state isn't recognized and ends only at the action limit
@@ -32,7 +32,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | Id | Title | Kind | Status | Area |
 |---|---|---|---|---|
 | `changeling-cda-only` | Only changeling's characteristic-defining ability makes an object every creature type | interpretation | decided | [characteristics-layers](interpretations/characteristics-layers.md) |
-| `combat-tax-scaled-to-nothing` | A scaled tax to attack or block that comes to nothing isn't a cost | interpretation | provisional | [combat](interpretations/combat.md) |
+| `combat-tax-scaled-to-nothing` | A scaled tax to attack or block that comes to nothing isn't a cost | deviation | provisional | [combat](interpretations/combat.md) |
 | `combat-tax-written-zero-is-a-cost` | A stated {0} cost to attack or block is still a cost | interpretation | decided | [combat](interpretations/combat.md) |
 | `copy-exception-ability-stacks` | An ability a copy exception grants is added again even when the copied values already have it | interpretation | decided | [copy](interpretations/copy.md) |
 | `default-card-name` | A default or invalid card name names nothing | deviation | decided | [decisions-policies](interpretations/decisions-policies.md) |

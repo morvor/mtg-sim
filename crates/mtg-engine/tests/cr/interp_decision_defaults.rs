@@ -5,7 +5,7 @@
 use crate::r100_common::*;
 use mtg_engine::decision::{Action, Answer, Decision};
 use mtg_engine::game::GameConfig;
-use mtg_engine::object::{CastMethod, StackKind};
+use mtg_engine::object::StackKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -96,7 +96,7 @@ fn default_yes_no_does_what_you_may_but_doesnt_pay_optional_costs() {
 
 #[test]
 fn default_choices_take_the_first_listed_candidates() {
-    cr!("701.21a");
+    cr!("608.2d");
     interp!("default-first-listed-choice");
     // Diabolic Edict: "Target player sacrifices a creature." P1 chooses by default: the
     // first creature offered.
@@ -128,8 +128,8 @@ fn default_choices_take_the_first_listed_candidates() {
 }
 
 #[test]
-fn default_targets_and_modes_are_the_first_legal_ones() {
-    cr!("601.2b", "601.2c");
+fn default_targets_are_the_first_legal_ones() {
+    cr!("601.2c");
     interp!("default-first-listed-choice");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -306,10 +306,13 @@ fn a_default_division_splits_evenly_with_the_remainder_first() {
 
 #[test]
 fn a_default_card_name_names_nothing() {
-    cr!("201.4");
+    // Not cited: CR 201.4 (a real card name must be chosen), which this default deviates
+    // from. The choice is made as Pithing Needle enters (CR 614.12a).
+    cr!("614.12a");
     interp!("default-card-name");
     // Pithing Needle names nothing: every activated ability can still be activated.
     let mut t = TestGame::new(2);
+    let pyromancer = t.battlefield(P0, "Prodigal Pyromancer");
     let needle = t.hand(P0, "Pithing Needle");
     t.set_step(P0, Step::PrecombatMain);
     t.lands(P0, "Plains", 1);
@@ -322,6 +325,10 @@ fn a_default_card_name_names_nothing() {
         Some(""),
         "no name chosen"
     );
+    t.activate(P0, pyromancer, 0, &[Entity::Player(P1)])
+        .expect("Prodigal Pyromancer's ability isn't stopped");
+    t.resolve();
+    assert_eq!(t.life(P1), 19);
 }
 
 #[test]
@@ -335,7 +342,7 @@ fn an_invalid_answer_is_treated_as_the_default() {
     t.answer(P0, DecisionKind::Priority, Answer::Number(3));
     t.g.advance();
     assert_eq!(t.g.turn.priority, Some(P1));
-    let _ = (Action::Pass, CastMethod::Normal);
+    assert_eq!(t.g.turn.passes, 1);
 }
 
 #[test]
