@@ -1620,7 +1620,10 @@ impl Game {
                 }
             }
             (ReplacementAction::Add(v), ev) => {
-                let d = self.eval_value(&v, &ctx).max(0) as u32;
+                // (The amount may depend on the event's: "damage equal to ~'s power".)
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                let d = self.eval_value(&v, &c).max(0) as u32;
                 vec![scale_event(ev, |n| n + d)]
             }
             (
