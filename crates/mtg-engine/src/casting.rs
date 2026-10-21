@@ -467,7 +467,9 @@ impl Game {
             let Restriction::CantPlayLandCards { who, what } = r else {
                 return false;
             };
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            // The player the restriction is checked for ("from their graveyards").
+            ctx.iter_player = Some(p);
             self.player_filter_matches(who, p, &ctx) && self.matches_view(&view, card, what, &ctx)
         };
         self.statics
@@ -1035,7 +1037,9 @@ impl Game {
             .count() as u32;
         let view = WithChars { id: card, chars };
         let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
-            let ctx = Ctx::new(s, c);
+            let mut ctx = Ctx::new(s, c);
+            // The player the restriction is checked for ("from their graveyards").
+            ctx.iter_player = Some(p);
             match r {
                 Restriction::CantCast { who, what } => {
                     self.player_filter_matches(who, p, &ctx)
