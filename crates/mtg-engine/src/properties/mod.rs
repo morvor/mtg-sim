@@ -19,6 +19,9 @@
 
 pub mod agent;
 pub mod canon;
+pub mod copies;
+pub mod damage;
+pub mod payment;
 
 pub use agent::{AgentState, PropertyAgent, Recorder};
 pub use canon::Canon;

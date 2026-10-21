@@ -2200,9 +2200,26 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
             deals.contains(&ai.id) && g.is_live(ai.id) && g.obj(ai.id).zone == Zone::Battlefield
         })
         .collect();
-    for ai in trample_assignment_order(g, attackers) {
-        let a = assign_attacker_damage(g, ai, &assignments);
+    let order = trample_assignment_order(g, attackers);
+    // CR 702.19b, 510.1e: a trampler's lethal damage counts the damage the other creatures
+    // assign in the step, those assigned after it too; the total assignment is checked
+    // once every attacker's damage is assigned. If it doesn't comply, the player assigns
+    // again from the start (counting only the damage already assigned, which can't fail).
+    let mut relied = Vec::new();
+    for (i, ai) in order.iter().enumerate() {
+        let later = later_capacity(g, &order[i + 1..]);
+        let (a, r) = assign_attacker_damage(g, ai, &assignments, &later);
+        if r {
+            relied.push(ai.id);
+        }
         assignments.extend(a);
+    }
+    if !relied.is_empty() && !lethal_assigned(g, &order, &relied, &assignments) {
+        assignments.clear();
+        for ai in &order {
+            let (a, _) = assign_attacker_damage(g, ai, &assignments, &[]);
+            assignments.extend(a);
+        }
     }
     for bi in &combat.blockers {
         if !deals.contains(&bi.id) || !g.is_live(bi.id) || g.obj(bi.id).zone != Zone::Battlefield {
@@ -2258,6 +2275,72 @@ fn trample_assignment_order<'a>(
     out
 }
 
+/// The most damage the attackers assigning later in the step (`later`) could assign to
+/// each creature blocking them and each planeswalker they attack: (creature or
+/// planeswalker, damage, from a source with deathtouch).
+fn later_capacity(g: &Game, later: &[&AttackerInfo]) -> Vec<(ObjectId, u32, bool)> {
+    let mut out = Vec::new();
+    for ai in later {
+        let n = damage_amount(g, ai.id);
+        if n == 0 {
+            continue;
+        }
+        let dt = g.obj(ai.id).has_keyword(KeywordKind::Deathtouch);
+        for b in &ai.blockers {
+            if g.is_live(*b) && g.obj(*b).zone == Zone::Battlefield && g.is_blocking(*b) {
+                out.push((*b, n, dt));
+            }
+        }
+        if let Some(Entity::Object(pw)) = ai.target {
+            if g.obj(pw).is(CardType::Planeswalker) {
+                out.push((pw, n, false));
+            }
+        }
+    }
+    out
+}
+
+/// CR 702.19b, 510.1e: whether each of the `relied` attackers (tramplers whose
+/// assignment beyond their blockers counted on damage assigned after them) has its
+/// blockers assigned lethal damage by the whole assignment: damage already marked plus
+/// the damage every attacker assigns to them, or any from a source with deathtouch.
+fn lethal_assigned(
+    g: &Game,
+    order: &[&AttackerInfo],
+    relied: &[ObjectId],
+    assignments: &[(ObjectId, Entity, u32)],
+) -> bool {
+    order.iter().filter(|ai| relied.contains(&ai.id)).all(|ai| {
+        ai.blockers
+            .iter()
+            .filter(|b| g.is_live(**b) && g.obj(**b).zone == Zone::Battlefield && g.is_blocking(**b))
+            .all(|b| {
+                let e = Entity::Object(*b);
+                let to_it: Vec<&(ObjectId, Entity, u32)> =
+                    assignments.iter().filter(|(_, r, n)| *r == e && *n > 0).collect();
+                let deathtouch = to_it
+                    .iter()
+                    .any(|(s, _, _)| g.obj(*s).has_keyword(KeywordKind::Deathtouch));
+                let total: i32 = to_it.iter().map(|(_, _, n)| *n as i32).sum();
+                deathtouch
+                    || g.obj(*b).damage as i32 + total >= crate::kw::lethal_damage_basis(g, *b)
+            })
+            // CR 702.19c: damage to the planeswalker's controller only once the planeswalker
+            // is assigned damage at least equal to its loyalty.
+            && match ai.target {
+                Some(Entity::Object(pw)) if g.obj(pw).is(CardType::Planeswalker) => {
+                    let controller = Entity::Player(g.obj(pw).controller);
+                    !assignments
+                        .iter()
+                        .any(|(s, r, n)| *s == ai.id && *r == controller && *n > 0)
+                        || crate::kw::trample::pending_to(assignments, Entity::Object(pw)) as i32
+                            >= g.obj(pw).loyalty()
+                }
+                _ => true,
+            }
+    })
+}
+
 fn damage_amount(g: &Game, id: ObjectId) -> u32 {
     // "assigns no combat damage this turn" (CR 510.1a).
     if g.restricted_obj(id, |r| match r {
@@ -2276,15 +2359,19 @@ fn damage_amount(g: &Game, id: ObjectId) -> u32 {
     crate::keyword_impls::combat_damage_amount(g, id)
 }
 
+/// The combat damage the attacker `ai` assigns, and whether it's assigned beyond its
+/// blockers counting on damage that attackers assigning after it (`later`, see
+/// [`later_capacity`]) could assign to them (CR 702.19b).
 fn assign_attacker_damage(
     g: &mut Game,
     ai: &AttackerInfo,
     pending: &[(ObjectId, Entity, u32)],
-) -> Vec<(ObjectId, Entity, u32)> {
+    later: &[(ObjectId, u32, bool)],
+) -> (Vec<(ObjectId, Entity, u32)>, bool) {
     let id = ai.id;
     let power = damage_amount(g, id);
     if power == 0 {
-        return vec![];
+        return (vec![], false);
     }
     // Other ways to assign its damage a rule allows (not once all its blockers are gone).
     let blockers_gone = ai.blocked
@@ -2294,7 +2381,7 @@ fn assign_attacker_damage(
             .any(|b| g.is_live(*b) && g.obj(*b).zone == Zone::Battlefield && g.is_blocking(*b));
     if !blockers_gone {
         if let Some(v) = crate::kw::assign_combat_damage(g, id, power) {
-            return v;
+            return (v, false);
         }
     }
     let controller = g.obj(id).controller;
@@ -2319,6 +2406,19 @@ fn assign_attacker_damage(
         )),
         _ => None,
     };
+    // What the planeswalker must be assigned before its controller, if the attackers
+    // assigning after this one assign what they can to it (CR 702.19c).
+    let spill_at_least = match (target, spill) {
+        (Some(Entity::Object(pw)), Some((_, need))) => {
+            let later_to: u32 = later
+                .iter()
+                .filter(|(x, _, _)| *x == pw)
+                .map(|(_, n, _)| *n)
+                .sum();
+            (later_to > 0 && need > 0).then(|| need.saturating_sub(later_to))
+        }
+        _ => None,
+    };
     // "You may have it assign its combat damage as though it weren't blocked" (Thorn
     // Elemental): assigned all to what it's attacking as though unblocked (CR 510.1b), even
     // if no creatures are blocking it anymore (rather than none, CR 510.1c).
@@ -2327,11 +2427,20 @@ fn assign_attacker_damage(
     if !ai.blocked || as_though_unblocked {
         // CR 510.1b
         return match (target, spill) {
-            (Some(_), Some(_)) => {
-                assign_trample_damage(g, id, controller, power, &[], vec![], target, spill)
-            }
-            (Some(t), None) => vec![(id, t, power)],
-            _ => vec![],
+            (Some(_), Some(_)) => assign_trample_damage(
+                g,
+                id,
+                controller,
+                power,
+                &[],
+                vec![],
+                spill_at_least.map(|_| vec![]),
+                spill_at_least,
+                target,
+                spill,
+            ),
+            (Some(t), None) => (vec![(id, t, power)], false),
+            _ => (vec![], false),
         };
     }
     let blockers: Vec<ObjectId> = ai
@@ -2344,32 +2453,84 @@ fn assign_attacker_damage(
         // CR 510.1c: blocked with no blockers assigns no damage, unless it has trample: then
         // it's assigned as though all blockers were assigned lethal damage (CR 702.19d).
         return match (trample, target) {
-            (true, Some(_)) => {
-                assign_trample_damage(g, id, controller, power, &[], vec![], target, spill)
-            }
-            _ => vec![],
+            (true, Some(_)) => assign_trample_damage(
+                g,
+                id,
+                controller,
+                power,
+                &[],
+                vec![],
+                spill_at_least.map(|_| vec![]),
+                spill_at_least,
+                target,
+                spill,
+            ),
+            _ => (vec![], false),
         };
     }
     let lethal: Vec<u32> = blockers
         .iter()
         .map(|b| crate::kw::trample::lethal_damage(g, id, *b, pending))
         .collect();
+    // What it must assign to each blocker before assigning beyond them, if the attackers
+    // assigning after it assign what they can to them too (CR 702.19b).
+    let at_least: Vec<u32> = blockers
+        .iter()
+        .zip(&lethal)
+        .map(|(b, l)| {
+            let to_it = later.iter().filter(|(x, n, _)| x == b && *n > 0);
+            if to_it.clone().any(|(_, _, dt)| *dt) {
+                0
+            } else {
+                l.saturating_sub(to_it.map(|(_, n, _)| *n).sum())
+            }
+        })
+        .collect();
+    let at_least = (at_least != lethal || spill_at_least.is_some()).then_some(at_least);
     // CR 702.22j: another player may divide its damage freely among its blockers. With
     // trample, that player also makes the trample choices (Defensive Formation ruling): any
     // damage beyond lethal to all blockers may go to the attacked player or permanent.
     if let Some(p) = crate::kw::combat_damage_assigner(g, id) {
         if trample {
-            return assign_trample_damage(g, id, p, power, &blockers, lethal, target, spill);
+            return assign_trample_damage(
+                g,
+                id,
+                p,
+                power,
+                &blockers,
+                lethal,
+                at_least,
+                spill_at_least,
+                target,
+                spill,
+            );
         }
-        return divide_freely(g, id, p, power, &blockers, lethal);
+        return (divide_freely(g, id, p, power, &blockers, lethal), false);
     }
     if !trample {
         if blockers.len() == 1 {
-            return vec![(id, Entity::Object(blockers[0]), power)];
+            return (vec![(id, Entity::Object(blockers[0]), power)], false);
         }
-        return assign_trample_damage(g, id, controller, power, &blockers, lethal, None, None);
+        return (
+            assign_trample_damage(
+                g, id, controller, power, &blockers, lethal, None, None, None, None,
+            )
+            .0,
+            false,
+        );
     }
-    assign_trample_damage(g, id, controller, power, &blockers, lethal, target, spill)
+    assign_trample_damage(
+        g,
+        id,
+        controller,
+        power,
+        &blockers,
+        lethal,
+        at_least,
+        spill_at_least,
+        target,
+        spill,
+    )
 }
 
 /// Whether the creature was attacking a planeswalker (CR 702.19e).
@@ -2386,7 +2547,11 @@ fn attacked_planeswalker(g: &Game, ai: &AttackerInfo) -> bool {
 /// over planeswalkers: the player and the damage the planeswalker still needs). Damage can
 /// go to the target only once all blockers are assigned lethal damage (CR 702.19b), and to
 /// the planeswalker's controller only once the planeswalker is assigned damage at least
-/// equal to its loyalty (CR 702.19c).
+/// equal to its loyalty (CR 702.19c). `at_least` and `spill_at_least`, if given, are what
+/// each blocker and the planeswalker must be assigned before damage goes beyond them when
+/// the attackers assigning after this one assign what they can to them (CR 702.19b–c); the
+/// second value returned is whether the answer relied on that, so the whole assignment
+/// must be checked (CR 510.1e).
 #[allow(clippy::too_many_arguments)]
 fn assign_trample_damage(
     g: &mut Game,
@@ -2395,20 +2560,26 @@ fn assign_trample_damage(
     power: u32,
     blockers: &[ObjectId],
     mut lethal: Vec<u32>,
+    at_least: Option<Vec<u32>>,
+    spill_at_least: Option<u32>,
     target: Option<Entity>,
     spill: Option<(Entity, u32)>,
-) -> Vec<(ObjectId, Entity, u32)> {
+) -> (Vec<(ObjectId, Entity, u32)>, bool) {
     let mut recipients: Vec<Entity> = blockers.iter().map(|b| Entity::Object(*b)).collect();
     let nb = recipients.len();
+    let mut at_least = at_least.filter(|_| target.is_some());
     if let Some(t) = target {
         recipients.push(t);
         if let Some((player, need)) = spill {
             recipients.push(player);
             lethal.push(need);
+            if let Some(a) = at_least.as_mut() {
+                a.push(spill_at_least.unwrap_or(need));
+            }
         }
     }
     if recipients.len() == 1 {
-        return vec![(id, recipients[0], power)];
+        return (vec![(id, recipients[0], power)], false);
     }
     let shape = TrampleShape {
         lethal: lethal.clone(),
@@ -2416,6 +2587,12 @@ fn assign_trample_damage(
         target: target.is_some(),
         spill: target.is_some() && spill.is_some(),
     };
+    let relaxed = at_least.map(|a| TrampleShape {
+        lethal: a,
+        blockers: nb,
+        target: target.is_some(),
+        spill: target.is_some() && spill.is_some(),
+    });
     let mut default = shape.default_assignment(power);
     if controller != g.obj(id).controller && nb > 0 {
         // The defending player assigning it (CR 702.22j) keeps it all on the blockers
@@ -2439,16 +2616,22 @@ fn assign_trample_damage(
             trample: target.is_some(),
         },
     );
+    let mut relied = false;
     let assignment: Vec<u32> = match ans {
         Answer::Numbers(v) if shape.valid(&v, power) => v.into_iter().map(|x| x as u32).collect(),
+        Answer::Numbers(v) if relaxed.as_ref().is_some_and(|r| r.valid(&v, power)) => {
+            relied = true;
+            v.into_iter().map(|x| x as u32).collect()
+        }
         _ => default,
     };
-    recipients
+    let out = recipients
         .into_iter()
         .zip(assignment)
         .filter(|(_, n)| *n > 0)
         .map(|(r, n)| (id, r, n))
-        .collect()
+        .collect();
+    (out, relied)
 }
 
 /// The recipients of a creature's combat damage: `blockers` creatures (with `lethal`

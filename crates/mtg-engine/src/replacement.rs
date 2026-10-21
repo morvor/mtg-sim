@@ -33,15 +33,25 @@ pub struct EtbInfo {
     /// Enters as a copy of this object's copiable values (CR 707.9).
     pub copy_of: Option<ObjectId>,
     pub copy_exceptions: Vec<Modification>,
-    /// The part of `copy_exceptions` that the entering permanent's own "enter as a copy
-    /// of ..., except ..." abilities added (as self-replacement effects applied before the
-    /// copy is chosen, CR 707.9b): exceptions of the copy effect its enter-as-copy
-    /// replacement creates, which stay when that copy effect replaces the one it would
-    /// have entered with (e.g. an embalmed token copy, CR 702.128b).
+    /// The exceptions the entering permanent's own "enter as a copy of ..., except ..."
+    /// abilities added (as self-replacement effects applied before the copy is chosen, CR
+    /// 707.9b) since the last copy choice: exceptions of the copy effect the next
+    /// enter-as-copy replacement creates, and only of it (CR 707.9). They become
+    /// `copy_exceptions` when that replacement chooses something to copy — replacing the
+    /// exceptions of a copy effect it would have entered with (e.g. an embalmed token
+    /// copy, CR 702.128b; CR 707.9e) — and are dropped if it chooses nothing (a token copy
+    /// of a Clone-like creature keeps only its own copy effect's exceptions).
     pub own_copy_exceptions: Vec<Modification>,
     /// Parts of the copy effect's exception that are additional effects, conditional, or
     /// linked triggered abilities (CR 707.9e–707.9g).
     pub copy_extras: Vec<crate::copy_rules::CopyExtra>,
+    /// Like `own_copy_exceptions`, for `copy_extras` (CR 707.9e–707.9g).
+    pub own_copy_extras: Vec<crate::copy_rules::CopyExtra>,
+    /// The copiable values of `copy_of` as they were when the copy was determined: as the
+    /// token was created ("create a token that's a copy of", CR 111.10, 707.2c), or as the
+    /// object to copy was chosen. Effects applied as it enters ("as this enters, turn all
+    /// other nontoken creatures face down") don't change what it copies.
+    pub copy_values: Option<(ObjectId, Box<Characteristics>)>,
     /// Modifications to its copiable values from "as this enters" abilities that set
     /// power and toughness (CR 707.2), applied after any copy effect it enters with.
     pub copiable_mods: Vec<Modification>,
@@ -72,6 +82,17 @@ pub struct EtbInfo {
     /// It applies as the permanent enters (CR 611.2e), with a later timestamp than the
     /// permanent's own static abilities (CR 613.7n).
     pub with_mods: Option<(Option<ObjectId>, PlayerId, Vec<Modification>)>,
+}
+
+impl EtbInfo {
+    /// The copiable values it enters copying from `src` (its `copy_of`): those fixed as
+    /// the copy was determined ([`EtbInfo::copy_values`]), or else `src`'s now.
+    pub fn copied_values<'a>(&'a self, g: &'a Game, src: ObjectId) -> &'a Characteristics {
+        match &self.copy_values {
+            Some((s, v)) if *s == src => v,
+            _ => &g.obj(src).copiable,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -476,7 +497,7 @@ impl Game {
                     _ => None,
                 };
                 let chars = match (m.etb.copy_of, &face_chars) {
-                    (Some(c), _) => Some(&self.obj(c).copiable),
+                    (Some(c), _) => Some(m.etb.copied_values(self, c)),
                     (None, Some(fc)) => Some(fc),
                     (None, None) => None,
                 };
@@ -855,7 +876,7 @@ impl Game {
         }
         self.battlefield.push(id);
         if let Some(src) = m.etb.copy_of {
-            let values = Box::new(self.obj(src).copiable.clone());
+            let values = Box::new(m.etb.copied_values(self, src).clone());
             self.effects.push(ContinuousEffect {
                 id: 0,
                 source: Some(id),
@@ -1533,20 +1554,18 @@ impl Game {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
                     m.etb.counters_by.extend(em.counters_by);
-                    m.etb
-                        .own_copy_exceptions
-                        .extend(em.copy_exceptions.iter().cloned());
-                    m.etb.copy_exceptions.extend(em.copy_exceptions);
-                    m.etb.copy_extras.extend(em.copy_extras);
+                    // The exceptions of its own "enter as a copy" abilities apply to the
+                    // copy effect the next of those creates (CR 707.9).
+                    m.etb.own_copy_exceptions.extend(em.copy_exceptions);
+                    m.etb.own_copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
                     // "It enters as a copy of one of those cards" (CR 707.9).
                     if let Some(o) = em.copy_of {
-                        if m.etb.copy_of.is_some() {
-                            // CR 707.9e, 707.9g: as for `EnterAsCopy`.
-                            m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
-                            m.etb.copy_extras.clear();
-                        }
+                        // CR 707.9e, 707.9g: as for `EnterAsCopy`.
+                        m.etb.copy_exceptions = std::mem::take(&mut m.etb.own_copy_exceptions);
+                        m.etb.copy_extras = std::mem::take(&mut m.etb.own_copy_extras);
                         m.etb.copy_of = Some(o);
+                        m.etb.copy_values = Some((o, Box::new(self.obj(o).copiable.clone())));
                     }
                     // CR 614.1c: "it enters with haste" — performed on the permanent as
                     // it's put onto the battlefield.
@@ -1607,19 +1626,23 @@ impl Game {
                     1,
                 );
                 if let Some(o) = chosen.first() {
-                    if m.etb.copy_of.is_some() {
-                        // CR 707.9e, 707.9g: another copy effect is applied after the one
-                        // it would have entered with: that one's exceptions (and linked
-                        // triggered abilities) don't happen; the exceptions of this one
-                        // do.
-                        m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
-                        m.etb.copy_extras.clear();
-                    }
+                    // The copy effect this creates has its own exceptions (CR 707.9); if
+                    // it's applied after one it would have entered with, that one's
+                    // exceptions (and linked triggered abilities) don't happen
+                    // (CR 707.9e, 707.9g).
+                    m.etb.copy_exceptions = std::mem::take(&mut m.etb.own_copy_exceptions);
+                    m.etb.copy_extras = std::mem::take(&mut m.etb.own_copy_extras);
                     m.etb.copy_of = Some(*o);
+                    m.etb.copy_values = Some((*o, Box::new(self.obj(*o).copiable.clone())));
                     // "Enter tapped as a copy of": only as a copy (Vesuva's rulings).
                     if tapped {
                         m.etb.tapped = true;
                     }
+                } else {
+                    // It copies nothing this way: the exceptions of the copy effect this
+                    // would have created don't apply (CR 707.9).
+                    m.etb.own_copy_exceptions.clear();
+                    m.etb.own_copy_extras.clear();
                 }
                 vec![ReplEvent::Move(m)]
             }

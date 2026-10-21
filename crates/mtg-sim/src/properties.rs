@@ -92,6 +92,15 @@ struct Tally {
 }
 
 pub fn run(args: &[String]) {
+    // The properties checked over every card or many small cases have a runner of their
+    // own.
+    if args
+        .windows(2)
+        .any(|w| w[0] == "--property" && crate::exhaustive::NAMES.contains(&w[1].as_str()))
+    {
+        crate::exhaustive::run(args);
+        return;
+    }
     let mut games = 100u64;
     let mut seed = 1u64;
     let mut only: Option<u64> = None;

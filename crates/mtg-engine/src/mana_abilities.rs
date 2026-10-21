@@ -34,6 +34,11 @@ pub struct ManaSource {
     /// costs (CR 119.4, 118.3): the sources planned for one payment can't cost more life
     /// than the player has, Phyrexian mana paid with life included.
     pub life: u32,
+    /// The damage the mana ability deals to its controller as it adds the mana ("{T}: Add
+    /// {U} or {B}. This land deals 1 damage to you."): not a cost, but it lowers the life
+    /// left to pay Phyrexian mana with (CR 601.2g–h: mana abilities are activated before
+    /// costs are paid; CR 119.4).
+    pub damage: u32,
     /// The mana cost of a mana ability that costs mana (a filter: "{1}, {T}: Add {B}{G}"),
     /// paid with other mana before it's activated (CR 605.3a, 601.2g). Such abilities are
     /// planned only when a cost can't be paid without one (see [`plan_payment`]).
@@ -51,6 +56,18 @@ const ALL_COLORS: [ManaType; 5] = [
     ManaType::R,
     ManaType::G,
 ];
+
+/// The damage a mana ability's effect deals to `p`, its controller ("This land deals 1
+/// damage to you.").
+fn self_damage(g: &Game, p: PlayerId, e: &Effect, ctx: &Ctx) -> u32 {
+    match e {
+        Effect::Seq(v) => v.iter().map(|x| self_damage(g, p, x, ctx)).sum(),
+        Effect::DealDamage { amount, to, .. } if matches!(to, Sel::Players(PlayerRef::You)) => {
+            g.eval_value(amount, ctx).max(0) as u32
+        }
+        _ => 0,
+    }
+}
 
 /// Mana types an AddMana effect could produce, per unit.
 fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>>> {
@@ -1422,6 +1439,7 @@ fn sources_inner(
                         sac_count,
                         offer: None,
                         life,
+                        damage: self_damage(g, p, &act.body.effect, &ctx),
                         mana: filter_cost.clone(),
                         cost_pool: Vec::new(),
                     });
@@ -1512,6 +1530,7 @@ fn offer_sources(g: &Game, p: PlayerId) -> Vec<ManaSource> {
                 sac_count: 0,
                 offer: Some(id),
                 life: life_each,
+                damage: 0,
                 mana: None,
                 cost_pool: Vec::new(),
             });
@@ -1947,6 +1966,11 @@ struct Planner<'a> {
     source_life: Vec<u32>,
     /// Life paid so far: for Phyrexian symbols and for uses of special actions.
     life_used: u32,
+    /// The damage the use of each source deals to the player ([`ManaSource::damage`]).
+    source_damage: Vec<u32>,
+    /// Life paid so far for symbols (Phyrexian mana): it must be left after the damage
+    /// the sources in use deal.
+    symbol_life: u32,
     life: u32,
     /// Phyrexian symbols (and others an effect allows) may be paid with life.
     phyrexian_life: bool,
@@ -2003,12 +2027,30 @@ impl<'a> Planner<'a> {
             extra_generic: 0,
             source_life: sources.iter().map(|s| s.life).collect(),
             life_used: 0,
+            source_damage: sources.iter().map(|s| s.damage).collect(),
+            symbol_life: 0,
             life,
             phyrexian_life: true,
             life_for: Vec::new(),
             x_distinct: false,
             x_used: ColorSet::NONE,
         }
+    }
+
+    /// The damage the sources in use deal to the player.
+    fn damage_in_use(&self) -> u32 {
+        self.source_damage
+            .iter()
+            .zip(&self.in_use)
+            .filter(|(_, n)| **n > 0)
+            .map(|(d, _)| *d)
+            .sum()
+    }
+
+    /// Whether the life paid for symbols is left after the damage the sources in use deal
+    /// (CR 601.2g–h, 119.4).
+    fn life_left_for_symbols(&self) -> bool {
+        self.symbol_life == 0 || self.life_used + self.damage_in_use() <= self.life
     }
 
     /// Whether the life left pays for using source `s` (if it isn't in use already).
@@ -2047,9 +2089,11 @@ impl<'a> Planner<'a> {
             let unit = &self.units[u];
             let source_in_use = unit.source.is_some_and(|s| self.in_use[s] > 0);
             let costs_life = unit.source.is_some_and(|s| self.source_life[s] > 0);
+            let deals_damage = unit.source.is_some_and(|s| self.source_damage[s] > 0);
             (
                 unit.pool_index.is_none(),
                 costs_life,
+                deals_damage && !source_in_use,
                 !source_in_use,
                 unit.types.len(),
             )
@@ -2190,7 +2234,16 @@ impl<'a> Planner<'a> {
     /// Pays the symbols from `i` on.
     fn solve(&mut self, i: usize) -> bool {
         if i == self.reqs.len() {
-            return self.fill_generic(self.extra_generic);
+            let start = self.assign.len();
+            if self.fill_generic(self.extra_generic) {
+                if self.life_left_for_symbols() {
+                    return true;
+                }
+                while self.assign.len() > start {
+                    self.untake();
+                }
+            }
+            return false;
         }
         if !self.enough_units(i) {
             return false;
@@ -2210,7 +2263,18 @@ impl<'a> Planner<'a> {
             }),
             Req::XOf(colors) => self.pay_x(i, colors),
             // Only generic symbols remain (they're sorted last): any unit pays each.
-            Req::Generic => return self.fill_generic(self.reqs.len() - i + self.extra_generic),
+            Req::Generic => {
+                let start = self.assign.len();
+                if self.fill_generic(self.reqs.len() - i + self.extra_generic) {
+                    if self.life_left_for_symbols() {
+                        return true;
+                    }
+                    while self.assign.len() > start {
+                        self.untake();
+                    }
+                }
+                return false;
+            }
             Req::Hybrid(a, b) => self.try_each(i, &|u| {
                 if has(u, col(a)) {
                     Some(col(a))
@@ -2259,14 +2323,16 @@ impl<'a> Planner<'a> {
     /// Pays symbol `i` with `n` life (a Phyrexian symbol, or one an effect lets the payer
     /// pay with life), then the rest.
     fn pay_life_instead(&mut self, i: usize, n: u32) -> bool {
-        if !self.phyrexian_life || self.life_used + n > self.life {
+        if !self.phyrexian_life || self.life_used + self.damage_in_use() + n > self.life {
             return false;
         }
         self.life_used += n;
+        self.symbol_life += n;
         if self.solve(i + 1) {
             return true;
         }
         self.life_used -= n;
+        self.symbol_life -= n;
         false
     }
 

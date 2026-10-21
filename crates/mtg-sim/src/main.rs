@@ -48,6 +48,7 @@ mod checks;
 mod coverage;
 mod decks;
 mod every_card;
+mod exhaustive;
 mod properties;
 mod runner;
 mod strict;
