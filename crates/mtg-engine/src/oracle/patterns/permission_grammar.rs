@@ -2127,16 +2127,47 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
 /// leading condition ("If you do, ...", "If it's red, ...").
 pub(crate) fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l).trim();
-    let (cond, rest) = if let Some(r) = l.strip_prefix("if you do, ") {
+    // "If you don't cast it this way, you may cast it this turn." (Rashmi and Ragavan):
+    // whether the spell was cast as the effect resolved.
+    let (cond, rest) = if let Some(r) = l
+        .strip_prefix("if you do, ")
+        .or_else(|| l.strip_prefix("if you cast it this way, "))
+    {
         (Some(Condition::PrevHappened), r)
-    } else if let Some(r) = l.strip_prefix("if you don't, ") {
+    } else if let Some(r) = l
+        .strip_prefix("if you don't, ")
+        .or_else(|| l.strip_prefix("if you don't cast it this way, "))
+    {
         (Some(Condition::Not(Box::new(Condition::PrevHappened))), r)
     } else {
         (None, l)
     };
+    // "If an instant or sorcery card is exiled this way, you may cast it ..." (Taster of
+    // Wares): the permission is for the exiled card only if it has that quality (as a
+    // spell, it must have it, CR 601.3e).
+    let (quality, rest) = match rest
+        .strip_prefix("if an ")
+        .or_else(|| rest.strip_prefix("if a "))
+        .and_then(|r| r.split_once(" card is exiled this way, "))
+    {
+        Some((q, r)) => match object_filter(&format!("{q} card")) {
+            Some(f) => (Some(f), r),
+            None => return false,
+        },
+        None => (None, rest),
+    };
     let Some(mut p) = parse(rest).filter(|p| !p.linked_it) else {
         return false;
     };
+    if let Some(q) = quality {
+        if !matches!(p.obj, Obj::Referent { limit: None }) {
+            return false;
+        }
+        p.terms.what = Some(match p.terms.what.take() {
+            Some(w) => Filter::and(vec![w, q]),
+            None => q,
+        });
+    }
     if p.who == Who::They {
         if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
             || matches!(b.it_player, PlayerRef::You)

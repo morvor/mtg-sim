@@ -19,6 +19,10 @@ fn ends_casting(e: &Effect) -> bool {
     match e {
         Effect::CastCard { .. } => true,
         Effect::WithPlayTerms { effect, .. } => ends_casting(effect),
+        // "... if it's a spell with mana value less than ..." (not cast otherwise).
+        Effect::If {
+            then, otherwise, ..
+        } => matches!(**otherwise, Effect::Noop) && ends_casting(then),
         Effect::Seq(v) => match v.last() {
             Some(Effect::AddReplacement { .. }) => {
                 v.len() >= 2 && ends_casting(&v[v.len() - 2])
@@ -86,5 +90,32 @@ fn f_when_you_cast_that_spell(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
     true
 }
 
+/// "If you don't cast it this way, you may cast it this turn." (Rashmi and Ragavan): after
+/// "you may cast it", "if you don't" (whether the spell was cast as the effect resolved).
+fn f_if_you_dont_cast_it_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l).trim();
+    let reworded = if let Some(r) = l.strip_prefix("if you don't cast it this way, ") {
+        format!("if you don't, {r}")
+    } else {
+        return false;
+    };
+    if !ends_casting(prev) {
+        return false;
+    }
+    if crate::oracle_ext::apply_followup_ext(&reworded, prev, b) {
+        return true;
+    }
+    let n0 = b.targets.len();
+    let Some(e) = parse_sentence(&reworded, b) else {
+        return false;
+    };
+    if b.targets.len() != n0 {
+        return false;
+    }
+    *prev = Effect::seq(vec![std::mem::take(prev), e]);
+    true
+}
+
 inventory::submit! { FollowupPattern { name: "cast riders 4: if you cast a spell this way, X (after a spell cast as the effect resolves)", priority: 90, apply: f_if_cast_this_way } }
+inventory::submit! { FollowupPattern { name: "cast riders 4: if you don't cast it this way, X", priority: 90, apply: f_if_you_dont_cast_it_this_way } }
 inventory::submit! { FollowupPattern { name: "cast riders 4: when you cast that spell, X (after a spell cast as the effect resolves)", priority: 90, apply: f_when_you_cast_that_spell } }

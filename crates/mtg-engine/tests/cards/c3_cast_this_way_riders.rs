@@ -289,3 +289,100 @@ fn dragons_approach_exiles_itself_and_four_more_to_find_a_dragon() {
         }
     }
 }
+
+#[test]
+fn rashmi_and_ragavan_cast_it_later_this_turn_if_not_cast_this_way() {
+    cr!("608.2g", "611.2a");
+    ruling!(
+        "Rashmi and Ragavan",
+        "If you don’t cast it without paying its mana cost but rather cast it later in the turn, you must pay its costs"
+    );
+    assert_supported("Rashmi and Ragavan");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Rashmi and Ragavan");
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 2);
+    // Mana value 2, not less than the one artifact (the Treasure): not cast for free.
+    let bears = t.library_top(P1, "Grizzly Bears");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, bolt).go();
+    t.resolve_all();
+    let bears_x = t.g.current(bears);
+    assert_eq!(t.zone(bears_x), Zone::Exile, "{}", t.dump_log());
+    assert!(can_cast(&mut t, P0, bears_x, &[]));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+#[test]
+fn rashmi_and_ragavan_permission_only_if_not_cast_and_only_this_turn() {
+    cr!("611.2a");
+    ruling!("Rashmi and Ragavan", "If you don’t cast the card at all, it remains exiled.");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Rashmi and Ragavan");
+    t.lands(P0, "Mountain", 1);
+    let bears = t.library_top(P1, "Grizzly Bears");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, bolt).go();
+    t.resolve_all();
+    let bears_x = t.g.current(bears);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Forest", 2);
+    assert!(!can_cast(&mut t, P0, bears_x, &[]));
+    assert_eq!(t.zone(bears_x), Zone::Exile);
+}
+
+#[test]
+fn taster_of_wares_casts_an_exiled_instant_while_you_control_it() {
+    cr!("611.2a", "118.14", "601.3e");
+    ruling!(
+        "Taster of Wares",
+        "You pay all costs and follow all timing rules for cards cast this way."
+    );
+    assert_supported("Taster of Wares");
+    for (card, castable) in [("Lightning Bolt", true), ("Grizzly Bears", false)] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.lands(P0, "Swamp", 2);
+        let c = t.hand(P1, card);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.answer_choose(P1, &[Entity::Object(c)]);
+        t.answer_choose(P0, &[Entity::Object(c)]);
+        let taster = t.enter(P0, "Taster of Wares");
+        t.resolve_all();
+        let x = t.g.current(c);
+        assert_eq!(t.zone(x), Zone::Exile, "{}", t.dump_log());
+        // Swamps pay for the Bolt (mana of any type).
+        let targets: &[Entity] = if castable { &[Entity::Player(P1)] } else { &[] };
+        assert_eq!(can_cast(&mut t, P0, x, targets), castable);
+        if castable {
+            assert_eq!(t.life(P1), 17);
+        }
+        let _ = taster;
+    }
+}
+
+#[test]
+fn taster_of_wares_permission_ends_when_you_lose_control() {
+    cr!("611.2a");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P1, &[Entity::Object(bolt)]);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    let taster = t.enter(P0, "Taster of Wares");
+    t.resolve_all();
+    let x = t.g.current(bolt);
+    assert_eq!(t.zone(x), Zone::Exile);
+    t.g.destroy(t.g.current(taster), None);
+    t.settle();
+    assert!(!can_cast(&mut t, P0, x, &[Entity::Player(P1)]));
+}
