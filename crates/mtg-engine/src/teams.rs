@@ -12,6 +12,10 @@ use crate::types::*;
 /// ability's effect applies with shared team turns (CR 805.9).
 pub const ACTIVE_PLAYER_VAR: Var = u16::MAX - 805;
 
+/// The variable holding which attacking player "the attacking player" refers to while an
+/// ability's effect applies with shared team turns (CR 805.10c).
+pub const ATTACKING_PLAYER_VAR: Var = u16::MAX - 806;
+
 /// The shared team turns option can be used only if the members of each team sit in
 /// adjacent seats (CR 805.1).
 pub fn teams_seated_together(g: &Game) -> bool {
@@ -61,8 +65,10 @@ pub fn more_step_trigger_infos(
 }
 
 /// CR 805.9: an ability that refers to "the active player" refers to one specific active
-/// player; its controller chooses which as its effect is applied.
+/// player; its controller chooses which as its effect is applied. Likewise for "the
+/// attacking player" (CR 805.10c, [`choose_attacking_player`]).
 pub fn choose_active_player(g: &mut Game, body: &Body, ctx: &mut Ctx) {
+    choose_attacking_player(g, body, ctx);
     if !g.uses_shared_team_turns() || ctx.vars.contains_key(&ACTIVE_PLAYER_VAR) {
         return;
     }
@@ -91,6 +97,105 @@ pub fn choose_active_player(g: &mut Game, body: &Body, ctx: &mut Ctx) {
         .and_then(|e| e.player())
         .unwrap_or(actives[0]);
     ctx.set_var(ACTIVE_PLAYER_VAR, vec![Entity::Player(chosen)]);
+}
+
+/// The players "the attacking player" can refer to for an ability (CR 506.2, 805.10c),
+/// in seat order with the player representing the turn first. Without shared team turns,
+/// the active player. With them, it's one specific attacking player: if the ability is an
+/// ability of a blocking creature, or refers to one (the creature whose blocking or
+/// damage triggered it), the controller of the attacking creature that blocking creature
+/// is blocking (or was, as it last existed, if it left the battlefield); several when it
+/// blocks creatures of different attacking players. Otherwise every attacking player.
+/// Each blocking creature determines its own (an ability that triggers for each blocker
+/// sees its own creature in its event).
+pub fn attacking_player_candidates(g: &Game, ctx: &Ctx) -> Vec<PlayerId> {
+    if !g.uses_shared_team_turns() {
+        return vec![g.turn.active];
+    }
+    let attacking: Vec<PlayerId> = crate::combat::attacking_players(g)
+        .into_iter()
+        .filter(|p| g.player(*p).in_game())
+        .collect();
+    let Some(combat) = g.combat.as_ref() else {
+        return attacking;
+    };
+    // The blocking creature the ability belongs to or refers to.
+    let blocked_by = |b: ObjectId| -> Vec<ObjectId> {
+        if g.is_live(b) {
+            combat.blocking(b)
+        } else {
+            combat
+                .block_history
+                .iter()
+                .filter(|(x, _)| *x == b)
+                .map(|(_, a)| *a)
+                .collect()
+        }
+    };
+    let referred = ctx
+        .event
+        .as_ref()
+        .and_then(|e| e.object)
+        .into_iter()
+        .chain(ctx.source);
+    for b in referred {
+        let blocked = blocked_by(b);
+        if blocked.is_empty() {
+            continue;
+        }
+        let controllers: Vec<PlayerId> = attacking
+            .iter()
+            .copied()
+            .filter(|p| blocked.iter().any(|a| g.obj(*a).controller == *p))
+            .collect();
+        if !controllers.is_empty() {
+            return controllers;
+        }
+    }
+    attacking
+}
+
+/// CR 805.10c: an ability that refers to "the attacking player" refers to one specific
+/// attacking player; if several could be meant, its controller chooses one as its effect
+/// is applied.
+pub fn choose_attacking_player(g: &mut Game, body: &Body, ctx: &mut Ctx) {
+    if !g.uses_shared_team_turns() || ctx.vars.contains_key(&ATTACKING_PLAYER_VAR) {
+        return;
+    }
+    let mentions = serde_json::to_string(body).is_ok_and(|j| j.contains("\"AttackingPlayer\""));
+    if !mentions {
+        return;
+    }
+    let candidates = attacking_player_candidates(g, ctx);
+    let chosen = choose_one_attacking_player(g, ctx.controller, ctx.source, &candidates);
+    if let Some(p) = chosen {
+        ctx.set_var(ATTACKING_PLAYER_VAR, vec![Entity::Player(p)]);
+    }
+}
+
+/// The attacking player `controller` chooses among `candidates` for their spell or
+/// ability (CR 805.10c's last sentence); no choice if there's only one.
+pub fn choose_one_attacking_player(
+    g: &mut Game,
+    controller: PlayerId,
+    source: Option<ObjectId>,
+    candidates: &[PlayerId],
+) -> Option<PlayerId> {
+    if candidates.len() < 2 {
+        return candidates.first().copied();
+    }
+    g.ask_entities(
+        controller,
+        source,
+        "Choose the attacking player this refers to",
+        candidates.iter().map(|p| Entity::Player(*p)).collect(),
+        1,
+        1,
+    )
+    .first()
+    .and_then(|e| e.player())
+    .filter(|p| candidates.contains(p))
+    .or(Some(candidates[0]))
 }
 
 impl Game {

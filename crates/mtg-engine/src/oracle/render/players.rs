@@ -1141,6 +1141,12 @@ impl Renderer<'_> {
                 "{alt:that player|that attacking player|the attacking player}".into()
             }
             PlayerRef::ActivePlayer => "that player".into(),
+            PlayerRef::AttackingPlayer if self.attack_trigger => {
+                "{alt:that player|that attacking player|the attacking player}".into()
+            }
+            PlayerRef::AttackingPlayer => {
+                "{alt:the attacking player|attacking player|that attacking player}".into()
+            }
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),
             // "the player with the most life" (the one an intervening "if a player has more
