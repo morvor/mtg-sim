@@ -208,6 +208,28 @@ fn quality_of<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
 
 inventory::submit! { FilterSuffixPattern { name: "choices 4: with mana value or power of the chosen quality", priority: 95, parse: quality_of } }
 
+/// "with power, toughness, or mana value 4" (The Fantastic Four): any of them is that
+/// number (CR 208.1, 202.3); a spell with no power or toughness has neither.
+fn any_stat_is<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("with power, toughness, or mana value ")?;
+    let (n, rest) = crate::oracle::phrases::parse_number(r)?;
+    if !(rest.is_empty() || rest.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    n.as_const()?;
+    let v = || Box::new(n.clone());
+    Some((
+        Filter::Or(vec![
+            Filter::Power(Cmp::Eq, v()),
+            Filter::Toughness(Cmp::Eq, v()),
+            Filter::ManaValue(Cmp::Eq, v()),
+        ]),
+        rest,
+    ))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "choices 4: with power, toughness, or mana value N", priority: 95, parse: any_stat_is } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -218,6 +240,7 @@ mod tests {
             ("Enchantment", "At the beginning of your upkeep, the player with the lowest life total gains control of ~. If two or more players are tied for lowest life total, you choose one of them, and that player gains control of ~."),
             ("Creature", "Whenever you attack, choose odd or even. Creatures with mana value of that quality can't block this turn."),
             ("Sorcery", "You may put a +1/+1 counter on a creature. Then choose odd or even. Return each creature with power of the chosen quality to its owner's hand."),
+            ("Legendary Creature", "When ~ enter and whenever you cast a spell with power, toughness, or mana value 4, choose one that hasn't been chosen this turn.\n• Create a 0/4 colorless Wall creature token with defender.\n• ~ deal 3 damage to each opponent.\n• Put two +1/+1 counters on target creature.\n• Draw a card."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
