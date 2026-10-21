@@ -38,6 +38,7 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
             | TriggerCond::FirstTimeEachTurn(c)
             | TriggerCond::ThisTurn(c)
             | TriggerCond::UntilYourNextTurn(c)
+            | TriggerCond::ThisCombat(c)
             | TriggerCond::Noncombat(c),
             ev,
         ) => looks_back(c, ev),
@@ -117,7 +118,8 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
         TriggerCond::Where { trigger: c, .. }
         | TriggerCond::FirstTimeEachTurn(c)
         | TriggerCond::ThisTurn(c)
-        | TriggerCond::UntilYourNextTurn(c) => phase_out_trigger(c),
+        | TriggerCond::UntilYourNextTurn(c)
+        | TriggerCond::ThisCombat(c) => phase_out_trigger(c),
         _ => false,
     }
 }
@@ -457,6 +459,9 @@ impl Game {
                 }
             }
         }
+        // Delayed triggered abilities about the batch ("whenever either of those creatures
+        // deals combat damage this turn").
+        found.extend(crate::delayed_batches::triggered_by_batch(self, batch));
         // CR 801.7: only events entirely within the controller's range of influence.
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
@@ -790,7 +795,7 @@ impl Game {
         once_matches
     }
 
-    fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
+    pub(crate) fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
         let body = match d.performer {
             Some(p) => crate::resolve::performed_by(d.body.clone(), p),
             None => d.body.clone(),
@@ -2090,9 +2095,12 @@ impl Game {
             }
             // Removed in the cleanup step; until then it's the inner condition.
             // Removed as its controller's next turn begins.
-            (TriggerCond::ThisTurn(inner) | TriggerCond::UntilYourNextTurn(inner), ev) => {
-                self.trigger_matches_ctx(inner, base, ev)
-            }
+            (
+                TriggerCond::ThisTurn(inner)
+                | TriggerCond::UntilYourNextTurn(inner)
+                | TriggerCond::ThisCombat(inner),
+                ev,
+            ) => self.trigger_matches_ctx(inner, base, ev),
             (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
                 self.trigger_matches_ctx(inner, base, ev)
             }
@@ -2325,6 +2333,7 @@ fn on_sacrifice(t: &TriggerCond) -> bool {
         | TriggerCond::Batched { trigger, .. }
         | TriggerCond::ThisTurn(trigger)
         | TriggerCond::UntilYourNextTurn(trigger)
+        | TriggerCond::ThisCombat(trigger)
         | TriggerCond::Noncombat(trigger) => on_sacrifice(trigger),
         TriggerCond::AnyOf(ts) => ts.iter().all(on_sacrifice),
         _ => false,

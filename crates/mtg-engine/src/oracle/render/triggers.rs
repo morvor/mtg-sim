@@ -295,6 +295,10 @@ impl Renderer<'_> {
                 let s = self.trigger_text(inner);
                 format!("until your next turn, {}", lower_first(&s))
             }
+            TriggerCond::ThisCombat(inner) => {
+                let s = self.trigger_text(inner);
+                format!("{s} this combat")
+            }
             TriggerCond::Custom(name) if self.custom_trigger_is_complete(name) => {
                 self.custom_trigger(name)
             }
@@ -1551,7 +1555,9 @@ impl Renderer<'_> {
                 let e = self.trigger_event(inner, det);
                 Ev::new(e.subj, format!("{} this turn", e.vp))
             }
-            TriggerCond::UntilYourNextTurn(inner) => self.trigger_event(inner, det),
+            TriggerCond::UntilYourNextTurn(inner) | TriggerCond::ThisCombat(inner) => {
+                self.trigger_event(inner, det)
+            }
             TriggerCond::Noncombat(inner) => {
                 let e = self.trigger_event(inner, det);
                 Ev::new(e.subj, e.vp.replacen("damage", "noncombat damage", 1))

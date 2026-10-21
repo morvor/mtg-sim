@@ -56,6 +56,7 @@ pub mod create_rules;
 pub mod custom;
 pub mod decision;
 pub mod deck;
+pub mod delayed_batches;
 pub mod designations;
 pub mod destinations;
 pub mod dfc;

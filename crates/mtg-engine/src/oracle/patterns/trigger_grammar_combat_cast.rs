@@ -2364,7 +2364,7 @@ fn subtypes(f: &Filter) -> Vec<String> {
 /// creature blocks a black or red creature, the blocking creature gets +1/+1", the
 /// blocker; in "Whenever an Archer you control deals damage to a creature, that Archer
 /// deals that much damage to that creature's controller", the source.
-fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
+pub(crate) fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
     let mut out: Vec<(String, Sel)> = Vec::new();
     let mut push = |p: &str, s: Sel| {
         if !out.iter().any(|(q, _)| q == p) {

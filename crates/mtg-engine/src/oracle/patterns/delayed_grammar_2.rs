@@ -89,3 +89,121 @@ fn delayed_unless_pays_before(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 2: unless they pay before that step", priority: 980, parse: delayed_unless_pays_before } }
+
+// ---------------------------------------------------------------------------------------
+// "Until your next turn, whenever either of those creatures ...", "... this combat"
+// ---------------------------------------------------------------------------------------
+
+/// How long a delayed triggered ability with a stated duration lasts (CR 603.7b).
+#[derive(Clone, Copy, PartialEq)]
+enum Lasts {
+    ThisTurn,
+    UntilYourNextTurn,
+    ThisCombat,
+}
+
+/// Rewraps the duration of the delayed triggered abilities `e` creates ("this turn", as
+/// the grammar read them) as `lasts`; false if there's none.
+fn rewrap(e: &mut Effect, lasts: Lasts) -> bool {
+    match e {
+        Effect::DelayedTrigger {
+            trigger,
+            once: false,
+            ..
+        } => {
+            let TriggerCond::ThisTurn(inner) = std::mem::replace(trigger, TriggerCond::PlayerLoses)
+            else {
+                return false;
+            };
+            *trigger = match lasts {
+                Lasts::ThisTurn => TriggerCond::ThisTurn(inner),
+                Lasts::UntilYourNextTurn => TriggerCond::UntilYourNextTurn(inner),
+                Lasts::ThisCombat => TriggerCond::ThisCombat(inner),
+            };
+            true
+        }
+        Effect::Seq(v) => {
+            let mut any = false;
+            for x in v.iter_mut() {
+                if matches!(x, Effect::DelayedTrigger { .. } | Effect::Seq(_)) {
+                    if !rewrap(x, lasts) {
+                        return false;
+                    }
+                    any = true;
+                }
+            }
+            any
+        }
+        _ => false,
+    }
+}
+
+/// "he" (a character's card) is ~.
+fn normalize_subject(cond: &str) -> String {
+    let mut c = cond.to_string();
+    if let Some(r) = c.strip_prefix("he ").or_else(|| c.strip_prefix("she ")) {
+        c = format!("~ {r}");
+    }
+    c
+}
+
+/// "Until end of turn, whenever that creature deals damage, ...", "Until your next turn,
+/// whenever either of those creatures deals combat damage, you draw a card.", "Whenever
+/// that creature deals combat damage to a player this combat, ...": the referent and
+/// general delayed trigger grammar, with the stated duration.
+pub(crate) fn delayed_with_duration(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (lasts, r) = if let Some(r) = l.strip_prefix("until end of turn, whenever ") {
+        (Lasts::ThisTurn, r)
+    } else if let Some(r) = l.strip_prefix("until your next turn, whenever ") {
+        (Lasts::UntilYourNextTurn, r)
+    } else {
+        let r = l.strip_prefix("whenever ")?;
+        if !r.contains(" this combat, ") {
+            return None;
+        }
+        (Lasts::ThisCombat, r)
+    };
+    let (cond, eff) = match lasts {
+        Lasts::ThisCombat => r.split_once(" this combat, ")?,
+        _ => r.split_once(", ")?,
+    };
+    if cond.contains(" this turn") || cond.contains(" this combat") {
+        return None;
+    }
+    let cond = normalize_subject(cond);
+    let mut eff = eff.to_string();
+    if cond.starts_with("~ ") {
+        eff = eff.replacen("he deals ", "~ deals ", 1).replacen("she deals ", "~ deals ", 1);
+    }
+    let text = format!("whenever {cond} this turn, {eff}");
+    let n0 = b.targets.len();
+    // With ~ as its subject ("whenever he deals combat damage to an opponent, he deals
+    // that much damage to each other opponent"), the trigger is about the delayed
+    // ability's source (CR 603.7d) and its effect about the delayed ability's own event:
+    // the general grammar's reading.
+    let general_first = cond.starts_with("~ ");
+    let first = if general_first {
+        super::triggers_delayed::this_turn_trigger(&text, b)
+    } else {
+        super::delayed_grammar::referent_trigger(&text, b)
+    };
+    let mut e = match first {
+        Some(e) => e,
+        None => {
+            b.targets.truncate(n0);
+            if general_first {
+                super::delayed_grammar::referent_trigger(&text, b)?
+            } else {
+                super::triggers_delayed::this_turn_trigger(&text, b)?
+            }
+        }
+    };
+    if !rewrap(&mut e, lasts) {
+        b.targets.truncate(n0);
+        return None;
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 2: until your next turn / this combat, whenever [referent] ...", priority: 95, parse: delayed_with_duration } }

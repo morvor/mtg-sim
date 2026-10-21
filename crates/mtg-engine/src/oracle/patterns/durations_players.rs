@@ -224,6 +224,28 @@ mod tests {
     }
 
     #[test]
+    fn debug_probe() {
+        let tl = TypeLine::parse("Legendary Planeswalker — Vraska");
+        let ctx = CompileContext {
+            card_name: "Vraska the Unseen",
+            full_name: "Vraska the Unseen",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let mut b = crate::oracle::effects::Builder::new(&ctx);
+        eprintln!("TEXT {:?}", crate::oracle::effects::parse_effect_text("choose up to two target creatures. until end of turn, whenever either of those creatures deals combat damage, you draw a card.", &mut b));
+        let mut b = crate::oracle::effects::Builder::new(&ctx);
+        eprintln!("ONE {:?}", crate::oracle::effects::parse_sentence("choose up to two target creatures", &mut b));
+        eprintln!("TWO {:?}", super::super::delayed_grammar_2::delayed_with_duration("until end of turn, whenever either of those creatures deals combat damage, you draw a card", &mut b));
+        eprintln!("THREE {:?}", super::super::delayed_grammar::referent_trigger("whenever one of those creatures deals combat damage this turn, you draw a card", &mut b));
+        panic!();
+    }
+
+    #[test]
     fn next_turn_durations() {
         for t in [
             "Each opponent can't cast instant or sorcery spells during that player's next turn.",

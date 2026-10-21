@@ -950,6 +950,36 @@ fn referent_subject(s: &str, b: &mut Builder) -> Option<(Sel, Filter)> {
     if s.starts_with("a ") || s.starts_with("an ") || s.starts_with("each ") {
         return None;
     }
+    // "either of those creatures", "any of those creatures", "one of those creatures": any
+    // of the objects "those creatures" refers to (an event about one of them, not a choice
+    // of one).
+    for p in [
+        "either of those ",
+        "any of those ",
+        "one of those ",
+        "either of them",
+        "any of them",
+        "one of them",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            let plural = if p.ends_with("them") {
+                if !r.is_empty() {
+                    return None;
+                }
+                "them".to_string()
+            } else {
+                format!("those {r}")
+            };
+            let (sel, rest) = object_ref(&plural, b)?;
+            if !rest.trim().is_empty() || refs::is_no_referent(&sel) {
+                return None;
+            }
+            if matches!(sel, Sel::Choose { .. } | Sel::This) {
+                return None;
+            }
+            return Some((sel, Filter::In(Box::new(Sel::Var(REFERENT)))));
+        }
+    }
     // "When the creature an opponent controls dies this turn" after "target creature an
     // opponent controls": that target.
     if let Some(r) = s.strip_prefix("the ") {
@@ -1089,7 +1119,7 @@ fn x_is_event_amount(e: &Effect) -> Option<Effect> {
     amount_is(e, &Value::EventAmount)
 }
 
-fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (when, r) = if let Some(r) = l.strip_prefix("when ") {
         (true, r)
@@ -1166,7 +1196,13 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
                 trigger,
                 TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)
             );
+            // "Whenever either of those creatures deals combat damage ..., put a +1/+1
+            // counter on it": the one that dealt the damage.
+            let group_subject = ["either of ", "any of ", "one of "]
+                .iter()
+                .any(|p| subject_s.starts_with(p));
             b.it = match it {
+                Sel::This if deals_damage(&trigger) && group_subject => Sel::TriggerOtherObject,
                 Sel::This if deals_damage(&trigger) => Sel::Var(REFERENT),
                 Sel::This if leaves => Sel::TriggerLki,
                 Sel::This => Sel::TriggerObject,

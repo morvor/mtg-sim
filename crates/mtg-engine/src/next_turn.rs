@@ -133,6 +133,10 @@ fn start(g: &mut Game, due: impl Fn(&Game, &Scheduled) -> bool) {
 /// without a combat phase ends them as it ends (see the interpretation
 /// `end-of-combat-on-your-next-turn-without-combat`).
 pub fn expire_end_of_combat_on_next_turn(g: &mut Game) {
+    // "Whenever ... this combat" delayed triggered abilities end with the combat phase (or
+    // the turn).
+    g.delayed_triggers
+        .retain(|d| !matches!(d.trigger, TriggerCond::ThisCombat(_)));
     let turn = g.turn.number;
     let actives = g.active_players();
     let ends = |d: &Duration, c: PlayerId, created: u32| {
