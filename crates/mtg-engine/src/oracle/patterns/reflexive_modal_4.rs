@@ -234,6 +234,14 @@ pub fn excess_atom(s: &str) -> Option<(Value, String)> {
         .then(|| (Value::Var(vars::EXCESS), r.to_string()))
 }
 
+/// "unlock a locked door of a Room you control" (CR 709.5f).
+fn unlock_a_locked_door(l: &str, _b: &mut Builder) -> Option<Effect> {
+    (end(l) == "unlock a locked door of a room you control")
+        .then(|| Effect::Custom(crate::kw::choices_4::UNLOCK_A_DOOR.into()))
+}
+
+inventory::submit! { EffectPattern { name: "reflexive modal 4: unlock a locked door of a Room you control", priority: 100, parse: unlock_a_locked_door } }
+
 /// "choose up to that many" (after paying a cost several times): at most X modes.
 fn up_to_that_many(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
     (h == "choose up to that many").then(|| ModalHeader {
@@ -444,6 +452,7 @@ mod tests {
             ("Sorcery", "~ deals 7 damage to target creature or planeswalker. When it deals excess damage this way, destroy target artifact or enchantment an opponent controls with mana value less than or equal to that amount of excess damage."),
             ("Sorcery", "Target creature you control gets +1/+0 until end of turn. It fights target creature an opponent controls. When excess damage is dealt to the creature an opponent controls this way, destroy up to one target noncreature artifact with mana value 3 or less."),
             ("Legendary Creature", "Whenever ~ enters or attacks, put a charge counter on it or remove one from it. When you remove a counter this way, choose one —\n• ~ deals 4 damage to any target.\n• ~ gains lifelink and indestructible until end of turn."),
+            ("Creature", "When ~ enters, return an enchantment card from your graveyard to your hand or unlock a locked door of a Room you control."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

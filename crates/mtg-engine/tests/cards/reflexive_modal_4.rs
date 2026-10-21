@@ -332,3 +332,21 @@ fn immard_putting_a_counter_doesnt_trigger_the_reflexive_ability() {
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
 }
+
+#[test]
+fn ghostly_dancers_unlocks_a_locked_door() {
+    cr!("608.2d", "709.5f");
+    supported("Ghostly Dancers");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 5);
+    let room = t.battlefield(P0, "Dazzling Theater // Prop Room");
+    t.graveyard(P0, "Sigarda's Splendor");
+    let gd = t.hand(P0, "Ghostly Dancers");
+    // Unlock a door (the second instruction), the right one (Prop Room).
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.cast(P0, gd).go();
+    t.resolve_all();
+    assert_eq!(mtg_engine::rooms::unlocked(&t.g, room), [false, true]);
+    assert!(t.in_graveyard(P0, "Sigarda's Splendor"));
+}

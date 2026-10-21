@@ -20,6 +20,11 @@ pub const POWER_OF_CHOSEN_QUALITY: &str = "choices 4: power of the chosen qualit
 /// instruction's result.
 pub const COLLECT_EVIDENCE_X: &str = "choices 4: collect evidence X";
 
+/// `Effect::Custom`: "unlock a locked door of a Room you control" (Ghostly Dancers): the
+/// player chooses a Room they control with a locked door and a locked door of it, and
+/// unlocks it (CR 709.5f, 709.5j). Done only if there was one.
+pub const UNLOCK_A_DOOR: &str = "choices 4: unlock a locked door of a Room you control";
+
 pub struct Choices4;
 
 impl KeywordRules for Choices4 {
@@ -28,6 +33,10 @@ impl KeywordRules for Choices4 {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name == UNLOCK_A_DOOR {
+            unlock_a_door(g, ctx);
+            return true;
+        }
         if name != COLLECT_EVIDENCE_X {
             return false;
         }
@@ -66,3 +75,52 @@ impl KeywordRules for Choices4 {
 }
 
 inventory::submit! { KeywordRegistration(&Choices4) }
+
+fn unlock_a_door(g: &mut Game, ctx: &mut Ctx) {
+    let p = ctx.controller;
+    if g.dirty {
+        g.recompute();
+    }
+    let rooms: Vec<ObjectId> = g
+        .permanents()
+        .filter(|o| o.controller == p)
+        .map(|o| o.id)
+        .filter(|id| !crate::rooms::locked_halves(g, *id).is_empty())
+        .collect();
+    ctx.prev_happened = false;
+    if rooms.is_empty() {
+        return;
+    }
+    let room = g
+        .ask_objects(
+            p,
+            ctx.source,
+            "Choose a Room to unlock a door of",
+            rooms.clone(),
+            1,
+            1,
+        )
+        .first()
+        .copied()
+        .filter(|r| rooms.contains(r))
+        .unwrap_or(rooms[0]);
+    let locked = crate::rooms::locked_halves(g, room);
+    let half = if locked.len() > 1 {
+        let names: Vec<String> = crate::rooms::room_card(g, room)
+            .map(|c| c.faces.iter().map(|f| f.chars.name.to_string()).collect())
+            .unwrap_or_else(|| vec!["Left door".into(), "Right door".into()]);
+        let i = g.ask_option(
+            p,
+            ctx.source,
+            "Unlock which door?",
+            locked
+                .iter()
+                .map(|h| names.get(*h).cloned().unwrap_or_default())
+                .collect(),
+        );
+        locked.get(i).copied().unwrap_or(locked[0])
+    } else {
+        locked[0]
+    };
+    ctx.prev_happened = crate::rooms::unlock(g, room, half, p);
+}
