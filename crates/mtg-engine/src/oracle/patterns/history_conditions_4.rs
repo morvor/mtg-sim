@@ -160,6 +160,9 @@ pub fn value_atom(
     s: &str,
     b: &mut crate::oracle::effects::Builder,
 ) -> Option<(Value, String)> {
+    if let Some(v) = spells_cast_value(s, b) {
+        return Some(v);
+    }
     if let Some(r) = s.strip_prefix("the number of untapped lands ") {
         let (who, r) = named_player(r, b, false)?;
         let rest = r.strip_prefix("controlled at the beginning of this turn")?;
@@ -431,3 +434,108 @@ pub fn was_attacked_by(r: &str, who: &PlayerRef) -> Option<Condition> {
 }
 
 
+
+/// A spell phrase listing kinds with "and" ("instant and sorcery spells": spells of either
+/// kind, CR 205.2b), as a filter of spells.
+fn spells_phrase(np: &str) -> Option<Filter> {
+    let np = np.replacen(" and ", " or ", 1);
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(&np)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let json = serde_json::to_string(&f).ok()?;
+    json.contains("\"Spell\"").then_some(f)
+}
+
+/// "the greatest mana value among instant and sorcery spells you've cast this turn"
+/// (Rootha, Mastering the Moment), "the number of instant and sorcery spells you've cast
+/// this turn", "the number of instant and sorcery spells cast before that spell this
+/// turn" (Sentinel Tower: the spells cast before the spell the ability triggered on, CR
+/// 601.2i).
+fn spells_cast_value(
+    s: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<(Value, String)> {
+    let cast = |who: PlayerRel, f: Filter| TriggerCond::CastSpell { who, filter: f };
+    if let Some(r) = s.strip_prefix("the greatest mana value among ") {
+        let (np, rest) = r.split_once(" you've cast this turn")?;
+        let f = spells_phrase(np)?;
+        return Some((
+            Value::Extreme(
+                Box::new(Value::ManaValueOf(Box::new(Sel::Var(vars::TESTED)))),
+                Box::new(Sel::ThisTurn(Box::new(cast(PlayerRel::You, f)))),
+                true,
+            ),
+            rest.to_string(),
+        ));
+    }
+    let r = s.strip_prefix("the number of ")?;
+    if !r.contains(" and ") {
+        return None;
+    }
+    if let Some((np, rest)) = r.split_once(" cast before that spell this turn") {
+        // Only in an ability that triggered on a spell being cast.
+        let raw = crate::oracle::raw_text().to_lowercase();
+        if !b.in_trigger || !(raw.contains(" is cast") || raw.contains(" casts ")) {
+            return None;
+        }
+        let f = spells_phrase(np)?;
+        let through = Filter::and(vec![
+            f,
+            Filter::Custom(format!("{}that spell", crate::kw::cast_history::CAST_BY_THEN).into()),
+        ]);
+        return Some((
+            Value::Sum(vec![
+                Value::EventsThisTurn(Box::new(cast(PlayerRel::Any, through)), Tally::Events),
+                Value::Const(-1),
+            ]),
+            rest.to_string(),
+        ));
+    }
+    let (np, rest) = r.split_once(" you've cast this turn")?;
+    let f = spells_phrase(np)?;
+    Some((
+        Value::EventsThisTurn(Box::new(cast(PlayerRel::You, f)), Tally::Events),
+        rest.to_string(),
+    ))
+}
+
+/// "At the beginning of the next end step, destroy all non-Wall creatures that player
+/// controls that didn't attack this turn. Ignore this effect for each creature the player
+/// didn't control continuously since the beginning of the turn." (Siren's Call, after
+/// "Creatures the active player controls attack this turn if able."): "that player" is
+/// the active player, whose turn the next end step is in (the spell is cast before
+/// attackers are declared); the creatures are those of theirs that didn't attack and that
+/// they've controlled continuously since the turn began (CR 302.6).
+fn ignore_for_each_not_controlled(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    const IGNORE: &str = " ignore this effect for each creature the player didn't control continuously since the beginning of the turn.";
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let head = lower.strip_suffix(IGNORE)?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("creatures the active player controls attack this turn if able") {
+        return None;
+    }
+    let (before, after) = head.split_once(" that player controls that didn't attack this turn.")?;
+    if !after.is_empty() || !before.starts_with("at the beginning of the next end step, destroy all ") {
+        return None;
+    }
+    let rewritten = format!(
+        "{before} the active player has controlled continuously since the beginning of the turn that didn't attack this turn."
+    );
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = t.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: ignore this effect for each creature the player didn't control continuously since the beginning of the turn", priority: 90, parse: ignore_for_each_not_controlled } }

@@ -783,3 +783,82 @@ fn combat_celebrant_can_be_exerted_once_each_turn() {
     }
     assert_eq!(exert_offers, 1, "not again once exerted this turn");
 }
+
+// --- batch 6: spells cast this turn, Siren's Call ---------------------------------------
+
+#[test]
+fn rootha_makes_an_elemental_as_big_as_the_greatest_instant_or_sorcery_cast_this_turn() {
+    cr!("202.3", "603.4");
+    assert_supported("Rootha, Mastering the Moment");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rootha, Mastering the Moment");
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Mountain", 1);
+    for (name, target) in [("Divination", None), ("Shock", Some(Entity::Player(P1)))] {
+        let c = t.hand(P0, name);
+        let targets: Vec<Entity> = target.into_iter().collect();
+        t.cast_with(P0, c, &targets).unwrap();
+        t.resolve_all();
+    }
+    // An opponent's bigger instant doesn't count.
+    t.lands(P1, "Mountain", 1);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let el: Vec<ObjectId> = t
+        .g
+        .permanents_controlled_by(P0)
+        .into_iter()
+        .filter(|o| t.g.obj(*o).chars.subtypes.iter().any(|s| s.as_str() == "Elemental"))
+        .collect();
+    assert_eq!(el.len(), 1);
+    assert_eq!(t.pt(el[0]), (3, 3), "Divination's mana value");
+}
+
+#[test]
+fn sentinel_tower_counts_the_instants_and_sorceries_cast_before_that_spell() {
+    cr!("601.2i", "603.2");
+    assert_supported("Sentinel Tower");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sentinel Tower");
+    t.lands(P0, "Mountain", 3);
+    for _ in 0..3 {
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        let c = t.hand(P0, "Shock");
+        t.cast_with(P0, c, &[Entity::Player(P1)]).unwrap();
+        t.resolve_all();
+    }
+    // Shocks: 2 + 2 + 2; the tower: 1 + 2 + 3.
+    assert_eq!(t.life(P1), 20 - 6 - 6);
+}
+
+#[test]
+fn sirens_call_destroys_creatures_that_didnt_attack_if_controlled_since_the_turn_began() {
+    cr!("508.1d", "302.6");
+    assert_supported("Siren's Call");
+    let mut t = TestGame::new(2);
+    let attacker = t.battlefield(P1, "Grizzly Bears");
+    let stayer = t.battlefield(P1, "Hill Giant");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.set_step(P1, Step::Upkeep);
+    t.advance_to(P1, Step::PrecombatMain);
+    // Came under P1's control this turn: spared.
+    let newcomer = t.battlefield(P1, "Llanowar Elves");
+    t.g.objects[newcomer.0 as usize].summoning_sick = true;
+    t.lands(P0, "Island", 1);
+    let sc = t.hand(P0, "Siren's Call");
+    t.cast_with(P0, sc, &[]).unwrap();
+    t.resolve_all();
+    // Tapped, so it can't attack (and must not).
+    t.g.objects[stayer.0 as usize].tapped = true;
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(attacker, Entity::Player(P0))]),
+    );
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    assert!(t.on_battlefield(attacker));
+    assert!(!t.on_battlefield(stayer), "didn't attack");
+    assert!(t.on_battlefield(wall), "a Wall");
+    assert!(t.on_battlefield(newcomer), "not controlled since the turn began");
+}
