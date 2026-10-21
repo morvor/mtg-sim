@@ -27,7 +27,10 @@ impl Strict {
         };
         match args[i].as_str() {
             "--cards" => {
-                self.cards = Some(parse_bar(&value()).unwrap_or_else(|e| std::process::exit(2)))
+                self.cards = Some(parse_bar(&value()).unwrap_or_else(|e| {
+                    eprintln!("{e}");
+                    std::process::exit(2)
+                }))
             }
             "--tiers" => self.tiers = Some(value()),
             _ => return false,
