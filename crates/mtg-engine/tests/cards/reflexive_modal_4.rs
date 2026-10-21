@@ -350,3 +350,27 @@ fn ghostly_dancers_unlocks_a_locked_door() {
     assert_eq!(mtg_engine::rooms::unlocked(&t.g, room), [false, true]);
     assert!(t.in_graveyard(P0, "Sigarda's Splendor"));
 }
+
+#[test]
+fn explosion_of_riches_five_damage_per_card_drawn_this_way() {
+    cr!("603.12", "115.1");
+    supported("Explosion of Riches");
+    let mut t = TestGame::new(4);
+    t.lands(P0, "Mountain", 6);
+    let spell = t.hand(P0, "Explosion of Riches");
+    // P1 and P3 draw, P2 doesn't: three cards drawn this way.
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, false);
+    t.answer_yes(P3, true);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let lost: Vec<i32> = [P1, P2, P3].iter().map(|p| 20 - t.life(*p)).collect();
+    assert_eq!(lost.iter().sum::<i32>(), 15);
+    assert!(lost.iter().all(|l| l % 5 == 0));
+    assert_eq!(t.life(P0), 20);
+    // Nobody chose the targets.
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })));
+}

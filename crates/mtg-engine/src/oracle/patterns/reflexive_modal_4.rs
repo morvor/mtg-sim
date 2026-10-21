@@ -234,6 +234,59 @@ pub fn excess_atom(s: &str) -> Option<(Value, String)> {
         .then(|| (Value::Var(vars::EXCESS), r.to_string()))
 }
 
+/// The cards drawn this turn by all players, before an instruction's draws.
+const DRAWN_BEFORE: Var = vars::USER + 41022;
+
+/// "Draw a card, then each other player may draw a card. Whenever a card is drawn this
+/// way, ~ deals 5 damage to target opponent chosen at random from among your opponents."
+/// (Explosion of Riches): a reflexive triggered ability for each card the instructions
+/// drew (CR 603.12), each with its own target.
+fn whenever_a_card_is_drawn_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("whenever a card is drawn this way, ") else {
+        return false;
+    };
+    if !format!("{prev:?}").contains("Draw {") {
+        return false;
+    }
+    let r = r.replace(
+        "target opponent chosen at random from among your opponents",
+        "target opponent chosen at random",
+    );
+    let Some(Effect::If {
+        cond: Condition::PrevHappened,
+        then,
+        ..
+    }) = crate::oracle::effects::parse_clause(&format!("when you do, {r}"), b)
+    else {
+        return false;
+    };
+    if !matches!(*then, Effect::Reflexive { .. }) {
+        return false;
+    }
+    let drawn = || {
+        Value::OverPlayers(
+            AggOp::Sum,
+            PlayerFilter::Any,
+            Box::new(Value::CardsDrawnThisTurn(PlayerRef::Iterated)),
+        )
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        Effect::StoreValue {
+            var: DRAWN_BEFORE,
+            value: drawn(),
+        },
+        old,
+        Effect::Repeat {
+            times: Value::Diff(Box::new(drawn()), Box::new(Value::Var(DRAWN_BEFORE))),
+            effect: then,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "reflexive modal 4: whenever a card is drawn this way", priority: 100, apply: whenever_a_card_is_drawn_this_way } }
+
 /// "unlock a locked door of a Room you control" (CR 709.5f).
 fn unlock_a_locked_door(l: &str, _b: &mut Builder) -> Option<Effect> {
     (end(l) == "unlock a locked door of a room you control")
@@ -453,6 +506,7 @@ mod tests {
             ("Sorcery", "Target creature you control gets +1/+0 until end of turn. It fights target creature an opponent controls. When excess damage is dealt to the creature an opponent controls this way, destroy up to one target noncreature artifact with mana value 3 or less."),
             ("Legendary Creature", "Whenever ~ enters or attacks, put a charge counter on it or remove one from it. When you remove a counter this way, choose one —\n• ~ deals 4 damage to any target.\n• ~ gains lifelink and indestructible until end of turn."),
             ("Creature", "When ~ enters, return an enchantment card from your graveyard to your hand or unlock a locked door of a Room you control."),
+            ("Sorcery", "Draw a card, then each other player may draw a card. Whenever a card is drawn this way, ~ deals 5 damage to target opponent chosen at random from among your opponents."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
