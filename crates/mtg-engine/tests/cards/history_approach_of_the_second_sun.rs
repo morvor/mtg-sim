@@ -1,4 +1,5 @@
-//! Approach of the Second Sun (hand-written, `src/cards/approach_of_the_second_sun.rs`).
+//! Approach of the Second Sun, compiled: "you've cast another spell named ~ this game" is a
+//! history query over the whole game (`HistoryWindow::ThisGame`, `turn_start.rs`).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -101,4 +102,23 @@ fn with_fewer_than_seven_cards_it_goes_on_the_bottom() {
     assert_eq!(lib.len(), 4);
     // The bottom card is the first in the list.
     assert_eq!(t.g.obj(lib[0]).chars.name.as_str(), "Approach of the Second Sun");
+}
+
+#[test]
+fn the_first_one_may_have_been_cast_in_an_earlier_turn() {
+    cr!("104.2b");
+    let mut t = TestGame::new(2);
+    cast_approach(&mut t);
+    assert_eq!(t.life(P0), 27);
+    t.set_step(P0, mtg_engine::turn::Step::End);
+    t.advance_to(P1, mtg_engine::turn::Step::PrecombatMain);
+    t.set_step(P1, mtg_engine::turn::Step::End);
+    t.advance_to(P0, mtg_engine::turn::Step::PrecombatMain);
+    for l in t.g.permanents_controlled_by(P0) {
+        t.g.objects[l.0 as usize].tapped = false;
+    }
+    let a = t.hand(P0, "Approach of the Second Sun");
+    t.cast(P0, a).go();
+    t.resolve();
+    assert_eq!(t.g.result, Some(GameResult::Win(vec![P0])));
 }
