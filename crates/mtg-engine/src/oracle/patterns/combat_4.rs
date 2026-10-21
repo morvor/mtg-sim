@@ -1275,3 +1275,52 @@ fn t_attacks_between_you_and_enchanted(r: &str) -> Option<(TriggerCond, Sel, Pla
 }
 
 inventory::submit! { super::TriggerPattern { name: "combat 4: you attack enchanted opponent / they attack you", priority: 90, parse: t_attacks_between_you_and_enchanted } }
+
+/// "each creature you control attacking a player gets +1/+0 until end of turn for each
+/// creature that player controls" (Jurin, Leading the Charge): for each such creature, the
+/// number of creatures the player it's attacking controls, counted as the effect begins
+/// (CR 608.2h).
+fn p_each_attacker_gets_for_each_defender_creature(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("each creature you control attacking a player gets ")?;
+    let (pt, rest) = r.split_once(' ')?;
+    let rest = rest.strip_prefix("until end of turn for each ")?;
+    let noun = rest.strip_suffix(" that player controls")?;
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(noun)?;
+    if plural || !tail.trim().is_empty() {
+        return None;
+    }
+    let (p, t) = pt.split_once('/')?;
+    let num = |s: &str| -> Option<i32> {
+        let s = s.strip_prefix('+').unwrap_or(s);
+        s.parse().ok()
+    };
+    let (p, t) = (num(p)?, num(t)?);
+    let count = Value::Count(Filter::and(vec![
+        f,
+        Filter::Custom(crate::kw::combat_history_4::CONTROLLED_BY_ITS_DEFENDER.into()),
+    ]));
+    let per = |n: i32| {
+        if n == 0 {
+            Value::c(0)
+        } else {
+            Value::Mul(Box::new(Value::c(n)), Box::new(count.clone()))
+        }
+    };
+    let var = crate::kw::combat_history_4::EACH_ATTACKER;
+    Some(Effect::ForEach {
+        sel: Sel::All(Filter::and(vec![
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::ControlledBy(PlayerRel::You),
+            Filter::AttackingPlayer(PlayerRel::Any),
+        ])),
+        var,
+        effect: Box::new(Effect::Modify {
+            what: Sel::Var(var),
+            mods: vec![Modification::ModifyPT(per(p), per(t))],
+            duration: Duration::EndOfTurn,
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: each creature you control attacking a player gets ... for each creature that player controls", priority: 90, parse: p_each_attacker_gets_for_each_defender_creature } }

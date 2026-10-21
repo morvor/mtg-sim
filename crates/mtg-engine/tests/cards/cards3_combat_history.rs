@@ -271,3 +271,30 @@ fn creepy_puppeteer_does_nothing_with_two_other_attackers() {
     assert_eq!(t.pt(bears), (2, 2));
     assert_eq!(t.pt(lions), (2, 1));
 }
+
+#[test]
+fn jurin_pumps_each_attacker_by_its_defenders_creature_count() {
+    cr!("508.1", "608.2h");
+    supported("Jurin, Leading the Charge");
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let jurin = t.battlefield(P0, "Jurin, Leading the Charge");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P2, "Savannah Lions");
+    let (jp, jt) = t.pt(jurin);
+    declare(
+        &mut t,
+        P0,
+        &[(jurin, Entity::Player(P1)), (bears, Entity::Player(P2))],
+    );
+    t.resolve_all();
+    assert_eq!(t.pt(jurin), (jp + 2, jt));
+    assert_eq!(t.pt(bears), (3, 2));
+}

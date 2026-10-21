@@ -38,6 +38,11 @@ pub const YOU_ATTACK_ENCHANTED: &str = "combat4:you attack enchanted player or t
 /// `TriggerCond::Custom`: "[enchanted opponent] attack(s) you or a planeswalker you
 /// control".
 pub const ENCHANTED_ATTACKS_YOU: &str = "combat4:enchanted player attacks you or your planeswalker";
+/// The attacking creature an "each creature you control attacking a player gets ... for
+/// each creature that player controls" instruction is being performed for.
+pub const EACH_ATTACKER: Var = vars::USER + 13376;
+/// `Filter::Custom`: controlled by the player [`EACH_ATTACKER`] is attacking.
+pub const CONTROLLED_BY_ITS_DEFENDER: &str = "combat4:controlled by the player that creature attacks";
 /// While an attack tax is determined: what the creature would attack.
 pub const ATTACK_TARGET: Var = vars::USER + 13373;
 
@@ -173,6 +178,20 @@ impl KeywordRules for CombatHistory4 {
                         || c.declared_blockers.contains(&id)
                 });
                 Some(!now && !before)
+            }
+            CONTROLLED_BY_ITS_DEFENDER => {
+                let attacker = ctx
+                    .vars
+                    .get(&EACH_ATTACKER)
+                    .and_then(|v| v.first())
+                    .and_then(|e| e.object());
+                let defender = attacker.and_then(|a| {
+                    g.combat
+                        .as_ref()
+                        .and_then(|c| c.attack_target(a))
+                        .and_then(|t| t.player())
+                });
+                Some(defender.is_some_and(|p| g.obj(id).controller == p))
             }
             ATTACKING_A_PLANESWALKER => Some(
                 ctx.vars
