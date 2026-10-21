@@ -2352,7 +2352,10 @@ impl Game {
         let mut changes = crate::activation_costs::CostChanges::default();
         let mut any_type = false;
         for (s, ctl, cm) in &self.statics.cost_modifiers {
-            let ctx = Ctx::new(Some(*s), *ctl);
+            let mut ctx = Ctx::new(Some(*s), *ctl);
+            // The ability whose cost this is ("for each black mana symbol in their
+            // activation costs", see `kw::cost_modifier_values`).
+            crate::kw::cost_modifier_values::note_ability(&mut ctx, src, a.uid);
             if crate::activation_costs::modifier_applies(self, cm, p, src, a, act, stack, &ctx) {
                 // "Mana of any type can be spent to activate ~'s abilities" (CR 118.14).
                 any_type |= matches!(cm.change, CostChange::SpendAnyType);
@@ -3222,6 +3225,7 @@ impl Game {
                 let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
                 let mut c = Ctx::new(src, p);
                 c.cost_of = ctx.cost_of;
+                c.ability_uid = ctx.ability_uid;
                 self.can_pay_cost_optimistic_in(p, &flat, src, &chars, &c)
             }
             CostPart::OneOf(costs) => {

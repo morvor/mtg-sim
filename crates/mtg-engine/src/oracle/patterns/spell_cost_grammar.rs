@@ -121,6 +121,24 @@ fn targeted(s: &str) -> Option<Filter> {
         }
         _ => {}
     }
+    // "you or a permanent you control" (Monastery Siege).
+    if s == "you" {
+        return Some(Filter::StackTargets(Box::new(TargetsFilter::Targets {
+            objects: None,
+            players: Some(PlayerFilter::You),
+        })));
+    }
+    if let Some(r) = s.strip_prefix("you or ") {
+        let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+        let (f, _, tail) = parse_object_phrase(r)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Filter::StackTargets(Box::new(TargetsFilter::Targets {
+            objects: Some(f),
+            players: Some(PlayerFilter::You),
+        })));
+    }
     let r = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
     let (f, _, tail) = parse_object_phrase(r)?;
     end(tail).is_empty().then(|| objects(f))
@@ -359,6 +377,12 @@ fn for_each_spell(s: &str) -> Option<Value> {
     }
     if let Some(v) = super::value_results::whole_history_count(s) {
         return Some(v);
+    }
+    // "for each target" (Hinata, Dawn-Crowned): the spell's targets, once chosen.
+    if s == "target" {
+        return Some(Value::Custom(
+            crate::kw::cost_modifier_values::SPELL_TARGETS.into(),
+        ));
     }
     if s.contains(" this turn") || s.contains("target") {
         return None;
