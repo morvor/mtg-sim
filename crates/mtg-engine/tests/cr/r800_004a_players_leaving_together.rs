@@ -62,3 +62,23 @@ fn players_losing_a_subgame_together_keep_their_main_game_cards() {
         assert_eq!(t.g.obj(*c).zone, mtg_engine::object::Zone::Hand(p));
     }
 }
+
+#[test]
+fn players_losing_at_once_lose_in_apnap_order() {
+    // Found by seat symmetry: players losing at once were handled in the order they were
+    // listed, by seat, and what happened as the first of them lost (effects ending,
+    // characteristics recomputed) depended on which one it was.
+    cr!("101.4", "104.4a");
+    let mut t = TestGame::new(4);
+    t.set_step(P2, mtg_engine::turn::Step::PrecombatMain);
+    let from = t.g.turn_events.len();
+    t.g.lose_game_simultaneously(&[P0, P1, P3]);
+    let lost: Vec<PlayerId> = t.g.turn_events[from..]
+        .iter()
+        .filter_map(|e| match e {
+            mtg_engine::events::Event::PlayerLost { player } => Some(*player),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(lost, vec![P3, P0, P1]);
+}

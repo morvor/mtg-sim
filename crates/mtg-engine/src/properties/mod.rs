@@ -208,11 +208,15 @@ impl Run {
     /// The final line: the canonical state and the result.
     fn final_line(&self) -> String {
         let r = self.recorder.lock().unwrap();
-        format!(
-            "end {} {}",
-            r.canon.result(&self.game),
-            r.canon.state(&self.game)
-        )
+        // Characteristics (and what changes with them, such as summoning sickness after
+        // a change of control) are computed as they're needed; the game may have ended
+        // before they were.
+        let mut g = self.game.clone();
+        g.set_agents(vec![]);
+        if g.dirty {
+            g.recompute();
+        }
+        format!("end {} {}", r.canon.result(&g), r.canon.state(&g))
     }
 }
 

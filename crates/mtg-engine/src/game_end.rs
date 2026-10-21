@@ -202,7 +202,12 @@ impl Game {
         let was = self.losing_simultaneously;
         self.losing_simultaneously = true;
         let mut teams_done: Vec<u8> = Vec::new();
-        for &p in ps {
+        // In APNAP order (CR 101.4), so that what happens as each of them loses doesn't
+        // depend on where the players sit.
+        let order = self.apnap();
+        let mut ps = ps.to_vec();
+        ps.sort_by_key(|p| order.iter().position(|q| q == p).unwrap_or(order.len()));
+        for p in ps {
             if self.config.variant == Variant::TwoHeadedGiant {
                 let team = self.player(p).team;
                 if teams_done.contains(&team) {
