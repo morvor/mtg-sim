@@ -1834,3 +1834,111 @@ fn for_each_still_exiled(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "at the beginning of ..., for each of those cards that are still exiled", priority: 980, parse: for_each_still_exiled } }
+
+/// "Target player reveals their hand, then you choose a nonland card from it for each
+/// card discarded this way." (Last Rites): as many as the cards discarded.
+fn reworded_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let t = if let Some((head, tail)) =
+        l.split_once(" a nonland card from it for each card discarded this way")
+    {
+        if !head.ends_with("you choose") {
+            return None;
+        }
+        format!(
+            "{head} x nonland cards from it{tail}, where x is the number of cards discarded this way"
+        )
+    } else {
+        return None;
+    };
+    crate::oracle::effects::parse_sentence(&t, b)
+}
+
+inventory::submit! { super::EffectPattern { name: "referents 4: a card for each card discarded this way", priority: 980, parse: reworded_sentence } }
+
+/// The spell an "exile it" instruction exiled, for "that spell" after a later instruction.
+const EXILED_SPELL: Var = vars::USER + 14_017;
+
+/// "Whenever you cast your first instant, sorcery, or Villain spell each turn, exile it,
+/// then exile cards from the top of your library until you exile a nonland card. ~ deals
+/// damage to each opponent equal to the difference between that spell's mana value and
+/// that nonland card's mana value." (Lady Loki, Agent of Chaos): "that spell" is the spell
+/// exiled first (recorded right after it), "that nonland card" the card found.
+fn that_spell_and_that_nonland_card(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains("that spell") || !l.contains("that nonland card") {
+        return false;
+    }
+    let Effect::Seq(v) = &*prev else {
+        return false;
+    };
+    let ok = matches!(
+        v.as_slice(),
+        [
+            Effect::Exile {
+                what: Sel::TriggerSpell,
+                ..
+            },
+            Effect::RevealUntil { .. }
+        ]
+    );
+    if !ok {
+        return false;
+    }
+    let t = l
+        .replace("that nonland card", "that card")
+        .replace("that spell", "the first exiled spell");
+    let n = b.named.len();
+    b.named.push((
+        "the first exiled spell".to_string(),
+        Sel::Var(EXILED_SPELL),
+    ));
+    let e = crate::oracle::effects::parse_sentence(&t, b);
+    b.named.truncate(n);
+    let Some(e) = e else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    v.insert(
+        1,
+        Effect::Store {
+            var: EXILED_SPELL,
+            sel: Sel::Var(vars::IT),
+        },
+    );
+    v.push(e);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "that spell (exiled first) and that nonland card (found)", priority: 140, apply: that_spell_and_that_nonland_card } }
+
+/// "Target opponent chooses X cards from their hand. Look at those cards. You may cast a
+/// spell from among them without paying its mana cost." (Extract Brain): looking at the
+/// chosen cards changes nothing in the game (the engine has no hidden information to
+/// reveal); casting a spell from among them is casting one of those cards.
+fn look_at_the_chosen_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains(" cards from their hand. look at those cards. ") {
+        return false;
+    }
+    if l == "look at those cards" {
+        return b.named.iter().any(|(n, _)| n == "those cards");
+    }
+    let Some(rest) = l.strip_prefix("you may cast a spell from among them ") else {
+        return false;
+    };
+    let t = format!("you may cast one of those cards {rest}");
+    match crate::oracle::effects::parse_sentence(&t, b) {
+        Some(e) => {
+            let old = std::mem::replace(prev, Effect::Noop);
+            *prev = Effect::seq(vec![old, e]);
+            true
+        }
+        None => false,
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "look at those cards (chosen from a hand), cast a spell from among them", priority: 140, apply: look_at_the_chosen_cards } }

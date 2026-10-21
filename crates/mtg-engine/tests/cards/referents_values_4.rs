@@ -2286,3 +2286,71 @@ fn toralf_deals_the_excess_damage_to_another_target() {
     assert!(!t.on_battlefield(bear));
     assert_eq!(t.life(P1), 19, "3 damage to a 2-toughness creature: 1 excess");
 }
+
+#[test]
+fn lady_loki_deals_the_difference_between_the_spell_and_the_card_found() {
+    cr!("608.2h", "701.20a");
+    compiles("Lady Loki, Agent of Chaos");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lady Loki, Agent of Chaos");
+    t.lands(P0, "Mountain", 1);
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Forest");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_yes(P0, false);
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    // The Bolt is exiled before it resolves; Hill Giant (4) against Lightning Bolt (1).
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Lightning Bolt") && t.in_exile("Hill Giant"));
+}
+
+#[test]
+fn last_rites_chooses_a_card_for_each_card_discarded() {
+    cr!("701.9a", "608.2c");
+    compiles("Last Rites");
+    for (discard, chosen) in [(2usize, 2usize), (1, 1)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 3);
+        let rites = t.hand(P0, "Last Rites");
+        let forest = t.hand(P0, "Forest");
+        let island = t.hand(P0, "Island");
+        for c in ["Grizzly Bears", "Hill Giant", "Mountain"] {
+            t.hand(P1, c);
+        }
+        t.advance_to(P0, Step::PrecombatMain);
+        let mine = [Entity::Object(forest), Entity::Object(island)];
+        t.answer_choose(P0, &mine[..discard]);
+        pick_by_name(&mut t, P0, &["Grizzly Bears", "Hill Giant"]);
+        t.cast(P0, rites).target(Entity::Player(P1)).go();
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), 2 - discard);
+        // As many nonland cards as were discarded (the Mountain is never chosen).
+        assert_eq!(t.hand_size(P1), 3 - chosen, "{discard}");
+        assert!(t.in_hand(P1, "Mountain"));
+    }
+}
+
+#[test]
+fn extract_brain_casts_one_of_the_chosen_cards() {
+    cr!("608.2c", "601.2");
+    compiles("Extract Brain");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 2);
+    let brain = t.hand(P0, "Extract Brain");
+    let bears = t.hand(P1, "Grizzly Bears");
+    let giant = t.hand(P1, "Hill Giant");
+    t.hand(P1, "Lightning Bolt");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P1, &[Entity::Object(bears), Entity::Object(giant)]);
+    pick_by_name(&mut t, P0, &["Hill Giant"]);
+    t.answer_yes(P0, true);
+    t.cast(P0, brain).x(2).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert_eq!(t.g.obj(g[0]).controller, P0);
+    assert!(t.in_hand(P1, "Grizzly Bears") && t.in_hand(P1, "Lightning Bolt"));
+}
