@@ -793,6 +793,8 @@ pub struct Game {
     pub cards: crate::cards::CardState,
     /// Players and objects abilities noted for their linked abilities (CR 607.1).
     pub linked_notes: crate::linked_notes::LinkedNotes,
+    /// The links handed out to abilities resolving effects give (CR 607.5).
+    pub fresh_links: crate::ability_grants::FreshLinks,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
     /// Watches every event as it's processed, with the game as it is then (see
@@ -926,6 +928,7 @@ impl Game {
             planechase: Default::default(),
             cards: Default::default(),
             linked_notes: Default::default(),
+            fresh_links: Default::default(),
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),

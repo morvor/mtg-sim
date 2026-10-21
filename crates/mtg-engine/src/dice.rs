@@ -418,8 +418,10 @@ pub fn roll_dice(
 /// then effects that increase or decrease results; when several could apply, the player
 /// who rolled chooses which one is considered next. Each modifier's controller decides
 /// whether to use it (and pays its cost; mana abilities can be activated while paying).
-/// For the planar die (`planar`), only rerolls that don't refer to a numerical result or
-/// a number of sides apply (CR 706.7).
+/// For the planar die (`planar`), only modifiers that don't refer to a number of sides or
+/// a natural result are considered, and those that increase or decrease the result can be
+/// used (and their costs paid, using up a "once each turn" modifier) but change nothing:
+/// the planar die has no numerical result (CR 706.7).
 fn apply_modifiers(
     g: &mut Game,
     roller: PlayerId,
@@ -427,8 +429,7 @@ fn apply_modifiers(
     source: Option<ObjectId>,
     planar: bool,
 ) {
-    let phases: &[bool] = if planar { &[true] } else { &[true, false] };
-    for &reroll_phase in phases {
+    for reroll_phase in [true, false] {
         let mut considered: Vec<(ObjectId, usize)> = Vec::new();
         for _ in 0..64 {
             let turn = g.turn.number;
@@ -488,6 +489,8 @@ fn apply_modifiers(
                     }
                 }
                 match m.kind {
+                    // No numerical result to change (CR 706.7).
+                    ModifierKind::Add(_) | ModifierKind::AddOrSubtract(_) if planar => break,
                     // CR 706.2b: a rerolled die's first roll never happened.
                     ModifierKind::Reroll => {
                         d.natural = natural(g, d.sides);
@@ -517,7 +520,8 @@ fn modifies(m: &DieModifier, d: &RolledDie) -> bool {
 }
 
 /// Rolls the planar die for `p` (CR 901.9): its natural result 1–6 (see
-/// [`crate::planechase::face_for`]) after any rerolls `p` and others choose to apply
+/// [`crate::planechase::face_for`]) after any rerolls `p` and others choose to apply;
+/// modifiers that increase or decrease the result may be used but change nothing
 /// (Monitor Monitor's reroll applies to any die roll, CR 706.2). Modifiers that refer to
 /// a numerical result or a number of sides ignore it (CR 706.7).
 pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {

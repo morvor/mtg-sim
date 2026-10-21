@@ -821,13 +821,13 @@ impl Game {
                 });
                 let ts = self.new_timestamp();
                 let parts: Vec<(Option<ObjectId>, Vec<Modification>)> = if per_object {
-                    objs.iter()
-                        .map(|o| {
-                            let mut c = ctx.clone();
-                            c.set_var(vars::AFFECTED, vec![Entity::Object(*o)]);
-                            (Some(*o), self.fix_mods(mods, &c))
-                        })
-                        .collect()
+                    let mut parts = Vec::with_capacity(objs.len());
+                    for o in &objs {
+                        let mut c = ctx.clone();
+                        c.set_var(vars::AFFECTED, vec![Entity::Object(*o)]);
+                        parts.push((Some(*o), self.fix_mods(mods, &c)));
+                    }
+                    parts
                 } else {
                     let fixed = self.fix_mods(mods, ctx);
                     // CR 612.5: an exchange of text boxes gives each object the other's
@@ -2644,18 +2644,19 @@ impl Game {
     }
 
     /// Evaluates dynamic values in modifications once, at resolution (CR 608.2h, 611.2c).
-    pub fn fix_mods(&self, mods: &[Modification], ctx: &Ctx) -> Vec<Modification> {
+    pub fn fix_mods(&mut self, mods: &[Modification], ctx: &Ctx) -> Vec<Modification> {
         // "gain [keywords] until end of turn if [objects] have them" (CR 702.1c): which
         // keywords is determined as the effect is created.
-        let mods: Vec<Modification> = mods
-            .iter()
-            .flat_map(|m| match m {
-                Modification::AddKeywordsOf { kinds, from } => {
+        let mut fixed: Vec<Modification> = Vec::with_capacity(mods.len());
+        // The fresh links handed out for this effect (CR 607.5).
+        let mut links = Vec::new();
+        for m in mods {
+            match m {
+                Modification::AddKeywordsOf { kinds, from } => fixed.extend(
                     crate::layers::keywords_of(self, kinds, from, ctx)
                         .into_iter()
-                        .map(Modification::AddKeyword)
-                        .collect()
-                }
+                        .map(Modification::AddKeyword),
+                ),
                 // "landwalk of each of the land types of the sacrificed land" (Excavator):
                 // one landwalk per land type it had as it last existed (CR 702.14a, 608.2h).
                 Modification::AddKeyword(k)
@@ -2673,24 +2674,22 @@ impl Game {
                             }
                         }
                     }
-                    types
-                        .into_iter()
-                        .map(|t| {
-                            let mut k = k.clone();
-                            k.text = Some(format!("{}walk", t.to_lowercase()).into());
-                            k.filter = Some(Filter::Subtype(t));
-                            Modification::AddKeyword(k)
-                        })
-                        .collect()
+                    fixed.extend(types.into_iter().map(|t| {
+                        let mut k = k.clone();
+                        k.text = Some(format!("{}walk", t.to_lowercase()).into());
+                        k.filter = Some(Filter::Subtype(t));
+                        Modification::AddKeyword(k)
+                    }));
                 }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
-                Modification::AddAbilitiesOf { from, which, terms } => {
-                    crate::ability_grants::snapshot(self, from, which, terms, ctx)
-                }
-                other => vec![other.clone()],
-            })
-            .collect();
+                Modification::AddAbilitiesOf { from, which, terms } => fixed.extend(
+                    crate::ability_grants::snapshot(self, from, which, terms, ctx, &mut links),
+                ),
+                other => fixed.push(other.clone()),
+            }
+        }
+        let mods = fixed;
         mods.iter()
             .map(|m| match m {
                 Modification::ModifyPT(p, t) => Modification::ModifyPT(

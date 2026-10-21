@@ -144,18 +144,26 @@ Not bugs in the rules, but found and handled by the properties:
 
 * **CR 733.1's exceptions aren't kept.** The engine reverses an illegal action by restoring
   a copy of the whole game, so it also reverses what CR 733.1 says players may not reverse
-  (moving cards to or from a library, shuffling, revealing library cards). Rollback
-  identity allows this; keeping those parts would need a reversal that knows which actions
-  happened during the attempt.
+  (moving cards to or from a library, shuffling, revealing library cards). A scan of the
+  compiled costs and mana abilities of every fully supported card found none that can
+  reach it (a cost's library actions are paid after everything that can make the action
+  illegal, and no supported mana ability touches a library), so it's registered as the
+  provisional deviation `illegal-action-reversal-restores-libraries`
+  (docs/interpretations/stack-casting-costs.md, with the cards found). The scan also found
+  that Thought Lash's cumulative upkeep could be paid in part; that's fixed.
+* **Links of abilities continuous effects give are hashes.** Abilities a static or
+  other continuously reevaluated effect gives (`layers::acquired_ability`,
+  `ability_grants::gained_link`) get links hashed from the ability, the granter and the
+  source into 0x8000–0xbfff, recomputed each time characteristics are; two such grants to
+  one object could, very rarely, hash to the same link (CR 607.5). Links resolving
+  effects give are numbered per game (0xc000 on) and can't collide.
 * **Ability ids depend on the process.** They come from a global counter (`ability.rs`)
   and are assigned as abilities are first needed, so the ids in protocol requests
   (`action.ability`) differ between processes unless both play the same games in the same
   order. Answers refer to options by index, so replays work; making the ids deterministic
   would mean allocating them per game, which the caches of derived abilities (shared by all
-  games) don't allow without reworking them.
-* **The fresh links of abilities an effect gives** (`ability_grants::snapshot`) are the
-  ability-id counter modulo 0x7fff, so they can, rarely, equal another link on the same
-  object (CR 607.5 wants them distinct).
+  games) don't allow without reworking them. Registered as the policy
+  `ability-ids-depend-on-the-process` (docs/interpretations/decisions-policies.md).
 * **Seat symmetry compares what the canonical state shows**: the turn, players, zones and
   public objects with their status and characteristics, the stack, combat and every
   decision. Internal bookkeeping that never reaches those (and hidden-information views)
@@ -192,7 +200,9 @@ request is reported as differing.
 Earlier runs found the bugs above: seat symmetry 12 violations in 300 games (`--seed 3`)
 and 4 in 2,000 (`--seed 10`), all fixed; snapshot and determinism flagged ability ids,
 links, mana riders' ids and replacement keys drawn from the process-wide counter (now
-compared up to renaming); rollback identity found the loop watch recording reversed
+compared up to renaming; the links of abilities resolving effects give are now numbered
+per game in a range of their own and skip links still in use, so they can't equal another
+link on the object, CR 607.5); rollback identity found the loop watch recording reversed
 attempts, which it now ignores as bookkeeping. Rollback identity, snapshot equivalence
 and determinism found no engine bug.
 
