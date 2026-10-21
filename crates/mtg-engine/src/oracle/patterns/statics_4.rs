@@ -257,3 +257,45 @@ fn s_in_graveyard_has_keyword(
 }
 
 inventory::submit! { super::AbilityPattern { name: "statics 4: as long as ~ is in your graveyard, it has [keyword] (instants and sorceries)", priority: 90, parse: s_in_graveyard_has_keyword } }
+
+/// "Return it to the battlefield. It's an Aura enchantment with ... and \"...\". ~ loses
+/// all other abilities." (Harold and Bob, First Numens): the permanent it returns as
+/// loses the abilities other than those the rider gives it (layer 6, in order:
+/// CR 613.1f, 613.7).
+fn f_loses_all_other_abilities(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    // The sentence after a quote ending in a period is read with it: "It's an Aura
+    // enchantment with ... and \"...\" ~ loses all other abilities."
+    if let Some(r) = l
+        .strip_suffix("\" ~ loses all other abilities")
+        .filter(|r| r.starts_with("it's ") || r.starts_with("it is "))
+    {
+        return super::characteristic_riders::rider_followup(
+            &format!("{r}\" and loses all other abilities"),
+            prev,
+            b,
+        );
+    }
+    if !matches!(l, "~ loses all other abilities" | "it loses all other abilities") {
+        return false;
+    }
+    let Some(to) = super::characteristic_riders::last_battlefield_move(prev) else {
+        return false;
+    };
+    let gives = to
+        .with_mods
+        .iter()
+        .any(|m| matches!(m, Modification::AddAbility(_) | Modification::AddKeyword(_)));
+    if !gives
+        || to
+            .with_mods
+            .iter()
+            .any(|m| matches!(m, Modification::RemoveAllAbilities))
+    {
+        return false;
+    }
+    to.with_mods.insert(0, Modification::RemoveAllAbilities);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "statics 4: ~ loses all other abilities (after a characteristic rider)", priority: 1140, apply: f_loses_all_other_abilities } }

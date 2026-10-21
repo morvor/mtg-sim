@@ -341,3 +341,26 @@ fn bello_animates_big_non_equipment_artifacts_and_non_aura_enchantments_on_your_
     t.g.recompute();
     assert!(!t.g.obj(lotus).is_creature());
 }
+
+#[test]
+fn harold_and_bob_return_as_an_aura_on_a_forest_with_only_the_granted_ability() {
+    cr!("303.4f", "613.1f");
+    supported("Harold and Bob, First Numens");
+    use mtg_engine::keywords::KeywordKind;
+    let mut t = TestGame::new(2);
+    let hb = t.battlefield(P0, "Harold and Bob, First Numens");
+    let forest = t.battlefield(P0, "Forest");
+    let before = t.g.obj(forest).chars.abilities.len();
+    t.g.destroy(hb, None);
+    t.settle();
+    t.resolve_all();
+    let now = t.named_on_battlefield("Harold and Bob, First Numens");
+    assert_eq!(now.len(), 1);
+    let o = t.g.obj(now[0]);
+    assert!(!o.is_creature());
+    assert!(o.chars.has_subtype("Aura"));
+    assert!(!o.has_keyword(KeywordKind::Reach));
+    assert!(!o.has_keyword(KeywordKind::Vigilance));
+    assert_eq!(o.attached_to, Some(Entity::Object(forest)));
+    assert_eq!(t.g.obj(forest).chars.abilities.len(), before + 1);
+}
