@@ -216,6 +216,29 @@ fn cant_have_counters_for_duration(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "durations 4: it can't have counters put on it [duration]", priority: 100, parse: cant_have_counters_for_duration } }
 
+/// "gain control of target creature that player controls for as long as they're the
+/// monarch" (Garland, Royal Kidnapper): a duration about that player (fixed as the effect
+/// begins, see `control_change.rs`), which ends for good once they stop being the monarch
+/// (CR 611.2b).
+fn for_as_long_as_theyre_the_monarch(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_suffix(" for as long as they're the monarch")?;
+    let who = b.it_player.clone();
+    if matches!(who, PlayerRef::You) {
+        return None;
+    }
+    let mut e = parse_sentence(r, b)?;
+    let Effect::GainControl { duration, .. } = &mut e else {
+        return None;
+    };
+    if !matches!(duration, Duration::Permanent) {
+        return None;
+    }
+    *duration = Duration::WhileCondition(Condition::PlayerMatches(who, PlayerFilter::Monarch));
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "durations 4: for as long as they're the monarch", priority: 100, parse: for_as_long_as_theyre_the_monarch } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

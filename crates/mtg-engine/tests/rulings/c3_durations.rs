@@ -171,3 +171,35 @@ fn suncleanser_opponent_cant_get_counters_while_it_remains() {
     // Not another player.
     assert_eq!(t.g.put_counters(Entity::Player(P0), "poison", 1, how), 1);
 }
+
+#[test]
+fn garland_keeps_the_creature_for_as_long_as_they_are_the_monarch() {
+    cr!("611.2b", "725.1");
+    ruling!(
+        "Garland, Royal Kidnapper",
+        "As a player becomes the monarch, the current monarch (if any) ceases being the monarch."
+    );
+    supported("Garland, Royal Kidnapper");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Garland, Royal Kidnapper");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.g.monarch, Some(P1));
+    assert_eq!(t.obj_now(bears).controller, P0);
+    // Creatures you control but don't own get +2/+2.
+    assert_eq!(t.pt(bears), (4, 4));
+    // P1 stops being the monarch: the effect ends, for good.
+    mtg_engine::designations::become_monarch(&mut t.g, P0);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P1);
+    mtg_engine::designations::become_monarch(&mut t.g, P1);
+    t.g.flush_events();
+    // (Before Garland's ability triggers again.)
+    t.g.recompute();
+    assert_eq!(t.obj_now(bears).controller, P1);
+}
