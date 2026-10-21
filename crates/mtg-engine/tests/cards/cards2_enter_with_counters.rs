@@ -246,3 +246,40 @@ fn sin_removes_counters_from_chosen_permanents_and_enters_with_twice_that_many()
     assert_eq!(t.counters(mine, "+1/+1"), 10);
     assert_eq!(t.counters(mine, "oil"), 1);
 }
+
+#[test]
+fn indominus_rex_enters_with_a_counter_per_keyword_among_discarded_cards() {
+    cr!("614.12", "614.1c", "122.1b");
+    ruling!(
+        "Indominus Rex, Alpha",
+        "Indominus Rex's first ability will give it only one of each kind of counter, even if you discard more than one creature card with the relevant ability."
+    );
+    supported("Indominus Rex, Alpha");
+    let mut t = TestGame::new(2);
+    let angel = t.hand(P0, "Serra Angel");
+    let drake = t.hand(P0, "Wind Drake");
+    let rats = t.hand(P0, "Typhoid Rats");
+    t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Island", 2);
+    let rex = t.hand(P0, "Indominus Rex, Alpha");
+    let hand = t.hand_size(P0);
+    t.cast(P0, rex).go();
+    t.answer_choose(
+        P0,
+        &[
+            Entity::Object(angel),
+            Entity::Object(drake),
+            Entity::Object(rats),
+        ],
+    );
+    t.resolve_all();
+    let r = t.named_on_battlefield("Indominus Rex, Alpha")[0];
+    assert_eq!(t.counters(r, "flying"), 1);
+    assert_eq!(t.counters(r, "vigilance"), 1);
+    assert_eq!(t.counters(r, "deathtouch"), 1);
+    assert_eq!(t.counters(r, "trample"), 0);
+    // Cast it (-1), discarded three (-3), drew a card for each of its three counters.
+    assert_eq!(t.hand_size(P0), hand - 1 - 3 + 3);
+    assert!(t.in_graveyard(P0, "Serra Angel"));
+}

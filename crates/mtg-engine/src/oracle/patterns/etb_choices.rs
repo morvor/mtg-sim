@@ -893,6 +893,19 @@ fn as_enters_sentence(l: &str, ctx: &CompileContext) -> Option<Effect> {
                 otherwise: Box::new(e),
             });
         }
+        // "it enters with a flying counter on it if a card discarded this way has flying"
+        // (Indominus Rex, Alpha).
+        if let Some((m, c)) = r.split_once(" on it if ") {
+            if let (Some(e), Some(cond)) =
+                (entry(&format!("{m} on it"), ctx), etb_condition(c, ctx))
+            {
+                return Some(Effect::If {
+                    cond,
+                    then: Box::new(e),
+                    otherwise: Box::new(Effect::Noop),
+                });
+            }
+        }
         return entry(r, ctx);
     }
     // "put a phylactery counter on an artifact you control" (Phylactery Lich): a permanent

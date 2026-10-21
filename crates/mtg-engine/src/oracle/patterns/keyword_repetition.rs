@@ -69,36 +69,52 @@ fn substitute(l: &str, word: &str, with: &str) -> Option<String> {
     (n >= 2).then_some(out)
 }
 
-/// "When ~ enters, [sentence about flying]. Repeat this process for [keywords]. [rest]":
-/// the sentence once for each keyword, then the rest.
+/// "When ~ enters, [sentence about flying]. Repeat this process for [keywords]. [rest]",
+/// "As ~ enters, [instruction]. It enters with a flying counter on it if [...] has flying.
+/// The same is true for [keywords]." (Indominus Rex, Alpha): the sentence before the list
+/// once for each keyword, then the rest.
 fn repeat_this_process(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let lower = block.to_lowercase();
     if lower.contains('"') {
         return None;
     }
-    let (head, tail) = lower.split_once(". repeat this process for ")?;
+    let (head, tail) = lower
+        .split_once(". repeat this process for ")
+        .or_else(|| lower.split_once(". the same is true for "))?;
     let (list, rest) = tail.split_once(". ").unwrap_or((tail, ""));
     let kws = keyword_list(list)?;
-    let (trigger, first) = head.split_once(", ")?;
-    if !trigger.starts_with("when") {
+    // The sentences before the repeated one, and the trigger or "as ~ enters" prefix of a
+    // one-sentence head.
+    let (before, base_sentence) = match head.rsplit_once(". ") {
+        Some((b, s)) => (format!("{b}."), s.to_string()),
+        None => {
+            let (prefix, s) = head.split_once(", ")?;
+            if !(prefix.starts_with("when") || prefix.starts_with("as ")) {
+                return None;
+            }
+            (format!("{prefix},"), s.to_string())
+        }
+    };
+    if !(before.starts_with("when") || before.starts_with("as ")) {
         return None;
     }
     // "on any creature you control": one creature you choose.
-    let first = first.replace(
+    let first = base_sentence.replace(
         " on any creature you control ",
         " on a creature you control ",
     );
     let first = first.as_str();
-    // The keyword the first sentence is about: the one it names (at least) twice.
+    // The keyword the sentence is about: the one it names (at least) twice.
     let base = ["flying", "first strike", "deathtouch"]
         .into_iter()
         .find(|k| substitute(first, k, k).is_some())?;
-    let mut text = format!("{trigger}, {first}.");
+    let mut text = format!("{before} {first}.");
     for k in &kws {
         text.push(' ');
         text.push_str(&substitute(first, base, k)?);
         text.push('.');
     }
+    let trigger = head.split_once(", ")?.0;
     // "Then put a +1/+1 counter on ~ for each counter put on a creature this way."
     let rest = end(rest);
     let per_counter = match rest
@@ -209,3 +225,18 @@ fn count_counters_put(e: &mut Effect) -> usize {
         _ => 0,
     }
 }
+
+/// "a card discarded this way has flying": one of the cards the earlier instruction
+/// discarded has the keyword (CR 400.7: as it is in the graveyard).
+fn discarded_this_way_has(s: &str) -> Option<Condition> {
+    let r = end(s).strip_prefix("a card discarded this way has ")?;
+    let kind = KeywordKind::from_name(r)?;
+    Some(Condition::Exists(Filter::and(vec![
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::In(Box::new(Sel::Var(crate::discard_rules::DISCARDED))),
+        Filter::HasKeyword(kind),
+    ])))
+}
+
+inventory::submit! { ConditionPattern { name: "a card discarded this way has [keyword]", priority: 50, parse: discarded_this_way_has } }
