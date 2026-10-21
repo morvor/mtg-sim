@@ -261,3 +261,40 @@ fn cemetery_illuminator_casts_the_top_card_if_it_shares_a_type_with_an_exiled_ca
     let elves2 = t.library_top(P0, "Llanowar Elves");
     assert!(!try_cast_as(&mut t, P0, elves2, CastMethod::Normal));
 }
+
+#[test]
+fn ninja_teen_casts_creature_cards_from_your_graveyard_only_for_sneak() {
+    cr!("702.190a", "601.3");
+    ruling!(
+        "Ninja Teen",
+        "Casting creature spells from your graveyard using their sneak abilities with the permission granted by Ninja Teen's first level 3 ability doesn't change when you can cast them."
+    );
+    assert_supported("Ninja Teen");
+    let mut t = TestGame::new(2);
+    let teen = t.battlefield(P0, "Ninja Teen");
+    t.lands(P0, "Swamp", 8);
+    t.activate(P0, teen, 0, &[]).unwrap();
+    t.resolve();
+    t.activate(P0, teen, 1, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.obj_now(teen).class_level, 3);
+    let ogre = t.graveyard(P0, "Gray Ogre");
+    // Not for its mana cost, in the main phase.
+    assert!(!try_cast_as(&mut t, P0, ogre, CastMethod::Normal));
+    // For its sneak cost ({3}{B}) in the declare blockers step, returning an unblocked
+    // attacker.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.settle();
+    let sneak = CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Sneak);
+    assert!(try_cast_as(&mut t, P0, ogre, sneak), "{}", t.dump_log());
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(t.named_on_battlefield("Gray Ogre").len(), 1);
+}

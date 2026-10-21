@@ -930,6 +930,11 @@ const TAILS: &[Tail] = &[
     (" until your next end step", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),
+    (" using their sneak abilities", |p| {
+        let was = p.terms.only_keyword.is_some();
+        p.terms.only_keyword = Some(crate::keywords::KeywordKind::Sneak);
+        !was
+    }),
     (" during your turn", |p| {
         let was = p.your_turn;
         p.your_turn = true;

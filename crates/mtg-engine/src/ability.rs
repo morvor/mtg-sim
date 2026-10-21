@@ -3784,6 +3784,11 @@ pub struct PlayTerms {
     /// permission's source and player) once its targets are chosen (CR 601.2c).
     #[serde(default)]
     pub cost_increase_unless_targets: Option<(u32, Filter)>,
+    /// "You may cast creature spells from your graveyard using their sneak abilities."
+    /// (Ninja Teen): spells are cast with the permission only for that keyword's cost
+    /// (and its other rules), not their mana costs.
+    #[serde(default)]
+    pub only_keyword: Option<crate::keywords::KeywordKind>,
 }
 
 impl PlayTerms {
@@ -3853,6 +3858,9 @@ impl PlayTerms {
         }
         self.snow_as_any_color |= other.snow_as_any_color;
         self.controller_duration |= other.controller_duration;
+        if other.only_keyword.is_some() {
+            self.only_keyword = other.only_keyword;
+        }
         if other.cost_increase_unless_targets.is_some() {
             self.cost_increase_unless_targets = other.cost_increase_unless_targets.clone();
         }

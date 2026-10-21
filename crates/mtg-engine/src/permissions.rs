@@ -461,6 +461,14 @@ pub fn attach(
             if perm.terms.cast_face.is_some_and(|f| f != opt.face) {
                 continue;
             }
+            // "using their sneak abilities": only for that keyword's cost.
+            if perm
+                .terms
+                .only_keyword
+                .is_some_and(|k| opt.method != CastMethod::Keyword(k))
+            {
+                continue;
+            }
             let changes_the_way = perm.terms.flash
                 || perm.requires_cost()
                 || perm.terms.cost_reduction > 0
