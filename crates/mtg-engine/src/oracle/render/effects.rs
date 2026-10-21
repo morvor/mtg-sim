@@ -799,6 +799,11 @@ impl Renderer<'_> {
                     format!("for {w}, {inner}")
                 }
             }
+            Effect::AsPlayer { who, effect } if self.choose_and_pay_each(effect).is_some() => {
+                let w = self.player(who, Case::Subj);
+                let s = self.choose_and_pay_each(effect).unwrap_or_default();
+                format!("{w} {s}")
+            }
             Effect::AsPlayer { who, effect } => {
                 let w = self.player(who, Case::Subj);
                 // Performed as that player: "you" in the instruction is that player
@@ -1129,6 +1134,15 @@ impl Renderer<'_> {
                         self.chosen_one.push(*var);
                     }
                     let c = self.player(chooser, Case::Subj);
+                    // "You choose a nonland card from that player's graveyard or hand", "You
+                    // choose a nonland card from it or a card from their graveyard".
+                    if let (true, "you", Sel::Choose { filter, count: Value::Const(1), up_to: false, .. }) =
+                        (self.revealed_hand, c.as_str(), sel)
+                    {
+                        if let Some(s) = self.hand_or_graveyard_choice(filter) {
+                            return format!("{{opt:you}} choose {s}");
+                        }
+                    }
                     let mut s = self.sel(&strip_chooser(sel), Case::Obj);
                     // "Target opponent reveals their hand. You choose a nonland card from
                     // it."
@@ -2080,9 +2094,28 @@ impl Renderer<'_> {
                         head.replacen("token", &format!("{} token", st.trim()), 1)
                     )
                 };
-                if !mods.is_empty() {
-                    let ex = self.exceptions(mods);
-                    vp.push_str(&format!(", except {ex}"));
+                let ex = if mods.is_empty() {
+                    String::new()
+                } else {
+                    format!(", except {}", self.exceptions(mods))
+                };
+                vp.push_str(&ex);
+                // "create a token that's a copy of another target attacking creature and
+                // that's tapped and attacking" / "... The token enters tapped and
+                // attacking." / "a token that's a copy of ~ tapped and attacking": the
+                // token enters that way (CR 508.4) whichever way it's said.
+                if *tapped && *attacking && matches!(count, Value::Const(1)) {
+                    let mut alts = vec![
+                        vp.clone(),
+                        format!("create {head} tapped and attacking{ex}"),
+                    ];
+                    if ex.is_empty() {
+                        alts.push(format!("create {head} and that's tapped and attacking"));
+                        alts.push(format!(
+                            "create {head}. The token enters tapped and attacking"
+                        ));
+                    }
+                    vp = format!("{{alt:{}}}", alts.join("|"));
                 }
                 // "For each token you control, create a token that's a copy of that
                 // permanent": one copy of each of them.
@@ -2130,6 +2163,42 @@ impl Renderer<'_> {
                 attacking,
                 blocking,
             } => {
+                // "create a token that's a copy of ~ tapped and attacking that player,
+                // except it isn't legendary": the player it attacks before the exceptions.
+                if let (
+                    Effect::CreateTokenCopy {
+                        of,
+                        count: Value::Const(1),
+                        controller: PlayerRef::You,
+                        tapped: true,
+                        attacking: true,
+                        mods,
+                    },
+                    Some(p),
+                    None,
+                ) = (effect.as_ref(), attacking, blocking)
+                {
+                    if !mods.is_empty() {
+                        let s = self.effect(effect);
+                        let o = self.sel(of, Case::Obj);
+                        let p = self.player(p, Case::Obj);
+                        let ex = self.exceptions(mods);
+                        return format!(
+                            "{{alt:{s} {p}|create a token that's a copy of {o} tapped and attacking {p}, except {ex}}}"
+                        );
+                    }
+                }
+                // "create a 1/1 white Human creature token that's tapped and attacking that
+                // player or a planeswalker they control" (`kw/token_creation_rules.rs`).
+                if let (Effect::Seq(v), Some(p)) = (effect.as_ref(), attacking) {
+                    if let [Effect::Custom(n), rest] = v.as_slice() {
+                        if n == crate::kw::token_creation_rules::OR_THEIR_PLANESWALKERS {
+                            let s = self.effect(rest);
+                            let p = self.player(p, Case::Obj);
+                            return format!("{s} {p} or a planeswalker they control");
+                        }
+                    }
+                }
                 let mut s = self.effect(effect);
                 if let Some(p) = attacking {
                     let p = self.player(p, Case::Obj);
@@ -2408,6 +2477,32 @@ impl Renderer<'_> {
                 effect,
             } => {
                 let mut parts = Vec::new();
+                // "except it has vanishing 3 if that creature doesn't have vanishing",
+                // "except it enters with a shield counter on it if you control that
+                // creature": a condition on the object copied (CR 707.9f).
+                let copied = match only_if {
+                    Some(Filter::Custom(n)) => n
+                        .strip_prefix(crate::copy_rules::COPIED_MATCHES)
+                        .and_then(|j| serde_json::from_str::<Filter>(j).ok()),
+                    _ => None,
+                };
+                if let Some(g) = copied {
+                    let cond = match &g {
+                        Filter::ControlledBy(PlayerRel::You) => {
+                            "you control that creature".to_string()
+                        }
+                        Filter::Not(x) => format!("that creature {}", self.is_predicate(x, true)),
+                        x => format!("that creature {}", self.is_predicate(x, false)),
+                    };
+                    if !mods.is_empty() {
+                        parts.push(self.exceptions(mods));
+                    }
+                    let e = self.effect(effect);
+                    if !e.is_empty() {
+                        parts.push(e);
+                    }
+                    return format!("except {} if {cond}", parts.join(" "));
+                }
                 if let Some(f) = only_if {
                     let n = self.noun_det(f, Det::A);
                     parts.push(format!("if it's {n},"));
@@ -3409,6 +3504,28 @@ impl Renderer<'_> {
                 match (target, among) {
                     // "copy that spell for each other creature you control that the spell
                     // could target. Each copy targets a different one of those creatures."
+                    // "for each other permanent or player the spell could target. Each
+                    // copy targets a different one of those permanents and players."
+                    (None, Some(Filter::Or(v)))
+                        if v.iter().any(|x| matches!(x, Filter::Custom(n) if n == crate::copy_rules::ANY_PLAYER)) =>
+                    {
+                        let w = if matches!(what, Sel::TriggerSpell) {
+                            "{alt:that spell|that spell or ability}".to_string()
+                        } else {
+                            w
+                        };
+                        let objs: Vec<Filter> = v
+                            .iter()
+                            .filter(|x| !matches!(x, Filter::Custom(n) if n == crate::copy_rules::ANY_PLAYER))
+                            .cloned()
+                            .collect();
+                        let objs = Filter::Or(objs);
+                        let n = self.noun(&objs, Num::One);
+                        let ns = self.noun(&objs, Num::Many);
+                        format!(
+                            "copy {w} for each other {n} or player {{alt:the spell|the spell or ability|that spell|that spell or ability}} could target. Each copy targets a different one of those {ns} and players"
+                        )
+                    }
                     (None, Some(f)) => {
                         let w = if matches!(what, Sel::TriggerSpell) {
                             "that spell".to_string()
@@ -3840,6 +3957,57 @@ impl Renderer<'_> {
         let mut outcomes = Vec::new();
         let mut i = 0;
         while i < v.len() {
+            if let Some((s, used)) = self.guess_seq(&v[i..]) {
+                parts.push(s);
+                i += used;
+                continue;
+            }
+            // "... choose one of those creatures. Copy that spell. The copy targets the
+            // chosen creature." (the creatures the intervening "if" is about).
+            if let (
+                Some(Effect::Store {
+                    var,
+                    sel:
+                        Sel::Choose {
+                            chooser: PlayerRef::You,
+                            filter,
+                            count: Value::Const(1),
+                            up_to: false,
+                            ..
+                        },
+                }),
+                Some(Effect::CopySpellRetargeted {
+                    what: Sel::TriggerSpell,
+                    target: Some(Sel::Var(t)),
+                    among: None,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                if t == var
+                    && matches!(filter, Filter::And(f) if f.iter().any(|x| matches!(x, Filter::Custom(n) if n == crate::copy_rules::TRIGGER_SPELL_COULD_TARGET)))
+                    && self
+                        .intervening_exists
+                        .as_ref()
+                        .is_some_and(|g| format!("{g:?}") == format!("{filter:?}"))
+                {
+                    let types: Vec<Filter> = match filter {
+                        Filter::And(f) => f
+                            .iter()
+                            .filter(|x| matches!(x, Filter::Type(_) | Filter::Permanent))
+                            .cloned()
+                            .collect(),
+                        _ => Vec::new(),
+                    };
+                    let ty = Filter::and(types);
+                    let many = self.noun(&ty, Num::Many);
+                    let one = self.noun(&ty, Num::One);
+                    parts.push(format!(
+                        "choose one of those {many}. Copy that spell. The copy targets the chosen {one}"
+                    ));
+                    i += 2;
+                    continue;
+                }
+            }
             // "Sacrifice X Foods." with X chosen as they're sacrificed (CR 107.3f,
             // `patterns/sacrifice_x.rs`).
             if let (
@@ -5113,6 +5281,147 @@ impl Renderer<'_> {
     /// cost": you cast up to one card, chosen as it's cast (choosing none is not casting).
     /// Only a nonland card can be cast (CR 305.9), and the card cast is a spell (CR
     /// 601.2a).
+    /// "[That player] may choose any number of tapped blue creatures they control and pay
+    /// {4} for each creature chosen this way. If the player does, untap those creatures."
+    /// (performed as that player): choosing none and paying nothing is not doing it.
+    fn choose_and_pay_each(&mut self, e: &Effect) -> Option<String> {
+        let Effect::Seq(v) = e else { return None };
+        let [Effect::Store {
+            var,
+            sel:
+                Sel::Choose {
+                    chooser: PlayerRef::You,
+                    filter,
+                    count: Value::CountSel(all),
+                    up_to: true,
+                    ..
+                },
+        }, Effect::PayOptional {
+            who: PlayerRef::You,
+            cost,
+            then,
+            otherwise,
+        }, Effect::If {
+            cond: Condition::PrevHappened,
+            then: untap,
+            otherwise: no,
+        }] = v.as_slice()
+        else {
+            return None;
+        };
+        if !matches!(all.as_ref(), Sel::All(f) if format!("{f:?}") == format!("{filter:?}"))
+            || !matches!(then.as_ref(), Effect::Noop)
+            || !matches!(otherwise.as_ref(), Effect::Noop)
+            || !matches!(no.as_ref(), Effect::Noop)
+            || !matches!(untap.as_ref(), Effect::Untap { what: Sel::Var(x) } if x == var)
+            || cost.mana.is_some()
+        {
+            return None;
+        }
+        let [CostPart::Repeated { cost: each, times }] = cost.parts.as_slice() else {
+            return None;
+        };
+        if !matches!(times, Value::CountSel(s) if matches!(s.as_ref(), Sel::Var(x) if x == var)) {
+            return None;
+        }
+        let parts: Vec<Filter> = match filter {
+            Filter::And(v) => v.clone(),
+            other => vec![other.clone()],
+        };
+        if !parts
+            .iter()
+            .any(|x| matches!(x, Filter::ControlledBy(PlayerRel::You)))
+        {
+            return None;
+        }
+        let kind: Vec<Filter> = parts
+            .iter()
+            .filter(|x| !matches!(x, Filter::ControlledBy(_) | Filter::InZone(_)))
+            .cloned()
+            .collect();
+        let types: Vec<Filter> = kind
+            .iter()
+            .filter(|x| matches!(x, Filter::Type(_)))
+            .cloned()
+            .collect();
+        let many = self.noun(&Filter::and(kind), Num::Many);
+        let one = self.noun(&Filter::and(types.clone()), Num::One);
+        let ones = self.noun(&Filter::and(types), Num::Many);
+        let c = self.cost(each);
+        Some(format!(
+            "may choose any number of {many} they control and pay {c} for each {one} chosen this way. If {{alt:the player|that player|they}} {{alt:does|do}}, untap those {ones}"
+        ))
+    }
+
+    /// One card chosen from a player's revealed hand or their graveyard: "a nonland card
+    /// from that player's graveyard or hand", "a nonland card from it or a card from their
+    /// graveyard".
+    fn hand_or_graveyard_choice(&mut self, f: &Filter) -> Option<String> {
+        // The player whose cards they are, and the qualities other than zone and owner.
+        let split = |v: &[Filter]| -> Option<(PlayerRef, Vec<Filter>)> {
+            let p = v.iter().find_map(|x| match x {
+                Filter::OwnedByPlayer(p) => Some((**p).clone()),
+                _ => None,
+            })?;
+            let rest = v
+                .iter()
+                .filter(|x| {
+                    !matches!(
+                        x,
+                        Filter::OwnedByPlayer(_) | Filter::InZone(_) | Filter::Or(_)
+                    )
+                })
+                .cloned()
+                .collect();
+            Some((p, rest))
+        };
+        match f {
+            Filter::And(v)
+                if v.iter().any(|x| {
+                    matches!(x, Filter::Or(z) if matches!(z.as_slice(),
+                    [Filter::InZone(ZoneKind::Hand), Filter::InZone(ZoneKind::Graveyard)]))
+                }) =>
+            {
+                let (p, rest) = split(v)?;
+                let n = self.noun_det(&Filter::and(rest), Det::A);
+                let alts: Vec<String> = possessives(self, &p)
+                    .iter()
+                    .flat_map(|poss| {
+                        [
+                            format!("{n} from {poss} graveyard or hand"),
+                            format!("{n} from {poss} hand or graveyard"),
+                        ]
+                    })
+                    .collect();
+                Some(format!("{{alt:{}}}", alts.join("|")))
+            }
+            Filter::Or(alts) => {
+                let [Filter::And(a), Filter::And(b)] = alts.as_slice() else {
+                    return None;
+                };
+                let in_zone = |v: &[Filter], z: ZoneKind| {
+                    v.iter().any(|x| matches!(x, Filter::InZone(y) if *y == z))
+                };
+                if !in_zone(a, ZoneKind::Hand) || !in_zone(b, ZoneKind::Graveyard) {
+                    return None;
+                }
+                let (pa, ra) = split(a)?;
+                let (pb, rb) = split(b)?;
+                if format!("{pa:?}") != format!("{pb:?}") {
+                    return None;
+                }
+                let na = self.noun_det(&Filter::and(ra), Det::A);
+                let nb = self.noun_det(&Filter::and(rb), Det::A);
+                let alts: Vec<String> = possessives(self, &pb)
+                    .iter()
+                    .map(|poss| format!("{na} from it or {nb} from {poss} graveyard"))
+                    .collect();
+                Some(format!("{{alt:{}}}", alts.join("|")))
+            }
+            _ => None,
+        }
+    }
+
     fn cast_up_to_one(&mut self, effect: &Effect) -> Option<String> {
         let Effect::CastCard {
             who: PlayerRef::You,
@@ -5176,15 +5485,48 @@ impl Renderer<'_> {
         } else {
             super::nouns::Det::A
         };
-        let n = self.noun_det(&f, det);
-        let n = match n.find(" card") {
-            Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
-                format!("{} spell{}", &n[..i], &n[i + 5..])
+        let spell_noun = |r: &mut Self, f: &Filter, det: super::nouns::Det| {
+            let n = r.noun_det(f, det);
+            match n.find(" card") {
+                Some(i) if n[i + 5..].is_empty() || n[i + 5..].starts_with(' ') => {
+                    format!("{} spell{}", &n[..i], &n[i + 5..])
+                }
+                Some(i) if group.is_some() && n[i + 5..].starts_with('s') => {
+                    format!("{} spell{}", &n[..i], &n[i + 5..])
+                }
+                _ => n,
             }
-            Some(i) if group.is_some() && n[i + 5..].starts_with('s') => {
-                format!("{} spell{}", &n[..i], &n[i + 5..])
+        };
+        // "cast a spell with mana value X from among cards exiled with ~", "... from among
+        // cards you own exiled with ~": one of the cards an ability of this object exiled
+        // (CR 607.2a), cast as a spell.
+        let linked = parts
+            .iter()
+            .any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked)));
+        let among_linked = (linked && group.is_none()).then(|| {
+            let owned = parts
+                .iter()
+                .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)));
+            let kind = Filter::and(
+                parts
+                    .iter()
+                    .filter(|x| {
+                        !matches!(x, Filter::In(_) | Filter::InZone(_) | Filter::OwnedBy(PlayerRel::You))
+                            && !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land)))
+                    })
+                    .cloned()
+                    .collect(),
+            );
+            let you_own = if owned { "you own " } else { "" };
+            (kind, you_own)
+        });
+        let n = spell_noun(self, &f, det.clone());
+        let n = match among_linked {
+            Some((kind, you_own)) => {
+                let k = spell_noun(self, &kind, det);
+                format!("{{alt:{n}|{k} from among cards {you_own}exiled with ~}}")
             }
-            _ => n,
+            None => n,
         };
         let n = if group.is_some() {
             format!("{n} from among {{alt:them|those cards|the exiled cards}}")
@@ -8379,4 +8721,14 @@ fn same_life_amount(a: &Effect, b: &Effect) -> bool {
             na,
             Value::Const(_) | Value::X | Value::Prev | Value::EventAmount
         )
+}
+
+/// The ways to say a player's zone after the player was named ("that player's", "their"),
+/// each in full so a phrase built from it is one alternative.
+fn possessives(r: &mut Renderer<'_>, p: &PlayerRef) -> Vec<String> {
+    let poss = r.player(p, Case::Poss);
+    match poss.strip_prefix("{alt:").and_then(|x| x.strip_suffix('}')) {
+        Some(inner) if !inner.contains('{') => inner.split('|').map(str::to_string).collect(),
+        _ => vec![poss],
+    }
 }

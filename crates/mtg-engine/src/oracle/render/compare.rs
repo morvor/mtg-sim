@@ -33,10 +33,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "\"A creature that isn't enchanted\" is an unenchanted creature (CR 303.4).",
     },
     Equivalence {
-        pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) card or (non-?[a-z]+ [a-z]+) card\b",
+        pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) card or (non-?[a-z]+ [a-z]+|legendary [a-z]+) card\b",
         replacement: "$1 or $2 card",
-        why: "\"Artifact or non-Aura enchantment card\": the noun after the last alternative \
-              names both alternatives (\"artifact card or non-Aura enchantment card\").",
+        why: "\"Artifact or non-Aura enchantment card\", \"a land or legendary Turtle card\": \
+              the noun after the last alternative names both alternatives (\"artifact card \
+              or non-Aura enchantment card\").",
     },
     Equivalence {
         pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) spell or (non-?[a-z]+ [a-z]+) spell\b",
@@ -610,7 +611,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               control\" are \"creatures your opponents control with flying\".",
     },
     Equivalence {
-        pattern: r"\bexiled with (~it|~|it) with mana value ([^ .,]+)",
+        pattern: r"\bexiled with (~it|~|it) with mana value ([^ .,|{}]+)",
         replacement: "with mana value $2 exiled with $1",
         why: "The order of a noun's qualities: \"a creature card with mana value X exiled \
               with ~\".",
@@ -1691,7 +1692,7 @@ fn sentence_rewrites(s: &str) -> String {
     // refers back to what was chosen, is taken for the target.
     static CHOOSE_THAT: OnceLock<Option<Regex>> = OnceLock::new();
     if let Some(re) = CHOOSE_THAT.get_or_init(|| {
-        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) )?(?:another |other )?target [^.,]+?)\. ([^\n]*?)\bthat (creature|player|opponent|permanent|spell|card|artifact|land|planeswalker)\b").ok()
+        Regex::new(r"(^|[.:—•] |\n|, )choose ((?:up to (?:one|1) )?(?:another |other )?target [^.,]+?)\. ([^\n]*?)\bthat (spell or ability|creature|player|opponent|permanent|spell|card|artifact|land|planeswalker)\b").ok()
     }) {
         s = re
             .replace_all(&s, |c: &regex::Captures| {

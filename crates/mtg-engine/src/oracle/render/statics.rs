@@ -966,10 +966,43 @@ impl Renderer<'_> {
                 } else {
                     self.spell_noun_plural(&w)
                 };
-                // "cast spells from among cards exiled with ~".
-                match s.strip_prefix("spells exiled with ") {
-                    Some(r) => format!("cast {{alt:{s}|spells from among cards exiled with {r}}}"),
-                    None => format!("cast {s}"),
+                // "cast spells from among cards exiled with ~", "cast creature spells
+                // from among cards you own exiled with ~": cards an ability of this object
+                // exiled (CR 607.2a).
+                let parts: Vec<Filter> = match &pp.what {
+                    Filter::And(v) => v.clone(),
+                    other => vec![other.clone()],
+                };
+                let linked = parts
+                    .iter()
+                    .any(|x| matches!(x, Filter::In(l) if matches!(l.as_ref(), Sel::Linked)));
+                if linked {
+                    let owned = parts
+                        .iter()
+                        .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)));
+                    let kind = spell_what(&Filter::and(
+                        parts
+                            .iter()
+                            .filter(|x| {
+                                !matches!(
+                                    x,
+                                    Filter::In(_)
+                                        | Filter::InZone(_)
+                                        | Filter::OwnedBy(PlayerRel::You)
+                                )
+                            })
+                            .cloned()
+                            .collect(),
+                    ));
+                    let k = if matches!(kind, Filter::Any | Filter::Spell) {
+                        "spells".to_string()
+                    } else {
+                        self.spell_noun_plural(&kind)
+                    };
+                    let you_own = if owned { "you own " } else { "" };
+                    format!("cast {{alt:{s}|{k} from among cards {you_own}exiled with ~}}")
+                } else {
+                    format!("cast {s}")
                 }
             }
         };
@@ -2598,6 +2631,9 @@ impl Renderer<'_> {
         if let Some(s) = self.qualified_replacement(def) {
             return s;
         }
+        if let Some(s) = self.first_tokens_as_copies(def) {
+            return s;
+        }
         match (&def.event, &def.action) {
             // --- Entering the battlefield (CR 614.1c).
             (E::EntersBattlefield(f), action) => {
@@ -3217,6 +3253,11 @@ impl Renderer<'_> {
     fn enters_subject(&mut self, f: &Filter) -> String {
         match f {
             Filter::Source => self.me(),
+            // "When you cast ~, ... ~ enters with ...": the spell that triggered it is the
+            // object itself.
+            Filter::In(s) if matches!(s.as_ref(), Sel::TriggerSpell) && self.trigger_is_self => {
+                "~it".into()
+            }
             other => self.noun_det(other, Det::Plural),
         }
     }
@@ -3394,6 +3435,44 @@ impl Renderer<'_> {
             {
                 let parts: Vec<String> = v.iter().map(|x| self.as_enters_vp(x)).collect();
                 format!("{subj} {}", join_list(&parts, "and"))
+            }
+            // "As ~ enters, exile an instant or sorcery card from your graveyard": the
+            // entering object is never among the cards it exiles as it enters (Sutured
+            // Ghoul's ruling), which the choice says (`Filter::Other`).
+            Effect::Exile {
+                what:
+                    Sel::Choose {
+                        chooser,
+                        filter: Filter::And(v),
+                        count,
+                        up_to,
+                        store,
+                    },
+                face_down,
+                link,
+            } if v.iter().any(|x| matches!(x, Filter::Other))
+                && v.iter()
+                    .any(|x| matches!(x, Filter::InZone(ZoneKind::Graveyard))) =>
+            {
+                let e2 = Effect::Exile {
+                    what: Sel::Choose {
+                        chooser: chooser.clone(),
+                        filter: Filter::and(
+                            v.iter()
+                                .filter(|x| !matches!(x, Filter::Other))
+                                .cloned()
+                                .collect(),
+                        ),
+                        count: count.clone(),
+                        up_to: *up_to,
+                        store: *store,
+                    },
+                    face_down: *face_down,
+                    link: *link,
+                };
+                let s = self.effect(&e2);
+                let subj = if subj == "~" { "~it" } else { subj };
+                format!("as {subj} enters, {s}")
             }
             other => {
                 let s = self.effect(other);

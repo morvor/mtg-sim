@@ -1191,6 +1191,31 @@ impl Renderer<'_> {
                 "you control a Ring-bearer".into()
             };
         }
+        // "if another opponent controls one or more nonland permanents that spell could
+        // target": an opponent other than the controller of what the spell targets.
+        if let (Filter::And(v), false) = (f, negated) {
+            let other_than_targeted = |x: &Filter| {
+                matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::ControlledByPlayer(p)
+                    if matches!(p.as_ref(), PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::All(t) if matches!(t, Filter::TargetOf(ts) if matches!(ts.as_ref(), Sel::TriggerSpell))))))
+            };
+            if v.iter().any(other_than_targeted)
+                && v.iter()
+                    .any(|x| matches!(x, Filter::ControlledBy(PlayerRel::Opponent)))
+            {
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| {
+                            !other_than_targeted(x)
+                                && !matches!(x, Filter::ControlledBy(PlayerRel::Opponent))
+                        })
+                        .cloned()
+                        .collect(),
+                );
+                let n = self.noun_det(&rest, Det::A);
+                let many = self.noun(&rest, Num::Many);
+                return format!("another opponent controls {{alt:{n}|one or more {many}}}");
+            }
+        }
         // "if your team controls another Warrior": you or a teammate (CR 102.4).
         if let Filter::And(v) = f {
             let team = |x: &Filter| {
@@ -1242,6 +1267,15 @@ impl Renderer<'_> {
                     format!("{subj} {{alt:{verb} no|{dont} control}} {n}")
                 } else {
                     let n = self.noun_det(&rest, Det::A);
+                    // "if you control one or more other creatures ...": another one.
+                    if let Some(r) = n.strip_prefix("another ").filter(|r| !r.contains('{')) {
+                        let many = self.noun(&rest, Num::Many);
+                        if let Some(m) = many.strip_prefix("other ") {
+                            return format!(
+                                "{subj} {verb} {{alt:another {r}|one or more other {m}}}"
+                            );
+                        }
+                    }
                     format!("{subj} {verb} {n}")
                 }
             }
@@ -1591,6 +1625,9 @@ impl Renderer<'_> {
     }
 
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
+        if let Some(s) = self.guessed(a, cmp, b) {
+            return s;
+        }
         // Pack tactics: "if you attacked with creatures with total power 6 or greater
         // this combat" (the attackers' power as they were declared).
         if let (Value::Custom(n), Cmp::Ge, Value::Const(k)) = (a, cmp, b) {

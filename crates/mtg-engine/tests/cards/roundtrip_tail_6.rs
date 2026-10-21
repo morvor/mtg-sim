@@ -2,6 +2,7 @@
 //! cluster, plus Celestial Dawn's spells you own that another player controls.
 
 use mtg_engine::ability::AbilityKind;
+use mtg_engine::decision::Answer;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -212,4 +213,42 @@ fn skeletonizes_token_regenerates_itself() {
     t.settle();
     assert!(t.on_battlefield(token), "{}", t.dump_log());
     assert!(t.obj_now(token).tapped);
+}
+
+#[test]
+fn gollum_reveals_the_top_card_the_guess_was_about() {
+    cr!("608.2c", "701.20a");
+    // "look at the top two cards of your library, put them back in any order, then choose
+    // land or nonland. An opponent guesses whether the top card of your library is the
+    // chosen kind. Reveal that card. If they guessed right, remove Gollum from combat.
+    // Otherwise, you draw a card ...": "that card" is the top card; the other card looked
+    // at can't be revealed or put on top instead.
+    let mut t = TestGame::new(2);
+    let gollum = t.battlefield(P0, "Gollum, Scheming Guide");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Forest");
+    t.answer(P0, DecisionKind::Option, Answer::Index(0)); // land
+    t.answer(P1, DecisionKind::Option, Answer::Index(1)); // no: a wrong guess
+    t.answer_choose(P0, &[Entity::Player(P1)]); // the opponent who guesses
+    // (On the old code: the card "that card" was, chosen among the two looked at.)
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(gollum, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.resolve_all();
+    // The top card is revealed, not the other one looked at.
+    let log = t.dump_log();
+    let revealed = |name: &str| {
+        log.lines()
+            .any(|l| l.contains(" reveals ") && l.contains(name))
+    };
+    assert!(revealed("Forest"), "{log}");
+    assert!(!revealed("Grizzly Bears"), "{log}");
+    // The guess was wrong: P0 draws the top card, the Forest.
+    assert!(t.in_hand(P0, "Forest"), "{log}");
+    assert!(!t.in_hand(P0, "Grizzly Bears"), "{log}");
 }

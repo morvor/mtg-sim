@@ -636,6 +636,22 @@ impl Renderer<'_> {
                     .into(),
                 case,
             ),
+            // The objects a "choose" instruction chose ("Target opponent chooses two of
+            // those cards. Put the chosen cards into your graveyard", see
+            // `patterns::choice_grammar_objects`).
+            Sel::Var(crate::oracle::patterns::choice_grammar_objects::CHOSEN) => {
+                let pron = match case {
+                    Case::Subj => "{alt:it|they}",
+                    Case::Obj => "{alt:it|them}",
+                    Case::Poss => "{alt:its|their}",
+                };
+                match case {
+                    Case::Poss => pron.to_string(),
+                    _ => format!(
+                        "{{alt:{pron}|the chosen cards|the chosen card|the chosen creatures|the chosen creature|the chosen permanents|the chosen permanent|those cards|that card}}"
+                    ),
+                }
+            }
             Sel::Var(v) => match *v {
                 vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
                     decline("~".into(), case)
@@ -718,6 +734,15 @@ impl Renderer<'_> {
                 };
                 let x = (**x).clone();
                 self.sel(&x, case)
+            }
+            // "Sacrifice those tokens at end of combat": the tokens created, those you
+            // still control (a player sacrifices only permanents they control, CR
+            // 701.21a).
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(c), Filter::ControlledBy(PlayerRel::You)]
+                    if matches!(c.as_ref(), Sel::Var(x) if *x == vars::CREATED)) =>
+            {
+                decline("{alt:those tokens|the tokens|that token|the token}".into(), case)
             }
             // The cards exiled with this object that are still in exile: "the exiled card"
             // (an object that exiles one card, as with imprint) or "each card exiled with

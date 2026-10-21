@@ -37,6 +37,7 @@ mod events_happened;
 mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
+mod guesses;
 mod history_values;
 mod joined_lines;
 mod keywords;
@@ -63,6 +64,7 @@ mod statics;
 mod tail_filters;
 mod tail_parts;
 mod this_turn;
+mod token_copies;
 mod trigger_causes;
 mod triggers;
 mod values;
@@ -896,6 +898,9 @@ pub struct Renderer<'a> {
     pub(crate) x_for_each: Option<String>,
     /// The trigger condition names an opponent ("a land an opponent controls enters").
     pub(crate) trigger_names_opponent: bool,
+    /// The objects the triggered ability's intervening "if" says exist ("if you control
+    /// one or more other creatures that spell could target"): "those creatures" later.
+    pub(crate) intervening_exists: Option<Filter>,
     /// The keyword an activated ability is introduced by ("Boast — ...").
     pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
     /// The head noun of what the cost sacrificed ("the sacrificed artifact").
@@ -1057,6 +1062,7 @@ impl<'a> Renderer<'a> {
             chosen_one: Vec::new(),
             x_for_each: None,
             trigger_names_opponent: false,
+            intervening_exists: None,
             keyword_ability: None,
             plural_vars: Vec::new(),
             play_terms: None,
@@ -1185,6 +1191,7 @@ impl<'a> Renderer<'a> {
         self.stored_values.clear();
         self.stored_this_way.clear();
         self.trigger_player = None;
+        self.intervening_exists = None;
         self.revealed_hand = false;
         self.chosen_up_to_one.clear();
         self.chosen_one.clear();
