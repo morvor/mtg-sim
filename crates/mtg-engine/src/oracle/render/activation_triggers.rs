@@ -227,6 +227,15 @@ impl Renderer<'_> {
                     }
                     return None;
                 }
+                // "a player activates an ability of enchanted creature with {T} in its
+                // activation cost that isn't a mana ability" (CR 605.1a).
+                if matches!(cond, Condition::Custom(n) if n == aak::TAP_IN_COST) && !*include_mana {
+                    let o = self.noun_det(source, Det::A);
+                    return Some((
+                        w,
+                        format!("activate an ability of {o} with {{T}} in its activation cost that isn't a mana ability"),
+                    ));
+                }
                 let kind = ability_kind(cond)?;
                 let vp = match source {
                     Filter::Any | Filter::Permanent => format!("activate {kind}"),
