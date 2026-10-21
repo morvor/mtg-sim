@@ -64,7 +64,7 @@ impl Renderer<'_> {
         let (card, perm) = self.beheld_nouns(&f);
         let m = self.me();
         Some(format!(
-            "{{alt:the behold cost was paid|you revealed {card} or chose {perm} as you cast {m}}}"
+            "{{alt:the behold cost was paid|you revealed {card} or chose {perm} as you cast {m}|{perm} was beheld}}"
         ))
     }
 

@@ -492,6 +492,14 @@ impl Renderer<'_> {
             {
                 self.effect(effect)
             }
+            // "You may repeat this process any number of times." (CR 608.2c): each time
+            // it's done, you may again.
+            Effect::May {
+                who: PlayerRef::You,
+                effect,
+            } if matches!(effect.as_ref(), Effect::RepeatThisProcess) => {
+                "you may repeat this process {opt:any number of times}".into()
+            }
             Effect::May { who, effect } => self.may(who, effect),
             // "Then each player who searched their library this way shuffles."
             Effect::ForEachPlayer {
@@ -2380,6 +2388,12 @@ impl Renderer<'_> {
             Effect::ChangeTargets { what, who, how, to } => {
                 let w = self.sel(what, Case::Obj);
                 let vp = match (how, to) {
+                    // "Change a target of target spell or ability to ~": one of its targets
+                    // (CR 115.7c).
+                    (TargetChange::One, Some(t)) => {
+                        let t = self.sel(t, Case::Obj);
+                        format!("change {{alt:a|the}} target of {w} to {t}")
+                    }
                     (_, Some(t)) => {
                         let t = self.sel(t, Case::Obj);
                         format!("change the target of {w} to {t}")
@@ -2681,12 +2695,20 @@ impl Renderer<'_> {
                 } else {
                     format!("{f} spell")
                 };
+                // The spell is the object the rider is about: "it gains haste" (the
+                // mana ability's source isn't named in it).
+                let saved = self.self_salient;
+                self.self_salient = false;
                 let b = self.in_event_scope(|r| r.body(body));
+                self.self_salient = saved;
                 if *abilities {
                     format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
                 } else if *additional {
-                    // Mana spent "on" a spell is spent to cast it (CR 601.2h).
-                    format!("{a}. If that mana is spent {{alt:to cast|on}} {f}, {b}")
+                    // Mana spent "on" a spell is spent to cast it (CR 601.2h); the rider
+                    // applies if any of that mana is (Arena of Glory's rulings).
+                    format!(
+                        "{a}. If {{opt:any of}} that mana is spent {{alt:to cast|on}} {f}, {b}"
+                    )
                 } else {
                     format!(
                         "{a}. When {{alt:that mana is spent|you spend this mana}} to cast {f}, {b}"
@@ -3515,6 +3537,26 @@ impl Renderer<'_> {
                     format!("put it {dest} instead of into its owner's graveyard")
                 };
                 format!("{e}. If {which} is countered this way, {instead}")
+            }
+            // "Return target creature card from your graveyard to the battlefield. If a
+            // Hero enters this way, it enters with two additional +1/+1 counters on it.":
+            // a replacement of the instruction's own events (CR 614.1c, 614.12).
+            Effect::SelfReplace {
+                replacement:
+                    ReplacementDef {
+                        event: ReplacementEvent::EntersBattlefield(f),
+                        action: ReplacementAction::EnterWithCounters(kind, n),
+                        ..
+                    },
+                effect,
+            } if !matches!(f, Filter::Any | Filter::Source) => {
+                let e = self.effect(effect);
+                let w = self.noun_det(f, Det::A);
+                let (c, x) = self.counted(n, &counter_name(kind));
+                format!(
+                    "{e}. If {w} enters this way, it enters with {c} on it{}",
+                    x.unwrap_or_default()
+                )
             }
             Effect::SelfReplace {
                 replacement,
@@ -4615,6 +4657,50 @@ impl Renderer<'_> {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
+            // "Two target players each draw a card": two different target players (CR
+            // 115.3), each doing the same.
+            if let (
+                Some(Effect::Draw {
+                    who: PlayerRef::Target(a),
+                    n: n1,
+                }),
+                Some(Effect::Draw {
+                    who: PlayerRef::Target(b),
+                    n: n2,
+                }),
+            ) = (v.get(i), v.get(i + 1))
+            {
+                let one_player = |t: Option<&TargetSpec>| {
+                    t.is_some_and(|t| {
+                        matches!(t.what, TargetKind::Player(PlayerFilter::Any))
+                            && matches!(t.min, Value::Const(1))
+                            && matches!(t.max, Value::Const(1))
+                    })
+                };
+                let (ta, tb) = (self.targets.get(*a as usize), self.targets.get(*b as usize));
+                let fresh = |r: &Self, x: u8| r.introduced.get(x as usize) == Some(&false);
+                if one_player(ta)
+                    && one_player(tb)
+                    && tb.is_some_and(|t| t.distinct_from == vec![*a])
+                    && format!("{n1:?}") == format!("{n2:?}")
+                    && fresh(self, *a)
+                    && fresh(self, *b)
+                {
+                    self.introduced[*a as usize] = true;
+                    self.introduced[*b as usize] = true;
+                    let d = match n1 {
+                        Value::Const(1) => "a card".to_string(),
+                        Value::Const(k) => format!("{} cards", number_word(*k)),
+                        other => {
+                            let (c, x) = self.counted(other, "card");
+                            format!("{c}{}", x.unwrap_or_default())
+                        }
+                    };
+                    parts.push(format!("two target players each draw {d}"));
+                    i += 2;
+                    continue;
+                }
+            }
             // "Create a Treasure token and a 2/2 blue Bird creature token with flying."
             if let (
                 Some(Effect::CreateToken { controller: c1, .. }),
@@ -4862,8 +4948,19 @@ impl Renderer<'_> {
                 let same = same_sel(what, w2) || matches!(w2, Sel::Var(x) if *x == vars::IT);
                 if same {
                     let w = self.sel(what, Case::Obj);
-                    let (c, _) = self.counted(n, &counter_name(kind));
-                    parts.push(format!("exile {w} with {c} on it"));
+                    let (c, x) = self.counted(n, &counter_name(kind));
+                    // "with a number of time counters on it equal to its mana value".
+                    let s = match x {
+                        Some(x) => {
+                            let v = self.value(n);
+                            let k = plural(&counter_name(kind));
+                            format!(
+                                "{{alt:exile {w} with {c} on it{x}|exile {w} with a number of {k} on it equal to {v}}}"
+                            )
+                        }
+                        None => format!("exile {w} with {c} on it"),
+                    };
+                    parts.push(s);
                     i += 2;
                     continue;
                 }
@@ -4880,14 +4977,16 @@ impl Renderer<'_> {
                 }
                 if j > i + 1 {
                     let mut items = Vec::new();
+                    let mut wheres = String::new();
                     for e in &v[i..j] {
                         if let Effect::AddCounters { kind, n, .. } = e {
-                            let (c, _) = self.counted(n, &counter_name(kind));
+                            let (c, x) = self.counted(n, &counter_name(kind));
                             items.push(c);
+                            wheres.push_str(&x.unwrap_or_default());
                         }
                     }
                     let t = self.sel(what, Case::Obj);
-                    parts.push(format!("put {} on {t}", join_list(&items, "and")));
+                    parts.push(format!("put {} on {t}{wheres}", join_list(&items, "and")));
                     i = j;
                     continue;
                 }

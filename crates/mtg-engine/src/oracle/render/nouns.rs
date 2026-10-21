@@ -1696,7 +1696,7 @@ impl Renderer<'_> {
     pub(crate) fn controls_phrase(&mut self, r: PlayerRel, num: Num) -> String {
         let num = if self.each_mode { Num::Many } else { num };
         match r {
-            PlayerRel::You if self.as_cast => "{alt:you control|you controlled}".into(),
+            PlayerRel::You if self.control_past => "{alt:you control|you controlled}".into(),
             PlayerRel::You => "you control".into(),
             // "a creature an opponent controls" / "each creature your opponents control":
             // the same objects, those any opponent controls.
@@ -1718,6 +1718,9 @@ impl Renderer<'_> {
                 format!("{p} or that planeswalker's controller controls")
             }
             // "among creatures they control": the player each player is.
+            PlayerRel::Iterated if self.control_past => {
+                "{alt:that player controls|they control|they controlled}".into()
+            }
             PlayerRel::Iterated => "{alt:that player controls|they control}".into(),
             // "Whenever ... deal combat damage to an opponent, destroy target artifact that
             // opponent controls."

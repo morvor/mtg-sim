@@ -72,6 +72,7 @@ impl Renderer<'_> {
         let a = self.effect(act);
         let mut parts = vec![format!("any opponent may have you {a}")];
         let mut n = 3;
+        let mut did_said = false;
         while let Some(Effect::If {
             cond: Condition::Compare(Value::Var(HAD), Cmp::Eq, Value::Const(k)),
             then,
@@ -83,8 +84,13 @@ impl Renderer<'_> {
             }
             let t = self.effect(then);
             parts.push(match k {
-                1 => format!("If a player does, {t}"),
-                0 => format!("{{alt:Otherwise|If no player does}}, {t}"),
+                1 => {
+                    did_said = true;
+                    format!("If a player does, {t}")
+                }
+                // "Otherwise" after "If a player does"; else "If no player does".
+                0 if did_said => format!("Otherwise, {t}"),
+                0 => format!("If no player does, {t}"),
                 _ => break,
             });
             n += 1;

@@ -2831,6 +2831,18 @@ impl Renderer<'_> {
                             format!("{subj} enters{t} as a copy of {n}")
                         }
                     }
+                    // "~ enters under the control of an opponent of your choice": the player
+                    // who would control it chooses (`replacement.rs`, CR 614.12a).
+                    A::EnterUnderControl(PlayerRef::Each(f))
+                        if matches!(f, PlayerFilter::Opponent | PlayerFilter::Any) =>
+                    {
+                        let who = if matches!(f, PlayerFilter::Opponent) {
+                            "an opponent"
+                        } else {
+                            "a player"
+                        };
+                        format!("{subj} enters under the control of {who} of your choice")
+                    }
                     A::EnterUnderControl(p) => {
                         let p = self.player(p, Case::Obj);
                         format!("{subj} enters under the control of {p}")

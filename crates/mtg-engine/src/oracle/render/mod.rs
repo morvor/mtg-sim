@@ -867,9 +867,13 @@ pub struct Renderer<'a> {
     /// What the last instruction did to a group of objects ("permanents destroyed this
     /// way"), for counting them.
     pub(crate) it_done: Option<String>,
-    /// Rendering a value taken as the spell was cast ("the number of Mountains you
-    /// control as you cast ~"): "you control" may be "you controlled".
-    pub(crate) as_cast: bool,
+    /// Rendering a value about an earlier moment ("the number of Mountains you control
+    /// as you cast ~", "damage dealt by sources they controlled"): "you control" may be
+    /// "you controlled".
+    pub(crate) control_past: bool,
+    /// Rendering a triggered ability whose event is excess damage dealt: its amount is
+    /// "that excess damage" (CR 120.10).
+    pub(crate) excess_trigger: bool,
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
@@ -1057,7 +1061,8 @@ impl<'a> Renderer<'a> {
             var_defs: Vec::new(),
             outer_vars: Vec::new(),
             it_done: None,
-            as_cast: false,
+            control_past: false,
+            excess_trigger: false,
             batch_once: false,
             batch_per_source: false,
             prev_mandatory: false,
@@ -1210,6 +1215,7 @@ impl<'a> Renderer<'a> {
         self.vote_noun = None;
         self.last_group = None;
         self.trigger_names_opponent = false;
+        self.excess_trigger = false;
         let saved_scope = std::mem::replace(
             &mut self.event_scope,
             // A step trigger ("at the beginning of your upkeep") has no event object.

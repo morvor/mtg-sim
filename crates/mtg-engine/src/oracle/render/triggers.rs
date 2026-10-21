@@ -186,6 +186,7 @@ impl Renderer<'_> {
         } else if opponent_event(&t.trigger) {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
+        self.excess_trigger = matches!(t.trigger, TriggerCond::DealtExcessDamage { .. });
         let trig = self.trigger_text(&t.trigger);
         self.trigger_names_opponent =
             trig.contains("an opponent controls") || trig.contains("your opponents control");

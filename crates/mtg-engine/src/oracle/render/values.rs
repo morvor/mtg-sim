@@ -155,6 +155,10 @@ impl Renderer<'_> {
                 "{{alt:that much|that many|that damage|{}}}",
                 self.extra.event_amount.unwrap_or_default()
             ),
+            // "amass Orcs X, where X is that excess damage" (CR 120.10).
+            Value::EventAmount if self.excess_trigger => {
+                "{alt:that much|that many|that excess damage|the excess}".into()
+            }
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             // "the amount of excess damage dealt to that creature this way": the one target
@@ -1203,6 +1207,15 @@ impl Renderer<'_> {
 
     /// "you control an artifact", "you control no Islands", "there are ... in your graveyard".
     pub(crate) fn exists(&mut self, f: &Filter, negated: bool) -> String {
+        // "if a creature is attacking you".
+        if let (Filter::And(v), false) = (f, negated) {
+            if let [Filter::Type(CardType::Creature), Filter::Attacking, Filter::AttackingPlayer(r)] =
+                v.as_slice()
+            {
+                let p = self.rel_object(*r);
+                return format!("a creature is attacking {p}");
+            }
+        }
         // "if you don't control a Ring-bearer" (your Ring-bearer is a creature you
         // control, CR 701.54a).
         if matches!(f, Filter::Custom(n) if n == crate::kwa::ring::RING_BEARER) {
@@ -1433,6 +1446,16 @@ impl Renderer<'_> {
                 Filter::Not(inner) => {
                     let p = self.is_predicate(inner, !negated);
                     return p;
+                }
+                // "is attacking or blocking": a creature in combat (CR 506.4).
+                Filter::Or(v) if v.iter().all(|x| combat_status(x).is_some()) => {
+                    let w: Vec<String> = v
+                        .iter()
+                        .filter_map(combat_status)
+                        .map(str::to_string)
+                        .collect();
+                    let n = self.noun_det(a, Det::A);
+                    format!("{{alt:{}|{n}}}", join_list(&w, "or"))
                 }
                 Filter::Targets(f) => {
                     let n = self.noun_det(f, Det::A);
@@ -2206,5 +2229,23 @@ pub(crate) fn is_revealed_this_way(s: &Sel) -> bool {
                 && *c == crate::kw::reveal_from_hand::REVEALED
         }
         _ => false,
+    }
+}
+
+/// "attacking", "blocking": a combat status, said of a creature.
+fn combat_status(f: &Filter) -> Option<&'static str> {
+    let status = |a: &Filter| match a {
+        Filter::Attacking => Some("attacking"),
+        Filter::Blocking => Some("blocking"),
+        _ => None,
+    };
+    match f {
+        Filter::And(v) => match v.as_slice() {
+            [Filter::Type(CardType::Creature), s] | [s, Filter::Type(CardType::Creature)] => {
+                status(s)
+            }
+            _ => None,
+        },
+        other => status(other),
     }
 }
