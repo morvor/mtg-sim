@@ -956,6 +956,8 @@ fn distribute_up_to_that_much_life(l: &str, b: &mut Builder) -> Option<Effect> {
     spec.min = Value::c(0);
     spec.max = n.clone();
     spec.divide = Some(n);
+    // "up to that many": fewer may be distributed.
+    spec.divide_up_to = true;
     let text = r[..r.len() - tail.len()].trim().to_string();
     let slot = b.add_target(spec, &text);
     Some(Effect::Custom(

@@ -496,6 +496,9 @@ impl Renderer<'_> {
             StaticEffect::PlayPermission(pp) => self.play_permission(pp),
             StaticEffect::ActivationPermission(ap) => self.activation_permission("you", ap),
             StaticEffect::FlashPermission { who, what } => {
+                if let Some(s) = self.flash_permission_named(*who, what) {
+                    return s;
+                }
                 // "Any player may cast Sliver spells as though they had flash."
                 let w = if matches!(who, PlayerRel::Any) {
                     "any player".to_string()
@@ -820,6 +823,10 @@ impl Renderer<'_> {
                 self.activation_permission(&who, ap)
             }
             PlayerModification::Shroud => format!("{subj} have shroud"),
+            PlayerModification::HexproofFrom(f) => {
+                let q = self.quality(f);
+                format!("{subj} have hexproof from {q}")
+            }
             PlayerModification::ProtectionFrom(f) => {
                 let q = self.quality(f);
                 format!("{subj} have protection from {q}")
@@ -1012,8 +1019,30 @@ impl Renderer<'_> {
                 " {alt:. If you cast a spell this way, you may cast it as though it had flash|as though they had flash|as though it had flash}",
             );
         }
-        if t.alt_cost.is_some() {
-            s.push_str(&self.gap("an alternative cost for spells cast with a static permission"));
+        if let Some(c) = &t.alt_cost {
+            // "by paying {U} rather than paying its mana cost", "If you cast a spell this
+            // way, pay life equal to its mana value rather than pay its mana cost" (an
+            // alternative cost, CR 118.9).
+            let pay = match c.parts.as_slice() {
+                [CostPart::PayLife(Value::ManaValueOf(x))]
+                    if c.mana.is_none() && matches!(x.as_ref(), Sel::This) =>
+                {
+                    "pay life equal to its mana value".to_string()
+                }
+                _ => self.cost_as_payment(c),
+            };
+            let by = gerund_first(&pay);
+            s.push_str(&format!(
+                "{{alt: by {by} rather than paying its mana cost|. If you cast a spell this way, {pay} rather than pay its mana cost}}"
+            ));
+        }
+        // "If you do, it enters with two +1/+1 counters on it": what casting it this way
+        // does to the spell.
+        if let Some(e) = &t.on_cast {
+            let w = self.effect(e);
+            s.push_str(&format!(
+                ". {{alt:If you do|If you cast it this way|If you cast a spell this way}}, {w}"
+            ));
         }
         if t.spend_as_any_color {
             s.push_str(
@@ -1039,7 +1068,14 @@ impl Renderer<'_> {
         if t.what.is_some() || t.limit.is_some() || t.until_another || t.later_turn {
             s.push_str(&self.gap("terms of a static permission to play cards"));
         }
-        if t.exile_instead {
+        if t.exile_instead && matches!(pp.what, Filter::Source) {
+            // "If you cast ~ this way and it would be put into your graveyard, exile it
+            // instead" (the card itself, cast from its owner's graveyard).
+            let m = self.me();
+            s.push_str(&format!(
+                "{{alt:. If a spell cast this way would be put into its owner's graveyard, exile it instead|. If you cast {m} this way and it would be put into your graveyard, exile it instead}}"
+            ));
+        } else if t.exile_instead {
             s.push_str(
                 ". If a spell cast this way would be put into its owner's graveyard, exile it instead",
             );
@@ -1162,6 +1198,12 @@ impl Renderer<'_> {
         {
             return "mana of any type can be spent to activate ~'s abilities".into();
         }
+        if let Some(s) = self
+            .first_spell_each_player_free(cm)
+            .or_else(|| self.additional_cost_per_symbol(cm))
+        {
+            return s;
+        }
         // "The first creature spell you cast each turn costs {2} less to cast."
         let first = match &cm.applies_to {
             CostTarget::Spells(f) => Self::first_each_turn(f),
@@ -1270,9 +1312,31 @@ impl Renderer<'_> {
                 let (amt, tail) = self.cost_amount(v);
                 format!("{target}{who} {costs} {amt} more {act}{tail}")
             }
+            // "This effect can't reduce the amount of mana ~ costs by more than {5}": the
+            // reduction is at most 5.
+            CostChange::ReduceGeneric(Value::Min(v, cap))
+                if matches!(cm.applies_to, CostTarget::ThisSpell)
+                    && matches!(cap.as_ref(), Value::Const(_)) =>
+            {
+                let (amt, tail) = self.cost_amount(v);
+                let cap = self.value(cap);
+                format!("{target}{who} {costs} {amt} less {act}{tail}. This effect can't reduce the amount of mana ~ costs by more than {{{cap}}}")
+            }
             CostChange::ReduceGeneric(v) => {
                 let (amt, tail) = self.cost_amount(v);
-                format!("{target}{who} {costs} {amt} less {act}{tail}")
+                let one = format!("{target}{who} {costs} {amt} less {act}{tail}");
+                // "{1} less to cast for each 1 life you gained this turn": the same amount
+                // counted one by one.
+                let each = tail
+                    .strip_prefix(", where X is ")
+                    .filter(|_| amt == "{X}")
+                    .and_then(|s| self.per_life(s));
+                match each {
+                    Some(r) => {
+                        format!("{{alt:{one}|{target}{who} {costs} {{1}} less {act} for each {r}}}")
+                    }
+                    None => one,
+                }
             }
             CostChange::ReduceGenericMinOne(v) => {
                 let (amt, tail) = self.cost_amount(v);
@@ -1909,6 +1973,11 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
+            Restriction::AttackPlayersDespiteDefender { attackers, players } => format!(
+                "{} can attack players for whom {} as though it didn't have defender",
+                subj(self, attackers),
+                self.condition(players)
+            ),
             Restriction::AttackAsThoughHaste {
                 attackers,
                 defender,
@@ -2060,6 +2129,12 @@ impl Renderer<'_> {
                     }
                     None => String::new(),
                 };
+                // "Each opponent must attack ...": each of them is restricted.
+                let p = if matches!(players, PlayerFilter::Opponent) {
+                    format!("{{alt:{p}|each opponent}}")
+                } else {
+                    p
+                };
                 format!("{p} must attack{d} with at least one creature each combat if able")
             }
             Restriction::MinBlockersCounted { attacker, n } => {
@@ -2090,6 +2165,17 @@ impl Renderer<'_> {
             Restriction::CantAttackPlayerAgain(f) => {
                 let a = subj(self, f);
                 format!("{a} can't attack a player it has already attacked this turn")
+            }
+            Restriction::CantAttackPermanentsOf {
+                attackers,
+                controller,
+            } => {
+                let a = subj(self, attackers);
+                let who = match controller {
+                    PlayerFilter::You => "you control".to_string(),
+                    _ => "a player controls".to_string(),
+                };
+                format!("{a} can't attack a permanent {who}")
             }
             Restriction::CantBeTargeted { what, by } => {
                 let w = subj(self, what);
@@ -2344,6 +2430,12 @@ impl Renderer<'_> {
             }
             Restriction::SorcerySpeedOnly(p) => {
                 let w = self.player_filter_subject(p);
+                // "Each opponent can cast spells only ...": each of them is restricted.
+                let w = if matches!(p, PlayerFilter::Opponent) {
+                    format!("{{alt:{w}|each opponent}}")
+                } else {
+                    w
+                };
                 format!("{w} can cast spells only any time they could cast a sorcery")
             }
             Restriction::CantPlayLands(p) => {
@@ -3125,11 +3217,14 @@ impl Renderer<'_> {
                 *effect_only,
                 action,
             ),
-            (event, action) => self.gap(format!(
-                "replacement {:?} / {:?}",
-                std::mem::discriminant(event),
-                std::mem::discriminant(action)
-            )),
+            (event, action) => match self.replacement_named(def) {
+                Some(s) => s,
+                None => self.gap(format!(
+                    "replacement {:?} / {:?}",
+                    std::mem::discriminant(event),
+                    std::mem::discriminant(action)
+                )),
+            },
         }
     }
 
@@ -3746,6 +3841,17 @@ impl Renderer<'_> {
                             "{{alt:your starting deck contains only {} with even mana values|each {e} in your starting deck has an even mana value}}",
                             plural(&e)
                         );
+                    }
+                    // "Your starting deck contains only cards with odd mana values and
+                    // land cards": each nonland card has an odd mana value.
+                    [Filter::Custom(n)] if n == crate::kw::companion::ODD_MANA_VALUE => {
+                        let lands = matches!(each, Filter::Not(x) if matches!(x.as_ref(), Filter::Type(CardType::Land)));
+                        let each_form = format!("each {e} in your starting deck has an odd mana value");
+                        return if lands {
+                            format!("{{alt:your starting deck contains only cards with odd mana values and land cards|{each_form}}}")
+                        } else {
+                            each_form
+                        };
                     }
                     [Filter::Custom(n)] if n == crate::kw::companion::HAS_ACTIVATED_ABILITY => {
                         "has an activated ability".to_string()

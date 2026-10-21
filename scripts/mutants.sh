@@ -40,18 +40,27 @@ for stem in "$@"; do
     dest=$OUT/$stem-rerun
     k=1
     # Each survivor is found again in today's list of the file's mutants: the same mutation
-    # in the same function, at the same column and the nearest line (edits elsewhere in the
-    # file may have moved it).
+    # in the same function whose diff (the mutated line and the lines around it, from the
+    # earlier run's mutants.out/diff/) matches best, then the same column and the nearest
+    # line (edits elsewhere in the file may have moved it; line distance alone can pick
+    # a neighbouring identical mutation).
     cat "$prev/missed.txt" "$prev/timeout.txt" 2>/dev/null >"$OUT/$stem.survivors"
-    (cd "$MS" && cargo mutants --list -f "$file") >"$OUT/$stem.list"
+    (cd "$MS" && cargo mutants --list --json --diff -f "$file") >"$OUT/$stem.list.json"
     nf=0
     while IFS= read -r name; do
       nf=$((nf + 1))
       args+=(-F "^$(printf '%s' "$name" | sed 's/[][\\.^$*+?(){}|]/\\&/g')\$")
-    done < <(python3 - "$OUT/$stem.survivors" "$OUT/$stem.list" <<'PY'
-import re, sys
+    done < <(python3 - "$OUT/$stem.survivors" "$OUT/$stem.list.json" "$prev/diff" <<'PY'
+import difflib, json, os, re, sys
 pat = re.compile(r"^(.*?):(\d+):(\d+): (.*)$")
-now = [m.groups() for m in map(pat.match, open(sys.argv[2]).read().splitlines()) if m]
+def body(diff):
+    # The hunk without its file and @@ header lines (which carry line numbers).
+    return [l for l in diff.splitlines() if not l.startswith(("---", "+++", "@@"))]
+now = []
+for m in json.load(open(sys.argv[2])):
+    g = pat.match(m["name"])
+    if g:
+        now.append((*g.groups(), body(m["diff"])))
 for line in open(sys.argv[1]).read().splitlines():
     m = pat.match(line)
     if not m:
@@ -61,7 +70,12 @@ for line in open(sys.argv[1]).read().splitlines():
     if not cands:
         print(f"no longer generated: {line}", file=sys.stderr)
         continue
-    best = min(cands, key=lambda c: (c[2] != col, abs(int(c[1]) - int(ln))))
+    old = os.path.join(sys.argv[3], f"{f.replace('/', '__')}_line_{ln}_col_{col}.diff")
+    ob = body(open(old).read()) if os.path.exists(old) else None
+    def score(c):
+        sim = difflib.SequenceMatcher(None, ob, c[4]).ratio() if ob is not None else 0
+        return (-sim, c[2] != col, abs(int(c[1]) - int(ln)))
+    best = min(cands, key=score)
     print(f"{best[0]}:{best[1]}:{best[2]}: {best[3]}")
 PY
     )

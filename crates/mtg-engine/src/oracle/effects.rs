@@ -487,6 +487,15 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 super::patterns::filters_relational::resolve_in_sentence(e, b, before)
             });
             let Some(mut e) = parsed else {
+                // "Mill a card. You may put a land card milled this way into your hand. You
+                // gain 2 life if a Lesson card is milled this way.": a sentence about what
+                // an instruction before the previous sentence did (`referents_values_4`).
+                if x_defined.is_none()
+                    && super::patterns::referents_values_4::lookback(&s, &mut effects, b)
+                {
+                    b.sentences += 1;
+                    continue;
+                }
                 super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
                 groups::abandon(b, outer_group);
                 return None;

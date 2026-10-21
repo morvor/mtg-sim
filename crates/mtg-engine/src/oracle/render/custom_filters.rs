@@ -200,7 +200,7 @@ fn custom_clause(name: &str, subj: &str, negated: bool) -> Option<String> {
             format!("{subj} dealt damage to you this turn"),
             format!("{subj} didn't deal damage to you this turn"),
         ),
-        _ => return None,
+        _ => return super::named_qualities::custom_clause_named(name, subj, negated),
     };
     Some(if negated { no } else { yes })
 }

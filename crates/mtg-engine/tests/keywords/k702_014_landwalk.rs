@@ -122,6 +122,7 @@ fn landwalk_unblockable_while_defending_player_controls_such_a_land() {
 #[test]
 fn landwalk_abilities_dont_cancel_one_another() {
     cr!("702.14d");
+    cr_example!("702.14d", "snow forestwalk");
     // The rule's example: a snow Forest, and a blocker with snow forestwalk itself.
     let mut t = TestGame::new(2);
     let dryad = t.battlefield(P0, "Rime Dryad");

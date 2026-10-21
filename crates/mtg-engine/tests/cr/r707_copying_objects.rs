@@ -318,6 +318,7 @@ fn becoming_a_copy_of_something_else_isnt_entering_or_leaving() {
 #[test]
 fn entering_as_a_copy_includes_the_copied_entry_abilities() {
     cr!("707.5");
+    cr_example!("707.5", "Wall of Omens reads");
     let mut t = TestGame::new(2);
     let slow = oracle_card(
         "Slow Beast",
@@ -342,6 +343,7 @@ fn entering_as_a_copy_includes_the_copied_entry_abilities() {
 #[test]
 fn choices_made_for_the_original_arent_copied() {
     cr!("707.6");
+    cr_example!("707.6", "Adaptive Automaton");
     supported("Adaptive Automaton");
     let pick = |t: &mut TestGame, p: PlayerId, ty: &str| {
         let i = mtg_engine::types::subtype_lists()
@@ -411,6 +413,7 @@ fn copying_a_double_faced_permanent_copies_the_face_up() {
 #[test]
 fn a_token_copy_of_a_double_faced_object_has_both_faces() {
     cr!("707.8a");
+    cr_example!("707.8a", "Clone is not a double-faced card");
     let mut t = TestGame::new(2);
     let delver = t.battlefield(P1, "Delver of Secrets");
     assert!(mtg_engine::dfc::transform(&mut t.g, delver));

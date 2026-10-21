@@ -82,6 +82,19 @@ pub fn distinct_among(g: &Game, what: Among, sel: &Sel, ctx: &Ctx) -> i64 {
             }
             set.len() as i64
         }
+        Among::PlaneswalkerTypes => {
+            let mut set = BTreeSet::new();
+            for c in chars() {
+                if c.is(CardType::Planeswalker) {
+                    for s in &c.subtypes {
+                        if subtype_lists().planeswalker.contains(s.as_str()) {
+                            set.insert(s.clone());
+                        }
+                    }
+                }
+            }
+            set.len() as i64
+        }
         Among::BasicLandTypes => {
             let mut set = BTreeSet::new();
             for c in chars() {

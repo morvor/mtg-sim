@@ -36,7 +36,7 @@ const SUBJECTS: [(&str, &str); 8] = [
 ];
 
 /// The last instruction of `e`, if it puts objects onto the battlefield.
-fn last_battlefield_move(e: &mut Effect) -> Option<&mut Destination> {
+pub(crate) fn last_battlefield_move(e: &mut Effect) -> Option<&mut Destination> {
     match e {
         Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield => Some(to),
         Effect::Seq(v) => v.last_mut().and_then(last_battlefield_move),
@@ -208,7 +208,7 @@ fn bundle_with_quotes(sentence: &str, b: &mut Builder) -> Option<Vec<Modificatio
 }
 
 /// "[return it to the battlefield]. It's [characteristics]."
-fn rider_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn rider_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     {
         let Some(to) = last_battlefield_move(prev) else {
             return false;

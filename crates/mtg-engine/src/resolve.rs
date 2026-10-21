@@ -792,6 +792,10 @@ impl Game {
                     .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
                     .filter(|o| self.is_live(*o))
                     .collect();
+                ctx.set_var(
+                    vars::MODIFIED,
+                    objs.iter().map(|o| Entity::Object(*o)).collect(),
+                );
                 if objs.is_empty() {
                     return;
                 }
@@ -873,6 +877,15 @@ impl Game {
                             self.bind_target_players(f, ctx),
                         ))
                     }
+                    // "For as long as that creature has a duty counter on it, ..."
+                    // (Immortal Obligation): the object named as the effect begins.
+                    Duration::WhileCondition(Condition::SelMatches(
+                        s @ (Sel::Var(_) | Sel::Target(_) | Sel::TriggerObject),
+                        f,
+                    )) => Duration::WhileCondition(Condition::SelMatches(
+                        Sel::All(Filter::Objects(self.resolve_objects(s, ctx))),
+                        f.clone(),
+                    )),
                     d => d.clone(),
                 };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
@@ -903,6 +916,12 @@ impl Game {
                 let id = self.new_effect_id();
                 let ts = self.new_timestamp();
                 let mut effect = effect.clone();
+                // "protection from that player": the player as the effect begins.
+                if let PlayerModification::ProtectionFrom(f) | PlayerModification::HexproofFrom(f) =
+                    &mut effect
+                {
+                    *f = self.bind_target_players(f, ctx);
+                }
                 // CR 608.2h: amounts are determined as the effect begins.
                 crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
                 // "from that player's graveyard": that player, as the effect begins.
@@ -1158,6 +1177,16 @@ impl Game {
                         .collect();
                     ctx.set_var(crate::tokens::TOKEN_DEFENDER, d);
                 }
+                // A creature card moved onto the battlefield blocking enters blocking (see
+                // `destinations.rs`); tokens are put into the block once created.
+                let blocked = blocking
+                    .as_ref()
+                    .and_then(|a| self.resolve_objects(a, ctx).first().copied());
+                let saved_block = ctx.vars.get(&crate::tokens::JOIN_BLOCKING).cloned();
+                if let Some(a) = blocked {
+                    ctx.set_var(crate::tokens::JOIN_BLOCKING, vec![Entity::Object(a)]);
+                }
+                let created_before = ctx.vars.get(&vars::CREATED).cloned();
                 self.exec(effect, ctx);
                 match saved {
                     Some(v) => ctx.set_var(crate::tokens::TOKEN_DEFENDER, v),
@@ -1165,13 +1194,21 @@ impl Game {
                         ctx.vars.remove(&crate::tokens::TOKEN_DEFENDER);
                     }
                 }
-                if let Some(a) = blocking {
-                    if let Some(attacker) = self.resolve_objects(a, ctx).first().copied() {
-                        let created: Vec<ObjectId> = ctx
-                            .vars
-                            .get(&vars::CREATED)
-                            .map(|v| v.iter().filter_map(|e| e.object()).collect())
-                            .unwrap_or_default();
+                match saved_block {
+                    Some(v) => ctx.set_var(crate::tokens::JOIN_BLOCKING, v),
+                    None => {
+                        ctx.vars.remove(&crate::tokens::JOIN_BLOCKING);
+                    }
+                }
+                if let Some(attacker) = blocked {
+                    {
+                        let now = ctx.vars.get(&vars::CREATED).cloned();
+                        let created: Vec<ObjectId> = if now == created_before {
+                            vec![]
+                        } else {
+                            now.map(|v| v.iter().filter_map(|e| e.object()).collect())
+                                .unwrap_or_default()
+                        };
                         for t in created {
                             if self.is_live(t) {
                                 crate::combat::put_onto_battlefield_blocking(self, t, attacker);
@@ -1394,8 +1431,22 @@ impl Game {
                 }
             }
             Effect::EnterCopyExceptions(mods) => {
+                // A power and toughness given by a value ("equal to ~'s power and
+                // toughness") is fixed as the replacement applies, from the entering
+                // object as it is now (CR 707.9b).
+                let mods: Vec<Modification> = mods
+                    .iter()
+                    .map(|m| match m {
+                        Modification::SetPT(..) => self
+                            .fix_mods(std::slice::from_ref(m), ctx)
+                            .into_iter()
+                            .next()
+                            .unwrap_or_else(|| m.clone()),
+                        m => m.clone(),
+                    })
+                    .collect();
                 if let Some(e) = ctx.entering.as_mut() {
-                    e.copy_exceptions.extend(mods.iter().cloned());
+                    e.copy_exceptions.extend(mods);
                 }
             }
             Effect::EnterCopyExtra {
@@ -1941,8 +1992,17 @@ impl Game {
             } => {
                 // CR 500.10a: "you get" adds nothing to another player's turn.
                 let gets = who.as_ref().map(|w| self.eval_players(w, ctx));
+                ctx.nums
+                    .remove(&crate::kw::added_combat_phases::ADDED_COMBAT);
                 if gets.is_none_or(|ps| ps.iter().any(|p| self.is_active_player(*p))) {
                     let n = self.eval_value(n, ctx).max(0) as usize;
+                    // "That combat": the one combat phase added (CR 500.8).
+                    if n == 1 && parts.first() == Some(&TurnPart::CombatPhase) {
+                        let k =
+                            crate::kw::added_combat_phases::added_after_current(self, *after_phase);
+                        ctx.nums
+                            .insert(crate::kw::added_combat_phases::ADDED_COMBAT, k as i64);
+                    }
                     for _ in 0..n {
                         self.add_turn_parts(parts, *after_phase);
                     }
@@ -2584,21 +2644,30 @@ impl Game {
     /// ([`vars::DAMAGED`]) and as the previous effect's affected objects.
     fn record_damaged(&mut self, srcs: &[ObjectId], before: usize, ctx: &mut Ctx) {
         let mut damaged: Vec<Entity> = Vec::new();
+        let mut players: Vec<Entity> = Vec::new();
         for ev in &self.events[before.min(self.events.len())..] {
             if let Event::Damage {
                 source,
-                target: Entity::Object(o),
+                target,
                 amount,
                 ..
             } = ev
             {
-                if srcs.contains(source) && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
-                    damaged.push(Entity::Object(*o));
+                if !srcs.contains(source) || *amount == 0 {
+                    continue;
+                }
+                let list = match target {
+                    Entity::Object(_) => &mut damaged,
+                    Entity::Player(_) => &mut players,
+                };
+                if !list.contains(target) {
+                    list.push(*target);
                 }
             }
         }
         ctx.prev_affected = damaged.clone();
         ctx.set_var(vars::DAMAGED, damaged);
+        ctx.set_var(vars::DAMAGED_PLAYERS, players);
     }
 
     /// The source of damage for an effect: the named object, or the resolving object's
@@ -2627,6 +2696,30 @@ impl Game {
                         .into_iter()
                         .map(Modification::AddKeyword),
                 ),
+                // "landwalk of each of the land types of the sacrificed land" (Excavator):
+                // one landwalk per land type it had as it last existed (CR 702.14a, 608.2h).
+                Modification::AddKeyword(k)
+                    if k.kind == KeywordKind::Landwalk
+                        && matches!(&k.filter, Some(Filter::Custom(n))
+                            if n.as_str() == crate::oracle::patterns::statics_4::LAND_TYPES_OF_SACRIFICED) =>
+                {
+                    let mut types: Vec<smol_str::SmolStr> = Vec::new();
+                    for e in ctx.vars.get(&vars::SACRIFICED).into_iter().flatten() {
+                        if let Some(o) = e.object() {
+                            for t in &self.obj(o).chars.subtypes {
+                                if crate::types::is_land_type(t) && !types.contains(t) {
+                                    types.push(t.clone());
+                                }
+                            }
+                        }
+                    }
+                    fixed.extend(types.into_iter().map(|t| {
+                        let mut k = k.clone();
+                        k.text = Some(format!("{}walk", t.to_lowercase()).into());
+                        k.filter = Some(Filter::Subtype(t));
+                        Modification::AddKeyword(k)
+                    }));
+                }
                 // "gains all activated abilities of target creature until end of turn":
                 // the abilities it has as the effect is created (CR 608.2h).
                 Modification::AddAbilitiesOf { from, which, terms } => fixed.extend(
@@ -2669,6 +2762,14 @@ impl Game {
                     k.filter = Some(Filter::ControllerMatches(Box::new(PlayerFilter::Or(
                         opponents,
                     ))));
+                    Modification::AddKeyword(k)
+                }
+                // "gain protection from that player": the player as the effect begins.
+                Modification::AddKeyword(k)
+                    if matches!(&k.filter, Some(Filter::ControlledByPlayer(_))) =>
+                {
+                    let mut k = k.clone();
+                    k.filter = k.filter.as_ref().map(|f| self.bind_target_players(f, ctx));
                     Modification::AddKeyword(k)
                 }
                 // "Protection from each of that permanent's colors": the colors it has as
@@ -2865,12 +2966,32 @@ impl Game {
         // A restriction on a referenced player ("target player can't play lands this
         // turn") locks onto that player.
         if let Some(pf) = restriction_player_filter(&mut r) {
-            if let PlayerFilter::Ref(who) = pf {
-                let ps = self.eval_players(who, ctx);
-                *pf = PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect());
-            }
+            self.bind_player_refs(pf, ctx);
         }
         r
+    }
+
+    /// Locks the referenced players of a restriction's player filter ("target player",
+    /// "the other chosen player"), except those about the affected object ("its
+    /// controller" for each creature the requirement applies to).
+    fn bind_player_refs(&self, pf: &mut PlayerFilter, ctx: &Ctx) {
+        match pf {
+            PlayerFilter::Ref(who) => {
+                let about_affected = serde_json::to_string(&**who)
+                    .is_ok_and(|s| s.contains(&format!("{{\"Var\":{}}}", vars::AFFECTED)));
+                if !about_affected {
+                    let ps = self.eval_players(who, ctx);
+                    *pf = PlayerFilter::Or(ps.into_iter().map(PlayerFilter::Is).collect());
+                }
+            }
+            PlayerFilter::And(v) | PlayerFilter::Or(v) => {
+                for x in v {
+                    self.bind_player_refs(x, ctx);
+                }
+            }
+            PlayerFilter::Not(x) => self.bind_player_refs(x, ctx),
+            _ => {}
+        }
     }
 
     /// "Creatures other than [specific objects]" (Intimidation Bolt: "other creatures
@@ -3514,6 +3635,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantBeCopied(f)
         | Restriction::SourceDamageCantBePrevented(f)
         | Restriction::AttackDespiteDefender(f)
+        | Restriction::AttackPlayersDespiteDefender { attackers: f, .. }
         | Restriction::BlockAsThoughUntapped(f)
         | Restriction::Goaded(f)
         | Restriction::DamageByToughness(f)
@@ -3542,6 +3664,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::MustAttackObject { attackers, .. }
+        | Restriction::CantAttackPermanentsOf { attackers, .. }
         | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,

@@ -442,6 +442,7 @@ fn ulamog_annihilator_counts_counters_as_the_ability_resolves() {
 #[test]
 fn volcano_hellion_echo_cost_is_your_life_total_as_the_ability_resolves() {
     cr!("702.1b", "702.30a", "608.2h");
+    cr_example!("702.1b", "Volcano Hellion has the ability");
     ruling!(
         "Volcano Hellion",
         "Volcano Hellion's echo cost constantly changes; it's not locked in when it enters. The echo cost you pay is equal to your life total as the echo triggered ability resolves."

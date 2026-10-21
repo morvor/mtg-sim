@@ -90,12 +90,17 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
         Filter::Not(x) => Filter::Not(Box::new(lock_filter(g, x, ctx))),
         // "each creature blocking it" (Feint): the creatures blocking that object as the
         // effect is created (the object is known only then).
-        Filter::BlockingAnyOf(sel) if !matches!(**sel, Sel::This) => Filter::Objects(
-            g.permanents()
-                .map(|o| o.id)
-                .filter(|&o| g.matches(o, f, ctx))
-                .collect(),
-        ),
+        // "each creature it's blocking" (Sewers of Estark): likewise.
+        Filter::BlockingAnyOf(sel) | Filter::BlockRelation { other: sel, .. }
+            if !matches!(**sel, Sel::This) =>
+        {
+            Filter::Objects(
+                g.permanents()
+                    .map(|o| o.id)
+                    .filter(|&o| g.matches(o, f, ctx))
+                    .collect(),
+            )
+        }
         // "creatures target opponent controls": that player, whoever controls what later.
         Filter::ControlledBy(PlayerRel::Target(k)) => {
             let ps = ctx
@@ -262,6 +267,17 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
         }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        // "They enter as copies of the chosen creature" (Mystic Reflection): the target
+        // is locked in as the effect is created.
+        ReplacementAction::EnterAsCopy {
+            filter,
+            optional,
+            tapped,
+        } => ReplacementAction::EnterAsCopy {
+            filter: lf(filter),
+            optional: *optional,
+            tapped: *tapped,
+        },
         ReplacementAction::RedirectNext(sel, n) => {
             ReplacementAction::RedirectNext(lock_to(sel), n.clone())
         }
