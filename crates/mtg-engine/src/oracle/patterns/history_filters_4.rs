@@ -578,3 +578,27 @@ fn except_sharing_type_with_convoker<'a>(t: &'a str, _so_far: &Filter) -> Option
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "history 4: except those that share a creature type with a creature that convoked ~", priority: 900, parse: except_sharing_type_with_convoker } }
+
+/// "dealt damage this turn by a Spider you controlled" (Shelob, Child of Ungoliant: "another
+/// creature dealt damage this turn by a Spider you controlled"), "that was dealt damage
+/// this turn by ...": the window before the source.
+fn dealt_damage_this_turn_by<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let body = t
+        .strip_prefix("that was dealt damage this turn by ")
+        .or_else(|| t.strip_prefix("dealt damage this turn by "))?;
+    let words: Vec<&str> = body.split(' ').collect();
+    for k in (1..=words.len()).rev() {
+        let src = words[..k].join(" ");
+        let rest = &body[src.len()..];
+        if !clause_end(rest) || src.ends_with(',') {
+            continue;
+        }
+        let src_now = src.replace(" you controlled", " you control");
+        if let Some(f) = object_filter(&format!("was dealt damage by {src_now}"), " this turn", so_far) {
+            return Some((f, rest));
+        }
+    }
+    None
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "history 4: dealt damage this turn by [a source]", priority: 5, parse: dealt_damage_this_turn_by } }

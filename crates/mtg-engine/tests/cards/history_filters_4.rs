@@ -1343,3 +1343,28 @@ fn stalwart_successor_adds_a_counter_only_the_first_time_each_creature_gets_coun
     t.resolve_all();
     assert_eq!(t.counters(b, "+1/+1"), 2, "each creature's first time");
 }
+
+#[test]
+fn shelob_copies_a_dying_creature_a_spider_of_yours_damaged_this_turn() {
+    cr!("603.10a", "707.9b");
+    assert_supported("Shelob, Child of Ungoliant");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Shelob, Child of Ungoliant");
+    let spider = t.battlefield(P0, "Giant Spider");
+    let hit = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    t.g.deal_damage(spider, Entity::Object(hit), 1, false);
+    t.g.flush_events();
+    t.g.destroy(other, None);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty(), "not damaged by a Spider");
+    t.g.destroy(hit, None);
+    t.g.flush_events();
+    t.resolve_all();
+    let copies = t.named_on_battlefield("Hill Giant");
+    assert_eq!(copies.len(), 1);
+    let c = &t.g.obj(copies[0]).chars;
+    assert!(c.subtypes.iter().any(|s| s.as_str() == "Food"));
+    assert!(!c.is_creature(), "it loses its other card types");
+}
