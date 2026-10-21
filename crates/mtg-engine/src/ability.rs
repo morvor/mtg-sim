@@ -3734,6 +3734,10 @@ pub struct PlayTerms {
     /// to the player who gets it (see `PlayGrant::duration_player`).
     #[serde(default)]
     pub controller_duration: bool,
+    /// For an effect's permission given with `controller_duration`: that controller (set
+    /// as the permission is given).
+    #[serde(default)]
+    pub duration_player: Option<PlayerId>,
 }
 
 impl PlayTerms {

@@ -99,7 +99,7 @@ impl Agent for ScriptedAgent {
         "scripted"
     }
 
-    fn decide(&mut self, _g: &Game, p: PlayerId, d: &Decision) -> Answer {
+    fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
         let mut s = self.script.lock().unwrap();
         s.asked.push((p, d.clone()));
         let k = kind_of(d);
@@ -111,6 +111,20 @@ impl Agent for ScriptedAgent {
             .position(|(kind, _)| *kind == k || *kind == DecisionKind::Any)
         {
             let (_, a) = q.remove(i).unwrap();
+            // A card scripted before it moved (a new object, CR 400.7): the object it is
+            // now, if that's what can be chosen.
+            if let (Answer::Entities(es), Decision::ChooseEntities { candidates, .. }) = (&a, d) {
+                let es = es
+                    .iter()
+                    .map(|e| match e {
+                        Entity::Object(o) if !candidates.contains(e) => {
+                            Entity::Object(g.current(*o))
+                        }
+                        e => *e,
+                    })
+                    .collect();
+                return Answer::Entities(es);
+            }
             return a;
         }
         match d {

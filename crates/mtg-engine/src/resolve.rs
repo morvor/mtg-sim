@@ -2183,7 +2183,7 @@ impl Game {
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                     if terms.controller_duration {
-                        g.duration_player = ctx.controller;
+                        g.terms.duration_player = Some(ctx.controller);
                     }
                 }
                 crate::permissions::given(self, before);

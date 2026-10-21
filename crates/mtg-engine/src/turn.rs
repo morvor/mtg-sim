@@ -1020,12 +1020,12 @@ impl Game {
             o.goaded_by.retain(|p| *p != active);
         }
         self.play_grants
-            .retain(|g| !until(&g.duration, g.duration_player));
+            .retain(|g| !until(&g.duration, g.duration_player()));
         // "Until the end of your next turn, you may play that card."
         let turn = self.turn.number;
         for g in self.play_grants.iter_mut() {
             if matches!(g.duration, Duration::UntilEndOfYourNextTurn)
-                && g.duration_player == active
+                && g.duration_player() == active
                 && g.turn < turn
             {
                 g.duration = Duration::EndOfTurn;
@@ -1095,7 +1095,7 @@ impl Game {
         self.replacements
             .retain(|e| !until(&e.duration, e.controller));
         self.play_grants
-            .retain(|g| !until(&g.duration, g.duration_player));
+            .retain(|g| !until(&g.duration, g.duration_player()));
         self.dirty = true;
     }
 

@@ -141,6 +141,8 @@ pub struct Perm {
     /// "..., and they can't play cards from their hand": for as long as the permission
     /// lasts, its players can't play cards from their hands.
     pub no_hand: bool,
+    /// "from among cards exiled with it": "it" must be the source (see [`effect`]).
+    pub linked_it: bool,
 }
 
 impl Perm {
@@ -379,6 +381,8 @@ fn referent(s: &str) -> Option<(Option<u32>, &str)> {
 fn among_referent(s: &str) -> Option<&str> {
     let r = s.strip_prefix(" from among ")?;
     for w in [
+        // (Etali, Primal Conqueror: the spells cast from among them are nonland anyway.)
+        "the nonland cards exiled this way",
         "the cards exiled this way",
         "cards exiled this way",
         "cards revealed this way",
@@ -447,8 +451,38 @@ fn class_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         })
         .collect();
     let card_phrase = card_phrase.join(" ");
-    let f = object_filter(&card_phrase)?;
+    let f = match noun_or_phrase(&card_phrase) {
+        Some(f) => f,
+        None => object_filter(&card_phrase).or_else(|| either_phrase(&card_phrase))?,
+    };
     Some((f, single, rest))
+}
+
+/// "noncreature or Robot card" (Vision, Spectral Synthezoid): "a noncreature card" or "a
+/// Robot card", where the object phrase can't read the list itself.
+fn either_phrase(s: &str) -> Option<Filter> {
+    let (head, noun) = s.rsplit_once(' ')?;
+    let (a, b) = head.split_once(" or ")?;
+    if b.contains(" or ") || a.contains(',') {
+        return None;
+    }
+    let fa = object_filter(&format!("{a} {noun}"))?;
+    let fb = object_filter(&format!("{b} {noun}"))?;
+    Some(Filter::Or(vec![fa, fb]))
+}
+
+/// "Vehicle or artifact creature card" (Sanwell, Avenger Ace): a Vehicle card, or an
+/// artifact creature card (a Vehicle isn't a creature card, so "creature" describes only
+/// the second alternative).
+fn noun_or_phrase(s: &str) -> Option<Filter> {
+    let (a, rest) = s.split_once(" or ")?;
+    if !matches!(a, "vehicle" | "equipment") || rest.split(' ').count() < 3 {
+        return None;
+    }
+    let (_, noun) = rest.rsplit_once(' ')?;
+    let fa = object_filter(&format!("{a} {noun}"))?;
+    let fb = object_filter(rest)?;
+    Some(Filter::Or(vec![fa, fb]))
 }
 
 /// A card phrase ("red cards", "creature card with mana value 3 or less") as a filter,
@@ -548,7 +582,7 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
     if let Some(r) = s.strip_prefix(" from your hand, from your graveyard, or from among cards you own in exile") {
         return Some((From::HandGraveyardOwnedExile, r));
     }
-    for (p, z) in [
+    for (p_, z) in [
         (" from your graveyard", From::Graveyard),
         (" from the top of your graveyard", From::GraveyardTop),
         (" from each opponent's graveyard", From::EachOpponentGraveyard),
@@ -570,9 +604,14 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
             " from among the cards exiled with ~",
             From::Linked { owned: false },
         ),
+        (
+            " from among cards exiled with it",
+            From::Linked { owned: false },
+        ),
     ] {
-        if let Some(r) = s.strip_prefix(p) {
+        if let Some(r) = s.strip_prefix(p_) {
             if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
+                p.linked_it |= p_.ends_with(" with it");
                 return Some((z, r));
             }
         }
@@ -1215,6 +1254,10 @@ pub fn moved(e: &Effect) -> Moved {
         | Effect::Store { .. } => Moved::Unchanged,
         // "You may look at those cards for as long as they remain exiled."
         Effect::Custom(n) if n.as_str() == crate::zones::MAY_LOOK_AT_EXILED => Moved::Unchanged,
+        // "Exile all cards from that player's hand, then they draw that many cards."
+        Effect::Custom(n) if n.as_str() == crate::kw::hand_graveyard_actions::RECORD_THAT_MANY => {
+            Moved::Unchanged
+        }
         _ => Moved::Other,
     }
 }
@@ -1998,7 +2041,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
 /// A permission sentence after the instruction that moved the cards it's about ("Exile
 /// the top card of your library. You may play that card this turn."), with an optional
 /// leading condition ("If you do, ...", "If it's red, ...").
-fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l).trim();
     let (cond, rest) = if let Some(r) = l.strip_prefix("if you do, ") {
         (Some(Condition::PrevHappened), r)
@@ -2007,7 +2050,7 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     } else {
         (None, l)
     };
-    let Some(mut p) = parse(rest) else {
+    let Some(mut p) = parse(rest).filter(|p| !p.linked_it) else {
         return false;
     };
     if p.who == Who::They {
@@ -2140,6 +2183,11 @@ fn keep_earlier_moved(prev: &mut Effect, e: Effect) -> Effect {
 /// "it" means after an earlier instruction moved them.
 pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let p = parse(l)?;
+    // "Whenever this Vehicle attacks, you may cast an instant or sorcery spell from among
+    // cards exiled with it." (Kylox's Voltstrider): only where "it" is the source.
+    if p.linked_it && !matches!(b.it, Sel::This) {
+        return None;
+    }
     if matches!(p.obj, Obj::Target { .. }) {
         return target_effect(&p, b);
     }
@@ -2348,16 +2396,32 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         quality = Some(f);
         r
     };
-    if !matches!(
-        r,
-        "your graveyard, exile it instead" | "a graveyard, exile it instead"
-    ) {
-        return false;
-    }
+    // "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    // library instead." (Kylox's Voltstrider).
+    let to = match r {
+        "your graveyard, exile it instead" | "a graveyard, exile it instead" => {
+            Destination::zone(ZoneKind::Exile)
+        }
+        "your graveyard, put it on the bottom of its owner's library instead"
+        | "a graveyard, put it on the bottom of its owner's library instead" => {
+            let mut to = Destination::zone(ZoneKind::Library);
+            to.position = LibraryPosition::Bottom;
+            to
+        }
+        _ => return false,
+    };
+    let exile = to.zone == ZoneKind::Exile;
     // (A permission to play lands as well: only its spells are cast.)
     if quality.is_none() {
         if let Some(terms) = last_terms(prev) {
-            terms.exile_instead = true;
+            if exile {
+                terms.exile_instead = true;
+            } else {
+                if terms.graveyard_instead.is_some() || terms.exile_instead {
+                    return false;
+                }
+                terms.graveyard_instead = Some(to);
+            }
             return true;
         }
     }
@@ -2386,7 +2450,7 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
                     from: None,
                     to: Some(ZoneKind::Graveyard),
                 },
-                action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                action: ReplacementAction::MoveInstead(to),
                 self_replacement: false,
                 optional: false,
             },

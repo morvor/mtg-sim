@@ -39,7 +39,9 @@ fn ends_with_choice(e: &Effect) -> bool {
 
 /// "choose one of them" after exiling the top cards of a library.
 fn choose_one(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
-    if end(l) != "choose one of them" || !exiles_top_cards(prev) {
+    // "Exile the top three cards of your library. Choose one. You may play that card this
+    // turn." (Chandra, Flameshaper): one of them.
+    if !matches!(end(l), "choose one of them" | "choose one") || !exiles_top_cards(prev) {
         return false;
     }
     let old = std::mem::take(prev);
