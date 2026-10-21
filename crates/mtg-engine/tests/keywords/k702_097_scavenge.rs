@@ -126,6 +126,7 @@ fn scavenge_does_nothing_if_its_target_becomes_illegal() {
 #[test]
 fn varolz_gives_creature_cards_scavenge_for_their_mana_cost() {
     cr!("702.97a");
+    cr_example!("702.1a", "Varolz, the Scar-Striped has an ability");
     ruling!(
         "Varolz, the Scar-Striped",
         "While Varolz, the Scar-Striped is on the battlefield, the scavenge cost of a creature card in your graveyard is equal to its mana cost, including any colored mana requirements."
@@ -140,6 +141,12 @@ fn varolz_gives_creature_cards_scavenge_for_their_mana_cost() {
     assert!(scavenge(&mut t, P0, giant, bears).is_err());
     t.lands(P0, "Mountain", 1);
     scavenge(&mut t, P0, giant, bears).expect("scavenge for its mana cost");
+    // The activation cost is that mana plus "Exile this card from your graveyard".
+    assert!(t.in_exile("Hill Giant"));
+    assert_eq!(
+        t.g.permanents().filter(|o| o.chars.is_land() && o.tapped).count(),
+        4
+    );
     t.resolve();
     assert_eq!(t.counters(bears, counters::PLUS1), 3);
 }

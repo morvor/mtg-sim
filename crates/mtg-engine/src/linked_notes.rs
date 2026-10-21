@@ -30,6 +30,13 @@ pub struct LinkedNotes {
     notes: BTreeMap<(ObjectId, u16), Vec<Entity>>,
 }
 
+impl LinkedNotes {
+    /// The links notes are kept for (on any object).
+    pub(crate) fn links(&self) -> impl Iterator<Item = u16> + '_ {
+        self.notes.keys().map(|(_, l)| *l)
+    }
+}
+
 /// [`Effect::NoteLinked`]: notes what `what` selects for the abilities linked to the
 /// resolving one.
 pub fn exec(g: &mut Game, what: &Sel, replace: bool, ctx: &mut Ctx) {

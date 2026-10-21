@@ -133,6 +133,18 @@ fn scaled(part: &CostPart, n: i64) -> Option<CostPart> {
             filter: filter.clone(),
             count: m(count),
         },
+        // "Exile the top card of your library" (Thought Lash): the top N cards, so the
+        // whole set is payable only with N cards in the library (no partial payments).
+        CostPart::Effect(e) => match &**e {
+            Effect::Move {
+                what: Sel::TopOfLibrary(who, k),
+                to,
+            } => CostPart::Effect(Box::new(Effect::Move {
+                what: Sel::TopOfLibrary(who.clone(), m(k)),
+                to: to.clone(),
+            })),
+            _ => return None,
+        },
         _ => return None,
     })
 }
