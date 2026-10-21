@@ -469,3 +469,35 @@ fn jace_mirror_mage_removes_loyalty_equal_to_the_drawn_cards_mana_value() {
     assert_eq!(t.counters(jace, "loyalty"), 0);
     assert!(!t.on_battlefield(jace));
 }
+
+#[test]
+fn kathril_puts_one_keyword_counter_per_keyword_in_the_graveyard() {
+    cr!("122.1b", "608.2c");
+    ruling!(
+        "Kathril, Aspect Warper",
+        "You check once for each keyword. If you have two creature cards with flying in your graveyard, you put just one flying counter on a creature you control, not two."
+    );
+    ruling!(
+        "Kathril, Aspect Warper",
+        "The counters don't need to all be put on the same creature."
+    );
+    supported("Kathril, Aspect Warper");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.graveyard(P0, "Serra Angel");
+    t.graveyard(P0, "Wind Drake");
+    t.graveyard(P0, "Typhoid Rats");
+    // Flying on the Bears, then deathtouch and vigilance on Kathril (by default).
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let k = t.enter(P0, "Kathril, Aspect Warper");
+    t.resolve_all();
+    use mtg_engine::keywords::KeywordKind;
+    assert_eq!(t.counters(bears, "flying"), 1);
+    assert!(t.obj_now(bears).has_keyword(KeywordKind::Flying));
+    let on_k = t.counters(k, "deathtouch") + t.counters(k, "vigilance");
+    let on_b = t.counters(bears, "deathtouch") + t.counters(bears, "vigilance");
+    assert_eq!(on_k + on_b, 2);
+    assert_eq!(t.counters(k, "lifelink") + t.counters(bears, "lifelink"), 0);
+    // Three counters were put on creatures this way.
+    assert_eq!(t.counters(k, "+1/+1"), 3);
+}
