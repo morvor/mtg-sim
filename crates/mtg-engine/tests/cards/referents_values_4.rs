@@ -2354,3 +2354,38 @@ fn extract_brain_casts_one_of_the_chosen_cards() {
     assert_eq!(t.g.obj(g[0]).controller, P0);
     assert!(t.in_hand(P1, "Grizzly Bears") && t.in_hand(P1, "Lightning Bolt"));
 }
+
+#[test]
+fn azors_gateway_counts_different_mana_values_exiled_with_it() {
+    cr!("607.2a", "202.3");
+    compiles("Azor's Gateway");
+    let mut t = TestGame::new(2);
+    let gate = t.battlefield(P0, "Azor's Gateway");
+    t.lands(P0, "Island", 1);
+    for _ in 0..12 {
+        t.library_top(P0, "Forest");
+        t.library_top(P1, "Forest");
+    }
+    let cards: Vec<ObjectId> = ["Island", "Llanowar Elves", "Grizzly Bears", "Hill Giant", "Craw Wurm"]
+        .iter()
+        .map(|c| t.hand(P0, c))
+        .collect();
+    for (i, c) in cards.iter().enumerate() {
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_choose(P0, &[Entity::Object(*c)]);
+        t.activate(P0, gate, 0, &[]).unwrap();
+        t.resolve_all();
+        // Mana values 0, 1, 2, 4, 6: the fifth one makes five different values.
+        assert_eq!(t.life(P0), if i == 4 { 25 } else { 20 }, "after {}", i + 1);
+        // (Drawn Forests leave the hand, so nothing is discarded to hand size.)
+        for f in t.g.find_in_zone(mtg_engine::object::Zone::Hand(P0), "Forest") {
+            t.g.move_object(
+                f,
+                mtg_engine::object::Zone::Graveyard(P0),
+                mtg_engine::events::MoveCause::Effect,
+                None,
+            );
+        }
+        t.advance_to(P1, Step::PrecombatMain);
+    }
+}

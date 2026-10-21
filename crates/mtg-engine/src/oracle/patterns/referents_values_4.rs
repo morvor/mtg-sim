@@ -1634,6 +1634,8 @@ inventory::submit! { FollowupPattern { name: "if you discarded the card with the
 ///   Artisan): "it" is ~ (CR 607.2a-style link to its own tokens).
 /// * "Tap enchanted creature: Target creature other than the creature tapped this way
 ///   ..." (Veteran's Voice): the creature the cost taps is the enchanted creature.
+/// * "..., you gain 5 life, untap ~, and transform it." (Azor's Gateway): the three
+///   instructions in order.
 fn reworded_ability(
     block: &str,
     ctx: &crate::oracle::CompileContext,
@@ -1662,6 +1664,9 @@ fn reworded_ability(
             " other than the creature tapped this way ",
             " other than enchanted creature ",
         )
+    } else if lower.contains(", untap ~, and transform it") {
+        // "you gain 5 life, untap ~, and transform it" (Azor's Gateway): in that order.
+        (", untap ~, and transform it", ", untap ~, then transform ~")
     } else {
         return None;
     };
@@ -1942,3 +1947,27 @@ fn look_at_the_chosen_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
 }
 
 inventory::submit! { FollowupPattern { name: "look at those cards (chosen from a hand), cast a spell from among them", priority: 140, apply: look_at_the_chosen_cards } }
+
+/// "cards with five or more different mana values are exiled with ~" (Azor's Gateway):
+/// the number of different mana values among the cards exiled with it (CR 607.2a).
+fn different_values_exiled_with_source(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("cards with ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let r = r.trim_start().strip_prefix("or more different ")?;
+    let among = match r {
+        "mana values are exiled with ~" => Among::ManaValues,
+        "names are exiled with ~" => Among::Names,
+        _ => return None,
+    };
+    let exiled = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Linked)),
+        Filter::InZone(ZoneKind::Exile),
+    ]));
+    Some(Condition::Compare(
+        Value::DistinctAmong(among, Box::new(exiled)),
+        Cmp::Ge,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "cards with N or more different [mana values] are exiled with ~", priority: 140, parse: different_values_exiled_with_source } }
