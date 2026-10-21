@@ -57,6 +57,17 @@ fn play_with_fire_scries_only_if_a_player_was_dealt_damage() {
     t.resolve_all();
     assert!(!t.on_battlefield(bear));
     assert!(!scried(&t, P0), "only a creature was dealt damage");
+
+    // Damage to the player that's prevented isn't dealt (CR 120.4b).
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    t.battlefield(P1, "Energy Field");
+    let fire = t.hand(P0, "Play with Fire");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, fire).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(!scried(&t, P0), "the damage was prevented");
 }
 
 #[test]
@@ -249,6 +260,20 @@ fn nahiris_lithoforming_lets_you_play_x_additional_lands() {
         "drew a card for each land sacrificed"
     );
     assert_eq!(t.g.player(P0).land_plays, 3, "two additional land plays");
+
+    // X greater than the number of lands: each land is sacrificed, a card drawn for each.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let nahiri = t.hand(P0, "Nahiri's Lithoforming");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.g.players[P0.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::R, 4);
+    let before = t.hand_size(P0);
+    t.cast(P0, nahiri).x(4).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Mountain").is_empty());
+    assert_eq!(t.hand_size(P0), before - 1 + 2, "two lands sacrificed");
 }
 
 #[test]
@@ -340,7 +365,7 @@ fn lethal_exploit_counts_modified_creatures_as_it_was_cast() {
 
 #[test]
 fn lost_isle_calling_takes_an_extra_turn_with_seven_verse_counters() {
-    cr!("608.2h", "118.3");
+    cr!("608.2h", "500.7");
     compiles("Lost Isle Calling");
     for (n, extra) in [(7u32, true), (6, false)] {
         let mut t = TestGame::new(2);
@@ -1044,7 +1069,7 @@ fn lathiel_may_distribute_fewer_counters_than_the_life_gained() {
     cr!("601.2d");
     ruling!(
         "Lathiel, the Bounteous Dawn",
-        "You may choose no targets if you want."
+        "Each target must receive at least one +1/+1 counter."
     );
     compiles("Lathiel, the Bounteous Dawn");
     let mut t = TestGame::new(2);
@@ -1060,6 +1085,31 @@ fn lathiel_may_distribute_fewer_counters_than_the_life_gained() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(t.counters(a, "+1/+1"), 1, "up to that many");
+
+    // Two targets, two of three counters: one each. Fewer than one per target isn't a
+    // legal choice (the full amount is distributed instead).
+    for (k, each) in [(2i64, 1u32), (1, 0)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Lathiel, the Bounteous Dawn");
+        let a = t.battlefield(P0, "Grizzly Bears");
+        let b = t.battlefield(P0, "Hill Giant");
+        t.g.gain_life(P0, 3);
+        t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+        t.answer(
+            P0,
+            DecisionKind::Number,
+            mtg_engine::decision::Answer::Number(k),
+        );
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        let total = t.counters(a, "+1/+1") + t.counters(b, "+1/+1");
+        assert!(t.counters(a, "+1/+1") >= 1 && t.counters(b, "+1/+1") >= 1);
+        if each == 1 {
+            assert_eq!(total, 2, "chose two");
+        } else {
+            assert_eq!(total, 3, "an illegal amount: all three");
+        }
+    }
 }
 
 #[test]
@@ -1103,6 +1153,24 @@ fn rise_and_shine_puts_counters_on_each_artifact_that_became_a_creature() {
     t.resolve_all();
     assert_eq!(t.counters(rock, "+1/+1"), 4);
     assert_eq!(t.pt(rock), (4, 4));
+
+    // Overloaded: each artifact you control becomes a creature and gets the counters; an
+    // opponent's artifact doesn't.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 6);
+    let a = t.battlefield(P0, "Mind Stone");
+    let b = t.battlefield(P0, "Sol Ring");
+    let theirs = t.battlefield(P1, "Mind Stone");
+    let rise = t.hand(P0, "Rise and Shine");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, rise)
+        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Overload))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 4);
+    assert_eq!(t.pt(a), (4, 4));
+    assert_eq!(t.counters(b, "+1/+1"), 4);
+    assert_eq!(t.counters(theirs, "+1/+1"), 0);
 }
 
 #[test]
@@ -1585,7 +1653,7 @@ fn ultra_magnus_converts_if_the_attackers_have_total_power_eight() {
 
 #[test]
 fn grimoire_thief_counters_spells_with_the_exiled_cards_names() {
-    cr!("201.2", "607.2a");
+    cr!("201.2a", "607.2a");
     compiles("Grimoire Thief");
     let mut t = TestGame::new(2);
     let thief = t.battlefield(P0, "Grimoire Thief");
@@ -1653,18 +1721,26 @@ fn phosphorescent_feast_counts_green_symbols_in_the_revealed_cards() {
     t.lands(P0, "Forest", 5);
     let a = t.hand(P0, "Craw Wurm"); // {4}{G}{G}
     let b = t.hand(P0, "Grizzly Bears"); // {1}{G}
+    let c = t.hand(P0, "Kitchen Finks"); // {1}{G/W}{G/W}
     t.hand(P0, "Llanowar Elves"); // not revealed
     let feast = t.hand(P0, "Phosphorescent Feast");
     t.advance_to(P0, Step::PrecombatMain);
-    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.answer_choose(
+        P0,
+        &[Entity::Object(a), Entity::Object(b), Entity::Object(c)],
+    );
     t.cast(P0, feast).go();
     t.resolve_all();
-    assert_eq!(t.life(P0), 26, "2 life for each of three green symbols");
+    assert_eq!(
+        t.life(P0),
+        30,
+        "2 life for each of five green symbols, hybrid ones included"
+    );
 }
 
 #[test]
 fn sovereign_okinec_ahau_counters_equal_to_power_over_base_power() {
-    cr!("208.3", "608.2h");
+    cr!("608.2h");
     compiles("Sovereign Okinec Ahau");
     let mut t = TestGame::new(2);
     let ahau = t.battlefield(P0, "Sovereign Okinec Ahau");
@@ -2112,7 +2188,7 @@ fn arcane_artisan_exiles_the_tokens_it_made_when_it_leaves() {
 
 #[test]
 fn veterans_voice_targets_a_creature_other_than_the_one_it_taps() {
-    cr!("602.2", "118.12");
+    cr!("602.2", "602.2b");
     compiles("Veteran's Voice");
     // The enchanted creature alone: no legal target.
     let mut t = TestGame::new(2);
@@ -2227,7 +2303,7 @@ fn depala_reveals_the_top_x_cards_paid_for() {
 
 #[test]
 fn knickknack_ouphe_reveals_the_top_x_cards() {
-    cr!("107.3m", "303.4");
+    cr!("107.3m", "303.4f");
     compiles("Knickknack Ouphe");
     for x in [1i64, 2] {
         let mut t = TestGame::new(2);
@@ -2239,11 +2315,15 @@ fn knickknack_ouphe_reveals_the_top_x_cards() {
         pick_by_name(&mut t, P0, &["Rancor"]);
         t.cast(P0, ouphe).x(x).go();
         t.resolve_all();
-        assert_eq!(
-            t.named_on_battlefield("Rancor").len(),
-            (x == 2) as usize,
-            "X = {x}"
-        );
+        let rancor = t.named_on_battlefield("Rancor");
+        assert_eq!(rancor.len(), (x == 2) as usize, "X = {x}");
+        if let Some(r) = rancor.first() {
+            assert_eq!(
+                t.g.obj(*r).attached_to,
+                Some(Entity::Object(t.g.current(ouphe))),
+                "enchants the chosen creature"
+            );
+        }
     }
 }
 

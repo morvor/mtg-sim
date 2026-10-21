@@ -449,7 +449,34 @@ fn a_pronoun_for_an_untracked_object_is_not_the_source() {
     t.activate(P0, herb, 0, &[]).unwrap();
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Heart-Shaped Herb"), "the Herb stays put");
-    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    let bears = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    assert_eq!(t.counters(bears[0], "+1/+1"), 3);
+    assert_eq!(t.g.monarch, Some(P0));
+}
+
+#[test]
+fn a_pronoun_with_no_tracked_referent_stays_unsupported() {
+    // "That card" with nothing this ability tracked for it (no sacrifice, or two
+    // sacrificed creatures) must not compile to the source sacrificed as a cost.
+    for text in [
+        "{2}, {T}, Sacrifice this artifact: You may pay {2}. If you do, return that card to the battlefield under its owner's control.",
+        "{2}, {T}, Sacrifice this artifact: You may sacrifice two creatures. If you do, return that card to the battlefield under its owner's control.",
+    ] {
+        let tl = TypeLine::parse("Artifact");
+        let ctx = CompileContext {
+            card_name: "Probe",
+            full_name: "Probe",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let compiled = oracle::compile(text, &ctx);
+        assert!(!compiled.unsupported.is_empty(), "{text}");
+    }
 }
 
 #[test]
