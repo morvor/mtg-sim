@@ -798,6 +798,10 @@ pub struct Game {
     /// paying {1} rather than paying its mana cost", CR 608.2g, 118.9). Set and restored
     /// around that effect only (see `permissions::with_resolution_terms`).
     pub resolution_alt_cost: Option<Cost>,
+    /// Likewise, an additional cost those spells are cast with ("you may cast target
+    /// instant or sorcery card from your graveyard by paying {R}{R} in addition to its
+    /// other costs", CR 601.2b, 601.2f).
+    pub resolution_extra_cost: Option<Cost>,
 }
 
 impl Game {
@@ -917,6 +921,7 @@ impl Game {
             observer: None,
             timing: Default::default(),
             resolution_alt_cost: None,
+            resolution_extra_cost: None,
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

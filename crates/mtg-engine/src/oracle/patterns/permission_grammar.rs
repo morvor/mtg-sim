@@ -341,6 +341,9 @@ fn referent(s: &str) -> Option<(Option<u32>, &str)> {
         "the card they exiled this way",
         "cards they exiled this way",
         "the cards exiled this way",
+        // "You may cast the exiled nonland card" after exiling cards until a nonland card
+        // (Black Widow, Super Spy): the card found.
+        "the exiled nonland card",
         "cards exiled this way",
         "those exiled cards",
         "the exiled cards",
@@ -1295,6 +1298,7 @@ pub fn moved(e: &Effect) -> Moved {
         | Effect::Scry { .. }
         | Effect::Surveil { .. }
         | Effect::AddPlayerCounters { .. }
+        | Effect::AddCounters { .. }
         | Effect::CreateToken { .. }
         | Effect::GrantPlayPermission { .. }
         | Effect::WithPlayTerms { .. }
@@ -2342,7 +2346,6 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
     match &p.duration {
         None => {
             if terms.flash
-                || terms.extra_cost.is_some()
                 || terms.spend_as_any_color
                 || terms.condition.is_some()
                 || terms.exile_instead
@@ -2367,16 +2370,19 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
             if terms.alt_cost.is_some() && p.free {
                 return None;
             }
-            // "by paying {1} rather than paying its mana cost" (CR 118.9).
-            let cast = match &terms.alt_cost {
-                Some(c) => Effect::WithPlayTerms {
+            // "by paying {1} rather than paying its mana cost" (CR 118.9), "by paying
+            // {R}{R} in addition to its other costs" (CR 601.2b, 601.2f).
+            let cast = if terms.alt_cost.is_some() || terms.extra_cost.is_some() {
+                Effect::WithPlayTerms {
                     terms: PlayTerms {
-                        alt_cost: Some(c.clone()),
+                        alt_cost: terms.alt_cost.clone(),
+                        extra_cost: terms.extra_cost.clone(),
                         ..Default::default()
                     },
                     effect: Box::new(cast),
-                },
-                None => cast,
+                }
+            } else {
+                cast
             };
             // "..., and mana of any type can be spent to cast that spell" (CR 118.14).
             Some(if terms.spend_any_type {
@@ -2420,7 +2426,8 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
 /// The terms of the last permission the effect gives, if it ends by giving one.
 pub(crate) fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
     match e {
-        Effect::WithPlayTerms { terms, .. } => Some(terms),
+        // (Not the terms of spells cast as the effect resolves.)
+        Effect::WithPlayTerms { terms, effect } if !ends_casting(effect) => Some(terms),
         Effect::AddPlayerEffect {
             effect: PlayerModification::PlayPermission(pp),
             ..
@@ -2437,6 +2444,7 @@ pub(crate) fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
 fn ends_casting(e: &Effect) -> bool {
     match e {
         Effect::CastCard { .. } => true,
+        Effect::WithPlayTerms { effect, .. } => ends_casting(effect),
         Effect::Seq(v) => v.last().is_some_and(ends_casting),
         _ => false,
     }

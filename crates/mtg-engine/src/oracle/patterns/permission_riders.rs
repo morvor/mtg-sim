@@ -56,6 +56,9 @@ fn enters_rider(x: &str) -> Option<(Effect, bool)> {
         "that permanent enters ",
         "that card enters ",
         "it enters ",
+        // "If you do, ~ enters with a +1/+1 counter on it." (Undead Sprinter): the card
+        // the permission is for is ~ itself.
+        "~ enters ",
     ]
     .iter()
     .find_map(|p| x.strip_prefix(p))?;
@@ -244,6 +247,8 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
         l,
         "if you cast ~ this way and it would be put into your graveyard, exile it instead"
             | "if you cast ~ this way and it would be put into a graveyard, exile it instead"
+            | "if you cast it this way and it would be put into your graveyard, exile it instead"
+            | "if you cast it this way and it would be put into a graveyard, exile it instead"
     ) {
         if !spells || terms.exile_instead {
             return false;

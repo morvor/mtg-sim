@@ -273,6 +273,22 @@ pub fn cast_during_resolution_as(
         }
         opt.alt_cost = Some(Cost::free());
     }
+    // "by paying {R}{R} in addition to its other costs" (CR 601.2b, 601.2f).
+    if let Some(extra) = g.resolution_extra_cost.clone() {
+        let mv = g
+            .face_characteristics(card, face)
+            .mana_cost
+            .as_ref()
+            .map_or(0, |m| m.mana_value_with_x(0));
+        let e = crate::permissions::spell_relative_cost(&extra, mv);
+        opt.extra_cost = Some(match opt.extra_cost.take() {
+            Some(mut c) => {
+                add_cost(&mut c, &e);
+                c
+            }
+            None => e,
+        });
+    }
     // A land can't be cast, even by an effect that lets a player cast cards (CR 305.9).
     if g.option_characteristics(card, &opt).is_land() {
         return Err(Illegal("a land can't be cast".into()));

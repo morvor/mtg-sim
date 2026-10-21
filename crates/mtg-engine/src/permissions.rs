@@ -124,8 +124,10 @@ pub fn with_resolution_terms<R>(
     f: impl FnOnce(&mut Game) -> R,
 ) -> R {
     let prev = std::mem::replace(&mut g.resolution_alt_cost, terms.alt_cost.clone());
+    let prev_extra = std::mem::replace(&mut g.resolution_extra_cost, terms.extra_cost.clone());
     let r = f(g);
     g.resolution_alt_cost = prev;
+    g.resolution_extra_cost = prev_extra;
     r
 }
 
