@@ -57,6 +57,8 @@ impl Game {
                 m
             })
             .collect();
+        // CR 400.6: an object a state-based action is moving at the same time.
+        let moves = crate::zones::contradictory_moves(self, moves);
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         // CR 614.13a, 614.13c: while effects that modify how these objects enter are

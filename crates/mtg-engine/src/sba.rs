@@ -506,6 +506,22 @@ impl Game {
                 });
             }
         }
+        // CR 704.3, 400.6: a loss that a replacement effect replaces is replaced with the
+        // game as it is, before the other state-based actions move anything ("instead exile
+        // this creature"); an object both would move moves as its controller chooses.
+        let (replaced, losers): (Vec<PlayerId>, Vec<PlayerId>) = losers
+            .into_iter()
+            .partition(|p| self.loss_would_be_replaced(*p));
+        if !replaced.is_empty() {
+            self.zones.sba_moves = moves.clone();
+            self.lose_game_simultaneously(&replaced);
+            self.zones.sba_moves.clear();
+            // An object the replacement moved instead wasn't destroyed or sacrificed.
+            let chosen = std::mem::take(&mut self.zones.sba_moves_chosen);
+            let moved_instead = |g: &Game, id: &ObjectId| !g.is_live(*id) && !chosen.contains(id);
+            to_destroy.retain(|id| !moved_instead(self, id));
+            sacrifice.retain(|id| !moved_instead(self, id));
+        }
         if !moves.is_empty() {
             let sac_ids: Vec<(ObjectId, PlayerId)> = sacrifice
                 .iter()
@@ -545,7 +561,6 @@ impl Game {
 
         // Players who lose at the same time lose simultaneously (CR 104.4a, 704.3); "can't
         // lose" effects apply (CR 101.2).
-        let losers: Vec<PlayerId> = losers.into_iter().collect();
         self.lose_game_simultaneously(&losers);
         self.recompute();
         true
