@@ -1688,7 +1688,7 @@ impl Game {
         if !self.is_live(id) || self.obj(id).zone != Zone::Stack {
             return false;
         }
-        if self.cant_be_countered(id) {
+        if self.cant_be_countered(id) || crate::kw::cant_be_countered_by(self, id, cause.obj) {
             return false;
         }
         self.counter_or_fizzle(id, MoveCause::Counter);

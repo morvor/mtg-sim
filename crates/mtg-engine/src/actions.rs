@@ -1553,6 +1553,10 @@ impl Game {
         {
             return k;
         }
+        // "[Counters] can't be removed from ..." (see `kw::counters_cant_be_removed`).
+        if crate::kw::counters_cant_be_removed(self, target, kind) {
+            return 0;
+        }
         let have = match target {
             // An object that has left its zone is a new object (CR 400.7); counters can't
             // be removed from its last known information.

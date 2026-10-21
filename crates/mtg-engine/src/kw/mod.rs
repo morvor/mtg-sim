@@ -432,6 +432,23 @@ pub trait KeywordRules: Sync + Send {
     fn resolves_despite_illegal_targets(&self, g: &Game, stack_obj: ObjectId, body: &Body) -> bool {
         false
     }
+    /// Whether a rule this implementation defines keeps counters of `kind` from being
+    /// removed from `target` ("Stun counters can't be removed from permanents your
+    /// opponents control"): removing them removes nothing (CR 122.8 still lets a
+    /// replacement such as a stun counter's apply).
+    fn counters_cant_be_removed(&self, g: &Game, target: Entity, kind: &str) -> bool {
+        false
+    }
+    /// Whether the planeswalker `pw` isn't put into its owner's graveyard by the
+    /// state-based action for having 0 loyalty (an exception to CR 704.5i).
+    fn keeps_zero_loyalty_planeswalker(&self, g: &Game, pw: ObjectId) -> bool {
+        false
+    }
+    /// Whether the spell or ability `id` can't be countered by `cause` (the spell or
+    /// ability countering it, if any), e.g. "can't be countered by blue or black spells".
+    fn cant_be_countered_by(&self, g: &Game, id: ObjectId, cause: Option<ObjectId>) -> bool {
+        false
+    }
     /// Evaluates a named [`Condition::Custom`] this implementation defines, if it's one.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         None
@@ -1140,6 +1157,30 @@ pub fn on_event(g: &mut Game, ev: &Event) {
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
     registry().iter().any(|r| r.keeps_unattached_aura(g, aura))
+}
+
+/// Whether counters of `kind` can't be removed from `target` (see
+/// [`KeywordRules::counters_cant_be_removed`]).
+pub fn counters_cant_be_removed(g: &Game, target: Entity, kind: &str) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.counters_cant_be_removed(g, target, kind))
+}
+
+/// Whether a planeswalker with 0 loyalty stays on the battlefield (see
+/// [`KeywordRules::keeps_zero_loyalty_planeswalker`]).
+pub fn keeps_zero_loyalty_planeswalker(g: &Game, pw: ObjectId) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.keeps_zero_loyalty_planeswalker(g, pw))
+}
+
+/// Whether `id` can't be countered by `cause` (see
+/// [`KeywordRules::cant_be_countered_by`]).
+pub fn cant_be_countered_by(g: &Game, id: ObjectId, cause: Option<ObjectId>) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.cant_be_countered_by(g, id, cause))
 }
 
 /// Whether an ability resolves although all its targets are illegal (see

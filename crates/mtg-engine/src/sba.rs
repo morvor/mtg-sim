@@ -167,7 +167,10 @@ impl Game {
                     to_destroy.push(id); // 704.5h
                 }
             }
-            if o.is(CardType::Planeswalker) && o.loyalty() <= 0 {
+            if o.is(CardType::Planeswalker)
+                && o.loyalty() <= 0
+                && !crate::kw::keeps_zero_loyalty_planeswalker(self, id)
+            {
                 to_graveyard.push(id); // 704.5i
             }
         }

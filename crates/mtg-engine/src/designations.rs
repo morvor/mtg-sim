@@ -6,7 +6,16 @@ use crate::game::Game;
 use crate::object::{ObjKind, Zone};
 use crate::types::*;
 
+/// `PlayerModification::Custom` name: "[Players] can't become the monarch [this turn]".
+pub const CANT_BECOME_MONARCH: &str = "can't become the monarch";
+
 pub fn become_monarch(g: &mut Game, p: PlayerId) {
+    // The current monarch, if any, stays the monarch.
+    if g.player(p).has_mod(
+        |m| matches!(m, crate::ability::PlayerModification::Custom(n) if n == CANT_BECOME_MONARCH),
+    ) {
+        return;
+    }
     if g.monarch != Some(p) {
         g.monarch = Some(p);
         g.emit(Event::BecameMonarch { player: p });
