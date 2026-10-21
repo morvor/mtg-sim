@@ -56,3 +56,37 @@ fn slicer_goes_to_the_opponent_goaded_and_unsacrificeable() {
     assert_eq!(t.g.obj(slicer).controller, P0);
     assert!(!t.g.cant_be_sacrificed(slicer));
 }
+
+#[test]
+fn capricopian_the_attacked_player_pays_to_grow_it_and_send_it_elsewhere() {
+    cr!("508.7");
+    supported("Capricopian");
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let goat = t.battlefield(P0, "Capricopian");
+    t.g.objects[goat.0 as usize]
+        .counters
+        .insert("+1/+1".into(), 2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P1, "Forest", 2);
+    declare(&mut t, P0, &[(goat, Entity::Player(P1))]);
+    // Only the player it's attacking may activate the ability.
+    assert!(t.activate(P0, goat, 0, &[]).is_err());
+    t.answer_choose(P1, &[Entity::Player(P2)]);
+    t.activate(P1, goat, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(goat, "+1/+1"), 3);
+    let target = t
+        .g
+        .combat
+        .as_ref()
+        .and_then(|c| c.attack_target(goat));
+    assert_eq!(target, Some(Entity::Player(P2)));
+    // Now P1 isn't the player it's attacking.
+    assert!(t.activate(P1, goat, 0, &[]).is_err());
+}
