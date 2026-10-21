@@ -333,6 +333,65 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
                 .collect(),
         );
     }
+    // "... When you do, tap the copied creature ...", "When you do, exile that card.": a
+    // reflexive triggered ability linked to the copy exception (CR 603.12, 707.9g), whose
+    // "that creature" / "the copied creature" is the object copied.
+    if let Some(i) = lower.find(". when you do, ") {
+        if !block.is_ascii() {
+            return None;
+        }
+        let first = &block[..i + 1];
+        let reflexive = &block[i + ". when you do, ".len()..];
+        let text = reflexive
+            .to_lowercase()
+            .replace("the copied creature", "it")
+            .replace("that creature", "it")
+            .replace("that card", "it");
+        let body = crate::oracle::effects::parse_body_with_it(
+            &text,
+            ctx,
+            Sel::Var(crate::copy_rules::COPIED),
+        )?;
+        let mut out = enter_as_copy(first, ctx)?;
+        let extra = Effect::EnterCopyExtra {
+            only_if: None,
+            mods: vec![],
+            effect: Box::new(Effect::Reflexive {
+                body: Box::new(body),
+            }),
+        };
+        match out.iter().position(|a| {
+            matches!(&a.kind, AbilityKind::Static(st)
+                if matches!(&st.effect, StaticEffect::Replacement(d) if matches!(d.action, ReplacementAction::AsEnters(_))))
+        }) {
+            Some(i) => {
+                let a = std::sync::Arc::make_mut(&mut out[i]);
+                if let AbilityKind::Static(st) = &mut a.kind {
+                    if let StaticEffect::Replacement(d) = &mut st.effect {
+                        if let ReplacementAction::AsEnters(e) = &mut d.action {
+                            let old = std::mem::take(e.as_mut());
+                            **e = Effect::seq(vec![old, extra]);
+                        }
+                    }
+                }
+            }
+            None => out.push(AbilityDef::new(
+                AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+                    ReplacementDef {
+                        event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                        action: ReplacementAction::AsEnters(Box::new(extra)),
+                        self_replacement: true,
+                        optional: false,
+                    },
+                ))),
+                block,
+            )),
+        }
+        for a in &mut out {
+            std::sync::Arc::make_mut(a).text = block.into();
+        }
+        return Some(out);
+    }
     let r = l.strip_prefix("you may have ~ enter ")?;
     let (tapped, r) = match r.strip_prefix("tapped ") {
         Some(x) => (true, x),
@@ -463,6 +522,31 @@ fn copy_exceptions_ext(s: &str, ctx: &CompileContext) -> Option<(Vec<Modificatio
             (None, Some((rest, t))) => (Some(copy_type_filter(t)?), rest.to_string()),
             (o, _) => (o, c),
         };
+        // "it enters with a shield counter on it if you control that creature", "it has
+        // vanishing 3 if that creature doesn't have vanishing": a condition on the object
+        // it copies (CR 707.9f).
+        let (only_if, c) = match (only_if, c.rsplit_once(" if ")) {
+            (None, Some((rest, cond))) => {
+                let f = copied_object_condition(cond)?;
+                let json = serde_json::to_string(&f).ok()?;
+                (
+                    Some(Filter::Custom(
+                        format!("{}{json}", crate::copy_rules::COPIED_MATCHES).into(),
+                    )),
+                    rest.to_string(),
+                )
+            }
+            (o, _) => (o, c),
+        };
+        if only_if.is_some() && c.starts_with("it has ") {
+            let mods = copy_exceptions(&c, ctx)?;
+            extras.push(Effect::EnterCopyExtra {
+                only_if,
+                mods,
+                effect: Box::new(Effect::Noop),
+            });
+            continue;
+        }
         if let Some(r) = c.strip_prefix("it enters with ") {
             let (r, kw) = match r.split_once(" and has ") {
                 Some((a, k)) => (a, Some(k)),
@@ -521,6 +605,26 @@ fn copy_exceptions_ext(s: &str, ctx: &CompileContext) -> Option<(Vec<Modificatio
         mods.extend(copy_exceptions(&c, ctx)?);
     }
     (!mods.is_empty() || !extras.is_empty()).then_some((mods, extras))
+}
+
+/// "you control that creature", "that creature doesn't have vanishing", "that creature
+/// has flying": a condition on the object a permanent enters as a copy of.
+fn copied_object_condition(c: &str) -> Option<Filter> {
+    let c = c.trim();
+    if c == "you control that creature" || c == "you control that permanent" {
+        return Some(Filter::ControlledBy(PlayerRel::You));
+    }
+    let r = c
+        .strip_prefix("that creature ")
+        .or_else(|| c.strip_prefix("that permanent "))?;
+    let (neg, kw) = if let Some(k) = r.strip_prefix("doesn't have ") {
+        (true, k)
+    } else {
+        (false, r.strip_prefix("has ")?)
+    };
+    let k = crate::keywords::KeywordKind::from_name(kw)?;
+    let f = Filter::HasKeyword(k);
+    Some(if neg { Filter::not(f) } else { f })
 }
 
 /// "a creature", "a planeswalker" after "if it's".

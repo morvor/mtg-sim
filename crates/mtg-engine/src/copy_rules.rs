@@ -30,6 +30,23 @@ pub struct CopyExtra {
     pub effect: Effect,
 }
 
+/// The object a permanent entering as a copy copies, for its copy exceptions ("if you
+/// control that creature", "When you do, tap the copied creature").
+pub const COPIED: Var = vars::USER + 5120;
+
+/// `Filter::Custom` prefix: the object the entering permanent copies ([`COPIED`]) matches
+/// the filter (JSON) that follows: "except it has vanishing 3 if that creature doesn't
+/// have vanishing" (CR 707.9f).
+pub const COPIED_MATCHES: &str = "copy rules:the copied object matches:";
+
+/// Evaluates [`COPIED_MATCHES`].
+pub fn custom_filter(g: &Game, name: &str, _id: ObjectId, ctx: &Ctx) -> Option<bool> {
+    let json = name.strip_prefix(COPIED_MATCHES)?;
+    let f: Filter = serde_json::from_str(json).ok()?;
+    let copied = ctx.vars.get(&COPIED).and_then(|v| v.first()).and_then(|e| e.object());
+    Some(copied.is_some_and(|o| g.matches(o, &f, ctx)))
+}
+
 /// How a copy of a card defined by name is made.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NamedCopy {
@@ -47,10 +64,14 @@ pub enum NamedCopy {
 /// Performs the copy exception extras of a permanent that entered as a copy (`copy`: the
 /// copy effect it entered with). Counters it enters with are added to `counters`; other
 /// effects are returned to be performed as it enters.
+///
+/// `copied` is the object it copies, which the exceptions call "that creature" or "the
+/// copied creature" ([`COPIED`]).
 pub fn apply_copy_extras(
     g: &mut Game,
     id: ObjectId,
     copy: Option<u32>,
+    copied: Option<ObjectId>,
     extras: &[CopyExtra],
     counters: &mut Vec<(CounterKind, u32)>,
 ) -> Vec<(Ctx, Effect)> {
@@ -64,16 +85,50 @@ pub fn apply_copy_extras(
     // CR 707.9f: whether a conditional exception applies is determined from what the
     // permanent would be if the copy effect applied without it (its other exceptions
     // included): the characteristics it has now.
+    let copied_var: Vec<Entity> = copied.map(Entity::Object).into_iter().collect();
+    let extras: Vec<CopyExtra> = extras
+        .iter()
+        .map(|x| {
+            let mut x = x.clone();
+            x.ctx.set_var(COPIED, copied_var.clone());
+            x
+        })
+        .collect();
     let applying: Vec<&CopyExtra> = extras
         .iter()
         .filter(|x| {
             x.only_if.as_ref().is_none_or(|f| {
                 let ctl = g.obj(id).controller;
-                g.matches(id, f, &Ctx::new(Some(id), ctl))
+                let mut c = Ctx::new(Some(id), ctl);
+                c.set_var(COPIED, copied_var.clone());
+                g.matches(id, f, &c)
             })
         })
         .collect();
     let mods: Vec<Modification> = applying.iter().flat_map(|x| x.mods.clone()).collect();
+    // An exception adding an ability that makes it enter with counters ("it has vanishing
+    // 3"): it entered with that ability, so with those counters (CR 702.63a, 614.1c).
+    for m in &mods {
+        let abilities = match m {
+            Modification::AddKeyword(k) => crate::kw::derived(k),
+            Modification::AddAbility(a) => vec![a.clone()],
+            _ => vec![],
+        };
+        for a in abilities {
+            if let AbilityKind::Static(st) = &a.kind {
+                if let StaticEffect::Replacement(ReplacementDef {
+                    event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                    action: ReplacementAction::EnterWithCounters(kind, Value::Const(n)),
+                    ..
+                }) = &st.effect
+                {
+                    if *n > 0 {
+                        counters.push((kind.clone(), *n as u32));
+                    }
+                }
+            }
+        }
+    }
     if !mods.is_empty() {
         if let Some(e) = g.effects.iter_mut().find(|e| e.id == eid) {
             if let Some(Layer1::Copy { exceptions, .. }) = &mut e.layer1 {
