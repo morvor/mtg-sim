@@ -513,6 +513,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     if let Some(r) = adjective_first_in_list(s) {
         return Some(r);
     }
+    // "legendary or Rat card", "instant, sorcery, and/or Tamiyo planeswalker cards".
+    if let Some(r) = super::patterns::filter_qualities::listed_kinds(s) {
+        return Some(r);
+    }
     let mut s = s.trim_start();
     let mut parts: Vec<Filter> = Vec::new();
     // "another"/"other"
@@ -1040,6 +1044,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {
             (Filter::InZone(ZoneKind::Battlefield), r)
+        } else if let Some((f, r)) = super::patterns::filter_qualities::early_suffix(t) {
+            // "without first strike, double strike, or vigilance", "that's an artifact or
+            // that has mana value 3 or less" (read before the core's shorter readings).
+            (f, r)
         } else if let Some((f @ Filter::Or(_), r)) = t
             .starts_with("with ")
             .then(|| parse_with_suffix(t))
