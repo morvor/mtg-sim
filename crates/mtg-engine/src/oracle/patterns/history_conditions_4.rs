@@ -1080,3 +1080,53 @@ fn trigger_cost_has_x(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: that spell's mana cost or that ability's activation cost contains {X}", priority: 900, parse: trigger_cost_has_x } }
+
+// ---------------------------------------------------------------------------
+// Prime numbers
+// ---------------------------------------------------------------------------
+
+/// "you control a prime number of lands" (Zimone, All-Questioning).
+fn prime_number(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("you control a prime number of ")?;
+    let sg = r.strip_suffix('s')?;
+    crate::types::CardType::from_word(sg)?;
+    Some(Condition::Custom(
+        format!("{}{sg}", crate::kw::damage_history_4::PRIME_NUMBER_YOU_CONTROL).into(),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: you control a prime number of [permanents]", priority: 900, parse: prime_number } }
+
+/// "..., if ... you control a prime number of lands, create [a token], then put that many
+/// +1/+1 counters on it." (Zimone, All-Questioning): "that many" is the number of lands
+/// you control, the prime number.
+fn prime_that_many(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let i = lower.find("you control a prime number of ")?;
+    let kind = lower[i + "you control a prime number of ".len()..]
+        .split([',', ' '])
+        .next()?
+        .to_string();
+    let j = lower.find(", then put that many ")?;
+    let rest = &lower[j + ", then put that many ".len()..];
+    let (counters, on) = rest.split_once(" counters on ")?;
+    let on = on.strip_suffix('.')?;
+    let rewritten = format!(
+        "{}, then put a {counters} counter on {on} for each {} you control.",
+        &t[..j],
+        kind.strip_suffix('s')?
+    );
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = t.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: a prime number of lands ... that many", priority: 40, parse: prime_that_many } }

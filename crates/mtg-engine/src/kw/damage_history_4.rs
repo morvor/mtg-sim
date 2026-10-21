@@ -71,6 +71,14 @@ fn cost_has_x(g: &Game, id: ObjectId) -> bool {
     }
 }
 
+/// `Condition::Custom` prefix: you control a prime number of permanents of the card type
+/// that follows ("you control a prime number of lands", Zimone, All-Questioning).
+pub const PRIME_NUMBER_YOU_CONTROL: &str = "history:you control a prime number of:";
+
+fn is_prime(n: usize) -> bool {
+    n >= 2 && (2..n).take_while(|d| d * d <= n).all(|d| n % d != 0)
+}
+
 /// The greatest amount of damage one source dealt to one recipient this turn.
 pub fn greatest_damage_by_a_source(g: &Game) -> i64 {
     let mut totals: BTreeMap<(ObjectId, Entity), i64> = BTreeMap::new();
@@ -100,6 +108,16 @@ impl KeywordRules for DamageHistory {
 
     fn custom_value(&self, g: &Game, name: &str, _ctx: &Ctx) -> Option<i64> {
         (name == GREATEST_DAMAGE_BY_A_SOURCE).then(|| greatest_damage_by_a_source(g))
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        let t = name.strip_prefix(PRIME_NUMBER_YOU_CONTROL)?;
+        let ty = CardType::from_word(t)?;
+        let n = g
+            .permanents()
+            .filter(|o| o.controller == ctx.controller && o.is(ty))
+            .count();
+        Some(is_prime(n))
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {

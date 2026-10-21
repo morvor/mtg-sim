@@ -1286,3 +1286,38 @@ fn unbound_flourishing_copies_an_instant_or_sorcery_with_x_in_its_mana_cost() {
     t.resolve_all();
     assert_eq!(t.life(P1), 14, "no {{X}}: no copy");
 }
+
+#[test]
+fn zimone_makes_primo_with_a_prime_number_of_lands() {
+    cr!("603.4", "122.1");
+    ruling!(
+        "Zimone, All-Questioning",
+        "If you don't control a prime number of lands as Zimone's ability tries to resolve, it won't resolve."
+    );
+    assert_supported("Zimone, All-Questioning");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Zimone, All-Questioning");
+    t.lands(P0, "Forest", 2);
+    t.enter(P0, "Island");
+    t.g.flush_events();
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let primo = t.named_on_battlefield("Primo, the Indivisible");
+    assert_eq!(primo.len(), 1);
+    assert_eq!(t.counters(primo[0], "+1/+1"), 3);
+}
+
+#[test]
+fn zimone_does_nothing_with_four_lands() {
+    cr!("603.4");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Zimone, All-Questioning");
+    t.lands(P0, "Forest", 3);
+    t.enter(P0, "Island");
+    t.g.flush_events();
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Primo, the Indivisible").is_empty());
+}
