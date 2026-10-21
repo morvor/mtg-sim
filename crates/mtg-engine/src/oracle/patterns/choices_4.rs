@@ -288,6 +288,64 @@ fn target_players_other_than_that_player(l: &str, b: &mut Builder) -> Option<Eff
 
 inventory::submit! { EffectPattern { name: "choices 4: target players other than that player each", priority: 120, parse: target_players_other_than_that_player } }
 
+/// A verb phrase in the third person singular: "draw a card, then discard a card at
+/// random" → "draws a card, then discards a card at random".
+fn third_person(pred: &str) -> String {
+    pred.split(", then ")
+        .map(|part| {
+            let (verb, rest) = part.split_once(' ').unwrap_or((part, ""));
+            let verb = match verb {
+                "lose" => "loses".to_string(),
+                v if v.ends_with('s') || v.ends_with("sh") => format!("{v}es"),
+                v => format!("{v}s"),
+            };
+            if rest.is_empty() {
+                verb
+            } else {
+                format!("{verb} {rest}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", then ")
+}
+
+/// "you and those players each draw a card, then discard a card at random" (Zurzoth, Chaos
+/// Rider: the players the triggering attackers attack), "you and the controller of those
+/// creatures each draw a card" (Nelly Borca, Impulsive Accuser): each of the players
+/// performs the instructions, each instruction by all of them in APNAP order before the
+/// next (CR 101.4, 608.2e).
+fn you_and_players_each(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you and ")?;
+    let (who, pred) = r.split_once(" each ")?;
+    if !b.in_trigger {
+        return None;
+    }
+    let others = match who {
+        // The players the triggering creatures attack.
+        "those players" => PlayerFilter::History(Box::new(Condition::SelNonEmpty(Sel::All(
+            Filter::and(vec![
+                Filter::In(Box::new(Sel::TriggerObjects)),
+                Filter::AttackingPlayer(PlayerRel::Iterated),
+            ]),
+        )))),
+        "the controller of those creatures" => PlayerFilter::Ref(Box::new(
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects)),
+        )),
+        _ => return None,
+    };
+    let e = parse_clause(&format!("each player {}", third_person(pred)), b)?;
+    let group = PlayerRef::Each(PlayerFilter::Or(vec![PlayerFilter::You, others]));
+    let json = serde_json::to_string(&e).ok()?;
+    let each = serde_json::to_string(&PlayerRef::EachPlayer).ok()?;
+    if !json.contains(&each) {
+        return None;
+    }
+    let json = json.replace(&each, &serde_json::to_string(&group).ok()?);
+    serde_json::from_str(&json).ok()
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: you and [those players] each", priority: 120, parse: you_and_players_each } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -300,6 +358,8 @@ mod tests {
             ("Sorcery", "You may put a +1/+1 counter on a creature. Then choose odd or even. Return each creature with power of the chosen quality to its owner's hand."),
             ("Legendary Creature", "When ~ enter and whenever you cast a spell with power, toughness, or mana value 4, choose one that hasn't been chosen this turn.\n• Create a 0/4 colorless Wall creature token with defender.\n• ~ deal 3 damage to each opponent.\n• Put two +1/+1 counters on target creature.\n• Draw a card."),
             ("Enchantment — Aura Curse", "Enchant player\nAt the beginning of enchanted player's upkeep, any number of target players other than that player each draw cards equal to the number of Curses attached to that player."),
+            ("Legendary Creature", "Whenever one or more Devils you control attack one or more players, you and those players each draw a card, then discard a card at random."),
+            ("Legendary Creature", "Whenever one or more creatures an opponent controls deal combat damage to one or more of your opponents, you and the controller of those creatures each draw a card."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

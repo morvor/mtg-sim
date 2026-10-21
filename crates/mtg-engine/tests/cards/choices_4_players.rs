@@ -138,3 +138,57 @@ fn curse_of_surveillance_other_target_players_draw_per_curse() {
     assert!(!cands.is_empty());
     assert!(cands.iter().all(|c| !c.contains(&Entity::Player(P1))));
 }
+
+#[test]
+fn zurzoth_you_and_the_players_devils_attack_draw_then_discard_at_random() {
+    cr!("101.4", "608.2e");
+    ruling!(
+        "Zurzoth, Chaos Rider",
+        "Devils you control that attack a planeswalker won't cause any player to draw or discard a card."
+    );
+    supported("Zurzoth, Chaos Rider");
+    let mut t = TestGame::new(4);
+    let z = t.battlefield(P0, "Zurzoth, Chaos Rider");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let devil = t.battlefield(P0, "Forge Devil");
+    let jace = t.battlefield(P3, "Jace Beleren");
+    for p in [P0, P1, P2, P3] {
+        t.hand(p, "Lightning Bolt");
+    }
+    let hands: Vec<usize> = [P0, P1, P2, P3].iter().map(|p| t.hand_size(*p)).collect();
+    // Zurzoth attacks P1, the Bears (not a Devil) attack P2, a Devil attacks P3's
+    // planeswalker.
+    t.attack(
+        &[
+            (z, Entity::Player(P1)),
+            (bears, Entity::Player(P2)),
+            (devil, Entity::Object(jace)),
+        ],
+        &[],
+    );
+    let gy: Vec<usize> = [P0, P1, P2, P3]
+        .iter()
+        .map(|p| t.graveyard_size(*p))
+        .collect();
+    assert_eq!(gy, vec![1, 1, 0, 0]);
+    let now: Vec<usize> = [P0, P1, P2, P3].iter().map(|p| t.hand_size(*p)).collect();
+    assert_eq!(now, hands);
+}
+
+#[test]
+fn nelly_borca_you_and_the_attacking_player_draw() {
+    cr!("101.4");
+    supported("Nelly Borca, Impulsive Accuser");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Nelly Borca, Impulsive Accuser");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    let hands = (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2));
+    t.attack(&[(bears, Entity::Player(P2))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P2), 18);
+    assert_eq!(
+        (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2)),
+        (hands.0 + 1, hands.1 + 1, hands.2)
+    );
+}
