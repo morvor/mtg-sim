@@ -238,7 +238,21 @@ pub fn event_in_range(g: &Game, controller: PlayerId, info: &EventInfo) -> bool 
 
 /// Whether a triggered ability that just triggered really does (CR 801.7).
 pub fn trigger_in_range(g: &Game, t: &PendingTrigger) -> bool {
-    !option_used(g) || exempt_source(g, Some(t.source)) || event_in_range(g, t.controller, &t.event)
+    if !option_used(g) || exempt_source(g, Some(t.source)) {
+        return true;
+    }
+    // "Whenever [a creature] becomes blocked": the event is the creature becoming blocked.
+    // The blockers are recorded for reference, but they aren't part of it (unlike
+    // "becomes blocked by a creature"; CR 801.7's example).
+    if let crate::ability::AbilityKind::Triggered(ta) = &t.ability.kind {
+        if matches!(ta.trigger, crate::ability::TriggerCond::BecomesBlocked(_)) {
+            let mut ev = t.event.clone();
+            ev.other = None;
+            ev.objects.clear();
+            return event_in_range(g, t.controller, &ev);
+        }
+    }
+    event_in_range(g, t.controller, &t.event)
 }
 
 /// CR 801.8, 801.9: an Aura can't enchant, and an Equipment or Fortification can't be
