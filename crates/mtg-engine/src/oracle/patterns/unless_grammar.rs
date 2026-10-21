@@ -1011,8 +1011,12 @@ fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) ->
         "" => (PlayerFilter::Any, true),
         "you" => (PlayerFilter::You, false),
         "you or planeswalkers you control" => (PlayerFilter::You, true),
+        // "Creatures can't attack planeswalkers you control unless ..." (Onakke
+        // Oathkeeper): attacking you is free (see `kw::combat_history_4`).
+        "planeswalkers you control" => (PlayerFilter::You, true),
         _ => return None,
     };
+    let walkers_only = defender_s.trim() == "planeswalkers you control";
     if block && !defender_s.trim().is_empty() {
         return None;
     }
@@ -1065,10 +1069,13 @@ fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) ->
     }
     if let Some(at) = action.find(" for each ") {
         let each = &action[at + " for each ".len()..];
-        if let Some(noun) = each
-            .strip_suffix(" they control that's attacking you")
-            .or_else(|| each.strip_suffix(" they control that's attacking"))
-        {
+        let attacking_suffix = if walkers_only {
+            each.strip_suffix(" they control that's attacking a planeswalker you control")
+        } else {
+            each.strip_suffix(" they control that's attacking you")
+                .or_else(|| each.strip_suffix(" they control that's attacking"))
+        };
+        if let Some(noun) = attacking_suffix {
             let (f, _, t) = parse_object_phrase(noun)?;
             if !end(t).is_empty()
                 || !serde_json::to_string(&f)
@@ -1090,6 +1097,17 @@ fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) ->
         return None;
     }
     let mut out = Vec::new();
+    if walkers_only && action.contains(" for each ") {
+        return None;
+    }
+    let filter = if walkers_only {
+        Filter::and(vec![
+            filter,
+            Filter::Custom(crate::kw::combat_history_4::ATTACKING_A_PLANESWALKER.into()),
+        ])
+    } else {
+        filter
+    };
     if attack {
         out.push(Restriction::AttackCost {
             attackers: filter.clone(),

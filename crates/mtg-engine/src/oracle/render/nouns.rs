@@ -212,6 +212,9 @@ impl Renderer<'_> {
         let word = match c {
             Cmp::Lt => "lesser",
             Cmp::Gt => "greater",
+            // "a creature card with equal or lesser toughness".
+            Cmp::Le => "equal or lesser",
+            Cmp::Ge => "equal or greater",
             _ => return None,
         };
         let v = self.value(v);
@@ -661,16 +664,23 @@ impl Renderer<'_> {
             Filter::Blocking => np.status.push("blocking".into()),
             Filter::Blocked => np.status.push("blocked".into()),
             Filter::Unblocked => np.status.push("unblocked".into()),
+            // "Creatures attacking the last chosen player": the player chosen for the
+            // source, its latest choice (made again each turn).
+            Filter::AttackingPlayer(PlayerRel::Chosen) => {
+                np.post.push("attacking the {opt:last} chosen player".into());
+            }
             Filter::AttackingPlayer(r) => {
                 let who = self.rel_object(*r);
                 np.post.push(format!("attacking {who}"));
             }
+            // "target creature that's blocking it", "a creature blocking ~": cards say
+            // it either way.
             Filter::BlockingSource if self.self_before_target => {
-                np.post.push("blocking ~it".into())
+                np.post.push("{opt:that's} blocking ~it".into())
             }
             Filter::BlockingSource => {
                 let m = self.me();
-                np.post.push(format!("blocking {m}"))
+                np.post.push(format!("{{opt:that's}} blocking {m}"))
             }
             Filter::BlockedBySource if self.self_before_target => {
                 np.post.push("blocked by ~it".into())
@@ -681,7 +691,7 @@ impl Renderer<'_> {
             }
             Filter::BlockingAnyOf(s) => {
                 let s = self.sel(s, Case::Obj);
-                np.post.push(format!("blocking {s}"));
+                np.post.push(format!("{{opt:that's}} blocking {s}"));
             }
             Filter::BandedWith(s) => {
                 let s = self.sel(s, Case::Obj);
@@ -720,7 +730,7 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("targeted by {s}"));
             }
-            Filter::AttackingAlone => np.post.push("attacking alone".into()),
+            Filter::AttackingAlone => np.post.push("{opt:that's} attacking alone".into()),
             Filter::BlockingAlone => np.post.push("blocking alone".into()),
             Filter::AttackingPlayerAlone => np.post.push("attacking a player alone".into()),
             Filter::HadToAttack => np.rel.push("that had to attack".into()),
@@ -747,6 +757,16 @@ impl Renderer<'_> {
             Filter::PowerVsBase(c) => {
                 np.with
                     .push(format!("power {}", cmp_phrase(*c, "its base power")));
+            }
+            // "destroy all permanents with that spell's mana value": equal to it.
+            Filter::ManaValue(Cmp::Eq, v)
+                if matches!(v.as_ref(), Value::ManaValueOf(s) if matches!(s.as_ref(), Sel::TriggerSpell)) =>
+            {
+                let v = self.value(v);
+                np.with.push(format!(
+                    "{{alt:mana value {}|that spell's mana value}}",
+                    cmp_phrase(Cmp::Eq, &v)
+                ));
             }
             Filter::ManaValue(c, v) => {
                 let q = match self.lesser_greater(*c, v, "mana value") {
@@ -790,6 +810,10 @@ impl Renderer<'_> {
                 let s = self.shared_with(s);
                 np.rel.push(format!("that shares a color with {s}"));
             }
+            Filter::SharesManaValue(s) => {
+                let s = self.shared_with(s);
+                np.rel.push(format!("with the same mana value as {s}"));
+            }
             Filter::HasKeyword(k) => np.with.push(self.keyword_kind_word(*k)),
             Filter::HasCounter(k) => np.with_on.push(match k {
                 Some(k) => counter_name(k),
@@ -818,6 +842,22 @@ impl Renderer<'_> {
             // "a creature dealt damage this way".
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
+            }
+            // "each creature tapped this way" (the most recent tap instruction or cost).
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::TAPPED)) => {
+                np.post.push("tapped this way".into())
+            }
+            // "each artifact that became a creature this way".
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::MODIFIED)) => {
+                np.post.push("that became a creature this way".into())
+            }
+            // "all cards exiled this way" (`referents_values_4`).
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v)
+                    if *v == crate::oracle::patterns::referents_values_4::EXILED_SNAPSHOT) =>
+            {
+                np.post.push("exiled this way".into());
+                np.kind.get_or_insert("card");
             }
             // "a card exiled with ~": the cards an ability of this object exiled
             // (CR 607.2a).
@@ -944,6 +984,16 @@ impl Renderer<'_> {
                 np.rel.push(CAST_FROM.into());
             }
             Filter::CastWithCost(name) => np.status.push(name.to_string()),
+            // An instant or sorcery deals damage only as it resolves, the turn it's an
+            // object on the stack (CR 400.7, 608.2): "dealt damage by ~" is this turn.
+            Filter::DealtDamageThisTurnBy(sel)
+                if matches!(sel.as_ref(), Sel::This)
+                    && (self.info.card_types.contains(CardType::Instant)
+                        || self.info.card_types.contains(CardType::Sorcery)) =>
+            {
+                let s = self.sel(sel, Case::Obj);
+                np.rel.push(format!("dealt damage by {s} {{opt:this turn}}"));
+            }
             Filter::DealtDamageThisTurnBy(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("dealt damage by {s} this turn"));
@@ -1649,6 +1699,13 @@ impl Renderer<'_> {
             }
             // "among creatures they control": the player each player is.
             PlayerRel::Iterated => "{alt:that player controls|they control}".into(),
+            // "Whenever ... deal combat damage to an opponent, destroy target artifact that
+            // opponent controls."
+            PlayerRel::TriggerPlayer
+                if self.trigger_player == Some(super::players::OPPONENT_EVENT) =>
+            {
+                "{alt:that player controls|that opponent controls|they control}".into()
+            }
             other => {
                 let p = self.rel_subject(other);
                 format!("{p} controls")

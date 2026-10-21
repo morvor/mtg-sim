@@ -34,9 +34,14 @@ inventory::submit! { ConditionPattern { name: "you control N creatures that shar
 /// Evaluates [`SHARE_A_TYPE`] conditions.
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     let n: usize = name.strip_prefix(SHARE_A_TYPE)?.parse().ok()?;
+    Some(player_has_n_sharing(g, ctx.controller, n))
+}
+
+/// Whether some creature type is had by at least `n` creatures player `p` controls.
+pub fn player_has_n_sharing(g: &Game, p: crate::types::PlayerId, n: usize) -> bool {
     let mine: Vec<&crate::object::Characteristics> = g
         .permanents()
-        .filter(|o| o.controller == ctx.controller && o.is_creature())
+        .filter(|o| o.controller == p && o.is_creature())
         .map(|o| &o.chars)
         .collect();
     let every = mine
@@ -60,5 +65,5 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     let best = counts.values().copied().max().unwrap_or(0);
     // Creatures that are every creature type share any type with the others (and with
     // each other).
-    Some(every >= n || (best > 0 && best + every >= n))
+    every >= n || (best > 0 && best + every >= n)
 }

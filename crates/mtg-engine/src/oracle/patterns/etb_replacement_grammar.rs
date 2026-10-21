@@ -100,6 +100,11 @@ enum Entry {
     TappedAndAttacking,
 }
 
+/// The objects an instruction puts onto the battlefield, chosen before it's known whether
+/// they enter attacking ("If that card is an enchantment card, it enters tapped and
+/// attacking").
+const ENTERING_CHOSEN: Var = vars::USER + 13371;
+
 /// "enters with N counters on it", "enters tapped", "enters tapped and attacking".
 fn entry(s: &str, ctx: &CompileContext) -> Option<Entry> {
     let s = s.trim();
@@ -127,6 +132,18 @@ fn entry(s: &str, ctx: &CompileContext) -> Option<Entry> {
 
 /// The last instruction of `e` that puts objects onto the battlefield.
 fn last_entry_effect(e: &mut Effect) -> Option<&mut Effect> {
+    // "For each card you've discarded this turn, create a token that's a copy of ~. The
+    // tokens enter tapped and attacking." (Living Laser): the tokens are created at once
+    // (CR 609.3), so "the tokens" are all of them.
+    if let Effect::Repeat { times, effect } = e {
+        if let Effect::CreateTokenCopy { count, .. } = &mut **effect {
+            if matches!(count, Value::Const(1)) {
+                *count = times.clone();
+                *e = std::mem::take(&mut **effect);
+                return Some(e);
+            }
+        }
+    }
     match e {
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_entry_effect),
         Effect::May { effect, .. } => last_entry_effect(effect),
@@ -311,6 +328,7 @@ fn entering_subject(s: &str) -> Option<&str> {
         "it enters ",
         "that creature enters ",
         "the token enters ",
+        "the tokens enter ",
         "that card enters ",
         "that permanent enters ",
     ] {
@@ -374,6 +392,41 @@ fn f_enters_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         None => modify_entry(target, &entry),
         Some(c) => {
             if let Some(f) = entering_filter(c) {
+                // "If that card is an enchantment card, it enters tapped and attacking."
+                // (Summoner's Grimoire): whether it's put onto the battlefield attacking
+                // depends on the card it is (CR 508.4). There's no replacement effect for
+                // entering attacking, so the card is chosen first and moved one way or the
+                // other.
+                if matches!(entry, Entry::TappedAndAttacking) {
+                    let Effect::Move { what, to } = target else {
+                        return false;
+                    };
+                    if to.attacking {
+                        return false;
+                    }
+                    let mut attacking = to.clone();
+                    attacking.tapped = true;
+                    attacking.attacking = true;
+                    let chosen = Sel::Var(ENTERING_CHOSEN);
+                    *target = Effect::seq(vec![
+                        Effect::Store {
+                            var: ENTERING_CHOSEN,
+                            sel: what.clone(),
+                        },
+                        Effect::If {
+                            cond: Condition::SelMatches(chosen.clone(), f),
+                            then: Box::new(Effect::Move {
+                                what: chosen.clone(),
+                                to: attacking,
+                            }),
+                            otherwise: Box::new(Effect::Move {
+                                what: chosen,
+                                to: to.clone(),
+                            }),
+                        },
+                    ]);
+                    return true;
+                }
                 let original = target.clone();
                 let Some(e) = self_replacement(f, &entry, original) else {
                     return false;
@@ -696,7 +749,9 @@ fn a_mana_spent_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Abi
             self_replacement: false,
             optional: false,
         },
-        duration: Duration::EndOfTurn,
+        // Until it applies, once: to the permanent that spell becomes (another object
+        // later, CR 400.7), as "When you spend this mana ..., it enters with ..." is.
+        duration: Duration::Permanent,
         uses: Some(1),
     });
     let abilities = crate::oracle::parse_ability(head, ctx)?;

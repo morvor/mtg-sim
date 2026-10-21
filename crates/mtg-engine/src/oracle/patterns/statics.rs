@@ -115,6 +115,17 @@ pub(crate) fn quote_names_card(normalized: &str, ctx: &CompileContext) -> bool {
             return with_name != crate::oracle::normalize(q, &anonymous);
         }
     }
+    // A quote nested in a quote ("Enchanted Forest has '{1}, {T}, Sacrifice this land:
+    // ...'", Old-Growth Troll): its self-references are the object it's granted to.
+    for q in quoted_segments(&raw) {
+        let doubled = super::tokens_copies_create::nested_quotes_doubled(q);
+        for iq in quoted_segments(&doubled) {
+            let with_name = crate::oracle::normalize(iq, ctx);
+            if bare(&with_name) == bare(normalized) {
+                return with_name != crate::oracle::normalize(iq, &anonymous);
+            }
+        }
+    }
     true
 }
 
@@ -1623,6 +1634,19 @@ fn type_words(s: &str) -> Option<TypeWords> {
         // base P/T (CR 613.4b).
         let mv = Value::ManaValueOf(Box::new(Sel::Var(vars::AFFECTED)));
         tw.pt = Some((mv.clone(), mv));
+        s = r;
+    } else if let Some((r, kind)) = s
+        .split_once(" with power and toughness each equal to the number of ")
+        .and_then(|(r, c)| {
+            // "... the number of loyalty counters on it" (Spark Rupture): each affected
+            // object's own counters (CR 613.4b).
+            let c = c.strip_suffix(" counters on it")?;
+            let (kind, rest) = crate::oracle::costs::counter_kind(c)?;
+            rest.trim().is_empty().then_some((r, kind))
+        })
+    {
+        let n = Value::CountersOn(Box::new(Sel::Var(vars::AFFECTED)), Some(kind));
+        tw.pt = Some((n.clone(), n));
         s = r;
     } else if let Some(i) = s.find(" with ") {
         for item in split_list(&s[i + " with ".len()..]) {

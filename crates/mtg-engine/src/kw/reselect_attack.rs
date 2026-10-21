@@ -17,6 +17,9 @@ use crate::types::*;
 pub const RESELECT_TARGET: &str = "reselect attack of target:";
 /// `Effect::Custom` name: reselect for each attacking creature.
 pub const RESELECT_EACH: &str = "reselect attack of each attacking creature";
+/// `Effect::Custom` name: "you may reselect which player ~ is attacking" (Capricopian):
+/// the source, among players only.
+pub const RESELECT_SELF_PLAYER: &str = "reselect which player the source is attacking";
 
 /// What `attacker` could be made to attack instead of what it's attacking now: an opponent
 /// of its controller, or a planeswalker or battle of one, within the limits of CR
@@ -45,11 +48,14 @@ pub fn reselect_options(g: &Game, attacker: ObjectId) -> Vec<Entity> {
         .collect()
 }
 
-fn reselect(g: &mut Game, attacker: ObjectId, ctx: &Ctx) {
+fn reselect(g: &mut Game, attacker: ObjectId, ctx: &Ctx, players_only: bool) {
     if !g.is_attacking(attacker) || g.obj(attacker).zone != Zone::Battlefield {
         return;
     }
-    let options = reselect_options(g, attacker);
+    let mut options = reselect_options(g, attacker);
+    if players_only {
+        options.retain(|e| matches!(e, Entity::Player(_)));
+    }
     if options.is_empty() {
         return;
     }
@@ -75,8 +81,11 @@ impl KeywordRules for ReselectAttack {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        let players_only = name == RESELECT_SELF_PLAYER;
         let attackers: Vec<ObjectId> = if name == RESELECT_EACH {
             g.attackers()
+        } else if players_only {
+            ctx.source.map(|s| g.current(s)).into_iter().collect()
         } else if let Some(slot) = name
             .strip_prefix(RESELECT_TARGET)
             .and_then(|s| s.parse::<u8>().ok())
@@ -86,7 +95,7 @@ impl KeywordRules for ReselectAttack {
             return false;
         };
         for a in attackers {
-            reselect(g, a, ctx);
+            reselect(g, a, ctx, players_only);
         }
         true
     }

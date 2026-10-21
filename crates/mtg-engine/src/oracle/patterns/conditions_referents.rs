@@ -846,6 +846,10 @@ fn object_predicate(sel: &Sel, r: &str, b: &mut Builder) -> Option<Condition> {
         return possessive(sel, r, b);
     }
     let r = r.trim();
+    // CR 506.7: "if that creature had to attack this combat" (Firkraag).
+    if end(r) == "had to attack this combat" {
+        return Some(Condition::SelMatches(sel.clone(), Filter::HadToAttack));
+    }
     for (p, neg) in [
         ("isn't ", true),
         ("wasn't ", true),

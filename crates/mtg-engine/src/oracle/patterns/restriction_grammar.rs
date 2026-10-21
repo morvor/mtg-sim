@@ -770,7 +770,12 @@ fn effect_players(s: &str, b: &mut Builder) -> Option<PlayerFilter> {
         | PlayerRef::ControllerOf(_)
         | PlayerRef::OwnerOf(_)
         | PlayerRef::DefendingPlayer
-        | PlayerRef::TriggerPlayer => PlayerFilter::Ref(Box::new(r)),
+        | PlayerRef::TriggerPlayer
+        // "they" for the players an earlier instruction affected ("If a player is dealt
+        // damage this way, they can't gain life for the rest of the game"; fixed as the
+        // effect begins).
+        | PlayerRef::Var(_)
+        | PlayerRef::Each(_) => PlayerFilter::Ref(Box::new(r)),
         _ => return None,
     })
 }
@@ -901,6 +906,8 @@ fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
                 | Restriction::CantBlockAlone(_)
                 | Restriction::CantTransform(_)
                 | Restriction::CantActivate { .. }
+                // "it can't be sacrificed this turn" (Slicer, Hired Muscle).
+                | Restriction::CantBeSacrificed(_)
         )
     });
     if !ok || rs.is_empty() {
@@ -1014,14 +1021,16 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         // "Creatures target opponent controls attack ~ if able" (Gideon Jura): only a
         // planeswalker or battle can be attacked (CR 508.1b).
         let tl = b.ctx.type_line;
-        if !(tl.card_types.contains(CardType::Planeswalker) || tl.card_types.contains(CardType::Battle)) {
+        if !(tl.card_types.contains(CardType::Planeswalker)
+            || tl.card_types.contains(CardType::Battle))
+        {
             return None;
         }
         vec![Restriction::MustAttackObject {
             attackers: f,
             target: Filter::Source,
         }]
-   } else if let Some(p) = rest
+    } else if let Some(p) = rest
         .strip_prefix("attacks ")
         .or_else(|| rest.strip_prefix("attack "))
     {

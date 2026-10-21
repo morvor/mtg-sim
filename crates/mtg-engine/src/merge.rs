@@ -46,6 +46,12 @@ pub const MUTATES_SELF: &str = "mutates:self";
 pub const MELD_EFFECT: &str = "meld into:";
 /// `Condition::Custom` name: "you both own and control [this] and its meld partner".
 pub const MELD_PAIR_CONDITION: &str = "own and control meld pair";
+/// `Effect::Custom`: "If ~ and a creature named [partner] are attacking, and you both own
+/// and control them, exile them, then meld them into [result]." (Mishra, Claimed by Gix);
+/// with [`MELD_ENTERS_ATTACKING`] after it, "It enters tapped and attacking."
+pub const MELD_ATTACKING_PAIR: &str = "meld attacking pair";
+/// Suffix of [`MELD_ATTACKING_PAIR`]: the melded permanent enters tapped and attacking.
+pub const MELD_ENTERS_ATTACKING: &str = ":enters tapped and attacking";
 
 /// The cards and tokens that represent `id`, topmost first. A melded component counts as
 /// its two cards. Empty for an object represented by a single card or token.
@@ -669,6 +675,19 @@ pub fn meld(
     result: Arc<CardDef>,
     controller: PlayerId,
 ) -> Option<ObjectId> {
+    meld_entering(g, a, b, result, controller, false)
+}
+
+/// [`meld`]; `attacking`: the melded permanent enters tapped and attacking what its
+/// controller chooses (CR 508.4).
+fn meld_entering(
+    g: &mut Game,
+    a: ObjectId,
+    b: ObjectId,
+    result: Arc<CardDef>,
+    controller: PlayerId,
+    attacking: bool,
+) -> Option<ObjectId> {
     let part = |g: &Game, x: ObjectId| {
         g.is_live(x)
             && g.obj(x).kind == ObjKind::Card
@@ -695,6 +714,11 @@ pub fn meld(
     // CR 903.3b: melded with a commander, the melded permanent is that commander.
     mark_commander(g, m);
     crate::stickers::redirect(g, &[a, b], m);
+    let attack = if attacking {
+        crate::combat::choose_attack_target_for_new_attacker(g, controller)
+    } else {
+        None
+    };
     let new = g.move_object_ev(MoveEv {
         obj: m,
         to: Zone::Battlefield,
@@ -703,6 +727,8 @@ pub fn meld(
         by: Some(controller),
         etb: EtbInfo {
             controller: Some(controller),
+            tapped: attacking,
+            attacking: attack,
             ..Default::default()
         },
         source: None,
@@ -810,6 +836,47 @@ pub fn meld_effect(g: &mut Game, result_name: &str, ctx: &Ctx) {
     }
 }
 
+/// [`MELD_ATTACKING_PAIR`]: if the source and a permanent named as its meld partner are
+/// both attacking and their controller owns and controls both, they're exiled and melded
+/// (CR 701.42a); the melded permanent may enter tapped and attacking.
+fn meld_attacking_pair(g: &mut Game, enters_attacking: bool, ctx: &Ctx) {
+    let Some(src) = ctx.source else {
+        return;
+    };
+    let p = ctx.controller;
+    if !g.is_attacking(src) {
+        return;
+    }
+    let Some((result, partners)) = meld_pair(g, src, p, "") else {
+        return;
+    };
+    let partners: Vec<ObjectId> = partners
+        .into_iter()
+        .filter(|x| g.is_attacking(*x))
+        .collect();
+    let partner = match partners.as_slice() {
+        [] => return,
+        [one] => *one,
+        _ => g
+            .ask_objects(
+                p,
+                Some(src),
+                "Choose the permanent to meld",
+                partners.clone(),
+                1,
+                1,
+            )
+            .first()
+            .copied()
+            .unwrap_or(partners[0]),
+    };
+    let a = g.move_object(src, Zone::Exile, MoveCause::Effect, Some(p));
+    let b = g.move_object(partner, Zone::Exile, MoveCause::Effect, Some(p));
+    if let (Some(a), Some(b)) = (a, b) {
+        meld_entering(g, a, b, result, p, enters_attacking);
+    }
+}
+
 /// "you both own and control [this] and its meld partner".
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     (name == MELD_PAIR_CONDITION).then(|| {
@@ -825,6 +892,10 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &Ctx) -> bool {
             // CR 710, 730.2h.
             crate::flip::flip(g, src);
         }
+        return true;
+    }
+    if let Some(rest) = name.strip_prefix(MELD_ATTACKING_PAIR) {
+        meld_attacking_pair(g, rest == MELD_ENTERS_ATTACKING, ctx);
         return true;
     }
     match name.strip_prefix(MELD_EFFECT) {

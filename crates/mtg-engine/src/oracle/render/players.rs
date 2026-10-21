@@ -719,6 +719,15 @@ impl Renderer<'_> {
                 let x = (**x).clone();
                 self.sel(&x, case)
             }
+            // "Sacrifice those tokens at end of combat": the tokens created, those you
+            // still control (a player sacrifices only permanents they control, CR
+            // 701.21a).
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(c), Filter::ControlledBy(PlayerRel::You)]
+                    if matches!(c.as_ref(), Sel::Var(x) if *x == vars::CREATED)) =>
+            {
+                decline("{alt:those tokens|the tokens|that token|the token}".into(), case)
+            }
             // The cards exiled with this object that are still in exile: "the exiled card"
             // (an object that exiles one card, as with imprint) or "each card exiled with
             // ~".
@@ -951,6 +960,20 @@ impl Renderer<'_> {
                                 format!("{{alt:your {x} and your {y}|your {x} and {y}}}"),
                                 case,
                             );
+                        }
+                    }
+                }
+                // "your hand, graveyard, and all permanents you own": a list of zones of
+                // the same player, the owner said once or for each.
+                if parts.len() > 2 {
+                    let orig = parts.clone();
+                    for i in 1..parts.len() {
+                        let one_zone = orig[i]
+                            .strip_prefix("your ")
+                            .filter(|x| !x.contains(' '))
+                            .map(str::to_string);
+                        if let (true, Some(z)) = (orig[i - 1].starts_with("your "), one_zone) {
+                            parts[i] = format!("{{opt:your}} {z}");
                         }
                     }
                 }

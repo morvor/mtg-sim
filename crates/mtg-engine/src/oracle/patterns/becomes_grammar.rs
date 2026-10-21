@@ -1108,7 +1108,8 @@ fn static_predicates(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
 
 inventory::submit! { StaticPattern { name: "becomes grammar: [objects] [characteristic predicates]", priority: 1100, parse: static_predicates } }
 
-/// The zones of cards that aren't on the battlefield (or the stack).
+/// The zones of cards that aren't on the battlefield, but the stack (for "all cards that
+/// aren't on the battlefield, spells, and permanents", whose spells are any on the stack).
 const OFF_BATTLEFIELD: [ZoneKind; 5] = [
     ZoneKind::Hand,
     ZoneKind::Library,
@@ -1156,7 +1157,7 @@ fn zone_subject(s: &str) -> Option<(Vec<Filter>, Subject)> {
                 matches!(x, Filter::Type(CardType::Creature))
             });
             if off {
-                for z in OFF_BATTLEFIELD {
+                for z in super::statics_other_zones::NOT_ON_BATTLEFIELD {
                     alts.push(Filter::and(vec![f.clone(), Filter::InZone(z)]));
                 }
             } else if f.zone().is_some() {

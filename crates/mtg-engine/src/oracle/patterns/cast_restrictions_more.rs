@@ -28,8 +28,9 @@ fn stat(e: StaticEffect, text: &str) -> Ability {
     AbilityDef::new(AbilityKind::Static(StaticAbility::new(e)), text)
 }
 
-/// "[quality] spells" as a filter of the cards cast ("noncreature spells", "non-Phyrexian
-/// spells", "creature spells").
+/// "[quality] spells" as a filter of the spells cast ("noncreature spells", "non-Phyrexian
+/// spells", "creature spells"): any spell, a cast copy of a card included (CR 112.1b,
+/// 707.12), so the phrase's probe "card" isn't kept.
 fn spells(s: &str) -> Option<Filter> {
     let q = s
         .strip_suffix(" spells")
@@ -39,7 +40,7 @@ fn spells(s: &str) -> Option<Filter> {
     if !end(tail).trim().is_empty() {
         return None;
     }
-    Some(f)
+    Some(crate::oracle::phrases::without_probe_card(f))
 }
 
 fn restrictions(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {

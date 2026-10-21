@@ -280,6 +280,10 @@ fn capture_refs(e: &Effect, outer_targets: u8, what: Capture) -> Option<(Vec<Eff
                         _ => J::String(s),
                     }
                 }
+                // An ability the instruction creates or grants (a token's "{B}: Regenerate
+                // this token."): its own object and targets, nothing of the creating
+                // ability's (CR 113.7, 111.3).
+                J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
                 J::Object(m) => {
                     if m.len() == 1 {
                         if let Some(J::Number(n)) = m.get("Target") {

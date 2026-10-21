@@ -15,13 +15,17 @@ use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 use crate::types::*;
 
-/// The zones of cards that aren't on the battlefield (or the stack).
-const OFF_BATTLEFIELD: [ZoneKind; 5] = [
+/// The zones of "cards ... that aren't on the battlefield": every zone a card can be in
+/// but the battlefield, the stack included (a spell is a card on the stack, CR 112.1; a
+/// spell you own that another player controls is still a card you own that isn't on the
+/// battlefield).
+pub(crate) const NOT_ON_BATTLEFIELD: [ZoneKind; 6] = [
     ZoneKind::Hand,
     ZoneKind::Library,
     ZoneKind::Graveyard,
     ZoneKind::Exile,
     ZoneKind::Command,
+    ZoneKind::Stack,
 ];
 
 /// The alternatives of "creature spells you control and creature cards you own that
@@ -59,7 +63,7 @@ pub(crate) fn other_zone_objects(s: &str) -> Option<Vec<Filter>> {
             return None;
         }
         if off {
-            for z in OFF_BATTLEFIELD {
+            for z in NOT_ON_BATTLEFIELD {
                 out.push(Filter::and(vec![f.clone(), Filter::InZone(z)]));
             }
         } else {
