@@ -39,7 +39,12 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
   lines around it as saved in the earlier run's `mutants.out/diff/`, matches best; then
   the same column and the nearest line, since merges move lines) and tests exactly those
   (`-F '^<name>$'`). Matching by line distance alone picked a neighbouring identical
-  mutation once code had moved by more than the distance between them.
+  mutation once code had moved by more than the distance between them. cargo-mutants
+  27.1 applies neither `-F` nor `-E` to "delete field" mutants (it selected every one of
+  them, 163 for triggers.rs), so the re-run applies each survivor's diff to
+  `target/mutsrc` itself and runs the same build and `cargo test -p mtg-engine` (300 s
+  timeout), recording caught/missed/timeout/unviable in `target/mutants/<stem>-rerun/`.
+  `ONLY=<regex>` re-runs just the matching survivors, keeping the others' results.
 
 Kill rate = (caught + timeout) / (caught + missed + timeout); unviable mutants (that do
 not compile) are excluded.
@@ -58,20 +63,26 @@ Each surviving mutant is classified as
 | File | Mutants (all) | Sampled | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
 |---|---|---|---|---|---|---|---|---|
 | sba.rs | 154 | 16 (1/10) | 14 | 2 | 0 | 0 | 87.5% | 87.5% (both survivors equivalent) |
-| trigger_timing.rs | 17 | 17 (all) | 14 | 2 | 0 | 1 | 87.5% | TBD |
-| permissions.rs | 169 | 17 (1/10) | 10 | 4 | 0 | 3 | 71.4% | TBD |
-| simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | TBD |
-| turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | TBD |
-| mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | TBD |
+| trigger_timing.rs | 17 | 17 (all) | 14 | 2 | 0 | 1 | 87.5% | 93.8% (15/16) |
+| permissions.rs | 169 | 17 (1/10) | 10 | 4 | 0 | 3 | 71.4% | 78.6% (11/14) |
+| simultaneous.rs | 171 | 18 (1/10) | 6 | 12 | 0 | 0 | 33.3% | 55.6% (10/18) |
+| turn.rs | 234 | 24 (1/10) | 21 | 2 | 0 | 1 | 91.3% | 95.7% (22/23) |
+| mana.rs | 228 | 23 (1/10) | 15 | 6 | 0 | 2 | 71.4% | 81.0% (17/21) |
 | eval.rs | 268 | 27 (1/10) | 25 | 0 | 0 | 2 | 100% | 100% |
-| stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | TBD |
-| replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | TBD |
-| triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | TBD |
-| resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | TBD |
-| actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | TBD |
+| stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | 94.4% (34/36) |
+| replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | 82.4% (28/34; its two tests' mutants are equivalent now) |
+| triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | 75.0% (36/48) |
+| resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | 86.7% (26/30) |
+| actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
-| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | TBD |
-| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | TBD |
+| casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
+| combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 92.6% (75/81) |
+| **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.1%** (458/520) |
+
+"After new tests" re-tests the first run's survivors (`RERUN=1`, 2026-10-21, on the tree
+with all the new tests): each survivor now caught counts as caught. Some were killed by
+tests other work added in the meantime (noted in their entries); five whose tests were
+written for them turned out to be equivalent in today's code and are re-triaged below.
 
 ### sba.rs
 
@@ -361,7 +372,8 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   the next end step" created during that step doesn't fire in it, except in a cleanup step
   that's followed by another, CR 514.3a): **(b) not killed**. The check only matters for a
   delayed trigger created between a step's beginning and the trigger check for it; no
-  card creates one there.
+  card creates one there. The re-run (2026-10-21) found it **killed** by tests added
+  since by other work.
 - `triggers.rs:1088:21` (Attacks: `objects`, all the attackers), `1272:25`
   (IsDealtDamage: `other`, the source), `1528:25` (SpellCopied: `object`; `spell` holds the
   same copy), `1606:25` (TokenCreated: `player`), `1650:25` (TappedForManaOfType:
@@ -593,13 +605,10 @@ to the worktree and to pass without it.
 
 ## Status (2026-10-21)
 
-All 15 files have been sampled: 520 viable mutants (plus 31 unviable), 423 caught, 4
-timeouts, 93 missed: a kill rate of **82.1%** before the new tests. The casting.rs and
-combat.rs survivors are triaged and have tests. Remaining:
-
-1. Re-run the survivors of every file with new tests (`RERUN=1 scripts/mutants.sh
-   trigger_timing permissions simultaneous turn mana stack replacement triggers resolve
-   casting combat`, about 6 hours at ~4 minutes a mutant) and fill in the "After new tests"
-   column and the overall kill rate after. Each new test was written against its mutant's
-   code and checked to pass on the unmutated engine (the casting.rs and combat.rs ones
-   also to fail with their mutant applied); the re-run is what confirms the kill.
+Done. All 15 core files are sampled (551 of 5,281 mutants, 520 viable): 427 killed
+before the new tests (**82.1%**), 458 after (**88.1%**), counting the first run's
+survivors that the re-run found caught. The 62 survivors left are each triaged above:
+equivalent (a), or behavior no card in the pool reaches yet (b, "not killed", with what a
+test would need). One engine bug was found and fixed (multi-player search moves,
+simultaneous.rs). Re-running a file later: `scripts/mutants.sh <stem>` for a new sample,
+`RERUN=1 scripts/mutants.sh <stem>` for the survivors.
