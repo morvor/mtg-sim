@@ -736,9 +736,9 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             // creature); it is an alternative of its own.
             let (foreign, group): (Vec<Filter>, Vec<Filter>) =
                 if matches!(nf, Filter::Type(CardType::Creature)) && group.len() > 1 {
-                    group.into_iter().partition(
-                        |h| matches!(h, Filter::Subtype(st) if !is_creature_type(st)),
-                    )
+                    group
+                        .into_iter()
+                        .partition(|h| matches!(h, Filter::Subtype(st) if !is_creature_type(st)))
                 } else {
                     (vec![], group)
                 };

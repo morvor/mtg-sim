@@ -519,3 +519,25 @@ fn reveillark_targets_up_to_two_creature_cards_with_power_2_or_less() {
         assert_eq!(t.zone(giant), Zone::Graveyard(P0));
     }
 }
+
+#[test]
+fn an_exiler_that_left_and_returned_isnt_linked_to_what_the_old_object_exiled() {
+    // The card exiled by the ability of an Oblivion Ring that had already left is linked
+    // to that old object (CR 607.2a), not to the new object the card becomes when it
+    // returns to the battlefield (CR 400.7): the new Oblivion Ring's leaves ability
+    // returns only what its own enters ability exiled.
+    cr!("607.2a", "400.7");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let ring = leaves_before_its_etb_resolves(&mut t, "Oblivion Ring", Some(obj(bears)), false);
+    assert_eq!(t.zone(t.g.current(bears)), Zone::Exile);
+    t.answer_targets(P0, &[obj(giant)]);
+    let ring2 = move_to(&mut t, ring, Zone::Battlefield).expect("returns");
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Exile);
+    destroy(&mut t, ring2);
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Battlefield);
+    assert_eq!(t.zone(t.g.current(bears)), Zone::Exile);
+}
