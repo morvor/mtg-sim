@@ -30,6 +30,12 @@ pub const TEAMWORK: &str = "teamwork";
 /// `StaticEffect::Custom` functioning on the stack: "You may cast this spell as though it
 /// had flash if it's cast using teamwork."
 pub const FLASH_WITH_TEAMWORK: &str = "teamwork:flash if cast using teamwork";
+/// `Event::Custom` name: a creature became tapped to pay a teamwork cost (the event's
+/// object; its player paid the cost).
+pub const TAPPED_FOR_TEAMWORK: &str = "teamwork:tapped to pay a teamwork cost";
+/// `TriggerCond::Custom`: "Whenever ~ becomes tapped to pay a teamwork cost" (Agent Maria
+/// Hill).
+pub const SELF_TAPPED_FOR_TEAMWORK: &str = "teamwork:~ becomes tapped to pay a teamwork cost";
 /// Whether the spell was cast using teamwork.
 pub fn used(g: &Game, spell: ObjectId) -> bool {
     g.obj(spell)
@@ -63,6 +69,32 @@ pub struct Teamwork;
 impl KeywordRules for Teamwork {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[KeywordKind::Teamwork]
+    }
+
+    fn custom_trigger(
+        &self,
+        _g: &Game,
+        name: &str,
+        src: ObjectId,
+        _ctl: PlayerId,
+        ev: &crate::events::Event,
+    ) -> Option<Vec<EventInfo>> {
+        if name != SELF_TAPPED_FOR_TEAMWORK {
+            return None;
+        }
+        Some(match ev {
+            crate::events::Event::Custom {
+                name: n,
+                obj: Some(o),
+                player,
+                ..
+            } if n == TAPPED_FOR_TEAMWORK && *o == src => vec![EventInfo {
+                object: Some(*o),
+                player: *player,
+                ..Default::default()
+            }],
+            _ => vec![],
+        })
     }
 
     fn optional_costs(&self, g: &Game, spell: ObjectId, kw: &Keyword) -> Vec<(SmolStr, Cost, bool)> {

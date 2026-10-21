@@ -222,6 +222,17 @@ pub fn pay_total_power(
     for c in &chosen {
         g.tap(*c);
     }
+    // "Whenever ~ becomes tapped to pay a teamwork cost" (`kw/teamwork.rs`).
+    if kw == KeywordKind::Teamwork {
+        for c in &chosen {
+            g.emit(crate::events::Event::Custom {
+                name: crate::kw::teamwork::TAPPED_FOR_TEAMWORK.into(),
+                player: Some(p),
+                obj: Some(*c),
+                amount: 0,
+            });
+        }
+    }
     if matches!(kw, KeywordKind::Crew | KeywordKind::Saddle) {
         if let Some(v) = src {
             for c in &chosen {

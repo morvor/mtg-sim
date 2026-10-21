@@ -309,6 +309,15 @@ pub struct CastInfo {
     /// black and/or red mana on X": "the amount of {B} spent on X", see `payment_rules`).
     #[serde(default)]
     pub mana_spent_on_x: Vec<ManaType>,
+    /// The life paid to cast the spell or activate the ability (CR 119.4, 601.2h, 602.2b):
+    /// life payment costs and Phyrexian mana paid with life ("if life was paid to
+    /// activate it, you may pay that much life again").
+    #[serde(default)]
+    pub life_paid: u32,
+    /// The loyalty counters removed from the source to activate a loyalty ability
+    /// (CR 606.4: "if you removed two or more loyalty counters to activate it").
+    #[serde(default)]
+    pub loyalty_removed: u32,
 }
 
 /// Data from the event that caused a triggered ability to trigger, used by "that

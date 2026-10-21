@@ -525,7 +525,9 @@ impl Renderer<'_> {
                         let t = t.trim_start_matches("whenever ").to_string();
                         // "If an artifact or creature entering causes ...": the event as a
                         // gerund.
-                        let t = if let Some(x) = t.strip_suffix(" enters") {
+                        let t = if let TriggerCond::TurnedFaceUp(_) = c.as_ref() {
+                            "turning a face-down permanent face up".to_string()
+                        } else if let Some(x) = t.strip_suffix(" enters") {
                             format!("{x} entering {{opt:the battlefield}}")
                         } else if let Some(x) = t.strip_suffix(" is dealt damage") {
                             format!("{x} being dealt damage")
