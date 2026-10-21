@@ -31,7 +31,7 @@
 //!   supported cards' abilities by compiled structure and reports the structures no test
 //!   exercises (see `structure_coverage.rs` for the command sequence).
 //! * `verified [--write] [--out PATH] [--logs DIR] [--report FILE] [--passing PATH]
-//!   [--card NAME]` — every card's tier (unsupported < compiled < round-trip < verified)
+//!   [--fuzz-from TIERS] [--gain N] [--card NAME]` — every card's tier (unsupported < compiled < round-trip < verified)
 //!   and the checks it fails, into `docs/verified-cards.tsv` (see `verified.rs` for the
 //!   regeneration recipe).
 
@@ -527,7 +527,7 @@ fn pattern_of(text: &str) -> String {
 }
 
 /// How to regenerate the tier file and this report, for CARD_COVERAGE.md.
-const TIER_RECIPE: &str = "```sh\nexport CARGO_BUILD_JOBS=2\nrm -rf target/structlog\nMTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log\n# The every-card sweep: about 2.3 hours with 3 threads, so three chunks of ~46 min each\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 10100 --report target/every-card-0.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 10100 --count 10100 --report target/every-card-1.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 10100 --report target/every-card-2.tsv\ncat target/every-card-[012].tsv > target/every-card.tsv\ncargo run --release -p mtg-tools -- roundtrip --write docs/ROUNDTRIP.md     # if round trips changed\ncargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write\ncargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md\n```\n";
+const TIER_RECIPE: &str = "```sh\nexport CARGO_BUILD_JOBS=2\nrm -rf target/structlog\nMTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log\n# The every-card sweep: about 2.3 hours with 3 threads, so three chunks of ~46 min each\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 10100 --report target/every-card-0.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 10100 --count 10100 --report target/every-card-1.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 10100 --report target/every-card-2.tsv\ncat target/every-card-[012].tsv > target/every-card.tsv\ncargo run --release -p mtg-tools -- roundtrip --write docs/ROUNDTRIP.md     # if round trips changed\ncargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write\ncargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md\n```\n\nWhen only tests changed since the last sweep (tests can't change what the sweep finds), skip the sweep and carry each card's sweep results over from the committed tier file: regenerate the structure log, then run `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write` and `card-coverage`. A card the old file listed as unsupported has no recorded sweep result and counts as not swept. `verified --gain 60` lists the unexercised structures with the highest verified gain (the cards whose only failed check is that structure).\n";
 
 fn card_coverage(args: &[String]) {
     use mtg_engine::card::CardDef;

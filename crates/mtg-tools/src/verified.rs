@@ -12,7 +12,11 @@
 //!   `mtg-sim --every-card --report FILE`.
 //!
 //! Options: `--write` (write `docs/verified-cards.tsv`), `--out PATH` (write there
-//! instead), `--card NAME` (print one card's tier and checks).
+//! instead), `--card NAME` (print one card's tier and checks), `--fuzz-from TIERS` (take
+//! each card's sweep results from an earlier tier file instead of an every-card report:
+//! after adding tests, which can't change the sweep, this recomputes the tiers without
+//! re-running it), `--gain N` (print the N unexercised structures with the highest
+//! verified gain: the cards whose only failed check is that one structure).
 //!
 //! The regeneration recipe (about three hours, most of it the sweep, run in chunks):
 //!
@@ -28,6 +32,9 @@
 //! cargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write
 //! cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
 //! ```
+//!
+//! When only tests changed since the last sweep, skip the sweep:
+//! `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write`.
 
 use mtg_engine::card::CardDef;
 use mtg_engine::card_tiers::{check, classify, CardTier, Evidence, FuzzOutcome, Tier, TIERS_FILE};
@@ -71,6 +78,61 @@ pub fn parse_report(text: &str) -> HashMap<String, FuzzOutcome> {
             name.to_lowercase(),
             FuzzOutcome::Swept {
                 cast,
+                exempt,
+                not_cast,
+                failures,
+            },
+        );
+    }
+    out
+}
+
+/// The sweep results an earlier tier file recorded, by lowercased card name: its
+/// `fuzz-swept`, `fuzz-cast` and `fuzz-clean` checks and its `fuzz-cast exempt: why` note
+/// (`--fuzz-from`). A card the file lists as unsupported has no recorded sweep result (its
+/// fuzz checks aren't written), so it counts as missing from the sweep.
+pub fn fuzz_from_tiers(text: &str) -> HashMap<String, FuzzOutcome> {
+    let mut out = HashMap::new();
+    for line in text.lines() {
+        if line.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() < 3 {
+            continue;
+        }
+        match Tier::parse(cols[1]) {
+            None | Some(Tier::Unsupported) => continue,
+            Some(_) => {}
+        }
+        let failed: Vec<(&str, &str)> = cols[2]
+            .split("; ")
+            .filter(|s| !s.trim().is_empty())
+            .map(|f| match f.split_once(" (") {
+                Some((c, d)) => (c, d.strip_suffix(')').unwrap_or(d)),
+                None => (f, ""),
+            })
+            .collect();
+        if failed.iter().any(|(c, _)| *c == check::FUZZ_SWEPT) {
+            continue;
+        }
+        let exempt = cols
+            .get(3)
+            .and_then(|n| n.strip_prefix(&format!("{} exempt: ", check::FUZZ_CAST)))
+            .map(str::to_string);
+        let not_cast = failed
+            .iter()
+            .find(|(c, _)| *c == check::FUZZ_CAST)
+            .map(|(_, d)| d.to_string());
+        let failures = failed
+            .iter()
+            .find(|(c, _)| *c == check::FUZZ_CLEAN)
+            .map(|(_, d)| d.split(", ").map(str::to_string).collect())
+            .unwrap_or_default();
+        out.insert(
+            cols[0].to_lowercase(),
+            FuzzOutcome::Swept {
+                cast: not_cast.is_none() && exempt.is_none(),
                 exempt,
                 not_cast,
                 failures,
@@ -199,6 +261,8 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     let mut passing = root.join(crate::roundtrip::PASSING_LIST);
     let mut out: Option<PathBuf> = None;
     let mut card: Option<String> = None;
+    let mut fuzz_from: Option<PathBuf> = None;
+    let mut gain: Option<usize> = None;
     let mut i = 0;
     while i < args.len() {
         let value = |i: usize| -> String {
@@ -229,6 +293,17 @@ pub fn run(args: &[String], repo_root: PathBuf) {
                 card = Some(value(i).to_lowercase());
                 i += 1;
             }
+            "--fuzz-from" => {
+                fuzz_from = Some(PathBuf::from(value(i)));
+                i += 1;
+            }
+            "--gain" => {
+                gain = Some(value(i).parse().unwrap_or_else(|_| {
+                    eprintln!("--gain needs a number");
+                    std::process::exit(2)
+                }));
+                i += 1;
+            }
             other => {
                 eprintln!("unknown option {other}");
                 std::process::exit(2);
@@ -253,7 +328,9 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         }
         names.insert(key.clone(), key);
     }
-    let fuzz = match std::fs::read_to_string(&report) {
+    let fuzz_source = fuzz_from.as_ref().unwrap_or(&report);
+    let fuzz = match std::fs::read_to_string(fuzz_source) {
+        Ok(t) if fuzz_from.is_some() => fuzz_from_tiers(&t),
         Ok(t) => {
             let mut f = parse_report(&t);
             charge_named(&t, &names, &mut f);
@@ -262,7 +339,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         Err(e) => {
             eprintln!(
                 "error: can't read the every-card report {}: {e} (run `mtg-sim --every-card --report FILE`)",
-                report.display()
+                fuzz_source.display()
             );
             std::process::exit(1);
         }
@@ -270,7 +347,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     if fuzz.is_empty() {
         eprintln!(
             "error: {} has no outcome lines (made by an older mtg-sim?)",
-            report.display()
+            fuzz_source.display()
         );
         std::process::exit(1);
     }
@@ -286,6 +363,8 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     }
 
     let mut rows: Vec<Row> = Vec::new();
+    // `--gain`: unexercised structure -> (its kind, the cards it alone keeps from verified).
+    let mut gains: HashMap<u64, (&'static str, Vec<String>)> = HashMap::new();
     let mut seen = BTreeSet::new();
     for c in mtg_data::cards().iter() {
         if !listed(c) || !seen.insert(c.name.clone()) {
@@ -305,6 +384,19 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         let def = CardDef::from_scryfall(c);
         let e = evidence(&def, &passing, &manual, &exercised, &fuzz);
         let tier = classify(&e);
+        if gain.is_some()
+            && e.unexercised == 1
+            && tier.failed.len() == 1
+            && tier.failed[0].check == check::STRUCTURE
+        {
+            if let Some((h, kind)) = unexercised_structure(&def, &exercised) {
+                gains
+                    .entry(h)
+                    .or_insert((kind, vec![]))
+                    .1
+                    .push(def.name.to_string());
+            }
+        }
         if card.is_some() {
             println!("{}: {}", def.name, tier.tier);
             for f in &tier.failed {
@@ -330,11 +422,31 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     }
     rows.sort_by(|a, b| a.name.cmp(&b.name));
     summary(&rows);
+    if let Some(n) = gain {
+        let mut ranked: Vec<(u64, (&str, Vec<String>))> = gains.into_iter().collect();
+        ranked.sort_by(|a, b| b.1 .1.len().cmp(&a.1 .1.len()).then(a.0.cmp(&b.0)));
+        let total: usize = ranked.iter().take(n).map(|r| r.1 .1.len()).sum();
+        println!("top {n} structures by verified gain (total gain {total}):");
+        for (h, (kind, cards)) in ranked.iter().take(n) {
+            let shown: Vec<&str> = cards.iter().take(4).map(String::as_str).collect();
+            println!(
+                "  {:>4}  {h:016x}  {kind:<11} {}",
+                cards.len(),
+                shown.join(" | ")
+            );
+        }
+    }
     if let Some(path) = out {
+        let sweep = match &fuzz_from {
+            Some(_) => format!(
+                "sweep results of {} cards carried over from the previous tier file (--fuzz-from)",
+                fuzz.len()
+            ),
+            None => format!("every-card report of {} cards", fuzz.len()),
+        };
         let inputs = format!(
-            "{} structure log files, every-card report of {} cards, {} round-trip-passing cards",
+            "{} structure log files, {sweep}, {} round-trip-passing cards",
             std::fs::read_dir(&logs).map_or(0, |d| d.count()),
-            fuzz.len(),
             passing.len()
         );
         std::fs::write(&path, render(&rows, &inputs)).expect("write the tier file");
@@ -390,6 +502,25 @@ fn evidence(
         unexercised,
         fuzz: fuzz.get(&key).cloned().unwrap_or(FuzzOutcome::Missing),
     }
+}
+
+/// The card's one unexercised ability structure, and its kind (for `--gain`).
+fn unexercised_structure(
+    def: &CardDef,
+    exercised: &HashMap<u64, Vec<(String, String)>>,
+) -> Option<(u64, &'static str)> {
+    let mut names: Vec<&str> = vec![def.name.as_str()];
+    names.extend(def.faces.iter().map(|f| f.chars.name.as_str()));
+    def.faces
+        .iter()
+        .flat_map(|f| f.chars.abilities.iter())
+        .map(|a| {
+            (
+                structure::hash(&structure::fingerprint(a, &names)),
+                structure::kind_label(a),
+            )
+        })
+        .find(|(h, _)| !exercised.contains_key(h))
 }
 
 /// Prints the count in each tier and how many cards fail each check.
@@ -539,5 +670,68 @@ mod tests {
         ));
         let table = mtg_engine::card_tiers::TierTable::parse(&text);
         assert_eq!(table.recorded("A Card"), Some(&rows[0].tier));
+    }
+
+    #[test]
+    fn the_sweep_results_carry_over_from_a_tier_file() {
+        let outcomes = [
+            FuzzOutcome::Missing,
+            FuzzOutcome::Swept {
+                cast: true,
+                exempt: None,
+                not_cast: None,
+                failures: vec![],
+            },
+            FuzzOutcome::Swept {
+                cast: false,
+                exempt: Some("no mana cost".into()),
+                not_cast: None,
+                failures: vec![],
+            },
+            FuzzOutcome::Swept {
+                cast: false,
+                exempt: None,
+                not_cast: Some("never drawn".into()),
+                failures: vec!["rules in a game of Akroma, Vision of Ixidor".into()],
+            },
+        ];
+        let rows: Vec<Row> = outcomes
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let e = Evidence {
+                    unsupported: vec![],
+                    round_trip: true,
+                    manual_problems: vec![],
+                    structures: 2,
+                    unexercised: 1,
+                    fuzz: f.clone(),
+                };
+                Row {
+                    name: format!("Card {i}"),
+                    tier: classify(&e),
+                    notes: notes(&e),
+                }
+            })
+            .collect();
+        let text = render(&rows, "test");
+        let back = fuzz_from_tiers(&text);
+        for (i, f) in outcomes.iter().enumerate() {
+            let got = back
+                .get(&format!("card {i}"))
+                .cloned()
+                .unwrap_or(FuzzOutcome::Missing);
+            // The rendered checks are what matter: the recomputed row renders the same.
+            let e = Evidence {
+                unsupported: vec![],
+                round_trip: true,
+                manual_problems: vec![],
+                structures: 2,
+                unexercised: 1,
+                fuzz: got,
+            };
+            assert_eq!(classify(&e), rows[i].tier, "{f:?}");
+            assert_eq!(notes(&e), rows[i].notes, "{f:?}");
+        }
     }
 }
