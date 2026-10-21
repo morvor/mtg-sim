@@ -162,3 +162,42 @@ fn gogo_copies_a_creature_and_both_must_attack() {
     assert!(!legal_attack(&mut t, &[(gogo, p1)]));
     assert!(legal_attack(&mut t, &[(gogo, p1), (giant, p1)]));
 }
+
+#[test]
+fn arcums_whistle_forces_an_unpaid_creature_to_attack() {
+    cr!("508.1d");
+    supported("Arcum's Whistle");
+    let mut t = TestGame::new(2);
+    let whistle = t.battlefield(P0, "Arcum's Whistle");
+    t.lands(P0, "Island", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::Upkeep);
+    // P1 has no mana: the {4} isn't paid.
+    t.activate(P0, whistle, 0, &[Entity::Object(giant)]).unwrap();
+    t.resolve_all();
+    to_combat(&mut t, P1);
+    assert!(!legal_attack(&mut t, &[]));
+    assert!(legal_attack(&mut t, &[(giant, Entity::Player(P0))]));
+}
+
+#[test]
+fn arcums_whistle_paid_leaves_the_creature_free() {
+    cr!("508.1d");
+    let mut t = TestGame::new(2);
+    let whistle = t.battlefield(P0, "Arcum's Whistle");
+    t.lands(P0, "Island", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P1, "Mountain", 4);
+    t.set_step(P1, Step::Upkeep);
+    t.answer_yes(P1, true);
+    t.activate(P0, whistle, 0, &[Entity::Object(giant)]).unwrap();
+    t.resolve_all();
+    let tapped = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P1 && o.tapped)
+        .count();
+    assert_eq!(tapped, 4);
+    to_combat(&mut t, P1);
+    assert!(legal_attack(&mut t, &[]));
+}

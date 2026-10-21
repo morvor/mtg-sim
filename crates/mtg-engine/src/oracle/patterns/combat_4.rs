@@ -1020,3 +1020,97 @@ fn add_to_if_you_do(e: Effect, more: Effect) -> Effect {
 }
 
 inventory::submit! { FollowupPattern { name: "combat 4: that creature (the creature copied)", priority: 50, apply: f_that_creature_after_copy } }
+
+/// "That player may pay {X}, where X is that creature's mana value." (Arcum's Whistle),
+/// "Its controller may pay {X}, where X is ...": X is defined by the text (CR 107.3a), and
+/// the player may pay it; "if they don't" follows.
+fn p_may_pay_x_where(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (head, value) = l.split_once(" may pay {x}, where x is ")?;
+    let who = match head {
+        "its controller" if matches!(b.it, Sel::Target(_)) => {
+            PlayerRef::ControllerOf(Box::new(b.it.clone()))
+        }
+        // "Choose target [creature] the active player [controls]. That player may pay
+        // ...": the active player.
+        "that player"
+            if is_no_player_referent(&b.it_player)
+                && b.targets.len() == 1
+                && b.targets[0].text.contains("the active player") =>
+        {
+            PlayerRef::ActivePlayer
+        }
+        "that player" if !is_no_player_referent(&b.it_player) => b.it_player.clone(),
+        _ => return None,
+    };
+    let n = b.targets.len();
+    let (v, rest) = crate::oracle::statics::parse_value_phrase(value, b)?;
+    if !end(&rest).is_empty() || b.targets.len() != n {
+        b.targets.truncate(n);
+        return None;
+    }
+    // {X}: X generic mana, the amount determined as the payment is offered.
+    let cost = Cost::default().with(CostPart::Repeated {
+        cost: Box::new(Cost {
+            mana: Some(crate::mana::ManaCost::parse("{1}")?),
+            parts: vec![],
+        }),
+        times: v,
+    });
+    b.it_player = who.clone();
+    Some(Effect::AsPlayer {
+        who,
+        effect: Box::new(Effect::PayOptional {
+            who: PlayerRef::You,
+            cost,
+            then: Box::new(Effect::Noop),
+            otherwise: Box::new(Effect::Noop),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: [player] may pay {X}, where X is [value]", priority: 90, parse: p_may_pay_x_where } }
+
+/// Whether the last instruction of `e` is a payment of an X the text defines (see
+/// [`p_may_pay_x_where`]).
+fn pays_defined_x(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.last().is_some_and(pays_defined_x),
+        Effect::AsPlayer { effect, .. } => matches!(&**effect, Effect::PayOptional { cost, .. }
+            if cost.parts.iter().any(|p| matches!(p, CostPart::Repeated { .. }))),
+        _ => false,
+    }
+}
+
+/// "If they don't [pay], ..." after "[player] may pay {X}, where X is ...": what happens
+/// if they didn't pay.
+fn f_if_they_dont_pay(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    let Some(rest) = l
+        .strip_prefix("if they don't pay, ")
+        .or_else(|| l.strip_prefix("if they don't, "))
+    else {
+        return false;
+    };
+    if !pays_defined_x(prev) {
+        return false;
+    }
+    let n = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_sentence(rest, b).filter(|_| b.targets.len() == n)
+    else {
+        b.targets.truncate(n);
+        return false;
+    };
+    let p = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        p,
+        Effect::If {
+            cond: Condition::Not(Box::new(Condition::PrevHappened)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "combat 4: if they don't pay", priority: 40, apply: f_if_they_dont_pay } }
