@@ -47,6 +47,7 @@ fn aura_swap_exchanges_the_aura_with_an_aura_card_in_hand() {
 #[test]
 fn aura_swap_does_nothing_if_the_aura_card_cant_enchant_the_permanent() {
     cr!("702.65b");
+    cr_example!("702.65b", "The only Aura card in your hand");
     ruling!(
         "Arcanum Wings",
         "If on resolution, half the exchange can’t be completed (such as if the only Aura in your hand can’t enchant the permanent), nothing happens."
@@ -75,6 +76,7 @@ fn aura_swap_does_nothing_if_the_aura_card_cant_enchant_the_permanent() {
 #[test]
 fn aura_swap_does_nothing_if_you_dont_own_the_aura() {
     cr!("702.65b");
+    cr_example!("702.65b", "an Aura that you control but you");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     // P0 controls an Arcanum Wings that P1 owns.

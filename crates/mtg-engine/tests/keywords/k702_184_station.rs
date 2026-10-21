@@ -178,6 +178,7 @@ fn a_station_card_has_station_symbols_that_are_keyword_abilities() {
 #[test]
 fn static_abilities_may_make_it_use_toughness() {
     cr!("702.184c");
+    cr_example!("702.184c", "Tapestry Warden has as ability");
     ruling!(
         "Tapestry Warden",
         "They change only the amount of combat damage the creature assigns and how many counters are put on a permanent with station"

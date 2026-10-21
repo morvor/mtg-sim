@@ -251,6 +251,7 @@ fn with_a_keyword_means_with_that_keyword_ability() {
 #[test]
 fn the_same_is_true_for_on_a_resolving_ability_locks_in_what_is_granted() {
     cr!("702.1c", "611.2c");
+    cr_example!("702.1c", "Concerted Effort is an enchantment");
     ruling!(
         "Concerted Effort",
         "All three creatures will have flying, islandwalk, vigilance, protection from red, and protection from green until the end of the turn."

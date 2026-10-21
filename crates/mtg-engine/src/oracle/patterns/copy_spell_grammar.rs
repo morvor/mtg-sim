@@ -100,6 +100,8 @@ fn spell_copy_exceptions(s: &str, b: &Builder) -> Option<Vec<Modification>> {
     // Removing a supertype the spell doesn't have does nothing, so "if the spell is
     // legendary" (Double Major) changes nothing.
     let s = s.strip_suffix(" if the spell is legendary").unwrap_or(s);
+    // "except that the copy is red" (Fork).
+    let s = s.strip_prefix("that ").unwrap_or(s);
     let s = if let Some(r) = s.strip_prefix("the copy is ") {
         format!("it's {r}")
     } else if let Some(r) = s.strip_prefix("the copy isn't ") {
