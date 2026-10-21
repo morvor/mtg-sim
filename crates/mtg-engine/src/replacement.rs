@@ -1447,6 +1447,16 @@ impl Game {
                 // additional counters, where X is the number of counters on ~".
                 c.source = cand.source.or(Some(m.obj));
                 c.cast = m.etb.cast.clone();
+                // The entering permanent, as the spell it was ("a number of counters equal
+                // to the number of times it's been cast from the command zone", Opal
+                // Palace), unless the context already has an event.
+                if c.event.is_none() {
+                    c.event = Some(crate::object::EventInfo {
+                        object: Some(m.obj),
+                        spell: Some(m.obj),
+                        ..Default::default()
+                    });
+                }
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;
                 if k.as_str() == crate::ability::EACH_KIND_ON_SOURCE {

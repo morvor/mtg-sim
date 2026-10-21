@@ -2489,6 +2489,11 @@ impl Renderer<'_> {
                 additional,
             } => {
                 let a = self.effect(add);
+                // "your commander": a commander its caster owns (CR 903.3d).
+                let yours = matches!(spell_filter, Filter::And(v) if v.len() == 3
+                    && v.iter().any(|x| matches!(x, Filter::Commander))
+                    && v.iter().any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                    && v.iter().any(|x| matches!(x, Filter::Spell)));
                 let f = self.noun_det(spell_filter, Det::A);
                 let f = if f.contains("spell") {
                     f
@@ -2507,6 +2512,12 @@ impl Renderer<'_> {
                 } else {
                     self.in_event_scope(|r| r.body(body))
                 };
+                if yours && !*abilities {
+                    let verb = if *additional { "If" } else { "When" };
+                    return format!(
+                        "{a}. {verb} {{alt:you spend this mana|that mana is spent}} to cast your commander, {b}"
+                    );
+                }
                 if *abilities {
                     format!("{a}. When you spend this mana to cast {f} or activate an ability, {b}")
                 } else if *additional {

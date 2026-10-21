@@ -3572,7 +3572,8 @@ impl Renderer<'_> {
             },
             A::Redirect(sel) => {
                 let t = self.sel(sel, Case::Obj);
-                format!("that damage is dealt to {t} instead")
+                // "it deals that damage to you instead" (Goblin Psychopath).
+                format!("{{alt:that damage is dealt to {t}|it deals that damage to {t}}} instead")
             }
             A::RedirectNext(sel, v) => {
                 let t = self.sel(sel, Case::Obj);

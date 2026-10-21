@@ -203,6 +203,9 @@ impl Renderer<'_> {
             crate::kwa::ring::TIMES_TEMPTED => {
                 "the number of times the Ring has tempted you this game".into()
             }
+            crate::kw::your_commander_terms::COLORS_IN_COMMANDERS_IDENTITY => {
+                "the number of colors in your commanders' color identity".into()
+            }
             // CR 107.14: the energy counters removed from you this turn.
             crate::kw::energy_paid::ENERGY_PAID_OR_LOST_THIS_TURN => {
                 "the number of {E} you've paid or lost this turn".into()

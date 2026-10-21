@@ -41,6 +41,14 @@
 //!   those permanents and/or players." (Sundering Stroke): after damage divided among
 //!   targets, the same targets are each dealt that damage instead when the condition
 //!   holds (the division announced as it was cast, CR 601.2d, is then not used).
+//! - "Your commander" (CR 903.3d, `kw/your_commander_terms.rs`): "When that mana is spent
+//!   to cast a creature spell that shares a creature type with your commander" (Path of
+//!   Ancestry), "Pay life equal to the number of colors in your commanders' color
+//!   identity" (War Room), "When you spend this mana to cast your commander, scry X, where
+//!   X is the number of times it's been cast from the command zone this game" (Study
+//!   Hall), "If you spend this mana to cast your commander, it enters with a number of
+//!   additional +1/+1 counters on it equal to the number of times it's been cast from the
+//!   command zone this game" (Opal Palace; CR 903.8).
 //! - Spending restrictions (CR 106.6): "This mana can't be spent to cast spells." (Thran
 //!   Turbine: it may pay for anything else, such as activating abilities), "Spend this
 //!   mana only to cast spells you don't own." (Thieving Varmint: "you" is the player
@@ -90,6 +98,16 @@ pub(crate) fn mana_from_kind(kind: &str) -> Option<String> {
 pub(crate) fn count_phrase(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some((v, rest)) = unspent_mana(r) {
         return Some((v, rest.to_string()));
+    }
+    // "the number of times it's been cast from the command zone this game" about the spell
+    // the mana was spent on (CR 903.8).
+    if let Some(rest) = r.strip_prefix("times it's been cast from the command zone this game") {
+        if matches!(b.it, Sel::TriggerSpell) && (rest.is_empty() || rest.starts_with([' ', ',', '.'])) {
+            return Some((
+                Value::Custom(crate::kw::game_rules::TIMES_IT_WAS_CAST.into()),
+                rest.to_string(),
+            ));
+        }
     }
     if let Some(rest) = r.strip_prefix("{e} you've paid or lost this turn") {
         if rest.is_empty() || rest.starts_with([' ', ',', '.']) {
@@ -603,6 +621,93 @@ fn instead_damage_to_each_target(l: &str, prev: &mut Effect, b: &mut Builder) ->
 }
 
 inventory::submit! { super::FollowupPattern { name: "mana 4: if [condition], instead ~ deals N damage to each of those targets", priority: 100, apply: instead_damage_to_each_target } }
+
+/// "[spell] that shares a creature type with your commander".
+fn shares_type_with_your_commander<'a>(t: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t
+        .strip_prefix("that shares a creature type with your commander")
+        .or_else(|| t.strip_prefix("that share a creature type with your commander"))?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    Some((
+        Filter::Custom(crate::kw::your_commander_terms::SHARES_TYPE_WITH_YOUR_COMMANDER.into()),
+        r,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "mana 4: that shares a creature type with your commander", priority: 100, parse: shares_type_with_your_commander } }
+
+/// "Pay life equal to the number of colors in your commanders' color identity" (a cost).
+fn pay_life_commander_colors(p: &str) -> Option<CostPart> {
+    (end(p.trim()) == "pay life equal to the number of colors in your commanders' color identity")
+        .then(|| {
+            CostPart::PayLife(Value::Custom(
+                crate::kw::your_commander_terms::COLORS_IN_COMMANDERS_IDENTITY.into(),
+            ))
+        })
+}
+
+inventory::submit! { super::CostPattern { name: "mana 4: pay life equal to the colors in your commanders' identity", priority: 100, parse: pay_life_commander_colors } }
+
+/// "[Add mana]. If you spend this mana to cast your commander, it enters with a number of
+/// additional +1/+1 counters on it equal to the number of times it's been cast from the
+/// command zone this game." (Opal Palace): the mana's additional effect (CR 106.6), a
+/// replacement effect on the commander entering (CR 614.1c) with the count taken as the
+/// mana is spent.
+fn commander_mana_enters_with(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.to_lowercase();
+    let marker = ". if you spend this mana to cast your commander, it enters with a number of additional ";
+    let idx = lower.find(marker)?;
+    let head = &block[..idx + 1];
+    let tail = end(&lower[idx + marker.len()..]);
+    let (kind, r) = crate::oracle::costs::counter_kind(tail)?;
+    let r = r
+        .trim_start()
+        .strip_prefix("counters on it equal to the number of times it's been cast from the command zone this game")?;
+    if !r.trim().is_empty() {
+        return None;
+    }
+    let n = Value::Custom(crate::kw::game_rules::TIMES_IT_WAS_CAST.into());
+    let body = Body::effect(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::In(Box::new(Sel::TriggerSpell))),
+            action: ReplacementAction::EnterWithCounters(kind, n),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::EndOfTurn,
+        uses: Some(1),
+    });
+    let spell_filter = Filter::and(vec![
+        Filter::Commander,
+        Filter::OwnedBy(PlayerRel::You),
+        Filter::Spell,
+    ]);
+    let abilities = crate::oracle::parse_ability(head, ctx)?;
+    let mut out = Vec::new();
+    for a in abilities {
+        let AbilityKind::Activated(act) = &a.kind else {
+            return None;
+        };
+        if !matches!(act.body.effect, Effect::AddMana { .. }) {
+            return None;
+        }
+        let mut act = act.clone();
+        act.body.effect = Effect::AddManaWithSpentTrigger {
+            add: Box::new(act.body.effect.clone()),
+            spell_filter: spell_filter.clone(),
+            body: Box::new(body.clone()),
+            abilities: false,
+            additional: true,
+        };
+        act.is_mana_ability = act.body.targets.is_empty();
+        out.push(AbilityDef::new(AbilityKind::Activated(act), block));
+    }
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "mana 4: if you spend this mana to cast your commander, it enters with counters", priority: 150, parse: commander_mana_enters_with } }
 
 #[cfg(test)]
 mod tests {
