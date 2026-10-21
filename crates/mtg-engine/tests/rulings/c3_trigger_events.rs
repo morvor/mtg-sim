@@ -596,3 +596,49 @@ fn teamwork_triggers_virtual_assistant_and_maria_hill() {
     assert_eq!(t.counters(hill, "+1/+1"), 1);
     assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Robot").len(), 1);
 }
+
+#[test]
+fn hero_of_bretagard_counts_cards_exiled_from_hand_or_by_your_spells() {
+    cr!("603.2c", "603.2");
+    supported("Hero of Bretagard");
+    supported("Ranar the Ever-Watchful");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let hero = t.battlefield(P0, "Hero of Bretagard");
+    // Two cards exiled from P0's hand at once.
+    let a = t.hand(P0, "Island");
+    let b = t.hand(P0, "Forest");
+    t.g.batch_hold += 1;
+    for c in [a, b] {
+        t.g.move_object(c, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    }
+    t.g.batch_hold -= 1;
+    t.g.end_event_batch();
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(hero, "+1/+1"), 2);
+    // P0's spell exiles a permanent.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_new(&mut t, P0, "Swords to Plowshares", &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(t.counters(hero, "+1/+1"), 3);
+    // An opponent's spell exiling a permanent: no.
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
+    cast_new(&mut t, P1, "Swords to Plowshares", &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert_eq!(t.counters(hero, "+1/+1"), 3);
+}
+
+#[test]
+fn ranar_creates_a_spirit_when_your_spell_exiles_permanents() {
+    cr!("603.2c");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ranar the Ever-Watchful");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_new(&mut t, P0, "Swords to Plowshares", &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Spirit").len(), 1);
+}

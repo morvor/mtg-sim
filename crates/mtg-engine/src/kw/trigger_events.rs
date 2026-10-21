@@ -27,6 +27,9 @@ pub const CAUSED_BY_SPELL_OR_ABILITY: &str = "event cause:a spell or ability";
 /// `Condition::Custom`: a spell or ability an opponent of the ability's controller controls
 /// caused the trigger event.
 pub const CAUSED_BY_OPPONENTS: &str = "event cause:a spell or ability an opponent controls";
+/// `Condition::Custom`: a spell or ability the ability's controller controls caused the
+/// trigger event ("a spell or ability you control exiles one or more permanents").
+pub const CAUSED_BY_YOURS: &str = "event cause:a spell or ability you control";
 /// `Condition::Custom`: a spell or ability controlled by the trigger event's player caused
 /// it ("causes its controller to shuffle their library").
 pub const CAUSED_BY_EVENT_PLAYERS: &str = "event cause:its controller's";
@@ -65,6 +68,7 @@ impl KeywordRules for TriggerEvents {
             DURING_YOUR_UNTAP_STEP => Some(
                 g.turn.step == crate::turn::Step::Untap && g.turn.active == ctx.controller,
             ),
+            CAUSED_BY_YOURS => Some(cause.is_some_and(|c| ctl(c) == ctx.controller)),
             CAUSED_BY_OPPONENTS => {
                 Some(cause.is_some_and(|c| g.are_opponents(ctx.controller, ctl(c))))
             }

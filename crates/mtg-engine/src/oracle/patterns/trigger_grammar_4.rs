@@ -40,7 +40,7 @@
 use super::{AbilityPattern, EffectPattern, TriggerPattern};
 use crate::ability::*;
 use crate::kw::trigger_events::{
-    CAUSED_BY_EVENT_PLAYERS, CAUSED_BY_OPPONENTS, CAUSED_BY_SPELL_OR_ABILITY,
+    CAUSED_BY_EVENT_PLAYERS, CAUSED_BY_OPPONENTS, CAUSED_BY_SPELL_OR_ABILITY, CAUSED_BY_YOURS,
     DURING_YOUR_UNTAP_STEP, THE_CAUSE,
 };
 use crate::oracle::effects::Builder;
@@ -636,6 +636,61 @@ fn teamwork_events(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: teamwork events", priority: 100, parse: teamwork_events } }
+
+/// "a spell or ability you control exiles one or more permanents from the battlefield"
+/// (Hero of Bretagard, Ranar the Ever-Watchful): permanents put into exile from the
+/// battlefield by the effect of such a spell or ability, as a batch.
+fn spell_or_ability_exiles(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (cause, rest) = t.split_once(" exiles one or more ")?;
+    let cond = match cause {
+        "a spell or ability you control" => CAUSED_BY_YOURS,
+        "a spell or ability an opponent controls" => CAUSED_BY_OPPONENTS,
+        "a spell or ability" => CAUSED_BY_SPELL_OR_ABILITY,
+        _ => return None,
+    };
+    let np = rest.strip_suffix(" from the battlefield")?;
+    let (f, plural, tail) = parse_object_phrase(np)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some((
+        TriggerCond::Batched {
+            trigger: Box::new(TriggerCond::Where {
+                trigger: Box::new(TriggerCond::ZoneChange {
+                    filter: Filter::and(vec![f, Filter::Permanent]),
+                    from: Some(ZoneKind::Battlefield),
+                    to: Some(ZoneKind::Exile),
+                }),
+                cond: Condition::Custom(cond.into()),
+            }),
+            per: BatchPer::Batch,
+        },
+        Sel::TriggerObjects,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: a spell or ability you control exiles one or more permanents", priority: 100, parse: spell_or_ability_exiles } }
+
+/// "one or more cards are put into exile from your hand or a spell or ability you control
+/// exiles one or more permanents from the battlefield": either batch (see the
+/// interpretation `batched-alternatives-one-batch`).
+fn exile_batches_either(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (a, b) = t.split_once(" or a spell or ability ")?;
+    if !a.starts_with("one or more ") {
+        return None;
+    }
+    let (ca, _, _) = parse_trigger_condition(&format!("whenever {a}"))?;
+    let (cb, _, _) = spell_or_ability_exiles(&format!("a spell or ability {b}"))?;
+    if !matches!(ca, TriggerCond::Batched { .. }) {
+        return None;
+    }
+    Some((TriggerCond::AnyOf(vec![ca, cb]), Sel::TriggerObjects, PlayerRef::You))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: one or more [A] or a spell or ability exiles one or more [B]", priority: 100, parse: exile_batches_either } }
 
 #[cfg(test)]
 mod tests {
