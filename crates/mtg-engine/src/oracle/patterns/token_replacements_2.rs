@@ -254,3 +254,352 @@ fn first_time_copies(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
 }
 
 inventory::submit! { StaticPattern { name: "token replacements 2: the first time you would create tokens, copies instead", priority: 70, parse: first_time_copies } }
+
+// ---------------------------------------------------------------------------
+// Token creation variants
+// ---------------------------------------------------------------------------
+
+/// Whether `e` creates tokens (and nothing else but storing values).
+fn creates_tokens(e: &Effect) -> bool {
+    match e {
+        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => true,
+        Effect::Seq(v) => v.iter().any(creates_tokens),
+        _ => false,
+    }
+}
+
+/// "create two 3/3 blue and red Elemental creature tokens with flying that attack that
+/// opponent this turn if able" (Furygale Flocking, inside "for each opponent, ..."): the
+/// tokens, then a requirement that they attack that player this turn (CR 508.1d).
+fn create_that_attack_if_able(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let base = l
+        .strip_suffix(" that attack that opponent this turn if able")
+        .or_else(|| l.strip_suffix(" that attack that player this turn if able"))?;
+    if !base.starts_with("create ") {
+        return None;
+    }
+    let defender = b.it_player.clone();
+    if !matches!(defender, PlayerRef::Iterated | PlayerRef::TriggerPlayer) {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let e = crate::oracle::effects::parse_clause(base, b);
+    let Some(e) = e.filter(creates_tokens) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    b.it = Sel::Var(vars::CREATED);
+    Some(Effect::seq(vec![
+        e,
+        Effect::AddRestriction {
+            restriction: Restriction::MustAttackPlayer {
+                attackers: Filter::In(Box::new(Sel::Var(vars::CREATED))),
+                defender: PlayerFilter::Ref(Box::new(defender)),
+            },
+            duration: Duration::EndOfTurn,
+        },
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: create tokens that attack that opponent this turn if able", priority: 85, parse: create_that_attack_if_able } }
+
+/// "They gain haste until end of turn." after "For each opponent, create [tokens] ...":
+/// the tokens each pass created (performed in each pass, right after they're created).
+fn they_after_each_player_creation(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Effect::ForEachPlayer { effect, .. } = prev else {
+        return false;
+    };
+    if !creates_tokens(effect) {
+        return false;
+    }
+    let lower = l.to_lowercase();
+    if !lower.starts_with("they ") && !lower.starts_with("those tokens ") {
+        return false;
+    }
+    let saved = (b.it.clone(), b.targets.len());
+    b.it = Sel::Var(vars::CREATED);
+    let text = lower.replacen("those tokens ", "they ", 1);
+    let e = crate::oracle::effects::parse_sentence(&text, b);
+    b.it = saved.0;
+    let Some(e) = e.filter(|_| b.targets.len() == saved.1) else {
+        b.targets.truncate(saved.1);
+        return false;
+    };
+    if !serde_json::to_string(&e)
+        .is_ok_and(|j| j.contains(&format!("{{\"Var\":{}}}", vars::CREATED)))
+    {
+        return false;
+    }
+    let body = std::mem::take(effect.as_mut());
+    **effect = Effect::seq(vec![body, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: they ... after creating tokens for each player", priority: 45, apply: they_after_each_player_creation } }
+
+/// "Otherwise, create one of those tokens." after "If [condition], create three [tokens].
+/// [They have ...]" (Brood Birthing): one token of that description.
+fn otherwise_one_of_those(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    if end(&lower) != "otherwise, create one of those tokens" {
+        return false;
+    }
+    let Effect::If {
+        then, otherwise, ..
+    } = prev
+    else {
+        return false;
+    };
+    if !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    let one = match then.as_ref() {
+        Effect::CreateToken {
+            spec,
+            controller,
+            tapped,
+            attacking,
+            ..
+        } => Effect::CreateToken {
+            spec: spec.clone(),
+            count: Value::c(1),
+            controller: controller.clone(),
+            tapped: *tapped,
+            attacking: *attacking,
+        },
+        _ => return false,
+    };
+    **otherwise = one;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: otherwise, create one of those tokens", priority: 45, apply: otherwise_one_of_those } }
+
+/// "create a 1/1 white Human creature token that's tapped and attacking that player or a
+/// planeswalker they control" (Adeline, Resplendent Cathar): the tokens attack that
+/// player or a planeswalker that player controls, as their controller chooses (CR 508.4).
+fn attacking_that_player_or_planeswalker(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let base = l
+        .strip_suffix(" or a planeswalker they control")
+        .or_else(|| l.strip_suffix(" or a planeswalker that player controls"))?;
+    if !base.ends_with(" attacking that player") || !base.starts_with("create ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let e = crate::oracle::effects::parse_clause(base, b);
+    let Some(Effect::TokensJoinCombat {
+        effect,
+        attacking: Some(defender),
+        blocking: None,
+    }) = e
+    else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    Some(Effect::TokensJoinCombat {
+        effect: Box::new(Effect::seq(vec![
+            Effect::Custom(crate::kw::token_creation_rules::OR_THEIR_PLANESWALKERS.into()),
+            *effect,
+        ])),
+        attacking: Some(defender),
+        blocking: None,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: tokens attacking that player or a planeswalker they control", priority: 85, parse: attacking_that_player_or_planeswalker } }
+
+/// The token specs `e` creates.
+fn created_specs(e: &mut Effect) -> Vec<&mut TokenSpec> {
+    match e {
+        Effect::CreateToken { spec, .. } | Effect::CreateTokenWithPT { spec, .. } => vec![spec],
+        Effect::Seq(v) => v.iter_mut().flat_map(created_specs).collect(),
+        _ => vec![],
+    }
+}
+
+/// "create a 1/1 creature token of the chosen color and type" (Sarpadian Empires, Vol.
+/// VII; Volrath's Laboratory), "create an X/X creature token of the chosen color and type,
+/// where X is ..." (Riptide Replicator), "... of the chosen color", "... of the chosen
+/// type": the token's color and creature type are those chosen for the source (CR 607.2d).
+fn token_of_the_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("create ") {
+        return None;
+    }
+    let (phrase, placeholders): (&str, &[&str]) = [
+        (
+            " of the chosen color and type",
+            &[crate::tokens::CHOSEN_COLOR, crate::tokens::CHOSEN_TYPE][..],
+        ),
+        (" of the chosen color", &[crate::tokens::CHOSEN_COLOR][..]),
+        (" of the chosen type", &[crate::tokens::CHOSEN_TYPE][..]),
+    ]
+    .into_iter()
+    .find(|(p, _)| l.contains(&format!("token{p}")) || l.contains(&format!("tokens{p}")))?;
+    let text = l.replacen(phrase, "", 1);
+    let saved = (b.targets.len(), b.it.clone());
+    let mut e = crate::oracle::effects::parse_clause(&text, b)?;
+    let specs = created_specs(&mut e);
+    if specs.len() != 1 {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    for spec in specs {
+        // Only a token whose color and creature type the choice gives.
+        if placeholders.contains(&crate::tokens::CHOSEN_COLOR) && !spec.colors.is_colorless() {
+            return None;
+        }
+        if placeholders.contains(&crate::tokens::CHOSEN_TYPE)
+            && spec.card_types.contains(&crate::types::CardType::Creature)
+            && !spec.subtypes.is_empty()
+        {
+            return None;
+        }
+        for p in placeholders {
+            spec.subtypes.push((*p).into());
+        }
+    }
+    Some(e)
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: a token of the chosen color and type", priority: 85, parse: token_of_the_chosen } }
+
+/// "As ~ enters, choose white Citizen, blue Camarid, black Thrull, red Goblin, or green
+/// Saproling." (Sarpadian Empires, Vol. VII): a color and a creature type chosen together
+/// (CR 614.12, 607.2d).
+fn choose_color_type_pairs(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("as ~ enters, choose ")?;
+    let list = r.replace(", or ", ", ");
+    let mut words = Vec::new();
+    for w in list.split(", ") {
+        let (c, t) = w.split_once(' ')?;
+        crate::types::Color::from_word(c)?;
+        let t = subtype_word(t)?;
+        words.push(format!("{c} {t}"));
+    }
+    if words.len() < 2 {
+        return None;
+    }
+    Some(static_ability(
+        replacement(
+            ReplacementEvent::EntersBattlefield(Filter::Source),
+            ReplacementAction::AsEnters(Box::new(Effect::Choose {
+                who: PlayerRef::You,
+                kind: ChoiceKind::OneOf(words),
+            })),
+            false,
+        ),
+        None,
+        text,
+    ))
+}
+
+inventory::submit! { StaticPattern { name: "token replacements 2: choose a color and creature type pair", priority: 70, parse: choose_color_type_pairs } }
+
+/// "create a green Fungus Dinosaur creature token with base power and toughness each
+/// equal to the total power of those creatures" (The Skullspore Nexus): the token's power
+/// and toughness are determined as it's created and are part of its copiable values
+/// (CR 111.3, 608.2h).
+fn token_with_pt_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("create a ") && !l.starts_with("create an ") {
+        return None;
+    }
+    let (head, value) = l
+        .split_once(" token with base power and toughness each equal to ")
+        .or_else(|| l.split_once(" token with power and toughness each equal to "))?;
+    let (_, desc) = head.split_once(' ')?;
+    let desc = desc
+        .strip_prefix("a ")
+        .or_else(|| desc.strip_prefix("an "))?;
+    if desc.contains('/') || !desc.contains(" creature") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+    };
+    let Some((v, tail)) = crate::oracle::statics::parse_value_phrase(value, b) else {
+        restore(b);
+        return None;
+    };
+    if !end(&tail).is_empty() {
+        restore(b);
+        return None;
+    }
+    let Some(mut e) =
+        crate::oracle::effects::parse_clause(&format!("create a 0/0 {desc} token"), b)
+    else {
+        restore(b);
+        return None;
+    };
+    let Effect::CreateToken { spec, .. } = &mut e else {
+        restore(b);
+        return None;
+    };
+    spec.power = None;
+    spec.toughness = None;
+    spec.pt_values = Some(Box::new((v.clone(), v)));
+    Some(e)
+}
+
+inventory::submit! { super::EffectPattern { name: "token replacements 2: a token with power and toughness each equal to", priority: 85, parse: token_with_pt_equal_to } }
+
+/// All the tokens a run of creations made.
+const ALL_CREATED: Var = vars::USER + 5110;
+/// The token each pass of "for each of those tokens" is about.
+const EACH_TOKEN: Var = vars::USER + 5111;
+
+/// "For each of those tokens, you may put an Aura card from your hand and/or graveyard
+/// onto the battlefield attached to it." after "create a 1/1 white Cat creature token
+/// with lifelink, a 1/1 white Bird creature token with flying, and a 2/4 white Ox creature
+/// token" (Liberated Livestock): the instruction for each token created, in turn.
+fn for_each_of_those_tokens(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("for each of those tokens, ") else {
+        return false;
+    };
+    let creations: Vec<Effect> = match &*prev {
+        Effect::Seq(v)
+            if !v.is_empty() && v.iter().all(|e| matches!(e, Effect::CreateToken { .. })) =>
+        {
+            v.clone()
+        }
+        Effect::CreateToken { .. } => vec![prev.clone()],
+        _ => return false,
+    };
+    let saved = (b.it.clone(), b.targets.len());
+    b.it = Sel::Var(EACH_TOKEN);
+    let e = crate::oracle::effects::parse_sentence(r, b);
+    b.it = saved.0;
+    let Some(e) = e.filter(|_| b.targets.len() == saved.1) else {
+        b.targets.truncate(saved.1);
+        return false;
+    };
+    let mut v = vec![Effect::Store {
+        var: ALL_CREATED,
+        sel: Sel::None,
+    }];
+    for c in creations {
+        v.push(c);
+        v.push(Effect::Store {
+            var: ALL_CREATED,
+            sel: Sel::Union(vec![Sel::Var(ALL_CREATED), Sel::Var(vars::CREATED)]),
+        });
+    }
+    v.push(Effect::ForEach {
+        sel: Sel::Var(ALL_CREATED),
+        var: EACH_TOKEN,
+        effect: Box::new(e),
+    });
+    *prev = Effect::Seq(v);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: for each of those tokens, [instruction]", priority: 45, apply: for_each_of_those_tokens } }

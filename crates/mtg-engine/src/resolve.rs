@@ -3079,8 +3079,9 @@ impl Game {
             .and_then(|c| ctx.source.and_then(|src| c.attack_target(src)));
         let mut options = crate::combat::attack_target_options(self, preferred);
         // "... that's tapped and attacking that player" (`Effect::TokensJoinCombat`).
-        if let Some(d) = crate::tokens::forced_defender(ctx) {
-            options.retain(|t| Some(*t) == d);
+        // "... attacking that player or a planeswalker they control": any of those.
+        if let Some(ds) = ctx.vars.get(&crate::tokens::TOKEN_DEFENDER) {
+            options.retain(|t| ds.contains(t));
         }
         spec.attacking = options.first().copied();
         let prev = std::mem::replace(&mut self.token_attack_options, options);

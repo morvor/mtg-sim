@@ -563,6 +563,13 @@ fn create_aura_attached(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let (to, tail) = if let Some(t) = to_s.strip_prefix('~') {
         (Sel::This, t)
+    } else if let Some(t) = ["it", "that creature", "that permanent"]
+        .iter()
+        .find_map(|p| to_s.strip_prefix(p))
+        .filter(|_| matches!(b.it, Sel::Var(_) | Sel::Target(_) | Sel::TriggerObject))
+    {
+        // "for each of up to X target creatures, create ... attached to that creature".
+        (b.it.clone(), t)
     } else {
         let (spec, tail) = parse_target(to_s)?;
         let text = to_s[..to_s.len() - tail.len()].trim().to_string();

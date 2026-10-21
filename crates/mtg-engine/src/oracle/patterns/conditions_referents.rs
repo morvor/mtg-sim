@@ -909,6 +909,10 @@ fn is_state(sel: &Sel, s: &str, neg: bool, b: &mut Builder) -> Option<Condition>
         // "it's attacking a battle", "it's attacking you".
         let f = match p {
             "you" => Filter::AttackingPlayer(PlayerRel::You),
+            // "if it's attacking one of your opponents" (Scriv's Contract token).
+            "an opponent" | "one of your opponents" => {
+                Filter::AttackingPlayer(PlayerRel::Opponent)
+            }
             "a battle" => Filter::AttackingObject(Box::new(Filter::Type(CardType::Battle))),
             "a planeswalker" => {
                 Filter::AttackingObject(Box::new(Filter::Type(CardType::Planeswalker)))
