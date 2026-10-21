@@ -702,6 +702,7 @@ impl Game {
                     self,
                     new_id,
                     copy_effect,
+                    m.etb.copy_of,
                     &m.etb.copy_extras,
                     &mut counters_to_add,
                 );
@@ -1207,6 +1208,18 @@ impl Game {
     }
 
     pub fn tap_ex(&mut self, obj: ObjectId, for_mana: bool) -> bool {
+        self.tap_with(obj, for_mana, None, false)
+    }
+
+    /// Taps a permanent, recording who tapped it ("whenever you tap an untapped creature
+    /// an opponent controls") and whether it's being declared as an attacker (CR 508.1f).
+    pub fn tap_with(
+        &mut self,
+        obj: ObjectId,
+        for_mana: bool,
+        by: Option<PlayerId>,
+        attacking: bool,
+    ) -> bool {
         let o = self.obj(obj);
         // Only a permanent: an object that has left the battlefield keeps its zone as
         // last known information, but it's no longer there to tap (CR 400.7).
@@ -1215,7 +1228,12 @@ impl Game {
         }
         self.objects[obj.0 as usize].tapped = true;
         self.dirty = true;
-        self.emit(Event::Tapped { obj, for_mana });
+        self.emit(Event::Tapped {
+            obj,
+            for_mana,
+            by,
+            attacking,
+        });
         true
     }
 
@@ -1698,8 +1716,15 @@ impl Game {
         if !self.can_pay_life(p, n) {
             return false;
         }
-        if n > 0 {
+        if n > 0 && !crate::kw::pay_life_instead(self, p, n) {
             self.perform_lose_life(p, n);
+            // "Whenever you pay life" (CR 119.4).
+            self.emit(Event::Custom {
+                name: crate::life_totals::PAID_LIFE.into(),
+                player: Some(p),
+                obj: None,
+                amount: n as i32,
+            });
         }
         true
     }
@@ -2102,6 +2127,11 @@ impl Game {
             self.recompute();
         }
         if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
+            return false;
+        }
+        // CR 702.26b: a phased-out permanent is treated as though it doesn't exist; an
+        // effect can't attach it (Robe of Stars phased out in response to its equip).
+        if self.obj(obj).phased_out {
             return false;
         }
         if self.obj(obj).attached_to == Some(to) {

@@ -140,7 +140,11 @@ What it found:
 | 9 | offered, never cast | Counterspells with nothing to counter; casts whose payment then failed |
 | 11 | activated or triggered, never resolved | Countered, or every target gone |
 
-Run with `--report FILE` for the full list (card, reason, ability text).
+Run with `--report FILE` for the full list (card, reason, ability text). The report also
+has one `outcome` line per card (`outcome<TAB>index<TAB>card<TAB>cast | exempt: why |
+not cast: why<TAB>failed game kinds`), clean cards included, which `mtg-tools verified`
+reads for the fuzz checks of the card tiers (`docs/CARD_COVERAGE.md`). `--cards
+verified|round-trip|compiled` limits the pool to cards at that tier.
 
 Deck setup changes after this sweep (`every_card.rs`), from the commonest reasons
 above: decks get enough lands for the card's most expensive activated ability, not just
@@ -152,6 +156,33 @@ cards for the types and keywords it names, which could crowd them out; and "dies
 re-run with these changes and the merged newer engine (pool of 29,744): abilities used
 94.8% → 95.0%, cards fully exercised 95.2% → 95.5%, and its only failures are the two
 Charismatic Conqueror games described above.
+
+### Sweep for the card tiers (Oct 21)
+
+The sweep behind `docs/verified-cards.tsv` (pool of 30,222 cards, 60,444 games, 3 threads,
+three chunks of about 46 minutes): 99.7% of the castable cards cast or played, 95.4% of
+the activated and triggered abilities used, 95.9% of the cards fully exercised. Its four
+failed games keep their cards from being verified (`fuzz-clean`): Charismatic Conqueror's
+two slow games (the open loop described above), one slow Shahrazad game (subgames
+inside subgames), and one Maelstrom Nexus game with a zone-consistency report ("Sight
+Beyond Sight #53 is listed in Library(P0) but has become a new object", from turn 27;
+replay with `mtg-sim --every-card --from 15350 --count 1 --game 0 --log`). A card a
+failed game's message names as an object is charged too (`fuzz-clean (rules in a game of
+Maelstrom Nexus)` for Sight Beyond Sight); the other cards of a failed game's decks
+aren't, since the report doesn't list them.
+
+The Maelstrom Nexus violation was an engine bug, since fixed: Sight Beyond Sight resolved
+with Skill Borrower out (its controller may look at the top card of their library). Taking
+the top card into the hand uncovered the other card, which the top-card effect saw again
+and made a new object (CR 401.6), while the dig still held the old id and put that on the
+bottom: the stale id stayed listed in the library and the new object stayed on top.
+Library rearrangements (`library.rs`: put on top/bottom, the rest of a dig) now follow a
+card to the object it is now (`tests/cards/card_flow_sight_beyond_sight.rs`). The tier
+file still charges both cards until the next sweep.
+
+The tier file was regenerated after merging newer engine work, with a fresh structure log
+and this sweep's report: the 321 cards that compile since then aren't in the report, so
+they fail `fuzz-swept` until the next sweep.
 
 ### Earlier sweeps
 

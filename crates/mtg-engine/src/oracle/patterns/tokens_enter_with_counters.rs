@@ -12,10 +12,49 @@ use crate::types::CounterKind;
 /// Whether the effect ends by creating tokens.
 fn ends_with_token(e: &Effect) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => true,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => true,
         Effect::Seq(v) => v.last().is_some_and(ends_with_token),
+        Effect::DelayedTrigger { body, .. } => ends_with_token(&body.effect),
         _ => false,
     }
+}
+
+/// The object the last token copy `e` creates copies.
+fn last_copied(e: &Effect) -> Option<Sel> {
+    match e {
+        Effect::CreateTokenCopy { of, .. } => Some(of.clone()),
+        Effect::Seq(v) => v.last().and_then(last_copied),
+        Effect::DelayedTrigger { body, .. } => last_copied(&body.effect),
+        _ => None,
+    }
+}
+
+/// "The token enters with half that many +1/+1 counters on it, rounded down." (Ochre
+/// Jelly): half the counters of that kind the object the token copies had as it last
+/// existed before it died (CR 400.7).
+fn half_that_many(r: &str, prev: &Effect) -> Option<Vec<(CounterKind, Value)>> {
+    let r = r.strip_prefix("half that many ")?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counters on it, rounded ")?;
+    let up = match r {
+        "up" => true,
+        "down" => false,
+        _ => return None,
+    };
+    let of = last_copied(prev)?;
+    Some(vec![(
+        kind.clone(),
+        Value::Div(
+            Box::new(Value::CountersOn(
+                Box::new(Sel::Before(Box::new(of))),
+                Some(kind),
+            )),
+            2,
+            up,
+        ),
+    )])
 }
 
 fn token_enters_with_counters(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
@@ -27,6 +66,9 @@ fn token_enters_with_counters(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
     };
     if !ends_with_token(prev) {
         return false;
+    }
+    if let Some(c) = half_that_many(r, prev) {
+        return wrap_last_create(prev, c);
     }
     let Some((counters, rest)) = r.split_once(" on it") else {
         return false;
@@ -56,7 +98,9 @@ fn token_enters_with_counters(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 /// Makes the tokens the last instruction of `e` creates enter with `counters`.
 fn wrap_last_create(e: &mut Effect, counters: Vec<(CounterKind, Value)>) -> bool {
     match e {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } => {
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => {
             let create = std::mem::take(e);
             *e = Effect::TokensEnterWithCounters {
                 counters,
@@ -67,6 +111,7 @@ fn wrap_last_create(e: &mut Effect, counters: Vec<(CounterKind, Value)>) -> bool
         Effect::Seq(v) => v
             .last_mut()
             .is_some_and(|last| wrap_last_create(last, counters)),
+        Effect::DelayedTrigger { body, .. } => wrap_last_create(&mut body.effect, counters),
         _ => false,
     }
 }

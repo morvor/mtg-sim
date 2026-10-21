@@ -92,10 +92,24 @@ fn choose_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let mut slots: Vec<(u8, &'static str)> = Vec::new();
     for item in target_items(end(r)) {
-        let Some((mut spec, tail)) = parse_target(item) else {
+        // "target instant or sorcery spell that targets only a single permanent or
+        // player" (Radiate): what the spell targets (CR 115.9).
+        let (head, qualifier) = super::r115_targets::split_targets_qualifier(item);
+        let Some((mut spec, tail)) = parse_target(head) else {
             restore(b);
             return None;
         };
+        if let Some(q) = qualifier {
+            match &mut spec.what {
+                TargetKind::Spell(f) | TargetKind::Ability(f) | TargetKind::SpellOrAbility(f) => {
+                    *f = Filter::and(vec![f.clone(), Filter::StackTargets(Box::new(q))]);
+                }
+                _ => {
+                    restore(b);
+                    return None;
+                }
+            }
+        }
         let mut tail = tail;
         if let Some((grp, extra, t2)) = controller_group(tail) {
             if spec.together.is_some() {

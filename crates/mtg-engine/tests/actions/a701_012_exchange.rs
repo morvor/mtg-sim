@@ -56,6 +56,7 @@ fn exchanging_control_of_permanents_with_the_same_controller_does_nothing() {
 #[test]
 fn if_the_entire_exchange_cant_be_completed_no_part_of_it_occurs() {
     cr!("701.12a");
+    cr_example!("701.12a", "one of those creatures is destroyed before the spell resolves");
     ruling!(
         "Switcheroo",
         "If one of the target creatures is an illegal target when Switcheroo resolves, the exchange won’t happen."

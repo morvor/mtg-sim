@@ -416,6 +416,12 @@ pub trait KeywordRules: Sync + Send {
     fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
         false
     }
+    /// Replaces `p`'s paying `n` (> 0) life, which they can pay (CR 119.4), with something
+    /// else ("If you would pay life ..., exile that many cards ... instead"); returns true
+    /// if it did (the life counts as paid).
+    fn pay_life_instead(&self, g: &mut Game, p: PlayerId, n: u32) -> bool {
+        false
+    }
     /// What a static ability of this keyword does "any time" the game is in some state,
     /// such as a player getting the city's blessing from ascend (CR 702.131b). Checked each
     /// time state-based actions are checked, before them.
@@ -1127,6 +1133,11 @@ pub fn on_event(g: &mut Game, ev: &Event) {
     for r in registry() {
         r.on_event(g, ev);
     }
+}
+
+/// See [`KeywordRules::pay_life_instead`].
+pub fn pay_life_instead(g: &mut Game, p: PlayerId, n: u32) -> bool {
+    registry().iter().any(|r| r.pay_life_instead(g, p, n))
 }
 
 /// Whether a keyword keeps an unattached or illegally attached Aura from being put into

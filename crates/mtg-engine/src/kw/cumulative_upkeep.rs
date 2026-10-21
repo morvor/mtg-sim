@@ -10,6 +10,13 @@ use crate::keywords::{Keyword, KeywordKind};
 /// The age counter (CR 702.24a).
 pub const AGE: &str = "age";
 
+/// `Effect::Custom`/`Event::Custom` names for paying a permanent's cumulative upkeep and
+/// not paying it ("Whenever you pay ~'s cumulative upkeep", Hibernation's End; "When a
+/// player doesn't pay ~'s cumulative upkeep", Heart of Bogardan). Not paying is reported
+/// before the permanent is sacrificed.
+pub const CUMULATIVE_UPKEEP_PAID: &str = "cumulative upkeep paid";
+pub const CUMULATIVE_UPKEEP_NOT_PAID: &str = "cumulative upkeep not paid";
+
 pub struct CumulativeUpkeep;
 
 impl KeywordRules for CumulativeUpkeep {
@@ -43,8 +50,11 @@ impl KeywordRules for CumulativeUpkeep {
                 Effect::PayOptional {
                     who: PlayerRef::You,
                     cost,
-                    then: Box::new(Effect::Noop),
-                    otherwise: Box::new(Effect::SacrificeObjects { what: Sel::This }),
+                    then: Box::new(Effect::Custom(CUMULATIVE_UPKEEP_PAID.into())),
+                    otherwise: Box::new(Effect::Seq(vec![
+                        Effect::Custom(CUMULATIVE_UPKEEP_NOT_PAID.into()),
+                        Effect::SacrificeObjects { what: Sel::This },
+                    ])),
                 },
             ])),
         );
@@ -53,6 +63,14 @@ impl KeywordRules for CumulativeUpkeep {
             AbilityKind::Triggered(t),
             KeywordKind::CumulativeUpkeep.name(),
         )])
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != CUMULATIVE_UPKEEP_PAID && name != CUMULATIVE_UPKEEP_NOT_PAID {
+            return false;
+        }
+        super::echo::upkeep_payment_event(g, name, ctx);
+        true
     }
 }
 

@@ -110,6 +110,25 @@ fn word_end(rest: &str) -> bool {
 
 fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(r) = s.strip_prefix("twice ") {
+        // "twice" binds tighter than "plus"/"minus": "twice the number of age counters
+        // on ~ minus 2" (Heart of Bogardan) is 2N - 2, even where an amount phrase
+        // would read the whole "N minus 2".
+        for op in [" minus ", " plus "] {
+            if let Some(i) = r.find(op) {
+                let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+                if let Some((v, rest)) = term(&r[..i], b) {
+                    if rest.trim().is_empty() {
+                        return Some((
+                            Value::Mul(Box::new(Value::c(2)), Box::new(v)),
+                            r[i..].to_string(),
+                        ));
+                    }
+                }
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                b.it_player = saved.2;
+            }
+        }
         let (v, rest) = term(r, b)?;
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }
@@ -129,6 +148,34 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "the discarded card's mana value" for a spell whose kicker or additional cost
+    // discards a card (Dralnu's Pet).
+    if let Some(rest) = s.strip_prefix("the discarded card's mana value") {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        if raw.lines().any(|l| l.starts_with("kicker") && l.contains("discard a")) {
+            return Some((
+                Value::Custom(crate::kw::counter_groups::DISCARDED_FOR_COST_MANA_VALUE.into()),
+                rest.to_string(),
+            ));
+        }
+    }
+    // "the total mana value of all cards revealed this way" after "each player reveals the
+    // top card of their library" (Naya Soulbeast): the cards it revealed.
+    if let Some(rest) = s.strip_prefix("the total mana value of all cards revealed this way") {
+        if crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("each player reveals the top card of their library")
+        {
+            return Some((
+                Value::Aggregate(
+                    AggOp::Sum,
+                    Stat::ManaValue,
+                    Box::new(Sel::Var(crate::kw::parley::REVEALED)),
+                ),
+                rest.to_string(),
+            ));
+        }
+    }
     // The phrases of this grammar first; amounts from earlier instructions and this
     // turn's history (`value_results`) when they don't read the whole phrase.
     let saved = (

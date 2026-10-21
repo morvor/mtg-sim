@@ -63,6 +63,14 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
                 ch.basic_land_type = Some(SmolStr::new(w));
             } else if is_creature_type(w) {
                 ch.creature_type = Some(SmolStr::new(w));
+            } else if let Some((c, t)) = w
+                .split_once(' ')
+                .and_then(|(c, t)| Some((Color::from_word(c)?, t)))
+                .filter(|(_, t)| is_creature_type(t))
+            {
+                // "choose white Citizen, blue Camarid, ...": a color and a creature type.
+                ch.color = Some(c);
+                ch.creature_type = Some(SmolStr::new(t));
             }
         }
         ChoiceKind::CreatureTypeOtherThan(except) => {

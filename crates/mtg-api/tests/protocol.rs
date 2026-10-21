@@ -32,6 +32,16 @@ impl Transport for Scripted {
     }
 }
 
+/// Protocol options letting in any fully supported card: these tests are about the
+/// protocol, and their random decks aren't held to the verified bar
+/// (`tests/card_tiers.rs` tests the bar).
+fn any_cards() -> ProtocolOptions {
+    ProtocolOptions {
+        min_card_tier: mtg_engine::card_tiers::Tier::Compiled,
+        ..Default::default()
+    }
+}
+
 fn scripted(lines: &[&str]) -> Scripted {
     Scripted {
         answers: Arc::new(Mutex::new(lines.iter().map(|s| s.to_string()).collect())),
@@ -197,8 +207,9 @@ fn a_session_drives_a_whole_game() {
         config,
         vec![common::simple_deck(), common::simple_deck()],
         vec![Seat::External, Seat::External],
-        ProtocolOptions::default(),
-    );
+        any_cards(),
+    )
+    .unwrap();
     // Answering for the wrong seat is refused.
     let first = s.next().unwrap();
     let other = PlayerId(1 - first.seat);
@@ -238,9 +249,10 @@ fn a_session_mixes_external_and_in_process_seats() {
         vec![Seat::Agent(Box::new(RandomAgent::new(1))), Seat::External],
         ProtocolOptions {
             max_retries: 2,
-            ..Default::default()
+            ..any_cards()
         },
-    );
+    )
+    .unwrap();
     let mut rng = ChaCha8Rng::seed_from_u64(2);
     let mut n = 0;
     let mut saw_events = false;
@@ -262,8 +274,9 @@ fn dropping_a_session_stops_its_game() {
         GameConfig::default(),
         vec![common::simple_deck(), common::simple_deck()],
         vec![Seat::External, Seat::External],
-        ProtocolOptions::default(),
-    );
+        any_cards(),
+    )
+    .unwrap();
     assert!(s.next().is_some());
     drop(s);
 }

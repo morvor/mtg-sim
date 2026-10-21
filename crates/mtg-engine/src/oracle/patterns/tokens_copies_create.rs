@@ -741,14 +741,25 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if several_kinds(prev) {
         return false;
     }
+    // "For each of up to X target creatures, create a red Aura enchantment token named
+    // Smoke Blessing attached to that creature. Those tokens have enchant creature ...":
+    // the tokens each pass creates.
+    let in_loop = matches!(prev, Effect::ForEach { .. });
+    let last = match prev {
+        Effect::ForEach { effect, .. } => last_create(effect),
+        other => last_create(other),
+    };
     let Some(
         Effect::CreateToken { spec, .. }
         | Effect::CreateTokenWithPT { spec, .. }
         | Effect::CreateTokenAttached { spec, .. },
-    ) = last_create(prev)
+    ) = last
     else {
         return false;
     };
+    if in_loop && !l.starts_with("those tokens have ") {
+        return false;
+    }
     let Some((masked, quotes)) = super::statics::mask_quotes(r) else {
         return false;
     };
