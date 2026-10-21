@@ -29,8 +29,13 @@
 //! * `structure-coverage [--write PATH] [--limit N] [--logs DIR] [--card NAME]` — groups
 //!   supported cards' abilities by compiled structure and reports the structures no test
 //!   exercises (see `structure_coverage.rs` for the command sequence).
+//! * `verified [--write] [--out PATH] [--logs DIR] [--report FILE] [--passing PATH]
+//!   [--card NAME]` — every card's tier (unsupported < compiled < round-trip < verified)
+//!   and the checks it fails, into `docs/verified-cards.tsv` (see `verified.rs` for the
+//!   regeneration recipe).
 
 mod structure_coverage;
+mod verified;
 
 mod roundtrip;
 
@@ -520,17 +525,26 @@ fn pattern_of(text: &str) -> String {
     re.replace_all(text, "N").to_string()
 }
 
+/// How to regenerate the tier file and this report, for CARD_COVERAGE.md.
+const TIER_RECIPE: &str = "```sh\nexport CARGO_BUILD_JOBS=2\nrm -rf target/structlog\nMTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log\n# The every-card sweep: about 2.3 hours with 3 threads, so three chunks of ~46 min each\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 10100 --report target/every-card-0.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 10100 --count 10100 --report target/every-card-1.tsv\ncargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 10100 --report target/every-card-2.tsv\ncat target/every-card-[012].tsv > target/every-card.tsv\ncargo run --release -p mtg-tools -- roundtrip --write docs/ROUNDTRIP.md     # if round trips changed\ncargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write\ncargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md\n```\n";
+
 fn card_coverage(args: &[String]) {
     use mtg_engine::card::CardDef;
+    use mtg_engine::card_tiers::{check, Tier, TierTable, TIERS_FILE};
     let db = mtg_data::cards();
+    let table = TierTable::load(&repo_root().join(TIERS_FILE));
+    if table.is_empty() {
+        eprintln!("warning: {TIERS_FILE} is missing or empty: every card counts as at most compiled (run `mtg-tools verified --write`)");
+    }
     let mut total = 0usize;
     let mut full = 0usize;
-    // Fully supported and round-trip verified (`mtg-tools roundtrip`).
-    let mut verified = 0usize;
+    let mut tiers: BTreeMap<Tier, usize> = BTreeMap::new();
+    let mut fails: BTreeMap<String, usize> = BTreeMap::new();
     let mut total_abilities = 0usize;
     let mut supported_abilities = 0usize;
     let mut patterns: HashMap<String, usize> = HashMap::new();
-    let mut by_format: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    // Format → (cards, count at least each tier, indexed by Tier as usize).
+    let mut by_format: BTreeMap<&str, (usize, [usize; 4])> = BTreeMap::new();
     let mut manual_cards: Vec<String> = Vec::new();
     let formats = [
         "standard",
@@ -543,6 +557,7 @@ fn card_coverage(args: &[String]) {
     ];
     // Sticker sheets are deferred (docs/DEFERRED.md): counted separately.
     let mut sticker_sheets = 0usize;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     for c in db.iter() {
         if !c.is_playable_card() || !c.is_legal_somewhere() {
             continue;
@@ -561,11 +576,15 @@ fn card_coverage(args: &[String]) {
         total_abilities += n_abilities;
         supported_abilities += n_abilities.saturating_sub(unsupported.len());
         let ok = unsupported.is_empty();
+        let tier = table.tier_of(&def);
+        *tiers.entry(tier.tier).or_default() += 1;
+        if ok && seen.insert(c.name.clone()) {
+            for f in &tier.failed {
+                *fails.entry(f.check.clone()).or_default() += 1;
+            }
+        }
         if ok {
             full += 1;
-            if mtg_engine::oracle::render::compare::check_card(&def).pass {
-                verified += 1;
-            }
             if !def.manual_text().is_empty() {
                 manual_cards.push(c.name.clone());
             }
@@ -576,8 +595,10 @@ fn card_coverage(args: &[String]) {
             {
                 let e = by_format.entry(f).or_default();
                 e.0 += 1;
-                if ok {
-                    e.1 += 1;
+                for t in Tier::ALL {
+                    if tier.tier >= t {
+                        e.1[t as usize] += 1;
+                    }
                 }
             }
         }
@@ -585,39 +606,113 @@ fn card_coverage(args: &[String]) {
             *patterns.entry(pattern_of(u)).or_default() += 1;
         }
     }
+    let pct = |a: usize, b: usize| 100.0 * a as f64 / b.max(1) as f64;
+    let at_least =
+        |t: Tier| -> usize { tiers.iter().filter(|(k, _)| **k >= t).map(|(_, n)| n).sum() };
+    let verified = at_least(Tier::Verified);
     let mut pats: Vec<(String, usize)> = patterns.into_iter().collect();
     pats.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     println!(
+        "Verified: {verified}/{total} ({:.1}%); round-trip or better: {} ({:.1}%); compiled (fully supported): {full} ({:.1}%)",
+        pct(verified, total),
+        at_least(Tier::RoundTrip),
+        pct(at_least(Tier::RoundTrip), total),
+        pct(full, total),
+    );
+    println!(
         "Cards fully supported: {full}/{total} ({:.1}%); abilities supported: {supported_abilities}/{total_abilities} ({:.1}%)",
-        100.0 * full as f64 / total.max(1) as f64,
-        100.0 * supported_abilities as f64 / total_abilities.max(1) as f64
+        pct(full, total),
+        pct(supported_abilities, total_abilities)
     );
     let n_manual = manual_cards.len();
     println!(
         "Fully supported: {full} (compiled: {}, with hand-written abilities: {n_manual})",
         full - n_manual
     );
-    println!(
-        "Fully supported and round-trip verified: {verified}/{total} ({:.1}%)",
-        100.0 * verified as f64 / total.max(1) as f64
-    );
     println!("Deferred, not counted: {sticker_sheets} sticker sheets (see docs/DEFERRED.md)");
     let mut md = String::new();
-    md.push_str("# Card support coverage\n\nGenerated by `cargo run -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md`. A card is *fully supported* when the oracle compiler understood every ability on every face.\n\n");
+    md.push_str("# Card coverage\n\nGenerated by `cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md` from `docs/verified-cards.tsv` (`mtg-tools verified --write`) and the live compiler.\n\n");
     md.push_str(&format!(
-        "- Cards (paper, legal in at least one format): **{total}**\n- Fully supported: **{full}** ({:.1}%): compiled {}, with hand-written abilities {n_manual}\n- Fully supported and round-trip verified (compiled abilities render back to the Oracle text, see `docs/ROUNDTRIP.md`): **{verified}** ({:.1}%)\n- Abilities supported: {supported_abilities}/{total_abilities} ({:.1}%)\n- Deferred, not counted: {sticker_sheets} sticker sheets (see `docs/DEFERRED.md`)\n\n",
-        100.0 * full as f64 / total.max(1) as f64,
-        full - n_manual,
-        100.0 * verified as f64 / total.max(1) as f64,
-        100.0 * supported_abilities as f64 / total_abilities.max(1) as f64
+        "**Verified: {verified} of {total} cards ({:.1}%)** (paper cards legal in at least one format).\n\n",
+        pct(verified, total)
     ));
-    md.push_str("| Format | Cards | Fully supported | % |\n|---|---:|---:|---:|\n");
-    for (f, (t, s)) in &by_format {
+    md.push_str("A card is *verified* when it passes every check we have: every ability compiled (or hand-written and tested), the compiled abilities render back to the Oracle text (the round trip, `docs/ROUNDTRIP.md`), every ability structure on it is exercised by some test (`docs/STRUCTURE_COVERAGE.md`), and the latest every-card sweep cast or played it with no panic, hang, slow game or rules-check violation involving it (in the games built around it, or naming it; `docs/EVERY_CARD.md`; a card the sweep can't cast, with no mana cost or in a supplementary deck, is exempt from being cast). Simulations use only verified cards by default (`mtg-sim --cards`, `mtg_api::ProtocolOptions::min_card_tier`).\n\n");
+    md.push_str(
+        "| Tier | Means | Cards | % | At least this tier | % |\n|---|---|---:|---:|---:|---:|\n",
+    );
+    for (t, means) in [
+        (
+            Tier::Verified,
+            "round-trip, structure-verified and fuzz-clean",
+        ),
+        (
+            Tier::RoundTrip,
+            "compiled, and the Oracle round trip passes (for a card with hand-written abilities: everything but those, once `manual-check` passes)",
+        ),
+        (
+            Tier::Compiled,
+            "every ability compiled or hand-written (fully supported)",
+        ),
+        (Tier::Unsupported, "some ability not compiled"),
+    ] {
+        let n = tiers.get(&t).copied().unwrap_or(0);
         md.push_str(&format!(
-            "| {f} | {t} | {s} | {:.1}% |\n",
-            100.0 * *s as f64 / (*t).max(1) as f64
+            "| {t} | {means} | {n} | {:.1}% | {} | {:.1}% |\n",
+            pct(n, total),
+            at_least(t),
+            pct(at_least(t), total)
         ));
     }
+    md.push_str("\nChecks failed by compiled cards (a card can fail several):\n\n| Check | Cards failing | What it is |\n|---|---:|---|\n");
+    for (c, what) in [
+        (
+            check::ROUND_TRIP,
+            "the compiled abilities don't render back to the Oracle text",
+        ),
+        (check::MANUAL, "a hand-written ability fails `manual-check`"),
+        (check::STRUCTURE, "an ability structure no test exercises"),
+        (check::FUZZ_SWEPT, "not in the every-card report"),
+        (check::FUZZ_CAST, "the sweep never cast or played it"),
+        (
+            check::FUZZ_CLEAN,
+            "a panic, hang, slow game or rules violation in its games, or in another game whose failure names it",
+        ),
+        (
+            check::LISTED,
+            "not in `docs/verified-cards.tsv` (newer card data: regenerate)",
+        ),
+    ] {
+        let n = fails.get(c).copied().unwrap_or(0);
+        if n > 0 || c != check::LISTED {
+            md.push_str(&format!("| {c} | {n} | {what} |\n"));
+        }
+    }
+    md.push_str("\n| Format | Cards | Verified | % | Round-trip or better | % | Compiled (fully supported) | % |\n|---|---:|---:|---:|---:|---:|---:|---:|\n");
+    for (f, (t, at)) in &by_format {
+        let (v, r, c) = (
+            at[Tier::Verified as usize],
+            at[Tier::RoundTrip as usize],
+            at[Tier::Compiled as usize],
+        );
+        md.push_str(&format!(
+            "| {f} | {t} | {v} | {:.1}% | {r} | {:.1}% | {c} | {:.1}% |\n",
+            pct(v, *t),
+            pct(r, *t),
+            pct(c, *t)
+        ));
+    }
+    md.push_str(&format!(
+        "\n## Compiled cards\n\n- Fully supported (the compiled tier and above): **{full}** ({:.1}%): compiled {}, with hand-written abilities {n_manual}\n- Abilities supported: {supported_abilities}/{total_abilities} ({:.1}%)\n- Deferred, not counted: {sticker_sheets} sticker sheets (see `docs/DEFERRED.md`)\n\n",
+        pct(full, total),
+        full - n_manual,
+        pct(supported_abilities, total_abilities)
+    ));
+    md.push_str("## Regenerating\n\nRegenerate the tier file and this report before each milestone, and after a new card set or a CR update (other work changes round trips and structure coverage all the time, so the numbers drift between regenerations; a card newer than the tier file counts as at most compiled, and a card that stops compiling or round-tripping drops at once). Run nothing else heavy alongside the sweep:\n\n");
+    md.push_str(TIER_RECIPE);
+    md.push_str("\nEach chunk is a separate command because one run of the whole sweep takes longer than a command may run here (a pool larger than 30,300 cards needs a fourth chunk). `verified` reads the concatenated reports' `outcome` lines (whether each card was cast, and its failed games) and `failure` lines (a card a failed game's message names as an object, like a rules-check violation's, isn't fuzz-clean either).\n");
+    md.push_str(
+        "\n`mtg-tools verified --card \"Name\"` prints one card's tier and failed checks.\n",
+    );
     md.push_str("\n## Cards with hand-written abilities\n\nGenuinely unique abilities written directly in the ability AST (`crates/mtg-engine/src/cards/`), each tested in `crates/mtg-engine/tests/cards/m_<card>.rs`; see the policy in `cards/mod.rs`.\n\n| Card | Ability | Why hand-written |\n|---|---|---|\n");
     let mut entries: Vec<&mtg_engine::cards::ManualAbility> = mtg_engine::cards::all().collect();
     entries.sort_by(|a, b| (a.card, a.face, a.text).cmp(&(b.card, b.face, b.text)));
@@ -1144,8 +1239,9 @@ fn main() {
         Some("manual-check") => manual_check(),
         Some("interpretations") => interpretations(&args[1..]),
         Some("structure-coverage") => structure_coverage::run(&args[1..], repo_root()),
+        Some("verified") => verified::run(&args[1..], repo_root()),
         _ => {
-            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check|interpretations|roundtrip> [--write PATH] [--check]");
+            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check|interpretations|roundtrip|verified> [--write PATH] [--check]");
             std::process::exit(2);
         }
     }

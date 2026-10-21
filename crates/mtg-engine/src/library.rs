@@ -64,8 +64,24 @@ pub fn stack_starting_libraries(g: &mut Game) {
     }
 }
 
+/// The cards of `cards` that are in `p`'s library now, each as the object it is now: a card
+/// can become a new object without leaving its library (a top card revealed again, CR
+/// 401.6) while an effect that looked at it is still putting it somewhere in that library.
+fn in_library_now(g: &Game, p: PlayerId, cards: &[ObjectId]) -> Vec<ObjectId> {
+    let mut out: Vec<ObjectId> = Vec::new();
+    for c in cards {
+        let c = g.current(*c);
+        if g.player(p).library.contains(&c) && !out.contains(&c) {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Reorders the library so `top_first` are on top in that order.
 fn set_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
+    let top_first = in_library_now(g, p, top_first);
+    let top_first = &top_first[..];
     let lib = &mut g.players[p.idx()].library;
     lib.retain(|c| !top_first.contains(c));
     for c in top_first.iter().rev() {
@@ -74,17 +90,14 @@ fn set_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
 }
 
 /// Puts cards already in `p`'s library on top of it, in the given order (first on top).
-/// Cards not in that library are ignored.
+/// Cards not in that library are ignored; a card that became a new object there (CR 401.6)
+/// is followed.
 pub fn put_on_top(g: &mut Game, p: PlayerId, top_first: &[ObjectId]) {
-    let cards: Vec<ObjectId> = top_first
-        .iter()
-        .copied()
-        .filter(|c| g.player(p).library.contains(c))
-        .collect();
-    set_top(g, p, &cards);
+    set_top(g, p, top_first);
 }
 
 fn to_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
+    let cards = in_library_now(g, p, cards);
     let lib = &mut g.players[p.idx()].library;
     lib.retain(|c| !cards.contains(c));
     for (i, c) in cards.iter().enumerate() {
@@ -105,14 +118,10 @@ pub fn surveil(g: &mut Game, p: PlayerId, n: u32) {
 }
 
 /// Puts cards already in `p`'s library on the bottom of it, the first one lowest. Cards
-/// not in that library are ignored.
+/// not in that library are ignored; a card that became a new object there (CR 401.6) is
+/// followed.
 pub fn put_on_bottom(g: &mut Game, p: PlayerId, cards: &[ObjectId]) {
-    let cards: Vec<ObjectId> = cards
-        .iter()
-        .copied()
-        .filter(|c| g.player(p).library.contains(c))
-        .collect();
-    to_bottom(g, p, &cards);
+    to_bottom(g, p, cards);
 }
 
 /// Searches `owner`'s library for up to `n` cards matching `filter` (CR 701.23). The
@@ -293,8 +302,9 @@ pub(crate) fn place_rest(
     if rest_to.zone != ZoneKind::Library {
         return g.move_to_destination(rest, rest_to, ctx);
     }
-    // (Cards rearranged in their library stay the same objects, CR 400.7.)
-    let placed = rest.clone();
+    // (Cards rearranged in their library stay the same objects, CR 400.7; a card revealed
+    // again on top meanwhile is a new one, CR 401.6.)
+    let placed: Vec<ObjectId> = rest.iter().map(|c| g.current(*c)).collect();
     match rest_to.position {
         LibraryPosition::Top => {
             let order = choose_order(g, p, &rest, "Order the cards to put on top (top first)");

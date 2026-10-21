@@ -64,6 +64,11 @@ pub struct ProtocolOptions {
     pub auto_pass: bool,
     /// Include the event feed in requests.
     pub events: bool,
+    /// The lowest card tier (`mtg_engine::card_tiers`) a deck may hold where the API turns
+    /// decks into a game ([`crate::Session`], [`crate::decks`]): `Verified` by default.
+    /// Lower it explicitly to play cards that fail some check (`Compiled`: any fully
+    /// supported card; `Unsupported`: no check at all).
+    pub min_card_tier: mtg_engine::card_tiers::Tier,
 }
 
 impl Default for ProtocolOptions {
@@ -73,6 +78,7 @@ impl Default for ProtocolOptions {
             max_retries: 3,
             auto_pass: false,
             events: true,
+            min_card_tier: mtg_engine::card_tiers::Tier::Verified,
         }
     }
 }
