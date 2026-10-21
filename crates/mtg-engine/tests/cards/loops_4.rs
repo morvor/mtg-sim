@@ -44,3 +44,33 @@ fn rally_the_horde_repeats_until_the_last_card_is_a_land() {
     // Six cards exiled, four of them nonland.
     assert_eq!(tokens(&t, "Warrior"), 4);
 }
+
+fn tyrant(t: &mut TestGame) {
+    supported("Tyrant of Discord");
+    t.lands(P0, "Mountain", 7);
+    let tyrant = t.hand(P0, "Tyrant of Discord");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, tyrant).go();
+    t.resolve_all();
+}
+
+#[test]
+fn tyrant_of_discord_keeps_sacrificing_until_a_land() {
+    cr!("608.2c");
+    ruling!(
+        "Tyrant of Discord",
+        "the opponent will keep sacrificing permanents until they sacrifice a land"
+    );
+    // Only nonland permanents: all of them go.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P1, "Ornithopter");
+    tyrant(&mut t);
+    assert!(![a, b, c].iter().any(|o| t.on_battlefield(*o)));
+    // Only lands: the first one sacrificed stops it.
+    let mut t = TestGame::new(2);
+    let lands = t.lands(P1, "Forest", 3);
+    tyrant(&mut t);
+    assert_eq!(lands.iter().filter(|o| t.on_battlefield(**o)).count(), 2);
+}

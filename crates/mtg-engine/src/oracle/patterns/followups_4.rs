@@ -629,6 +629,48 @@ fn the_last_card_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "followups 4: if the last card exiled ...", priority: 120, apply: the_last_card_exiled } }
 
+/// The last instruction of an effect (looking into sequences and players' instructions).
+fn last_instruction(e: &Effect) -> &Effect {
+    match e {
+        Effect::Seq(v) => v.last().map_or(e, last_instruction),
+        Effect::AsPlayer { effect, .. } => last_instruction(effect),
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => last_instruction(then),
+        _ => e,
+    }
+}
+
+/// "If a nonland permanent is sacrificed this way, repeat this process." after "[player]
+/// chooses a permanent they control at random and sacrifices it" (Tyrant of Discord): the
+/// one permanent that instruction sacrificed, as "if it was a nonland permanent".
+fn if_the_sacrificed_one_was(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if a ").or_else(|| l.strip_prefix("if an ")) else {
+        return false;
+    };
+    let Some((kind, rest)) = r.split_once(" is sacrificed this way, ") else {
+        return false;
+    };
+    let Effect::SacrificeObjects { what: Sel::Var(v) } = last_instruction(prev) else {
+        return false;
+    };
+    if !matches!(b.it, Sel::Var(w) if w == *v) {
+        return false;
+    }
+    let article = if l.starts_with("if an ") { "an" } else { "a" };
+    let Some(e) =
+        crate::oracle::effects::parse_sentence(&format!("if it was {article} {kind}, {rest}"), b)
+    else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: if a [kind] is sacrificed this way (one chosen permanent)", priority: 120, apply: if_the_sacrificed_one_was } }
+
 /// Every card exiled by a process of single-card exiles, over all its passes.
 const EXILED_IN_PROCESS: Var = vars::USER + 41001;
 
