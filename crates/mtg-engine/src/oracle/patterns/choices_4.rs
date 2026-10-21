@@ -10,7 +10,7 @@
 //!   are tied for lowest life total, you choose one of them, and that player gains control
 //!   of ~." (Loxodon Peacekeeper).
 
-use super::{EffectPattern, FollowupPattern};
+use super::{EffectPattern, FilterSuffixPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::end;
@@ -179,6 +179,35 @@ fn tie_sentence(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "choices 4: if two or more players are tied for lowest life total", priority: 120, apply: tie_sentence } }
 
+/// "with mana value of that quality", "with power of the chosen quality" after "choose odd
+/// or even" (CR 202.3, 208): the quality chosen by the instruction's own ability (CR
+/// 607.2d).
+fn quality_of<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    for (p, f) in [
+        (
+            "with mana value of that quality",
+            Filter::ManaValueOfChosenQuality,
+        ),
+        (
+            "with power of the chosen quality",
+            Filter::Custom(crate::kw::choices_4::POWER_OF_CHOSEN_QUALITY.into()),
+        ),
+        (
+            "with power of that quality",
+            Filter::Custom(crate::kw::choices_4::POWER_OF_CHOSEN_QUALITY.into()),
+        ),
+    ] {
+        if let Some(r) = t.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',', '.']) {
+                return Some((f, r));
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { FilterSuffixPattern { name: "choices 4: with mana value or power of the chosen quality", priority: 95, parse: quality_of } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -187,6 +216,8 @@ mod tests {
     fn players_compared() {
         for (ty, text) in [
             ("Enchantment", "At the beginning of your upkeep, the player with the lowest life total gains control of ~. If two or more players are tied for lowest life total, you choose one of them, and that player gains control of ~."),
+            ("Creature", "Whenever you attack, choose odd or even. Creatures with mana value of that quality can't block this turn."),
+            ("Sorcery", "You may put a +1/+1 counter on a creature. Then choose odd or even. Return each creature with power of the chosen quality to its owner's hand."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
