@@ -532,6 +532,44 @@ pub fn choice_visible(g: &Game, obj: ObjectId, chooser: PlayerId, viewer: Player
     viewer == chooser || !g.obj(obj).choices.secret.contains(&chooser)
 }
 
+/// Records the objects `p` chose for the source while its choices are secret ("you and
+/// target opponent each secretly choose a creature that player controls"): kept among
+/// `p`'s own choices for the source, which only `p` sees until they're revealed.
+pub fn record_secret_objects(g: &mut Game, p: PlayerId, picked: &[Entity], ctx: &Ctx) {
+    let Some(src) = ctx.source else {
+        return;
+    };
+    if !g.obj(src).choices.secret_next {
+        return;
+    }
+    let objs: Vec<ObjectId> = picked.iter().filter_map(|e| e.object()).collect();
+    let ch = &mut g.objects[src.0 as usize].choices;
+    // Each secret choice of objects has its own `SECRET_NEXT` (`mark_secret`): a later
+    // choice of objects for the source isn't secret.
+    ch.secret_next = false;
+    let i = match ch.by_player.iter().position(|(q, _)| *q == p) {
+        Some(i) => i,
+        None => {
+            ch.by_player.push((p, Default::default()));
+            ch.by_player.len() - 1
+        }
+    };
+    let mine = &mut ch.by_player[i].1;
+    mine.objects = objs;
+    mine.made_during = ctx.stack_obj;
+    if !ch.secret.contains(&p) {
+        ch.secret.push(p);
+    }
+    g.dirty = true;
+}
+
+/// What a player chose ([`describe`]), with the objects they chose by name.
+pub fn describe_in(g: &Game, c: &crate::object::Choices) -> Vec<String> {
+    let mut out = describe(c);
+    out.extend(c.objects.iter().map(|o| g.obj(*o).chars.name.to_string()));
+    out
+}
+
 /// Reveals the secret choices made for `src`: they become public.
 pub fn reveal_choices(g: &mut Game, src: ObjectId) {
     let o = &mut g.objects[src.0 as usize];
@@ -549,7 +587,7 @@ pub fn reveal_choices(g: &mut Game, src: ObjectId) {
                 .by_player
                 .iter()
                 .find(|(q, _)| *q == p)
-                .map(|(_, c)| describe(c).join(", "))
+                .map(|(_, c)| describe_in(g, c).join(", "))
                 .unwrap_or_default();
             format!("{p} reveals their choice for {}: {what}", g.describe(src))
         });

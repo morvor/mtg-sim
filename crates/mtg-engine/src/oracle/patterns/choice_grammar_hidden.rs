@@ -44,14 +44,32 @@ fn secretly_choose(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "secretly choose", priority: 60, parse: secretly_choose } }
 
+/// Whether a selection (as JSON) has a player choose objects: `Sel::Choose`, alone or
+/// added to objects chosen before (`Sel::Union`).
+fn chooses_objects(sel: &serde_json::Value) -> bool {
+    if sel.get("Choose").is_some_and(|c| c.get("chooser").is_some()) {
+        return true;
+    }
+    sel.get("Union")
+        .and_then(|u| u.as_array())
+        .is_some_and(|v| v.iter().any(chooses_objects))
+}
+
 /// Makes each choice of a value ([`Effect::Choose`]) in `v` secret.
 fn mark_secret(v: serde_json::Value, n: &mut usize) -> serde_json::Value {
     use serde_json::Value as J;
     match v {
         J::Object(m) => {
+            // A choice of a value, or of objects kept for the instructions that follow
+            // ("each secretly choose a creature that player controls").
             let is_choose = m.len() == 1
-                && m.get("Choose")
-                    .is_some_and(|x| x.get("kind").is_some() && x.get("who").is_some());
+                && (m
+                    .get("Choose")
+                    .is_some_and(|x| x.get("kind").is_some() && x.get("who").is_some())
+                    || m
+                        .get("Store")
+                        .and_then(|x| x.get("sel"))
+                        .is_some_and(chooses_objects));
             let m: serde_json::Map<String, J> =
                 m.into_iter().map(|(k, x)| (k, mark_secret(x, n))).collect();
             if is_choose {
@@ -71,9 +89,9 @@ fn mark_secret(v: serde_json::Value, n: &mut usize) -> serde_json::Value {
 
 /// "each player secretly chooses a number", "each opponent secretly chooses silence or
 /// snitch", "you and target opponent each secretly choose 1, 2, or 3": the same
-/// instruction without "secretly", each value chosen in secret. (Objects chosen
-/// secretly, "each player secretly chooses a creature they control", are chosen as
-/// usual: nothing about them is shown until the instruction that reveals them.)
+/// instruction without "secretly", each value chosen in secret. Objects chosen secretly
+/// ("you and target opponent each secretly choose a creature that player controls") are
+/// recorded as the chooser's secret choice for the source (`choices::record_secret_objects`).
 fn subject_secretly_chooses(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let at = l.find(" secretly choose")?;
