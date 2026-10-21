@@ -9,11 +9,21 @@
 //!   ~ is equipped,"), "If a creature dying causes a triggered ability of ~ or an emblem
 //!   you own to trigger, ..." (the ability The Masamune grants the equipped creature):
 //!   the source itself, Equipment attached to it, emblems its controller owns (CR 114).
+//!
+//! And conditions on what was paid to activate the ability whose activation triggered
+//! ("Whenever you activate ..., if one or more permanents were sacrificed to activate it",
+//! "if life was paid to activate it, you may pay that much life again", "if you removed
+//! two or more loyalty counters to activate it"; CR 602.2b, 601.2h, 606.4): see
+//! `kw/trigger_modifiers.rs`.
 
-use super::StaticPattern;
+use super::{EffectPattern, StaticPattern};
 use crate::ability::*;
-use crate::kw::trigger_modifiers::EMBLEM;
-use crate::oracle::phrases::{end, parse_object_phrase};
+use crate::kw::trigger_modifiers::{
+    EMBLEM, LIFE_PAID_AMOUNT, LIFE_PAID_TO_ACTIVATE, LOYALTY_REMOVED_TO_ACTIVATE,
+    SACRIFICED_TO_ACTIVATE,
+};
+use crate::oracle::effects::Builder;
+use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
 use crate::oracle::CompileContext;
 
 const ADDITIONAL: &str = ", that ability triggers an additional time";
@@ -116,6 +126,51 @@ fn additional_time(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Abi
 
 inventory::submit! { StaticPattern { name: "r603.2d triggers an additional time: face up, source relations", priority: 105, parse: additional_time } }
 
+/// "one or more permanents were sacrificed to activate it", "life was paid to activate
+/// it", "you removed two or more loyalty counters to activate it": about the ability whose
+/// activation caused the ability to trigger ("it" is the ability activated).
+pub fn paid_to_activate(c: &str, b: &Builder) -> Option<Condition> {
+    if !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    let c = end(c).strip_suffix(" to activate it")?;
+    let name = match c {
+        "one or more permanents were sacrificed" | "a permanent was sacrificed" => {
+            SACRIFICED_TO_ACTIVATE.to_string()
+        }
+        "life was paid" => LIFE_PAID_TO_ACTIVATE.to_string(),
+        _ => {
+            let r = c.strip_prefix("you removed ")?;
+            let (v, rest) = parse_number(r)?;
+            let Value::Const(n) = v else { return None };
+            if rest.trim() != "or more loyalty counters" || n < 1 {
+                return None;
+            }
+            format!("{LOYALTY_REMOVED_TO_ACTIVATE}{n}")
+        }
+    };
+    Some(Condition::Custom(name.into()))
+}
+
+/// "you may pay that much life again" after "if life was paid to activate it" in an
+/// ability that triggers on activating one: the life paid to activate that ability.
+fn pay_that_much_life_again(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "you may pay that much life again" || !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    Some(Effect::PayOptional {
+        who: PlayerRef::You,
+        cost: Cost {
+            mana: None,
+            parts: vec![CostPart::PayLife(Value::Custom(LIFE_PAID_AMOUNT.into()))],
+        },
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "you may pay that much life again (paid to activate it)", priority: 100, parse: pay_that_much_life_again } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +186,34 @@ mod tests {
             Some(TriggerCond::TurnedFaceUp(_))
         ));
         assert!(matches!(event("a creature dying"), Some(TriggerCond::Dies(_))));
+    }
+
+    fn paid(c: &str) -> Option<Condition> {
+        let tl = crate::types::TypeLine::parse("Enchantment");
+        let ctx = CompileContext {
+            card_name: "Test",
+            full_name: "Test",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let mut b = Builder::new(&ctx);
+        b.it = Sel::TriggerSpell;
+        paid_to_activate(c, &b)
+    }
+
+    #[test]
+    fn reads_costs_paid_to_activate() {
+        for (c, name) in [
+            ("one or more permanents were sacrificed to activate it", SACRIFICED_TO_ACTIVATE),
+            ("life was paid to activate it", LIFE_PAID_TO_ACTIVATE),
+            ("you removed two or more loyalty counters to activate it", "activation paid:loyalty removed>=2"),
+        ] {
+            assert!(matches!(paid(c), Some(Condition::Custom(n)) if n == name), "{c}");
+        }
+        assert!(paid("you removed loyalty counters to activate it").is_none());
     }
 }

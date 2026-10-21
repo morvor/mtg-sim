@@ -167,6 +167,9 @@ impl Renderer<'_> {
 
     /// `Value::Custom` names put into words here.
     pub(crate) fn custom_value_extra(&mut self, name: &str) -> Option<String> {
+        if name == crate::kw::trigger_modifiers::LIFE_PAID_AMOUNT {
+            return Some("the life paid to activate it".into());
+        }
         if let Some((noun, done)) = self.paid_cost(name) {
             return Some(format!("the number of {} {done} this way", plural(&noun)));
         }

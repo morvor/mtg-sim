@@ -201,3 +201,89 @@ fn masamune_doubles_dies_triggers_of_equipped_creature_and_emblems() {
     // Equipped Blood Artist: 2; unequipped: 1; emblem: 2.
     assert_eq!(triggers_on_stack(&t, "dies"), 5);
 }
+
+#[test]
+fn ashnod_copies_abilities_paid_for_by_sacrificing() {
+    cr!("602.2b", "707.10");
+    ruling!(
+        "Ashnod the Uncaring",
+        "“Sacrificed to activate it” means that a permanent was sacrificed to pay the ability’s costs."
+    );
+    supported("Ashnod the Uncaring");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ashnod the Uncaring");
+    for _ in 0..3 {
+        t.library_top(P0, "Forest");
+    }
+    let elder = t.battlefield(P0, "Sakura-Tribe Elder");
+    t.answer_yes(P0, true);
+    t.activate(P0, elder, 0, &[]).expect("activate");
+    t.settle();
+    t.resolve_all();
+    // The ability and its copy each put a Forest onto the battlefield.
+    assert_eq!(t.named_on_battlefield("Forest").len(), 2);
+    // An ability with no sacrifice in its cost isn't copied.
+    let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
+    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)]).expect("activate");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+}
+
+#[test]
+fn verrak_pays_the_life_again_and_copies() {
+    cr!("602.2b", "119.4", "707.10");
+    ruling!(
+        "Verrak, Warped Sengir",
+        "Verrak’s triggered ability creates another instance of that activated ability on the stack."
+    );
+    supported("Verrak, Warped Sengir");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Verrak, Warped Sengir");
+    // "{B}, Pay 2 life: Draw a card."
+    let greed = t.battlefield(P0, "Greed");
+    t.lands(P0, "Swamp", 2);
+    for _ in 0..4 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.activate(P0, greed, 0, &[]).expect("activate");
+    t.settle();
+    t.resolve_all();
+    // 2 life to activate, 2 more for the copy; two cards drawn.
+    assert_eq!(t.life(P0), 16);
+    assert_eq!(t.hand_size(P0), hand + 2);
+    // Declining to pay: no copy.
+    t.answer_yes(P0, false);
+    t.activate(P0, greed, 0, &[]).expect("activate");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 14);
+    assert_eq!(t.hand_size(P0), hand + 3);
+}
+
+#[test]
+fn way_of_the_mind_sculptor_counts_loyalty_removed() {
+    cr!("606.4", "602.2b");
+    supported("Way of the Mind Sculptor");
+    for (index, draws) in [(1usize, 2usize), (0, 0)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.enter(P0, "Way of the Mind Sculptor");
+        t.settle();
+        t.resolve_all();
+        let jace = crate::r_s01_common::with_subtype(&t, P0, "Jace")[0];
+        assert_eq!(t.counters(jace, "loyalty"), 5);
+        for _ in 0..4 {
+            t.library_top(P0, "Island");
+        }
+        let hand = t.hand_size(P0);
+        // [−3]: Draw a card (and Way's trigger draws one); [−1]: Surveil 1 (no trigger).
+        t.activate(P0, jace, index, &[]).expect("activate");
+        t.settle();
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + draws, "ability {index}");
+    }
+}
