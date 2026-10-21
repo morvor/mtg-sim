@@ -84,7 +84,12 @@ fn wild_swing_regeneration_must_be_set_up_before_it_resolves() {
     let mut t = TestGame::new(2);
     let boas: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P1, "River Boa")).collect();
     t.lands(P1, "Forest", 3);
-    let swing = cast(&mut t, P0, "Wild Swing", &[&[o(boas[0]), o(boas[1]), o(boas[2])]]);
+    let swing = cast(
+        &mut t,
+        P0,
+        "Wild Swing",
+        &[&[o(boas[0]), o(boas[1]), o(boas[2])]],
+    );
     // P1 doesn't know which one will be chosen: they shield all three in response.
     for b in &boas {
         t.activate(P1, *b, 0, &[]).unwrap();
@@ -498,4 +503,27 @@ fn spin_into_myth_on_a_token_fateseals_the_top_cards() {
     let mut want = vec![a, b];
     want.sort();
     assert_eq!(got, want);
+}
+
+#[test]
+fn anchor_to_the_aether_on_your_token_scries_your_top_card() {
+    cr!("111.6", "701.22a");
+    supported("Anchor to the Aether");
+    let mut t = TestGame::new(2);
+    empty_library(&mut t, P0);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let token = crate::r_s02_common::create_token(&mut t, P0, "Soldier");
+    let from = t.asked().len();
+    cast(&mut t, P0, "Anchor to the Aether", &[&[o(token)]]);
+    t.resolve_all();
+    // The token put on top isn't a card: the card scried is Lightning Bolt.
+    let seen: Vec<Vec<ObjectId>> = asked_since(&t, from)
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            Decision::Scry { cards } if p == P0 => Some(cards),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(seen, vec![vec![bolt]]);
+    assert!(t.named_on_battlefield("Soldier").is_empty());
 }

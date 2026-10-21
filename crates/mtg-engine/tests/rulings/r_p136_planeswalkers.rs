@@ -267,11 +267,7 @@ fn karn_keeps_only_permanent_cards_exiled_by_its_first_two_abilities() {
     t.exile(P1, "Savannah Lions");
     assert!(t.in_exile("Hill Giant") && t.in_exile("Lightning Bolt"));
     karn_restart(&mut t, k);
-    let mut names: Vec<String> = t
-        .g
-        .permanents()
-        .map(|p| p.chars.name.to_string())
-        .collect();
+    let mut names: Vec<String> = t.g.permanents().map(|p| p.chars.name.to_string()).collect();
     names.sort();
     assert_eq!(names, vec!["Grizzly Bears", "Hill Giant"]);
     assert!(t.g.permanents().all(|p| p.controller == P0));
@@ -491,7 +487,12 @@ fn barrin_doesnt_trigger_without_a_returned_permanent() {
     t.battlefield(P0, "Barrin, Tolarian Archmage");
     // A card put into P0's hand from elsewhere doesn't count.
     let gy = t.graveyard(P0, "Grizzly Bears");
-    t.g.move_object(gy, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        gy,
+        Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.advance_to(P0, Step::End);
     assert_eq!(triggers_on_stack(&t, "draw a card"), 0);
 }
@@ -547,6 +548,8 @@ fn liliana_ultimate_opponents_choose_in_order_then_sacrifice_the_rest_at_once() 
     let f2 = t.battlefield(P1, "Forest");
     let l1 = t.battlefield(P1, "Isamaru, Hound of Konda");
     let l2 = t.battlefield(P1, "Thalia, Guardian of Thraben");
+    // Blood Artist sees every creature that dies at the same time as it.
+    let artist = t.battlefield(P1, "Blood Artist");
     // P2: an artifact and two creatures.
     let art = t.battlefield(P2, "Bonesplitter");
     let c1 = t.battlefield(P2, "Hill Giant");
@@ -587,9 +590,14 @@ fn liliana_ultimate_opponents_choose_in_order_then_sacrifice_the_rest_at_once() 
     for id in [mine, f1, l2, art, c2] {
         assert!(t.on_battlefield(id));
     }
-    for id in [f2, l1, c1] {
+    for id in [f2, l1, c1, artist] {
         assert!(!t.on_battlefield(id));
     }
+    // All the unchosen permanents were sacrificed at the same time: Blood Artist (P1's,
+    // sacrificed with P1's other unchosen permanents) saw itself, Isamaru and P2's Hill
+    // Giant die.
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "loses 1 life"), 3);
 }
 
 #[test]
