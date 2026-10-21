@@ -861,6 +861,14 @@ impl Renderer<'_> {
             }
             // "a card exiled with ~": the cards an ability of this object exiled
             // (CR 607.2a).
+            // "creature cards from their graveyard that weren't put there this way": in a
+            // graveyard before the instruction (`referents_values_4`).
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v)
+                    if *v == crate::oracle::patterns::referents_values_4::PUT_THERE) =>
+            {
+                np.rel.push("that weren't put there this way".into());
+            }
             Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {
                 np.zone_said = true;
                 np.post.push("exiled with ~it".into());
@@ -1016,6 +1024,13 @@ impl Renderer<'_> {
                 let s = self.sel(&sel, Case::Obj);
                 np.with.push(format!("the same name as {s}"));
             }
+            // "another permanent card": other than the card the sacrificed permanent
+            // became (CR 400.7).
+            Filter::Custom(name)
+                if name == crate::oracle::patterns::referents_values_4::NOT_SACRIFICED_CARD =>
+            {
+                np.other = true
+            }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {
                     use super::custom_filters::CustomQuality as Q;
@@ -1051,6 +1066,14 @@ impl Renderer<'_> {
     }
 
     fn collect_not(&mut self, inner: &Filter, np: &mut Np) {
+        // "each other card exiled with ~": other than those the instruction a "this way"
+        // condition asked about affected (`conditions_this_way::SNAPSHOT`).
+        if matches!(inner, Filter::In(s) if matches!(s.as_ref(), Sel::Var(v)
+            if *v == crate::oracle::patterns::conditions_this_way::SNAPSHOT))
+        {
+            np.other = true;
+            return;
+        }
         // "that doesn't share a land type with a land you control", "that doesn't have the
         // same name as another permanent you control".
         if let Filter::Or(v) = inner {
@@ -1673,6 +1696,7 @@ impl Renderer<'_> {
     pub(crate) fn controls_phrase(&mut self, r: PlayerRel, num: Num) -> String {
         let num = if self.each_mode { Num::Many } else { num };
         match r {
+            PlayerRel::You if self.as_cast => "{alt:you control|you controlled}".into(),
             PlayerRel::You => "you control".into(),
             // "a creature an opponent controls" / "each creature your opponents control":
             // the same objects, those any opponent controls.

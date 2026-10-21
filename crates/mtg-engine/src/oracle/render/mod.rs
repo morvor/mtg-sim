@@ -867,6 +867,9 @@ pub struct Renderer<'a> {
     /// What the last instruction did to a group of objects ("permanents destroyed this
     /// way"), for counting them.
     pub(crate) it_done: Option<String>,
+    /// Rendering a value taken as the spell was cast ("the number of Mountains you
+    /// control as you cast ~"): "you control" may be "you controlled".
+    pub(crate) as_cast: bool,
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
@@ -1054,6 +1057,7 @@ impl<'a> Renderer<'a> {
             var_defs: Vec::new(),
             outer_vars: Vec::new(),
             it_done: None,
+            as_cast: false,
             batch_once: false,
             batch_per_source: false,
             prev_mandatory: false,

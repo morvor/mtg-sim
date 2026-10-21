@@ -1694,7 +1694,7 @@ fn reworded_ability(
 inventory::submit! { super::AbilityPattern { name: "referents 4: reworded abilities (if it didn't die, tokens created with it, the creature tapped this way)", priority: 50, parse: reworded_ability } }
 
 /// The cards in graveyards before an instruction, for "that weren't put there this way".
-const PUT_THERE: Var = vars::USER + 14_016;
+pub const PUT_THERE: Var = vars::USER + 14_016;
 
 thread_local! {
     static PUT_THERE_OK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };

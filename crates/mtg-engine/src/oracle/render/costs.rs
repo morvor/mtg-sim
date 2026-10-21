@@ -549,10 +549,16 @@ impl Renderer<'_> {
             &a.condition,
             Some(Condition::Compare(Value::X, Cmp::Ge, Value::Const(1)))
         );
+        // "Only the player ~ is attacking may activate this ability and only during the
+        // declare attackers step": there is such a player only while ~ attacks one.
+        let by_defender = matches!(&a.activator, Some(PlayerFilter::Ref(r))
+            if matches!(r.as_ref(), PlayerRef::DefendingPlayer))
+            && matches!(&a.condition, Some(Condition::And(v)) if matches!(v.as_slice(),
+                [Condition::Phase(PhaseCond::DeclareAttackers), Condition::SelMatches(Sel::This, Filter::AttackingPlayer(PlayerRel::Any))]));
         match a
             .condition
             .as_ref()
-            .filter(|_| !solved && !boast && !x_not_zero && remove_all.is_none())
+            .filter(|_| !solved && !boast && !x_not_zero && remove_all.is_none() && !by_defender)
         {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {
@@ -644,9 +650,19 @@ impl Renderer<'_> {
                 PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::AttachedTo)) => {
                     "the controller of the enchanted creature".to_string()
                 }
+                // "Only the player ~ is attacking may activate this ability" (CR 506.2).
+                PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::DefendingPlayer) => {
+                    format!("the player {} is attacking", self.me())
+                }
                 other => self.gap(format!("who may activate: {other:?}")),
             };
-            s.push_str(&format!(" Only {w} may activate this ability."));
+            if by_defender {
+                s.push_str(&format!(
+                    " Only {w} may activate this ability and only during the declare attackers step."
+                ));
+            } else {
+                s.push_str(&format!(" Only {w} may activate this ability."));
+            }
         }
         match (a.cant_be_copied, x_not_zero) {
             (true, true) => s.push_str(" This ability can't be copied and X can't be 0."),

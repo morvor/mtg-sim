@@ -245,7 +245,14 @@ impl Renderer<'_> {
             n if n.starts_with("base:p=") => (false, format!("with base power {}", &n[7..])),
             n if n.starts_with("base:t=") => (false, format!("with base toughness {}", &n[7..])),
             "attached to you" => rel("attached to you"),
-            "base power=1" => rel("with base power 1"),
+            // "with base power 0" (CR 208.4b).
+            n if n.starts_with(crate::kw::offspring::BASE_POWER) => (
+                false,
+                format!(
+                    "with base power {}",
+                    &n[crate::kw::offspring::BASE_POWER.len()..]
+                ),
+            ),
             "has_nonmana_activated_ability" => {
                 rel("with an activated ability that isn't a mana ability")
             }

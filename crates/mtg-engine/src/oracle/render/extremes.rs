@@ -158,6 +158,9 @@ impl Renderer<'_> {
         for w in words {
             forms.push(format!("{plain} with the {w} {x}"));
             forms.push(format!("{bare} with the {w} {x} among {n}"));
+            if plain != bare {
+                forms.push(format!("{plain} with the {w} {x} among {n}"));
+            }
             if all_permanents {
                 forms.push(format!(
                     "{bare} with the {w} {x} among {n} on the battlefield"
@@ -175,7 +178,15 @@ impl Renderer<'_> {
             } else {
                 ""
             };
-            return Some(format!("{bare} with the {w} {x} among {n}{field}"));
+            // "a creature or planeswalker they control with the greatest mana value
+            // among creatures and planeswalkers they control": the object's own
+            // qualities may be said in full too.
+            let head = if plain == bare {
+                bare
+            } else {
+                format!("{{alt:{bare}|{plain}}}")
+            };
+            return Some(format!("{head} with the {w} {x} among {n}{field}"));
         }
         Some(format!("{{alt:{}}}", forms.join("|")))
     }

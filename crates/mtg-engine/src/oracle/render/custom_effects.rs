@@ -47,6 +47,57 @@ impl Renderer<'_> {
         if let Some(n) = crate::kw::game_rules::pay_energy_amount(name) {
             return Some(format!("pay {}", "{E}".repeat(n.max(0) as usize)));
         }
+        // "After the second main phase this turn, there's an additional combat phase
+        // followed by an additional main phase" (CR 500.8).
+        if let Some((main, nth, parts)) = crate::kw::added_combat_phases::parse_after(name) {
+            let phase = if main { "main" } else { "combat" };
+            let nth = match nth {
+                1 => "first",
+                2 => "second",
+                3 => "third",
+                _ => return None,
+            };
+            let added = match parts.as_slice() {
+                [TurnPart::CombatPhase] => "an additional combat phase",
+                [TurnPart::CombatPhase, TurnPart::MainPhase] => {
+                    "an additional combat phase followed by an additional main phase"
+                }
+                _ => return None,
+            };
+            return Some(format!(
+                "after the {nth} {phase} phase this turn, there's {added}"
+            ));
+        }
+        // "Those creatures are now attacking that player" (CR 508.7).
+        if let Some(r) = name.strip_prefix(crate::kw::combat_history_4::NOW_ATTACKING) {
+            let (p, c) = r.split_once(':')?;
+            let p: u8 = p.parse().ok()?;
+            let c: u8 = c.parse().ok()?;
+            let creatures = self.target_mention(c, Case::Subj);
+            let player = self.target_mention(p, Case::Obj);
+            return Some(format!("{creatures} are now attacking {player}"));
+        }
+        // "you may reselect which player ~ is attacking" (CR 508.7).
+        if name == crate::kw::reselect_attack::RESELECT_SELF_PLAYER {
+            let m = self.me();
+            return Some(format!("you may reselect which player {m} is attacking"));
+        }
+        // "If ~ and a creature named Phyrexian Dragon Engine are attacking, and you both
+        // own and control them, exile them, then meld them into ~ Lost to Phyrexia. It
+        // enters tapped and attacking." (CR 701.42a).
+        if let Some(rest) = name.strip_prefix(crate::merge::MELD_ATTACKING_PAIR) {
+            let (partner, result) = self.info.meld.clone()?;
+            let m = self.me();
+            let mut s = format!(
+                "if {m} and {partner} are attacking, and you both own and control them, exile them, then meld them into {result}"
+            );
+            if rest == crate::merge::MELD_ENTERS_ATTACKING {
+                s.push_str(". It enters tapped and attacking");
+            } else if !rest.is_empty() {
+                return None;
+            }
+            return Some(s);
+        }
         Some(match name {
             crate::kwa::vote::CHOOSES_VOTES => "you choose how each player votes this turn".into(),
             // Secret choices (`choices.rs`).

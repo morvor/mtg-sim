@@ -926,6 +926,39 @@ impl Renderer<'_> {
         if let Some(s) = self.one_play_permission(pp) {
             return s;
         }
+        // "from any graveyard", "from that player's graveyard": a permission for cards in
+        // graveyards other than its player's (`PlayTerms::any_owner`).
+        if pp.terms.any_owner && pp.zone == ZoneKind::Graveyard {
+            let mut q = pp.clone();
+            q.terms.any_owner = false;
+            let parts: Vec<Filter> = match &pp.what {
+                Filter::And(v) => v.clone(),
+                other => vec![other.clone()],
+            };
+            let owner = parts.iter().find_map(|x| match x {
+                Filter::OwnedByPlayer(p) => Some((**p).clone()),
+                _ => None,
+            });
+            let from = match owner {
+                Some(p) => {
+                    q.what = Filter::and(
+                        parts
+                            .into_iter()
+                            .filter(|x| !matches!(x, Filter::OwnedByPlayer(_)))
+                            .collect(),
+                    );
+                    let p = self.player(&p, Case::Poss);
+                    format!("from {p} graveyard")
+                }
+                None => "from any graveyard".into(),
+            };
+            return self.play_permission_from(&q, Some(from));
+        }
+        self.play_permission_from(pp, None)
+    }
+
+    /// [`Self::play_permission`], saying where the cards are with `from` if given.
+    fn play_permission_from(&mut self, pp: &PlayPermission, from: Option<String>) -> String {
         let who = self.rel_subject(pp.who);
         let p = if who == "you" { "your" } else { "their" };
         // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
@@ -1022,11 +1055,12 @@ impl Renderer<'_> {
         };
         // Cards "exiled with ~" are in exile (CR 607.2a): the quality says where they are.
         let linked = format!("{:?}", pp.what).contains("In(Linked)");
-        let zone = match pp.zone {
-            ZoneKind::Library if pp.top_only => format!("from the top of {p} library"),
-            ZoneKind::Exile if linked => String::new(),
-            ZoneKind::Exile => "from exile".into(),
-            z => format!("from {p} {}", zone_word(z)),
+        let zone = match (pp.zone, from) {
+            (_, Some(f)) => f,
+            (ZoneKind::Library, None) if pp.top_only => format!("from the top of {p} library"),
+            (ZoneKind::Exile, None) if linked => String::new(),
+            (ZoneKind::Exile, None) => "from exile".into(),
+            (z, None) => format!("from {p} {}", zone_word(z)),
         };
         let mut s = format!("{who} may {verb} {zone}").trim_end().to_string();
         if let Some(c) = &pp.cost {
@@ -1079,6 +1113,12 @@ impl Renderer<'_> {
                 "{{alt: by {by} rather than paying its mana cost|. If you cast a spell this way, {pay} rather than pay its mana cost}}"
             ));
         }
+        // "If you do, it gains ...": the same for a land played this way and a spell
+        // cast this way (CR 305.1, 601.2).
+        let same_on_land = match (&t.on_cast, &t.on_land) {
+            (Some(a), Some(b)) => format!("{a:?}") == format!("{b:?}"),
+            _ => false,
+        };
         // "If you do, it enters with two +1/+1 counters on it": what casting it this way
         // does to the spell.
         if let Some(e) = &t.on_cast {
@@ -1111,7 +1151,26 @@ impl Renderer<'_> {
         if t.what.is_some() || t.limit.is_some() || t.until_another || t.later_turn {
             s.push_str(&self.gap("terms of a static permission to play cards"));
         }
-        if let Some(what) = super::play_terms::unworded_static_terms(t) {
+        // "if you pay {1} more to cast it for each other creature card in your graveyard"
+        // (CR 601.2f).
+        if let Some(Value::Count(f)) = &t.cost_increase_each {
+            let n = self.noun(f, Num::One);
+            s.push_str(&format!(" if you pay {{1}} more to cast it for each {n}"));
+        }
+        // "and you may spend mana from snow sources as though it were mana of any color to
+        // cast those spells" (CR 609.4b).
+        if t.snow_as_any_color {
+            s.push_str(" and you may spend mana from snow sources as though it were mana of any color to cast those spells");
+        }
+        let mut worded = t.clone();
+        if same_on_land {
+            worded.on_land = None;
+        }
+        if matches!(worded.cost_increase_each, Some(Value::Count(_))) {
+            worded.cost_increase_each = None;
+        }
+        worded.snow_as_any_color = false;
+        if let Some(what) = super::play_terms::unworded_static_terms(&worded) {
             s.push_str(&self.gap(format!("static permission term: {what}")));
         }
         if t.exile_instead && matches!(pp.what, Filter::Source) {
@@ -2081,6 +2140,29 @@ impl Renderer<'_> {
                 planeswalkers,
                 cost,
             } => {
+                // "Creatures can't attack planeswalkers you control unless ...": only the
+                // creatures attacking a planeswalker are taxed (`combat_history_4`).
+                let pw_only = crate::kw::combat_history_4::ATTACKING_A_PLANESWALKER;
+                if let (Filter::And(v), PlayerFilter::You, true) =
+                    (attackers, defender, *planeswalkers)
+                {
+                    if v.iter()
+                        .any(|x| matches!(x, Filter::Custom(n) if n == pw_only))
+                    {
+                        let rest = Filter::and(
+                            v.iter()
+                                .filter(|x| !matches!(x, Filter::Custom(n) if n == pw_only))
+                                .cloned()
+                                .collect(),
+                        );
+                        let a = subj(self, &rest);
+                        let n = self.noun(&rest, Num::One);
+                        let c = self.cost(cost);
+                        return format!(
+                            "{a} can't attack planeswalkers you control unless their controller pays {c} for each {n} they control that's attacking a planeswalker you control"
+                        );
+                    }
+                }
                 let a = subj(self, attackers);
                 // Attacking anything (a player, a planeswalker, or a battle, `combat.rs`):
                 // "Leviathan can't attack unless you sacrifice two Islands", "Green
@@ -2827,6 +2909,16 @@ impl Renderer<'_> {
                     (None, None) => "change zones".into(),
                 };
                 let then = match action {
+                    // "If ~ would leave the battlefield, exile it instead of putting it
+                    // anywhere else": wherever it would go, it's exiled (CR 614.1a).
+                    A::MoveInstead(d)
+                        if from.is_some()
+                            && to.is_none()
+                            && d.zone == ZoneKind::Exile
+                            && d.with_counters.is_empty() =>
+                    {
+                        "exile it {alt:instead|instead of putting it anywhere else}".to_string()
+                    }
                     // "reveal ~ and shuffle it into its owner's library instead": the
                     // object itself is revealed, named again in the instruction.
                     A::RevealAndMoveInstead(d) if matches!(filter, Filter::Source) => {

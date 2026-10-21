@@ -58,6 +58,14 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the number of {n} revealed this way")
             }
+            // "for each of those cards that are still exiled": those of the remembered
+            // cards still the same objects in exile (CR 400.7).
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Matching(_, Filter::Custom(n))
+                    if n == crate::oracle::patterns::referents_values_4::STILL_EXILED_CARD) =>
+            {
+                "the number of those cards that are still exiled".into()
+            }
             Value::CountSel(s) if self.this_way_of(s).is_some() => {
                 let n = self.noun(&Filter::In(Box::new((**s).clone())), Num::Many);
                 format!("the number of {n}")
@@ -880,6 +888,13 @@ impl Renderer<'_> {
                 self.condition(&v[1])
             }
             Condition::And(v) => {
+                // "if it's your main phase": a main phase of your turn (CR 505.1).
+                if matches!(
+                    v.as_slice(),
+                    [Condition::YourTurn, Condition::Phase(PhaseCond::MainPhase)]
+                ) {
+                    return "it's your main phase".into();
+                }
                 if let Some(s) = self.attempt(|r| r.events_joined(v, "and")) {
                     return s;
                 }
@@ -1016,6 +1031,10 @@ impl Renderer<'_> {
             Condition::PrevAffectedAny => "a card was affected this way".into(),
             // "If this spell was cast from a graveyard" (the zone it was cast from, CR
             // 601.2a); cards casting their own card say "if you cast it from your ...".
+            // "If ~ was cast from exile" (there's one exile zone, CR 406.1).
+            Condition::CastFrom(ZoneKind::Exile) => {
+                "{alt:you cast it from exile|~ {alt:was|is} cast from exile}".into()
+            }
             Condition::CastFrom(z) => {
                 let z = zone_word(*z);
                 // Your own card is in your zone (CR 400.3): "from a graveyard" is "from
@@ -1029,7 +1048,8 @@ impl Renderer<'_> {
             Condition::ChosenWord(w) => format!("{w} was chosen"),
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => "it's combat".into(),
-                PhaseCond::MainPhase => "it's your main phase".into(),
+                // Any player's main phase.
+                PhaseCond::MainPhase => "it's a main phase".into(),
                 PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
@@ -1641,6 +1661,13 @@ impl Renderer<'_> {
         if let Some(s) = self.attempt(|r| r.events_compare(a, cmp, b, false)) {
             return s;
         }
+        // "if your library has no cards in it".
+        if let (Value::LibrarySize(p), Cmp::Eq, Value::Const(0)) = (a, cmp, b) {
+            let p = self.player(p, Case::Poss);
+            return format!(
+                "{{alt:there are no cards in {p} library|{p} library has no cards in it}}"
+            );
+        }
         // "if no mana was spent to cast it" (none of the amount, CR 601.2h).
         if let (Value::Custom(n), Cmp::Eq, Value::Const(0)) = (a, cmp, b) {
             if n == "opus:mana spent to cast that spell" {
@@ -2169,7 +2196,7 @@ fn two_zone_count(v: &[Value]) -> Option<(Filter, Vec<ZoneKind>)> {
 /// The cards "revealed this way" (see `value_results::this_way_sel`): those a reveal
 /// instruction left in [`vars::DUG`], the cards revealed one at a time that it didn't
 /// ([`vars::REVEALED`]), and the cards revealed from a hand.
-fn is_revealed_this_way(s: &Sel) -> bool {
+pub(crate) fn is_revealed_this_way(s: &Sel) -> bool {
     let Sel::Union(v) = s else { return false };
     match v.as_slice() {
         [Sel::Var(a), Sel::Matching(b, Filter::Not(n)), Sel::Var(c)] => {

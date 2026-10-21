@@ -226,7 +226,15 @@ impl Renderer<'_> {
             }
             Effect::Sacrifice { who, filter, count } => {
                 let det = self.det_for(count);
-                let n = self.noun_det(&strip_controller(filter), det);
+                // "a creature they control with the greatest power among creatures they
+                // control": the objects compared are said with whose they are.
+                let extreme = matches!(filter, Filter::And(v) if v.iter().any(|x|
+                    matches!(x, Filter::ValueCmp(_, _, b) if matches!(b.as_ref(), Value::Extreme(..)))));
+                let n = if extreme {
+                    self.noun_det(filter, det)
+                } else {
+                    self.noun_det(&strip_controller(filter), det)
+                };
                 (who.clone(), format!("sacrifice {n}"), false)
             }
             Effect::AddPlayerCounters { who, kind, n } => {
@@ -416,6 +424,9 @@ impl Renderer<'_> {
         if let Some(s) = self.cast_only_permission(e) {
             return s;
         }
+        if let Some(s) = self.free_if_permission(e) {
+            return s;
+        }
         // "If it's a land card, you may ... If you don't, ..." (`outcomes.rs`).
         if let Some(s) = self.if_or_else_part(e) {
             return s;
@@ -465,6 +476,18 @@ impl Renderer<'_> {
                             effect: PlayerModification::AdditionalLandPlays(_),
                             duration: Duration::ThisTurn,
                         }
+                    ) =>
+            {
+                self.effect(effect)
+            }
+            // "When ~ dies, you may cast it from your graveyard ...": a permission to cast
+            // is a choice already (CR 601.1a, 608.2d), so the "may" is said once.
+            Effect::May { who, effect }
+                if same_player(who, &PlayerRef::You)
+                    && matches!(
+                        effect.as_ref(),
+                        Effect::WithPlayTerms { effect: g, .. }
+                            if matches!(g.as_ref(), Effect::GrantPlayPermission { who: PlayerRef::You, .. })
                     ) =>
             {
                 self.effect(effect)
@@ -633,6 +656,21 @@ impl Renderer<'_> {
                             let one = self.noun(f, Num::One);
                             return format!(
                                 "{{alt:for each {s}, {inner}|each {one} deals {rest}}}"
+                            );
+                        }
+                    }
+                }
+                // "Each creature you control attacking a player gets +1/+0 until end of
+                // turn for each creature that player controls": each object is modified
+                // on its own.
+                if let (Sel::All(f), Effect::Modify { what: Sel::Var(v), .. }) =
+                    (sel, effect.as_ref())
+                {
+                    if v == var {
+                        if let Some(rest) = inner.strip_prefix("it gets ") {
+                            let one = self.noun(f, Num::One);
+                            return format!(
+                                "{{alt:for each {s}, {inner}|each {one} gets {rest}}}"
                             );
                         }
                     }
@@ -1401,6 +1439,15 @@ impl Renderer<'_> {
                     .collect();
                 let subj = self.player(&PlayerRef::Target(*t), Case::Subj);
                 let det = self.det_for(count);
+                // "a creature or planeswalker they control with the greatest mana value
+                // among creatures and planeswalkers they control": who controls it is
+                // said with the noun, before the comparison.
+                if v.iter().any(|f| matches!(f, Filter::ValueCmp(..))) {
+                    let saved = self.they_target.replace(*t);
+                    let n = self.noun_det(&Filter::And(v.clone()), det);
+                    self.they_target = saved;
+                    return format!("{subj} exiles {n}");
+                }
                 let n = self.noun_det(&Filter::and(rest), det);
                 format!("{subj} exiles {n} they control")
             }
@@ -2066,6 +2113,23 @@ impl Renderer<'_> {
                 attacking,
                 mods,
             } => {
+                // "For each creature card revealed this way, create a token that's a copy
+                // of that card": one copy of each.
+                if let (Sel::Matching(u, f), Value::Const(1), false, false, PlayerRef::You) =
+                    (of, count, *tapped, *attacking, controller)
+                {
+                    if super::values::is_revealed_this_way(u) {
+                        let one = self.noun(f, Num::One);
+                        let ex = if mods.is_empty() {
+                            String::new()
+                        } else {
+                            format!(", except {}", self.exceptions(mods))
+                        };
+                        return format!(
+                            "for each {one} revealed this way, create a token that's a copy of {{alt:that card|it}}{ex}"
+                        );
+                    }
+                }
                 let o = self.sel(of, Case::Obj);
                 let mut status = Vec::new();
                 if *tapped {
@@ -2568,7 +2632,12 @@ impl Renderer<'_> {
             Effect::SetLife { who, n } => {
                 let p = self.player(who, Case::Poss);
                 let (a, w) = self.amount(n);
-                format!("{p} life total becomes {a}{}", w.unwrap_or_default())
+                // "Your life total becomes equal to your starting life total."
+                if let Some(w) = w {
+                    let v = self.value(n);
+                    return format!("{p} life total becomes {{alt:{a}{w}|equal to {v}}}");
+                }
+                format!("{p} life total becomes {a}")
             }
             Effect::ExchangeLifeTotals { a, b } => {
                 let a = self.player(a, Case::Subj);
@@ -2845,10 +2914,24 @@ impl Renderer<'_> {
                         let p = self.player(p, Case::Subj);
                         format!("{p} get {list} after {after}{t}")
                     }
-                    // "There is an additional combat phase after this phase" says the same.
-                    None if t.is_empty() => format!(
-                        "{{alt:after {after}, there is {list}|there is {list} after {after}}}"
-                    ),
+                    // "There is an additional combat phase after this phase" says the same;
+                    // "there is an additional combat phase after this phase, followed by
+                    // an additional main phase": the first part after this phase.
+                    None if t.is_empty() => {
+                        let mut forms = vec![
+                            format!("after {after}, there is {list}"),
+                            format!("there is {list} after {after}"),
+                        ];
+                        if let [first, rest @ ..] = names.as_slice() {
+                            if !rest.is_empty() {
+                                let r = join_list(rest, "followed by");
+                                forms.push(format!(
+                                    "there is {first} after {after}, followed by {r}"
+                                ));
+                            }
+                        }
+                        format!("{{alt:{}}}", forms.join("|"))
+                    }
                     None => format!("after {after}, there is {list}{t}"),
                 }
             }
@@ -2887,7 +2970,11 @@ impl Renderer<'_> {
                             Some(r) => format!("{{alt:when you next cast {r}|when you cast {r}}}"),
                             None => match t.strip_prefix("whenever you play ") {
                                 Some(r) => format!("when you play {r}"),
-                                None => t,
+                                // "When you next attack this turn, ..." (CR 603.7b).
+                                None => match t.strip_prefix("whenever you attack") {
+                                    Some(r) => format!("when you next attack{r}"),
+                                    None => t,
+                                },
                             },
                         }
                     }
@@ -2954,6 +3041,26 @@ impl Renderer<'_> {
                     self.in_event_scope(|r| r.body(body))
                 };
                 format!("when you do, {}", lower_first(&b))
+            }
+            // "At the beginning of that combat, untap all creatures you control": a
+            // reflexive trigger as the added combat phase begins (CR 603.7).
+            Effect::DuringNext {
+                part: NextTurnPart::AddedCombatPhase,
+                effect,
+                ..
+            } if matches!(effect.as_ref(), Effect::Reflexive { .. }) => {
+                let Effect::Reflexive { body } = effect.as_ref() else {
+                    return String::new();
+                };
+                let b = if body.targets.is_empty()
+                    && body.modal.is_none()
+                    && !self.targets.is_empty()
+                {
+                    self.in_event_scope(|r| r.effect_sentences(&body.effect))
+                } else {
+                    self.in_event_scope(|r| r.body(body))
+                };
+                format!("at the beginning of that combat, {}", lower_first(&b))
             }
             Effect::DuringNext { who, part, effect } => {
                 let p = self.player(who, super::players::Case::Poss);
@@ -3124,7 +3231,18 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 // "You may cast an instant or sorcery spell from among them", "you may
                 // play one of those cards": what may be played, and how many.
-                let w = self.permission_object(&w);
+                let mut w = self.permission_object(&w);
+                // "you may cast it from your graveyard as an Adventure" (CR 715.3): the
+                // card the triggered ability's source became.
+                if let Some(face) = self.play_terms.as_ref().and_then(|t| t.cast_face) {
+                    if matches!(what, Sel::This) {
+                        w.push_str(" {opt:from your graveyard}");
+                    }
+                    match face {
+                        crate::object::FaceState::Half(1) => w.push_str(" as an Adventure"),
+                        _ => w.push_str(&self.gap("permission term: cast face")),
+                    }
+                }
                 let d = self.duration(duration);
                 let f = if *free {
                     " without paying its mana cost"
@@ -4490,7 +4608,10 @@ impl Renderer<'_> {
                     .iter()
                     .take_while(|e| matches!(e, Effect::Store { .. }));
                 let named_later = v[i + 1..].iter().skip(later.count()).take(1).any(names);
-                if !next.is_some_and(names) && !named_later {
+                // The cards in graveyards before an instruction, named by the later
+                // "that weren't put there this way" it's remembered for.
+                let put_there = var_n == crate::oracle::patterns::referents_values_4::PUT_THERE;
+                if !next.is_some_and(names) && !named_later && !put_there {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
@@ -7155,6 +7276,28 @@ impl Renderer<'_> {
                 Modification::Custom { name, .. }
                     if name.as_str() == crate::kw::grant_filters::LOSE_ALL_LAND_TYPES
                         && custom_extra::loses_land_types_and_abilities(mods) => {}
+                // A copy exception's "it's a legendary Alien": these subtypes instead of
+                // its others (CR 707.9b, 205.1a), its card types kept.
+                Modification::Custom { name, .. }
+                    if name
+                        .strip_prefix(crate::kw::copy_exception_mods::ONLY_SUBTYPES)
+                        .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
+                        .is_some() =>
+                {
+                    let j = &name[crate::kw::copy_exception_mods::ONLY_SUBTYPES.len()..];
+                    let v: Vec<String> = serde_json::from_str(j).unwrap_or_default();
+                    becomes.subtypes.extend(v);
+                    becomes.replaces_creature_types = true;
+                }
+                // "its starting loyalty is 1" (CR 306.5b).
+                Modification::Custom { name, .. }
+                    if name
+                        .strip_prefix(crate::kw::copy_exception_mods::STARTING_LOYALTY)
+                        .is_some_and(|n| n.parse::<i32>().is_ok()) =>
+                {
+                    let n = &name[crate::kw::copy_exception_mods::STARTING_LOYALTY.len()..];
+                    parts.push(format!("{{alt:its starting loyalty is {n}|has starting loyalty {n}}}"));
+                }
                 Modification::Custom { name, .. } => {
                     let t = self.custom_modification(name);
                     parts.push(t);
@@ -8267,7 +8410,12 @@ impl Becomes {
             return Some((s, String::new()));
         }
         if let Some(n) = &self.name {
-            if self.pt.is_none() && self.add_types.is_empty() && self.subtypes.is_empty() {
+            if self.pt.is_none()
+                && self.add_types.is_empty()
+                && self.subtypes.is_empty()
+                && self.supertypes.is_empty()
+                && self.colors.is_none()
+            {
                 return Some((format!("is named {n}"), String::new()));
             }
         }
