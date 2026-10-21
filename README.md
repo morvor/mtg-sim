@@ -14,8 +14,14 @@ both sources:
 - **Scryfall rulings**: a test that checks a ruling cites it (`ruling!("Card", "text")`),
   or the ruling is listed in `docs/rulings-exemptions/` with a reason. Both macros fail
   the test if the rule or ruling doesn't exist, so citations can't be made up.
-- **Cards**: the Oracle compiler reports every ability text it can't compile, so a card
-  is either fully supported or reported as unsupported along with that text.
+- **Cards**: a card is *verified* only when it passes every check: every ability
+  compiled (the Oracle compiler reports every ability text it can't compile), its
+  compiled abilities render back to its Oracle text (the round trip), every ability
+  structure on it is exercised by some test, and the every-card fuzzing sweep cast it
+  with no crash, hang or rules violation. Verified cards are the headline number
+  (`docs/CARD_COVERAGE.md`); each card's tier (unsupported < compiled < round-trip <
+  verified) and failed checks are in `docs/verified-cards.tsv`, and simulations use only
+  verified cards unless told otherwise (`mtg-sim --cards`).
 
 The coverage tools list what is neither cited nor exempt.
 
@@ -29,11 +35,17 @@ cargo build --release
 cargo test --workspace                                        # the full test suite
 cargo run --release -p mtg-sim -- --games 200                 # simulate games
 cargo run --release -p mtg-sim -- --deck a.txt --deck b.txt   # "4 Lightning Bolt" lines
+cargo run --release -p mtg-sim -- --deck a.txt --cards compiled  # allow unverified cards
 cargo run --release -p mtg-sim -- --random-decks --games 1000 # fuzz the engine
 cargo run --release -p mtg-sim -- --every-card --threads 4     # play every supported card
 ```
 
-`--random-decks` gives every game new random decks of fully supported cards. It reports
+Ordinary games (`--deck` files and the default deck) use only verified cards: a deck
+with a card below the bar is rejected before the game starts, listing each such card
+and the checks it fails. `--cards verified|round-trip|compiled` sets the bar.
+
+`--random-decks` gives every game new random decks of fully supported cards (only cards
+at the bar with `--cards`). It reports
 any panic, any hang, and any rules violation its checks find (a player getting priority
 while a state-based action is pending, CR 117.5; zone lists that don't match their
 objects; out-of-date characteristics; mana or spells left as a step ends; damage left as
@@ -148,7 +160,8 @@ decisions from a script.
 
 ```sh
 cargo run --release -p mtg-tools -- cr-coverage                          # uncited, unexempt rules
-cargo run --release -p mtg-tools -- card-coverage                        # supported cards by format
+cargo run --release -p mtg-tools -- card-coverage                        # verified cards, tiers, by format
+cargo run --release -p mtg-tools -- verified --card "Shock"              # one card's tier and failed checks
 cargo run --release -p mtg-tools -- rulings-coverage --card "Tarmogoyf"  # one card's rulings
 cargo run --release -p mtg-tools -- unsupported --limit 50               # most common unsupported texts
 ```

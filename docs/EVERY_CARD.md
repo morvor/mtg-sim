@@ -140,7 +140,11 @@ What it found:
 | 9 | offered, never cast | Counterspells with nothing to counter; casts whose payment then failed |
 | 11 | activated or triggered, never resolved | Countered, or every target gone |
 
-Run with `--report FILE` for the full list (card, reason, ability text).
+Run with `--report FILE` for the full list (card, reason, ability text). The report also
+has one `outcome` line per card (`outcome<TAB>index<TAB>card<TAB>cast | exempt: why |
+not cast: why<TAB>failed game kinds`), clean cards included, which `mtg-tools verified`
+reads for the fuzz checks of the card tiers (`docs/CARD_COVERAGE.md`). `--cards
+verified|round-trip|compiled` limits the pool to cards at that tier.
 
 Deck setup changes after this sweep (`every_card.rs`), from the commonest reasons
 above: decks get enough lands for the card's most expensive activated ability, not just

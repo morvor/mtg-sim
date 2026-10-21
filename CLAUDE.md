@@ -19,7 +19,14 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 - `crates/mtg-sim` — CLI simulator (`cargo run --release -p mtg-sim -- --games 100`);
   `--random-decks` fuzzes the engine with random decks of fully supported cards.
 - `crates/mtg-tools` — coverage reports (`cr-coverage`, `card-coverage`,
-  `rulings-coverage`, `unsupported`).
+  `rulings-coverage`, `unsupported`, `verified`).
+
+Card tiers (`card_tiers.rs`): unsupported < compiled (fully supported) < round-trip <
+verified (round-trip + every ability structure exercised by a test + clean in the
+every-card sweep). `docs/verified-cards.tsv` records each card's tier and failed checks;
+verified is the headline number, and `mtg-sim`/`mtg_api::Session` use only verified cards
+by default (`--cards`, `ProtocolOptions::min_card_tier`). `TestGame` and `Game` don't check
+tiers.
 
 ## Engine map (`crates/mtg-engine/src`)
 
@@ -45,6 +52,7 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 | `keyword_actions.rs`, `keyword_actions_impl.rs` | Keyword actions (CR 701) |
 | `oracle/` | Oracle text compiler (normalize → split → parse). `oracle/patterns/` is the **pattern registry** |
 | `card.rs` | `CardDef` from Scryfall, `CardDb`, `card("Name")` |
+| `card_tiers.rs` | Card tiers (unsupported < compiled < round-trip < verified), the `docs/verified-cards.tsv` loader, the strict-mode deck check |
 | `testing.rs` | `TestGame` harness + `ScriptedAgent` |
 | `agents.rs` | `RandomAgent` |
 | `cards/` | **Hand-written card abilities** for genuine one-offs (`ManualAbility`, one file per card; policy in `cards/mod.rs`) |
@@ -143,6 +151,13 @@ cargo run --release -p mtg-tools -- structure-coverage --write docs/STRUCTURE_CO
 cargo run --release -p mtg-tools -- structure-coverage --card "Fetid Heath" --show-fingerprints
 cargo run --release -p mtg-sim -- --games 200
 cargo run --release -p mtg-sim -- --random-decks --games 1000   # fuzz: random decks; panics/hangs print a repro command
+cargo run --release -p mtg-tools -- verified --card "Shock"      # a card's tier and failed checks
+# Regenerate docs/verified-cards.tsv and docs/CARD_COVERAGE.md (before each milestone, after a
+# new card set or CR update; the sweep takes about an hour, so run nothing else heavy alongside):
+rm -rf target/structlog && MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace
+cargo run --release -p mtg-sim -- --every-card --threads 3 --report target/every-card.tsv
+cargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write
+cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
 ```
 
 Build machines are small (4 cores, ~15 GB RAM) and running out of memory restarts the whole
