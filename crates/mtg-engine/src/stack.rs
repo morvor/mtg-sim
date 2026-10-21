@@ -960,7 +960,11 @@ impl Game {
             };
             out[i] = match &spec.together {
                 Some(grp) => {
-                    crate::target_groups::fit(self, grp, picked, &cands, min as usize, ctx)?
+                    // Targets that don't go together are replaced by a group found among
+                    // the candidates in an order that doesn't depend on seats.
+                    let mut ordered = cands.clone();
+                    self.sort_apnap(&mut ordered);
+                    crate::target_groups::fit(self, grp, picked, &ordered, min as usize, ctx)?
                 }
                 None => picked,
             };

@@ -63,3 +63,37 @@ fn choices_at_random_take_the_players_in_apnap_order() {
         ]
     );
 }
+
+#[test]
+fn targets_that_must_go_together_are_replaced_without_regard_to_seats() {
+    // Found by seat symmetry: when chosen targets didn't go together ("two target cards
+    // from an opponent's graveyard" from two graveyards), the group chosen instead was
+    // the first among the candidates in seat order.
+    cr!("101.4", "601.2c");
+    let mut t = TestGame::new(3);
+    t.set_step(P1, Step::PrecombatMain);
+    // "{1}{B}, {T}: Exile two target cards from an opponent's graveyard. ..."
+    let tracker = t.battlefield(P1, "Deadeye Tracker");
+    t.lands(P1, "Swamp", 2);
+    let p0 = [
+        t.graveyard(P0, "Grizzly Bears"),
+        t.graveyard(P0, "Hill Giant"),
+    ];
+    let p2 = [
+        t.graveyard(P2, "Grizzly Bears"),
+        t.graveyard(P2, "Hill Giant"),
+    ];
+    t.answer(
+        P1,
+        DecisionKind::Targets,
+        Answer::Entities(vec![Entity::Object(p0[0]), Entity::Object(p2[0])]),
+    );
+    let ab = t.activate(P1, tracker, 0, &[]).unwrap().expect("on the stack");
+    let targets = &t.g.obj(ab).stack.as_ref().unwrap().chosen[0].targets[0];
+    // P2 is the first opponent after P1 in turn order.
+    assert_eq!(
+        targets,
+        &vec![Entity::Object(p2[0]), Entity::Object(p2[1])],
+        "P0's cards: {p0:?}"
+    );
+}
