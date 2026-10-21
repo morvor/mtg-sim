@@ -74,14 +74,43 @@ Decided 2026-10-02.
 
 - **Scope:** about 2,050 paper cards with no format where they are legal or restricted:
   playtest cards (737), Un-set cards that aren't legal anywhere (474, including the acorn
-  cards), planes and phenomena (212), schemes (102), cards banned everywhere such as the
-  ante cards and dexterity cards (77), vanguards, conspiracies and memorabilia.
+  cards), planes and phenomena (212), cards from sets that weren't out yet when the data
+  was fetched on 2026-09-24 (189, from Star Trek and three Commander products), schemes
+  (102), cards banned everywhere (34: the 9 ante cards and 25 conspiracies), vanguards and
+  memorabilia. All the dexterity cards but Chaos Orb and Falling Star are in this group
+  (those two are legal or restricted in Old School; see "Dexterity cards" below).
 - **Already implemented:** the variant and ante rules themselves (Planechase, Archenemy,
   Vanguard, Conspiracy draft, ante; CR 407 and 900-905) are in the engine and tested, and
   stay supported. Only covering these individual cards is deferred.
 - **Status:** `card-coverage` and `unsupported` already skip them. Rulings that apply only
   to such cards are DEFERRED in `scripts/rulings_batches.py`. Together with digital-only
-  cards and sticker sheets, that is 2,636 ruling texts.
+  cards, sticker sheets and the dexterity cards (below), that is 2,520 ruling texts on
+  Oct 21 (2,636 on Oct 2: a text that a test has cited or an exemption has listed since
+  then counts as CITED or EXEMPT instead).
+
+### Dexterity cards
+
+Decided 2026-10-21.
+
+- **Scope:** Chaos Orb and Falling Star, the two dexterity cards that are legal or
+  restricted in some format. Their abilities flip the physical card onto the table "from
+  a height of at least one foot" and affect what it touches when it lands: Chaos Orb
+  destroys the nontoken permanents it touches, Falling Star deals 3 damage to each
+  creature it lands on. No rule in the Comprehensive Rules models a physical flip (CR 705
+  covers coin flips only). Scryfall's Old School format (`oldschool`) is the only one
+  where they are legal or restricted: Chaos Orb is restricted there and Falling Star is
+  legal (both are banned in Vintage, Legacy and Commander). Every other card with
+  Scryfall's `dexterity` tag (60 names: 54 Un-set cards such as Orcish Paratroopers and
+  Landfill, three playtest cards including two planes, two holiday and convention promos,
+  and one Secret Lair card) isn't legal in any format and is deferred under "Cards not
+  legal in any format" above.
+- **Status:** they stay unsupported, and `card-coverage` counts them as unsupported paper
+  cards, like Pearl Collector and Tenacious Pup; their texts are in
+  `docs/agents/round3/deferred.tsv`. Their rulings about the physical procedure (and Chaos
+  Orb's Old School wording) are already exempt in
+  `docs/rulings-exemptions/rulings-P136.tsv` and `rulings-P045.tsv`; the others are
+  DEFERRED in `scripts/rulings_batches.py`, which finds these cards by the words "from a
+  height of at least one foot".
 
 ## Deferred to later
 
