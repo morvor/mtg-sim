@@ -245,6 +245,29 @@ pub struct ObjectView {
     pub attachments: Vec<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub combat: Option<CombatView>,
+    /// The choices players made for it ("P1 chose war", CR 607.2d), one per player. A
+    /// secret choice not yet revealed shows only that the player made one ("P1 chose
+    /// secretly"), except to that player.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<String>,
+}
+
+/// The choices made for `o` as `viewer` sees them (see [`ObjectView::choices`]).
+fn choices_view(g: &Game, viewer: Viewer, o: &GameObject) -> Vec<String> {
+    o.choices
+        .by_player
+        .iter()
+        .map(|(p, c)| {
+            let who = crate::describe::player_name(*p);
+            let visible = viewer
+                .is_none_or(|v| mtg_engine::choices::choice_visible(g, o.id, *p, v));
+            if visible {
+                format!("{who} chose {}", mtg_engine::choices::describe(c).join(", "))
+            } else {
+                format!("{who} chose secretly")
+            }
+        })
+        .collect()
 }
 
 /// An object whose identity the viewer can't see: only that it exists.
@@ -333,6 +356,7 @@ pub fn object_view(g: &Game, viewer: Viewer, id: ObjectId) -> ObjectView {
         } else {
             None
         },
+        choices: choices_view(g, viewer, o),
     }
 }
 

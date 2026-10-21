@@ -49,6 +49,12 @@ impl Renderer<'_> {
         }
         Some(match name {
             crate::kwa::vote::CHOOSES_VOTES => "you choose how each player votes this turn".into(),
+            // Secret choices (`choices.rs`).
+            crate::choices::REVEAL_CHOICES => {
+                "{alt:those choices|the choices|those numbers|the numbers} are revealed".into()
+            }
+            crate::choices::REVEAL_CHOSEN_PLAYER => "reveal the player you chose".into(),
+            crate::choices::REVEAL_CHOSEN_TYPE => "reveal the creature type you chose".into(),
             // Reinterpret.
             // "equal or lesser" than the mana value of the spell's one target.
             n if n.starts_with("cast from hand free with mana value at most that of target:") => {

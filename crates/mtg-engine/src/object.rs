@@ -387,6 +387,17 @@ pub struct Choices {
     /// "The color or colors of your choice" (one or more colors).
     #[serde(default)]
     pub colors: Option<ColorSet>,
+    /// Each player's own choices for this object ("each player chooses war or peace",
+    /// CR 607.2d): what that player chose most recently. See `choices.rs`.
+    #[serde(default)]
+    pub by_player: Vec<(PlayerId, Choices)>,
+    /// The players whose choices for this object are secret: made without showing them
+    /// to the other players, until they're revealed ("secretly choose an opponent").
+    #[serde(default)]
+    pub secret: Vec<PlayerId>,
+    /// The choices made for this object from now on are secret (until revealed).
+    #[serde(default)]
+    pub secret_next: bool,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

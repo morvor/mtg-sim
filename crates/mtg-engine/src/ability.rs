@@ -1201,6 +1201,10 @@ pub enum PlayerFilter {
     /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
     /// `kwa::vote::voted_like`.
     VotedLikeYou(bool),
+    /// A player who chose this word for the source ("players who chose war", "each
+    /// opponent who chose silence"): that player's own choice among the source's
+    /// per-player choices (CR 607.2d; see `choices::player_choice_matches`).
+    Chose(SmolStr),
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,

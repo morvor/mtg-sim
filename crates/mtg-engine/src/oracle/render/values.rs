@@ -1421,6 +1421,7 @@ impl Renderer<'_> {
                 }
             }
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
+            PlayerFilter::Chose(w) => format!("chose {w}"),
             PlayerFilter::VotedLikeYou(true) => "voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => "voted for a choice you didn't vote for".into(),
             PlayerFilter::LessThanHalfStartingLife => {

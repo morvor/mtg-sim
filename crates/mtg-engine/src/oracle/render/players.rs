@@ -1340,6 +1340,7 @@ impl Renderer<'_> {
                 }
             }
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::Chose(w) => format!("who chose {w}"),
             PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => {
                 "who voted for a choice you didn't vote for".into()

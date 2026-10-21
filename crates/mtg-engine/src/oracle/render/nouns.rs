@@ -621,6 +621,14 @@ impl Renderer<'_> {
                 let w = self.target_group(g);
                 np.post.push(w);
             }
+            // "creatures controlled by players who chose war" (`choice_grammar_per_player`).
+            Filter::ControllerMatches(pf) if matches!(pf.as_ref(), PlayerFilter::Chose(_)) => {
+                let PlayerFilter::Chose(w) = pf.as_ref() else {
+                    return;
+                };
+                np.controller_matches =
+                    Some(format!("controlled by {{alt:players|a player}} who chose {w}"));
+            }
             Filter::ControllerMatches(pf) => {
                 let p = self.player_filter_noun(pf, Num::One);
                 np.controller_matches = Some(format!("whose controller is {}", with_article(&p)));

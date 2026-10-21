@@ -243,3 +243,44 @@ fn every_player_sees_a_face_down_permanents_public_characteristics() {
     let p0 = json(&observe(&t.g, Some(P0)));
     assert!(!p0.contains("Hill Giant"), "{p0}");
 }
+
+#[test]
+fn a_secret_choice_is_shown_only_to_its_chooser_until_revealed() {
+    cr!("607.2d");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let archon = t.enter(P0, "Guardian Archon");
+    t.settle();
+    let view = |t: &TestGame, v: PlayerId| {
+        observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == archon.0)
+            .unwrap()
+            .choices
+    };
+    // P0 made the choice and sees it; the others see only that a choice was made.
+    assert_eq!(view(&t, P0), vec!["P0 chose P2".to_string()]);
+    assert_eq!(view(&t, P1), vec!["P0 chose secretly".to_string()]);
+    assert_eq!(view(&t, P2), vec!["P0 chose secretly".to_string()]);
+    let p1 = json(&observe(&t.g, Some(P1)));
+    assert!(!p1.contains("chose P2"), "{p1}");
+    // Revealing it (the cost of its ability) shows it to everyone.
+    t.activate(P0, archon, 0, &[Entity::Object(archon)]).unwrap();
+    assert_eq!(view(&t, P1), vec!["P0 chose P2".to_string()]);
+}
+
+#[test]
+fn an_open_choice_is_shown_to_every_player() {
+    cr!("607.2d");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(0));
+    t.answer(P1, DecisionKind::Option, mtg_engine::decision::Answer::Index(1));
+    let angel = t.enter(P0, "Archangel of Strife");
+    t.settle();
+    let o = observe(&t.g, Some(P1));
+    let a = o.battlefield.iter().find(|o| o.id == angel.0).unwrap();
+    assert_eq!(a.choices, vec!["P0 chose war", "P1 chose peace"]);
+}

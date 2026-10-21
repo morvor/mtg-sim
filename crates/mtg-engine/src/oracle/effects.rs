@@ -655,7 +655,13 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
             _ => rest,
         };
         let first_new_target = b.targets.len();
-        let e = parse_clause(rest, b)?;
+        let Some(e) = parse_clause(rest, b) else {
+            // Read again by the patterns as a whole ("If each opponent chose silence, ~
+            // deals 4 damage to each of them": "them" is the condition's players).
+            b.targets.truncate(before_if.0);
+            (b.it, b.it_player) = (before_if.1, before_if.2);
+            return parse_clause(l, b);
+        };
         // CR 601.2c, 702.33g: targets of a part that has its effect only if an optional
         // cost was paid as the spell was cast are chosen only if it was paid.
         // "If this spell's additional cost was paid, destroy target ..." too.

@@ -159,39 +159,90 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
     }
     // CR 607.2d: the choice belongs to the abilities linked to the one that made it.
     let made = g.obj(src).choices.clone();
-    let entry = g.objects[src.0 as usize]
-        .linked_choices
-        .entry(ctx.link)
-        .or_default();
+    let o = &mut g.objects[src.0 as usize];
+    let entry = o.linked_choices.entry(ctx.link).or_default();
+    copy_choice(kind, &made, entry);
+    // Each player's own choice ("each player chooses war or peace"), kept for the
+    // object and for the linked abilities.
+    record_for_player(&mut o.choices, p, kind, &made);
+    record_for_player(entry, p, kind, &made);
+    // A secret choice isn't shown to the other players until it's revealed.
+    if made.secret_next {
+        for ch in [&mut o.choices, entry] {
+            if !ch.secret.contains(&p) {
+                ch.secret.push(p);
+            }
+        }
+    }
+    g.dirty = true;
+}
+
+/// Copies the value `kind` chose from `made` into `to`.
+fn copy_choice(kind: &ChoiceKind, made: &crate::object::Choices, to: &mut crate::object::Choices) {
     match kind {
-        ChoiceKind::Color | ChoiceKind::ColorOtherThan(_) => entry.color = made.color,
-        ChoiceKind::Colors | ChoiceKind::ColorsExactly(_) => entry.colors = made.colors,
+        ChoiceKind::Color | ChoiceKind::ColorOtherThan(_) => to.color = made.color,
+        ChoiceKind::Colors | ChoiceKind::ColorsExactly(_) => to.colors = made.colors,
         // A word choice may also name a color or type (see above).
         ChoiceKind::OneOf(_) => {
             if let Some(w) = made.text.clone() {
                 if Color::from_word(&w).is_some() {
-                    entry.color = made.color;
+                    to.color = made.color;
                 } else if CardType::from_word(&w).is_some() {
-                    entry.card_type = made.card_type;
+                    to.card_type = made.card_type;
                 } else if is_land_type(&w) {
-                    entry.basic_land_type = made.basic_land_type;
+                    to.basic_land_type = made.basic_land_type.clone();
                 } else if is_creature_type(&w) {
-                    entry.creature_type = made.creature_type;
+                    to.creature_type = made.creature_type.clone();
                 }
-                entry.text = Some(w);
+                to.text = Some(w);
             }
         }
         ChoiceKind::CreatureType | ChoiceKind::CreatureTypeOtherThan(_) => {
-            entry.creature_type = made.creature_type
+            to.creature_type = made.creature_type.clone()
         }
-        ChoiceKind::BasicLandType => entry.basic_land_type = made.basic_land_type,
-        ChoiceKind::CardType => entry.card_type = made.card_type,
-        ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => entry.card_name = made.card_name,
-        ChoiceKind::Number { .. } => entry.number = made.number,
-        ChoiceKind::Opponent | ChoiceKind::Player => entry.player = made.player,
-        ChoiceKind::OddOrEven | ChoiceKind::Word(_) => entry.text = made.text,
+        ChoiceKind::BasicLandType => to.basic_land_type = made.basic_land_type.clone(),
+        ChoiceKind::CardType => to.card_type = made.card_type,
+        ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => {
+            to.card_name = made.card_name.clone()
+        }
+        ChoiceKind::Number { .. } => to.number = made.number,
+        ChoiceKind::Opponent | ChoiceKind::Player => to.player = made.player,
+        ChoiceKind::OddOrEven | ChoiceKind::Word(_) => to.text = made.text.clone(),
     }
-    g.dirty = true;
+}
+
+/// Records what `p` chose (the value `kind` chose, in `made`) among `ch`'s per-player
+/// choices.
+fn record_for_player(
+    ch: &mut crate::object::Choices,
+    p: PlayerId,
+    kind: &ChoiceKind,
+    made: &crate::object::Choices,
+) {
+    let i = match ch.by_player.iter().position(|(q, _)| *q == p) {
+        Some(i) => i,
+        None => {
+            ch.by_player.push((p, Default::default()));
+            ch.by_player.len() - 1
+        }
+    };
+    copy_choice(kind, made, &mut ch.by_player[i].1);
+}
+
+/// What `p` chose for an object, as a word ("war", "red", "Goblin", a card name, a
+/// number): the most recent of that player's choices that is a word.
+pub fn player_choice_matches(ch: &crate::object::Choices, p: PlayerId, word: &str) -> bool {
+    let Some((_, c)) = ch.by_player.iter().find(|(q, _)| *q == p) else {
+        return false;
+    };
+    let w = word.to_lowercase();
+    c.text.as_ref().is_some_and(|t| t.to_lowercase() == w)
+        || c.color.is_some_and(|x| x.word() == w)
+        || c.creature_type.as_ref().is_some_and(|t| t.to_lowercase() == w)
+        || c.basic_land_type.as_ref().is_some_and(|t| t.to_lowercase() == w)
+        || c.card_type.is_some_and(|t| t.word() == w)
+        || c.card_name.as_ref().is_some_and(|t| t.to_lowercase() == w)
+        || c.number.is_some_and(|n| n.to_string() == w)
 }
 
 /// Whether a filter refers to a choice made for its source ("of the chosen color").
@@ -201,6 +252,8 @@ pub fn filter_mentions_choice(f: &crate::ability::Filter) -> bool {
         Filter::ChosenColor | Filter::ChosenType | Filter::ChosenName | Filter::ChosenCardType => {
             true
         }
+        // "protection from the chosen player": what that player controls.
+        Filter::ControlledBy(crate::ability::PlayerRel::Chosen) => true,
         // "with mana value equal to the chosen number"
         Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v) => {
             matches!(**v, crate::ability::Value::Chosen)
@@ -227,6 +280,9 @@ pub fn filter_refers_to_undefined_choice(
             .and_then(|c| c.card_name.as_ref())
             .is_none_or(|n| n.is_empty()),
         Filter::ChosenCardType => ch.and_then(|c| c.card_type).is_none(),
+        Filter::ControlledBy(crate::ability::PlayerRel::Chosen) => {
+            ch.and_then(|c| c.player).is_none()
+        }
         Filter::ManaValue(_, v) | Filter::Power(_, v) | Filter::Toughness(_, v)
             if matches!(**v, crate::ability::Value::Chosen) =>
         {
@@ -282,6 +338,12 @@ pub fn bind_choices(
             .map(Filter::Named)
             .unwrap_or_else(nothing),
         Filter::ChosenCardType => ch.card_type.map(Filter::Type).unwrap_or_else(nothing),
+        Filter::ControlledBy(crate::ability::PlayerRel::Chosen) => ch
+            .player
+            .map(|p| {
+                Filter::ControllerMatches(Box::new(crate::ability::PlayerFilter::Is(p)))
+            })
+            .unwrap_or_else(nothing),
         Filter::ManaValue(c, v) | Filter::Power(c, v) | Filter::Toughness(c, v)
             if matches!(**v, crate::ability::Value::Chosen) =>
         {
@@ -370,3 +432,139 @@ pub fn pick_at_random(
     cands.truncate(n);
     cands
 }
+
+/// `Effect::Custom` names for secret choices ("secretly choose an opponent", "each player
+/// secretly chooses a number. Then those numbers are revealed."): the choices that follow
+/// [`SECRET_NEXT`] are made without being shown to the other players, until
+/// [`REVEAL_CHOICES`] (or a cost that reveals them) shows them to everyone. While it's
+/// secret, only the player who made a choice can see it (`mtg-api` observations); the
+/// choice is still the value the abilities that refer to it use (Emissary of Grudges's
+/// rulings).
+pub const SECRET_NEXT: &str = "choices: the next choices are secret";
+/// "then those choices are revealed": every secret choice made for the source.
+pub const REVEAL_CHOICES: &str = "choices: reveal the secret choices";
+/// The costs "Reveal the player you chose" and "Reveal the creature type you chose": they
+/// can be paid only if that choice was made for the source (Emissary of Grudges's
+/// rulings: "If you don't have a chosen opponent ... you can't pay the cost").
+pub const REVEAL_CHOSEN_PLAYER: &str = "choices: reveal the player you chose";
+pub const REVEAL_CHOSEN_TYPE: &str = "choices: reveal the creature type you chose";
+/// `Event::Custom` name reported for each secret choice revealed (the player who made it
+/// and the object it was made for).
+pub const REVEALED_CHOICE: &str = "choice revealed";
+
+/// Whether `viewer` may see what `chooser` chose for `obj`: anyone, unless the choice is
+/// still secret, which only the player who made it sees.
+pub fn choice_visible(g: &Game, obj: ObjectId, chooser: PlayerId, viewer: PlayerId) -> bool {
+    viewer == chooser || !g.obj(obj).choices.secret.contains(&chooser)
+}
+
+/// Reveals the secret choices made for `src`: they become public.
+pub fn reveal_choices(g: &mut Game, src: ObjectId) {
+    let o = &mut g.objects[src.0 as usize];
+    let secret = std::mem::take(&mut o.choices.secret);
+    o.choices.secret_next = false;
+    for ch in o.linked_choices.values_mut() {
+        ch.secret.clear();
+        ch.secret_next = false;
+    }
+    for p in secret {
+        g.log(|g| {
+            let what = g
+                .obj(src)
+                .choices
+                .by_player
+                .iter()
+                .find(|(q, _)| *q == p)
+                .map(|(_, c)| describe(c).join(", "))
+                .unwrap_or_default();
+            format!("{p} reveals their choice for {}: {what}", g.describe(src))
+        });
+        g.emit(crate::events::Event::Custom {
+            name: SmolStr::new(REVEALED_CHOICE),
+            player: Some(p),
+            obj: Some(src),
+            amount: 0,
+        });
+    }
+}
+
+/// The values in a set of choices, as words ("war", "red", "Goblin", "Player 1").
+pub fn describe(c: &crate::object::Choices) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(t) = &c.text {
+        out.push(t.to_string());
+    }
+    if let Some(x) = c.color {
+        if c.text.as_deref() != Some(x.word()) {
+            out.push(x.word().to_string());
+        }
+    }
+    if let Some(s) = &c.colors {
+        out.push(s.iter().map(|c| c.word()).collect::<Vec<_>>().join(" and "));
+    }
+    for t in [&c.creature_type, &c.basic_land_type].into_iter().flatten() {
+        if c.text.as_deref() != Some(t.as_str()) {
+            out.push(t.to_string());
+        }
+    }
+    if let Some(t) = c.card_type {
+        if c.text.as_deref() != Some(t.word()) {
+            out.push(t.word().to_string());
+        }
+    }
+    if let Some(n) = &c.card_name {
+        out.push(n.to_string());
+    }
+    if let Some(n) = c.number {
+        out.push(n.to_string());
+    }
+    if let Some(p) = c.player {
+        out.push(format!("{p}"));
+    }
+    out
+}
+
+/// Secret choices and the costs that reveal them.
+pub struct ChoiceRules;
+
+impl crate::kw::KeywordRules for ChoiceRules {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        let Some(src) = ctx.source else {
+            return matches!(
+                name,
+                SECRET_NEXT | REVEAL_CHOICES | REVEAL_CHOSEN_PLAYER | REVEAL_CHOSEN_TYPE
+            );
+        };
+        match name {
+            SECRET_NEXT => g.objects[src.0 as usize].choices.secret_next = true,
+            REVEAL_CHOICES | REVEAL_CHOSEN_PLAYER | REVEAL_CHOSEN_TYPE => reveal_choices(g, src),
+            _ => return false,
+        }
+        true
+    }
+
+    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        // Only the player who made the choice can reveal it: a player who gained control
+        // of the permanent made no choice for it (A Killer Among Us's and Stalking
+        // Leonin's rulings).
+        let mine = ctx.source.and_then(|s| {
+            g.obj(s)
+                .choices
+                .by_player
+                .iter()
+                .find(|(q, _)| *q == ctx.controller)
+                .map(|(_, c)| c)
+        });
+        match name {
+            REVEAL_CHOSEN_PLAYER => Some(mine.is_some_and(|c| c.player.is_some())),
+            REVEAL_CHOSEN_TYPE => Some(mine.is_some_and(|c| c.creature_type.is_some())),
+            _ => None,
+        }
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChoiceRules) }

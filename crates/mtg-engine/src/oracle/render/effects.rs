@@ -3731,6 +3731,15 @@ impl Renderer<'_> {
                     continue;
                 }
             }
+            // "secretly choose an opponent" (`choices.rs`).
+            if let (Some(Effect::Custom(n)), Some(next)) = (v.get(i), v.get(i + 1)) {
+                if n == crate::choices::SECRET_NEXT {
+                    let e = self.effect(next);
+                    parts.push(format!("secretly {e}"));
+                    i += 2;
+                    continue;
+                }
+            }
             // "An opponent gains control of ~": an opponent you choose, named once.
             if let (
                 Some(Effect::Choose {
@@ -7469,6 +7478,10 @@ pub(crate) fn either_form(a: String, b: String) -> String {
 }
 
 pub(crate) fn third_person(vp: &str) -> String {
+    // An adverb before the verb: "secretly chooses".
+    if let Some(r) = vp.strip_prefix("secretly ") {
+        return format!("secretly {}", third_person(r));
+    }
     let (verb, rest) = match vp.split_once(' ') {
         Some((v, r)) => (v, format!(" {r}")),
         None => (vp, String::new()),
