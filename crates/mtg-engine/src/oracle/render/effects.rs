@@ -1910,6 +1910,7 @@ impl Renderer<'_> {
                 if matches!(
                     effect,
                     PlayerModification::Hexproof
+                        | PlayerModification::HexproofFrom(_)
                         | PlayerModification::Shroud
                         | PlayerModification::ProtectionFrom(_)
                 ) {

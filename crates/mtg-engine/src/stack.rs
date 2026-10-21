@@ -702,6 +702,16 @@ impl Game {
                 {
                     return true
                 }
+                PlayerModification::HexproofFrom(f)
+                    if self.are_opponents(by, p)
+                        && !crate::kw::hexproof::hexproof_ignored(self, Entity::Player(p), by) =>
+                {
+                    if let Some(s) = source {
+                        if self.matches(self.ability_source_of(s), f, &Ctx::new(None, p)) {
+                            return true;
+                        }
+                    }
+                }
                 PlayerModification::ProtectionFrom(f) => {
                     if let Some(s) = source {
                         if self.matches(self.ability_source_of(s), f, &Ctx::new(None, p)) {

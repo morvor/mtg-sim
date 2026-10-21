@@ -820,6 +820,10 @@ impl Renderer<'_> {
                 self.activation_permission(&who, ap)
             }
             PlayerModification::Shroud => format!("{subj} have shroud"),
+            PlayerModification::HexproofFrom(f) => {
+                let q = self.quality(f);
+                format!("{subj} have hexproof from {q}")
+            }
             PlayerModification::ProtectionFrom(f) => {
                 let q = self.quality(f);
                 format!("{subj} have protection from {q}")

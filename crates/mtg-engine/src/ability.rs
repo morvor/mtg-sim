@@ -1552,6 +1552,9 @@ pub enum Filter {
     SharesCreatureType(Box<Sel>),
     SharesCardType(Box<Sel>),
     SharesColor(Box<Sel>),
+    /// Has the same mana value as one of the selected objects ("protection from each mana
+    /// value among artifacts you control", CR 202.3, 702.16a).
+    SharesManaValue(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
     /// The number of counters of a kind (of all kinds: None) on it compared with a value
@@ -3543,6 +3546,10 @@ pub enum StaticEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerModification {
     Hexproof,
+    /// "You have hexproof from blue" (CR 702.11d on a player, Veil of Summer): spells with
+    /// the quality and abilities from sources with it that the player's opponents control
+    /// can't target them.
+    HexproofFrom(Filter),
     Shroud,
     ProtectionFrom(Filter),
     MaxHandSize(Option<Value>),

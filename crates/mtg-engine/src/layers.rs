@@ -1920,6 +1920,13 @@ pub fn apply_mod(
                     None => return,
                 }
             }
+            // "Protection from each color / mana value among [objects]": the qualities
+            // those objects have now, from the granting ability's point of view.
+            if k.kind == KeywordKind::Protection {
+                if let Some(f) = qualities_among(k.filter.as_ref(), g, ctx) {
+                    k.filter = Some(f);
+                }
+            }
             if let (Some(f), Some(ch)) = (k.filter.as_ref(), g.source_choices(ctx)) {
                 if crate::choices::filter_mentions_choice(f) {
                     k.filter = Some(crate::choices::bind_choices(f, ch));
@@ -2199,5 +2206,43 @@ fn mentions_library(f: &Filter) -> bool {
         Filter::InZone(ZoneKind::Library) => true,
         Filter::And(v) | Filter::Or(v) => v.iter().any(mentions_library),
         _ => false,
+    }
+}
+
+/// "Each color among [objects]" / "each mana value among [objects]" as a protection
+/// quality (CR 702.16h): one quality per color or mana value the objects have, evaluated
+/// for the granting ability (`ctx`).
+fn qualities_among(f: Option<&Filter>, g: &Game, ctx: &Ctx) -> Option<Filter> {
+    match f? {
+        Filter::SharesColor(sel) if matches!(**sel, Sel::All(_)) => {
+            let colors = g
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .fold(ColorSet::NONE, |acc, o| acc.union(g.obj(o).chars.colors));
+            Some(Filter::Or(
+                Color::ALL
+                    .iter()
+                    .filter(|c| colors.contains(**c))
+                    .map(|c| Filter::Color(*c))
+                    .collect(),
+            ))
+        }
+        Filter::SharesManaValue(sel) if matches!(**sel, Sel::All(_)) => {
+            let mut mvs: Vec<u32> = g
+                .eval_sel(sel, ctx)
+                .iter()
+                .filter_map(|e| e.object())
+                .map(|o| crate::mana_value::mana_value_with(g, o, &g.obj(o).chars))
+                .collect();
+            mvs.sort_unstable();
+            mvs.dedup();
+            Some(Filter::Or(
+                mvs.into_iter()
+                    .map(|n| Filter::ManaValue(Cmp::Eq, Box::new(Value::c(n as i32))))
+                    .collect(),
+            ))
+        }
+        _ => None,
     }
 }
