@@ -512,3 +512,30 @@ fn each_who_cant(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Op
 }
 
 inventory::submit! { super::StaticPattern { name: "history 4: each opponent who [did something] this turn can't ...", priority: 900, parse: each_who_cant } }
+
+/// "[who] cast a spell this turn with the same name as that card" (Grim Reminder: the card
+/// the instruction before revealed), for "you" (the player performing the instruction).
+pub fn past_with_referent(
+    cond: &str,
+    b: &crate::oracle::effects::Builder,
+) -> Option<Condition> {
+    let r = cond.strip_prefix("cast a spell this turn with the same name as ")?;
+    let sel = match r {
+        "that card" | "it" => b.it.clone(),
+        _ => return None,
+    };
+    if super::oracle_hardening_referents::is_no_referent(&sel) || matches!(sel, Sel::This) {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::EventsThisTurn(
+            Box::new(TriggerCond::CastSpell {
+                who: PlayerRel::You,
+                filter: Filter::and(vec![Filter::Spell, Filter::SameNameAs(Box::new(sel))]),
+            }),
+            Tally::Events,
+        ),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}

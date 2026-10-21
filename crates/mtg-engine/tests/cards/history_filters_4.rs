@@ -862,3 +862,95 @@ fn sirens_call_destroys_creatures_that_didnt_attack_if_controlled_since_the_turn
     assert!(t.on_battlefield(wall), "a Wall");
     assert!(t.on_battlefield(newcomer), "not controlled since the turn began");
 }
+
+// --- batch 7: counters removed, same name as a spell cast this turn ---------------------
+
+#[test]
+fn churning_reservoir_needs_an_oil_counter_removed_or_an_oiled_permanent_gone() {
+    cr!("122.8", "602.5b");
+    assert_supported("Churning Reservoir");
+    let mut t = TestGame::new(2);
+    let cr = t.battlefield(P0, "Churning Reservoir");
+    let thing = t.battlefield(P0, "Ornithopter");
+    t.lands(P0, "Mountain", 4);
+    t.g.add_counters(Entity::Object(thing), "oil", 2, None);
+    t.g.flush_events();
+    assert!(t.activate(P0, cr, 0, &[]).is_err(), "nothing yet");
+    t.g.remove_counters(Entity::Object(thing), "oil", 1);
+    t.g.flush_events();
+    t.activate(P0, cr, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(count_named(&t, P0, "Goblin"), 1);
+}
+
+#[test]
+fn churning_reservoir_counts_a_permanent_with_oil_put_into_a_graveyard() {
+    cr!("122.8", "602.5b");
+    let mut t = TestGame::new(2);
+    let cr = t.battlefield(P0, "Churning Reservoir");
+    let thing = t.battlefield(P1, "Ornithopter");
+    t.lands(P0, "Mountain", 2);
+    t.g.add_counters(Entity::Object(thing), "oil", 1, None);
+    t.g.destroy(thing, None);
+    t.g.flush_events();
+    t.activate(P0, cr, 0, &[]).unwrap();
+}
+
+#[test]
+fn twinning_glass_casts_a_card_named_like_a_spell_cast_this_turn() {
+    cr!("601.2", "118.9");
+    ruling!("Twinning Glass", "It doesn’t matter who cast the first spell.");
+    assert_supported("Twinning Glass");
+    let mut t = TestGame::new(2);
+    let tg = t.battlefield(P0, "Twinning Glass");
+    t.lands(P0, "Plains", 1);
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let theirs = t.hand(P1, "Shock");
+    t.cast_with(P1, theirs, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    let mine = t.hand(P0, "Shock");
+    t.hand(P0, "Lightning Bolt");
+    t.answer_choose(P0, &[Entity::Object(mine)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.activate(P0, tg, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "the Shock, free");
+    let offered = t
+        .asked()
+        .into_iter()
+        .rev()
+        .find_map(|(q, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } if q == P0 => {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(offered, vec![Entity::Object(mine)], "not the Lightning Bolt");
+}
+
+#[test]
+fn grim_reminder_drains_opponents_who_cast_a_spell_with_the_revealed_name() {
+    cr!("701.23a", "119.3");
+    assert_supported("Grim Reminder");
+    let mut t = TestGame::new(3);
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let s = t.hand(P1, "Shock");
+    t.cast_with(P1, s, &[Entity::Player(P2)]).unwrap();
+    t.resolve_all();
+    t.set_step(P2, Step::PrecombatMain);
+    t.lands(P2, "Island", 1);
+    let o = t.hand(P2, "Opt");
+    t.cast_with(P2, o, &[]).unwrap();
+    t.resolve_all();
+    let shock = t.library_top(P0, "Shock");
+    t.answer_choose(P0, &[Entity::Object(shock)]);
+    t.lands(P0, "Swamp", 3);
+    let gr = t.hand(P0, "Grim Reminder");
+    t.cast_with(P0, gr, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14, "cast a Shock this turn");
+    assert_eq!(t.life(P2), 18, "cast an Opt (and was Shocked)");
+}

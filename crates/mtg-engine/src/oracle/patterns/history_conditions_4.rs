@@ -539,3 +539,75 @@ fn ignore_for_each_not_controlled(
 }
 
 inventory::submit! { super::AbilityPattern { name: "history 4: ignore this effect for each creature the player didn't control continuously since the beginning of the turn", priority: 90, parse: ignore_for_each_not_controlled } }
+
+/// "an oil counter was removed from a permanent you controlled this turn" (Churning
+/// Reservoir): such a counter was removed this turn.
+fn counter_removed(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c.strip_prefix("an ").or_else(|| c.strip_prefix("a "))?;
+    let (kind, obj) = r.split_once(" counter was removed from ")?;
+    let obj = obj.strip_suffix(" this turn")?;
+    let obj = obj.replace(" you controlled", " you control");
+    let article = if kind.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+    let (cond, _, _) = crate::oracle::triggers::parse_trigger_condition(&format!(
+        "whenever {article} {kind} counter is removed from {obj}"
+    ))?;
+    if !matches!(cond, TriggerCond::CountersRemoved { .. }) {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::EventsThisTurn(Box::new(cond), Tally::Events),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: a [kind] counter was removed from [object] this turn", priority: 900, parse: counter_removed } }
+
+/// "[condition] or [condition]": either, each a whole condition of its own (Churning
+/// Reservoir: "an oil counter was removed from a permanent you controlled this turn or a
+/// permanent with an oil counter on it was put into a graveyard this turn").
+fn conditions_or(c: &str) -> Option<Condition> {
+    let c = end(c);
+    for (i, _) in c.match_indices(" or ") {
+        let (x, y) = (&c[..i], &c[i + " or ".len()..]);
+        if let (Some(a), Some(b)) = (free_condition(x), free_condition(y)) {
+            return Some(Condition::Or(vec![a, b]));
+        }
+    }
+    None
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: [condition] or [condition]", priority: 995, parse: conditions_or } }
+
+/// "You may cast a spell from your hand without paying its mana cost if it has the same
+/// name as a spell that was cast this turn." (Twinning Glass): only such a card may be
+/// chosen (whoever cast the first spell, Twinning Glass rulings).
+fn cast_if_same_name_as_cast(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, cond) = l.rsplit_once(" if it has the same name as ")?;
+    let who = match cond {
+        "a spell that was cast this turn" => PlayerRel::Any,
+        "a spell you've cast this turn" | "a spell you cast this turn" => PlayerRel::You,
+        _ => return None,
+    };
+    if !head.contains(" cast ") || !head.ends_with("without paying its mana cost") {
+        return None;
+    }
+    let e = crate::oracle::effects::parse_clause(head, b)?;
+    let mut json = serde_json::to_value(&e).ok()?;
+    let filter = json
+        .get_mut("CastCard")?
+        .get_mut("what")?
+        .get_mut("Choose")?
+        .get_mut("filter")?;
+    let f: Filter = serde_json::from_value(filter.clone()).ok()?;
+    let same = Filter::SameNameAs(Box::new(Sel::ThisTurn(Box::new(TriggerCond::CastSpell {
+        who,
+        filter: Filter::Spell,
+    }))));
+    *filter = serde_json::to_value(Filter::and(vec![f, same])).ok()?;
+    serde_json::from_value(json).ok()
+}
+
+inventory::submit! { super::EffectPattern { name: "history 4: cast a spell ... if it has the same name as a spell that was cast this turn", priority: 10, parse: cast_if_same_name_as_cast } }

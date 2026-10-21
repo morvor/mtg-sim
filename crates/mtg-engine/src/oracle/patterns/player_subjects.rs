@@ -194,6 +194,12 @@ fn player_condition(r: &str, with: bool, b: &Builder) -> Option<(Condition, Stri
         if mentions_you(&cond) {
             continue;
         }
+        // "who cast a spell this turn with the same name as that card" (Grim Reminder).
+        if !with {
+            if let Some(c) = super::history_filters_4::past_with_referent(&cond, b) {
+                return Some((c, pred));
+            }
+        }
         let worded = if with {
             format!("you have {cond}")
         } else {
