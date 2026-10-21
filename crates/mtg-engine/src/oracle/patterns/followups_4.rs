@@ -25,7 +25,136 @@ thread_local! {
     /// the instruction's verb is, while the next sentence is read ("the number of
     /// opponents who investigated this way").
     static ACCEPTED: std::cell::Cell<Option<(Var, &'static str)>> = const { std::cell::Cell::new(None) };
+    /// The objects the previous instruction moved, stored as they last existed, while the
+    /// next sentence is read ("the total power of creatures they controlled that were
+    /// exiled this way").
+    static MOVED: std::cell::Cell<Option<Var>> = const { std::cell::Cell::new(None) };
 }
+
+/// The objects the previous instruction moved (exiled, returned, destroyed), as they
+/// last existed, kept for a sentence about each player's share of them.
+const MOVED_THIS_WAY: Var = vars::USER + 41005;
+
+/// The verbs of "[objects] [verb] this way" an instruction that moves objects is read
+/// with.
+fn moved_verb(e: &Effect) -> Option<&'static str> {
+    match e {
+        Effect::Exile {
+            what: Sel::All(_), ..
+        } => Some("exiled"),
+        Effect::Move {
+            what: Sel::All(_),
+            to,
+        } if to.zone == ZoneKind::Hand => Some("returned"),
+        Effect::Destroy {
+            what: Sel::All(_), ..
+        } => Some("destroyed"),
+        _ => None,
+    }
+}
+
+/// The value grammar's atom (while [`MOVED`] is set): "the total power of creatures they
+/// controlled that were exiled this way" (Oversimplify): each player's own share, judged
+/// as the creatures last existed (CR 608.2h).
+fn moved_share_atom(s: &str) -> Option<(Value, String)> {
+    let v = MOVED.with(|c| c.get())?;
+    let r = s.strip_prefix("the total power of ")?;
+    // "they" (each player), read as "you" by a player performing the instruction.
+    let (noun, rest) = r
+        .split_once(" they controlled that were ")
+        .or_else(|| r.split_once(" you controlled that were "))?;
+    let (_verb, rest) = rest.split_once(" this way")?;
+    if !(rest.is_empty() || rest.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(noun)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some((
+        Value::Aggregate(
+            AggOp::Sum,
+            Stat::Power,
+            Box::new(Sel::Matching(
+                Box::new(Sel::Var(v)),
+                Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
+            )),
+        ),
+        rest.to_string(),
+    ))
+}
+
+/// A sentence about each player's share of the objects the previous instruction moved:
+/// "Each player creates a 0/0 ... token and puts a number of +1/+1 counters on it equal to
+/// the total power of creatures they controlled that were exiled this way." (Oversimplify),
+/// "For each opponent who controlled a creature returned this way, you create two 1/1 ...
+/// tokens" (Faerie Slumber Party).
+fn players_share_of_moved(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(verb) = moved_verb(last_instruction(prev)) else {
+        return false;
+    };
+    if !l.contains(&format!(" {verb} this way")) {
+        return false;
+    }
+    let store = Effect::Store {
+        var: MOVED_THIS_WAY,
+        sel: Sel::Before(Box::new(Sel::Var(vars::IT))),
+    };
+    // "for each opponent who controlled a creature returned this way, [clause]".
+    if let Some(r) = l.strip_prefix("for each opponent who controlled ") {
+        let Some((noun, clause)) = r.split_once(&format!(" {verb} this way, ")) else {
+            return false;
+        };
+        let noun = noun
+            .strip_prefix("a ")
+            .or_else(|| noun.strip_prefix("an "))
+            .unwrap_or(noun);
+        let Some((f, _, tail)) = crate::oracle::phrases::parse_object_phrase(noun) else {
+            return false;
+        };
+        if !tail.trim().is_empty() {
+            return false;
+        }
+        let Some(e) = parse_clause(clause, b) else {
+            return false;
+        };
+        let who = PlayerFilter::And(vec![
+            PlayerFilter::Opponent,
+            PlayerFilter::History(Box::new(Condition::SelNonEmpty(Sel::Matching(
+                Box::new(Sel::Var(MOVED_THIS_WAY)),
+                Filter::and(vec![f, Filter::ControlledBy(PlayerRel::Iterated)]),
+            )))),
+        ]);
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![
+            old,
+            store,
+            Effect::ForEachPlayer {
+                who: PlayerRef::Each(who),
+                effect: Box::new(e),
+            },
+        ]);
+        return true;
+    }
+    if !l.contains(" they controlled that were ") {
+        return false;
+    }
+    let saved = MOVED.with(|c| c.replace(Some(MOVED_THIS_WAY)));
+    let e = crate::oracle::effects::parse_sentence(l, b);
+    MOVED.with(|c| c.set(saved));
+    let Some(e) = e else {
+        return false;
+    };
+    if !format!("{e:?}").contains(&format!("Var({MOVED_THIS_WAY})")) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, store, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: each player's share of the objects moved this way", priority: 125, apply: players_share_of_moved } }
 
 fn with_per_player<T>(f: impl FnOnce() -> T) -> T {
     let saved = PER_PLAYER.with(|c| c.replace(true));
@@ -57,6 +186,9 @@ pub fn own_count_atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some(v);
     }
     if let Some(v) = super::reflexive_modal_4::excess_atom(s) {
+        return Some(v);
+    }
+    if let Some(v) = moved_share_atom(s) {
         return Some(v);
     }
     if !PER_PLAYER.with(|c| c.get()) {
@@ -945,6 +1077,8 @@ mod tests {
             ("Legendary Artifact", "At the beginning of your end step, put an influence counter on ~ and scry 2. Then target opponent may have you draw a card. If that player doesn't, you mill X cards, where X is the number of influence counters on ~, and that player loses life equal to the total mana value of those cards."),
             ("Artifact", "At the beginning of each player's upkeep, that player taps an untapped artifact, creature, or land they control for each fade counter on ~."),
             ("Enchantment", "At the beginning of each opponent's draw step, that player draws an additional card for each growth counter on ~, then ~ deals damage to the player equal to the number of cards they drew this way."),
+            ("Sorcery", "Exile all creatures. Each player creates a 0/0 green and blue Fractal creature token and puts a number of +1/+1 counters on it equal to the total power of creatures they controlled that were exiled this way."),
+            ("Sorcery", "Return all creatures to their owners' hands. For each opponent who controlled a creature returned this way, you create two 1/1 blue Faerie creature tokens with flying and \"This token can block only creatures with flying.\""),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

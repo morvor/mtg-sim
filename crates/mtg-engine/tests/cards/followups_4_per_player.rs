@@ -136,3 +136,58 @@ fn malignant_growth_damage_equals_the_cards_drawn_this_way() {
     assert_eq!(t.hand_size(P1), hand + 2);
     assert_eq!(t.life(P1), 18);
 }
+
+fn fractals(t: &TestGame, p: PlayerId) -> Vec<(i32, i32)> {
+    t.g.battlefield
+        .iter()
+        .filter(|o| {
+            let o = t.obj_now(**o);
+            o.controller == p && o.chars.name.starts_with("Fractal")
+        })
+        .map(|o| t.pt(*o))
+        .collect()
+}
+
+#[test]
+fn oversimplify_each_fractal_gets_its_controllers_exiled_power() {
+    cr!("608.2h", "101.4");
+    supported("Oversimplify");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Island", 2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    t.battlefield(P1, "Serra Angel");
+    let spell = t.hand(P0, "Oversimplify");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(fractals(&t, P0), vec![(5, 5)]);
+    assert_eq!(fractals(&t, P1), vec![(4, 4)]);
+    // P2 exiled nothing: a 0/0 that dies.
+    assert!(fractals(&t, P2).is_empty());
+}
+
+#[test]
+fn faerie_slumber_party_two_faeries_per_opponent_whose_creature_returned() {
+    cr!("608.2h");
+    supported("Faerie Slumber Party");
+    let mut t = TestGame::new(4);
+    t.lands(P0, "Island", 6);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P3, "Serra Angel");
+    let spell = t.hand(P0, "Faerie Slumber Party");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let faeries =
+        t.g.battlefield
+            .iter()
+            .filter(|o| {
+                let o = t.obj_now(**o);
+                o.controller == P0 && o.chars.name.starts_with("Faerie")
+            })
+            .count();
+    assert_eq!(faeries, 4);
+    assert!(t.in_hand(P1, "Hill Giant"));
+}
