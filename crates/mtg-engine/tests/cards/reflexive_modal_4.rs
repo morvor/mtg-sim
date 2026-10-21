@@ -202,3 +202,34 @@ fn cemetery_desecrator_exiles_another_card_and_shrinks_by_its_mana_value() {
         .collect();
     assert_eq!(cands, vec![vec![Entity::Object(giant)]]);
 }
+
+#[test]
+fn incinerator_of_the_guilty_collects_evidence_x_and_deals_x() {
+    cr!("701.59a", "603.12");
+    supported("Incinerator of the Guilty");
+    let mut t = TestGame::new(2);
+    let inc = t.battlefield(P0, "Incinerator of the Guilty");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Grizzly Bears");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Number, Answer::Number(4));
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.attack(&[(inc, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(!t.on_battlefield(angel));
+    assert!(t.on_battlefield(wall));
+    // X could be at most the total mana value in the graveyard (6).
+    let maxes: Vec<i64> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseNumber { max, .. } => Some(max),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(maxes, vec![6]);
+}

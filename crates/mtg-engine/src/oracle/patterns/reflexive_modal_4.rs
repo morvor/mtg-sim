@@ -114,6 +114,19 @@ fn exile_another_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "reflexive modal 4: exile another [card] from a graveyard", priority: 100, parse: exile_another_from_graveyard } }
 
+/// "collect evidence X" with no X defined (Incinerator of the Guilty: "you may collect
+/// evidence X. When you do, ~ deals X damage ..."): X is chosen as it's performed.
+fn collect_evidence_x(l: &str, _b: &mut Builder) -> Option<Effect> {
+    if end(l) != "collect evidence x" || super::value_grammar::x_defined() {
+        return None;
+    }
+    Some(Effect::Custom(
+        crate::kw::choices_4::COLLECT_EVIDENCE_X.into(),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "reflexive modal 4: collect evidence X (X chosen)", priority: 100, parse: collect_evidence_x } }
+
 /// "choose up to that many" (after paying a cost several times): at most X modes.
 fn up_to_that_many(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
     (h == "choose up to that many").then(|| ModalHeader {
@@ -237,6 +250,7 @@ mod tests {
             ("Legendary Creature", "Whenever ~ becomes tapped, you may pay {1} up to three times. When you do, choose up to that many —\n• Net — Target creature can't block this turn.\n• Explosive — ~ deals 2 damage to target player.\n• Boomerang — Discard a card, then draw a card."),
             ("Creature", "When ~ enters or dies, exile another card from a graveyard. When you do, choose one —\n• Remove X counters from target permanent, where X is the mana value of the exiled card.\n• Target creature an opponent controls gets -X/-X until end of turn, where X is the mana value of the exiled card."),
             ("Creature", "When ~ enters or dies, you may exile another creature card from your graveyard. When you do, put a +1/+1 counter on each creature you control other than ~ that shares a creature type with the exiled card."),
+            ("Creature", "Whenever ~ deals combat damage to a player, you may collect evidence X. When you do, ~ deals X damage to each creature and planeswalker that player controls."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
