@@ -370,7 +370,7 @@ fn that_player(inner: &str, b: &Builder) -> Option<PlayerRef> {
     Some(b.it_player.clone())
 }
 
-fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (delay, inner) = split_delay(l)?;
     let inner = inner.trim();

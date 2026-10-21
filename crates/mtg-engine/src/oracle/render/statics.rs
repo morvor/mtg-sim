@@ -614,6 +614,7 @@ impl Renderer<'_> {
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "that player ignores this effect until end of turn".into()
                     }
+                    SpecialActionEffect::StopDelayedTrigger => "that ability doesn't trigger".into(),
                 };
                 format!("{who} may {c} any time they could cast an instant. If they do, {what}")
             }

@@ -1897,6 +1897,9 @@ impl Game {
                     for_rest_of_game: false,
                     performer,
                 });
+                // Which one it is, for a special action that stops it (Glass Asp).
+                ctx.nums
+                    .insert(crate::special_actions::LAST_DELAYED, i64::from(id));
             }
             Effect::NoteLinked { what, replace } => {
                 crate::linked_notes::exec(self, what, *replace, ctx);

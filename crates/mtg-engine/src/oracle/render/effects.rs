@@ -2060,11 +2060,16 @@ impl Renderer<'_> {
                 }
                 let d = self.duration(duration);
                 let c = self.cost(&def.cost);
+                if let SpecialActionEffect::StopDelayedTrigger = &def.action {
+                    let who = self.player_filter_object(&def.who);
+                    return format!("{{alt:unless {who} pays {c} before that step|{who} may pay {c} before then to stop it}}");
+                }
                 let what = match &def.action {
                     SpecialActionEffect::Effect(e) => self.effect(e),
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "ignore this effect until end of turn".into()
                     }
+                    SpecialActionEffect::StopDelayedTrigger => String::new(),
                 };
                 let once = if *repeatable {
                     ""

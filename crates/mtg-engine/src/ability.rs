@@ -1360,6 +1360,10 @@ pub enum SpecialActionEffect {
     /// other static abilities don't apply to that player (or to objects they control)
     /// until end of turn.
     IgnoreSourceEffects,
+    /// "[delayed instruction] unless [that player] pays {2} before that step" (CR 116.2c):
+    /// stops the delayed triggered ability the effect offering it created just before
+    /// (Glass Asp); it can be taken only while that ability hasn't triggered.
+    StopDelayedTrigger,
 }
 
 /// How an effect changes the targets of a spell or ability (CR 115.7).
