@@ -149,6 +149,7 @@ fn teams_win_and_lose_together() {
     t.resolve_all();
     assert_eq!(t.g.result, Some(GameResult::Win(vec![P0, P1])));
     // If either player on a team loses, the team loses.
+    cr_example!("810.8a", "attempts to draw a card while there are no cards");
     let mut t = thg();
     t.g.players[3].library.clear();
     t.g.draw_cards(P3, 1);

@@ -835,6 +835,11 @@ impl Game {
                 continue;
             }
             let mut cands = self.legal_target_candidates(spec, ctx, stack_obj);
+            // CR 801.5a: another player choosing the targets chooses among those within
+            // their own range of influence too.
+            if chooser != ctx.controller {
+                cands.retain(|c| crate::multiplayer::range::entity_in_range(self, chooser, *c));
+            }
             // "another target": exclude entities chosen in the listed slots.
             for d in &spec.distinct_from {
                 if let Some(prev) = out.get(*d as usize) {
