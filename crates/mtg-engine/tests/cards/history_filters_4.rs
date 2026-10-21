@@ -1249,3 +1249,23 @@ fn sasaya_flips_with_seven_land_cards_in_hand() {
     t.resolve_all();
     assert_eq!(t.obj_now(sasaya).chars.name.as_str(), "Sasaya's Essence");
 }
+
+#[test]
+fn desolation_punishes_players_who_tapped_land_for_mana_and_sacrificed_a_plains() {
+    cr!("101.4", "106.12", "701.21a");
+    assert_supported("Desolation");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Desolation");
+    t.set_step(P1, Step::PrecombatMain);
+    let plains = t.lands(P1, "Plains", 1)[0];
+    let forest = t.lands(P2, "Forest", 1)[0];
+    let lions = t.hand(P1, "Savannah Lions");
+    t.cast_with(P1, lions, &[]).unwrap();
+    t.resolve_all();
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    assert!(!t.on_battlefield(plains), "P1 tapped it for mana");
+    assert_eq!(t.life(P1), 18, "and sacrificed a Plains");
+    assert!(t.on_battlefield(forest), "P2 didn't tap a land for mana");
+    assert_eq!(t.life(P2), 20);
+}

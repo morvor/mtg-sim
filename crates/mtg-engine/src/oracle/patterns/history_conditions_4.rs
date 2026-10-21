@@ -969,3 +969,91 @@ fn cards_of_a_kind_in_hand(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: you have N or more [kind] cards in your hand", priority: 900, parse: cards_of_a_kind_in_hand } }
+
+// ---------------------------------------------------------------------------
+// Desolation: "each player who [did something] sacrifices ..." and "each player who
+// sacrificed a [kind] this way"
+// ---------------------------------------------------------------------------
+
+/// "each player who tapped a land for mana this turn sacrifices a land of their choice"
+/// (Desolation): those players sacrifice at the same time (CR 101.4), so what they
+/// sacrificed is known together afterwards ("this way").
+fn each_who_sacrifices(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let l = end(l);
+    let (base, r) = if let Some(r) = l.strip_prefix("each player ") {
+        (PlayerFilter::Any, r)
+    } else if let Some(r) = l.strip_prefix("each opponent ") {
+        (PlayerFilter::Opponent, r)
+    } else {
+        return None;
+    };
+    if !r.starts_with("who ") {
+        return None;
+    }
+    let i = r.find(" sacrifices ")?;
+    let (q, rest) = super::history_filters_4::player_qualifier(&r[..i])?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let obj = r[i + " sacrifices ".len()..]
+        .strip_suffix(" of their choice")
+        .unwrap_or(&r[i + " sacrifices ".len()..]);
+    let e = crate::oracle::effects::parse_clause(&format!("sacrifice {obj}"), b)?;
+    let Effect::Sacrifice {
+        who: PlayerRef::You,
+        filter,
+        count,
+    } = e
+    else {
+        return None;
+    };
+    Some(Effect::Sacrifice {
+        who: PlayerRef::Each(PlayerFilter::And(vec![base, q])),
+        filter,
+        count,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "history 4: each player who [did something] this turn sacrifices [a permanent]", priority: 60, parse: each_who_sacrifices } }
+
+/// "~ deals 2 damage to each player who sacrificed a Plains this way" (Desolation): the
+/// players who sacrificed such a permanent with the instruction before (as it last
+/// existed, CR 608.2h).
+fn damage_each_who_sacrificed(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, np) = l.split_once(" to each player who sacrificed ")?;
+    let np = np.strip_suffix(" this way")?;
+    let np = np.strip_prefix("a ").or_else(|| np.strip_prefix("an "))?;
+    // ("Plains" reads as either number.)
+    let (f, _, tail) = crate::oracle::phrases::parse_object_phrase(np)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let e = crate::oracle::effects::parse_clause(&format!("{head} to each player"), b)?;
+    let mut json = serde_json::to_value(&e).ok()?;
+    let from = serde_json::to_value(Sel::Players(PlayerRef::EachPlayer)).ok()?;
+    let to = serde_json::to_value(Sel::Players(PlayerRef::ControllerOf(Box::new(
+        Sel::Matching(Box::new(Sel::Var(vars::SACRIFICED)), f),
+    ))))
+    .ok()?;
+    fn walk(v: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value, n: &mut usize) {
+        if *v == *from {
+            *v = to.clone();
+            *n += 1;
+            return;
+        }
+        match v {
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, from, to, n)),
+            serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, from, to, n)),
+            _ => {}
+        }
+    }
+    let mut n = 0;
+    walk(&mut json, &from, &to, &mut n);
+    if n != 1 {
+        return None;
+    }
+    serde_json::from_value(json).ok()
+}
+
+inventory::submit! { super::EffectPattern { name: "history 4: [damage] to each player who sacrificed [a permanent] this way", priority: 60, parse: damage_each_who_sacrificed } }
