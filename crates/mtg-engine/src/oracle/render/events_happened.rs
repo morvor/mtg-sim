@@ -498,6 +498,17 @@ impl Renderer<'_> {
                 let n = self.quantified_object(&f, q)?;
                 Said::Clause(format!("{subj} cycled {n}"))
             }
+            // "if you've discarded a card this turn".
+            TriggerCond::Discards { who, filter } if !amount => {
+                let subj = self.past_player(*who, iter);
+                let f = if matches!(filter, Filter::Any) {
+                    Filter::Card
+                } else {
+                    filter.clone()
+                };
+                let n = self.quantified_object(&f, q)?;
+                Said::Clause(format!("{subj} discarded {n}"))
+            }
             TriggerCond::PlayerAction { name, who } if !amount => {
                 let (past, bare) = match name.as_str() {
                     "scry" => ("scried", "scry"),

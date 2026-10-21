@@ -29,6 +29,11 @@ impl Renderer<'_> {
             }
             other => {
                 let p = self.rel_subject(other);
+                // A player named before ("Target player draws two cards, then ... the
+                // number of cards they've drawn this turn").
+                if p == "that player" {
+                    return "{alt:that player has|they've}".into();
+                }
                 format!("{p} has")
             }
         }
@@ -95,6 +100,11 @@ impl Renderer<'_> {
             }
             (TriggerCond::Draws { who }, Tally::Events) => {
                 let p = self.rel_perfect(*who);
+                // "the number of cards they've drawn this turn": the player named before,
+                // in the past tense either way.
+                if p == "{alt:that player has|they've}" {
+                    return "the number of cards {alt:that player drew|they drew} this turn".into();
+                }
                 format!("the number of cards {p} drawn this turn")
             }
             (TriggerCond::Discards { who, filter }, Tally::Events) => {

@@ -30,10 +30,10 @@ impl KeywordRules for DelayedConditions {
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         if name == SOURCE_STILL_ON_BATTLEFIELD {
-            return Some(
-                ctx.source
-                    .is_some_and(|s| g.is_live(s) && g.obj(s).zone == Zone::Battlefield),
-            );
+            // A phased-out permanent is treated as though it doesn't exist (CR 702.26b).
+            return Some(ctx.source.is_some_and(|s| {
+                g.is_live(s) && g.obj(s).zone == Zone::Battlefield && !g.obj(s).phased_out
+            }));
         }
         let var: crate::ability::Var = name.strip_prefix(STILL_EXILED)?.parse().ok()?;
         let objs = ctx.vars.get(&var).cloned().unwrap_or_default();

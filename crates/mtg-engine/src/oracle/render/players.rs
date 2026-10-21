@@ -942,6 +942,18 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                // "your hand and graveyard": whole zones of the same player, the owner said
+                // once.
+                if let [a, b] = parts.as_slice() {
+                    if let (Some(x), Some(y)) = (a.strip_prefix("your "), b.strip_prefix("your ")) {
+                        if !x.contains(' ') && !y.contains(' ') {
+                            return decline(
+                                format!("{{alt:your {x} and your {y}|your {x} and {y}}}"),
+                                case,
+                            );
+                        }
+                    }
+                }
                 // "each opponent and each creature and planeswalker they control".
                 if parts.first().is_some_and(|p| p == "each opponent") {
                     for p in parts.iter_mut().skip(1) {
@@ -973,8 +985,10 @@ impl Renderer<'_> {
                         let v = self.value(other);
                         // "a number of cards from the top of your library equal to the
                         // number of ...": the same cards, the number said after them.
+                        // Or "the top X cards of your library, where X is ..." (CR 107.3),
+                        // said where the cards are the last words of the sentence.
                         if !matches!(other, Value::X | Value::Var(_)) {
-                            format!("a number of cards from the top of {p} library equal to {v}")
+                            format!("{{alt:a number of cards from the top of {p} library equal to {v}|the top X cards of {p} library, where X is {v}}}")
                         } else {
                             format!("the top {v} cards of {p} library")
                         }
@@ -1384,6 +1398,9 @@ impl Renderer<'_> {
             PlayerFilter::Chose(w) => format!("who chose {w}"),
             PlayerFilter::ChosenPlayers => "who is one of the chosen players".into(),
             PlayerFilter::ChoseNumber(c, v) => {
+                if let Some(f) = self.chose_number_filter(*c, v) {
+                    return f;
+                }
                 let v = self.value(v);
                 format!("who chose a number {}", nouns::cmp_phrase(*c, &v))
             }
@@ -1444,6 +1461,14 @@ impl Renderer<'_> {
                     return String::new();
                 };
                 self.opt_in_quality(*v, false).unwrap_or_default()
+            }
+            // "Each player who received no votes" (the players voted for are each vote's
+            // choice, CR 701.38a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r)
+                    if matches!(r.as_ref(), PlayerRef::Var(crate::kwa::vote::VOTES_CAST))) =>
+            {
+                "who received no votes".into()
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
