@@ -402,7 +402,7 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             "cycle",
             format!("{} cycled {}", player_name(*player), name(g.current(*card))),
         ),
-        Event::TurnedFaceUp { obj } => ev(
+        Event::TurnedFaceUp { obj, .. } => ev(
             "face_up",
             format!("{} was turned face up", revealed_name(g, *obj)),
         ),

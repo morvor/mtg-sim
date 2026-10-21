@@ -1284,7 +1284,7 @@ impl Game {
                     turned |= if self.obj(o).zone == Zone::Exile {
                         crate::facedown::turn_exiled_face_up(self, o)
                     } else {
-                        crate::facedown::turn_face_up(self, o, false)
+                        crate::facedown::turn_face_up_by(self, o, ctx.controller)
                     };
                 }
                 ctx.prev_happened = turned;

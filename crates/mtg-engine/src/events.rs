@@ -272,6 +272,11 @@ pub enum Event {
     },
     TurnedFaceUp {
         obj: ObjectId,
+        /// The player who turned it face up: its controller for the special action
+        /// (CR 116.2b), the controller of the effect that turned it face up otherwise
+        /// ("Whenever you turn a permanent face up", Growing Dread).
+        #[serde(default)]
+        by: Option<PlayerId>,
     },
     TurnedFaceDown {
         obj: ObjectId,

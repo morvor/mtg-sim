@@ -265,3 +265,28 @@ fn dealt_damage_by(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "~ is dealt damage by [source]", priority: 905, parse: dealt_damage_by } }
+
+/// "Whenever you turn a permanent face up" (Growing Dread): it's turned face up by you —
+/// the special action, or an effect you control (`Event::TurnedFaceUp::by`).
+fn you_turn_face_up(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t)
+        .strip_prefix("you turn a ")?
+        .strip_suffix(" face up")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if plural
+        || !rest.trim().is_empty()
+        || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
+    {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::TurnedFaceUp(f)),
+            cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+        },
+        Sel::TriggerObject,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "whenever you turn a permanent face up", priority: 100, parse: you_turn_face_up } }

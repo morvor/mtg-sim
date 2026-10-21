@@ -1742,10 +1742,11 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::TurnedFaceUp(f), Event::TurnedFaceUp { obj }) => {
+            (TriggerCond::TurnedFaceUp(f), Event::TurnedFaceUp { obj, by }) => {
                 if self.matches(*obj, f, &ctx) {
                     one(EventInfo {
                         object: Some(*obj),
+                        player: *by,
                         ..Default::default()
                     })
                 } else {
