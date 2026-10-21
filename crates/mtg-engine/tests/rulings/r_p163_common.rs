@@ -55,3 +55,31 @@ pub fn life_gains(t: &TestGame, p: PlayerId) -> Vec<u32> {
 pub fn add_loyalty(t: &mut TestGame, pw: ObjectId, n: u32) {
     put_counters(t, pw, counters::LOYALTY, n);
 }
+
+/// The number of times `p`'s library was shuffled this turn.
+pub fn shuffles(t: &TestGame, p: PlayerId) -> usize {
+    t.g.turn_events
+        .iter()
+        .filter(|e| matches!(e, Event::Shuffled { player } if *player == p))
+        .count()
+}
+
+/// Moves every card in `p`'s hand to the bottom of their library (so tests control
+/// exactly what's in hand).
+pub fn empty_hand(t: &mut TestGame, p: PlayerId) {
+    use mtg_engine::object::Zone;
+    for c in t.g.player(p).hand.clone() {
+        t.g.players[p.idx()].hand.retain(|x| *x != c);
+        t.g.players[p.idx()].library.insert(0, c);
+        t.g.objects[c.0 as usize].zone = Zone::Library(p);
+    }
+}
+
+/// The names of the cards in `p`'s graveyard, bottom first.
+pub fn graveyard_names(t: &TestGame, p: PlayerId) -> Vec<String> {
+    t.g.player(p)
+        .graveyard
+        .iter()
+        .map(|c| t.g.obj(*c).chars.name.to_string())
+        .collect()
+}

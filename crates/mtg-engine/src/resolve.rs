@@ -1821,13 +1821,19 @@ impl Game {
                 crate::shuffle_rules::shuffle_into(self, &objs, Vec::new(), ctx);
             }
             Effect::ShuffleIntoLibrary { what, library } => {
-                let objs = self.resolve_objects(what, ctx);
                 let libraries = self.eval_players(library, ctx);
+                // "Target player shuffles [target cards] into their library": an illegal
+                // target player performs no action, so nothing moves (CR 608.2b).
                 let moved: Vec<Entity> =
-                    crate::shuffle_rules::shuffle_into(self, &objs, libraries, ctx)
-                        .into_iter()
-                        .map(Entity::Object)
-                        .collect();
+                    if matches!(library, PlayerRef::Target(_)) && libraries.is_empty() {
+                        Vec::new()
+                    } else {
+                        let objs = self.resolve_objects(what, ctx);
+                        crate::shuffle_rules::shuffle_into(self, &objs, libraries, ctx)
+                            .into_iter()
+                            .map(Entity::Object)
+                            .collect()
+                    };
                 ctx.prev_value = moved.len() as i64;
                 ctx.prev_happened = !moved.is_empty();
                 ctx.prev_affected = moved.clone();
