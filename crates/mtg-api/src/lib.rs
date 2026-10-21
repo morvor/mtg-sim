@@ -24,6 +24,7 @@ pub mod describe;
 pub mod events;
 pub mod external;
 pub mod legal;
+pub mod replay;
 pub mod request;
 pub mod session;
 pub mod view;
