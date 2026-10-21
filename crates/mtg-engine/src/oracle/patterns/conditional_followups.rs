@@ -399,7 +399,9 @@ inventory::submit! { EffectPattern { name: "if [condition] and [object] isn't le
 pub(crate) fn group_condition_run(effects: &mut Vec<Effect>) {
     let subject_of = |e: &Effect| match e {
         Effect::If { cond, otherwise, .. } if matches!(**otherwise, Effect::Noop) => {
-            super::conditions_this_way::cond_subject(cond).map(|s| format!("{s:?}"))
+            super::conditions_this_way::cond_subject(cond)
+                .map(|s| format!("{s:?}"))
+                .or_else(|| super::choice_grammar_per_player::choice_run_key(cond))
         }
         _ => None,
     };
@@ -436,7 +438,9 @@ fn otherwise(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
                     cond, otherwise, ..
                 } if matches!(**otherwise, Effect::Noop) => {
                     super::conditions_this_way::cond_subject(cond)
-                        .map(|s| (format!("{s:?}"), cond.clone()))
+                        .map(|s| format!("{s:?}"))
+                        .or_else(|| super::choice_grammar_per_player::choice_run_key(cond))
+                        .map(|s| (s, cond.clone()))
                 }
                 _ => None,
             };

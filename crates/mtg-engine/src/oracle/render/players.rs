@@ -377,6 +377,22 @@ impl Renderer<'_> {
                 let v = self.value(v);
                 format!("with total {st} {v} or less")
             }
+            TargetGroup::TotalAtLeast(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v} or greater")
+            }
+            TargetGroup::SameName => "with the same name".into(),
+            TargetGroup::ShareColor => "that share a color".into(),
+            TargetGroup::CardTypesAmong(v) => {
+                let v = self.value(v);
+                format!("with {v} or more card types among them")
+            }
         }
     }
 
@@ -1365,6 +1381,12 @@ impl Renderer<'_> {
                 }
             }
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::Chose(w) => format!("who chose {w}"),
+            PlayerFilter::ChosenPlayers => "who is one of the chosen players".into(),
+            PlayerFilter::ChoseNumber(c, v) => {
+                let v = self.value(v);
+                format!("who chose a number {}", nouns::cmp_phrase(*c, &v))
+            }
             PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => {
                 "who voted for a choice you didn't vote for".into()

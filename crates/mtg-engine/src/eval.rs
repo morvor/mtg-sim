@@ -189,6 +189,31 @@ impl View for Current {
     }
 }
 
+/// An attacking creature as it was declared as an attacker (see
+/// `Event::AttackersDeclared::as_declared`, CR 608.2i).
+pub struct AsDeclared<'c> {
+    pub id: ObjectId,
+    pub chars: &'c Characteristics,
+    pub controller: PlayerId,
+}
+
+impl View for AsDeclared<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+}
+
 /// A permanent as it entered the battlefield (see `TurnHistory::permanents_entered`).
 struct AsEntered<'c> {
     id: ObjectId,
@@ -412,6 +437,16 @@ impl Game {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
             PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
+            PlayerFilter::ChosenPlayers => self
+                .source_choices(ctx)
+                .is_some_and(|ch| ch.players.contains(&p)),
+            PlayerFilter::ChoseNumber(c, v) => {
+                let n = self.eval_value(v, ctx);
+                crate::choices::number_chosen_by(self, ctx, p).is_some_and(|x| c.eval(x, n))
+            }
+            PlayerFilter::Chose(w) => self
+                .source_choices(ctx)
+                .is_some_and(|ch| crate::choices::player_choice_matches(ch, p, w)),
             PlayerFilter::VotedLikeYou(like) => {
                 crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
             }
@@ -982,7 +1017,8 @@ impl Game {
             }
             // Checked by whatever chooses the objects together (`relational.rs`).
             Filter::Together(_) => true,
-            Filter::Custom(name) => crate::custom::custom_filter(self, name, id, ctx),
+            Filter::Custom(name) => crate::mana_value::custom_parity_filter(self, name, id, c)
+                .unwrap_or_else(|| crate::custom::custom_filter(self, name, id, ctx)),
         }
     }
 

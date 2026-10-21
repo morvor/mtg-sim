@@ -39,6 +39,22 @@ fn targets_condition(c: &str) -> Option<Condition> {
     let r = c.strip_prefix("it targets ")?;
     // One matching target ("if it targets two creatures" would need a count).
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    // "a spell or ability that targets a creature you control with power 7 or greater"
+    // (Not of This World): a spell or ability on the stack with such a target.
+    if let Some(t) = r.strip_prefix("spell or ability that targets ") {
+        let t = t.strip_prefix("a ").or_else(|| t.strip_prefix("an "))?;
+        let (f, _, tail) = parse_object_phrase(t)?;
+        if !end(tail).is_empty() {
+            return None;
+        }
+        return Some(Condition::SelMatches(
+            Sel::This,
+            Filter::Targets(Box::new(Filter::and(vec![
+                Filter::InZone(ZoneKind::Stack),
+                Filter::Targets(Box::new(f)),
+            ]))),
+        ));
+    }
     let (f, _, tail) = parse_object_phrase(r)?;
     if !end(tail).is_empty() {
         return None;

@@ -211,7 +211,9 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             ));
         }
     }
-    None
+    // More player phrases ("each of your opponents", "each player who controls a white
+    // creature", "target opponent whose turn it is", "another target player").
+    super::player_phrases_2::player_phrase(s, b)
 }
 
 /// The player the text chose with "choose target player/opponent" (see

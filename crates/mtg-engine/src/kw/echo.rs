@@ -13,6 +13,12 @@ use crate::types::*;
 /// The intervening "if" of the echo trigger (a [`Condition::Custom`]).
 pub const CAME_UNDER_CONTROL: &str = "came under your control since your last upkeep";
 
+/// `StaticEffect::Custom` name: "You may pay {0} rather than pay the echo cost for
+/// permanents you control." (Thick-Skinned Goblin; CR 118.9). Also the
+/// [`Condition::Custom`] that the echo ability's controller controls such an effect's
+/// source as the echo ability resolves.
+pub const ECHO_FOR_ZERO: &str = "you may pay {0} rather than pay echo costs";
+
 pub struct Echo;
 
 /// Whether the permanent `id` came under its controller's control since the beginning of
@@ -49,11 +55,19 @@ impl KeywordRules for Echo {
             (Some(_), Some(c)) => c.clone(),
             _ => kw.cost.clone().unwrap_or_default(),
         };
-        let pay = Effect::PayOptional {
+        let pay_with = |cost: Cost| Effect::PayOptional {
             who: PlayerRef::You,
             cost,
             then: Box::new(Effect::Noop),
             otherwise: Box::new(Effect::SacrificeObjects { what: Sel::This }),
+        };
+        // CR 118.9: or {0} rather than the echo cost, where an effect allows it.
+        let pay = Effect::If {
+            cond: Condition::Custom(ECHO_FOR_ZERO.into()),
+            then: Box::new(pay_with(
+                Cost::free().with(CostPart::OneOf(vec![Cost::free(), cost.clone()])),
+            )),
+            otherwise: Box::new(pay_with(cost)),
         };
         let effect = match &kw.x {
             Some(x) => Effect::Seq(vec![Effect::SetX { value: x.clone() }, pay]),
@@ -74,6 +88,14 @@ impl KeywordRules for Echo {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        if name == ECHO_FOR_ZERO {
+            return Some(
+                g.statics
+                    .customs
+                    .iter()
+                    .any(|(_, ctl, n)| *ctl == ctx.controller && n == ECHO_FOR_ZERO),
+            );
+        }
         if name != CAME_UNDER_CONTROL {
             return None;
         }

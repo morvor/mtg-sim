@@ -25,17 +25,37 @@ fn votable(s: &str) -> Option<Filter> {
     })
 }
 
-/// "each player secretly votes for [a object], then those votes are revealed".
+/// "each player secretly votes for [a object], then those votes are revealed"; "... for
+/// up to one creature" (a voter may vote for none); "... for a player" / "for another
+/// player" (a player other than the voter); "... for truth or consequences" (words).
 fn secret_vote(l: &str, b: &mut Builder) -> Option<Effect> {
     let _ = b;
     let r = end(l).strip_prefix("each player secretly votes for ")?;
     let what = r.strip_suffix(", then those votes are revealed")?;
-    let mut spec = Spec::new(
-        KeywordAction::Vote,
-        PlayerRef::You,
-        Sel::All(votable(what)?),
-        Value::c(1),
-    );
+    let mut spec = match what {
+        "a player" | "another player" => {
+            let who = if what == "a player" {
+                PlayerRef::EachPlayer
+            } else {
+                PlayerRef::EachOtherPlayer
+            };
+            Spec::new(KeywordAction::Vote, PlayerRef::You, Sel::Players(who), Value::c(1))
+        }
+        _ => {
+            if let Some(x) = what.strip_prefix("up to one ") {
+                let f = votable(&format!("a {x}"))?;
+                Spec::new(KeywordAction::Vote, PlayerRef::You, Sel::All(f), Value::c(0))
+            } else if let Some(f) = votable(what) {
+                Spec::new(KeywordAction::Vote, PlayerRef::You, Sel::All(f), Value::c(1))
+            } else {
+                let words = super::choice_grammar_per_player::word_list(what)?;
+                let mut spec =
+                    Spec::new(KeywordAction::Vote, PlayerRef::You, Sel::None, Value::c(1));
+                spec.options = words.into_iter().map(|w| (w, Effect::Noop)).collect();
+                spec
+            }
+        }
+    };
     spec.secret = true;
     Some(spec.effect())
 }

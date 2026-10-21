@@ -52,6 +52,9 @@ pub(crate) enum Clause {
     /// "if ~ is on the stack", "if ~ is in your graveyard": where the ability functions
     /// (CR 113.6).
     Zone(FunctionZone),
+    /// "if ~ is on the battlefield or in your graveyard": the ability functions in several
+    /// zones (anywhere, with the condition that it's in one of them, CR 113.6).
+    ZoneIf(FunctionZone, Condition),
 }
 
 fn and2(a: Condition, b: Condition) -> Condition {
@@ -435,6 +438,19 @@ pub(crate) fn clause(s: &str, ctx: &CompileContext) -> Option<Clause> {
         match r {
             "~ is on the stack" => return Some(Clause::Zone(FunctionZone::Stack)),
             "~ is in your graveyard" => return Some(Clause::Zone(FunctionZone::Graveyard)),
+            "~ is on the battlefield or in your graveyard" => {
+                let at = |z: ZoneKind| Condition::SelMatches(Sel::This, Filter::InZone(z));
+                return Some(Clause::ZoneIf(
+                    FunctionZone::Anywhere,
+                    Condition::Or(vec![
+                        at(ZoneKind::Battlefield),
+                        Condition::And(vec![
+                            at(ZoneKind::Graveyard),
+                            Condition::SelMatches(Sel::This, Filter::OwnedBy(PlayerRel::You)),
+                        ]),
+                    ]),
+                ));
+            }
             _ => {}
         }
         return Some(Clause::If(if_clause(r, ctx)?));
@@ -475,6 +491,8 @@ pub(crate) enum Who {
     Controller,
     AnyPlayer,
     Opponents,
+    /// "Only the controller of the enchanted creature may activate this ability."
+    EnchantedController,
 }
 
 /// A restriction sentence (lowercase, with or without its period): its clauses and who
@@ -494,6 +512,10 @@ pub(crate) fn restriction_sentence(s: &str, ctx: &CompileContext) -> Option<(Vec
     for (head, who) in [
         ("any player may activate this ability", Who::AnyPlayer),
         ("only your opponents may activate this ability", Who::Opponents),
+        (
+            "only the controller of the enchanted creature may activate this ability",
+            Who::EnchantedController,
+        ),
     ] {
         if let Some(r) = s.strip_prefix(head) {
             if r.is_empty() {
@@ -545,6 +567,10 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
             Clause::PerTurn(n) => act.max_per_turn = Some(act.max_per_turn.map_or(n, |m| m.min(n))),
             Clause::Total(n) => act.max_total = Some(act.max_total.map_or(n, |m| m.min(n))),
             Clause::Zone(z) => act.zone = z,
+            Clause::ZoneIf(z, cond) => {
+                act.zone = z;
+                conds.push(cond);
+            }
         }
     }
     act.condition = match conds.len() {
@@ -556,6 +582,11 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
         Who::Controller => {}
         Who::AnyPlayer => act.any_player = true,
         Who::Opponents => act.only_opponents = true,
+        Who::EnchantedController => {
+            act.activator = Some(PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(
+                Box::new(Sel::AttachedTo),
+            ))))
+        }
     }
     Some(())
 }

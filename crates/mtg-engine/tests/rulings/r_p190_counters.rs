@@ -3,7 +3,6 @@
 //! (CR 603.8), and counters that are only memory aids.
 
 use crate::r_p076_common::mana;
-use crate::r_p190_mana_costs::only_unsupported;
 use crate::r_s01_common::{attack_with, supported};
 use crate::r_s05_common::{enter, move_to};
 use crate::r_s06_common::attach_new;
@@ -421,7 +420,8 @@ fn tetzimoc_destroys_creatures_with_any_prey_counter() {
         "Tetzimoc, Primal Death",
         "Tetzimoc's triggered ability doesn't care how a prey counter got onto a creature an opponent controls or whose Tetzimoc put that counter on the creature."
     );
-    only_unsupported("Tetzimoc, Primal Death", "Reveal ~ from your hand");
+    // (Its "Reveal ~ from your hand" ability is supported too now.)
+    assert!(card("Tetzimoc, Primal Death").unsupported_text().is_empty());
     let mut t = TestGame::new(2);
     let theirs = t.battlefield(P1, "Grizzly Bears");
     let clean = t.battlefield(P1, "Raging Goblin");

@@ -133,14 +133,29 @@ pub const VOTES_FOR_IT: &str = "vote: votes for it";
 
 /// The variable holding the number of votes for `word`.
 pub fn word_var(word: &str) -> Var {
-    // FNV-1a, into a range of its own.
+    vars::USER + 2000 + (word_hash(word) % 20000) as Var
+}
+
+/// The variable holding the voters of the votes for `word`, once per vote ("for each
+/// money vote, choose a permanent owned by the voter").
+pub fn word_voters_var(word: &str) -> Var {
+    vars::USER + 40000 + (word_hash(word) % 20000) as Var
+}
+
+fn word_hash(word: &str) -> u32 {
+    // FNV-1a.
     let mut h: u32 = 0x811c9dc5;
     for b in word.to_lowercase().bytes() {
         h ^= b as u32;
         h = h.wrapping_mul(0x0100_0193);
     }
-    vars::USER + 2000 + (h % 20000) as Var
+    h
 }
+
+/// `Value::Custom`: the number of votes the player performing the instruction ("you")
+/// received in the vote earlier in the spell or ability ("Each player draws a card for
+/// each vote they received").
+pub const VOTES_RECEIVED: &str = "vote: votes received";
 
 /// How many votes `p` casts (CR 701.38d).
 fn votes_of(g: &mut Game, p: PlayerId, source: Option<ObjectId>) -> u32 {
@@ -172,11 +187,19 @@ impl KeywordActionRules for Vote {
             .spec
             .map(|s| s.options.iter().map(|(w, _)| w.clone()).collect())
             .unwrap_or_default();
-        let objects: Vec<ObjectId> = if words.is_empty() {
+        // Votes for players ("each player secretly votes for a player"; "for another
+        // player": a player other than the voter).
+        let players: Option<&PlayerRef> = match a.what {
+            Sel::Players(r) if words.is_empty() => Some(r),
+            _ => None,
+        };
+        let objects: Vec<ObjectId> = if words.is_empty() && players.is_none() {
             g.resolve_objects(a.what, ctx)
         } else {
             vec![]
         };
+        // "votes for up to one creature": a voter may vote for none (n = 0).
+        let up_to = matches!(a.n, Value::Const(0));
         // Starting with the specified player, in turn order.
         let first = g.eval_player(a.who, ctx).unwrap_or(ctx.controller);
         let mut order = vec![first];
@@ -188,25 +211,72 @@ impl KeywordActionRules for Vote {
         let secret = a.spec.is_some_and(|s| s.secret);
         let mut word_votes = vec![0i64; words.len()];
         let mut object_votes: Vec<(ObjectId, i64)> = objects.iter().map(|o| (*o, 0)).collect();
+        let mut player_votes: Vec<(PlayerId, i64)> = match players {
+            Some(_) => g.players_in_game().into_iter().map(|p| (p, 0)).collect(),
+            None => vec![],
+        };
         // The votes cast: (voter, word index, object voted for).
         let mut cast: Vec<(PlayerId, usize, Option<ObjectId>)> = Vec::new();
+        // The players voted for: (voter, player).
+        let mut cast_for_players: Vec<(PlayerId, PlayerId)> = Vec::new();
         for voter in order {
             if !g.player(voter).in_game() {
                 continue;
             }
             for _ in 0..votes_of(g, voter, ctx.source) {
                 let chooser = vote_chooser(g, voter);
+                if let Some(r) = players {
+                    let cands: Vec<Entity> = match r {
+                        PlayerRef::EachOtherPlayer => g
+                            .players_in_game()
+                            .into_iter()
+                            .filter(|p| *p != voter)
+                            .collect(),
+                        r => g.eval_players(r, ctx),
+                    }
+                    .into_iter()
+                    .map(Entity::Player)
+                    .collect();
+                    let Some(pick) = g
+                        .ask_entities(chooser, ctx.source, "Vote", cands.clone(), 1, 1)
+                        .first()
+                        .and_then(|e| e.player())
+                        .or_else(|| cands.first().and_then(|e| e.player()))
+                    else {
+                        continue;
+                    };
+                    if let Some(e) = player_votes.iter_mut().find(|(q, _)| *q == pick) {
+                        e.1 += 1;
+                    }
+                    cast_for_players.push((voter, pick));
+                    if !secret {
+                        reveal_player_vote(g, voter, pick);
+                    }
+                    continue;
+                }
                 let vote = if !words.is_empty() {
                     let i = g.ask_option(chooser, ctx.source, "Vote", words.clone());
                     let i = i.min(words.len() - 1);
                     word_votes[i] += 1;
                     (voter, i, None)
                 } else if !objects.is_empty() {
-                    let pick = g
-                        .ask_objects(chooser, ctx.source, "Vote", objects.clone(), 1, 1)
+                    let picked = g
+                        .ask_objects(
+                            chooser,
+                            ctx.source,
+                            "Vote",
+                            objects.clone(),
+                            if up_to { 0 } else { 1 },
+                            1,
+                        )
                         .first()
-                        .copied()
-                        .unwrap_or(objects[0]);
+                        .copied();
+                    let pick = match picked {
+                        Some(o) => o,
+                        // Voting for no object ("up to one").
+                        None if up_to => continue,
+                        None => objects[0],
+                    };
                     if let Some(e) = object_votes.iter_mut().find(|(o, _)| *o == pick) {
                         e.1 += 1;
                     }
@@ -226,14 +296,29 @@ impl KeywordActionRules for Vote {
             for vote in &cast {
                 reveal(g, &words, *vote);
             }
+            for (voter, pick) in &cast_for_players {
+                reveal_player_vote(g, *voter, *pick);
+            }
         }
         ctx.set_var(
             VOTES_CAST,
             cast.iter()
                 .filter_map(|(_, _, o)| o.map(Entity::Object))
+                .chain(cast_for_players.iter().map(|(_, p)| Entity::Player(*p)))
                 .collect(),
         );
-        let counts: Vec<i64> = if words.is_empty() {
+        for (i, w) in words.iter().enumerate() {
+            ctx.set_var(
+                word_voters_var(w),
+                cast.iter()
+                    .filter(|(_, j, o)| o.is_none() && *j == i)
+                    .map(|(v, _, _)| Entity::Player(*v))
+                    .collect(),
+            );
+        }
+        let counts: Vec<i64> = if players.is_some() {
+            player_votes.iter().map(|(_, n)| *n).collect()
+        } else if words.is_empty() {
             object_votes.iter().map(|(_, n)| *n).collect()
         } else {
             word_votes.clone()
@@ -249,6 +334,12 @@ impl KeywordActionRules for Vote {
             .iter()
             .filter(|(_, n)| *n == most && most > 0)
             .map(|(o, _)| Entity::Object(*o))
+            .chain(
+                player_votes
+                    .iter()
+                    .filter(|(_, n)| *n == most && most > 0)
+                    .map(|(p, _)| Entity::Player(*p)),
+            )
             .collect();
         ctx.set_var(WINNERS, winners);
         // The vote's number this turn identifies its votes for the abilities that
@@ -272,6 +363,12 @@ fn reveal(g: &mut Game, words: &[String], (voter, i, pick): (PlayerId, usize, Op
             emit(g, VOTED, voter, None, i as i32);
         }
     }
+}
+
+/// Logs and reports one vote for a player.
+fn reveal_player_vote(g: &mut Game, voter: PlayerId, pick: PlayerId) {
+    g.log(|_| format!("{voter} votes for {pick}"));
+    emit(g, VOTED, voter, None, -2 - pick.0 as i32);
 }
 
 /// The objects in `ctx`'s [`VOTES_CAST`], once per vote.
@@ -303,6 +400,10 @@ impl crate::kw::KeywordRules for VoteResults {
     }
 
     fn custom_value(&self, _g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name == VOTES_RECEIVED {
+            let me = Entity::Player(ctx.controller);
+            return Some(votes_cast(ctx).iter().filter(|e| **e == me).count() as i64);
+        }
         if name != VOTES_FOR_IT {
             return None;
         }

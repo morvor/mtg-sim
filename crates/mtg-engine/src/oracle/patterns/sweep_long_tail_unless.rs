@@ -81,11 +81,24 @@ fn counter_unless_scaled(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "sacrifice ~ unless you pay {1} for each card in your hand".
 fn unless_you_pay_scaled(l: &str, b: &mut Builder) -> Option<Effect> {
-    let (eff, cost) = end(l).rsplit_once(" unless you pay ")?;
+    // "~ deals 3 damage to that player unless they pay {1} for each vortex counter on ~"
+    // (Energy Vortex): the player the instruction is about decides (CR 118.12a).
+    let (eff, cost, who) = match end(l).rsplit_once(" unless you pay ") {
+        Some((e, c)) => (e, c, PlayerRef::You),
+        None => {
+            let (e, c) = end(l)
+                .rsplit_once(" unless they pay ")
+                .or_else(|| end(l).rsplit_once(" unless that player pays "))?;
+            if !e.contains("that player") {
+                return None;
+            }
+            (e, c, b.it_player.clone())
+        }
+    };
     let effect = parse_simple(eff, b)?;
     let cost = scaled_cost(cost, b)?;
     Some(Effect::PayOptional {
-        who: PlayerRef::You,
+        who,
         cost,
         then: Box::new(Effect::Noop),
         otherwise: Box::new(effect),
