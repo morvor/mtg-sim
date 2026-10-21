@@ -34,6 +34,9 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         // "each Equipment attached to it", "it" being each object the effect is about.
         "attached_to_affected" => rel("attached to it"),
         crate::kw::cast_history::USING_SOURCE_MANA => rel("using mana produced by ~"),
+        crate::kw::damage_shares_a_color::SHARES_COLOR_WITH_PRODUCED_MANA => {
+            rel("that shares a color with the mana that land produced")
+        }
         crate::kw::your_commander_terms::SHARES_TYPE_WITH_YOUR_COMMANDER => {
             rel("that shares a creature type with your commander")
         }

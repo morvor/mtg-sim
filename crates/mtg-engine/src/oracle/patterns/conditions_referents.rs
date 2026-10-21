@@ -1292,6 +1292,17 @@ fn shares(sel: &Sel, x: &str, b: &mut Builder) -> Option<Condition> {
             Filter::Custom(super::filter_qualities::MOST_COMMON_COLOR.into()),
         ));
     }
+    // "a color with the mana that land produced" (C.A.M.P.): the mana the triggering mana
+    // ability produced (CR 106.12a; `kw::damage_shares_a_color`).
+    if matches!(
+        end(x),
+        "a color with the mana that land produced" | "a color with the mana it produced"
+    ) {
+        return Some(Condition::SelMatches(
+            sel.clone(),
+            Filter::Custom(crate::kw::damage_shares_a_color::SHARES_COLOR_WITH_PRODUCED_MANA.into()),
+        ));
+    }
     let (mk, r): (fn(Box<Sel>) -> Filter, &str) = if let Some(r) = x.strip_prefix("a color with ") {
         (Filter::SharesColor, r)
     } else if let Some(r) = x.strip_prefix("a creature type with ") {

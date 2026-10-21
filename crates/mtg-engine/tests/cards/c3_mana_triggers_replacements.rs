@@ -286,3 +286,27 @@ fn stunning_reversal_ends_with_the_turn() {
     bolt(&mut t);
     assert!(t.has_lost(P0));
 }
+
+#[test]
+fn camp_makes_junk_if_the_creature_shares_a_color_with_the_mana() {
+    cr!("106.12a", "105.2");
+    assert_supported("C.A.M.P.");
+    for (land, junk) in [("Forest", 1), ("Mountain", 0)] {
+        let mut t = TestGame::new(2);
+        let camp = t.battlefield(P0, "C.A.M.P.");
+        let l = t.battlefield(P0, land);
+        t.g.attach(camp, Entity::Object(l));
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        tap(&mut t, P0, l);
+        t.resolve_all();
+        assert_eq!(t.counters(bears, "+1/+1"), 1, "{land}");
+        let n = t
+            .g
+            .permanents_controlled_by(P0)
+            .into_iter()
+            .filter(|o| t.g.obj(*o).chars.has_subtype("Junk"))
+            .count();
+        assert_eq!(n, junk, "{land}");
+    }
+}
