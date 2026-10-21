@@ -346,6 +346,18 @@ impl Game {
                 if gone && !looks_back(trigger, ev) {
                     continue;
                 }
+                // "Creatures dying don't cause abilities to trigger" (Hushbringer).
+                if !on_sacrifice(trigger)
+                    && crate::kw::torpor::suppressed_for(
+                        self,
+                        ev,
+                        Some(src),
+                        ctl,
+                        looks_back(trigger, ev),
+                    )
+                {
+                    continue;
+                }
                 let matched = self.trigger_matches_ctx(trigger, &base, ev);
                 if !matched.is_empty() {
                     let extra = self.additional_triggers(src, &t.trigger, ev, None);
@@ -673,6 +685,20 @@ impl Game {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
+            // "Creatures dying don't cause abilities to trigger" (Hushbringer), "...
+            // abilities of permanents your opponents control" (Elesh Norn).
+            // (Not an ability that triggers on sacrificing it.)
+            if !on_sacrifice(&t.trigger)
+                && crate::kw::torpor::suppressed_for(
+                    self,
+                    ev,
+                    Some(src),
+                    ctl,
+                    looks_back(&t.trigger, ev),
+                )
+            {
+                continue;
+            }
             // Filters like "the chosen color" refer to the ability's linked choices.
             let mut base = Ctx::new(Some(src), ctl);
             base.link = a.link;
@@ -782,6 +808,18 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
+            // "Creatures dying don't cause abilities to trigger" (Hushbringer).
+            if !on_sacrifice(&d.trigger)
+                && crate::kw::torpor::suppressed_for(
+                    self,
+                    ev,
+                    d.source,
+                    d.controller,
+                    looks_back(&d.trigger, ev),
+                )
+            {
+                continue;
+            }
             for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
                 if d.once {
                     // CR 801.7: an event outside its controller's range of influence

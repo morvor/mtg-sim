@@ -443,6 +443,7 @@ impl Game {
                 .filter(|(_, _, e)| matches!(e, StaticEffect::AdditionalTrigger { .. }))
                 .cloned()
                 .collect(),
+            trigger_suppressions: crate::kw::torpor::snapshot(self),
         }
     }
 

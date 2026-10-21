@@ -734,15 +734,32 @@ impl Renderer<'_> {
                     },
                 }
             }
-            n if n.starts_with("entering doesn't cause abilities to trigger:") => {
-                let types: Vec<String> = n["entering doesn't cause abilities to trigger:".len()..]
+            n if n.starts_with(crate::kw::torpor::DOESNT_TRIGGER) => {
+                let mut it = n[crate::kw::torpor::DOESNT_TRIGGER.len()..].split(';');
+                let events = it.next().unwrap_or("");
+                let types: Vec<String> = it
+                    .next()
+                    .unwrap_or("")
                     .split(',')
+                    .filter(|t| !t.is_empty())
                     .map(|t| plural(t))
                     .collect();
-                format!(
-                    "{} entering don't cause abilities to trigger",
+                let subject = if types.is_empty() {
+                    "permanents".to_string()
+                } else {
                     join_list(&types, "and")
-                )
+                };
+                let verb = if events == "enter,die" {
+                    "entering or dying"
+                } else {
+                    "entering"
+                };
+                let whose = if it.next() == Some("opponents") {
+                    "abilities of permanents your opponents control"
+                } else {
+                    "abilities"
+                };
+                format!("{subject} {verb} don't cause {whose} to trigger")
             }
             n if n.starts_with("blockable as though no landwalk:") => {
                 let k = &n["blockable as though no landwalk:".len()..];
