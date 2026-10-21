@@ -54,6 +54,13 @@ worktree.
 Already landed from round 2: `cards2-followups`, `cards2-statics-characteristics`, `cards2-combat`, `cards2-filters-conditions`, `cards2-referents-values` and `changeling-cda-only`. During the pause, rulings P219, P113 and P079 landed, as did mutation results for layers.rs and casting.rs: 14 of the 15 files, 81.8% caught overall, with combat.rs still to run.
 Also landed: `roundtrip-tail-5`, `every-card-fuzz-2` and the three gap-residual items.
 
+### Queue changes (Oct 21 evening)
+
+- **structure:** `property-tests-2` moves here from the mutation worker, which is still busy with its survivor re-run. The structure worker landed `cards3-costs-mana-replacements` and is free.
+- **cards-2:** `cards3-manual-defs` now that the dexterity cards are deferred, and `cards4-plan` (items/cards4-plan.md), which plans round 4 for the texts the landed round-3 items left unsupported. cards-1 keeps `cards3-followups-choices` and `cards3-game-rules-dice`.
+- **mutation:** after the survivor re-run lands, rulings batches P064 and P185.
+- **rulings-1:** P126, P176, P141, P142, P111. **rulings-2:** P194, P193, P046. Next in the pool: P063 P147 P186 P089 P006 ...
+
 ## The judge audit (E)
 
 **Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.
