@@ -141,3 +141,230 @@ fn reveal_chosen_cost(s: &str) -> Option<CostPart> {
 }
 
 inventory::submit! { CostPattern { name: "reveal the secret choice", priority: 60, parse: reveal_chosen_cost } }
+
+// ---------------------------------------------------------------------------
+// Guesses
+// ---------------------------------------------------------------------------
+
+/// What a player guessed (1: yes, 0: no) and whether the guess was right (1) or wrong
+/// (0), for the instructions after "[player] guesses whether [proposition]".
+pub const GUESS: Var = vars::USER + 30523;
+pub const GUESSED_RIGHT: Var = vars::USER + 30524;
+
+/// The condition a proposition states, read the way a leading "if" reads it (with the
+/// text's referents: "that card's mana value is greater than the number of artifacts you
+/// control"), and the condition for it to be about anything ("the top card of your
+/// library" with an empty library: no guess is right, Gollum's rulings).
+fn proposition(p: &str, b: &mut Builder) -> Option<(Condition, Option<Condition>)> {
+    if let Some(x) = p.strip_suffix(" is the chosen kind") {
+        let land = plain_proposition(&format!("{x} is a land card"), b)?;
+        let nonland = plain_proposition(&format!("{x} is a nonland card"), b)?;
+        let defined = match (x, &land) {
+            ("the top card of your library", Condition::SelMatches(s, _)) => {
+                Some(Condition::SelNonEmpty(s.clone()))
+            }
+            _ => None,
+        };
+        let cond = Condition::Or(vec![
+            Condition::And(vec![Condition::Chose("land".into()), land]),
+            Condition::And(vec![Condition::Chose("nonland".into()), nonland]),
+        ]);
+        return Some((cond, defined));
+    }
+    Some((plain_proposition(p, b)?, None))
+}
+
+fn plain_proposition(p: &str, b: &mut Builder) -> Option<Condition> {
+    // "a card with that name is in your hand" (the name chosen before).
+    if p == "a card with that name is in your hand" {
+        return Some(Condition::Exists(Filter::and(vec![
+            Filter::ChosenName,
+            Filter::InZone(ZoneKind::Hand),
+            Filter::OwnedBy(PlayerRel::You),
+        ])));
+    }
+    let p = p.replace("the card's ", "that card's ");
+    let targets = b.targets.len();
+    let e = crate::oracle::effects::parse_sentence(&format!("if {p}, you gain 1 life"), b);
+    if b.targets.len() != targets {
+        b.targets.truncate(targets);
+        return None;
+    }
+    match e? {
+        Effect::If {
+            cond,
+            then,
+            otherwise,
+        } if matches!(*then, Effect::GainLife { .. }) && matches!(*otherwise, Effect::Noop) => {
+            Some(cond)
+        }
+        _ => None,
+    }
+}
+
+/// "defending player guesses whether that card's mana value is greater than the number of
+/// artifacts you control", "an opponent guesses whether the top card of your library is
+/// the chosen kind", "target opponent guesses whether a card with that name is in your
+/// hand": the player answers yes or no; whether they guessed right is decided by the
+/// proposition as they guess.
+fn guesses_whether(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let at = l.find(" guesses whether ")?;
+    let (who_s, prop) = (&l[..at], &l[at + " guesses whether ".len()..]);
+    let targets = b.targets.len();
+    let mut pre = Vec::new();
+    let who = if who_s == "an opponent" {
+        pre.push(Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Opponent,
+        });
+        PlayerRef::ChosenOpponent
+    } else {
+        let (who, rest) = crate::oracle::effects::player_ref(who_s, b)?;
+        if !rest.trim().is_empty()
+            || matches!(
+                who,
+                PlayerRef::You | PlayerRef::EachPlayer | PlayerRef::EachOpponent
+            )
+        {
+            b.targets.truncate(targets);
+            return None;
+        }
+        who
+    };
+    let Some((cond, defined)) = proposition(prop, b) else {
+        b.targets.truncate(targets);
+        return None;
+    };
+    b.it_player = who.clone();
+    let store = |n| Effect::StoreValue {
+        var: GUESS,
+        value: Value::c(n),
+    };
+    pre.push(Effect::ChooseOne {
+        who,
+        options: vec![("yes".into(), store(1)), ("no".into(), store(0))],
+    });
+    let mut right = Value::If(
+        Box::new(cond),
+        Box::new(Value::Var(GUESS)),
+        Box::new(Value::Diff(Box::new(Value::c(1)), Box::new(Value::Var(GUESS)))),
+    );
+    if let Some(d) = defined {
+        right = Value::If(Box::new(d), Box::new(right), Box::new(Value::c(0)));
+    }
+    pre.push(Effect::StoreValue {
+        var: GUESSED_RIGHT,
+        value: right,
+    });
+    Some(Effect::seq(pre))
+}
+
+inventory::submit! { EffectPattern { name: "[player] guesses whether [proposition]", priority: 60, parse: guesses_whether } }
+
+/// "they guessed wrong", "the player guessed right", "your opponent guessed wrong".
+fn guessed(c: &str) -> Option<Condition> {
+    let r = ["they ", "the player ", "your opponent ", "that player "]
+        .iter()
+        .find_map(|p| c.strip_prefix(p))?;
+    let right = match r {
+        "guessed right" => 1,
+        "guessed wrong" => 0,
+        _ => return None,
+    };
+    Some(Condition::Compare(
+        Value::Var(GUESSED_RIGHT),
+        Cmp::Eq,
+        Value::c(right),
+    ))
+}
+
+/// "If they guessed wrong, [instruction]", "If you do and your opponent guessed wrong,
+/// [instruction]".
+fn if_guessed(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("if ")?;
+    let (c, rest) = r.split_once(", ")?;
+    let (prev, c) = match c.strip_prefix("you do and ") {
+        Some(c) => (true, c),
+        None => (false, c),
+    };
+    let g = guessed(c)?;
+    let cond = if prev {
+        Condition::And(vec![Condition::PrevHappened, g])
+    } else {
+        g
+    };
+    let rest = rest.replace("the card", "it");
+    let targets = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_effect_text(&rest, b) else {
+        b.targets.truncate(targets);
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "if they guessed right/wrong", priority: 60, parse: if_guessed } }
+
+/// Whether a spell was cast by the instruction before "If you don't cast a spell this
+/// way".
+const CAST_THIS_WAY: Var = vars::USER + 30525;
+
+/// Puts a record of whether it cast a spell after each [`Effect::CastCard`] in `e`.
+fn record_casts(e: &mut Effect) -> usize {
+    match e {
+        Effect::CastCard { .. } => {
+            let cast = std::mem::replace(e, Effect::Noop);
+            *e = Effect::seq(vec![
+                cast,
+                Effect::StoreValue {
+                    var: CAST_THIS_WAY,
+                    value: Value::If(
+                        Box::new(Condition::PrevHappened),
+                        Box::new(Value::c(1)),
+                        Box::new(Value::c(0)),
+                    ),
+                },
+            ]);
+            1
+        }
+        Effect::Seq(v) => v.iter_mut().map(record_casts).sum(),
+        Effect::If { then, otherwise, .. } => record_casts(then) + record_casts(otherwise),
+        _ => 0,
+    }
+}
+
+/// "If you don't cast a spell this way, [instruction]" after an instruction that may cast
+/// a spell.
+fn if_you_dont_cast_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you don't cast a spell this way, ") else {
+        return false;
+    };
+    let mut first = prev.clone();
+    if record_casts(&mut first) == 0 {
+        return false;
+    }
+    let targets = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_effect_text(r, b) else {
+        b.targets.truncate(targets);
+        return false;
+    };
+    *prev = Effect::seq(vec![
+        Effect::StoreValue {
+            var: CAST_THIS_WAY,
+            value: Value::c(0),
+        },
+        first,
+        Effect::If {
+            cond: Condition::Compare(Value::Var(CAST_THIS_WAY), Cmp::Eq, Value::c(0)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if you don't cast a spell this way", priority: 60, apply: if_you_dont_cast_this_way } }
