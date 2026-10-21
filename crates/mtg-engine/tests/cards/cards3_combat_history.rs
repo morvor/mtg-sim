@@ -159,3 +159,46 @@ fn tidal_flats_paying_keeps_the_blockers_as_they_are() {
     t.resolve_all();
     assert!(!t.g.obj(lions).has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
 }
+
+#[test]
+fn sewers_of_estark_on_a_blocker_prevents_its_and_its_attackers_damage() {
+    cr!("615.1a", "509.1g");
+    ruling!(
+        "Sewers of Estark",
+        "The check for whether that creature is attacking or blocking made on resolution"
+    );
+    supported("Sewers of Estark");
+    let mut t = TestGame::new(2);
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let spell = t.hand(P0, "Sewers of Estark");
+    t.lands(P0, "Swamp", 4);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    declare(
+        &mut t,
+        P1,
+        &[(giant, Entity::Player(P0)), (bears, Entity::Player(P0))],
+    );
+    declare_blocks(&mut t, P0, &[(lions, giant)]);
+    t.cast(P0, spell).target(Entity::Object(lions)).go();
+    t.resolve_all();
+    to_end_of_combat(&mut t);
+    assert!(t.on_battlefield(lions));
+    assert_eq!(t.g.obj(giant).damage, 0);
+    // The unblocked bears still deal their damage.
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn sewers_of_estark_on_an_attacker_makes_it_unblockable() {
+    cr!("509.1b");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let spell = t.hand(P0, "Sewers of Estark");
+    t.lands(P0, "Swamp", 4);
+    let wall = t.battlefield(P1, "Hill Giant");
+    declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
+    t.cast(P0, spell).target(Entity::Object(bears)).go();
+    t.resolve_all();
+    assert!(!legal_blocks(&mut t, &[(wall, bears)]));
+}

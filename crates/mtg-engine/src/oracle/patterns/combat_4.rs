@@ -766,3 +766,50 @@ fn f_if_that_player_doesnt(l: &str, prev: &mut Effect, b: &mut Builder) -> bool 
 }
 
 inventory::submit! { FollowupPattern { name: "combat 4: for each ..., its controller may pay. if that player doesn't, ...", priority: 60, apply: f_if_that_player_doesnt } }
+
+/// "prevent all combat damage that would be dealt this combat by it and each creature it's
+/// blocking" (Sewers of Estark): a prevention effect (CR 615) lasting until end of combat
+/// for damage from the creature and from the attacking creatures it blocks.
+fn p_prevent_combat_damage_this_combat(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("prevent all combat damage that would be dealt this combat by ")?;
+    let (who, blocked) = match r.strip_suffix(" and each creature it's blocking") {
+        Some(x) => (x, true),
+        None => (r, false),
+    };
+    let n = b.targets.len();
+    let (sel, rest) = object_ref(who, b)?;
+    if !rest.trim().is_empty() || is_no_referent(&sel) || matches!(sel, Sel::None) {
+        b.targets.truncate(n);
+        return None;
+    }
+    let source = if blocked {
+        Filter::Or(vec![
+            Filter::In(Box::new(sel.clone())),
+            Filter::BlockRelation {
+                rel: BlockRel::BlockedBy,
+                other: Box::new(sel),
+                when: BlockWhen::Now,
+            },
+        ])
+    } else {
+        Filter::In(Box::new(sel))
+    };
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::Damage {
+                source,
+                to_players: Some(PlayerFilter::Any),
+                to_objects: Some(Filter::Any),
+                combat_only: true,
+            },
+            action: ReplacementAction::Prevent,
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::EndOfCombat,
+        uses: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: prevent all combat damage that would be dealt this combat by [it and each creature it's blocking]", priority: 90, parse: p_prevent_combat_damage_this_combat } }
