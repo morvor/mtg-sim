@@ -304,3 +304,26 @@ fn primordial_mist_plays_the_card_its_cost_exiled_this_turn() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+#[test]
+fn dragon_kami_reborn_exiles_one_face_down_with_a_hatching_counter() {
+    cr!("714.2b", "122.6", "406.3");
+    assert_supported("The Dragon-Kami Reborn // Dragon-Kami's Egg");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let a = t.library_top(P0, "Forest");
+    let dragon = t.library_top(P0, "Shivan Dragon");
+    let c = t.library_top(P0, "Island");
+    t.answer_choose(P0, &[Entity::Object(dragon)]);
+    t.enter(P0, "The Dragon-Kami Reborn // Dragon-Kami's Egg");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    let x = t.g.current(dragon);
+    assert_eq!(t.zone(x), Zone::Exile, "{}", t.dump_log());
+    assert!(t.g.obj(x).face_down);
+    assert_eq!(t.counters(x, "hatching"), 1);
+    // The others went to the bottom.
+    assert_eq!(t.zone(t.g.current(a)), Zone::Library(P0));
+    assert_eq!(t.zone(t.g.current(c)), Zone::Library(P0));
+    assert_ne!(t.g.library_top(P0), Some(t.g.current(c)));
+}
