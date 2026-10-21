@@ -279,3 +279,67 @@ fn empty_city_ruse_skips_every_combat_phase_of_that_players_next_turn() {
     t.advance_to(P1, Step::BeginningOfCombat);
     assert!(t.g.turn.step_log.contains(&Step::BeginningOfCombat));
 }
+
+fn combats(t: &TestGame) -> usize {
+    t.g.turn
+        .step_log
+        .iter()
+        .filter(|s| **s == Step::BeginningOfCombat)
+        .count()
+}
+
+#[test]
+fn moment_of_silence_skips_only_the_next_combat_phase_this_turn() {
+    cr!("614.10", "500.8");
+    ruling!(
+        "Moment of Silence",
+        "If they manage to have two combat phases, then only their next one combat phase is skipped."
+    );
+    supported("Moment of Silence");
+    let mut t = TestGame::new(2);
+    t.advance_to(P1, Step::Upkeep);
+    let ms = t.hand(P0, "Moment of Silence");
+    mana(&mut t, P0);
+    t.cast_with(P0, ms, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    t.advance_to(P1, Step::PrecombatMain);
+    let ra = t.hand(P1, "Relentless Assault");
+    t.advance_to(P1, Step::PostcombatMain);
+    assert_eq!(combats(&t), 0);
+    // An additional combat phase isn't skipped.
+    mana(&mut t, P1);
+    t.cast_with(P1, ra, &[]).unwrap();
+    t.resolve_all();
+    t.advance_to(P1, Step::End);
+    assert_eq!(combats(&t), 1);
+}
+
+#[test]
+fn moment_of_silence_does_nothing_on_another_players_turn_or_after_combat() {
+    cr!("614.10");
+    ruling!(
+        "Moment of Silence",
+        "If cast on a player when it is not their turn, it has no effect."
+    );
+    ruling!(
+        "Moment of Silence",
+        "It must be used before the combat phase starts or it has no effect."
+    );
+    // Targeting the nonactive player: their next turn's combat happens.
+    let mut t = TestGame::new(2);
+    t.advance_to(P1, Step::Upkeep);
+    let ms = t.hand(P0, "Moment of Silence");
+    mana(&mut t, P0);
+    t.cast_with(P0, ms, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    assert_eq!(combats(&t), 1);
+    // After the combat phase: the next turn's combat happens.
+    let ms = t.hand(P1, "Moment of Silence");
+    mana(&mut t, P1);
+    t.cast_with(P1, ms, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    t.advance_to(P1, Step::End);
+    t.advance_to(P0, Step::End);
+    assert_eq!(combats(&t), 1);
+}

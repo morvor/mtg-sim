@@ -202,6 +202,40 @@ fn skips_all_combat_phases_of_next_turn(l: &str, b: &mut Builder) -> Option<Effe
 
 inventory::submit! { EffectPattern { name: "durations players: skips all combat phases of their next turn", priority: 120, parse: skips_all_combat_phases_of_next_turn } }
 
+/// "Target player skips their next combat phase this turn." (Moment of Silence): only
+/// the active player has combat phases this turn, so it does something only if that's
+/// the player, and only to a combat phase that begins before the turn ends (CR 614.10).
+fn skips_next_combat_phase_this_turn(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let player = l.strip_suffix(" skips their next combat phase this turn")?;
+    let phrase = format!("{player} ");
+    let (_, spec, after) = parse_player(&phrase)?;
+    if !after.is_empty() {
+        return None;
+    }
+    let slot = b.add_target(spec?, player);
+    let skip = Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::SkipStep {
+                step: StepKind::Combat,
+                whose: PlayerRel::Any,
+            },
+            action: ReplacementAction::Prevent,
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::EndOfTurn,
+        uses: Some(1),
+    };
+    Some(Effect::If {
+        cond: Condition::PlayerMatches(PlayerRef::Target(slot), PlayerFilter::Active),
+        then: Box::new(skip),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "durations players: skips their next combat phase this turn", priority: 120, parse: skips_next_combat_phase_this_turn } }
+
 #[cfg(test)]
 mod tests {
     use crate::card::Layout;
