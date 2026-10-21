@@ -7,7 +7,7 @@
 //! - "For each card less than two a player draws this way, that player gains 2 life."
 //!   after "Each player may draw up to two cards." (Truce).
 
-use super::FollowupPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::{end, parse_number};
@@ -400,6 +400,134 @@ fn for_each_card_less_than(l: &str, prev: &mut Effect, b: &mut Builder) -> bool 
 
 inventory::submit! { FollowupPattern { name: "followups 4: for each card less than N a player draws this way", priority: 130, apply: for_each_card_less_than } }
 
+/// "they" / "that opponent" for the player an earlier part of the text names ("that
+/// player"), in a clause the core reads with "that player": "creatures they control can't
+/// attack you this turn" (Web of Inertia), "they can't attack you this combat", "that
+/// opponent may pay {X}, where X is the number of cards in their hand" (Champions of Minas
+/// Tirith).
+fn that_player_words(l: &str, b: &mut Builder) -> Option<Effect> {
+    if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+        || matches!(b.it_player, PlayerRef::You)
+    {
+        return None;
+    }
+    let l = end(l);
+    let rewritten = if let Some(r) = l.strip_prefix("creatures they control can't attack you ") {
+        format!("creatures that player controls can't attack you {r}")
+    } else if let Some(r) = l
+        .strip_prefix("they can't attack you ")
+        .or_else(|| l.strip_prefix("that player can't attack you "))
+    {
+        format!("creatures that player controls can't attack you {r}")
+    } else if let Some(r) = l.strip_prefix("that opponent may pay ") {
+        format!("that player may pay {r}")
+    } else {
+        return None;
+    };
+    let e = parse_clause(&rewritten, b)?;
+    Some(unlock_attackers(e))
+}
+
+/// "Creatures that player controls can't attack you this turn" from a resolving ability
+/// modifies the rules, not the creatures: it applies to creatures that player controls
+/// at any time during the duration (CR 611.2c), not only those they control now.
+fn unlock_attackers(e: Effect) -> Effect {
+    match e {
+        Effect::AddRestriction {
+            mut restriction,
+            duration,
+        } => {
+            if let Restriction::CantAttackPlayer { attackers, .. } = &mut restriction {
+                if let Filter::In(inner) = attackers {
+                    if let Sel::All(f) = &**inner {
+                        if let Some(f) = by_player(f) {
+                            *attackers = f;
+                        }
+                    }
+                }
+            }
+            Effect::AddRestriction {
+                restriction,
+                duration,
+            }
+        }
+        e => e,
+    }
+}
+
+/// "Creatures [that player] controls" with the player as a reference bound as the effect
+/// begins (the triggering player, the iterated player); None for other filters.
+fn by_player(f: &Filter) -> Option<Filter> {
+    let Filter::And(v) = f else {
+        return None;
+    };
+    let mut found = false;
+    let v = v
+        .iter()
+        .map(|x| match x {
+            Filter::ControlledBy(PlayerRel::TriggerPlayer) => {
+                found = true;
+                Filter::ControlledByPlayer(Box::new(PlayerRef::TriggerPlayer))
+            }
+            Filter::ControlledByPlayer(_) => {
+                found = true;
+                x.clone()
+            }
+            x => x.clone(),
+        })
+        .collect();
+    found.then_some(Filter::And(v))
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: they / that opponent as that player", priority: 120, parse: that_player_words } }
+
+/// "you mill three cards, then ~ deals damage to that player equal to the total mana value
+/// of those cards" (Combustible Gearhulk), "you mill X cards, where X is ..., and that
+/// player loses life equal to the total mana value of those cards" (Palantír of
+/// Orthanc): "those cards" are the milled cards.
+fn mill_then_those_cards(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    for sep in [", then ", ", and "] {
+        let Some((first, second)) = l.split_once(sep) else {
+            continue;
+        };
+        if !(first.starts_with("mill ") || first.starts_with("you mill "))
+            || !second.contains("those cards")
+        {
+            continue;
+        }
+        let saved = (
+            b.targets.len(),
+            b.it.clone(),
+            b.it_player.clone(),
+            b.named.len(),
+        );
+        let Some(e1) = parse_clause(first, b) else {
+            continue;
+        };
+        if !format!("{e1:?}").contains("Mill") {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            b.named.truncate(saved.3);
+            continue;
+        }
+        let player = b.it_player.clone();
+        super::dig_grammar::note_source(Some(&e1), b);
+        // The mill doesn't change who "that player" is.
+        b.it_player = player;
+        let Some(e2) = parse_clause(&second.replace("those cards", "the milled cards"), b) else {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            b.named.truncate(saved.3);
+            continue;
+        };
+        return Some(Effect::seq(vec![e1, e2]));
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: mill, then ... those cards", priority: 120, parse: mill_then_those_cards } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -411,6 +539,10 @@ mod tests {
             ("Sorcery", "Each player may discard up to two cards. Each player loses life equal to the number of cards they discarded this way."),
             ("Sorcery", "Each player may draw up to two cards. For each card less than two a player draws this way, that player gains 2 life."),
             ("Sorcery", "Each player may draw up to three cards. Each opponent loses life equal to the number of cards they drew this way."),
+            ("Enchantment", "At the beginning of combat on each opponent's turn, that player may exile a card from their graveyard. If the player doesn't, creatures they control can't attack you this turn."),
+            ("Creature", "At the beginning of combat on each opponent's turn, if you're the monarch, that opponent may pay {X}, where X is the number of cards in their hand. If they don't, they can't attack you this combat."),
+            ("Artifact Creature", "When ~ enters, target opponent may have you draw three cards. If the player doesn't, you mill three cards, then ~ deals damage to that player equal to the total mana value of those cards."),
+            ("Legendary Artifact", "At the beginning of your end step, put an influence counter on ~ and scry 2. Then target opponent may have you draw a card. If that player doesn't, you mill X cards, where X is the number of influence counters on ~, and that player loses life equal to the total mana value of those cards."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
