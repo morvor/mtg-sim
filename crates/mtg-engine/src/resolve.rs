@@ -440,7 +440,18 @@ impl Game {
                 // 120.2); the amount is evaluated for each of them (`vars::AFFECTED`).
                 let multi = matches!(source, Sel::All(_) | Sel::Union(_));
                 let srcs: Vec<ObjectId> = if multi {
-                    self.resolve_objects(source, ctx)
+                    let v = self.resolve_objects(source, ctx);
+                    match source {
+                        // "Equipped creature has '..., Unattach ~: It deals 1 damage ...'"
+                        // (Razor Boomerang): the granter deals the damage even if it has
+                        // left the battlefield, as it last existed there (CR 608.2h).
+                        Sel::All(Filter::Objects(ids))
+                            if v.is_empty() && crate::granted_by::is_bound_granter(source) =>
+                        {
+                            ids.clone()
+                        }
+                        _ => v,
+                    }
                 } else {
                     self.damage_source(source, ctx).into_iter().collect()
                 };
