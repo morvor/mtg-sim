@@ -215,7 +215,7 @@ fn jace_minus_three(t: &mut TestGame, card: ObjectId) {
 
 #[test]
 fn jace_minus_three_follows_timing_and_costs() {
-    cr!("601.2", "307.1", "608.2b");
+    cr!("601.2", "307.1", "514.2");
     ruling!(
         "Jace, Vryn's Prodigy // Jace, Telepath Unbound",
         "If you activate the second ability of Jace, Telepath Unbound, you must follow the timing rules for the card's types."

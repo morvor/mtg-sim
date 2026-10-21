@@ -117,7 +117,7 @@ fn phyrexian(t: &mut TestGame, artifacts: usize) {
 
 #[test]
 fn mirrodin_besieged_phyrexian_checks_on_resolution() {
-    cr!("603.3d", "608.2b", "104.3e");
+    cr!("603.3d", "608.2c", "104.3e");
     ruling!(
         "Mirrodin Besieged",
         "If you support the Phyrexians, you must choose a target opponent as your end step begins. Whether that player loses the game is determined only as the ability resolves."
@@ -432,7 +432,9 @@ fn whenever_you_attack_vehicles_need_not_attack() {
     }
 }
 
-/// A creature card that is both a Pirate and a Vehicle (no real card is).
+/// A creature card that is both a Pirate and a Vehicle. No real card is: the types Mary
+/// Read and Anne Bonny lists are a creature type, an artifact type and a land type, and
+/// no card in hand has two of them.
 fn pirate_vehicle() -> mtg_engine::card::CardDef {
     custom_card(
         "Pirate Skiff",
@@ -451,11 +453,27 @@ fn fearless_swashbuckler_one_pirate_vehicle_is_enough() {
         "If you attack with a single creature that is both a Pirate and a Vehicle, the last ability triggers."
     );
     supported("Fearless Swashbuckler");
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Fearless Swashbuckler");
-    let skiff = t.custom(P0, pirate_vehicle(), Zone::Battlefield);
-    attack_with(&mut t, &[(skiff, Entity::Player(P1))]);
-    assert_eq!(triggers_on_stack(&t, "draw three cards"), 1);
+    supported("Maskwood Nexus");
+    // A crewed Smuggler's Copter under Maskwood Nexus is every creature type: a Pirate
+    // Vehicle.
+    for nexus in [true, false] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Fearless Swashbuckler");
+        if nexus {
+            t.battlefield(P0, "Maskwood Nexus");
+        }
+        let copter = t.battlefield(P0, "Smuggler's Copter");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        assert!(crate::r_s04_common::crew(&mut t, P0, copter, &[bears]));
+        t.resolve_all();
+        attack_with(&mut t, &[(copter, Entity::Player(P1))]);
+        let expected = if nexus { 1 } else { 0 };
+        assert_eq!(
+            triggers_on_stack(&t, "draw three cards"),
+            expected,
+            "Maskwood Nexus: {nexus}"
+        );
+    }
     // A Pirate alone isn't enough.
     let mut t = TestGame::new(2);
     let swash = t.battlefield(P0, "Fearless Swashbuckler");
@@ -507,7 +525,7 @@ fn varina_counts_the_zombies_attacked_with() {
 
 #[test]
 fn wharf_infiltrator_any_creature_discard_and_one_payment() {
-    cr!("603.2", "118.3");
+    cr!("603.2", "118.12");
     ruling!(
         "Wharf Infiltrator",
         "Wharf Infiltrator's last ability triggers anytime you discard a creature card"

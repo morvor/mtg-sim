@@ -152,7 +152,7 @@ fn jace_reawakened_copies_keep_or_change_targets_and_arent_cast() {
 
 #[test]
 fn tibalt_counts_the_hand_on_resolution_and_untaps_all_creatures() {
-    cr!("608.2h", "702.10b");
+    cr!("608.2h");
     ruling!(
         "Tibalt, the Fiend-Blooded",
         "The number of cards in the target player's hand is determined when Tibalt's second ability resolves."
@@ -360,7 +360,7 @@ fn sacrificed_creatures_power_is_last_known_information() {
 
 #[test]
 fn attunement_discards_all_when_short() {
-    cr!("701.9b");
+    cr!("701.9a");
     ruling!(
         "Attunement",
         "If you have less than 4 cards, discard all you have."

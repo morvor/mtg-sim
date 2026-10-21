@@ -144,7 +144,7 @@ fn oko_becoming_a_copy_doesnt_enter_or_leave() {
 
 #[test]
 fn oko_minus_five_tokens_copy_only_copiable_values() {
-    cr!("707.2", "111.4");
+    cr!("707.2");
     ruling!(
         "Oko, the Ringleader",
         "Each of the tokens created by Oko's last ability copies exactly what was printed on the original permanent and nothing else"

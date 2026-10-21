@@ -28,7 +28,7 @@ fn blocked(t: &mut TestGame, attacker: ObjectId) -> ObjectId {
 
 #[test]
 fn evasion_gained_after_blocks_doesnt_unblock() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Daring Saboteur",
         "Activating the first ability of Daring Saboteur after it has become blocked won't cause it to become unblocked."
@@ -129,7 +129,7 @@ fn dreadwing_scavenger_marked_damage_becomes_lethal() {
 
 #[test]
 fn duelist_of_the_mind_power_works_in_every_zone() {
-    cr!("604.3", "208.3");
+    cr!("604.3");
     ruling!(
         "Duelist of the Mind",
         "The ability that defines Duelist of the Mind’s power works in all zones, not just the battlefield."
