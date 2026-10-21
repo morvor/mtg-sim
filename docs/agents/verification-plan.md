@@ -87,6 +87,20 @@ If a usage limit interrupts the audit, resume its workflow run after the reset; 
 steps are reused. If the coordinator's machine has lost the run, run it again with the same
 seed and sample.
 
+## The user's decisions on the register (Oct 21)
+
+The user reviewed the four provisional entries:
+- `combat-tax-scaled-to-nothing`: follow CR 118.5, so a tax that comes to {0} is still a cost.
+- `attacking-player-is-an-active-player`: implement 805.10c fully.
+- `growing-loops-run-to-the-limit`: keep it; an unendable loop is a draw.
+- `conspiracy-draft-needs-three-players`: keep rejecting two-player games.
+
+Item `register-decisions-1` (items/register-decisions-1.md) applies them. It goes to rulings-2, next after cr-examples-2.
+
+## Later
+
+- **Loops and loop detection** (user, Oct 21). Once the rules work is settled, discuss how loops are recognized and handled: CR 104.4b and the 732 shortcut rules, recognizing growing loops early instead of at the action limit, and automating loops. A UI would need automated loops.
+
 ## Resuming (coordinator)
 
 1. The workers are the cloud sessions tagged `mtg-sim-worker`. Check each one. Resume any item a
