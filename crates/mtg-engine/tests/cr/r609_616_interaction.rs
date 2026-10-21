@@ -412,6 +412,7 @@ fn a_modified_event_can_become_subject_to_other_effects() {
     // would draw a card, return a card from your graveyard to your hand instead": gaining
     // 1 life returns a card from the graveyard to hand.
     cr!("616.2");
+    cr_example!("616.2", "If you would gain life, draw that many cards instead");
     let mut t = TestGame::new(2);
     t.custom(
         P0,
