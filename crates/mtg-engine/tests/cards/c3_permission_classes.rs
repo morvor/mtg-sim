@@ -237,3 +237,27 @@ fn maralen_only_cards_exiled_this_turn() {
     t.answer_targets(P0, &[Entity::Player(P1)]);
     assert!(!try_cast_as(&mut t, P0, bolt_x, CastMethod::Free));
 }
+
+#[test]
+fn cemetery_illuminator_casts_the_top_card_if_it_shares_a_type_with_an_exiled_card() {
+    cr!("607.2a", "601.3e");
+    assert_supported("Cemetery Illuminator");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Mountain", 1);
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Cemetery Illuminator");
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bears)), Zone::Exile, "{}", t.dump_log());
+    // An instant on top: no card type in common with the creature card.
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(!try_cast_as(&mut t, P0, bolt, CastMethod::Normal));
+    // A creature on top: yes, once this turn.
+    let elves = t.library_top(P0, "Llanowar Elves");
+    assert!(try_cast_as(&mut t, P0, elves, CastMethod::Normal));
+    let elves2 = t.library_top(P0, "Llanowar Elves");
+    assert!(!try_cast_as(&mut t, P0, elves2, CastMethod::Normal));
+}

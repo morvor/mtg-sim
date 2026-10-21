@@ -185,6 +185,20 @@ impl Perm {
             });
             return Some(terms);
         }
+        // "Once each turn, you may cast a spell from the top of your library if it shares a
+        // card type with a card exiled with ~." (Cemetery Illuminator): a quality of the
+        // spell (CR 601.3e), against the cards exiled with ~ (CR 607.2a).
+        if c == "it shares a card type with a card exiled with ~" {
+            let q = Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Linked)),
+                Filter::InZone(ZoneKind::Exile),
+            ]))));
+            terms.what = Some(match terms.what.take() {
+                Some(w) => Filter::and(vec![w, q]),
+                None => q,
+            });
+            return Some(terms);
+        }
         // Another quality of the card ("if it shares a card type with a card exiled with
         // ~") isn't a condition on the game: not understood.
         if ["it ", "its ", "that card ", "that spell ", "the spell "]
