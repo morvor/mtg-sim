@@ -136,3 +136,26 @@ fn chaos_defiler_chooses_one_per_opponent_then_destroys_one_at_random() {
     t.resolve_all();
     assert!(!t.on_battlefield(other));
 }
+
+#[test]
+fn winnowing_each_player_keeps_creatures_sharing_a_type_with_the_chosen_one() {
+    cr!("608.2c");
+    supported("Winnowing");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 6);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let bear2 = t.battlefield(P0, "Runeclaw Bear");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let spell = t.hand(P0, "Winnowing");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(angel)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert!(t.on_battlefield(bear2));
+    assert!(!t.on_battlefield(giant));
+    assert!(t.on_battlefield(angel));
+    assert!(!t.on_battlefield(elves));
+}

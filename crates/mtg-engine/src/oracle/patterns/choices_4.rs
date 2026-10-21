@@ -557,6 +557,42 @@ fn exile_mixed(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: exile [objects] in several zones", priority: 120, parse: exile_mixed } }
 
+/// "Then each player sacrifices all other creatures they control that don't share a
+/// creature type with the chosen creature they control." (Winnowing): after "for each
+/// player, you choose a creature that player controls", each player keeps the creature
+/// chosen for them and those sharing a creature type with it.
+fn sacrifices_others_not_sharing_with_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let head = l.strip_suffix(
+        " sacrifices all other creatures they control that don't share a creature type with the chosen creature they control",
+    )?;
+    if head != "each player" {
+        return None;
+    }
+    let chosen = super::iteration_grammar::CHOSEN;
+    let e = parse_clause(
+        "each player sacrifices all creatures they control not chosen this way",
+        b,
+    )?;
+    let json = serde_json::to_string(&e).ok()?;
+    let not_chosen =
+        serde_json::to_string(&Filter::not(Filter::In(Box::new(Sel::Var(chosen))))).ok()?;
+    if json.matches(&not_chosen).count() != 1 {
+        return None;
+    }
+    let both = Filter::and(vec![
+        Filter::not(Filter::In(Box::new(Sel::Var(chosen)))),
+        Filter::not(Filter::SharesCreatureType(Box::new(Sel::Matching(
+            Box::new(Sel::Var(chosen)),
+            Filter::ControlledBy(PlayerRel::You),
+        )))),
+    ]);
+    serde_json::from_str(&json.replace(&not_chosen, &serde_json::to_string(&both).ok()?)).ok()
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: each player sacrifices all other creatures that don't share a creature type with the chosen creature", priority: 120, parse: sacrifices_others_not_sharing_with_chosen } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -575,6 +611,7 @@ mod tests {
             ("Legendary Planeswalker — Bolas", "+1: You draw a card. Each opponent exiles a card from their hand or a permanent they control."),
             ("Enchantment", "Whenever you lose life, for each 1 life you lost, exile a permanent you control or a card from your hand or graveyard."),
             ("Enchantment", "At the beginning of your upkeep, put a despair counter on ~, then each player exiles X permanents they control and/or cards from their hand, where X is the number of despair counters on ~."),
+            ("Sorcery", "Convoke\nFor each player, you choose a creature that player controls. Then each player sacrifices all other creatures they control that don't share a creature type with the chosen creature they control."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
