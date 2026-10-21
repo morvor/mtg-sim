@@ -2419,12 +2419,16 @@ fn source_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
 /// library isn't a creature), until a card dug is put onto the battlefield
 /// ([`forget_that_creature`]).
 pub(super) fn keep_that_creature(b: &mut Builder) {
-    if b.in_trigger
-        && matches!(b.it, Sel::TriggerObject)
-        && !b.named.iter().any(|(n, _)| n == "that creature")
-    {
-        b.named
-            .push(("that creature".to_string(), Sel::TriggerObject));
+    // "Whenever equipped creature attacks, defending player reveals cards ... until they
+    // reveal a land card. The creature gets +1/+0 ..." (Trepanation Blade): "the
+    // creature" too is still the trigger's creature, not the card found.
+    for phrase in ["that creature", "the creature"] {
+        if b.in_trigger
+            && matches!(b.it, Sel::TriggerObject)
+            && !b.named.iter().any(|(n, _)| n == phrase)
+        {
+            b.named.push((phrase.to_string(), Sel::TriggerObject));
+        }
     }
     // "You may put a card that shares a creature type with it from among them into your
     // hand" (Tajuru Paragon): a qualifier's "it" is still what it was before the dig.
