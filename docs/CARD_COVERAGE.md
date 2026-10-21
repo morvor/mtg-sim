@@ -58,11 +58,11 @@ cargo run --release -p mtg-tools -- verified --logs target/structlog --report ta
 cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
 ```
 
-When only tests changed since the last sweep (tests can't change what the sweep finds), skip the sweep and carry each card's sweep results over from the committed tier file: regenerate the structure log, then run `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write` and `card-coverage`. A card the old file listed as unsupported has no recorded sweep result and counts as not swept. `verified --gain 60` lists the unexercised structures with the highest verified gain (the cards whose only failed check is that structure).
-
 Each chunk is a separate command because one run of the whole sweep takes longer than a command may run here (a pool larger than 30,300 cards needs a fourth chunk). `verified` reads the concatenated reports' `outcome` lines (whether each card was cast, and its failed games) and `failure` lines (a card a failed game's message names as an object, like a rules-check violation's, isn't fuzz-clean either).
 
 `mtg-tools verified --card "Name"` prints one card's tier and failed checks.
+
+When only tests changed since the last sweep (tests can't change what the sweep finds), skip the sweep and carry each card's sweep results over from the committed tier file: regenerate the structure log, then run `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write` and `card-coverage`. A card the old file listed as unsupported has no recorded sweep result and counts as not swept. `verified --gain 60` lists the unexercised structures with the highest verified gain (the cards whose only failed check is that structure).
 
 ## Cards with hand-written abilities
 
