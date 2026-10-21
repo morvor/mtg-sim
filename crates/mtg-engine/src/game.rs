@@ -1017,13 +1017,14 @@ impl Game {
         self.turn.active
     }
 
-    /// Opponents of a player (CR 102.3): in team games, players not on their team.
+    /// Opponents of a player (CR 102.3): in team games, players not on their team. In
+    /// APNAP order (CR 101.4), so that what's done for each opponent in turn, or a default
+    /// choice among them, doesn't depend on where the players sit.
     pub fn opponents(&self, p: PlayerId) -> Vec<PlayerId> {
         let team = self.player(p).team;
-        self.players
-            .iter()
-            .filter(|q| q.in_game() && q.team != team)
-            .map(|q| q.id)
+        self.apnap()
+            .into_iter()
+            .filter(|q| self.player(*q).team != team)
             .collect()
     }
 

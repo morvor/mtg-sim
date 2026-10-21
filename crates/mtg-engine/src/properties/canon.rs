@@ -173,8 +173,9 @@ impl Canon {
                 min,
                 max,
             } => format!(
-                "targets O{} {text:?} {} {min}..{max}",
+                "targets O{} {} {} {min}..{max}",
                 self.obj(*source),
+                self.debug(text),
                 self.entities(candidates)
             ),
             Decision::ChooseEntities {
@@ -184,8 +185,9 @@ impl Canon {
                 min,
                 max,
             } => format!(
-                "entities {} {prompt:?} {} {min}..{max}",
+                "entities {} {} {} {min}..{max}",
                 self.debug(source),
+                self.debug(prompt),
                 self.entities(candidates)
             ),
             Decision::Divide {
