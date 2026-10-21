@@ -514,3 +514,25 @@ fn watcher_of_hours_surveils_as_time_counters_are_removed_in_exile() {
     t.settle();
     assert_eq!(t.stack_len(), 0);
 }
+
+#[test]
+fn risky_move_gaining_control_from_another_player() {
+    cr!("705.2", "108.4");
+    ruling!("Risky Move", "This card does not target any creatures or players.");
+    supported("Risky Move");
+    for opp in [P0, P2] {
+        let mut t = TestGame::new(3);
+        let rm = t.battlefield(P0, "Risky Move");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        // P1 gains control of it in their upkeep, chooses the Bears and that opponent, and
+        // loses the flip.
+        t.answer_choose(P1, &[Entity::Object(bears)]);
+        t.answer_choose(P1, &[Entity::Player(opp)]);
+        t.g.dice.loaded_coins.push_back(false);
+        t.set_step(P0, Step::End);
+        t.advance_to(P1, Step::Draw);
+        t.resolve_all();
+        assert_eq!(t.obj_now(rm).controller, P1);
+        assert_eq!(t.obj_now(bears).controller, opp);
+    }
+}

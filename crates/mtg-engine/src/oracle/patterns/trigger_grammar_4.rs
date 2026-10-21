@@ -560,6 +560,43 @@ fn you_remove_counter_while_exiled(t: &str) -> Option<(TriggerCond, Sel, PlayerR
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: you remove a [kind] counter from ~ while it's exiled", priority: 100, parse: you_remove_counter_while_exiled } }
 
+/// "When you gain control of ~ from another player" (Risky Move): its control changes to
+/// you (a control change is always from another player, CR 108.4).
+fn gain_control_of_self(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t);
+    if r != "you gain control of ~ from another player" && r != "you gain control of ~" {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::ControlChanged(Filter::Source)),
+            cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+        },
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: you gain control of ~ from another player", priority: 100, parse: gain_control_of_self } }
+
+/// "choose a creature you control and an opponent": the object, then the player (each
+/// choice made as written, CR 608.2c), with their referents ("that creature", "that
+/// opponent").
+fn choose_object_and_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (obj, player) = ["an opponent", "a player", "target opponent", "target player"]
+        .iter()
+        .find_map(|p| r.strip_suffix(&format!(" and {p}")).map(|o| (o, *p)))?;
+    if obj.contains(" and ") {
+        return None;
+    }
+    let a = crate::oracle::effects::parse_sentence(&format!("choose {obj}"), b)?;
+    let c = crate::oracle::effects::parse_sentence(&format!("choose {player}"), b)?;
+    Some(Effect::seq(vec![a, c]))
+}
+
+inventory::submit! { EffectPattern { name: "trigger grammar 4: choose [an object] and [a player]", priority: 100, parse: choose_object_and_player } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
