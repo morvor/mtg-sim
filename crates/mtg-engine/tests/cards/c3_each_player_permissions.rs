@@ -61,20 +61,38 @@ fn rocco_each_player_plays_their_own_card_until_your_next_end_step() {
 fn rocco_permission_ends_at_the_controllers_next_end_step() {
     cr!("611.2a");
     ruling!("Rocco, Street Chef", "All cards not played remain exiled.");
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Rocco, Street Chef");
-    let p1_card = t.library_top(P1, "Forest");
-    t.advance_to(P0, Step::End);
-    t.resolve_all();
-    let p1_x = t.g.current(p1_card);
-    // Not played during P1's turn, nor during P0's next turn; P0's next end step ends it,
-    // not P1's.
-    t.advance_to(P1, Step::End);
-    t.advance_to(P0, Step::End);
-    t.resolve_all();
-    t.advance_to(P1, Step::PrecombatMain);
-    assert_eq!(t.zone(p1_x), Zone::Exile);
-    assert!(t.play_land(P1, p1_x).is_err(), "{}", t.dump_log());
+    // "Until your next end step" is P0's (Rocco's controller's), not the grantee's: P1 may
+    // still cast the Bolt P1 exiled after P1's own end step, during P0's next turn, and
+    // not after P0's next end step.
+    for cast_before_p0_end in [true, false] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rocco, Street Chef");
+        t.lands(P1, "Mountain", 1);
+        let p1_card = t.library_top(P1, "Lightning Bolt");
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        let p1_x = t.g.current(p1_card);
+        assert_eq!(t.zone(p1_x), Zone::Exile);
+        t.advance_to(P1, Step::End);
+        t.resolve_all();
+        if cast_before_p0_end {
+            t.advance_to(P0, Step::PrecombatMain);
+            t.cast_with(P1, p1_x, &[Entity::Player(P0)])
+                .expect("P1's permission lasts until P0's next end step");
+            t.resolve_all();
+            assert_eq!(t.life(P0), 17, "{}", t.dump_log());
+        } else {
+            t.advance_to(P0, Step::End);
+            t.resolve_all();
+            t.advance_to(P1, Step::PrecombatMain);
+            assert_eq!(t.zone(p1_x), Zone::Exile);
+            assert!(
+                t.cast_with(P1, p1_x, &[Entity::Player(P0)]).is_err(),
+                "{}",
+                t.dump_log()
+            );
+        }
+    }
 }
 
 #[test]
