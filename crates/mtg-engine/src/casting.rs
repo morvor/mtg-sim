@@ -3224,6 +3224,12 @@ impl Game {
                 c.cost_of = ctx.cost_of;
                 self.can_pay_cost_optimistic_in(p, &flat, src, &chars, &c)
             }
+            CostPart::OneOf(costs) => {
+                let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
+                costs
+                    .iter()
+                    .any(|c| self.can_pay_cost_optimistic_in(p, c, src, &chars, ctx))
+            }
         }
     }
 
@@ -3936,6 +3942,41 @@ impl Game {
                 };
                 let sub = self.pay_total_cost(p, &flat, src, &spend, ctx)?;
                 paid.mana_spent.extend(sub.mana_spent);
+            }
+            CostPart::OneOf(costs) => {
+                // The player chooses one of the costs they can pay (CR 118.3).
+                let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
+                let payable: Vec<&Cost> = costs
+                    .iter()
+                    .filter(|c| self.can_pay_cost_optimistic_in(p, c, src, &chars, ctx))
+                    .collect();
+                if payable.is_empty() {
+                    return bad("no cost can be paid");
+                }
+                let i = if payable.len() == 1 {
+                    0
+                } else {
+                    let names = payable
+                        .iter()
+                        .map(|c| crate::resolve::describe_cost(c))
+                        .collect();
+                    self.ask_option(p, src, "Choose which cost to pay", names)
+                        .min(payable.len() - 1)
+                };
+                let chosen = payable[i].clone();
+                let spend = SpendContext {
+                    is_ability: true,
+                    source: src,
+                    cost_of: ctx.cost_of,
+                    purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
+                    ..Default::default()
+                };
+                let sub = self.pay_total_cost(p, &chosen, src, &spend, ctx)?;
+                paid.mana_spent.extend(sub.mana_spent);
+                paid.objects.extend(sub.objects);
+                paid.sacrificed.extend(sub.sacrificed);
+                paid.exiled.extend(sub.exiled);
+                paid.tapped.extend(sub.tapped);
             }
         }
         Ok(())

@@ -536,6 +536,9 @@ pub enum CostPart {
         cost: Box<Cost>,
         times: Value,
     },
+    /// "Discard a card or pay {2}": one of these costs, which the player chooses as the
+    /// cost is paid among those they can pay (CR 118.3, 601.2h; a ward cost, CR 702.21a).
+    OneOf(Vec<Cost>),
 }
 
 // ---------------------------------------------------------------------------

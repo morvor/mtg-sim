@@ -279,6 +279,20 @@ impl Renderer<'_> {
                 let (c, w) = self.counted(count, &noun);
                 format!("reveal {c} from your hand{}", w.unwrap_or_default())
             }
+            CostPart::OneOf(costs) => {
+                let items: Vec<String> = costs.iter().map(|c| self.cost(c)).collect();
+                let mut s = items.join(" or ");
+                // "pay {2}" rather than a bare "{2}" in a list of costs.
+                for c in costs {
+                    if c.parts.is_empty() {
+                        if let Some(m) = &c.mana {
+                            let m = m.to_string();
+                            s = s.replacen(&m, &format!("pay {m}"), 1);
+                        }
+                    }
+                }
+                s
+            }
             CostPart::RevealSelf => "reveal ~ from your hand".into(),
             CostPart::RemoveCountersFromOne {
                 kind,
