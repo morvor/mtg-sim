@@ -312,3 +312,22 @@ fn selective_obliteration_keeps_colorless_and_the_color_each_controller_chose() 
     assert!(!t.on_battlefield(bears), "green");
     assert!(!t.on_battlefield(mage), "red and white isn't only red");
 }
+
+#[test]
+fn teferis_realm_the_upkeep_player_chooses_which_permanents_phase_out() {
+    cr!("702.26a", "303.4");
+    ruling!("Teferi's Realm", "Can affect itself if you choose");
+    compiles("Teferi's Realm");
+    let mut t = TestGame::new(2);
+    let realm = t.battlefield(P0, "Teferi's Realm");
+    let anthem = t.battlefield(P0, "Glorious Anthem");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let aura = t.battlefield(P1, "Rancor");
+    t.g.attach(aura, Entity::Object(bears));
+    pick(&mut t, P1, 3); // non-Aura enchantment
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.obj_now(anthem).phased_out && t.obj_now(realm).phased_out);
+    assert!(!t.obj_now(aura).phased_out, "an Aura");
+    assert!(!t.obj_now(bears).phased_out);
+}

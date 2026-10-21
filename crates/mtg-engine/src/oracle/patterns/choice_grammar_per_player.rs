@@ -28,9 +28,11 @@ fn word_ok(w: &str) -> bool {
     !w.is_empty()
         && parts.len() <= 2
         && !NOT_WORDS.contains(&parts[0])
-        && parts
-            .iter()
-            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric()))
+        && parts.iter().all(|p| {
+            !p.is_empty()
+                && !p.starts_with('-')
+                && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
 }
 
 /// "war or peace", "money, friends, or secrets": the listed words.
@@ -586,3 +588,66 @@ fn each_unless_its(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "exile each permanent unless it's [qualities]", priority: 120, parse: each_unless_its } }
+
+
+/// Whether `e` chooses among card type words with a qualified one ("artifact, creature,
+/// land, or non-Aura enchantment").
+fn chooses_type_words(e: &Effect) -> bool {
+    match e {
+        Effect::Choose {
+            kind: ChoiceKind::OneOf(w),
+            ..
+        } => w.iter().any(|x| x.starts_with("non-")),
+        Effect::AsPlayer { effect, .. } => chooses_type_words(effect),
+        Effect::Seq(v) => v.last().is_some_and(chooses_type_words),
+        _ => false,
+    }
+}
+
+/// Replaces "the chosen type" in `v` with the chosen card type word.
+fn type_word_filters(v: serde_json::Value, n: &mut usize) -> serde_json::Value {
+    use serde_json::Value as J;
+    if v == J::String("ChosenType".into()) {
+        *n += 1;
+        return serde_json::to_value(Filter::Custom(
+            crate::choices::OF_THE_CHOSEN_TYPE_WORD.into(),
+        ))
+        .unwrap_or(v);
+    }
+    match v {
+        J::Array(a) => J::Array(a.into_iter().map(|x| type_word_filters(x, n)).collect()),
+        J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, type_word_filters(x, n))).collect()),
+        x => x,
+    }
+}
+
+/// "... chooses artifact, creature, land, or non-Aura enchantment. All nontoken
+/// permanents of that type phase out." (Teferi's Realm): "that type" is the chosen word's
+/// type, "non-Aura enchantment" being enchantments that aren't Auras.
+fn of_that_type_word(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !l.contains("of that type") || !chooses_type_words(prev) {
+        return false;
+    }
+    let targets = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_clause(l, b) else {
+        b.targets.truncate(targets);
+        return false;
+    };
+    let mut n = 0;
+    let Ok(v) = serde_json::to_value(&e) else {
+        return false;
+    };
+    let v = type_word_filters(v, &mut n);
+    let Ok(e) = serde_json::from_value::<Effect>(v) else {
+        return false;
+    };
+    if n == 0 {
+        b.targets.truncate(targets);
+        return false;
+    }
+    let first = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![first, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "of that type (a chosen card type word)", priority: 20, apply: of_that_type_word } }

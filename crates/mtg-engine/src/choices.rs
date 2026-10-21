@@ -891,3 +891,31 @@ impl crate::kw::KeywordRules for ControllerChoice {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ControllerChoice) }
+
+/// `Filter::Custom`: of the card type the word chosen for the source names ("artifact",
+/// "creature", "land", "non-Aura enchantment": an enchantment that isn't an Aura).
+pub const OF_THE_CHOSEN_TYPE_WORD: &str = "choices: of the chosen card type word";
+
+pub struct ChosenTypeWord;
+
+impl crate::kw::KeywordRules for ChosenTypeWord {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name != OF_THE_CHOSEN_TYPE_WORD {
+            return None;
+        }
+        let Some(w) = g.source_choices(ctx).and_then(|c| c.text.clone()) else {
+            return Some(false);
+        };
+        let c = &g.obj(id).chars;
+        Some(match w.to_lowercase().as_str() {
+            "non-aura enchantment" => c.is(CardType::Enchantment) && !c.has_subtype("Aura"),
+            other => CardType::from_word(other).is_some_and(|t| c.is(t)),
+        })
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChosenTypeWord) }
