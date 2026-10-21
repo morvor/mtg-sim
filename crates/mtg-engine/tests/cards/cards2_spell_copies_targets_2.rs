@@ -253,3 +253,53 @@ fn radiant_performer_copies_a_single_target_ability_for_each_other_target() {
     assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
     assert!(t.named_on_battlefield("Radiant Performer").is_empty());
 }
+
+#[test]
+fn beamsplitter_mage_copies_a_spell_targeting_it_onto_a_chosen_creature() {
+    cr!("707.10e", "603.4", "115.9c");
+    supported("Beamsplitter Mage");
+    let mut t = TestGame::new(2);
+    let mage = t.battlefield(P0, "Beamsplitter Mage");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Forest", 1);
+    let g = t.hand(P0, "Giant Growth");
+    let spell = t.cast(P0, g).target(mage).go();
+    t.answer_choose(P0, &[obj(b)]);
+    t.resolve();
+    let copies: Vec<ObjectId> = t.g.stack.iter().copied().filter(|c| *c != spell).collect();
+    assert_eq!(copies.len(), 1);
+    assert_eq!(targets_of(&t, copies[0]), vec![obj(b)]);
+    assert_eq!(t.g.obj(copies[0]).controller, P0);
+    t.resolve_all();
+    assert_eq!(t.pt(mage), (5, 5));
+    assert_eq!(t.pt(b), (6, 6));
+    assert_eq!(t.pt(a), (2, 2));
+    // Without another creature it could target, the ability doesn't trigger.
+    let mut t = TestGame::new(2);
+    let mage = t.battlefield(P0, "Beamsplitter Mage");
+    t.lands(P0, "Forest", 1);
+    let g = t.hand(P0, "Giant Growth");
+    t.cast(P0, g).target(mage).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+}
+
+#[test]
+fn exterminator_magmarch_copies_onto_another_opponents_permanent() {
+    cr!("707.10e", "603.4");
+    supported("Exterminator Magmarch");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Exterminator Magmarch");
+    let p1s = t.battlefield(P1, "Grizzly Bears");
+    let p1other = t.battlefield(P1, "Hill Giant");
+    let p2s = t.battlefield(P2, "Craw Wurm");
+    t.lands(P0, "Swamp", 3);
+    let kill = t.hand(P0, "Murder");
+    t.cast(P0, kill).target(p1s).go();
+    t.answer_choose(P0, &[obj(p2s)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(p1s) && !t.on_battlefield(p2s));
+    // Not the first opponent's other permanent.
+    assert!(t.on_battlefield(p1other));
+}

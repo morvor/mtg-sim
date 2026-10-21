@@ -55,6 +55,7 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
     };
     let r = super::conditions_compare::lesser_than_triggering_spell(c, b)
         .or_else(|| super::copy_spell_grammar_2::it_has_a_single_target(c, b))
+        .or_else(|| super::copy_spell_grammar_2::could_target_condition(c, b))
         .or_else(|| understood(referent_condition(c, b)))
         .or_else(|| understood(joined(c, b)))
         .or_else(|| understood(referent_free(c, b)))

@@ -522,3 +522,120 @@ fn each_copy_targets_a_different_one_2(s: &str, prev: &mut Effect, _b: &mut Buil
 }
 
 inventory::submit! { FollowupPattern { name: "copy spell grammar 2: each copy targets a different one of those permanents and players", priority: 45, apply: each_copy_targets_a_different_one_2 } }
+
+/// "you control one or more other creatures that spell could target", "another opponent
+/// controls one or more nonland permanents that spell could target": the objects (other
+/// than its current targets) the spell an ability triggered on could target.
+fn could_target_group(c: &str) -> Option<Filter> {
+    let c = end(c);
+    let (who, r) = if let Some(r) = c.strip_prefix("you control one or more ") {
+        (Filter::ControlledBy(PlayerRel::You), r)
+    } else if let Some(r) = c.strip_prefix("another opponent controls one or more ") {
+        // An opponent other than the one controlling what the spell targets.
+        (
+            Filter::and(vec![
+                Filter::ControlledBy(PlayerRel::Opponent),
+                Filter::not(Filter::ControlledByPlayer(Box::new(
+                    PlayerRef::ControllerOf(Box::new(Sel::All(Filter::TargetOf(Box::new(
+                        Sel::TriggerSpell,
+                    ))))),
+                ))),
+            ]),
+            r,
+        )
+    } else {
+        return None;
+    };
+    let noun = r.strip_suffix(" that spell could target")?;
+    let (f, plural, tail) = parse_object_phrase(noun)?;
+    if !plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(Filter::and(vec![
+        f,
+        who,
+        Filter::Custom(crate::copy_rules::TRIGGER_SPELL_COULD_TARGET.into()),
+    ]))
+}
+
+/// The intervening "if" clause "if you control one or more other creatures that spell
+/// could target" (Beamsplitter Mage).
+pub(crate) fn could_target_condition(c: &str, b: &Builder) -> Option<Condition> {
+    if !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    Some(Condition::Exists(could_target_group(c)?))
+}
+
+/// The object chosen by "choose one of those creatures" (the copy's new target).
+const CHOSEN_NEW_TARGET: Var = vars::USER + 5130;
+
+/// "choose one of those creatures" after "if you control one or more other creatures
+/// that spell could target" (Beamsplitter Mage, Exterminator Magmarch).
+fn choose_one_of_those_could_target(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    let r = end(l).strip_prefix("choose one of those ")?;
+    if r.contains(' ') {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let i = raw.find(" that spell could target")?;
+    let head = &raw[..i + " that spell could target".len()];
+    let start = head.rfind("if ")? + "if ".len();
+    let f = could_target_group(&head[start..])?;
+    b.named.push((
+        format!("the chosen {}", r.trim_end_matches('s')),
+        Sel::Var(CHOSEN_NEW_TARGET),
+    ));
+    Some(Effect::Store {
+        var: CHOSEN_NEW_TARGET,
+        sel: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: f,
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar 2: choose one of those (the spell could target)", priority: 80, parse: choose_one_of_those_could_target } }
+
+/// "The copy targets the chosen creature." after "Copy that spell." (CR 707.10e).
+fn the_copy_targets_the_chosen(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(what) = end(&lower).strip_prefix("the copy targets ") else {
+        return false;
+    };
+    let Some(sel) = b
+        .named
+        .iter()
+        .find(|(p, _)| p == what)
+        .map(|(_, s)| s.clone())
+    else {
+        return false;
+    };
+    fn retarget(e: &mut Effect, sel: &Sel) -> bool {
+        match e {
+            Effect::CopySpell {
+                what,
+                count: Value::Const(1),
+                ..
+            } if matches!(what, Sel::TriggerSpell) => {
+                *e = Effect::CopySpellRetargeted {
+                    what: Sel::TriggerSpell,
+                    target: Some(sel.clone()),
+                    among: None,
+                };
+                true
+            }
+            Effect::Seq(v) => v.last_mut().is_some_and(|x| retarget(x, sel)),
+            _ => false,
+        }
+    }
+    retarget(prev, &sel)
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: the copy targets the chosen [object]", priority: 45, apply: the_copy_targets_the_chosen } }

@@ -30,6 +30,11 @@ pub struct CopyExtra {
     pub effect: Effect,
 }
 
+/// `Filter::Custom` name: an object other than the current targets of the spell an
+/// ability triggered on that the spell could target, as each of its targets ("if you
+/// control one or more other creatures that spell could target", CR 115.9, 707.10e).
+pub const TRIGGER_SPELL_COULD_TARGET: &str = "copy rules:the triggering spell could target it";
+
 /// `Filter::Custom` name: in the filter of the objects a spell is copied for (an
 /// [`Effect::CopySpellRetargeted`]'s `among`, joined by `Or`), players are included too
 /// ("for each other permanent or player the spell could target"). It matches no object.
@@ -45,9 +50,33 @@ pub const COPIED: Var = vars::USER + 5120;
 pub const COPIED_MATCHES: &str = "copy rules:the copied object matches:";
 
 /// Evaluates [`COPIED_MATCHES`].
-pub fn custom_filter(g: &Game, name: &str, _id: ObjectId, ctx: &Ctx) -> Option<bool> {
+pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
     if name == ANY_PLAYER {
         return Some(false);
+    }
+    if name == TRIGGER_SPELL_COULD_TARGET {
+        let spell = g
+            .eval_sel(&Sel::TriggerSpell, ctx)
+            .into_iter()
+            .find_map(|e| e.object())?;
+        let current: Vec<Entity> = g
+            .obj(spell)
+            .stack
+            .as_deref()
+            .map(|si| {
+                si.chosen
+                    .iter()
+                    .flat_map(|m| m.targets.iter().flatten().copied())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let e = Entity::Object(id);
+        return Some(
+            g.is_live(spell)
+                && g.obj(spell).zone == Zone::Stack
+                && !current.contains(&e)
+                && legal_for_each_target(g, spell, e),
+        );
     }
     let json = name.strip_prefix(COPIED_MATCHES)?;
     let f: Filter = serde_json::from_str(json).ok()?;
