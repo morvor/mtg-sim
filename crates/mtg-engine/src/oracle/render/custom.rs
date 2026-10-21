@@ -974,6 +974,18 @@ impl Renderer<'_> {
                 };
                 format!("{subj} {dont} lose unspent {color} mana as steps and phases end")
             }
+            // "If you would lose unspent mana, that mana becomes red instead." (CR 614.1a).
+            n if you
+                && n.strip_prefix(crate::mana_abilities::UNSPENT_MANA_BECOMES)
+                    .is_some_and(|t| t.len() == 2 && t.starts_with(' ')) =>
+            {
+                let t = crate::mana::ManaType::from_letter_str(&n[n.len() - 1..]);
+                let what = match t.and_then(|t| t.color()) {
+                    Some(c) => c.word(),
+                    None => "colorless",
+                };
+                format!("if you would lose unspent mana, that mana becomes {what} instead")
+            }
             // Mana burn (CR 500.5 as it once was): each player affected loses life.
             crate::kw::mana_grammar::MANA_BURN if matches!(subj, "players" | "each player") => {
                 "a player losing unspent mana causes that player to lose that much life".into()

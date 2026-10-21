@@ -165,7 +165,7 @@ pub fn expire_end_of_combat_on_next_turn(g: &mut Game) {
             && created < turn
     };
     g.play_grants
-        .retain(|x| !ends(&x.duration, x.player, x.turn));
+        .retain(|x| !ends(&x.duration, x.duration_player(), x.turn));
     g.effects
         .retain(|x| !ends(&x.duration, x.controller, x.created_turn));
 }

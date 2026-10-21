@@ -48,12 +48,23 @@ fn mana_spent_rider(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let head = &block[..idx + 1];
     let tail = end(&lower[idx + marker.len()..]);
     let (spell_s, eff) = tail.split_once(", ")?;
-    if !eff.starts_with("it gains ") {
-        return None;
-    }
     let spell_filter = spell_phrase(spell_s)?;
-    let body =
-        crate::oracle::effects::parse_trigger_body(eff, ctx, Sel::TriggerSpell, PlayerRef::You)?;
+    // "If that mana is spent on an instant or sorcery spell, that spell can't be
+    // countered." (Boseiju, Who Shelters All): the spell gains "can't be countered"
+    // (CR 101.2: a spell that can't be countered isn't countered by a spell or ability).
+    let body = if eff == "that spell can't be countered" {
+        Body::effect(Effect::Modify {
+            what: Sel::TriggerSpell,
+            mods: vec![Modification::AddAbility(
+                super::restriction_grammar::cant_be_countered_ability(),
+            )],
+            duration: Duration::Permanent,
+        })
+    } else if eff.starts_with("it gains ") {
+        crate::oracle::effects::parse_trigger_body(eff, ctx, Sel::TriggerSpell, PlayerRef::You)?
+    } else {
+        return None;
+    };
     if !body.targets.is_empty() || body.modal.is_some() || !grants_to_spell(&body.effect) {
         return None;
     }

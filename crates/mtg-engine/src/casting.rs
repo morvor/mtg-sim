@@ -75,6 +75,14 @@ pub struct PlayGrant {
     pub terms: PlayTerms,
 }
 
+impl PlayGrant {
+    /// The player "your" in the permission's duration means ("until your next turn",
+    /// "until the end of their next turn", CR 611.2a): usually the player who gets it.
+    pub fn duration_player(&self) -> PlayerId {
+        self.terms.duration_player.unwrap_or(self.player)
+    }
+}
+
 /// Recorded in `CastInfo::paid` for a spell cast with an effect's permission for that card
 /// ([`PlayGrant`], "you may cast that card this turn") as the permission its controller
 /// chose to use (see `permissions.rs`).
@@ -264,6 +272,22 @@ pub fn cast_during_resolution_as(
             opt.method = CastMethod::Free;
         }
         opt.alt_cost = Some(Cost::free());
+    }
+    // "by paying {R}{R} in addition to its other costs" (CR 601.2b, 601.2f).
+    if let Some(extra) = g.resolution_extra_cost.clone() {
+        let mv = g
+            .face_characteristics(card, face)
+            .mana_cost
+            .as_ref()
+            .map_or(0, |m| m.mana_value_with_x(0));
+        let e = crate::permissions::spell_relative_cost(&extra, mv);
+        opt.extra_cost = Some(match opt.extra_cost.take() {
+            Some(mut c) => {
+                add_cost(&mut c, &e);
+                c
+            }
+            None => e,
+        });
     }
     // A land can't be cast, even by an effect that lets a player cast cards (CR 305.9).
     if g.option_characteristics(card, &opt).is_land() {
@@ -2055,7 +2079,22 @@ impl Game {
                     let ctx = Ctx::new(c.source, p);
                     self.eval_value(v, &ctx).max(0) as u32
                 });
-                c.terms.cost_increase + each
+                // "If that spell doesn't target a creature you control, it costs {8} more
+                // to cast this way" (its targets are chosen by now, CR 601.2c).
+                let unless = c
+                    .terms
+                    .cost_increase_unless_targets
+                    .as_ref()
+                    .map_or(0, |(n, f)| {
+                        let ctx = Ctx::new(c.source, p);
+                        let targets = Filter::Targets(Box::new(f.clone()));
+                        if self.matches(card, &targets, &ctx) {
+                            0
+                        } else {
+                            *n
+                        }
+                    });
+                c.terms.cost_increase + each + unless
             }
             None => crate::kw::play_permission_terms::cost_increase(self, card),
         };

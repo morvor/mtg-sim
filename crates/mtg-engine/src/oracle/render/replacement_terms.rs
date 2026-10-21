@@ -16,6 +16,13 @@ fn is_not_cast(c: &Condition) -> bool {
     matches!(c, Condition::Not(inner) if is_cast(inner))
 }
 
+/// "it wasn't cast or no mana was spent to cast it" (Primeval Spawn).
+fn is_not_cast_or_no_mana(c: &Condition) -> bool {
+    matches!(c, Condition::Or(v) if v.len() == 2 && is_not_cast(&v[0])
+        && matches!(&v[1], Condition::Compare(Value::Custom(n), Cmp::Eq, Value::Const(0))
+            if *n == crate::kw::cast_history::spent(crate::kw::cast_history::EVENT_OBJECT, "total")))
+}
+
 /// "it was cast": the object entering is a spell on the stack that was cast.
 fn is_cast(c: &Condition) -> bool {
     matches!(c, Condition::SelMatches(Sel::TriggerObject, Filter::And(v))
@@ -35,6 +42,32 @@ impl Renderer<'_> {
     pub(crate) fn qualified_replacement(&mut self, def: &ReplacementDef) -> Option<String> {
         use ReplacementAction as A;
         use ReplacementEvent as E;
+        // "Prevent all damage that would be dealt to a creature by another creature if
+        // they share a color." (Well-Laid Plans).
+        if let (
+            E::Where {
+                event,
+                cond: Condition::Custom(c),
+            },
+            A::Prevent,
+        ) = (&def.event, &def.action)
+        {
+            if c == crate::kw::damage_shares_a_color::SOURCE_AND_RECIPIENT_SHARE_A_COLOR {
+                if let E::Damage {
+                    source,
+                    to_players: None,
+                    to_objects: Some(to),
+                    combat_only: false,
+                } = event.as_ref()
+                {
+                    let to = self.noun_det(to, Det::A);
+                    let from = self.noun(source, Num::One);
+                    return Some(format!(
+                        "prevent all damage that would be dealt to {to} by another {from} if they share a color"
+                    ));
+                }
+            }
+        }
         match (&def.event, &def.action) {
             (
                 E::DiscardCausedBy { who, filter, by },
@@ -225,6 +258,13 @@ impl Renderer<'_> {
                 let then = self.replacement_then_move(d);
                 Some(format!("if {n} would enter and it wasn't cast, {then}"))
             }
+            (E::EntersBattlefield(f), c, A::MoveInstead(d)) if is_not_cast_or_no_mana(c) => {
+                let n = self.noun_det(f, Det::A);
+                let then = self.replacement_then_move(d);
+                Some(format!(
+                    "if {n} would enter and it wasn't cast or no mana was spent to cast it, {then}"
+                ))
+            }
             // "Creatures played by your opponents enter tapped."
             (E::EntersBattlefield(f), c, A::EnterTapped) if is_played(c) => {
                 let Filter::And(v) = f else {
@@ -259,6 +299,17 @@ impl Renderer<'_> {
                 let e = self.effect(e);
                 Some(format!(
                     "the first time {w} would draw a card each turn, instead {e}"
+                ))
+            }
+            // "The first time you would draw a card each turn except the first card you
+            // draw during each of your draw steps, you draw four cards instead."
+            (E::Draw(PlayerFilter::And(v)), Condition::Custom(n), A::Instead(e))
+                if n == crate::kw::first_draw_except_draw_step::FIRST_DRAW_EXCEPT_DRAW_STEP
+                    && matches!(v.as_slice(), [PlayerFilter::You, PlayerFilter::Not(_)]) =>
+            {
+                let e = self.effect(e);
+                Some(format!(
+                    "the first time you would draw a card each turn except the first card you draw during each of your draw steps, {e} instead"
                 ))
             }
             _ => None,

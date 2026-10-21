@@ -1103,6 +1103,18 @@ pub(crate) fn damage_action(
         let sel = redirect_to(r.strip_suffix(" instead")?, b)?;
         return Some((ReplacementAction::Redirect(sel), true));
     }
+    // "it deals that damage to you instead" (Goblin Psychopath): redirected to another
+    // recipient (CR 614.9).
+    if let Some(r) = s
+        .strip_prefix("it deals that damage to ")
+        .or_else(|| s.strip_prefix("that source deals that damage to "))
+        .and_then(|r| r.strip_suffix(" instead"))
+    {
+        if !matches!(r, "its controller" | "itself") {
+            let sel = redirect_to(r, b)?;
+            return Some((ReplacementAction::Redirect(sel), false));
+        }
+    }
     for p in [
         "it deals that damage to its controller instead",
         "that spell deals that damage to its controller instead",

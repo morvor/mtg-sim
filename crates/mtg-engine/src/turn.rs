@@ -334,9 +334,16 @@ impl Game {
         self.last_turn_history = std::mem::take(&mut self.history);
         self.history.began_at = self.next_timestamp;
         let events = std::mem::take(&mut self.turn_events);
+        self.game_events.extend(
+            events
+                .iter()
+                .filter(|e| crate::turn_start::kept_for_game(e))
+                .cloned(),
+        );
         if let Some(players) = ended {
             crate::history_query::record_turn(self, players, events);
         }
+        crate::turn_start::record(self);
         for p in self.active_players() {
             self.players[p.idx()].turns_taken += 1;
         }
@@ -1019,12 +1026,13 @@ impl Game {
         for o in self.objects.iter_mut() {
             o.goaded_by.retain(|p| *p != active);
         }
-        self.play_grants.retain(|g| !until(&g.duration, g.player));
+        self.play_grants
+            .retain(|g| !until(&g.duration, g.duration_player()));
         // "Until the end of your next turn, you may play that card."
         let turn = self.turn.number;
         for g in self.play_grants.iter_mut() {
             if matches!(g.duration, Duration::UntilEndOfYourNextTurn)
-                && g.player == active
+                && g.duration_player() == active
                 && g.turn < turn
             {
                 g.duration = Duration::EndOfTurn;
@@ -1093,7 +1101,8 @@ impl Game {
             .retain(|e| !until(&e.duration, e.controller));
         self.replacements
             .retain(|e| !until(&e.duration, e.controller));
-        self.play_grants.retain(|g| !until(&g.duration, g.player));
+        self.play_grants
+            .retain(|g| !until(&g.duration, g.duration_player()));
         self.dirty = true;
     }
 

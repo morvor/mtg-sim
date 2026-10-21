@@ -182,6 +182,7 @@ impl Renderer<'_> {
             }
             "that spell" => "cast {alt:it|that spell}".into(),
             "this ability" => "activate this ability".into(),
+            ch::ENTERING => "cast {alt:it|them}".into(),
             w => {
                 let slot: u8 = w.strip_prefix("target ")?.parse().ok()?;
                 let t = self.sel(&Sel::Target(slot), Case::Obj);
@@ -206,7 +207,7 @@ impl Renderer<'_> {
                 } else if let Some(t) = w.strip_prefix("source type:") {
                     let t = t.to_lowercase();
                     if one {
-                        format!("mana from {}", with_article(&t))
+                        format!("mana from {} {{alt:source|}}", with_article(&t))
                     } else {
                         format!("mana from {t}s")
                     }
@@ -230,7 +231,15 @@ impl Renderer<'_> {
             Self::spent_what(what, true)?
         };
         let on = self.spent_on(whose)?;
-        Some(format!("the {{alt:number|amount}} of {m} spent to {on}"))
+        // "for each mana from a Treasure that was spent to cast ~" (Spoils of the Hunt).
+        let that_was = if what.starts_with("source ") {
+            "{opt:that was} "
+        } else {
+            ""
+        };
+        Some(format!(
+            "the {{alt:number|amount}} of {m} {that_was}spent to {on}"
+        ))
     }
 
     /// A comparison of a spell's or ability's history with a number: "if this ability has

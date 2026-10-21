@@ -1797,12 +1797,25 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
         }
         "exile" => {
             let mut d = Destination::zone(ZoneKind::Exile);
-            if let Some(r) = after.strip_prefix(" face down") {
+            let mut r = after;
+            if let Some(x) = r.strip_prefix(" face down") {
                 d.face_down = true;
-                (false, d, r)
-            } else {
-                (false, d, after)
+                r = x;
             }
+            // "Exile one of them face down with a hatching counter on it" (The
+            // Dragon-Kami Reborn): with the counters as it's exiled (CR 122.6).
+            if d.face_down {
+                if let Some((with, x)) = r
+                    .strip_prefix(" with ")
+                    .and_then(|x| x.split_once(" on it").map(|(c, t)| (c, t)))
+                {
+                    let (kind, n) =
+                        super::etb_replacement_grammar::counters_on(&format!("{with} on it"))?;
+                    d.with_counters.push((kind, n));
+                    r = x;
+                }
+            }
+            (false, d, r)
         }
         "return" => {
             let r = after.trim_start();

@@ -24,18 +24,28 @@
 use super::FollowupPattern;
 use crate::ability::*;
 use crate::keywords::KeywordKind;
-use crate::mana::{ManaRestriction, SpendFilter, SpendPurpose};
+use crate::mana::{FaceUpWay, ManaRestriction, SpendFilter, SpendPurpose};
+
+/// "pay a mana cost to turn a manifested creature face up" (Qarsi Deceiver): one purpose.
+const MANIFEST_FACE_UP: &str = "pay a mana cost to turn a manifested creature face up";
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 
 /// Parses the purposes after "spend this mana only ".
 pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
-    let r = end(r).trim();
+    // "pay a mana cost to turn a manifested creature face up" is one purpose (its "to
+    // turn" doesn't start another).
+    let r = end(r)
+        .trim()
+        .replace(MANIFEST_FACE_UP, "pay manifest-face-up-cost");
     let words: Vec<&str> = r.split(' ').filter(|w| !w.is_empty()).collect();
     // Split at each "cast"/"activate" verb that starts a purpose.
     let mut chunks: Vec<(&str, Vec<&str>)> = Vec::new();
     for (i, w) in words.iter().enumerate() {
-        let starts = matches!(*w, "cast" | "activate" | "gain" | "pay" | "foretell" | "unlock")
+        let starts = matches!(
+            *w,
+            "cast" | "activate" | "gain" | "pay" | "foretell" | "unlock" | "turn"
+        )
             && (i == 0
                 || matches!(words[i - 1], "to" | "or" | "and" | "and/or")
                 || words[i - 1].ends_with(','));
@@ -75,6 +85,19 @@ pub fn parse_purposes(r: &str) -> Option<ManaRestriction> {
                 ManaRestriction::Purpose(SpendPurpose::UnlockDoor)
             }
             "unlock" => return None,
+            // "to turn permanents face up" (CR 116.2b): any way.
+            "turn"
+                if matches!(
+                    text,
+                    "permanents face up"
+                        | "a permanent face up"
+                        | "creatures face up"
+                        | "a creature face up"
+                ) =>
+            {
+                ManaRestriction::TurnFaceUp(None)
+            }
+            "turn" => return None,
             _ => activate_purpose(text)?,
         });
     }
@@ -146,6 +169,12 @@ fn pay_purpose(s: &str) -> Option<ManaRestriction> {
         "a cost that contains {c}" | "costs that contain {c}" => {
             ManaRestriction::CostWithColorless
         }
+        // Turning a face-down permanent face up one way (CR 702.37e, 701.40b).
+        "a morph cost" | "morph costs" => ManaRestriction::TurnFaceUp(Some(FaceUpWay::Morph)),
+        "a disguise cost" | "disguise costs" => {
+            ManaRestriction::TurnFaceUp(Some(FaceUpWay::Disguise))
+        }
+        "manifest-face-up-cost" => ManaRestriction::TurnFaceUp(Some(FaceUpWay::Manifest)),
         _ => return None,
     })
 }
@@ -324,7 +353,7 @@ pub fn restrict(e: &mut Effect, r: &ManaRestriction) -> bool {
             a && b && (contains_add_mana(then) || contains_add_mana(otherwise))
         }
         Effect::May { effect, .. } => restrict(effect, r),
-        Effect::PersistentMana(inner) => restrict(inner, r),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => restrict(inner, r),
         Effect::AddManaWithSpentTrigger { add, .. } => restrict(add, r),
         _ => false,
     }
@@ -340,7 +369,7 @@ pub fn contains_add_mana(e: &Effect) -> bool {
             then, otherwise, ..
         } => contains_add_mana(then) || contains_add_mana(otherwise),
         Effect::May { effect, .. } => contains_add_mana(effect),
-        Effect::PersistentMana(inner) => contains_add_mana(inner),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => contains_add_mana(inner),
         _ => false,
     }
 }

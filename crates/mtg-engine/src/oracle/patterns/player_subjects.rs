@@ -194,10 +194,20 @@ fn player_condition(r: &str, with: bool, b: &Builder) -> Option<(Condition, Stri
         if mentions_you(&cond) {
             continue;
         }
+        // "who cast a spell this turn with the same name as that card" (Grim Reminder).
+        if !with {
+            if let Some(c) = super::history_filters_4::past_with_referent(&cond, b) {
+                return Some((c, pred));
+            }
+        }
         let worded = if with {
             format!("you have {cond}")
         } else {
-            let Some(c) = as_you(&cond) else { continue };
+            // "who lost life this turn": a history clause, already about the player.
+            let Some(c) = as_you(&cond).or_else(|| super::history_filters_4::as_you_past(&cond))
+            else {
+                continue;
+            };
             format!("you {c}")
         };
         if let Some(c) = crate::oracle::statics::parse_condition(&worded, b.ctx) {
@@ -295,6 +305,15 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
                 if let Some(c) = r.strip_prefix(rel) {
                     let (cond, pred) = player_condition(c, with, b)?;
                     return Some((Subject::Each(who, Some(cond)), pred));
+                }
+            }
+            // "each player ~ attacked this turn", "each opponent dealt combat damage this
+            // game by a creature named ~" (`history_filters_4`): checked as each performs
+            // it ("you" is that player).
+            if let Some((pf, pred)) = super::history_filters_4::player_qualifier(r) {
+                if !r.starts_with("who ") {
+                    let cond = Condition::PlayerMatches(PlayerRef::You, pf);
+                    return Some((Subject::Each(who, Some(cond)), pred.trim_start().to_string()));
                 }
             }
             return Some((Subject::Each(who, None), r.to_string()));
