@@ -30,9 +30,9 @@ fn the_exiled_cards_may_be_played_until_the_end_of_the_next_turn_and_illegal_tar
     t.lands(P0, "Mountain", 4);
     let castable = |t: &mut TestGame| {
         t.g.turn.priority = Some(P0);
-        t.g.legal_actions(P0).iter().any(|a| {
-            matches!(a, Action::Cast { card, method: CastMethod::Normal } if *card == giant)
-        })
+        t.g.legal_actions(P0).iter().any(
+            |a| matches!(a, Action::Cast { card, method: CastMethod::Normal } if *card == giant),
+        )
     };
     assert!(castable(&mut t));
     t.advance_to(P1, Step::PrecombatMain);
@@ -41,4 +41,25 @@ fn the_exiled_cards_may_be_played_until_the_end_of_the_next_turn_and_illegal_tar
     t.advance_to(P1, Step::PrecombatMain);
     t.advance_to(P0, Step::PrecombatMain);
     assert!(!castable(&mut t));
+}
+
+/// Targets affecting different players are taken in APNAP order (CR 608.2f): the active
+/// player's own creature before the opponent, whatever order they were chosen in.
+#[test]
+fn targets_of_different_players_are_taken_in_apnap_order() {
+    cr!("608.2f", "101.4");
+    let mut t = TestGame::new(2);
+    // Craw Wurm (6/4) is P0's own; P0 is the active player.
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 9);
+    let eruption = t.hand(P0, "Soulfire Eruption");
+    t.cast(P0, eruption)
+        .targets(&[Entity::Player(P1), Entity::Object(wurm)])
+        .go();
+    t.resolve();
+    // The Wurm first: Hill Giant (4) destroys it; then Grizzly Bears (2) for P1.
+    assert!(!t.on_battlefield(wurm));
+    assert_eq!(t.life(P1), 18);
 }

@@ -4,8 +4,10 @@
 //! cards until the end of your next turn."
 //!
 //! The library can't be exiled from several times at once, so the targets are taken one
-//! at a time, in an order its controller chooses: for each, the top card is exiled and
-//! then the damage dealt (CR 608.2f example). Illegal targets are skipped (CR 608.2b).
+//! at a time (CR 608.2f and its example): in APNAP order of the affected players (a target
+//! player, or a target permanent's controller), and among the targets affecting the same
+//! player in an order the spell's controller chooses. For each, the top card is exiled and
+//! then the damage dealt. Illegal targets are skipped (CR 608.2b).
 
 use super::{map_effect, parse, ManualAbility};
 use crate::ability::{vars, Effect, PlayerRef, Sel, Value};
@@ -52,22 +54,39 @@ impl KeywordRules for Rules {
         }
         let mut remaining: Vec<Entity> = ctx.targets.first().cloned().unwrap_or_default();
         let mut exiled = Vec::new();
+        let order = g.apnap();
+        // The player a target affects: itself, or the permanent's controller.
+        let affected = |g: &Game, e: &Entity| -> usize {
+            let p = match e {
+                Entity::Player(p) => *p,
+                Entity::Object(o) => g.obj(*o).controller,
+            };
+            order.iter().position(|q| *q == p).unwrap_or(usize::MAX)
+        };
         while !remaining.is_empty() {
-            // The target being considered: chosen by the controller.
-            let next = if remaining.len() == 1 {
-                remaining[0]
+            // APNAP order first (the first player in it with a remaining target) ...
+            let first = remaining.iter().map(|e| affected(g, e)).min().unwrap_or(0);
+            let options: Vec<Entity> = remaining
+                .iter()
+                .copied()
+                .filter(|e| affected(g, e) == first)
+                .collect();
+            // ... then the target considered next among those: chosen by the controller.
+            let next = if options.len() == 1 {
+                options[0]
             } else {
                 g.ask_entities(
                     ctx.controller,
                     ctx.source,
                     "Choose the next target",
-                    remaining.clone(),
+                    options.clone(),
                     1,
                     1,
                 )
                 .first()
                 .copied()
-                .unwrap_or(remaining[0])
+                .filter(|e| options.contains(e))
+                .unwrap_or(options[0])
             };
             remaining.retain(|e| *e != next);
             g.exec(
