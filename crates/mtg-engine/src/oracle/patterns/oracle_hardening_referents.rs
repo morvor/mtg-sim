@@ -334,8 +334,19 @@ pub fn note_player_mention(text: &str, b: &mut Builder) {
     if is_no_referent(&b.it) {
         return;
     }
-    let owner = l.contains("its owner");
-    let controller = l.contains("its controller");
+    // "Target creature's owner shuffles it into their library. Then that player ...",
+    // "The owner of target artifact or creature ...": the player the subject names.
+    let target_owner = l.starts_with("the owner of target ")
+        || (l.starts_with("target ")
+            && l.split_once("'s owner ")
+                .is_some_and(|(x, _)| x.split(' ').count() <= 4));
+    let target_controller = l.starts_with("the controller of target ")
+        || (l.starts_with("target ")
+            && l.split_once("'s controller ")
+                .is_some_and(|(x, _)| x.split(' ').count() <= 4));
+    let owner = l.contains("its owner") || (target_owner && matches!(b.it, Sel::Target(_)));
+    let controller =
+        l.contains("its controller") || (target_controller && matches!(b.it, Sel::Target(_)));
     // Neither, or both (ambiguous).
     if owner == controller {
         return;

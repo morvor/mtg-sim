@@ -1334,6 +1334,14 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             {
                 let (sel, rest) = if let Some(z) = y.strip_prefix("the mana cost of ") {
                     referent(z, b)?
+                } else if let Some((who, z)) = y.split_once("' mana costs") {
+                    // "green mana symbols in those cards' mana costs" (Phosphorescent
+                    // Feast): all of them added up.
+                    let (sel, t) = referent(who, b)?;
+                    if !t.trim().is_empty() {
+                        return None;
+                    }
+                    (sel, z.to_string())
                 } else {
                     let (who, z) = split_possessive(y)
                         .or_else(|| y.strip_prefix("its ").map(|z| ("it", z)))?;
@@ -1652,6 +1660,11 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         || t.starts_with("then "))
     {
         return None;
+    }
+    // "the number of creatures tapped this way": those objects, each as it is now or as it
+    // last existed (one that left the battlefield still counts, CR 608.2h).
+    if let Some(v) = super::referents_values_4::count_this_way(&f) {
+        return Some((v, rest));
     }
     Some((Value::Count(f), rest))
 }

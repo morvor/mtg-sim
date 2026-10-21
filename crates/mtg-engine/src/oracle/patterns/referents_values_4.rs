@@ -7,6 +7,23 @@
 //!   [`vars::DAMAGED_PLAYERS`]; "they"/"that player" in the effect are those players.
 //! - "Players dealt damage this way can't cast noncreature spells this turn." (Aurelia's
 //!   Fury): the same players as the subject of an instruction.
+//! - "another permanent card" after "If you sacrificed a permanent this way" (Deadly
+//!   Brew): other than the card the sacrificed permanent became (CR 400.7).
+//! - Object phrases about results: "each creature dealt damage this way", "creatures
+//!   tapped this way", "each artifact that became a creature this way", "all cards exiled
+//!   this way" (recorded right after the exile, even with other instructions between).
+//! - Values: "[value] as you cast ~" (recorded as the spell becomes cast, CR 601.2i), "the
+//!   number of abilities from among [keywords] found among [objects]", "the difference
+//!   between A and B", "the difference between [objects]' powers", "its total toxic
+//!   value" (CR 702.164b), counts of objects affected "this way" (as they last existed).
+//! - Referents: "the chosen creature" after bolster (CR 701.39a), "the [description]" of
+//!   an earlier target ("the creature you control"), "the discarded card", "those cards"
+//!   of "If two or more of those cards have the same name" (CR 201.2a).
+//! - Results: "If that spell is countered this way", "If you didn't draw cards this way",
+//!   "If those creatures have total power 8 or greater", "If that player discards a card
+//!   this way" after "unless they [pay a cost]".
+//! - [`lookback`]: a sentence about an instruction of an earlier sentence, read against
+//!   all the instructions so far.
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -315,6 +332,9 @@ pub fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         return Some(v);
     }
     if let Some(v) = difference_between(s, b) {
+        return Some(v);
+    }
+    if let Some(v) = total_toxic_value(s, b) {
         return Some(v);
     }
     let i = s.find(" as you cast ~")?;
@@ -1016,3 +1036,480 @@ fn the_discarded_card(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "the discarded card, after a discard", priority: 160, apply: the_discarded_card } }
+
+/// "its total toxic value" (CR 702.164b): the sum of the N values of its toxic abilities
+/// (Goliath Hatchery: the creature the text chose).
+fn total_toxic_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let i = s.find(" total toxic value")?;
+    let who = &s[..i];
+    let rest = &s[i + " total toxic value".len()..];
+    let sel = match who {
+        "its" => {
+            if super::oracle_hardening_referents::is_no_referent(&b.it) {
+                return None;
+            }
+            b.it.clone()
+        }
+        w => {
+            let w = w.strip_suffix("'s")?;
+            let (sel, tail) = crate::oracle::effects::object_ref(w, b)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            sel
+        }
+    };
+    Some((
+        crate::kw::referents_values_4::total_toxic_value(&sel),
+        rest.to_string(),
+    ))
+}
+
+/// The creature a "for each creature ... with power greater than that creature's base
+/// power" instruction is about.
+const EACH_GREATER: Var = vars::USER + 14_008;
+
+/// "For each creature you control with power greater than that creature's base power, put
+/// a number of +1/+1 counters on that creature equal to the difference." (Sovereign
+/// Okinec Ahau): each such creature gets its power minus its base power in counters, the
+/// creatures and amounts determined as the instruction begins (CR 608.2h).
+fn for_each_greater_than_base_power(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("for each ")?;
+    let (group, x) = r.split_once(" with power greater than that creature's base power, ")?;
+    let (counters, tail) = x
+        .strip_prefix("put a number of ")?
+        .split_once(" counters on that creature equal to the difference")?;
+    if !tail.is_empty() {
+        return None;
+    }
+    let kind = crate::oracle::costs::counter_kind(&format!("{counters} counters"))?.0;
+    let (f, false, rest) = crate::oracle::phrases::parse_object_phrase(group)? else {
+        return None;
+    };
+    if !end(rest).is_empty() {
+        return None;
+    }
+    let _ = b;
+    let tested = Sel::Var(vars::TESTED);
+    let greater = Filter::ValueCmp(
+        Box::new(Value::PowerOf(Box::new(tested.clone()))),
+        Cmp::Gt,
+        Box::new(Value::BasePowerOf(Box::new(tested))),
+    );
+    let me = Sel::Var(EACH_GREATER);
+    let amounts: Var = vars::USER + 14_009;
+    Some(Effect::ForEach {
+        sel: Sel::All(Filter::and(vec![f, greater])),
+        var: EACH_GREATER,
+        effect: Box::new(Effect::seq(vec![
+            Effect::StoreValue {
+                var: amounts,
+                value: Value::Diff(
+                    Box::new(Value::PowerOf(Box::new(me.clone()))),
+                    Box::new(Value::BasePowerOf(Box::new(me.clone()))),
+                ),
+            },
+            Effect::AddCounters {
+                what: me,
+                kind,
+                n: Value::Var(amounts),
+            },
+        ])),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "for each creature with power greater than its base power, counters equal to the difference", priority: 140, parse: for_each_greater_than_base_power } }
+
+/// "the number of [objects] tapped this way" etc.: a count of the objects an earlier
+/// instruction affected (the "this way" filters of this grammar), each judged as it is now
+/// or as it last existed (CR 608.2h): `CountSel(Matching(var, rest))`.
+pub fn count_this_way(f: &Filter) -> Option<Value> {
+    let parts: Vec<Filter> = match f {
+        Filter::And(v) => v.clone(),
+        other => vec![other.clone()],
+    };
+    let is_var = |x: &Filter| match x {
+        Filter::In(s) => match s.as_ref() {
+            Sel::Var(v) => [vars::TAPPED, vars::DAMAGED, vars::MODIFIED, EXILED_SNAPSHOT]
+                .contains(v)
+                .then_some(*v),
+            _ => None,
+        },
+        _ => None,
+    };
+    let var = parts.iter().find_map(is_var)?;
+    let rest: Vec<Filter> = parts.into_iter().filter(|x| is_var(x).is_none()).collect();
+    let rest = match rest.len() {
+        0 => Filter::Any,
+        1 => rest.into_iter().next().unwrap_or(Filter::Any),
+        _ => Filter::And(rest),
+    };
+    Some(Value::CountSel(Box::new(Sel::Matching(
+        Box::new(Sel::Var(var)),
+        rest,
+    ))))
+}
+
+/// "Target player discards a card unless they put a card from their hand on top of their
+/// library. If that player discards a card this way, ~ deals 1 damage to each creature
+/// and each player." (Tainted Specter): whether the discard the previous instruction may
+/// perform (as the alternative to a cost the player didn't pay) happened.
+fn if_that_player_discards_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(x) = [
+        "if that player discards a card this way, ",
+        "if they discard a card this way, ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p)) else {
+        return false;
+    };
+    fn nested_discard(e: &Effect) -> bool {
+        match e {
+            Effect::AsPlayer { effect, .. } => nested_discard(effect),
+            Effect::PayOptional {
+                then, otherwise, ..
+            } => matches!(**then, Effect::Noop) && matches!(**otherwise, Effect::Discard { .. }),
+            _ => false,
+        }
+    }
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    if !last.is_some_and(nested_discard) {
+        return false;
+    }
+    let Some(e) = parse_clause(x, b) else {
+        return false;
+    };
+    let discarded = crate::discard_rules::DISCARDED;
+    let mut v = match std::mem::replace(prev, Effect::Noop) {
+        Effect::Seq(v) => v,
+        other => vec![other],
+    };
+    let i = v.len() - 1;
+    // Nothing was discarded unless the instruction discards now.
+    v.insert(
+        i,
+        Effect::Store {
+            var: discarded,
+            sel: Sel::None,
+        },
+    );
+    v.push(Effect::If {
+        cond: Condition::SelNonEmpty(Sel::Var(discarded)),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::Seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if that player discards a card this way (unless a cost), [effect]", priority: 140, apply: if_that_player_discards_this_way } }
+
+thread_local! {
+    static REVEALED_REWORDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether `e` ends with revealing the top card of a library (which "that card" then
+/// names).
+fn ends_with_top_reveal(e: &Effect) -> bool {
+    match e {
+        Effect::Dig {
+            reveal: true,
+            n: Value::Const(1),
+            ..
+        } => true,
+        Effect::AsPlayer { effect, .. } => ends_with_top_reveal(effect),
+        Effect::Seq(v) => v.last().is_some_and(ends_with_top_reveal),
+        _ => false,
+    }
+}
+
+/// "Target opponent reveals the top card of their library. ~ deals damage equal to the
+/// revealed card's mana value to that player ..." (Cerebral Eruption): "the revealed card"
+/// is the card just revealed, as "that card" names it.
+fn the_revealed_card(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if REVEALED_REWORDING.with(|c| c.get()) {
+        return false;
+    }
+    let l = end(l);
+    if !l.contains("the revealed card") || !ends_with_top_reveal(prev) {
+        return false;
+    }
+    let t = l
+        .replace("the revealed card's", "that card's")
+        .replace("the revealed card", "that card");
+    REVEALED_REWORDING.with(|c| c.set(true));
+    let e = crate::oracle::effects::parse_sentence(&t, b);
+    REVEALED_REWORDING.with(|c| c.set(false));
+    let Some(e) = e else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        other => Effect::seq(vec![other, e]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "the revealed card (the top card just revealed)", priority: 160, apply: the_revealed_card } }
+
+/// "Whenever ~ deals combat damage to a player, exile up to that many target cards from
+/// their graveyard." (Froghemoth): in an imperative instruction of an ability that
+/// triggers on dealing damage to a player, "their" is that player.
+fn their_is_the_damaged_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" from their graveyard")
+        || !matches!(b.it_player, PlayerRef::TriggerPlayer)
+        || !["exile ", "return ", "put "]
+            .iter()
+            .any(|v| l.starts_with(v))
+    {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("deals combat damage to a player, ")
+        && !raw.contains("deals damage to a player, ")
+    {
+        return None;
+    }
+    let t = l.replace(" from their graveyard", " from that player's graveyard");
+    parse_clause(&t, b)
+}
+
+inventory::submit! { super::EffectPattern { name: "their graveyard (the damaged player's)", priority: 990, parse: their_is_the_damaged_player } }
+
+/// "Count the colors of the sacrificed creature, then search your library for a creature
+/// card that's exactly that many colors plus one." (Evolving Door): a card with exactly
+/// one more color than the object (CR 105.2; the count is of the object as it last
+/// existed).
+fn count_colors_then_search(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("count the colors of ")?;
+    let (who, search) = r.split_once(", then ")?;
+    let (search, more) = search.split_once(" that's exactly that many colors")?;
+    let plus = match more {
+        "" => 0,
+        " plus one" => 1,
+        " plus two" => 2,
+        _ => return None,
+    };
+    let (sel, tail) = super::filters_relational::object_in(who)?;
+    if !tail.trim().is_empty() || matches!(sel, Sel::All(_)) {
+        return None;
+    }
+    let mut e = parse_clause(search, b)?;
+    let colors = |s: Sel| Value::DistinctAmong(Among::Colors, Box::new(s));
+    let f = Filter::ValueCmp(
+        Box::new(colors(Sel::Var(vars::TESTED))),
+        Cmp::Eq,
+        Box::new(Value::Sum(vec![colors(sel), Value::c(plus)])),
+    );
+    let Effect::Search { filter, .. } = &mut e else {
+        return None;
+    };
+    *filter = Filter::and(vec![filter.clone(), f]);
+    Some(e)
+}
+
+inventory::submit! { super::EffectPattern { name: "count the colors of X, then search for a card that's exactly that many colors plus one", priority: 140, parse: count_colors_then_search } }
+
+thread_local! {
+    static TRAILING_IF: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "Mill two cards, then destroy the chosen permanent if its mana value is less than or
+/// equal to the number of cards in your graveyard." (Quag Feast): an instruction with a
+/// condition after it, as the second half of a clause; the condition is checked as the
+/// instruction would be performed, its pronouns as the instruction reads them.
+fn instruction_if_condition(l: &str, b: &mut Builder) -> Option<Effect> {
+    if TRAILING_IF.with(|c| c.get()) {
+        return None;
+    }
+    let l = end(l);
+    let (x, c) = l.rsplit_once(" if ")?;
+    if x.contains(" if ") || c.contains(", ") || c.starts_with("you do") || c.starts_with("able") {
+        return None;
+    }
+    // Only an instruction about an object the text named before ("the chosen permanent").
+    if !(x.starts_with("destroy the ") || x.starts_with("exile the ")) {
+        return None;
+    }
+    TRAILING_IF.with(|f| f.set(true));
+    let saved = (b.targets.len(), b.it.clone());
+    let e = parse_clause(x, b);
+    let cond = e
+        .as_ref()
+        .and_then(|_| super::conditions_referents::parse_condition_with(c, b));
+    TRAILING_IF.with(|f| f.set(false));
+    let (Some(e), Some(cond)) = (e, cond) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "destroy the [named object] if [condition] (in a clause)", priority: 995, parse: instruction_if_condition } }
+
+/// "For each player, choose target permanent that player controls. Those players
+/// sacrifice those permanents." (Vaevictis Asmadi, the Dire): each target is sacrificed by
+/// its controller (CR 701.21a), all at once.
+fn those_players_sacrifice_those_permanents(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "those players sacrifice those permanents" {
+        return None;
+    }
+    let k = b
+        .targets
+        .iter()
+        .rposition(|t| t.per_player.is_some() && matches!(t.what, TargetKind::Object(_)))?;
+    Some(Effect::SacrificeObjects {
+        what: Sel::Target(k as u8),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "those players sacrifice those permanents (per-player targets)", priority: 140, parse: those_players_sacrifice_those_permanents } }
+
+/// "Each player who sacrificed a permanent this way reveals the top card of their library,
+/// then puts it onto the battlefield if it's a permanent card." (Vaevictis Asmadi): each
+/// controller of a permanent the previous instruction sacrificed (as it last existed),
+/// performing the rest of the sentence in turn.
+fn each_player_who_sacrificed(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(rest) = l.strip_prefix("each player who sacrificed a permanent this way ") else {
+        return false;
+    };
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    if !matches!(
+        last,
+        Some(Effect::SacrificeObjects { .. } | Effect::Sacrifice { .. })
+    ) {
+        return false;
+    }
+    let saved = b.it_player.clone();
+    b.it_player = PlayerRef::Iterated;
+    // Read as that player's own instructions ("reveal the top card of your library, then
+    // put it onto the battlefield ...").
+    let (v, r) = rest.split_once(' ').unwrap_or((rest, ""));
+    let base = v.strip_suffix('s').unwrap_or(v);
+    let text = format!("{base} {r}")
+        .replace(" their ", " your ")
+        .replace(", then puts ", ", then put ");
+    let body = crate::oracle::effects::parse_clause(&text, b).map(|e| Effect::AsPlayer {
+        who: PlayerRef::Iterated,
+        effect: Box::new(e),
+    });
+    b.it_player = saved;
+    let Some(body) = body else {
+        return false;
+    };
+    let who = PlayerRef::Each(PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(
+        Box::new(Sel::Var(vars::SACRIFICED)),
+    ))));
+    let e = Effect::ForEachPlayer {
+        who,
+        effect: Box::new(body),
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        other => Effect::seq(vec![other, e]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "each player who sacrificed a permanent this way [does something]", priority: 140, apply: each_player_who_sacrificed } }
+
+/// "Exile all other cards revealed this way, and you lose 1 life for each of the exiled
+/// cards." (Spoils of the Vault): the cards the exile instruction just exiled, counted
+/// after it (CR 608.2c).
+fn exile_and_life_for_each(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some((x, life)) = l.split_once(", and you ") else {
+        return false;
+    };
+    let (gain, r) = if let Some(r) = life.strip_prefix("lose ") {
+        (false, r)
+    } else if let Some(r) = life.strip_prefix("gain ") {
+        (true, r)
+    } else {
+        return false;
+    };
+    let Some((n, r)) = crate::oracle::phrases::parse_number(r) else {
+        return false;
+    };
+    if n.as_const().is_none()
+        || r.trim() != "life for each of the exiled cards"
+        || !x.starts_with("exile ")
+    {
+        return false;
+    }
+    // The exile, read as the sentence it begins (it may refer to the previous one).
+    let mut trial = prev.clone();
+    let alone = if crate::oracle_ext::apply_followup_ext(x, &mut trial, b) {
+        None
+    } else {
+        match crate::oracle::effects::parse_sentence(x, b) {
+            Some(e) => Some(e),
+            None => return false,
+        }
+    };
+    let count = Value::Mul(
+        Box::new(n),
+        Box::new(Value::CountSel(Box::new(Sel::Var(vars::IT)))),
+    );
+    let life = if gain {
+        Effect::GainLife {
+            who: PlayerRef::You,
+            n: count,
+        }
+    } else {
+        Effect::LoseLife {
+            who: PlayerRef::You,
+            n: count,
+        }
+    };
+    let mut v = match alone {
+        None => match trial {
+            Effect::Seq(v) => v,
+            other => vec![other],
+        },
+        Some(e) => {
+            let mut v = match std::mem::replace(prev, Effect::Noop) {
+                Effect::Seq(v) => v,
+                other => vec![other],
+            };
+            v.push(e);
+            v
+        }
+    };
+    // Only right after an exile instruction ("the exiled cards" are what it exiled).
+    let last_exiles = v
+        .last()
+        .is_some_and(|e| serde_json::to_string(e).is_ok_and(|j| j.contains("\"Exile\"")));
+    if !last_exiles {
+        return false;
+    }
+    v.push(life);
+    *prev = Effect::Seq(v);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "exile ..., and you lose N life for each of the exiled cards", priority: 140, apply: exile_and_life_for_each } }

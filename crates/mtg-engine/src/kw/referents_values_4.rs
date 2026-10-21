@@ -12,8 +12,8 @@ use crate::types::*;
 
 /// `Value::Custom` name prefix (then a JSON `Value`): the value as the spell became cast
 /// ("the greatest power among creatures you controlled as you cast ~", CR 601.2i,
-/// 608.2h). Recorded in the spell's `CastInfo::paid` as it becomes cast; a copy wasn't
-/// cast (CR 707.10), so it has no record and the value is 0.
+/// 608.2h). Recorded in the spell's `CastInfo::paid` as it becomes cast; before that (as
+/// it's being cast) the value is the current one.
 pub const AS_CAST_VALUE: &str = "rv4:as cast:";
 /// Separates the value's name from the number recorded in `CastInfo::paid`.
 const SEP: char = '\u{1f}';
@@ -70,6 +70,21 @@ pub fn shares_creature_type_with_each(sel: &crate::ability::Sel) -> crate::abili
     )
 }
 
+/// `Value::Custom` name prefix (then a JSON `Sel`): the total toxic value of the selected
+/// objects (CR 702.164b).
+pub const TOTAL_TOXIC: &str = "rv4:total toxic value:";
+
+/// The value "[objects]'s total toxic value".
+pub fn total_toxic_value(sel: &crate::ability::Sel) -> crate::ability::Value {
+    crate::ability::Value::Custom(
+        format!(
+            "{TOTAL_TOXIC}{}",
+            serde_json::to_string(sel).unwrap_or_default()
+        )
+        .into(),
+    )
+}
+
 pub struct ReferentsValues4;
 
 impl KeywordRules for ReferentsValues4 {
@@ -104,18 +119,43 @@ impl KeywordRules for ReferentsValues4 {
     }
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if let Some(json) = name.strip_prefix(TOTAL_TOXIC) {
+            let Ok(sel) = serde_json::from_str::<crate::ability::Sel>(json) else {
+                return Some(0);
+            };
+            let total: i64 = g
+                .eval_sel_objects(&sel, ctx)
+                .into_iter()
+                .map(|o| {
+                    g.obj(o)
+                        .chars
+                        .keywords()
+                        .filter(|k| k.kind == KeywordKind::Toxic)
+                        .map(|k| k.n.unwrap_or(0) as i64)
+                        .sum::<i64>()
+                })
+                .sum();
+            return Some(total);
+        }
         if !name.starts_with(AS_CAST_VALUE) {
             return None;
         }
-        let spell = ctx.stack_obj.or(ctx.source)?;
         let key = format!("{name}{SEP}");
-        let found = g.obj(spell).stack.as_ref().and_then(|si| {
-            si.cast
-                .paid
-                .iter()
-                .find_map(|x| x.strip_prefix(key.as_str()).and_then(|n| n.parse().ok()))
+        let found = ctx.stack_obj.or(ctx.source).and_then(|spell| {
+            g.obj(spell).stack.as_ref().and_then(|si| {
+                si.cast
+                    .paid
+                    .iter()
+                    .find_map(|x| x.strip_prefix(key.as_str()).and_then(|n| n.parse().ok()))
+            })
         });
-        Some(found.unwrap_or(0))
+        // Not recorded yet: the spell is being cast now (its targets and the division of
+        // its damage are chosen before it becomes cast, CR 601.2c-d, 601.2i).
+        Some(found.unwrap_or_else(|| {
+            name.strip_prefix(AS_CAST_VALUE)
+                .and_then(|json| serde_json::from_str::<crate::ability::Value>(json).ok())
+                .map_or(0, |v| g.eval_value(&v, ctx))
+        }))
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {

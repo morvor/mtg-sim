@@ -1582,3 +1582,386 @@ fn ultra_magnus_converts_if_the_attackers_have_total_power_eight() {
         assert_eq!(t.obj_now(um).face == FaceState::Front, converts, "{extra}");
     }
 }
+
+#[test]
+fn grimoire_thief_counters_spells_with_the_exiled_cards_names() {
+    cr!("201.2", "607.2a");
+    compiles("Grimoire Thief");
+    let mut t = TestGame::new(2);
+    let thief = t.battlefield(P0, "Grimoire Thief");
+    t.library_top(P1, "Shock");
+    t.lands(P1, "Mountain", 2);
+    t.lands(P0, "Island", 1);
+    let shock = t.hand(P1, "Shock");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.tap(thief);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    // P1 casts Shock and Lightning Bolt; the Thief's ability counters only the Shock.
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, shock).target(Entity::Player(P0)).go();
+    t.cast(P1, bolt).target(Entity::Player(P0)).go();
+    t.activate(P0, thief, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17, "only Lightning Bolt resolved");
+}
+
+#[test]
+fn holistic_wisdom_needs_a_shared_card_type_with_the_exiled_card() {
+    cr!("400.7j", "205.2a");
+    compiles("Holistic Wisdom");
+    for (exiled, back) in [("Hill Giant", true), ("Shock", false)] {
+        let mut t = TestGame::new(2);
+        let wisdom = t.battlefield(P0, "Holistic Wisdom");
+        t.lands(P0, "Forest", 2);
+        let ex = t.hand(P0, exiled);
+        let bear = t.graveyard(P0, "Grizzly Bears");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_choose(P0, &[Entity::Object(ex)]);
+        t.activate(P0, wisdom, 0, &[Entity::Object(bear)]).unwrap();
+        t.resolve_all();
+        assert!(t.in_exile(exiled));
+        assert_eq!(t.in_hand(P0, "Grizzly Bears"), back, "{exiled}");
+    }
+}
+
+#[test]
+fn goliath_hatchery_draws_the_chosen_creatures_total_toxic_value() {
+    cr!("702.164b");
+    compiles("Goliath Hatchery");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Goliath Hatchery");
+    let nurse = t.battlefield(P0, "Plague Nurse");
+    t.g.add_counters(Entity::Player(P1), "poison", 3, None);
+    t.advance_to(P1, Step::End);
+    let before = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Object(nurse)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    // Toxic 2: two cards (the draw step hasn't happened yet).
+    assert_eq!(t.hand_size(P0), before + 2);
+}
+
+#[test]
+fn phosphorescent_feast_counts_green_symbols_in_the_revealed_cards() {
+    cr!("107.4e", "701.20a");
+    compiles("Phosphorescent Feast");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let a = t.hand(P0, "Craw Wurm"); // {4}{G}{G}
+    let b = t.hand(P0, "Grizzly Bears"); // {1}{G}
+    t.hand(P0, "Llanowar Elves"); // not revealed
+    let feast = t.hand(P0, "Phosphorescent Feast");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.cast(P0, feast).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 26, "2 life for each of three green symbols");
+}
+
+#[test]
+fn sovereign_okinec_ahau_counters_equal_to_power_over_base_power() {
+    cr!("208.3", "608.2h");
+    compiles("Sovereign Okinec Ahau");
+    let mut t = TestGame::new(2);
+    let ahau = t.battlefield(P0, "Sovereign Okinec Ahau");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Glorious Anthem");
+    t.g.add_counters(Entity::Object(bear), "+1/+1", 2, None);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.attack(&[(ahau, Entity::Player(P1))], &[]);
+    // Bears: 5 power, base 2: three more counters. Elves: 2 power, base 1: one.
+    assert_eq!(t.counters(bear, "+1/+1"), 5);
+    assert_eq!(t.counters(elf, "+1/+1"), 1);
+}
+
+#[test]
+fn colfenors_urn_returns_the_cards_exiled_with_it() {
+    cr!("607.2a", "608.2c");
+    compiles("Colfenor's Urn");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Colfenor's Urn");
+    let wurms: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Craw Wurm")).collect();
+    t.advance_to(P0, Step::PrecombatMain);
+    for w in &wurms {
+        t.answer_yes(P0, true);
+        t.g.destroy(*w, None);
+        t.settle();
+        t.resolve_all();
+    }
+    assert!(t.named_on_battlefield("Craw Wurm").is_empty());
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Colfenor's Urn"));
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 3);
+}
+
+#[test]
+fn specters_shriek_exiles_from_your_hand_if_a_nonblack_card_was_exiled() {
+    cr!("608.2c");
+    compiles("Specter's Shriek");
+    for (card, mine) in [("Grizzly Bears", true), ("Hypnotic Specter", false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 1);
+        let theirs = t.hand(P1, card);
+        t.hand(P0, "Llanowar Elves");
+        let shriek = t.hand(P0, "Specter's Shriek");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(theirs)]);
+        t.cast(P0, shriek).target(Entity::Player(P1)).go();
+        t.resolve_all();
+        assert!(t.in_exile(card));
+        assert_eq!(t.in_exile("Llanowar Elves"), mine, "{card}");
+    }
+}
+
+#[test]
+fn zack_fair_passes_its_counters_and_equipment_on() {
+    cr!("122.8", "608.2h");
+    compiles("Zack Fair");
+    let mut t = TestGame::new(2);
+    let zack = t.battlefield(P0, "Zack Fair");
+    t.g.add_counters(Entity::Object(zack), "+1/+1", 2, None);
+    let sword = t.battlefield(P0, "Bonesplitter");
+    t.g.attach(sword, Entity::Object(zack));
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 1);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(sword)]);
+    t.activate(P0, zack, 0, &[Entity::Object(bear)]).unwrap();
+    t.resolve_all();
+    assert!(!t.on_battlefield(zack));
+    assert_eq!(t.counters(bear, "+1/+1"), 2);
+    assert_eq!(t.g.obj(sword).attached_to, Some(Entity::Object(bear)));
+    assert!(t
+        .obj_now(bear)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Indestructible));
+}
+
+#[test]
+fn tainted_specter_deals_damage_only_if_the_player_discarded() {
+    cr!("118.12", "608.2c");
+    compiles("Tainted Specter");
+    for (put, damage) in [(false, true), (true, false)] {
+        let mut t = TestGame::new(2);
+        let specter = t.battlefield(P0, "Tainted Specter");
+        t.lands(P0, "Swamp", 3);
+        t.hand(P1, "Grizzly Bears");
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_yes(P1, put);
+        t.activate(P0, specter, 0, &[Entity::Player(P1)]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.hand_size(P1), 0);
+        let hurt = if damage { 1 } else { 0 };
+        assert_eq!(t.life(P1), 20 - hurt, "{put}");
+        assert_eq!(t.life(P0), 20 - hurt);
+        assert_eq!(t.g.obj(giant).damage, hurt as u32);
+    }
+}
+
+#[test]
+fn cerebral_eruption_uses_the_revealed_cards_mana_value() {
+    cr!("701.20a", "608.2c");
+    compiles("Cerebral Eruption");
+    for (top, dmg, back) in [("Hill Giant", 4, false), ("Forest", 0, true)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 4);
+        t.library_top(P1, top);
+        let bear = t.battlefield(P1, "Grizzly Bears");
+        let mine = t.battlefield(P0, "Llanowar Elves");
+        let spell = t.hand(P0, "Cerebral Eruption");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.cast(P0, spell).target(Entity::Player(P1)).go();
+        t.resolve_all();
+        assert_eq!(t.life(P1), 20 - dmg, "{top}");
+        assert_eq!(t.on_battlefield(bear), dmg < 2);
+        assert!(t.on_battlefield(mine), "only that player's creatures");
+        assert_eq!(t.in_hand(P0, "Cerebral Eruption"), back);
+    }
+}
+
+#[test]
+fn froghemoth_exiles_up_to_that_many_cards_from_the_damaged_players_graveyard() {
+    cr!("510.2", "608.2c");
+    compiles("Froghemoth");
+    let mut t = TestGame::new(2);
+    let frog = t.battlefield(P0, "Froghemoth");
+    let a = t.graveyard(P1, "Grizzly Bears");
+    let b = t.graveyard(P1, "Shock");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.attack(&[(frog, Entity::Player(P1))], &[]);
+    assert!(t.in_exile("Grizzly Bears") && t.in_exile("Shock"));
+    assert_eq!(t.counters(frog, "+1/+1"), 1, "one creature card");
+    assert_eq!(t.life(P0), 21, "one noncreature card");
+}
+
+#[test]
+fn zoyowas_justice_lets_the_owner_discover_the_mana_value() {
+    cr!("701.57a", "608.2h");
+    compiles("Zoyowa's Justice");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    // P1's library: lands and a Hill Giant (mana value 4).
+    t.g.player_mut(P1).library.clear();
+    t.library_top(P1, "Hill Giant");
+    for _ in 0..5 {
+        t.library_top(P1, "Forest");
+    }
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Zoyowa's Justice");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(bear).go();
+    t.resolve_all();
+    // Discover 2 (the Bears' mana value): the Giant is skipped, the Bears found again.
+    let bears_back = t.on_battlefield(t.g.current(bear))
+        || !t.named_on_battlefield("Grizzly Bears").is_empty()
+        || t.in_hand(P1, "Grizzly Bears");
+    assert!(bears_back, "{}", t.dump_log());
+    assert!(t.named_on_battlefield("Hill Giant").is_empty() && !t.in_hand(P1, "Hill Giant"));
+}
+
+#[test]
+fn haphazard_bombardment_destroys_one_of_those_permanents_at_random() {
+    cr!("603.4", "701.8a");
+    ruling!(
+        "Haphazard Bombardment",
+        "select the permanent destroyed at random from among the permanents with aim counters that don’t have indestructible"
+    );
+    compiles("Haphazard Bombardment");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Haphazard Bombardment");
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let myr = t.battlefield(P1, "Darksteel Myr");
+    let other = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(bear), "aim", 1, None);
+    t.g.add_counters(Entity::Object(myr), "aim", 1, None);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(
+        !t.on_battlefield(bear),
+        "the only one that can be destroyed"
+    );
+    assert!(t.on_battlefield(myr) && t.on_battlefield(other));
+}
+
+#[test]
+fn evolving_door_searches_for_one_more_color() {
+    cr!("105.2", "608.2h");
+    compiles("Evolving Door");
+    let mut t = TestGame::new(2);
+    let door = t.battlefield(P0, "Evolving Door");
+    t.lands(P0, "Forest", 1);
+    let bear = t.battlefield(P0, "Grizzly Bears"); // green
+    t.g.player_mut(P0).library.clear();
+    t.library_top(P0, "Craw Wurm"); // one color: not a match
+    let two = t.library_top(P0, "Kitchen Finks"); // two colors
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(bear)]);
+    t.answer_choose(P0, &[Entity::Object(two)]);
+    t.activate(P0, door, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_exile("Kitchen Finks") || !t.named_on_battlefield("Kitchen Finks").is_empty());
+    assert!(!t.in_exile("Craw Wurm"));
+}
+
+#[test]
+fn quag_feast_destroys_the_chosen_permanent_if_its_mana_value_is_low_enough() {
+    cr!("608.2c", "701.17a");
+    compiles("Quag Feast");
+    for (graveyard, destroyed) in [(3usize, true), (0, false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 2);
+        // Mill two: the graveyard then has 2 + the cards already there (+ Quag Feast is
+        // still on the stack).
+        for _ in 0..graveyard {
+            t.graveyard(P0, "Grizzly Bears");
+        }
+        let target = t.battlefield(P1, "Serra Angel"); // mana value 5
+        let spell = t.hand(P0, "Quag Feast");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.cast(P0, spell).target(target).go();
+        t.resolve_all();
+        assert_eq!(!t.on_battlefield(target), destroyed, "{graveyard}");
+    }
+}
+
+#[test]
+fn vaevictis_asmadi_each_player_who_sacrificed_reveals_and_may_get_a_permanent() {
+    cr!("701.21a", "608.2c");
+    compiles("Vaevictis Asmadi, the Dire");
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P0, "Vaevictis Asmadi, the Dire");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.library_top(P0, "Forest");
+    t.library_top(P1, "Shock");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.answer_targets(P0, &[Entity::Object(theirs)]);
+    t.attack(&[(dragon, Entity::Player(P1))], &[]);
+    assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P1, "Hill Giant"));
+    // P0 revealed a Forest (a permanent card): onto the battlefield. P1 revealed Shock.
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    assert!(t
+        .g
+        .player(P1)
+        .library
+        .last()
+        .is_some_and(|c| t.g.obj(*c).chars.name == "Shock"));
+}
+
+#[test]
+fn spoils_of_the_vault_loses_life_for_each_exiled_card() {
+    cr!("701.20a", "608.2c");
+    compiles("Spoils of the Vault");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 1);
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Shock");
+    let spoils = t.hand(P0, "Spoils of the Vault");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        mtg_engine::decision::Answer::Text("Forest".into()),
+    );
+    t.cast(P0, spoils).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Forest"));
+    assert!(t.in_exile("Shock") && t.in_exile("Grizzly Bears"));
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn mysterious_limousine_returns_the_other_exiled_cards() {
+    cr!("607.2a", "608.2c");
+    compiles("Mysterious Limousine");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Craw Wurm");
+    let crew = t.battlefield(P0, "Grizzly Bears");
+    let limo = t.battlefield(P0, "Mysterious Limousine");
+    for (turn, target) in [(0, a), (1, b)] {
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_choose(P0, &[Entity::Object(crew)]);
+        t.activate(P0, limo, 0, &[]).unwrap();
+        t.resolve_all();
+        t.answer_targets(P0, &[Entity::Object(target)]);
+        t.attack(&[(limo, Entity::Player(P1))], &[]);
+        if turn == 0 {
+            assert!(t.in_exile("Hill Giant"));
+            t.advance_to(P1, Step::End);
+        }
+    }
+    // The Wurm is exiled; the Giant, exiled with it before, returns.
+    assert!(t.in_exile("Craw Wurm"));
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}

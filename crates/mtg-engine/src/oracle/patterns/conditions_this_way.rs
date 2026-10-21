@@ -345,6 +345,8 @@ fn verb(v: &str) -> Option<Verb> {
             // "Each player reveals the top card of their library." (`kw/parley.rs` also
             // records the cards in `vars::REVEALED`).
             Effect::Custom(n) => n == crate::kw::parley::REVEAL_TOPS,
+            // "Target opponent reveals the top card of their library."
+            Effect::AsPlayer { effect, .. } => dig_reveal(effect),
             _ => false,
         }
     }
@@ -355,7 +357,9 @@ fn verb(v: &str) -> Option<Verb> {
             back: false,
         },
         "exiled" | "put into exile" | "exile" => Verb {
-            kind: |e| matches!(e, Effect::Exile { .. }),
+            // "exile up to one other target creature until ~ leaves the battlefield. If a
+            // creature is put into exile this way, ..." (Mysterious Limousine).
+            kind: |e| matches!(e, Effect::Exile { .. } | Effect::ExileUntil { .. }),
             var: vars::IT,
             back: false,
         },
@@ -641,6 +645,11 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if x.ends_with(" instead") || x.starts_with("instead ") {
         return false;
     }
+    // "each other card exiled with ~": other than the one this way, which "other" (not
+    // the source) doesn't say (`referents_instead_4`).
+    if x.contains("each other card exiled with") {
+        return false;
+    }
     let Some((f, verb, word, that, by_you, quant)) = this_way_condition_q(c) else {
         return false;
     };
@@ -661,7 +670,11 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let conditional_core = |e: &Effect| match e {
         Effect::If {
             then, otherwise, ..
-        } if matches!(**otherwise, Effect::Noop) => Some((**then).clone()),
+        } if matches!(**otherwise, Effect::Noop) => Some(match &**then {
+            // "If you do, that player exiles that card."
+            Effect::AsPlayer { effect, .. } => (**effect).clone(),
+            t => t.clone(),
+        }),
         _ => None,
     };
     let is_kind = |e: &Effect| match e {

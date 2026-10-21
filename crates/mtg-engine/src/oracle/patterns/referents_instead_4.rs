@@ -10,6 +10,17 @@
 //! - "{4}{U}{U}, Exile ~: Draw a card for each verse counter on ~. If it had seven or more
 //!   verse counters on it, ..." (Lost Isle Calling): "it" is the source, as it last
 //!   existed before its cost moved it.
+//! - "instead" alternatives: "If you win, you may put that creature on top of its owner's
+//!   library instead." after a clash and another instruction (CR 701.30d), "~ deals double
+//!   that damage instead", "~ deals 4 damage to each of those permanents and/or players
+//!   instead if ...", "you may put one of those cards ... onto the battlefield instead of
+//!   putting it into your hand", "If that land is a Plains, you may return that ... card to
+//!   the battlefield instead", an alternative that restates the whole effect (Once and
+//!   Future), "Otherwise, ..." after "If you win the flip" (CR 705.2);
+//! - the option of an additional cost that was paid ("If the modified creature was
+//!   sacrificed"), the card the cost moved ("the card exiled this way", "that card"),
+//!   "those cards" exiled with the source, "spells with those names", the source's
+//!   counters and Equipment after its cost removed it.
 
 use super::{ConditionPattern, FollowupPattern};
 use crate::ability::*;
@@ -931,3 +942,213 @@ fn spells_with_those_names(l: &str, prev: &mut Effect, b: &mut Builder) -> bool 
 }
 
 inventory::submit! { FollowupPattern { name: "counter all spells with those names", priority: 140, apply: spells_with_those_names } }
+
+thread_local! {
+    static THOSE_EXILED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "At the beginning of the end step, if three or more cards have been exiled with this
+/// artifact, sacrifice it. If you do, return those cards to the battlefield under their
+/// owner's control." (Colfenor's Urn): "those cards" are the cards exiled with the source
+/// that the condition counted (CR 607.2a).
+fn those_cards_exiled_with_source(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if THOSE_EXILED.with(|c| c.get()) {
+        return false;
+    }
+    let l = end(l);
+    if !l.contains("those cards") || b.named.iter().any(|(p, _)| p == "those cards") {
+        return false;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let cond_names = raw.split(['\n', '.']).any(|part| {
+        part.contains(", if ")
+            && (part.contains("cards have been exiled with ~")
+                || part.contains("cards have been exiled with this "))
+    });
+    if !cond_names {
+        return false;
+    }
+    // The cards the condition counted: those exiled with the source.
+    let t = l.replace("those cards", "all cards exiled with ~");
+    THOSE_EXILED.with(|c| c.set(true));
+    let mut trial = prev.clone();
+    let ok = crate::oracle_ext::apply_followup_ext(&t, &mut trial, b);
+    let e = if ok { None } else { parse_sentence(&t, b) };
+    THOSE_EXILED.with(|c| c.set(false));
+    if ok {
+        *prev = trial;
+        return true;
+    }
+    let Some(e) = e else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        other => Effect::seq(vec![other, e]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "those cards (exiled with the source, named by the condition)", priority: 30, apply: those_cards_exiled_with_source } }
+
+/// Whether the ability's cost removes its source from the battlefield ("Sacrifice ~:"),
+/// so that "~" in its effect is the source as it last existed (CR 608.2h).
+fn cost_removes_source(b: &Builder) -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let name = b.ctx.card_name.to_lowercase();
+    raw.lines().any(|l| {
+        l.split_once(": ").is_some_and(|(c, _)| {
+            ["~", "this ", name.as_str()]
+                .iter()
+                .filter(|n| !n.is_empty())
+                .any(|n| c.contains(&format!("sacrifice {n}")) || c.contains(&format!("exile {n}")))
+        })
+    })
+}
+
+/// "{1}, Sacrifice ~: ... Put ~'s counters on that creature and attach an Equipment that
+/// was attached to ~ to that creature." (Zack Fair): the counters the source had and an
+/// Equipment attached to it as it last existed on the battlefield (CR 122.8, 608.2h).
+fn source_counters_and_equipment(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !cost_removes_source(b) {
+        return None;
+    }
+    if let Some(r) = l.strip_prefix("put ~'s counters on ") {
+        let saved = (b.targets.len(), b.it.clone());
+        let (to, rest) = crate::oracle::effects::object_ref(r, b)?;
+        if !end(&rest).is_empty() || b.targets.len() != saved.0 {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            return None;
+        }
+        return Some(Effect::PutCountersOf {
+            from: Sel::This,
+            to,
+            kind: None,
+        });
+    }
+    let r = l.strip_prefix("attach an equipment that was attached to ~ to ")?;
+    let saved = (b.targets.len(), b.it.clone());
+    let (to, rest) = crate::oracle::effects::object_ref(r, b)?;
+    if !end(&rest).is_empty() || b.targets.len() != saved.0 {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    let equipment = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: Filter::and(vec![
+            Filter::In(Box::new(Sel::AttachedAsItLeft(Box::new(Sel::This)))),
+            Filter::Subtype("Equipment".into()),
+            Filter::InZone(ZoneKind::Battlefield),
+        ]),
+        count: Value::c(1),
+        up_to: false,
+        store: None,
+    };
+    Some(Effect::Attach {
+        what: equipment,
+        to,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "put ~'s counters on / attach an Equipment that was attached to ~ (source gone)", priority: 140, parse: source_counters_and_equipment } }
+
+/// The group an intervening "if" clause of the ability counts ("if two or more permanents
+/// you don't control have an aim counter on them"): the filter of those objects.
+fn intervening_group(noun: &str) -> Option<Filter> {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let i = raw.find(", if ")?;
+    let c = &raw[i + ", if ".len()..];
+    let c = c.split(", ").next()?;
+    let (n, r) = crate::oracle::phrases::parse_number(c)?;
+    n.as_const()?;
+    let r = r.trim_start().strip_prefix("or more ")?;
+    let (objects, counter) = r.split_once(" have ")?;
+    let k = counter
+        .strip_prefix("an ")
+        .or_else(|| counter.strip_prefix("a "))?
+        .strip_suffix(" counter on them")?;
+    if !objects.starts_with(noun) {
+        return None;
+    }
+    let (f, true, tail) = parse_object_phrase(objects)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Filter::and(vec![f, Filter::HasCounter(Some(k.into()))]))
+}
+
+/// "At the beginning of your end step, if two or more permanents you don't control have
+/// an aim counter on them, destroy one of those permanents at random." (Haphazard
+/// Bombardment): one of the objects the condition counted, chosen at random among those
+/// that can be destroyed (its ruling: not one with indestructible).
+fn destroy_one_of_those_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let noun = l
+        .strip_prefix("destroy one of those ")?
+        .strip_suffix(" at random")?;
+    if !b.in_trigger || noun.contains(' ') {
+        return None;
+    }
+    let f = intervening_group(noun)?;
+    Some(Effect::Destroy {
+        what: Sel::AtRandom {
+            filter: Filter::and(vec![
+                f,
+                Filter::not(Filter::HasKeyword(
+                    crate::keywords::KeywordKind::Indestructible,
+                )),
+            ]),
+            count: Value::c(1),
+            store: None,
+        },
+        no_regen: false,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "destroy one of those [objects] at random (the intervening if's group)", priority: 140, parse: destroy_one_of_those_at_random } }
+
+thread_local! {
+    static OTHER_EXILED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "Exile up to one other target creature until ~ leaves the battlefield. If a creature is
+/// put into exile this way, return each other card exiled with ~ to the battlefield under
+/// its owner's control." (Mysterious Limousine): the cards exiled with the source other
+/// than the one this instruction just exiled.
+fn each_other_card_exiled_with_source(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if OTHER_EXILED.with(|c| c.get()) {
+        return false;
+    }
+    let l = end(l);
+    let phrase = "each other card exiled with ~";
+    if !l.starts_with("if ") || !l.contains(" this way, ") || !l.contains(phrase) {
+        return false;
+    }
+    let others = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Linked)),
+        Filter::InZone(ZoneKind::Exile),
+        Filter::not(Filter::In(Box::new(Sel::Var(
+            super::conditions_this_way::SNAPSHOT,
+        )))),
+    ]));
+    let t = l.replace(phrase, "the other cards exiled with ~");
+    b.named
+        .push(("the other cards exiled with ~".to_string(), others));
+    OTHER_EXILED.with(|c| c.set(true));
+    let ok = super::conditions_this_way::if_this_way(&t, prev, b);
+    OTHER_EXILED.with(|c| c.set(false));
+    b.named
+        .retain(|(p, _)| p != "the other cards exiled with ~");
+    ok
+}
+
+inventory::submit! { FollowupPattern { name: "each other card exiled with ~ (after this way)", priority: 145, apply: each_other_card_exiled_with_source } }

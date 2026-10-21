@@ -799,6 +799,22 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())
             }
+            // "each creature tapped this way" (the most recent tap instruction or cost).
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::TAPPED)) => {
+                np.post.push("tapped this way".into())
+            }
+            // "each artifact that became a creature this way".
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::MODIFIED)) => {
+                np.post.push("that became a creature this way".into())
+            }
+            // "all cards exiled this way" (`referents_values_4`).
+            Filter::In(s)
+                if matches!(s.as_ref(), Sel::Var(v)
+                    if *v == crate::oracle::patterns::referents_values_4::EXILED_SNAPSHOT) =>
+            {
+                np.post.push("exiled this way".into());
+                np.kind.get_or_insert("card");
+            }
             // "a card exiled with ~": the cards an ability of this object exiled
             // (CR 607.2a).
             Filter::In(s) if matches!(s.as_ref(), Sel::Linked) => {

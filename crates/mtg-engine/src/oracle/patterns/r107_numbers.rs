@@ -201,7 +201,25 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
         // X used as the spell resolves: the value recorded as it became cast
         // (`referents_values_4::as_cast_snapshot`).
         let snap = super::referents_values_4::as_cast_snapshot(value_s, b)?;
-        return where_x_is_value_inner(&clause, snap, b, it, false);
+        let first_target = b.targets.len();
+        let before = (b.it.clone(), b.it_player.clone());
+        let Some(e) = where_x_is_value_inner(&clause, snap, b, it, false) else {
+            b.targets.truncate(first_target);
+            (b.it, b.it_player) = before;
+            return None;
+        };
+        // Not for the number of targets or a division chosen as the spell is cast (CR
+        // 601.2c-d): the value is recorded only once it has become cast (CR 601.2i).
+        let in_targets = b.targets[first_target.min(b.targets.len())..]
+            .iter()
+            .any(|t| serde_json::to_string(t).is_ok_and(|j| j.contains("rv4:as cast")));
+        let divided = serde_json::to_string(&e).is_ok_and(|j| j.contains("DealDividedDamage"));
+        if in_targets || divided {
+            b.targets.truncate(first_target);
+            (b.it, b.it_player) = before;
+            return None;
+        }
+        return Some(e);
     }
     where_x_is_parts(&clause, value_s, b, it)
 }
