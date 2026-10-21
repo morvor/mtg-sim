@@ -793,3 +793,65 @@ fn entered_face_down(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: a permanent entered the battlefield face down under your control this turn", priority: 900, parse: entered_face_down } }
+
+/// "..., if that player lost less than 8 life this turn, they lose life equal to the
+/// difference." (Lolth, Spider Queen's emblem): 8 minus the life they lost this turn.
+fn lost_less_than_the_difference(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let i = lower.find(", if that player lost less than ")?;
+    let r = &lower[i + ", if that player lost less than ".len()..];
+    let (n, rest) = r.split_once(" life this turn, ")?;
+    let (Value::Const(_), "") = crate::oracle::phrases::parse_number(n)? else {
+        return None;
+    };
+    if rest != "they lose life equal to the difference." {
+        return None;
+    }
+    let rewritten = format!(
+        "{}, if that player lost less than {n} life this turn, they lose life equal to {n} minus the amount of life they lost this turn.",
+        &t[..i]
+    );
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = t.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: if that player lost less than N life this turn, they lose life equal to the difference", priority: 90, parse: lost_less_than_the_difference } }
+
+/// "if any of that damage was dealt by a Warrior" (Mindblade Render, after "Whenever your
+/// opponents are dealt combat damage"): a source of the damage the ability triggered on
+/// (the batch's sources) is one, as it last existed if it has left (CR 603.10a).
+fn any_of_that_damage_by(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c.strip_prefix("any of that damage was dealt by ")?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !(raw.starts_with("whenever ") && raw.contains(" dealt combat damage, if any of that damage"))
+    {
+        return None;
+    }
+    let np = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(np)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::CountSel(Box::new(Sel::Matching(Box::new(Sel::TriggerObjects), f))),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: any of that damage was dealt by [a source]", priority: 900, parse: any_of_that_damage_by } }

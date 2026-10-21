@@ -1140,3 +1140,49 @@ fn giant_albatross_destroys_the_creatures_that_dealt_damage_to_it() {
     assert!(!t.on_battlefield(hitter), "it dealt damage to the Albatross");
     assert!(t.on_battlefield(other));
 }
+
+#[test]
+fn mindblade_render_draws_only_if_a_warrior_dealt_some_of_the_damage() {
+    cr!("603.2c", "603.4");
+    assert_supported("Mindblade Render");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mindblade Render");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let warrior = t.battlefield(P0, "Combat Celebrant");
+    let before = t.hand_size(P0);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before, "no Warrior dealt damage");
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer_yes(P0, false);
+    let before = t.hand_size(P0);
+    t.attack(
+        &[(bears, Entity::Player(P1)), (warrior, Entity::Player(P1))],
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+    assert_eq!(t.life(P0), 19);
+}
+
+#[test]
+fn lolths_emblem_tops_up_the_life_loss_to_eight() {
+    cr!("114.1", "119.3");
+    assert_supported("Lolth, Spider Queen");
+    let mut t = TestGame::new(2);
+    let lolth = t.battlefield(P0, "Lolth, Spider Queen");
+    t.g.objects[lolth.0 as usize]
+        .counters
+        .insert("loyalty".into(), 8);
+    t.activate(P0, lolth, 2, &[]).unwrap();
+    t.resolve_all();
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(giant, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 12, "3 combat damage, then 5 more: 8 this turn");
+}

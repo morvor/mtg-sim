@@ -22,6 +22,20 @@ pub fn that_player_condition(c: &str, who: &PlayerRef) -> Option<Condition> {
         | "'s life total is less than half their starting life total" => {
             PlayerFilter::LessThanHalfStartingLife
         }
+        // "lost less than 8 life this turn" (Lolth, Spider Queen's emblem).
+        r if r.starts_with("lost less than ") && r.ends_with(" life this turn") => {
+            let n = r
+                .strip_prefix("lost less than ")?
+                .strip_suffix(" life this turn")?;
+            let (Value::Const(n), "") = crate::oracle::phrases::parse_number(n)? else {
+                return None;
+            };
+            return Some(Condition::Compare(
+                Value::LifeLostThisTurn(who.clone()),
+                Cmp::Lt,
+                Value::Const(n),
+            ));
+        }
         // "had another land enter the battlefield under their control this turn" (Tunnel
         // Ignus): besides the land the ability triggered on, so two or more this turn.
         r => {
