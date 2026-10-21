@@ -3913,6 +3913,48 @@ impl Renderer<'_> {
 
     /// "[Replacement effect] this turn" created by a resolving spell or ability; see the
     /// `Effect::AddReplacement` arm of `effect_inner`.
+    /// "The next time one or more creatures or planeswalkers enter this turn, they enter
+    /// as copies of the chosen creature": a replacement that applies once, to all the
+    /// objects entering at the same time (`replacement.rs`, CR 614.1c, 614.12).
+    fn next_time_enter(&mut self, def: &ReplacementDef, duration: &Duration) -> Option<String> {
+        let ReplacementEvent::EntersBattlefield(f) = &def.event else {
+            return None;
+        };
+        if matches!(f, Filter::In(_) | Filter::Source) || !matches!(duration, Duration::EndOfTurn) {
+            return None;
+        }
+        let many = self.noun(f, Num::Many);
+        let what = match &def.action {
+            ReplacementAction::EnterAsCopy {
+                filter,
+                optional: false,
+                tapped: false,
+            } => {
+                let of = match filter {
+                    // "Choose target nonlegendary creature. ... copies of the chosen
+                    // creature": the target is chosen first (said before, CR 115.1).
+                    Filter::In(s) if matches!(s.as_ref(), Sel::Target(_)) => {
+                        "the chosen creature".to_string()
+                    }
+                    other => self.noun_det(other, Det::A),
+                };
+                format!("they enter as copies of {of}")
+            }
+            ReplacementAction::EnterWithCounters(k, n) => {
+                let (c, x) = self.counted(n, &counter_name(k));
+                let c = match c.split_once(' ') {
+                    Some((num, rest)) => format!("{num} {{opt:additional}} {rest}"),
+                    None => c,
+                };
+                format!("each enters with {c} on it{}", x.unwrap_or_default())
+            }
+            _ => return None,
+        };
+        Some(format!(
+            "the next time one or more {many} enter this turn, {what}"
+        ))
+    }
+
     fn add_replacement(
         &mut self,
         def: &ReplacementDef,
@@ -3931,6 +3973,9 @@ impl Renderer<'_> {
         }
         if *uses == Some(1) {
             if let Some(s) = self.attempt(|r| r.next_time_damage(def, duration)) {
+                return s;
+            }
+            if let Some(s) = self.attempt(|r| r.next_time_enter(def, duration)) {
                 return s;
             }
         }
@@ -7290,10 +7335,19 @@ impl Renderer<'_> {
                 Modification::AddKeywordsOf { kinds, from } => {
                     let f = self.noun_det(from, Det::A);
                     let k: Vec<String> = kinds.iter().map(|k| self.keyword_kind_word(*k)).collect();
-                    parts.push(format!(
+                    let all = format!(
                         "has {} as long as {f} has that ability",
                         join_list(&k, "and")
-                    ));
+                    );
+                    // "has flying as long as a card exiled with it has flying. The same is
+                    // true for first strike, ...": each ability on its own condition.
+                    match k.as_slice() {
+                        [first, rest @ ..] if !rest.is_empty() => parts.push(format!(
+                            "{{alt:{all}|has {first} as long as {f} has {first}. The same is true for {}}}",
+                            join_list(rest, "and")
+                        )),
+                        _ => parts.push(all),
+                    }
                 }
                 Modification::AddAbilitiesOf { from, which, terms } => {
                     // The activation instructions for the gained abilities (CR 113.10a).
@@ -7812,6 +7866,12 @@ impl Renderer<'_> {
             }
             // CR 205.3i: every land type.
             ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
+            // "a card type other than creature or land": the card types of cards (CR
+            // 300.1) but those.
+            ChoiceKind::OneOf(v) if card_types_but(v).is_some() => {
+                let but = card_types_but(v).unwrap_or_default();
+                format!("a card type other than {}", join_list(&but, "or"))
+            }
             ChoiceKind::OneOf(v) => join_list(v, "or"),
             ChoiceKind::CreatureType => "a creature type".into(),
             ChoiceKind::CreatureTypeOtherThan(v) => {
@@ -9018,4 +9078,30 @@ fn possessives(r: &mut Renderer<'_>, p: &PlayerRef) -> Vec<String> {
         Some(inner) if !inner.contains('{') => inner.split('|').map(str::to_string).collect(),
         _ => vec![poss],
     }
+}
+
+/// The card types of cards (CR 300.1, the nine a card can have) that a list of them leaves
+/// out, if it names only such types and leaves out one or two.
+fn card_types_but(v: &[String]) -> Option<Vec<String>> {
+    const TYPES: [&str; 9] = [
+        "artifact",
+        "battle",
+        "creature",
+        "enchantment",
+        "instant",
+        "kindred",
+        "land",
+        "planeswalker",
+        "sorcery",
+    ];
+    let lower: Vec<String> = v.iter().map(|x| x.to_lowercase()).collect();
+    if lower.is_empty() || !lower.iter().all(|x| TYPES.contains(&x.as_str())) {
+        return None;
+    }
+    let missing: Vec<String> = TYPES
+        .iter()
+        .filter(|t| !lower.iter().any(|x| x == *t))
+        .map(|t| t.to_string())
+        .collect();
+    (1..=2).contains(&missing.len()).then_some(missing)
 }

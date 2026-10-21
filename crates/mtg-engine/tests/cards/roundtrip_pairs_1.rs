@@ -125,3 +125,57 @@ fn kindle_the_carnage_can_repeat_more_than_once() {
     // 2 + 4 damage: the 6/6 dies.
     assert!(!t.on_battlefield(dreadmaw), "{}", t.dump_log());
 }
+
+#[test]
+fn blazing_effigy_counts_damage_from_another_effigys_dies_trigger() {
+    cr!("113.7a", "120.1", "608.2h");
+    // "When Blazing Effigy dies, it deals X damage to target creature, where X is 3 plus
+    // the amount of damage dealt to Blazing Effigy this turn by other sources named
+    // Blazing Effigy." The first Effigy's trigger (its source the Effigy as it last
+    // existed) deals 3 to the second, which dies and deals 3 + 3 = 6.
+    let mut t = TestGame::new(2);
+    let first = t.battlefield(P0, "Blazing Effigy");
+    let second = t.battlefield(P0, "Blazing Effigy");
+    let dreadmaw = t.battlefield(P1, "Colossal Dreadmaw");
+    t.answer_targets(P0, &[Entity::Object(second)]);
+    t.answer_targets(P0, &[Entity::Object(dreadmaw)]);
+    t.g.destroy(first, None);
+    t.resolve_all();
+    assert!(!t.on_battlefield(second), "{}", t.dump_log());
+    assert!(!t.on_battlefield(dreadmaw), "{}", t.dump_log());
+}
+
+#[test]
+fn jace_mirror_mage_keeps_the_card_it_draws_and_reveals() {
+    cr!("701.20a", "606.3");
+    // "0: Draw a card and reveal it. Remove a number of loyalty counters equal to that
+    // card's mana value from Jace, Mirror Mage."
+    let mut t = TestGame::new(2);
+    let jace = t.battlefield(P0, "Jace, Mirror Mage");
+    let loyalty = t.counters(jace, "loyalty");
+    t.library_top(P0, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    t.activate(P0, jace, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1, "{}", t.dump_log());
+    assert!(t.in_hand(P0, "Grizzly Bears"), "{}", t.dump_log());
+    assert_eq!(t.counters(jace, "loyalty"), loyalty - 2);
+}
+
+#[test]
+fn driftgloom_coyote_checks_the_exiled_creatures_power_as_it_last_existed() {
+    cr!("608.2h", "610.3");
+    // "When Driftgloom Coyote enters, exile target creature an opponent controls until
+    // Driftgloom Coyote leaves the battlefield. If that creature had power 2 or less, put a
+    // +1/+1 counter on Driftgloom Coyote."
+    for (name, counters) in [("Grizzly Bears", 1), ("Hill Giant", 0)] {
+        let mut t = TestGame::new(2);
+        let target = t.battlefield(P1, name);
+        t.answer_targets(P0, &[Entity::Object(target)]);
+        t.enter(P0, "Driftgloom Coyote");
+        t.resolve_all();
+        assert_eq!(t.zone(target), Zone::Exile, "{}", t.dump_log());
+        let coyote = t.named_on_battlefield("Driftgloom Coyote")[0];
+        assert_eq!(t.counters(coyote, "+1/+1"), counters, "{name}: {}", t.dump_log());
+    }
+}

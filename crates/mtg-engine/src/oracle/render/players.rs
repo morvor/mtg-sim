@@ -927,6 +927,49 @@ impl Renderer<'_> {
                 self.block_pair_both(v, case).unwrap_or_default()
             }
             Sel::Union(v) => {
+                // "a creature card and/or a land card from your hand": up to one of each,
+                // from the same zone of yours.
+                let one_from = |x: &Sel| match x {
+                    Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter: Filter::And(f),
+                        count: Value::Const(1),
+                        up_to: true,
+                        store: None,
+                    } => {
+                        let zone = f.iter().find_map(|a| match a {
+                            Filter::InZone(z) => Some(*z),
+                            _ => None,
+                        })?;
+                        let yours = f.iter().any(|a| {
+                            matches!(a, Filter::OwnedBy(PlayerRel::You))
+                                || matches!(a, Filter::OwnedByPlayer(p) if matches!(p.as_ref(), PlayerRef::You))
+                        });
+                        let rest: Vec<Filter> = f
+                            .iter()
+                            .filter(|a| {
+                                !matches!(
+                                    a,
+                                    Filter::InZone(_) | Filter::OwnedBy(_) | Filter::OwnedByPlayer(_)
+                                )
+                            })
+                            .cloned()
+                            .collect();
+                        (yours && matches!(zone, ZoneKind::Hand | ZoneKind::Graveyard))
+                            .then(|| (zone, Filter::and(rest)))
+                    }
+                    _ => None,
+                };
+                let each: Option<Vec<(ZoneKind, Filter)>> = v.iter().map(one_from).collect();
+                let and_or = match each {
+                    Some(e) if e.len() == 2 && e.iter().all(|(z, _)| *z == e[0].0) => {
+                        let ns: Vec<String> =
+                            e.iter().map(|(_, f)| self.noun_det(f, Det::A)).collect();
+                        let z = zone_word(e[0].0);
+                        Some(format!("{} from your {z}", join_list(&ns, "and/or")))
+                    }
+                    _ => None,
+                };
                 let mut parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
                 // "target creature and all other creatures with the same name as that
                 // creature": the union already leaves out the one named first.
@@ -983,7 +1026,11 @@ impl Renderer<'_> {
                         *p = p.replace("your opponents control", "they control");
                     }
                 }
-                decline(join_list(&parts, "and"), case)
+                let joined = join_list(&parts, "and");
+                match and_or {
+                    Some(a) => decline(format!("{{alt:{joined}|{a}}}"), case),
+                    None => decline(joined, case),
+                }
             }
             Sel::TopOfGraveyard(p) => {
                 let p = self.player(p, Case::Poss);

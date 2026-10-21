@@ -2785,7 +2785,9 @@ impl Renderer<'_> {
                         };
                         match each {
                             Some((c1, each)) => {
-                                format!("{{alt:{s}|{subj} enters with {c1} on {it} {each}}}")
+                                // "on him" (the object itself).
+                                let on = if subj.starts_with('~') { "~it" } else { it };
+                                format!("{{alt:{s}|{subj} enters with {c1} on {on} {each}}}")
                             }
                             None => s,
                         }

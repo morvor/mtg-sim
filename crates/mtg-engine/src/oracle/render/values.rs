@@ -1737,15 +1737,16 @@ impl Renderer<'_> {
             }
         }
         // "if 4 or more damage was dealt to it this turn".
-        let to_self = |t: &TriggerCond| {
-            matches!(
-                t,
-                TriggerCond::DealsDamage {
-                    source: Filter::Any,
-                    to: DamageRecipient::Object(Filter::Source),
-                    combat_only: false,
-                }
-            )
+        let to_self = |t: &TriggerCond| match t {
+            TriggerCond::DealsDamage {
+                source: Filter::Any,
+                to: DamageRecipient::Object(f),
+                combat_only: false,
+            } => {
+                matches!(f, Filter::Source)
+                    || matches!(f, Filter::In(s) if matches!(s.as_ref(), Sel::TriggerLki))
+            }
+            _ => false,
         };
         if let (Value::EventsThisTurn(t, Tally::Amount), Cmp::Ge, Value::Const(k)) = (a, cmp, b) {
             if to_self(t) {
