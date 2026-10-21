@@ -80,9 +80,12 @@ pub fn parse_decklist(text: &str) -> DeckList {
     DeckList { main, sideboard }
 }
 
+/// The default deck: red-green creatures and burn, every card verified
+/// (`docs/verified-cards.tsv`; Mountain Bandit replaced Raging Goblin, an Arena-only
+/// printing that the tier file doesn't list).
 pub fn default_deck() -> DeckList {
     parse_decklist(
-        "12 Mountain\n12 Forest\n4 Grizzly Bears\n4 Lightning Bolt\n4 Hill Giant\n4 Shock\n4 Raging Goblin\n4 Gray Ogre\n4 Giant Growth\n4 Llanowar Elves\n4 Craw Wurm",
+        "12 Mountain\n12 Forest\n4 Grizzly Bears\n4 Lightning Bolt\n4 Hill Giant\n4 Shock\n4 Mountain Bandit\n4 Gray Ogre\n4 Giant Growth\n4 Llanowar Elves\n4 Craw Wurm",
     )
 }
 

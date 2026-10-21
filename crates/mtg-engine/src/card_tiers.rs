@@ -368,7 +368,9 @@ impl TierTable {
                 tier: Tier::Compiled,
                 failed: vec![Failed::new(
                     check::LISTED,
-                    format!("not in {TIERS_FILE}; regenerate it"),
+                    format!(
+                    "not in {TIERS_FILE}: not a paper card legal in some format, or newer than the file"
+                ),
                 )],
             });
         // The live check costs a render: skip it when the file already puts the card at

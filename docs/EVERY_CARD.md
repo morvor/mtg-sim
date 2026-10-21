@@ -157,6 +157,18 @@ re-run with these changes and the merged newer engine (pool of 29,744): abilitie
 94.8% → 95.0%, cards fully exercised 95.2% → 95.5%, and its only failures are the two
 Charismatic Conqueror games described above.
 
+### Sweep for the card tiers (Oct 21)
+
+The sweep behind `docs/verified-cards.tsv` (pool of 30,222 cards, 60,444 games, 3 threads,
+three chunks of about 46 minutes): 99.7% of the castable cards cast or played, 95.4% of
+the activated and triggered abilities used, 95.9% of the cards fully exercised. Its four
+failed games keep their cards from being verified (`fuzz-clean`): Charismatic Conqueror's
+two slow games (the open loop described above), one slow Shahrazad game (subgames
+inside subgames), and one Maelstrom Nexus game with a zone-consistency report ("Sight
+Beyond Sight #53 is listed in Library(P0) but has become a new object", from turn 27;
+replay with `mtg-sim --every-card --from 15350 --count 1 --game 0 --log`), not yet
+investigated.
+
 ### Earlier sweeps
 
 At commit 47b8f9d (pool of 23,116 cards, 46,232 games, 3 threads, 64 min): no panic,

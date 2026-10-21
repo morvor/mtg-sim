@@ -479,6 +479,7 @@ fn card_coverage(args: &[String]) {
     ));
     md.push_str("## Regenerating\n\nRegenerate the tier file and this report before each milestone, and after a new card set or a CR update (other work changes round trips and structure coverage all the time, so the numbers drift between regenerations; a card newer than the tier file counts as at most compiled, and a card that stops compiling or round-tripping drops at once). Run nothing else heavy alongside the sweep:\n\n");
     md.push_str(TIER_RECIPE);
+    md.push_str("\nWhere a command can't run for an hour, run the sweep in chunks (`--from 0 --count 10100 --report target/every-card-0.tsv`, `--from 10100 --count 10100 ...`, `--from 20200 ...`) and concatenate the reports into one file: `verified` reads only their `outcome` lines.\n");
     md.push_str(
         "\n`mtg-tools verified --card \"Name\"` prints one card's tier and failed checks.\n",
     );
