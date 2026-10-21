@@ -82,6 +82,16 @@ impl Renderer<'_> {
 
     /// "If they match" (the chosen numbers).
     pub(crate) fn chosen_number_condition(&mut self, name: &str) -> Option<String> {
+        if name == crate::kw::delayed_conditions::SOURCE_STILL_ON_BATTLEFIELD {
+            let m = self.me();
+            return Some(format!("{m} is still on the battlefield"));
+        }
+        if name == crate::kw::control_since_your_turn::CONTROLLED_SINCE_YOUR_TURN {
+            let m = self.me();
+            return Some(format!(
+                "you've controlled {m} continuously since the beginning of your most recent turn"
+            ));
+        }
         (name == NUMBERS_MATCH).then(|| "{alt:they match|those numbers match}".into())
     }
 
@@ -143,6 +153,16 @@ impl Renderer<'_> {
                 self.target_vars.push((*var, "that player".into(), false));
                 let t = self.effect(then);
                 Some((format!("for each vote {who} received, {t}"), 1))
+            }
+            // "For each vote you received, draw a card."
+            [Effect::Repeat {
+                times: Value::Custom(n),
+                effect,
+            }, ..]
+                if n == crate::kwa::vote::VOTES_RECEIVED && !self.in_as_player =>
+            {
+                let e = self.effect(effect);
+                Some((format!("for each vote you received, {e}"), 1))
             }
             // "you gain 1 life for each of the chosen colors it is".
             [Effect::SetX {
@@ -214,5 +234,130 @@ impl Renderer<'_> {
         let f = self.chose_number_filter(*c, v)?;
         let _ = Case::Subj;
         Some(format!("each player {f}"))
+    }
+}
+
+/// What a "the player who controls the fewest" block counts, if `e` is one: (what each
+/// player keeps, sacrificed or discarded).
+enum Balance {
+    /// Permanents matching the filter, sacrificed.
+    Sacrifice(Filter),
+    /// Cards in hand, discarded.
+    Discard,
+}
+
+/// "Each player chooses a number of lands they control equal to the number of lands
+/// controlled by the player who controls the fewest, then sacrifices the rest."
+fn balance_block(e: &Effect) -> Option<Balance> {
+    let Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect,
+    } = e
+    else {
+        return None;
+    };
+    let Effect::Seq(v) = effect.as_ref() else {
+        return None;
+    };
+    let [Effect::StoreValue {
+        var,
+        value: Value::Diff(mine, fewest),
+    }, Effect::AsPlayer {
+        who: PlayerRef::Iterated,
+        effect: act,
+    }] = v.as_slice()
+    else {
+        return None;
+    };
+    let Value::OverPlayers(AggOp::Min, PlayerFilter::Any, each) = fewest.as_ref() else {
+        return None;
+    };
+    if format!("{mine:?}") != format!("{each:?}") {
+        return None;
+    }
+    match (mine.as_ref(), act.as_ref()) {
+        (
+            Value::Count(f),
+            Effect::Sacrifice {
+                who: PlayerRef::You,
+                filter,
+                count: Value::Var(c),
+            },
+        ) if c == var => {
+            // The count is of what they control on the battlefield of that kind.
+            let Filter::And(parts) = f else {
+                return None;
+            };
+            let kept: Vec<Filter> = parts
+                .iter()
+                .filter(|p| {
+                    !matches!(
+                        p,
+                        Filter::InZone(ZoneKind::Battlefield)
+                            | Filter::ControlledBy(PlayerRel::Iterated)
+                    )
+                })
+                .cloned()
+                .collect();
+            let kind = Filter::and(kept);
+            let same = format!("{kind:?}") == format!("{filter:?}")
+                || (matches!(kind, Filter::Permanent) && matches!(filter, Filter::Permanent));
+            same.then(|| Balance::Sacrifice(filter.clone()))
+        }
+        (
+            Value::HandSize(PlayerRef::Iterated),
+            Effect::Discard {
+                who: PlayerRef::You,
+                n: Value::Var(c),
+                random: false,
+                filter: Filter::Any,
+            },
+        ) if c == var => Some(Balance::Discard),
+        _ => None,
+    }
+}
+
+impl Renderer<'_> {
+    /// "Each player chooses a number of lands they control equal to the number of lands
+    /// controlled by the player who controls the fewest, then sacrifices the rest. Players
+    /// sacrifice creatures and discard cards the same way."
+    pub(crate) fn balance_seq(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let first = balance_block(v.first()?)?;
+        let Balance::Sacrifice(f) = first else {
+            return None;
+        };
+        let n = self.noun(&f, Num::Many);
+        let mut out = format!(
+            "each player chooses a number of {n} they control equal to the number of {n} controlled by the player who controls the fewest, then sacrifices the rest"
+        );
+        let mut same: Vec<String> = Vec::new();
+        let mut used = 1;
+        for e in &v[1..] {
+            match balance_block(e) {
+                Some(Balance::Sacrifice(g)) => {
+                    let m = self.noun(&g, Num::Many);
+                    same.push(format!("sacrifice {m}"));
+                }
+                Some(Balance::Discard) => same.push("discard cards".into()),
+                None => break,
+            }
+            used += 1;
+        }
+        if !same.is_empty() {
+            let one = same.len() == 1;
+            let s = join_list(&same, "and");
+            // "Each player discards cards the same way." / "Players sacrifice creatures and
+            // discard cards the same way."
+            let subj = if one {
+                format!(
+                    "{{alt:each player {}|players {s}}}",
+                    effects::third_person(&s)
+                )
+            } else {
+                format!("players {s}")
+            };
+            out.push_str(&format!(". {subj} the same way"));
+        }
+        Some((out, used))
     }
 }

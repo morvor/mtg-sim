@@ -29,7 +29,7 @@ impl Renderer<'_> {
                     |e| matches!(e, Effect::Store { var, sel: Sel::Choose { .. } } if var == x),
                 );
                 if chosen {
-                    "the chosen card".into()
+                    "{alt:the chosen card|that card}".into()
                 } else {
                     "that card".into()
                 }

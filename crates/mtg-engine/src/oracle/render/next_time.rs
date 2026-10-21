@@ -202,3 +202,43 @@ pub(crate) fn split_outside_braces<'a>(s: &'a str, sep: &str) -> Option<(&'a str
     }
     None
 }
+
+impl super::Renderer<'_> {
+    /// "At the beginning of the next end step, if ~ is still on the battlefield, you may
+    /// return that card to the battlefield": a one-shot delayed trigger with an
+    /// intervening "if" (CR 603.7b, 603.4), the condition checked again as it resolves.
+    pub(crate) fn next_step_if(
+        &mut self,
+        trigger: &TriggerCond,
+        body: &Body,
+        once: bool,
+    ) -> Option<String> {
+        let TriggerCond::Where {
+            trigger: inner,
+            cond,
+        } = trigger
+        else {
+            return None;
+        };
+        if !once || !body.targets.is_empty() || body.modal.is_some() {
+            return None;
+        }
+        let Effect::If {
+            cond: c2,
+            then,
+            otherwise,
+        } = &body.effect
+        else {
+            return None;
+        };
+        if format!("{cond:?}") != format!("{c2:?}") || !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let when = self.delay_text(inner)?;
+        let c = self.condition(cond);
+        let t = self.in_event_scope(|r| r.effect_sentences(then));
+        let t = super::effects::lower_first(&t);
+        let t = t.trim_end_matches('.');
+        Some(format!("{{alt:{when}, if {c}, {t}|{t} {when} if {c}}}"))
+    }
+}

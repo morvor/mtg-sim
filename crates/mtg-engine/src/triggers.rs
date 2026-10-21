@@ -759,6 +759,11 @@ impl Game {
                 || matches!(d.trigger, TriggerCond::UntilYourNextTurn(_))
         });
         let mut once_matches: Vec<(u32, EventInfo)> = Vec::new();
+        // One-shot delayed triggers whose event happened with their intervening "if"
+        // false: "at the beginning of the next end step, if ~ is still on the battlefield,
+        // ..." doesn't trigger then, and never will (CR 603.7b: only the next time its
+        // event occurs; CR 603.4).
+        let mut spent: Vec<u32> = Vec::new();
         for d in self.delayed_triggers.clone() {
             if let TriggerCond::BeginningOf { .. } = d.trigger {
                 // "at the beginning of the next end step" doesn't fire in the step it was
@@ -782,7 +787,27 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
-            for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
+            let infos = self.trigger_matches_ctx(&d.trigger, &base, ev);
+            if let (
+                true,
+                true,
+                TriggerCond::Where {
+                    trigger: inner,
+                    cond,
+                },
+            ) = (d.once, infos.is_empty(), &d.trigger)
+            {
+                // (Not a condition that picks which player's step it is.)
+                let about_step = format!("{cond:?}");
+                if matches!(inner.as_ref(), TriggerCond::BeginningOf { .. })
+                    && !about_step.contains("TriggerPlayer")
+                    && !about_step.contains("Active")
+                    && !self.trigger_matches_ctx(inner, &base, ev).is_empty()
+                {
+                    spent.push(d.id);
+                }
+            }
+            for info in infos {
                 if d.once {
                     // CR 801.7: an event outside its controller's range of influence
                     // doesn't trigger it; it waits for the next one.
@@ -796,6 +821,7 @@ impl Game {
                 }
             }
         }
+        self.delayed_triggers.retain(|d| !spent.contains(&d.id));
         // CR 801.7: only events entirely within the controller's range of influence.
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {

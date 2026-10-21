@@ -62,7 +62,12 @@ fn join_same_subject(a: &str, b: &str) -> Option<String> {
     }
     // "Equipped creature gets +1/+1. If it's a Warrior, it gets +2/+1 instead." (one
     // bonus for each kind of creature, the two never applying together).
-    if let (Some((sa, xa)), Some((sb, xb))) = (a.split_once(" gets "), b.split_once(" gets ")) {
+    let gets = |s: &'_ str| -> Option<(String, String)> {
+        s.split_once(" gets ")
+            .or_else(|| s.split_once(" get "))
+            .map(|(x, y)| (x.to_string(), y.to_string()))
+    };
+    if let (Some((sa, xa)), Some((sb, xb))) = (gets(a), gets(b)) {
         if let (Some((head, ta)), Some((head2, tb))) =
             (sa.split_once(" that isn't "), sb.split_once(" that's "))
         {

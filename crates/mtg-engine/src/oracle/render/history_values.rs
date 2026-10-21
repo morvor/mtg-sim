@@ -29,6 +29,11 @@ impl Renderer<'_> {
             }
             other => {
                 let p = self.rel_subject(other);
+                // A player named before ("Target player draws two cards, then ... the
+                // number of cards they've drawn this turn").
+                if p == "that player" {
+                    return "{alt:that player has|they've}".into();
+                }
                 format!("{p} has")
             }
         }

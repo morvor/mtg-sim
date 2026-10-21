@@ -1621,16 +1621,13 @@ impl Renderer<'_> {
 
     /// "you control", "an opponent controls", "your opponents control".
     pub(crate) fn controls_phrase(&mut self, r: PlayerRel, num: Num) -> String {
-        let each = self.each_mode;
         let num = if self.each_mode { Num::Many } else { num };
         match r {
             PlayerRel::You => "you control".into(),
             // "a creature an opponent controls" / "each creature your opponents control":
-            // the same objects, those any opponent controls ("each creature each opponent
-            // controls" too).
+            // the same objects, those any opponent controls.
             PlayerRel::Opponent => match num {
                 Num::One => "{alt:an opponent controls|your opponents control}".into(),
-                Num::Many if each => "{alt:your opponents control|each opponent controls}".into(),
                 Num::Many => "your opponents control".into(),
             },
             PlayerRel::NotYou => "you don't control".into(),

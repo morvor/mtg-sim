@@ -514,9 +514,7 @@ impl Renderer<'_> {
                 Case::Poss => "{alt:that player's|their}".into(),
                 // "Target opponent loses life equal to the number of creatures they
                 // control": the subject, named again in the amount.
-                // "Target player draws two cards, then ... the number of cards they've
-                // drawn this turn": the player named again, as the subject.
-                Case::Subj => "{alt:that player|they}".into(),
+                Case::Subj if self.they_target == Some(i) => "{alt:that player|they}".into(),
                 Case::Obj if self.they_target == Some(i) => "{alt:that player|them}".into(),
                 _ => "that player".into(),
             };
@@ -944,6 +942,18 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                // "your hand and graveyard": whole zones of the same player, the owner said
+                // once.
+                if let [a, b] = parts.as_slice() {
+                    if let (Some(x), Some(y)) = (a.strip_prefix("your "), b.strip_prefix("your ")) {
+                        if !x.contains(' ') && !y.contains(' ') {
+                            return decline(
+                                format!("{{alt:your {x} and your {y}|your {x} and {y}}}"),
+                                case,
+                            );
+                        }
+                    }
+                }
                 // "each opponent and each creature and planeswalker they control".
                 if parts.first().is_some_and(|p| p == "each opponent") {
                     for p in parts.iter_mut().skip(1) {
@@ -1160,15 +1170,7 @@ impl Renderer<'_> {
             PlayerRef::ActivePlayer if self.attack_trigger => {
                 "{alt:that player|that attacking player|the attacking player}".into()
             }
-            // "At the beginning of the upkeep of enchanted creature's controller, that
-            // player ... unless they pay ...": the active player, named by the trigger.
-            PlayerRef::ActivePlayer => {
-                return match case {
-                    Case::Subj => "{alt:that player|they}".into(),
-                    Case::Obj => "{alt:that player|them}".into(),
-                    Case::Poss => "{alt:that player's|their}".into(),
-                }
-            }
+            PlayerRef::ActivePlayer => "that player".into(),
             PlayerRef::AttackingPlayer if self.attack_trigger => {
                 "{alt:that player|that attacking player|the attacking player}".into()
             }

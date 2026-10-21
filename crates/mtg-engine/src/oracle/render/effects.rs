@@ -2648,6 +2648,9 @@ impl Renderer<'_> {
                 body,
                 once,
             } => {
+                if let Some(s) = self.next_step_if(trigger, body, *once) {
+                    return s;
+                }
                 // A one-shot delayed trigger at a step: "at the beginning of the next end
                 // step" (CR 603.7).
                 let delay = if *once { self.delay_text(trigger) } else { None };
@@ -3481,6 +3484,17 @@ impl Renderer<'_> {
                             .find('}')
                             .is_some_and(|i| ev[i + 1..].starts_with(" would "));
                     if !ev.contains('{') || one_alt || alt_subject {
+                        // "..., instead they exile the top card of their library. They may
+                        // play it this turn.": "instead" first, before the instructions.
+                        if let Some(body) = then.strip_suffix(" instead") {
+                            let body = match body.strip_prefix("{opt:") {
+                                Some(r) => r.split_once("} ").map_or(body, |(_, b)| b),
+                                None => body,
+                            };
+                            return format!(
+                                "the next time {ev} this turn, {{alt:{then}|instead {body}}}"
+                            );
+                        }
                         return format!("the next time {ev} this turn, {then}");
                     }
                 }
@@ -3694,7 +3708,13 @@ impl Renderer<'_> {
                     && !format!("{first:?}").contains("Target")
                 {
                     let vp = self.effect(first);
-                    if !vp.contains(['.', '{']) && !vp.starts_with("you ") {
+                    // (Alternative wordings of one instruction are fine: "each secretly
+                    // choose {alt:a number from 1 to 3|1, 2, or 3}".)
+                    let alts_only = vp.starts_with("secretly ");
+                    if !vp.contains('.')
+                        && (!vp.contains('{') || alts_only)
+                        && !vp.starts_with("you ")
+                    {
                         let p = self.player(other, Case::Subj);
                         parts.push(format!("you and {p} each {vp}"));
                         i += 2;
@@ -4974,6 +4994,12 @@ impl Renderer<'_> {
                     *x = x[pay.len()..].to_string();
                 }
             }
+            // "that player sacrifices it unless they pay {X}": the player named before.
+            let p = if p == "that player" && o.contains("that player") {
+                "{alt:that player|they}".to_string()
+            } else {
+                p
+            };
             return format!("{o} unless {p} {}", pays.join(" or "));
         }
         let p = self.player(who, Case::Subj);
@@ -6805,6 +6831,14 @@ impl Renderer<'_> {
             }
             ChoiceKind::Players(n) => {
                 format!("{} players", crate::oracle::render::number_word(*n as i32))
+            }
+            // "Choose an order for artifacts, creatures, and lands": all of the card types
+            // named, each chosen in turn (the first, second, ... type).
+            ChoiceKind::Distinct(n, v)
+                if *n as usize == v.len() && v.iter().all(|w| CardType::from_word(w).is_some()) =>
+            {
+                let ws: Vec<String> = v.iter().map(|w| plural(w)).collect();
+                format!("an order for {}", join_list(&ws, "and"))
             }
             ChoiceKind::Distinct(n, v) => format!(
                 "{} abilities from among {}",

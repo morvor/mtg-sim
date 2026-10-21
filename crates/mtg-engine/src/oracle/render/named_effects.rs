@@ -85,7 +85,10 @@ impl Renderer<'_> {
 
     /// Instruction sequences this module words as a whole: (text, instructions used).
     pub(crate) fn named_seq(&mut self, v: &[Effect], i: usize) -> Option<(String, usize)> {
-        self.chosen_number_seq(&v[i..])
+        self.two_choices(&v[i..])
+            .or_else(|| self.rite_of_types(&v[i..]))
+            .or_else(|| self.chosen_number_seq(&v[i..]))
+            .or_else(|| self.balance_seq(&v[i..]))
             .or_else(|| self.choose_kind_then_reveal(&v[i..]))
             .or_else(|| self.revealed_at_random(&v[i..]))
             .or_else(|| self.bidding(&v[i..]))
@@ -452,5 +455,80 @@ impl Renderer<'_> {
         };
         let w = self.player(p, Case::Subj);
         Some(format!("{w} skips their next {what} this turn"))
+    }
+}
+
+impl Renderer<'_> {
+    /// "Choose a land type and a basic land type." (two choices, one sentence).
+    fn two_choices(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::Choose {
+            who: PlayerRef::You,
+            kind: a,
+        }, Effect::Choose {
+            who: PlayerRef::You,
+            kind: b,
+        }, ..] = v
+        else {
+            return None;
+        };
+        let x = self.choice(a);
+        let y = self.choice(b);
+        Some((
+            format!("{{alt:choose {x}. choose {y}|choose {x} and {y}}}"),
+            2,
+        ))
+    }
+
+    /// "Each player sacrifices one permanent of their choice of the first type, sacrifices
+    /// two of their choice of the second type, then sacrifices three of their choice of
+    /// the third type." (the types in the order chosen).
+    fn rite_of_types(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::ForEachPlayer {
+            who: PlayerRef::EachPlayer,
+            effect,
+        }, ..] = v
+        else {
+            return None;
+        };
+        let Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: inner,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        let Effect::Seq(steps) = inner.as_ref() else {
+            return None;
+        };
+        let mut parts = Vec::new();
+        for (i, s) in steps.iter().enumerate() {
+            let Effect::Sacrifice {
+                who: PlayerRef::You,
+                filter: Filter::And(f),
+                count: Value::Const(n),
+            } = s
+            else {
+                return None;
+            };
+            let [Filter::Permanent, Filter::Custom(c)] = f.as_slice() else {
+                return None;
+            };
+            let k: usize = c
+                .strip_prefix(crate::choices::NTH_CHOSEN_CARD_TYPE)?
+                .parse()
+                .ok()?;
+            let nth = ordinal_word(k as u32 + 1);
+            let what = if i == 0 {
+                format!("{} permanent of their choice", number_word(*n))
+            } else {
+                format!("{} of their choice", number_word(*n))
+            };
+            parts.push(format!("sacrifices {what} of the {nth} type"));
+        }
+        if parts.len() < 2 {
+            return None;
+        }
+        let last = parts.pop()?;
+        Some((format!("each player {}, then {last}", parts.join(", ")), 1))
     }
 }

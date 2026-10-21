@@ -260,9 +260,19 @@ impl Renderer<'_> {
                     return self.with_subject(who, &vp, false);
                 }
                 let noun = self.card_noun(filter);
+                // "until you reveal X nonland cards, where X is ..." (CR 107.3).
+                let mut where_x = String::new();
                 let n = match count {
                     Value::Const(1) => with_article(&noun),
                     Value::Const(k) => format!("{} {}", number_word(*k), plural(&noun)),
+                    Value::Max(v, z)
+                        if matches!(z.as_ref(), Value::Const(0))
+                            && !matches!(v.as_ref(), Value::X | Value::Var(_)) =>
+                    {
+                        let v = self.value(v);
+                        where_x = format!(", where X is {v}");
+                        format!("X {}", plural(&noun))
+                    }
                     other => {
                         let v = self.value(other);
                         format!("{v} {}", plural(&noun))
@@ -283,7 +293,9 @@ impl Renderer<'_> {
                 };
                 let done = if *exile { "exiled" } else { "revealed" };
                 let vp = if p == "your" {
-                    format!("{verb} cards from the top of {p} library until {subj} {verb} {n}")
+                    format!(
+                        "{verb} cards from the top of {p} library until {subj} {verb} {n}{where_x}"
+                    )
                 } else {
                     format!(
                         "{verb} cards from the top of {p} library until {{alt:{subj} {verb} {n}|{n} {are} {done}}}"

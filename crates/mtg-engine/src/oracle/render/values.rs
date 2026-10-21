@@ -77,6 +77,12 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Poss);
                 format!("{s} toughness")
             }
+            // "1 plus the mana value of the sacrificed artifact".
+            Value::ManaValueOf(s) if matches!(s.as_ref(), Sel::Var(vars::SACRIFICED)) => {
+                let o = self.sel(s, Case::Obj);
+                let p = self.sel(s, Case::Poss);
+                format!("{{alt:{p} mana value|the mana value of {o}}}")
+            }
             Value::ManaValueOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("{s} mana value")

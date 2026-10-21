@@ -1062,7 +1062,14 @@ impl Renderer<'_> {
         if t.what.is_some() || t.limit.is_some() || t.until_another || t.later_turn {
             s.push_str(&self.gap("terms of a static permission to play cards"));
         }
-        if t.exile_instead {
+        if t.exile_instead && matches!(pp.what, Filter::Source) {
+            // "If you cast ~ this way and it would be put into your graveyard, exile it
+            // instead" (the card itself, cast from its owner's graveyard).
+            let m = self.me();
+            s.push_str(&format!(
+                "{{alt:. If a spell cast this way would be put into its owner's graveyard, exile it instead|. If you cast {m} this way and it would be put into your graveyard, exile it instead}}"
+            ));
+        } else if t.exile_instead {
             s.push_str(
                 ". If a spell cast this way would be put into its owner's graveyard, exile it instead",
             );
@@ -1746,6 +1753,13 @@ impl Renderer<'_> {
                     return (format!("{{{k}}}"), format!(" for each {each}"));
                 }
                 let s = self.value(other);
+                // "{1} less to cast for each 1 life you gained this turn": the same amount.
+                if let Some(r) = self.per_life(&s) {
+                    return (
+                        "{alt:{X}|{1}}".into(),
+                        format!("{{alt:, where X is {s}| for each {r}}}"),
+                    );
+                }
                 ("{X}".into(), format!(", where X is {s}"))
             }
         }
@@ -1769,7 +1783,7 @@ impl Renderer<'_> {
         if let Some(r) = s.strip_prefix("the number of ") {
             return Some((k, r.to_string()));
         }
-        self.per_life(&s).map(|r| (k, r))
+        None
     }
 
     /// The text of a restriction (a rule-modifying effect, CR 613.11).

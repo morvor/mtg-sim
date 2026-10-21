@@ -117,12 +117,13 @@ impl Renderer<'_> {
             let Sel::All(Filter::And(fs)) = s.as_ref() else {
                 return None;
             };
-            let [base, Filter::Subtype(t2)] = fs.as_slice() else {
+            let [rest @ .., Filter::Subtype(t2)] = fs.as_slice() else {
                 return None;
             };
-            if t != t2 {
+            if t != t2 || rest.is_empty() {
                 return None;
             }
+            let base = &Filter::and(rest.to_vec());
             match &objs {
                 Some(b) if format!("{b:?}") != format!("{base:?}") => return None,
                 Some(_) => {}
