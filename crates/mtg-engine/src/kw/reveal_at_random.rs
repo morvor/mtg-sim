@@ -8,7 +8,7 @@
 //! `oracle/patterns/reveal_at_random.rs`).
 
 use super::{KeywordRegistration, KeywordRules};
-use crate::ability::{vars, PlayerRef};
+use crate::ability::{vars, PlayerRef, Sel};
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
@@ -25,13 +25,45 @@ pub fn effect_name(who: &PlayerRef) -> Option<String> {
     })
 }
 
-fn player_of(name: &str) -> Option<PlayerRef> {
-    let who = name.strip_prefix(PREFIX)?;
+/// "reveals two cards at random from their hand" (Rise // Fall), "Target creature's
+/// controller reveals a card at random from their hand." (Friendly Fire): `n` cards, by
+/// the player `who` (a target slot, the controller of a target, or the controller).
+const PREFIX_N: &str = "reveal cards at random from hand:";
+
+/// The `Effect::Custom` name for `n` cards revealed at random by `who`.
+pub fn effect_name_n(who: &PlayerRef, n: u32) -> Option<String> {
+    let who = match who {
+        PlayerRef::You => "you".to_string(),
+        PlayerRef::Target(slot) => format!("target {slot}"),
+        PlayerRef::ControllerOf(s) => match &**s {
+            Sel::Target(slot) => format!("controller of target {slot}"),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(format!("{PREFIX_N}{n}:{who}"))
+}
+
+fn who_of(who: &str) -> Option<PlayerRef> {
+    if let Some(slot) = who.strip_prefix("controller of target ") {
+        return Some(PlayerRef::ControllerOf(Box::new(Sel::Target(
+            slot.parse().ok()?,
+        ))));
+    }
     Some(match who.strip_prefix("target ") {
         Some(slot) => PlayerRef::Target(slot.parse().ok()?),
         None if who == "you" => PlayerRef::You,
         None => return None,
     })
+}
+
+/// The player and the number of cards of an instruction.
+fn player_of(name: &str) -> Option<(PlayerRef, usize)> {
+    if let Some(r) = name.strip_prefix(PREFIX_N) {
+        let (n, who) = r.split_once(':')?;
+        return Some((who_of(who)?, n.parse().ok()?));
+    }
+    Some((who_of(name.strip_prefix(PREFIX)?)?, 1))
 }
 
 pub struct RevealAtRandom;
@@ -42,19 +74,26 @@ impl KeywordRules for RevealAtRandom {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-        let Some(who) = player_of(name) else {
+        let Some((who, n)) = player_of(name) else {
             return false;
         };
         let mut revealed = Vec::new();
         for p in g.eval_players(&who, ctx) {
-            let hand: Vec<ObjectId> = g.player(p).hand.clone();
+            let mut hand: Vec<ObjectId> = g.player(p).hand.clone();
             if hand.is_empty() {
                 continue;
             }
-            use rand::Rng;
-            let card = hand[g.rng.gen_range(0..hand.len())];
-            crate::reveal::reveal_in(g, p, &[card], Some(ctx));
-            revealed.push(Entity::Object(card));
+            if n == 1 {
+                use rand::Rng;
+                let card = hand[g.rng.gen_range(0..hand.len())];
+                hand = vec![card];
+            } else {
+                use rand::seq::SliceRandom;
+                hand.shuffle(&mut g.rng);
+                hand.truncate(n);
+            }
+            crate::reveal::reveal_in(g, p, &hand, Some(ctx));
+            revealed.extend(hand.into_iter().map(Entity::Object));
         }
         ctx.set_var(vars::IT, revealed);
         true

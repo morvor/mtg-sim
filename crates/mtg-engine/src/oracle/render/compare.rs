@@ -1573,10 +1573,14 @@ fn sentence_rewrites(s: &str) -> String {
             .to_string();
     }
     // "X if C." and "If C, X." state the same condition (a trailing "if able" or "only
-    // if" is something else).
+    // if" is something else). A rendering's alternatives may be in either part.
     static TRAILING_IF: OnceLock<Option<Regex>> = OnceLock::new();
-    let trailing = TRAILING_IF
-        .get_or_init(|| Regex::new(r"(^|[.:—•] |\n)([^.:—•\n]+?) if ([^.,:\n]+)\.").ok());
+    let trailing = TRAILING_IF.get_or_init(|| {
+        Regex::new(
+            r"(^|[.:—•] |\n)((?:[^.:—•\n{}]|\{(?:[^{}]|\{[^{}]*\})*\})+?) if ((?:[^.,:\n{}]|\{(?:[^{}]|\{[^{}]*\})*\})+)\.",
+        )
+        .ok()
+    });
     let Some(trailing) = trailing else {
         return s;
     };

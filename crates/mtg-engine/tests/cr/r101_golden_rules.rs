@@ -61,6 +61,7 @@ fn cant_takes_precedence_over_may() {
     // play lands this turn" — the effect that precludes playing lands wins, whatever the
     // order.
     cr!("101.2");
+    cr_example!("101.2", "the effect that precludes you from playing lands wins");
     for explore_first in [true, false] {
         let mut t = explore_and_turf_wound(explore_first);
         let land = t.hand(P0, "Forest");
@@ -192,6 +193,7 @@ fn observe(t: &mut TestGame) -> Arc<Mutex<Vec<Seen>>> {
 fn simultaneous_choices_are_made_in_apnap_order_then_happen_at_once() {
     // The rule's example: "Each player sacrifices a creature."
     cr!("101.4");
+    cr_example!("101.4", "Each player sacrifices a creature.");
     ruling!(
         "Earth-Cult Elemental",
         "Once all choices have been made, all permanents are sacrificed simultaneously."

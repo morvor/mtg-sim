@@ -21,11 +21,18 @@ pub fn parse_triggered(text: &str, ctx: &CompileContext) -> Option<Ability> {
 /// unless that player sacrifices ...", where it's each of them).
 fn that_player_is_the_triggers(eff: &str) -> bool {
     let l = eff.to_lowercase();
+    let mut targeted = false;
     super::effects::split_sentences(&l).iter().any(|s| {
-        s.match_indices("that player").any(|(i, _)| {
+        // "target opponent reveals cards ... Then that player puts ...": the target.
+        let named = |before: &str| {
+            targeted || before.contains("target opponent") || before.contains("target player")
+        };
+        let found = s.match_indices("that player").any(|(i, _)| {
             let before = &s[..i];
-            !(before.contains("each opponent ") || before.contains("each player "))
-        })
+            !(before.contains("each opponent ") || before.contains("each player ") || named(before))
+        });
+        targeted = named(s);
+        found
     })
 }
 

@@ -122,6 +122,7 @@ fn exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         let slot = b.add_target(TargetSpec::player(pf, text), text);
         b.it_player = PlayerRef::Target(slot);
         b.it = Sel::Var(vars::IT);
+        name_the_exiled_card(b);
         return Some(effect(PlayerRef::Target(slot), filter));
     };
     let desc = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
@@ -132,7 +133,17 @@ fn exile_until(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     b.it = Sel::Var(vars::IT);
+    name_the_exiled_card(b);
     Some(effect(who, filter))
+}
+
+/// After exiling cards until one with a quality is exiled, "the exiled card" (one card)
+/// is that card, the last one exiled ("You may cast the exiled card without paying its
+/// mana cost if ...", Ryan Sinclair), not every card exiled; "the exiled cards" are all of
+/// them.
+pub(super) fn name_the_exiled_card(b: &mut Builder) {
+    b.named
+        .push(("the exiled card".into(), Sel::Var(vars::IT)));
 }
 
 fn effect(who: PlayerRef, filter: Filter) -> Effect {

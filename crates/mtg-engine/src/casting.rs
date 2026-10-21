@@ -261,6 +261,10 @@ pub fn cast_during_resolution_as(
         }
         opt.alt_cost = Some(Cost::free());
     }
+    // A land can't be cast, even by an effect that lets a player cast cards (CR 305.9).
+    if g.option_characteristics(card, &opt).is_land() {
+        return Err(Illegal("a land can't be cast".into()));
+    }
     g.cast_with_option(p, card, opt)
 }
 
