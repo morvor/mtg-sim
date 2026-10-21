@@ -13,7 +13,10 @@ use mtg_engine::*;
 #[test]
 fn transcendent_dragon_exiles_the_countered_spell_and_casts_it() {
     cr!("614.15", "701.6a", "608.2g");
-    ruling!("Transcendent Dragon", "as part of the resolution of Transcendent Dragon’s last ability");
+    ruling!(
+        "Transcendent Dragon",
+        "as part of the resolution of Transcendent Dragon’s last ability"
+    );
     assert_supported("Transcendent Dragon");
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
@@ -37,7 +40,7 @@ fn transcendent_dragon_exiles_the_countered_spell_and_casts_it() {
 
 #[test]
 fn enduring_angel_transforms_instead_of_its_controller_losing() {
-    cr!("614.1a", "119.3", "701.27a");
+    cr!("614.1a", "119.5", "701.27a");
     ruling!(
         "Enduring Angel // Angelic Enforcer",
         "It doesn't use the stack and can't be responded to"

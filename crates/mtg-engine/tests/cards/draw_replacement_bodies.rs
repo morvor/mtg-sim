@@ -14,7 +14,10 @@ use mtg_engine::*;
 #[test]
 fn enduring_renewal_mills_creatures_and_draws_other_cards() {
     cr!("614.6", "614.5", "121.1");
-    ruling!("Enduring Renewal", "the card you draw as a result of the second ability will be the card you revealed");
+    ruling!(
+        "Enduring Renewal",
+        "the card you draw as a result of the second ability will be the card you revealed"
+    );
     assert_supported("Enduring Renewal");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Enduring Renewal");
@@ -66,8 +69,11 @@ fn breathstealers_crypt_creature_drawn_is_discarded_unless_life_is_paid() {
 
 #[test]
 fn urabrask_exiles_the_opponents_next_draw_and_they_may_play_it() {
-    cr!("614.6", "611.2c");
-    ruling!("Urabrask, Heretic Praetor", "Players must pay all costs and follow all normal timing rules");
+    cr!("614.6");
+    ruling!(
+        "Urabrask, Heretic Praetor",
+        "Players must pay all costs and follow all normal timing rules"
+    );
     assert_supported("Urabrask, Heretic Praetor");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Urabrask, Heretic Praetor");

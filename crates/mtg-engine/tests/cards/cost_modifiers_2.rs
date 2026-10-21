@@ -25,16 +25,25 @@ fn brutal_suppression_rebels_sacrifice_a_land_to_activate() {
     // Amrou Scout: "{4}, {T}: Search your library for a Rebel permanent card ..."
     let scout = t.battlefield(P0, "Amrou Scout");
     t.lands(P0, "Plains", 4);
-    let lands_before = t.g.permanents().filter(|o| o.controller == P0 && o.chars.is(types::CardType::Land)).count();
+    let lands_before =
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && o.chars.is(types::CardType::Land))
+            .count();
     t.activate(P0, scout, 0, &[]).unwrap();
-    let lands_after = t.g.permanents().filter(|o| o.controller == P0 && o.chars.is(types::CardType::Land)).count();
+    let lands_after =
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && o.chars.is(types::CardType::Land))
+            .count();
     assert_eq!(lands_after, lands_before - 1);
 }
 
 #[test]
 fn drought_sacrifices_a_swamp_for_each_black_symbol() {
     cr!("602.2b", "601.2f", "118.3");
-    ruling!("Drought", "that’s 4 activations with {B} each so you sacrifice 4 Swamps");
+    ruling!(
+        "Drought",
+        "that’s 4 activations with {B} each so you sacrifice 4 Swamps"
+    );
     assert_supported("Drought");
     let swamps = |t: &TestGame| {
         t.g.permanents()
@@ -75,7 +84,10 @@ fn drought_sacrifices_a_swamp_for_each_black_symbol() {
 #[test]
 fn hinata_changes_costs_for_each_target() {
     cr!("601.2f", "601.2c");
-    ruling!("Hinata, Dawn-Crowned", "count the number of players or objects that are targets");
+    ruling!(
+        "Hinata, Dawn-Crowned",
+        "count the number of players or objects that are targets"
+    );
     assert_supported("Hinata, Dawn-Crowned");
     // Your spell with two targets costs {2} less.
     let mut t = TestGame::new(2);
@@ -95,11 +107,52 @@ fn hinata_changes_costs_for_each_target() {
     t.set_step(P1, Step::PrecombatMain);
     t.lands(P1, "Mountain", 1);
     let bolt = t.hand(P1, "Lightning Bolt");
-    assert!(t.cast(P1, bolt).target(Entity::Player(P0)).try_go().is_err());
+    assert!(t
+        .cast(P1, bolt)
+        .target(Entity::Player(P0))
+        .try_go()
+        .is_err());
     t.lands(P1, "Mountain", 1);
     let bolt = t.hand(P1, "Lightning Bolt");
     t.cast(P1, bolt).target(Entity::Player(P0)).go();
     assert_eq!(untapped(&t, P1), 0);
+}
+
+#[test]
+fn hinata_counts_a_creature_targeted_twice_once() {
+    cr!("601.2f", "601.2c", "115.3");
+    ruling!(
+        "Hinata, Dawn-Crowned",
+        "{1} less to cast if each instance targeted the same creature"
+    );
+    // Subtle Strike ({1}{B}), both modes at P0's one creature: {1} more, not {2}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hinata, Dawn-Crowned");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Swamp", 3);
+    let strike = t.hand(P1, "Subtle Strike");
+    t.cast(P1, strike)
+        .modes(&[0, 1])
+        .target(bears)
+        .target(bears)
+        .go();
+    assert_eq!(untapped(&t, P1), 0);
+    // Two different creatures: {2} more, so three Swamps aren't enough.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hinata, Dawn-Crowned");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Swamp", 3);
+    let strike = t.hand(P1, "Subtle Strike");
+    assert!(t
+        .cast(P1, strike)
+        .modes(&[0, 1])
+        .target(bears)
+        .target(giant)
+        .try_go()
+        .is_err());
 }
 
 #[test]
@@ -126,8 +179,11 @@ fn professor_hojo_reduces_the_first_targeting_activation_each_of_your_turns() {
 
 #[test]
 fn thick_skinned_goblin_pays_zero_for_echo() {
-    cr!("702.30a", "118.9");
-    ruling!("Thick-Skinned Goblin", "you may pay {0}, pay its echo cost, or choose not to pay");
+    cr!("702.30a");
+    ruling!(
+        "Thick-Skinned Goblin",
+        "you may pay {0}, pay its echo cost, or choose not to pay"
+    );
     assert_supported("Thick-Skinned Goblin");
     // Without the Goblin and without mana, the echo creature is sacrificed.
     let mut t = TestGame::new(2);
@@ -208,7 +264,11 @@ fn monastery_siege_dragons_taxes_spells_that_target_you_or_your_permanents() {
     let mut t = siege_game();
     t.lands(P1, "Mountain", 2);
     let bolt = t.hand(P1, "Lightning Bolt");
-    assert!(t.cast(P1, bolt).target(Entity::Player(P0)).try_go().is_err());
+    assert!(t
+        .cast(P1, bolt)
+        .target(Entity::Player(P0))
+        .try_go()
+        .is_err());
     t.clear_answers();
     t.lands(P1, "Mountain", 1);
     t.cast(P1, bolt).target(Entity::Player(P0)).go();
@@ -234,7 +294,10 @@ fn monastery_siege_dragons_taxes_spells_that_target_you_or_your_permanents() {
 #[test]
 fn not_of_this_world_is_free_against_a_spell_targeting_your_big_creature() {
     cr!("601.2f", "115.9b");
-    ruling!("Not of This World", "This check is made as you cast Not of This World");
+    ruling!(
+        "Not of This World",
+        "This check is made as you cast Not of This World"
+    );
     assert_supported("Not of This World");
     let mut t = TestGame::new(2);
     let bronto = t.battlefield(P0, "Ancient Brontodon");

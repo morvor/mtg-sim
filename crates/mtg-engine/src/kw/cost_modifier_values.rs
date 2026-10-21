@@ -38,10 +38,7 @@ pub const SPELL_TARGETS: &str = "cost: targets of the spell being cast";
 pub const COLOR_SYMBOLS: &str = "cost: mana symbols of color in the cost:";
 
 fn symbols_of(m: &ManaCost, c: Color) -> i64 {
-    m.symbols
-        .iter()
-        .filter(|s| s.colors().contains(c))
-        .count() as i64
+    m.symbols.iter().filter(|s| s.colors().contains(c)).count() as i64
 }
 
 /// The spell a cost change is about: the spell being cast (the event's spell for an effect
@@ -67,15 +64,17 @@ impl KeywordRules for CostModifierValues {
 
     fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
         if name == SPELL_TARGETS {
-            let n: usize = spell_of(g, ctx)
-                .and_then(|s| g.obj(s).stack.as_deref())
-                .map_or(0, |si| {
-                    si.chosen
-                        .iter()
-                        .map(|cm| cm.targets.iter().map(Vec::len).sum::<usize>())
-                        .sum()
-                });
-            return Some(n as i64);
+            // The players and objects that are targets, each counted once (Hinata ruling:
+            // "target creature" twice targeting the same creature counts one).
+            let mut seen: Vec<Entity> = Vec::new();
+            if let Some(si) = spell_of(g, ctx).and_then(|s| g.obj(s).stack.as_deref()) {
+                for e in si.chosen.iter().flat_map(|cm| cm.targets.iter().flatten()) {
+                    if !seen.contains(e) {
+                        seen.push(*e);
+                    }
+                }
+            }
+            return Some(seen.len() as i64);
         }
         let c = name
             .strip_prefix(COLOR_SYMBOLS)?
@@ -95,10 +94,15 @@ impl KeywordRules for CostModifierValues {
         });
         if let Some((src, uid)) = ability {
             {
-                let act = g.obj(src).chars.abilities.iter().find_map(|a| match &a.kind {
-                    AbilityKind::Activated(act) if a.uid == uid => Some(act),
-                    _ => None,
-                });
+                let act = g
+                    .obj(src)
+                    .chars
+                    .abilities
+                    .iter()
+                    .find_map(|a| match &a.kind {
+                        AbilityKind::Activated(act) if a.uid == uid => Some(act),
+                        _ => None,
+                    });
                 if let Some(act) = act {
                     return Some(act.cost.mana.as_ref().map_or(0, |m| symbols_of(m, c)));
                 }

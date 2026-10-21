@@ -80,7 +80,7 @@ fn ojer_axonil_raises_small_noncombat_damage_from_red_sources_to_its_power() {
 
 #[test]
 fn jeska_triples_combat_damage_to_opponents_until_your_next_turn() {
-    cr!("614.1a", "611.2c", "606.3");
+    cr!("614.1a");
     assert_supported("Jeska, Thrice Reborn");
     let mut t = TestGame::new(2);
     let jeska = t.battlefield(P0, "Jeska, Thrice Reborn");

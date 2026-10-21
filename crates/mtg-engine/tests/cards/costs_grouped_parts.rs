@@ -42,8 +42,14 @@ fn sphinx_of_the_chimes_discards_two_nonland_cards_with_the_same_name() {
 #[test]
 fn weight_of_conscience_taps_two_creatures_that_share_a_creature_type() {
     cr!("118.3", "302.6");
-    ruling!("Weight of Conscience", "you can tap creatures that haven’t been under your control");
-    ruling!("Weight of Conscience", "The Aura will then be put into your graveyard");
+    ruling!(
+        "Weight of Conscience",
+        "you can tap creatures that haven’t been under your control"
+    );
+    ruling!(
+        "Weight of Conscience",
+        "The Aura will then be put into your graveyard"
+    );
     assert_supported("Weight of Conscience");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
@@ -88,7 +94,10 @@ fn illuminated_folio_reveals_two_cards_that_share_a_color() {
 #[test]
 fn mossbridge_troll_taps_creatures_with_total_power_ten_or_greater() {
     cr!("118.3", "602.2b");
-    ruling!("Mossbridge Troll", "you may tap a Mossbridge Troll to help pay the cost of a different");
+    ruling!(
+        "Mossbridge Troll",
+        "you may tap a Mossbridge Troll to help pay the cost of a different"
+    );
     assert_supported("Mossbridge Troll");
     let mut t = TestGame::new(2);
     let troll = t.battlefield(P0, "Mossbridge Troll");
@@ -106,7 +115,7 @@ fn mossbridge_troll_taps_creatures_with_total_power_ten_or_greater() {
 
 #[test]
 fn the_capitoline_triad_exiles_historic_cards_with_total_mana_value_30() {
-    cr!("118.3", "107.3a");
+    cr!("118.3");
     assert_supported("The Capitoline Triad");
     let mut t = TestGame::new(2);
     let triad = t.battlefield(P0, "The Capitoline Triad");
@@ -130,7 +139,10 @@ fn the_capitoline_triad_exiles_historic_cards_with_total_mana_value_30() {
 #[test]
 fn zombie_scavengers_exiles_the_top_creature_card_of_its_graveyard() {
     cr!("404.2", "701.19a");
-    ruling!("Zombie Scavengers", "is the card that was put there most recently");
+    ruling!(
+        "Zombie Scavengers",
+        "is the card that was put there most recently"
+    );
     assert_supported("Zombie Scavengers");
     assert_supported("Necratog");
     let mut t = TestGame::new(2);
@@ -154,7 +166,7 @@ fn zombie_scavengers_exiles_the_top_creature_card_of_its_graveyard() {
 
 #[test]
 fn tetzimoc_reveals_itself_from_hand_during_your_turn() {
-    cr!("113.6", "701.20a", "602.5d");
+    cr!("113.6", "701.20a", "602.1b");
     ruling!("Tetzimoc, Primal Death", "more than once during your turn");
     assert_supported("Tetzimoc, Primal Death");
     let mut t = TestGame::new(2);
@@ -191,12 +203,15 @@ fn moxite_refinery_removes_x_counters_from_one_permanent() {
     // X = 3: no one permanent has three counters (three among them isn't enough).
     t.answer(P0, DecisionKind::X, Answer::Number(3));
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
-    assert!(t.activate(P0, refinery, 0, &[Entity::Object(rock)]).is_err());
+    assert!(t
+        .activate(P0, refinery, 0, &[Entity::Object(rock)])
+        .is_err());
     t.clear_answers();
     // X = 2, from the Bears: two charge counters on the Mind Stone.
     t.answer(P0, DecisionKind::X, Answer::Number(2));
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
-    t.activate(P0, refinery, 0, &[Entity::Object(rock)]).unwrap();
+    t.activate(P0, refinery, 0, &[Entity::Object(rock)])
+        .unwrap();
     assert_eq!(t.counters(a, "+1/+1"), 0);
     assert_eq!(t.counters(b, "+1/+1"), 1);
     t.resolve();

@@ -79,6 +79,11 @@ fn titania_ward_discard_a_card_or_pay_two() {
     t.answer_yes(P1, true);
     t.resolve_all();
     assert_eq!(t.g.obj(titania).damage, 3);
+    assert!(t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P1 && o.chars.has_subtype("Mountain"))
+        .all(|o| o.tapped));
     // Neither: the spell is countered.
     let mut t = TestGame::new(2);
     let titania = t.battlefield(P0, "Titania, Rugged Rumbler");
@@ -94,7 +99,10 @@ fn titania_ward_discard_a_card_or_pay_two() {
 #[test]
 fn anthropede_discards_or_pays_then_destroys_target_room() {
     cr!("603.12", "118.12");
-    ruling!("Anthropede", "a second \"reflexive\" ability triggers when you discard a card");
+    ruling!(
+        "Anthropede",
+        "a second \"reflexive\" ability triggers when you discard a card"
+    );
     assert_supported("Anthropede");
     let mut t = TestGame::new(2);
     let room = t.battlefield(P1, "Cramped Vents // Access Maze");
@@ -123,7 +131,10 @@ fn anthropede_discards_or_pays_then_destroys_target_room() {
 #[test]
 fn nimble_hobbit_pays_mana_without_a_food() {
     cr!("603.12", "118.12", "118.3");
-    ruling!("Nimble Hobbit", "triggers when you sacrifice a Food or pay {2}{W} this way");
+    ruling!(
+        "Nimble Hobbit",
+        "triggers when you sacrifice a Food or pay {2}{W} this way"
+    );
     assert_supported("Nimble Hobbit");
     let mut t = TestGame::new(2);
     let hobbit = t.battlefield(P0, "Nimble Hobbit");
@@ -156,6 +167,8 @@ fn preferred_selection_sacrifices_itself_and_pays() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Preferred Selection"));
     assert!(t.in_hand(P0, "Hill Giant") || t.in_hand(P0, "Craw Wurm"));
+    // Put into the hand, not drawn (the draw step hasn't come yet).
+    assert_eq!(t.g.history.cards_drawn.get(&P0).copied().unwrap_or(0), 0);
     assert_eq!(
         t.g.permanents()
             .filter(|o| o.chars.has_subtype("Forest") && o.tapped)

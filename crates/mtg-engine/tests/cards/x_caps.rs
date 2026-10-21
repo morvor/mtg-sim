@@ -58,14 +58,22 @@ fn soul_immolation_x_is_at_most_the_greatest_toughness() {
     cr!("107.3a", "601.2b", "601.2f");
     assert_supported("Soul Immolation");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Hill Giant");
-    t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     let wurm = t.battlefield(P1, "Craw Wurm");
     t.lands(P0, "Mountain", 10);
     let si = t.hand(P0, "Soul Immolation");
     // X = 4 is greater than the greatest toughness (3): the greatest legal value is used.
     t.answer(P0, DecisionKind::X, Answer::Number(4));
     t.cast(P0, si).go();
+    // Blight 3: three -1/-1 counters on one of P0's creatures, which dies.
+    t.settle();
+    let left = [giant, bears]
+        .iter()
+        .filter(|o| t.on_battlefield(**o))
+        .count();
+    assert_eq!(left, 1);
+    assert_eq!(t.graveyard_size(P0), 1);
     t.resolve();
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.g.obj(wurm).damage, 3);

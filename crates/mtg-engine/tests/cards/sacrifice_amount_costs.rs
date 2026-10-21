@@ -12,13 +12,18 @@ use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 fn horrors(t: &TestGame) -> usize {
-    t.g.permanents().filter(|o| o.chars.has_subtype("Horror")).count()
+    t.g.permanents()
+        .filter(|o| o.chars.has_subtype("Horror"))
+        .count()
 }
 
 #[test]
 fn emrakuls_evangel_counts_itself_among_the_sacrificed_creatures() {
-    cr!("107.3", "118.3");
-    ruling!("Emrakul's Evangel", "Emrakul’s Evangel’s ability counts itself");
+    cr!("118.3");
+    ruling!(
+        "Emrakul's Evangel",
+        "Emrakul’s Evangel’s ability counts itself"
+    );
     assert_supported("Emrakul's Evangel");
     // Nothing else sacrificed: one token.
     let mut t = TestGame::new(2);
@@ -42,8 +47,11 @@ fn emrakuls_evangel_counts_itself_among_the_sacrificed_creatures() {
 
 #[test]
 fn baba_lysaga_needs_three_card_types_among_the_sacrificed_permanents() {
-    cr!("107.3", "118.3");
-    ruling!("Baba Lysaga, Night Witch", "as they last existed on the battlefield");
+    cr!("118.3");
+    ruling!(
+        "Baba Lysaga, Night Witch",
+        "as they last existed on the battlefield"
+    );
     ruling!("Baba Lysaga, Night Witch", "it will have no effect");
     assert_supported("Baba Lysaga, Night Witch");
     // A land, a creature and an artifact.
@@ -56,7 +64,11 @@ fn baba_lysaga_needs_three_card_types_among_the_sacrificed_permanents() {
     t.answer(P0, DecisionKind::X, Answer::Number(3));
     t.answer_choose(
         P0,
-        &[Entity::Object(land), Entity::Object(bears), Entity::Object(rock)],
+        &[
+            Entity::Object(land),
+            Entity::Object(bears),
+            Entity::Object(rock),
+        ],
     );
     t.activate(P0, baba, 0, &[]).unwrap();
     t.resolve();
@@ -70,7 +82,10 @@ fn baba_lysaga_needs_three_card_types_among_the_sacrificed_permanents() {
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Hill Giant");
     t.answer(P0, DecisionKind::X, Answer::Number(3));
-    t.answer_choose(P0, &[Entity::Object(land), Entity::Object(a), Entity::Object(b)]);
+    t.answer_choose(
+        P0,
+        &[Entity::Object(land), Entity::Object(a), Entity::Object(b)],
+    );
     t.activate(P0, baba, 0, &[]).unwrap();
     t.resolve();
     assert_eq!(t.life(P1), 20);
@@ -82,13 +97,16 @@ fn baba_lysaga_needs_three_card_types_among_the_sacrificed_permanents() {
     }
     t.answer(P0, DecisionKind::X, Answer::Number(4));
     t.activate(P0, baba, 0, &[]).unwrap();
-    let forests = t.g.permanents().filter(|o| o.chars.has_subtype("Forest")).count();
+    let forests =
+        t.g.permanents()
+            .filter(|o| o.chars.has_subtype("Forest"))
+            .count();
     assert!(forests >= 1);
 }
 
 #[test]
 fn energy_vortex_the_chosen_player_pays_for_each_counter() {
-    cr!("118.12a", "107.3");
+    cr!("118.12a");
     ruling!("Energy Vortex", "Does a flat 3 damage");
     assert_supported("Energy Vortex");
     // P1 is chosen; two vortex counters; P1 has only one land.

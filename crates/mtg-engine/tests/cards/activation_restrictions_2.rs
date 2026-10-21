@@ -13,16 +13,15 @@ use mtg_engine::*;
 /// Whether `p` may activate the `index`th activated ability of `src` now.
 fn can(t: &mut TestGame, p: PlayerId, src: ObjectId, index: usize) -> bool {
     t.g.recompute();
-    let uid = t
-        .g
-        .obj(src)
-        .chars
-        .abilities
-        .iter()
-        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
-        .nth(index)
-        .map(|a| a.uid)
-        .expect("no such ability");
+    let uid =
+        t.g.obj(src)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+            .nth(index)
+            .map(|a| a.uid)
+            .expect("no such ability");
     let saved = t.g.turn.priority;
     t.g.turn.priority = Some(p);
     let ok = t.g.legal_actions(p).iter().any(|a| {
@@ -36,7 +35,10 @@ fn can(t: &mut TestGame, p: PlayerId, src: ObjectId, index: usize) -> bool {
 fn merseine_only_the_enchanted_creatures_controller_pays_its_mana_cost() {
     cr!("602.2", "118.3");
     ruling!("Merseine", "includes colored mana requirements");
-    ruling!("Merseine", "Can remove as many counters per turn as you want");
+    ruling!(
+        "Merseine",
+        "Can remove as many counters per turn as you want"
+    );
     assert_supported("Merseine");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
@@ -61,9 +63,15 @@ fn merseine_only_the_enchanted_creatures_controller_pays_its_mana_cost() {
 
 #[test]
 fn rocket_launcher_needs_control_since_your_most_recent_turn() {
-    cr!("602.5b", "302.6");
-    ruling!("Rocket Launcher", "you can activate the ability many times in one turn");
-    ruling!("Rocket Launcher", "It is only destroyed at end of turn if the ability resolved");
+    cr!("602.1b", "602.5");
+    ruling!(
+        "Rocket Launcher",
+        "you can activate the ability many times in one turn"
+    );
+    ruling!(
+        "Rocket Launcher",
+        "It is only destroyed at end of turn if the ability resolved"
+    );
     assert_supported("Rocket Launcher");
     // Came under P0's control this turn: no.
     let mut t = TestGame::new(2);
@@ -93,7 +101,7 @@ fn rocket_launcher_needs_control_since_your_most_recent_turn() {
 
 #[test]
 fn skyblades_boon_returns_from_the_battlefield_or_your_graveyard() {
-    cr!("113.6", "602.5b");
+    cr!("113.6", "602.1b");
     assert_supported("Skyblade's Boon");
     // From the graveyard.
     let mut t = TestGame::new(2);
@@ -119,7 +127,7 @@ fn skyblades_boon_returns_from_the_battlefield_or_your_graveyard() {
 
 #[test]
 fn nemesis_phoenix_returns_attacking_when_you_attack_two_opponents() {
-    cr!("602.5b", "508.1");
+    cr!("602.1b", "602.5");
     assert_supported("Nemesis Phoenix");
     let mut t = TestGame::new(3);
     let a = t.battlefield(P0, "Grizzly Bears");
@@ -139,7 +147,11 @@ fn nemesis_phoenix_returns_attacking_when_you_attack_two_opponents() {
     t.resolve();
     let p = t.named_on_battlefield("Nemesis Phoenix")[0];
     assert!(t.g.obj(p).tapped);
-    assert!(t.g.combat.as_ref().is_some_and(|c| c.attackers.iter().any(|x| x.id == p)));
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .is_some_and(|c| c.attackers.iter().any(|x| x.id == p)));
     // Attacking only one opponent: no.
     let mut t = TestGame::new(3);
     let a = t.battlefield(P0, "Grizzly Bears");
