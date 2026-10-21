@@ -230,6 +230,10 @@ const LEADS: &[Lead] = &[
     ("until your next turn, ", |p| {
         set_duration(p, Duration::UntilYourNextTurn)
     }),
+    // Brazen Cannonade (`next_turn::expire_end_of_combat_on_next_turn`).
+    ("until end of combat on your next turn, ", |p| {
+        set_duration(p, Duration::UntilEndOfCombatOnYourNextTurn)
+    }),
     ("until your next end step, ", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),

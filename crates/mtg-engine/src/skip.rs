@@ -18,13 +18,21 @@ pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
         }
         _ => false,
     };
-    // (source, controller, effect, uid of the static ability it comes from)
-    let mut cands: Vec<(Option<ObjectId>, PlayerId, ReplacementDef, Option<u64>)> = g
+    // (source, controller, effect, uid of the static ability it comes from, id of the
+    // one-shot effect)
+    type Cand = (
+        Option<ObjectId>,
+        PlayerId,
+        ReplacementDef,
+        Option<u64>,
+        Option<u32>,
+    );
+    let mut cands: Vec<Cand> = g
         .statics
         .replacements
         .iter()
         .filter(|(s, c, _, _, d)| applies(d, Some(*s), *c))
-        .map(|(s, c, _, a, d)| (Some(*s), *c, d.clone(), Some(a.uid)))
+        .map(|(s, c, _, a, d)| (Some(*s), *c, d.clone(), Some(a.uid), None))
         .collect();
     // One-shot effects ("you skip your draw step this turn"): several of them still skip
     // the step only once.
@@ -32,11 +40,18 @@ pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
         g.replacements
             .iter()
             .filter(|r| r.uses != Some(0) && applies(&r.def, r.source, r.controller))
-            .map(|r| (r.source, r.controller, r.def.clone(), None)),
+            .map(|r| (r.source, r.controller, r.def.clone(), None, Some(r.id))),
     );
-    for (src, ctl, d, uid) in cands {
+    for (src, ctl, d, uid, one_shot) in cands {
         if d.optional && !g.ask_yes_no(active, src, &format!("Skip your {kind:?} step?"), false) {
             continue;
+        }
+        // A limited one-shot effect ("skips their next combat phase this turn") is used
+        // up.
+        if let Some(r) = one_shot.and_then(|id| g.replacements.iter_mut().find(|r| r.id == id)) {
+            if let Some(u) = r.uses.as_mut() {
+                *u = u.saturating_sub(1);
+            }
         }
         if let (Some(src), Some(uid)) = (src, uid) {
             crate::structure::record_replacement(g, src, uid);

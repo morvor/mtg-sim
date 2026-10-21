@@ -61,6 +61,13 @@ fn parse_triggered_at(
             break;
         }
     }
+    // "This ability triggers only once." / "This ability triggers only twice each turn."
+    // (`trigger_limits.rs`).
+    let mut limit = None;
+    if let Some((rest, l)) = super::patterns::trigger_limits::limit_suffix(eff) {
+        eff = rest;
+        limit = Some(l);
+    }
     // Intervening "if" clause (CR 603.4).
     let mut intervening = None;
     let mut body_it: Option<Sel> = None;
@@ -266,6 +273,7 @@ fn parse_triggered_at(
     tr.is_mana_ability = is_mana_ability;
     tr.intervening_if = intervening;
     tr.once_per_turn = once_per_turn;
+    tr.limit = limit;
     tr.zone = trigger_zone(&tr.trigger, &eff.to_lowercase());
     // "At the beginning of your upkeep, if ~ is in your graveyard, ...": it functions from
     // the graveyard (CR 113.6).
