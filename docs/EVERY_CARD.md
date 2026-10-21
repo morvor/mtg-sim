@@ -180,6 +180,10 @@ Library rearrangements (`library.rs`: put on top/bottom, the rest of a dig) now 
 card to the object it is now (`tests/cards/card_flow_sight_beyond_sight.rs`). The tier
 file still charges both cards until the next sweep.
 
+The tier file was regenerated after merging newer engine work, with a fresh structure log
+and this sweep's report: the 321 cards that compile since then aren't in the report, so
+they fail `fuzz-swept` until the next sweep.
+
 ### Earlier sweeps
 
 At commit 47b8f9d (pool of 23,116 cards, 46,232 games, 3 threads, 64 min): no panic,

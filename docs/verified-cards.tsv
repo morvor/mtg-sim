@@ -5,7 +5,7 @@ name	tier	failed	notes
 "Lifetime" Pass Holder	compiled	round-trip; structure (1 of 3 unexercised)	
 +2 Mace	verified		
 A Good Day to Pie	unsupported	compiled (1 unsupported)	
-A Killer Among Us	unsupported	compiled (2 unsupported)	
+A Killer Among Us	compiled	round-trip; fuzz-swept (not in the report)	
 A Little Chat	verified		
 A Realm Reborn	round-trip	structure (1 of 1 unexercised)	
 A Tale for the Ages	round-trip	structure (1 of 1 unexercised)	
@@ -26,7 +26,7 @@ Aang, the Last Airbender	round-trip	structure (2 of 3 unexercised)
 Aarakocra Sneak	verified		
 Aardvark Sloth	verified		
 Aatchik, Emerald Radian	verified		
-Abaddon the Despoiler	unsupported	compiled (1 unsupported)	
+Abaddon the Despoiler	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Abandon Attachments	verified		
 Abandon Hope	round-trip	structure (1 of 2 unexercised)	
 Abandon Reason	round-trip	structure (1 of 2 unexercised)	
@@ -48,7 +48,7 @@ Aberrant Mind Sorcerer	compiled	round-trip; structure (1 of 1 unexercised)
 Aberrant Researcher // Perfected Form	verified		
 Aberrant Return	compiled	round-trip	
 Abeyance	compiled	round-trip	
-Abhorrent Oculus	round-trip	structure (2 of 3 unexercised)	
+Abhorrent Oculus	round-trip	structure (1 of 3 unexercised)	
 Abhorrent Overlord	round-trip	structure (1 of 3 unexercised)	
 Abiding Grace	round-trip	structure (1 of 1 unexercised)	
 Abigale, Eloquent First-Year	round-trip	structure (1 of 4 unexercised)	
@@ -74,7 +74,7 @@ Abrupt Decay	verified
 Absolute Grace	verified		
 Absolute Law	verified		
 Absolute Virtue	verified		
-Absolver Thrull	round-trip	structure (1 of 3 unexercised)	
+Absolver Thrull	verified		
 Absolving Lammasu	round-trip	structure (1 of 3 unexercised)	
 Absorb	verified		
 Absorb Identity	verified		
@@ -84,7 +84,7 @@ Absorbing Man and Titania	compiled	round-trip
 Abstergo Entertainment	round-trip	structure (1 of 3 unexercised)	
 Abstract Paintmage	round-trip	structure (1 of 1 unexercised)	
 Abstract Performance	compiled	round-trip	
-Abstruse Appropriation	unsupported	compiled (1 unsupported)	
+Abstruse Appropriation	compiled	round-trip; fuzz-swept (not in the report)	
 Abstruse Archaic	verified		
 Abstruse Interference	verified		
 Abu Ja'far	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -92,10 +92,10 @@ Abuelo's Awakening	round-trip	structure (1 of 1 unexercised)
 Abuelo, Ancestral Echo	verified		
 Abuna Acolyte	round-trip	structure (1 of 2 unexercised)	
 Abuna's Chant	round-trip	structure (1 of 2 unexercised)	
-Abundance	unsupported	compiled (1 unsupported)	
+Abundance	compiled	round-trip; fuzz-swept (not in the report)	
 Abundant Countryside	verified		
 Abundant Growth	verified		
-Abundant Harvest	unsupported	compiled (1 unsupported)	
+Abundant Harvest	compiled	round-trip; fuzz-swept (not in the report)	
 Abundant Maw	round-trip	structure (1 of 2 unexercised)	
 Abyssal Gatekeeper	round-trip	structure (1 of 1 unexercised)	
 Abyssal Gorestalker	verified		
@@ -121,7 +121,7 @@ Abzan Runemark	round-trip	structure (1 of 3 unexercised)
 Abzan Skycaptain	verified		
 Academic Ascent	verified		
 Academic Dispute	round-trip	structure (1 of 2 unexercised)	
-Academic Probation	unsupported	compiled (1 unsupported)	
+Academic Probation	compiled	round-trip; fuzz-swept (not in the report)	
 Academy Drake	verified		
 Academy Elite	round-trip	structure (1 of 2 unexercised)	
 Academy Journeymage	verified		
@@ -210,7 +210,7 @@ Adept Watershaper	round-trip	structure (1 of 1 unexercised)
 Adherent of Hope	round-trip	structure (1 of 1 unexercised)	
 Adipose Offspring	compiled	round-trip; structure (1 of 2 unexercised)	
 Admiral Beckett Brass	unsupported	compiled (1 unsupported)	
-Admiral Brass, Unsinkable	round-trip	structure (1 of 2 unexercised)	
+Admiral Brass, Unsinkable	verified		
 Admiral's Order	round-trip	structure (1 of 2 unexercised)	
 Admonition Angel	round-trip	structure (1 of 3 unexercised)	
 Adorned Crocodile	verified		
@@ -223,7 +223,7 @@ Adrix and Nev, Twincasters	verified
 Adult Gold Dragon	verified		
 Advance Scout	verified		
 Advanced Hoverguard	verified		
-Advanced Reconstruction	compiled	round-trip; structure (3 of 4 unexercised)	
+Advanced Reconstruction	compiled	round-trip; structure (2 of 4 unexercised)	
 Advanced Stitchwing	verified		
 Advancing the Spirit	round-trip	structure (1 of 2 unexercised)	
 Advent of the Wurm	verified		
@@ -327,7 +327,7 @@ Aetheric Amplifier	unsupported	compiled (1 unsupported)
 Aetherize	verified		
 Aetherjacket	round-trip	structure (1 of 3 unexercised)	
 Aetherling	verified		
-Aethermage's Touch	unsupported	compiled (1 unsupported)	
+Aethermage's Touch	compiled	round-trip; fuzz-swept (not in the report)	
 Aetherplasm	unsupported	compiled (1 unsupported)	
 Aethershield Artificer	round-trip	structure (1 of 1 unexercised)	
 Aethersnatch	verified		
@@ -703,7 +703,7 @@ Ambush Viper	verified
 Ambush Wolf	verified		
 Amethyst Dragon // Explosive Crystal	verified		
 Aminatou's Augury	unsupported	compiled (1 unsupported)	
-Aminatou, Veil Piercer	unsupported	compiled (1 unsupported)	
+Aminatou, Veil Piercer	compiled	round-trip; fuzz-swept (not in the report)	
 Aminatou, the Fateshifter	compiled	round-trip; structure (2 of 4 unexercised)	
 Ammit Eternal	verified		
 Amoeboid Changeling	verified		
@@ -765,7 +765,7 @@ Ancestral Tribute	round-trip	structure (1 of 2 unexercised)
 Ancestral Vengeance	verified		
 Ancestral Vision	verified		
 Anchor to Reality	compiled	round-trip; structure (1 of 2 unexercised)	
-Anchor to the Aether	round-trip	structure (1 of 1 unexercised)	
+Anchor to the Aether	verified		
 Anchovy & Banana Pizza	round-trip	structure (1 of 2 unexercised)	
 Ancient Adamantoise	round-trip	structure (1 of 5 unexercised)	
 Ancient Amphitheater	verified		
@@ -802,7 +802,7 @@ Ancient Vendetta	round-trip	structure (1 of 1 unexercised)
 Ancient Ziggurat	verified		
 And They Shall Know No Fear	verified		
 Andradite Leech	verified		
-Andúril, Flame of the West	compiled	round-trip; structure (1 of 3 unexercised)	
+Andúril, Flame of the West	compiled	round-trip	
 Andúril, Narsil Reforged	round-trip	structure (1 of 3 unexercised)	
 Anep, Vizier of Hazoret	verified		
 Angel of Condemnation	verified		
@@ -938,7 +938,7 @@ Antagonize	verified
 Anthem of Champions	verified		
 Anthem of Rakdos	verified		
 Anthousa, Setessan Hero	round-trip	structure (1 of 1 unexercised)	
-Anthropede	unsupported	compiled (1 unsupported)	
+Anthropede	compiled	round-trip; fuzz-swept (not in the report)	
 Anthroplasm	verified		
 Anti-Magic Aura	verified		
 Anti-Venom, Horrifying Healer	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -1129,7 +1129,7 @@ Archaic's Agony	compiled	round-trip
 Archangel	verified		
 Archangel Avacyn // Avacyn, the Purifier	round-trip	structure (1 of 6 unexercised)	
 Archangel Elspeth	round-trip	structure (2 of 3 unexercised)	
-Archangel of Strife	unsupported	compiled (3 unsupported)	
+Archangel of Strife	compiled	round-trip; fuzz-swept (not in the report)	
 Archangel of Thune	verified		
 Archangel of Tithes	compiled	round-trip	
 Archangel of Wrath	compiled	round-trip	
@@ -1160,7 +1160,7 @@ Architect of the Untamed	round-trip	structure (1 of 2 unexercised)
 Architects of Will	round-trip	structure (1 of 2 unexercised)	
 Archive Arbiter	round-trip	structure (1 of 2 unexercised)	
 Archive Dragon	verified		
-Archive Trap	round-trip	structure (2 of 2 unexercised)	
+Archive Trap	round-trip	structure (1 of 2 unexercised)	
 Archivist	verified		
 Archivist of Gondor	compiled	round-trip; structure (1 of 2 unexercised)	
 Archivist of Oghma	round-trip	structure (1 of 2 unexercised)	
@@ -1230,7 +1230,7 @@ Argent Mutation	round-trip	structure (1 of 2 unexercised)
 Argent Sphinx	verified		
 Argentum Armor	round-trip	structure (1 of 3 unexercised)	
 Argentum Masticore	compiled	round-trip; structure (1 of 3 unexercised)	
-Argivian Avenger	unsupported	compiled (1 unsupported)	
+Argivian Avenger	compiled	round-trip; fuzz-swept (not in the report)	
 Argivian Cavalier	verified		
 Argivian Find	round-trip	structure (1 of 1 unexercised)	
 Argivian Phalanx	verified		
@@ -1400,7 +1400,7 @@ Ashiok's Forerunner	verified
 Ashiok's Reaper	verified		
 Ashiok's Skulker	verified		
 Ashiok, Dream Render	compiled	round-trip; structure (1 of 2 unexercised)	
-Ashiok, Nightmare Muse	unsupported	compiled (1 unsupported)	
+Ashiok, Nightmare Muse	compiled	round-trip; structure (2 of 3 unexercised); fuzz-swept (not in the report)	
 Ashiok, Nightmare Weaver	compiled	round-trip; structure (3 of 3 unexercised)	
 Ashiok, Sculptor of Fears	round-trip	structure (2 of 3 unexercised)	
 Ashiok, Wicked Manipulator	unsupported	compiled (1 unsupported)	
@@ -1410,7 +1410,7 @@ Ashling's Prerogative	compiled	round-trip
 Ashling, Flame Dancer	compiled	round-trip; structure (1 of 2 unexercised)	
 Ashling, Rekindled // Ashling, Rimebound	verified		
 Ashling, the Extinguisher	compiled	round-trip	
-Ashling, the Limitless	unsupported	compiled (1 unsupported)	
+Ashling, the Limitless	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Ashmouth Hound	verified		
 Ashnod the Uncaring	unsupported	compiled (1 unsupported)	
 Ashnod's Altar	verified		
@@ -1440,7 +1440,7 @@ Assassin Initiate	round-trip	structure (1 of 1 unexercised)
 Assassin's Blade	compiled	round-trip; structure (1 of 2 unexercised)	
 Assassin's Ink	compiled	round-trip	
 Assassin's Strike	verified		
-Assassin's Trophy	round-trip	structure (1 of 1 unexercised)	
+Assassin's Trophy	verified		
 Assassinate	verified		
 Assault // Battery	verified		
 Assault Formation	round-trip	structure (1 of 3 unexercised)	
@@ -1526,7 +1526,7 @@ Atzocan Archer	verified
 Atzocan Seer	round-trip	structure (1 of 2 unexercised)	
 Audacious Infiltrator	verified		
 Audacious Reshapers	compiled	round-trip; structure (1 of 1 unexercised)	
-Audacious Swap	unsupported	compiled (1 unsupported)	
+Audacious Swap	compiled	round-trip; fuzz-swept (not in the report)	
 Audacious Thief	round-trip	structure (1 of 1 unexercised)	
 Audacity	verified		
 Audience with Trostani	verified		
@@ -1568,7 +1568,7 @@ Auratouched Mage	unsupported	compiled (1 unsupported)
 Aurelia's Fury	unsupported	compiled (1 unsupported)	
 Aurelia's Vindicator	compiled	round-trip	
 Aurelia, Exemplar of Justice	compiled	round-trip	
-Aurelia, the Law Above	unsupported	compiled (1 unsupported)	
+Aurelia, the Law Above	compiled	round-trip; fuzz-swept (not in the report)	
 Aurelia, the Warleader	round-trip	structure (1 of 4 unexercised)	
 Aurification	verified		
 Auriok Bladewarden	round-trip	structure (1 of 1 unexercised)	
@@ -1722,7 +1722,7 @@ Awakener Druid	compiled	round-trip
 Awakening	round-trip	structure (1 of 1 unexercised)	
 Awakening Zone	round-trip	structure (1 of 1 unexercised)	
 Awakening of Vitu-Ghazi	compiled	round-trip; structure (1 of 1 unexercised)	
-Awe Strike	round-trip	structure (1 of 1 unexercised)	
+Awe Strike	verified		
 Awe for the Guilds	round-trip	structure (1 of 1 unexercised)	
 Awesome Presence	compiled	round-trip	
 Axebane Beast	verified		
@@ -1787,7 +1787,7 @@ Azusa's Many Journeys // Likeness of the Seeker	round-trip	structure (1 of 4 une
 Azusa, Lost but Seeking	verified		
 Ba Sing Se	round-trip	structure (1 of 3 unexercised)	
 Baaallerina	unsupported	compiled (1 unsupported)	
-Baba Lysaga, Night Witch	unsupported	compiled (1 unsupported)	
+Baba Lysaga, Night Witch	compiled	round-trip; fuzz-swept (not in the report)	
 Baboon Spirit	round-trip	structure (2 of 2 unexercised)	
 Back for More	verified		
 Back for Seconds	unsupported	compiled (1 unsupported)	
@@ -1866,7 +1866,7 @@ Balloon Peddler	round-trip	structure (1 of 1 unexercised)
 Balloon Stand	verified		fuzz-cast exempt: supplementary-deck or conspiracy card
 Ballot Broker	verified		
 Ballroom	verified		
-Ballroom Brawlers	unsupported	compiled (1 unsupported)	
+Ballroom Brawlers	compiled	round-trip; fuzz-swept (not in the report)	
 Ballynock Cohort	verified		
 Ballynock Trapper	verified		
 Ballyrush Banneret	verified		
@@ -1894,8 +1894,8 @@ Band Together	compiled	round-trip
 Bandit's Haul	round-trip	structure (1 of 3 unexercised)	
 Bandit's Talent	compiled	round-trip; structure (3 of 4 unexercised)	
 Bane Alley Blackguard	verified		
-Bane Alley Broker	unsupported	compiled (1 unsupported)	
-Bane of Bala Ged	round-trip	structure (1 of 1 unexercised)	
+Bane Alley Broker	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
+Bane of Bala Ged	verified		
 Bane of Progress	round-trip	structure (1 of 1 unexercised)	
 Bane of the Living	round-trip	structure (1 of 2 unexercised)	
 Bane's Contingency	verified		
@@ -1969,7 +1969,7 @@ Bard's Company	round-trip	structure (1 of 3 unexercised)
 Bard, Heir of Girion	round-trip	structure (1 of 4 unexercised)	
 Bard, King of Dale	verified		
 Bargain	round-trip	structure (1 of 2 unexercised)	
-Bargaining Table	unsupported	compiled (1 unsupported)	
+Bargaining Table	compiled	round-trip; fuzz-swept (not in the report)	
 Barge In	round-trip	structure (1 of 1 unexercised)	
 Barging Sergeant	verified		
 Barishi	round-trip	structure (1 of 1 unexercised)	
@@ -2007,7 +2007,7 @@ Barrin's Codex	round-trip	structure (1 of 2 unexercised)
 Barrin's Spite	verified		
 Barrin's Unmaking	compiled	round-trip; structure (1 of 1 unexercised)	
 Barrin, Master Wizard	round-trip	structure (1 of 1 unexercised)	
-Barrin, Tolarian Archmage	round-trip	structure (1 of 2 unexercised)	
+Barrin, Tolarian Archmage	verified		
 Barroom Brawl	compiled	round-trip	
 Barrow Ghoul	verified		
 Barrow Naughty	verified		
@@ -2166,7 +2166,7 @@ Bearded Axe	verified
 Bearer of Glory	verified		
 Bearer of Memory	round-trip	structure (1 of 1 unexercised)	
 Bearer of Silence	verified		
-Bearer of the Heavens	round-trip	structure (1 of 1 unexercised)	
+Bearer of the Heavens	verified		
 Bearscape	round-trip	structure (1 of 1 unexercised)	
 Beast Attack	verified		
 Beast Hunt	verified		
@@ -2430,7 +2430,7 @@ Biting Tether	round-trip	structure (1 of 3 unexercised)
 Biting-Palm Ninja	round-trip	structure (1 of 3 unexercised)	
 Bitter Chill	round-trip	structure (1 of 4 unexercised)	
 Bitter Downfall	round-trip	structure (1 of 2 unexercised)	
-Bitter Feud	unsupported	compiled (2 unsupported)	
+Bitter Feud	compiled	round-trip; fuzz-swept (not in the report)	
 Bitter Ordeal	verified		
 Bitter Reunion	round-trip	structure (1 of 2 unexercised)	
 Bitter Revelation	round-trip	structure (1 of 1 unexercised)	
@@ -2567,7 +2567,7 @@ Blessed Ghoul	round-trip	structure (1 of 2 unexercised)
 Blessed Hippogriff // Tyr's Blessing	verified		
 Blessed Light	verified		
 Blessed Orator	round-trip	structure (1 of 1 unexercised)	
-Blessed Reincarnation	unsupported	compiled (1 unsupported)	
+Blessed Reincarnation	compiled	round-trip; fuzz-swept (not in the report)	
 Blessed Respite	verified		
 Blessed Reversal	verified		
 Blessed Sanctuary	round-trip	structure (2 of 2 unexercised)	
@@ -2804,7 +2804,7 @@ Bloodthirsty Aerialist	verified
 Bloodthirsty Blade	round-trip	structure (1 of 3 unexercised)	
 Bloodthirsty Conqueror	verified		
 Bloodthirsty Ogre	round-trip	structure (1 of 2 unexercised)	
-Bloodthorn Flail	unsupported	compiled (1 unsupported)	
+Bloodthorn Flail	compiled	round-trip; fuzz-swept (not in the report)	
 Bloodthorn Taunter	round-trip	structure (1 of 2 unexercised)	
 Bloodthrone Vampire	verified		
 Bloodtithe Collector	round-trip	structure (1 of 2 unexercised)	
@@ -2829,7 +2829,7 @@ Blossoming Bogbeast	round-trip	structure (1 of 1 unexercised)
 Blossoming Calm	verified		
 Blossoming Defense	verified		
 Blossoming Sands	verified		
-Blossoming Tortoise	round-trip	structure (1 of 3 unexercised)	
+Blossoming Tortoise	verified		
 Blossoming Wreath	round-trip	structure (1 of 1 unexercised)	
 Blot Out	compiled	round-trip	
 Blot Out the Sky	round-trip	structure (1 of 1 unexercised)	
@@ -2838,7 +2838,7 @@ Blowfly Infestation	round-trip	structure (1 of 1 unexercised)
 Bludgeon Brawl	unsupported	compiled (1 unsupported)	
 Blue Dragon	compiled	round-trip; structure (1 of 2 unexercised)	
 Blue Elemental Blast	verified		
-Blue Mage's Cane	unsupported	compiled (1 unsupported)	
+Blue Mage's Cane	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Blue Mana Battery	compiled	round-trip	
 Blue Marvel, Adam Brashear	verified		
 Blue Scarab	verified		
@@ -2912,7 +2912,7 @@ Boggart Trawler // Boggart Bog	verified
 Bogslither's Embrace	round-trip	structure (1 of 2 unexercised)	
 Bogstomper	verified		
 Bogwater Lumaret	verified		
-Bohn, Beguiling Balladeer	unsupported	compiled (1 unsupported)	
+Bohn, Beguiling Balladeer	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Boil	verified		
 Boilerbilges Ripper	verified		
 Boiling Blood	verified		
@@ -3129,7 +3129,7 @@ Bountiful Harvest	verified
 Bountiful Landscape	round-trip	structure (1 of 3 unexercised)	
 Bountiful Promenade	verified		
 Bounty Agent	compiled	round-trip; structure (1 of 2 unexercised)	
-Bounty Board	unsupported	compiled (1 unsupported)	
+Bounty Board	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Bounty Hunter	round-trip	structure (2 of 2 unexercised)	
 Bounty of Might	verified		
 Bounty of Skemfar	compiled	round-trip	
@@ -3254,11 +3254,11 @@ Breath of Fire	verified
 Breath of Fury	verified		
 Breath of Malfegor	verified		
 Breath of the Sleepless	round-trip	structure (1 of 2 unexercised)	
-Breathe Your Last	round-trip	structure (1 of 1 unexercised)	
+Breathe Your Last	verified		
 Breathkeeper Seraph	round-trip	structure (1 of 3 unexercised)	
 Breathless Knight	round-trip	structure (1 of 3 unexercised)	
 Breathstealer	verified		
-Breathstealer's Crypt	unsupported	compiled (1 unsupported)	
+Breathstealer's Crypt	compiled	round-trip; fuzz-swept (not in the report)	
 Bred for the Hunt	verified		
 Breeches, Brazen Plunderer	unsupported	compiled (1 unsupported)	
 Breeches, Eager Pillager	verified		
@@ -3435,7 +3435,7 @@ Brutal Deceiver	round-trip	structure (1 of 2 unexercised)
 Brutal Expulsion	verified		
 Brutal Hordechief	compiled	round-trip	
 Brutal Nightstalker	round-trip	structure (1 of 1 unexercised)	
-Brutal Suppression	unsupported	compiled (1 unsupported)	
+Brutal Suppression	compiled	round-trip; fuzz-swept (not in the report)	
 Brutalizer Exarch	round-trip	structure (1 of 1 unexercised)	
 Brute Force	verified		
 Brute Strength	verified		
@@ -3527,7 +3527,7 @@ Burning Vengeance	round-trip	structure (1 of 1 unexercised)
 Burning Wish	verified		
 Burning-Eye Zubera	compiled	round-trip	
 Burning-Fist Minotaur	round-trip	structure (1 of 2 unexercised)	
-Burning-Rune Demon	unsupported	compiled (1 unsupported)	
+Burning-Rune Demon	compiled	round-trip; fuzz-swept (not in the report)	
 Burning-Tree Bloodscale	verified		
 Burning-Tree Emissary	verified		
 Burning-Tree Shaman	compiled	round-trip	
@@ -3576,7 +3576,7 @@ Bygone Marvels	verified
 Byrke, Long Ear of the Law	verified		
 Byway Barterer	round-trip	structure (1 of 2 unexercised)	
 Byway Courier	round-trip	structure (1 of 1 unexercised)	
-Bösium Strip	unsupported	compiled (1 unsupported)	
+Bösium Strip	compiled	round-trip; fuzz-swept (not in the report)	
 C.A.M.P.	unsupported	compiled (1 unsupported)	
 Cabal Archon	verified		
 Cabal Coffers	round-trip	structure (1 of 1 unexercised)	
@@ -3624,7 +3624,7 @@ Cadaverous Bloom	verified
 Cadaverous Knight	verified		
 Cadira, Caller of the Small	round-trip	structure (1 of 2 unexercised)	
 Cadric, Soul Kindler	compiled	round-trip	
-Caduceus, Staff of Hermes	round-trip	structure (1 of 3 unexercised)	
+Caduceus, Staff of Hermes	verified		
 Caelorna, Coral Tyrant	verified		
 Caesar, Legion's Emperor	verified		
 Cage of Hands	verified		
@@ -3683,13 +3683,13 @@ Call to Mind	verified
 Call to Serve	verified		
 Call to the Feast	verified		
 Call to the Grave	verified		
-Call to the Kindred	unsupported	compiled (1 unsupported)	
+Call to the Kindred	compiled	round-trip; fuzz-swept (not in the report)	
 Call to the Netherworld	round-trip	structure (1 of 2 unexercised)	
 Call to the Void	unsupported	compiled (1 unsupported)	
 Callaphe, Beloved of the Sea	verified		
 Caller of Gales	verified		
 Caller of the Claw	round-trip	structure (1 of 2 unexercised)	
-Caller of the Hunt	unsupported	compiled (1 unsupported)	
+Caller of the Hunt	compiled	round-trip; fuzz-swept (not in the report)	
 Caller of the Pack	verified		
 Caller of the Untamed	unsupported	compiled (1 unsupported)	
 Callidus Assassin	verified		
@@ -3866,7 +3866,7 @@ Carrion Call	round-trip	structure (1 of 1 unexercised)
 Carrion Crow	verified		
 Carrion Cruiser	round-trip	structure (1 of 2 unexercised)	
 Carrion Feeder	verified		
-Carrion Grub	round-trip	structure (1 of 2 unexercised)	
+Carrion Grub	verified		
 Carrion Howler	round-trip	structure (1 of 1 unexercised)	
 Carrion Imp	round-trip	structure (1 of 2 unexercised)	
 Carrion Locust	verified		
@@ -4018,7 +4018,7 @@ Cavern Lampad	round-trip	structure (1 of 3 unexercised)
 Cavern Stomper	verified		
 Cavern Thoctar	verified		
 Cavern Whisperer	verified		
-Cavern of Souls	unsupported	compiled (1 unsupported)	
+Cavern of Souls	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Cavern-Hoard Dragon	verified		
 Cavernous Maw	compiled	round-trip	
 Caverns of Despair	verified		
@@ -4044,12 +4044,12 @@ Celestial Armor	round-trip	structure (1 of 4 unexercised)
 Celestial Colonnade	verified		
 Celestial Convergence	verified		
 Celestial Crusader	verified		
-Celestial Dawn	unsupported	compiled (1 unsupported)	
+Celestial Dawn	compiled	round-trip; fuzz-swept (not in the report)	
 Celestial Enforcer	round-trip	structure (1 of 1 unexercised)	
 Celestial Flare	verified		
 Celestial Force	round-trip	structure (1 of 1 unexercised)	
 Celestial Gatekeeper	compiled	round-trip; structure (1 of 2 unexercised)	
-Celestial Judgment	unsupported	compiled (1 unsupported)	
+Celestial Judgment	compiled	round-trip; fuzz-swept (not in the report)	
 Celestial Kirin	compiled	round-trip; structure (1 of 2 unexercised)	
 Celestial Mantle	compiled	round-trip	
 Celestial Messenger	round-trip	structure (1 of 3 unexercised)	
@@ -4060,7 +4060,7 @@ Celestial Reunion	unsupported	compiled (2 unsupported)
 Celestial Unicorn	verified		
 Celestine, the Living Saint	round-trip	structure (1 of 3 unexercised)	
 Celestus Sanctifier	verified		
-Cellar Door	unsupported	compiled (1 unsupported)	
+Cellar Door	compiled	round-trip; fuzz-swept (not in the report)	
 Cement Shoes	round-trip	structure (1 of 3 unexercised)	
 Cemetery Desecrator	unsupported	compiled (1 unsupported)	
 Cemetery Gate	verified		
@@ -4182,7 +4182,7 @@ Champion of the Path	verified
 Champion of the Perished	verified		
 Champion of the Weird	verified		
 Champion's Drake	verified		
-Champion's Helm	round-trip	structure (1 of 3 unexercised)	
+Champion's Helm	verified		
 Champion's Victory	verified		
 Champions from Beyond	round-trip	structure (1 of 3 unexercised)	
 Champions of Minas Tirith	unsupported	compiled (1 unsupported)	
@@ -4390,7 +4390,7 @@ Chimney Imp	round-trip	structure (1 of 2 unexercised)
 Chimney Rabble	verified		
 Chisei, Heart of Oceans	round-trip	structure (1 of 2 unexercised)	
 Chishiro, the Shattered Blade	round-trip	structure (2 of 2 unexercised)	
-Chiss-Goria, Forge Tyrant	unsupported	compiled (1 unsupported)	
+Chiss-Goria, Forge Tyrant	compiled	round-trip; fuzz-swept (not in the report)	
 Chitin Gravestalker	round-trip	structure (1 of 2 unexercised)	
 Chitinous Cloak	verified		
 Chitinous Graspling	verified		
@@ -4436,7 +4436,7 @@ Chorus of the Tides	round-trip	structure (1 of 2 unexercised)
 Chosen by Heliod	verified		
 Chosen of Markov // Markov's Servant	round-trip	structure (1 of 1 unexercised)	
 Chromanticore	round-trip	structure (1 of 7 unexercised)	
-Chromatic Armor	unsupported	compiled (1 unsupported)	
+Chromatic Armor	compiled	round-trip; fuzz-swept (not in the report)	
 Chromatic Lantern	verified		
 Chromatic Orrery	round-trip	structure (1 of 3 unexercised)	
 Chromatic Sphere	verified		
@@ -4537,7 +4537,7 @@ Citywatch Sphinx	round-trip	structure (1 of 2 unexercised)
 Citywide Bust	round-trip	structure (1 of 1 unexercised)	
 Civic Gardener	round-trip	structure (1 of 1 unexercised)	
 Civic Guildmage	round-trip	structure (1 of 2 unexercised)	
-Civic Saber	round-trip	structure (1 of 2 unexercised)	
+Civic Saber	verified		
 Civic Stalwart	verified		
 Civic Wayfinder	verified		
 Civil Servant	round-trip	structure (1 of 1 unexercised)	
@@ -4564,7 +4564,7 @@ Clara Oswald	round-trip	structure (1 of 4 unexercised)
 Clarion Cathars	verified		
 Clarion Conqueror	verified		
 Clarion Spirit	verified		
-Clarion Ultimatum	unsupported	compiled (1 unsupported)	
+Clarion Ultimatum	compiled	round-trip; fuzz-swept (not in the report)	
 Clash of Elements	unsupported	compiled (1 unsupported)	
 Clash of Realities	round-trip	structure (2 of 2 unexercised)	
 Clash of Titans	verified		
@@ -4800,7 +4800,7 @@ Collective Effort	verified
 Collective Inferno	compiled	round-trip	
 Collective Nightmare	verified		
 Collective Resistance	verified		
-Collective Restraint	compiled	round-trip; structure (1 of 1 unexercised)	
+Collective Restraint	compiled	round-trip	
 Collective Unconscious	round-trip	structure (1 of 1 unexercised)	
 Collective Voyage	compiled	round-trip; structure (1 of 1 unexercised)	
 Collector Ouphe	verified		
@@ -4983,7 +4983,7 @@ Conjured Currency	compiled	round-trip
 Conjurer's Ban	compiled	round-trip	
 Conjurer's Bauble	round-trip	structure (1 of 1 unexercised)	
 Conjurer's Closet	verified		
-Conjurer's Mantle	unsupported	compiled (1 unsupported)	
+Conjurer's Mantle	compiled	round-trip; fuzz-swept (not in the report)	
 Connecting the Dots	round-trip	structure (1 of 2 unexercised)	
 Connive // Concoct	round-trip	structure (1 of 2 unexercised)	
 Conquering Manticore	round-trip	structure (1 of 2 unexercised)	
@@ -5076,7 +5076,7 @@ Control Magic	verified
 Control of the Court	verified		
 Controlled Instincts	round-trip	fuzz-cast (never cast: never legal to cast)	
 Controvert	verified		
-Conundrum Sphinx	unsupported	compiled (1 unsupported)	
+Conundrum Sphinx	compiled	round-trip; fuzz-swept (not in the report)	
 Convalescence	round-trip	structure (1 of 1 unexercised)	
 Convalescent Care	round-trip	structure (1 of 1 unexercised)	
 Convenient Target	verified		
@@ -5185,10 +5185,10 @@ Cosi's Ravager	round-trip	structure (1 of 1 unexercised)
 Cosi's Trickster	compiled	round-trip	
 Cosima, God of the Voyage // The Omenkeel	compiled	round-trip; structure (1 of 3 unexercised)	
 Cosmic Crucible	round-trip	structure (2 of 2 unexercised)	
-Cosmic Cube	unsupported	compiled (1 unsupported)	
+Cosmic Cube	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Cosmic Epiphany	round-trip	structure (1 of 1 unexercised)	
 Cosmic Hunger	round-trip	structure (1 of 1 unexercised)	
-Cosmic Intervention	unsupported	compiled (1 unsupported)	
+Cosmic Intervention	compiled	round-trip; fuzz-swept (not in the report)	
 Cosmic Larva	verified		
 Cosmic Rebirth	compiled	round-trip	
 Cosmic Spider-Man	round-trip	structure (1 of 6 unexercised)	
@@ -5203,7 +5203,7 @@ Cost of Brilliance	round-trip	structure (1 of 1 unexercised)
 Costly Plunder	verified		
 Costume Closet	round-trip	structure (1 of 3 unexercised)	
 Costume Shop	round-trip	structure (1 of 1 unexercised)	fuzz-cast exempt: supplementary-deck or conspiracy card
-Council Guardian	unsupported	compiled (1 unsupported)	
+Council Guardian	compiled	round-trip; fuzz-swept (not in the report)	
 Council of Advisors	verified		
 Council of Echoes	compiled	round-trip; structure (1 of 2 unexercised)	
 Council of Reeds	round-trip	structure (2 of 2 unexercised)	
@@ -5226,7 +5226,7 @@ Countersquall	round-trip	structure (1 of 1 unexercised)
 Countervailing Winds	verified		
 Countless Gears Renegade	verified		
 Country Roads	verified		
-Countryside Crusher	round-trip	structure (2 of 2 unexercised)	
+Countryside Crusher	verified		
 Courage in Crisis	round-trip	structure (1 of 1 unexercised)	
 Courageous Goblin	verified		
 Courageous Outrider	round-trip	structure (1 of 1 unexercised)	
@@ -5273,12 +5273,12 @@ Covetous Urge	compiled	round-trip; structure (1 of 1 unexercised)
 Cowabunga!	round-trip	structure (1 of 1 unexercised)	
 Coward // Killer	compiled	round-trip	
 Cowardice	round-trip	structure (1 of 1 unexercised)	
-Cowed by Wisdom	compiled	round-trip; structure (2 of 3 unexercised)	
+Cowed by Wisdom	compiled	round-trip	
 Cower in Fear	verified		
 Cowl Prowler	verified		
 Crab Umbra	verified		
 Crabapple Cohort	verified		
-Crabomination	unsupported	compiled (1 unsupported)	
+Crabomination	compiled	round-trip; fuzz-swept (not in the report)	
 Crack Open	round-trip	structure (1 of 1 unexercised)	
 Crack in Time	round-trip	structure (1 of 2 unexercised)	
 Crack the Earth	round-trip	structure (1 of 1 unexercised)	
@@ -5346,7 +5346,7 @@ Crawling Barrens	round-trip	structure (1 of 2 unexercised)
 Crawling Chorus	verified		
 Crawling Filth	verified		
 Crawling Infestation	verified		
-Crawling Sensation	round-trip	structure (1 of 2 unexercised)	
+Crawling Sensation	verified		
 Crawlspace	verified		
 Crazed Armodon	round-trip	structure (1 of 1 unexercised)	
 Crazed Firecat	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -5482,7 +5482,7 @@ Cruel Ultimatum	round-trip	structure (1 of 1 unexercised)
 Cruel Witness	verified		
 Cruelclaw's Heist	compiled	round-trip	
 Crumb and Get It	verified		
-Crumble to Dust	round-trip	structure (1 of 2 unexercised); fuzz-cast (never cast: never legal to cast)	
+Crumble to Dust	round-trip	fuzz-cast (never cast: never legal to cast)	
 Crumbling Ashes	round-trip	structure (1 of 1 unexercised)	
 Crumbling Colossus	round-trip	structure (1 of 2 unexercised)	
 Crumbling Necropolis	verified		
@@ -5609,15 +5609,15 @@ Cunning Giant	unsupported	compiled (1 unsupported)
 Cunning Lethemancer	verified		
 Cunning Maneuver	verified		
 Cunning Nightbonder	compiled	round-trip	
-Cunning Rhetoric	unsupported	compiled (1 unsupported)	
+Cunning Rhetoric	compiled	round-trip; fuzz-swept (not in the report)	
 Cunning Sparkmage	verified		
 Cunning Strike	verified		
 Cunning Survivor	round-trip	structure (1 of 1 unexercised)	
 Cunning Wish	round-trip	structure (1 of 1 unexercised)	
 Cuombajj Witches	verified		
 Curate	verified		
-Curator Beastie	round-trip	structure (1 of 3 unexercised)	
-Curator of Destinies	round-trip	structure (1 of 3 unexercised)	
+Curator Beastie	verified		
+Curator of Destinies	verified		
 Curator of Mysteries	round-trip	structure (1 of 3 unexercised)	
 Curator of Sun's Creation	compiled	round-trip	
 Curator's Ward	round-trip	structure (1 of 3 unexercised)	
@@ -5649,7 +5649,7 @@ Curse of Disturbance	verified
 Curse of Echoes	unsupported	compiled (1 unsupported)	
 Curse of Exhaustion	verified		
 Curse of Fool's Wisdom	verified		
-Curse of Hospitality	unsupported	compiled (1 unsupported)	
+Curse of Hospitality	compiled	round-trip; fuzz-swept (not in the report)	
 Curse of Inertia	compiled	round-trip; structure (1 of 2 unexercised)	
 Curse of Leeches // Leeching Lurker	unsupported	compiled (1 unsupported)	
 Curse of Marit Lage	round-trip	structure (1 of 2 unexercised)	
@@ -5664,7 +5664,7 @@ Curse of Silence	round-trip	structure (2 of 4 unexercised)
 Curse of Stalked Prey	compiled	round-trip	
 Curse of Surveillance	unsupported	compiled (1 unsupported)	
 Curse of Thirst	compiled	round-trip	
-Curse of Unbinding	unsupported	compiled (1 unsupported)	
+Curse of Unbinding	compiled	round-trip; fuzz-swept (not in the report)	
 Curse of Vengeance	round-trip	structure (2 of 3 unexercised)	
 Curse of Verbosity	verified		
 Curse of Vitality	verified		
@@ -5697,7 +5697,7 @@ Custodi Lich	compiled	round-trip
 Custodi Peacekeeper	round-trip	structure (1 of 2 unexercised)	
 Custodi Soulbinders	verified		
 Custodi Soulcaller	verified		
-Custodi Squire	unsupported	compiled (1 unsupported)	
+Custodi Squire	compiled	round-trip; fuzz-swept (not in the report)	
 Custodian of the Trove	verified		
 Custody Battle	round-trip	structure (1 of 2 unexercised)	
 Customs Depot	round-trip	structure (1 of 1 unexercised)	
@@ -5722,7 +5722,7 @@ Cyberdrive Awakener	round-trip	structure (2 of 3 unexercised)
 Cyberman Patrol	round-trip	structure (1 of 1 unexercised)	
 Cybermat	round-trip	structure (1 of 2 unexercised)	
 Cybermen Squadron	round-trip	structure (1 of 1 unexercised)	
-Cybernetica Datasmith	unsupported	compiled (1 unsupported)	
+Cybernetica Datasmith	compiled	round-trip; fuzz-swept (not in the report)	
 Cybership	round-trip	structure (1 of 3 unexercised)	
 Cycle of Life	verified		
 Cycle of Renewal	verified		
@@ -5748,7 +5748,7 @@ Cytoplast Manipulator	verified
 Cytoplast Root-Kin	round-trip	structure (2 of 3 unexercised)	
 Cytoshape	verified		
 Cytospawn Shambler	round-trip	structure (1 of 2 unexercised)	
-Círdan the Shipwright	unsupported	compiled (1 unsupported)	
+Círdan the Shipwright	compiled	round-trip; fuzz-swept (not in the report)	
 D'Avenant Healer	verified		
 D'Avenant Trapper	round-trip	structure (1 of 1 unexercised)	
 Dack Fayden	compiled	round-trip; structure (2 of 3 unexercised)	
@@ -5806,7 +5806,7 @@ Dance with Calamity	unsupported	compiled (1 unsupported)
 Dance with Devils	round-trip	structure (1 of 1 unexercised)	
 Dancer's Chakrams	round-trip	structure (1 of 3 unexercised)	
 Dancing Scimitar	verified		
-Dancing Sword	round-trip	structure (1 of 3 unexercised)	
+Dancing Sword	verified		
 Dancing from Dark to Dawn	round-trip	structure (1 of 2 unexercised)	
 Dandân	verified		
 Dangerous Wager	verified		
@@ -6004,7 +6004,7 @@ Day of Black Sun	verified
 Day of Destiny	verified		
 Day of Judgment	verified		
 Day of the Dragons	compiled	round-trip; structure (1 of 2 unexercised)	
-Day of the Moon	unsupported	compiled (1 unsupported)	
+Day of the Moon	compiled	round-trip; fuzz-swept (not in the report)	
 Day's Undoing	verified		
 Daybreak Chaplain	verified		
 Daybreak Charger	verified		
@@ -6021,12 +6021,12 @@ Dazzling Denial	round-trip	structure (1 of 1 unexercised)
 Dazzling Lights	verified		
 Dazzling Ramparts	verified		
 Dazzling Reflection	round-trip	structure (1 of 1 unexercised)	
-Dazzling Sphinx	unsupported	compiled (1 unsupported)	
+Dazzling Sphinx	compiled	round-trip; fuzz-swept (not in the report)	
 Dazzling Theater // Prop Room	round-trip	structure (1 of 2 unexercised)	
 Dead // Gone	round-trip	structure (1 of 2 unexercised)	
 Dead Before Sunrise	round-trip	structure (1 of 1 unexercised)	
 Dead Drop	verified		
-Dead Man's Chest	unsupported	compiled (1 unsupported)	
+Dead Man's Chest	compiled	round-trip; fuzz-swept (not in the report)	
 Dead Reckoning	round-trip	structure (1 of 1 unexercised)	
 Dead Reveler	verified		
 Dead Revels	verified		
@@ -6147,14 +6147,14 @@ Deathmask Nezumi	round-trip	structure (1 of 1 unexercised)
 Deathmist Raptor	compiled	round-trip	
 Deathpact Angel	verified		
 Deathreap Ritual	verified		
-Deathrender	round-trip	structure (1 of 3 unexercised)	
+Deathrender	verified		
 Deathrite Shaman	round-trip	structure (2 of 3 unexercised)	
 Deathspore Thallid	round-trip	structure (1 of 3 unexercised)	
 Deathsprout	round-trip	structure (1 of 1 unexercised)	
 Debilitating Injury	verified		
 Debris Beetle	verified		
 Debris Field Crusher	round-trip	structure (1 of 3 unexercised)	
-Debt of Loyalty	unsupported	compiled (1 unsupported)	
+Debt of Loyalty	compiled	round-trip; fuzz-swept (not in the report)	
 Debt to the Deathless	verified		
 Debt to the Kami	compiled	round-trip	
 Debtor's Pulpit	round-trip	structure (1 of 2 unexercised)	
@@ -6260,7 +6260,7 @@ Defenders of Humanity	round-trip	structure (2 of 2 unexercised)
 Defenestrate	round-trip	structure (1 of 1 unexercised)	
 Defenestrated Phantom	verified		
 Defense Grid	verified		
-Defense of the Heart	round-trip	structure (1 of 1 unexercised)	
+Defense of the Heart	verified		
 Defensive Formation	verified		
 Defensive Maneuvers	round-trip	structure (1 of 1 unexercised)	
 Defensive Stance	round-trip	structure (1 of 2 unexercised)	
@@ -6310,7 +6310,7 @@ Delete	round-trip	structure (1 of 1 unexercised)
 Deliberate	verified		
 Delif's Cone	compiled	round-trip	
 Delif's Cube	compiled	round-trip; structure (2 of 2 unexercised)	
-Delighted Halfling	unsupported	compiled (1 unsupported)	
+Delighted Halfling	compiled	round-trip; fuzz-swept (not in the report)	
 Delightful Discovery	round-trip	structure (1 of 2 unexercised)	
 Delina, Wild Mage	unsupported	compiled (1 unsupported)	
 Delirium	unsupported	compiled (1 unsupported)	
@@ -6331,7 +6331,7 @@ Demand Answers	verified
 Demanding Dragon	round-trip	structure (1 of 2 unexercised)	
 Dematerialize	verified		
 Dementia Bat	verified		
-Dementia Sliver	unsupported	compiled (1 unsupported)	
+Dementia Sliver	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Demigod of Revenge	verified		
 Demilich	round-trip	structure (3 of 3 unexercised)	
 Demogorgon's Clutches	verified		
@@ -6347,7 +6347,7 @@ Demon of Death's Gate	round-trip	structure (1 of 3 unexercised)
 Demon of Fate's Design	round-trip	structure (1 of 4 unexercised)	
 Demon of Loathing	verified		
 Demon of Wailing Agonies	verified		
-Demon's Disciple	round-trip	structure (1 of 1 unexercised)	
+Demon's Disciple	verified		
 Demon's Due	verified		
 Demon's Grasp	verified		
 Demon's Herald	verified		
@@ -6417,7 +6417,7 @@ Deranged Whelp	verified
 Derelict Attic // Widow's Walk	round-trip	structure (1 of 2 unexercised)	
 Derevi, Empyrial Tactician	compiled	round-trip	
 Dermoplasm	compiled	round-trip	
-Dermotaxi	unsupported	compiled (1 unsupported)	
+Dermotaxi	compiled	round-trip; fuzz-swept (not in the report)	
 Descend upon the Sinful	verified		
 Descendant of Kiyomaro	round-trip	structure (1 of 1 unexercised)	
 Descendant of Masumaro	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -6476,7 +6476,7 @@ Desperate Lunge	round-trip	structure (1 of 1 unexercised)
 Desperate Measures	compiled	round-trip	
 Desperate Plea	round-trip	structure (1 of 2 unexercised)	
 Desperate Ravings	verified		
-Desperate Research	unsupported	compiled (1 unsupported)	
+Desperate Research	compiled	round-trip; fuzz-swept (not in the report)	
 Desperate Ritual	verified		
 Desperate Sentry	verified		
 Desperate Stand	verified		
@@ -6538,7 +6538,7 @@ Devour Intellect	round-trip	structure (1 of 1 unexercised)
 Devour in Flames	round-trip	structure (1 of 2 unexercised)	
 Devour in Shadow	round-trip	structure (1 of 1 unexercised)	
 Devourer of Destiny	compiled	round-trip	
-Devourer of Memory	round-trip	structure (1 of 2 unexercised)	
+Devourer of Memory	verified		
 Devouring Deep	verified		
 Devouring Greed	compiled	round-trip	
 Devouring Hellion	compiled	round-trip	
@@ -6573,7 +6573,7 @@ Diamond Pick-Axe	round-trip	structure (1 of 3 unexercised)
 Diamond Weapon	round-trip	structure (1 of 3 unexercised)	
 Diaochan, Artful Beauty	compiled	round-trip; structure (1 of 1 unexercised)	
 Diary of Dreams	round-trip	structure (1 of 2 unexercised)	
-Dichotomancy	unsupported	compiled (1 unsupported)	
+Dichotomancy	compiled	round-trip; fuzz-swept (not in the report)	
 Dictate of Erebos	round-trip	structure (1 of 2 unexercised)	
 Dictate of Heliod	verified		
 Dictate of Karametra	verified		
@@ -6598,8 +6598,8 @@ Diluvian Primordial	compiled	round-trip
 Dimension X	verified		
 Dimension X Pizzasaur	round-trip	structure (2 of 2 unexercised)	
 Dimensional Breach	unsupported	compiled (1 unsupported)	
-Dimensional Exile	round-trip	structure (1 of 2 unexercised)	
-Dimensional Infiltrator	round-trip	structure (1 of 4 unexercised)	
+Dimensional Exile	verified		
+Dimensional Infiltrator	verified		
 Diminish	verified		
 Diminisher Witch	round-trip	structure (1 of 2 unexercised)	
 Diminishing Returns	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -6607,7 +6607,7 @@ Dimir Aqueduct	verified
 Dimir Charm	compiled	round-trip	
 Dimir Cluestone	verified		
 Dimir Cutpurse	round-trip	structure (1 of 1 unexercised)	
-Dimir Doppelganger	round-trip	structure (1 of 1 unexercised)	
+Dimir Doppelganger	verified		
 Dimir Guildgate	verified		
 Dimir Guildmage	round-trip	structure (2 of 2 unexercised)	
 Dimir House Guard	verified		
@@ -6623,7 +6623,7 @@ Din of the Fireherd	round-trip	structure (1 of 1 unexercised)
 Dina's Guidance	compiled	round-trip	
 Dina, Essence Brewer	round-trip	structure (2 of 2 unexercised)	
 Dina, Soul Steeper	verified		
-Dingus Egg	round-trip	structure (1 of 1 unexercised)	
+Dingus Egg	verified		
 Dingus Staff	round-trip	structure (1 of 1 unexercised)	
 Dining Room	verified		
 Dino DNA	round-trip	structure (2 of 2 unexercised)	
@@ -6706,7 +6706,7 @@ Discordant Dirge	compiled	round-trip; structure (1 of 2 unexercised)
 Discordant Piper	round-trip	structure (1 of 1 unexercised)	
 Discordant Spirit	compiled	round-trip	
 Discourtesy Clerk	round-trip	structure (1 of 2 unexercised)	
-Discover the Impossible	unsupported	compiled (1 unsupported)	
+Discover the Impossible	compiled	round-trip; fuzz-swept (not in the report)	
 Discovery // Dispersal	compiled	round-trip; structure (1 of 2 unexercised)	
 Discreet Retreat	verified		
 Disdainful Stroke	round-trip	structure (1 of 1 unexercised)	
@@ -6729,7 +6729,7 @@ Dismiss	verified
 Dismiss into Dream	round-trip	structure (1 of 1 unexercised)	
 Dismissive Denial	verified		
 Dismissive Pyromancer	verified		
-Disorder	unsupported	compiled (1 unsupported)	
+Disorder	compiled	round-trip; fuzz-swept (not in the report)	
 Disorder in the Court	unsupported	compiled (1 unsupported)	
 Disorient	verified		
 Disorienting Choice	unsupported	compiled (1 unsupported)	
@@ -6864,7 +6864,7 @@ Doctor Spectrum	round-trip	structure (1 of 2 unexercised)
 Doctor Strange, Surgeon	round-trip	structure (1 of 3 unexercised)	
 Dodecapod	verified		
 Dodgy Jalopy	verified		
-Does Machines	round-trip	structure (3 of 4 unexercised)	
+Does Machines	round-trip	structure (1 of 4 unexercised)	
 Dog Umbra	compiled	round-trip	
 Dog Walker	round-trip	structure (1 of 3 unexercised)	
 Dogged Detective	verified		
@@ -6964,7 +6964,7 @@ Double Negative	round-trip	structure (1 of 1 unexercised)
 Double Trouble	verified		
 Double Vision	verified		
 Doublecast	verified		
-Doubling Chant	unsupported	compiled (1 unsupported)	
+Doubling Chant	compiled	round-trip; fuzz-swept (not in the report)	
 Doubling Cube	compiled	round-trip	
 Doubling Season	verified		
 Doubtless One	verified		
@@ -7054,7 +7054,7 @@ Dragon's Desire	round-trip	structure (1 of 1 unexercised)
 Dragon's Disciple	verified		
 Dragon's Eye Savants	round-trip	structure (1 of 2 unexercised)	
 Dragon's Eye Sentry	verified		
-Dragon's Fire	unsupported	compiled (1 unsupported)	
+Dragon's Fire	compiled	round-trip; fuzz-swept (not in the report)	
 Dragon's Herald	verified		
 Dragon's Hoard	round-trip	structure (2 of 3 unexercised)	
 Dragon's Presence	verified		
@@ -7134,7 +7134,7 @@ Drannith Magistrate	verified
 Drannith Ruins	round-trip	structure (1 of 2 unexercised)	
 Drannith Stinger	round-trip	structure (1 of 2 unexercised)	
 Drastic Revelation	round-trip	structure (1 of 1 unexercised)	
-Draugr Necromancer	unsupported	compiled (1 unsupported)	
+Draugr Necromancer	compiled	round-trip; fuzz-swept (not in the report)	
 Draugr Recruiter	round-trip	structure (1 of 1 unexercised)	
 Draugr Thought-Thief	verified		
 Draugr's Helm	verified		
@@ -7180,14 +7180,14 @@ Dreadwing	round-trip	structure (1 of 1 unexercised)
 Dreadwing Scavenger	round-trip	structure (1 of 3 unexercised)	
 Dreadwurm	round-trip	structure (1 of 1 unexercised)	
 Dream Beavers	round-trip	structure (1 of 2 unexercised)	
-Dream Cache	unsupported	compiled (1 unsupported)	
+Dream Cache	compiled	round-trip; fuzz-swept (not in the report)	
 Dream Chisel	round-trip	structure (1 of 1 unexercised)	
 Dream Coat	round-trip	structure (1 of 2 unexercised)	
-Dream Devourer	unsupported	compiled (1 unsupported)	
+Dream Devourer	compiled	round-trip; fuzz-swept (not in the report)	
 Dream Eater	verified		
 Dream Fighter	verified		
 Dream Fracture	round-trip	structure (1 of 2 unexercised)	
-Dream Harvest	unsupported	compiled (1 unsupported)	
+Dream Harvest	compiled	round-trip; fuzz-swept (not in the report)	
 Dream Leash	compiled	round-trip; structure (1 of 3 unexercised)	
 Dream Pillager	verified		
 Dream Salvage	unsupported	compiled (1 unsupported)	
@@ -7197,7 +7197,7 @@ Dream Stalker	verified
 Dream Strix	verified		
 Dream Thief	verified		
 Dream Thrush	verified		
-Dream Tides	unsupported	compiled (1 unsupported)	
+Dream Tides	compiled	round-trip; structure (2 of 2 unexercised); fuzz-swept (not in the report)	
 Dream Trawler	round-trip	structure (1 of 5 unexercised)	
 Dream Twist	verified		
 Dream's Grip	verified		
@@ -7288,7 +7288,7 @@ Dross Scorpion	round-trip	structure (1 of 1 unexercised)
 Dross Skullbomb	round-trip	structure (1 of 2 unexercised)	
 Drossclaw	round-trip	structure (1 of 4 unexercised)	
 Drossforge Bridge	verified		
-Drought	unsupported	compiled (2 unsupported)	
+Drought	compiled	round-trip; fuzz-swept (not in the report)	
 Drove of Elves	verified		
 Drover Grizzly	round-trip	structure (1 of 2 unexercised)	
 Drover of the Mighty	verified		
@@ -7400,7 +7400,7 @@ Duress	verified
 Durkwood Baloth	verified		
 Durkwood Boars	verified		
 Durkwood Tracker	verified		
-Durnan of the Yawning Portal	unsupported	compiled (1 unsupported)	
+Durnan of the Yawning Portal	compiled	round-trip; fuzz-swept (not in the report)	
 Dusk // Dawn	round-trip	structure (2 of 3 unexercised)	
 Dusk Charger	verified		
 Dusk Feaster	verified		
@@ -7585,7 +7585,7 @@ Ebony Treefolk	verified
 Eccentric Apprentice	verified		
 Eccentric Farmer	verified		
 Eccentric Pestfinder // Turn Stones	round-trip	structure (2 of 3 unexercised)	
-Echo Chamber	unsupported	compiled (1 unsupported)	
+Echo Chamber	compiled	round-trip; fuzz-swept (not in the report)	
 Echo Circlet	verified		
 Echo Inspector	verified		
 Echo Mage	verified		
@@ -7612,7 +7612,7 @@ Eclipsed Kithkin	round-trip	structure (1 of 1 unexercised)
 Eclipsed Merrow	round-trip	structure (1 of 1 unexercised)	
 Eclipsed Realms	compiled	round-trip; structure (1 of 3 unexercised)	
 Eclipsed Steppe	verified		
-Ecological Appreciation	unsupported	compiled (1 unsupported)	
+Ecological Appreciation	compiled	round-trip; fuzz-swept (not in the report)	
 Ecologist's Terrarium	verified		
 Ecstatic Awakener // Awoken Demon	round-trip	structure (1 of 1 unexercised)	
 Ecstatic Beauty	unsupported	compiled (1 unsupported)	
@@ -7627,7 +7627,7 @@ Edgar's Awakening	round-trip	structure (1 of 2 unexercised)
 Edgar, Ancient Bloodlord	round-trip	structure (2 of 2 unexercised)	
 Edgar, Charmed Groom // Edgar Markov's Coffin	compiled	round-trip	
 Edgar, King of Figaro	round-trip	structure (1 of 2 unexercised)	
-Edgar, Master Machinist	unsupported	compiled (1 unsupported)	
+Edgar, Master Machinist	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Edgar, Moonlit Sovereign	round-trip	structure (1 of 3 unexercised)	
 Edge Rover	round-trip	structure (1 of 2 unexercised)	
 Edge of Autumn	round-trip	structure (2 of 2 unexercised)	
@@ -7681,7 +7681,7 @@ El-Hajjâj	verified
 Elaborate Firecannon	round-trip	structure (1 of 3 unexercised)	
 Eladamri's Call	round-trip	structure (1 of 1 unexercised)	
 Eladamri's Vineyard	round-trip	structure (1 of 1 unexercised)	
-Eladamri, Korvecdal	unsupported	compiled (1 unsupported)	
+Eladamri, Korvecdal	compiled	round-trip; fuzz-swept (not in the report)	
 Eladamri, Lord of Leaves	verified		
 Eland Umbra	verified		
 Elanor Gardner	verified		
@@ -7755,7 +7755,7 @@ Elemental Mastery	verified
 Elemental Resonance	verified		
 Elemental Spectacle	round-trip	structure (1 of 1 unexercised)	
 Elemental Summoning	verified		
-Elemental Teachings	unsupported	compiled (1 unsupported)	
+Elemental Teachings	compiled	round-trip; fuzz-swept (not in the report)	
 Elemental Uprising	verified		
 Elementalist Adept	verified		
 Elementalist's Palette	round-trip	structure (2 of 3 unexercised)	
@@ -7782,7 +7782,7 @@ Elfsworn Giant	round-trip	structure (1 of 2 unexercised)
 Elgaud Inquisitor	verified		
 Elgaud Shieldmate	round-trip	structure (1 of 2 unexercised)	
 Eligeth, Crossroads Augur	verified		
-Eliminate	round-trip	structure (1 of 1 unexercised)	
+Eliminate	verified		
 Eliminate the Competition	verified		
 Eliminate the Impossible	compiled	round-trip	
 Elite Arcanist	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -7972,7 +7972,7 @@ Emil, Vastlands Roamer	verified
 Emissary Escort	round-trip	structure (1 of 1 unexercised)	
 Emissary Green	compiled	round-trip	
 Emissary of Despair	round-trip	structure (1 of 2 unexercised)	
-Emissary of Grudges	unsupported	compiled (2 unsupported)	
+Emissary of Grudges	compiled	round-trip; fuzz-swept (not in the report)	
 Emissary of Hope	round-trip	structure (1 of 2 unexercised)	
 Emissary of Soulfire	verified		
 Emissary of Sunrise	verified		
@@ -7998,7 +7998,7 @@ Empyrean Eagle	verified
 Empyrial Archangel	verified		
 Empyrial Plate	round-trip	structure (1 of 2 unexercised)	
 Empyrial Storm	verified		
-Emrakul's Evangel	unsupported	compiled (1 unsupported)	
+Emrakul's Evangel	compiled	round-trip; fuzz-swept (not in the report)	
 Emrakul's Hatcher	verified		
 Emrakul's Influence	round-trip	structure (1 of 1 unexercised)	
 Emrakul's Messenger	round-trip	structure (1 of 3 unexercised)	
@@ -8058,13 +8058,13 @@ Endrider Spikespitter	round-trip	structure (1 of 3 unexercised)
 Endurance	compiled	round-trip	
 Endurance Bobblehead	compiled	round-trip	
 Endure	round-trip	structure (1 of 1 unexercised)	
-Enduring Angel // Angelic Enforcer	unsupported	compiled (1 unsupported)	
+Enduring Angel // Angelic Enforcer	compiled	round-trip; structure (1 of 6 unexercised); fuzz-swept (not in the report)	
 Enduring Bondwarden	verified		
 Enduring Courage	verified		
 Enduring Curiosity	verified		
 Enduring Ideal	verified		
 Enduring Innocence	verified		
-Enduring Renewal	unsupported	compiled (1 unsupported)	
+Enduring Renewal	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Enduring Scalelord	verified		
 Enduring Sliver	round-trip	structure (1 of 2 unexercised)	
 Enduring Tenacity	verified		
@@ -8078,7 +8078,7 @@ Energy Chamber	round-trip	structure (1 of 1 unexercised)
 Energy Field	verified		
 Energy Refractor	verified		
 Energy Tap	round-trip	structure (1 of 1 unexercised)	
-Energy Vortex	unsupported	compiled (1 unsupported)	
+Energy Vortex	compiled	round-trip; structure (2 of 4 unexercised); fuzz-swept (not in the report)	
 Energybending	compiled	round-trip	
 Enfeeblement	verified		
 Enforcer Griffin	verified		
@@ -8134,7 +8134,7 @@ Entangling Vines	verified
 Enter the Avatar State	round-trip	structure (1 of 1 unexercised)	
 Enter the Enigma	verified		
 Enter the God-Eternals	verified		
-Enter the Infinite	round-trip	structure (1 of 1 unexercised)	
+Enter the Infinite	verified		
 Enter the Unknown	verified		
 Enterprising Scallywag	verified		
 Enthralling Hold	compiled	round-trip	
@@ -8148,7 +8148,7 @@ Entomber Exarch	round-trip	structure (1 of 1 unexercised)
 Entourage of Trest	round-trip	structure (1 of 2 unexercised)	
 Entrails Feaster	round-trip	structure (1 of 1 unexercised)	
 Entrancing Lyre	round-trip	structure (1 of 2 unexercised)	
-Entrancing Melody	round-trip	structure (1 of 1 unexercised)	
+Entrancing Melody	verified		
 Entrapment Maneuver	verified		
 Entreat the Angels	verified		
 Entreat the Dead	round-trip	structure (1 of 2 unexercised)	
@@ -8203,7 +8203,7 @@ Erebos's Intervention	verified
 Erebos's Titan	verified		
 Erebos, Bleak-Hearted	round-trip	structure (1 of 4 unexercised)	
 Erebos, God of the Dead	verified		
-Erestor of the Council	unsupported	compiled (1 unsupported)	
+Erestor of the Council	compiled	round-trip; fuzz-swept (not in the report)	
 Erg Raiders	verified		
 Eriette of the Charmed Apple	round-trip	structure (2 of 2 unexercised)	
 Eriette's Lullaby	round-trip	structure (1 of 1 unexercised)	
@@ -8212,7 +8212,7 @@ Eriette's Whisper	verified
 Eriette, the Beguiler	unsupported	compiled (1 unsupported)	
 Erinis, Gloom Stalker	round-trip	structure (1 of 3 unexercised)	
 Eris, Roar of the Storm	round-trip	structure (1 of 4 unexercised)	
-Erithizon	unsupported	compiled (1 unsupported)	
+Erithizon	compiled	round-trip; fuzz-swept (not in the report)	
 Erkenbrand, Lord of Westfold	round-trip	structure (1 of 1 unexercised)	
 Erode	round-trip	structure (1 of 1 unexercised)	
 Eroded Canyon	verified		
@@ -8300,7 +8300,7 @@ Essence of the Wild	compiled	round-trip
 Essenceknit Scholar	round-trip	structure (1 of 2 unexercised)	
 Estinien Varlineau	round-trip	structure (1 of 2 unexercised)	
 Estrid's Invocation	verified		
-Estrid, the Masked	compiled	round-trip; structure (1 of 4 unexercised)	
+Estrid, the Masked	compiled	round-trip	
 Estwald Shieldbasher	round-trip	structure (1 of 1 unexercised)	
 Etali's Favor	verified		
 Etali, Primal Conqueror // Etali, Primal Sickness	unsupported	compiled (1 unsupported)	
@@ -8505,7 +8505,7 @@ Experimental Frenzy	compiled	round-trip; structure (1 of 5 unexercised)
 Experimental Lab // Staff Room	round-trip	structure (1 of 2 unexercised)	
 Experimental Overload	verified		
 Experimental Synthesizer	round-trip	structure (2 of 2 unexercised)	
-Expert-Level Safe	unsupported	compiled (1 unsupported)	
+Expert-Level Safe	compiled	round-trip; fuzz-swept (not in the report)	
 Exploding Barrel	round-trip	structure (1 of 2 unexercised)	
 Exploding Borders	verified		
 Exploration	verified		
@@ -8522,7 +8522,7 @@ Explosive Getaway	round-trip	structure (1 of 2 unexercised)
 Explosive Growth	verified		
 Explosive Impact	verified		
 Explosive Prodigy	round-trip	structure (1 of 1 unexercised)	
-Explosive Revelation	unsupported	compiled (1 unsupported)	
+Explosive Revelation	compiled	round-trip; fuzz-swept (not in the report)	
 Explosive Shot	verified		
 Explosive Singularity	verified		
 Explosive Vegetation	verified		
@@ -8533,7 +8533,7 @@ Expose the Culprit	compiled	round-trip
 Expose to Daylight	verified		
 Expressive Firedancer	round-trip	structure (1 of 1 unexercised)	
 Expressive Iteration	verified		
-Expropriate	unsupported	compiled (1 unsupported)	
+Expropriate	compiled	round-trip; fuzz-swept (not in the report)	
 Exquisite Archangel	compiled	round-trip	
 Exquisite Blood	verified		
 Exquisite Firecraft	verified		
@@ -8584,7 +8584,7 @@ Eye of Jace	round-trip	structure (1 of 1 unexercised)
 Eye of Malcator	round-trip	structure (1 of 2 unexercised)	
 Eye of Nidhogg	compiled	round-trip	
 Eye of Nowhere	verified		
-Eye of Ojer Taq // Apex Observatory	unsupported	compiled (2 unsupported)	
+Eye of Ojer Taq // Apex Observatory	unsupported	compiled (1 unsupported)	
 Eye of Ramos	verified		
 Eye of Singularity	compiled	round-trip	
 Eye of Ugin	round-trip	structure (2 of 2 unexercised)	
@@ -8642,7 +8642,7 @@ Fade into Antiquity	verified
 Fading Hope	verified		
 Fae Flight	verified		
 Fae Offering	compiled	round-trip; structure (1 of 1 unexercised)	
-Fae of Wishes // Granted	round-trip	structure (1 of 3 unexercised)	
+Fae of Wishes // Granted	verified		
 Faebloom Trick	verified		
 Faeburrow Elder	round-trip	structure (1 of 3 unexercised)	
 Faerie Artisans	compiled	round-trip	
@@ -8922,7 +8922,7 @@ Feasting Troll King	round-trip	structure (1 of 4 unexercised)
 Feat of Resistance	round-trip	structure (1 of 1 unexercised)	
 Feather of Flight	verified		
 Feather, Radiant Arbiter	unsupported	compiled (1 unsupported)	
-Feather, the Redeemed	unsupported	compiled (1 unsupported)	
+Feather, the Redeemed	compiled	round-trip; fuzz-swept (not in the report)	
 Featherbrained Filcher	round-trip	structure (1 of 2 unexercised)	
 Fecund Greenshell	round-trip	structure (2 of 3 unexercised)	
 Fecundity	round-trip	structure (1 of 1 unexercised)	
@@ -9375,7 +9375,7 @@ Flash	unsupported	compiled (1 unsupported)
 Flash Conscription	round-trip	structure (1 of 1 unexercised)	
 Flash Counter	round-trip	structure (1 of 1 unexercised)	
 Flash Foliage	verified		
-Flash Photography	unsupported	compiled (1 unsupported)	
+Flash Photography	compiled	round-trip; fuzz-swept (not in the report)	
 Flash Thompson, Spider-Fan	verified		
 Flash of Defiance	round-trip	structure (1 of 2 unexercised)	
 Flash of Insight	verified		
@@ -9483,7 +9483,7 @@ Floral Evoker	round-trip	structure (1 of 2 unexercised)
 Floral Spuzzem	round-trip	structure (1 of 1 unexercised)	
 Florian, Voldaren Scion	compiled	round-trip; structure (1 of 2 unexercised)	
 Floriferous Vinewall	round-trip	structure (1 of 2 unexercised)	
-Flotsam // Jetsam	unsupported	compiled (1 unsupported)	
+Flotsam // Jetsam	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Flourishing Bloom-Kin	compiled	round-trip; structure (2 of 3 unexercised)	
 Flourishing Defenses	verified		
 Flourishing Fox	round-trip	structure (1 of 2 unexercised)	
@@ -9607,7 +9607,7 @@ Forbidden Alchemy	verified
 Forbidden Crypt	compiled	round-trip; structure (2 of 2 unexercised)	
 Forbidden Friendship	verified		
 Forbidden Orchard	round-trip	structure (1 of 2 unexercised)	
-Forbidden Ritual	compiled	round-trip; structure (1 of 1 unexercised)	
+Forbidden Ritual	compiled	round-trip	
 Forbidding Spirit	compiled	round-trip	
 Force Away	round-trip	structure (1 of 2 unexercised)	
 Force Bubble	round-trip	structure (3 of 3 unexercised)	
@@ -9642,7 +9642,7 @@ Forerunner of the Empire	round-trip	structure (1 of 2 unexercised)
 Forerunner of the Heralds	verified		
 Forerunner of the Legion	round-trip	structure (1 of 2 unexercised)	
 Foresee	verified		
-Foreshadow	round-trip	structure (1 of 2 unexercised)	
+Foreshadow	verified		
 Foresight	round-trip	structure (1 of 2 unexercised)	
 Forest	verified		
 Forest Bear	verified		
@@ -9656,7 +9656,7 @@ Forge Devil	round-trip	structure (1 of 1 unexercised)
 Forge of Heroes	compiled	round-trip	
 Forgeborn Oreads	round-trip	structure (1 of 1 unexercised)	
 Forgehammer Centurion	verified		
-Forger's Foundry	unsupported	compiled (1 unsupported)	
+Forger's Foundry	compiled	round-trip; fuzz-swept (not in the report)	
 Forgestoker Dragon	verified		
 Forget	compiled	round-trip	
 Forging the Anchor	round-trip	structure (1 of 1 unexercised)	
@@ -9706,17 +9706,17 @@ Fortress Crab	verified
 Fortress Cyclops	verified		
 Fortress Kin-Guard	verified		
 Fortuitous Find	round-trip	structure (1 of 1 unexercised)	
-Fortunate Few	unsupported	compiled (1 unsupported)	
+Fortunate Few	compiled	round-trip; fuzz-swept (not in the report)	
 Fortune Teller	round-trip	structure (1 of 1 unexercised)	fuzz-cast exempt: supplementary-deck or conspiracy card
 Fortune Teller's Talent	compiled	round-trip; structure (1 of 4 unexercised)	
 Fortune Thief	verified		
-Fortune's Favor	compiled	round-trip; structure (1 of 1 unexercised)	
+Fortune's Favor	compiled	round-trip	
 Fortune, Loyal Steed	verified		
 Forum Familiar	round-trip	structure (1 of 2 unexercised)	
 Forum Filibuster	verified		
 Forum Necroscribe	round-trip	structure (1 of 2 unexercised)	
 Forum of Amity	verified		
-Fossil Find	unsupported	compiled (1 unsupported)	
+Fossil Find	compiled	round-trip; fuzz-swept (not in the report)	
 Foster	round-trip	structure (1 of 1 unexercised)	
 Foul Emissary	round-trip	structure (1 of 2 unexercised)	
 Foul Imp	verified		
@@ -9817,7 +9817,7 @@ Freyalise Supplicant	round-trip	structure (1 of 1 unexercised)
 Freyalise's Charm	round-trip	structure (1 of 2 unexercised)	
 Freyalise's Radiance	round-trip	structure (1 of 2 unexercised)	
 Freyalise, Llanowar's Fury	round-trip	structure (3 of 4 unexercised)	
-Friendly Fire	unsupported	compiled (1 unsupported)	
+Friendly Fire	compiled	round-trip; fuzz-swept (not in the report)	
 Friendly Ghost	verified		
 Friendly Neighborhood	round-trip	structure (1 of 3 unexercised)	
 Friendly Rivalry	compiled	round-trip	
@@ -10181,7 +10181,7 @@ Gatta and Luzzu	compiled	round-trip; structure (1 of 2 unexercised)
 Gau, Feral Youth	verified		
 Gauntlet of Power	unsupported	compiled (1 unsupported)	
 Gauntlets of Light	verified		
-Gavel of the Righteous	unsupported	compiled (1 unsupported)	
+Gavel of the Righteous	compiled	round-trip; structure (2 of 5 unexercised); fuzz-swept (not in the report)	
 Gavi, Nest Warden	compiled	round-trip; structure (1 of 2 unexercised)	
 Gavony Dawnguard	round-trip	structure (1 of 3 unexercised)	
 Gavony Ironwright	verified		
@@ -10496,7 +10496,7 @@ Gift of the Gargantuan	round-trip	structure (1 of 1 unexercised)
 Gift of the Viper	round-trip	structure (1 of 1 unexercised)	
 Gift of the Woods	round-trip	structure (1 of 2 unexercised)	
 Gifted Aetherborn	verified		
-Gifts Ungiven	unsupported	compiled (1 unsupported)	
+Gifts Ungiven	compiled	round-trip; fuzz-swept (not in the report)	
 Gigadrowse	verified		
 Gigantic Big Bear	verified		
 Gigantiform	verified		
@@ -10590,7 +10590,7 @@ Gladewalker Ritualist	verified
 Gladiolus Amicitia	round-trip	structure (2 of 2 unexercised)	
 Glaive of the Guildpact	verified		
 Glamdring	verified		
-Glamdring, Foe-hammer // Gleam of Death	round-trip	structure (2 of 3 unexercised)	
+Glamdring, Foe-hammer // Gleam of Death	round-trip	structure (1 of 3 unexercised)	
 Glamer Gifter	verified		
 Glamer Spinners	compiled	round-trip	
 Glamerdye	verified		
@@ -10653,7 +10653,7 @@ Glimpse of Freedom	verified
 Glimpse of Nature	verified		
 Glimpse of Tomorrow	unsupported	compiled (1 unsupported)	
 Glimpse the Core	round-trip	structure (1 of 1 unexercised)	
-Glimpse the Cosmos	unsupported	compiled (1 unsupported)	
+Glimpse the Cosmos	compiled	round-trip; fuzz-swept (not in the report)	
 Glimpse the Future	verified		
 Glimpse the Impossible	unsupported	compiled (1 unsupported)	
 Glimpse the Sun God	verified		
@@ -10851,7 +10851,7 @@ Goblin Flectomancer	verified
 Goblin Flotilla	unsupported	compiled (1 unsupported)	
 Goblin Freerunner	verified		
 Goblin Furrier	round-trip	structure (1 of 1 unexercised)	
-Goblin Game	unsupported	compiled (1 unsupported)	
+Goblin Game	compiled	round-trip; fuzz-swept (not in the report)	
 Goblin Gang Leader	verified		
 Goblin Gardener	verified		
 Goblin Gathering	round-trip	structure (1 of 1 unexercised)	
@@ -11053,11 +11053,11 @@ Gollum's Bite	round-trip	structure (1 of 2 unexercised)
 Gollum, Obsessed Stalker	unsupported	compiled (1 unsupported)	
 Gollum, Patient Plotter	round-trip	structure (2 of 2 unexercised)	
 Gollum, Riddle Master	round-trip	structure (1 of 2 unexercised)	
-Gollum, Scheming Guide	unsupported	compiled (1 unsupported)	
+Gollum, Scheming Guide	compiled	round-trip; fuzz-swept (not in the report)	
 Gollum, Silent Slinker // Meager Meal	round-trip	structure (1 of 2 unexercised)	
 Golos, Tireless Pilgrim	compiled	round-trip; structure (2 of 2 unexercised)	
 Goma Fada Vanguard	verified		
-Gomazoa	unsupported	compiled (1 unsupported)	
+Gomazoa	compiled	round-trip; fuzz-swept (not in the report)	
 Gond Gate	round-trip	structure (1 of 3 unexercised)	
 Gone Missing	round-trip	structure (1 of 2 unexercised)	
 Gongaga, Reactor Town	verified		
@@ -11153,7 +11153,7 @@ Granitic Titan	verified
 Granulate	round-trip	structure (1 of 1 unexercised)	
 Grapeshot	verified		
 Grapple with Death	round-trip	structure (1 of 1 unexercised)	
-Grapple with the Past	round-trip	structure (1 of 1 unexercised)	
+Grapple with the Past	verified		
 Grappler Spider	verified		
 Grappling Hook	verified		
 Grappling Kraken	round-trip	structure (1 of 1 unexercised)	
@@ -11323,7 +11323,7 @@ Grendel, Spawn of Knull	verified
 Grenzo's Cutthroat	verified		
 Grenzo's Rebuttal	compiled	round-trip	
 Grenzo's Ruffians	verified		
-Grenzo, Dungeon Warden	unsupported	compiled (1 unsupported)	
+Grenzo, Dungeon Warden	compiled	round-trip; fuzz-swept (not in the report)	
 Grenzo, Havoc Raiser	compiled	round-trip; structure (1 of 1 unexercised)	
 Greta, Sweettooth Scourge	round-trip	structure (2 of 3 unexercised)	
 Gretchen Titchwillow	round-trip	structure (1 of 1 unexercised)	
@@ -11331,7 +11331,7 @@ Greven, Predator Captain	round-trip	structure (2 of 3 unexercised)
 Grey Havens Navigator	verified		
 Grey Host Reinforcements	round-trip	structure (1 of 3 unexercised)	
 Grey Knight Paragon	round-trip	structure (1 of 2 unexercised)	
-Greymond, Avacyn's Stalwart	unsupported	compiled (2 unsupported)	
+Greymond, Avacyn's Stalwart	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Grid Monitor	verified		
 Gridlock	round-trip	structure (1 of 1 unexercised)	
 Grief	round-trip	structure (1 of 3 unexercised)	
@@ -11381,9 +11381,9 @@ Grim Tutor	round-trip	structure (1 of 1 unexercised)
 Grim Wanderer	verified		
 Grimclaw Bats	round-trip	structure (1 of 2 unexercised)	
 Grimdancer	verified		
-Grime Gorger	unsupported	compiled (1 unsupported)	
+Grime Gorger	compiled	round-trip; fuzz-swept (not in the report)	
 Grimgrin, Corpse-Born	round-trip	structure (1 of 4 unexercised)	
-Grimoire Thief	unsupported	compiled (2 unsupported)	
+Grimoire Thief	unsupported	compiled (1 unsupported)	
 Grimoire of the Dead	compiled	round-trip; structure (2 of 2 unexercised)	
 Grind // Dust	round-trip	structure (2 of 3 unexercised)	
 Grindclock	round-trip	structure (1 of 2 unexercised)	
@@ -11393,7 +11393,7 @@ Grinning Ignus	verified
 Grinning Totem	unsupported	compiled (1 unsupported)	
 Grip of Amnesia	verified		
 Grip of Chaos	unsupported	compiled (1 unsupported)	
-Grip of Desolation	round-trip	structure (1 of 2 unexercised)	
+Grip of Desolation	verified		
 Grip of Phyresis	verified		
 Grip of the Roil	verified		
 Griptide	verified		
@@ -11407,7 +11407,7 @@ Grisly Survivor	verified
 Grisly Transformation	verified		
 Grismold, the Dreadsower	round-trip	structure (2 of 3 unexercised)	
 Grist, Voracious Larva // Grist, the Plague Swarm	compiled	round-trip; structure (3 of 5 unexercised)	
-Grist, the Hunger Tide	round-trip	structure (1 of 4 unexercised)	
+Grist, the Hunger Tide	verified		
 Gristle Glutton	verified		
 Gristle Grinner	round-trip	structure (1 of 1 unexercised)	
 Gristleback	round-trip	structure (1 of 2 unexercised)	
@@ -11418,7 +11418,7 @@ Grixis Illusionist	verified
 Grixis Panorama	round-trip	structure (1 of 2 unexercised)	
 Grixis Slavedriver	verified		
 Grixis Sojourners	round-trip	structure (1 of 2 unexercised)	
-Grizzled Angler // Grisly Anglerfish	round-trip	structure (1 of 2 unexercised)	
+Grizzled Angler // Grisly Anglerfish	verified		
 Grizzled Leotau	verified		
 Grizzled Outcasts // Krallenhorde Wantons	verified		
 Grizzled Outrider	verified		
@@ -11499,7 +11499,7 @@ Gryff Vanguard	verified
 Gryff's Boon	verified		
 Gryffwing Cavalry	round-trip	structure (1 of 3 unexercised)	
 Gríma Wormtongue	round-trip	structure (1 of 2 unexercised)	
-Gríma, Saruman's Footman	unsupported	compiled (1 unsupported)	
+Gríma, Saruman's Footman	compiled	round-trip; fuzz-swept (not in the report)	
 Guac & Marshmallow Pizza	round-trip	structure (1 of 3 unexercised)	
 Guadosalam, Farplane Gateway	verified		
 Guard Dogs	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -11507,7 +11507,7 @@ Guard Duty	verified
 Guard Gomazoa	verified		
 Guarded Heir	verified		
 Guardian Angel	verified		
-Guardian Archon	unsupported	compiled (2 unsupported)	
+Guardian Archon	compiled	round-trip; fuzz-swept (not in the report)	
 Guardian Augmenter	verified		
 Guardian Automaton	verified		
 Guardian Gladewalker	verified		
@@ -11707,7 +11707,7 @@ Halo Scarab	round-trip	structure (1 of 1 unexercised)
 Halo-Charged Skaab	verified		
 Halsin, Emerald Archdruid	compiled	round-trip; structure (1 of 2 unexercised)	
 Halt Order	round-trip	structure (1 of 2 unexercised)	
-Halvar, God of Battle // Sword of the Realms	compiled	round-trip; structure (2 of 5 unexercised)	
+Halvar, God of Battle // Sword of the Realms	compiled	round-trip	
 Hama Pashar, Ruin Seeker	compiled	round-trip	
 Hama, the Bloodbender	unsupported	compiled (1 unsupported)	
 Hamato Guardian Stance	round-trip	structure (1 of 1 unexercised)	
@@ -11768,7 +11768,7 @@ Happy Hogan, Bodyguard	compiled	round-trip; structure (1 of 2 unexercised)
 Happy Hogan, Dauntless Driver	verified		
 Harabaz Druid	round-trip	structure (1 of 1 unexercised)	
 Haradrim Spearmaster	round-trip	structure (1 of 2 unexercised)	
-Harald Unites the Elves	round-trip	structure (2 of 3 unexercised)	
+Harald Unites the Elves	round-trip	structure (1 of 3 unexercised)	
 Harald, King of Skemfar	round-trip	structure (1 of 2 unexercised)	
 Harbin, Vanguard Aviator	round-trip	structure (1 of 2 unexercised)	
 Harbinger of Night	round-trip	structure (1 of 1 unexercised)	
@@ -11883,7 +11883,7 @@ Haunted Ridge	verified
 Haunted Screen	round-trip	structure (1 of 3 unexercised)	
 Haunter of Nightveil	verified		
 Haunting Apparition	verified		
-Haunting Echoes	unsupported	compiled (1 unsupported)	
+Haunting Echoes	compiled	round-trip; fuzz-swept (not in the report)	
 Haunting Figment	verified		
 Haunting Hymn	round-trip	structure (1 of 1 unexercised)	
 Haunting Imitation	unsupported	compiled (1 unsupported)	
@@ -11941,13 +11941,13 @@ Hazy Homunculus	round-trip	structure (1 of 1 unexercised)
 He Who Hungers	round-trip	structure (1 of 3 unexercised)	
 Head Games	compiled	round-trip; structure (1 of 1 unexercised)	
 Head of the Homestead	verified		
-Head of the Hunt	unsupported	compiled (1 unsupported)	
+Head of the Hunt	compiled	round-trip; fuzz-swept (not in the report)	
 Headhunter	verified		
 Headless Horseman	verified		
 Headless Rider	round-trip	structure (1 of 1 unexercised)	
 Headless Skaab	verified		
 Headless Specter	round-trip	structure (1 of 2 unexercised)	
-Headliner Scarlett	unsupported	compiled (1 unsupported)	
+Headliner Scarlett	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Headlong Rush	round-trip	structure (1 of 1 unexercised)	
 Headsplitter	verified		
 Headstone	verified		
@@ -11991,7 +11991,7 @@ Hearthfire Hobgoblin	verified
 Hearthhull, the Worldseed	round-trip	structure (2 of 3 unexercised)	
 Heartlash Cinder	verified		
 Heartless Act	round-trip	structure (1 of 1 unexercised)	
-Heartless Conscription	unsupported	compiled (1 unsupported)	
+Heartless Conscription	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Heartless Hidetsugu	round-trip	structure (1 of 1 unexercised)	
 Heartless Pillage	verified		
 Heartless Summoning	verified		
@@ -12054,7 +12054,7 @@ Heir of Falkenrath // Heir to the Night	round-trip	structure (1 of 2 unexercised
 Heir of the Ancient Fang	round-trip	structure (1 of 1 unexercised)	
 Heir of the Wilds	verified		
 Heirloom Auntie	verified		
-Heirloom Blade	round-trip	structure (1 of 3 unexercised)	
+Heirloom Blade	verified		
 Heirloom Epic	unsupported	compiled (1 unsupported)	
 Heirloom Mirror // Inherited Fiend	compiled	round-trip; structure (2 of 3 unexercised)	
 Heirs of Stromkirk	verified		
@@ -12128,7 +12128,7 @@ Henge of Ramos	verified
 Hengegate Pathway // Mistgate Pathway	verified		
 Henrika Domnathi // Henrika, Infernal Seer	round-trip	structure (1 of 5 unexercised)	
 Henry Wu, InGen Geneticist	compiled	round-trip	
-Henzie "Toolbox" Torre	unsupported	compiled (1 unsupported)	
+Henzie "Toolbox" Torre	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Herald of Amity	round-trip	structure (2 of 3 unexercised)	
 Herald of Anafenza	verified		
 Herald of Anguish	round-trip	structure (2 of 4 unexercised)	
@@ -12165,7 +12165,7 @@ Herd Migration	round-trip	structure (2 of 2 unexercised)
 Herdchaser Dragon	verified		
 Here Comes a New Hero!	verified		
 Heretic's Punishment	compiled	round-trip	
-Herigast, Erupting Nullkite	unsupported	compiled (1 unsupported)	
+Herigast, Erupting Nullkite	compiled	round-trip; structure (2 of 4 unexercised); fuzz-swept (not in the report)	
 Heritage Druid	verified		
 Heritage Reclamation	verified		
 Hermes, Overseer of Elpis	verified		
@@ -12232,7 +12232,7 @@ Hexhaven Invigorator	round-trip	structure (1 of 2 unexercised)
 Hexing Squelcher	round-trip	structure (1 of 4 unexercised)	
 Hexmark Destroyer	verified		
 Hexplate Golem	verified		
-Hexplate Wallbreaker	round-trip	structure (1 of 4 unexercised)	
+Hexplate Wallbreaker	verified		
 Hezrou // Demonic Stench	round-trip	structure (2 of 2 unexercised)	
 Hibernation	round-trip	structure (1 of 1 unexercised)	
 Hibernation Sliver	round-trip	structure (1 of 1 unexercised)	
@@ -12313,12 +12313,12 @@ Highway Robbery	round-trip	structure (1 of 2 unexercised)
 Higure, the Still Wind	round-trip	structure (1 of 3 unexercised)	
 Hijack	verified		
 Hikari, Twilight Guardian	round-trip	structure (1 of 2 unexercised)	
-Hildibrand Manderville // Gentleman's Rise	unsupported	compiled (1 unsupported)	
+Hildibrand Manderville // Gentleman's Rise	compiled	round-trip; fuzz-swept (not in the report)	
 Hill Giant	verified		
 Hill Giant Herdgorger	verified		
 Hill Gigas	verified		
 Hillcomber Giant	verified		
-Hinata, Dawn-Crowned	unsupported	compiled (2 unsupported)	
+Hinata, Dawn-Crowned	compiled	round-trip; fuzz-swept (not in the report)	
 Hinder	verified		
 Hindering Light	compiled	round-trip; structure (1 of 2 unexercised); fuzz-cast (never cast: never legal to cast)	
 Hindering Touch	verified		
@@ -12358,7 +12358,7 @@ Hithlain Rope	round-trip	structure (1 of 3 unexercised)
 Hive Mind	verified		
 Hive Stirrings	verified		
 Hive of the Eye Tyrant	round-trip	structure (1 of 3 unexercised)	
-Hiveheart Shaman	unsupported	compiled (1 unsupported)	
+Hiveheart Shaman	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Hivespine Wolverine	round-trip	structure (1 of 1 unexercised)	
 Hivestone	round-trip	structure (1 of 1 unexercised)	
 Hivis of the Scale	round-trip	structure (1 of 2 unexercised)	
@@ -12557,7 +12557,7 @@ Hound of the Farbogs	round-trip	structure (1 of 1 unexercised)
 Hour of Defeat	round-trip	structure (1 of 1 unexercised)	
 Hour of Devastation	round-trip	structure (1 of 1 unexercised)	
 Hour of Eternity	compiled	round-trip; structure (1 of 1 unexercised)	
-Hour of Glory	unsupported	compiled (1 unsupported)	
+Hour of Glory	compiled	round-trip; fuzz-swept (not in the report)	
 Hour of Need	round-trip	structure (1 of 2 unexercised)	
 Hour of Promise	verified		
 Hour of Reckoning	round-trip	structure (1 of 2 unexercised)	
@@ -12698,7 +12698,7 @@ Huntmaster Liger	verified
 Huntmaster of the Fells // Ravager of the Fells	round-trip	structure (2 of 5 unexercised)	
 Hurkyl's Final Meditation	compiled	round-trip; structure (2 of 2 unexercised)	
 Hurkyl's Recall	verified		
-Hurkyl, Master Wizard	unsupported	compiled (1 unsupported)	
+Hurkyl, Master Wizard	compiled	round-trip; fuzz-swept (not in the report)	
 Hurl Through Hell	compiled	round-trip	
 Hurl into History	round-trip	structure (1 of 1 unexercised)	
 Hurler Cyclops	verified		
@@ -12838,7 +12838,7 @@ Ignis Scientia	round-trip	structure (1 of 2 unexercised)
 Ignite Disorder	verified		
 Ignite Memories	round-trip	structure (1 of 2 unexercised)	
 Ignite the Beacon	round-trip	structure (1 of 1 unexercised)	
-Ignite the Future	unsupported	compiled (1 unsupported)	
+Ignite the Future	compiled	round-trip; fuzz-swept (not in the report)	
 Ignition Team	round-trip	structure (1 of 2 unexercised)	
 Ignoble Hierarch	verified		
 Ignoble Soldier	round-trip	structure (1 of 1 unexercised)	
@@ -12856,14 +12856,14 @@ Ill-Tempered Cyclops	verified
 Ill-Tempered Loner // Howlpack Avenger	round-trip	structure (1 of 4 unexercised)	
 Ill-Timed Explosion	round-trip	structure (1 of 1 unexercised)	
 Illegitimate Business	verified		
-Illicit Auction	unsupported	compiled (1 unsupported)	
+Illicit Auction	compiled	round-trip; fuzz-swept (not in the report)	
 Illicit Masquerade	round-trip	structure (1 of 3 unexercised)	
 Illicit Shipment	verified		
 Illithid Harvester // Plant Tadpoles	verified		
 Illness in the Ranks	verified		
 Illuminate	round-trip	structure (1 of 2 unexercised)	
 Illuminate History	round-trip	structure (1 of 1 unexercised)	
-Illuminated Folio	unsupported	compiled (1 unsupported)	
+Illuminated Folio	compiled	round-trip; fuzz-swept (not in the report)	
 Illuminated Wings	verified		
 Illumination	round-trip	structure (1 of 1 unexercised)	
 Illuminator Virtuoso	round-trip	structure (1 of 2 unexercised)	
@@ -12876,7 +12876,7 @@ Illusionary Armor	verified
 Illusionary Informant	unsupported	compiled (1 unsupported)	
 Illusionary Presence	round-trip	structure (1 of 2 unexercised)	
 Illusionary Servant	verified		
-Illusionary Terrain	unsupported	compiled (2 unsupported)	
+Illusionary Terrain	compiled	round-trip; fuzz-swept (not in the report)	
 Illusionist's Bracers	compiled	round-trip	
 Illusionist's Gambit	unsupported	compiled (1 unsupported)	
 Illusionist's Stratagem	verified		
@@ -12979,8 +12979,8 @@ Impractical Joke	verified
 Imprison	compiled	round-trip	
 Imprisoned in the Moon	compiled	round-trip	
 Improbable Alliance	verified		
-Impromptu Raid	round-trip	structure (1 of 1 unexercised)	
-Improvisation Capstone	unsupported	compiled (1 unsupported)	
+Impromptu Raid	verified		
+Improvisation Capstone	compiled	round-trip; fuzz-swept (not in the report)	
 Improvised Armor	verified		
 Improvised Arsenal	verified		
 Improvised Club	verified		
@@ -13123,7 +13123,7 @@ Infested Roothold	round-trip	structure (1 of 3 unexercised)
 Infested Thrinax	verified		
 Infesting Radroach	compiled	round-trip; structure (1 of 4 unexercised)	
 Infiltrate	verified		
-Infiltration Lens	round-trip	structure (1 of 2 unexercised)	
+Infiltration Lens	verified		
 Infiltrator il-Kor	verified		
 Infiltrator's Magemark	round-trip	structure (1 of 3 unexercised)	
 Infinite Authority	unsupported	compiled (1 unsupported)	
@@ -13212,7 +13212,7 @@ Insatiable Hemophage	verified
 Insatiable Skittermaw	verified		
 Insatiable Souleater	round-trip	structure (1 of 1 unexercised)	
 Inscribed Tablet	compiled	round-trip	
-Inscription of Abundance	round-trip	structure (1 of 2 unexercised)	
+Inscription of Abundance	verified		
 Inscription of Insight	verified		
 Inscription of Ruin	verified		
 Insectoid Exterminator	round-trip	structure (1 of 2 unexercised)	
@@ -13315,7 +13315,7 @@ Intrepid Ace	compiled	round-trip; structure (1 of 1 unexercised)
 Intrepid Adversary	round-trip	structure (1 of 3 unexercised)	
 Intrepid Hero	round-trip	structure (1 of 1 unexercised)	
 Intrepid Outlander	compiled	round-trip; structure (1 of 2 unexercised)	
-Intrepid Paleontologist	unsupported	compiled (1 unsupported)	
+Intrepid Paleontologist	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Intrepid Provisioner	round-trip	structure (1 of 2 unexercised)	
 Intrepid Rabbit	verified		
 Intrepid Stablemaster	verified		
@@ -13374,7 +13374,7 @@ Invasion of Zendikar // Awakened Skyclave	compiled	round-trip; structure (1 of 5
 Invasion of the Giants	compiled	round-trip; structure (2 of 3 unexercised)	
 Invasive Maneuvers	compiled	round-trip; structure (1 of 1 unexercised)	
 Invasive Species	round-trip	structure (1 of 1 unexercised)	
-Invasive Surgery	unsupported	compiled (1 unsupported)	
+Invasive Surgery	compiled	round-trip; fuzz-swept (not in the report)	
 Inventive Iteration // Living Breakthrough	compiled	round-trip; structure (2 of 5 unexercised)	
 Inventive Wingsmith	compiled	round-trip; structure (1 of 1 unexercised)	
 Inventor's Apprentice	verified		
@@ -13628,7 +13628,7 @@ Jade Guardian	round-trip	structure (1 of 2 unexercised)
 Jade Idol	round-trip	structure (1 of 1 unexercised)	
 Jade Leech	verified		
 Jade Mage	verified		
-Jade Orb of Dragonkind	unsupported	compiled (1 unsupported)	
+Jade Orb of Dragonkind	compiled	round-trip; fuzz-swept (not in the report)	
 Jade Seedstones // Jadeheart Attendant	verified		
 Jade Statue	round-trip	structure (1 of 1 unexercised)	
 Jade-Cast Sentinel	verified		
@@ -13638,7 +13638,7 @@ Jaded Response	compiled	round-trip; structure (1 of 1 unexercised)
 Jaded Sell-Sword	round-trip	structure (1 of 1 unexercised)	
 Jadelight Ranger	verified		
 Jadelight Spelunker	verified		
-Jadzi, Oracle of Arcavios // Journey to the Oracle	unsupported	compiled (1 unsupported)	
+Jadzi, Oracle of Arcavios // Journey to the Oracle	compiled	round-trip; structure (2 of 3 unexercised); fuzz-swept (not in the report)	
 Jadzi, Steward of Fate // Oracle's Gift	round-trip	structure (1 of 3 unexercised)	
 Jagged Barrens	verified		
 Jagged Lightning	verified		
@@ -13712,7 +13712,7 @@ Jeong Jeong's Deserters	verified
 Jeong Jeong, the Deserter	verified		
 Jerren, Corrupted Bishop // Ormendahl, the Corrupter	round-trip	structure (2 of 7 unexercised)	
 Jeska's Will	verified		
-Jeska, Thrice Reborn	unsupported	compiled (1 unsupported)	
+Jeska, Thrice Reborn	compiled	round-trip; structure (2 of 5 unexercised); fuzz-swept (not in the report)	
 Jeska, Warrior Adept	verified		
 Jeskai Ascendancy	round-trip	structure (2 of 2 unexercised)	
 Jeskai Banner	verified		
@@ -13783,7 +13783,7 @@ Jirina, Dauntless General	verified
 Jiwari, the Earth Aflame	round-trip	structure (2 of 2 unexercised)	
 Jo Grant	round-trip	structure (2 of 3 unexercised)	
 Jocasta, Automaton Avenger	compiled	round-trip; structure (2 of 3 unexercised)	
-Jodah's Avenger	unsupported	compiled (1 unsupported)	
+Jodah's Avenger	compiled	round-trip; fuzz-swept (not in the report)	
 Jodah's Codex	round-trip	structure (1 of 1 unexercised)	
 Jodah, Archmage Eternal	verified		
 Jodah, the Unifier	compiled	round-trip	
@@ -13824,7 +13824,7 @@ Joraga Treespeaker	round-trip	structure (1 of 3 unexercised)
 Joraga Visionary	verified		
 Joraga Warcaller	verified		
 Jori En, Ruin Diver	verified		
-Jorn, God of Winter // Kaldring, the Rimestaff	unsupported	compiled (1 unsupported)	
+Jorn, God of Winter // Kaldring, the Rimestaff	compiled	round-trip; structure (2 of 2 unexercised); fuzz-swept (not in the report)	
 Jorubai Murk Lurker	verified		
 Joshua, Phoenix's Dominant // Phoenix, Warden of Fire	round-trip	structure (1 of 6 unexercised)	
 Josu Vess, Lich Knight	compiled	round-trip	
@@ -14040,7 +14040,7 @@ Karlov of the Ghost Council	round-trip	structure (1 of 2 unexercised)
 Karma	verified		
 Karmic Guide	round-trip	structure (1 of 4 unexercised)	
 Karmic Justice	compiled	round-trip	
-Karn Liberated	round-trip	structure (1 of 3 unexercised)	
+Karn Liberated	verified		
 Karn's Bastion	verified		
 Karn's Sylex	round-trip	structure (1 of 3 unexercised)	
 Karn's Temporal Sundering	verified		
@@ -14118,7 +14118,7 @@ Kavu Recluse	round-trip	structure (1 of 1 unexercised)
 Kavu Runner	compiled	round-trip; structure (1 of 1 unexercised)	
 Kavu Scout	verified		
 Kavu Titan	verified		
-Kaya the Inexorable	unsupported	compiled (1 unsupported)	
+Kaya the Inexorable	compiled	round-trip; structure (2 of 3 unexercised); fuzz-swept (not in the report)	
 Kaya's Ghostform	compiled	round-trip	
 Kaya's Guile	verified		
 Kaya's Onslaught	verified		
@@ -14174,7 +14174,7 @@ Keeper of the Beasts	verified
 Keeper of the Cadence	round-trip	structure (1 of 1 unexercised)	
 Keeper of the Dead	unsupported	compiled (1 unsupported)	
 Keeper of the Flame	compiled	round-trip	
-Keeper of the Lens	unsupported	compiled (1 unsupported)	
+Keeper of the Lens	compiled	round-trip; fuzz-swept (not in the report)	
 Keeper of the Light	round-trip	structure (1 of 1 unexercised)	
 Keeper of the Mind	verified		
 Keeper of the Nine Gales	round-trip	structure (1 of 2 unexercised)	
@@ -14271,8 +14271,8 @@ Kheru Lich Lord	compiled	round-trip; structure (1 of 1 unexercised)
 Kheru Mind-Eater	compiled	round-trip	
 Kheru Spellsnatcher	round-trip	structure (1 of 2 unexercised)	
 Khorvath Brightflame	compiled	round-trip	
-Khorvath's Fury	unsupported	compiled (1 unsupported)	
-Khârn the Betrayer	unsupported	compiled (1 unsupported)	
+Khorvath's Fury	compiled	round-trip; fuzz-swept (not in the report)	
+Khârn the Betrayer	compiled	round-trip; fuzz-swept (not in the report)	
 Kianne, Corrupted Memory	compiled	round-trip; structure (2 of 3 unexercised)	
 Kianne, Dean of Substance // Imbraham, Dean of Theory	compiled	round-trip; structure (3 of 4 unexercised)	
 Kibo, Uktabi Prince	round-trip	structure (2 of 3 unexercised)	
@@ -14375,7 +14375,7 @@ Kirol, Attentive First-Year	round-trip	structure (1 of 1 unexercised)
 Kirol, History Buff // Pack a Punch	round-trip	structure (2 of 2 unexercised)	
 Kirri, Talented Sprout	round-trip	structure (2 of 2 unexercised)	
 Kirtar's Desire	round-trip	structure (1 of 3 unexercised)	
-Kirtar's Wrath	unsupported	compiled (1 unsupported)	
+Kirtar's Wrath	compiled	round-trip; fuzz-swept (not in the report)	
 Kishla Skimmer	verified		
 Kishla Trawlers	verified		
 Kishla Village	verified		
@@ -14388,7 +14388,7 @@ Kite Shield	verified
 Kitesail	verified		
 Kitesail Apprentice	round-trip	structure (1 of 1 unexercised)	
 Kitesail Cleric	round-trip	structure (1 of 3 unexercised)	
-Kitesail Corsair	round-trip	structure (1 of 1 unexercised)	
+Kitesail Corsair	verified		
 Kitesail Freebooter	verified		
 Kitesail Larcenist	unsupported	compiled (1 unsupported)	
 Kitesail Scout	verified		
@@ -14820,7 +14820,7 @@ Lapse of Certainty	verified
 Laquatus's Champion	verified		
 Laquatus's Creativity	compiled	round-trip	
 Laquatus's Disdain	round-trip	structure (1 of 2 unexercised); fuzz-cast (never cast: never legal to cast)	
-Lara Croft, Tomb Raider	unsupported	compiled (1 unsupported)	
+Lara Croft, Tomb Raider	compiled	round-trip; fuzz-swept (not in the report)	
 Larceny	verified		
 Larder Zombie	round-trip	structure (1 of 2 unexercised)	
 Large Bear	verified		
@@ -14888,7 +14888,7 @@ Lava Storm	compiled	round-trip
 Lava Tubes	verified		
 Lava Zombie	verified		
 Lava-Field Overlord	verified		
-Lavaball Trap	round-trip	structure (2 of 2 unexercised)	
+Lavaball Trap	round-trip	structure (1 of 2 unexercised)	
 Lavabelly Sliver	round-trip	structure (1 of 1 unexercised)	
 Lavaborn Muse	verified		
 Lavabrink Floodgates	compiled	round-trip	
@@ -14992,7 +14992,7 @@ Legion Loyalist	compiled	round-trip; structure (1 of 2 unexercised)
 Legion Loyalty	round-trip	structure (1 of 1 unexercised)	
 Legion Vanguard	round-trip	structure (1 of 1 unexercised)	
 Legion Warboss	verified		
-Legion's End	unsupported	compiled (1 unsupported)	
+Legion's End	compiled	round-trip; fuzz-swept (not in the report)	
 Legion's Initiative	round-trip	structure (2 of 3 unexercised)	
 Legion's Judgment	verified		
 Legion's Landing // Adanto, the First Fort	round-trip	structure (1 of 4 unexercised)	
@@ -15007,14 +15007,14 @@ Leitmotif Composer	round-trip	structure (1 of 3 unexercised)
 Lembas	round-trip	structure (2 of 3 unexercised)	
 Lena, Selfless Champion	round-trip	structure (2 of 2 unexercised)	
 Lens Flare	verified		
-Lens of Clarity	unsupported	compiled (1 unsupported)	
+Lens of Clarity	compiled	round-trip; fuzz-swept (not in the report)	
 Leo's Guidance	round-trip	structure (1 of 1 unexercised)	
 Leonardo da Vinci	compiled	round-trip; structure (2 of 2 unexercised)	
 Leonardo's Technique	verified		
 Leonardo, Big Brother	round-trip	structure (1 of 2 unexercised)	
 Leonardo, Cutting Edge	verified		
 Leonardo, Leader in Blue	verified		
-Leonardo, Sewer Samurai	unsupported	compiled (1 unsupported)	
+Leonardo, Sewer Samurai	compiled	round-trip; fuzz-swept (not in the report)	
 Leonardo, Worldly Warrior	verified		
 Leonardo, the Balance	round-trip	structure (2 of 3 unexercised)	
 Leonin Abunas	verified		
@@ -15092,7 +15092,7 @@ Leyline of the Meek	round-trip	structure (1 of 2 unexercised)
 Leyline of the Void	compiled	round-trip	
 Lhurgoyf	round-trip	structure (1 of 1 unexercised)	
 Liability	compiled	round-trip	
-Liar's Pendulum	unsupported	compiled (1 unsupported)	
+Liar's Pendulum	compiled	round-trip; fuzz-swept (not in the report)	
 Liberate	verified		
 Liberated Dwarf	round-trip	structure (1 of 1 unexercised)	
 Liberated Livestock	unsupported	compiled (1 unsupported)	
@@ -15247,8 +15247,8 @@ Liliana's Talent	verified
 Liliana's Triumph	verified		
 Liliana, Death Mage	round-trip	structure (3 of 3 unexercised)	
 Liliana, Death Wielder	round-trip	structure (3 of 3 unexercised)	
-Liliana, Death's Majesty	compiled	round-trip; structure (3 of 3 unexercised)	
-Liliana, Dreadhorde General	unsupported	compiled (1 unsupported)	
+Liliana, Death's Majesty	compiled	round-trip; structure (2 of 3 unexercised)	
+Liliana, Dreadhorde General	compiled	round-trip; fuzz-swept (not in the report)	
 Liliana, Heretical Healer // Liliana, Defiant Necromancer	compiled	round-trip; structure (2 of 5 unexercised)	
 Liliana, Untouched by Death	round-trip	structure (2 of 3 unexercised)	
 Liliana, Waker of the Dead	round-trip	structure (3 of 3 unexercised)	
@@ -15287,7 +15287,7 @@ Lion Umbra	round-trip	structure (2 of 3 unexercised)
 Lion Vulture	round-trip	structure (1 of 2 unexercised)	
 Lionheart Glimmer	round-trip	structure (1 of 2 unexercised)	
 Lionheart Maverick	verified		
-Liquid Fire	unsupported	compiled (2 unsupported)	
+Liquid Fire	compiled	round-trip; fuzz-swept (not in the report)	
 Liquify	round-trip	structure (1 of 1 unexercised)	
 Liquimetal Coating	verified		
 Liquimetal Torque	verified		
@@ -15327,7 +15327,7 @@ Living Library	compiled	round-trip; structure (1 of 1 unexercised)
 Living Lies of Loki	verified		
 Living Lightning	round-trip	structure (1 of 1 unexercised)	
 Living Lightning, Charged Up	round-trip	structure (1 of 3 unexercised)	
-Living Lore	unsupported	compiled (1 unsupported)	
+Living Lore	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Living Phone	round-trip	structure (1 of 1 unexercised)	
 Living Tempest	verified		
 Living Terrain	verified		
@@ -15382,7 +15382,7 @@ Loathsome Troll	compiled	round-trip; structure (1 of 1 unexercised)
 Lobber Crew	verified		
 Lobelia Sackville-Baggins	round-trip	structure (1 of 3 unexercised)	
 Lobelia, Defender of Bag End	round-trip	structure (1 of 2 unexercised)	
-Lobotomy	unsupported	compiled (1 unsupported)	
+Lobotomy	compiled	round-trip; fuzz-swept (not in the report)	
 Localized Destruction	compiled	round-trip	
 Loch Dragon	round-trip	structure (1 of 2 unexercised)	
 Loch Korrigan	verified		
@@ -15423,7 +15423,7 @@ Lonely Arroyo	verified
 Lonely Sandbar	verified		
 Lonesome Unicorn // Rider in Need	verified		
 Long Feng, Grand Secretariat	verified		
-Long Goodbye	round-trip	structure (1 of 2 unexercised)	
+Long Goodbye	verified		
 Long Lake Nuisance	verified		
 Long List of the Ents	unsupported	compiled (1 unsupported)	
 Long Rest	unsupported	compiled (1 unsupported)	
@@ -15443,7 +15443,7 @@ Longshot Squad	verified
 Longshot, Rebel Bowman	verified		
 Longstalk Brawl	compiled	round-trip	
 Longtusk Cub	round-trip	structure (2 of 2 unexercised)	
-Lonis, Cryptozoologist	unsupported	compiled (1 unsupported)	
+Lonis, Cryptozoologist	compiled	round-trip; fuzz-swept (not in the report)	
 Lonis, Genetics Expert	round-trip	structure (2 of 3 unexercised)	
 Lookout's Dispersal	verified		
 Looming Altisaur	verified		
@@ -15533,7 +15533,7 @@ Lotus Field	round-trip	structure (1 of 4 unexercised)
 Lotus Guardian	verified		
 Lotus Path Djinn	verified		
 Lotus Ring	round-trip	structure (1 of 3 unexercised)	
-Lotus Vale	unsupported	compiled (1 unsupported)	
+Lotus Vale	compiled	round-trip; fuzz-swept (not in the report)	
 Lotus-Eye Mystics	verified		
 Lotusguard Disciple	round-trip	structure (1 of 2 unexercised)	
 Lotuslight Dancers	round-trip	structure (1 of 2 unexercised)	
@@ -15597,17 +15597,17 @@ Ludevic, Necrogenius // Olag, Ludevic's Hubris	unsupported	compiled (1 unsupport
 Luke Cage, Hero for Hire	round-trip	structure (1 of 2 unexercised)	
 Luke Cage, Power Man	round-trip	structure (1 of 1 unexercised)	
 Lukka, Bound to Ruin	compiled	round-trip; structure (2 of 4 unexercised)	
-Lukka, Coppercoat Outcast	unsupported	compiled (1 unsupported)	
+Lukka, Coppercoat Outcast	compiled	round-trip; structure (2 of 3 unexercised); fuzz-swept (not in the report)	
 Lull	verified		
 Lullmage Mentor	compiled	round-trip	
-Lullmage's Domination	unsupported	compiled (1 unsupported)	
+Lullmage's Domination	compiled	round-trip; fuzz-swept (not in the report)	
 Lullmage's Familiar	verified		
 Lulu, Loyal Hollyphant	round-trip	structure (1 of 3 unexercised)	
 Lulu, Stern Guardian	round-trip	structure (1 of 2 unexercised)	
 Lumaret's Favor	round-trip	structure (1 of 2 unexercised)	
 Lumbering Battlement	compiled	round-trip	
 Lumbering Falls	verified		
-Lumbering Laundry	unsupported	compiled (1 unsupported)	
+Lumbering Laundry	compiled	round-trip; fuzz-swept (not in the report)	
 Lumbering Megasloth	compiled	round-trip	
 Lumbering Satyr	round-trip	structure (1 of 1 unexercised)	
 Lumbering Worldwagon	round-trip	structure (2 of 3 unexercised)	
@@ -15685,7 +15685,7 @@ Lyev Decree	verified
 Lyev Skyknight	verified		
 Lyla, Holographic Assistant	round-trip	structure (1 of 1 unexercised)	
 Lymph Sliver	verified		
-Lynde, Cheerful Tormentor	unsupported	compiled (1 unsupported)	
+Lynde, Cheerful Tormentor	compiled	round-trip; fuzz-swept (not in the report)	
 Lynx	verified		
 Lyra Dawnbringer	round-trip	structure (1 of 4 unexercised)	
 Lyra, Archangel of Dawn	verified		
@@ -15774,7 +15774,7 @@ Mage-Ring Responder	verified
 Magebane Armor	round-trip	structure (1 of 3 unexercised)	
 Magebane Lizard	compiled	round-trip; structure (1 of 1 unexercised)	
 Magefire Wings	verified		
-Mages' Contest	unsupported	compiled (1 unsupported)	
+Mages' Contest	compiled	round-trip; fuzz-swept (not in the report)	
 Mageta the Lion	verified		
 Mageta's Boon	verified		
 Magewright's Stone	compiled	round-trip	
@@ -15820,7 +15820,7 @@ Magmaw	round-trip	structure (1 of 1 unexercised)
 Magnanimous Magistrate	compiled	round-trip; structure (1 of 2 unexercised)	
 Magnetic Flux	round-trip	structure (1 of 1 unexercised)	
 Magnetic Mine	verified		
-Magnetic Mountain	unsupported	compiled (1 unsupported)	
+Magnetic Mountain	compiled	round-trip; fuzz-swept (not in the report)	
 Magnetic Snuffler	round-trip	structure (1 of 2 unexercised)	
 Magnetic Theft	verified		
 Magnetic Web	round-trip	structure (1 of 3 unexercised)	
@@ -15928,7 +15928,7 @@ Malicious Intent	verified
 Malicious Malfunction	verified		
 Malignant Growth	unsupported	compiled (1 unsupported)	
 Malignus	round-trip	structure (1 of 2 unexercised)	
-Malik, Grim Manipulator	unsupported	compiled (1 unsupported)	
+Malik, Grim Manipulator	compiled	round-trip; structure (2 of 2 unexercised); fuzz-swept (not in the report)	
 Malleable Impostor	verified		
 Mammoth Bellow	verified		
 Mammoth Growth	verified		
@@ -15981,7 +15981,7 @@ Mandible Justiciar	verified
 Mandibular Kite	verified		
 Mandroid Squadron	verified		
 Maned Serval	verified		
-Mangara of Corondor	round-trip	structure (1 of 1 unexercised)	
+Mangara of Corondor	verified		
 Mangara's Blessing	verified		
 Mangara's Equity	round-trip	structure (2 of 3 unexercised)	
 Mangara's Tome	compiled	round-trip	
@@ -16144,7 +16144,7 @@ Marshaling Cry	round-trip	structure (1 of 3 unexercised)
 Marshaling the Troops	verified		
 Marshals' Pathcruiser	verified		
 Marshdrinker Giant	round-trip	structure (1 of 1 unexercised)	
-Marshland Bloodcaster	unsupported	compiled (1 unsupported)	
+Marshland Bloodcaster	compiled	round-trip; fuzz-swept (not in the report)	
 Marshmist Titan	verified		
 Martha Jones	round-trip	structure (1 of 3 unexercised)	
 Martial Coup	compiled	round-trip	
@@ -16183,7 +16183,7 @@ Mask of Immolation	verified
 Mask of Intolerance	round-trip	structure (1 of 1 unexercised)	
 Mask of Law and Grace	verified		
 Mask of Memory	round-trip	structure (1 of 2 unexercised)	
-Mask of Riddles	round-trip	structure (1 of 3 unexercised)	
+Mask of Riddles	verified		
 Mask of the Jadecrafter	round-trip	structure (1 of 2 unexercised)	
 Mask of the Mimic	verified		
 Mask of the Schemer	round-trip	structure (1 of 2 unexercised)	
@@ -16226,14 +16226,14 @@ Master Trinketeer	verified
 Master Warcraft	verified		
 Master of Arms	verified		
 Master of Barbs	verified		
-Master of Ceremonies	unsupported	compiled (1 unsupported)	
+Master of Ceremonies	compiled	round-trip; fuzz-swept (not in the report)	
 Master of Cruelties	compiled	round-trip	
 Master of Dark Rites	verified		
 Master of Death	round-trip	structure (1 of 2 unexercised)	
 Master of Diversion	verified		
 Master of Etherium	verified		
 Master of Pearls	round-trip	structure (1 of 2 unexercised)	
-Master of Predicaments	unsupported	compiled (1 unsupported)	
+Master of Predicaments	compiled	round-trip; fuzz-swept (not in the report)	
 Master of Waves	verified		
 Master of Winds	compiled	round-trip	
 Master of the Feast	round-trip	structure (1 of 2 unexercised)	
@@ -16259,7 +16259,7 @@ Match the Odds	verified
 Mathas, Fiend Seeker	verified		
 Mathemagics	unsupported	compiled (1 unsupported)	
 Mathise, Surge Channeler	round-trip	structure (1 of 1 unexercised)	
-Matopi Golem	unsupported	compiled (1 unsupported)	
+Matopi Golem	compiled	round-trip; fuzz-swept (not in the report)	
 Matoya, Archon Elder	round-trip	structure (1 of 1 unexercised)	
 Matsu-Tribe Birdstalker	verified		
 Matsu-Tribe Decoy	verified		
@@ -16397,7 +16397,7 @@ Memory Vampire	verified
 Memory Vessel	unsupported	compiled (1 unsupported)	
 Memory Worm	round-trip	structure (1 of 1 unexercised)	
 Memory's Journey	verified		
-Menacing Ogre	unsupported	compiled (1 unsupported)	
+Menacing Ogre	compiled	round-trip; fuzz-swept (not in the report)	
 Menagerie Liberator	verified		
 Mendicant Core, Guidelight	round-trip	structure (1 of 3 unexercised)	
 Mending Hands	verified		
@@ -16414,7 +16414,7 @@ Mentor of the Meek	verified
 Mentor's Guidance	verified		
 Mephidross Vampire	round-trip	structure (1 of 2 unexercised)	
 Mephitic Draught	round-trip	structure (1 of 1 unexercised)	
-Mephitic Ooze	unsupported	compiled (1 unsupported)	
+Mephitic Ooze	compiled	round-trip; fuzz-swept (not in the report)	
 Mephitic Vapors	verified		
 Mer-Ek Nightblade	round-trip	structure (1 of 2 unexercised)	
 Mercadia's Downfall	verified		
@@ -16491,7 +16491,7 @@ Merry Bards	verified
 Merry, Esquire of Rohan	compiled	round-trip; structure (2 of 3 unexercised)	
 Merry, Warden of Isengard	round-trip	structure (1 of 2 unexercised)	
 Merry-Go-Round	round-trip	structure (1 of 1 unexercised)	fuzz-cast exempt: supplementary-deck or conspiracy card
-Merseine	unsupported	compiled (1 unsupported)	
+Merseine	compiled	round-trip; fuzz-swept (not in the report)	
 Mesa Cavalier	verified		
 Mesa Enchantress	verified		
 Mesa Falcon	verified		
@@ -16551,7 +16551,7 @@ Miara, Thorn of the Glade	verified
 Miasma Demon	round-trip	structure (1 of 2 unexercised)	
 Miasmic Mummy	verified		
 Mica, Reader of Ruins	verified		
-Michelangelo's Technique	unsupported	compiled (1 unsupported)	
+Michelangelo's Technique	compiled	round-trip; fuzz-swept (not in the report)	
 Michelangelo, Game Master	round-trip	structure (1 of 1 unexercised)	
 Michelangelo, Improviser	compiled	round-trip	
 Michelangelo, Mutant BFF	round-trip	structure (1 of 2 unexercised)	
@@ -16613,7 +16613,7 @@ Migratory Route	verified
 Miirym, Sentinel Wyrm	round-trip	structure (1 of 3 unexercised)	
 Mikaeus, the Lunarch	round-trip	structure (1 of 3 unexercised)	
 Mikaeus, the Unhallowed	round-trip	structure (1 of 3 unexercised)	
-Mikey & Don, Party Planners	unsupported	compiled (1 unsupported)	
+Mikey & Don, Party Planners	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Mikey & Leo, Chaos & Order	verified		
 Mikey & Mona, Mutant Sitters	round-trip	structure (1 of 1 unexercised)	
 Mikokoro, Center of the Sea	round-trip	structure (1 of 2 unexercised)	
@@ -16633,8 +16633,8 @@ Millennial Gargoyle	verified
 Millicent, Restless Revenant	round-trip	structure (1 of 3 unexercised)	
 Millikin	verified		
 Millstone	verified		
-Mimeofacture	unsupported	compiled (1 unsupported)	
-Mimeoplasm, Revered One	unsupported	compiled (1 unsupported)	
+Mimeofacture	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
+Mimeoplasm, Revered One	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Mimic	verified		
 Mimic Vat	compiled	round-trip	
 Miming Slime	verified		
@@ -16655,7 +16655,7 @@ Mind Drain	verified
 Mind Drill Assailant	round-trip	structure (1 of 2 unexercised)	
 Mind Extraction	compiled	round-trip	
 Mind Flayer	round-trip	structure (1 of 1 unexercised)	
-Mind Funeral	unsupported	compiled (1 unsupported)	
+Mind Funeral	compiled	round-trip; fuzz-swept (not in the report)	
 Mind Games	round-trip	structure (1 of 2 unexercised)	
 Mind Grind	compiled	round-trip; structure (1 of 2 unexercised)	
 Mind Harness	round-trip	fuzz-cast (never cast: never legal to cast)	
@@ -16669,7 +16669,7 @@ Mind Raker	round-trip	structure (1 of 2 unexercised)
 Mind Ravel	verified		
 Mind Roots	compiled	round-trip; structure (1 of 1 unexercised)	
 Mind Rot	verified		
-Mind Sculpt	round-trip	structure (1 of 1 unexercised)	
+Mind Sculpt	verified		
 Mind Shatter	round-trip	structure (1 of 1 unexercised)	
 Mind Slash	verified		
 Mind Sludge	round-trip	structure (1 of 1 unexercised)	
@@ -16687,7 +16687,7 @@ Mind's Dilation	verified
 Mind's Eye	round-trip	structure (1 of 1 unexercised)	
 Mindbender Spores	compiled	round-trip; structure (1 of 3 unexercised)	
 Mindblade Render	unsupported	compiled (1 unsupported)	
-Mindblaze	unsupported	compiled (1 unsupported)	
+Mindblaze	compiled	round-trip; fuzz-swept (not in the report)	
 Mindbreak Trap	round-trip	structure (2 of 2 unexercised)	
 Mindclaw Shaman	compiled	round-trip	
 Mindcrank	round-trip	structure (1 of 1 unexercised)	
@@ -16705,7 +16705,7 @@ Mindlink Mech	verified
 Mindlock Orb	verified		
 Mindmelter	round-trip	structure (1 of 3 unexercised)	
 Mindmoil	compiled	round-trip	
-Mindreaver	round-trip	structure (2 of 2 unexercised)	
+Mindreaver	round-trip	structure (1 of 2 unexercised)	
 Minds Aglow	verified		
 Mindscour Dragon	round-trip	structure (1 of 2 unexercised)	
 Mindseeker Oculus	verified		
@@ -16819,7 +16819,7 @@ Mirror Match	unsupported	compiled (1 unsupported)
 Mirror Mockery	verified		
 Mirror Room // Fractured Realm	verified		
 Mirror Sheen	round-trip	structure (1 of 1 unexercised)	
-Mirror Shield	round-trip	structure (1 of 2 unexercised)	
+Mirror Shield	verified		
 Mirror Strike	compiled	round-trip	
 Mirror Wall	verified		
 Mirror of Fate	unsupported	compiled (1 unsupported)	
@@ -16938,7 +16938,7 @@ Misty Mountains Raider	round-trip	structure (1 of 1 unexercised)
 Misty Palms Oasis	verified		
 Misty Rainforest	round-trip	structure (1 of 1 unexercised)	
 Mite Overseer	round-trip	structure (1 of 3 unexercised)	
-Mithril Coat	round-trip	structure (1 of 5 unexercised)	
+Mithril Coat	verified		
 Mitotic Manipulation	compiled	round-trip; structure (1 of 1 unexercised)	
 Mitotic Slime	verified		
 Mizzium Meddler	compiled	round-trip	
@@ -16951,7 +16951,7 @@ Mizzix's Mastery	compiled	round-trip
 Mizzix, Replica Rider	unsupported	compiled (1 unsupported)	
 Mjölnir's Might	round-trip	structure (1 of 2 unexercised)	
 Mjölnir, Hammer of Thor	compiled	round-trip	
-Mjölnir, Storm Hammer	round-trip	structure (2 of 3 unexercised)	
+Mjölnir, Storm Hammer	round-trip	structure (1 of 3 unexercised)	
 Mm'menon, Uthros Exile	round-trip	structure (1 of 2 unexercised)	
 Mm'menon, the Right Hand	compiled	round-trip; structure (2 of 4 unexercised)	
 Mnemonic Betrayal	unsupported	compiled (1 unsupported)	
@@ -16968,7 +16968,7 @@ Mob Justice	round-trip	structure (1 of 1 unexercised)
 Mob Lookout	round-trip	structure (1 of 1 unexercised)	
 Mob Mentality	compiled	round-trip	
 Mob Rule	verified		
-Mob Verdict	unsupported	compiled (1 unsupported)	
+Mob Verdict	compiled	round-trip; fuzz-swept (not in the report)	
 Mobile Fort	round-trip	structure (1 of 2 unexercised)	
 Mobile Garrison	round-trip	structure (1 of 2 unexercised)	
 Mobile Homestead	verified		
@@ -16982,7 +16982,7 @@ Mocking Sprite	verified
 Mockingbird	verified		
 Mockingbird, Ace Agent	round-trip	structure (1 of 2 unexercised)	
 Mockingbird, Bobbi Morse	verified		
-Model of Unity	unsupported	compiled (1 unsupported)	
+Model of Unity	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Moderation	verified		
 Modify Memory	compiled	round-trip	
 Mog, Moogle Warrior	verified		
@@ -17091,7 +17091,7 @@ Monastery Loremaster	round-trip	structure (1 of 2 unexercised)
 Monastery Mentor	verified		
 Monastery Messenger	round-trip	structure (1 of 3 unexercised)	
 Monastery Raid	verified		
-Monastery Siege	unsupported	compiled (1 unsupported)	
+Monastery Siege	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Monastery Swiftspear	verified		
 Mondo Gecko	compiled	round-trip; structure (2 of 2 unexercised)	
 Mondrak, Glory Dominus	round-trip	structure (1 of 2 unexercised)	
@@ -17120,7 +17120,7 @@ Monster Mashup	verified
 Monstrify	verified		
 Monstrosity of the Lake	round-trip	structure (1 of 2 unexercised)	
 Monstrous Carabid	verified		
-Monstrous Emergence	unsupported	compiled (2 unsupported)	
+Monstrous Emergence	compiled	round-trip; fuzz-swept (not in the report)	
 Monstrous Growth	verified		
 Monstrous Hound	compiled	round-trip; structure (2 of 2 unexercised)	
 Monstrous Onslaught	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -17252,13 +17252,13 @@ Moss Viper	verified
 Moss-Pit Skeleton	verified		
 Mossbeard Ancient	verified		
 Mossborn Hydra	verified		
-Mossbridge Troll	unsupported	compiled (1 unsupported)	
+Mossbridge Troll	compiled	round-trip; fuzz-swept (not in the report)	
 Mosscoat Goriak	verified		
 Mossdog	round-trip	structure (1 of 1 unexercised)	
 Mossfire Egg	verified		
 Mossfire Valley	verified		
 Mosstodon	round-trip	structure (1 of 1 unexercised)	
-Mosswood Dreadknight // Dread Whispers	unsupported	compiled (1 unsupported)	
+Mosswood Dreadknight // Dread Whispers	compiled	round-trip; fuzz-swept (not in the report)	
 Mosswort Bridge	verified		
 Most Decrepit Old Bird // Speak Secrets	round-trip	structure (1 of 3 unexercised)	
 Most Valuable Slayer	round-trip	structure (1 of 1 unexercised)	
@@ -17299,7 +17299,7 @@ Mox Amber	verified
 Mox Jasper	round-trip	structure (1 of 1 unexercised)	
 Mox Opal	round-trip	structure (1 of 1 unexercised)	
 Mox Tantalite	verified		
-Moxite Refinery	unsupported	compiled (1 unsupported)	
+Moxite Refinery	compiled	round-trip; fuzz-swept (not in the report)	
 Mr. Foxglove	unsupported	compiled (1 unsupported)	
 Mr. House, President and CEO	unsupported	compiled (1 unsupported)	
 Mr. Orfeo, the Boulder	verified		
@@ -17362,7 +17362,7 @@ Murasa Sproutling	verified
 Murder	verified		
 Murder Investigation	verified		
 Murder of Crows	round-trip	structure (1 of 2 unexercised)	
-Murderer's Axe	round-trip	structure (1 of 2 unexercised)	
+Murderer's Axe	verified		
 Murderous Betrayal	compiled	round-trip; structure (1 of 1 unexercised)	
 Murderous Compulsion	verified		
 Murderous Cut	verified		
@@ -17385,7 +17385,7 @@ Muscle Burst	verified
 Muse Drake	verified		
 Muse Seeker	verified		
 Muse Vessel	verified		
-Muse Vortex	unsupported	compiled (1 unsupported)	
+Muse Vortex	compiled	round-trip; fuzz-swept (not in the report)	
 Muse's Encouragement	verified		
 Museum Nightwatch	verified		
 Mushroom Watchdogs	round-trip	structure (1 of 1 unexercised)	
@@ -17457,7 +17457,7 @@ Myr Welder	verified
 Myra the Magnificent	unsupported	compiled (1 unsupported)	
 Myrel, Shield of Argive	compiled	round-trip; structure (1 of 3 unexercised)	
 Myriad Construct	round-trip	structure (1 of 3 unexercised)	
-Myriad Landscape	unsupported	compiled (1 unsupported)	
+Myriad Landscape	compiled	round-trip; fuzz-swept (not in the report)	
 Myrkul's Edict	compiled	round-trip; structure (1 of 1 unexercised)	
 Myrkul's Invoker	round-trip	structure (1 of 1 unexercised)	
 Myrkul, Lord of Bones	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -17546,7 +17546,7 @@ Nahiri's Sacrifice	verified
 Nahiri's Stoneblades	round-trip	structure (1 of 1 unexercised)	
 Nahiri's Warcrafting	compiled	round-trip; structure (1 of 1 unexercised)	
 Nahiri's Wrath	verified		
-Nahiri, Forged in Fury	unsupported	compiled (1 unsupported)	
+Nahiri, Forged in Fury	compiled	round-trip; fuzz-swept (not in the report)	
 Nahiri, Heir of the Ancients	round-trip	structure (2 of 3 unexercised)	
 Nahiri, Storm of Stone	compiled	round-trip; structure (3 of 3 unexercised)	
 Nahiri, the Harbinger	round-trip	structure (2 of 3 unexercised)	
@@ -17604,7 +17604,7 @@ Narset, Jeskai Waymaster	verified
 Narset, Parter of Veils	round-trip	structure (2 of 2 unexercised)	
 Narstad Scrapper	verified		
 Naru Meha, Master Wizard	verified		
-Nascent Metamorph	unsupported	compiled (1 unsupported)	
+Nascent Metamorph	compiled	round-trip; fuzz-swept (not in the report)	
 Nashi, Moon Sage's Scion	compiled	round-trip; structure (1 of 2 unexercised)	
 Nashi, Moon's Legacy	unsupported	compiled (1 unsupported)	
 Nashi, Searcher in the Dark	compiled	round-trip	
@@ -17668,7 +17668,7 @@ Neck Snap	verified
 Necklace of Girion	round-trip	structure (1 of 2 unexercised)	
 Necra Disciple	verified		
 Necra Sanctuary	round-trip	structure (1 of 1 unexercised)	
-Necratog	unsupported	compiled (1 unsupported)	
+Necratog	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Necravolver	verified		
 Necrobite	round-trip	structure (1 of 1 unexercised)	
 Necroblossom Snarl	verified		
@@ -17681,7 +17681,7 @@ Necrogen Rotpriest	round-trip	structure (1 of 3 unexercised)
 Necrogen Scudder	verified		
 Necrogen Spellbomb	verified		
 Necrogenesis	round-trip	structure (1 of 1 unexercised)	
-Necrogoyf	round-trip	structure (2 of 3 unexercised)	
+Necrogoyf	round-trip	structure (1 of 3 unexercised)	
 Necromancer's Assistant	verified		
 Necromancer's Covenant	round-trip	structure (2 of 2 unexercised)	
 Necromancer's Familiar	verified		
@@ -17711,7 +17711,7 @@ Necrosynthesis	verified
 Necrotic Fumes	verified		
 Necrotic Hex	round-trip	structure (1 of 1 unexercised)	
 Necrotic Ooze	verified		
-Necrotic Plague	unsupported	compiled (1 unsupported)	
+Necrotic Plague	compiled	round-trip; fuzz-swept (not in the report)	
 Necrotic Sliver	round-trip	structure (1 of 1 unexercised)	
 Necrotic Wound	verified		
 Nectar Faerie	round-trip	structure (1 of 2 unexercised)	
@@ -17748,9 +17748,9 @@ Nekusar, the Mindrazer	verified
 Nelly Borca, Impulsive Accuser	unsupported	compiled (1 unsupported)	
 Nema Siltlurker	verified		
 Nemata, Grove Guardian	round-trip	structure (1 of 2 unexercised)	
-Nemata, Primeval Warden	unsupported	compiled (1 unsupported)	
+Nemata, Primeval Warden	compiled	round-trip; structure (1 of 4 unexercised); fuzz-swept (not in the report)	
 Nemesis Mask	verified		
-Nemesis Phoenix	unsupported	compiled (1 unsupported)	
+Nemesis Phoenix	compiled	round-trip; fuzz-swept (not in the report)	
 Nemesis Trap	compiled	round-trip; structure (1 of 2 unexercised)	
 Nemesis of Mortals	verified		
 Nemesis of Reason	round-trip	structure (1 of 1 unexercised)	
@@ -17834,7 +17834,7 @@ New Generation's Technique	verified
 New Horizons	verified		
 New Perspectives	verified		
 New Prahv Guildmage	verified		
-New Way Forward	unsupported	compiled (1 unsupported)	
+New Way Forward	compiled	round-trip; fuzz-swept (not in the report)	
 News Helicopter	verified		
 Nexos	verified		
 Next of Kin	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -17963,7 +17963,7 @@ Nimana Skitter-Sneak	verified
 Nimana Skydancer	round-trip	structure (1 of 3 unexercised)	
 Nimble Birdsticker	verified		
 Nimble Brigand	verified		
-Nimble Hobbit	unsupported	compiled (1 unsupported)	
+Nimble Hobbit	compiled	round-trip; fuzz-swept (not in the report)	
 Nimble Innovator	verified		
 Nimble Larcenist	verified		
 Nimble Mongoose	verified		
@@ -18064,7 +18064,7 @@ Noble Vestige	round-trip	structure (1 of 2 unexercised)
 Noble's Purse	round-trip	structure (1 of 3 unexercised)	
 Nobody	verified		
 Noctis, Heir Apparent	unsupported	compiled (1 unsupported)	
-Noctis, Prince of Lucis	unsupported	compiled (1 unsupported)	
+Noctis, Prince of Lucis	compiled	round-trip; fuzz-swept (not in the report)	
 Nocturnal Feeder	verified		
 Nocturnal Hunger	verified		
 Nocturnal Raid	round-trip	structure (1 of 1 unexercised)	
@@ -18112,7 +18112,7 @@ Norwood Warrior	verified
 Nosy Goblin	round-trip	structure (1 of 1 unexercised)	
 Not Dead After All	verified		
 Not Forgotten	verified		
-Not of This World	unsupported	compiled (1 unsupported)	
+Not of This World	compiled	round-trip; fuzz-swept (not in the report)	
 Not on My Watch	verified		
 Nothic	round-trip	structure (1 of 1 unexercised)	
 Notion Rain	verified		
@@ -18140,7 +18140,7 @@ Noxious Dragon	round-trip	structure (1 of 2 unexercised)
 Noxious Field	verified		
 Noxious Gearhulk	compiled	round-trip	
 Noxious Ghoul	round-trip	structure (1 of 1 unexercised)	
-Noxious Grasp	round-trip	structure (1 of 1 unexercised)	
+Noxious Grasp	verified		
 Noxious Groodion	verified		
 Noxious Hatchling	verified		
 Noxious Newt	verified		
@@ -18155,7 +18155,7 @@ Nuka-Cola Vending Machine	verified
 Nuka-Nuke Launcher	unsupported	compiled (1 unsupported)	
 Null Brooch	round-trip	structure (1 of 1 unexercised)	
 Null Caller	verified		
-Null Chamber	unsupported	compiled (2 unsupported)	
+Null Chamber	compiled	round-trip; fuzz-swept (not in the report)	
 Null Champion	round-trip	structure (1 of 3 unexercised)	
 Null Elemental Blast	round-trip	structure (1 of 1 unexercised); fuzz-cast (never cast: offered but never chosen)	
 Null Group Biological Assets	verified		
@@ -18285,7 +18285,7 @@ Oblivious Bookworm	unsupported	compiled (1 unsupported)
 Oboro Breezecaller	round-trip	structure (1 of 2 unexercised)	
 Oboro Envoy	verified		
 Oboro, Palace in the Clouds	verified		
-Obosh, the Preypiercer	unsupported	compiled (1 unsupported)	
+Obosh, the Preypiercer	compiled	round-trip; fuzz-swept (not in the report)	
 Obscura Ascendancy	round-trip	structure (2 of 2 unexercised)	
 Obscura Charm	round-trip	structure (1 of 1 unexercised)	
 Obscura Confluence	round-trip	structure (1 of 1 unexercised)	
@@ -18376,7 +18376,7 @@ Ohran Viper	verified
 Ohran Yeti	round-trip	structure (1 of 1 unexercised)	
 Oil-Gorger Troll	round-trip	structure (1 of 1 unexercised)	
 Oildeep Gearhulk	round-trip	structure (1 of 3 unexercised)	
-Ojer Axonil, Deepest Might // Temple of Power	unsupported	compiled (2 unsupported)	
+Ojer Axonil, Deepest Might // Temple of Power	unsupported	compiled (1 unsupported)	
 Ojer Kaslem, Deepest Growth // Temple of Cultivation	round-trip	structure (2 of 5 unexercised)	
 Ojer Pakpatiq, Deepest Epoch // Temple of Cyclical Time	round-trip	structure (2 of 5 unexercised)	
 Ojer Taq, Deepest Foundation // Temple of Civilization	compiled	round-trip; structure (1 of 5 unexercised)	
@@ -18445,7 +18445,7 @@ Omega Myr	verified
 Omega, Heartless Evolution	compiled	round-trip; structure (1 of 1 unexercised)	
 Omen	verified		
 Omen Hawker	round-trip	structure (1 of 1 unexercised)	
-Omen Machine	unsupported	compiled (1 unsupported)	
+Omen Machine	compiled	round-trip; fuzz-swept (not in the report)	
 Omen of Fire	round-trip	structure (1 of 1 unexercised)	
 Omen of the Dead	verified		
 Omen of the Forge	verified		
@@ -18548,7 +18548,7 @@ Open the Gates	round-trip	structure (1 of 1 unexercised)
 Open the Graves	verified		
 Open the Omenpaths	verified		
 Open the Vaults	round-trip	structure (1 of 1 unexercised)	
-Open the Way	unsupported	compiled (1 unsupported)	
+Open the Way	compiled	round-trip; fuzz-swept (not in the report)	
 Opera Love Song	round-trip	structure (1 of 1 unexercised)	
 Ophidian	verified		
 Ophidian Eye	verified		
@@ -18708,12 +18708,12 @@ Oscorp Industries	round-trip	structure (1 of 4 unexercised)
 Oscorp Research Team	verified		
 Osgir, the Reconstructor	round-trip	structure (1 of 3 unexercised)	
 Osgood, Operation Double	round-trip	structure (3 of 3 unexercised)	
-Oskar, Rubbish Reclaimer	unsupported	compiled (1 unsupported)	
+Oskar, Rubbish Reclaimer	compiled	round-trip; fuzz-swept (not in the report)	
 Osseous Exhale	compiled	round-trip	
 Osseous Sticktwister	verified		
-Ossification	round-trip	structure (1 of 2 unexercised)	
+Ossification	verified		
 Ossuary Rats	round-trip	structure (1 of 1 unexercised)	
-Osteomancer Adept	unsupported	compiled (1 unsupported)	
+Osteomancer Adept	compiled	round-trip; fuzz-swept (not in the report)	
 Ostiary Thrull	verified		
 Ostracize	round-trip	structure (1 of 1 unexercised)	
 Ostrich-Horse	verified		
@@ -18740,7 +18740,7 @@ Out Cold	verified
 Out of Air	round-trip	structure (1 of 2 unexercised)	
 Out of Bounds	verified		
 Out of Time	compiled	round-trip	
-Out of the Tombs	compiled	round-trip; structure (2 of 2 unexercised)	
+Out of the Tombs	compiled	round-trip; structure (1 of 2 unexercised)	
 Out of the Way	verified		
 Outbreak	round-trip	structure (2 of 2 unexercised)	
 Outcaster Greenblade	round-trip	structure (2 of 2 unexercised)	
@@ -18861,7 +18861,7 @@ Pack's Betrayal	round-trip	structure (1 of 1 unexercised)
 Pack's Disdain	compiled	round-trip; structure (1 of 1 unexercised)	
 Pack's Favor	verified		
 Packsong Pup	round-trip	structure (1 of 2 unexercised)	
-Pact Weapon	compiled	round-trip; structure (1 of 3 unexercised)	
+Pact Weapon	compiled	round-trip	
 Pact of Negation	verified		
 Pact of the Serpent	compiled	round-trip; structure (1 of 1 unexercised)	
 Pact of the Titan	verified		
@@ -18875,10 +18875,10 @@ Pain Kami	round-trip	structure (1 of 1 unexercised)
 Pain Magnification	compiled	round-trip	
 Pain Seer	verified		
 Pain for All	verified		
-Pain's Reward	unsupported	compiled (1 unsupported)	
+Pain's Reward	compiled	round-trip; fuzz-swept (not in the report)	
 Painbringer	compiled	round-trip; structure (1 of 1 unexercised)	
 Painful Lesson	verified		
-Painful Memories	unsupported	compiled (1 unsupported)	
+Painful Memories	compiled	round-trip; fuzz-swept (not in the report)	
 Painful Quandary	verified		
 Painful Truths	verified		
 Painsmith	round-trip	structure (1 of 1 unexercised)	
@@ -19216,7 +19216,7 @@ Pests of Honor	verified
 Pet Avengers	round-trip	structure (1 of 2 unexercised)	
 Petalmane Baku	round-trip	structure (1 of 2 unexercised)	
 Petals of Insight	compiled	round-trip; structure (1 of 1 unexercised)	
-Peter Parker // Amazing Spider-Man	unsupported	compiled (1 unsupported)	
+Peter Parker // Amazing Spider-Man	compiled	round-trip; structure (2 of 5 unexercised); fuzz-swept (not in the report)	
 Peter Parker's Camera	verified		
 Petradon	verified		
 Petrahydrox	round-trip	structure (1 of 1 unexercised)	
@@ -19505,10 +19505,10 @@ Plague Fiend	round-trip	structure (1 of 1 unexercised)
 Plague Mare	verified		
 Plague Nurse	verified		
 Plague Rats	verified		
-Plague Reaver	unsupported	compiled (1 unsupported)	
+Plague Reaver	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Plague Sliver	round-trip	structure (1 of 1 unexercised)	
 Plague Spitter	round-trip	structure (2 of 2 unexercised)	
-Plague Spores	round-trip	structure (1 of 1 unexercised)	
+Plague Spores	verified		
 Plague Stinger	verified		
 Plague Wight	verified		
 Plague Wind	round-trip	structure (1 of 1 unexercised)	
@@ -19535,7 +19535,7 @@ Planar Guide	verified
 Planar Incision	round-trip	structure (1 of 1 unexercised)	
 Planar Nexus	compiled	round-trip	
 Planar Outburst	verified		
-Planar Overlay	unsupported	compiled (1 unsupported)	
+Planar Overlay	compiled	round-trip; fuzz-swept (not in the report)	
 Planar Portal	round-trip	structure (1 of 1 unexercised)	
 Planar Void	verified		
 Planebound Accomplice	round-trip	structure (1 of 1 unexercised)	
@@ -19556,7 +19556,7 @@ Plasma Caster	unsupported	compiled (1 unsupported)
 Plasma Elemental	verified		
 Plasma Jockey	round-trip	structure (1 of 2 unexercised)	
 Plasmancer	round-trip	structure (1 of 2 unexercised)	
-Plate Armor	compiled	round-trip; structure (1 of 3 unexercised)	
+Plate Armor	compiled	round-trip	
 Plated Crusher	verified		
 Plated Geopede	verified		
 Plated Onslaught	verified		
@@ -19768,7 +19768,7 @@ Predictive Preparations	verified
 Preeminent Captain	verified		
 Preemptive Strike	verified		
 Preening Champion	verified		
-Preferred Selection	unsupported	compiled (1 unsupported)	
+Preferred Selection	compiled	round-trip; fuzz-swept (not in the report)	
 Prehistoric Pet	round-trip	structure (1 of 2 unexercised)	
 Prehistoric Turtlesaurus	verified		
 Premature Burial	unsupported	compiled (1 unsupported)	
@@ -19901,7 +19901,7 @@ Prismatic Omen	verified
 Prismatic Strands	verified		
 Prismatic Undercurrents	round-trip	structure (1 of 2 unexercised)	
 Prismatic Vista	round-trip	structure (1 of 1 unexercised)	
-Prismatic Ward	round-trip	structure (1 of 3 unexercised)	
+Prismatic Ward	verified		
 Prismite	verified		
 Prismwake Merrow	verified		
 Prison Barricade	verified		
@@ -19909,7 +19909,7 @@ Prison Break	round-trip	structure (1 of 2 unexercised)
 Prison Realm	verified		
 Prison Sentence	verified		
 Prison Term	verified		
-Prisoner's Dilemma	unsupported	compiled (1 unsupported)	
+Prisoner's Dilemma	compiled	round-trip; fuzz-swept (not in the report)	
 Pristine Angel	round-trip	structure (2 of 3 unexercised)	
 Pristine Skywise	round-trip	structure (1 of 2 unexercised)	
 Pristine Talisman	verified		
@@ -19945,7 +19945,7 @@ Profaner of the Dead	compiled	round-trip
 Professional Face-Breaker	round-trip	structure (1 of 3 unexercised)	
 Professional Wrestler	verified		
 Professor Dellian Fel	round-trip	structure (2 of 4 unexercised)	
-Professor Hojo	unsupported	compiled (1 unsupported)	
+Professor Hojo	compiled	round-trip; fuzz-swept (not in the report)	
 Professor Hulk	verified		
 Professor Onyx	compiled	round-trip; structure (2 of 4 unexercised)	
 Professor Zei, Anthropologist	round-trip	structure (1 of 2 unexercised)	
@@ -19960,7 +19960,7 @@ Proft, Consulting Detective	round-trip	structure (1 of 1 unexercised)
 Proft, Sinister Mastermind	compiled	round-trip; structure (2 of 3 unexercised)	
 Progenitor Exarch	round-trip	structure (2 of 2 unexercised)	
 Progenitor Mimic	verified		
-Progenitor's Icon	unsupported	compiled (1 unsupported)	
+Progenitor's Icon	compiled	round-trip; fuzz-swept (not in the report)	
 Progenitus	verified		
 Prognostic Sphinx	verified		
 Prohibit	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -20019,7 +20019,7 @@ Protector of the Crown	verified
 Protector of the Wastes	verified		
 Protege's Awakening	verified		
 Proteus Machine	round-trip	structure (1 of 2 unexercised)	
-Proteus Staff	round-trip	structure (1 of 1 unexercised)	
+Proteus Staff	verified		
 Protocol Knight	verified		
 Protomatter Powder	verified		
 Prototype Portal	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -20082,7 +20082,7 @@ Psychic Whorl	round-trip	structure (1 of 1 unexercised)
 Psychogenic Probe	unsupported	compiled (1 unsupported)	
 Psychomancer	round-trip	structure (1 of 2 unexercised)	
 Psychosis Crawler	verified		
-Psychotic Episode	unsupported	compiled (1 unsupported)	
+Psychotic Episode	compiled	round-trip; fuzz-swept (not in the report)	
 Psychotic Fury	round-trip	structure (1 of 2 unexercised); fuzz-cast (never cast: never legal to cast)	
 Psychotic Haze	verified		
 Psychotrope Thallid	verified		
@@ -20121,7 +20121,7 @@ Pulse of the Tangle	round-trip	structure (1 of 1 unexercised)
 Pulsemage Advocate	round-trip	structure (1 of 1 unexercised)	
 Pulverize	round-trip	structure (1 of 2 unexercised)	
 Pummeler for Hire	round-trip	structure (1 of 4 unexercised)	
-Pumpkin Bombardment	round-trip	structure (1 of 2 unexercised)	
+Pumpkin Bombardment	verified		
 Pumpkin Bombs	compiled	round-trip	
 Puncture Blast	verified		
 Puncture Bolt	round-trip	structure (1 of 1 unexercised)	
@@ -20276,7 +20276,7 @@ Quarantine Field	compiled	round-trip
 Quarrel	verified		
 Quarrel's End	round-trip	structure (1 of 2 unexercised)	
 Quarry Beetle	round-trip	structure (1 of 1 unexercised)	
-Quarry Colossus	unsupported	compiled (1 unsupported)	
+Quarry Colossus	compiled	round-trip; fuzz-swept (not in the report)	
 Quarry Hauler	verified		
 Quartzwood Crasher	round-trip	structure (1 of 2 unexercised)	
 Quarum Trench Gnomes	unsupported	compiled (1 unsupported)	
@@ -20357,7 +20357,7 @@ Quintessential Katana	round-trip	structure (2 of 3 unexercised)
 Quintorius Kand	round-trip	structure (3 of 4 unexercised)	
 Quintorius, Field Historian	verified		
 Quintorius, History Chaser	round-trip	structure (2 of 4 unexercised)	
-Quintorius, Loremaster	unsupported	compiled (1 unsupported)	
+Quintorius, Loremaster	compiled	round-trip; fuzz-swept (not in the report)	
 Quirion Beastcaller	verified		
 Quirion Druid	round-trip	structure (1 of 1 unexercised)	
 Quirion Dryad	verified		
@@ -20390,7 +20390,7 @@ Racers' Scoreboard	round-trip	structure (1 of 3 unexercised)
 Rack and Ruin	verified		
 Rackling	round-trip	structure (1 of 1 unexercised)	
 Rad Rascal	verified		
-Radagast of Rhosgobel	unsupported	compiled (1 unsupported)	
+Radagast of Rhosgobel	compiled	round-trip; fuzz-swept (not in the report)	
 Radagast the Brown	round-trip	structure (1 of 1 unexercised)	
 Radagast, Wizard of Wilds	verified		
 Radha's Firebrand	round-trip	structure (2 of 2 unexercised)	
@@ -20698,7 +20698,7 @@ Rathi Assassin	round-trip	structure (1 of 2 unexercised)
 Rathi Fiend	verified		
 Rathi Intimidator	verified		
 Rathi Trapper	verified		
-Ratonhnhaké꞉ton	unsupported	compiled (1 unsupported)	
+Ratonhnhaké꞉ton	compiled	round-trip; fuzz-swept (not in the report)	
 Rats' Feast	round-trip	structure (1 of 1 unexercised)	
 Rattleback Apothecary	round-trip	structure (1 of 2 unexercised)	
 Rattleblaze Scarecrow	round-trip	structure (2 of 2 unexercised)	
@@ -20755,7 +20755,7 @@ Ravenous Skirge	verified
 Ravenous Slime	compiled	round-trip; structure (1 of 2 unexercised)	
 Ravenous Squirrel	round-trip	structure (2 of 2 unexercised)	
 Ravenous Trap	round-trip	structure (2 of 2 unexercised)	
-Ravenous Tyrannosaurus	unsupported	compiled (1 unsupported)	
+Ravenous Tyrannosaurus	compiled	round-trip; fuzz-swept (not in the report)	
 Ravenous Vampire	round-trip	structure (1 of 2 unexercised)	
 Ravine Raider	verified		
 Raving Dead	verified		
@@ -20816,7 +20816,7 @@ Reach Through Mists	verified
 Reach for the Sky	verified		
 Reach of Branches	round-trip	structure (1 of 2 unexercised)	
 Reach of Shadows	round-trip	structure (1 of 1 unexercised)	
-Reach the Horizon	compiled	round-trip; structure (1 of 1 unexercised)	
+Reach the Horizon	compiled	round-trip	
 Read the Bones	verified		
 Read the Runes	verified		
 Read the Tides	round-trip	structure (1 of 1 unexercised)	
@@ -20839,12 +20839,12 @@ Realm-Cloaked Giant // Cast Off	round-trip	structure (1 of 2 unexercised)
 Realm-Scorcher Hellkite	round-trip	structure (1 of 5 unexercised)	
 Realmbreaker's Grasp	verified		
 Realmbreaker, the Invasion Tree	compiled	round-trip; structure (1 of 2 unexercised)	
-Realms Uncharted	unsupported	compiled (1 unsupported)	
+Realms Uncharted	compiled	round-trip; fuzz-swept (not in the report)	
 Realmwalker	verified		
 Realmwright	verified		
 Reanimate	verified		
 Reap	compiled	round-trip	
-Reap Intellect	unsupported	compiled (1 unsupported)	
+Reap Intellect	compiled	round-trip; fuzz-swept (not in the report)	
 Reap What Is Sown	verified		
 Reap and Sow	round-trip	structure (1 of 2 unexercised)	
 Reap the Past	verified		
@@ -21032,7 +21032,7 @@ Regenesis	verified
 Regent's Authority	round-trip	structure (1 of 1 unexercised)	
 Regicide	unsupported	compiled (2 unsupported)	
 Regisaur Alpha	verified		
-Regna's Sanction	unsupported	compiled (1 unsupported)	
+Regna's Sanction	compiled	round-trip; fuzz-swept (not in the report)	
 Regna, the Redeemer	verified		
 Regress	verified		
 Regrowth	verified		
@@ -21533,7 +21533,7 @@ Riot Piker	verified
 Riot Ringleader	round-trip	structure (1 of 1 unexercised)	
 Riot Spikes	verified		
 Rip Apart	round-trip	structure (1 of 1 unexercised)	
-Rip, Spawn Hunter	unsupported	compiled (1 unsupported)	
+Rip, Spawn Hunter	compiled	round-trip; fuzz-swept (not in the report)	
 Rip-Clan Crasher	verified		
 Riparian Tiger	round-trip	structure (1 of 3 unexercised)	
 Ripchain Razorkin	verified		
@@ -21557,7 +21557,7 @@ Riptide Replicator	unsupported	compiled (1 unsupported)
 Riptide Shapeshifter	verified		
 Riptide Survivor	round-trip	structure (1 of 2 unexercised)	
 Riptide Turtle	verified		
-Rise // Fall	unsupported	compiled (1 unsupported)	
+Rise // Fall	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Rise Again	verified		
 Rise and Shine	unsupported	compiled (1 unsupported)	
 Rise from the Grave	compiled	round-trip	
@@ -21575,7 +21575,7 @@ Rise of the Varmints	verified
 Rise of the Witch-king	unsupported	compiled (1 unsupported)	
 Rise to Glory	round-trip	structure (1 of 1 unexercised)	
 Rise to the Challenge	verified		
-Risen Executioner	unsupported	compiled (1 unsupported)	
+Risen Executioner	compiled	round-trip; fuzz-swept (not in the report)	
 Risen Necroregent	round-trip	structure (1 of 2 unexercised)	
 Risen Reef	round-trip	structure (1 of 1 unexercised)	
 Risen Riptide	verified		
@@ -21606,7 +21606,7 @@ Rite of Oblivion	verified
 Rite of Passage	round-trip	structure (1 of 1 unexercised)	
 Rite of Renewal	round-trip	structure (1 of 1 unexercised)	
 Rite of Replication	compiled	round-trip	
-Rite of Ruin	unsupported	compiled (1 unsupported)	
+Rite of Ruin	compiled	round-trip; fuzz-swept (not in the report)	
 Rite of Undoing	round-trip	structure (1 of 2 unexercised)	
 Rite of the Dragoncaller	verified		
 Rite of the Moth	round-trip	structure (1 of 2 unexercised)	
@@ -21717,7 +21717,7 @@ Rock Slide	verified
 Rock Soldiers	round-trip	structure (1 of 1 unexercised)	
 Rockalanche	round-trip	structure (1 of 2 unexercised)	
 Rockcaster Platoon	round-trip	structure (1 of 1 unexercised)	
-Rocket Launcher	unsupported	compiled (1 unsupported)	
+Rocket Launcher	compiled	round-trip; fuzz-swept (not in the report)	
 Rocket-Powered Goblin Glider	compiled	round-trip	
 Rocketeer Boostbuggy	verified		
 Rockface Village	round-trip	structure (1 of 3 unexercised)	
@@ -21740,11 +21740,11 @@ Rogue Class	round-trip	structure (3 of 4 unexercised)
 Rogue Elephant	verified		
 Rogue Kavu	verified		
 Rogue Refiner	round-trip	structure (1 of 1 unexercised)	
-Rogue's Gloves	round-trip	structure (1 of 2 unexercised)	
+Rogue's Gloves	verified		
 Rogue's Passage	verified		
 Rogues' Gallery	compiled	round-trip; structure (1 of 1 unexercised)	
 Rohgahh, Kher Keep Overlord	round-trip	structure (1 of 3 unexercised)	
-Rohirrim Chargers	unsupported	compiled (1 unsupported)	
+Rohirrim Chargers	compiled	round-trip; fuzz-swept (not in the report)	
 Rohirrim Lancer	verified		
 Roil Cartographer	verified		
 Roil Elemental	verified		
@@ -21899,7 +21899,7 @@ Rowan, Scion of War	compiled	round-trip
 Rowdy Crew	unsupported	compiled (1 unsupported)	
 Rowdy Research	verified		
 Rowdy Snowballers	verified		
-Rowen	round-trip	structure (1 of 2 unexercised)	
+Rowen	verified		
 Roxanne, Starfall Savant	compiled	round-trip; structure (2 of 2 unexercised)	
 Roxi, Publicist to the Stars	unsupported	compiled (2 unsupported)	
 Roxxon Brutes	round-trip	structure (1 of 3 unexercised)	
@@ -22089,7 +22089,7 @@ Ruthless Technomancer	compiled	round-trip; structure (2 of 2 unexercised)
 Ruthless Waterbender	round-trip	structure (1 of 1 unexercised)	
 Ruthless Winnower	verified		
 Ruxa, Patient Professor	round-trip	structure (1 of 3 unexercised)	
-Ryan Sinclair	unsupported	compiled (1 unsupported)	
+Ryan Sinclair	compiled	round-trip; fuzz-swept (not in the report)	
 Rydia's Return	round-trip	structure (1 of 1 unexercised)	
 Rydia, Summoner of Mist	round-trip	structure (2 of 2 unexercised)	
 Rysorian Badger	round-trip	structure (1 of 1 unexercised)	
@@ -22255,7 +22255,7 @@ Samite Censer-Bearer	round-trip	structure (1 of 1 unexercised)
 Samite Elder	compiled	round-trip	
 Samite Healer	verified		
 Samite Herbalist	verified		
-Samite Ministration	unsupported	compiled (1 unsupported)	
+Samite Ministration	compiled	round-trip; fuzz-swept (not in the report)	
 Samite Pilgrim	round-trip	structure (1 of 1 unexercised)	
 Samite Sanctuary	round-trip	structure (1 of 1 unexercised)	
 Sample Collector	verified		
@@ -22272,14 +22272,14 @@ Samut, the Driving Force	verified
 Samut, the Tested	round-trip	structure (3 of 3 unexercised)	
 Samwise Gamgee	round-trip	structure (2 of 2 unexercised)	
 Samwise the Stouthearted	round-trip	structure (1 of 2 unexercised)	
-Sanar, Innovative First-Year	unsupported	compiled (1 unsupported)	
+Sanar, Innovative First-Year	compiled	round-trip; fuzz-swept (not in the report)	
 Sanar, Unfinished Genius // Wild Idea	round-trip	structure (2 of 3 unexercised)	
 Sanctified Charge	verified		
 Sanctifier en-Vec	compiled	round-trip	
 Sanctifier of Souls	round-trip	structure (1 of 2 unexercised)	
 Sanctify	verified		
 Sanctimony	verified		
-Sanctuary Blade	unsupported	compiled (2 unsupported)	
+Sanctuary Blade	compiled	round-trip; fuzz-swept (not in the report)	
 Sanctuary Lockdown	round-trip	structure (1 of 2 unexercised)	
 Sanctuary Raptor	round-trip	structure (1 of 2 unexercised)	
 Sanctuary Smasher	round-trip	structure (1 of 3 unexercised)	
@@ -22412,7 +22412,7 @@ Sarkhan, Dragonsoul	compiled	round-trip; structure (2 of 3 unexercised)
 Sarkhan, Fireblood	round-trip	structure (1 of 3 unexercised)	
 Sarkhan, Soul Aflame	verified		
 Sarkhan, the Dragonspeaker	compiled	round-trip; structure (1 of 3 unexercised)	
-Sarpadian Empires, Vol. VII	unsupported	compiled (2 unsupported)	
+Sarpadian Empires, Vol. VII	unsupported	compiled (1 unsupported)	
 Sarpadian Simulacrum	verified		
 Sarulf's Packmate	verified		
 Sarulf, Realm Eater	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -22466,7 +22466,7 @@ Savage Punch	compiled	round-trip
 Savage Silhouette	verified		
 Savage Smash	verified		
 Savage Stomp	round-trip	structure (2 of 2 unexercised)	
-Savage Summoning	unsupported	compiled (1 unsupported)	
+Savage Summoning	compiled	round-trip; fuzz-swept (not in the report)	
 Savage Surge	verified		
 Savage Swipe	verified		
 Savage Thallid	round-trip	structure (1 of 3 unexercised)	
@@ -22503,7 +22503,7 @@ Sawtooth Loon	verified
 Sawtooth Ogre	verified		
 Sawtooth Thresher	round-trip	structure (1 of 2 unexercised)	
 Sawtusk Demolisher	round-trip	structure (1 of 3 unexercised)	
-Say Its Name	compiled	round-trip; structure (2 of 2 unexercised)	
+Say Its Name	compiled	round-trip; structure (1 of 2 unexercised)	
 Sazacap's Brew	round-trip	structure (1 of 4 unexercised)	
 Sazh Katzroy	compiled	round-trip; structure (2 of 2 unexercised)	
 Sazh's Chocobo	verified		
@@ -22633,7 +22633,7 @@ Scorch Spitter	verified
 Scorch the Fields	round-trip	structure (1 of 1 unexercised)	
 Scorched Earth	round-trip	structure (2 of 2 unexercised)	
 Scorched Geyser	verified		
-Scorched Ruins	unsupported	compiled (1 unsupported)	
+Scorched Ruins	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Scorched Rusalka	round-trip	structure (1 of 1 unexercised)	
 Scorching Dragonfire	verified		
 Scorching Lava	round-trip	structure (1 of 2 unexercised)	
@@ -22734,7 +22734,7 @@ Screeching Soulbreaker	round-trip	structure (1 of 2 unexercised)
 Scrib Nibblers	round-trip	structure (2 of 2 unexercised)	
 Scribe of the Mindful	round-trip	structure (1 of 1 unexercised)	
 Scriv, the Obligator	unsupported	compiled (1 unsupported)	
-Scroll Rack	unsupported	compiled (1 unsupported)	
+Scroll Rack	compiled	round-trip; fuzz-swept (not in the report)	
 Scroll Thief	verified		
 Scroll of Avacyn	round-trip	structure (1 of 1 unexercised)	
 Scroll of Fate	verified		
@@ -22749,10 +22749,10 @@ Scrounger of Souls	verified
 Scrounging Bandar	verified		
 Scrounging Skyray	round-trip	structure (1 of 3 unexercised)	
 Scryb Ranger	round-trip	structure (1 of 4 unexercised)	
-Scrying Glass	unsupported	compiled (1 unsupported)	
+Scrying Glass	compiled	round-trip; fuzz-swept (not in the report)	
 Scrying Sheets	round-trip	structure (1 of 2 unexercised)	
 Sculpted Perfection	verified		
-Sculpted Sunburst	unsupported	compiled (1 unsupported)	
+Sculpted Sunburst	compiled	round-trip; fuzz-swept (not in the report)	
 Sculpting Steel	verified		
 Sculptor of Winter	round-trip	structure (1 of 1 unexercised)	
 Scurrid Colony	verified		
@@ -22776,7 +22776,7 @@ Scuzzback Scrounger	round-trip	structure (1 of 1 unexercised)
 Scythe Leopard	verified		
 Scythe Specter	compiled	round-trip; structure (1 of 2 unexercised)	
 Scythe Tiger	round-trip	structure (1 of 2 unexercised)	
-Scythe of the Wretched	round-trip	structure (1 of 3 unexercised)	
+Scythe of the Wretched	verified		
 Scythecat Cub	round-trip	structure (1 of 2 unexercised)	
 Scytheclaw	round-trip	structure (1 of 4 unexercised)	
 Scytheclaw Raptor	round-trip	structure (1 of 1 unexercised)	
@@ -22822,12 +22822,12 @@ Sealed Fate	compiled	round-trip
 Sealock Monster	round-trip	structure (1 of 3 unexercised)	
 Seam Rip	verified		
 Sear	verified		
-Search Party Captain	round-trip	structure (1 of 2 unexercised)	
+Search Party Captain	verified		
 Search Warrant	round-trip	structure (1 of 1 unexercised)	
 Search for Azcanta // Azcanta, the Sunken Ruin	round-trip	structure (1 of 3 unexercised)	
 Search for Dagger	round-trip	structure (1 of 1 unexercised)	
 Search for Glory	compiled	round-trip; structure (1 of 1 unexercised)	
-Search for Survivors	unsupported	compiled (1 unsupported)	
+Search for Survivors	compiled	round-trip; fuzz-swept (not in the report)	
 Search for Tomorrow	verified		
 Search the City	unsupported	compiled (1 unsupported)	
 Search the Premises	round-trip	structure (1 of 1 unexercised)	
@@ -22988,9 +22988,9 @@ Sejiri Steppe	round-trip	structure (1 of 3 unexercised)
 Sek'Kuar, Deathkeeper	round-trip	structure (1 of 1 unexercised)	
 Sekki, Seasons' Guide	round-trip	structure (1 of 3 unexercised)	
 Select for Inspection	verified		
-Selective Adaptation	unsupported	compiled (1 unsupported)	
+Selective Adaptation	compiled	round-trip; fuzz-swept (not in the report)	
 Selective Memory	round-trip	structure (1 of 1 unexercised)	
-Selective Obliteration	unsupported	compiled (1 unsupported)	
+Selective Obliteration	compiled	round-trip; fuzz-swept (not in the report)	
 Selective Snare	round-trip	structure (1 of 1 unexercised)	
 Selesnya Charm	round-trip	structure (1 of 1 unexercised)	
 Selesnya Cluestone	verified		
@@ -23025,7 +23025,7 @@ Sell-Sword Brute	round-trip	structure (1 of 1 unexercised)
 Seller of Songbirds	verified		
 Selvala's Charge	verified		
 Selvala's Enforcer	verified		
-Selvala's Stampede	unsupported	compiled (1 unsupported)	
+Selvala's Stampede	compiled	round-trip; fuzz-swept (not in the report)	
 Selvala, Eager Trailblazer	round-trip	structure (1 of 3 unexercised)	
 Selvala, Explorer Returned	compiled	round-trip; structure (1 of 1 unexercised)	
 Selvala, Heart of the Wilds	round-trip	structure (2 of 2 unexercised)	
@@ -23088,7 +23088,7 @@ Seraph of the Masses	verified
 Seraph of the Scales	verified		
 Seraph of the Suns	verified		
 Seraph of the Sword	verified		
-Seraphic Greatsword	round-trip	structure (1 of 3 unexercised)	
+Seraphic Greatsword	verified		
 Seraphic Steed	round-trip	structure (1 of 4 unexercised)	
 Serendib Efreet	verified		
 Serendib Sorcerer	verified		
@@ -23125,7 +23125,7 @@ Serra Avenger	verified
 Serra Disciple	round-trip	structure (1 of 3 unexercised)	
 Serra Inquisitors	compiled	round-trip	
 Serra Paladin	round-trip	structure (1 of 2 unexercised)	
-Serra Paragon	unsupported	compiled (1 unsupported)	
+Serra Paragon	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Serra Redeemer	round-trip	structure (1 of 2 unexercised)	
 Serra Sphinx	verified		
 Serra Zealot	verified		
@@ -23263,7 +23263,7 @@ Shaman of Forgotten Ways	compiled	round-trip; structure (2 of 2 unexercised)
 Shaman of Spring	verified		
 Shaman of the Great Hunt	round-trip	structure (1 of 3 unexercised)	
 Shaman of the Pack	verified		
-Shaman's Trance	unsupported	compiled (1 unsupported)	
+Shaman's Trance	compiled	round-trip; fuzz-swept (not in the report)	
 Shamanic Revelation	round-trip	structure (2 of 2 unexercised)	
 Shamble Back	round-trip	structure (1 of 1 unexercised)	
 Shambleshark	verified		
@@ -23440,7 +23440,7 @@ Shiko, Paragon of the Way	verified
 Shilgengar, Sire of Famine	compiled	round-trip; structure (1 of 3 unexercised)	
 Shimatsu the Bloodcloaked	compiled	round-trip; structure (1 of 1 unexercised)	
 Shimian Night Stalker	compiled	round-trip	
-Shimian Specter	unsupported	compiled (1 unsupported)	
+Shimian Specter	compiled	round-trip; fuzz-swept (not in the report)	
 Shimmer	verified		
 Shimmer Dragon	round-trip	structure (2 of 3 unexercised)	
 Shimmer Myr	round-trip	structure (1 of 2 unexercised)	
@@ -23630,7 +23630,7 @@ Sidewinder Naga	verified
 Sidewinder Sliver	verified		
 Sidisi's Faithful	verified		
 Sidisi's Pet	verified		
-Sidisi, Brood Tyrant	round-trip	structure (1 of 2 unexercised)	
+Sidisi, Brood Tyrant	verified		
 Sidisi, Regent of the Mire	compiled	round-trip; structure (1 of 1 unexercised)	
 Sidisi, Undead Vizier	verified		
 Siege Behemoth	verified		
@@ -23678,7 +23678,7 @@ Sightless Ghoul	verified
 Sigil Blessing	verified		
 Sigil Captain	compiled	round-trip; structure (1 of 1 unexercised)	
 Sigil Tracer	round-trip	structure (1 of 1 unexercised)	
-Sigil of Distinction	round-trip	structure (1 of 3 unexercised)	
+Sigil of Distinction	verified		
 Sigil of Myrkul	verified		
 Sigil of Sleep	round-trip	structure (1 of 2 unexercised)	
 Sigil of Valor	verified		
@@ -23694,7 +23694,7 @@ Sigiled Starfish	round-trip	structure (1 of 1 unexercised)
 Sigiled Sword of Valeron	verified		
 Sign in Blood	verified		
 Signal Pest	verified		
-Signal the Clans	unsupported	compiled (1 unsupported)	
+Signal the Clans	compiled	round-trip; fuzz-swept (not in the report)	
 Signature Slam	verified		
 Signpost Scarecrow	verified		
 Sigrid, God-Favored	verified		
@@ -23757,7 +23757,7 @@ Silver Knight	verified
 Silver Myr	verified		
 Silver Raven	verified		
 Silver Sable, Mercenary Leader	round-trip	structure (2 of 2 unexercised)	
-Silver Scrutiny	unsupported	compiled (1 unsupported)	
+Silver Scrutiny	compiled	round-trip; fuzz-swept (not in the report)	
 Silver Seraph	round-trip	structure (1 of 2 unexercised)	
 Silver Shroud Costume	verified		
 Silver Surfer, Cosmic Voyager	compiled	round-trip; structure (1 of 3 unexercised)	
@@ -23835,7 +23835,7 @@ Singer of Swift Rivers	round-trip	structure (1 of 3 unexercised)
 Singing Bell Strike	verified		
 Single Combat	compiled	round-trip	
 Singularity Rupture	verified		
-Sinister Concierge	unsupported	compiled (1 unsupported)	
+Sinister Concierge	compiled	round-trip; fuzz-swept (not in the report)	
 Sinister Concoction	round-trip	structure (1 of 1 unexercised)	
 Sinister Cryologist	verified		
 Sinister Gnarlbark	round-trip	structure (1 of 1 unexercised)	
@@ -23861,7 +23861,7 @@ Sip of Hemlock	verified
 Siphon Insight	compiled	round-trip	
 Sire of Insanity	round-trip	structure (1 of 1 unexercised)	
 Sire of Seven Deaths	verified		
-Sire of Stagnation	round-trip	structure (1 of 2 unexercised)	
+Sire of Stagnation	verified		
 Sire of the Storm	round-trip	structure (1 of 2 unexercised)	
 Siren Lookout	verified		
 Siren Reaver	round-trip	structure (1 of 2 unexercised)	
@@ -23882,7 +23882,7 @@ Sisterhood of Karn	round-trip	structure (1 of 2 unexercised)
 Sisters of Stone Death	compiled	round-trip	
 Sisters of the Flame	verified		
 Sita Varma, Masked Racer	compiled	round-trip; structure (1 of 1 unexercised)	
-Sivitri, Dragon Master	compiled	round-trip; structure (3 of 4 unexercised)	
+Sivitri, Dragon Master	compiled	round-trip; structure (2 of 4 unexercised)	
 Sivriss, Nightmare Speaker	unsupported	compiled (1 unsupported)	
 Sivvi's Ruse	round-trip	structure (1 of 2 unexercised)	
 Sivvi's Valor	verified		
@@ -23919,7 +23919,7 @@ Skeletal Wurm	verified
 Skeleton Archer	verified		
 Skeleton Crew	round-trip	structure (1 of 3 unexercised)	
 Skeleton Key	round-trip	structure (2 of 3 unexercised)	
-Skeleton Scavengers	unsupported	compiled (1 unsupported)	
+Skeleton Scavengers	compiled	round-trip; fuzz-swept (not in the report)	
 Skeleton Shard	round-trip	structure (1 of 1 unexercised)	
 Skeletonize	compiled	round-trip; structure (1 of 1 unexercised)	
 Skemfar Avenger	round-trip	structure (1 of 1 unexercised)	
@@ -24029,7 +24029,7 @@ Sky-Eel School	verified
 Skybeast Tracker	round-trip	structure (1 of 2 unexercised)	
 Skybind	round-trip	structure (1 of 1 unexercised)	
 Skyblade of the Legion	verified		
-Skyblade's Boon	unsupported	compiled (1 unsupported)	
+Skyblade's Boon	compiled	round-trip; fuzz-swept (not in the report)	
 Skyblinder Staff	verified		
 Skyboon Evangelist	round-trip	structure (1 of 3 unexercised)	
 Skybox Ferry	verified		
@@ -24043,7 +24043,7 @@ Skyclave Pick-Axe	verified
 Skyclave Plunder	round-trip	structure (1 of 1 unexercised)	
 Skyclave Relic	verified		
 Skyclave Sentinel	verified		
-Skyclave Shade	unsupported	compiled (1 unsupported)	
+Skyclave Shade	compiled	round-trip; structure (1 of 4 unexercised); fuzz-swept (not in the report)	
 Skyclave Shadowcat	verified		
 Skyclave Squid	round-trip	structure (1 of 2 unexercised)	
 Skyclaw Thrash	round-trip	structure (1 of 1 unexercised)	
@@ -24230,7 +24230,7 @@ Sliver Overlord	round-trip	structure (2 of 2 unexercised)
 Sliversmith	round-trip	structure (1 of 1 unexercised)	
 Slobad, Goblin Tinkerer	round-trip	structure (1 of 1 unexercised)	
 Slobad, Iron Goblin	round-trip	structure (1 of 1 unexercised)	
-Slogurk, the Overslime	round-trip	structure (3 of 4 unexercised)	
+Slogurk, the Overslime	round-trip	structure (2 of 4 unexercised)	
 Sloppity Bilepiper	verified		
 Slow Motion	verified		
 Sludge Crawler	verified		
@@ -24267,7 +24267,7 @@ Smelt-Ward Gatekeepers	round-trip	structure (1 of 1 unexercised)
 Smelt-Ward Ignus	verified		
 Smelt-Ward Minotaur	verified		
 Smelted Chargebug	round-trip	structure (1 of 3 unexercised)	
-Smelting Vat	unsupported	compiled (1 unsupported)	
+Smelting Vat	compiled	round-trip; fuzz-swept (not in the report)	
 Smile at Death	round-trip	structure (1 of 1 unexercised)	
 Smirking Spelljacker	compiled	round-trip; structure (2 of 4 unexercised)	
 Smite the Deathless	round-trip	structure (1 of 1 unexercised)	
@@ -24290,7 +24290,7 @@ Smoldering Efreet	round-trip	structure (1 of 1 unexercised)
 Smoldering Egg // Ashmouth Dragon	compiled	round-trip	
 Smoldering Marsh	verified		
 Smoldering Spires	verified		
-Smoldering Stagecoach	unsupported	compiled (1 unsupported)	
+Smoldering Stagecoach	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Smoldering Tar	round-trip	structure (1 of 2 unexercised)	
 Smoldering Werewolf // Erupting Dreadwolf	verified		
 Smother	verified		
@@ -24301,7 +24301,7 @@ Smuggler's Buggy	verified
 Smuggler's Copter	verified		
 Smuggler's Share	verified		
 Smuggler's Surprise	compiled	round-trip	
-Sméagol, Helpful Guide	unsupported	compiled (1 unsupported)	
+Sméagol, Helpful Guide	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Snag	round-trip	structure (2 of 2 unexercised)	
 Snake Basket	round-trip	structure (1 of 1 unexercised)	
 Snake Cult Initiation	verified		
@@ -24391,7 +24391,7 @@ Sokka, Wolf Cove's Protector	verified
 Sokrates, Athenian Teacher	unsupported	compiled (1 unsupported)	
 Sol Ring	verified		
 Sol Talisman	verified		
-Sol'Kanar the Tainted	unsupported	compiled (1 unsupported)	
+Sol'Kanar the Tainted	compiled	round-trip; fuzz-swept (not in the report)	
 Sol'kanar the Swamp King	verified		
 Solar Array	verified		
 Solar Blast	round-trip	structure (1 of 3 unexercised)	
@@ -24404,7 +24404,7 @@ Sold Out	compiled	round-trip; structure (1 of 1 unexercised)
 Soldevi Adnate	unsupported	compiled (1 unsupported)	
 Soldevi Heretic	round-trip	structure (1 of 1 unexercised)	
 Soldevi Sage	compiled	round-trip; structure (1 of 1 unexercised)	
-Soldevi Sentry	unsupported	compiled (1 unsupported)	
+Soldevi Sentry	compiled	round-trip; fuzz-swept (not in the report)	
 Soldevi Steam Beast	round-trip	structure (1 of 2 unexercised)	
 Soldier On	verified		
 Soldier Replica	round-trip	structure (1 of 1 unexercised)	
@@ -24530,7 +24530,7 @@ Soul Echo	unsupported	compiled (1 unsupported)
 Soul Enervation	round-trip	structure (1 of 3 unexercised)	
 Soul Feast	verified		
 Soul Foundry	compiled	round-trip	
-Soul Immolation	unsupported	compiled (1 unsupported)	
+Soul Immolation	compiled	round-trip; fuzz-swept (not in the report)	
 Soul Link	round-trip	structure (1 of 3 unexercised)	
 Soul Manipulation	round-trip	structure (1 of 1 unexercised)	
 Soul Net	verified		
@@ -24597,8 +24597,8 @@ Soulcatchers' Aerie	round-trip	structure (2 of 2 unexercised)
 Soulcipher Board // Cipherbound Spirit	round-trip	structure (2 of 6 unexercised)	
 Soulcoil Viper	round-trip	structure (1 of 1 unexercised)	
 Souldrinker	round-trip	structure (1 of 1 unexercised)	
-Soulfire Eruption	unsupported	compiled (1 unsupported)	
-Soulfire Grand Master	unsupported	compiled (1 unsupported)	
+Soulfire Eruption	round-trip	fuzz-swept (not in the report)	
+Soulfire Grand Master	compiled	round-trip; fuzz-swept (not in the report)	
 Soulflayer	unsupported	compiled (1 unsupported)	
 Soulgorger Orgg	compiled	round-trip	
 Soulherder	compiled	round-trip	
@@ -24631,9 +24631,9 @@ Southern Paladin	round-trip	structure (1 of 1 unexercised)
 Souvenir Snatcher	round-trip	structure (1 of 3 unexercised)	
 Sovereign Okinec Ahau	unsupported	compiled (1 unsupported)	
 Sovereign's Bite	verified		
-Sovereigns of Lost Alara	unsupported	compiled (1 unsupported)	
+Sovereigns of Lost Alara	compiled	round-trip; fuzz-swept (not in the report)	
 Sower of Chaos	verified		
-Sower of Discord	unsupported	compiled (2 unsupported)	
+Sower of Discord	compiled	round-trip; fuzz-swept (not in the report)	
 Sower of Temptation	verified		
 Sowing Mycospawn	round-trip	structure (2 of 4 unexercised)	
 Sowing Salt	round-trip	structure (1 of 1 unexercised); fuzz-cast (never cast: offered but never chosen)	
@@ -24810,7 +24810,7 @@ Sphinx of Lost Truths	verified
 Sphinx of Magosi	round-trip	structure (1 of 2 unexercised)	
 Sphinx of New Prahv	verified		
 Sphinx of Uthuun	verified		
-Sphinx of the Chimes	unsupported	compiled (1 unsupported)	
+Sphinx of the Chimes	compiled	round-trip; fuzz-swept (not in the report)	
 Sphinx of the Final Word	verified		
 Sphinx of the Guildpact	verified		
 Sphinx of the Revelation	round-trip	structure (1 of 4 unexercised)	
@@ -25166,7 +25166,7 @@ Stalker Hag	verified
 Stalking Assassin	round-trip	structure (1 of 2 unexercised)	
 Stalking Bloodsucker	verified		
 Stalking Drone	verified		
-Stalking Leonin	unsupported	compiled (2 unsupported)	
+Stalking Leonin	compiled	round-trip; fuzz-swept (not in the report)	
 Stalking Tiger	verified		
 Stalking Vengeance	round-trip	structure (1 of 2 unexercised)	
 Stalking Yeti	compiled	round-trip; structure (2 of 2 unexercised)	
@@ -25249,7 +25249,7 @@ Start the TARDIS	verified
 Starting Column	round-trip	structure (1 of 3 unexercised)	
 Starting Town	verified		
 Startle	round-trip	structure (1 of 2 unexercised)	
-Startled Awake // Persistent Nightmare	round-trip	structure (1 of 4 unexercised)	
+Startled Awake // Persistent Nightmare	verified		
 Startled Relic Sloth	verified		
 Startling Development	verified		
 Starved Rusalka	verified		
@@ -25416,7 +25416,7 @@ Stitched Drake	verified
 Stitched Mangler	verified		
 Stitcher Geralf	compiled	round-trip; structure (1 of 1 unexercised)	
 Stitcher's Apprentice	verified		
-Stitcher's Graft	round-trip	structure (1 of 4 unexercised)	
+Stitcher's Graft	verified		
 Stitcher's Supplier	round-trip	structure (1 of 1 unexercised)	
 Stitchwing Skaab	verified		
 Stock Up	verified		
@@ -25559,7 +25559,7 @@ Stormrider Spirit	verified
 Stormscale Anarch	round-trip	structure (1 of 1 unexercised)	
 Stormscale Scion	verified		
 Stormscape Apprentice	verified		
-Stormscape Battlemage	round-trip	structure (1 of 3 unexercised)	
+Stormscape Battlemage	verified		
 Stormscape Familiar	verified		
 Stormscape Master	round-trip	structure (1 of 2 unexercised)	
 Stormshriek Feral // Flush Out	round-trip	structure (1 of 4 unexercised)	
@@ -25592,7 +25592,7 @@ Strangling Soot	round-trip	structure (1 of 2 unexercised)
 Strangling Spores	verified		
 Strata Scythe	compiled	round-trip; structure (2 of 3 unexercised)	
 Stratadon	verified		
-Strategic Betrayal	unsupported	compiled (1 unsupported)	
+Strategic Betrayal	compiled	round-trip; fuzz-swept (not in the report)	
 Strategic Intervention	round-trip	structure (1 of 1 unexercised)	
 Strategic Planning	verified		
 Stratosoarer	verified		
@@ -25744,7 +25744,7 @@ Sudden Disappearance	round-trip	structure (1 of 1 unexercised)
 Sudden Edict	verified		
 Sudden Impact	verified		
 Sudden Insight	round-trip	structure (1 of 1 unexercised)	
-Sudden Reclamation	compiled	round-trip; structure (1 of 1 unexercised)	
+Sudden Reclamation	compiled	round-trip	
 Sudden Salvation	compiled	round-trip	
 Sudden Setback	verified		
 Sudden Shock	verified		
@@ -25802,7 +25802,7 @@ Summon: Bahamut	round-trip	structure (3 of 4 unexercised)
 Summon: Brynhildr	compiled	round-trip	
 Summon: Choco/Mog	round-trip	structure (1 of 1 unexercised)	
 Summon: Esper Ramuh	round-trip	structure (2 of 2 unexercised)	
-Summon: Esper Valigarmanda	unsupported	compiled (1 unsupported)	
+Summon: Esper Valigarmanda	compiled	round-trip; structure (2 of 4 unexercised); fuzz-swept (not in the report)	
 Summon: Fat Chocobo	round-trip	structure (2 of 2 unexercised)	
 Summon: Fenrir	round-trip	structure (2 of 3 unexercised)	
 Summon: G.F. Cerberus	verified		
@@ -25850,7 +25850,7 @@ Sunbathing Rootwalla	round-trip	structure (1 of 1 unexercised)
 Sunbeam Spellbomb	verified		
 Sunbillow Verge	round-trip	structure (1 of 2 unexercised)	
 Sunbird Standard // Sunbird Effigy	unsupported	compiled (1 unsupported)	
-Sunbird's Invocation	unsupported	compiled (1 unsupported)	
+Sunbird's Invocation	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Sunblade Angel	verified		
 Sunblade Elf	verified		
 Sunblade Samurai	round-trip	structure (1 of 2 unexercised)	
@@ -25868,7 +25868,7 @@ Sundering Archaic	round-trip	structure (1 of 2 unexercised)
 Sundering Eruption // Volcanic Fissure	round-trip	structure (1 of 3 unexercised)	
 Sundering Growth	verified		
 Sundering Stroke	unsupported	compiled (1 unsupported)	
-Sundering Titan	unsupported	compiled (1 unsupported)	
+Sundering Titan	compiled	round-trip; fuzz-swept (not in the report)	
 Sundering Vitae	verified		
 Sundial of the Infinite	verified		
 Sundial, Dawn Tyrant	verified		
@@ -25879,7 +25879,7 @@ Sunfire Torch	verified
 Sunflare Shaman	compiled	round-trip; structure (1 of 1 unexercised)	
 Sunforger	compiled	round-trip; structure (1 of 3 unexercised)	
 Sunfrill Imitator	verified		
-Sunglasses of Urza	unsupported	compiled (1 unsupported)	
+Sunglasses of Urza	compiled	round-trip; fuzz-swept (not in the report)	
 Sungold Barrage	verified		
 Sungold Sentinel	compiled	round-trip; structure (2 of 2 unexercised)	
 Sungrace Pegasus	verified		
@@ -26046,7 +26046,7 @@ Susurian Voidborn	verified
 Sutina, Speaker of the Tajuru	round-trip	structure (1 of 2 unexercised)	
 Suture Priest	round-trip	structure (1 of 2 unexercised)	
 Suture Spirit	round-trip	structure (1 of 2 unexercised)	
-Sutured Ghoul	unsupported	compiled (1 unsupported)	
+Sutured Ghoul	compiled	round-trip; fuzz-swept (not in the report)	
 Svella, Ice Shaper	compiled	round-trip; structure (1 of 2 unexercised)	
 Svogthos, the Restless Tomb	compiled	round-trip	
 Svyelun of Sea and Sky	round-trip	structure (1 of 3 unexercised)	
@@ -26111,7 +26111,7 @@ Swiftgear Drake	round-trip	structure (1 of 3 unexercised)
 Swiftwater Cliffs	verified		
 Swiftwing Assailant	round-trip	structure (1 of 3 unexercised)	
 Swimmer in Nightmares	compiled	round-trip; structure (1 of 2 unexercised)	
-Swindler's Scheme	unsupported	compiled (1 unsupported)	
+Swindler's Scheme	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Swinging Ship	unsupported	compiled (1 unsupported)	
 Swirl the Mists	unsupported	compiled (2 unsupported)	
 Swirling Sandstorm	round-trip	structure (1 of 1 unexercised)	
@@ -26128,7 +26128,7 @@ Sword Dancer	round-trip	structure (1 of 1 unexercised)
 Sword of Body and Mind	round-trip	structure (1 of 3 unexercised)	
 Sword of Feast and Famine	verified		
 Sword of Fire and Ice	verified		
-Sword of Forge and Frontier	round-trip	structure (1 of 3 unexercised)	
+Sword of Forge and Frontier	verified		
 Sword of Hearth and Home	unsupported	compiled (1 unsupported)	
 Sword of Hours	compiled	round-trip	
 Sword of Kaldra	round-trip	structure (1 of 3 unexercised)	
@@ -26141,8 +26141,8 @@ Sword of War and Peace	round-trip	structure (1 of 3 unexercised)
 Sword of Wealth and Power	verified		
 Sword of the Animist	round-trip	structure (1 of 3 unexercised)	
 Sword of the Chosen	round-trip	structure (1 of 1 unexercised)	
-Sword of the Meek	unsupported	compiled (1 unsupported)	
-Sword of the Paruns	round-trip	structure (3 of 4 unexercised)	
+Sword of the Meek	compiled	round-trip; fuzz-swept (not in the report)	
+Sword of the Paruns	verified		
 Sword of the Squeak	compiled	round-trip; structure (1 of 3 unexercised)	
 Sword-Point Diplomacy	compiled	round-trip	
 Sword-Swallowing Seraph	unsupported	compiled (1 unsupported)	
@@ -26252,7 +26252,7 @@ TVA Bureaucrat	round-trip	structure (1 of 1 unexercised)
 Tabaxi Toucaneers	verified		
 Tablet of Compleation	round-trip	structure (1 of 3 unexercised)	
 Tablet of Discovery	round-trip	structure (1 of 3 unexercised)	
-Tablet of the Guilds	unsupported	compiled (1 unsupported)	
+Tablet of the Guilds	compiled	round-trip; fuzz-swept (not in the report)	
 Taborax, Hope's Demise	round-trip	structure (1 of 3 unexercised)	
 Tackle Artist	verified		
 Tadeas, Juniper Ascendant	compiled	round-trip	
@@ -26292,7 +26292,7 @@ Tajic, Legion's Edge	round-trip	structure (1 of 4 unexercised)
 Tajuru Archer	round-trip	structure (1 of 1 unexercised)	
 Tajuru Beastmaster	round-trip	structure (1 of 1 unexercised)	
 Tajuru Blightblade	verified		
-Tajuru Paragon	unsupported	compiled (1 unsupported)	
+Tajuru Paragon	compiled	round-trip; fuzz-swept (not in the report)	
 Tajuru Pathwarden	verified		
 Tajuru Preserver	verified		
 Tajuru Snarecaster	verified		
@@ -26432,9 +26432,9 @@ Tarnation Vista	round-trip	structure (1 of 4 unexercised)
 Tarnished Citadel	round-trip	structure (1 of 2 unexercised)	
 Tarox Bladewing	verified		
 Tarpan	verified		
-Tarrian's Journal // The Tomb of Aclazotz	unsupported	compiled (1 unsupported)	
+Tarrian's Journal // The Tomb of Aclazotz	compiled	round-trip; structure (1 of 4 unexercised); fuzz-swept (not in the report)	
 Tarrian's Soulcleaver	round-trip	structure (1 of 3 unexercised)	
-Tasha's Hideous Laughter	unsupported	compiled (1 unsupported)	
+Tasha's Hideous Laughter	compiled	round-trip; fuzz-swept (not in the report)	
 Tasha, the Witch Queen	compiled	round-trip; structure (3 of 4 unexercised)	
 Tasigur's Cruelty	verified		
 Tasigur, the Golden Fang	compiled	round-trip	
@@ -26481,7 +26481,7 @@ Tawnos, Urza's Apprentice	round-trip	structure (1 of 2 unexercised)
 Tawnos, the Toymaker	verified		
 Tax Collector	verified		
 Taxi Driver	verified		
-Tayam, Luminous Enigma	round-trip	structure (2 of 2 unexercised)	
+Tayam, Luminous Enigma	verified		
 Tazeem Raptor	round-trip	structure (1 of 2 unexercised)	
 Tazeem Roilmage	round-trip	structure (1 of 2 unexercised)	
 Tazri, Beacon of Unity	compiled	round-trip	
@@ -26527,15 +26527,15 @@ Teferi's Moat	round-trip	structure (1 of 2 unexercised)
 Teferi's Protection	compiled	round-trip	
 Teferi's Protege	verified		
 Teferi's Puzzle Box	compiled	round-trip; structure (1 of 1 unexercised)	
-Teferi's Realm	unsupported	compiled (1 unsupported)	
+Teferi's Realm	compiled	round-trip; fuzz-swept (not in the report)	
 Teferi's Response	round-trip	structure (1 of 2 unexercised); fuzz-cast (never cast: never legal to cast)	
 Teferi's Sentinel	round-trip	structure (1 of 1 unexercised)	
 Teferi's Talent	round-trip	structure (2 of 3 unexercised)	
 Teferi's Time Twist	compiled	round-trip	
-Teferi's Tutelage	round-trip	structure (1 of 2 unexercised)	
+Teferi's Tutelage	verified		
 Teferi's Veil	round-trip	structure (1 of 1 unexercised)	
 Teferi's Wavecaster	verified		
-Teferi, Hero of Dominaria	round-trip	structure (3 of 3 unexercised)	
+Teferi, Hero of Dominaria	round-trip	structure (1 of 3 unexercised)	
 Teferi, Mage of Zhalfir	compiled	round-trip; structure (3 of 7 unexercised)	
 Teferi, Master of Time	compiled	round-trip; structure (1 of 4 unexercised)	
 Teferi, Temporal Archmage	round-trip	structure (2 of 4 unexercised)	
@@ -26561,7 +26561,7 @@ Tel-Jilad Stylus	round-trip	structure (1 of 1 unexercised)
 Tel-Jilad Wolf	round-trip	structure (1 of 1 unexercised)	
 Telekinetic Bonds	round-trip	structure (1 of 1 unexercised)	
 Telekinetic Sliver	round-trip	structure (1 of 1 unexercised)	
-Telemin Performance	unsupported	compiled (1 unsupported)	
+Telemin Performance	compiled	round-trip; fuzz-swept (not in the report)	
 Telepathic Spies	verified		
 Telepathy	verified		
 Teleport	verified		
@@ -26694,7 +26694,7 @@ Terisian Mindbreaker	verified
 Terisiare's Devastation	verified		
 Termagant Swarm	verified		
 Terminal Agony	verified		
-Terminal Criticism	round-trip	structure (1 of 1 unexercised)	
+Terminal Criticism	verified		
 Terminal Moraine	verified		
 Terminal Velocity	compiled	round-trip; structure (1 of 1 unexercised)	
 Terminate	verified		
@@ -26760,7 +26760,7 @@ Tethmos High Priest	round-trip	structure (1 of 1 unexercised)
 Tetsuko Umezawa, Fugitive	compiled	round-trip	
 Tetsuko Umezawa, Pursuer	compiled	round-trip; structure (1 of 3 unexercised)	
 Tetsuo, Imperial Champion	compiled	round-trip; structure (1 of 1 unexercised)	
-Tetzimoc, Primal Death	unsupported	compiled (1 unsupported)	
+Tetzimoc, Primal Death	compiled	round-trip; fuzz-swept (not in the report)	
 Tetzin, Gnome Champion // The Golden-Gear Colossus	round-trip	structure (2 of 5 unexercised)	
 Teval's Judgment	round-trip	structure (1 of 1 unexercised)	
 Teval, Arbiter of Virtue	round-trip	structure (2 of 4 unexercised)	
@@ -26848,7 +26848,7 @@ The Balrog, Durin's Bane	round-trip	structure (3 of 4 unexercised)
 The Balrog, Flame of Udûn	verified		
 The Bath Song	round-trip	structure (2 of 2 unexercised)	
 The Battle of Bywater	round-trip	structure (1 of 1 unexercised)	
-The Beamtown Bullies	unsupported	compiled (1 unsupported)	
+The Beamtown Bullies	compiled	round-trip; fuzz-swept (not in the report)	
 The Bears of Littjara	compiled	round-trip	
 The Beast, Deathless Prince	compiled	round-trip; structure (2 of 4 unexercised)	
 The Belligerent	verified		
@@ -26860,14 +26860,14 @@ The Black Breath	round-trip	structure (1 of 1 unexercised)
 The Black Gate	verified		
 The Blackstaff of Waterdeep	verified		
 The Bloodsky Massacre	round-trip	structure (3 of 3 unexercised)	
-The Blue Spirit	unsupported	compiled (1 unsupported)	
+The Blue Spirit	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 The Book of Exalted Deeds	round-trip	structure (1 of 2 unexercised)	
 The Book of Vile Darkness	unsupported	compiled (1 unsupported)	
 The Boulder, Ready to Rumble	round-trip	structure (1 of 1 unexercised)	
 The Brothers' War	unsupported	compiled (1 unsupported)	
 The Brute	verified		
 The Cabbage Merchant	round-trip	structure (2 of 3 unexercised)	
-The Capitoline Triad	unsupported	compiled (1 unsupported)	
+The Capitoline Triad	compiled	round-trip; fuzz-swept (not in the report)	
 The Cauldron of Eternity	round-trip	structure (3 of 3 unexercised)	
 The Cave of Two Lovers	round-trip	structure (2 of 3 unexercised)	
 The Caves of Androzani	unsupported	compiled (1 unsupported)	
@@ -26890,7 +26890,7 @@ The Cyber-Controller	compiled	round-trip
 The Dalek Emperor	compiled	round-trip	
 The Darkness Crystal	round-trip	structure (1 of 3 unexercised)	
 The Dawning Archaic	round-trip	structure (1 of 3 unexercised)	
-The Day of the Doctor	unsupported	compiled (1 unsupported)	
+The Day of the Doctor	compiled	round-trip; structure (2 of 2 unexercised); fuzz-swept (not in the report)	
 The Death of Gwen Stacy	round-trip	structure (3 of 3 unexercised)	
 The Deck of Many Things	unsupported	compiled (1 unsupported)	
 The Destined Black Mage	round-trip	structure (2 of 3 unexercised)	
@@ -26905,7 +26905,7 @@ The Eagles Are Coming!	unsupported	compiled (1 unsupported)
 The Earth Crystal	verified		
 The Earth King	round-trip	structure (1 of 2 unexercised)	
 The Echoverse Fulcrum	round-trip	structure (1 of 2 unexercised)	
-The Eighth Doctor	unsupported	compiled (1 unsupported)	
+The Eighth Doctor	compiled	round-trip; fuzz-swept (not in the report)	
 The Elder Dragon War	verified		
 The Elderspell	compiled	round-trip; structure (1 of 1 unexercised)	
 The Eldest Reborn	round-trip	structure (1 of 3 unexercised)	
@@ -26946,7 +26946,7 @@ The Flood of Mars	round-trip	structure (1 of 2 unexercised)
 The Flux	compiled	round-trip; structure (3 of 3 unexercised)	
 The Foretold Soldier	verified		
 The Fourteenth Doctor	unsupported	compiled (1 unsupported)	
-The Fourth Doctor	unsupported	compiled (1 unsupported)	
+The Fourth Doctor	compiled	round-trip; fuzz-swept (not in the report)	
 The Frightful Four	round-trip	structure (1 of 2 unexercised)	
 The Fugitive Doctor	verified		
 The Gaffer	verified		
@@ -26974,7 +26974,7 @@ The Huntsman's Redemption	compiled	round-trip; structure (2 of 3 unexercised)
 The Immortal Sun	verified		
 The Immortal Weapons	round-trip	structure (1 of 2 unexercised)	
 The Indomitable	verified		
-The Infamous Cruelclaw	unsupported	compiled (1 unsupported)	
+The Infamous Cruelclaw	compiled	round-trip; fuzz-swept (not in the report)	
 The Irencrag	compiled	round-trip	
 The Jolly Balloon Man	verified		
 The Kami War // O-Kagachi Made Manifest	round-trip	structure (3 of 7 unexercised)	
@@ -27002,7 +27002,7 @@ The Magic Mirror	round-trip	structure (1 of 3 unexercised)
 The Mana Rig	round-trip	structure (2 of 2 unexercised)	
 The Mary Janes	verified		
 The Masamune	unsupported	compiled (1 unsupported)	
-The Master of Keys	compiled	round-trip; structure (1 of 3 unexercised)	
+The Master of Keys	compiled	round-trip	
 The Master of Lake-town	compiled	round-trip	
 The Master, Formed Anew	compiled	round-trip; structure (2 of 2 unexercised)	
 The Master, Gallifrey's End	unsupported	compiled (1 unsupported)	
@@ -27026,7 +27026,7 @@ The Modern Age // Vector Glider	round-trip	structure (1 of 3 unexercised)
 The Moment	round-trip	structure (1 of 3 unexercised)	
 The Monumental Facade	round-trip	structure (1 of 3 unexercised)	
 The Most Dangerous Gamer	round-trip	structure (1 of 4 unexercised)	
-The Motherlode, Excavator	unsupported	compiled (1 unsupported)	
+The Motherlode, Excavator	compiled	round-trip; fuzz-swept (not in the report)	
 The Mountain-king's Return	round-trip	structure (3 of 3 unexercised)	
 The Mouth of Sauron	round-trip	structure (1 of 1 unexercised)	
 The Mycosynth Gardens	round-trip	structure (1 of 3 unexercised)	
@@ -27066,7 +27066,7 @@ The Ring Goes South	compiled	round-trip; structure (1 of 1 unexercised)
 The Rise of Sozin // Fire Lord Sozin	compiled	round-trip; structure (1 of 6 unexercised)	
 The Rollercrusher Ride	round-trip	structure (1 of 2 unexercised)	
 The Royal Scions	round-trip	structure (1 of 3 unexercised)	
-The Ruinous Powers	unsupported	compiled (1 unsupported)	
+The Ruinous Powers	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 The Ruinous Wrecking Crew	round-trip	structure (1 of 2 unexercised)	
 The Sackville-Bagginses	round-trip	structure (2 of 2 unexercised)	
 The Scarab God	round-trip	structure (1 of 3 unexercised)	
@@ -27078,7 +27078,7 @@ The Seedcore	round-trip	structure (1 of 3 unexercised)
 The Sentry, Golden Guardian	compiled	round-trip; structure (1 of 4 unexercised)	
 The Seriema	round-trip	structure (2 of 3 unexercised)	
 The Serpent Society	round-trip	structure (1 of 3 unexercised)	
-The Seventh Doctor	unsupported	compiled (1 unsupported)	
+The Seventh Doctor	compiled	round-trip; fuzz-swept (not in the report)	
 The Shattered States Era // Nameless Conqueror	round-trip	structure (2 of 5 unexercised)	
 The Shire	round-trip	structure (1 of 3 unexercised)	
 The Sibsig Ceremony	verified		
@@ -27117,7 +27117,7 @@ The Torment of Gollum	verified
 The Toymaker's Trap	unsupported	compiled (1 unsupported)	
 The Trickster-God's Heist	round-trip	structure (1 of 3 unexercised)	
 The Triumph of Anax	verified		
-The Twelfth Doctor	unsupported	compiled (1 unsupported)	
+The Twelfth Doctor	compiled	round-trip; structure (2 of 2 unexercised); fuzz-swept (not in the report)	
 The Unagi of Kyoshi Island	round-trip	structure (2 of 3 unexercised)	
 The Unbeatable Squirrel Girl	round-trip	structure (1 of 2 unexercised)	
 The Underworld Cookbook	round-trip	structure (2 of 2 unexercised)	
@@ -27133,7 +27133,7 @@ The Wandering Minstrel	compiled	round-trip; structure (2 of 3 unexercised)
 The Wandering Rescuer	verified		
 The War Doctor	unsupported	compiled (1 unsupported)	
 The War Games	round-trip	structure (1 of 3 unexercised)	
-The War in Heaven	compiled	round-trip; structure (3 of 3 unexercised)	
+The War in Heaven	compiled	round-trip; structure (2 of 3 unexercised)	
 The Warring Triad	compiled	round-trip	
 The Wasp, Janet Van Dyne	verified		
 The Wasp, Winsome Avenger	round-trip	structure (1 of 4 unexercised)	
@@ -27153,7 +27153,7 @@ Their Name Is Death	round-trip	structure (1 of 1 unexercised)
 Their Number Is Legion	verified		
 Thelon of Havenwood	verified		
 Thelon's Chant	compiled	round-trip; structure (1 of 2 unexercised)	
-Thelon's Curse	unsupported	compiled (1 unsupported)	
+Thelon's Curse	compiled	round-trip; fuzz-swept (not in the report)	
 Thelonite Hermit	round-trip	structure (1 of 3 unexercised)	
 Thelonite Monk	round-trip	structure (1 of 1 unexercised)	
 Themberchaud	round-trip	structure (2 of 4 unexercised)	
@@ -27174,7 +27174,7 @@ Thermopod	round-trip	structure (2 of 2 unexercised)
 Thespian's Stage	verified		
 They Came from the Pipes	round-trip	structure (1 of 2 unexercised)	
 They Went This Way	round-trip	structure (1 of 1 unexercised)	
-Thick-Skinned Goblin	unsupported	compiled (1 unsupported)	
+Thick-Skinned Goblin	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Thickest in the Thicket	round-trip	structure (2 of 2 unexercised)	
 Thicket Crasher	round-trip	structure (1 of 2 unexercised)	
 Thicket Elemental	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -27185,7 +27185,7 @@ Thief of Sanity	compiled	round-trip
 Thief's Knife	compiled	round-trip	
 Thieves' Auction	compiled	round-trip	
 Thieves' Fortune	verified		
-Thieves' Guild Enforcer	round-trip	structure (2 of 3 unexercised)	
+Thieves' Guild Enforcer	round-trip	structure (1 of 3 unexercised)	
 Thieves' Tools	verified		
 Thieving Amalgam	round-trip	structure (1 of 2 unexercised)	
 Thieving Magpie	round-trip	structure (1 of 2 unexercised)	
@@ -27206,7 +27206,7 @@ Thirst for Discovery	round-trip	structure (1 of 1 unexercised)
 Thirst for Identity	verified		
 Thirst for Knowledge	round-trip	structure (1 of 1 unexercised)	
 Thirst for Meaning	verified		
-Thirsting Axe	round-trip	structure (1 of 3 unexercised)	
+Thirsting Axe	verified		
 Thirsting Bloodlord	verified		
 Thirsting Roots	round-trip	structure (1 of 1 unexercised)	
 Thirsting Shade	verified		
@@ -27266,12 +27266,12 @@ Those Who Serve	verified
 Thought Collapse	verified		
 Thought Courier	verified		
 Thought Devourer	verified		
-Thought Dissector	unsupported	compiled (1 unsupported)	
+Thought Dissector	compiled	round-trip; fuzz-swept (not in the report)	
 Thought Distortion	compiled	round-trip; structure (1 of 2 unexercised)	
 Thought Eater	verified		
 Thought Erasure	verified		
 Thought Gorger	verified		
-Thought Harvester	round-trip	structure (1 of 3 unexercised)	
+Thought Harvester	verified		
 Thought Hemorrhage	compiled	round-trip; structure (1 of 1 unexercised)	
 Thought Monitor	verified		
 Thought Nibbler	verified		
@@ -27358,7 +27358,7 @@ Threadbind Clique // Rip the Seams	verified
 Threads of Disloyalty	verified		
 Threaten	verified		
 Threats Around Every Corner	round-trip	structure (1 of 2 unexercised)	
-Threats Undetected	unsupported	compiled (1 unsupported)	
+Threats Undetected	compiled	round-trip; fuzz-swept (not in the report)	
 Three Blind Mice	round-trip	structure (1 of 3 unexercised)	
 Three Bowls of Porridge	round-trip	structure (1 of 1 unexercised)	
 Three Dog, Galaxy News DJ	unsupported	compiled (1 unsupported)	
@@ -27593,7 +27593,7 @@ Timeline Inquiry	compiled	round-trip
 Timely Hordemate	round-trip	structure (1 of 1 unexercised)	
 Timely Interference	round-trip	structure (1 of 3 unexercised)	
 Timely Reinforcements	compiled	round-trip	
-Timely Ward	unsupported	compiled (1 unsupported)	
+Timely Ward	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 Timesifter	unsupported	compiled (1 unsupported)	
 Timestream Navigator	round-trip	structure (1 of 2 unexercised)	
 Timid Drake	round-trip	structure (1 of 2 unexercised)	
@@ -27613,7 +27613,7 @@ Tinybones Joins Up	round-trip	structure (2 of 2 unexercised)
 Tinybones, Bauble Burglar	compiled	round-trip; structure (3 of 3 unexercised)	
 Tinybones, Pocket Nuisance	round-trip	structure (1 of 2 unexercised)	
 Tinybones, Trinket Thief	compiled	round-trip; structure (1 of 2 unexercised)	
-Tinybones, the Pickpocket	unsupported	compiled (1 unsupported)	
+Tinybones, the Pickpocket	compiled	round-trip; fuzz-swept (not in the report)	
 Tip the Scales	verified		
 Tippy-Toe, Terrific Partner	compiled	round-trip; structure (1 of 2 unexercised)	
 Tireless Hauler // Dire-Strain Brawler	verified		
@@ -27641,7 +27641,7 @@ Titania, Gaea Incarnate	round-trip	structure (1 of 7 unexercised)	fuzz-cast exem
 Titania, Nature's Force	round-trip	structure (3 of 3 unexercised)	
 Titania, Protector of Argoth	round-trip	structure (1 of 2 unexercised)	
 Titania, Proud Pummeler	verified		
-Titania, Rugged Rumbler	unsupported	compiled (1 unsupported)	
+Titania, Rugged Rumbler	compiled	round-trip; fuzz-swept (not in the report)	
 Titania, Voice of Gaea	round-trip	structure (1 of 3 unexercised)	
 Titanic Brawl	round-trip	structure (1 of 2 unexercised)	
 Titanic Bulvox	verified		
@@ -27866,7 +27866,7 @@ Toxic Deluge	verified
 Toxic Iguanar	round-trip	structure (1 of 1 unexercised)	
 Toxic Nim	verified		
 Toxic Scorpion	round-trip	structure (1 of 2 unexercised)	
-Toxic Stench	unsupported	compiled (1 unsupported)	
+Toxic Stench	compiled	round-trip; fuzz-swept (not in the report)	
 Toxicrene	compiled	round-trip; structure (1 of 3 unexercised)	
 Toxin Analysis	verified		
 Toxin Sliver	verified		
@@ -27883,7 +27883,7 @@ Trade Secrets	compiled	round-trip; structure (1 of 1 unexercised)
 Trade the Helm	round-trip	structure (1 of 2 unexercised)	
 Trading Post	round-trip	structure (3 of 4 unexercised)	
 Tragedy Feaster	verified		
-Tragic Arrogance	unsupported	compiled (1 unsupported)	
+Tragic Arrogance	compiled	round-trip; fuzz-swept (not in the report)	
 Tragic Banshee	round-trip	structure (1 of 1 unexercised)	
 Tragic Fall	round-trip	structure (1 of 1 unexercised)	
 Tragic Lesson	round-trip	structure (1 of 1 unexercised)	
@@ -27930,7 +27930,7 @@ Tranquil Thicket	verified
 Tranquilize	verified		
 Transcendence	compiled	round-trip; structure (1 of 3 unexercised)	
 Transcendent Archaic	compiled	round-trip; structure (1 of 2 unexercised)	
-Transcendent Dragon	unsupported	compiled (1 unsupported)	
+Transcendent Dragon	compiled	round-trip; fuzz-swept (not in the report)	
 Transcendent Envoy	verified		
 Transcendent Master	round-trip	structure (1 of 3 unexercised)	
 Transcendent Message	verified		
@@ -27992,7 +27992,7 @@ Treacherous Greed	round-trip	structure (2 of 2 unexercised)
 Treacherous Link	verified		
 Treacherous Pit-Dweller	round-trip	structure (1 of 2 unexercised)	
 Treacherous Terrain	round-trip	structure (1 of 2 unexercised)	
-Treacherous Urge	unsupported	compiled (1 unsupported)	
+Treacherous Urge	compiled	round-trip; fuzz-swept (not in the report)	
 Treacherous Vampire	round-trip	structure (1 of 3 unexercised)	
 Treacherous Werewolf	verified		
 Treachery	verified		
@@ -28046,7 +28046,7 @@ Trenching Steed	round-trip	structure (1 of 1 unexercised)
 Trenchpost	compiled	round-trip; structure (1 of 2 unexercised)	
 Treno, Dark City	verified		
 Trenzalore Clocktower	compiled	round-trip; structure (2 of 2 unexercised)	
-Trepanation Blade	unsupported	compiled (1 unsupported)	
+Trepanation Blade	compiled	round-trip; fuzz-swept (not in the report)	
 Trespasser il-Vec	round-trip	structure (1 of 1 unexercised)	
 Trespasser's Curse	verified		
 Trespassing Souleater	round-trip	structure (1 of 1 unexercised)	
@@ -28066,7 +28066,7 @@ Trial of Knowledge	verified
 Trial of Solidarity	verified		
 Trial of Strength	verified		
 Trial of Zeal	verified		
-Trial of a Time Lord	unsupported	compiled (1 unsupported)	
+Trial of a Time Lord	compiled	round-trip; fuzz-swept (not in the report)	
 Triarch Praetorian	verified		
 Triarch Stalker	compiled	round-trip	
 Tribal Flames	round-trip	structure (1 of 1 unexercised)	
@@ -28182,7 +28182,7 @@ Trusty Companion	verified
 Trusty Machete	verified		
 Trusty Packbeast	round-trip	structure (1 of 1 unexercised)	
 Trusty Retriever	round-trip	structure (1 of 1 unexercised)	
-Truth or Consequences	unsupported	compiled (1 unsupported)	
+Truth or Consequences	compiled	round-trip; fuzz-swept (not in the report)	
 Truth or Tale	compiled	round-trip	
 Trygon Predator	verified		
 Trygon Prime	verified		
@@ -28216,7 +28216,7 @@ Tunnel Ignus	unsupported	compiled (1 unsupported)
 Tunnel Rats	verified		
 Tunnel Surveyor	round-trip	structure (1 of 1 unexercised)	
 Tunnel Tipster	verified		
-Tunnel Vision	unsupported	compiled (1 unsupported)	
+Tunnel Vision	compiled	round-trip; fuzz-swept (not in the report)	
 Tunnel of Love	unsupported	compiled (1 unsupported)	
 Tunneler Wurm	verified		
 Tunneling Geopede	verified		
@@ -28327,7 +28327,7 @@ Two-Headed Sliver	round-trip	structure (1 of 1 unexercised)
 Two-Headed Zombie	verified		
 Ty Lee, Artful Acrobat	round-trip	structure (1 of 2 unexercised)	
 Ty Lee, Chi Blocker	round-trip	structure (1 of 3 unexercised)	
-Tymaret Calls the Dead	round-trip	structure (2 of 2 unexercised)	
+Tymaret Calls the Dead	round-trip	structure (1 of 2 unexercised)	
 Tymaret, Chosen from Death	round-trip	structure (1 of 2 unexercised)	
 Tymaret, the Murder King	round-trip	structure (1 of 2 unexercised)	
 Tymna the Weaver	verified		
@@ -28383,7 +28383,7 @@ Uktabi Wildcats	round-trip	structure (1 of 2 unexercised)
 Ukud Cobra	verified		
 Ulalek, Fused Atrocity	unsupported	compiled (1 unsupported)	
 Ulamog's Crusher	verified		
-Ulamog's Despoiler	unsupported	compiled (1 unsupported)	
+Ulamog's Despoiler	compiled	round-trip; fuzz-swept (not in the report)	
 Ulamog's Dreadsire	verified		
 Ulamog's Nullifier	verified		
 Ulamog's Reclaimer	round-trip	structure (1 of 2 unexercised)	
@@ -28406,7 +28406,7 @@ Ultimate Magic: Meteor	compiled	round-trip; structure (1 of 2 unexercised)
 Ultimate Nullification	round-trip	structure (2 of 2 unexercised)	
 Ultimate Price	verified		
 Ultimecia, Temporal Threat	round-trip	structure (1 of 2 unexercised)	
-Ultimecia, Time Sorceress // Ultimecia, Omnipotent	unsupported	compiled (1 unsupported)	
+Ultimecia, Time Sorceress // Ultimecia, Omnipotent	compiled	round-trip; structure (1 of 4 unexercised); fuzz-swept (not in the report)	
 Ultimo, Civilization's End	round-trip	structure (1 of 3 unexercised)	
 Ultra Magnus, Tactician // Ultra Magnus, Armored Carrier	unsupported	compiled (1 unsupported)	
 Ultramarines Honour Guard	verified		
@@ -28437,9 +28437,9 @@ Umbral Collar Zealot	round-trip	structure (1 of 1 unexercised)
 Umbral Expanse	verified		
 Umbral Juke	round-trip	structure (1 of 1 unexercised)	
 Umbral Mantle	verified		
-Umbris, Fear Manifest	round-trip	structure (2 of 2 unexercised)	
+Umbris, Fear Manifest	round-trip	structure (1 of 2 unexercised)	
 Umezawa's Charm	round-trip	structure (1 of 1 unexercised)	
-Umezawa's Jitte	round-trip	structure (1 of 3 unexercised)	
+Umezawa's Jitte	verified		
 Umori, the Collector	compiled	round-trip	
 Unable to Scream	verified		
 Unagi's Spray	verified		
@@ -28478,7 +28478,7 @@ Uncover the Moon-Letters	round-trip	structure (1 of 1 unexercised)
 Uncovered Clues	compiled	round-trip; structure (1 of 1 unexercised)	
 Unctus's Retrofitter	verified		
 Unctus, Grand Metatect	compiled	round-trip; structure (2 of 3 unexercised)	
-Undead Alchemist	compiled	round-trip; structure (2 of 2 unexercised)	
+Undead Alchemist	compiled	round-trip; structure (1 of 2 unexercised)	
 Undead Augur	round-trip	structure (1 of 1 unexercised)	
 Undead Butler	round-trip	structure (1 of 2 unexercised)	
 Undead Executioner	round-trip	structure (1 of 1 unexercised)	
@@ -28512,7 +28512,7 @@ Undercover Operative	unsupported	compiled (1 unsupported)
 Undercover Skrull	compiled	round-trip; structure (1 of 2 unexercised)	
 Underdark Basilisk	verified		
 Underdark Explorer	verified		
-Underdark Rift	unsupported	compiled (1 unsupported)	
+Underdark Rift	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Underfoot Underdogs	round-trip	structure (1 of 2 unexercised)	
 Underground Mortuary	verified		
 Underground River	verified		
@@ -28560,7 +28560,7 @@ Unexpected Fangs	round-trip	structure (1 of 1 unexercised)
 Unexpected Request	verified		
 Unexpected Results	compiled	round-trip	
 Unexpected Windfall	verified		
-Unexpectedly Absent	unsupported	compiled (1 unsupported)	
+Unexpectedly Absent	compiled	round-trip; fuzz-swept (not in the report)	
 Unexplained Absence	round-trip	structure (1 of 1 unexercised)	
 Unexplained Disappearance	verified		
 Unexplained Vision	round-trip	structure (1 of 2 unexercised)	
@@ -28661,7 +28661,7 @@ Unstable Hulk	round-trip	structure (1 of 2 unexercised)
 Unstable Molecule Suit	verified		
 Unstable Mutation	verified		
 Unstable Obelisk	verified		
-Unstable Shapeshifter	round-trip	structure (1 of 1 unexercised)	
+Unstable Shapeshifter	verified		
 Unstoppable Ash	round-trip	structure (2 of 3 unexercised)	
 Unstoppable Ogre	verified		
 Unstoppable Plan	round-trip	structure (1 of 1 unexercised)	
@@ -28701,11 +28701,11 @@ Uproot	verified
 Upwelling	verified		
 Ur-Drago	verified		
 Ur-Golem's Eye	verified		
-Urabrask // The Great Work	unsupported	compiled (1 unsupported)	
+Urabrask // The Great Work	compiled	round-trip; structure (5 of 6 unexercised); fuzz-swept (not in the report)	
 Urabrask the Hidden	verified		
 Urabrask's Anointer	round-trip	structure (1 of 1 unexercised)	
 Urabrask's Forge	compiled	round-trip; structure (1 of 1 unexercised)	
-Urabrask, Heretic Praetor	unsupported	compiled (1 unsupported)	
+Urabrask, Heretic Praetor	compiled	round-trip; fuzz-swept (not in the report)	
 Urban Burgeoning	verified		
 Urban Daggertooth	verified		
 Urban Evolution	verified		
@@ -28737,7 +28737,7 @@ Urge to Feed	compiled	round-trip
 Urgent Exorcism	round-trip	structure (1 of 1 unexercised)	
 Urgent Necropsy	unsupported	compiled (1 unsupported)	
 Urgoros, the Empty One	compiled	round-trip; structure (1 of 2 unexercised)	
-Urianger Augurelt	unsupported	compiled (1 unsupported)	
+Urianger Augurelt	compiled	round-trip; fuzz-swept (not in the report)	
 Uril, the Miststalker	verified		
 Urn of Godfire	round-trip	structure (1 of 2 unexercised)	
 Uro, Titan of Nature's Wrath	verified		
@@ -28809,7 +28809,7 @@ Valakut Invoker	verified
 Valakut Predator	verified		
 Valakut, the Molten Pinnacle	round-trip	structure (1 of 3 unexercised)	
 Valduk, Keeper of the Flame	compiled	round-trip; structure (1 of 1 unexercised)	
-Valentin, Dean of the Vein // Lisette, Dean of the Root	unsupported	compiled (1 unsupported)	
+Valentin, Dean of the Vein // Lisette, Dean of the Root	compiled	round-trip; structure (1 of 4 unexercised); fuzz-swept (not in the report)	
 Valentina Allegra de Fontaine	compiled	round-trip; structure (2 of 2 unexercised)	
 Valeria Richards, Precocious	verified		
 Valeron Outlander	verified		
@@ -28818,8 +28818,8 @@ Valgavoth's Faithful	round-trip	structure (1 of 1 unexercised)
 Valgavoth's Lair	verified		
 Valgavoth's Onslaught	verified		
 Valgavoth, Harrower of Souls	compiled	round-trip	
-Valgavoth, Terror Eater	unsupported	compiled (1 unsupported)	
-Valiant Changeling	unsupported	compiled (1 unsupported)	
+Valgavoth, Terror Eater	compiled	round-trip; structure (1 of 5 unexercised); fuzz-swept (not in the report)	
+Valiant Changeling	compiled	round-trip; fuzz-swept (not in the report)	
 Valiant Endeavor	compiled	round-trip; structure (1 of 1 unexercised)	
 Valiant Guard	verified		
 Valiant Knight	round-trip	structure (1 of 2 unexercised)	
@@ -28939,7 +28939,7 @@ Vat Emergence	round-trip	structure (1 of 1 unexercised)
 Vat of Rebirth	round-trip	structure (2 of 2 unexercised)	
 Vault 101: Birthday Party	unsupported	compiled (1 unsupported)	
 Vault 112: Sadistic Simulation	unsupported	compiled (1 unsupported)	
-Vault 11: Voter's Dilemma	unsupported	compiled (1 unsupported)	
+Vault 11: Voter's Dilemma	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Vault 12: The Necropolis	round-trip	structure (3 of 3 unexercised)	
 Vault 13: Dweller's Journey	unsupported	compiled (1 unsupported)	
 Vault 21: House Gambit	unsupported	compiled (1 unsupported)	
@@ -29014,7 +29014,7 @@ Venarian Glimmer	round-trip	structure (1 of 1 unexercised)
 Venarian Gold	compiled	round-trip; structure (3 of 4 unexercised)	
 Venat, Heart of Hydaelyn // Hydaelyn, the Mothercrystal	round-trip	structure (3 of 4 unexercised)	
 Vendetta	round-trip	structure (1 of 1 unexercised)	
-Vendilion Clique	unsupported	compiled (1 unsupported)	
+Vendilion Clique	compiled	round-trip; fuzz-swept (not in the report)	
 Venerable Knight	round-trip	structure (1 of 1 unexercised)	
 Venerable Kumo	verified		
 Venerable Lammasu	verified		
@@ -29072,7 +29072,7 @@ Venser's Journal	round-trip	structure (1 of 2 unexercised)
 Venser's Sliver	verified		
 Venser, Corpse Puppet	round-trip	structure (1 of 3 unexercised)	
 Venser, Shaper Savant	verified		
-Venser, the Sojourner	round-trip	structure (3 of 3 unexercised)	
+Venser, the Sojourner	verified		
 Vent Sentinel	round-trip	structure (1 of 2 unexercised)	
 Ventifact Bottle	compiled	round-trip; structure (2 of 2 unexercised)	
 Venture Forth	round-trip	structure (1 of 2 unexercised)	
@@ -29136,7 +29136,7 @@ Veteran Dungeoneer	verified
 Veteran Explorer	verified		
 Veteran Guardmouse	verified		
 Veteran Ice Climber	verified		
-Veteran Motorist	round-trip	structure (1 of 2 unexercised)	
+Veteran Motorist	verified		
 Veteran Soldier	compiled	round-trip; structure (1 of 1 unexercised)	
 Veteran Survivor	round-trip	structure (2 of 2 unexercised)	
 Veteran Swordsmith	verified		
@@ -29326,7 +29326,7 @@ Virtue's Ruin	verified
 Virtuous Charge	verified		
 Virtuous Variant	verified		
 Virtus the Veiled	verified		
-Virtus's Maneuver	unsupported	compiled (1 unsupported)	
+Virtus's Maneuver	compiled	round-trip; fuzz-swept (not in the report)	
 Virulent Emissary	verified		
 Virulent Plague	verified		
 Virulent Silencer	verified		
@@ -29345,7 +29345,7 @@ Viscid Lemures	round-trip	structure (1 of 1 unexercised)
 Viseling	verified		
 Vish Kal, Blood Arbiter	round-trip	structure (1 of 4 unexercised)	
 Vishgraz, the Doomhive	verified		
-Vision Charm	unsupported	compiled (1 unsupported)	
+Vision Charm	compiled	round-trip; fuzz-swept (not in the report)	
 Vision Quest	round-trip	structure (1 of 1 unexercised)	
 Vision Skeins	verified		
 Vision of Love	round-trip	structure (1 of 1 unexercised)	
@@ -29353,7 +29353,7 @@ Vision, Spectral Synthezoid	unsupported	compiled (1 unsupported)
 Vision, Synthezoid Avenger	round-trip	structure (1 of 2 unexercised)	
 Visionary Augmenter	verified		
 Visionary's Dance	round-trip	structure (1 of 2 unexercised)	
-Visions	unsupported	compiled (1 unsupported)	
+Visions	compiled	round-trip; fuzz-swept (not in the report)	
 Visions of Beyond	verified		
 Visions of Brutality	verified		
 Visions of Dominance	round-trip	structure (1 of 3 unexercised)	
@@ -29385,7 +29385,7 @@ Vivi Ornitier	round-trip	structure (1 of 2 unexercised)
 Vivi's Persistence	round-trip	structure (1 of 2 unexercised)	
 Vivid Crag	verified		
 Vivid Creek	verified		
-Vivid Flying Fish	round-trip	structure (1 of 1 unexercised)	
+Vivid Flying Fish	verified		
 Vivid Grove	verified		
 Vivid Marsh	verified		
 Vivid Meadow	verified		
@@ -29452,7 +29452,7 @@ Voice of the Vermin	round-trip	structure (1 of 2 unexercised)
 Voice of the Woods	round-trip	structure (1 of 1 unexercised)	
 Voiceless Spirit	verified		
 Voices from the Void	round-trip	structure (1 of 1 unexercised)	
-Void	unsupported	compiled (1 unsupported)	
+Void	compiled	round-trip; fuzz-swept (not in the report)	
 Void Attendant	verified		
 Void Beckoner	round-trip	structure (1 of 3 unexercised)	
 Void Extrapolator // Omit Variables	verified		
@@ -29491,7 +29491,7 @@ Volcanic Eruption	round-trip	structure (1 of 1 unexercised)
 Volcanic Fallout	verified		
 Volcanic Geyser	verified		
 Volcanic Hammer	verified		
-Volcanic Offering	unsupported	compiled (2 unsupported)	
+Volcanic Offering	compiled	round-trip; fuzz-swept (not in the report)	
 Volcanic Rambler	verified		
 Volcanic Rush	verified		
 Volcanic Salvo	verified		
@@ -29583,7 +29583,7 @@ Vraan, Executioner Thane	round-trip	structure (1 of 1 unexercised)
 Vraska Joins Up	round-trip	structure (2 of 2 unexercised)	
 Vraska the Unseen	unsupported	compiled (1 unsupported)	
 Vraska's Conquistador	round-trip	structure (1 of 1 unexercised)	
-Vraska's Contempt	round-trip	structure (1 of 1 unexercised)	
+Vraska's Contempt	verified		
 Vraska's Fall	verified		
 Vraska's Final Mercy	round-trip	structure (1 of 1 unexercised)	
 Vraska's Finisher	round-trip	structure (1 of 1 unexercised)	
@@ -29735,7 +29735,7 @@ Waltz of Rage	compiled	round-trip
 Wan Shi Tong, All-Knowing	round-trip	structure (2 of 3 unexercised)	
 Wan Shi Tong, Librarian	compiled	round-trip; structure (1 of 5 unexercised)	
 Wand of Denial	round-trip	structure (1 of 1 unexercised)	
-Wand of Ith	unsupported	compiled (1 unsupported)	
+Wand of Ith	compiled	round-trip; fuzz-swept (not in the report)	
 Wand of Orcus	round-trip	structure (1 of 3 unexercised)	
 Wand of Vertebrae	round-trip	structure (1 of 2 unexercised)	
 Wand of Wonder	unsupported	compiled (1 unsupported)	
@@ -30050,12 +30050,12 @@ Weed-Pruner Poplar	round-trip	structure (1 of 1 unexercised)
 Weeping Angel	compiled	round-trip; structure (1 of 5 unexercised)	
 Weftblade Enhancer	verified		
 Weftstalker Ardent	round-trip	structure (1 of 2 unexercised)	
-Weftwalking	unsupported	compiled (1 unsupported)	
+Weftwalking	compiled	round-trip; structure (1 of 2 unexercised); fuzz-swept (not in the report)	
 Wei Ambush Force	verified		
 Wei Assassins	verified		
 Wei Scout	verified		
 Weigh Down	verified		
-Weight of Conscience	unsupported	compiled (1 unsupported)	
+Weight of Conscience	compiled	round-trip; fuzz-swept (not in the report)	
 Weight of Memory	round-trip	structure (1 of 1 unexercised)	
 Weight of Spires	round-trip	structure (1 of 1 unexercised)	
 Weight of the Underworld	verified		
@@ -30105,7 +30105,7 @@ Wharf Infiltrator	round-trip	structure (1 of 3 unexercised)
 What Must Be Done	compiled	round-trip; structure (1 of 1 unexercised)	
 Wheel and Deal	verified		
 Wheel of Fate	verified		
-Wheel of Misfortune	unsupported	compiled (1 unsupported)	
+Wheel of Misfortune	compiled	round-trip; fuzz-swept (not in the report)	
 Wheel of Potential	unsupported	compiled (1 unsupported)	
 Wheel of Sun and Moon	compiled	round-trip	
 Wheel of Torture	round-trip	structure (1 of 1 unexercised)	
@@ -30167,7 +30167,7 @@ Whispering Specter	round-trip	structure (1 of 3 unexercised)
 Whispering Wizard	round-trip	structure (1 of 1 unexercised)	
 Whispers of Emrakul	round-trip	structure (1 of 1 unexercised)	
 Whispersilk Cloak	compiled	round-trip	
-Whispersteel Dagger	unsupported	compiled (1 unsupported)	
+Whispersteel Dagger	compiled	round-trip; fuzz-swept (not in the report)	
 Whisperwood Elemental	round-trip	structure (2 of 2 unexercised)	
 White Auracite	verified		
 White Dragon	verified		
@@ -30199,7 +30199,7 @@ Wiccan, Young Avenger	round-trip	structure (1 of 1 unexercised)
 Wick's Patrol	verified		
 Wick, the Whorled Mind	compiled	round-trip; structure (2 of 2 unexercised)	
 Wicked Akuba	unsupported	compiled (1 unsupported)	
-Wicked Guardian	unsupported	compiled (1 unsupported)	
+Wicked Guardian	compiled	round-trip; fuzz-swept (not in the report)	
 Wicked Reward	verified		
 Wicked Slumber	compiled	round-trip	
 Wicked Visitor	round-trip	structure (1 of 1 unexercised)	
@@ -30228,7 +30228,7 @@ Wild Defiance	compiled	round-trip
 Wild Dogs	verified		
 Wild Elephant	verified		
 Wild Endeavor	compiled	round-trip; structure (1 of 1 unexercised)	
-Wild Evocation	unsupported	compiled (1 unsupported)	
+Wild Evocation	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Wild Griffin	verified		
 Wild Growth	verified		
 Wild Guess	verified		
@@ -30257,7 +30257,7 @@ Wild Wanderer	verified
 Wild Wasteland	verified		
 Wild Wurm	round-trip	structure (1 of 1 unexercised)	
 Wild-Field Scarecrow	verified		
-Wild-Magic Sorcerer	unsupported	compiled (1 unsupported)	
+Wild-Magic Sorcerer	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Wildborn Preserver	verified		
 Wildcall	verified		
 Wilderland Scrounger	round-trip	structure (1 of 1 unexercised)	
@@ -30345,7 +30345,7 @@ Windreaver	verified
 Windrider Eel	verified		
 Windrider Patrol	round-trip	structure (1 of 2 unexercised)	
 Windrider Wizard	round-trip	structure (1 of 2 unexercised)	
-Winds of Abandon	unsupported	compiled (1 unsupported)	
+Winds of Abandon	compiled	round-trip; fuzz-swept (not in the report)	
 Winds of Qal Sisma	compiled	round-trip	
 Winds of Rath	round-trip	structure (1 of 1 unexercised)	
 Winds of Rebuke	round-trip	structure (1 of 1 unexercised)	
@@ -30400,7 +30400,7 @@ Winter Sky	round-trip	structure (1 of 1 unexercised)
 Winter Soldier, Bucky Barnes	verified		
 Winter Soldier, Icy Assassin	round-trip	structure (2 of 4 unexercised)	
 Winter Soldier, Reborn Avenger	compiled	round-trip; structure (1 of 1 unexercised)	
-Winter's Chill	unsupported	compiled (2 unsupported)	
+Winter's Chill	unsupported	compiled (1 unsupported)	
 Winter's Grasp	verified		
 Winter's Intervention	verified		
 Winter's Rest	verified		
@@ -30544,7 +30544,7 @@ Wolverine, Fierce Fighter	compiled	round-trip
 Wonder	verified		
 Wonder Man, Hollywood Hero	verified		
 Wonderscape Sage	unsupported	compiled (1 unsupported)	
-Wondrous Crucible	round-trip	structure (2 of 2 unexercised)	
+Wondrous Crucible	verified		
 Wondrous Revival	round-trip	structure (1 of 1 unexercised)	
 Wood Elves	round-trip	structure (1 of 1 unexercised)	
 Woodborn Behemoth	round-trip	structure (1 of 1 unexercised)	
@@ -30599,14 +30599,14 @@ Workshop Elders	round-trip	structure (2 of 2 unexercised)
 Workshop Warchief	verified		
 World Breaker	round-trip	structure (2 of 4 unexercised)	
 World Map	round-trip	structure (1 of 2 unexercised)	
-World Queller	round-trip	structure (1 of 1 unexercised)	
+World Queller	verified		
 World Shaper	round-trip	structure (1 of 2 unexercised)	
-World War Hulk	unsupported	compiled (1 unsupported)	
+World War Hulk	compiled	round-trip; structure (1 of 3 unexercised); fuzz-swept (not in the report)	
 World at War	unsupported	compiled (1 unsupported)	
 World-Weary	verified		
 Worldfire	compiled	round-trip	
 Worldgorger Dragon	verified		
-Worldheart Phoenix	unsupported	compiled (1 unsupported)	
+Worldheart Phoenix	compiled	round-trip; fuzz-swept (not in the report)	
 Worldly Counsel	round-trip	structure (1 of 1 unexercised)	
 Worldly Tutor	verified		
 Worldpurge	compiled	round-trip; structure (1 of 1 unexercised)	
@@ -30618,7 +30618,7 @@ Worldspine Wurm	round-trip	structure (1 of 3 unexercised)
 Worldwalker Helm	compiled	round-trip	
 Worm Harvest	verified		
 Wormfang Behemoth	round-trip	structure (2 of 2 unexercised)	
-Wormfang Crab	unsupported	compiled (1 unsupported)	
+Wormfang Crab	compiled	round-trip; fuzz-swept (not in the report)	
 Wormfang Drake	compiled	round-trip	
 Wormfang Manta	round-trip	structure (2 of 3 unexercised)	
 Wormfang Newt	compiled	round-trip	
@@ -30644,7 +30644,7 @@ Wrangler of the Damned	round-trip	structure (1 of 2 unexercised)
 Wrap in Flames	verified		
 Wrap in Vigor	verified		
 Wrath of God	verified		
-Wrath of Marit Lage	round-trip	structure (2 of 2 unexercised)	
+Wrath of Marit Lage	round-trip	structure (1 of 2 unexercised)	
 Wrath of the Bloodmane	round-trip	structure (1 of 2 unexercised)	
 Wrath of the Skies	compiled	round-trip	
 Wrathful Raptors	compiled	round-trip	
@@ -30790,7 +30790,7 @@ Yew Spirit	verified
 Yggdrasil, Rebirth Engine	round-trip	structure (1 of 3 unexercised)	
 Ygra, Eater of All	round-trip	structure (3 of 3 unexercised)	
 Yidaro, Wandering Monster	unsupported	compiled (1 unsupported)	
-Yidris, Maelstrom Wielder	unsupported	compiled (1 unsupported)	
+Yidris, Maelstrom Wielder	compiled	round-trip; fuzz-swept (not in the report)	
 Yip Yip!	verified		
 Yisan, the Wanderer Bard	round-trip	structure (1 of 1 unexercised)	
 Yixlid Jailer	verified		
@@ -30864,7 +30864,7 @@ Zack Fair	unsupported	compiled (1 unsupported)
 Zada's Commando	verified		
 Zada, Hedron Grinder	verified		
 Zaffai and the Tempests	compiled	round-trip	
-Zaffai, Thunder Conductor	unsupported	compiled (1 unsupported)	
+Zaffai, Thunder Conductor	compiled	round-trip; fuzz-swept (not in the report)	
 Zagoth Crystal	verified		
 Zagoth Mamba	round-trip	structure (1 of 1 unexercised)	
 Zagoth Triome	verified		
@@ -30947,12 +30947,12 @@ Zhao, the Seething Flame	verified
 Zhentarim Bandit	round-trip	structure (1 of 1 unexercised)	
 Zhou Yu, Chief Commander	verified		
 Zhuge Jin, Wu Strategist	round-trip	structure (1 of 1 unexercised)	
-Zhulodok, Void Gorger	unsupported	compiled (1 unsupported)	
+Zhulodok, Void Gorger	compiled	round-trip; structure (1 of 1 unexercised); fuzz-swept (not in the report)	
 Zhur-Taa Ancient	verified		
 Zhur-Taa Druid	verified		
 Zhur-Taa Goblin	verified		
 Zhur-Taa Swine	verified		
-Ziatora's Envoy	unsupported	compiled (1 unsupported)	
+Ziatora's Envoy	compiled	round-trip; fuzz-swept (not in the report)	
 Ziatora's Proving Ground	verified		
 Ziatora, the Incinerator	compiled	round-trip	
 Zidane, Tantalus Thief	compiled	round-trip; structure (1 of 2 unexercised)	
@@ -30968,7 +30968,7 @@ Zimone, Quandrix Prodigy	round-trip	structure (2 of 2 unexercised)
 Zinnia, Valley's Voice	compiled	round-trip; structure (1 of 3 unexercised)	
 Zirda, the Dawnwaker	verified		
 Zirilan of the Claw	compiled	round-trip	
-Zndrsplt's Judgment	unsupported	compiled (1 unsupported)	
+Zndrsplt's Judgment	compiled	round-trip; fuzz-swept (not in the report)	
 Zndrsplt, Eye of Wisdom	round-trip	structure (1 of 3 unexercised)	
 Zo-Zu the Punisher	verified		
 Zoanthrope	verified		
@@ -31001,7 +31001,7 @@ Zombie Mob	verified
 Zombie Musher	round-trip	structure (2 of 2 unexercised)	
 Zombie Ogre	verified		
 Zombie Outlander	verified		
-Zombie Scavengers	unsupported	compiled (1 unsupported)	
+Zombie Scavengers	compiled	round-trip; fuzz-swept (not in the report)	
 Zombie Trailblazer	round-trip	structure (2 of 2 unexercised)	
 Zombify	verified		
 Zoo Escapees	round-trip	structure (1 of 1 unexercised)	
