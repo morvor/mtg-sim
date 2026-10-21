@@ -302,3 +302,42 @@ fn storybook_ride_doesnt_change_when_the_cards_can_be_played() {
     t.play_land(P0, forest).unwrap();
     assert!(t.on_battlefield(forest));
 }
+
+#[test]
+fn florian_cards_are_played_with_their_costs_and_timing() {
+    cr!("601.2h", "117.1a", "305.2");
+    ruling!(
+        "Florian, Voldaren Scion",
+        "You must pay all costs and follow all timing rules for cards you play with Florian's last ability."
+    );
+    // The opponent lost 1 life: Florian looks at the top card and exiles it.
+    let florian = |top: &str| -> (TestGame, ObjectId) {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Florian, Voldaren Scion");
+        t.library_top(P0, top);
+        lose(&mut t, P1, 1);
+        t.advance_to(P0, Step::PostcombatMain);
+        t.resolve_all();
+        let exiled = *t.g.exile.last().unwrap();
+        assert_eq!(t.g.obj(exiled).chars.name.as_str(), top);
+        (t, exiled)
+    };
+    // A sorcery: its mana cost must be paid, and not while a spell is on the stack.
+    let (mut t, div) = florian("Divination");
+    assert!(t.cast(P0, div).try_go().is_err());
+    mana(&mut t, P0, ManaType::U, 3);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    mana(&mut t, P0, ManaType::R, 1);
+    t.cast(P0, bolt).target(pl(P1)).go();
+    assert!(t.cast(P0, div).try_go().is_err());
+    t.resolve_all();
+    t.cast(P0, div).go();
+    assert_eq!(pool(&t, P0), 0);
+    // A land: only with a land play left.
+    let (mut t, forest) = florian("Forest");
+    t.g.players[0].lands_played_this_turn = 1;
+    assert!(t.play_land(P0, forest).is_err());
+    t.g.players[0].lands_played_this_turn = 0;
+    t.play_land(P0, forest).unwrap();
+    assert!(t.on_battlefield(forest));
+}
