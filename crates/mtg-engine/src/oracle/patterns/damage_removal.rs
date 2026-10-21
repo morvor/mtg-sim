@@ -1597,6 +1597,60 @@ fn f_return_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "damage_removal: return exiled", priority: 40, apply: f_return_exiled } }
 
+/// "Exile X target creatures, then investigate X times. Return the exiled cards to the
+/// battlefield tapped under their owners' control at the beginning of the next end step."
+/// (Disorder in the Court): "the exiled cards" are what the sentence's exile moved, even
+/// with another instruction after it; they're remembered right after the exile (CR 400.7,
+/// 603.7c).
+fn f_return_the_exiled_cards_later(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(rest) = l
+        .strip_prefix("return the exiled cards ")
+        .or_else(|| l.strip_prefix("return the exiled card "))
+    else {
+        return false;
+    };
+    let Some(dest_s) = rest.strip_suffix(" at the beginning of the next end step") else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let exiles: Vec<usize> = v
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| matches!(e, Effect::Exile { .. }))
+        .map(|(i, _)| i)
+        .collect();
+    // One exile, followed by other instructions (right after it, `f_return_exiled`).
+    let [i] = exiles[..] else {
+        return false;
+    };
+    if i + 1 == v.len() {
+        return false;
+    }
+    let Some(dest) = battlefield_destination(dest_s, Sel::Var(DELAYED)) else {
+        return false;
+    };
+    v.insert(
+        i + 1,
+        Effect::Store {
+            var: DELAYED,
+            sel: Sel::Var(vars::IT),
+        },
+    );
+    v.push(Effect::AtNext {
+        step: TriggerStep::End,
+        effect: Box::new(Effect::Move {
+            what: Sel::Var(DELAYED),
+            to: dest,
+        }),
+    });
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "damage_removal: return the exiled cards later, after other instructions", priority: 41, apply: f_return_the_exiled_cards_later } }
+
 /// "Exile up to one other target creature. At the beginning of the next end step, you may
 /// pay {3}{B}. If you don't, return that card to the battlefield under its owner's
 /// control." (Koya, Death from Above): the return is what the delayed ability does if the

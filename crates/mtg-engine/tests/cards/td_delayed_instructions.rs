@@ -161,3 +161,38 @@ fn giant_slug_chooses_its_landwalk_at_your_next_upkeep_for_that_turn() {
     t.advance_to(P1, Step::Upkeep);
     assert!(!kw(&t));
 }
+
+#[test]
+fn disorder_in_the_court_returns_the_exiled_cards_tapped_at_the_next_end_step() {
+    cr!("603.7a", "400.7", "701.16a");
+    supported("Disorder in the Court");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Llanowar Elves");
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Island", 2);
+    let spell = t.hand(P0, "Disorder in the Court");
+    t.cast(P0, spell)
+        .x(2)
+        .targets(&[Entity::Object(mine), Entity::Object(theirs)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(mine)), Zone::Exile);
+    assert_eq!(t.zone(t.g.current(theirs)), Zone::Exile);
+    let clues = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).is_token() && t.g.obj(**o).chars.has_subtype("Clue"))
+        .count();
+    assert_eq!(clues, 2);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let bears = t.named_on_battlefield("Grizzly Bears");
+    let elves = t.named_on_battlefield("Llanowar Elves");
+    assert_eq!((bears.len(), elves.len()), (1, 1));
+    assert_eq!(t.obj_now(bears[0]).controller, P0);
+    assert_eq!(t.obj_now(elves[0]).controller, P1);
+    assert!(t.obj_now(bears[0]).tapped && t.obj_now(elves[0]).tapped);
+}
