@@ -364,7 +364,7 @@ fn steal_equipped(name: &str) -> (TestGame, ObjectId, ObjectId, ObjectId) {
 
 #[test]
 fn stealing_a_creature_doesnt_steal_its_auras_or_equipment() {
-    cr!("301.5c", "303.4e", "702.6a");
+    cr!("301.5d", "303.4e", "702.6a");
     ruling!(
         "Enthralling Hold",
         "Gaining control of a permanent doesn't cause you to gain control of any Auras or Equipment attached to it."
@@ -464,7 +464,7 @@ fn threads_of_disloyalty_counts_x_as_zero_on_the_battlefield() {
 
 #[test]
 fn illusory_gains_moves_for_each_creature_and_must_move() {
-    cr!("603.3b", "303.4f");
+    cr!("603.3b", "701.3a");
     ruling!(
         "Illusory Gains",
         "If multiple creatures enter the battlefield under an opponent's control at the same time, Illusory Gains will trigger for each of them."
@@ -569,7 +569,7 @@ fn bond_of_passion_affects_the_target_that_is_still_legal() {
 
 #[test]
 fn press_into_service_affects_only_its_legal_targets() {
-    cr!("608.2b", "702.32a");
+    cr!("608.2b", "701.41a");
     ruling!(
         "Press into Service",
         "As Press into Service resolves, if at least one of its targets is still legal, it will resolve, affecting only targets that are still legal at that time."

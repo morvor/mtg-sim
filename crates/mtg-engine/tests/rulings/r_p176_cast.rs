@@ -462,6 +462,16 @@ fn knowledge_exploitation_casts_from_the_opponents_library() {
     });
     assert!(t.in_graveyard(P1, "Forest"), "the chosen mode happened");
     assert!(t.in_graveyard(P1, "Funeral Charm"));
+    // It was cast from P1's library, not P0's hand.
+    let (_, spell) = *t
+        .g
+        .history
+        .spells_cast
+        .iter()
+        .find(|(p, s)| *p == P0 && t.g.obj(*s).chars.name == "Funeral Charm")
+        .expect("Funeral Charm was cast");
+    let from = t.g.obj(spell).stack.as_ref().and_then(|si| si.cast.from);
+    assert_eq!(from, Some(mtg_engine::ability::ZoneKind::Library));
 }
 
 // ---------------------------------------------------------------------------------

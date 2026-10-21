@@ -539,7 +539,7 @@ fn sorin(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn sorin_can_target_himself_as_a_creature() {
-    cr!("606.3", "608.2c");
+    cr!("115.1", "608.2c");
     ruling!(
         "Sorin, Lord of Innistrad",
         "If Sorin, Lord of Innistrad somehow becomes a creature, it can be chosen as a target of its own third ability."
