@@ -100,19 +100,11 @@ impl Renderer<'_> {
             }
             (TriggerCond::Draws { who }, Tally::Events) => {
                 let p = self.rel_perfect(*who);
-                // "they've drawn" said as one phrase in each alternative.
-                let p = match p
-                    .strip_prefix("{alt:")
-                    .and_then(|r| r.strip_suffix('}'))
-                    .and_then(|r| r.split_once('|'))
-                {
-                    Some((a, b)) if !a.contains('{') && !b.contains('{') => {
-                        return format!(
-                            "the number of cards {{alt:{a} drawn|{b} drawn}} this turn"
-                        );
-                    }
-                    _ => p,
-                };
+                // "the number of cards they've drawn this turn": the player named before,
+                // in the past tense either way.
+                if p == "{alt:that player has|they've}" {
+                    return "the number of cards {alt:that player drew|they drew} this turn".into();
+                }
                 format!("the number of cards {p} drawn this turn")
             }
             (TriggerCond::Discards { who, filter }, Tally::Events) => {

@@ -854,6 +854,13 @@ impl Renderer<'_> {
                     .collect();
                 format!("{syms} was spent to cast {}", self.me())
             }
+            // "if it's at least one of the chosen colors": the spell exists (it's the
+            // triggering spell) and the count about it; the first says nothing of its own.
+            Condition::And(v)
+                if matches!(v.as_slice(), [Condition::SelMatches(Sel::TriggerObject, Filter::Any), Condition::Compare(Value::Custom(_), _, _)]) =>
+            {
+                self.condition(&v[1])
+            }
             Condition::And(v) => {
                 if let Some(s) = self.attempt(|r| r.events_joined(v, "and")) {
                     return s;
@@ -1507,7 +1514,7 @@ impl Renderer<'_> {
                 if you
                     && matches!(v.as_ref(), Value::Custom(n) if n == crate::choices::HIGHEST_NUMBER) =>
             {
-                "{alt:are one of those players|chose the highest number}".into()
+                "are one of those players".into()
             }
             PlayerFilter::ChoseNumber(c, v) => {
                 let v = self.value(v);

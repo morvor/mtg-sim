@@ -365,6 +365,25 @@ impl Renderer<'_> {
         }
         let a = self.effect(d);
         let b = self.effect(o);
+        // "before that draw step": the step it waits for, named.
+        let step = match d {
+            Effect::DelayedTrigger {
+                trigger: TriggerCond::BeginningOf { step, .. },
+                ..
+            } => match step {
+                TriggerStep::Draw => Some("draw step"),
+                TriggerStep::Upkeep => Some("upkeep"),
+                _ => None,
+            },
+            _ => None,
+        };
+        let b = match step {
+            Some(w) if b.contains(" before that step") => {
+                let named = b.replacen(" before that step", &format!(" before that {w}"), 1);
+                format!("{{alt:{b}|{named}}}")
+            }
+            _ => b,
+        };
         Some((format!("{a} {b}"), 2))
     }
 
@@ -471,6 +490,10 @@ impl Renderer<'_> {
         else {
             return None;
         };
+        let player = |k: &ChoiceKind| matches!(k, ChoiceKind::Opponent | ChoiceKind::Player);
+        if player(a) || player(b) {
+            return None;
+        }
         let x = self.choice(a);
         let y = self.choice(b);
         Some((

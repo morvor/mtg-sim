@@ -102,7 +102,10 @@ impl Renderer<'_> {
             [Effect::ForEachPlayer {
                 who: PlayerRef::Each(PlayerFilter::ChoseNumber(c, n)),
                 effect,
-            }, ..] => {
+            }, ..]
+                if matches!(effect.as_ref(), Effect::AsPlayer { effect: e, .. }
+                    if matches!(e.as_ref(), Effect::DealDamage { .. })) =>
+            {
                 let Effect::AsPlayer {
                     who: PlayerRef::Iterated,
                     effect: inner,
@@ -152,6 +155,35 @@ impl Renderer<'_> {
                 self.target_vars.push((*var, "that player".into(), false));
                 let t = self.effect(then);
                 Some((format!("for each vote {who} received, {t}"), 1))
+            }
+            // "Each player with the highest number loses that much life."
+            [Effect::ForEachPlayer {
+                who: PlayerRef::Each(PlayerFilter::ChoseNumber(Cmp::Eq, h)),
+                effect,
+            }, ..]
+                if matches!(h.as_ref(), Value::Custom(n) if n == HIGHEST_NUMBER) =>
+            {
+                let Effect::AsPlayer {
+                    who: PlayerRef::Iterated,
+                    effect: inner,
+                } = effect.as_ref()
+                else {
+                    return None;
+                };
+                let Effect::LoseLife {
+                    who: PlayerRef::You,
+                    n: Value::Custom(m),
+                } = inner.as_ref()
+                else {
+                    return None;
+                };
+                if m != HIGHEST_NUMBER {
+                    return None;
+                }
+                Some((
+                    "each player with the highest number loses that much life".into(),
+                    1,
+                ))
             }
             // "For each vote you received, draw a card."
             [Effect::Repeat {

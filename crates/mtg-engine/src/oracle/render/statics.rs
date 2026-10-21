@@ -1036,7 +1036,9 @@ impl Renderer<'_> {
         // does to the spell.
         if let Some(e) = &t.on_cast {
             let w = self.effect(e);
-            s.push_str(&format!(". {{alt:If you do|If you cast it this way}}, {w}"));
+            s.push_str(&format!(
+                ". {{alt:If you do|If you cast it this way|If you cast a spell this way}}, {w}"
+            ));
         }
         if t.spend_as_any_color {
             s.push_str(

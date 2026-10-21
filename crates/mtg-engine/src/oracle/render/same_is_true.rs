@@ -90,9 +90,23 @@ impl Renderer<'_> {
         if objs.len() + 2 != from_parts.len() {
             return None;
         }
-        objs.push(Filter::HasKeyword(kinds[0]));
-        let n = self.noun_det(&Filter::and(objs), Det::A);
+        // "with flying not named ~": the keyword, then the name.
+        let not_named = objs.iter().position(|f| {
+            matches!(f, Filter::Not(x) if matches!(x.as_ref(), Filter::SameNameAs(s) if matches!(s.as_ref(), Sel::This)))
+        });
         let k0 = self.keyword_kind_word(kinds[0]);
+        let n = match not_named {
+            Some(i) => {
+                objs.remove(i);
+                let base = self.noun_det(&Filter::and(objs), Det::A);
+                let m = self.me();
+                format!("{base} with {k0} not named {m}")
+            }
+            None => {
+                objs.push(Filter::HasKeyword(kinds[0]));
+                self.noun_det(&Filter::and(objs), Det::A)
+            }
+        };
         let mut others: Vec<String> = kinds[1..]
             .iter()
             .map(|k| self.keyword_kind_word(*k))

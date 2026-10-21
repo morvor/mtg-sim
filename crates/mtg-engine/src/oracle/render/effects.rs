@@ -4682,6 +4682,22 @@ impl Renderer<'_> {
                 {
                     if same_sel(a, b) && t.contains(" to it, where X is ") {
                         t = t.replacen(" to it, where X is ", " {opt:to it}, where X is ", 1);
+                        // "~ deals damage equal to that card's power instead".
+                        if let (
+                            Effect::Seq(v),
+                            Effect::DealDamage {
+                                source,
+                                amount: Value::X,
+                                ..
+                            },
+                        ) = (then, then_damage)
+                        {
+                            if let Some(Effect::SetX { value }) = v.first() {
+                                let x = self.value(value);
+                                let src = self.sel(source, Case::Subj);
+                                t = format!("{{alt:{t}|{src} deals damage equal to {x}}}");
+                            }
+                        }
                     } else if same_sel(a, b) {
                         if let Some(head) = t
                             .strip_suffix(" to it")
