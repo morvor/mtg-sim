@@ -1111,6 +1111,9 @@ impl Renderer<'_> {
         if t.what.is_some() || t.limit.is_some() || t.until_another || t.later_turn {
             s.push_str(&self.gap("terms of a static permission to play cards"));
         }
+        if let Some(what) = super::play_terms::unworded_static_terms(t) {
+            s.push_str(&self.gap(format!("static permission term: {what}")));
+        }
         if t.exile_instead && matches!(pp.what, Filter::Source) {
             // "If you cast ~ this way and it would be put into your graveyard, exile it
             // instead" (the card itself, cast from its owner's graveyard).

@@ -92,11 +92,25 @@ renderer used to drop), "that opponent", "the last chosen player/color", "spent 
 creature spell", "When a creature is put onto the battlefield this way", "the number of
 cards revealed this way", token copies "tapped and attacking" in each wording, "you've cast
 another/an instant or sorcery spell this turn" (a spell's own cost, CR 601.2i). New
-equivalences: "each of your opponents" / "one or more of your opponents" (CR 102.2, 102.3),
+equivalences: "each of your opponents" = "each opponent" and, separately, "one or more of
+your opponents" = "one or more opponents" (CR 102.2, 102.3; the two are never equated),
 the defending player named again as "their"/"they", "a land or legendary Turtle card".
 Two existing comparison rules were fixed: the "exiled with ~ with mana value" reordering
 matched across `{alt:...}` alternatives, and "Choose target ... . Copy that spell or
 ability" left "or ability" behind.
+
+Review: every play term `with_play_terms` and `static_permission_terms` don't word (a
+cast or land rider, cost reduction or increase per card, a free option, the cast face, "from
+any graveyard", spending a mana type or snow mana as any color, "put it ... instead" for a
+static permission) is now a gap instead of being dropped (no passing card changed; it
+exposes e.g. The Great Work's "from any graveyard", worded "your graveyard" before).
+Reviewed and kept: the defending-player pronoun rules (every card with "defending player
+... their/they control" in one sentence means defending player), "a land or legendary
+Turtle card" (the general "[type] card or [qualified] card" rule; Lara Croft's "legendary
+artifact card or legendary land card" reads the same way), Animal Attendant's duration (the
+replacement is locked to the spell object, which a later object never is, CR 400.7), and
+Aven Warcraft's protection outside the threshold "if" (without a chosen color "the chosen
+color" matches nothing, so no protection is granted).
 
 ## Parser bugs found
 

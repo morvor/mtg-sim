@@ -156,6 +156,10 @@ impl Renderer<'_> {
         let mut s = self.effect(effect);
         self.any_turn_permission = saved_any;
         self.play_terms = saved;
+        // Terms this wording doesn't say: a gap, never silently dropped.
+        if let Some(what) = unworded_effect_terms(terms) {
+            s.push_str(&self.gap(format!("permission term: {what}")));
+        }
         if let Some(u) = &any_turn {
             s = format!("during any turn {u}, {s}");
         }
@@ -301,4 +305,46 @@ impl Renderer<'_> {
         }
         Some(parts.join(". "))
     }
+}
+
+/// The first term of an effect's permission that [`Renderer::with_play_terms`] doesn't
+/// word (`what`, `limit` and `until_another` are worded with the permission's object).
+fn unworded_effect_terms(t: &PlayTerms) -> Option<&'static str> {
+    [
+        (t.on_cast.is_some(), "on cast"),
+        (t.on_land.is_some(), "on land"),
+        (t.cost_reduction > 0, "cost reduction"),
+        (t.free_option.is_some(), "free option"),
+        (t.any_owner, "any owner"),
+        (t.cast_face.is_some(), "cast face"),
+        (t.cost_increase_each.is_some(), "cost increase for each"),
+        (
+            t.spend_type_as_any_color.is_some(),
+            "spend a type as any color",
+        ),
+        (t.snow_as_any_color, "snow as any color"),
+    ]
+    .into_iter()
+    .find_map(|(set, w)| set.then_some(w))
+}
+
+/// The first term of a static permission that [`Renderer::static_permission_terms`]
+/// doesn't word.
+pub(crate) fn unworded_static_terms(t: &PlayTerms) -> Option<&'static str> {
+    [
+        (t.on_land.is_some(), "on land"),
+        (t.cost_reduction > 0, "cost reduction"),
+        (t.free_option.is_some(), "free option"),
+        (t.cast_face.is_some(), "cast face"),
+        (t.cost_increase_each.is_some(), "cost increase for each"),
+        (
+            t.spend_type_as_any_color.is_some(),
+            "spend a type as any color",
+        ),
+        (t.snow_as_any_color, "snow as any color"),
+        (t.graveyard_instead.is_some(), "graveyard instead"),
+        (t.any_owner, "any owner"),
+    ]
+    .into_iter()
+    .find_map(|(set, w)| set.then_some(w))
 }

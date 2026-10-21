@@ -276,8 +276,10 @@ Quantifiers that may be left out but never stand for one another (`OPTIONAL_QUAN
 |---:|---|---|
 | 11 | gap: Filter | Cathedral Membrane; Onakke Oathkeeper; Hollow Warrior |
 | 10 | gap: a remembered group no instruction names | Cache Grab; Bringer of the Last Gift; Sphinx's Tutelage |
+| 9 | gap: permission term | Durnan of the Yawning Portal; Chiss-Goria, Forge Tyrant; Mosswood Dreadknight // Dread Whispers |
 | 6 | gap: Effect | World at War; Portal Manipulator; Mishra, Claimed by Gix |
 | 6 | gap: Value | Lethal Exploit; Lifestream's Blessing; Jaws of Stone |
+| 6 | gap: static permission term | The Eighth Doctor; Urabrask // The Great Work; Risen Executioner |
 | 4 | oracle `main phase there is a` vs rendered `turn it is your main` | Moraug, Fury of Akoum; Grim Reaper's Sprint; All-Out Assault |
 | 3 | oracle `it control with the greatest` vs rendered `with the {alt:greatest\|highest} mana value` | Riveteers Charm; End of the Hunt; Blot Out |
 | 3 | oracle `may put any number of` vs rendered `{opt:may} put any number of` | Kamahl's Druidic Vow; Nashi, Searcher in the Dark; Blex, Vexing Pest // Search for Blex |
@@ -303,7 +305,6 @@ Quantifiers that may be left out but never stand for one another (`OPTIONAL_QUAN
 | 2 | oracle `a creature other than ~` vs rendered `other creature if you {alt:do not\|can't}` | Lord of the Pit; Liege of the Pit |
 | 2 | oracle `a dragon was beheld` vs rendered `{alt:the behold cost was paid\|you revealed a dragon card or chose a dragon as cast ~}` | Osseous Exhale; Piercing Exhale |
 | 2 | oracle `a enchanted or equipped creature` vs rendered `{alt:an enchanted creature or an equipped creature you control\|an enchanted creature you control or an equipped creature you control}` | Dogmeat, Ever Loyal; Reyav, Master Smith |
-| 2 | oracle `a historic land or cast` vs rendered `historic land or nonland historic` | The Eighth Doctor; The Fourth Doctor |
 | 2 | oracle `a number of card from` vs rendered `the top x card of` | Omarthis, Ghostfire Initiate; Eye of Yawgmoth |
 | 2 | oracle `a number of time counter` vs rendered `x time counter on it` | The Wedding of River Song; The Eleventh Doctor |
 | 2 | oracle `a opponent control is dealt` vs rendered `{alt:an opponent controls\|your opponents control} is dealt excess noncombat` | Fall of Cair Andros; Toralf, God of Fury // Toralf's Hammer |
@@ -332,7 +333,6 @@ Quantifiers that may be left out but never stand for one another (`OPTIONAL_QUAN
 | 2 | oracle `card drawn this way` vs rendered `{alt:it\|cards discarded this way}` | Ancient Excavation; Messenger Jays |
 | 2 | oracle `card name other than a` vs rendered `not basic land card name` | Desperate Research; Necromentia |
 | 2 | oracle `card` vs rendered `∅` | Garruk's Harbinger; Sanctum of Shattered Heights |
-| 2 | oracle `cast it in your graveyard` vs rendered `may cast ~it` | Mosswood Dreadknight // Dread Whispers; Hildibrand Manderville // Gentleman's Rise |
 | 2 | oracle `cast of the chosen type` vs rendered `of {alt:the chosen type\|that type} cast cost {1}` | Gathering Stone; Herald's Horn |
 | 2 | oracle `cast of the chosen type` vs rendered `of {alt:the chosen type\|that type} cast` | Cloud Key; Umori, the Collector |
 | 2 | oracle `choose a color of a` vs rendered `add 1 mana of any` | Corrupted Grafstone; Meteor Crater |
