@@ -88,6 +88,16 @@ on the old code (checked by reverting the parser files) and a row in the bug tab
   who accepted). `followup_each_player::done_cond`: putting counters on each of a group can
   always be done.
 
+- (review) Rakdos, Lord of Riots, and every "You can't cast ~ unless/if [condition]" and
+  "Cast ~ only during your turn" card: the condition was checked for the card's owner
+  (its controller in hand or exile), not the player who would cast it (CR 109.5). Another
+  player casting your Rakdos (Hostage Taker) after you lost life couldn't. A spell put on
+  the stack was re-checked for its caster, so only this wrongful refusal showed (Rock
+  Jockey's case was already right). `layers::collect_statics` checks such a condition for
+  each player and restricts those it holds for. Tests:
+  `rakdos_checks_the_opponents_of_the_player_casting_it` (fails on the old code),
+  `rock_jockey_checks_the_land_plays_of_the_player_casting_it` (regression).
+
 Checked in play (tests pass on the old code too): Mog, Moogle Warrior (the cards every
 player discarded), Behemoth of Vault 0 (the reflexive trigger destroys the dies trigger's
 target), Fyndhorn Druid and Wave of Rats (a dies trigger remembers what the creature did),
@@ -101,15 +111,15 @@ Samut, Vizier of Naktamun ("that creature entered this turn"), Barrin, Tolarian 
   creature doesn't untap"; "X. If C, Y instead" with the names swapped), so the card's "it"
   lands on the other mention. Same meaning.
 - Rock Jockey: "You can't cast ~ if you've played a land this turn" is compiled as a
-  restriction on any player (`CantCast { who: Any }`) with the condition about you; "you"
-  for a card not on the battlefield is the player who would cast it (CR 109.5), so the two
-  differ only if another player could cast your Rock Jockey. Rendered "players can't cast".
+  restriction on any player (`CantCast { who: Any }`) conditioned on you; the engine now
+  reads "you" as the player who would cast it (see the review fix above). Rendered "players
+  can't cast" (renderer only).
 - Grist, the Plague Swarm: "For each creature card in your graveyard, create a token that's
   a copy of it" wording (the −6, outside the taken gap).
 - Malamet Battle Glyph: "Choose target creature you control and target creature you don't
   control. If the creature you control entered this turn, ..." — the targets are named in
   the condition and the fight rather than chosen up front.
-- Robber of the Rich: "the top card of their library" rendered "defending player's".
+- Robber of the Rich: "the top card of their library" rendered "defending player's" (the AST is right: `TopOfLibrary(DefendingPlayer)`, "their" being the defending player of the intervening if).
 - Imprison: the second ability's "creatures it was blocking that had become blocked by only
   that creature" rendered "each attacking creature that had become blocked by only it"
   (the same creatures).

@@ -923,8 +923,6 @@ pub struct Renderer<'a> {
 }
 
 impl<'a> Renderer<'a> {
-    /// Renders two wordings of the same thing from the same state (each sees the state
-    /// as it was before either), keeping the state the second leaves and the gaps of both.
     /// Runs `f`; when it says nothing, undoes whatever it changed (targets mentioned,
     /// gaps, the object last named), so another wording can be tried.
     pub(crate) fn attempt<T>(&mut self, f: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
@@ -936,6 +934,8 @@ impl<'a> Renderer<'a> {
         r
     }
 
+    /// Renders two wordings of the same thing from the same state (each sees the state
+    /// as it was before either), keeping the state the second leaves and the gaps of both.
     pub(crate) fn two_ways(
         &mut self,
         a: impl FnOnce(&mut Self) -> String,

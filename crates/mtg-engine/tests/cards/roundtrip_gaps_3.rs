@@ -244,3 +244,60 @@ fn barrin_draws_after_a_permanent_was_returned_to_your_hand() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1, "{}", t.dump_log());
 }
+
+#[test]
+fn rock_jockey_checks_the_land_plays_of_the_player_casting_it() {
+    cr!("109.5", "601.3");
+    // "You can't cast Rock Jockey if you've played a land this turn": "you" is the player
+    // who would cast it. P1's Hostage Taker exiles P0's Rock Jockey; P1 may cast it unless
+    // P1 played a land this turn (P0 played none).
+    for played in [false, true] {
+        let mut t = TestGame::new(2);
+        let rj = t.battlefield(P0, "Rock Jockey");
+        t.answer_targets(P1, &[Entity::Object(rj)]);
+        t.set_step(P1, Step::PrecombatMain);
+        t.enter(P1, "Hostage Taker");
+        t.resolve_all();
+        let exiled = t.g.current(rj);
+        assert_eq!(t.zone(exiled), mtg_engine::object::Zone::Exile, "{}", t.dump_log());
+        t.lands(P1, "Swamp", 3);
+        if played {
+            let land = t.hand(P1, "Swamp");
+            assert!(t.play_land(P1, land).is_ok());
+        }
+        assert_eq!(
+            t.cast(P1, exiled).try_go().is_ok(),
+            !played,
+            "played a land: {played}\n{}",
+            t.dump_log()
+        );
+    }
+}
+
+#[test]
+fn rakdos_checks_the_opponents_of_the_player_casting_it() {
+    cr!("109.5", "601.3");
+    // "You can't cast Rakdos unless an opponent lost life this turn": an opponent of the
+    // player who would cast it. P1's Hostage Taker exiles P0's Rakdos; P0 (P1's opponent)
+    // lost life, P1 didn't: P1 may cast it. With no life lost, P1 can't.
+    for lost in [true, false] {
+        let mut t = TestGame::new(2);
+        let rakdos = t.battlefield(P0, "Rakdos, Lord of Riots");
+        t.answer_targets(P1, &[Entity::Object(rakdos)]);
+        t.set_step(P1, Step::PrecombatMain);
+        t.enter(P1, "Hostage Taker");
+        t.resolve_all();
+        let exiled = t.g.current(rakdos);
+        assert_eq!(t.zone(exiled), mtg_engine::object::Zone::Exile, "{}", t.dump_log());
+        if lost {
+            t.g.lose_life(P0, 2);
+        }
+        t.lands(P1, "Swamp", 4);
+        assert_eq!(
+            t.cast(P1, exiled).try_go().is_ok(),
+            lost,
+            "P0 lost life: {lost}\n{}",
+            t.dump_log()
+        );
+    }
+}
