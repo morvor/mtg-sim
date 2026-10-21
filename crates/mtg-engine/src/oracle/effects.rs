@@ -1528,16 +1528,15 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
             }
             // "each white creature and each player who controls a white creature".
             let (players, rest) = if rest.starts_with(" who ") {
-                let (who, rest) =
-                    super::patterns::choice_grammar::player_phrase(&format!("each player{rest}"), b)?;
+                let (who, rest) = super::patterns::choice_grammar::player_phrase(
+                    &format!("each player{rest}"),
+                    b,
+                )?;
                 (who, rest)
             } else {
                 (PlayerRef::EachPlayer, rest.to_string())
             };
-            return Some((
-                Sel::Union(vec![Sel::All(f), Sel::Players(players)]),
-                rest,
-            ));
+            return Some((Sel::Union(vec![Sel::All(f), Sel::Players(players)]), rest));
         }
     }
     // "deal damage equal to its power to you and any target" (both get that damage).

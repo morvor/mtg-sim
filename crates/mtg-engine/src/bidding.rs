@@ -58,10 +58,7 @@ pub fn bid(g: &mut Game, ctx: &mut Ctx, bidders: Vec<PlayerId>, start: Option<i6
     };
     let mut all: Vec<PlayerId> = vec![you];
     all.extend(order);
-    let all: Vec<PlayerId> = all
-        .into_iter()
-        .filter(|p| bidders.contains(p))
-        .collect();
+    let all: Vec<PlayerId> = all.into_iter().filter(|p| bidders.contains(p)).collect();
     if all.len() > 1 {
         let mut i = 1 % all.len();
         let mut declined = 0;

@@ -6653,8 +6653,13 @@ impl Renderer<'_> {
             ChoiceKind::CardType => "a card type".into(),
             ChoiceKind::OddOrEven => "odd or even".into(),
             ChoiceKind::Word(v) => join_list(v, "or"),
-            ChoiceKind::Distinct(n, v) if *v == ["Plains", "Island", "Swamp", "Mountain", "Forest"] => {
-                format!("{} basic land types", crate::oracle::render::number_word(*n as i32))
+            ChoiceKind::Distinct(n, v)
+                if *v == ["Plains", "Island", "Swamp", "Mountain", "Forest"] =>
+            {
+                format!(
+                    "{} basic land types",
+                    crate::oracle::render::number_word(*n as i32)
+                )
             }
             ChoiceKind::Players(n) => {
                 format!("{} players", crate::oracle::render::number_word(*n as i32))

@@ -303,8 +303,12 @@ pub fn player_choice_matches(ch: &crate::object::Choices, p: PlayerId, word: &st
     let w = word.to_lowercase();
     c.text.as_ref().is_some_and(|t| t.to_lowercase() == w)
         || c.color.is_some_and(|x| x.word() == w)
-        || c.creature_type.as_ref().is_some_and(|t| t.to_lowercase() == w)
-        || c.basic_land_type.as_ref().is_some_and(|t| t.to_lowercase() == w)
+        || c.creature_type
+            .as_ref()
+            .is_some_and(|t| t.to_lowercase() == w)
+        || c.basic_land_type
+            .as_ref()
+            .is_some_and(|t| t.to_lowercase() == w)
         || c.card_type.is_some_and(|t| t.word() == w)
         || c.card_name.as_ref().is_some_and(|t| t.to_lowercase() == w)
         || c.number.is_some_and(|n| n.to_string() == w)
@@ -405,9 +409,7 @@ pub fn bind_choices(
         Filter::ChosenCardType => ch.card_type.map(Filter::Type).unwrap_or_else(nothing),
         Filter::ControlledBy(crate::ability::PlayerRel::Chosen) => ch
             .player
-            .map(|p| {
-                Filter::ControllerMatches(Box::new(crate::ability::PlayerFilter::Is(p)))
-            })
+            .map(|p| Filter::ControllerMatches(Box::new(crate::ability::PlayerFilter::Is(p))))
             .unwrap_or_else(nothing),
         Filter::ManaValue(c, v) | Filter::Power(c, v) | Filter::Toughness(c, v)
             if matches!(**v, crate::ability::Value::Chosen) =>
@@ -794,7 +796,10 @@ impl crate::kw::KeywordRules for ChosenList {
                 true
             }
             CHOSEN_ABILITIES => {
-                let list = g.source_choices(ctx).map(|c| c.list.clone()).unwrap_or_default();
+                let list = g
+                    .source_choices(ctx)
+                    .map(|c| c.list.clone())
+                    .unwrap_or_default();
                 for w in list {
                     if let Some(k) = crate::keywords::KeywordKind::from_name(&w) {
                         let kw = crate::keywords::Keyword::new(k);
@@ -998,7 +1003,8 @@ pub const CHOSEN_OBJECTS_VAR: crate::ability::Var = crate::ability::vars::USER +
 /// `Effect::Custom`: "For each different power among creatures on the battlefield, choose
 /// a creature with that power." (Celestial Judgment): the controller chooses one creature
 /// for each power any creature has, collected in [`CHOSEN_OBJECTS_VAR`].
-pub const FOR_EACH_DIFFERENT_POWER: &str = "choices: for each different power, choose a creature with that power";
+pub const FOR_EACH_DIFFERENT_POWER: &str =
+    "choices: for each different power, choose a creature with that power";
 /// `Filter::Custom` prefix: of the card type that is the `i`th word chosen for the source
 /// ("of the first type" after "choose an order for artifacts, creatures, and lands").
 pub const NTH_CHOSEN_CARD_TYPE: &str = "choices: of the chosen card type #";
@@ -1060,7 +1066,10 @@ impl crate::kw::KeywordRules for ObjectChoices {
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
         let i: usize = name.strip_prefix(NTH_CHOSEN_CARD_TYPE)?.parse().ok()?;
         let w = g.source_choices(ctx).and_then(|c| c.list.get(i).cloned());
-        Some(w.and_then(|w| CardType::from_word(&w)).is_some_and(|t| g.obj(id).chars.is(t)))
+        Some(
+            w.and_then(|w| CardType::from_word(&w))
+                .is_some_and(|t| g.obj(id).chars.is(t)),
+        )
     }
 }
 
