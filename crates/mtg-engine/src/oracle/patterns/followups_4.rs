@@ -13,6 +13,10 @@ use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::{end, parse_number};
 use crate::scry_rules::OPT_IN;
 
+/// The power of the creature each player exiled, as it last existed ("the power of the
+/// creature they exiled", Olórin's Searing Light).
+pub const EXILED_POWER: Var = vars::USER + 41006;
+
 /// Each player's number of cards drawn by the latest "each player [may] draw" instruction
 /// (see [`record_draws`]).
 pub const CARDS_DRAWN: Var = vars::USER + 41000;
@@ -210,6 +214,22 @@ pub fn own_count_atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         }
         return None;
     }
+    for p in [
+        "the power of the creature they exiled",
+        "the power of the creature that player exiled",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',', '.']) {
+                return Some((
+                    Value::PlayerTally {
+                        var: EXILED_POWER,
+                        who: Box::new(PlayerRef::Iterated),
+                    },
+                    r.to_string(),
+                ));
+            }
+        }
+    }
     let r = s.strip_prefix("the number of cards ")?;
     let r = r
         .strip_prefix("they ")
@@ -402,6 +422,29 @@ fn ensure_recorded(prev: &mut Effect, var: Var) -> bool {
         }
         return records(step, var) && record_draws(step) == 1;
     }
+    if var == EXILED_POWER {
+        // One creature each player exiles: its power as it last existed.
+        let Effect::Exile {
+            what: Sel::Choose { count, filter, .. },
+            ..
+        } = &*step
+        else {
+            return false;
+        };
+        if count.as_const() != Some(1) || !format!("{filter:?}").contains("Creature") {
+            return false;
+        }
+        let exile = std::mem::take(step);
+        *step = Effect::seq(vec![
+            exile,
+            Effect::AddToPlayerTally {
+                var: EXILED_POWER,
+                who: PlayerRef::Iterated,
+                value: Value::PowerOf(Box::new(Sel::Before(Box::new(Sel::Var(vars::IT))))),
+            },
+        ]);
+        return true;
+    }
     records(step, var)
 }
 
@@ -435,6 +478,14 @@ fn per_player_clause(clause: &str, v: &Value, b: &mut Builder) -> Option<Effect>
 fn own_count_equal_to(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
     let l = l.strip_prefix("then ").unwrap_or(l);
+    // "If there are two or more instant and/or sorcery cards in your graveyard, ...".
+    let (cond, l) = match l.strip_prefix("if ").and_then(|r| r.split_once(", ")) {
+        Some((c, r)) => match crate::oracle::statics::parse_condition(c, b.ctx) {
+            Some(cond) => (Some(cond), r),
+            None => return false,
+        },
+        None => (None, l),
+    };
     let Some((head, value)) = l.split_once(" equal to ") else {
         return false;
     };
@@ -444,7 +495,7 @@ fn own_count_equal_to(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !rest.trim().is_empty() {
         return false;
     }
-    let Some(var) = [crate::tallies::CARDS_ACTED_ON, CARDS_DRAWN]
+    let Some(var) = [crate::tallies::CARDS_ACTED_ON, CARDS_DRAWN, EXILED_POWER]
         .into_iter()
         .find(|var| uses_tally(&v, *var))
     else {
@@ -482,14 +533,20 @@ fn own_count_equal_to(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(e) = per_player_clause(&clause, &v, b) else {
         return false;
     };
-    let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![
-        old,
-        Effect::ForEachPlayer {
-            who,
-            effect: Box::new(e),
+    let each = Effect::ForEachPlayer {
+        who,
+        effect: Box::new(e),
+    };
+    let each = match cond {
+        Some(cond) => Effect::If {
+            cond,
+            then: Box::new(each),
+            otherwise: Box::new(Effect::Noop),
         },
-    ]);
+        None => each,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, each]);
     true
 }
 
@@ -1079,6 +1136,7 @@ mod tests {
             ("Enchantment", "At the beginning of each opponent's draw step, that player draws an additional card for each growth counter on ~, then ~ deals damage to the player equal to the number of cards they drew this way."),
             ("Sorcery", "Exile all creatures. Each player creates a 0/0 green and blue Fractal creature token and puts a number of +1/+1 counters on it equal to the total power of creatures they controlled that were exiled this way."),
             ("Sorcery", "Return all creatures to their owners' hands. For each opponent who controlled a creature returned this way, you create two 1/1 blue Faerie creature tokens with flying and \"This token can block only creatures with flying.\""),
+            ("Sorcery", "Each opponent exiles a creature with the greatest power among creatures that player controls.\nSpell mastery — If there are two or more instant and/or sorcery cards in your graveyard, ~ deals damage to each opponent equal to the power of the creature they exiled."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

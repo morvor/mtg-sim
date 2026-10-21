@@ -191,3 +191,38 @@ fn faerie_slumber_party_two_faeries_per_opponent_whose_creature_returned() {
     assert_eq!(faeries, 4);
     assert!(t.in_hand(P1, "Hill Giant"));
 }
+
+#[test]
+fn olorins_searing_light_damage_equal_to_the_power_of_their_exiled_creature() {
+    cr!("101.4", "608.2h");
+    supported("Olórin's Searing Light");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Plains", 1);
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P0, "Shock");
+    t.battlefield(P1, "Serra Angel");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P2, "Hill Giant");
+    let spell = t.hand(P0, "Olórin's Searing Light");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.in_exile("Serra Angel"));
+    assert!(t.in_exile("Hill Giant"));
+    assert_eq!((t.life(P1), t.life(P2)), (16, 17));
+}
+
+#[test]
+fn olorins_searing_light_without_spell_mastery_only_exiles() {
+    cr!("101.4");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Plains", 1);
+    t.graveyard(P0, "Lightning Bolt");
+    t.battlefield(P1, "Serra Angel");
+    let spell = t.hand(P0, "Olórin's Searing Light");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.in_exile("Serra Angel"));
+    assert_eq!(t.life(P1), 20);
+}
