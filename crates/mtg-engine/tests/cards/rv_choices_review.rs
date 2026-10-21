@@ -41,9 +41,25 @@ fn aether_gust_a_permanent_goes_on_top_or_bottom_of_its_owners_library() {
 fn dubious_challenge_the_exiled_cards_are_not_the_cards_looked_at() {
     // "exile up to two creature cards from among them, then shuffle. Target opponent may
     // choose one of the exiled cards ... Put the rest onto the battlefield under your
-    // control.": read as choosing among (and putting onto the battlefield) the cards
-    // looked at, which were shuffled away. Not read until "the exiled cards" is.
-    assert!(!card("Dubious Challenge").unsupported_text().is_empty());
+    // control.": the cards exiled, not the cards looked at (which were shuffled away).
+    cr!("608.2c");
+    let def = card("Dubious Challenge");
+    assert!(def.unsupported_text().is_empty(), "{:?}", def.unsupported_text());
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 4);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let giant = t.library_top(P0, "Hill Giant");
+    let spell = t.hand(P0, "Dubious Challenge");
+    // Only the Giant is exiled; the opponent takes nothing.
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_choose(P1, &[]);
+    t.cast(P0, spell).target(P1).go();
+    t.resolve_all();
+    let giant_x = t.g.current(giant);
+    assert!(t.on_battlefield(giant_x), "{}", t.dump_log());
+    assert_eq!(t.g.obj(giant_x).controller, P0);
+    // The Bears, looked at but not exiled, stay in the library.
+    assert_eq!(t.zone(t.g.current(bears)), Zone::Library(P0));
 }
 
 #[test]

@@ -575,3 +575,25 @@ fn vault_13_returns_two_exiled_cards_and_puts_the_rest_on_the_bottom() {
     assert_eq!(t.zone(giant_x), Zone::Library(P2));
     assert_ne!(t.g.library_top(P2), Some(giant_x));
 }
+
+#[test]
+fn dubious_challenge_opponent_takes_one_exiled_creature_and_you_get_the_rest() {
+    cr!("608.2c", "701.24a");
+    assert_supported("Dubious Challenge");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Forest", 4);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let giant = t.library_top(P0, "Hill Giant");
+    let spell = t.hand(P0, "Dubious Challenge");
+    t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(giant)]);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.cast(P0, spell).target(P1).go();
+    t.resolve_all();
+    let bears_x = t.g.current(bears);
+    let giant_x = t.g.current(giant);
+    assert!(t.on_battlefield(bears_x), "{}", t.dump_log());
+    assert_eq!(t.g.obj(bears_x).controller, P1);
+    assert!(t.on_battlefield(giant_x));
+    assert_eq!(t.g.obj(giant_x).controller, P0);
+}

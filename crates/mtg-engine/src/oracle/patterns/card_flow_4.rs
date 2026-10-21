@@ -212,3 +212,99 @@ fn return_some_exiled_with_and_the_rest(l: &str, b: &mut Builder) -> Option<Effe
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: return N cards exiled with ~ ... and put the rest on the bottom", priority: 90, parse: return_some_exiled_with_and_the_rest } }
+
+/// The cards an earlier instruction exiled, for "the rest" after "Target opponent may
+/// choose one of the exiled cards and put it onto the battlefield under their control."
+const EXILED_SET: Var = vars::USER + 9480;
+
+/// "Target opponent may choose one of the exiled cards and put it onto the battlefield
+/// under their control." (Dubious Challenge): that player chooses (CR 608.2c), and the
+/// chosen card is put onto the battlefield under their control.
+fn f_opponent_chooses_one_of_the_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    let Some(r) = l.strip_prefix("target opponent may choose one of the exiled cards and put it ")
+    else {
+        return false;
+    };
+    if r != "onto the battlefield under their control" {
+        return false;
+    }
+    // After exiling cards (perhaps chosen from among cards looked at, then shuffling).
+    fn exiled_last(e: &Effect) -> bool {
+        match e {
+            Effect::Exile { .. } => true,
+            Effect::DigStep(s) => {
+                matches!(&**s, DigStep::Take { to, .. } if to.zone == ZoneKind::Exile)
+            }
+            Effect::Seq(v) => v
+                .iter()
+                .rev()
+                .find(|x| !matches!(x, Effect::Shuffle { .. }))
+                .is_some_and(exiled_last),
+            _ => false,
+        }
+    }
+    if !exiled_last(prev) {
+        return false;
+    }
+    let Some((spec, rest)) = crate::oracle::phrases::parse_target("target opponent") else {
+        return false;
+    };
+    if !rest.trim().is_empty() {
+        return false;
+    }
+    let slot = b.add_target(spec, "target opponent");
+    let chooser = PlayerRef::Target(slot);
+    let exiled = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(EXILED_SET))),
+        Filter::InZone(ZoneKind::Exile),
+    ]));
+    let mut to = Destination::zone(ZoneKind::Battlefield);
+    to.controller = Some(chooser.clone());
+    let choose = Effect::Move {
+        what: Sel::Choose {
+            chooser,
+            filter: Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(EXILED_SET))),
+                Filter::InZone(ZoneKind::Exile),
+            ]),
+            count: Value::c(1),
+            up_to: true,
+            store: None,
+        },
+        to,
+    };
+    b.named.push((super::r406_exile_until::THE_REST.into(), exiled));
+    *prev = Effect::seq(vec![
+        std::mem::take(prev),
+        Effect::Store {
+            var: EXILED_SET,
+            sel: Sel::Var(vars::IT),
+        },
+        choose,
+    ]);
+    true
+}
+
+/// "Put the rest onto the battlefield under your control." after the above.
+fn put_the_rest_onto_the_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l.trim()) != "put the rest onto the battlefield under your control" {
+        return None;
+    }
+    let (_, rest) = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == super::r406_exile_until::THE_REST)?;
+    let rest = rest.clone();
+    if !format!("{rest:?}").contains(&format!("Var({EXILED_SET})")) {
+        return None;
+    }
+    Some(Effect::Move {
+        what: rest,
+        to: Destination::battlefield().under_your_control(),
+    })
+}
+
+inventory::submit! { super::FollowupPattern { name: "card flow 4: target opponent may choose one of the exiled cards and put it onto the battlefield", priority: 90, apply: f_opponent_chooses_one_of_the_exiled } }
+inventory::submit! { EffectPattern { name: "card flow 4: put the rest onto the battlefield under your control", priority: 90, parse: put_the_rest_onto_the_battlefield } }
