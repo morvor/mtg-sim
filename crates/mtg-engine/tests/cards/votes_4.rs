@@ -56,3 +56,41 @@ fn split_decision_tie_copies_the_spell() {
     let t = split(&[0, 1, 1]);
     assert_eq!(t.life(P1), 14);
 }
+
+#[test]
+fn davros_each_opponent_who_lost_three_life_faces_a_villainous_choice() {
+    cr!("701.55a", "701.55d");
+    supported("Davros, Dalek Creator");
+    let mut t = TestGame::new(4);
+    t.battlefield(P0, "Davros, Dalek Creator");
+    t.g.lose_life(P1, 3);
+    t.g.lose_life(P2, 2);
+    t.g.lose_life(P3, 4);
+    let card = t.hand(P1, "Grizzly Bears");
+    // P1 chooses "that player discards a card"; P3 chooses "You draw a card".
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    t.answer_choose(P1, &[Entity::Object(card)]);
+    t.answer(P3, DecisionKind::Option, Answer::Index(0));
+    t.advance_to(P0, mtg_engine::turn::Step::End);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    let daleks =
+        t.g.battlefield
+            .iter()
+            .filter(|o| t.obj_now(**o).chars.name.starts_with("Dalek"))
+            .count();
+    assert_eq!(daleks, 1);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    let faced: Vec<PlayerId> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            decision::Decision::ChooseOption { prompt, .. } if prompt == "Villainous choice" => {
+                Some(p)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(faced, vec![P1, P3]);
+}

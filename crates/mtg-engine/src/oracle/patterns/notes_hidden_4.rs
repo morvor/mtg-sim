@@ -90,6 +90,83 @@ fn the_chosen_spell(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "notes 4: the spell (the chosen target spell)", priority: 120, parse: the_chosen_spell } }
 
+/// The players a "faces a villainous choice" subject with a relative clause names.
+const FACING: Var = vars::USER + 41030;
+
+/// "each opponent who lost 3 or more life this turn faces a villainous choice — ..."
+/// (Davros, Dalek Creator): the players the subject names (read as the core reads "each
+/// opponent who ... loses 1 life") each face the choice, in APNAP order (CR 701.55a,
+/// 701.55d).
+fn villainous_for_players_who(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let marker = " faces a villainous choice — ";
+    let i = l.find(marker)?;
+    let subject = &l[..i];
+    if !subject.contains(" who ") || !subject.starts_with("each ") {
+        return None;
+    }
+    let probe = crate::oracle::effects::parse_clause(&format!("{subject} loses 1 life"), b)?;
+    let Effect::ForEachPlayer { who, effect } = probe else {
+        return None;
+    };
+    let Effect::AsPlayer {
+        who: PlayerRef::Iterated,
+        effect: inner,
+    } = *effect
+    else {
+        return None;
+    };
+    let Effect::If {
+        cond,
+        then,
+        otherwise,
+    } = *inner
+    else {
+        return None;
+    };
+    if !matches!(*then, Effect::LoseLife { .. }) || !matches!(*otherwise, Effect::Noop) {
+        return None;
+    }
+    let choice = crate::oracle::effects::parse_clause(
+        &format!(
+            "each opponent faces a villainous choice — {}",
+            &l[i + marker.len()..]
+        ),
+        b,
+    )?;
+    let Effect::KeywordActionEx(mut spec) = choice else {
+        return None;
+    };
+    if spec.action != KeywordAction::VillainousChoice {
+        return None;
+    }
+    spec.who = PlayerRef::Var(FACING);
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: FACING,
+            sel: Sel::None,
+        },
+        Effect::ForEachPlayer {
+            who,
+            effect: Box::new(Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect: Box::new(Effect::If {
+                    cond,
+                    then: Box::new(Effect::Store {
+                        var: FACING,
+                        sel: Sel::Union(vec![Sel::Var(FACING), Sel::Players(PlayerRef::Iterated)]),
+                    }),
+                    otherwise: Box::new(Effect::Noop),
+                }),
+            }),
+        },
+        Effect::KeywordActionEx(spec),
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "notes 4: each opponent who ... faces a villainous choice", priority: 55, parse: villainous_for_players_who } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -98,6 +175,7 @@ mod tests {
     fn notes() {
         for (ty, text) in [
             ("Instant", "Will of the council — Choose target instant or sorcery spell. Starting with you, each player votes for denial or duplication. If denial gets more votes, counter the spell. If duplication gets more votes or the vote is tied, copy the spell. You may choose new targets for the copy."),
+            ("Legendary Creature", "At the beginning of your end step, create a 3/3 black Dalek artifact creature token with menace if an opponent lost 3 or more life this turn. Then each opponent who lost 3 or more life this turn faces a villainous choice — You draw a card, or that player discards a card."),
             ("Enchantment", "As ~ enters, note your life total.\nAt the beginning of your upkeep, draw a card if your life total is greater than or equal to the last noted life total for ~. Then note your life total."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
