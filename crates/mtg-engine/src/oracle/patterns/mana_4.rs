@@ -24,6 +24,19 @@
 //!   "If target Plains is tapped for mana, it produces colorless mana instead of white
 //!   mana." (an effect on that Plains from then on). Wordings the older grammars read
 //!   (a fixed type for any amount, "twice as much") are left to them.
+//! - "Whenever a player taps a Mountain, Forest, or Plains for mana" (Keeper of
+//!   Progenitus): a tapped-for-mana trigger (CR 106.12a) on a list of land types.
+//! - "If they do, they add {C} for each counter on it." (Cheering Crowd): "they" is the
+//!   player the trigger is about, as "that player adds".
+//! - "For each artifact or creature card in target opponent's graveyard, add {C} and you
+//!   gain 1 life." (Spoils of Evil): both instructions scaled by the one count (its target
+//!   chosen once).
+//! - "Whenever a basic land is tapped for mana of the chosen color" (Gauntlet of Power): a
+//!   tapped-for-mana trigger (CR 106.12a) whose mana included the color chosen for the
+//!   source (`kw/mana_produced_chosen_color.rs`).
+//! - "Choose a color. Add an amount of mana of that color equal to [value]." (Three Tree
+//!   City): that much mana of one color the player chooses, as "add X mana of any one
+//!   color" (CR 106.1b).
 //! - Spending restrictions (CR 106.6): "This mana can't be spent to cast spells." (Thran
 //!   Turbine: it may pay for anything else, such as activating abilities), "Spend this
 //!   mana only to cast spells you don't own." (Thieving Varmint: "you" is the player
@@ -359,6 +372,188 @@ fn mana_change_target(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "mana 4: if target land is tapped for mana, it produces [mana] instead", priority: 61, parse: mana_change_target } }
+
+/// "a Mountain, Forest, or Plains": land subtypes in a list.
+fn subtype_list(s: &str) -> Option<Filter> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let (head, last) = s.rsplit_once(", or ")?;
+    let mut v = Vec::new();
+    for w in head.split(", ").chain([last]) {
+        let st = subtype_word(w.trim())?;
+        if crate::types::subtype_kind(&st) != Some(crate::types::SubtypeKind::Land) {
+            return None;
+        }
+        v.push(Filter::Subtype(st));
+    }
+    (v.len() >= 3).then(|| Filter::Or(v))
+}
+
+/// "[a player | you | an opponent] taps a Mountain, Forest, or Plains for mana".
+fn taps_listed_lands(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(r.trim());
+    let (who, rest) = [
+        ("a player taps ", PlayerRel::Any),
+        ("you tap ", PlayerRel::You),
+        ("an opponent taps ", PlayerRel::Opponent),
+    ]
+    .into_iter()
+    .find_map(|(p, w)| r.strip_prefix(p).map(|x| (w, x)))?;
+    let filter = subtype_list(rest.strip_suffix(" for mana")?)?;
+    Some((
+        TriggerCond::TappedForMana { who, filter },
+        Sel::TriggerObject,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { super::TriggerPattern { name: "mana 4: a player taps a Mountain, Forest, or Plains for mana", priority: 100, parse: taps_listed_lands } }
+
+/// "they add [mana]": "that player adds [mana]" when "they" is the trigger's player.
+fn they_add(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("they add ")?;
+    if !matches!(b.it_player, PlayerRef::TriggerPlayer) {
+        return None;
+    }
+    let e = crate::oracle::effects::parse_clause(&format!("that player adds {r}"), b)?;
+    matches!(&e, Effect::AddMana { who: PlayerRef::TriggerPlayer, .. }).then_some(e)
+}
+
+inventory::submit! { super::EffectPattern { name: "mana 4: they add [mana]", priority: 100, parse: they_add } }
+
+/// "for each [counted thing], add [mana] [and you gain N life]".
+fn for_each_add(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each ")?;
+    let (counted, rest) = r.split_once(", ")?;
+    if !rest.starts_with("add ") || counted.contains(',') || rest.contains(" for each ") {
+        return None;
+    }
+    let saved = b.targets.len();
+    let parsed = (|| {
+        let (v, tail) = crate::oracle::statics::parse_value_phrase(
+            &format!("the number of {counted}"),
+            b,
+        )?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        let before = b.targets.len();
+        let mut out = Vec::new();
+        for part in rest.split(" and ") {
+            let e = crate::oracle::effects::parse_clause(part, b)?;
+            out.push(match e {
+                Effect::AddMana {
+                    who,
+                    mana: ManaProduction::Fixed(ts),
+                    restriction,
+                } if !ts.is_empty() && ts.iter().all(|t| *t == ts[0]) => Effect::AddMana {
+                    who,
+                    mana: ManaProduction::Amount(
+                        ts[0],
+                        match ts.len() {
+                            1 => v.clone(),
+                            n => Value::Mul(Box::new(Value::c(n as i32)), Box::new(v.clone())),
+                        },
+                    ),
+                    restriction,
+                },
+                e @ Effect::GainLife { .. } => {
+                    super::iteration_grammar::times_over(e, v.clone())
+                }
+                _ => return None,
+            });
+        }
+        (b.targets.len() == before && matches!(out.first(), Some(Effect::AddMana { .. })))
+            .then(|| Effect::seq(out))
+    })();
+    if parsed.is_none() {
+        b.targets.truncate(saved);
+    }
+    parsed
+}
+
+inventory::submit! { super::EffectPattern { name: "mana 4: for each [x], add [mana] and you gain N life", priority: 120, parse: for_each_add } }
+
+/// "[a basic land] is tapped for mana of the chosen color".
+fn tapped_for_chosen_color(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let subject = end(r.trim()).strip_suffix(" is tapped for mana of the chosen color")?;
+    let s = subject
+        .strip_prefix("a ")
+        .or_else(|| subject.strip_prefix("an "))?;
+    let (f, plural, rest) = parse_object_phrase(s)?;
+    if plural || !end(rest).is_empty() {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::TappedForMana {
+                who: PlayerRel::Any,
+                filter: f,
+            }),
+            cond: Condition::Custom(
+                crate::kw::mana_produced_chosen_color::PRODUCED_CHOSEN_COLOR.into(),
+            ),
+        },
+        Sel::TriggerObject,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+/// "its controller adds an additional one mana of that color" after "is tapped for mana of
+/// the chosen color": the chosen color (CR 607.2d).
+fn adds_one_of_that_color(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.in_trigger
+        || end(l) != "its controller adds an additional one mana of that color"
+        || !matches!(b.it, Sel::TriggerObject)
+        || !crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("is tapped for mana of the chosen color, its controller adds")
+    {
+        return None;
+    }
+    Some(Effect::AddMana {
+        who: PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        mana: ManaProduction::ChosenColor(Value::c(1)),
+        restriction: None,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "mana 4: its controller adds an additional one mana of that color", priority: 100, parse: adds_one_of_that_color } }
+
+inventory::submit! { super::TriggerPattern { name: "mana 4: [land] is tapped for mana of the chosen color", priority: 100, parse: tapped_for_chosen_color } }
+
+/// "add an amount of mana of that color equal to [value]" after "choose a color".
+fn amount_of_chosen_color(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("add an amount of mana of that color equal to ") else {
+        return false;
+    };
+    if !matches!(
+        prev,
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Color,
+        }
+    ) {
+        return false;
+    }
+    let saved = b.targets.len();
+    let Some((v, tail)) = crate::oracle::statics::parse_value_phrase(r, b) else {
+        return false;
+    };
+    // Only a count of things (the rendering words it "for each"); devotion is
+    // `game_rules_mana`'s.
+    if !tail.trim().is_empty() || b.targets.len() != saved || !matches!(v, Value::Count(_)) {
+        b.targets.truncate(saved);
+        return false;
+    }
+    *prev = Effect::AddMana {
+        who: PlayerRef::You,
+        mana: ManaProduction::AnyOneColor(v),
+        restriction: None,
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "mana 4: choose a color. add an amount of mana of that color equal to [count]", priority: 100, apply: amount_of_chosen_color } }
 
 #[cfg(test)]
 mod tests {

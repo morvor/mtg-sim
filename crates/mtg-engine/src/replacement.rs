@@ -411,6 +411,15 @@ impl Game {
         scope: CandScope,
     ) -> Vec<Candidate> {
         let mut out = Vec::new();
+        // An entering event, possibly with a condition ("If ~ would enter and it wasn't
+        // cast", `ReplacementEvent::Where`): the entering object's own applies too.
+        fn entry(e: &ReplacementEvent) -> Option<&Filter> {
+            match e {
+                ReplacementEvent::EntersBattlefield(f) => Some(f),
+                ReplacementEvent::Where { event, .. } => entry(event),
+                _ => None,
+            }
+        }
         let in_scope = |d: &ReplacementDef| match scope {
             CandScope::All => true,
             CandScope::EntryOnly => matches!(d.event, ReplacementEvent::EntersBattlefield(_)),
@@ -425,7 +434,7 @@ impl Game {
             .map(|(s, c, _, a, d)| (*s, *c, a.clone(), d.clone()))
             .collect();
         if let ReplEvent::Move(m) = ev {
-            if m.to == Zone::Battlefield && scope != CandScope::NotEntry {
+            if m.to == Zone::Battlefield {
                 let o = self.obj(m.obj);
                 // CR 614.12, 707.9: once it's entering as a copy, the copied object's
                 // "as this enters" / "enters with" abilities apply instead of its own.
@@ -473,12 +482,24 @@ impl Game {
                         // from the permanent itself ("Permanents enter tapped" doesn't
                         // affect the permanent that has it).
                         if let StaticEffect::Replacement(d) = &s.effect {
-                            if matches!(
-                                d.event,
-                                ReplacementEvent::EntersBattlefield(Filter::Source)
-                            ) && !sources
-                                .iter()
-                                .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
+                            // "If ~ would enter and it wasn't cast, ..." is checked against
+                            // the object where it is, with the other zone-change
+                            // replacements; "~ enters tapped" with the effects that modify
+                            // how it enters (CR 614.12).
+                            let own = match &d.event {
+                                ReplacementEvent::EntersBattlefield(Filter::Source) => {
+                                    scope != CandScope::NotEntry
+                                }
+                                ReplacementEvent::Where { event, .. } => {
+                                    scope != CandScope::EntryOnly
+                                        && matches!(entry(event), Some(Filter::Source))
+                                }
+                                _ => false,
+                            };
+                            if own
+                                && !sources
+                                    .iter()
+                                    .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
                             {
                                 sources.push((
                                     m.obj,

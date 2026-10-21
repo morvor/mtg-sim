@@ -16,6 +16,13 @@ fn is_not_cast(c: &Condition) -> bool {
     matches!(c, Condition::Not(inner) if is_cast(inner))
 }
 
+/// "it wasn't cast or no mana was spent to cast it" (Primeval Spawn).
+fn is_not_cast_or_no_mana(c: &Condition) -> bool {
+    matches!(c, Condition::Or(v) if v.len() == 2 && is_not_cast(&v[0])
+        && matches!(&v[1], Condition::Compare(Value::Custom(n), Cmp::Eq, Value::Const(0))
+            if *n == crate::kw::cast_history::spent(crate::kw::cast_history::EVENT_OBJECT, "total")))
+}
+
 /// "it was cast": the object entering is a spell on the stack that was cast.
 fn is_cast(c: &Condition) -> bool {
     matches!(c, Condition::SelMatches(Sel::TriggerObject, Filter::And(v))
@@ -224,6 +231,13 @@ impl Renderer<'_> {
                 let n = self.noun_det(f, Det::A);
                 let then = self.replacement_then_move(d);
                 Some(format!("if {n} would enter and it wasn't cast, {then}"))
+            }
+            (E::EntersBattlefield(f), c, A::MoveInstead(d)) if is_not_cast_or_no_mana(c) => {
+                let n = self.noun_det(f, Det::A);
+                let then = self.replacement_then_move(d);
+                Some(format!(
+                    "if {n} would enter and it wasn't cast or no mana was spent to cast it, {then}"
+                ))
             }
             // "Creatures played by your opponents enter tapped."
             (E::EntersBattlefield(f), c, A::EnterTapped) if is_played(c) => {

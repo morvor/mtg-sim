@@ -1560,13 +1560,13 @@ fn sentence_rewrites(s: &str) -> String {
     static OTHERWISE: OnceLock<[Option<Regex>; 2]> = OnceLock::new();
     let [instead, otherwise] = OTHERWISE.get_or_init(|| {
         [
-            Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), instead ([^.]+)\.").ok(),
+            Regex::new(r"(^|[.:—•] |\n)(if|the next time) ([^,.]+), instead ([^.]+)\.").ok(),
             Regex::new(r"(^|[.:—•] |\n)if ([^,.]+), ([^.]+)\. otherwise, ([^.]+)\.").ok(),
         ]
     });
     if let Some(instead) = instead {
         s = instead
-            .replace_all(&s, "${1}if $2, $3 instead.")
+            .replace_all(&s, "${1}${2} $3, $4 instead.")
             .to_string();
     }
     if let Some(otherwise) = otherwise {

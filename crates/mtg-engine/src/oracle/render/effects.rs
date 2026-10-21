@@ -2444,6 +2444,16 @@ impl Renderer<'_> {
                     return format!("for each color among {n}, add one mana of that color");
                 }
                 let m = self.mana_production(mana);
+                // "Choose a color. Add an amount of mana of that color equal to the number
+                // of ..." (Three Tree City): X mana of any one color.
+                if let (ManaProduction::AnyOneColor(v @ Value::Count(_)), PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let val = self.value(v);
+                    return format!(
+                        "{{alt:add {m}|choose a color. add an amount of mana of that color equal to {val}}}"
+                    );
+                }
                 let mut s = self.with_subject(who, &format!("add {m}"), false);
                 if let Some(r) = restriction {
                     let r = self.mana_restriction(r);
@@ -3698,6 +3708,23 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
+        // "For each artifact or creature card in target opponent's graveyard, add {C} and
+        // you gain 1 life." (Spoils of Evil): mana and life scaled by one count.
+        if let [Effect::AddMana {
+            who: PlayerRef::You,
+            mana: ManaProduction::Amount(t, Value::Count(f)),
+            restriction: None,
+        }, Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::Count(g),
+        }] = v
+        {
+            if format!("{f:?}") == format!("{g:?}") {
+                let each = self.for_each_noun(f);
+                let sym = mana_symbol(*t);
+                return format!("for each {each}, add {sym} and you gain 1 life");
+            }
+        }
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
@@ -6879,8 +6906,10 @@ impl Renderer<'_> {
                     // ~": one color chosen for all of it (Selvala, Eager Trailblazer's
                     // rulings), the same as X mana of any one color.
                     match w.strip_prefix(", where X is the number of ") {
+                        // "Choose a color. Add an amount of mana of that color equal to
+                        // the number of ..." (Three Tree City) too.
                         Some(each) if a == "X" && !each.contains(['{', ',']) => format!(
-                            "{{alt:X mana of any one color{w}|one mana of the color of your choice for each {each}}}"
+                            "{{alt:X mana of any one color{w}|one mana of the color of your choice for each {each}|an amount of mana of the color of your choice equal to the number of {each}}}"
                         ),
                         _ => format!("{a} mana of any one color{w}"),
                     }
@@ -6953,7 +6982,7 @@ impl Renderer<'_> {
                 format!("one mana of any color that {n} could produce")
             }
             ManaProduction::ChosenColor(n) => match n {
-                Value::Const(1) => "one mana of the chosen color".into(),
+                Value::Const(1) => "one mana of {alt:the chosen color|that color}".into(),
                 Value::Const(k) => format!("{} mana of the chosen color", number_word(*k)),
                 other => {
                     let (a, w) = self.amount(other);

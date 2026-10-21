@@ -536,6 +536,23 @@ impl Renderer<'_> {
         {
             return "{alt:it|that permanent or player}".into();
         }
+        // "Target creature you control fights target creature an opponent controls. If
+        // the creature an opponent controls would die this turn, ...": one of several
+        // targets named again by its words.
+        if !matches!(case, Case::Poss) && self.targets.len() >= 2 {
+            if let Some(words) = self
+                .targets
+                .get(idx)
+                .and_then(|t| t.text.strip_prefix("target "))
+                .filter(|w| {
+                    (w.ends_with(" control") || w.ends_with(" controls"))
+                        && !w.contains(['{', '|'])
+                        && !w.contains(" or ")
+                })
+            {
+                return format!("{{alt:it|the {words}}}");
+            }
+        }
         match case {
             Case::Poss => "its".into(),
             _ => "it".into(),

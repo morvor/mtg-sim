@@ -58,6 +58,10 @@ pub const USING_SOURCE_MANA: &str = "cast history:using mana produced by source"
 /// them for each mana from a Treasure spent to cast them").
 pub const ENTERING: &str = "entering";
 
+/// The `whose` of [`SPENT`] for the object the event is about ("If ~ would enter and no
+/// mana was spent to cast it": the spell about to enter).
+pub const EVENT_OBJECT: &str = "event object";
+
 /// The `Value::Custom` name for an amount of mana spent.
 pub fn spent(whose: &str, what: &str) -> String {
     format!("{SPENT}{whose}:{what}")
@@ -114,6 +118,11 @@ fn payment<'a>(g: &'a Game, whose: &str, ctx: &'a Ctx) -> Option<&'a CastInfo> {
         // Only the entering permanent's own spell: one that wasn't cast had no mana spent
         // on it, whatever the replacement effect's source had.
         ENTERING => ctx.cast.as_ref().filter(|c| c.was_cast),
+        // The object an event is about, as it is (a spell resolving and about to enter).
+        EVENT_OBJECT => {
+            let o = ctx.event.as_ref().and_then(|e| e.object)?;
+            object_cast(g, o).filter(|c| c.was_cast)
+        }
         "this ability" => {
             let a = ctx.stack_obj?;
             g.try_obj(a)?.stack.as_deref().map(|si| &si.cast)
