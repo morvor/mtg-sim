@@ -201,7 +201,8 @@ pub fn spell(
 /// * a block the compiler can now parse on its own (delete the definition),
 /// * a manual card with no test in `tests/cards/` naming it (`"Card Name"`),
 /// * two definitions claiming the same block.
-pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
+/// [`manual_check`]'s problems with the card each is about.
+pub fn manual_problems(tests_cards_dir: &std::path::Path) -> Vec<(String, String)> {
     let mut problems = Vec::new();
     let mut tests = String::new();
     if let Ok(rd) = std::fs::read_dir(tests_cards_dir) {
@@ -217,19 +218,22 @@ pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
             .iter()
             .any(|o| o.card == m.card && o.face == m.face && o.text == m.text)
         {
-            problems.push(format!(
-                "{} (face {}): two definitions claim {:?}",
-                m.card, m.face, m.text
+            problems.push((
+                m.card.to_string(),
+                format!(
+                    "{} (face {}): two definitions claim {:?}",
+                    m.card, m.face, m.text
+                ),
             ));
         }
         let Some(sc) = mtg_data::cards().by_name(m.card) else {
-            problems.push(format!("{}: no such card", m.card));
+            problems.push((m.card.to_string(), format!("{}: no such card", m.card)));
             continue;
         };
         if sc.name != m.card {
-            problems.push(format!(
-                "{}: use the full Oracle name {:?}",
-                m.card, sc.name
+            problems.push((
+                m.card.to_string(),
+                format!("{}: use the full Oracle name {:?}", m.card, sc.name),
             ));
         }
         let def = crate::card::CardDef::from_scryfall(sc);
@@ -238,9 +242,12 @@ pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
             .get(m.face)
             .is_some_and(|f| f.manual.iter().any(|t| t == m.text))
         {
-            problems.push(format!(
-                "{} (face {}): stale, matches no ability block: {:?}",
-                m.card, m.face, m.text
+            problems.push((
+                m.card.to_string(),
+                format!(
+                    "{} (face {}): stale, matches no ability block: {:?}",
+                    m.card, m.face, m.text
+                ),
             ));
             continue;
         }
@@ -252,24 +259,41 @@ pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
             .any(|a| matches!(&a.kind, AbilityKind::Unsupported(_)))
             || !face.unsupported.is_empty()
         {
-            problems.push(format!(
-                "{} (face {}): the card still has unsupported text {:?}",
-                m.card, m.face, face.unsupported
+            problems.push((
+                m.card.to_string(),
+                format!(
+                    "{} (face {}): the card still has unsupported text {:?}",
+                    m.card, m.face, face.unsupported
+                ),
             ));
         }
         let plain = crate::oracle::without_manual(|| crate::card::CardDef::from_scryfall(sc));
         if !plain.faces[m.face].unsupported.iter().any(|t| t == m.text) {
-            problems.push(format!(
+            problems.push((
+                m.card.to_string(),
+                format!(
                 "{} (face {}): the compiler now parses {:?}; delete the hand-written definition",
                 m.card, m.face, m.text
+            ),
             ));
         }
         if !tests.contains(&format!("{:?}", m.card)) {
-            problems.push(format!(
-                "{}: no test in tests/cards/ loads this card by name",
-                m.card
+            problems.push((
+                m.card.to_string(),
+                format!(
+                    "{}: no test in tests/cards/ loads this card by name",
+                    m.card
+                ),
             ));
         }
     }
     problems
+}
+
+/// [`manual_problems`] without the cards: one message per problem.
+pub fn manual_check(tests_cards_dir: &std::path::Path) -> Vec<String> {
+    manual_problems(tests_cards_dir)
+        .into_iter()
+        .map(|(_, p)| p)
+        .collect()
 }
