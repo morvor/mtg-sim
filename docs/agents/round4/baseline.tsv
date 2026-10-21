@@ -9,7 +9,6 @@ Close Encounter	As an additional cost to cast ~, choose a creature you control o
 Close Encounter	~ deals damage equal to the power of the chosen creature or card to target creature.
 Parker Luck	At the beginning of your end step, two target players each reveal the top card of their library. They each lose life equal to the mana value of the card revealed by the other player. Then they each put the card they revealed into their hand.
 Nethergoyf	Escape—{N}{B}, Exile any number of other cards from your graveyard with four or more card types among them.
-Verrak, Warped Sengir	Whenever you activate an ability that isn't a mana ability, if life was paid to activate it, you may pay that much life again. If you do, copy that ability. You may choose new targets for the copy.
 Boltbender	When ~ is turned face up, you may choose new targets for any number of other spells and/or abilities.
 Celebr-8000	At the beginning of combat on your turn, roll two six-sided dice. For each result of N, ~ gets +N/+N until end of turn. For each other result, it gains the indicated ability until end of turn. If you rolled doubles, it also gains double strike until end of turn. / • N — menace / • N — vigilance / • N — lifelink / • N — flying / • N — indestructible
 Twilight Diviner	Whenever one or more other creatures you control enter, if they entered or were cast from a graveyard, create a token that's a copy of one of them. This ability triggers only once each turn.
@@ -50,24 +49,19 @@ Agent of Acquisitions	Instead of drafting a card from a booster pack, you may dr
 Lore Seeker	Reveal ~ as you draft it. After you draft ~, you may add a booster pack to the draft.
 Boreal Outrider	Whenever you cast a creature spell, if {S} of any of that spell's colors was spent to cast it, that creature enters with an additional +N/+N counter on it.
 Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, that player can't cast spells, you may look at the top card of their library any time, you may play the top card of their library, and you may spend mana as though it were mana of any color to cast spells this way.
-Risky Move	When you gain control of ~ from another player, choose a creature you control and an opponent. Flip a coin. If you lose the flip, that opponent gains control of that creature.
 Araumi of the Dead Tide	{T}, Exile cards from your graveyard equal to the number of opponents you have: Target creature card in your graveyard gains encore until end of turn. The encore cost is equal to its mana cost.
 Magma Pummeler	If damage would be dealt to ~ while it has a +N/+N counter on it, prevent that damage and remove that many +N/+N counters from it. When one or more counters are removed from ~ this way, it deals that much damage to any target.
 Tainted Pact	Exile the top card of your library. You may put that card into your hand unless it has the same name as another card exiled this way. Repeat this process until you put a card into your hand or you exile two cards with the same name, whichever comes first.
-Psychogenic Probe	Whenever a spell or ability causes a player to shuffle their library, ~ deals N damage to that player.
 Territorial Hellkite	At the beginning of combat on your turn, choose an opponent at random that ~ didn't attack during your last combat. ~ attacks that player this combat if able. If you can't choose an opponent this way, tap ~.
 Riku of Many Paths	Whenever you cast a modal spell, choose up to X, where X is the number of times you chose a mode for that spell — / • Exile the top card of your library. Until the end of your next turn, you may play it. / • Put a +N/+N counter on ~. It gains trample until end of turn. / • Create a N/N blue Bird creature token with flying.
 Alaundo the Seer	{T}: Draw a card, then exile a card from your hand and put a number of time counters on it equal to its mana value. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it without paying its mana cost. If you cast a creature spell this way, it gains haste until end of turn." Then remove a time counter from each other card you own in exile.
-Panoptic Projektor	If turning a face-down permanent face up causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.
 Rakdos Augermage	{T}: Reveal your hand and discard a card of target opponent's choice. Then that player reveals their hand and discards a card of your choice. Activate only as a sorcery.
 Grishnákh, Brash Instigator	When ~ enters, amass Orcs N. When you do, until end of turn, gain control of target nonlegendary creature an opponent controls with power less than or equal to the amassed Army's power. Untap that creature. It gains haste until end of turn.
-The Millennium Calendar	Whenever you untap one or more permanents during your untap step, put that many time counters on ~.
 Extrapolate the Impossible	You may reveal exactly two cards you own with different names from outside the game. An opponent chooses one of them. You put that card into your hand.
 Resplendent Marshal	When ~ enters or dies, you may exile another creature card from your graveyard. When you do, put a +N/+N counter on each creature you control other than ~ that shares a creature type with the exiled card.
 Protective Sphere	{N}, Pay N life: Prevent all damage that would be dealt to you this turn by a source of your choice that shares a color with the mana spent on this activation cost.
 Shape Anew	The controller of target artifact sacrifices it, then reveals cards from the top of their library until they reveal an artifact card. That player puts that card onto the battlefield, then shuffles all other cards revealed this way into their library.
 Scholarship Sponsor	When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles.
-Rendmaw, Creaking Nest	When ~ enters and whenever you play a card with two or more card types, each player creates a tapped N/N black Bird creature token with flying. The tokens are goaded for the rest of the game.
 Midnight Crusader Shuttle	Midnight Entity — Whenever ~ attacks, defending player faces a villainous choice — That player sacrifices a creature of their choice, or you gain control of a creature of your choice that player controls until end of turn. If you gain control of a creature this way, tap it, and it's attacking that player.
 Spikeshell Harrier	When ~ enters, return target creature or Vehicle an opponent controls to its owner's hand. If that opponent's speed is greater than each other player's speed, reduce that opponent's speed by N. This effect can't reduce their speed below N.
 Kitesail Larcenist	When ~ enters, for each player, choose up to one other target artifact or creature that player controls. For as long as ~ remains on the battlefield, the chosen permanents become Treasure artifacts with "{T}, Sacrifice ~: Add one mana of any color" and lose all other abilities.
@@ -80,12 +74,10 @@ Aladdin's Lamp	{X}, {T}: The next time you would draw a card this turn, instead 
 Wish	You may play a card you own from outside the game this turn.
 Infernal Denizen	At the beginning of your upkeep, sacrifice two Swamps. If you can't, tap ~, and an opponent may gain control of a creature you control of their choice for as long as ~ remains on the battlefield.
 Reflecting Mirror	{X}, {T}: Change the target of target spell with a single target if that target is you. The new target must be a player. X is twice the mana value of that spell.
-Cloud, Midgar Mercenary	As long as ~ is equipped, if a triggered ability of ~ or an Equipment attached to it triggers, that ability triggers an additional time.
 Megatron, Tyrant // Megatron, Destructive Force	Whenever ~ attacks, you may sacrifice another artifact. When you do, ~ deals damage equal to the sacrificed artifact's mana value to target creature. If excess damage would be dealt to that creature this way, instead that damage is dealt to that creature's controller and you convert ~.
 Incubation Druid	{T}: Add one mana of any type that a land you control could produce. If ~ has a +N/+N counter on it, add three mana of that type instead.
 Combustible Gearhulk	When ~ enters, target opponent may have you draw three cards. If the player doesn't, you mill three cards, then ~ deals damage to that player equal to the total mana value of those cards.
 Mourner's Shield	{N}, {T}: Prevent all damage that would be dealt this turn by a source of your choice that shares a color with the exiled card.
-Mana Sculpt	Counter target spell. If you control a Wizard, add an amount of {C} equal to the amount of mana spent to cast that spell at the beginning of your next main phase.
 Oracle en-Vec	{T}: Target opponent chooses any number of creatures they control. During that player's next turn, the chosen creatures attack if able, and other creatures can't attack. At the beginning of that turn's end step, destroy each of the chosen creatures that didn't attack this turn. Activate only during your turn.
 Mogg Assassin	{T}: You choose target creature an opponent controls, and that opponent chooses target creature. Flip a coin. If you win the flip, destroy the creature you chose. If you lose the flip, destroy the creature your opponent chose.
 Urgent Necropsy	As an additional cost to cast ~, collect evidence X, where X is the total mana value of the permanents ~ targets.
@@ -97,7 +89,6 @@ Auratouched Mage	When ~ enters, search your library for an Aura card that could 
 Call the Spirit Dragons	At the beginning of your upkeep, for each color, put a +N/+N counter on a Dragon you control of that color. If you put +N/+N counters on five Dragons this way, you win the game.
 Chef's Kiss	Gain control of target spell that targets only a single permanent or player. Copy it, then reselect the targets at random for the spell and the copy. The new targets can't be you or a permanent you control.
 Seize the Spotlight	Each opponent chooses fame or fortune. For each player who chose fame, gain control of a creature that player controls until end of turn. Untap those creatures and they gain haste until end of turn. For each player who chose fortune, you draw a card and create a Treasure token.
-Hushbringer	Creatures entering or dying don't cause abilities to trigger.
 Hall of Gemstone	At the beginning of each player's upkeep, that player chooses a color. Until end of turn, lands tapped for mana produce mana of the chosen color instead of any other color.
 Flash	You may put a creature card from your hand onto the battlefield. If you do, sacrifice it unless you pay its mana cost reduced by {N}.
 Lae'zel's Acrobatics	Exile all nontoken creatures you control, then roll a d20. N—N | Return those cards to the battlefield under their owner's control at the beginning of the next end step. N—N | Return those cards to the battlefield under their owner's control, then exile them again. Return those cards to the battlefield under their owner's control at the beginning of the next end step.
@@ -107,13 +98,11 @@ Collision of Realms	Each player shuffles all creatures they own into their libra
 River Song	Meet in Reverse — You draw cards from the bottom of your library rather than the top.
 River Song	Spoilers — Whenever an opponent scries, surveils, or searches their library, put a +N/+N counter on ~. Then ~ deals damage to that player equal to its power.
 God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, copy that card and you may cast the copy. That copy costs {N} less to cast.
-Suncleanser	When ~ enters, choose one — / • Remove all counters from target creature. It can't have counters put on it for as long as ~ remains on the battlefield. / • Target opponent loses all counters. That player can't get counters for as long as ~ remains on the battlefield.
 Jötun Grunt	Cumulative upkeep—Put two cards from a single graveyard on the bottom of their owner's library.
 Bag of Devouring	{N}, {T}, Sacrifice ~: Roll a d10. Return up to X cards from among cards exiled with ~ to their owners' hands, where X is the result.
 Curse of Leeches // Leeching Lurker	As ~ transforms into ~, attach it to a player.
 Champions of Minas Tirith	At the beginning of combat on each opponent's turn, if you're the monarch, that opponent may pay {X}, where X is the number of cards in their hand. If they don't, they can't attack you this combat.
 Light Up the Night	Flashback—{N}{R}, Remove X loyalty counters from among planeswalkers you control. If you cast ~ this way, X can't be N.
-Opportunistic Dragon	When ~ enters, choose target Human or artifact an opponent controls. For as long as ~ remains on the battlefield, gain control of that permanent, it loses all abilities, and it can't attack or block.
 Rinoa, Angel Wing	Whenever one or more attacking creatures you control die, you may return one of them to the battlefield tapped under its owner's control with a flying counter on it. Do this only once each turn.
 Vault 112: Sadistic Simulation	{CHAPTER} III — Pay any amount of {E}. If you paid one or more {E} this way, shuffle your library, then exile that many cards from the top. You may play one of those cards without paying its mana cost.
 Hordewing Skaab	Whenever one or more Zombies you control deal combat damage to one or more of your opponents, you may draw cards equal to the number of opponents dealt damage this way. If you do, discard that many cards.
@@ -133,17 +122,14 @@ Keeper of the Dead	{B}, {T}: Choose target opponent who has at least two fewer c
 Drop Tower	{VISIT} Visit — Target creature gains flying until end of turn, or until any player rolls a N, whichever comes first.
 Terra, Magical Adept // Esper Terra	{CHAPTER} IV — Add {W}{W}, {U}{U}, {B}{B}, {R}{R}, and {G}{G}. Exile ~, then return it to the battlefield .
 Last Voyage of the _____	Enchanted creature gets +N/+N for each name sticker on ~ with seven or fewer letters.
-Ob Nixilis, Captive Kingpin	Whenever one or more opponents each lose exactly N life, put a +N/+N counter on ~. Exile the top card of your library. Until your next end step, you may play that card.
 Synthesis Pod	{N}{U/P}, {T}, Exile a spell you control: Target opponent reveals cards from the top of their library until they reveal a card with mana value equal to N plus the exiled spell's mana value. Exile that card, then that player shuffles. You may cast that exiled card without paying its mana cost.
 Revivify	Roll a d20 and add the number of creature cards in your graveyard that were put there from the battlefield this turn. N—N | Return all creature cards in your graveyard that were put there from the battlefield this turn to your hand. N+ | Return those cards from your graveyard to the battlefield.
 Suffocation	~ deals N damage to the controller of the last red instant or sorcery spell that dealt damage to you this turn.
 Nicol Bolas, Dragon-God	+N: You draw a card. Each opponent exiles a card from their hand or a permanent they control.
 Wolf in _____ Clothing	When ~ enters, you may put a name sticker on it. When you do, up to X target creatures each get -N/-N until end of turn, where X is the number of unique vowels on that sticker.
 Guile	If a spell or ability you control would counter a spell, instead exile that spell and you may play that card without paying its mana cost.
-Elesh Norn, Mother of Machines	Permanents entering don't cause abilities of permanents your opponents control to trigger.
 Elrond of the White Council	Secret council — When ~ enters, each player secretly votes for fellowship or aid, then those votes are revealed. For each fellowship vote, the voter chooses a creature they control. You gain control of each creature chosen this way, and they gain "~ can't attack its owner." Then for each aid vote, put a +N/+N counter on each creature you control.
 Unpredictable Cyclone	If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.
-Infinite Reflection	When ~ enters attached to a creature, each other nontoken creature you control becomes a copy of that creature.
 Struggle for Sanity	Target opponent reveals their hand. That player exiles a card from it, then you exile a card from it. Repeat this process until all cards in that hand have been exiled. That player returns the cards they exiled this way to their hand and puts the rest into their graveyard.
 Hellish Rebuke	Until end of turn, permanents your opponents control gain "When ~ deals damage to the player who cast ~, sacrifice ~. You lose N life."
 Maddening Hex	Whenever enchanted player casts a noncreature spell, roll a d6. ~ deals damage to that player equal to the result. Then attach ~ to another one of your opponents chosen at random.
@@ -169,7 +155,6 @@ Molten Sentry	As ~ enters, flip a coin. If the coin comes up heads, ~ enters as 
 Demonlord Belzenlok	When ~ enters, exile cards from the top of your library until you exile a nonland card, then put that card into your hand. If the card's mana value is N or greater, repeat this process. ~ deals N damage to you for each card put into your hand this way.
 Priority Boarding	Whenever you roll a die, you may reveal the top card of your library. Do this only once each turn. Whenever you reveal a card with mana value less than the result this way, you may exile it. If you do, you may play it this turn.
 Zygon Infiltrator	Body-print — {N}{U}: Tap another target creature and put a stun counter on it. ~ becomes a copy of that creature for as long as that creature remains tapped. Activate only as a sorcery.
-Virtual Assistant	Whenever you cast a spell using teamwork, create a N/N colorless Robot Hero artifact creature token with flying.
 Spinning Darkness	You may exile the top three black cards of your graveyard rather than pay ~'s mana cost.
 Pin Collection	When ~ enters, you may put an ability sticker with ticket cost X or less on it without paying that sticker's ticket cost.
 Pin Collection	Equipped creature gets +N/+N and has all abilities of ability stickers on ~.
@@ -193,7 +178,6 @@ Lineprancers	{N}{G}: Target creature you don't control blocks target creature yo
 Sigarda's Splendor	As ~ enters, note your life total.
 Sigarda's Splendor	At the beginning of your upkeep, draw a card if your life total is greater than or equal to the last noted life total for ~. Then note your life total.
 Genesis of the Daleks	{CHAPTER} IV — Target opponent faces a villainous choice — Destroy all Dalek creatures and each of your opponents loses life equal to the total power of Daleks that died this turn, or destroy all non-Dalek creatures.
-Rescue from the Underworld	Choose target creature card in your graveyard. Return that card and the sacrificed card to the battlefield under your control at the beginning of your next upkeep. Exile ~.
 Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, until end of turn, red creatures get +N/+N and whenever a player taps a Mountain for mana, that player adds an additional {R}. If the number is even, until end of turn, red creatures get -N/-N and if a player taps a Mountain for mana, that Mountain produces colorless mana instead of any other type.
 Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card or sacrifice a permanent. You draw a card for each land card put into a graveyard this way.
 Wizard's Spellbook	{T}: Exile target instant or sorcery card from a graveyard. Roll a d20. Activate only as a sorcery. N—N | Copy that card. You may cast the copy. N—N | Copy that card. You may cast the copy by paying {N} rather than paying its mana cost. N | Copy each card exiled with ~. You may cast any number of the copies without paying their mana costs.
@@ -223,10 +207,8 @@ Yannik, Scavenging Sentinel	When ~ enters, exile another creature you control un
 Ichor Elixir	If you would roll one or more planar dice, instead roll that many planar dice plus one and ignore one.
 _____ Balls of Fire	Whenever you put a sticker on ~, it deals damage equal to the number of o's in name stickers on ~ to any target.
 Timothar, Baron of Bats	Whenever another nontoken Vampire you control dies, you may pay {N} and exile it. If you do, create a N/N black Bat creature token with flying. It gains "When ~ deals combat damage to a player, sacrifice it and return the exiled card to the battlefield tapped."
-Hero of Bretagard	Whenever one or more cards are put into exile from your hand or a spell or ability you control exiles one or more permanents from the battlefield, put that many +N/+N counters on ~.
 Whippoorwill	{G}{G}, {T}: Target creature can't be regenerated this turn. Damage that would be dealt to that creature this turn can't be prevented or dealt instead to another permanent or player. When the creature dies this turn, exile the creature.
 Breeches, the Blastmaker	Whenever you cast your second spell each turn, you may sacrifice an artifact. If you do, flip a coin. When you win the flip, copy that spell. You may choose new targets for the copy. When you lose the flip, ~ deals damage equal to that spell's mana value to any target.
-Widespread Panic	Whenever a spell or ability causes its controller to shuffle their library, that player puts a card from their hand on top of their library.
 Chancellor of the Annex	You may reveal ~ from your opening hand. If you do, when each opponent casts their first spell of the game, counter that spell unless that player pays {N}.
 Cemetery Desecrator	When ~ enters or dies, exile another card from a graveyard. When you do, choose one — / • Remove X counters from target permanent, where X is the mana value of the exiled card. / • Target creature an opponent controls gets -X/-X until end of turn, where X is the mana value of the exiled card.
 Gale's Redirection	Exile target spell, then roll a d20 and add that spell's mana value. N—N | You may cast the exiled card for as long as it remains exiled, and you may spend mana as though it were mana of any color to cast that spell. N+ | You may cast the exiled card without paying its mana cost for as long as it remains exiled.
@@ -237,9 +219,7 @@ Clandestine Chameleon	~ has all abilities of ability stickers on other permanent
 Descent into Madness	At the beginning of your upkeep, put a despair counter on ~, then each player exiles X permanents they control and/or cards from their hand, where X is the number of despair counters on ~.
 Loxodon Peacekeeper	At the beginning of your upkeep, the player with the lowest life total gains control of ~. If two or more players are tied for lowest life total, you choose one of them, and that player gains control of ~.
 Unlawful Entry	Whenever you put an art sticker on a creature, you may return ~ from your graveyard to your hand.
-The Masamune	Equipped creature has "If a creature dying causes a triggered ability of ~ or an emblem you own to trigger, that ability triggers an additional time."
 Springheart Nantuko	Landfall — Whenever a land you control enters, you may pay {N}{G} if ~ is attached to a creature you control. If you do, create a token that's a copy of that creature. If you didn't create a token this way, create a N/N green Insect creature token.
-The Second Doctor	How Civil of You — At the beginning of your end step, each player may draw a card. Each opponent who does can't attack you or permanents you control during their next turn.
 Faramir, Prince of Ithilien	At the beginning of your end step, choose an opponent. At the beginning of that player's next end step, you draw a card if they didn't attack you that turn. Otherwise, create three N/N white Human Soldier creature tokens.
 Winnowing	For each player, you choose a creature that player controls. Then each player sacrifices all other creatures they control that don't share a creature type with the chosen creature they control.
 Deification	As ~ enters, choose a planeswalker type.
@@ -248,17 +228,12 @@ Paranormal Analyst	Whenever you manifest dread, put a card you put into your gra
 Wyll's Reversal	Choose target spell or ability with one or more targets. Roll a d20 and add the greatest power among creatures you control. N—N | You may choose new targets for that spell or ability. N+ | You may choose new targets for that spell or ability. Then copy it. You may choose new targets for the copy.
 Delina, Wild Mage	Whenever ~ attacks, choose target creature you control, then roll a d20. N—N | Create a tapped and attacking token that's a copy of that creature, except it's not legendary and it has "At end of combat, exile ~." N—N | Create one of those tokens. You may roll again.
 Vault 21: House Gambit	{CHAPTER} III — Reveal up to five nonland cards from your hand. For each of those cards that has the same mana value as another card revealed this way, create a Treasure token.
-Prowl, Stoic Strategist // Prowl, Pursuit Vehicle	Whenever a player plays a card exiled with ~, you draw a card and convert ~.
 Turf War	Whenever a creature deals combat damage to a player, if that player controls one or more lands with contested counters on them, that creature's controller gains control of one of those lands of their choice and untaps it.
 Overclocked Electromancer	Whenever ~ deals combat damage to a creature, if that creature was dealt excess damage this turn, you get X {E}, where X is that excess damage.
 The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between N and N that hasn't been chosen. If you do, an opponent guesses which number you chose, then you reveal the number you chose. If they guessed wrong, they lose life equal to the number they guessed and you draw a card. If they guessed right, sacrifice ~.
-Surge to Victory	Exile target instant or sorcery card from your graveyard. Creatures you control get +X/+N until end of turn, where X is that card's mana value. Whenever a creature you control deals combat damage to a player this turn, copy the exiled card. You may cast the copy without paying its mana cost.
 Wand of Wonder	{N}, {T}: Roll a d20. Each opponent exiles cards from the top of their library until they exile an instant or sorcery card, then shuffles the rest into their library. You may cast up to X instant and/or sorcery spells from among cards exiled this way without paying their mana costs. N—N | X is one. N—N | X is two. N | X is three.
 Bigger on the Inside	Enchanted permanent has "{T}: Target player adds two mana of any one color. The next spell they cast this turn has cascade."
-Zenos yae Galvus // Shinryu, Transcendent Rival	When the chosen creature leaves the battlefield, transform ~.
-Zenos yae Galvus // Shinryu, Transcendent Rival	Burning Chains — When the chosen player loses the game, you win the game.
 Leovold's Operative	As you draft a card, you may draft an additional card from that booster pack. If you do, turn ~ face down, then pass the next booster pack without drafting a card from it.
-Voltaic Visionary // Volt-Charged Berserker	When you play a card exiled with ~, transform ~.
 Goblin Airbrusher	Whenever you place a sticker, create a Treasure token. If it's an art sticker, instead create two Treasure tokens.
 Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, each opponent reveals their hand. For each opponent, exile a creature card they revealed this way until ~ leaves the battlefield.
 Valki, God of Lies // Tibalt, Cosmic Impostor	As ~ enters, you get an emblem with "You may play cards exiled with ~, and you may spend mana as though it were mana of any color to cast those spells."
@@ -271,9 +246,7 @@ Central Elevator // Promising Stairs	At the beginning of your upkeep, surveil N.
 A Good Day to Pie	Whenever you put a name sticker on a creature, you may return ~ from your graveyard to your hand.
 Glorfindel, Dauntless Rescuer	Whenever you scry, choose one and ~ gets +N/+N until end of turn. / • ~ must be blocked this turn if able. / • ~ can't be blocked by more than one creature each combat this turn.
 Glyph of Reincarnation	Destroy all creatures that were blocked by target Wall this turn. They can't be regenerated. For each creature that died this way, put a creature card from the graveyard of the player who controlled that creature the last time it became blocked by that Wall onto the battlefield under its owner's control.
-Zurgo and Ojutai	Whenever one or more Dragons you control deal combat damage to a player or battle, look at the top three cards of your library. Put one of them into your hand and the rest on the bottom of your library in any order. You may return one of those Dragons to its owner's hand.
 Mirror March	Whenever a nontoken creature you control enters, flip a coin until you lose a flip. For each flip you won, create a token that's a copy of that creature. Those tokens gain haste. Exile them at the beginning of the next end step.
-Way of the Mind Sculptor	Whenever you activate a loyalty ability, if you removed two or more loyalty counters to activate it, draw a card.
 The Pandorica	{N}{W}, {T}: Untap another target nonland permanent, then it phases out. It can't phase in for as long as ~ remains tapped. When ~ becomes untapped or leaves the battlefield, that permanent phases in. Activate only as a sorcery.
 Feather, Radiant Arbiter	Whenever you cast a noncreature spell that targets only ~, you may choose any number of other creatures that spell could target and pay {N} for each of those creatures. If you do, for each of those creatures, copy that spell. The copy targets that creature.
 Wheel of Potential	Each player may exile their hand and draw a number of cards equal to the amount of {E} paid this way. If seven or more {E} was paid this way, you may play cards you own exiled this way until the end of your next turn.
@@ -299,7 +272,6 @@ Ulalek, Fused Atrocity	Whenever you cast an Eldrazi spell, you may pay {C}{C}. I
 Delirium	Tap target creature that player controls. That creature deals damage equal to its power to the player. Prevent all combat damage that would be dealt to and dealt by the creature this turn.
 Chaos Dragon	At the beginning of combat on your turn, each player rolls a d20. If one or more opponents had the highest result, ~ can't attack those players or planeswalkers they control this combat.
 The Fantastic Four	When ~ enter and whenever you cast a spell with power, toughness, or mana value N, choose one that hasn't been chosen this turn. / • Create a N/N colorless Wall creature token with defender. / • ~ deal N damage to each opponent. / • Put two +N/+N counters on target creature. / • Draw a card.
-Agent Maria Hill	Whenever ~ becomes tapped to pay a teamwork cost, put a +N/+N counter on her and draw a card.
 Mana Clash	You and target opponent each flip a coin. ~ deals N damage to each player whose coin comes up tails. Repeat this process until both players' coins come up heads on the same flip.
 Talent of the Telepath	Target opponent reveals the top seven cards of their library. You may cast an instant or sorcery spell from among them without paying its mana cost. Then that player puts the rest into their graveyard. If there are two or more instant and/or sorcery cards in your graveyard, you may cast up to two instant and/or sorcery spells from among the revealed cards instead of one.
 Sigardian Evangel	When ~ enters the battlefield, conjure a card named ~ into your hand. Discard that card at the beginning of the next end step.
@@ -314,9 +286,7 @@ Dynaheir, Invoker Adept	{T}: When you next activate an ability that isn't a mana
 Web of Inertia	At the beginning of combat on each opponent's turn, that player may exile a card from their graveyard. If the player doesn't, creatures they control can't attack you this turn.
 Sirocco	Target player reveals their hand. For each blue instant card revealed this way, that player discards that card unless they pay N life.
 Danse Macabre	Each player sacrifices a nontoken creature of their choice. Roll a d20 and add the toughness of the creature you sacrificed this way. N—N | Return a creature card put into a graveyard this way to the battlefield under your control. N+ | Return up to two creature cards put into graveyards this way to the battlefield under your control.
-Mnemonic Betrayal	Exile all opponents' graveyards. You may cast spells from among those cards this turn, and mana of any type can be spent to cast them. At the beginning of the next end step, if any of those cards remain exiled, return them to their owners' graveyards.
 Equipoise	At the beginning of your upkeep, for each land target player controls in excess of the number you control, choose a land that player controls, then the chosen permanents phase out. Repeat this process for artifacts and creatures.
-Garland, Royal Kidnapper	Whenever an opponent becomes the monarch, gain control of target creature that player controls for as long as they're the monarch.
 Azra Bladeseeker	When ~ enters, each player on your team may discard a card, then each player who discarded a card this way draws a card.
 Druid of the Emerald Grove	When ~ enters, search your library for up to two basic land cards and reveal them, then roll a d20. N or less | Put those cards into your hand, then shuffle. N—N | Put one of those cards onto the battlefield tapped and the other into your hand, then shuffle. N+ | Put those cards onto the battlefield tapped, then shuffle.
 Wee Champion	Whenever you place a sticker, ~ gets +N/+N until end of turn. If it's an art sticker, instead put a +N/+N counter on ~.
@@ -326,21 +296,13 @@ Vedalken Squirrel-Whacker	As ~ enters, roll a six-sided die twice. Its base powe
 Vedalken Squirrel-Whacker	If you would roll one or more six-sided dice, instead roll them and you may exchange one result with ~'s base power or base toughness.
 Aeon Engine	{T}, Exile ~: Reverse the game's turn order.
 Jhoira's Timebug	{T}: Choose target permanent you control or suspended card you own. If that permanent or card has a time counter on it, you may remove a time counter from it or put another time counter on it.
-Great Train Heist	+ {N}{R} — Untap all creatures you control. If it's your combat phase, there is an additional combat phase after this phase. / + {N} — Creatures you control get +N/+N and gain first strike until end of turn. / + {R} — Choose target opponent. Whenever a creature you control deals combat damage to that player this turn, create a tapped Treasure token.
 Curse of Misfortunes	At the beginning of your upkeep, you may search your library for a Curse card that doesn't have the same name as a Curse attached to enchanted player, put it onto the battlefield attached to that player, then shuffle.
-Willie Lumpkin, Postman	Whenever ~ deals combat damage to an opponent, you draw a card and that player may draw a card. If they do, that player can't attack you or permanents you control during their next turn.
 Plumb the Forbidden	As an additional cost to cast ~, you may sacrifice one or more creatures. When you do, copy ~ for each creature sacrificed this way.
-Ghyrson Starn, Kelermorph	Three Autostubs — Whenever another source you control deals exactly N damage to a permanent or player, ~ deals N damage to that permanent or player.
-Sacred Ground	Whenever a spell or ability an opponent controls causes a land to be put into your graveyard from the battlefield, return that card to the battlefield.
-Watcher of Hours	Whenever you remove a time counter from ~ while it's exiled, surveil N.
 Malignant Growth	At the beginning of each opponent's draw step, that player draws an additional card for each growth counter on ~, then ~ deals damage to the player equal to the number of cards they drew this way.
-Elkin Lair	At the beginning of each player's upkeep, that player exiles a card at random from their hand. The player may play that card this turn. At the beginning of the next end step, if the player hasn't played the card, they put it into their graveyard.
 Verdant Mastery	Search your library for up to four basic land cards and reveal them. Put one of them onto the battlefield tapped under an opponent's control if the {N}{G} cost was paid. Put two of them onto the battlefield tapped under your control and the rest into your hand. Then shuffle.
-Suppress	Target player exiles all cards from their hand face down. At the beginning of the end step of that player's next turn, that player returns those cards to their hand.
 Gaze of Pain	Until end of turn, whenever a creature you control attacks and isn't blocked, you may choose to have it deal damage equal to its power to a target creature. If you do, it assigns no combat damage this turn.
 Infinite Authority	Whenever enchanted creature blocks or becomes blocked by a creature with toughness N or less, destroy the other creature at end of combat. At the beginning of the next end step, if that creature was destroyed this way, put a +N/+N counter on the first creature.
 Zuko, Conflicted	At the beginning of your first main phase, choose one that hasn't been chosen and you lose N life — / • Draw a card. / • Put a +N/+N counter on ~. / • Add {R}. / • Exile ~, then return him to the battlefield under an opponent's control.
-Stromgald Spy	Whenever ~ attacks and isn't blocked, you may have defending player play with their hand revealed for as long as ~ remains on the battlefield. If you do, ~ assigns no combat damage this turn.
 Keen Duelist	At the beginning of your upkeep, you and target opponent each reveal the top card of your library. You each lose life equal to the mana value of the card revealed by the other player. You each put the card you revealed into your hand.
 Bamboozling Beeble	{N}, {T}: The next time target player would roll one or more dice this turn, instead they roll that many dice plus one and you choose one of those rolls to ignore.
 Spawnsire of Ulamog	{N}: Cast any number of Eldrazi spells from among cards you own outside the game without paying their mana costs.
@@ -366,18 +328,15 @@ Sunbird Standard // Sunbird Effigy	{T}: For each color among the exiled cards us
 Jaya's Phoenix	Whenever ~ deals combat damage to a player or planeswalker, copy the next loyalty ability you activate this turn when you activate it. You may choose new targets for the copy.
 Shuriken	Equipped creature has "{T}, Unattach ~: ~ deals N damage to target creature. That creature's controller gains control of ~ unless it was unattached from a Ninja."
 Zur's Weirding	If a player would draw a card, they reveal it instead. Then any other player may pay N life. If a player does, put that card into its owner's graveyard. Otherwise, that player draws a card.
-Ranar the Ever-Watchful	Whenever one or more cards are put into exile from your hand or a spell or ability you control exiles one or more permanents from the battlefield, create a N/N white Spirit creature token with flying.
 Blim, Comedic Genius	Whenever ~ deals combat damage to a player, that player gains control of target permanent you control. Then each player loses life and discards cards equal to the number of permanents they control but don't own.
 Enchantment Alteration	Attach target Aura attached to a creature or land to another permanent of that type.
 Aminatou's Augury	Exile the top eight cards of your library. You may put a land card from among them onto the battlefield. Until end of turn, for each nonland card type, you may cast a spell of that type from among the exiled cards without paying its mana cost.
 Kaboom!	Choose any number of target players or planeswalkers. For each of them, reveal cards from the top of your library until you reveal a nonland card, ~ deals damage equal to that card's mana value to that player or planeswalker, then you put the revealed cards on the bottom of your library in any order.
 Gilgamesh, Master-at-Arms	Whenever ~ enters or attacks, look at the top six cards of your library. You may put any number of Equipment cards from among them onto the battlefield. Put the rest on the bottom of your library in a random order. When you put one or more Equipment onto the battlefield this way, you may attach one of them to a Samurai you control.
-The Ninth Doctor	Into the TARDIS — Whenever ~ becomes untapped during your untap step, you get an additional upkeep step after this step.
 Commander's Plate	Equipped creature gets +N/+N and has protection from each color that's not in your commander's color identity.
 Knowledge Pool	Whenever a player casts a spell from their hand, that player exiles it. If the player does, they may cast a spell from among other cards exiled with ~ without paying its mana cost.
 Soundwave, Sonic Spy // Soundwave, Superior Captain	Whenever one or more creature tokens you control deal combat damage to a player, exile target instant or sorcery card with mana value equal to the damage dealt from their graveyard. Copy it. You may cast the copy without paying its mana cost. If you do, convert ~.
 Tyrant of Discord	When ~ enters, target opponent chooses a permanent they control at random and sacrifices it. If a nonland permanent is sacrificed this way, repeat this process.
-Historian's Boon	Whenever the final chapter ability of a Saga you control triggers, create a N/N white Angel creature token with flying and vigilance.
 Scheming Fence	As ~ enters, you may choose a nonland permanent.
 Scheming Fence	Activated abilities of the chosen permanent can't be activated.
 Scheming Fence	~ has all activated abilities of the chosen permanent except for loyalty abilities. You may spend mana as though it were mana of any color to activate those abilities.
@@ -396,19 +355,14 @@ Magus of the Jar	{T}, Sacrifice ~: Each player exiles all cards from their hand 
 Spire Phantasm	Reveal ~ as you draft it. The next time a player drafts a card from this booster pack, guess that card's name. Then that player reveals the drafted card.
 Spire Phantasm	When ~ enters, if you guessed correctly for a card named ~, draw a card.
 Endless Detour	The owner of target spell, nonland permanent, or card in a graveyard puts it on their choice of the top or bottom of their library.
-Reincarnation	Choose target creature. When that creature dies this turn, return a creature card from its owner's graveyard to the battlefield under the control of that creature's owner.
 Finale of Promise	You may cast up to one target instant card and/or up to one target sorcery card from your graveyard each with mana value X or less without paying their mana costs. If a spell cast this way would be put into your graveyard, exile it instead. If X is N or more, copy each of those spells twice. You may choose new targets for the copies.
-Imodane, the Pyrohammer	Whenever an instant or sorcery spell you control that targets only a single creature deals damage to that creature, ~ deals that much damage to each opponent.
 Desperate Gambit	Choose a source you control and flip a coin. If you win the flip, the next time that source would deal damage this turn, it deals double that damage instead. If you lose the flip, the next time it would deal damage this turn, prevent that damage.
 Ambitious Augmenter	When ~ dies, if it had one or more counters on it, create a N/N green and blue Fractal creature token, then put ~'s counters on that token.
-The War Doctor	Whenever one or more other permanents phase out and whenever one or more other cards are put into exile from anywhere, put a time counter on ~.
-Kang the Conqueror	Power-up — {N}{U}{U}{U}: Put a +N/+N counter on ~. Take an extra turn after this one. During that turn, power-up abilities can't be activated.
 Caller of the Untamed	{X}, {T}: Create a token that's a copy of a card you exiled with cards named ~. X is the mana value of that card.
 Regicide	Reveal ~ as you draft it. The player to your right chooses a color, you choose another color, then the player to your left chooses a third color.
 Regicide	Destroy target creature that's one or more of the colors chosen as you drafted cards named ~.
 Smuggler Captain	As you draft a card, you may reveal it, note its name, then turn ~ face down.
 Smuggler Captain	When ~ enters, you may search your library for a card with a name you noted for cards named ~, reveal it, put it into your hand, then shuffle.
-Ashnod the Uncaring	Whenever you activate an ability of an artifact or creature that isn't a mana ability, if one or more permanents were sacrificed to activate it, you may copy that ability. You may choose new targets for the copy.
 Godsend	Whenever equipped creature blocks or becomes blocked by one or more creatures, you may exile one of those creatures.
 Spirit of Resilience	Whenever one or more cards leave your graveyard, put a +N/+N counter on ~, then you may have ~ become a copy of an artifact or creature card from among those cards until end of turn.
 Proficient Pyrodancer	{N}{R}: Another target creature with an art sticker on it gets +N/+N and gains menace until end of turn.
@@ -421,8 +375,6 @@ Indomitable Creativity	Destroy X target artifacts and/or creatures. For each per
 Glyph of Delusion	Put X glyph counters on target creature that target Wall blocked this turn, where X is the power of that blocked creature. The creature gains "~ doesn't untap during your untap step if it has a glyph counter on it" and "At the beginning of your upkeep, remove a glyph counter from ~."
 Shared Fate	If a player would draw a card, that player exiles the top card of one of their opponents' libraries face down instead.
 Shared Fate	Each player may look at cards they exiled with ~, and they may play lands and cast spells from among those cards.
-Diabolic Servitude	When the creature put onto the battlefield with ~ dies, exile it and return ~ to its owner's hand.
-Diabolic Servitude	When ~ leaves the battlefield, exile the creature put onto the battlefield with ~.
 Jeweled Amulet	{N}, {T}: Put a charge counter on ~. Note the type of mana spent to pay this activation cost. Activate only if there are no charge counters on ~.
 Jeweled Amulet	{T}, Remove a charge counter from ~: Add one mana of ~'s last noted type.
 Whispergear Sneak	During the draft, you may turn ~ face down. If you do, look at any unopened booster pack in the draft or any booster pack not being looked at by another player.
@@ -433,7 +385,6 @@ The Master, Gallifrey's End	Make Them Pay — Whenever a nontoken artifact creat
 Tunnel of Love	{VISIT} Visit — Choose an opponent. They choose a creature they control, then you choose a creature you control. You may exile the chosen creatures. If you do, return them to the battlefield under their owners' control at the beginning of the next end step. Otherwise, the chosen creatures fight each other.
 Olórin's Searing Light	Each opponent exiles a creature with the greatest power among creatures that player controls. If there are two or more instant and/or sorcery cards in your graveyard, ~ deals damage to each opponent equal to the power of the creature they exiled.
 Winter, Cynical Opportunist	Delirium — At the beginning of your end step, you may exile any number of cards from your graveyard with four or more card types among them. If you do, put a permanent card from among them onto the battlefield with a finality counter on it.
-Havengul Laboratory // Havengul Mystery	When the creature put onto the battlefield with ~ leaves the battlefield, transform ~.
 Comet, Stellar Pup	N or N — [+N], then create two N/N green Squirrel creature tokens. They gain haste until end of turn.
 Comet, Stellar Pup	N — [-N], then return a card with mana value N or less from your graveyard to your hand.
 Comet, Stellar Pup	N or N — ~ deals damage equal to the number of loyalty counters on him to a creature or player, then [-N].
@@ -448,7 +399,6 @@ Breeches, Brazen Plunderer	Whenever one or more Pirates you control deal damage 
 Chaos Defiler	Battle Cannon — When ~ enters or dies, for each opponent, choose a nonland permanent that player controls. Destroy one of them chosen at random.
 Cogwork Librarian	As you draft a card, you may draft an additional card from that booster pack. If you do, put ~ into that booster pack.
 Vesuvan Shapeshifter	As ~ enters or is turned face up, you may choose another creature on the battlefield. If you do, until ~ is turned face down, it becomes a copy of that creature, except it has "At the beginning of your upkeep, you may turn ~ face down."
-Immovable Rod	{N}{W}, {T}: For as long as ~ remains tapped, another target permanent loses all abilities and can't attack or block.
 Goblin Artisans	{T}: Flip a coin. If you win the flip, draw a card. If you lose the flip, counter target artifact spell you control that isn't the target of an ability from another creature named ~.
 Infectious Rage	When enchanted creature dies, choose a creature at random ~ can enchant. Return ~ to the battlefield attached to that creature.
 Sivriss, Nightmare Speaker	{T}, Sacrifice another creature or an artifact: For each opponent, you mill a card, then return that card from your graveyard to your hand unless that player pays N life.
@@ -474,7 +424,6 @@ Cover of Winter	If a creature would deal combat damage to you and/or one or more
 Cass, Hand of Vengeance	Whenever ~ or another creature you control dies, if it was enchanted or equipped, return any number of Aura cards that were attached to it from your graveyard to the battlefield attached to target creature, then attach any number of Equipment that were attached to it to that creature.
 Survivor's Med Kit	{N}, {T}: Choose one that hasn't been chosen — / • Stimpak — Draw a card. / • Fancy Lads Snack Cakes — Create a Food token. / • RadAway — Target player loses all rad counters. Sacrifice ~.
 Cemetery Prowler	Spells you cast cost {N} less to cast for each card type they share with cards exiled with ~.
-Lucius the Eternal	Armour of Shrieking Souls — When ~ dies, exile it and choose target creature an opponent controls. When that creature leaves the battlefield, return ~ from exile to the battlefield under its owner's control.
 Mind Bomb	Each player may discard up to three cards. ~ deals damage to each player equal to N minus the number of cards they discarded this way.
 Farideh, Devil's Chosen	Dark One's Own Luck — Whenever you roll one or more dice, ~ gains flying and menace until end of turn. If any of those results was N or higher, draw a card.
 False Cure	Until end of turn, whenever a player gains life, that player loses N life for each N life they gained.
@@ -490,4 +439,3 @@ Grifter's Blade	As ~ enters, choose a creature you control it could be attached 
 Leori, Sparktouched Hunter	Whenever ~ deals combat damage to a player, choose a planeswalker type. Until end of turn, whenever you activate an ability of a planeswalker of that type, copy that ability. You may choose new targets for the copies.
 Explosion of Riches	Draw a card, then each other player may draw a card. Whenever a card is drawn this way, ~ deals N damage to target opponent chosen at random from among your opponents.
 Temporary Truce	Each player may draw up to two cards. For each card less than two a player draws this way, that player gains N life.
-Firesong and Sunspeaker	Whenever a white instant or sorcery spell causes you to gain life, ~ deals N damage to target creature or player.

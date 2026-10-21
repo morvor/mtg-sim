@@ -32,7 +32,7 @@ play-exiled-by-you	Grizzly Bears	You may play cards exiled with ~.	OK
 spend-any-color-exiled	Grizzly Bears	You may play cards exiled with ~, and you may spend mana as though it were mana of any color to cast those spells.	OK
 emblem-quoted	Grizzly Bears	When ~ enters, you get an emblem with "Creatures you control get +1/+1."	OK
 each-player-exiled-with	Grizzly Bears	Each player may play lands and cast spells from among cards they own exiled with ~.	FAIL
-for-as-long-one-of	Grizzly Bears	When ~ enters, exile the top three cards of target opponent's library. For as long as you control ~, you may play one of the exiled cards.	FAIL
+for-as-long-one-of	Grizzly Bears	When ~ enters, exile the top three cards of target opponent's library. For as long as you control ~, you may play one of the exiled cards.	OK
 once-each-turn-play	Grizzly Bears	Once each turn, you may play a card from exile with a collection counter on it.	OK
 for-each-type-cast	Divination	Exile the top eight cards of your library. Until end of turn, for each nonland card type, you may cast a spell of that type from among the exiled cards without paying its mana cost.	FAIL
 up-to-one-andor	Divination	You may cast up to one target instant card and/or up to one target sorcery card from your graveyard without paying their mana costs.	FAIL
@@ -330,3 +330,13 @@ cw1	Cover of Winter	If a creature would deal combat damage to you and/or one or 
 cw2	Cover of Winter	If a creature would deal combat damage to you, prevent X of that damage, where X is the number of age counters on ~.	OK
 cw3	Cover of Winter	If a creature would deal combat damage to you, prevent 1 of that damage.	OK
 eu1	Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card. You draw a card for each land card put into a graveyard this way.	FAIL
+T-effecttrig	Divination	Until end of turn, whenever a player gains life, you draw a card.	OK
+T-effecttrig2	Divination	Until end of turn, whenever a creature you control attacks, you gain 1 life.	OK
+T-nextcast	Divination	When you next cast an instant spell this turn, copy that spell.	OK
+T-nextcast2	Divination	When you next cast an instant spell or activate a loyalty ability this turn, copy that spell or ability.	FAIL
+T-delayed-enter	Divination	Return target creature card from your graveyard to the battlefield. When that creature enters, you gain 2 life.	FAIL
+T-losecontrol	Divination	Gain control of target artifact until end of turn. When you lose control of that artifact this turn, draw a card.	FAIL
+T-aslong-copy	Grizzly Bears	{2}{U}: Tap another target creature. ~ becomes a copy of that creature for as long as that creature remains tapped.	FAIL
+T-aslong-copy2	Grizzly Bears	{2}{U}: ~ becomes a copy of target creature until end of turn.	OK
+T-castcard	Grizzly Bears	Whenever a player casts an instant or sorcery card, you gain 1 life.	FAIL
+T-untap-trig	Grizzly Bears	{T}: Tap target creature. When ~ becomes untapped, untap that creature.	OK
