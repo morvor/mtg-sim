@@ -6,6 +6,7 @@ use super::r600_examples_common::supported;
 use super::r800_common::*;
 use mtg_engine::events::Event;
 use mtg_engine::game::{GameConfig, GameResult};
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
