@@ -317,24 +317,49 @@ fn put_the_rest_of_the_exiled_cards(l: &str, prev: &mut Effect, b: &mut Builder)
     let l = l.strip_prefix("then ").unwrap_or(l);
     let to = match l {
         "put the rest of the exiled cards into your hand" => Destination::zone(ZoneKind::Hand),
+        // "Then they put the exiled cards on the bottom of their library in a random order."
+        // (Tibalt's Trickery): those still in exile, after the one found may have been cast.
+        "they put the exiled cards on the bottom of their library in a random order"
+        | "put the exiled cards on the bottom of your library in a random order" => {
+            let mut d = Destination::zone(ZoneKind::Library);
+            d.position = LibraryPosition::BottomRandom;
+            d
+        }
         _ => return false,
     };
-    let Some((_, rest)) = b
+    // After exiling cards until one is exiled (perhaps by another player, "its controller
+    // exiles cards ..."): the cards revealed that are still in exile.
+    fn exiles_until(e: &Effect) -> bool {
+        match e {
+            Effect::RevealUntil {
+                found_to, rest_to, ..
+            } => found_to.zone == ZoneKind::Exile && rest_to.zone == ZoneKind::Exile,
+            Effect::Seq(v) => v.iter().any(exiles_until),
+            Effect::AsPlayer { effect, .. } | Effect::May { effect, .. } => exiles_until(effect),
+            Effect::If {
+                then, otherwise, ..
+            } => exiles_until(then) || exiles_until(otherwise),
+            _ => false,
+        }
+    }
+    let rest = match b
         .named
         .iter()
         .rev()
         .find(|(n, _)| n == super::r406_exile_until::THE_REST)
-    else {
-        return false;
+    {
+        Some((_, rest)) => rest.clone(),
+        None if exiles_until(prev) => Sel::All(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(vars::REVEALED))),
+            Filter::InZone(ZoneKind::Exile),
+        ])),
+        None => return false,
     };
     // Only the cards still in exile.
     if !format!("{rest:?}").contains("InZone(Exile)") {
         return false;
     }
-    let e = Effect::Move {
-        what: rest.clone(),
-        to,
-    };
+    let e = Effect::Move { what: rest, to };
     *prev = Effect::seq(vec![std::mem::take(prev), e]);
     true
 }

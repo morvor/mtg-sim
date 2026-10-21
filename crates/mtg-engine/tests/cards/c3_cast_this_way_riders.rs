@@ -698,3 +698,36 @@ fn hama_casts_the_exiled_card_during_your_turn_by_waterbending() {
     assert_eq!(t.life(P1), 17);
     let _ = hama;
 }
+
+#[test]
+fn tibalts_trickery_the_controller_casts_the_found_card_and_bottoms_the_rest() {
+    cr!("608.2g", "701.17a", "201.2");
+    assert_supported("Tibalt's Trickery");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P1, "Mountain", 2);
+    // P0's library: three Forests (one to three are milled), a Lightning Bolt (the same
+    // name as the countered spell: passed over), then a Shock (found).
+    let shock = t.library_top(P0, "Shock");
+    let bolt2 = t.library_top(P0, "Lightning Bolt");
+    for _ in 0..3 {
+        t.library_top(P0, "Forest");
+    }
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let trickery = t.hand(P1, "Tibalt's Trickery");
+    t.cast(P0, bolt).target(P1).go();
+    // The countered spell's controller (P0) casts the Shock for free, at P1.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.turn.priority = Some(P1);
+    let target = t.g.current(bolt);
+    t.cast(P1, trickery).target(target).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "{}", t.dump_log());
+    assert!(t.in_graveyard(P0, "Shock"));
+    let _ = shock;
+    // The other exiled cards went to the bottom of P0's library.
+    assert_eq!(t.zone(t.g.current(bolt2)), Zone::Library(P0));
+    assert!(t.g.exile.iter().all(|c| t.g.obj(*c).owner != P0), "{}", t.dump_log());
+}
