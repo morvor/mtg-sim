@@ -340,3 +340,80 @@ fn put_the_rest_of_the_exiled_cards(l: &str, prev: &mut Effect, b: &mut Builder)
 }
 
 inventory::submit! { super::FollowupPattern { name: "card flow 4: put the rest of the exiled cards into your hand", priority: 5, apply: put_the_rest_of_the_exiled_cards } }
+
+/// The instruction a clause said of "each player" would be in the second person ("reveals
+/// ... their library" → "reveal ... your library"), if it's one of these verbs.
+fn as_your_instruction(clause: &str) -> Option<String> {
+    let (verb, rest) = clause.split_once(' ')?;
+    let verb = match verb {
+        "reveals" => "reveal",
+        "puts" => "put",
+        "looks" => "look",
+        "exiles" => "exile",
+        "shuffles" => "shuffle",
+        _ => return None,
+    };
+    let mut rest = format!(" {rest} ");
+    for (from, to) in [
+        (" they revealed this way ", " revealed this way "),
+        (" their library ", " your library "),
+        (" their graveyard ", " your graveyard "),
+        (" their hand ", " your hand "),
+        (" they control ", " you control "),
+        (" they control,", " you control,"),
+    ] {
+        rest = rest.replace(from, to);
+    }
+    let rest = rest.trim();
+    // Nothing else about "they".
+    if rest.contains("they ") || rest.contains("their ") || rest.contains("them") {
+        return None;
+    }
+    Some(format!("{verb} {rest}"))
+}
+
+/// "Each player reveals a number of cards from the top of their library equal to the
+/// number of nonland permanents they control, puts all permanent cards they revealed this
+/// way onto the battlefield, and puts the rest into their graveyard." (Over the Top): each
+/// player performs the instructions, each instruction by all of them before the next
+/// (CR 101.4, 608.2e; see `simultaneous.rs`).
+fn each_player_does_a_list(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l.trim()).strip_prefix("each player ")?;
+    // "X, Y, and Z": three or more clauses (two are other patterns' business).
+    let (head, last) = r.rsplit_once(", and ")?;
+    let mut clauses: Vec<&str> = head.split(", ").collect();
+    clauses.push(last);
+    if clauses.len() < 3 {
+        return None;
+    }
+    let sentences: Vec<String> = clauses
+        .iter()
+        .map(|c| as_your_instruction(c))
+        .collect::<Option<_>>()?;
+    let text = sentences
+        .iter()
+        .map(|s| {
+            let mut c = s.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().chain(c).collect::<String>() + ".",
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = b.in_trigger;
+    let e = crate::oracle::effects::parse_effect_text(&text, &mut sub)?;
+    if !sub.targets.is_empty() {
+        return None;
+    }
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(e),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: each player [does X], [does Y], and [does Z]", priority: 90, parse: each_player_does_a_list } }

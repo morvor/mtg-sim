@@ -363,3 +363,27 @@ fn portent_of_calamity_casts_one_free_only_with_four_or_more_exiled() {
         }
     }
 }
+
+#[test]
+fn over_the_top_each_player_reveals_and_puts_permanents_onto_the_battlefield() {
+    cr!("101.4", "608.2e", "701.20a");
+    assert_supported("Over the Top");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 7);
+    t.battlefield(P1, "Gray Ogre");
+    t.battlefield(P1, "Ornithopter");
+    // P0 controls one nonland permanent; P1 two.
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let shock = t.library_top(P1, "Shock");
+    let giant = t.library_top(P1, "Hill Giant");
+    let spell = t.hand(P0, "Over the Top");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Graveyard(P0), "{}", t.dump_log());
+    let giant_x = t.g.current(giant);
+    assert!(t.on_battlefield(giant_x));
+    assert_eq!(t.g.obj(giant_x).controller, P1);
+    assert_eq!(t.zone(t.g.current(shock)), Zone::Graveyard(P1));
+}
