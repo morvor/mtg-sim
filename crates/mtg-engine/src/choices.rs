@@ -990,3 +990,78 @@ impl crate::kw::KeywordRules for ChosenObjects {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChosenObjects) }
+
+/// The variable holding objects chosen by an instruction, collected from every player
+/// ("each other player chooses a nonland permanent ... that hasn't been chosen this way",
+/// "choose a creature with that power"), for "the others" / "not chosen this way".
+pub const CHOSEN_OBJECTS_VAR: crate::ability::Var = crate::ability::vars::USER + 30529;
+/// `Effect::Custom`: "For each different power among creatures on the battlefield, choose
+/// a creature with that power." (Celestial Judgment): the controller chooses one creature
+/// for each power any creature has, collected in [`CHOSEN_OBJECTS_VAR`].
+pub const FOR_EACH_DIFFERENT_POWER: &str = "choices: for each different power, choose a creature with that power";
+/// `Filter::Custom` prefix: of the card type that is the `i`th word chosen for the source
+/// ("of the first type" after "choose an order for artifacts, creatures, and lands").
+pub const NTH_CHOSEN_CARD_TYPE: &str = "choices: of the chosen card type #";
+
+/// The filter name for the `i`th chosen card type.
+pub fn nth_chosen_card_type(i: usize) -> String {
+    format!("{NTH_CHOSEN_CARD_TYPE}{i}")
+}
+
+pub struct ObjectChoices;
+
+impl crate::kw::KeywordRules for ObjectChoices {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != FOR_EACH_DIFFERENT_POWER {
+            return false;
+        }
+        let creatures: Vec<ObjectId> = g
+            .permanents()
+            .filter(|o| o.chars.is_creature())
+            .map(|o| o.id)
+            .collect();
+        let mut powers: Vec<i32> = creatures
+            .iter()
+            .map(|c| g.obj(*c).chars.power.unwrap_or(0))
+            .collect();
+        powers.sort_unstable();
+        powers.dedup();
+        let mut chosen = Vec::new();
+        for pw in powers {
+            let cands: Vec<ObjectId> = creatures
+                .iter()
+                .copied()
+                .filter(|c| g.is_live(*c) && g.obj(*c).chars.power.unwrap_or(0) == pw)
+                .collect();
+            let pick = g
+                .ask_objects(
+                    ctx.controller,
+                    ctx.source,
+                    &format!("Choose a creature with power {pw}"),
+                    cands.clone(),
+                    1,
+                    1,
+                )
+                .first()
+                .copied()
+                .or(cands.first().copied());
+            if let Some(c) = pick {
+                chosen.push(Entity::Object(c));
+            }
+        }
+        ctx.set_var(CHOSEN_OBJECTS_VAR, chosen);
+        true
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        let i: usize = name.strip_prefix(NTH_CHOSEN_CARD_TYPE)?.parse().ok()?;
+        let w = g.source_choices(ctx).and_then(|c| c.list.get(i).cloned());
+        Some(w.and_then(|w| CardType::from_word(&w)).is_some_and(|t| g.obj(id).chars.is(t)))
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ObjectChoices) }
