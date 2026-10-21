@@ -42,16 +42,27 @@ fn blade_and_plated_slivers_pump_every_sliver() {
     cr!("611.3a", "613.4c");
     // Blade Sliver: "All Sliver creatures get +1/+0." Plated Sliver: "All Sliver creatures
     // get +0/+1."
-    for (name, base, bonus) in [("Blade Sliver", (2, 2), (1, 0)), ("Plated Sliver", (1, 1), (0, 1))] {
+    for (name, base, bonus) in [
+        ("Blade Sliver", (2, 2), (1, 0)),
+        ("Plated Sliver", (1, 1), (0, 1)),
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         let s = t.battlefield(P0, name);
         let mine = t.battlefield(P0, "Metallic Sliver");
         let theirs = t.battlefield(P1, "Metallic Sliver");
         let bears = t.battlefield(P0, "Grizzly Bears");
-        assert_eq!(t.pt(s), (base.0 + bonus.0, base.1 + bonus.1), "{name}: itself");
+        assert_eq!(
+            t.pt(s),
+            (base.0 + bonus.0, base.1 + bonus.1),
+            "{name}: itself"
+        );
         for x in [mine, theirs] {
-            assert_eq!(t.pt(x), (1 + bonus.0, 1 + bonus.1), "{name}: every player's Slivers");
+            assert_eq!(
+                t.pt(x),
+                (1 + bonus.0, 1 + bonus.1),
+                "{name}: every player's Slivers"
+            );
         }
         assert_eq!(t.pt(bears), (2, 2), "{name}: not other creatures");
     }
@@ -74,9 +85,18 @@ fn vow_of_malice_pumps_and_keeps_the_creature_from_attacking_you() {
     t.set_step(P1, Step::BeginningOfCombat);
     assert!(t.g.can_attack(bears));
     assert!(!t.g.can_attack_target(bears, Entity::Player(P0)), "not you");
-    assert!(!t.g.can_attack_target(bears, obj(walker)), "not your planeswalkers");
-    assert!(t.g.can_attack_target(bears, Entity::Player(P2)), "other players");
-    assert!(t.g.can_attack_target(other, Entity::Player(P0)), "only the enchanted creature");
+    assert!(
+        !t.g.can_attack_target(bears, obj(walker)),
+        "not your planeswalkers"
+    );
+    assert!(
+        t.g.can_attack_target(bears, Entity::Player(P2)),
+        "other players"
+    );
+    assert!(
+        t.g.can_attack_target(other, Entity::Player(P0)),
+        "only the enchanted creature"
+    );
 }
 
 #[test]
@@ -91,7 +111,10 @@ fn hot_springs_gives_the_enchanted_land_a_prevention_ability() {
     let theirs = t.battlefield(P1, "Maze of Ith");
     let aura = enchant(&mut t, "Hot Springs", "Forest", 2, mine);
     let c = target_choices(&t, P0).pop().unwrap();
-    assert!(c.contains(&obj(mine)) && !c.contains(&obj(theirs)), "a land you control");
+    assert!(
+        c.contains(&obj(mine)) && !c.contains(&obj(theirs)),
+        "a land you control"
+    );
     assert_eq!(t.obj_now(aura).attached_to, Some(obj(mine)));
     let has_prevent = |t: &TestGame, id: ObjectId| {
         t.obj_now(id)
@@ -102,7 +125,14 @@ fn hot_springs_gives_the_enchanted_land_a_prevention_ability() {
     };
     assert!(has_prevent(&t, mine));
     assert!(!has_prevent(&t, theirs), "only the enchanted land");
-    act(&mut t, P0, mine, "prevent the next 1", &[Entity::Player(P0)]).unwrap();
+    act(
+        &mut t,
+        P0,
+        mine,
+        "prevent the next 1",
+        &[Entity::Player(P0)],
+    )
+    .unwrap();
     assert!(t.obj_now(mine).tapped);
     t.resolve_all();
     t.lands(P1, "Mountain", 1);
@@ -181,7 +211,10 @@ fn lightwalker_flies_with_a_counter_on_it() {
     assert!(!t.obj_now(l).has_keyword(KeywordKind::Flying));
     t.g.add_counters(obj(l), "-1/-1", 1, None);
     t.g.recompute();
-    assert!(!t.obj_now(l).has_keyword(KeywordKind::Flying), "a -1/-1 counter isn't one");
+    assert!(
+        !t.obj_now(l).has_keyword(KeywordKind::Flying),
+        "a -1/-1 counter isn't one"
+    );
     let l = t.battlefield(P0, "Lightwalker");
     t.g.add_counters(obj(l), "+1/+1", 1, None);
     t.g.recompute();
@@ -215,7 +248,10 @@ fn river_serpent_attacks_only_with_five_cards_in_your_graveyard() {
     }
     t.graveyard(P1, "Forest");
     t.set_step(P0, Step::BeginningOfCombat);
-    assert!(!t.g.can_attack(s), "four cards (the opponent's don't count)");
+    assert!(
+        !t.g.can_attack(s),
+        "four cards (the opponent's don't count)"
+    );
     t.graveyard(P0, "Forest");
     t.g.recompute();
     assert!(t.g.can_attack(s), "five cards");
@@ -230,7 +266,10 @@ fn leech_fanatic_has_lifelink_during_your_turn() {
     let l = t.battlefield(P0, "Leech Fanatic");
     let theirs = t.battlefield(P1, "Leech Fanatic");
     assert!(t.obj_now(l).has_keyword(KeywordKind::Lifelink));
-    assert!(!t.obj_now(theirs).has_keyword(KeywordKind::Lifelink), "not its controller's turn");
+    assert!(
+        !t.obj_now(theirs).has_keyword(KeywordKind::Lifelink),
+        "not its controller's turn"
+    );
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(l, Entity::Player(P1))], &[]);
     t.resolve_all();
@@ -329,7 +368,10 @@ fn brine_giant_costs_one_less_for_each_enchantment_you_control() {
     t.battlefield(P1, "Glorious Anthem");
     t.lands(P0, "Island", 4);
     let g = t.hand(P0, "Brine Giant");
-    assert!(t.cast(P0, g).try_go().is_err(), "{{4}}{{U}} with two enchantments");
+    assert!(
+        t.cast(P0, g).try_go().is_err(),
+        "{{4}}{{U}} with two enchantments"
+    );
     t.clear_answers();
     t.lands(P0, "Island", 1);
     t.cast(P0, g).go();

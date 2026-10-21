@@ -35,7 +35,11 @@ fn eladamris_vineyard_adds_gg_in_each_players_first_main_phase() {
     // Not in the second main phase.
     t.advance_to(P1, Step::PostcombatMain);
     assert_eq!(waiting(&t), 0, "no trigger in the second main phase");
-    assert_eq!(pool(&t, P1, ManaType::G), 0, "the mana emptied and none was added");
+    assert_eq!(
+        pool(&t, P1, ManaType::G),
+        0,
+        "the mana emptied and none was added"
+    );
     // And its controller's own first main phase.
     t.advance_to(P0, Step::PrecombatMain);
     t.resolve_all();
@@ -56,7 +60,11 @@ fn knucklebone_witch_may_grow_when_a_goblin_you_control_dies() {
         let bears = t.battlefield(P0, "Grizzly Bears");
         kill(&mut t, theirs);
         kill(&mut t, bears);
-        assert_eq!(t.counters(w, "+1/+1"), 0, "not an opponent's Goblin or a non-Goblin");
+        assert_eq!(
+            t.counters(w, "+1/+1"),
+            0,
+            "not an opponent's Goblin or a non-Goblin"
+        );
         t.answer_yes(P0, yes);
         kill(&mut t, g);
         assert_eq!(t.counters(w, "+1/+1"), yes as u32, "accepted: {yes}");
@@ -118,7 +126,10 @@ fn charmed_clothier_attaches_a_royal_role_to_another_creature_you_control() {
     let c = etb(&mut t, P0, "Charmed Clothier");
     let ch = target_choices(&t, P0).pop().unwrap();
     assert!(ch.contains(&obj(bears)));
-    assert!(!ch.contains(&obj(c)) && !ch.contains(&obj(theirs)), "another, you control");
+    assert!(
+        !ch.contains(&obj(c)) && !ch.contains(&obj(theirs)),
+        "another, you control"
+    );
     let roles = subtype_ids(&t, P0, "Role");
     assert_eq!(roles.len(), 1);
     assert_eq!(t.obj_now(roles[0]).attached_to, Some(obj(bears)));
@@ -138,7 +149,11 @@ fn hekma_sentinels_grows_once_per_cycle_or_discard() {
     t.lands(P0, "Island", 1);
     act(&mut t, P0, s, "cycling", &[]).unwrap();
     t.resolve_all();
-    assert_eq!(t.pt(h), (3, 4), "cycling is a discard too, but it triggers once");
+    assert_eq!(
+        t.pt(h),
+        (3, 4),
+        "cycling is a discard too, but it triggers once"
+    );
     assert_eq!(t.hand_size(P0), 1, "cycling drew a card");
     // The opponent's discards don't count; yours do, once each.
     t.hand(P0, "Grizzly Bears");
@@ -218,7 +233,10 @@ fn scavenging_harpy_exiles_a_card_from_an_opponents_graveyard() {
     t.answer_targets(P0, &[obj(theirs)]);
     etb(&mut t, P0, "Scavenging Harpy");
     let ch = target_choices(&t, P0).pop().unwrap();
-    assert!(ch.contains(&obj(theirs)) && ch.contains(&obj(other)), "any card");
+    assert!(
+        ch.contains(&obj(theirs)) && ch.contains(&obj(other)),
+        "any card"
+    );
     assert!(!ch.contains(&obj(mine)), "not your graveyard");
     assert!(t.in_exile("Hill Giant"));
     assert!(t.in_graveyard(P1, "Forest") && t.in_graveyard(P0, "Grizzly Bears"));
@@ -245,7 +263,10 @@ fn ghitu_chronicler_returns_an_instant_or_sorcery_only_if_kicked() {
             let ch = target_choices(&t, P0).pop().unwrap();
             assert!(!ch.contains(&obj(creature)) && !ch.contains(&obj(theirs)));
         } else {
-            assert!(target_choices(&t, P0).is_empty(), "no trigger when not kicked");
+            assert!(
+                target_choices(&t, P0).is_empty(),
+                "no trigger when not kicked"
+            );
         }
         assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P1, "Shock"));
     }
@@ -286,7 +307,10 @@ fn shocking_sharpshooter_pings_an_opponent_when_another_creature_you_control_ent
     t.enter(P1, "Grizzly Bears");
     t.enter(P0, "Sol Ring");
     t.resolve_all();
-    assert!(target_choices(&t, P0).is_empty(), "not an opponent's creature or a noncreature");
+    assert!(
+        target_choices(&t, P0).is_empty(),
+        "not an opponent's creature or a noncreature"
+    );
     etb(&mut t, P0, "Grizzly Bears");
     let ch = target_choices(&t, P0).pop().unwrap();
     assert!(ch.contains(&Entity::Player(P1)) && ch.contains(&Entity::Player(P2)));
@@ -352,7 +376,10 @@ fn thundering_wurm_is_sacrificed_unless_you_discard_a_land() {
     t.answer_choose(P0, &[obj(land)]);
     let w = etb(&mut t, P0, "Thundering Wurm");
     let ch = entity_choices(&t, P0).pop().unwrap();
-    assert!(ch.contains(&obj(land)) && !ch.contains(&obj(bears)), "land cards only");
+    assert!(
+        ch.contains(&obj(land)) && !ch.contains(&obj(bears)),
+        "land cards only"
+    );
     assert!(t.on_battlefield(w));
     assert_eq!(t.zone(land), Zone::Graveyard(P0));
     assert_eq!(t.zone(bears), Zone::Hand(P0));
@@ -378,15 +405,30 @@ fn penumbra_wurm_and_brood_weaver_leave_tokens_when_they_die() {
     // with trample." Brood Weaver: "When this creature dies, create a 1/2 green Spider
     // creature token with reach."
     for (name, sub, pt, color, kw) in [
-        ("Penumbra Wurm", "Wurm", (6, 6), Color::Black, KeywordKind::Trample),
-        ("Brood Weaver", "Spider", (1, 2), Color::Green, KeywordKind::Reach),
+        (
+            "Penumbra Wurm",
+            "Wurm",
+            (6, 6),
+            Color::Black,
+            KeywordKind::Trample,
+        ),
+        (
+            "Brood Weaver",
+            "Spider",
+            (1, 2),
+            Color::Green,
+            KeywordKind::Reach,
+        ),
     ] {
         supported(name);
         let mut t = TestGame::new(2);
         let c = t.battlefield(P0, name);
         t.g.move_object(c, Zone::Exile, MoveCause::Effect, None);
         t.resolve_all();
-        assert!(tokens(&t, P0, sub).is_empty(), "{name}: exiled, it didn't die");
+        assert!(
+            tokens(&t, P0, sub).is_empty(),
+            "{name}: exiled, it didn't die"
+        );
         let c = t.battlefield(P0, name);
         kill(&mut t, c);
         let tk = tokens(&t, P0, sub);
@@ -408,7 +450,11 @@ fn forerunner_of_the_coalition_drains_when_another_pirate_enters() {
     t.enter(P1, "Kitesail Corsair");
     t.enter(P0, "Grizzly Bears");
     t.resolve_all();
-    assert_eq!((t.life(P1), t.life(P2)), (20, 20), "not an opponent's Pirate or a non-Pirate");
+    assert_eq!(
+        (t.life(P1), t.life(P2)),
+        (20, 20),
+        "not an opponent's Pirate or a non-Pirate"
+    );
     etb(&mut t, P0, "Kitesail Corsair");
     assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 19, 19));
 }
@@ -469,7 +515,10 @@ fn frilled_deathspitter_hits_an_opponent_when_dealt_damage() {
     let s = t.hand(P1, "Shock");
     t.cast(P1, s).target(obj(d)).go();
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Frilled Deathspitter"), "3/2: Shock kills it");
+    assert!(
+        t.in_graveyard(P0, "Frilled Deathspitter"),
+        "3/2: Shock kills it"
+    );
     let ch = target_choices(&t, P0).pop().unwrap();
     assert!(ch.contains(&Entity::Player(P1)) && ch.contains(&obj(walker)));
     assert!(ch.contains(&obj(mine)), "any planeswalker");

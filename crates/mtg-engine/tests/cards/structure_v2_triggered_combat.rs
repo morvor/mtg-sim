@@ -32,7 +32,11 @@ fn audacious_thief_draws_and_loses_life_when_it_attacks() {
     t.battlefield(P0, "Audacious Thief");
     let bears = t.battlefield(P0, "Grizzly Bears");
     attack_and_trigger(&mut t, &[bears]);
-    assert_eq!((t.hand_size(P0), t.life(P0)), (0, 20), "another creature attacking");
+    assert_eq!(
+        (t.hand_size(P0), t.life(P0)),
+        (0, 20),
+        "another creature attacking"
+    );
     let mut t = TestGame::new(2);
     let a2 = t.battlefield(P0, "Audacious Thief");
     attack_and_trigger(&mut t, &[a2]);
@@ -54,7 +58,11 @@ fn phyrexian_pegasus_gives_another_attacker_without_flying_flying() {
     t.answer_targets(P0, &[obj(bears)]);
     attack_and_trigger(&mut t, &[p, bears, drake]);
     let ch = target_choices(&t, P0).pop().unwrap();
-    assert_eq!(ch, vec![obj(bears)], "another attacking creature without flying");
+    assert_eq!(
+        ch,
+        vec![obj(bears)],
+        "another attacking creature without flying"
+    );
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Flying));
     assert!(!t.obj_now(home).has_keyword(KeywordKind::Flying));
     next_turn(&mut t);
@@ -119,7 +127,10 @@ fn rotting_giant_is_sacrificed_unless_you_exile_a_card_from_your_graveyard() {
     t.answer_choose(P0, &[obj(card)]);
     attack_and_trigger(&mut t, &[g]);
     let ch = entity_choices(&t, P0).pop().unwrap();
-    assert!(ch.contains(&obj(card)) && !ch.contains(&obj(theirs)), "your graveyard");
+    assert!(
+        ch.contains(&obj(card)) && !ch.contains(&obj(theirs)),
+        "your graveyard"
+    );
     assert!(t.on_battlefield(g));
     assert!(t.in_exile("Forest"));
     assert!(t.in_graveyard(P1, "Forest"));
@@ -187,8 +198,16 @@ fn heat_of_battle_damages_each_blocking_creatures_controller() {
     let w1 = t.battlefield(P1, "Wall of Wood");
     let w2 = t.battlefield(P1, "Wall of Wood");
     fight(&mut t, &[a, b, c], &[(w1, a), (w2, b)]);
-    assert_eq!(t.life(P1), 20 - 2 - 2, "1 per blocker, plus the unblocked Bears' 2");
-    assert_eq!(t.life(P0), 20, "the attackers' controller isn't dealt damage");
+    assert_eq!(
+        t.life(P1),
+        20 - 2 - 2,
+        "1 per blocker, plus the unblocked Bears' 2"
+    );
+    assert_eq!(
+        t.life(P0),
+        20,
+        "the attackers' controller isn't dealt damage"
+    );
 }
 
 #[test]
@@ -206,9 +225,15 @@ fn clamor_shaman_stops_a_creature_from_blocking() {
     attack_and_trigger(&mut t, &[s]);
     let ch = target_choices(&t, P0).pop().unwrap();
     assert!(ch.contains(&obj(wall)) && ch.contains(&obj(other)));
-    assert!(!ch.contains(&obj(mine)) && !ch.contains(&obj(s)), "an opponent's creature");
+    assert!(
+        !ch.contains(&obj(mine)) && !ch.contains(&obj(s)),
+        "an opponent's creature"
+    );
     let opts = block_options(&t.g, &[P1]);
-    assert!(!block_declaration_legal(&t.g, &opts, &[(wall, s)]), "it can't block");
+    assert!(
+        !block_declaration_legal(&t.g, &opts, &[(wall, s)]),
+        "it can't block"
+    );
     assert!(block_declaration_legal(&t.g, &opts, &[(other, s)]));
 }
 
@@ -223,8 +248,14 @@ fn stinkweed_imp_destroys_creatures_it_deals_combat_damage_to() {
     let spider = t.battlefield(P1, "Giant Spider");
     let wall = t.battlefield(P1, "Wall of Stone");
     fight(&mut t, &[imp, bears], &[(spider, imp), (wall, bears)]);
-    assert!(t.in_graveyard(P1, "Giant Spider"), "1 damage from the Imp destroys the 2/4");
-    assert!(t.on_battlefield(wall), "damage from another creature doesn't");
+    assert!(
+        t.in_graveyard(P1, "Giant Spider"),
+        "1 damage from the Imp destroys the 2/4"
+    );
+    assert!(
+        t.on_battlefield(wall),
+        "damage from another creature doesn't"
+    );
     // Unblocked, it damages the player and destroys nothing.
     let mut t = TestGame::new(2);
     let imp = t.battlefield(P0, "Stinkweed Imp");
@@ -252,7 +283,10 @@ fn no_mercy_destroys_each_creature_that_damages_you() {
     t.resolve_all();
     assert_eq!(t.life(P0), 18);
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
-    assert!(t.on_battlefield(giant), "it dealt damage to a creature, not to you");
+    assert!(
+        t.on_battlefield(giant),
+        "it dealt damage to a creature, not to you"
+    );
     // Noncombat damage from a creature counts; damage to the opponent doesn't.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "No Mercy");
@@ -282,7 +316,10 @@ fn foot_elite_makes_another_creature_indestructible_when_it_attacks() {
     attack_and_trigger(&mut t, &[f]);
     let ch = target_choices(&t, P0).pop().unwrap();
     assert!(ch.contains(&obj(bears)));
-    assert!(!ch.contains(&obj(f)) && !ch.contains(&obj(theirs)), "another, you control");
+    assert!(
+        !ch.contains(&obj(f)) && !ch.contains(&obj(theirs)),
+        "another, you control"
+    );
     assert_eq!(t.pt(bears), (3, 2));
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Indestructible));
     assert!(!t.obj_now(f).has_keyword(KeywordKind::Indestructible));

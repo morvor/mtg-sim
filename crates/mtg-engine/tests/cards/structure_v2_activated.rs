@@ -34,7 +34,10 @@ fn conservator_prevents_the_next_two_damage_to_you() {
     let mut t = TestGame::new(2);
     let c = t.battlefield(P0, "Conservator");
     t.lands(P0, "Wastes", 2);
-    assert!(act(&mut t, P0, c, "prevent", &[]).is_err(), "{{3}} needs three mana");
+    assert!(
+        act(&mut t, P0, c, "prevent", &[]).is_err(),
+        "{{3}} needs three mana"
+    );
     t.clear_answers();
     t.lands(P0, "Wastes", 1);
     act(&mut t, P0, c, "prevent", &[]).unwrap();
@@ -63,7 +66,10 @@ fn rishadan_port_taps_target_land() {
     let theirs = t.battlefield(P1, "Forest");
     let other = t.battlefield(P1, "Island");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    assert!(act(&mut t, P0, port, "tap target", &[obj(theirs)]).is_err(), "{{1}} unpaid");
+    assert!(
+        act(&mut t, P0, port, "tap target", &[obj(theirs)]).is_err(),
+        "{{1}} unpaid"
+    );
     t.clear_answers();
     t.lands(P0, "Wastes", 1);
     act(&mut t, P0, port, "tap target", &[obj(theirs)]).unwrap();
@@ -90,10 +96,20 @@ fn aurora_griffin_makes_target_permanent_white_until_end_of_turn() {
     t.lands(P0, "Plains", 2);
     act(&mut t, P0, g, "white", &[obj(dragon)]).unwrap();
     let c = target_choices(&t, P0).pop().unwrap();
-    assert!(c.contains(&obj(land)) && c.contains(&obj(bears)), "any permanent");
+    assert!(
+        c.contains(&obj(land)) && c.contains(&obj(bears)),
+        "any permanent"
+    );
     t.resolve_all();
-    assert_eq!(t.obj_now(dragon).chars.colors, ColorSet::single(Color::White), "only white");
-    assert_eq!(t.obj_now(bears).chars.colors, ColorSet::single(Color::Green));
+    assert_eq!(
+        t.obj_now(dragon).chars.colors,
+        ColorSet::single(Color::White),
+        "only white"
+    );
+    assert_eq!(
+        t.obj_now(bears).chars.colors,
+        ColorSet::single(Color::Green)
+    );
     act(&mut t, P0, g, "white", &[obj(land)]).unwrap();
     t.resolve_all();
     assert_eq!(t.obj_now(land).chars.colors, ColorSet::single(Color::White));
@@ -115,13 +131,20 @@ fn pilgrim_of_justice_prevents_damage_from_a_chosen_red_source() {
     let b = bolt_at(&mut t, P1, Entity::Player(P0));
     t.answer_choose(P0, &[obj(b)]);
     act(&mut t, P0, p, "prevent", &[]).unwrap();
-    assert!(t.in_graveyard(P0, "Pilgrim of Justice"), "sacrificed as a cost");
+    assert!(
+        t.in_graveyard(P0, "Pilgrim of Justice"),
+        "sacrificed as a cost"
+    );
     t.resolve(); // the Pilgrim's ability
     let c = entity_choices(&t, P0).pop().unwrap();
     assert!(c.contains(&obj(b)), "the red spell can be chosen");
     assert!(!c.contains(&obj(bears)), "a green source can't");
     t.resolve_all();
-    assert_eq!(t.life(P0), 20, "the chosen red source's damage is prevented");
+    assert_eq!(
+        t.life(P0),
+        20,
+        "the chosen red source's damage is prevented"
+    );
     bolt_at(&mut t, P1, Entity::Player(P0));
     t.resolve_all();
     assert_eq!(t.life(P0), 17, "only the next time");
@@ -141,7 +164,10 @@ fn bonecaller_cleric_reanimates_only_as_a_sorcery() {
     t.lands(P0, "Swamp", 4);
     // Not with a spell on the stack.
     bolt_at(&mut t, P1, Entity::Player(P1));
-    assert!(act(&mut t, P0, c, "return", &[obj(giant)]).is_err(), "not at instant speed");
+    assert!(
+        act(&mut t, P0, c, "return", &[obj(giant)]).is_err(),
+        "not at instant speed"
+    );
     t.clear_answers();
     t.resolve_all();
     act(&mut t, P0, c, "return", &[obj(giant)]).unwrap();
@@ -341,7 +367,10 @@ fn wildheart_invoker_gives_plus_five_and_trample_until_end_of_turn() {
     let w = t.battlefield(P0, "Wildheart Invoker");
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Forest", 7);
-    assert!(act(&mut t, P0, w, "+5/+5", &[obj(bears)]).is_err(), "{{8}} needs eight mana");
+    assert!(
+        act(&mut t, P0, w, "+5/+5", &[obj(bears)]).is_err(),
+        "{{8}} needs eight mana"
+    );
     t.clear_answers();
     t.lands(P0, "Forest", 1);
     act(&mut t, P0, w, "+5/+5", &[obj(bears)]).unwrap();
@@ -363,14 +392,20 @@ fn lithatog_sacrifices_a_land_for_plus_one_plus_one() {
     let mut t = TestGame::new(2);
     let l = t.battlefield(P0, "Lithatog");
     let art = t.battlefield(P0, "Ornithopter");
-    assert!(act(&mut t, P0, l, "sacrifice a land", &[]).is_err(), "no land");
+    assert!(
+        act(&mut t, P0, l, "sacrifice a land", &[]).is_err(),
+        "no land"
+    );
     t.clear_answers();
     let forest = t.battlefield(P0, "Forest");
     let theirs = t.battlefield(P1, "Forest");
     t.answer_choose(P0, &[obj(forest)]);
     act(&mut t, P0, l, "sacrifice a land", &[]).unwrap();
     assert!(t.in_graveyard(P0, "Forest"));
-    assert!(t.on_battlefield(theirs) && t.on_battlefield(art), "only your land");
+    assert!(
+        t.on_battlefield(theirs) && t.on_battlefield(art),
+        "only your land"
+    );
     t.resolve_all();
     assert_eq!(t.pt(l), (2, 3));
     next_turn(&mut t);
@@ -384,7 +419,10 @@ fn glittermonger_taps_for_a_treasure() {
     supported("Glittermonger");
     let mut t = TestGame::new(2);
     let g = t.battlefield_sick(P0, "Glittermonger");
-    assert!(act(&mut t, P0, g, "treasure", &[]).is_err(), "summoning sick");
+    assert!(
+        act(&mut t, P0, g, "treasure", &[]).is_err(),
+        "summoning sick"
+    );
     t.clear_answers();
     let g2 = t.battlefield(P0, "Glittermonger");
     act(&mut t, P0, g2, "treasure", &[]).unwrap();
@@ -394,7 +432,10 @@ fn glittermonger_taps_for_a_treasure() {
     assert_eq!(tr.len(), 1);
     assert!(t.obj_now(tr[0]).is_token());
     assert_eq!(count_subtype(&t, P1, "Treasure"), 0);
-    assert!(act(&mut t, P0, g2, "treasure", &[]).is_err(), "already tapped");
+    assert!(
+        act(&mut t, P0, g2, "treasure", &[]).is_err(),
+        "already tapped"
+    );
 }
 
 #[test]
@@ -406,10 +447,16 @@ fn eternal_dragon_returns_from_the_graveyard_only_during_your_upkeep() {
     let mut t = TestGame::new(2);
     let d = t.graveyard(P0, "Eternal Dragon");
     t.lands(P0, "Plains", 5);
-    assert!(act(&mut t, P0, d, "return", &[]).is_err(), "not in the main phase");
+    assert!(
+        act(&mut t, P0, d, "return", &[]).is_err(),
+        "not in the main phase"
+    );
     t.clear_answers();
     t.set_step(P1, Step::Upkeep);
-    assert!(act(&mut t, P0, d, "return", &[]).is_err(), "not in an opponent's upkeep");
+    assert!(
+        act(&mut t, P0, d, "return", &[]).is_err(),
+        "not in an opponent's upkeep"
+    );
     t.clear_answers();
     t.set_step(P0, Step::Upkeep);
     act(&mut t, P0, d, "return", &[]).unwrap();
@@ -483,14 +530,24 @@ fn ghor_clan_rampager_bloodrushes_an_attacking_creature() {
     act(&mut t, P0, r, "attacking creature", &[obj(bears)]).unwrap();
     let c = target_choices(&t, P0).pop().unwrap();
     assert!(c.contains(&obj(bears)));
-    assert!(!c.contains(&obj(home)) && !c.contains(&obj(wall)), "attacking creatures only");
-    assert!(t.in_graveyard(P0, "Ghor-Clan Rampager"), "discarded as the cost");
+    assert!(
+        !c.contains(&obj(home)) && !c.contains(&obj(wall)),
+        "attacking creatures only"
+    );
+    assert!(
+        t.in_graveyard(P0, "Ghor-Clan Rampager"),
+        "discarded as the cost"
+    );
     t.resolve_all();
     assert_eq!(t.pt(bears), (6, 6));
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Trample));
     block(&mut t, P1, &[(wall, bears)]);
     t.advance_to_step(Step::EndOfCombat);
-    assert_eq!(t.life(P1), 17, "6 trample damage past a 0/3 wall: 3 trample over");
+    assert_eq!(
+        t.life(P1),
+        17,
+        "6 trample damage past a 0/3 wall: 3 trample over"
+    );
     next_turn(&mut t);
     assert_eq!(t.pt(bears), (2, 2));
 }
@@ -521,7 +578,10 @@ fn faerie_dreamthief_exiles_itself_from_the_graveyard_to_draw_and_lose_life() {
     let mut t = TestGame::new(2);
     let f = t.battlefield(P0, "Faerie Dreamthief");
     t.lands(P0, "Swamp", 3);
-    assert!(act(&mut t, P0, f, "draw", &[]).is_err(), "only from the graveyard");
+    assert!(
+        act(&mut t, P0, f, "draw", &[]).is_err(),
+        "only from the graveyard"
+    );
     t.clear_answers();
     let f = t.graveyard(P0, "Faerie Dreamthief");
     act(&mut t, P0, f, "draw", &[]).unwrap();
