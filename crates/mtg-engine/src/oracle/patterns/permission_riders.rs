@@ -20,7 +20,7 @@
 //! Casting the same card another way (without that permission) doesn't get the rider:
 //! the terms belong to the permission the player announces using (CR 601.2).
 
-use super::FollowupPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
@@ -470,3 +470,89 @@ fn f_delayed_cast_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 inventory::submit! { FollowupPattern { name: "permission riders: the spell a delayed trigger casts is exiled instead", priority: 40, apply: f_delayed_cast_exiled } }
 
 inventory::submit! { FollowupPattern { name: "permission riders: a rider on the spells cast with an effect's permission", priority: 96, apply: f_rider } }
+
+/// "Creature cards exiled this way gain \"You may cast ~ from exile as long as you control a
+/// ~ planeswalker.\"" (Lukka, Coppercoat Outcast), "... gain haste": the cards the effect
+/// just exiled with those qualities gain the abilities for as long as they remain exiled
+/// (CR 400.7, 611.2c).
+fn p_exiled_cards_gain(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (subject, granted) = l
+        .split_once(" exiled this way gain ")
+        .or_else(|| l.split_once(" exiled this way gains "))?;
+    if !matches!(b.it, Sel::Var(v) if v == vars::IT) {
+        return None;
+    }
+    let (f, _, rest) = crate::oracle::phrases::parse_object_phrase(subject)?;
+    if !end(rest).trim().is_empty() {
+        return None;
+    }
+    let mods = if granted.starts_with('"') {
+        let (masked, quotes) = super::statics::mask_quotes(granted)?;
+        if masked.trim() != "\"#0\"" {
+            return None;
+        }
+        let abilities = super::grant_grammar::compile_quotes(
+            &[0],
+            &quotes,
+            crate::types::CardType::Creature,
+            false,
+            b,
+        )?;
+        abilities.into_iter().map(Modification::AddAbility).collect()
+    } else {
+        crate::oracle::effects::keyword_mods(granted)?
+    };
+    Some(Effect::Modify {
+        what: Sel::All(Filter::and(vec![
+            Filter::In(Box::new(it())),
+            Filter::InZone(ZoneKind::Exile),
+            f,
+        ])),
+        mods,
+        duration: Duration::Permanent,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "permission riders: cards exiled this way gain [abilities]", priority: 100, parse: p_exiled_cards_gain } }
+
+/// The cards the first of two exiles moved (Sinister Concierge).
+const EXILED_FIRST: Var = vars::USER + 7358;
+
+/// "When ~ dies, you may exile it and put three time counters on it. If you do, exile up to
+/// one target creature and put three time counters on it. Each card exiled this way that
+/// doesn't have suspend gains suspend." (Sinister Concierge): both cards (CR 702.62a).
+fn f_each_exiled_gains_suspend(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l.trim()) != "each card exiled this way that doesn't have suspend gains suspend" {
+        return false;
+    }
+    // "If you do, exile up to one target creature and put three time counters on it.":
+    // "it" still means the card exiled first as that instruction begins.
+    let Effect::If {
+        cond: Condition::PrevHappened,
+        then,
+        otherwise,
+    } = prev
+    else {
+        return false;
+    };
+    let s = format!("{then:?}");
+    if !matches!(**otherwise, Effect::Noop) || !s.contains("Exile {") || !s.contains("\"time\"") {
+        return false;
+    }
+    let old = std::mem::take(then.as_mut());
+    **then = Effect::seq(vec![
+        Effect::Store {
+            var: EXILED_FIRST,
+            sel: Sel::Var(vars::IT),
+        },
+        old,
+        super::r702_062_gains_suspend::gains_suspend(Sel::Union(vec![
+            Sel::Var(EXILED_FIRST),
+            Sel::Var(vars::IT),
+        ])),
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "permission riders: each card exiled this way that doesn't have suspend gains suspend", priority: 44, apply: f_each_exiled_gains_suspend } }

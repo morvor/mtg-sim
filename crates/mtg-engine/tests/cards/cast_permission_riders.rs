@@ -411,3 +411,62 @@ fn quintorius_spell_cast_this_way_goes_to_the_bottom_of_the_library() {
     assert_eq!(t.g.obj(bottom).chars.name, "Lightning Bolt");
     assert!(!t.in_graveyard(P0, "Lightning Bolt"));
 }
+
+#[test]
+fn lukka_exiled_creature_cards_may_be_cast_while_you_control_a_lukka() {
+    cr!("611.2c", "601.3");
+    assert_supported(&["Lukka, Coppercoat Outcast"]);
+    let mut t = TestGame::new(2);
+    let l = t.battlefield(P0, "Lukka, Coppercoat Outcast");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Lightning Bolt");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.activate(P0, l, 0, &[]).unwrap();
+    t.resolve_all();
+    let bears = t.g.current(bears);
+    assert_eq!(t.zone(bears), Zone::Exile);
+    t.lands(P0, "Forest", 2);
+    // The noncreature card gained nothing.
+    let bolt = t.g.exile.iter().copied().find(|o| t.g.obj(*o).chars.name == "Lightning Bolt").unwrap();
+    t.lands(P0, "Mountain", 1);
+    assert!(t.cast(P0, bolt).target(Entity::Player(P1)).try_go().is_err());
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}
+
+#[test]
+fn lukka_permission_ends_without_a_lukka() {
+    cr!("611.2c");
+    let mut t = TestGame::new(2);
+    let l = t.battlefield(P0, "Lukka, Coppercoat Outcast");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.activate(P0, l, 0, &[]).unwrap();
+    t.resolve_all();
+    let bears = t.g.current(bears);
+    t.g.destroy(l, None);
+    t.settle();
+    t.lands(P0, "Forest", 2);
+    assert!(t.cast(P0, bears).try_go().is_err());
+}
+
+#[test]
+fn sinister_concierge_both_exiled_cards_gain_suspend() {
+    cr!("702.62a");
+    assert_supported(&["Sinister Concierge"]);
+    let mut t = TestGame::new(2);
+    let c = t.battlefield(P0, "Sinister Concierge");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.g.destroy(c, None);
+    t.settle();
+    t.resolve_all();
+    let c = t.g.current(c);
+    let giant = t.g.current(giant);
+    for o in [c, giant] {
+        assert_eq!(t.zone(o), Zone::Exile);
+        assert_eq!(t.counters(o, "time"), 3);
+        assert!(t.obj_now(o).has_keyword(KeywordKind::Suspend));
+    }
+}
