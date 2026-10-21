@@ -183,3 +183,32 @@ fn f_if_you_do_choose_from_revealed_hand(
 }
 
 inventory::submit! { super::FollowupPattern { name: "card flow 4: if you do, choose a card from the revealed hand", priority: 90, apply: f_if_you_do_choose_from_revealed_hand } }
+
+/// "Return two cards exiled with ~ to the battlefield under their owners' control and put
+/// the rest on the bottom of their owners' libraries." (Vault 13: Dweller's Journey): the
+/// cards exiled with ~ (CR 607.2a) still in exile after the first part are the rest.
+fn return_some_exiled_with_and_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let head = l.strip_suffix(" and put the rest on the bottom of their owners' libraries")?;
+    if !head.starts_with("return ") || !head.contains(" cards exiled with ~ ") {
+        return None;
+    }
+    let first = crate::oracle::effects::parse_clause(head, b)?;
+    if !matches!(first, Effect::Move { .. }) {
+        return None;
+    }
+    let mut to = Destination::zone(ZoneKind::Library);
+    to.position = LibraryPosition::Bottom;
+    Some(Effect::seq(vec![
+        first,
+        Effect::Move {
+            what: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Linked)),
+                Filter::InZone(ZoneKind::Exile),
+            ])),
+            to,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: return N cards exiled with ~ ... and put the rest on the bottom", priority: 90, parse: return_some_exiled_with_and_the_rest } }

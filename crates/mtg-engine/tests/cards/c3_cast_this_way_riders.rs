@@ -544,3 +544,34 @@ fn thought_prison_does_nothing_if_you_dont() {
     t.resolve_all();
     assert_eq!(t.zone(t.g.current(bolt)), Zone::Hand(P1));
 }
+
+#[test]
+fn vault_13_returns_two_exiled_cards_and_puts_the_rest_on_the_bottom() {
+    cr!("607.2a", "714.2b");
+    assert_supported("Vault 13: Dweller's Journey");
+    let mut t = TestGame::new(3);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    let giant = t.battlefield(P2, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(ogre)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let saga = t.enter(P0, "Vault 13: Dweller's Journey");
+    t.resolve_all();
+    for o in [bears, ogre, giant] {
+        assert_eq!(t.zone(t.g.current(o)), Zone::Exile, "{}", t.dump_log());
+    }
+    // Chapter III: the Bears and the Ogre return; the Giant goes to the bottom.
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.resolve_all();
+    t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(ogre)]);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(bears)), "{}", t.dump_log());
+    assert!(t.on_battlefield(t.g.current(ogre)));
+    assert_eq!(t.g.obj(t.g.current(ogre)).controller, P1);
+    let giant_x = t.g.current(giant);
+    assert_eq!(t.zone(giant_x), Zone::Library(P2));
+    assert_ne!(t.g.library_top(P2), Some(giant_x));
+}
