@@ -494,11 +494,13 @@ fn shuffle_in_then_draw_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
             return None;
         }
         (true, format!("shuffle {r} into your library"))
-    } else {
-        let r = l
-            .strip_prefix("shuffle ")?
-            .strip_suffix(" into your library, then draw that many cards")?;
+    } else if let Some(r) = l
+        .strip_prefix("shuffle ")
+        .and_then(|r| r.strip_suffix(" into your library, then draw that many cards"))
+    {
         (false, format!("shuffle {r} into your library"))
+    } else {
+        return shuffle_in_then_reveal_that_many(l, b);
     };
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = b.in_trigger;
@@ -534,3 +536,83 @@ fn shuffle_in_then_draw_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: shuffle [cards] into your library, then draw that many cards", priority: 90, parse: shuffle_in_then_draw_that_many } }
+
+/// "Shuffle all permanents you own into your library, then reveal that many cards from the
+/// top of your library." (Glimpse of Tomorrow): the later sentences choose among the cards
+/// revealed (see `dig_grammar`).
+fn shuffle_in_then_reveal_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = l
+        .strip_prefix("shuffle ")?
+        .strip_suffix(" into your library, then reveal that many cards from the top of your library")?;
+    let shuffle = crate::oracle::effects::parse_clause(&format!("shuffle {r} into your library"), b)?;
+    let Effect::ShuffleIntoLibrary { what, .. } = &shuffle else {
+        return None;
+    };
+    let what = what.clone();
+    let reveal = crate::oracle::effects::parse_clause("reveal the top two cards of your library", b)?;
+    let Effect::Dig {
+        who,
+        reveal: true,
+        filter,
+        take,
+        take_up_to,
+        take_to,
+        rest_to,
+        ..
+    } = reveal
+    else {
+        return None;
+    };
+    Some(Effect::seq(vec![
+        Effect::StoreValue {
+            var: SHUFFLED_COUNT,
+            value: Value::CountSel(Box::new(what)),
+        },
+        shuffle,
+        Effect::Dig {
+            who,
+            n: Value::Var(SHUFFLED_COUNT),
+            reveal: true,
+            filter,
+            take,
+            take_up_to,
+            take_to,
+            rest_to,
+        },
+    ]))
+}
+
+/// "Put all non-Aura permanent cards revealed this way onto the battlefield, then do the
+/// same for Aura cards, then put the rest ..." (Glimpse of Tomorrow): the same instruction
+/// for the other cards, after the first.
+fn f_do_the_same_for(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    let Some((first, rest)) = l.split_once(", then do the same for ") else {
+        return false;
+    };
+    let Some(after) = first.strip_prefix("put all ") else {
+        return false;
+    };
+    let Some((_, dest)) = after.split_once(" cards revealed this way ") else {
+        return false;
+    };
+    let (kind, tail) = match rest.split_once(" cards") {
+        Some((k, t)) => (k, t),
+        None => return false,
+    };
+    let reworded = format!("{first}, then put all {kind} cards revealed this way {dest}{tail}");
+    if crate::oracle_ext::apply_followup_ext(&reworded, prev, b) {
+        return true;
+    }
+    let n0 = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_sentence(&reworded, b) else {
+        return false;
+    };
+    if b.targets.len() != n0 {
+        return false;
+    }
+    *prev = Effect::seq(vec![std::mem::take(prev), e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "card flow 4: then do the same for [other] cards", priority: 5, apply: f_do_the_same_for } }

@@ -818,3 +818,36 @@ fn the_great_aurora_each_player_draws_as_many_as_they_shuffled_in() {
     assert!(t.named_on_battlefield("Gray Ogre").is_empty());
     assert!(t.in_exile("The Great Aurora"));
 }
+
+#[test]
+fn glimpse_of_tomorrow_reveals_as_many_as_shuffled_in_and_puts_auras_last() {
+    cr!("701.20a", "303.4f");
+    assert_supported("Glimpse of Tomorrow");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    // Only these cards will be in the library.
+    t.g.player_mut(P0).library.clear();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Ornithopter");
+    let rancor = t.hand(P0, "Rancor");
+    t.lands(P0, "Forest", 1);
+    t.cast(P0, rancor).target(bears).go();
+    t.resolve_all();
+    // (Cast for free with Omniscience, also one of P0's permanents.)
+    t.battlefield(P0, "Omniscience");
+    let spell = t.hand(P0, "Glimpse of Tomorrow");
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, spell).method(CastMethod::Free).go();
+    t.resolve_all();
+    // Five permanents (the Forest and Omniscience too) were shuffled in, five cards
+    // revealed: all of them come back, the Aura after the others (attached to one of
+    // them).
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    assert_eq!(t.named_on_battlefield("Omniscience").len(), 1);
+    let r = t.named_on_battlefield("Rancor");
+    assert_eq!(r.len(), 1);
+    assert!(t.obj_now(r[0]).attached_to.is_some());
+    assert_eq!(t.library_size(P0), 0);
+}
