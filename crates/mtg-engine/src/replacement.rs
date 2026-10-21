@@ -1652,6 +1652,101 @@ impl Game {
                 ]
             }
             (
+                ReplacementAction::TokensInsteadOf { specs, each },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                let chosen: Vec<TokenSpec> = if each {
+                    specs
+                } else {
+                    let labels = specs
+                        .iter()
+                        .map(|s| crate::tokens::token_characteristics_in(self, s, &ctx).name.to_string())
+                        .collect();
+                    let i = self.ask_option(ctx.controller, ctx.source, "Create which tokens", labels);
+                    specs.get(i).cloned().into_iter().collect()
+                };
+                chosen
+                    .iter()
+                    .map(|spec| ReplEvent::CreateTokens {
+                        controller,
+                        spec: Box::new(TokenCreate {
+                            chars: crate::tokens::token_characteristics_in(self, spec, &ctx),
+                            card: crate::tokens::predefined_card(spec),
+                            tapped: tokens.tapped,
+                            attacking: tokens.attacking,
+                            copy_of: None,
+                            copy_exceptions: vec![],
+                        }),
+                        count,
+                        source,
+                    })
+                    .collect()
+            }
+            (
+                ReplacementAction::TokenCopiesInstead { of, choose },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                let mut c = ctx.clone();
+                let target = match (&of, &choose) {
+                    (Some(sel), _) => crate::copy_rules::token_copy_sources(self, sel, &mut c)
+                        .into_iter()
+                        .next(),
+                    (None, Some(f)) => {
+                        let cands: Vec<ObjectId> = self
+                            .permanent_ids()
+                            .into_iter()
+                            .filter(|o| self.matches(*o, f, &c))
+                            .collect();
+                        self.ask_objects(
+                            c.controller,
+                            c.source,
+                            "Choose an object to copy",
+                            cands,
+                            1,
+                            1,
+                        )
+                        .into_iter()
+                        .next()
+                    }
+                    (None, None) => None,
+                };
+                let original = ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                };
+                let Some(t) = target else {
+                    return vec![original];
+                };
+                let ReplEvent::CreateTokens { spec: tokens, .. } = &original else {
+                    return vec![original];
+                };
+                vec![ReplEvent::CreateTokens {
+                    controller,
+                    spec: Box::new(TokenCreate {
+                        chars: self.obj(t).copiable.clone(),
+                        card: self.obj(t).card.clone(),
+                        tapped: tokens.tapped,
+                        attacking: tokens.attacking,
+                        copy_of: Some(t),
+                        copy_exceptions: vec![],
+                    }),
+                    count,
+                    source,
+                }]
+            }
+            (
                 ReplacementAction::TokensInstead { spec },
                 ReplEvent::CreateTokens {
                     controller,

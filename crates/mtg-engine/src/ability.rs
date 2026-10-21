@@ -2590,6 +2590,22 @@ pub enum ReplacementAction {
     /// the event creates have these characteristics instead of their own; everything else
     /// the creating effect specifies (tapped, attacking) still applies.
     TokensInstead { spec: TokenSpec },
+    /// "If you would create a Clue, Food, or Treasure token, instead create one of each"
+    /// (`each`: that many of each of `specs`, Academy Manufactor), "you may instead create
+    /// that many 2/2 green Cat creature tokens with haste or that many 3/1 green Dog
+    /// creature tokens with vigilance" (the replacement's controller chooses one of
+    /// `specs`, Jinnie Fay) (CR 614.1a): as [`ReplacementAction::TokensInstead`], the
+    /// tokens' characteristics are replaced; how the effect creates them still applies.
+    TokensInsteadOf { specs: Vec<TokenSpec>, each: bool },
+    /// "instead create that many tokens that are copies of enchanted permanent" (Moonlit
+    /// Meditation; `of`), "instead choose a creature other than ~ and create that many
+    /// tokens that are copies of that creature" (Esix, Fractal Bloom; the replacement's
+    /// controller chooses an object matching `choose`) (CR 614.1a, 707.2): the tokens are
+    /// copies of that object instead. Nothing is replaced if there's nothing to copy.
+    TokenCopiesInstead {
+        of: Option<Sel>,
+        choose: Option<Filter>,
+    },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.
