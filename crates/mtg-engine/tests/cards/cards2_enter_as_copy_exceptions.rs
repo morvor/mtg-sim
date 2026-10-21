@@ -167,3 +167,33 @@ fn march_from_velis_vel_lands_of_the_chosen_type_become_hasty_copies() {
         .obj_now(gate1)
         .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
 }
+
+#[test]
+fn sakashima_the_impostor_keeps_its_name_and_can_return_to_hand() {
+    cr!("707.9b", "707.9a", "603.7");
+    ruling!(
+        "Sakashima the Impostor",
+        "Sakashima must be on the battlefield at the end of turn in order to return to hand."
+    );
+    supported("Sakashima the Impostor");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 8);
+    let s = t.hand(P0, "Sakashima the Impostor");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let s = t.named_on_battlefield("Sakashima the Impostor");
+    assert_eq!(s.len(), 1);
+    let s = s[0];
+    let o = t.obj_now(s);
+    assert!(o.chars.is_legendary());
+    assert!(o.chars.subtypes.iter().any(|x| x.as_str() == "Bear"));
+    assert_eq!(t.pt(s), (2, 2));
+    t.activate(P0, s, 0, &[]).unwrap();
+    t.resolve_all();
+    t.advance_to_step(Step::End);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Sakashima the Impostor"));
+}

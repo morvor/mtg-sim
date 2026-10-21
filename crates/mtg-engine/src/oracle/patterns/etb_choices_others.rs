@@ -200,10 +200,7 @@ fn others_enter_with_counters(l: &str, text: &str, ctx: &CompileContext) -> Opti
         Some(r) => r,
         None if rest.contains(" additional ") => rest,
         // "Face-down creatures you control enter with a flying counter on them."
-        None => match rest
-            .strip_prefix("a ")
-            .or_else(|| rest.strip_prefix("an "))
-        {
+        None => match rest.strip_prefix("a ").or_else(|| rest.strip_prefix("an ")) {
             Some(r) if crate::oracle::costs::counter_kind(r).is_some() => r,
             _ => return None,
         },
@@ -412,8 +409,7 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             let exc = copy_exceptions(raw, ctx)
                 .map(|m| (m, vec![]))
                 .or_else(|| {
-                    let (masked, quotes) =
-                        super::statics::mask_quotes(end(&raw.to_lowercase()))?;
+                    let (masked, quotes) = super::statics::mask_quotes(end(&raw.to_lowercase()))?;
                     super::tokens_copies_copy::copy_exceptions(&masked, &quotes, ctx)
                         .map(|m| (m, vec![]))
                 })
@@ -463,7 +459,10 @@ fn enter_as_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             v.push(Effect::EnterCopyExceptions(exceptions));
         }
         v.extend(extras);
-        out.push(rep(ReplacementAction::AsEnters(Box::new(Effect::seq(v))), true));
+        out.push(rep(
+            ReplacementAction::AsEnters(Box::new(Effect::seq(v))),
+            true,
+        ));
     }
     Some(out)
 }
@@ -666,6 +665,16 @@ fn copy_exceptions(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
                 }
             }
             rest = &rest[rest.len() - (r.len() - len)..];
+        } else if let Some(r) = lower.strip_prefix("its name is ~") {
+            // The copy keeps this object's own name (Sakashima the Impostor, CR 707.9b).
+            out.push(Modification::SetName(ctx.card_name.into()));
+            rest = &rest[rest.len() - r.len()..];
+        } else if let Some(r) = lower.strip_prefix("it's legendary in addition to its other types")
+        {
+            out.push(Modification::AddSupertypes(vec![
+                crate::types::Supertype::Legendary,
+            ]));
+            rest = &rest[rest.len() - r.len()..];
         } else if let Some(r) = lower.strip_prefix("it isn't legendary") {
             out.push(Modification::RemoveSupertypes(vec![
                 crate::types::Supertype::Legendary,
