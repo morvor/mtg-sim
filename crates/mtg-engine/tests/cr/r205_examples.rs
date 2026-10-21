@@ -1,5 +1,5 @@
-//! The worked examples of CR 205 (the type line), played out as tests. The 205.3c, 205.3e
-//! and 205.4b examples are cited by the tests in `r205_type_line.rs`.
+//! The worked examples of CR 205 (the type line), played out as tests. The 205.3c and 205.3e
+//! examples are cited by the tests in `r205_type_line.rs`.
 
 use super::r105_util::{card_from_text, matches};
 use mtg_engine::ability::Filter;
@@ -18,6 +18,7 @@ fn has_types(t: &TestGame, id: ObjectId, types: &[CardType]) -> bool {
 fn lands_that_are_still_lands_keep_their_other_types() {
     cr!("205.1b", "205.4b", "613.1d");
     cr_example!("205.1b", "All lands are 1/1 creatures that are still lands");
+    cr_example!("205.4b", "they are still legendary");
     let mut t = TestGame::new(2);
     let anthem = card_from_text(
         "Animate Lands",

@@ -513,6 +513,11 @@ impl Game {
             self.zones.sba_moves = moves.clone();
             self.lose_game_simultaneously(&replaced);
             self.zones.sba_moves.clear();
+            // An object the replacement moved instead wasn't destroyed or sacrificed.
+            let chosen = std::mem::take(&mut self.zones.sba_moves_chosen);
+            let moved_instead = |g: &Game, id: &ObjectId| !g.is_live(*id) && !chosen.contains(id);
+            to_destroy.retain(|id| !moved_instead(self, id));
+            sacrifice.retain(|id| !moved_instead(self, id));
         }
         if !moves.is_empty() {
             let sac_ids: Vec<(ObjectId, PlayerId)> = sacrifice

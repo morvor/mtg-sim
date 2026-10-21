@@ -203,7 +203,6 @@ fn blocked_by_a_number_of_creatures() {
 #[test]
 fn trigger_characteristics_are_checked_when_blocking_happens() {
     cr!("509.3f");
-    cr_example!("509.3f", "white creature");
     // CR 509.3f example: "Whenever this creature becomes blocked by a white creature, ..."
     // blocked by a black creature later turned white doesn't trigger.
     let text = "Whenever this creature becomes blocked by a white creature, you gain 1 life.";

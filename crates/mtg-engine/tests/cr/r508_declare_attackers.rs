@@ -613,7 +613,6 @@ fn active_player_gets_priority_after_declaring_attackers() {
 #[test]
 fn attack_triggers_use_characteristics_at_declaration() {
     cr!("508.2a");
-    cr_example!("508.2a", "Whenever a green creature attacks");
     // "Whenever a green creature attacks, you gain 1 life."
     let watcher = triggered(TriggerCond::Attacks(Filter::Color(Color::Green)), gain(1));
     let mut t = TestGame::new(2);

@@ -66,6 +66,10 @@ pub struct ZoneState {
     /// the game are applied (CR 704.3; see [`contradictory_moves`]).
     #[serde(skip)]
     pub sba_moves: Vec<MoveEv>,
+    /// The objects of [`Self::sba_moves`] whose controller chose the state-based action's
+    /// move over the replacement's (so they were destroyed, sacrificed, ...).
+    #[serde(skip)]
+    pub sba_moves_chosen: Vec<ObjectId>,
 }
 
 /// CR 400.6: a state-based action and another effect would move the same object at the
@@ -99,6 +103,7 @@ pub(crate) fn contradictory_moves(g: &mut Game, moves: Vec<MoveEv>) -> Vec<MoveE
             if g.ask_yes_no(who, Some(m.obj), &q, true) {
                 m
             } else {
+                g.zones.sba_moves_chosen.push(m.obj);
                 MoveEv { to: sba_to, ..sba }
             }
         })

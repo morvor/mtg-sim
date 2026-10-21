@@ -432,7 +432,6 @@ fn some_card_types_have_no_subtypes() {
 #[test]
 fn supertypes_are_independent_of_card_types_and_subtypes() {
     cr!("205.4b");
-    cr_example!("205.4b", "they are still legendary");
     ruling!(
         "Leyline of Singularity",
         "Adding a supertype doesn't overwrite other supertypes."
