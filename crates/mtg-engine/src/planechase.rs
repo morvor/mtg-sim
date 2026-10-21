@@ -437,6 +437,7 @@ fn planeswalk_away_and_to(
     departed: &[ObjectId],
     n: usize,
 ) -> Vec<ObjectId> {
+    crate::kw::before_planeswalk(g, p);
     // CR 603.10g: "when you planeswalk away from" abilities look back in time.
     crate::kwa::planeswalk::planeswalking_away(g, pc, away);
     let from_plane = away

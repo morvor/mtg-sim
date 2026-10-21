@@ -132,36 +132,16 @@ impl KeywordRules for Casualty {
             return true;
         };
         let x = g.cast_info(ctx).and_then(|c| c.x).unwrap_or(0).max(0);
-        let Some(copy) = crate::copy::copy_spell(g, spell, ctx.controller, true) else {
+        let Some(first) = crate::copy::copy_spell(g, spell, ctx.controller, true) else {
             return true;
         };
-        let mut values = g.obj(copy).copiable.clone();
-        for e in exceptions.split(',') {
-            match e {
-                NOT_LEGENDARY => values.supertypes.remove(Supertype::Legendary),
-                LOYALTY_X => values.loyalty = Some(x),
-                _ => {}
-            }
+        // Copies an effect adds ("copy it that many times plus an additional time") have
+        // the same exceptions.
+        let mut all = vec![first];
+        all.extend(crate::copy::additional_copies(g, spell, ctx.controller));
+        for copy in all {
+            apply_copy_exceptions(g, copy, exceptions, x, ctx.controller);
         }
-        let id = g.new_effect_id();
-        let timestamp = g.new_timestamp();
-        let created_turn = g.turn.number;
-        g.effects.push(ContinuousEffect {
-            id,
-            source: Some(copy),
-            controller: ctx.controller,
-            timestamp,
-            duration: Duration::Permanent,
-            affected: Affected::Objects(vec![copy]),
-            mods: vec![],
-            layer1: Some(Layer1::Copy {
-                values: Box::new(values),
-                exceptions: vec![],
-            }),
-            created_turn,
-        });
-        g.dirty = true;
-        g.recompute();
         true
     }
 
@@ -194,6 +174,37 @@ impl KeywordRules for Casualty {
                 .is_some_and(|c| c.paid.iter().any(|p| *p == paid)),
         )
     }
+}
+
+/// Gives the copy `copy` of a casualty spell the exceptions (CR 707.9).
+fn apply_copy_exceptions(g: &mut Game, copy: ObjectId, exceptions: &str, x: i32, controller: PlayerId) {
+    let mut values = g.obj(copy).copiable.clone();
+    for e in exceptions.split(',') {
+        match e {
+            NOT_LEGENDARY => values.supertypes.remove(Supertype::Legendary),
+            LOYALTY_X => values.loyalty = Some(x),
+            _ => {}
+        }
+    }
+    let id = g.new_effect_id();
+    let timestamp = g.new_timestamp();
+    let created_turn = g.turn.number;
+    g.effects.push(ContinuousEffect {
+        id,
+        source: Some(copy),
+        controller,
+        timestamp,
+        duration: Duration::Permanent,
+        affected: Affected::Objects(vec![copy]),
+        mods: vec![],
+        layer1: Some(Layer1::Copy {
+            values: Box::new(values),
+            exceptions: vec![],
+        }),
+        created_turn,
+    });
+    g.dirty = true;
+    g.recompute();
 }
 
 inventory::submit! { KeywordRegistration(&Casualty) }

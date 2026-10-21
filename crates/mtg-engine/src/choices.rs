@@ -518,6 +518,9 @@ pub fn pick_at_random(
 pub const SECRET_NEXT: &str = "choices: the next choices are secret";
 /// "then those choices are revealed": every secret choice made for the source.
 pub const REVEAL_CHOICES: &str = "choices: reveal the secret choices";
+/// `Effect::Custom`, and the `Event::Custom` it emits: a player guessed, caused by the
+/// spell or ability (the event's `obj`).
+pub const GUESSED: &str = "choices: a player guessed";
 /// The costs "Reveal the player you chose" and "Reveal the creature type you chose": they
 /// can be paid only if that choice was made for the source (Emissary of Grudges's
 /// rulings: "If you don't have a chosen opponent ... you can't pay the cost").
@@ -611,6 +614,15 @@ impl crate::kw::KeywordRules for ChoiceRules {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name == GUESSED {
+            g.emit(crate::events::Event::Custom {
+                name: GUESSED.into(),
+                player: Some(ctx.controller),
+                obj: ctx.stack_obj.or(ctx.source),
+                amount: 0,
+            });
+            return true;
+        }
         let Some(src) = ctx.source else {
             return matches!(
                 name,

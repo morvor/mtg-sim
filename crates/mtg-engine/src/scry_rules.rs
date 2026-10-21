@@ -23,6 +23,9 @@ use crate::object::*;
 use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
 
+/// `Event::Custom` name: a player scrying put `amount` cards on the bottom of their library.
+pub const SCRIED_TO_BOTTOM: &str = "scried to bottom";
+
 /// `StaticEffect::Custom` prefix: "surveil extra:[N]" — its controller may look at N
 /// additional cards each time they surveil (CR 701.25b).
 pub const SURVEIL_EXTRA: &str = "surveil extra:";
@@ -174,13 +177,23 @@ pub fn perform(
     };
     // The amount is the number of cards the player actually looked at ("the number of
     // cards looked at while scrying this way": fewer with a short library).
-    for (p, cards) in players.into_iter().zip(&looked) {
+    for ((p, cards), (_, rest)) in players.into_iter().zip(&looked).zip(&splits) {
         g.emit(Event::Custom {
             name: name.into(),
             player: Some(p),
             obj: None,
             amount: cards.len() as i32,
         });
+        // "Whenever you choose to put one or more cards on the bottom of your library
+        // while scrying": how many.
+        if kind == Look::Scry && !rest.is_empty() {
+            g.emit(Event::Custom {
+                name: SCRIED_TO_BOTTOM.into(),
+                player: Some(p),
+                obj: None,
+                amount: rest.len() as i32,
+            });
+        }
     }
     looked_result
 }
