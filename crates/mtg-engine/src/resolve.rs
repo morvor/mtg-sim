@@ -676,6 +676,53 @@ impl Game {
                 }
                 ctx.prev_value = total as i64;
             }
+            Effect::CountersFromAmong {
+                from,
+                to,
+                kind,
+                min,
+                max,
+                each_missing_kind,
+            } => {
+                let n = crate::kw::counter_groups::counters_from_among(
+                    self,
+                    from,
+                    to.as_ref(),
+                    kind.as_ref(),
+                    min,
+                    max.as_ref(),
+                    *each_missing_kind,
+                    ctx,
+                );
+                ctx.prev_value = n as i64;
+                ctx.prev_happened = n > 0;
+            }
+            Effect::DistributeCounters {
+                n,
+                kind,
+                among,
+                min_objects,
+                max_objects,
+                up_to,
+            } => {
+                let n = crate::kw::counter_groups::distribute(
+                    self,
+                    n,
+                    kind,
+                    among,
+                    *min_objects,
+                    *max_objects,
+                    *up_to,
+                    ctx,
+                );
+                ctx.prev_value = n as i64;
+                ctx.prev_happened = n > 0;
+            }
+            Effect::PutEventCounters { to, one_each } => {
+                let n = crate::kw::counter_groups::put_event_counters(self, to, *one_each, ctx);
+                ctx.prev_value = n as i64;
+                ctx.prev_happened = n > 0;
+            }
             Effect::PutCountersOf { from, to, kind } => {
                 // "Its counters": the counters the object had as it last existed (CR 122.8),
                 // not the new object it became.

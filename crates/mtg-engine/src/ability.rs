@@ -4195,6 +4195,44 @@ pub enum Effect {
         to: Sel,
         kind: Option<CounterKind>,
     },
+    /// Counters removed from among the objects (or players) of `from`, or moved from them
+    /// onto `to` (CR 122.5), the player choosing how many of each kind come from each:
+    /// "remove any number of counters from among permanents on the battlefield", "you may
+    /// remove three quest counters from among permanents you control", "move any number
+    /// of counters from among creatures you control onto that creature", "move one or
+    /// more counters from ~ onto another target permanent you control". At least `min` in
+    /// all (nothing happens if there aren't that many), at most `max` (`None`: no limit).
+    /// `each_missing_kind`: "move a counter of each kind not on ~ from [object] onto ~",
+    /// one counter of each kind the destination doesn't have. See
+    /// `kw/counter_groups.rs`.
+    CountersFromAmong {
+        from: Sel,
+        to: Option<Sel>,
+        kind: Option<CounterKind>,
+        min: Value,
+        max: Option<Value>,
+        each_missing_kind: bool,
+    },
+    /// "Distribute three +1/+1 counters among one, two, or three creatures you control",
+    /// "... among any number of creatures you control" with no targets: the objects (at
+    /// least `min_objects`, at most `max_objects` and `n`) and the division are chosen as
+    /// it resolves (CR 608.2d), each chosen object getting at least one counter. `up_to`:
+    /// "distribute up to N", the player chooses how many first.
+    DistributeCounters {
+        n: Value,
+        kind: CounterKind,
+        among: Sel,
+        min_objects: u32,
+        max_objects: Option<u32>,
+        up_to: bool,
+    },
+    /// "[they] put the same number and kind of counters on ~", "put one of each of those
+    /// kinds of counters on [object]" (`one_each`): counters of the kind the triggering
+    /// event put (CR 122.6), as many as it put or one.
+    PutEventCounters {
+        to: Sel,
+        one_each: bool,
+    },
     /// Apply layer modifications to the selected objects for a duration (CR 611.2).
     Modify {
         what: Sel,

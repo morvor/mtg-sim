@@ -1,9 +1,10 @@
 //! Engine support for the counter instructions of `oracle/patterns/counters_grammar_2.rs`
-//! (CR 122): counters removed or moved from among a group of permanents with the player
-//! choosing how many of each kind come from each permanent, "a counter of each kind not
-//! on ~", a kind of counter chosen at random among those an object doesn't have, and
-//! counters copied from the counters a triggering event put ("the same number and kind of
-//! counters").
+//! (CR 122): counters removed or moved from among a group with the player choosing how
+//! many of each kind come from each ([`crate::ability::Effect::CountersFromAmong`]),
+//! counters distributed among objects chosen on resolution
+//! ([`crate::ability::Effect::DistributeCounters`]), counters copied from the counters a
+//! triggering event put ([`crate::ability::Effect::PutEventCounters`]), and a kind of
+//! counter chosen at random among those an object doesn't have.
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::{Sel, Value, Var};
@@ -11,54 +12,11 @@ use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::types::*;
-use serde::{Deserialize, Serialize};
-
-/// `Effect::Custom` prefix for a [`GroupOp`] (followed by its JSON).
-pub const GROUP_OP: &str = "counter groups:op:";
 
 /// `Effect::Custom` prefix: a kind of counter chosen at random among `kinds` that the
-/// first object of `what` doesn't have on it; its position in the list (from 1, 0 if
-/// there's none) is stored in the numeric variable. JSON of `(Var, Vec<CounterKind>, Sel)`.
+/// source doesn't have on it; its position in the list (from 1, 0 if there's none) is
+/// stored in the numeric variable. JSON of `(Var, Vec<CounterKind>)`.
 pub const RANDOM_MISSING_KIND: &str = "counter groups:random missing kind:";
-
-/// `Effect::Custom` prefix: counters of the kind the triggering event put are put on the
-/// selected objects: as many as it put, or one (`true`). JSON of `(Sel, bool)`.
-pub const SAME_AS_EVENT: &str = "counter groups:same as event:";
-
-/// Counters removed from among the objects (or players) of `from`, or moved from them
-/// onto `to` (CR 122.5): "remove any number of counters from among permanents on the
-/// battlefield", "you may remove three quest counters from among permanents you control",
-/// "move any number of counters from among creatures you control onto that creature",
-/// "move one or more counters from ~ onto another target permanent you control", "move a
-/// counter of each kind not on ~ from another target permanent you control onto ~".
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GroupOp {
-    pub from: Sel,
-    /// Where they're moved (`None`: they're removed).
-    pub to: Option<Sel>,
-    /// Only counters of this kind (`None`: of any kinds).
-    pub kind: Option<CounterKind>,
-    /// How many in all: at least `min` (nothing happens if there aren't that many), at
-    /// most `max` (`None`: no limit).
-    pub min: Value,
-    pub max: Option<Value>,
-    /// "a counter of each kind not on [to]": exactly one counter of each kind the
-    /// destination doesn't have (`min` and `max` are ignored).
-    #[serde(default)]
-    pub each_missing_kind: bool,
-}
-
-impl GroupOp {
-    pub fn effect(&self) -> crate::ability::Effect {
-        crate::ability::Effect::Custom(
-            format!(
-                "{GROUP_OP}{}",
-                serde_json::to_string(self).unwrap_or_default()
-            )
-            .into(),
-        )
-    }
-}
 
 fn counters_on(g: &Game, e: Entity) -> Vec<(CounterKind, u32)> {
     let map = match e {
@@ -79,10 +37,21 @@ fn entity_name(g: &Game, e: Entity) -> String {
     }
 }
 
-/// Performs a [`GroupOp`]; returns how many counters were removed or moved.
-fn perform(g: &mut Game, op: &GroupOp, ctx: &mut Ctx) -> u32 {
-    let sources = g.resolve_sel(&op.from, ctx);
-    let dest = match &op.to {
+/// [`crate::ability::Effect::CountersFromAmong`]; returns how many counters were removed
+/// or moved.
+#[allow(clippy::too_many_arguments)]
+pub fn counters_from_among(
+    g: &mut Game,
+    from: &Sel,
+    to: Option<&Sel>,
+    kind: Option<&CounterKind>,
+    min: &Value,
+    max: Option<&Value>,
+    each_missing_kind: bool,
+    ctx: &mut Ctx,
+) -> u32 {
+    let sources = g.resolve_sel(from, ctx);
+    let dest = match to {
         Some(t) => match g.resolve_sel(t, ctx).into_iter().next() {
             Some(d) => Some(d),
             // Moved onto something that isn't there: nothing moves (CR 122.5).
@@ -105,14 +74,14 @@ fn perform(g: &mut Game, op: &GroupOp, ctx: &mut Ctx) -> u32 {
             (None, f) => g.remove_counters_by(f, k, n, Some(me)),
         }
     };
-    if op.each_missing_kind {
+    if each_missing_kind {
         let Some(d) = dest else {
             return 0;
         };
         let have: Vec<CounterKind> = counters_on(g, d).into_iter().map(|(k, _)| k).collect();
         for from in sources {
             for (k, _) in counters_on(g, from) {
-                if !have.contains(&k) && op.kind.as_ref().is_none_or(|x| *x == k) {
+                if !have.contains(&k) && kind.is_none_or(|x| *x == k) {
                     total += act(g, from, &k, 1);
                 }
             }
@@ -126,14 +95,14 @@ fn perform(g: &mut Game, op: &GroupOp, ctx: &mut Ctx) -> u32 {
             continue;
         }
         for (k, n) in counters_on(g, from) {
-            if op.kind.as_ref().is_none_or(|x| *x == k) {
+            if kind.is_none_or(|x| *x == k) {
                 pool.push((from, k, n));
             }
         }
     }
     let available: u32 = pool.iter().map(|(_, _, n)| n).sum();
-    let min = g.eval_value(&op.min, ctx).max(0) as u32;
-    let max = match &op.max {
+    let min = g.eval_value(min, ctx).max(0) as u32;
+    let max = match max {
         Some(v) => (g.eval_value(v, ctx).max(0) as u32).min(available),
         None => available,
     };
@@ -145,6 +114,7 @@ fn perform(g: &mut Game, op: &GroupOp, ctx: &mut Ctx) -> u32 {
     let mut sofar = 0u32;
     for (i, (from, k, n)) in pool.iter().enumerate() {
         let after: u32 = pool[i + 1..].iter().map(|(_, _, n)| n).sum();
+        // Enough must be left for the rest to reach the minimum.
         let lo = min.saturating_sub(sofar + after).min(*n);
         let hi = (*n).min(max - sofar);
         if hi == 0 {
@@ -157,7 +127,7 @@ fn perform(g: &mut Game, op: &GroupOp, ctx: &mut Ctx) -> u32 {
                 "How many {k} counters to {verb} from {}",
                 entity_name(g, *from)
             );
-            g.ask_number(me, ctx.source, &prompt, lo as i64, hi as i64) as u32
+            g.ask_number(me, src, &prompt, lo as i64, hi as i64) as u32
         };
         if pick > 0 {
             chosen.push((*from, k.clone(), pick));
@@ -173,6 +143,100 @@ fn perform(g: &mut Game, op: &GroupOp, ctx: &mut Ctx) -> u32 {
     total
 }
 
+/// [`crate::ability::Effect::DistributeCounters`]; returns how many counters were put.
+#[allow(clippy::too_many_arguments)]
+pub fn distribute(
+    g: &mut Game,
+    n: &Value,
+    kind: &CounterKind,
+    among: &Sel,
+    min_objects: u32,
+    max_objects: Option<u32>,
+    up_to: bool,
+    ctx: &mut Ctx,
+) -> u32 {
+    use crate::decision::{Answer, Decision};
+    let me = ctx.controller;
+    let mut total = g.eval_value(n, ctx).max(0) as u32;
+    let cands: Vec<Entity> = g.resolve_sel(among, ctx);
+    if total == 0 || cands.is_empty() {
+        return 0;
+    }
+    if up_to {
+        total = g.ask_number(
+            me,
+            ctx.source,
+            "How many counters to distribute",
+            0,
+            total as i64,
+        ) as u32;
+        if total == 0 {
+            return 0;
+        }
+    }
+    // Each chosen object gets at least one counter.
+    let max = max_objects
+        .unwrap_or(u32::MAX)
+        .min(total)
+        .min(cands.len() as u32);
+    let min = min_objects.max(1).min(max);
+    let chosen = g.ask_entities(
+        me,
+        ctx.source,
+        &format!("Choose where to distribute {total} {kind} counters"),
+        cands,
+        min,
+        max,
+    );
+    if chosen.is_empty() {
+        return 0;
+    }
+    let k = chosen.len() as u32;
+    let default: Vec<u32> = (0..k)
+        .map(|i| total / k + u32::from(i < total % k))
+        .collect();
+    let source = ctx.stack_obj.or(ctx.source).unwrap_or(ObjectId(0));
+    let div = match g.ask(
+        me,
+        Decision::Divide {
+            source,
+            total,
+            recipients: chosen.clone(),
+            min_each: 1,
+        },
+    ) {
+        Answer::Numbers(v)
+            if v.len() == chosen.len()
+                && v.iter().all(|x| *x >= 1)
+                && v.iter().sum::<i64>() == total as i64 =>
+        {
+            v.into_iter().map(|x| x as u32).collect()
+        }
+        _ => default,
+    };
+    let mut placed = 0;
+    for (t, n) in chosen.into_iter().zip(div) {
+        placed += g.put_counters(t, kind, n, crate::event_causes::CounterPut::of(ctx));
+    }
+    placed
+}
+
+/// [`crate::ability::Effect::PutEventCounters`]; returns how many counters were put.
+pub fn put_event_counters(g: &mut Game, to: &Sel, one_each: bool, ctx: &mut Ctx) -> u32 {
+    let Some(ev) = ctx.event.clone() else {
+        return 0;
+    };
+    let Some(kind) = ev.counter_kind else {
+        return 0;
+    };
+    let n = if one_each { 1 } else { ev.amount.max(0) as u32 };
+    let mut placed = 0;
+    for t in g.resolve_sel(to, ctx) {
+        placed += g.put_counters(t, &kind, n, crate::event_causes::CounterPut::of(ctx));
+    }
+    placed
+}
+
 struct CounterGroups;
 
 impl KeywordRules for CounterGroups {
@@ -181,22 +245,12 @@ impl KeywordRules for CounterGroups {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-        if let Some(json) = name.strip_prefix(GROUP_OP) {
-            let Ok(op) = serde_json::from_str::<GroupOp>(json) else {
-                return true;
-            };
-            let n = perform(g, &op, ctx);
-            ctx.prev_value = n as i64;
-            ctx.prev_happened = n > 0;
-            return true;
-        }
         if let Some(json) = name.strip_prefix(RANDOM_MISSING_KIND) {
             use rand::seq::SliceRandom;
-            let Ok((var, kinds, what)) = serde_json::from_str::<(Var, Vec<CounterKind>, Sel)>(json)
-            else {
+            let Ok((var, kinds)) = serde_json::from_str::<(Var, Vec<CounterKind>)>(json) else {
                 return true;
             };
-            let holder = g.resolve_sel(&what, ctx).into_iter().next();
+            let holder = g.resolve_sel(&Sel::This, ctx).into_iter().next();
             let have: Vec<CounterKind> = holder
                 .map(|h| counters_on(g, h).into_iter().map(|(k, _)| k).collect())
                 .unwrap_or_default();
@@ -206,25 +260,6 @@ impl KeywordRules for CounterGroups {
             let pick = missing.choose(&mut g.rng).map_or(0, |i| *i as i64 + 1);
             ctx.nums.insert(var, pick);
             ctx.prev_happened = pick > 0;
-            return true;
-        }
-        if let Some(json) = name.strip_prefix(SAME_AS_EVENT) {
-            let Ok((to, one)) = serde_json::from_str::<(Sel, bool)>(json) else {
-                return true;
-            };
-            let Some(ev) = ctx.event.clone() else {
-                return true;
-            };
-            let Some(kind) = ev.counter_kind else {
-                return true;
-            };
-            let n = if one { 1 } else { ev.amount.max(0) as u32 };
-            let mut placed = 0;
-            for t in g.resolve_sel(&to, ctx) {
-                placed += g.put_counters(t, &kind, n, crate::event_causes::CounterPut::of(ctx));
-            }
-            ctx.prev_value = placed as i64;
-            ctx.prev_happened = placed > 0;
             return true;
         }
         false

@@ -1696,6 +1696,80 @@ impl Renderer<'_> {
                 let t = self.sel(to, Case::Obj);
                 format!("move {c} {f} onto {t}")
             }
+            Effect::CountersFromAmong {
+                from,
+                to,
+                kind,
+                min,
+                max,
+                each_missing_kind,
+            } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let t = to.as_ref().map(|t| self.sel(t, Case::Obj));
+                if *each_missing_kind {
+                    let f = self.sel(from, Case::Obj);
+                    let t = t.unwrap_or_default();
+                    return format!("move a {noun} of each kind not on {t} from {f} onto {t}");
+                }
+                let qty = match (min, max) {
+                    (Value::Const(0), None) => format!("any number of {}", plural(&noun)),
+                    (Value::Const(1), None) => format!("one or more {}", plural(&noun)),
+                    (Value::Const(0), Some(m)) => {
+                        let (c, _) = self.counted(m, &noun);
+                        format!("up to {c}")
+                    }
+                    (n, _) => self.counted(n, &noun).0,
+                };
+                let f = match from {
+                    Sel::All(f) => {
+                        let f = f.clone();
+                        let on_bf = |x: &Filter| matches!(x, Filter::InZone(ZoneKind::Battlefield));
+                        let f = match f {
+                            Filter::And(v) => Filter::and(v.into_iter().filter(|x| !on_bf(x)).collect()),
+                            f => f,
+                        };
+                        format!("among {}", self.noun(&f, Num::Many))
+                    }
+                    s => self.sel(s, Case::Obj),
+                };
+                match t {
+                    Some(t) => format!("move {qty} from {f} onto {t}"),
+                    None => format!("remove {qty} from {f}"),
+                }
+            }
+            Effect::DistributeCounters {
+                n,
+                kind,
+                among,
+                min_objects,
+                max_objects,
+                up_to,
+            } => {
+                let noun = counter_name(kind);
+                let (c, w) = self.counted(n, &noun);
+                let c = if *up_to { format!("up to {c}") } else { c };
+                let g = match among {
+                    Sel::All(f) => self.noun(f, Num::Many),
+                    s => self.sel(s, Case::Obj),
+                };
+                let q = match (min_objects, max_objects) {
+                    (_, Some(3)) => "one, two, or three",
+                    (_, Some(2)) => "one or two",
+                    _ => "any number of",
+                };
+                format!("distribute {c} among {q} {g}{}", w.unwrap_or_default())
+            }
+            Effect::PutEventCounters { to, one_each } => {
+                let t = self.sel(to, Case::Obj);
+                if *one_each {
+                    format!("put one of each of those kinds of counters on {t}")
+                } else {
+                    format!("put the same number and kind of counters on {t}")
+                }
+            }
             Effect::PutCountersOf { from, to, kind } => {
                 let f = self.sel(from, Case::Poss);
                 let t = self.sel(to, Case::Obj);

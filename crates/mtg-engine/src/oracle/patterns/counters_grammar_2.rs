@@ -14,7 +14,7 @@
 //!   (Eventide's Shadow, Overseer of Vault 76, Galloping Lizrog, Sensational Spider-Man)
 //!   and "move any number of counters from among creatures you control onto that
 //!   creature" (Slippery Bogbonder): the player chooses how many of each kind come from
-//!   each permanent ([`crate::kw::counter_groups::GroupOp`]).
+//!   each permanent ([`Effect::CountersFromAmong`]).
 //! * "move a counter of each kind not on ~ from another target permanent you control onto
 //!   ~", "move one or more counters from ~ onto another target permanent you control"
 //!   (Goldberry, River-Daughter).
@@ -26,7 +26,7 @@
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
-use crate::kw::counter_groups::{GroupOp, RANDOM_MISSING_KIND, SAME_AS_EVENT};
+use crate::kw::counter_groups::RANDOM_MISSING_KIND;
 use crate::oracle::effects::{object_ref, parse_clause, Builder};
 use crate::oracle::patterns::counter_grammar::{counter_noun, holder, quantity, Qty};
 use crate::oracle::phrases::*;
@@ -125,13 +125,11 @@ fn random_missing_kind(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("choose a kind of counter at random that ")?;
     let (obj, list) = r.split_once(" doesn't have on it from among ")?;
     let kinds = kind_list(list)?;
-    let saved = b.targets.len();
-    let (what, tail) = object_ref(obj, b)?;
-    if !end(&tail).is_empty() || b.targets.len() != saved {
-        b.targets.truncate(saved);
+    if obj != "~" {
         return None;
     }
-    let json = serde_json::to_string(&(RANDOM_KIND, &kinds, &what)).ok()?;
+    let _ = &b.targets;
+    let json = serde_json::to_string(&(RANDOM_KIND, &kinds)).ok()?;
     let marker = format!(
         "\u{1}random counter kind:{}",
         kinds
@@ -257,17 +255,14 @@ fn remove_from_among(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = r.trim_start().strip_prefix("from among ")?;
     let f = group(r)?;
     let (min, max) = bounds(q)?;
-    Some(
-        GroupOp {
-            from: Sel::All(f),
-            to: None,
-            kind,
-            min,
-            max,
-            each_missing_kind: false,
-        }
-        .effect(),
-    )
+    Some(Effect::CountersFromAmong {
+        from: Sel::All(f),
+        to: None,
+        kind,
+        min,
+        max,
+        each_missing_kind: false,
+    })
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: remove counters from among [permanents]", priority: 70, parse: remove_from_among } }
@@ -318,17 +313,14 @@ fn move_counters_2(l: &str, b: &mut Builder) -> Option<Effect> {
             restore(b);
             return None;
         };
-        return Some(
-            GroupOp {
-                from,
-                to: Some(to),
-                kind: None,
-                min: Value::c(0),
-                max: None,
-                each_missing_kind: true,
-            }
-            .effect(),
-        );
+        return Some(Effect::CountersFromAmong {
+            from,
+            to: Some(to),
+            kind: None,
+            min: Value::c(0),
+            max: None,
+            each_missing_kind: true,
+        });
     }
     let (min, max, r) = if let Some(r) = r.strip_prefix("one or more ") {
         (Value::c(1), None, r.to_string())
@@ -359,17 +351,14 @@ fn move_counters_2(l: &str, b: &mut Builder) -> Option<Effect> {
         restore(b);
         return None;
     };
-    Some(
-        GroupOp {
-            from: from_sel,
-            to: Some(to),
-            kind,
-            min,
-            max,
-            each_missing_kind: false,
-        }
-        .effect(),
-    )
+    Some(Effect::CountersFromAmong {
+        from: from_sel,
+        to: Some(to),
+        kind,
+        min,
+        max,
+        each_missing_kind: false,
+    })
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: move counters from among / one or more / each kind", priority: 70, parse: move_counters_2 } }
@@ -399,8 +388,7 @@ fn same_as_event(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved);
         return None;
     }
-    let json = serde_json::to_string(&(to, one)).ok()?;
-    let e = Effect::Custom(format!("{SAME_AS_EVENT}{json}").into());
+    let e = Effect::PutEventCounters { to, one_each: one };
     Some(match who {
         Some(who) => Effect::AsPlayer {
             who,
@@ -481,13 +469,13 @@ fn remove_a_number_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: remove a number of counters equal to", priority: 70, parse: remove_a_number_equal_to } }
 
-/// How many counters the latest [`GroupOp`] removed or moved.
+/// How many counters the latest [`Effect::CountersFromAmong`] removed or moved.
 const GROUP_COUNT: Var = vars::USER + 5102;
 
-/// Whether `e` ends with a [`GroupOp`].
+/// Whether `e` ends with an [`Effect::CountersFromAmong`].
 fn ends_with_group_op(e: &Effect) -> bool {
     match e {
-        Effect::Custom(n) => n.starts_with(crate::kw::counter_groups::GROUP_OP),
+        Effect::CountersFromAmong { .. } => true,
         Effect::Seq(v) => v.last().is_some_and(ends_with_group_op),
         Effect::May { effect, .. } => ends_with_group_op(effect),
         _ => false,
@@ -570,10 +558,10 @@ fn after_group_op(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
-/// `e` with the count of its final [`GroupOp`] stored in [`GROUP_COUNT`].
+/// `e` with the count of its final [`Effect::CountersFromAmong`] stored in [`GROUP_COUNT`].
 fn store_after_group_op(e: Effect) -> Effect {
     match e {
-        Effect::Custom(_) => Effect::seq(vec![
+        Effect::CountersFromAmong { .. } => Effect::seq(vec![
             e,
             Effect::StoreValue {
                 var: GROUP_COUNT,
@@ -806,3 +794,73 @@ fn cast_spell_enters_with(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: the cast spell enters with counters", priority: 85, parse: cast_spell_enters_with } }
+
+/// "distribute three +1/+1 counters among one, two, or three creatures you control",
+/// "distribute X +1/+1 counters among any number of creatures you control", "distribute a
+/// number of +1/+1 counters equal to [value] among any number of creatures you control",
+/// "distribute four +1/+1 counters among any number of creatures and/or Vehicles target
+/// player controls": counters divided among objects chosen as it resolves (no targets,
+/// CR 608.2d).
+fn distribute_untargeted(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("distribute ")?;
+    let saved = (b.targets.len(), b.it.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+    };
+    let (n, up_to, kind, rest) = if let Some(r) = r.strip_prefix("a number of ") {
+        let (kind, r) = counter_noun(r)?;
+        let r = r.trim_start().strip_prefix("equal to ")?;
+        let (v, rest) = super::value_grammar::parse_value(r, b)?;
+        let Some(rest) = rest.trim_start().strip_prefix("among ").map(str::to_string) else {
+            restore(b);
+            return None;
+        };
+        (v, false, kind?, rest)
+    } else {
+        let (q, r) = quantity(r, b)?;
+        let (n, up_to) = match q {
+            Qty::Exact(n) => (n, false),
+            Qty::UpTo(n) => (n, true),
+            _ => return None,
+        };
+        let (kind, r) = counter_noun(&r)?;
+        (
+            n,
+            up_to,
+            kind?,
+            r.trim_start().strip_prefix("among ")?.to_string(),
+        )
+    };
+    let (min, max, group) = if let Some(g) = rest.strip_prefix("one, two, or three ") {
+        (1, Some(3), g)
+    } else if let Some(g) = rest.strip_prefix("one or two ") {
+        (1, Some(2), g)
+    } else if let Some(g) = rest.strip_prefix("any number of ") {
+        (0, None, g)
+    } else {
+        return None;
+    };
+    // Targets are the core distribution's (CR 601.2d).
+    if group.contains("target ") && !group.contains(" target player controls") {
+        return None;
+    }
+    let Some((sel, tail)) = object_ref(&format!("all {group}"), b) else {
+        restore(b);
+        return None;
+    };
+    if !end(&tail).is_empty() || !matches!(sel, Sel::All(_)) {
+        restore(b);
+        return None;
+    }
+    Some(Effect::DistributeCounters {
+        n,
+        kind,
+        among: sel,
+        min_objects: min,
+        max_objects: max,
+        up_to,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "counters grammar 2: distribute counters among objects chosen on resolution", priority: 90, parse: distribute_untargeted } }
