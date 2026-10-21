@@ -277,8 +277,19 @@ impl Renderer<'_> {
                 );
             }
             self.targets[i].chosen_by = chooser;
-            pre.push(format!("{verb} {t}."));
+            pre.push((verb, t));
         }
+        // "Choose target player and another target player."
+        if pre.len() > 1 && pre.iter().all(|(v, _)| v == "choose") {
+            let ts: Vec<String> = pre.iter().map(|(_, t)| t.clone()).collect();
+            let apart: Vec<String> = pre.iter().map(|(v, t)| format!("{v} {t}.")).collect();
+            return format!(
+                "{{alt:choose {}.|{}}} {s}",
+                join_list(&ts, "and"),
+                apart.join(" ")
+            );
+        }
+        let pre: Vec<String> = pre.iter().map(|(v, t)| format!("{v} {t}.")).collect();
         format!("{} {s}", pre.join(" "))
     }
 
