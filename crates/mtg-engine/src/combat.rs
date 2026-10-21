@@ -1285,10 +1285,6 @@ fn perform_attack_declaration(
                     continue;
                 };
                 let ctx = Ctx::new(Some(*a), o.controller);
-                // "If ~ hasn't been exerted this turn, you may exert it as it attacks."
-                if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
-                    continue;
-                }
                 if !g.can_pay_cost(o.controller, cost, Some(*a), &ctx) {
                     continue;
                 }
