@@ -402,6 +402,11 @@ pub struct Choices {
     /// resolution they were made in, if any.
     #[serde(default)]
     pub made_during: Option<ObjectId>,
+    /// The words, types and names chosen for this object, in the order they were chosen
+    /// ("choose two basic land types" + "the first chosen type", "the second chosen
+    /// type"; "choose two abilities from among ..." + "each of the chosen abilities").
+    #[serde(default)]
+    pub list: Vec<SmolStr>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

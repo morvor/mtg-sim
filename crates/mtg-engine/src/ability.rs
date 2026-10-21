@@ -4925,6 +4925,10 @@ pub enum ChoiceKind {
     /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
     /// Dragons", CR 607.2f, 607.2m, 614.12b).
     Word(Vec<String>),
+    /// "choose two basic land types", "choose two abilities from among first strike,
+    /// vigilance, and lifelink": that many different ones of the listed words, in order
+    /// (kept as the chosen list, see `object::Choices::list`).
+    Distinct(u8, Vec<String>),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

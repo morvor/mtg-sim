@@ -156,6 +156,39 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             g.objects[src.0 as usize].choices.text =
                 words.get(i).or(words.first()).map(SmolStr::new);
         }
+        ChoiceKind::Distinct(n, words) => {
+            let mut left = words.clone();
+            let mut chosen: Vec<SmolStr> = Vec::new();
+            for k in 0..*n {
+                if left.is_empty() {
+                    break;
+                }
+                let prompt = format!("Choose ({} of {n})", k + 1);
+                let i = g.ask_option(p, Some(src), &prompt, left.clone());
+                let w = left.remove(i.min(left.len() - 1));
+                chosen.push(SmolStr::new(w));
+            }
+            let ch = &mut g.objects[src.0 as usize].choices;
+            ch.text = chosen.first().cloned();
+            ch.list = chosen;
+        }
+    }
+    // The ordered list of the words and types chosen (for "the first/second chosen
+    // type").
+    {
+        let ch = &mut g.objects[src.0 as usize].choices;
+        let word = match kind {
+            ChoiceKind::OneOf(_) | ChoiceKind::Word(_) | ChoiceKind::OddOrEven => ch.text.clone(),
+            ChoiceKind::BasicLandType => ch.basic_land_type.clone(),
+            ChoiceKind::CreatureType | ChoiceKind::CreatureTypeOtherThan(_) => {
+                ch.creature_type.clone()
+            }
+            ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => ch.card_name.clone(),
+            _ => None,
+        };
+        if let Some(w) = word {
+            ch.list.push(w);
+        }
     }
     // CR 607.2d: the choice belongs to the abilities linked to the one that made it.
     let made = g.obj(src).choices.clone();
@@ -179,6 +212,8 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
 
 /// Copies the value `kind` chose from `made` into `to`.
 fn copy_choice(kind: &ChoiceKind, made: &crate::object::Choices, to: &mut crate::object::Choices) {
+    // The ordered list of what was chosen ("the first chosen type").
+    to.list = made.list.clone();
     match kind {
         ChoiceKind::Color | ChoiceKind::ColorOtherThan(_) => to.color = made.color,
         ChoiceKind::Colors | ChoiceKind::ColorsExactly(_) => to.colors = made.colors,
@@ -208,6 +243,7 @@ fn copy_choice(kind: &ChoiceKind, made: &crate::object::Choices, to: &mut crate:
         ChoiceKind::Number { .. } => to.number = made.number,
         ChoiceKind::Opponent | ChoiceKind::Player => to.player = made.player,
         ChoiceKind::OddOrEven | ChoiceKind::Word(_) => to.text = made.text.clone(),
+        ChoiceKind::Distinct(..) => to.text = made.text.clone(),
     }
 }
 
@@ -679,3 +715,71 @@ impl crate::kw::KeywordRules for AttachChoices {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&AttachChoices) }
+
+/// `Filter::Custom`: has the first type chosen for the source ("basic lands of the first
+/// chosen type", "each land of the first chosen type").
+pub const FIRST_CHOSEN_TYPE: &str = "choices: of the first chosen type";
+/// `Modification::Custom` (layer 4): "[lands] are / become the second chosen type": the
+/// second land type chosen for the source replaces their land types (CR 305.7).
+pub const SECOND_CHOSEN_TYPE: &str = "choices: is the second chosen type";
+/// `Modification::Custom` (layer 6): "have each of the chosen abilities".
+pub const CHOSEN_ABILITIES: &str = "choices: has each of the chosen abilities";
+
+/// The `i`th word chosen for the source.
+fn nth_chosen(g: &Game, ctx: &Ctx, i: usize) -> Option<SmolStr> {
+    g.source_choices(ctx).and_then(|ch| ch.list.get(i).cloned())
+}
+
+/// Readers of the ordered list of choices.
+pub struct ChosenList;
+
+impl crate::kw::KeywordRules for ChosenList {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        (name == FIRST_CHOSEN_TYPE)
+            .then(|| nth_chosen(g, ctx, 0).is_some_and(|t| g.obj(id).chars.has_subtype(&t)))
+    }
+
+    fn custom_modification(
+        &self,
+        g: &Game,
+        name: &str,
+        chars: &mut crate::object::Characteristics,
+        ctx: &Ctx,
+        _target: ObjectId,
+    ) -> bool {
+        match name {
+            SECOND_CHOSEN_TYPE => {
+                // CR 305.7: the new land type replaces the old ones (and with them the
+                // abilities they gave).
+                if let Some(t) = nth_chosen(g, ctx, 1).filter(|t| is_land_type(t)) {
+                    chars
+                        .subtypes
+                        .retain(|s| !subtype_lists().land.contains(s.as_str()));
+                    chars.subtypes.push(t);
+                    chars.abilities.clear();
+                }
+                true
+            }
+            CHOSEN_ABILITIES => {
+                let list = g.source_choices(ctx).map(|c| c.list.clone()).unwrap_or_default();
+                for w in list {
+                    if let Some(k) = crate::keywords::KeywordKind::from_name(&w) {
+                        let kw = crate::keywords::Keyword::new(k);
+                        chars.abilities.push(crate::ability::AbilityDef::new(
+                            crate::ability::AbilityKind::Keyword(kw),
+                            k.name(),
+                        ));
+                    }
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChosenList) }

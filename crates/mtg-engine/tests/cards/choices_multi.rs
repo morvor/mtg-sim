@@ -147,3 +147,71 @@ fn chromatic_armor_prevents_damage_from_the_last_chosen_color() {
     t.resolve_all();
     assert_eq!(t.g.obj(bears).damage, 2, "red isn't the last chosen color");
 }
+
+fn option(t: &mut TestGame, p: PlayerId, i: usize) {
+    t.answer(p, DecisionKind::Option, Answer::Index(i));
+}
+
+#[test]
+fn illusionary_terrain_basic_lands_of_the_first_chosen_type_are_the_second() {
+    cr!("305.7", "607.2d");
+    compiles("Illusionary Terrain");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let island = t.battlefield(P1, "Island");
+    let forest = t.battlefield(P1, "Forest");
+    option(&mut t, P0, 1); // Island (of Plains, Island, Swamp, Mountain, Forest)
+    option(&mut t, P0, 1); // Swamp (of Plains, Swamp, Mountain, Forest)
+    t.enter(P0, "Illusionary Terrain");
+    t.settle();
+    let i = &t.obj_now(island).chars;
+    assert!(i.has_subtype("Swamp") && !i.has_subtype("Island"));
+    assert!(t.obj_now(forest).chars.has_subtype("Forest"));
+    // The two types are different: the second choice didn't offer Island.
+    let second = t.asked().into_iter().filter_map(|(_, d)| match d {
+        mtg_engine::decision::Decision::ChooseOption { options, .. } => Some(options),
+        _ => None,
+    });
+    assert!(second.last().is_some_and(|o| !o.contains(&"Island".to_string())));
+}
+
+#[test]
+fn vision_charm_each_land_of_the_first_chosen_type_becomes_the_second() {
+    cr!("305.7", "611.2c");
+    ruling!("Vision Charm", "All lands changed are changed to the same type");
+    compiles("Vision Charm");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 1);
+    let forest = t.battlefield(P1, "Forest");
+    let charm = t.hand(P0, "Vision Charm");
+    t.advance_to(P0, Step::PrecombatMain);
+    let types = mtg_engine::types::land_types();
+    let fi = types.iter().position(|x| x == "Forest").unwrap();
+    option(&mut t, P0, fi);
+    option(&mut t, P0, 3); // Mountain
+    let id = t.cast(P0, charm).modes(&[1]).go();
+    t.resolve_all();
+    assert_eq!(t.g.obj(id).choices.list, ["Forest", "Mountain"]);
+    let f = &t.obj_now(forest).chars;
+    assert!(f.has_subtype("Mountain") && !f.has_subtype("Forest"));
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(forest).chars.has_subtype("Forest"), "until end of turn");
+}
+
+#[test]
+fn greymond_humans_have_each_of_the_two_chosen_abilities() {
+    cr!("607.2d", "613.1f");
+    compiles("Greymond, Avacyn's Stalwart");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let human = t.battlefield(P0, "Thraben Inspector");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    option(&mut t, P0, 0); // first strike
+    option(&mut t, P0, 1); // lifelink (of vigilance, lifelink)
+    t.enter(P0, "Greymond, Avacyn's Stalwart");
+    t.settle();
+    let h = &t.obj_now(human).chars;
+    assert!(h.has_keyword(KeywordKind::FirstStrike) && h.has_keyword(KeywordKind::Lifelink));
+    assert!(!h.has_keyword(KeywordKind::Vigilance));
+    assert!(!t.obj_now(bears).chars.has_keyword(KeywordKind::FirstStrike), "not a Human");
+}

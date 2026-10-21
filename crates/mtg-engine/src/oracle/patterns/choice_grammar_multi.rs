@@ -89,3 +89,126 @@ fn last_chosen_color(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -
 }
 
 inventory::submit! { super::StaticPattern { name: "the last chosen color", priority: 60, parse: last_chosen_color } }
+
+const BASIC_TYPES: [&str; 5] = ["Plains", "Island", "Swamp", "Mountain", "Forest"];
+
+/// "choose two basic land types", "choose two abilities from among first strike,
+/// vigilance, and lifelink": that many different ones, in order.
+fn choose_several(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("choose ")?;
+    let (n, r) = parse_number(r)?;
+    let Value::Const(n @ 2..=5) = n else {
+        return None;
+    };
+    let r = r.trim_start();
+    let words: Vec<String> = if r == "basic land types" {
+        BASIC_TYPES.iter().map(|s| s.to_string()).collect()
+    } else {
+        let list = r.strip_prefix("abilities from among ")?;
+        let list = list.replace(", and ", ", ").replace(" and ", ", ");
+        let v: Vec<String> = list.split(", ").map(|s| s.trim().to_string()).collect();
+        if v.len() <= n as usize
+            || v
+                .iter()
+                .any(|k| crate::keywords::KeywordKind::from_name(k).is_none())
+        {
+            return None;
+        }
+        v
+    };
+    Some(Effect::Choose {
+        who: PlayerRef::You,
+        kind: ChoiceKind::Distinct(n as u8, words),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choose two [values]", priority: 60, parse: choose_several } }
+
+/// "Basic lands of the first chosen type are the second chosen type."
+fn first_type_are_second(l: &str, text: &str, _ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let subj = end(l).strip_suffix(" of the first chosen type are the second chosen type")?;
+    let (f, true, tail) = parse_object_phrase(subj)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let effect = StaticEffect::Continuous {
+        affected: Filter::and(vec![
+            f,
+            Filter::Custom(crate::choices::FIRST_CHOSEN_TYPE.into()),
+        ]),
+        mods: vec![Modification::Custom {
+            name: crate::choices::SECOND_CHOSEN_TYPE.into(),
+            layer: Layer::L4Type,
+        }],
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(effect)),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "[lands] of the first chosen type are the second chosen type", priority: 60, parse: first_type_are_second } }
+
+/// "Each land of the first chosen type becomes the second chosen type until end of turn."
+fn first_type_becomes_second(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("each ")?;
+    let (noun, rest) = r.split_once(" of the first chosen type becomes the second chosen type")?;
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    if end(rest) != "until end of turn" {
+        return None;
+    }
+    let duration = Duration::EndOfTurn;
+    Some(Effect::Modify {
+        what: Sel::All(Filter::and(vec![
+            f,
+            Filter::Custom(crate::choices::FIRST_CHOSEN_TYPE.into()),
+        ])),
+        mods: vec![Modification::Custom {
+            name: crate::choices::SECOND_CHOSEN_TYPE.into(),
+            layer: Layer::L4Type,
+        }],
+        duration,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "each [land] of the first chosen type becomes the second chosen type", priority: 60, parse: first_type_becomes_second } }
+
+/// "Humans you control have each of the chosen abilities."
+fn have_each_chosen_ability(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if !end(l).ends_with(" have each of the chosen abilities") {
+        return None;
+    }
+    let probe = text.replace("each of the chosen abilities", "flying");
+    let v = crate::oracle::statics::parse_static(&probe, ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Static(s) = &a.kind else {
+        return None;
+    };
+    let StaticEffect::Continuous { affected, mods } = &s.effect else {
+        return None;
+    };
+    if !matches!(mods.as_slice(), [Modification::AddKeyword(k)] if k.kind == crate::keywords::KeywordKind::Flying)
+    {
+        return None;
+    }
+    let mut st = s.clone();
+    st.effect = StaticEffect::Continuous {
+        affected: affected.clone(),
+        mods: vec![Modification::Custom {
+            name: crate::choices::CHOSEN_ABILITIES.into(),
+            layer: Layer::L6Ability,
+        }],
+    };
+    Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
+}
+
+inventory::submit! { super::StaticPattern { name: "have each of the chosen abilities", priority: 60, parse: have_each_chosen_ability } }
