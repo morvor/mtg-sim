@@ -626,3 +626,35 @@ fn mavinda_costs_eight_more_unless_the_spell_targets_your_creature() {
         assert_eq!(can_cast(&mut t, P0, bolt, &[Entity::Player(P1)]), lands == 9);
     }
 }
+
+#[test]
+fn amped_raptor_casts_the_exiled_card_for_energy_equal_to_its_mana_value() {
+    cr!("118.9", "608.2g", "107.14");
+    ruling!(
+        "Amped Raptor",
+        "If you choose not to cast the exiled nonland card (either because you don't have enough {E} or you just don't want to), that card will remain in exile as well."
+    );
+    assert_supported("Amped Raptor");
+    for (card, castable) in [("Grizzly Bears", true), ("Hill Giant", false)] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.lands(P0, "Mountain", 2);
+        let found = t.library_top(P0, card);
+        t.library_top(P0, "Forest");
+        let raptor = t.hand(P0, "Amped Raptor");
+        t.answer_yes(P0, true);
+        t.cast(P0, raptor).go();
+        t.resolve_all();
+        let on = t.named_on_battlefield(card).len();
+        if castable {
+            // Two energy for the Bears' mana value of 2.
+            assert_eq!(on, 1, "{}", t.dump_log());
+            assert_eq!(t.g.player(P0).counter("energy"), 0);
+        } else {
+            // Mana value 3: not enough energy; it stays exiled.
+            assert_eq!(on, 0);
+            assert_eq!(t.zone(t.g.current(found)), Zone::Exile);
+            assert_eq!(t.g.player(P0).counter("energy"), 2);
+        }
+    }
+}

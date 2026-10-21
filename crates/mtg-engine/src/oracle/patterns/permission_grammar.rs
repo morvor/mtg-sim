@@ -716,6 +716,14 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
 /// "by discarding a card", "by foraging", "by paying 2 life and exiling a card from your
 /// graveyard": the cost, in the imperative.
 fn gerund_cost(s: &str) -> Option<Cost> {
+    // "by paying an amount of {E} equal to its mana value" (Amped Raptor): energy relative
+    // to the spell (see `permissions::spell_relative_cost`).
+    if s == "paying an amount of {e} equal to its mana value" {
+        return Some(Cost {
+            mana: None,
+            parts: vec![CostPart::PayEnergy(Value::ManaValueOf(Box::new(Sel::This)))],
+        });
+    }
     let mut parts = Vec::new();
     for part in s.split(" and ") {
         let part = part.trim();
