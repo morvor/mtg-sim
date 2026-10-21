@@ -1030,3 +1030,34 @@ fn loyalty_notation(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: loyalty notation as an instruction", priority: 70, parse: loyalty_notation } }
+
+/// The permanents chosen by "remove all counters from any number of [permanents]".
+const CHOSEN_TO_CLEAR: Var = vars::USER + 5104;
+
+/// "remove all counters from any number of artifacts, creatures, and enchantments" (Sin,
+/// Unending Cataclysm): the permanents are chosen (not targeted), then every counter on
+/// each of them is removed (CR 122.8 counts them as removed).
+fn remove_all_from_any_number(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("remove all counters from any number of ")?;
+    let f = group(r)?;
+    let chosen = Sel::Var(CHOSEN_TO_CLEAR);
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN_TO_CLEAR,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: f,
+                count: Value::c(99),
+                up_to: true,
+                store: None,
+            },
+        },
+        Effect::RemoveCounters {
+            what: chosen.clone(),
+            kind: None,
+            n: Value::CountersOn(Box::new(chosen), None),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "counters grammar 2: remove all counters from any number of [permanents]", priority: 75, parse: remove_all_from_any_number } }

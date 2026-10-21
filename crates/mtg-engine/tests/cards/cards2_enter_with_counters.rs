@@ -203,3 +203,46 @@ fn dralnus_pet_kicked_enters_with_flying_and_the_discarded_cards_mana_value() {
         .obj_now(p)
         .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
 }
+
+#[test]
+fn sin_removes_counters_from_chosen_permanents_and_enters_with_twice_that_many() {
+    cr!("614.12", "614.1c", "122.6", "122.8");
+    ruling!(
+        "Sin, Unending Cataclysm",
+        "Sin's last ability puts all counters that were on Sin onto the target creature, not just its +1/+1 counters."
+    );
+    supported("Sin, Unending Cataclysm");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(mine), "+1/+1", 3, None);
+    let theirs = t.battlefield(P1, "Craw Wurm");
+    t.g.add_counters(Entity::Object(theirs), "-1/-1", 2, None);
+    let skipped = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(skipped), "+1/+1", 1, None);
+    t.lands(P0, "Forest", 4);
+    t.lands(P0, "Island", 3);
+    let sin = t.hand(P0, "Sin, Unending Cataclysm");
+    t.cast(P0, sin).go();
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        mtg_engine::decision::Answer::Entities(vec![Entity::Object(mine), Entity::Object(theirs)]),
+    );
+    t.resolve_all();
+    let s = t.named_on_battlefield("Sin, Unending Cataclysm")[0];
+    assert_eq!(t.counters(s, "+1/+1"), 10);
+    assert_eq!(t.counters(mine, "+1/+1"), 0);
+    assert_eq!(t.counters(theirs, "-1/-1"), 0);
+    assert_eq!(t.counters(skipped, "+1/+1"), 1);
+    // When it dies, all its counters go on target creature you control.
+    t.g.add_counters(Entity::Object(s), "oil", 1, None);
+    t.lands(P0, "Swamp", 3);
+    let kill = t.hand(P0, "Murder");
+    t.cast(P0, kill).target(s).go();
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.resolve_all();
+    let s_now = t.g.current(s);
+    assert_eq!(t.g.obj(s_now).zone, mtg_engine::object::Zone::Library(P0));
+    assert_eq!(t.counters(mine, "+1/+1"), 10);
+    assert_eq!(t.counters(mine, "oil"), 1);
+}

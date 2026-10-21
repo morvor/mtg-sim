@@ -292,7 +292,10 @@ fn creature_form(s: &str, in_addition: bool, ctx: &CompileContext) -> Option<Vec
     // A bare size: "your choice of 5/1 or 1/5" (Aquamorph Entity).
     if let Some((p, t)) = s.split_once('/') {
         if let (Ok(p), Ok(t)) = (p.parse::<i32>(), t.parse::<i32>()) {
-            return Some(vec![Modification::SetPT(Some(Value::c(p)), Some(Value::c(t)))]);
+            return Some(vec![Modification::SetPT(
+                Some(Value::c(p)),
+                Some(Value::c(t)),
+            )]);
         }
     }
     let r = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
@@ -498,8 +501,7 @@ fn for_each_value(s: &str, ctx: &CompileContext) -> Option<Value> {
     if let Some(v) = super::value_results::whole_history_count(s) {
         return Some(v);
     }
-    for_each_value_inner(s, ctx)
-        .or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
+    for_each_value_inner(s, ctx).or_else(|| super::value_grammar::whole_count_in(s, ctx, Sel::This))
 }
 
 fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
@@ -507,9 +509,10 @@ fn for_each_value_inner(s: &str, ctx: &CompileContext) -> Option<Value> {
     // "instant and sorcery spell you've cast this turn" (CR 601.2i)
     if let Some(kind) = s.strip_suffix(" spell you've cast this turn") {
         let f = match kind {
-            "instant and sorcery" | "instant or sorcery" => {
-                Filter::Or(vec![Filter::Type(CardType::Instant), Filter::Type(CardType::Sorcery)])
-            }
+            "instant and sorcery" | "instant or sorcery" => Filter::Or(vec![
+                Filter::Type(CardType::Instant),
+                Filter::Type(CardType::Sorcery),
+            ]),
             _ => {
                 let (f, plural, tail) = parse_object_phrase(&format!("{kind} spell"))
                     .map(|(f, p, t)| (f, p, t.to_string()))?;
@@ -944,7 +947,8 @@ fn as_enters_this_way(s: &str, ctx: &CompileContext) -> Option<Effect> {
             _ => None,
         }
     }
-    let (pre, count) = match &e1 {
+    let mut e1 = e1;
+    let (pre, count) = match &mut e1 {
         Effect::RemoveCounters { n, .. } => (
             Some(Effect::StoreValue {
                 var: AS_ENTERS_COUNT,
@@ -952,9 +956,41 @@ fn as_enters_this_way(s: &str, ctx: &CompileContext) -> Option<Effect> {
             }),
             Value::Var(AS_ENTERS_COUNT),
         ),
-        other => (None, Value::CountSel(Box::new(Sel::Var(stored_var(other)?)))),
+        // "remove all counters from any number of artifacts, ...": the permanents are
+        // chosen first; the counters are counted just before they're removed.
+        Effect::Seq(v) if matches!(v.last(), Some(Effect::RemoveCounters { .. })) => {
+            let Some(Effect::RemoveCounters { n, .. }) = v.last() else {
+                return None;
+            };
+            let store = Effect::StoreValue {
+                var: AS_ENTERS_COUNT,
+                value: n.clone(),
+            };
+            v.insert(v.len() - 1, store);
+            (None, Value::Var(AS_ENTERS_COUNT))
+        }
+        other => (
+            None,
+            Value::CountSel(Box::new(Sel::Var(stored_var(other)?))),
+        ),
     };
-    let (mult, rest) = if let Some(x) = r.strip_prefix("that many ") {
+    // "~ enters with X +1/+1 counters on it, where X is twice the number of counters
+    // removed this way" (Sin, Unending Cataclysm).
+    let x_form = r.strip_prefix("x ").and_then(|x| {
+        let (x, w) = x.split_once(", where x is ")?;
+        let w = w.trim_end_matches('.');
+        let w = w.strip_suffix(" this way")?;
+        let (m, w) = match w.strip_prefix("twice ") {
+            Some(w) => (2, w),
+            None => (1, w),
+        };
+        w.starts_with("the number of ").then(|| (m, x.to_string()))
+    });
+    let x_owned;
+    let (mult, rest) = if let Some((m, x)) = x_form {
+        x_owned = x;
+        (m, x_owned.as_str())
+    } else if let Some(x) = r.strip_prefix("that many ") {
         (1, x)
     } else if let Some(x) = r.strip_prefix("twice that many ") {
         (2, x)
