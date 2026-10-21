@@ -2532,6 +2532,10 @@ pub enum ManaProduction {
     /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
     /// resolves, then the amount is the controller's devotion to it.
     DevotionToChosenColor,
+    /// One mana of a type a hand-written card's rule names
+    /// ([`crate::kw::KeywordRules::custom_mana_types`]; "one mana of ~'s last noted
+    /// type"): no mana if it names none (CR 607.5a).
+    Custom(SmolStr),
 }
 
 /// Replacement effect definitions (CR 614–616).

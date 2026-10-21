@@ -21,24 +21,27 @@ pub fn order(
     ctx: &Ctx,
 ) -> Vec<PlayerId> {
     let n = g.players.len();
-    let you = ctx.controller.idx();
+    let you = ctx.controller;
     let start = match first {
         TurnOrderStart::You => you,
         // The next player after you in turn order who is your opponent.
         TurnOrderStart::NextOpponent => (1..n)
-            .map(|i| (you + i) % n)
-            .find(|&i| {
-                let p = PlayerId(i as u8);
-                g.player(p).in_game() && g.opponents(ctx.controller).contains(&p)
-            })
+            .map(|i| g.seat_in_turn_order(you, i))
+            .find(|p| g.player(*p).in_game() && g.opponents(you).contains(p))
             .unwrap_or(you),
     };
-    // An undefined direction (none was chosen) is taken as turn order.
-    let left = crate::seats::resolve_side(g, direction, ctx.source).unwrap_or(true);
+    // The default direction (`SeatSide::Left`) is turn order, which goes to the right once
+    // the game's turn order has been reversed; a chosen direction (or right) goes around
+    // the table that way. An undefined direction (none was chosen) is taken as turn order.
+    let seat_side = match direction {
+        SeatSide::Left => None,
+        side => crate::seats::resolve_side(g, side, ctx.source),
+    };
     (0..n)
-        .map(|i| {
-            let k = if left { start + i } else { start + n - i };
-            PlayerId((k % n) as u8)
+        .map(|i| match seat_side {
+            Some(true) => PlayerId(((start.idx() + i) % n) as u8),
+            Some(false) => PlayerId(((start.idx() + n - i) % n) as u8),
+            None => g.seat_in_turn_order(start, i),
         })
         .filter(|p| g.player(*p).in_game() && g.player_filter_matches(who, *p, ctx))
         .collect()

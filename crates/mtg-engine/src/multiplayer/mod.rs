@@ -88,13 +88,14 @@ pub fn left_players_seated_between(g: &Game, after: PlayerId, next: PlayerId) ->
     if n == 0 {
         return out;
     }
-    let mut i = (after.idx() + 1) % n;
-    while i != next.idx() && i != after.idx() {
-        let q = PlayerId(i as u8);
+    for k in 1..n {
+        let q = g.seat_in_turn_order(after, k);
+        if q == next {
+            break;
+        }
         if !g.player(q).in_game() {
             out.push(q);
         }
-        i = (i + 1) % n;
     }
     out
 }

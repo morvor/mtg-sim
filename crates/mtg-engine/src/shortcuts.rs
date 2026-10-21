@@ -85,7 +85,7 @@ pub fn propose(
     let mut end = seq.len();
     let n = g.players.len();
     for i in 1..n {
-        let p = PlayerId(((proposer.idx() + i) % n) as u8);
+        let p = g.seat_in_turn_order(proposer, i);
         if !g.player(p).in_game() {
             continue;
         }

@@ -39,3 +39,15 @@ Format and kinds: `docs/agents/items/interpretation-register.md`; index:
 - Affects: games with the limited range of influence option only (CR 801; Emperor, Grand Melee): abilities of a player's permanents about another player's creature (Auras, "whenever a creature attacks/blocks") when that creature attacks or blocks with or against a player out of the first player's range.
 - Code: `crates/mtg-engine/src/multiplayer/range.rs` (`trigger_in_range`).
 - Tests: `tests/cr/r801_combat_trigger_events.rs` (`attacks_and_becomes_blocked_ignore_the_defending_player_and_blockers_out_of_range`, `blocks_ignores_the_attacker_out_of_range_but_blocks_a_creature_doesnt`); `tests/cr/r801_examples.rs` (`becomes_blocked_triggers_but_becomes_blocked_by_a_creature_out_of_range_doesnt`).
+
+## venture-limit-looks-at-whole-turn: "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn
+- Kind: interpretation
+- Status: provisional
+- Rules: Keen-Eared Sentry: "Each opponent can't venture into the dungeon more than once each turn." / 101.2 "When a rule or effect allows or directs something to happen, and another effect states that it can’t happen, the “can’t” effect takes precedence." / Rule of Law ruling: "Rule of Law looks at the entire turn to see if a player has cast a spell, even if Rule of Law wasn’t on the battlefield when that spell was cast."
+- Question: Does an opponent's venture made this turn before Keen-Eared Sentry came under its controller's control count toward the limit? And does taking the initiative (whose triggered ability ventures into Undercity, CR 725.2) count as a venture?
+- Decision: Every venture this turn counts (a venture marker moved into a room, CR 309.4c), including those before the Sentry arrived and those of the initiative; once an opponent has ventured this turn, any further venture by them does nothing (the initiative is still taken).
+- Alternatives: Count only the ventures made while the Sentry was on the battlefield: would let an opponent venture again in the turn the Sentry arrives, unlike the rulings for the analogous "can't cast more than one spell each turn" (Rule of Law, Deafening Silence, Arcane Laboratory).
+- Why: The "each turn" limit is worded like Rule of Law's, whose rulings look at the whole turn; venturing into Undercity is venturing into the dungeon (CR 701.49d).
+- Affects: Keen-Eared Sentry.
+- Code: `crates/mtg-engine/src/cards/keen_eared_sentry.rs` (`venture_prohibited`); `crates/mtg-engine/src/dungeons.rs` (`venture_into`).
+- Tests: `tests/cards/m_keen_eared_sentry.rs` (`an_opponent_ventures_only_once_each_turn`, `ventures_before_it_entered_count_and_without_it_there_is_no_limit`).

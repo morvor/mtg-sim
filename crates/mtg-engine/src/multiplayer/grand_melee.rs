@@ -683,7 +683,7 @@ pub fn priority_players(g: &Game) -> Vec<PlayerId> {
 pub fn next_priority(g: &Game, p: PlayerId) -> PlayerId {
     let n = g.players.len();
     for k in 1..=n {
-        let q = PlayerId(((p.idx() + k) % n) as u8);
+        let q = g.seat_in_turn_order(p, k);
         if g.player(q).in_game() && gets_priority(g, q) {
             return q;
         }

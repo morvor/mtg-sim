@@ -47,8 +47,9 @@ impl Game {
     /// Every player, in turn order from the active player (players who left included).
     fn player_ids_apnap(&self) -> Vec<PlayerId> {
         let n = self.players.len();
-        let a = self.turn.active.idx();
-        (0..n).map(|i| PlayerId(((a + i) % n) as u8)).collect()
+        (0..n)
+            .map(|i| self.seat_in_turn_order(self.turn.active, i))
+            .collect()
     }
 
     /// Makes simultaneous choices in APNAP order (CR 101.4): each request is one player's

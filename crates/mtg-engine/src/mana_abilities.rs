@@ -170,6 +170,14 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::Custom(name) => {
+                let t = crate::kw::custom_mana_types(g, name, ctx);
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t]
+                }
+            }
             // CR 106.12a: the types of mana the triggering mana ability produced.
             ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
                 let t = crate::resolve::produced_types(ctx);

@@ -88,6 +88,11 @@ pub trait KeywordRules: Sync + Send {
     fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
         false
     }
+    /// Whether a rule this implementation defines prohibits `p` from venturing into the
+    /// dungeon now (CR 101.2, 701.49). Called for every registered implementation.
+    fn venture_prohibited(&self, g: &Game, p: PlayerId) -> bool {
+        false
+    }
     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
     /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
     /// Called for every registered implementation.
@@ -596,6 +601,16 @@ pub trait KeywordRules: Sync + Send {
     }
     /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
     /// number of spells cast before a storm spell (CR 702.40a).
+    /// The types one mana of [`ManaProduction::Custom`] `name` could be (the producer
+    /// chooses among them; none: no mana), if this implementation defines it.
+    fn custom_mana_types(
+        &self,
+        g: &Game,
+        name: &str,
+        ctx: &crate::eval::Ctx,
+    ) -> Option<Vec<crate::mana::ManaType>> {
+        None
+    }
     fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
         None
     }
@@ -1202,6 +1217,19 @@ pub fn land_play_prohibited(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     registry()
         .iter()
         .any(|r| r.land_play_prohibited(g, p, card))
+}
+
+/// See [`KeywordRules::custom_mana_types`].
+pub fn custom_mana_types(g: &Game, name: &str, ctx: &Ctx) -> Vec<crate::mana::ManaType> {
+    registry()
+        .iter()
+        .find_map(|r| r.custom_mana_types(g, name, ctx))
+        .unwrap_or_default()
+}
+
+/// See [`KeywordRules::venture_prohibited`].
+pub fn venture_prohibited(g: &Game, p: PlayerId) -> bool {
+    registry().iter().any(|r| r.venture_prohibited(g, p))
 }
 
 /// See [`KeywordRules::target_forbidden`].

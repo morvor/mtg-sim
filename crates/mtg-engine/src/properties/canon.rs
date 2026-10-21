@@ -377,10 +377,11 @@ impl Canon {
         }
         let _ = write!(
             s,
-            "] monarch{:?} initiative{:?} day{:?} pending{} delayed{} effects{} result{}",
+            "] monarch{:?} initiative{:?} day{:?} reversed{} pending{} delayed{} effects{} result{}",
             g.monarch.map(|p| self.player(p)),
             g.initiative.map(|p| self.player(p)),
             g.day,
+            g.turn_order_reversed,
             g.pending_triggers.len(),
             g.delayed_triggers.len(),
             g.effects.len(),

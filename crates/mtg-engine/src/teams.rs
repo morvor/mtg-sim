@@ -243,7 +243,7 @@ impl Game {
         let n = self.players.len();
         let team = self.player(after).team;
         for i in 1..=n {
-            let q = PlayerId(((after.idx() + i) % n) as u8);
+            let q = self.seat_in_turn_order(after, i);
             if self.player(q).in_game() && self.player(q).team != team {
                 return q;
             }
