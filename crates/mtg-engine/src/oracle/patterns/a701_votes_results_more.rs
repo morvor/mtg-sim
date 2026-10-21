@@ -267,3 +267,60 @@ fn owned_by_the_voter<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> 
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "owned by the voter", priority: 120, parse: owned_by_the_voter } }
+
+/// "[instruction] for each free vote" (the number of votes at the end of the sentence),
+/// and "reveal cards from the top of your library until you reveal a creature card for
+/// each wild vote" (that many creature cards).
+fn trailing_word_votes(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let at = l.rfind(" for each ")?;
+    let (x, tail) = (&l[..at], &l[at + " for each ".len()..]);
+    let word = tail.strip_suffix(" vote")?;
+    if word.is_empty() || word.split(' ').count() > 3 || x.contains(" for each ") {
+        return None;
+    }
+    let votes = Value::Var(word_var(word));
+    // "until you reveal a creature card for each wild vote": X creature cards.
+    if let Some(head) = x.strip_suffix(" until you reveal a creature card") {
+        let e = parse_clause(&format!("{head} until you reveal x creature cards"), b)?;
+        return Some(Effect::seq(vec![Effect::SetX { value: votes }, e]));
+    }
+    let mut e = parse_clause(x, b)?;
+    // "You may put a permanent card from your hand onto the battlefield for each free
+    // vote": each one is optional (the sentence's "you may" is read around the whole).
+    let optional = crate::oracle::raw_text()
+        .to_lowercase()
+        .contains(&format!("you may {x} for each {word} vote"));
+    if optional {
+        let mut n = 0;
+        let v = up_to_one(serde_json::to_value(&e).ok()?, &mut n);
+        if n != 1 {
+            return None;
+        }
+        e = serde_json::from_value(v).ok()?;
+    }
+    Some(Effect::Repeat {
+        times: votes,
+        effect: Box::new(e),
+    })
+}
+
+/// Makes the one object choice in `v` ("a permanent card from your hand") "up to one".
+fn up_to_one(v: serde_json::Value, n: &mut usize) -> serde_json::Value {
+    use serde_json::Value as J;
+    match v {
+        J::Object(mut m) => {
+            if let Some(J::Object(c)) = m.get_mut("Choose") {
+                if c.contains_key("chooser") && c.get("up_to") == Some(&J::Bool(false)) {
+                    c.insert("up_to".into(), J::Bool(true));
+                    *n += 1;
+                }
+            }
+            J::Object(m.into_iter().map(|(k, x)| (k, up_to_one(x, n))).collect())
+        }
+        J::Array(a) => J::Array(a.into_iter().map(|x| up_to_one(x, n)).collect()),
+        x => x,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "[instruction] for each [word] vote", priority: 55, parse: trailing_word_votes } }

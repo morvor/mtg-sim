@@ -238,3 +238,25 @@ fn erestor_rewards_opponents_who_voted_like_you_and_scries_for_the_others() {
         .any(|(p, d)| *p == P0 && matches!(d, Decision::Scry { cards } if cards.len() == 1));
     assert!(scried, "scry 1: one opponent voted otherwise");
 }
+
+#[test]
+fn selvalas_stampede_creatures_for_wild_votes_permanents_from_hand_for_free_votes() {
+    cr!("701.38a");
+    compiles("Selvala's Stampede");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 6);
+    let spell = t.hand(P0, "Selvala's Stampede");
+    let thopter = t.hand(P0, "Ornithopter");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.advance_to(P0, Step::PrecombatMain);
+    vote_word(&mut t, P0, 0); // wild
+    vote_word(&mut t, P1, 1); // free
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(thopter)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "one wild vote");
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1, "one free vote");
+    assert!(!t.in_graveyard(P0, "Island"), "the rest shuffled in");
+}
