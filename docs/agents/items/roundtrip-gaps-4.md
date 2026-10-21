@@ -51,8 +51,8 @@ with its reason). Regenerate docs/ROUNDTRIP.md and docs/roundtrip-passing.txt;
 ## Result
 
 26,438 of 30,041 fully supported cards passed at the start (a29dfa98); 26,574 of 30,041
-pass on the branch before the last merge, and 26,596 of 30,252 after merging the later
-landings (origin's passing list at that merge has 26,361 cards). 119 of the 153 cards in
+pass on the branch before the last merge, and 26,597 of 30,252 after merging the later
+landings (origin's passing list at that merge has 26,361 cards). 120 of the 153 cards in
 the taken clusters pass.
 
 Renderer (new files `cost_amounts.rs`, `cast_from_among.rs`, `same_name_search.rs`,
@@ -159,14 +159,16 @@ AST and plays as the text says (wording only) unless noted:
 - Selective Obliteration: "unless it's colorless or it's only the color its controller
   chose".
 - Sanctuary Blade: "protection from the last chosen color".
-- Pumpkin Bombs, The Fall of Kroog, Cerebral Vortex: "they"/"them" for a target player named
-  before (a global "they" for target players broke the pronoun choice of other cards).
+- Pumpkin Bombs, The Fall of Kroog: "they" for a target player named before (a global
+  "they" for target players broke the pronoun choice of other cards).
 - Celestial Dawn: "The same is true for spells you control and nonland cards you own that
   aren't on the battlefield."
-- Laughing Jasper Flint, Bloodsoaked Insight: "mana of any type can be spent to cast those
-  spells" wording.
-- The Enigma Jewel: the craft materials ("nonlands with activated abilities") and the gained
-  abilities' "only once each turn" (compiled as `GainedTerms::max_per_turn`, not rendered).
+- Laughing Jasper Flint: "Until end of turn, you may cast spells from among those cards, and
+  mana of any type can be spent to cast those spells" (the duration's place).
+- The Enigma Jewel // Locus of Enlightenment: the craft materials ("nonlands with activated
+  abilities") and the gained abilities' "only once each turn" (compiled as
+  `GainedTerms::max_per_turn`; the renderer doesn't word it yet, a dropped quality to look
+  at next).
 - Null Chamber: "you and an opponent each choose a card name other than a basic land card
   name" and the two restrictions in one sentence.
 - Anzrag's Rampage: "a creature card exiled this way".

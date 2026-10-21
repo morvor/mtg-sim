@@ -1320,7 +1320,19 @@ impl Renderer<'_> {
             }
             CostChange::ReduceGeneric(v) => {
                 let (amt, tail) = self.cost_amount(v);
-                format!("{target}{who} {costs} {amt} less {act}{tail}")
+                let one = format!("{target}{who} {costs} {amt} less {act}{tail}");
+                // "{1} less to cast for each 1 life you gained this turn": the same amount
+                // counted one by one.
+                let each = tail
+                    .strip_prefix(", where X is ")
+                    .filter(|_| amt == "{X}")
+                    .and_then(|s| self.per_life(s));
+                match each {
+                    Some(r) => {
+                        format!("{{alt:{one}|{target}{who} {costs} {{1}} less {act} for each {r}}}")
+                    }
+                    None => one,
+                }
             }
             CostChange::ReduceGenericMinOne(v) => {
                 let (amt, tail) = self.cost_amount(v);
@@ -1755,13 +1767,6 @@ impl Renderer<'_> {
                     return (format!("{{{k}}}"), format!(" for each {each}"));
                 }
                 let s = self.value(other);
-                // "{1} less to cast for each 1 life you gained this turn": the same amount.
-                if let Some(r) = self.per_life(&s) {
-                    return (
-                        "{alt:{X}|{1}}".into(),
-                        format!("{{alt:, where X is {s}| for each {r}}}"),
-                    );
-                }
                 ("{X}".into(), format!(", where X is {s}"))
             }
         }
