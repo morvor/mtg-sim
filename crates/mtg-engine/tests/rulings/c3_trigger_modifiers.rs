@@ -115,3 +115,89 @@ fn elesh_norn_entering_at_the_same_time() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn panoptic_projektor_face_up_triggers_twice() {
+    cr!("603.2d");
+    ruling!(
+        "Panoptic Projektor",
+        "Panoptic Projektor’s last ability affects a permanent’s own abilities that trigger when it turns face up as well as other triggered abilities that trigger when that permanent turns face up."
+    );
+    supported("Panoptic Projektor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Panoptic Projektor");
+    // "Whenever a permanent you control is turned face up, draw a card."
+    t.battlefield(P0, "Secret Plans");
+    // "When this creature is turned face up, you gain 2 life."
+    let w = t.battlefield(P0, "Watcher of the Roost");
+    assert!(mtg_engine::facedown::turn_face_down(&mut t.g, w));
+    let hand = t.hand_size(P0);
+    for _ in 0..4 {
+        t.library_top(P0, "Island");
+    }
+    assert!(mtg_engine::facedown::turn_face_up_by(&mut t.g, w, P0));
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 24);
+    assert_eq!(t.hand_size(P0), hand + 2);
+    // Another event (a creature entering) doesn't trigger twice.
+    t.battlefield(P0, "Soul Warden");
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 25);
+}
+
+#[test]
+fn cloud_equipment_triggers_twice() {
+    cr!("603.2d", "603.10a");
+    ruling!(
+        "Cloud, Midgar Mercenary",
+        "Cloud's last ability doesn't copy the triggered ability; it just causes the ability to trigger an additional time."
+    );
+    supported("Cloud, Midgar Mercenary");
+    let mut t = TestGame::new(2);
+    let cloud = t.battlefield(P0, "Cloud, Midgar Mercenary");
+    // "Whenever equipped creature dies, draw two cards."
+    let clamp = t.battlefield(P0, "Skullclamp");
+    assert!(t.g.attach(clamp, Entity::Object(cloud)));
+    t.g.recompute();
+    // Blood Artist isn't attached to Cloud: its ability triggers once.
+    t.battlefield(P0, "Blood Artist");
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    destroy(&mut t, cloud);
+    assert_eq!(triggers_on_stack(&t, "draw two cards"), 2);
+    assert_eq!(triggers_on_stack(&t, "dies, target player"), 1);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 4);
+}
+
+#[test]
+fn masamune_doubles_dies_triggers_of_equipped_creature_and_emblems() {
+    cr!("603.2d", "114.4", "700.4");
+    ruling!(
+        "The Masamune",
+        "The granted ability affects the equipped creature's own \"when this creature dies\" triggered abilities as well as other triggered abilities of that creature or emblems you own that trigger when a creature dies."
+    );
+    supported("The Masamune");
+    let mut t = TestGame::new(2);
+    let artist = t.battlefield(P0, "Blood Artist");
+    let sword = t.battlefield(P0, "The Masamune");
+    assert!(t.g.attach(sword, Entity::Object(artist)));
+    // Another Blood Artist, not equipped: once.
+    t.battlefield(P0, "Blood Artist");
+    // An emblem P0 owns with Blood Artist's ability.
+    let donor = t.exile(P1, "Blood Artist");
+    let abilities = t.obj_now(donor).chars.abilities.clone();
+    mtg_engine::tokens::create_emblem(&mut t.g, P0, abilities, None);
+    t.g.recompute();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    destroy(&mut t, bears);
+    // Equipped Blood Artist: 2; unequipped: 1; emblem: 2.
+    assert_eq!(triggers_on_stack(&t, "dies"), 5);
+}

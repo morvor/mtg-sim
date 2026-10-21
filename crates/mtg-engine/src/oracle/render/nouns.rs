@@ -946,6 +946,10 @@ impl Renderer<'_> {
                 let s = self.sel(&sel, Case::Obj);
                 np.with.push(format!("the same name as {s}"));
             }
+            // "an emblem you own" (CR 114).
+            Filter::Custom(name) if name == crate::kw::trigger_modifiers::EMBLEM => {
+                np.kind = Some("emblem")
+            }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {
                     use super::custom_filters::CustomQuality as Q;
