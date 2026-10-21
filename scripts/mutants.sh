@@ -3,7 +3,7 @@
 #
 #   scripts/mutants.sh sba layers ...            # sample run, one file at a time
 #   RERUN=1 scripts/mutants.sh sba               # re-run only the last run's missed/timeout
-#                                                # mutants (by exact name), into <stem>-rerun
+#                                                # mutants, into <stem>-rerun
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
 #
 # Each file stem names crates/mtg-engine/src/<stem>.rs. Mutants run in a persistent copy of
@@ -39,9 +39,36 @@ for stem in "$@"; do
     prev=$OUT/$stem/mutants.out
     dest=$OUT/$stem-rerun
     k=1
+    # Each survivor is found again in today's list of the file's mutants: the same mutation
+    # in the same function, at the same column and the nearest line (edits elsewhere in the
+    # file may have moved it).
+    cat "$prev/missed.txt" "$prev/timeout.txt" 2>/dev/null >"$OUT/$stem.survivors"
+    (cd "$MS" && cargo mutants --list -f "$file") >"$OUT/$stem.list"
+    nf=0
     while IFS= read -r name; do
+      nf=$((nf + 1))
       args+=(-F "^$(printf '%s' "$name" | sed 's/[][\\.^$*+?(){}|]/\\&/g')\$")
-    done < <(cat "$prev/missed.txt" "$prev/timeout.txt" 2>/dev/null)
+    done < <(python3 - "$OUT/$stem.survivors" "$OUT/$stem.list" <<'PY'
+import re, sys
+pat = re.compile(r"^(.*?):(\d+):(\d+): (.*)$")
+now = [m.groups() for m in map(pat.match, open(sys.argv[2]).read().splitlines()) if m]
+for line in open(sys.argv[1]).read().splitlines():
+    m = pat.match(line)
+    if not m:
+        continue
+    f, ln, col, rest = m.groups()
+    cands = [c for c in now if c[0] == f and c[3] == rest]
+    if not cands:
+        print(f"no longer generated: {line}", file=sys.stderr)
+        continue
+    best = min(cands, key=lambda c: (c[2] != col, abs(int(c[1]) - int(ln))))
+    print(f"{best[0]}:{best[1]}:{best[2]}: {best[3]}")
+PY
+    )
+    if ((nf == 0)); then
+      echo "== $stem: no survivors to re-run"
+      continue
+    fi
     args+=(--baseline skip)
   elif ((k > 1)); then
     args+=(--shard "0/$k" --sharding round-robin)

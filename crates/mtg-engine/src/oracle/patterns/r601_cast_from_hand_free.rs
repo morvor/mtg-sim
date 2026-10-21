@@ -29,6 +29,7 @@ inventory::submit! { EffectPattern { name: "you may cast a spell with mana value
 /// targeted earlier in the text, as it last existed.
 fn cast_from_hand_free_equal_or_lesser(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
+    let may = l.starts_with("you may ");
     let l = l.strip_prefix("you may ").unwrap_or(l);
     if l != "cast a spell with equal or lesser mana value from your hand without paying its mana cost" {
         return None;
@@ -37,9 +38,16 @@ fn cast_from_hand_free_equal_or_lesser(l: &str, b: &mut Builder) -> Option<Effec
         .targets
         .iter()
         .rposition(|t| matches!(t.what, TargetKind::Spell(_)))?;
-    Some(Effect::Custom(
-        crate::kw::cast_from_hand_free::effect_name_target(slot as u8).into(),
-    ))
+    let e = Effect::Custom(crate::kw::cast_from_hand_free::effect_name_target(slot as u8).into());
+    // (Read whole when the sentence is also a permission: "you may" is still the choice.)
+    Some(if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(e),
+        }
+    } else {
+        e
+    })
 }
 
 inventory::submit! { EffectPattern { name: "you may cast a spell with equal or lesser mana value from your hand without paying its mana cost", priority: 99, parse: cast_from_hand_free_equal_or_lesser } }

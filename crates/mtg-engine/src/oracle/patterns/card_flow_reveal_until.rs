@@ -60,7 +60,13 @@ fn reveal_until(l: &str, b: &mut Builder) -> Option<Effect> {
 /// reveal a nonlegendary creature card with lesser mana value", Kethek, Crucible Goliath:
 /// the sacrificed creature), not the source.
 pub fn implicit_comparison_with_source(desc: &str, b: &Builder) -> bool {
-    matches!(b.it, Sel::This)
+    // (A sacrificed creature the text names is what the comparison is with, see
+    // `filters_relational::resolve_referent`.)
+    let sacrificed = b.named.iter().any(|(n, s)| {
+        n == "that creature" && matches!(s, Sel::Var(v) if *v == vars::SACRIFICED)
+    });
+    !sacrificed
+        && matches!(b.it, Sel::This)
         && [" with lesser ", " with greater "]
             .iter()
             .any(|p| desc.contains(p))

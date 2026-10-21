@@ -98,6 +98,11 @@ pub(crate) fn pronoun_state(c: &str) -> Option<Filter> {
     // "it was dealt [noncombat] damage this turn" (Grisly Sigil).
     match c {
         "it was dealt damage this turn" => return Some(Filter::DealtDamageThisTurn),
+        "it shares a color with the most common color among all permanents or a color tied for most common" => {
+            return Some(Filter::Custom(
+                super::filter_qualities::MOST_COMMON_COLOR.into(),
+            ))
+        }
         "it was dealt noncombat damage this turn" => {
             return Some(Filter::Custom(
                 crate::kw::noncombat_damage::DEALT_NONCOMBAT_DAMAGE_THIS_TURN.into(),

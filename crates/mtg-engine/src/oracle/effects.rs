@@ -1262,7 +1262,7 @@ fn signed_value(s: &str) -> Option<Value> {
 pub fn parse_simple(l: &str, b: &mut Builder) -> Option<Effect> {
     // "it" in an object qualifier ("search for a creature card with lesser mana value")
     // means what "it" meant as the clause began (see `patterns::filters_relational`).
-    let it = super::patterns::pronoun_groups::singular_it(b);
+    let it = super::patterns::filters_relational::qualifier_it(b);
     let e = parse_simple_clause(l, b)?;
     let e = super::patterns::filters_relational::resolve_clause(e, &it);
     super::patterns::filters_relational::note_sacrificed(&e, b);
@@ -1525,6 +1525,11 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
                 rest.to_string(),
             ));
         }
+    }
+    // "deal damage equal to its power to you and any target" (both get that damage).
+    if let Some(r) = s.strip_prefix("you and ") {
+        let (other, rest) = damage_recipients(r, b)?;
+        return Some((Sel::Union(vec![Sel::Players(PlayerRef::You), other]), rest));
     }
     // "Whenever an opponent draws a card, ~ deals 1 damage to them.": a player.
     if let Some(who) = super::patterns::pronoun_groups::them_player(s, b) {

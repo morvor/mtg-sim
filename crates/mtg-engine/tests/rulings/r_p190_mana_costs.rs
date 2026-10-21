@@ -99,7 +99,8 @@ fn monocolored_hybrid_cards_keep_their_color_and_mana_value_however_paid() {
     );
     supported("Beseech the Queen");
     supported("Tower Above");
-    only_unsupported("Advice from the Fae", "Look at the top five cards");
+    // (Its "if you control more creatures than each other player" now compiles.)
+    supported("Advice from the Fae");
     // (card, its color, its color's mana, another color's mana)
     let cases = [
         ("Advice from the Fae", Color::Blue, ManaType::U, ManaType::B),

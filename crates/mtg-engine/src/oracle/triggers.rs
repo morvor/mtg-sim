@@ -731,7 +731,14 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             } else {
                 PlayerRef::TriggerPlayer
             };
-            return Some((t, obj(), it_player));
+            // "Whenever you attack, ... put a quest counter on it": no object triggered
+            // it, so "it" is the source.
+            let it = if matches!(t, TriggerCond::PlayerAttacks(_)) {
+                Sel::This
+            } else {
+                obj()
+            };
+            return Some((t, it, it_player));
         }
     }
     if r == "you sacrifice a permanent" {
@@ -789,6 +796,7 @@ fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         if !end(tail).is_empty() {
             return None;
         }
+        let f = super::patterns::filter_qualities::they_as_tested_controller(f);
         // "it" is the creature that died: its last known information for values ("its
         // power"), and the card it became for actions ("return it", CR 400.7e).
         return Some((

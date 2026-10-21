@@ -689,7 +689,8 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
                     trigger: Box::new(TriggerCond::Discards { who, filter: f }),
                     per: BatchPer::Player,
                 },
-                Sel::None,
+                // "them": the discarded cards, where they went (CR 701.9a).
+                Sel::TriggerObjects,
                 tp(),
             ));
         }
