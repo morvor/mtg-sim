@@ -26,7 +26,9 @@ fn cast_with_single_target(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         return None;
     };
     let rest = rest.strip_suffix(" with a single target")?;
-    let rest = rest.strip_prefix("a ").or_else(|| rest.strip_prefix("an "))?;
+    let rest = rest
+        .strip_prefix("a ")
+        .or_else(|| rest.strip_prefix("an "))?;
     let kind = if rest == "spell" {
         Filter::Any
     } else {
@@ -57,10 +59,28 @@ inventory::submit! { TriggerPattern { name: "casts a spell with a single target"
 /// could target" (Precursor Golem): only the other legal targets of that kind, as seen by
 /// the player who copies it.
 fn copies_for_each_other_target(l: &str, b: &mut Builder) -> Option<Effect> {
-    if !matches!(b.it, Sel::TriggerSpell) {
+    // "Whenever ~ becomes the target of an ability that targets only it, ... copy that
+    // ability for each other creature you control that ability could target" (Agrus Kos):
+    // the spell or ability that targeted it.
+    let targeted_by = b.in_trigger
+        && crate::oracle::raw_text()
+            .to_lowercase()
+            .contains(" becomes the target of a");
+    if !matches!(b.it, Sel::TriggerSpell) && !targeted_by {
         return None;
     }
     let l = end(l);
+    let ability_form;
+    let l = match l.strip_prefix("copy that ability for each other ") {
+        Some(r) => {
+            let r = r
+                .strip_suffix(" that ability could target")
+                .map(|k| format!("{k} that spell could target"))?;
+            ability_form = format!("copy that spell for each other {r}");
+            ability_form.as_str()
+        }
+        None => l,
+    };
     let (who, r) = if let Some(r) = l.strip_prefix("that player copies that spell for each other ")
     {
         (b.it_player.clone(), r)
@@ -113,21 +133,16 @@ fn each_copy_targets_a_different_one(s: &str, prev: &mut Effect, _b: &mut Builde
     let l = s.to_lowercase();
     let l = end(&l);
     if l != "each copy targets a different one of them"
-        && !l.strip_prefix("each copy targets a different one of those ").is_some_and(|k| {
-            parse_object_phrase(k).is_some_and(|(_, plural, tail)| plural && end(tail).is_empty())
-        })
+        && !l
+            .strip_prefix("each copy targets a different one of those ")
+            .is_some_and(|k| {
+                parse_object_phrase(k)
+                    .is_some_and(|(_, plural, tail)| plural && end(tail).is_empty())
+            })
     {
         return false;
     }
-    let retargeted = |e: &Effect| {
-        matches!(
-            e,
-            Effect::CopySpellRetargeted {
-                target: None,
-                ..
-            }
-        )
-    };
+    let retargeted = |e: &Effect| matches!(e, Effect::CopySpellRetargeted { target: None, .. });
     match prev {
         Effect::AsPlayer { effect, .. } => retargeted(effect),
         e => retargeted(e),

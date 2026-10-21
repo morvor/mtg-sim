@@ -303,3 +303,25 @@ fn exterminator_magmarch_copies_onto_another_opponents_permanent() {
     // Not the first opponent's other permanent.
     assert!(t.on_battlefield(p1other));
 }
+
+#[test]
+fn agrus_kos_copies_an_ability_targeting_it_for_each_other_creature_you_control() {
+    cr!("707.10d", "707.10");
+    supported("Agrus Kos, Eternal Soldier");
+    let mut t = TestGame::new(2);
+    let agrus = t.battlefield(P0, "Agrus Kos, Eternal Soldier");
+    let a = t.battlefield(P0, "Llanowar Elves");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    let pyro = t.battlefield(P1, "Prodigal Pyromancer");
+    t.lands(P0, "Plains", 2);
+    t.set_step(P1, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.activate(P1, pyro, 0, &[obj(agrus)]).unwrap();
+    t.resolve_all();
+    // The Elves (1/1) die; the Bears take 1; Agrus Kos takes 1; P1's Giant isn't hit.
+    assert!(!t.on_battlefield(a));
+    assert_eq!(t.obj_now(b).damage, 1);
+    assert_eq!(t.obj_now(agrus).damage, 1);
+    assert_eq!(t.obj_now(theirs).damage, 0);
+}
