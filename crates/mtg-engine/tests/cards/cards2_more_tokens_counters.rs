@@ -76,3 +76,28 @@ fn nine_lives_familiar_returns_with_one_fewer_revival_counter() {
     assert_eq!(back.len(), 1);
     assert_eq!(t.counters(back[0], "revival"), 2);
 }
+
+#[test]
+fn ochre_jelly_token_enters_with_half_the_counters_rounded_down() {
+    cr!("122.6", "707.2", "603.7");
+    ruling!(
+        "Ochre Jelly",
+        "if Ochre Jelly had five +1/+1 counters on it when it dies, the token you create will enter the battlefield with two +1/+1 counters on it"
+    );
+    supported("Ochre Jelly");
+    let mut t = TestGame::new(2);
+    let jelly = t.battlefield(P0, "Ochre Jelly");
+    t.g.add_counters(Entity::Object(jelly), "+1/+1", 5, None);
+    t.lands(P0, "Swamp", 3);
+    let kill = t.hand(P0, "Murder");
+    t.cast(P0, kill).target(jelly).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Ochre Jelly").is_empty());
+    t.advance_to_step(Step::End);
+    t.resolve_all();
+    let back = t.named_on_battlefield("Ochre Jelly");
+    assert_eq!(back.len(), 1);
+    assert!(t.obj_now(back[0]).is_token());
+    assert_eq!(t.counters(back[0], "+1/+1"), 2);
+    assert_eq!(t.pt(back[0]), (2, 2));
+}
