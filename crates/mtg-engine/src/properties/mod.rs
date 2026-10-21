@@ -402,10 +402,7 @@ fn pool() -> &'static [(String, u8)] {
     POOL.get_or_init(|| {
         let mut v = Vec::new();
         for c in mtg_data::cards().iter() {
-            if !c.is_playable_card() || !c.is_legal_somewhere() {
-                continue;
-            }
-            if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+            if !c.is_playable_card() || !c.is_legal_somewhere() || !c.is_paper_card() {
                 continue;
             }
             let front = c.type_line.as_deref().unwrap_or("");

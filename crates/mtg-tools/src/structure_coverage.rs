@@ -78,10 +78,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     let mut cards: BTreeMap<String, Vec<u64>> = BTreeMap::new();
     let mut total_cards = 0usize;
     for c in mtg_data::cards().iter() {
-        if !c.is_playable_card() || !c.is_legal_somewhere() {
-            continue;
-        }
-        if c.games.iter().all(|g| g != "paper") && !c.games.is_empty() {
+        if !c.is_playable_card() || !c.is_legal_somewhere() || !c.is_paper_card() {
             continue;
         }
         total_cards += 1;

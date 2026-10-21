@@ -6,10 +6,15 @@
 
 use flate2::read::GzDecoder;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+
+/// The data file listing the Oracle ids of the cards with at least one paper printing, one
+/// per line (`#` starts a comment). `scripts/paper_oracle_ids.py` writes it from Scryfall's
+/// "Default Cards" bulk data (every printing); `data/manifest.json` records its source.
+pub const PAPER_ORACLE_IDS: &str = "paper_oracle_ids.txt";
 
 /// One face of a multi-face card (split, flip, transform, MDFC, adventure, ...).
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -111,6 +116,10 @@ pub struct ScryfallCard {
     pub edhrec_rank: Option<u32>,
     #[serde(default)]
     pub attraction_lights: Option<Vec<u32>>,
+    /// True if the card's Oracle id is in [`PAPER_ORACLE_IDS`]: some printing of it is a
+    /// paper printing. Not a Scryfall field; [`CardDatabase::load`] sets it.
+    #[serde(skip)]
+    pub paper_printing: bool,
 }
 
 impl ScryfallCard {
@@ -128,6 +137,16 @@ impl ScryfallCard {
     /// leave them out and count them separately.
     pub fn is_sticker_sheet(&self) -> bool {
         self.type_line.as_deref() == Some("Stickers")
+    }
+
+    /// True for a paper card: one with at least one paper printing (Scryfall `games`
+    /// contains "paper"). This object is the one printing Scryfall picked for the Oracle id,
+    /// which can be a digital-only reprint of a paper card (Masters Edition, Vintage
+    /// Masters, Tempest Remastered, MTGO duel decks, Arena starter decks), so every printing
+    /// counts ([`ScryfallCard::paper_printing`]), and so does this one (a card newer than
+    /// the paper list). A card with no `games` (not from Scryfall) counts as paper.
+    pub fn is_paper_card(&self) -> bool {
+        self.paper_printing || self.games.is_empty() || self.games.iter().any(|g| g == "paper")
     }
 
     /// True if the card is legal (or restricted) in at least one format.
@@ -171,8 +190,24 @@ pub struct CardDatabase {
     by_name: HashMap<String, Vec<usize>>,
 }
 
+/// Reads a list of Oracle ids, one per line, skipping blank lines and `#` comments (the
+/// format of [`PAPER_ORACLE_IDS`]).
+pub fn read_oracle_ids(path: &Path) -> std::io::Result<HashSet<String>> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| std::io::Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+    Ok(text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(str::to_string)
+        .collect())
+}
+
 impl CardDatabase {
-    pub fn load(path: &Path) -> std::io::Result<Self> {
+    /// Loads the Oracle cards file `path`, with each card's paper status from the paper
+    /// printings list `paper` ([`PAPER_ORACLE_IDS`], [`ScryfallCard::is_paper_card`]).
+    pub fn load(path: &Path, paper: &Path) -> std::io::Result<Self> {
+        let paper = read_oracle_ids(paper)?;
         let file = File::open(path)?;
         let reader: Box<dyn BufRead> = if path.extension().is_some_and(|e| e == "gz") {
             Box::new(BufReader::with_capacity(1 << 20, GzDecoder::new(file)))
@@ -186,8 +221,9 @@ impl CardDatabase {
             if trimmed.is_empty() || trimmed == "[" || trimmed == "]" {
                 continue;
             }
-            let card: ScryfallCard = serde_json::from_str(trimmed)
+            let mut card: ScryfallCard = serde_json::from_str(trimmed)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            card.paper_printing = paper.contains(&card.oracle_id);
             cards.push(card);
         }
         Ok(Self::from_cards(cards))

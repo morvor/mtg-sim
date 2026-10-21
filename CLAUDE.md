@@ -2,7 +2,8 @@
 
 A Rust rules engine for simulating Magic games, built on the Comprehensive Rules
 (`data/comprehensive-rules.txt`, effective 2026-09-25) and Scryfall bulk data
-(`data/oracle_cards.jsonl.gz`, `data/rulings.jsonl.gz`, `data/oracle_tags.jsonl.gz`).
+(`data/oracle_cards.jsonl.gz`, `data/rulings.jsonl.gz`, `data/oracle_tags.jsonl.gz`, and
+`data/paper_oracle_ids.txt`, the cards with a paper printing, from `scripts/paper_oracle_ids.py`).
 No UI. The data files are the source of truth — the CR text in this repo is newer than
 most training data, so **read the actual rule text** (`grep -n "^702.19" data/comprehensive-rules.txt`)
 instead of relying on memory. Notably: combat damage assignment order no longer exists
@@ -82,7 +83,9 @@ Key invariants:
 Out of scope for now: `docs/DEFERRED.md` lists what the project has decided not to support
 yet (Contraptions, host/augment, sticker sheets, digital-only cards, cards not legal in
 any format, the dexterity cards Chaos Orb and Falling Star). Don't implement those;
-note anything new you run into there.
+note anything new you run into there. Whether a card is a paper card is decided by
+`ScryfallCard::is_paper_card` (any printing on paper), never by the `games` of the one
+printing in `oracle_cards`, which can be an MTGO- or Arena-only reprint of a paper card.
 
 ## Extending — prefer adding files over editing shared code
 

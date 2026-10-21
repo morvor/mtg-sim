@@ -87,10 +87,7 @@ pub fn pool(threads: usize) -> Vec<PoolCard> {
     let mut names: Vec<(String, bool, f64, Vec<String>)> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for c in mtg_data::cards().iter() {
-        if !c.is_playable_card() {
-            continue;
-        }
-        if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+        if !c.is_playable_card() || !c.is_paper_card() {
             continue;
         }
         if seen.insert(c.name.to_lowercase()) {

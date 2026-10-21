@@ -16,8 +16,9 @@ cargo run --release -p mtg-sim -- --every-card --from 6437 --count 1 --game 0 --
 
 ## How it works
 
-- **The pool**: every playable paper card (one per name) whose every ability the
-  compiler understood, sorted by name. Card N is the Nth card of the pool; the seeds of
+- **The pool**: every playable paper card (one with any printing on paper,
+  `ScryfallCard::is_paper_card`; one per name) whose every ability the compiler
+  understood, sorted by name. Card N is the Nth card of the pool; the seeds of
   its games are derived from N, so every failure is printed with the one command that
   replays it (`--from N --count 1 --game G --log`). The pool grows as card support does,
   so indexes shift between versions: replay with the same build.

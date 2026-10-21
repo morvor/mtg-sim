@@ -25,6 +25,7 @@ Usage (from the repo root):
   python3 scripts/rulings_batches.py card "Card Name"   # one card's rulings and status
 """
 import collections
+import functools
 import glob
 import gzip
 import json
@@ -64,12 +65,27 @@ def out_of_scope(c):
     return None
 
 
+@functools.cache
+def paper_oracle_ids():
+    """Oracle ids of the cards with at least one paper printing (data/paper_oracle_ids.txt,
+    written by scripts/paper_oracle_ids.py)."""
+    with open(os.path.join(ROOT, 'data/paper_oracle_ids.txt'), encoding='utf-8') as f:
+        return {l.strip() for l in f if l.strip() and not l.startswith('#')}
+
+
+def is_paper(c):
+    """A paper card: one with a paper printing (ScryfallCard::is_paper_card). The card's
+    Oracle Cards printing can be a digital-only reprint of a paper card, so every printing
+    counts (paper_oracle_ids), and so does that one (a card newer than the list)."""
+    games = c.get('games') or []
+    return c.get('oracle_id') in paper_oracle_ids() or not games or 'paper' in games
+
+
 def deferred(c):
     """Cards the project has decided not to support for now (docs/DEFERRED.md):
     digital-only cards, sticker sheets, cards not legal in any format and the dexterity
     cards."""
-    games = c.get('games') or []
-    if games and 'paper' not in games:
+    if not is_paper(c):
         return 'digital-only'
     if 'Stickers' in (c.get('type_line') or ''):
         return 'sticker sheet'

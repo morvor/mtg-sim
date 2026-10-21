@@ -1,6 +1,7 @@
 //! Data access for the MTG rules engine.
 //!
-//! * [`scryfall`] — Scryfall bulk-data "Oracle Cards" (one entry per Oracle ID).
+//! * [`scryfall`] — Scryfall bulk-data "Oracle Cards" (one entry per Oracle ID), and
+//!   which cards have a paper printing (`paper_oracle_ids.txt`).
 //! * [`rulings`] — Scryfall bulk-data rulings, keyed by Oracle ID.
 //! * [`tags`] — Scryfall oracle tags (functional card tags).
 //! * [`interpretations`] — the interpretation register (`docs/interpretations/`).
@@ -34,11 +35,18 @@ static CARDS: OnceLock<scryfall::CardDatabase> = OnceLock::new();
 static RULINGS: OnceLock<rulings::RulingsDatabase> = OnceLock::new();
 static RULES: OnceLock<rules::ComprehensiveRules> = OnceLock::new();
 
-/// The Scryfall oracle card database (loaded once per process).
+/// The Scryfall oracle card database, with each card's paper status from
+/// `data/paper_oracle_ids.txt` (loaded once per process).
 pub fn cards() -> &'static scryfall::CardDatabase {
     CARDS.get_or_init(|| {
-        scryfall::CardDatabase::load(&data_dir().join("oracle_cards.jsonl.gz"))
-            .expect("failed to load data/oracle_cards.jsonl.gz")
+        let dir = data_dir();
+        scryfall::CardDatabase::load(
+            &dir.join("oracle_cards.jsonl.gz"),
+            &dir.join(scryfall::PAPER_ORACLE_IDS),
+        )
+        .unwrap_or_else(|e| {
+            panic!("failed to load the card data (data/oracle_cards.jsonl.gz, data/paper_oracle_ids.txt): {e}")
+        })
     })
 }
 

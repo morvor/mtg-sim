@@ -194,7 +194,8 @@ fn primeval_spawn_under_humility_enters() {
     assert!(t.on_battlefield(spawn));
 }
 
-/// MTGO-only cards whose texts this item's redirection grammar compiles.
+/// Paper cards with MTGO-only Oracle printings (Masters Edition IV, Tempest Remastered)
+/// whose texts this item's redirection grammar compiles.
 #[test]
 fn jade_monolith_redirects_the_chosen_sources_next_damage_to_you() {
     cr!("614.9", "609.7a");
