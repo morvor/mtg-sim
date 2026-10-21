@@ -327,3 +327,39 @@ fn dragon_kami_reborn_exiles_one_face_down_with_a_hatching_counter() {
     assert_eq!(t.zone(t.g.current(c)), Zone::Library(P0));
     assert_ne!(t.g.library_top(P0), Some(t.g.current(c)));
 }
+
+#[test]
+fn portent_of_calamity_casts_one_free_only_with_four_or_more_exiled() {
+    cr!("608.2g", "118.9");
+    assert_supported("Portent of Calamity");
+    for four in [true, false] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.lands(P0, "Island", 5);
+        // X = 4: a land, a creature, an instant, an artifact.
+        let forest = t.library_top(P0, "Forest");
+        let bears = t.library_top(P0, "Grizzly Bears");
+        let bolt = t.library_top(P0, "Lightning Bolt");
+        let relic = t.library_top(P0, "Darksteel Relic");
+        let spell = t.hand(P0, "Portent of Calamity");
+        let chosen: Vec<Entity> = if four {
+            vec![forest, bears, bolt, relic]
+        } else {
+            vec![bears, bolt, relic]
+        }
+        .into_iter()
+        .map(Entity::Object)
+        .collect();
+        t.answer_choose(P0, &chosen);
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        t.cast(P0, spell).x(4).go();
+        t.resolve_all();
+        let bears_now = t.g.current(bears);
+        if four {
+            assert!(t.on_battlefield(bears_now), "{}", t.dump_log());
+        } else {
+            // Not cast: the rest of the exiled cards go to your hand.
+            assert_eq!(t.zone(bears_now), Zone::Hand(P0), "{}", t.dump_log());
+        }
+    }
+}

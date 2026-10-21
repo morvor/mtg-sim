@@ -308,3 +308,35 @@ fn put_the_rest_onto_the_battlefield(l: &str, b: &mut Builder) -> Option<Effect>
 
 inventory::submit! { super::FollowupPattern { name: "card flow 4: target opponent may choose one of the exiled cards and put it onto the battlefield", priority: 90, apply: f_opponent_chooses_one_of_the_exiled } }
 inventory::submit! { EffectPattern { name: "card flow 4: put the rest onto the battlefield under your control", priority: 90, parse: put_the_rest_onto_the_battlefield } }
+
+/// "Then put the rest of the exiled cards into your hand." (Portent of Calamity) after a
+/// spell cast from among the exiled cards: those still in exile (see `permission_grammar`,
+/// which names them).
+fn put_the_rest_of_the_exiled_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let to = match l {
+        "put the rest of the exiled cards into your hand" => Destination::zone(ZoneKind::Hand),
+        _ => return false,
+    };
+    let Some((_, rest)) = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == super::r406_exile_until::THE_REST)
+    else {
+        return false;
+    };
+    // Only the cards still in exile.
+    if !format!("{rest:?}").contains("InZone(Exile)") {
+        return false;
+    }
+    let e = Effect::Move {
+        what: rest.clone(),
+        to,
+    };
+    *prev = Effect::seq(vec![std::mem::take(prev), e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "card flow 4: put the rest of the exiled cards into your hand", priority: 5, apply: put_the_rest_of_the_exiled_cards } }

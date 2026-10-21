@@ -187,6 +187,28 @@ impl Perm {
             });
             return Some(terms);
         }
+        // "... if you exiled four or more cards this way" (Portent of Calamity): how many of
+        // the cards the effect moved are in exile, as it resolves.
+        if let Some(r) = c.strip_prefix("you exiled ") {
+            // (Only for a spell cast as the effect resolves.)
+            if self.duration.is_some() {
+                return None;
+            }
+            let (n, rest) = parse_number(r)?;
+            if rest.trim() != "or more cards this way" {
+                return None;
+            }
+            let exiled = Value::CountSel(Box::new(Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(vars::IT))),
+                Filter::InZone(ZoneKind::Exile),
+            ]))));
+            let cond = Condition::Compare(exiled, Cmp::Ge, n);
+            terms.condition = Some(match terms.condition.take() {
+                Some(w) => Condition::And(vec![w, cond]),
+                None => cond,
+            });
+            return Some(terms);
+        }
         // "Once each turn, you may cast a spell from the top of your library if it shares a
         // card type with a card exiled with ~." (Cemetery Illuminator): a quality of the
         // spell (CR 601.3e), against the cards exiled with ~ (CR 607.2a).
@@ -2548,6 +2570,17 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let zone = referent_zone(None, b);
     let e = to_effect(&p, zone, b.ctx)?;
+    // "Then put the rest of the exiled cards into your hand." (Portent of Calamity): the
+    // cards chosen among that are still where they were.
+    if let (Some(z), true) = (zone, stores_among(&e)) {
+        b.named.push((
+            super::r406_exile_until::THE_REST.into(),
+            Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(AMONG))),
+                Filter::InZone(z),
+            ])),
+        ));
+    }
     super::choice_grammar_objects::permission_for_chosen(e, None, b)
 }
 
