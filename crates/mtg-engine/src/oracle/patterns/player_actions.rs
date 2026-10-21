@@ -15,11 +15,10 @@
 //! - "Each player may play an additional land on each of their turns." (a static).
 
 use super::{EffectPattern, StaticPattern};
-use crate::oracle::CompileContext;
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
-
+use crate::oracle::CompileContext;
 
 /// ", rounded up" / ", rounded down" at the end of `s`: (the rest, rounded up).
 fn rounded(s: &str) -> Option<(&str, bool)> {
@@ -142,7 +141,10 @@ fn you_control(f: &Filter) -> bool {
 /// "[objects] you control" as a filter that includes "you control".
 fn permanents_you_control(s: &str) -> Option<Filter> {
     let (f, _, rest) = parse_object_phrase(s)?;
-    if !end(rest).is_empty() || !you_control(&f) || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+    if !end(rest).is_empty()
+        || !you_control(&f)
+        || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
+    {
         return None;
     }
     Some(f)
@@ -308,28 +310,27 @@ const KEPT: Var = vars::USER + 2745;
 /// "choose a card in your hand and discard the rest", "choose two cards in your graveyard
 /// and exile the rest", "choose up to seven cards in your hand, then shuffle the rest into
 /// your library".
-fn keep_cards_rest(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn keep_cards_rest(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let l = l.strip_prefix("you ").unwrap_or(l);
     let r = l.strip_prefix("choose ")?;
-    let (choice, verb) = r
-        .split_once(", then ")
-        .or_else(|| r.split_once(" and "))?;
+    let (choice, verb) = r.split_once(", then ").or_else(|| r.split_once(" and "))?;
     let (up_to, choice) = match choice.strip_prefix("up to ") {
         Some(c) => (true, c),
         None => (false, choice),
     };
     let (n, rest) = parse_number(choice)?;
-    n.as_const()?;
+    // "choose X cards in your hand" (Breakthrough): the X of the spell or ability.
+    let x_known = super::value_grammar::x_defined() || b.ctx.is_spell();
+    if n.as_const().is_none() && !(matches!(n, Value::X) && x_known) {
+        return None;
+    }
     let zone = match rest.trim() {
         "card in your hand" | "cards in your hand" => ZoneKind::Hand,
         "card in your graveyard" | "cards in your graveyard" => ZoneKind::Graveyard,
         _ => return None,
     };
-    let cards = Filter::and(vec![
-        Filter::InZone(zone),
-        Filter::OwnedBy(PlayerRel::You),
-    ]);
+    let cards = Filter::and(vec![Filter::InZone(zone), Filter::OwnedBy(PlayerRel::You)]);
     let rest_cards = Filter::and(vec![
         cards.clone(),
         Filter::not(Filter::In(Box::new(Sel::Var(KEPT)))),
@@ -407,7 +408,6 @@ fn reveal_your_hand(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "player actions: reveal your hand", priority: 400, parse: reveal_your_hand } }
 
-
 /// "put a rope counter on a creature you control" (not targeted: chosen as it resolves).
 fn counter_on_one(l: &str, _b: &mut Builder) -> Option<Effect> {
     let l = end(l);
@@ -419,7 +419,9 @@ fn counter_on_one(l: &str, _b: &mut Builder) -> Option<Effect> {
         .trim_start()
         .strip_prefix("counters on ")
         .or_else(|| rest.trim_start().strip_prefix("counter on "))?;
-    let one = rest.strip_prefix("a ").or_else(|| rest.strip_prefix("an "))?;
+    let one = rest
+        .strip_prefix("a ")
+        .or_else(|| rest.strip_prefix("an "))?;
     let f = permanents_you_control(one)?;
     Some(Effect::AddCounters {
         what: Sel::Choose {
@@ -498,7 +500,9 @@ fn each_player_additional_land(l: &str, text: &str, _ctx: &CompileContext) -> Op
         _ => return None,
     };
     Some(vec![AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::AdditionalLandPlays(rel, n))),
+        AbilityKind::Static(StaticAbility::new(StaticEffect::AdditionalLandPlays(
+            rel, n,
+        ))),
         text,
     )])
 }
@@ -511,7 +515,10 @@ fn shuffle_it_into_library(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = l.strip_prefix("you ").unwrap_or(l);
     let r = l.strip_prefix("shuffle ")?;
     let what = r.strip_suffix(" into your library")?;
-    if !matches!(what, "it" | "that card" | "that creature" | "that permanent") {
+    if !matches!(
+        what,
+        "it" | "that card" | "that creature" | "that permanent"
+    ) {
         return None;
     }
     let (sel, rest) = crate::oracle::effects::object_ref(what, b)?;

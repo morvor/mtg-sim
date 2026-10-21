@@ -48,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // Values as the spell became cast (`referents_values_4`).
+    if let Some(v) = super::referents_values_4::atom(s, b) {
+        return Some(v);
+    }
     // Amounts of earlier instructions (`referents_results`).
     if let Some(v) = super::referents_results::atom_ext(s, b) {
         return Some(v);
@@ -1400,8 +1404,16 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
         // "Forests put onto the battlefield this way" (Hunting Wilds): the permanents.
         (" put onto the battlefield", vars::IT, None),
         // "each card exiled from their hand this way" (Necromentia).
-        (" exiled from their hand", vars::IT, Some(Filter::InZone(ZoneKind::Hand))),
-        (" exiled from your hand", vars::IT, Some(Filter::InZone(ZoneKind::Hand))),
+        (
+            " exiled from their hand",
+            vars::IT,
+            Some(Filter::InZone(ZoneKind::Hand)),
+        ),
+        (
+            " exiled from your hand",
+            vars::IT,
+            Some(Filter::InZone(ZoneKind::Hand)),
+        ),
         // "each creature goaded this way" (CR 701.15).
         (" goaded", crate::kwa::goad::GOADED, None),
         // "each creature dealt damage this way" (the objects actually dealt damage).

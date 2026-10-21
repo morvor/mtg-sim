@@ -1019,6 +1019,9 @@ pub mod vars {
     /// Permanents the most recent phase-out instruction phased out, directly or
     /// indirectly (CR 702.26g): "each creature that phased out this way".
     pub const PHASED_OUT: Var = USER + 12_100;
+    /// Players dealt damage by the most recent damage effect ("if a player is dealt
+    /// damage this way", "the number of opponents dealt damage this way").
+    pub const DAMAGED_PLAYERS: Var = USER + 14_000;
 }
 
 /// Selects players and/or objects.
@@ -1940,6 +1943,8 @@ pub enum Among {
     /// Card types that are permanent types (CR 110.4a).
     PermanentTypes,
     CreatureTypes,
+    /// Planeswalker types (CR 205.3j) of planeswalkers.
+    PlaneswalkerTypes,
     /// Plains, Island, Swamp, Mountain, Forest (CR 205.3i).
     BasicLandTypes,
     Colors,

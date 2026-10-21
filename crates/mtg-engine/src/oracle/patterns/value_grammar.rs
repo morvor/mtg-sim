@@ -152,7 +152,10 @@ fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     // discards a card (Dralnu's Pet).
     if let Some(rest) = s.strip_prefix("the discarded card's mana value") {
         let raw = crate::oracle::raw_text().to_lowercase();
-        if raw.lines().any(|l| l.starts_with("kicker") && l.contains("discard a")) {
+        if raw
+            .lines()
+            .any(|l| l.starts_with("kicker") && l.contains("discard a"))
+        {
             return Some((
                 Value::Custom(crate::kw::counter_groups::DISCARDED_FOR_COST_MANA_VALUE.into()),
                 rest.to_string(),
@@ -806,7 +809,11 @@ pub(crate) fn literal_card_name(r: &str) -> Option<(String, &str)> {
         // itself, Food Fight.)
         if let Some(c) = mtg_data::cards().by_name(&title) {
             let consumed: usize = words[..k].iter().map(|w| w.len() + 1).sum::<usize>() - 1;
-            let rest = if k == words.len() { rest } else { &r[consumed..] };
+            let rest = if k == words.len() {
+                rest
+            } else {
+                &r[consumed..]
+            };
             // The exact name (a face's, for a card with two faces).
             let name = c
                 .name
@@ -991,6 +998,8 @@ fn among_kind(s: &str) -> Option<(Among, &str)> {
         ("permanent type", Among::PermanentTypes),
         ("creature types", Among::CreatureTypes),
         ("creature type", Among::CreatureTypes),
+        ("planeswalker types", Among::PlaneswalkerTypes),
+        ("planeswalker type", Among::PlaneswalkerTypes),
         ("basic land types", Among::BasicLandTypes),
         ("basic land type", Among::BasicLandTypes),
         ("colors", Among::Colors),

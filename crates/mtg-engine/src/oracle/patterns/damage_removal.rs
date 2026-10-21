@@ -629,6 +629,20 @@ fn damage_part(
         };
         return Some((damage(src, v, to), tail2));
     }
+    // CR 107.1a: "half X damage, rounded up, to you" (Eternal Flame): rounded as the
+    // text says.
+    if let Some(h) = s.strip_prefix("half ") {
+        let (amount, r) = amount_phrase(h, where_x)?;
+        let r = strip(r, "damage")?;
+        let (up, r) = match r.strip_prefix(", rounded up,") {
+            Some(r) => (true, r),
+            None => (false, r.strip_prefix(", rounded down,")?),
+        };
+        let r = strip(r, "to")?;
+        let (to, tail) = recipients(r, src, b)?;
+        let half = Value::Div(Box::new(amount), 2, up);
+        return Some((damage(src, half, to), tail));
+    }
     let (amount, r) = amount_phrase(s, where_x)?;
     let r = strip(r, "damage")?;
     if let Some(r2) = strip(r, "divided as you choose among ") {

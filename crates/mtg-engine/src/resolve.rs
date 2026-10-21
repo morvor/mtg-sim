@@ -2578,21 +2578,30 @@ impl Game {
     /// ([`vars::DAMAGED`]) and as the previous effect's affected objects.
     fn record_damaged(&mut self, srcs: &[ObjectId], before: usize, ctx: &mut Ctx) {
         let mut damaged: Vec<Entity> = Vec::new();
+        let mut players: Vec<Entity> = Vec::new();
         for ev in &self.events[before.min(self.events.len())..] {
             if let Event::Damage {
                 source,
-                target: Entity::Object(o),
+                target,
                 amount,
                 ..
             } = ev
             {
-                if srcs.contains(source) && *amount > 0 && !damaged.contains(&Entity::Object(*o)) {
-                    damaged.push(Entity::Object(*o));
+                if !srcs.contains(source) || *amount == 0 {
+                    continue;
+                }
+                let list = match target {
+                    Entity::Object(_) => &mut damaged,
+                    Entity::Player(_) => &mut players,
+                };
+                if !list.contains(target) {
+                    list.push(*target);
                 }
             }
         }
         ctx.prev_affected = damaged.clone();
         ctx.set_var(vars::DAMAGED, damaged);
+        ctx.set_var(vars::DAMAGED_PLAYERS, players);
     }
 
     /// The source of damage for an effect: the named object, or the resolving object's

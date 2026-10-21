@@ -88,18 +88,42 @@ pub fn note_object_last(prev: Option<&str>, sentence: &str, b: &mut Builder) {
     // "That creature" / "that spell" / "that scheme" still means the object the trigger
     // condition named.
     const NOT_OBJECTS: &[&str] = &[
-        "player", "player's", "much", "many", "opponent", "opponent's", "way", "mana",
-        "amount", "damage", "life", "number", "turn", "step", "phase", "combat", "time",
-        "color", "type", "name", "choice", "mode", "counter", "counters",
+        "player",
+        "player's",
+        "much",
+        "many",
+        "opponent",
+        "opponent's",
+        "way",
+        "mana",
+        "amount",
+        "damage",
+        "life",
+        "number",
+        "turn",
+        "step",
+        "phase",
+        "combat",
+        "time",
+        "color",
+        "type",
+        "name",
+        "choice",
+        "mode",
+        "counter",
+        "counters",
     ];
     let words: Vec<&str> = next.split_whitespace().collect();
-    let names_trigger_object = words.windows(2).any(|w| {
-        w[0] == "that"
-            && !NOT_OBJECTS.contains(&w[1].trim_end_matches([',', '.', ';']))
-    }) || next.contains("the copy");
+    let names_trigger_object = words
+        .windows(2)
+        .any(|w| w[0] == "that" && !NOT_OBJECTS.contains(&w[1].trim_end_matches([',', '.', ';'])))
+        || next.contains("the copy");
     if names_self_last
         && !names_trigger_object
-        && matches!(b.it, Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell)
+        && matches!(
+            b.it,
+            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell | Sel::TriggerObjects
+        )
     {
         b.it = Sel::This;
     }
@@ -181,7 +205,11 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
     count_creates(e, &mut creates);
     let last = last_instruction_mut(e);
     match last {
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } if creates == 1 => {
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. }
+            if creates == 1 =>
+        {
             b.it = Sel::Var(vars::CREATED);
         }
         // "You may sacrifice a creature. If you do, you gain life equal to its power.":
@@ -190,7 +218,11 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
             who: PlayerRef::You,
             count: Value::Const(1),
             ..
-        } if !introduced && !crate::oracle::raw_text().to_lowercase().contains("that card") => {
+        } if !introduced
+            && !crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("that card") =>
+        {
             // ("Return that card": the card in the graveyard, which this doesn't track.)
             b.it = Sel::Var(vars::SACRIFICED);
         }
@@ -335,7 +367,9 @@ fn count_creates(e: &Effect, n: &mut usize) {
             count_creates(then, n);
             count_creates(otherwise, n);
         }
-        Effect::CreateToken { .. } | Effect::CreateTokenWithPT { .. } | Effect::CreateTokenCopy { .. } => *n += 1,
+        Effect::CreateToken { .. }
+        | Effect::CreateTokenWithPT { .. }
+        | Effect::CreateTokenCopy { .. } => *n += 1,
         _ => {}
     }
 }
