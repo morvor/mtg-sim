@@ -429,20 +429,46 @@ pub(crate) fn cast_spell() -> Filter {
 /// stack, or a copy of a permanent spell (CR 707.10).
 fn not_cast_entry(l: &str, b: &mut OneShot) -> Option<(ReplacementDef, bool)> {
     let r = end(l.trim()).strip_prefix("if ")?;
-    let (subj, act) = r.split_once(" would enter and it wasn't cast, ")?;
+    // "... and it wasn't cast or no mana was spent to cast it" (Primeval Spawn): also a
+    // spell that was cast with no mana spent on it (CR 601.2h; see `kw/cast_history.rs`).
+    let (subj, act, no_mana) = match r.split_once(" would enter and it wasn't cast, ") {
+        Some((s, a)) => (s, a, false),
+        None => {
+            let (s, a) = r.split_once(
+                " would enter and it wasn't cast or no mana was spent to cast it, ",
+            )?;
+            (s, a, true)
+        }
+    };
     let (this_turn, act) = (false, act);
     let (f, _) = subject(subj, b)?;
     let action = move_instead(act.strip_suffix(" instead")?)?;
+    let not_cast = Condition::Not(Box::new(Condition::SelMatches(
+        Sel::TriggerObject,
+        cast_spell(),
+    )));
+    let cond = if no_mana {
+        Condition::Or(vec![
+            not_cast,
+            Condition::Compare(
+                Value::Custom(
+                    crate::kw::cast_history::spent(crate::kw::cast_history::EVENT_OBJECT, "total")
+                        .into(),
+                ),
+                Cmp::Eq,
+                Value::c(0),
+            ),
+        ])
+    } else {
+        not_cast
+    };
     Some((
         ReplacementDef {
             // Checked against the object where it is (not as it would exist on the
             // battlefield): a spell resolving is on the stack.
             event: ReplacementEvent::Where {
                 event: Box::new(ReplacementEvent::EntersBattlefield(f)),
-                cond: Condition::Not(Box::new(Condition::SelMatches(
-                    Sel::TriggerObject,
-                    cast_spell(),
-                ))),
+                cond,
             },
             action,
             self_replacement: false,

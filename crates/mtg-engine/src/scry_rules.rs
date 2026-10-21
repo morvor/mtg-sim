@@ -169,6 +169,11 @@ pub fn perform(
     }
     if !to_graveyard.is_empty() {
         looked_result.to_graveyard = g.move_objects(to_graveyard).into_iter().flatten().collect();
+        if kind == Look::Surveil {
+            g.history
+                .surveilled
+                .extend(looked_result.to_graveyard.iter().copied());
+        }
     }
     // CR 701.22d, 701.25d: the abilities trigger after the process is complete.
     let name = match kind {

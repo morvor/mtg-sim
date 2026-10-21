@@ -984,6 +984,12 @@ impl Renderer<'_> {
                 np.rel.push(CAST_FROM.into());
             }
             Filter::CastWithCost(name) => np.status.push(name.to_string()),
+            // Checked as the target is chosen; worded as the requirement itself.
+            Filter::AsChosen(f) => self.collect(f, np),
+            Filter::History(c) => {
+                let s = self.history_filter_clause(c);
+                np.rel.push(s);
+            }
             // An instant or sorcery deals damage only as it resolves, the turn it's an
             // object on the stack (CR 400.7, 608.2): "dealt damage by ~" is this turn.
             Filter::DealtDamageThisTurnBy(sel)

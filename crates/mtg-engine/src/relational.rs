@@ -31,6 +31,20 @@ pub fn value_cmp(g: &Game, id: ObjectId, lhs: &Value, cmp: Cmp, rhs: &Value, ctx
     cmp.eval(g.eval_value(lhs, &c), g.eval_value(rhs, &c))
 }
 
+/// The object a tested object was before its latest zone change (CR 400.7), for a
+/// [`Filter::History`] clause about how it got where it is ("a card in a graveyard that was
+/// put there from the battlefield this turn": the permanent that left the battlefield).
+pub const TESTED_PRIOR: Var = vars::USER + 31_401;
+
+/// [`Filter::History`]: whether the history condition holds with `id` as the tested object
+/// (and what it was before its latest zone change as [`TESTED_PRIOR`]).
+pub fn history_holds(g: &Game, id: ObjectId, cond: &Condition, ctx: &Ctx) -> bool {
+    let mut c = testing(ctx, id);
+    let prior: Vec<Entity> = g.obj(id).prev.map(Entity::Object).into_iter().collect();
+    c.vars.insert(TESTED_PRIOR, prior);
+    g.eval_cond(cond, &c)
+}
+
 /// [`Value::Extreme`]: the greatest or least of `of` among the selected objects (0 if
 /// there are none).
 pub fn extreme(g: &Game, of: &Value, sel: &Sel, greatest: bool, ctx: &Ctx) -> i64 {

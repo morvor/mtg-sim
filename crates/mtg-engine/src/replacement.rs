@@ -247,6 +247,32 @@ impl Game {
             ReplEvent::Move(m) if m.to == Zone::Battlefield => {
                 let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
                 let m = m.clone();
+                // The entering object's own conditional entry replacements ("If ~ would
+                // enter and it wasn't cast, exile it instead") apply only if it would have
+                // that ability on the battlefield (CR 614.12: not under Humility, Primeval
+                // Spawn's ruling).
+                let own_where = |c: &Candidate| {
+                    matches!(c.key, ReplKey::Static(s, _) if s == m.obj)
+                        && matches!(c.def.event, ReplacementEvent::Where { .. })
+                };
+                if v.iter().any(own_where) {
+                    let key = |d: &ReplacementDef| serde_json::to_string(d).unwrap_or_default();
+                    let kept: Vec<String> = self.with_hypothetical_entry(&m, |g| {
+                        g.obj(m.obj)
+                            .chars
+                            .abilities
+                            .iter()
+                            .filter_map(|a| match &a.kind {
+                                AbilityKind::Static(s) => match &s.effect {
+                                    StaticEffect::Replacement(d) => Some(key(d)),
+                                    _ => None,
+                                },
+                                _ => None,
+                            })
+                            .collect()
+                    });
+                    v.retain(|c| !own_where(c) || kept.contains(&key(&c.def)));
+                }
                 let ev2 = ev.clone();
                 let mut entry = self.with_hypothetical_entry(&m, |g| {
                     g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly)
@@ -411,6 +437,15 @@ impl Game {
         scope: CandScope,
     ) -> Vec<Candidate> {
         let mut out = Vec::new();
+        // An entering event, possibly with a condition ("If ~ would enter and it wasn't
+        // cast", `ReplacementEvent::Where`): the entering object's own applies too.
+        fn entry(e: &ReplacementEvent) -> Option<&Filter> {
+            match e {
+                ReplacementEvent::EntersBattlefield(f) => Some(f),
+                ReplacementEvent::Where { event, .. } => entry(event),
+                _ => None,
+            }
+        }
         let in_scope = |d: &ReplacementDef| match scope {
             CandScope::All => true,
             CandScope::EntryOnly => matches!(d.event, ReplacementEvent::EntersBattlefield(_)),
@@ -425,7 +460,7 @@ impl Game {
             .map(|(s, c, _, a, d)| (*s, *c, a.clone(), d.clone()))
             .collect();
         if let ReplEvent::Move(m) = ev {
-            if m.to == Zone::Battlefield && scope != CandScope::NotEntry {
+            if m.to == Zone::Battlefield {
                 let o = self.obj(m.obj);
                 // CR 614.12, 707.9: once it's entering as a copy, the copied object's
                 // "as this enters" / "enters with" abilities apply instead of its own.
@@ -473,12 +508,24 @@ impl Game {
                         // from the permanent itself ("Permanents enter tapped" doesn't
                         // affect the permanent that has it).
                         if let StaticEffect::Replacement(d) = &s.effect {
-                            if matches!(
-                                d.event,
-                                ReplacementEvent::EntersBattlefield(Filter::Source)
-                            ) && !sources
-                                .iter()
-                                .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
+                            // "If ~ would enter and it wasn't cast, ..." is checked against
+                            // the object where it is, with the other zone-change
+                            // replacements; "~ enters tapped" with the effects that modify
+                            // how it enters (CR 614.12).
+                            let own = match &d.event {
+                                ReplacementEvent::EntersBattlefield(Filter::Source) => {
+                                    scope != CandScope::NotEntry
+                                }
+                                ReplacementEvent::Where { event, .. } => {
+                                    scope != CandScope::EntryOnly
+                                        && matches!(entry(event), Some(Filter::Source))
+                                }
+                                _ => false,
+                            };
+                            if own
+                                && !sources
+                                    .iter()
+                                    .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
                             {
                                 sources.push((
                                     m.obj,
@@ -1426,6 +1473,16 @@ impl Game {
                 // additional counters, where X is the number of counters on ~".
                 c.source = cand.source.or(Some(m.obj));
                 c.cast = m.etb.cast.clone();
+                // The entering permanent, as the spell it was ("a number of counters equal
+                // to the number of times it's been cast from the command zone", Opal
+                // Palace), unless the context already has an event.
+                if c.event.is_none() {
+                    c.event = Some(crate::object::EventInfo {
+                        object: Some(m.obj),
+                        spell: Some(m.obj),
+                        ..Default::default()
+                    });
+                }
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;
                 if k.as_str() == crate::ability::EACH_KIND_ON_SOURCE {

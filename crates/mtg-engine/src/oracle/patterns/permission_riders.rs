@@ -56,6 +56,9 @@ fn enters_rider(x: &str) -> Option<(Effect, bool)> {
         "that permanent enters ",
         "that card enters ",
         "it enters ",
+        // "If you do, ~ enters with a +1/+1 counter on it." (Undead Sprinter): the card
+        // the permission is for is ~ itself.
+        "~ enters ",
     ]
     .iter()
     .find_map(|p| x.strip_prefix(p))?;
@@ -154,6 +157,32 @@ pub(crate) fn apply(s: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b
 }
 
 fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Builder) -> bool {
+    // "If that spell doesn't target a creature you control, it costs {8} more to cast this
+    // way." (Mavinda, Students' Advocate, CR 601.2f).
+    if let Some((what, more)) = l
+        .strip_prefix("if that spell doesn't target ")
+        .and_then(|r| r.split_once(", it costs {"))
+    {
+        let Some(n) = more
+            .strip_suffix("} more to cast this way")
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
+            return false;
+        };
+        let what = what
+            .strip_prefix("a ")
+            .or_else(|| what.strip_prefix("an "))
+            .unwrap_or(what);
+        let Some((f, _, rest)) = crate::oracle::phrases::parse_object_phrase(what) else {
+            return false;
+        };
+        if !end(rest).trim().is_empty() || !spells || terms.cost_increase_unless_targets.is_some()
+        {
+            return false;
+        }
+        terms.cost_increase_unless_targets = Some((n, f));
+        return true;
+    }
     // "Spells you cast this way cost {2} less to cast."
     if let Some(r) = l
         .strip_prefix("spells you cast this way cost {")
@@ -244,6 +273,8 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
         l,
         "if you cast ~ this way and it would be put into your graveyard, exile it instead"
             | "if you cast ~ this way and it would be put into a graveyard, exile it instead"
+            | "if you cast it this way and it would be put into your graveyard, exile it instead"
+            | "if you cast it this way and it would be put into a graveyard, exile it instead"
     ) {
         if !spells || terms.exile_instead {
             return false;
@@ -277,7 +308,13 @@ fn apply_inner(l: &str, terms: &mut PlayTerms, spells: bool, lands: bool, b: &Bu
         return false;
     };
     // "pay life equal to its mana value rather than pay its mana cost" (CR 118.9b).
-    if x == "pay life equal to its mana value rather than pay its mana cost" && !either {
+    if matches!(
+        x,
+        "pay life equal to its mana value rather than pay its mana cost"
+            | "you pay life equal to its mana value rather than paying its mana cost"
+            | "pay life equal to its mana value rather than paying its mana cost"
+    ) && !either
+    {
         if !spells || terms.alt_cost.is_some() || !matches!(kind, Filter::Any) {
             return false;
         }

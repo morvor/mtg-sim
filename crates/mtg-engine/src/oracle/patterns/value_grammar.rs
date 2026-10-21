@@ -961,6 +961,19 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
                 }
             }
         }
+        // Registered qualifiers, which may read what the phrase described so far ("cards
+        // in that player's graveyard that were put there from the battlefield this turn").
+        if t.starts_with("that ") {
+            let so_far = Filter::and(parts.clone());
+            if let Some((f, r)) = super::filter_suffix_patterns()
+                .iter()
+                .find_map(|p| (p.parse)(&t, &so_far))
+            {
+                parts.push(f);
+                rest = r.to_string();
+                continue;
+            }
+        }
         break;
     }
     // "other creatures with the same name as that creature": other than that creature,
@@ -986,7 +999,17 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
             })
             .collect();
     }
-    Some((Filter::and(parts), rest))
+    let f = Filter::and(parts);
+    // A count of objects described by their history ("Goblins that entered the
+    // battlefield under your control this turn") counts what happened, gone or not: not
+    // the permanents there now (`patterns::history_filters_4` reads it for cards in a
+    // graveyard or exile only).
+    if serde_json::to_string(&f).is_ok_and(|j| j.contains("\"History\""))
+        && !matches!(f.zone(), Some(ZoneKind::Graveyard | ZoneKind::Exile))
+    {
+        return None;
+    }
+    Some((f, rest))
 }
 
 /// "[thing] among [objects]" kinds of values.
@@ -1230,6 +1253,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "mana from a Treasure spent to cast ~" (see `mana_4`).
+    if let Some(v) = super::mana_4::count_phrase(r, b) {
+        return Some(v);
+    }
     // "counters removed this way": an amount chosen for the cost (see `cost_parts`).
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);
@@ -1546,6 +1573,18 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 }
             }
             let (f, tail) = objects(x, b)?;
+            // "among permanents you control and/or cards in your graveyard" (Happily Ever
+            // After): among the objects of both groups.
+            if let Some(y) = tail.strip_prefix(" and/or ") {
+                let (f2, tail2) = objects(y, b)?;
+                return Some((
+                    Value::DistinctAmong(
+                        kind,
+                        Box::new(Sel::Union(vec![Sel::All(f), Sel::All(f2)])),
+                    ),
+                    tail2,
+                ));
+            }
             return Some((Value::DistinctAmong(kind, Box::new(Sel::All(f))), tail));
         }
         if kind == Among::Colors {

@@ -16,15 +16,6 @@ fn pay_way(t: &mut TestGame, p: PlayerId, how: usize) {
     t.answer(p, DecisionKind::Option, Answer::Index(how));
 }
 
-/// Asserts that `name`'s only unsupported text is the one block containing `needle` (an
-/// ability the rulings tested with it don't concern).
-pub fn only_unsupported(name: &str, needle: &str) {
-    let c = card(name);
-    let u = c.unsupported_text();
-    assert_eq!(u.len(), 1, "{name}: {u:?}");
-    assert!(u[0].contains(needle), "{name}: {u:?}");
-}
-
 #[test]
 fn phyrexian_symbols_count_one_toward_mana_value_even_paid_with_life() {
     cr!("107.4f", "202.3", "702.150a");
