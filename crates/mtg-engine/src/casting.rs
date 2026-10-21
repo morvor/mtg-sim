@@ -1498,6 +1498,10 @@ impl Game {
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
             from: from_kind,
+            from_hand_of: match from {
+                Zone::Hand(q) => Some(q),
+                _ => None,
+            },
             was_cast: true,
             turn: self.turn.number,
             instant_timing: !sorcery_time,

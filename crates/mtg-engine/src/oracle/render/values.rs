@@ -58,6 +58,14 @@ impl Renderer<'_> {
                 let n = self.noun(f, Num::Many);
                 format!("the number of {n} revealed this way")
             }
+            // "for each of those cards that are still exiled": those of the remembered
+            // cards still the same objects in exile (CR 400.7).
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Matching(_, Filter::Custom(n))
+                    if n == crate::oracle::patterns::referents_values_4::STILL_EXILED_CARD) =>
+            {
+                "the number of those cards that are still exiled".into()
+            }
             Value::CountSel(s) if self.this_way_of(s).is_some() => {
                 let n = self.noun(&Filter::In(Box::new((**s).clone())), Num::Many);
                 format!("the number of {n}")
@@ -69,6 +77,13 @@ impl Renderer<'_> {
                 let d = self.it_done.clone().unwrap_or_default();
                 format!("the number of {d}")
             }
+            // "the number of cards exiled from their hand this way" (`search_rules`).
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Var(v) if *v == crate::search_rules::FROM_HAND) =>
+            {
+                let v = self.search_verb.unwrap_or("put");
+                format!("the number of cards {v} from their hand this way")
+            }
             Value::CountSel(s) => {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")
@@ -76,6 +91,11 @@ impl Renderer<'_> {
             Value::CountPlayers(pf) => {
                 let n = self.player_filter_noun(pf, Num::Many);
                 format!("the number of {n}")
+            }
+            // "the amassed Army's power" (CR 701.47c).
+            Value::PowerOf(s) if matches!(s.as_ref(), Sel::Var(crate::kwa::kvars::AMASSED)) => {
+                let p = self.sel(s, Case::Poss);
+                format!("{{alt:the amassed Army's|{p}}} power")
             }
             Value::PowerOf(s) => {
                 let s = self.sel(s, Case::Poss);
@@ -148,6 +168,10 @@ impl Renderer<'_> {
                 "{{alt:that much|that many|that damage|{}}}",
                 self.extra.event_amount.unwrap_or_default()
             ),
+            // "amass Orcs X, where X is that excess damage" (CR 120.10).
+            Value::EventAmount if self.excess_trigger => {
+                "{alt:that much|that many|that excess damage|the excess}".into()
+            }
             Value::EventAmount => "{alt:that much|that many}".into(),
             Value::Prev => "that many".into(),
             // "the amount of excess damage dealt to that creature this way": the one target
@@ -536,6 +560,11 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn amount(&mut self, v: &Value) -> (String, Option<String>) {
+        // "deals damage equal to the excess": the excess damage the trigger event was
+        // about (CR 120.10).
+        if matches!(v, Value::EventAmount) && self.excess_trigger {
+            return ("X".into(), Some(", where X is the excess".into()));
+        }
         // "that much damage", "that many {E}": the same amount, worded for the noun.
         if matches!(v, Value::EventAmount) {
             return ("{alt:that much|that many}".into(), None);
@@ -585,6 +614,31 @@ impl Renderer<'_> {
 
     /// "a card" / "two cards" / "X cards, where X is ..." (the where clause is returned
     /// separately).
+    /// A count said as "N [things] for each [thing]": (N's words with the noun, "for each
+    /// ..."), for a value that's a number of things, or a multiple of one ("put two
+    /// +1/+1 counters on ~ for each sprout vote").
+    pub(crate) fn counted_for_each(&mut self, v: &Value, noun: &str) -> Option<(String, String)> {
+        let (k, thing) = self.per_each(v)?;
+        if thing.contains(['{', '|']) || k < 1 {
+            return None;
+        }
+        let each = match thing.strip_prefix("times ") {
+            Some(r) => format!("for each time {r}"),
+            None if matches!(v, Value::Count(_))
+                || matches!(v, Value::Mul(_, b) if matches!(b.as_ref(), Value::Count(_))) =>
+            {
+                format!("for each {thing}")
+            }
+            None => format!("for each {}", super::singular(&thing)),
+        };
+        let c = if k == 1 {
+            with_article(noun)
+        } else {
+            format!("{} {}", number_word(k), plural(noun))
+        };
+        Some((c, each))
+    }
+
     pub(crate) fn counted(&mut self, v: &Value, noun: &str) -> (String, Option<String>) {
         if let Some(x) = self.stored_x(v) {
             return (format!("{x} {}", plural(noun)), None);
@@ -881,6 +935,13 @@ impl Renderer<'_> {
                 self.condition(&v[1])
             }
             Condition::And(v) => {
+                // "if it's your main phase": a main phase of your turn (CR 505.1).
+                if matches!(
+                    v.as_slice(),
+                    [Condition::YourTurn, Condition::Phase(PhaseCond::MainPhase)]
+                ) {
+                    return "it's your main phase".into();
+                }
                 if let Some(s) = self.attempt(|r| r.events_joined(v, "and")) {
                     return s;
                 }
@@ -902,7 +963,28 @@ impl Renderer<'_> {
                     }
                 }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
-                merge_subject(&parts, "and")
+                let merged = merge_subject(&parts, "and");
+                // "if you control artifacts named Crown of Empires and Scepter of Empires".
+                let named = |c: &Condition| match c {
+                    Condition::Exists(Filter::And(f)) => match f.as_slice() {
+                        [Filter::Type(t), Filter::Named(n), Filter::ControlledBy(PlayerRel::You)] => {
+                            Some((*t, n.to_string()))
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(ns) = v.iter().map(named).collect::<Option<Vec<_>>>() {
+                    if ns.len() > 1 && ns.iter().all(|(t, _)| *t == ns[0].0) {
+                        let kind = plural(&ns[0].0.word().to_lowercase());
+                        let names: Vec<String> = ns.into_iter().map(|(_, n)| n).collect();
+                        return format!(
+                            "{{alt:{merged}|you control {kind} named {}}}",
+                            join_list(&names, "and")
+                        );
+                    }
+                }
+                merged
             }
             Condition::Or(v) => {
                 if let Some(s) = self.attempt(|r| r.events_joined(v, "or")) {
@@ -1017,6 +1099,10 @@ impl Renderer<'_> {
             Condition::PrevAffectedAny => "a card was affected this way".into(),
             // "If this spell was cast from a graveyard" (the zone it was cast from, CR
             // 601.2a); cards casting their own card say "if you cast it from your ...".
+            // "If ~ was cast from exile" (there's one exile zone, CR 406.1).
+            Condition::CastFrom(ZoneKind::Exile) => {
+                "{alt:you cast it from exile|~ {alt:was|is} cast from exile}".into()
+            }
             Condition::CastFrom(z) => {
                 let z = zone_word(*z);
                 // Your own card is in your zone (CR 400.3): "from a graveyard" is "from
@@ -1030,7 +1116,8 @@ impl Renderer<'_> {
             Condition::ChosenWord(w) => format!("{w} was chosen"),
             Condition::Phase(p) => match p {
                 PhaseCond::Combat => "it's combat".into(),
-                PhaseCond::MainPhase => "it's your main phase".into(),
+                // Any player's main phase.
+                PhaseCond::MainPhase => "it's a main phase".into(),
                 PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
@@ -1184,6 +1271,40 @@ impl Renderer<'_> {
 
     /// "you control an artifact", "you control no Islands", "there are ... in your graveyard".
     pub(crate) fn exists(&mut self, f: &Filter, negated: bool) -> String {
+        // "if a card is exiled with it" (CR 607.2a: exiled by an ability of this object).
+        if let (Filter::And(v), false) = (f, negated) {
+            let linked =
+                |x: &Filter| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked));
+            if v.iter().any(linked) {
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| !linked(x) && !matches!(x, Filter::InZone(ZoneKind::Exile)))
+                        .cloned()
+                        .collect(),
+                );
+                let n = match rest {
+                    Filter::Any | Filter::Card => "a card".to_string(),
+                    r => self.noun_det(&r, Det::A),
+                };
+                let m = self.me();
+                let there = self.exists_plain(f, negated);
+                return format!("{{alt:{there}|{n} is exiled with {m}}}");
+            }
+        }
+        self.exists_plain(f, negated)
+    }
+
+    /// [`Self::exists`] without the alternative wordings above.
+    fn exists_plain(&mut self, f: &Filter, negated: bool) -> String {
+        // "if a creature is attacking you".
+        if let (Filter::And(v), false) = (f, negated) {
+            if let [Filter::Type(CardType::Creature), Filter::Attacking, Filter::AttackingPlayer(r)] =
+                v.as_slice()
+            {
+                let p = self.rel_object(*r);
+                return format!("a creature is attacking {p}");
+            }
+        }
         // "if you don't control a Ring-bearer" (your Ring-bearer is a creature you
         // control, CR 701.54a).
         if matches!(f, Filter::Custom(n) if n == crate::kwa::ring::RING_BEARER) {
@@ -1415,6 +1536,16 @@ impl Renderer<'_> {
                     let p = self.is_predicate(inner, !negated);
                     return p;
                 }
+                // "is attacking or blocking": a creature in combat (CR 506.4).
+                Filter::Or(v) if v.iter().all(|x| combat_status(x).is_some()) => {
+                    let w: Vec<String> = v
+                        .iter()
+                        .filter_map(combat_status)
+                        .map(str::to_string)
+                        .collect();
+                    let n = self.noun_det(a, Det::A);
+                    format!("{{alt:{}|{n}}}", join_list(&w, "or"))
+                }
                 Filter::Targets(f) => {
                     let n = self.noun_det(f, Det::A);
                     if negated {
@@ -1639,8 +1770,37 @@ impl Renderer<'_> {
                 );
             }
         }
+        // "if 4 or more damage was dealt to it this turn".
+        let to_self = |t: &TriggerCond| match t {
+            TriggerCond::DealsDamage {
+                source: Filter::Any,
+                to: DamageRecipient::Object(f),
+                combat_only: false,
+            } => {
+                matches!(f, Filter::Source)
+                    || matches!(f, Filter::In(s) if matches!(s.as_ref(), Sel::TriggerLki))
+            }
+            _ => false,
+        };
+        if let (Value::EventsThisTurn(t, Tally::Amount), Cmp::Ge, Value::Const(k)) = (a, cmp, b) {
+            if to_self(t) {
+                let m = self.me();
+                let v = self.value(a);
+                let w = number_word(*k);
+                return format!(
+                "{{alt:{v} is {w} or {{alt:greater|more}}|{w} or more damage was dealt to {m} this turn}}"
+            );
+            }
+        }
         if let Some(s) = self.attempt(|r| r.events_compare(a, cmp, b, false)) {
             return s;
+        }
+        // "if your library has no cards in it".
+        if let (Value::LibrarySize(p), Cmp::Eq, Value::Const(0)) = (a, cmp, b) {
+            let p = self.player(p, Case::Poss);
+            return format!(
+                "{{alt:there are no cards in {p} library|{p} library has no cards in it}}"
+            );
         }
         // "if no mana was spent to cast it" (none of the amount, CR 601.2h).
         if let (Value::Custom(n), Cmp::Eq, Value::Const(0)) = (a, cmp, b) {
@@ -1704,6 +1864,16 @@ impl Renderer<'_> {
                 return format!("{who} controls {what}");
             }
         }
+        // "if a player has one or fewer cards in hand".
+        if let (
+            Value::CountPlayers(pf @ (PlayerFilter::HandSize(..) | PlayerFilter::Life(..))),
+            Cmp::Ge,
+            Value::Const(1),
+        ) = (a, cmp, b)
+        {
+            let pred = self.player_predicate(pf, "a player", false);
+            return format!("a player {pred}");
+        }
         // "you have two or more opponents".
         if let (Value::CountPlayers(PlayerFilter::Opponent), Value::Const(n), Cmp::Ge) = (a, b, cmp)
         {
@@ -1755,6 +1925,35 @@ impl Renderer<'_> {
                     )
                 }
             };
+        }
+        // "if a card is exiled with it".
+        if let (Value::Count(f), Cmp::Ge, Value::Const(1)) = (a, cmp, b) {
+            if matches!(f, Filter::And(v) if v.iter().any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked))))
+            {
+                return self.exists(f, false);
+            }
+        }
+        // "as long as two or more Equipment are attached to it".
+        if let (Value::Count(Filter::And(v)), Cmp::Ge) = (a, cmp) {
+            if let Some(s) = v.iter().find_map(|x| match x {
+                Filter::AttachedToAnyOf(s) => Some(s.as_ref().clone()),
+                _ => None,
+            }) {
+                let rest = Filter::and(
+                    v.iter()
+                        .filter(|x| !matches!(x, Filter::AttachedToAnyOf(_)))
+                        .cloned()
+                        .collect(),
+                );
+                let n = self.count_phrase(&rest, cmp, b);
+                let o = self.sel(&s, Case::Obj);
+                let are = if matches!(b, Value::Const(1)) {
+                    "is"
+                } else {
+                    "are"
+                };
+                return format!("{n} {are} attached to {{alt:it|{o}}}");
+            }
         }
         // "you control three or more creatures".
         if let Value::Count(f) = a {
@@ -2170,7 +2369,7 @@ fn two_zone_count(v: &[Value]) -> Option<(Filter, Vec<ZoneKind>)> {
 /// The cards "revealed this way" (see `value_results::this_way_sel`): those a reveal
 /// instruction left in [`vars::DUG`], the cards revealed one at a time that it didn't
 /// ([`vars::REVEALED`]), and the cards revealed from a hand.
-fn is_revealed_this_way(s: &Sel) -> bool {
+pub(crate) fn is_revealed_this_way(s: &Sel) -> bool {
     let Sel::Union(v) = s else { return false };
     match v.as_slice() {
         [Sel::Var(a), Sel::Matching(b, Filter::Not(n)), Sel::Var(c)] => {
@@ -2180,5 +2379,23 @@ fn is_revealed_this_way(s: &Sel) -> bool {
                 && *c == crate::kw::reveal_from_hand::REVEALED
         }
         _ => false,
+    }
+}
+
+/// "attacking", "blocking": a combat status, said of a creature.
+fn combat_status(f: &Filter) -> Option<&'static str> {
+    let status = |a: &Filter| match a {
+        Filter::Attacking => Some("attacking"),
+        Filter::Blocking => Some("blocking"),
+        _ => None,
+    };
+    match f {
+        Filter::And(v) => match v.as_slice() {
+            [Filter::Type(CardType::Creature), s] | [s, Filter::Type(CardType::Creature)] => {
+                status(s)
+            }
+            _ => None,
+        },
+        other => status(other),
     }
 }

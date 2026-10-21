@@ -22,13 +22,39 @@ use super::*;
 pub(crate) struct OutcomeVerb {
     passive: &'static [&'static str],
     actor: Option<(PlayerRef, &'static str, &'static str)>,
+    /// Where the objects went, which cards may say ("returned to your hand").
+    to: Option<&'static str>,
 }
 
 /// The outcome verb of an instruction, looking into optional and per-player parts.
 fn outcome_verb(e: &Effect) -> Option<OutcomeVerb> {
-    let v = |passive, actor| Some(OutcomeVerb { passive, actor });
+    let v = |passive, actor| {
+        Some(OutcomeVerb {
+            passive,
+            actor,
+            to: None,
+        })
+    };
     match e {
         Effect::May { effect, .. } => outcome_verb(effect),
+        // "Target opponent reveals the top card of their library", "that player exiles
+        // that card": done as that player.
+        Effect::AsPlayer { who, effect } => {
+            let mut o = outcome_verb(effect)?;
+            if let Some((p, _, _)) = &mut o.actor {
+                if matches!(p, PlayerRef::You) {
+                    *p = who.clone();
+                }
+            }
+            Some(o)
+        }
+        // "exile up to one other target creature until ~ leaves the battlefield".
+        Effect::ExileUntil { .. } => v(
+            &["exiled", "put into exile"],
+            Some((PlayerRef::You, "exiles", "exiled")),
+        ),
+        // "Each player reveals the top card of their library" (`kw/parley.rs`).
+        Effect::Custom(n) if n == crate::kw::parley::REVEAL_TOPS => v(&["revealed"], None),
         Effect::If { then, .. } => outcome_verb(then),
         Effect::Seq(v) => v.iter().rev().find_map(outcome_verb),
         Effect::ForEachPlayer { who, effect } => {
@@ -56,9 +82,11 @@ fn outcome_verb(e: &Effect) -> Option<OutcomeVerb> {
             &["exiled", "put into exile"],
             Some((PlayerRef::You, "exiles", "exiled")),
         ),
-        Effect::Move { to, .. } if to.zone == ZoneKind::Hand => {
-            v(&["returned"], Some((PlayerRef::You, "returns", "returned")))
-        }
+        Effect::Move { to, .. } if to.zone == ZoneKind::Hand => Some(OutcomeVerb {
+            passive: &["returned"],
+            actor: Some((PlayerRef::You, "returns", "returned")),
+            to: Some("to your hand"),
+        }),
         Effect::Destroy { .. } => v(
             &["destroyed"],
             Some((PlayerRef::You, "destroys", "destroyed")),
@@ -120,6 +148,136 @@ fn some_matches(c: &Condition) -> Option<(Var, Filter)> {
         },
         _ => None,
     }
+}
+
+/// What a condition says about the objects of a snapshot.
+#[derive(Clone, Debug)]
+enum OutcomeCond {
+    /// "a land card was milled".
+    Some(Filter),
+    /// "four or more nontoken permanents you control were returned".
+    AtLeast(i32, Filter),
+    /// "no creature cards were revealed".
+    NoneOf(Filter),
+    /// "two nonland cards that share a color were milled" (the qualities, and whether
+    /// it's a color rather than a card type they share): two of them have one in common.
+    PairSharing(Filter, bool),
+}
+
+/// The snapshot a count is about, looking through "as they were before" (`Before`).
+fn snapshot_count(v: &Value) -> Option<(Var, Filter)> {
+    let Value::CountSel(s) = v else {
+        return None;
+    };
+    let Sel::Matching(inner, f) = s.as_ref() else {
+        return None;
+    };
+    let inner = match inner.as_ref() {
+        Sel::Before(x) => x.as_ref(),
+        x => x,
+    };
+    match inner {
+        Sel::Var(x) => Some((*x, f.clone())),
+        _ => None,
+    }
+}
+
+/// "Two cards that share a card type": for each card type (each color), two or more of
+/// the objects have it.
+fn pair_sharing(v: &[Condition]) -> Option<(Var, Filter, bool)> {
+    let mut snap = None;
+    let mut base: Option<Vec<Filter>> = None;
+    let mut colors = Vec::new();
+    let mut types = Vec::new();
+    for c in v {
+        let Condition::Compare(n, Cmp::Ge, two) = c else {
+            return None;
+        };
+        if !matches!(two, Value::Const(2)) {
+            return None;
+        }
+        let (s, f) = snapshot_count(n)?;
+        if snap.is_some_and(|x| x != s) {
+            return None;
+        }
+        snap = Some(s);
+        let Filter::And(parts) = f else {
+            return None;
+        };
+        let (rest, kind): (Vec<Filter>, Vec<Filter>) = parts
+            .into_iter()
+            .partition(|x| !matches!(x, Filter::Color(_)) && !matches!(x, Filter::Type(_)));
+        let [k] = kind.as_slice() else {
+            return None;
+        };
+        match k {
+            Filter::Color(c) => colors.push(*c),
+            Filter::Type(t) => types.push(*t),
+            _ => return None,
+        }
+        if base
+            .as_ref()
+            .is_some_and(|b| format!("{b:?}") != format!("{rest:?}"))
+        {
+            return None;
+        }
+        base = Some(rest);
+    }
+    // Every color, or every card type.
+    let by_color = if types.is_empty() && colors == crate::types::Color::ALL {
+        true
+    } else if colors.is_empty() && types == crate::types::CardType::ALL {
+        false
+    } else {
+        return None;
+    };
+    Some((snap?, Filter::and(base?), by_color))
+}
+
+/// A condition about a snapshot: (the snapshot, what it says).
+fn outcome_cond(c: &Condition) -> Option<(Var, OutcomeCond)> {
+    if let Some((s, f)) = some_matches(c) {
+        return Some((s, OutcomeCond::Some(f)));
+    }
+    match c {
+        // "Destroy target artifact or land. If an artifact is destroyed this way, ...":
+        // the snapshot is the one target, if it was destroyed.
+        Condition::And(v) => match v.as_slice() {
+            [Condition::SelNonEmpty(Sel::Var(s)), Condition::SelMatches(Sel::Target(_), f)] => {
+                Some((*s, OutcomeCond::Some(f.clone())))
+            }
+            _ => None,
+        },
+        Condition::Compare(n, Cmp::Ge, Value::Const(k)) if *k >= 2 => {
+            let (s, f) = snapshot_count(n)?;
+            Some((s, OutcomeCond::AtLeast(*k, f)))
+        }
+        Condition::Compare(n, Cmp::Eq, Value::Const(0)) => {
+            let (s, f) = snapshot_count(n)?;
+            Some((s, OutcomeCond::NoneOf(f)))
+        }
+        Condition::Or(v) => {
+            let (s, f, by_color) = pair_sharing(v)?;
+            Some((s, OutcomeCond::PairSharing(f, by_color)))
+        }
+        _ => None,
+    }
+}
+
+/// "If you control a Squirrel or returned a Squirrel card to your hand this way": another
+/// condition, or one about a snapshot.
+fn or_outcome(c: &Condition) -> Option<(&Condition, Var, OutcomeCond)> {
+    let Condition::Or(v) = c else {
+        return None;
+    };
+    let [other, about] = v.as_slice() else {
+        return None;
+    };
+    if outcome_cond(other).is_some() {
+        return None;
+    }
+    let (s, oc) = outcome_cond(about)?;
+    Some((other, s, oc))
 }
 
 /// Whether a filter is about the objects of a snapshot (`In(Var(s))`).
@@ -616,11 +774,35 @@ impl Renderer<'_> {
         i: usize,
         known: &mut Vec<(Var, OutcomeVerb)>,
     ) -> Option<(usize, String)> {
-        let asked_about = |s: Var, from: usize| {
-            v[from..].iter().any(|e| {
-                matches!(e, Effect::If { cond, .. } if some_matches(cond).is_some_and(|(x, _)| x == s))
-            })
+        let about = |c: &Condition| {
+            outcome_cond(c)
+                .map(|(x, _)| x)
+                .or_else(|| or_outcome(c).map(|(_, x, _)| x))
         };
+        let asked_about = |s: Var, from: usize| {
+            v[from..]
+                .iter()
+                .any(|e| matches!(e, Effect::If { cond, .. } if about(cond) == Some(s)))
+        };
+        // "You may choose a nonland card from it. If you do, that player exiles that card.
+        // If a nonblack card is exiled this way, ...": the snapshot starts empty, and the
+        // instruction (done only if the condition held) takes it.
+        if let (
+            Effect::Store {
+                var: s,
+                sel: Sel::None,
+            },
+            Some(Effect::If { then, .. }),
+        ) = (&v[i], v.get(i + 1))
+        {
+            let takes = matches!(then.as_ref(), Effect::Seq(t)
+                if matches!(t.last(), Some(Effect::Store { var, sel: Sel::Var(_) }) if var == s));
+            if takes && asked_about(*s, i + 2) {
+                let verb = outcome_verb(then)?;
+                known.push((*s, verb));
+                return Some((1, String::new()));
+            }
+        }
         // The snapshot: bookkeeping, once the instruction it's about is known.
         if let Some(s) = snapshot_var(&v[i]) {
             if asked_about(s, i + 1) {
@@ -637,7 +819,7 @@ impl Renderer<'_> {
             } if known.iter().any(|(s, _)| mentions_snapshot(f, *s)) => {
                 let next_asks = v.get(i + 1).is_some_and(|e| {
                     matches!(e, Effect::If { cond, .. }
-                        if some_matches(cond).is_some_and(|(x, _)| mentions_snapshot(f, x)))
+                        if about(cond).is_some_and(|x| mentions_snapshot(f, x)))
                 });
                 next_asks.then(|| (1, String::new()))
             }
@@ -646,9 +828,26 @@ impl Renderer<'_> {
                 then,
                 otherwise,
             } => {
-                let (s, f) = some_matches(cond)?;
+                let (other, s, oc) = match or_outcome(cond) {
+                    Some((o, s, oc)) => (Some(o), s, oc),
+                    None => {
+                        let (s, oc) = outcome_cond(cond)?;
+                        (None, s, oc)
+                    }
+                };
                 let verb = known.iter().find(|(x, _)| *x == s)?.1.clone();
-                let c = self.outcome_condition(&f, &verb);
+                let c = match other {
+                    Some(o) => {
+                        // "If you control a Squirrel or returned a Squirrel card to your
+                        // hand this way": the subject said once.
+                        let elide = matches!(o, Condition::Exists(Filter::And(v))
+                            if v.iter().any(|x| matches!(x, Filter::ControlledBy(PlayerRel::You))));
+                        let o = self.condition(o);
+                        let c = self.outcome_cond_text(&oc, &verb, elide);
+                        format!("{o} or {c}")
+                    }
+                    None => self.outcome_cond_text(&oc, &verb, false),
+                };
                 let text = if matches!(otherwise.as_ref(), Effect::Noop) {
                     let t = self.effect(then);
                     format!("if {c} this way, {t}")
@@ -663,13 +862,94 @@ impl Renderer<'_> {
         }
     }
 
+    /// The words of a condition about what an instruction did (without "this way").
+    /// `elide_you`: after another condition about you ("you control a Squirrel or
+    /// returned a Squirrel card"), the subject "you" may go unsaid.
+    fn outcome_cond_text(
+        &mut self,
+        oc: &OutcomeCond,
+        verb: &OutcomeVerb,
+        elide_you: bool,
+    ) -> String {
+        let noun = |r: &mut Self, f: &Filter| match f {
+            Filter::Any => "cards".to_string(),
+            f => r.noun_det(f, Det::Plural),
+        };
+        let np = match oc {
+            OutcomeCond::Some(f) => return self.outcome_condition(f, verb, elide_you),
+            OutcomeCond::AtLeast(k, f) => {
+                let n = noun(self, f);
+                format!("{} or more {n}", number_word(*k))
+            }
+            OutcomeCond::NoneOf(f) => {
+                let n = noun(self, f);
+                format!("no {n}")
+            }
+            OutcomeCond::PairSharing(f, by_color) => {
+                let n = noun(self, f);
+                let what = if *by_color { "a color" } else { "a card type" };
+                format!("two {n} that share {what}")
+            }
+        };
+        let alts = self.outcome_alts(&np, true, verb, elide_you);
+        format!("{{alt:{}}}", alts.join("|"))
+    }
+
+    /// "[noun] was milled", "you discarded [noun]", ... for a noun phrase.
+    fn outcome_alts(
+        &mut self,
+        noun: &str,
+        plural: bool,
+        verb: &OutcomeVerb,
+        elide_you: bool,
+    ) -> Vec<String> {
+        let bes: &[&str] = if plural {
+            &["are", "were"]
+        } else {
+            &["is", "was"]
+        };
+        let tos: Vec<String> = match verb.to {
+            Some(to) => vec![String::new(), format!(" {to}")],
+            None => vec![String::new()],
+        };
+        let mut alts = Vec::new();
+        for p in verb.passive {
+            for be in bes {
+                for to in &tos {
+                    alts.push(format!("{noun} {be} {p}{to}"));
+                }
+            }
+        }
+        if let Some((who, present, past)) = &verb.actor {
+            let subj = self.player(who, Case::Subj);
+            for to in &tos {
+                if subj == "you" {
+                    let base = present.strip_suffix('s').unwrap_or(present);
+                    let you = if elide_you { "{opt:you}" } else { "you" };
+                    alts.push(format!("{you} {past} {noun}{to}"));
+                    alts.push(format!("{you} {base} {noun}{to}"));
+                } else if !subj.contains(['{', '|']) && !subj.starts_with("each ") {
+                    alts.push(format!("{subj} {present} {noun}{to}"));
+                    alts.push(format!("{subj} {past} {noun}{to}"));
+                }
+            }
+        }
+        alts
+    }
+
     /// "a land card was milled", "you discarded a card", "that player discards an artifact
     /// card" (without "this way").
-    fn outcome_condition(&mut self, f: &Filter, verb: &OutcomeVerb) -> String {
-        // Cards the player who discarded or milled them owns: "you discarded a card".
+    fn outcome_condition(&mut self, f: &Filter, verb: &OutcomeVerb, elide_you: bool) -> String {
+        // Cards the player who discarded or milled them owns: "you discarded a card"; a
+        // player sacrifices only permanents they control (CR 701.21a): "you sacrificed a
+        // creature".
+        let sacrificed = verb.passive == ["sacrificed"];
+        let yours = |x: &Filter| {
+            owned_by_you(x) || (sacrificed && matches!(x, Filter::ControlledBy(PlayerRel::You)))
+        };
         let (by_you, f) = match f {
-            Filter::And(v) if v.iter().any(owned_by_you) => {
-                let rest: Vec<Filter> = v.iter().filter(|x| !owned_by_you(x)).cloned().collect();
+            Filter::And(v) if v.iter().any(yours) => {
+                let rest: Vec<Filter> = v.iter().filter(|x| !yours(x)).cloned().collect();
                 (true, Filter::and(rest))
             }
             other => (false, other.clone()),
@@ -687,22 +967,12 @@ impl Renderer<'_> {
         if noun.contains(['{', '|']) {
             return format!("{noun} {{alt:is|was}} {{alt:{passive}}}");
         }
-        let mut alts = Vec::new();
-        for p in verb.passive {
-            for be in ["is", "was"] {
-                alts.push(format!("{noun} {be} {p}"));
-                if let Some(rest) = noun.strip_prefix("a ").or(noun.strip_prefix("an ")) {
+        let mut alts = self.outcome_alts(&noun, false, verb, elide_you);
+        if let Some(rest) = noun.strip_prefix("a ").or(noun.strip_prefix("an ")) {
+            for p in verb.passive {
+                for be in ["is", "was"] {
                     alts.push(format!("at least one {rest} {be} {p}"));
                 }
-            }
-        }
-        if let Some((who, present, past)) = &verb.actor {
-            let subj = self.player(who, Case::Subj);
-            if subj == "you" {
-                alts.push(format!("you {past} {noun}"));
-            } else if !subj.contains(['{', '|']) && !subj.starts_with("each ") {
-                alts.push(format!("{subj} {present} {noun}"));
-                alts.push(format!("{subj} {past} {noun}"));
             }
         }
         format!("{{alt:{}}}", alts.join("|"))
