@@ -754,3 +754,38 @@ fn doomsday_excruciator_leaves_each_player_six_cards() {
     t.resolve_all();
     assert_eq!(t.library_size(P0), 30);
 }
+
+#[test]
+fn light_paws_finds_a_cheaper_aura_with_a_new_name_and_attaches_it() {
+    cr!("303.4f", "201.2", "701.23a");
+    assert_supported("Light-Paws, Emperor's Voice");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let paws = t.battlefield(P0, "Light-Paws, Emperor's Voice");
+    t.lands(P0, "Forest", 1);
+    let rancor2 = t.library_top(P0, "Rancor");
+    let pacifism = t.library_top(P0, "Pacifism");
+    let armor = t.library_top(P0, "Ethereal Armor");
+    let rancor = t.hand(P0, "Rancor");
+    t.answer_yes(P0, true);
+    // Only Ethereal Armor qualifies: Pacifism costs more, the other Rancor has the name of
+    // an Aura you control.
+    t.answer_choose(P0, &[Entity::Object(armor)]);
+    t.cast(P0, rancor).target(paws).go();
+    t.resolve_all();
+    let armor_x = t.g.current(armor);
+    assert!(t.on_battlefield(armor_x), "{}", t.dump_log());
+    assert_eq!(t.obj_now(armor_x).attached_to, Some(Entity::Object(paws)));
+    assert_eq!(t.zone(t.g.current(pacifism)), Zone::Library(P0));
+    assert_eq!(t.zone(t.g.current(rancor2)), Zone::Library(P0));
+    let offered: Vec<Entity> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .last()
+        .unwrap_or_default();
+    assert_eq!(offered.len(), 1, "{offered:?}");
+}
