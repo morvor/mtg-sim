@@ -661,6 +661,12 @@ impl Renderer<'_> {
                     {
                         return format!("starting with {start}, each {w} may pay any amount of mana");
                     }
+                    // "Starting with you, each player may pay any amount of life" (CR
+                    // 119.4b: any amount can be 0).
+                    if matches!(inner.as_ref(), Effect::Custom(n) if n == crate::kw::loop_totals::PAY_ANY_LIFE_TALLIED)
+                    {
+                        return format!("starting with {start}, each {w} may pay any amount of life");
+                    }
                 }
                 // "each player chooses a creature" / "each player may choose an artifact".
                 if let Effect::Store {
@@ -1130,6 +1136,11 @@ impl Renderer<'_> {
                         if let Some(i) = s.find(" in ") {
                             if s.ends_with(" hand") || s.ends_with(" hands") {
                                 s = super::graveyard_this_way::from_the_hand(&s[..i]);
+                            } else if let Some(j) = s[i..].find(" hand ") {
+                                // "a card other than a basic land card from it": the
+                                // quality after the hand.
+                                let rel = s[i + j + " hand ".len()..].to_string();
+                                s = format!("{} {rel} from it", &s[..i]);
                             }
                         }
                     }
@@ -1150,7 +1161,10 @@ impl Renderer<'_> {
                         let a = with_article(rest);
                         return format!("{{alt:choose {s}|you may choose {a}}}");
                     }
-                    if c == "you" {
+                    if c == "you" && self.revealed_hand {
+                        // "Target player reveals their hand. You choose a card from it."
+                        format!("{{opt:you}} choose {s}")
+                    } else if c == "you" {
                         format!("choose {s}")
                     } else {
                         format!("{c} chooses {s}")
@@ -1169,6 +1183,7 @@ impl Renderer<'_> {
                 | Sel::TriggerOtherObject
                 | Sel::TriggerObjects
                 | Sel::TriggerSpell
+                | Sel::TriggerPlayer
                 | Sel::AttachedTo
                 | Sel::AttachedToThis
                 | Sel::Linked
@@ -2061,7 +2076,11 @@ impl Renderer<'_> {
                 let d = self.duration(duration);
                 let c = self.cost(&def.cost);
                 if let SpecialActionEffect::StopDelayedTrigger = &def.action {
-                    let who = self.player_filter_object(&def.who);
+                    // "unless they pay {2} before that step": the player, as the subject.
+                    let who = match &def.who {
+                        PlayerFilter::Ref(r) => self.player(r, Case::Subj),
+                        other => self.player_filter_object(other),
+                    };
                     return format!("{{alt:unless {who} pays {c} before that step|{who} may pay {c} before then to stop it}}");
                 }
                 let what = match &def.action {
@@ -2654,7 +2673,17 @@ impl Renderer<'_> {
                 self.self_salient = false;
                 self.other_salient = false;
                 self.trigger_is_self = false;
-                let b = self.in_event_scope(|r| r.body(body));
+                // A delayed trigger without targets of its own refers to the targets of the
+                // ability that created it ("under that player's control", CR 603.7c).
+                let outer = body.targets.is_empty()
+                    && body.modal.is_none()
+                    && !self.targets.is_empty()
+                    && format!("{:?}", body.effect).contains("Target(");
+                let b = if outer {
+                    self.in_event_scope(|r| r.effect_sentences(&body.effect))
+                } else {
+                    self.in_event_scope(|r| r.body(body))
+                };
                 (self.self_salient, self.other_salient, self.trigger_is_self) = saved;
                 // "Sacrifice it at end of combat": a time for one instruction may follow it.
                 let at_step = delay.is_some();
@@ -3130,6 +3159,12 @@ impl Renderer<'_> {
                 mods,
                 expires,
             } => {
+                if let Some(s) = self
+                    .each_spell_this_turn(filter, mods, expires)
+                    .or_else(|| self.next_spell_marker(filter, mods, expires))
+                {
+                    return s;
+                }
                 let f = if matches!(filter, Filter::Any) {
                     "spell".to_string()
                 } else {
@@ -3434,11 +3469,18 @@ impl Renderer<'_> {
         // "The next time you would draw a card this turn, ... instead": one use.
         if *uses == Some(1) && (d == "until end of turn" || d == "this turn") {
             if let Some(rest) = s.strip_prefix("if ") {
-                if let Some((ev, then)) = rest.split_once(", ") {
+                if let Some((ev, then)) = super::next_time::split_outside_braces(rest, ", ") {
                     let one_alt = ev.starts_with("{alt:")
                         && ev.ends_with('}')
                         && ev.matches('{').count() == 1;
-                    if !ev.contains('{') || one_alt {
+                    // "the next time {alt:that player|they} would draw a card": a player
+                    // named first.
+                    let alt_subject = ev.starts_with("{alt:")
+                        && ev.matches('{').count() == 1
+                        && ev
+                            .find('}')
+                            .is_some_and(|i| ev[i + 1..].starts_with(" would "));
+                    if !ev.contains('{') || one_alt || alt_subject {
                         return format!("the next time {ev} this turn, {then}");
                     }
                 }
@@ -3627,6 +3669,9 @@ impl Renderer<'_> {
             if let Some((s, used)) = self
                 .seq_per_owner(&v[i..])
                 .or_else(|| self.seq_rest_not_cast(v, i))
+                .or_else(|| self.rest_after_cast(v, i))
+                .or_else(|| self.same_name_search(v, i))
+                .or_else(|| self.named_seq(v, i))
             {
                 parts.push(s);
                 i += used;
@@ -4421,6 +4466,9 @@ impl Renderer<'_> {
     }
 
     fn if_effect(&mut self, cond: &Condition, then: &Effect, otherwise: &Effect) -> String {
+        if let Some(s) = self.skips_next_this_turn(cond, then, otherwise) {
+            return s;
+        }
         let pushed = super::compared_values(cond)
             .map(|p| self.compared.push(p))
             .is_some();
@@ -4593,10 +4641,25 @@ impl Renderer<'_> {
                 let c = self.condition(cond);
                 let mut t = self.effect(then);
                 // "~ deals 3 damage to any target. If ..., it deals 4 damage instead."
+                // (Also "If ..., ~ deals damage equal to that card's power instead": the
+                // amount set just before.)
+                let then_damage = match then {
+                    Effect::Seq(v)
+                        if matches!(
+                            v.as_slice(),
+                            [Effect::SetX { .. }, Effect::DealDamage { .. }]
+                        ) =>
+                    {
+                        &v[1]
+                    }
+                    other => other,
+                };
                 if let (Effect::DealDamage { to: a, .. }, Effect::DealDamage { to: b, .. }) =
-                    (then, otherwise)
+                    (then_damage, otherwise)
                 {
-                    if same_sel(a, b) {
+                    if same_sel(a, b) && t.contains(" to it, where X is ") {
+                        t = t.replacen(" to it, where X is ", " {opt:to it}, where X is ", 1);
+                    } else if same_sel(a, b) {
                         if let Some(head) = t
                             .strip_suffix(" to it")
                             .or_else(|| t.strip_suffix(" to {alt:it|that permanent or player}"))
@@ -4703,8 +4766,9 @@ impl Renderer<'_> {
         if *count != 1 && !many {
             return None;
         }
-        // "from among them": a group an earlier instruction exiled (a card that left
-        // exile is a new object, not one of them, CR 400.7, so "in exile" goes unsaid).
+        // "from among them": a group an earlier instruction exiled or looked at (a card
+        // that left exile or the library is a new object, not one of them, CR 400.7, so
+        // "in exile" goes unsaid).
         let parts: Vec<Filter> = match filter {
             Filter::And(v) => v.clone(),
             other => vec![other.clone()],
@@ -4728,7 +4792,7 @@ impl Renderer<'_> {
                 .filter(|x| !matches!(x, Filter::Not(n) if matches!(n.as_ref(), Filter::Type(CardType::Land))))
                 .filter(|x| {
                     group.is_none()
-                        || !matches!(x, Filter::In(_) | Filter::InZone(ZoneKind::Exile) | Filter::Spell)
+                        || !matches!(x, Filter::In(_) | Filter::InZone(ZoneKind::Exile | ZoneKind::Library) | Filter::Spell)
                 })
                 .cloned()
                 .collect(),
@@ -5809,6 +5873,14 @@ impl Renderer<'_> {
                 if v.starts_with("the number of ") {
                     return format!("create X {noun_many}{tail}, where X is {v}");
                 }
+                // "create a 1/1 black Rat creature token for each 1 life they paid this
+                // way": one for each 1 life of the amount.
+                if let Some(r) = v.strip_prefix("the life ") {
+                    let one = with_article(&noun_one);
+                    return format!(
+                        "{{alt:create X {noun_many}{tail}, where X is {v}|create {one}{tail} for each 1 life {r}}}"
+                    );
+                }
                 // "create a number of ... tokens equal to ...".
                 return either_form(
                     format!("create X {noun_many}{tail}, where X is {v}"),
@@ -5963,6 +6035,9 @@ impl Renderer<'_> {
         mods: &[Modification],
         d: &Duration,
     ) -> String {
+        if let Some(s) = self.spell_marker_effect(what, mods) {
+            return s;
+        }
         if mods.len() == 1 {
             if let Modification::SwitchPT = mods[0] {
                 // "switch target creature's power and toughness" / "switch the power and
@@ -6713,7 +6788,7 @@ impl Renderer<'_> {
             // "choose any card name": any card in the Oracle card reference (CR 201.4).
             ChoiceKind::CardName => "{alt:a|any} card name".into(),
             ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
-            ChoiceKind::Number { min, max } => format!("a number from {min} to {max}"),
+            ChoiceKind::Number { min, max } => self.number_choice(*min, *max),
             ChoiceKind::Opponent => "an opponent".into(),
             ChoiceKind::Player => "a player".into(),
             ChoiceKind::BasicLandType => "a basic land type".into(),
@@ -7243,7 +7318,15 @@ impl Renderer<'_> {
             // the words or objects.
             K::Vote => {
                 let names: Vec<String> = options.iter().map(|(n, _)| n.clone()).collect();
-                let what_s = if names.is_empty() {
+                // "each player votes for a player" / "for another player".
+                let for_player = match what {
+                    Sel::Players(PlayerRef::EachPlayer) => Some("a player"),
+                    Sel::Players(PlayerRef::EachOtherPlayer) => Some("another player"),
+                    _ => None,
+                };
+                let what_s = if let (Some(p), true) = (for_player, names.is_empty()) {
+                    p.to_string()
+                } else if names.is_empty() {
                     let f = match what {
                         Sel::All(f) => f.clone(),
                         _ => return self.gap("a vote for objects"),
@@ -7302,6 +7385,11 @@ impl Renderer<'_> {
                 };
                 // "Behold a Kithkin", "behold two Elves": chosen from those the filter
                 // describes.
+                if let (K::Behold, Sel::All(f), Value::Const(1), PlayerRef::You) =
+                    (other, what, n, who)
+                {
+                    return self.behold_forms(f);
+                }
                 if let (K::Behold, Sel::All(f), Value::Const(c)) = (other, what, n) {
                     let w = if *c == 1 {
                         self.noun_det(f, Det::A)
@@ -7761,7 +7849,7 @@ fn starts_by_sacrificing(e: &Effect, s: &Sel) -> bool {
 /// A counted noun phrase in the singular: "charge counters on ~" -> "charge counter on
 /// ~", "creatures in your party" -> "creature in your party" (the head noun is the word
 /// before the first preposition or clause).
-fn singular_head(phrase: &str) -> String {
+pub(crate) fn singular_head(phrase: &str) -> String {
     let words: Vec<&str> = phrase.split(' ').collect();
     let preps = [
         "on", "in", "you", "your", "among", "that", "with", "attached",

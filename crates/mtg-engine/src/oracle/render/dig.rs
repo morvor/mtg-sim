@@ -7,7 +7,7 @@ use super::*;
 impl Renderer<'_> {
     /// Where cards go, as a dig's text says it ("into your hand", "onto the battlefield
     /// tapped", "on the bottom of your library in any order").
-    fn dig_destination(&mut self, to: &Destination, many: bool) -> String {
+    pub(crate) fn dig_destination(&mut self, to: &Destination, many: bool) -> String {
         let mut d = match to.zone {
             ZoneKind::Hand => "into your hand".to_string(),
             ZoneKind::Graveyard => "into your graveyard".to_string(),
@@ -75,6 +75,9 @@ impl Renderer<'_> {
                 to,
                 ..
             } => {
+                if let Some(s) = self.take_for_each_kind(each_of, *up_to, to) {
+                    return s;
+                }
                 // "Put that card onto the battlefield": the card a reveal found (all of
                 // one card).
                 if matches!(from, Sel::Var(v) if *v == vars::IT)

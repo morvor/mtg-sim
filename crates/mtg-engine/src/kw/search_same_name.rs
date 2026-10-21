@@ -44,11 +44,15 @@ pub fn parse_search(name: &str) -> Option<(u8, Var)> {
     Some((slot.parse().ok()?, var.parse().ok()?))
 }
 
-/// The general form: "search same name:{zones}:{any}:{object}:{var}" — the zones
-/// searched (`ghl`: graveyard, hand, and library; `l`: library), `all` or `any` (any
-/// number of cards), the object whose name it is (`t3`: the target in slot 3, `v65`: the
-/// object in variable 65), and the variable for the cards found. The zones are those of
-/// that object's controller (as it last existed; for a card, its owner).
+/// The general form: "search same name:{zones}:{any}:{object}:{var}[:{player}]" — the
+/// zones searched (`ghl`: graveyard, hand, and library; `l`: library), `all` or `any`
+/// (any number of cards), the object whose name it is (`t3`: the target in slot 3, `v65`:
+/// the object in variable 65), the variable for the cards found, and the player whose
+/// zones they are (JSON), when the text names one ("Search that player's graveyard, hand,
+/// and library"): that player's zones are searched even when no object was chosen (the
+/// Lobotomy and Shimian Specter rulings: with no card chosen, you still search the
+/// library and that player shuffles). Without a player, the zones are those of the
+/// object's controller (as it last existed; for a card, its owner).
 const PREFIX_GENERAL: &str = "search same name:";
 
 /// What a general same-name search searches for.
@@ -57,15 +61,28 @@ pub struct SameNameSearch {
     pub any_number: bool,
     pub object: Sel,
     pub var: Var,
+    /// The player whose zones are searched, if the text names one.
+    pub whose: Option<PlayerRef>,
+}
+
+impl SameNameSearch {
+    /// The player whose zones are searched.
+    pub fn player(&self) -> PlayerRef {
+        self.whose
+            .clone()
+            .unwrap_or_else(|| PlayerRef::ControllerOf(Box::new(self.object.clone())))
+    }
 }
 
 /// The instruction finding the cards named like `object` (a target or an object in a
-/// variable); `None` for other objects.
+/// variable) in the zones of `whose` (or of the object's controller); `None` for other
+/// objects.
 pub fn general_effect(
     all_zones: bool,
     any_number: bool,
     object: &Sel,
     var: Var,
+    whose: Option<&PlayerRef>,
 ) -> Option<crate::ability::Effect> {
     let obj = match object {
         Sel::Target(n) => format!("t{n}"),
@@ -74,15 +91,19 @@ pub fn general_effect(
     };
     let zones = if all_zones { "ghl" } else { "l" };
     let any = if any_number { "any" } else { "all" };
+    let whose = match whose {
+        Some(p) => format!(":{}", serde_json::to_string(p).ok()?),
+        None => String::new(),
+    };
     Some(crate::ability::Effect::Custom(
-        format!("{PREFIX_GENERAL}{zones}:{any}:{obj}:{var}").into(),
+        format!("{PREFIX_GENERAL}{zones}:{any}:{obj}:{var}{whose}").into(),
     ))
 }
 
 /// The parts of a [`general_effect`] instruction.
 pub fn parse_general(name: &str) -> Option<SameNameSearch> {
     let r = name.strip_prefix(PREFIX_GENERAL)?;
-    let mut it = r.split(':');
+    let mut it = r.splitn(5, ':');
     let all_zones = match it.next()? {
         "ghl" => true,
         "l" => false,
@@ -100,11 +121,16 @@ pub fn parse_general(name: &str) -> Option<SameNameSearch> {
         Sel::Var(obj.strip_prefix('v')?.parse().ok()?)
     };
     let var = it.next()?.parse().ok()?;
+    let whose = match it.next() {
+        Some(j) => Some(serde_json::from_str(j).ok()?),
+        None => None,
+    };
     Some(SameNameSearch {
         all_zones,
         any_number,
         object,
         var,
+        whose,
     })
 }
 
@@ -122,6 +148,7 @@ impl KeywordRules for SearchSameName {
                 any_number: name.starts_with(PREFIX_ANY),
                 object: Sel::Target(slot),
                 var,
+                whose: None,
             }
         } else if let Some(s) = parse_general(name) {
             s
@@ -142,11 +169,11 @@ fn run(g: &mut Game, search: &SameNameSearch, ctx: &mut Ctx) {
             any_number,
             ref object,
             var,
+            ..
         } = *search;
         let searcher = ctx.controller;
         let target = object.clone();
-        let Some(owner) = g.eval_player(&PlayerRef::ControllerOf(Box::new(target.clone())), ctx)
-        else {
+        let Some(owner) = g.eval_player(&search.player(), ctx) else {
             ctx.set_var(var, vec![]);
             return;
         };

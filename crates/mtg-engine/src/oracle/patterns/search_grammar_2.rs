@@ -19,6 +19,7 @@ use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::kw::search_same_name::{general_effect, parse_general};
 use crate::oracle::effects::{object_ref, Builder};
+use crate::oracle::patterns::oracle_hardening_referents::is_no_player_referent;
 use crate::oracle::phrases::end;
 
 /// The cards a same-name search found.
@@ -27,15 +28,16 @@ const FOUND: Var = vars::USER + 2312;
 fn search_same_name_of(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l.strip_prefix("then ").unwrap_or(l).strip_prefix("search ")?;
-    let (all_zones, r) = [
-        ("that player's graveyard, hand, and library for ", true),
-        ("their graveyard, hand, and library for ", true),
+    // (all zones, the zones are the player's the text is about)
+    let ((all_zones, of_player), r) = [
+        ("that player's graveyard, hand, and library for ", (true, true)),
+        ("their graveyard, hand, and library for ", (true, true)),
         (
             "the graveyard, hand, and library of that spell's controller for ",
-            true,
+            (true, false),
         ),
-        ("that player's library for ", false),
-        ("their library for ", false),
+        ("that player's library for ", (false, true)),
+        ("their library for ", (false, true)),
     ]
     .iter()
     .find_map(|(p, z)| r.strip_prefix(p).map(|r| (*z, r)))?;
@@ -68,8 +70,19 @@ fn search_same_name_of(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved);
         return None;
     }
-    let search = general_effect(all_zones, any_number, &sel, FOUND)?;
-    let who = PlayerRef::ControllerOf(Box::new(sel));
+    // "that player's": the player the text is about (the target player whose hand was
+    // revealed, the player dealt damage), searched even when no card was chosen.
+    // (A player named as an object's controller or owner is that object's; the search
+    // goes by the object as before.)
+    let named = (of_player
+        && !matches!(
+            b.it_player,
+            PlayerRef::You | PlayerRef::ControllerOf(_) | PlayerRef::OwnerOf(_)
+        )
+        && !is_no_player_referent(&b.it_player))
+    .then(|| b.it_player.clone());
+    let search = general_effect(all_zones, any_number, &sel, FOUND, named.as_ref())?;
+    let who = named.unwrap_or_else(|| PlayerRef::ControllerOf(Box::new(sel)));
     if matches!(b.it_player, PlayerRef::You) {
         b.it_player = who.clone();
     }
@@ -95,12 +108,8 @@ inventory::submit! {
 /// searched: the named object's controller, or, for a search repeated for each of
 /// several objects, the player the text is about (`it_player`).
 fn general_search_player(e: &Effect, it_player: &PlayerRef) -> Option<PlayerRef> {
-    use crate::oracle::patterns::oracle_hardening_referents::is_no_player_referent;
     match e {
-        Effect::Custom(n) => {
-            let s = parse_general(n)?;
-            Some(PlayerRef::ControllerOf(Box::new(s.object)))
-        }
+        Effect::Custom(n) => Some(parse_general(n)?.player()),
         Effect::Seq(v) => v
             .iter()
             .rev()

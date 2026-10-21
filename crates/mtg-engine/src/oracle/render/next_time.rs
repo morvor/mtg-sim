@@ -186,3 +186,19 @@ impl Renderer<'_> {
         })
     }
 }
+
+/// `s` split at the first `sep` outside `{...}`.
+pub(crate) fn split_outside_braces<'a>(s: &'a str, sep: &str) -> Option<(&'a str, &'a str)> {
+    let mut depth = 0i32;
+    for (i, c) in s.char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ if depth == 0 && s[i..].starts_with(sep) => {
+                return Some((&s[..i], &s[i + sep.len()..]));
+            }
+            _ => {}
+        }
+    }
+    None
+}

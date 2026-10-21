@@ -151,11 +151,14 @@ impl Renderer<'_> {
                 {
                     "pay life equal to {alt:its|that spell's} mana value".to_string()
                 }
-                _ => self.gap("an alternative cost for spells cast with a permission"),
+                _ => self.cost_as_payment(c),
             };
-            s.push_str(&format!(
-                ". If you cast a spell this way, {pay} rather than pay its mana cost"
-            ));
+            // "You may cast it by paying {1} rather than paying its mana cost" (an
+            // alternative cost, CR 118.9).
+            let by = super::statics::gerund_first(&pay);
+            s = format!(
+                "{{alt:{s}. If you cast a spell this way, {pay} rather than pay its mana cost|{s} by {by} rather than paying its mana cost}}"
+            );
         }
         if let Some(c) = &terms.extra_cost {
             let pay = self.cost_as_payment(c);

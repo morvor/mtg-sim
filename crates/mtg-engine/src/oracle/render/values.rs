@@ -67,6 +67,10 @@ impl Renderer<'_> {
             }
             Value::PowerOf(s) => {
                 let s = self.sel(s, Case::Poss);
+                // Several objects: the sum of their powers (`eval`), "their total power".
+                if s == "their" {
+                    return "their total power".into();
+                }
                 format!("{s} power")
             }
             Value::ToughnessOf(s) => {
@@ -1021,6 +1025,7 @@ impl Renderer<'_> {
                 format!("{m} was cast using {name}")
             }
             "collect evidence" => "evidence was collected".into(),
+            "behold" if self.info.behold.is_some() => self.behold_paid().unwrap_or_default(),
             n if n.starts_with("kicker ") => {
                 let m = self.me();
                 format!("{m} was kicked with its {} kicker", &n["kicker ".len()..])
@@ -1491,6 +1496,13 @@ impl Renderer<'_> {
             PlayerFilter::MaxSpeed => format!("{have} max speed"),
             PlayerFilter::Chose(w) => format!("chose {w}"),
             PlayerFilter::ChosenPlayers => "{alt:is|are} one of the chosen players".into(),
+            // "If you are one of those players" (with the highest number).
+            PlayerFilter::ChoseNumber(Cmp::Eq, v)
+                if you
+                    && matches!(v.as_ref(), Value::Custom(n) if n == crate::choices::HIGHEST_NUMBER) =>
+            {
+                "{alt:are one of those players|chose the highest number}".into()
+            }
             PlayerFilter::ChoseNumber(c, v) => {
                 let v = self.value(v);
                 format!("chose a number {}", cmp_phrase(*c, &v))
@@ -1532,6 +1544,15 @@ impl Renderer<'_> {
     }
 
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
+        // Pack tactics: "if you attacked with creatures with total power 6 or greater
+        // this combat" (the attackers' power as they were declared).
+        if let (Value::Custom(n), Cmp::Ge, Value::Const(k)) = (a, cmp, b) {
+            if n == crate::kw::pack_tactics::ATTACKED_WITH_TOTAL_POWER {
+                return format!(
+                    "{{alt:you attacked with creatures with total power {k} or greater this combat|the total power of the creatures you attacked with this combat is {k} or {{alt:greater|more}}}}"
+                );
+            }
+        }
         if let Some(s) = self.attempt(|r| r.events_compare(a, cmp, b, false)) {
             return s;
         }
@@ -1680,10 +1701,13 @@ impl Renderer<'_> {
         }
         // "if this is the second time this ability has resolved this turn".
         if let (Value::TimesResolvedThisTurn, Cmp::Eq, Value::Const(n)) = (a, cmp, b) {
-            return format!(
-                "this is the {} time this ability has resolved this turn",
-                ordinal_word(*n as u32)
-            );
+            let nth = ordinal_word(*n as u32);
+            let full = format!("this is the {nth} time this ability has resolved this turn");
+            // "If it's the second time, ...": after the first, the rest is understood.
+            if *n >= 2 {
+                return format!("{{alt:{full}|it's the {nth} time}}");
+            }
+            return full;
         }
         let a_value = a;
         let a = self.value(a);

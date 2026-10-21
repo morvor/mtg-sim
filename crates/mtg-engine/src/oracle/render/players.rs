@@ -514,7 +514,9 @@ impl Renderer<'_> {
                 Case::Poss => "{alt:that player's|their}".into(),
                 // "Target opponent loses life equal to the number of creatures they
                 // control": the subject, named again in the amount.
-                Case::Subj if self.they_target == Some(i) => "{alt:that player|they}".into(),
+                // "Target player draws two cards, then ... the number of cards they've
+                // drawn this turn": the player named again, as the subject.
+                Case::Subj => "{alt:that player|they}".into(),
                 Case::Obj if self.they_target == Some(i) => "{alt:that player|them}".into(),
                 _ => "that player".into(),
             };
@@ -973,8 +975,10 @@ impl Renderer<'_> {
                         let v = self.value(other);
                         // "a number of cards from the top of your library equal to the
                         // number of ...": the same cards, the number said after them.
+                        // Or "the top X cards of your library, where X is ..." (CR 107.3),
+                        // said where the cards are the last words of the sentence.
                         if !matches!(other, Value::X | Value::Var(_)) {
-                            format!("a number of cards from the top of {p} library equal to {v}")
+                            format!("{{alt:a number of cards from the top of {p} library equal to {v}|the top X cards of {p} library, where X is {v}}}")
                         } else {
                             format!("the top {v} cards of {p} library")
                         }
@@ -1156,7 +1160,15 @@ impl Renderer<'_> {
             PlayerRef::ActivePlayer if self.attack_trigger => {
                 "{alt:that player|that attacking player|the attacking player}".into()
             }
-            PlayerRef::ActivePlayer => "that player".into(),
+            // "At the beginning of the upkeep of enchanted creature's controller, that
+            // player ... unless they pay ...": the active player, named by the trigger.
+            PlayerRef::ActivePlayer => {
+                return match case {
+                    Case::Subj => "{alt:that player|they}".into(),
+                    Case::Obj => "{alt:that player|them}".into(),
+                    Case::Poss => "{alt:that player's|their}".into(),
+                }
+            }
             PlayerRef::AttackingPlayer if self.attack_trigger => {
                 "{alt:that player|that attacking player|the attacking player}".into()
             }
@@ -1384,6 +1396,9 @@ impl Renderer<'_> {
             PlayerFilter::Chose(w) => format!("who chose {w}"),
             PlayerFilter::ChosenPlayers => "who is one of the chosen players".into(),
             PlayerFilter::ChoseNumber(c, v) => {
+                if let Some(f) = self.chose_number_filter(*c, v) {
+                    return f;
+                }
                 let v = self.value(v);
                 format!("who chose a number {}", nouns::cmp_phrase(*c, &v))
             }
@@ -1444,6 +1459,14 @@ impl Renderer<'_> {
                     return String::new();
                 };
                 self.opt_in_quality(*v, false).unwrap_or_default()
+            }
+            // "Each player who received no votes" (the players voted for are each vote's
+            // choice, CR 701.38a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r)
+                    if matches!(r.as_ref(), PlayerRef::Var(crate::kwa::vote::VOTES_CAST))) =>
+            {
+                "who received no votes".into()
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);

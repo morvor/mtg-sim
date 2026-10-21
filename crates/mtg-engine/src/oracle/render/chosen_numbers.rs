@@ -1,0 +1,218 @@
+//! Numbers players choose (usually secretly) and what the text says about them once
+//! they're revealed (`choices.rs`): "each player with the highest number loses that much
+//! life", "~ deals damage equal to the highest number to each player who chose that
+//! number", "If they match, ..."; and other numbers implemented in code: "if two or more
+//! players have lost the game" (CR 800.4), "you gain 1 life for each of the chosen colors
+//! it is", "for each black mana symbol in their mana costs".
+
+use super::players::Case;
+use super::*;
+use crate::choices::{HIGHEST_NUMBER, LOWEST_NUMBER, NUMBERS_MATCH, OWN_NUMBER};
+
+impl Renderer<'_> {
+    /// "a number" (any number 0 or greater, capped by the engine at 1000), "a number
+    /// greater than 0", "1, 2, or 3".
+    pub(crate) fn number_choice(&mut self, min: i32, max: i32) -> String {
+        if max == 1000 {
+            return match min {
+                0 => "{alt:a number|a number 0 or greater}".into(),
+                n => format!(
+                    "{{alt:a number greater than {}|a number {n} or greater}}",
+                    n - 1
+                ),
+            };
+        }
+        let list: Vec<String> = (min..=max).map(|n| n.to_string()).collect();
+        if (2..=4).contains(&list.len()) {
+            let or = join_list(&list, "or");
+            return format!("{{alt:a number from {min} to {max}|{or}}}");
+        }
+        format!("a number from {min} to {max}")
+    }
+
+    /// Values about the chosen numbers.
+    pub(crate) fn chosen_number_value(&mut self, name: &str) -> Option<String> {
+        Some(match name {
+            HIGHEST_NUMBER => "{alt:the highest number|the highest number chosen|that much}".into(),
+            LOWEST_NUMBER => "the lowest number".into(),
+            OWN_NUMBER => "the number they chose".into(),
+            crate::oracle::patterns::conditions_compare::PLAYERS_LOST_GAME => {
+                "the number of players who have lost the game".into()
+            }
+            crate::choices::CHOSEN_COLORS_IT_IS => "the number of the chosen colors it is".into(),
+            // CR 701.38a: the votes the player performing the instruction received.
+            crate::kwa::vote::VOTES_RECEIVED if self.in_as_player => {
+                "the number of votes they received".into()
+            }
+            crate::kwa::vote::VOTES_RECEIVED => "the number of votes you received".into(),
+            _ => return None,
+        })
+    }
+
+    /// A player filter about the chosen numbers, after "each player": "with the highest
+    /// number", "who didn't choose the lowest number".
+    pub(crate) fn chose_number_filter(&mut self, c: Cmp, v: &Value) -> Option<String> {
+        let Value::Custom(n) = v else {
+            return None;
+        };
+        Some(match (c, n.as_str()) {
+            (Cmp::Eq, HIGHEST_NUMBER) => {
+                "{alt:with the highest number|who chose that number|who chose the highest number}"
+                    .into()
+            }
+            (Cmp::Ne, LOWEST_NUMBER) => "who didn't choose the lowest number".into(),
+            (Cmp::Eq, LOWEST_NUMBER) => "who chose the lowest number".into(),
+            _ => return None,
+        })
+    }
+
+    /// Comparisons of custom numbers this module words: "two or more players have lost
+    /// the game", "it's at least one of the chosen colors".
+    pub(crate) fn custom_compare_named(&mut self, name: &str, cmp: Cmp, n: i32) -> Option<String> {
+        match (name, cmp, n) {
+            (crate::oracle::patterns::conditions_compare::PLAYERS_LOST_GAME, Cmp::Ge, n) => Some(
+                format!("{} or more players have lost the game", number_word(n)),
+            ),
+            (crate::choices::CHOSEN_COLORS_IT_IS, Cmp::Ge, 1) => {
+                Some("it's at least one of the chosen colors".into())
+            }
+            _ => None,
+        }
+    }
+
+    /// "If they match" (the chosen numbers).
+    pub(crate) fn chosen_number_condition(&mut self, name: &str) -> Option<String> {
+        (name == NUMBERS_MATCH).then(|| "{alt:they match|those numbers match}".into())
+    }
+
+    /// Instruction sequences about chosen numbers and counted qualities: (text, used).
+    pub(crate) fn chosen_number_seq(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        match v {
+            // "~ deals damage equal to the highest number to each player who chose that
+            // number."
+            [Effect::ForEachPlayer {
+                who: PlayerRef::Each(PlayerFilter::ChoseNumber(c, n)),
+                effect,
+            }, ..] => {
+                let Effect::AsPlayer {
+                    who: PlayerRef::Iterated,
+                    effect: inner,
+                } = effect.as_ref()
+                else {
+                    return None;
+                };
+                let Effect::DealDamage {
+                    source: Sel::This,
+                    amount,
+                    to: Sel::Players(PlayerRef::You),
+                } = inner.as_ref()
+                else {
+                    return None;
+                };
+                let f = self.chose_number_filter(*c, n)?;
+                let m = self.me();
+                let a = self.value(amount);
+                Some((
+                    format!("{m} deals damage equal to {a} to each player {f}"),
+                    1,
+                ))
+            }
+            // "For each vote an opponent received, ~ deals 2 damage to that player and each
+            // creature that player controls." (once for each vote, CR 701.38a).
+            [Effect::ForEach {
+                sel: Sel::Var(crate::kwa::vote::VOTES_CAST),
+                var,
+                effect,
+            }, ..] => {
+                let Effect::If {
+                    cond: Condition::PlayerMatches(PlayerRef::Var(p), pf),
+                    then,
+                    otherwise,
+                } = effect.as_ref()
+                else {
+                    return None;
+                };
+                if p != var || !matches!(otherwise.as_ref(), Effect::Noop) {
+                    return None;
+                }
+                let who = match pf {
+                    PlayerFilter::Opponent => "an opponent",
+                    PlayerFilter::You => "you",
+                    _ => return None,
+                };
+                self.target_vars.push((*var, "that player".into(), false));
+                let t = self.effect(then);
+                Some((format!("for each vote {who} received, {t}"), 1))
+            }
+            // "you gain 1 life for each of the chosen colors it is".
+            [Effect::SetX {
+                value: Value::Mul(k, x),
+            }, Effect::GainLife {
+                who: PlayerRef::You,
+                n: Value::X,
+            }, ..] => {
+                let (Value::Const(k), Value::Custom(name)) = (k.as_ref(), x.as_ref()) else {
+                    return None;
+                };
+                if name != crate::choices::CHOSEN_COLORS_IT_IS {
+                    return None;
+                }
+                Some((
+                    format!("you gain {k} life for each of the chosen colors it is"),
+                    2,
+                ))
+            }
+            _ => None,
+        }
+    }
+
+    /// "Spells cost an additional "Sacrifice a Swamp" to cast for each black mana symbol in
+    /// their mana costs." (a cost repeated once for each such symbol).
+    pub(crate) fn additional_cost_per_symbol(&mut self, cm: &CostModifier) -> Option<String> {
+        let CostChange::AdditionalCost(cost) = &cm.change else {
+            return None;
+        };
+        let [CostPart::Repeated { cost: one, times }] = cost.parts.as_slice() else {
+            return None;
+        };
+        let Value::Custom(n) = times else {
+            return None;
+        };
+        let letter = n.strip_prefix("cost: mana symbols of color in the cost:")?;
+        let color = crate::types::Color::from_letter(letter.chars().next()?)?;
+        if cm.who != PlayerRel::Any || cost.mana.is_some() {
+            return None;
+        }
+        let what = self.cost(one);
+        let what = super::capitalize(&what);
+        let c = color.word();
+        Some(match &cm.applies_to {
+            CostTarget::Spells(Filter::Any) => format!(
+                "spells cost an additional \"{what}\" to cast for each {c} mana symbol in their mana costs"
+            ),
+            CostTarget::Abilities(Filter::Any) => format!(
+                "activated abilities cost an additional \"{what}\" to activate for each {c} mana symbol in their activation costs"
+            ),
+            _ => return None,
+        })
+    }
+
+    /// "If you are one of those players" (a player filter about the chosen numbers).
+    pub(crate) fn you_chose_number(&mut self, pf: &PlayerFilter) -> Option<String> {
+        let PlayerFilter::ChoseNumber(Cmp::Eq, v) = pf else {
+            return None;
+        };
+        matches!(v.as_ref(), Value::Custom(n) if n == HIGHEST_NUMBER)
+            .then(|| "{alt:you are one of those players|you chose the highest number}".into())
+    }
+
+    /// The subject for the players a player filter about chosen numbers names.
+    pub(crate) fn chosen_number_players(&mut self, pf: &PlayerFilter) -> Option<String> {
+        let PlayerFilter::ChoseNumber(c, v) = pf else {
+            return None;
+        };
+        let f = self.chose_number_filter(*c, v)?;
+        let _ = Case::Subj;
+        Some(format!("each player {f}"))
+    }
+}
