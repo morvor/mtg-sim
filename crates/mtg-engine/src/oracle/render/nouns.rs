@@ -790,6 +790,10 @@ impl Renderer<'_> {
                 let s = self.shared_with(s);
                 np.rel.push(format!("that shares a color with {s}"));
             }
+            Filter::SharesManaValue(s) => {
+                let s = self.shared_with(s);
+                np.rel.push(format!("with the same mana value as {s}"));
+            }
             Filter::HasKeyword(k) => np.with.push(self.keyword_kind_word(*k)),
             Filter::HasCounter(k) => np.with_on.push(match k {
                 Some(k) => counter_name(k),

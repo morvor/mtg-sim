@@ -59,6 +59,10 @@ impl KeywordRules for Improvise {
         &[KeywordKind::Improvise]
     }
 
+    fn pays_as_cost_is_paid(&self) -> bool {
+        true
+    }
+
     fn pay_mana_otherwise(
         &self,
         g: &mut Game,

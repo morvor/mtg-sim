@@ -838,6 +838,13 @@ impl Game {
                 .iter()
                 .filter_map(|e| e.object())
                 .any(|x| self.obj(x).chars.colors.intersects(c.colors)),
+            Filter::SharesManaValue(sel) => {
+                let mv = crate::mana_value::mana_value_with(self, id, c);
+                self.eval_sel(sel, ctx)
+                    .iter()
+                    .filter_map(|e| e.object())
+                    .any(|x| crate::mana_value::mana_value_with(self, x, &self.obj(x).chars) == mv)
+            }
             Filter::HasKeyword(k) => c.has_keyword(*k),
             Filter::HasCounter(k) => match k {
                 Some(k) => o.counter(k) > 0,

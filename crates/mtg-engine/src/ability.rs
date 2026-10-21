@@ -1572,6 +1572,9 @@ pub enum Filter {
     SharesCreatureType(Box<Sel>),
     SharesCardType(Box<Sel>),
     SharesColor(Box<Sel>),
+    /// Has the same mana value as one of the selected objects ("protection from each mana
+    /// value among artifacts you control", CR 202.3, 702.16a).
+    SharesManaValue(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
     /// The number of counters of a kind (of all kinds: None) on it compared with a value
@@ -2186,6 +2189,11 @@ pub enum NextTurnPart {
     /// "during [player]'s next combat phase": the first combat phase of a turn of that
     /// player that begins after the effect is created.
     CombatPhase,
+    /// "during that combat phase", "at the beginning of that combat": the additional combat
+    /// phase the instruction before added to this turn (see `kw::added_combat_phases`).
+    /// Nothing waits if it added none; the effect is dropped if that combat phase doesn't
+    /// begin this turn.
+    AddedCombatPhase,
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
@@ -2809,6 +2817,13 @@ pub enum Restriction {
         planeswalkers: bool,
         battles: bool,
     },
+    /// "can't attack [you or] a permanent you control" (Immortal Obligation): no
+    /// planeswalker or battle controlled by a player matching `controller` (with
+    /// [`Restriction::CantAttackPlayer`] for the player).
+    CantAttackPermanentsOf {
+        attackers: Filter,
+        controller: PlayerFilter,
+    },
     /// "is goaded" as a static ability: goaded by the source's controller for as long as
     /// the effect applies (CR 701.15b).
     Goaded(Filter),
@@ -2866,6 +2881,14 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "~ can attack players who attacked you during their last turn as though it didn't
+    /// have defender" (Weathered Sentinels; overrides CR 702.3b for some players): it can
+    /// attack a player for whom `players` holds, evaluated with that player as the
+    /// iterated player ([`PlayerRef::Iterated`]); not planeswalkers or battles.
+    AttackPlayersDespiteDefender {
+        attackers: Filter,
+        players: Box<Condition>,
+    },
     /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
     /// they may attack though their controller hasn't controlled them continuously since
     /// their most recent turn began. With `defender`, only those players and planeswalkers
@@ -3584,6 +3607,10 @@ pub enum StaticEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerModification {
     Hexproof,
+    /// "You have hexproof from blue" (CR 702.11d on a player, Veil of Summer): spells with
+    /// the quality and abilities from sources with it that the player's opponents control
+    /// can't target them.
+    HexproofFrom(Filter),
     Shroud,
     ProtectionFrom(Filter),
     MaxHandSize(Option<Value>),

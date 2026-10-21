@@ -1925,6 +1925,7 @@ impl Renderer<'_> {
                 if matches!(
                     effect,
                     PlayerModification::Hexproof
+                        | PlayerModification::HexproofFrom(_)
                         | PlayerModification::Shroud
                         | PlayerModification::ProtectionFrom(_)
                 ) {
@@ -2811,6 +2812,7 @@ impl Renderer<'_> {
                 let when = match part {
                     NextTurnPart::Turn => format!("during {p} next turn"),
                     NextTurnPart::CombatPhase => format!("during {p} next combat phase"),
+                    NextTurnPart::AddedCombatPhase => "during that combat phase".to_string(),
                 };
                 // "Target opponent skips all combat phases of their next turn."
                 if let Effect::AddReplacement { def, .. } = &**effect {
