@@ -442,3 +442,36 @@ fn each_player_does_a_list(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: each player [does X], [does Y], and [does Z]", priority: 90, parse: each_player_does_a_list } }
+
+/// "Each player exiles all but the bottom six cards of their library face down." (Doomsday
+/// Excruciator): the cards above those.
+fn each_exiles_all_but_the_bottom(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l.trim()).strip_prefix("each player exiles all but the bottom ")?;
+    let (n, r) = parse_number(r)?;
+    let face_down = match r.trim() {
+        "cards of their library face down" => true,
+        "cards of their library" => false,
+        _ => return None,
+    };
+    let n = n.as_const()?;
+    let above = Value::Max(
+        Box::new(Value::c(0)),
+        Box::new(Value::Diff(
+            Box::new(Value::LibrarySize(PlayerRef::You)),
+            Box::new(Value::c(n)),
+        )),
+    );
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(Effect::Exile {
+                what: Sel::TopOfLibrary(PlayerRef::You, above),
+                face_down,
+                link: false,
+            }),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: each player exiles all but the bottom N cards of their library", priority: 90, parse: each_exiles_all_but_the_bottom } }

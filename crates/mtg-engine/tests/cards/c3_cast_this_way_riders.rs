@@ -731,3 +731,26 @@ fn tibalts_trickery_the_controller_casts_the_found_card_and_bottoms_the_rest() {
     assert_eq!(t.zone(t.g.current(bolt2)), Zone::Library(P0));
     assert!(t.g.exile.iter().all(|c| t.g.obj(*c).owner != P0), "{}", t.dump_log());
 }
+
+#[test]
+fn doomsday_excruciator_leaves_each_player_six_cards() {
+    cr!("603.4", "406.3");
+    assert_supported("Doomsday Excruciator");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Swamp", 6);
+    let bottom = t.library_top(P1, "Grizzly Bears");
+    mtg_engine::library::put_on_bottom(&mut t.g, P1, &[bottom]);
+    let spell = t.hand(P0, "Doomsday Excruciator");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), 6, "{}", t.dump_log());
+    assert_eq!(t.library_size(P1), 6);
+    assert_eq!(t.zone(t.g.current(bottom)), Zone::Library(P1));
+    assert!(t.g.exile.iter().all(|c| t.g.obj(*c).face_down));
+    // Not cast: nothing.
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Doomsday Excruciator");
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), 30);
+}
