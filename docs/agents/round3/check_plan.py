@@ -15,7 +15,8 @@ lists must match the snapshot. Exit status 1 on any problem.
 
   check_plan.py           # check the plan files against the snapshot
   check_plan.py --live    # also compare the snapshot with the current release mtg-tools
-                          # (report only: texts supported since, texts new since)
+                          # (texts supported since are reported; a live text that no list
+                          # places is a problem, so the plan is checked against a fresh list)
 """
 import collections
 import glob
@@ -78,6 +79,8 @@ def main():
               f"{len(snap - live)}; new since: {len(live - snap)}")
         for c, t in sorted(live - snap):
             print(f"  NEW {c}: {t[:100]}")
+            if t not in seen:
+                problems.append(f"live text placed nowhere: {t[:100]} [{c}]")
     for p in problems:
         print("PROBLEM", p)
     if problems:
