@@ -3,13 +3,18 @@
 //! - "The next time you would lose the game this turn, instead [effect]." (Stunning
 //!   Reversal): a one-use replacement effect on the game-loss event (CR 104.3, 614.1a),
 //!   for the rest of the turn.
+//! - "Creatures dealt damage by ~ this turn can't be regenerated this turn." (the ability
+//!   Bone Shaman gains): a static restriction on the creatures the source has dealt damage
+//!   to this turn (CR 701.19c), which stops their regeneration shields from replacing
+//!   their destruction.
 //! - "the creature an opponent controls" after "target creature an opponent controls" in
 //!   the same ability ("Target creature you control fights target creature an opponent
 //!   controls. If the creature an opponent controls would die this turn, exile it
 //!   instead."): that target, named again by its own words ("the opponent" for "an
 //!   opponent", as The Last Agni Kai words it).
 
-use super::EffectPattern;
+use super::{EffectPattern, StaticPattern};
+use crate::oracle::CompileContext;
 use crate::ability::*;
 use crate::oracle::effects::{parse_effect_text, Builder};
 use crate::oracle::phrases::end;
@@ -72,3 +77,24 @@ fn next_loss_instead(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "replacements 4: the next time you would lose the game this turn, instead [effect]", priority: 70, parse: next_loss_instead } }
+
+/// "creatures dealt damage by ~ this turn can't be regenerated[ this turn]".
+fn dealt_damage_cant_regenerate(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let l = l.strip_suffix(" this turn").unwrap_or(l);
+    if l != "creatures dealt damage by ~ this turn can't be regenerated" {
+        return None;
+    }
+    let f = Filter::and(vec![
+        Filter::creature(),
+        Filter::DealtDamageThisTurnBy(Box::new(Sel::This)),
+    ]);
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(
+            Restriction::CantBeRegenerated(f),
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "replacements 4: creatures dealt damage by ~ this turn can't be regenerated", priority: 100, parse: dealt_damage_cant_regenerate } }

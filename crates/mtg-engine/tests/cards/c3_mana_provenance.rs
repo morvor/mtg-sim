@@ -97,7 +97,7 @@ fn spoils_of_the_hunt_counts_treasure_mana_and_the_pump_ends() {
     let giant = t.battlefield(P1, "Hill Giant");
     let spoils = t.hand(P0, "Spoils of the Hunt");
     t.cast(P0, spoils)
-        .targets(&[Entity::Object(bear), Entity::Object(giant)])
+        .target(bear).target(giant)
         .go();
     t.resolve_all();
     // Two Treasure mana: +2/+0; the 4-power Bears deals 4 damage to the 3/3 Giant.

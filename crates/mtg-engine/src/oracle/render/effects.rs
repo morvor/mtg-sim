@@ -3288,6 +3288,13 @@ impl Renderer<'_> {
                     // artifacts."
                     _ => self.mods_vp(mods, false),
                 };
+                // X is locked in as the effect is created (Kaza, Roil Chaser: "where X is
+                // the number of Wizards you control as this ability resolves").
+                let vp = if vp.contains("where X is") {
+                    format!("{vp} {{opt:as this ability resolves}}")
+                } else {
+                    vp
+                };
                 format!("the next {f} you cast{d} {vp}")
             }
             Effect::CopySpellRetargeted {
@@ -3708,6 +3715,23 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
+        // "~ deals 2 damage to that player. Prevent X of that damage, where X is the amount
+        // of mana that player paid this way." (Errant Minion; `patterns/prevention_4.rs`).
+        if let [Effect::AddReplacement {
+            def:
+                ReplacementDef {
+                    action: ReplacementAction::PreventAmount(Value::X),
+                    ..
+                },
+            uses: Some(1),
+            ..
+        }, dmg @ Effect::DealDamage { .. }] = v
+        {
+            let b = self.effect(dmg);
+            return format!(
+                "{b}. Prevent X of that damage, where X is the amount of mana that player paid this way"
+            );
+        }
         // "For each artifact or creature card in target opponent's graveyard, add {C} and
         // you gain 1 life." (Spoils of Evil): mana and life scaled by one count.
         if let [Effect::AddMana {

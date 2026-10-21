@@ -42,6 +42,32 @@ impl Renderer<'_> {
     pub(crate) fn qualified_replacement(&mut self, def: &ReplacementDef) -> Option<String> {
         use ReplacementAction as A;
         use ReplacementEvent as E;
+        // "Prevent all damage that would be dealt to a creature by another creature if
+        // they share a color." (Well-Laid Plans).
+        if let (
+            E::Where {
+                event,
+                cond: Condition::Custom(c),
+            },
+            A::Prevent,
+        ) = (&def.event, &def.action)
+        {
+            if c == crate::kw::damage_shares_a_color::SOURCE_AND_RECIPIENT_SHARE_A_COLOR {
+                if let E::Damage {
+                    source,
+                    to_players: None,
+                    to_objects: Some(to),
+                    combat_only: false,
+                } = event.as_ref()
+                {
+                    let to = self.noun_det(to, Det::A);
+                    let from = self.noun(source, Num::One);
+                    return Some(format!(
+                        "prevent all damage that would be dealt to {to} by another {from} if they share a color"
+                    ));
+                }
+            }
+        }
         match (&def.event, &def.action) {
             (
                 E::DiscardCausedBy { who, filter, by },

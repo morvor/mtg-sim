@@ -2306,7 +2306,7 @@ impl Renderer<'_> {
                 format!("{} can't be sacrificed", subj(self, f))
             }
             Restriction::CantBeRegenerated(f) => {
-                format!("{} can't be regenerated", subj(self, f))
+                format!("{} can't be regenerated {{opt:this turn}}", subj(self, f))
             }
             Restriction::DamageCantBePrevented => "damage can't be prevented".into(),
             Restriction::CombatDamageCantBePrevented(f) => {

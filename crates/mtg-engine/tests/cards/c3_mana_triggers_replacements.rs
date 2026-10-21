@@ -216,7 +216,7 @@ fn unnatural_aggression_exiles_the_opponents_creature_if_it_would_die() {
     t.lands(P0, "Forest", 3);
     let spell = t.hand(P0, "Unnatural Aggression");
     t.cast(P0, spell)
-        .targets(&[Entity::Object(giant), Entity::Object(bears)])
+        .target(giant).target(bears)
         .go();
     t.resolve_all();
     assert_eq!(t.zone(t.g.current(bears)), Zone::Exile);
@@ -228,7 +228,7 @@ fn unnatural_aggression_exiles_the_opponents_creature_if_it_would_die() {
     t.lands(P0, "Forest", 3);
     let spell = t.hand(P0, "Unnatural Aggression");
     t.cast(P0, spell)
-        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .target(bears).target(giant)
         .go();
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
