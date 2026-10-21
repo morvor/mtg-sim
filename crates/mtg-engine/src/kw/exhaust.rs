@@ -94,6 +94,24 @@ impl KeywordRules for Exhaust {
         used == 0 || may_activate_again(g, p)
     }
 
+    /// Once an exhaust ability has begun to be activated, an effect that applies only "as
+    /// long as you haven't activated an exhaust ability this turn" no longer lets another
+    /// one that was activated before be activated during it (CR 702.177b: Loot's exhaust
+    /// mana ability can't pay for Elvish Refueler's exhaust ability).
+    fn activation_allowed_during(
+        &self,
+        g: &Game,
+        _p: PlayerId,
+        src: ObjectId,
+        a: &Ability,
+        during: (ObjectId, u64),
+    ) -> bool {
+        if !is_exhaust(a) || !exhaust_uid(g, during.0, during.1) {
+            return true;
+        }
+        g.obj(src).activations.get(&a.uid).copied().unwrap_or(0) == 0
+    }
+
     /// "Whenever you activate an exhaust ability" (mana abilities included: they're
     /// recorded as they're activated).
     fn custom_trigger(

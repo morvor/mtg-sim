@@ -533,9 +533,18 @@ fn loots_exhaust_mana_ability_cant_be_activated_while_activating_elvish_refueler
         t.g.recompute();
         t.g.turn.priority = Some(P0);
         let src = t.g.current(src);
-        t.g.legal_actions(P0).iter().any(|a| {
-            matches!(a, Action::Activate { source, ability } if *source == src && *ability == uid)
-        })
+        let a = t
+            .obj(src)
+            .chars
+            .abilities
+            .iter()
+            .find(|a| a.uid == uid)
+            .cloned()
+            .expect("ability");
+        let mtg_engine::ability::AbilityKind::Activated(act) = &a.kind else {
+            panic!("not an activated ability");
+        };
+        t.g.can_activate(P0, src, &a, act)
     };
     let add = |t: &mut TestGame, ty: ManaType, n: u32| {
         t.g.players[P0.idx()].mana_pool.add_type(ty, n);
@@ -565,10 +574,7 @@ fn loots_exhaust_mana_ability_cant_be_activated_while_activating_elvish_refueler
     // Control: Loot's mana ability was never activated. Activating the Refueler's
     // exhaust ability again (the Refueler allows it), Loot's mana ability can pay for it.
     let (mut t, elf, loot, elf_ex, _) = setup(false);
-    let ok = activatable(&mut t, elf, elf_ex);
-    t.g.turn.priority = Some(P0);
-    let r = t.g.activate_ability(P0, elf, elf_ex);
-    panic!("{ok} {r:?} {}", t.dump_log());
+    assert!(activatable(&mut t, elf, elf_ex));
     t.g.turn.priority = Some(P0);
     t.g.activate_ability(P0, elf, elf_ex).unwrap();
     assert!(t.obj_now(loot).tapped, "{}", t.dump_log());
