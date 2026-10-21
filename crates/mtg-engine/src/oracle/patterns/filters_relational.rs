@@ -69,8 +69,8 @@ pub fn resolve_they(e: Effect) -> Effect {
     if !v.to_string().contains(&needle) {
         return e;
     }
-    let iterated = serde_json::to_string(&Filter::ControlledBy(PlayerRel::Iterated))
-        .unwrap_or_default();
+    let iterated =
+        serde_json::to_string(&Filter::ControlledBy(PlayerRel::Iterated)).unwrap_or_default();
     fn walk(v: &mut serde_json::Value, needle: &str, with: &str) {
         match v {
             serde_json::Value::Object(m) => {
@@ -189,8 +189,7 @@ pub fn unresolved(a: &AbilityDef) -> bool {
         return false;
     };
     let s = v.to_string();
-    if s.contains(&referent_needle()) || s.contains(&that_needle()) || s.contains(&they_needle())
-    {
+    if s.contains(&referent_needle()) || s.contains(&that_needle()) || s.contains(&they_needle()) {
         return true;
     }
     if !s.contains("\"Together\"") {
@@ -245,9 +244,13 @@ pub fn unresolved(a: &AbilityDef) -> bool {
                 if let Some(serde_json::Value::Array(parts)) = m.get_mut("parts") {
                     for part in parts {
                         if let serde_json::Value::Object(pm) = part {
-                            for key in
-                                ["Sacrifice", "Discard", "Exile", "TapUntapped", "RevealFromHand"]
-                            {
+                            for key in [
+                                "Sacrifice",
+                                "Discard",
+                                "Exile",
+                                "TapUntapped",
+                                "RevealFromHand",
+                            ] {
                                 strip_filter(pm, key);
                             }
                         }
@@ -319,9 +322,9 @@ pub fn value_in(t: &str) -> Option<(Value, &str)> {
                 if word_end(rest) && !mentions_referent(&f) {
                     let theirs = Filter::and(vec![
                         f,
-                        Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(
-                            Box::new(Sel::Var(vars::TESTED)),
-                        ))),
+                        Filter::ControlledByPlayer(Box::new(PlayerRef::ControllerOf(Box::new(
+                            Sel::Var(vars::TESTED),
+                        )))),
                     ]);
                     return Some((Value::Count(theirs), rest));
                 }
@@ -332,7 +335,11 @@ pub fn value_in(t: &str) -> Option<(Value, &str)> {
         // A value naming an object ("the number of counters on it") ends at the object.
         let rest = tail_of(t, &rest)?;
         // "that creature's power": not the source's.
-        let v = if t.starts_with("that ") { as_that(v) } else { v };
+        let v = if t.starts_with("that ") {
+            as_that(v)
+        } else {
+            v
+        };
         return Some((v, rest));
     }
     // "that creature's power", "the chosen creature's toughness".
@@ -403,7 +410,11 @@ pub fn object_in(t: &str) -> Option<(Sel, &str)> {
         return None;
     }
     // "that creature", "the chosen card": not the source.
-    let sel = if t.starts_with("it") { sel } else { as_that(sel) };
+    let sel = if t.starts_with("it") {
+        sel
+    } else {
+        as_that(sel)
+    };
     Some((sel, tail_of(t, &rest)?))
 }
 
@@ -493,7 +504,10 @@ fn bound(t: &str) -> Option<(Cmp, Value, &str)> {
     if let Some(rest) = r.strip_prefix("or less") {
         return Some((Cmp::Le, n, rest));
     }
-    if let Some(rest) = r.strip_prefix("or greater").or_else(|| r.strip_prefix("or more")) {
+    if let Some(rest) = r
+        .strip_prefix("or greater")
+        .or_else(|| r.strip_prefix("or more"))
+    {
         return Some((Cmp::Ge, n, rest));
     }
     None
@@ -502,7 +516,9 @@ fn bound(t: &str) -> Option<(Cmp, Value, &str)> {
 /// "its power", "their toughness": the tested object's own stat (in "with toughness
 /// greater than its power" the pronoun is the object described).
 fn own_stat(t: &str) -> Option<(Stat, &str)> {
-    let r = t.strip_prefix("its ").or_else(|| t.strip_prefix("their "))?;
+    let r = t
+        .strip_prefix("its ")
+        .or_else(|| t.strip_prefix("their "))?;
     stat_word(r)
 }
 
@@ -545,7 +561,12 @@ fn with_comparison<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)
             Some(o) => object_in(o)?,
             None => (referent(), x),
         };
-        let total = |s: Sel| Value::Sum(vec![stat_of(Stat::Power, s.clone()), stat_of(Stat::Toughness, s)]);
+        let total = |s: Sel| {
+            Value::Sum(vec![
+                stat_of(Stat::Power, s.clone()),
+                stat_of(Stat::Toughness, s),
+            ])
+        };
         let f = Filter::ValueCmp(
             Box::new(total(Sel::Var(vars::TESTED))),
             Cmp::Eq,
@@ -765,6 +786,22 @@ fn shares_with<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
     } else {
         return None;
     };
+    // "that shares a creature type with each creature tapped this way" (Cryptic
+    // Gateway): with every one of them, not just one (a type in common with each, not
+    // necessarily the same type).
+    if let Some(x) = r.strip_prefix("each ") {
+        if kind != 0 || negate {
+            return None;
+        }
+        let (f, false, rest) = parse_object_phrase(x)? else {
+            return None;
+        };
+        let sel = Sel::All(f);
+        return Some((
+            crate::kw::referents_values_4::shares_creature_type_with_each(&sel),
+            rest,
+        ));
+    }
     let (sel, rest) = object_in(r)?;
     let sel = Box::new(sel);
     let f = match kind {
@@ -943,7 +980,11 @@ fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
         let (more, _, tail) = parse_object_phrase(&probe)?;
         let more = match more {
             Filter::Card => Filter::Any,
-            Filter::And(v) => Filter::and(v.into_iter().filter(|x| !matches!(x, Filter::Card)).collect()),
+            Filter::And(v) => Filter::and(
+                v.into_iter()
+                    .filter(|x| !matches!(x, Filter::Card))
+                    .collect(),
+            ),
             other => other,
         };
         f = Filter::and(vec![
@@ -994,9 +1035,13 @@ fn target_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
     // "target creature card and all other cards with the same name as that card from
     // your graveyard": the zone is the target's too.
     let consumed = &after[..after.len() - rest.len()];
-    let head = match ["from your graveyard", "from a graveyard", "in your graveyard"]
-        .iter()
-        .find(|z| consumed.contains(*z))
+    let head = match [
+        "from your graveyard",
+        "from a graveyard",
+        "in your graveyard",
+    ]
+    .iter()
+    .find(|z| consumed.contains(*z))
     {
         Some(z) => format!("{head} {z}"),
         None => head.to_string(),
@@ -1147,7 +1192,11 @@ fn player_edict(l: &str, b: &mut Builder) -> Option<Effect> {
             let f: Filter = serde_json::from_str(&s.replace(&they_needle(), &with)).ok()?;
             Filter::and(vec![f, Filter::ControlledBy(rel)])
         };
-        let chooser = if many { PlayerRef::Iterated } else { who.clone() };
+        let chooser = if many {
+            PlayerRef::Iterated
+        } else {
+            who.clone()
+        };
         let pick = Sel::Choose {
             chooser,
             filter: filter.clone(),
@@ -1245,8 +1294,7 @@ fn tied_you_choose(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     if !r.ends_with(", you choose one of them") {
         return false;
     }
-    serde_json::to_string(prev)
-        .is_ok_and(|j| j.contains("\"Extreme\"") && j.contains("\"Choose\""))
+    serde_json::to_string(prev).is_ok_and(|j| j.contains("\"Extreme\"") && j.contains("\"Choose\""))
 }
 
 inventory::submit! { super::FollowupPattern { name: "relational: tied for greatest, you choose", priority: 100, apply: tied_you_choose } }
@@ -1307,10 +1355,17 @@ fn subject_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
     let whole = object_ref(head, b).filter(|(_, r)| r.trim().is_empty());
     let subject = whole.is_some();
     let found = whole.or_else(|| {
-        ["that creature", "that permanent", "it", "~", "enchanted creature", "equipped creature"]
-            .iter()
-            .filter(|p| head.ends_with(&format!(" {p}")))
-            .find_map(|p| object_ref(p, b))
+        [
+            "that creature",
+            "that permanent",
+            "it",
+            "~",
+            "enchanted creature",
+            "equipped creature",
+        ]
+        .iter()
+        .filter(|p| head.ends_with(&format!(" {p}")))
+        .find_map(|p| object_ref(p, b))
     });
     let Some((x, hrest)) = found else {
         restore(b);
@@ -1331,15 +1386,17 @@ fn subject_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         let f = substitute(&other_than_it(f, &x), &x)?;
         // "other" relative to it even when written without a qualifier on "other".
-        let f = if serde_json::to_string(&f)
-            .is_ok_and(|j| j.contains(&serde_json::to_string(&Filter::not(Filter::In(Box::new(x.clone())))).unwrap_or_default()))
-        {
+        let f = if serde_json::to_string(&f).is_ok_and(|j| {
+            j.contains(
+                &serde_json::to_string(&Filter::not(Filter::In(Box::new(x.clone()))))
+                    .unwrap_or_default(),
+            )
+        }) {
             f
         } else {
             Filter::and(vec![f, Filter::not(Filter::In(Box::new(x.clone())))])
         };
-        if !crate::relational::groups_of(&f).is_empty() || crate::relational::has_nested_group(&f)
-        {
+        if !crate::relational::groups_of(&f).is_empty() || crate::relational::has_nested_group(&f) {
             return None;
         }
         // The rest of the instruction, said of the subject alone.
@@ -1441,7 +1498,10 @@ fn objects_for_value(t: &str, b: &mut Builder) -> Option<(Sel, String)> {
         // So is a relative clause ("other spells you've cast this turn").
         let next = rest.split_whitespace().next().unwrap_or("");
         if (next.ends_with("ed") && next != "and")
-            || matches!(next, "you" | "you've" | "they" | "they've" | "that" | "which")
+            || matches!(
+                next,
+                "you" | "you've" | "they" | "they've" | "that" | "which"
+            )
         {
             return None;
         }
@@ -1514,9 +1574,8 @@ pub fn value_of_objects(s: &str, b: &mut Builder) -> Option<(Value, String)> {
         let r = r.trim_start().strip_prefix("of ")?;
         // The core reads a plain description for power and toughness.
         if stat != Stat::ManaValue
-            && parse_object_phrase(r).is_some_and(|(_, plural, rest)| {
-                plural && !rest.trim_start().starts_with("and ")
-            })
+            && parse_object_phrase(r)
+                .is_some_and(|(_, plural, rest)| plural && !rest.trim_start().starts_with("and "))
         {
             return None;
         }
@@ -1542,9 +1601,8 @@ pub fn value_of_objects(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     // The core reads "the greatest power/mana value among [a description]".
     if greatest
         && stat != Stat::Toughness
-        && parse_object_phrase(r).is_some_and(|(_, plural, rest)| {
-            plural && !rest.trim_start().starts_with("and ")
-        })
+        && parse_object_phrase(r)
+            .is_some_and(|(_, plural, rest)| plural && !rest.trim_start().starts_with("and "))
     {
         return None;
     }
@@ -1710,7 +1768,10 @@ fn return_one_to_hand(l: &str, b: &mut Builder) -> Option<Effect> {
     if !(r.starts_with("a ") || r.starts_with("an ") || r.starts_with("another ")) {
         return None;
     }
-    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")).unwrap_or(r);
+    let r = r
+        .strip_prefix("a ")
+        .or_else(|| r.strip_prefix("an "))
+        .unwrap_or(r);
     let (f, plural, rest) = parse_object_phrase(r)?;
     if plural || rest.trim() != "to its owner's hand" {
         return None;
@@ -1815,7 +1876,9 @@ fn target_player_other_than(l: &str, b: &mut Builder) -> Option<Effect> {
         (" other than ~'s controller", PlayerRef::You),
     ]
     .into_iter()
-    .find(|(p, _)| l.contains(&format!("target player{p}")) || l.contains(&format!("target opponent{p}")))
+    .find(|(p, _)| {
+        l.contains(&format!("target player{p}")) || l.contains(&format!("target opponent{p}"))
+    })
     .map(|(p, r)| (r, p))?;
     let rewritten = l.replacen(phrase, "", 1);
     let before = b.targets.len();

@@ -744,6 +744,10 @@ pub struct TargetSpec {
     pub distinct_from: Vec<u8>,
     /// "Divide N damage among any number of targets" (CR 601.2d).
     pub divide: Option<Value>,
+    /// With `divide`: "distribute up to N counters": the amount divided is chosen too,
+    /// from the number of targets up to N.
+    #[serde(default)]
+    pub divide_up_to: bool,
     /// Targets chosen by an opponent (CR 601.7).
     pub chosen_by_opponent: bool,
     /// Human-readable description ("target creature you control").
@@ -903,6 +907,7 @@ impl TargetSpec {
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
+            divide_up_to: false,
             chosen_by_opponent: false,
             text: text.into(),
             condition: None,
@@ -1019,6 +1024,12 @@ pub mod vars {
     /// Permanents the most recent phase-out instruction phased out, directly or
     /// indirectly (CR 702.26g): "each creature that phased out this way".
     pub const PHASED_OUT: Var = USER + 12_100;
+    /// Players dealt damage by the most recent damage effect ("if a player is dealt
+    /// damage this way", "the number of opponents dealt damage this way").
+    pub const DAMAGED_PLAYERS: Var = USER + 14_000;
+    /// Objects the most recent "becomes"/"gets" instruction (`Effect::Modify`) applied to
+    /// ("each artifact that became a creature this way").
+    pub const MODIFIED: Var = USER + 14_020;
 }
 
 /// Selects players and/or objects.
@@ -1552,6 +1563,9 @@ pub enum Filter {
     SharesCreatureType(Box<Sel>),
     SharesCardType(Box<Sel>),
     SharesColor(Box<Sel>),
+    /// Has the same mana value as one of the selected objects ("protection from each mana
+    /// value among artifacts you control", CR 202.3, 702.16a).
+    SharesManaValue(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
     /// The number of counters of a kind (of all kinds: None) on it compared with a value
@@ -1940,6 +1954,8 @@ pub enum Among {
     /// Card types that are permanent types (CR 110.4a).
     PermanentTypes,
     CreatureTypes,
+    /// Planeswalker types (CR 205.3j) of planeswalkers.
+    PlaneswalkerTypes,
     /// Plains, Island, Swamp, Mountain, Forest (CR 205.3i).
     BasicLandTypes,
     Colors,
@@ -2140,6 +2156,11 @@ pub enum NextTurnPart {
     /// "during [player]'s next combat phase": the first combat phase of a turn of that
     /// player that begins after the effect is created.
     CombatPhase,
+    /// "during that combat phase", "at the beginning of that combat": the additional combat
+    /// phase the instruction before added to this turn (see `kw::added_combat_phases`).
+    /// Nothing waits if it added none; the effect is dropped if that combat phase doesn't
+    /// begin this turn.
+    AddedCombatPhase,
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
@@ -2763,6 +2784,13 @@ pub enum Restriction {
         planeswalkers: bool,
         battles: bool,
     },
+    /// "can't attack [you or] a permanent you control" (Immortal Obligation): no
+    /// planeswalker or battle controlled by a player matching `controller` (with
+    /// [`Restriction::CantAttackPlayer`] for the player).
+    CantAttackPermanentsOf {
+        attackers: Filter,
+        controller: PlayerFilter,
+    },
     /// "is goaded" as a static ability: goaded by the source's controller for as long as
     /// the effect applies (CR 701.15b).
     Goaded(Filter),
@@ -2820,6 +2848,14 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "~ can attack players who attacked you during their last turn as though it didn't
+    /// have defender" (Weathered Sentinels; overrides CR 702.3b for some players): it can
+    /// attack a player for whom `players` holds, evaluated with that player as the
+    /// iterated player ([`PlayerRef::Iterated`]); not planeswalkers or battles.
+    AttackPlayersDespiteDefender {
+        attackers: Filter,
+        players: Box<Condition>,
+    },
     /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
     /// they may attack though their controller hasn't controlled them continuously since
     /// their most recent turn began. With `defender`, only those players and planeswalkers
@@ -3538,6 +3574,10 @@ pub enum StaticEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerModification {
     Hexproof,
+    /// "You have hexproof from blue" (CR 702.11d on a player, Veil of Summer): spells with
+    /// the quality and abilities from sources with it that the player's opponents control
+    /// can't target them.
+    HexproofFrom(Filter),
     Shroud,
     ProtectionFrom(Filter),
     MaxHandSize(Option<Value>),

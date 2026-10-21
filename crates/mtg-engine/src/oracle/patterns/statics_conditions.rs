@@ -198,6 +198,14 @@ fn object_has(r: &str, sel: &Sel) -> Option<Condition> {
         "attacked this turn" => {
             return Some(Condition::SelMatches(sel.clone(), Filter::AttackedThisTurn))
         }
+        // Declared as an attacker this combat (Tolsimir, Midnight's Light).
+        "attacked this combat" => {
+            return Some(Condition::SelMatches(sel.clone(), Filter::AttackedThisCombat))
+        }
+        // CR 506.7 (Firkraag, Cunning Instigator).
+        "had to attack this combat" => {
+            return Some(Condition::SelMatches(sel.clone(), Filter::HadToAttack))
+        }
         "attacked a battle this turn" => {
             return Some(Condition::SelMatches(
                 sel.clone(),

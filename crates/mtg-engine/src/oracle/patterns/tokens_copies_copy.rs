@@ -53,6 +53,11 @@ fn exception_clauses(masked: &str) -> Vec<String> {
         .replace(" other types and have ", " other types|they have ")
         // "it isn't legendary and is a Mutant in addition to its other types" (The
         // Cloning of Shredder).
+        // "it isn't legendary, is a Reflection in addition to its other types, and has
+        // haste" (The Apprentice's Folly): a serial list with the subject left out.
+        .replace(" other types, and has ", " other types|it has ")
+        .replace(", is a ", "|it's a ")
+        .replace(", is an ", "|it's an ")
         .replace(" and is a ", "|it's a ")
         .replace(" and is an ", "|it's an ")
         // "except it's 0/0 and has this ability" (Mimeoplasm, Revered One).

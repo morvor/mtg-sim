@@ -491,7 +491,8 @@ fn copy_exceptions_ext(s: &str, ctx: &CompileContext) -> Option<(Vec<Modificatio
     while i < words.len() {
         let w = words[i];
         let next = words.get(i + 1).copied().unwrap_or("");
-        let starts = |n: &str| n == "it" || n == "if" || n.starts_with("it's") || n == "it";
+        let starts =
+            |n: &str| n == "it" || n == "if" || n.starts_with("it's") || n == "its";
         if (w == "and" || w == "and,") && starts(next) && !cur.is_empty() {
             clauses.push(cur.trim().trim_end_matches(',').to_string());
             cur.clear();
@@ -582,6 +583,17 @@ fn copy_exceptions_ext(s: &str, ctx: &CompileContext) -> Option<(Vec<Modificatio
         }
         if only_if.is_some() {
             return None;
+        }
+        // "its power and toughness are equal to ~'s power and toughness" (Hulking
+        // Metamorph): this object's own power and toughness as it enters, its printed or
+        // prototype values (CR 707.9b; the ruling "Use the appropriate printed power and
+        // toughness"). Fixed as the replacement applies.
+        if c == "its power and toughness are equal to ~'s power and toughness" {
+            mods.push(Modification::SetPT(
+                Some(Value::PowerOf(Box::new(Sel::This))),
+                Some(Value::ToughnessOf(Box::new(Sel::This))),
+            ));
+            continue;
         }
         // "it's legendary and snow in addition to its other types"
         if let Some(r) = c

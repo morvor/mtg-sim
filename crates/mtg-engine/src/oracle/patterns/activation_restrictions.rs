@@ -493,6 +493,9 @@ pub(crate) enum Who {
     Opponents,
     /// "Only the controller of the enchanted creature may activate this ability."
     EnchantedController,
+    /// "Only the player ~ is attacking may activate this ability" (Capricopian): the
+    /// player the source is attacking (not a planeswalker or battle, CR 506.2).
+    AttackedPlayer,
 }
 
 /// A restriction sentence (lowercase, with or without its period): its clauses and who
@@ -515,6 +518,10 @@ pub(crate) fn restriction_sentence(s: &str, ctx: &CompileContext) -> Option<(Vec
         (
             "only the controller of the enchanted creature may activate this ability",
             Who::EnchantedController,
+        ),
+        (
+            "only the player ~ is attacking may activate this ability",
+            Who::AttackedPlayer,
         ),
     ] {
         if let Some(r) = s.strip_prefix(head) {
@@ -573,6 +580,12 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
             }
         }
     }
+    if who == Who::AttackedPlayer {
+        conds.push(Condition::SelMatches(
+            Sel::This,
+            Filter::AttackingPlayer(PlayerRel::Any),
+        ));
+    }
     act.condition = match conds.len() {
         0 => None,
         1 => conds.pop(),
@@ -586,6 +599,9 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
             act.activator = Some(PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(
                 Box::new(Sel::AttachedTo),
             ))))
+        }
+        Who::AttackedPlayer => {
+            act.activator = Some(PlayerFilter::Ref(Box::new(PlayerRef::DefendingPlayer)))
         }
     }
     Some(())

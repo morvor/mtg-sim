@@ -22,7 +22,12 @@ use crate::oracle::CompileContext;
 fn sides(cond: &str) -> Option<(String, String)> {
     let cond = cond.trim();
     // "A is less than B" / "A is greater than B".
-    for (w, greater_first) in [(" is less than ", false), (" is greater than ", true)] {
+    for (w, greater_first) in [
+        (" is less than ", false),
+        (" is greater than ", true),
+        (" was less than ", false),
+        (" was greater than ", true),
+    ] {
         if let Some((a, b)) = cond.split_once(w) {
             return Some(if greater_first {
                 (a.to_string(), b.to_string())
@@ -60,14 +65,20 @@ fn sides(cond: &str) -> Option<(String, String)> {
                 .and_then(|x| x.strip_suffix(" cards in hand"))
             {
                 return Some((
-                    format!("the number of cards in {} hand", player_possessive(subject)?),
+                    format!(
+                        "the number of cards in {} hand",
+                        player_possessive(subject)?
+                    ),
                     n.to_string(),
                 ));
             }
         }
     }
     // "that player lost less than 8 life this turn".
-    for (subject, verb) in [("that player", " lost less than "), ("you", " lost less than ")] {
+    for (subject, verb) in [
+        ("that player", " lost less than "),
+        ("you", " lost less than "),
+    ] {
         if let Some(n) = cond
             .strip_prefix(subject)
             .and_then(|r| r.strip_prefix(verb))
@@ -172,7 +183,11 @@ fn rewrite(text: &str) -> Option<String> {
     // "If that creature has greater power than ~": the condition is read in the same words
     // as the calculation, so that "that creature" names the same object in both.
     let head = if cond.starts_with("that ") && !cond.starts_with("that player ") {
-        format!("{}{big} is greater than {small}{}", &text[..i + 3], &text[cond_end..d])
+        format!(
+            "{}{big} is greater than {small}{}",
+            &text[..i + 3],
+            &text[cond_end..d]
+        )
     } else {
         text[..d].to_string()
     };

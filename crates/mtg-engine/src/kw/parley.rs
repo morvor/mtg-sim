@@ -38,6 +38,8 @@ fn reveal_tops(g: &mut Game, ctx: &mut Ctx) {
     }
     // "You may put the revealed cards into their owners' graveyards." (`dig_grammar`).
     crate::dig_steps::set_dug(ctx, revealed.clone());
+    // "If no creature cards were revealed this way" (`conditions_this_way`).
+    ctx.set_var(vars::REVEALED, revealed.clone());
     ctx.set_var(REVEALED, revealed);
 }
 

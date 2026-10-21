@@ -521,6 +521,30 @@ fn damage_recipient(s: &str, b: &mut Builder) -> Option<(Sel, String, bool)> {
         let slot = b.add_target(spec, &text);
         return Some((Sel::Target(slot), rest.to_string(), true));
     }
+    // "any target other than that permanent" (Toralf, God of Fury): not the object the
+    // text named (a player is never it).
+    if let Some(r) = s.strip_prefix("any target other than that ") {
+        let named = format!("that {r}");
+        let (sel, rest) = object_ref(&named, b)?;
+        if matches!(sel, Sel::All(_) | Sel::Choose { .. }) {
+            return None;
+        }
+        let any = Filter::Or(vec![
+            Filter::creature(),
+            Filter::Type(crate::types::CardType::Planeswalker),
+            Filter::Type(crate::types::CardType::Battle),
+        ]);
+        let text = s[..s.len() - rest.len()].trim().to_string();
+        let spec = TargetSpec::one(
+            TargetKind::ObjectOrPlayer(
+                Filter::and(vec![any, Filter::not(Filter::In(Box::new(sel)))]),
+                PlayerFilter::Any,
+            ),
+            text.clone(),
+        );
+        let slot = b.add_target(spec, &text);
+        return Some((Sel::Target(slot), rest.to_string(), true));
+    }
     // "target player who attacked this turn"
     if let Some(r) = s.strip_prefix("target player who attacked this turn") {
         let spec = TargetSpec::player(
