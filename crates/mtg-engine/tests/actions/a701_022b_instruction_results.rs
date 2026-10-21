@@ -1,6 +1,6 @@
 //! What an instruction reports to the instructions after it ("if you do", "that many",
 //! CR 608.2c): scrying 0 isn't scrying (CR 701.22b); turning a permanent face down is
-//! doing it; putting one object's counters on another counts the counters put (CR 122.8).
+//! doing it; putting one object's counters on another counts the counters put.
 
 use crate::a701_common::*;
 use mtg_engine::ability::*;
@@ -57,7 +57,7 @@ fn turning_a_creature_face_down_is_doing_it() {
 
 #[test]
 fn that_many_after_putting_its_counters_on_another_creature() {
-    cr!("122.8", "608.2c");
+    cr!("608.2c");
     let mut t = TestGame::new(2);
     let from = t.battlefield(P0, "Grizzly Bears");
     let to = t.battlefield(P0, "Hill Giant");
