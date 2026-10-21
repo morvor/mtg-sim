@@ -3537,7 +3537,7 @@ impl Game {
         match part {
             CostPart::Tap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
-                if !self.tap(s) {
+                if !self.tap_with(s, false, Some(p), false) {
                     return bad("can't tap");
                 }
             }
@@ -3832,7 +3832,7 @@ impl Game {
                 for o in pick {
                     paid.objects.push(o);
                     paid.tapped.push(o);
-                    self.tap(o);
+                    self.tap_with(o, false, Some(p), false);
                 }
             }
             // Crew (CR 702.122a): see `kw/crew.rs`.

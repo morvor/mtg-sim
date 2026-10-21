@@ -314,6 +314,20 @@ pub struct TriggeredAbility {
     /// controller hasn't taken the optional action this turn (CR 603.2h).
     #[serde(default)]
     pub do_once_per_turn: bool,
+    /// "This ability triggers only once." / "This ability triggers only twice each turn."
+    /// (see `trigger_limits.rs`).
+    #[serde(default)]
+    pub limit: Option<TriggerLimit>,
+}
+
+/// How many times a triggered ability may trigger ([`TriggeredAbility::limit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerLimit {
+    /// "This ability triggers only once.": once for as long as its source is the same
+    /// object (CR 400.7; Acrobatic Cheerleader's rulings).
+    Once,
+    /// "This ability triggers only twice each turn.": that many times each turn.
+    PerTurn(u32),
 }
 
 /// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
@@ -325,6 +339,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
+            | TriggerCond::ThisCombat(t)
             | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
             _ => false,
         }
@@ -356,6 +371,7 @@ impl TriggeredAbility {
             zone: FunctionZone::Battlefield,
             cant_be_countered: false,
             do_once_per_turn: false,
+            limit: None,
         }
     }
 }
@@ -1132,6 +1148,10 @@ pub enum SeatSide {
 
 /// The counter kind standing for the kind chosen by [`Effect::ChooseCounterKind`].
 pub const CHOSEN_COUNTER_KIND: &str = "chosen-kind";
+/// The counter kind of a [`ReplacementAction::EnterWithCounters`] that stands for each kind
+/// of counter on the replacement effect's source ("For each kind of counter on ~, each
+/// other Dinosaur you control enters with a counter of that kind on it").
+pub const EACH_KIND_ON_SOURCE: &str = "each-kind-on-source";
 
 /// Refers to one or more players.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1393,6 +1413,10 @@ pub enum SpecialActionEffect {
     /// other static abilities don't apply to that player (or to objects they control)
     /// until end of turn.
     IgnoreSourceEffects,
+    /// "[delayed instruction] unless [that player] pays {2} before that step" (CR 116.2c):
+    /// stops the delayed triggered ability the effect offering it created just before
+    /// (Glass Asp); it can be taken only while that ability hasn't triggered.
+    StopDelayedTrigger,
 }
 
 /// How an effect changes the targets of a spell or ability (CR 115.7).
@@ -2094,12 +2118,28 @@ pub enum Duration {
     /// "until your next upkeep", "until your next end step": until that step of the
     /// controller's turn next begins (CR 500.4).
     UntilYourNextStep(TriggerStep),
+    /// "until end of combat on your next turn": until the first combat phase of the
+    /// controller's next turn ends, or that turn ends if it has none (see
+    /// `next_turn::expire_end_of_combat_on_next_turn`).
+    UntilEndOfCombatOnYourNextTurn,
+    /// "until the next end step": until the next end step (of any turn) begins (CR 500.4).
+    UntilNextStep(TriggerStep),
     /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
     /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
     /// end it).
     UntilPlaneswalk {
         away_from_plane: bool,
     },
+}
+
+/// Which part of a player's next turn an [`Effect::DuringNext`] effect applies during.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NextTurnPart {
+    /// "during [player]'s next turn": the whole turn.
+    Turn,
+    /// "during [player]'s next combat phase": the first combat phase of a turn of that
+    /// player that begins after the effect is created.
+    CombatPhase,
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
@@ -2647,6 +2687,22 @@ pub enum ReplacementAction {
     /// the event creates have these characteristics instead of their own; everything else
     /// the creating effect specifies (tapped, attacking) still applies.
     TokensInstead { spec: TokenSpec },
+    /// "If you would create a Clue, Food, or Treasure token, instead create one of each"
+    /// (`each`: that many of each of `specs`, Academy Manufactor), "you may instead create
+    /// that many 2/2 green Cat creature tokens with haste or that many 3/1 green Dog
+    /// creature tokens with vigilance" (the replacement's controller chooses one of
+    /// `specs`, Jinnie Fay) (CR 614.1a): as [`ReplacementAction::TokensInstead`], the
+    /// tokens' characteristics are replaced; how the effect creates them still applies.
+    TokensInsteadOf { specs: Vec<TokenSpec>, each: bool },
+    /// "instead create that many tokens that are copies of enchanted permanent" (Moonlit
+    /// Meditation; `of`), "instead choose a creature other than ~ and create that many
+    /// tokens that are copies of that creature" (Esix, Fractal Bloom; the replacement's
+    /// controller chooses an object matching `choose`) (CR 614.1a, 707.2): the tokens are
+    /// copies of that object instead. Nothing is replaced if there's nothing to copy.
+    TokenCopiesInstead {
+        of: Option<Sel>,
+        choose: Option<Filter>,
+    },
     /// Subtract N from the amount.
     Subtract(Value),
     /// Redirect damage to the selection.
@@ -2724,6 +2780,13 @@ pub enum Restriction {
     MustAttackPlayer {
         attackers: Filter,
         defender: PlayerFilter,
+    },
+    /// "[attackers] attack ~ (this turn) if able" (Gideon Jura): a requirement that each
+    /// such creature attacks each permanent matching `target` — a planeswalker or battle —
+    /// if able (CR 508.1d).
+    MustAttackObject {
+        attackers: Filter,
+        target: Filter,
     },
     /// "blocks each combat if able".
     MustBlock(Filter),
@@ -4067,6 +4130,10 @@ pub enum TriggerCond {
     /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
     /// step is skipped.
     UntilYourNextTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts for the rest of the combat phase it was
+    /// created in ("whenever that creature deals combat damage to a player this combat",
+    /// CR 603.7b, 506.1): removed as that combat phase ends (CR 500.5a).
+    ThisCombat(Box<TriggerCond>),
     /// The inner damage trigger ("deals damage", "is dealt damage"), for noncombat damage
     /// only: "whenever a source you control deals noncombat damage to an opponent".
     Noncombat(Box<TriggerCond>),
@@ -4336,6 +4403,44 @@ pub enum Effect {
         to: Sel,
         kind: Option<CounterKind>,
     },
+    /// Counters removed from among the objects (or players) of `from`, or moved from them
+    /// onto `to` (CR 122.5), the player choosing how many of each kind come from each:
+    /// "remove any number of counters from among permanents on the battlefield", "you may
+    /// remove three quest counters from among permanents you control", "move any number
+    /// of counters from among creatures you control onto that creature", "move one or
+    /// more counters from ~ onto another target permanent you control". At least `min` in
+    /// all (nothing happens if there aren't that many), at most `max` (`None`: no limit).
+    /// `each_missing_kind`: "move a counter of each kind not on ~ from [object] onto ~",
+    /// one counter of each kind the destination doesn't have. See
+    /// `kw/counter_groups.rs`.
+    CountersFromAmong {
+        from: Sel,
+        to: Option<Sel>,
+        kind: Option<CounterKind>,
+        min: Value,
+        max: Option<Value>,
+        each_missing_kind: bool,
+    },
+    /// "Distribute three +1/+1 counters among one, two, or three creatures you control",
+    /// "... among any number of creatures you control" with no targets: the objects (at
+    /// least `min_objects`, at most `max_objects` and `n`) and the division are chosen as
+    /// it resolves (CR 608.2d), each chosen object getting at least one counter. `up_to`:
+    /// "distribute up to N", the player chooses how many first.
+    DistributeCounters {
+        n: Value,
+        kind: CounterKind,
+        among: Sel,
+        min_objects: u32,
+        max_objects: Option<u32>,
+        up_to: bool,
+    },
+    /// "[they] put the same number and kind of counters on ~", "put one of each of those
+    /// kinds of counters on [object]" (`one_each`): counters of the kind the triggering
+    /// event put (CR 122.6), as many as it put or one.
+    PutEventCounters {
+        to: Sel,
+        one_each: bool,
+    },
     /// Apply layer modifications to the selected objects for a duration (CR 611.2).
     Modify {
         what: Sel,
@@ -4396,6 +4501,13 @@ pub enum Effect {
     /// than them are the creatures already there).
     TokensEnterWithCounters {
         counters: Vec<(CounterKind, Value)>,
+        effect: Box<Effect>,
+    },
+    /// "create a token that's a copy of that permanent attached to that creature" (Arna
+    /// Kennerüd, Skycaptain): the tokens `effect` creates enter attached to `to` (CR
+    /// 303.4f–i, 301.5e); an Aura token that can't legally enchant it isn't created.
+    TokensEnterAttached {
+        to: Sel,
         effect: Box<Effect>,
     },
     /// "Create a Monster Role token attached to it": tokens that enter the battlefield
@@ -4812,6 +4924,17 @@ pub enum Effect {
         step: TriggerStep,
         effect: Box<Effect>,
     },
+    /// "During [player]'s next turn, [effect]", "[effect] during its controller's next
+    /// combat phase": rule-modifying effects (restrictions, requirements, skips) that apply
+    /// only during that player's next turn (each player's, for several players) or the next
+    /// combat phase of that turn's player. `effect` lasts "this turn" (or until end of
+    /// combat); it's created as that turn (combat phase) begins, with "that player"
+    /// ([`PlayerRef::Iterated`]) the player whose turn it is. See `next_turn.rs`.
+    DuringNext {
+        who: PlayerRef,
+        part: NextTurnPart,
+        effect: Box<Effect>,
+    },
     /// "[Player] gets an emblem with [ability]" (CR 114.2): each such player puts an
     /// emblem with the abilities into the command zone; they own and control it.
     CreateEmblem {
@@ -5000,6 +5123,9 @@ pub enum UntilEvent {
     /// "until an opponent becomes the monarch" (an opponent of the effect's controller,
     /// CR 725): it ends when one does, not merely because an opponent is the monarch.
     OpponentBecomesMonarch,
+    /// "until [target enchantment you control] leaves the battlefield": the object chosen
+    /// as the target in that slot, as the effect begins (CR 610.3).
+    TargetLeavesBattlefield(u8),
 }
 
 impl Effect {

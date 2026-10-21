@@ -82,7 +82,15 @@ fn new_targets_for_copy(s: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         end(&l),
         "you may choose new targets for the copy"
             | "you may choose new targets for the copies"
+            // "You copy that spell once plus ... You may choose new targets for the copies
+            // you control." (Tempt with Mayhem): the copies you made last.
+            | "you may choose new targets for the copies you control"
             | "you may choose new targets for that copy"
+            // "copy ~. You may choose a new target for the copy." (a spell with one
+            // target, Ancestral Communion).
+            | "you may choose a new target for the copy"
+            // "you may copy it. If you do, you may choose new targets for the copy."
+            | "if you do, you may choose new targets for the copy"
     ) {
         return false;
     }

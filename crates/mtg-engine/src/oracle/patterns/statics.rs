@@ -3227,7 +3227,7 @@ pub(crate) fn without_spell(f: Filter) -> Option<Filter> {
 /// Zones a spell is cast from: "graveyards or libraries", "graveyards", "exile",
 /// "anywhere other than their hands". A card being cast is still in that zone while
 /// prohibitions are first checked, and on the stack remembers it (CR 601.3).
-fn cast_from_zones(z: &str) -> Option<Filter> {
+pub(crate) fn cast_from_zones(z: &str) -> Option<Filter> {
     let zone = |k: ZoneKind| Filter::Or(vec![Filter::InZone(k), Filter::CastFrom(k)]);
     if matches!(
         z,

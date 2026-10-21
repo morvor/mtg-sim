@@ -40,10 +40,11 @@ pub struct UntilEffect {
 /// when the effect would start, CR 610.3a–b, 610.4b–c).
 fn ended(g: &Game, source: Option<ObjectId>, controller: PlayerId, until: &UntilEvent) -> bool {
     match until {
-        UntilEvent::SourceLeavesBattlefield => source.is_none_or(|s| {
-            let o = g.obj(s);
-            !g.is_live(s) || o.zone != Zone::Battlefield
-        }),
+        UntilEvent::SourceLeavesBattlefield | UntilEvent::TargetLeavesBattlefield(_) => source
+            .is_none_or(|s| {
+                let o = g.obj(s);
+                !g.is_live(s) || o.zone != Zone::Battlefield
+            }),
         // The events not yet processed (`check_untils` runs as they're flushed).
         UntilEvent::OpponentBecomesMonarch => {
             let opponents = g.opponents(controller);
@@ -54,11 +55,25 @@ fn ended(g: &Game, source: Option<ObjectId>, controller: PlayerId, until: &Until
     }
 }
 
+/// The object whose leaving the battlefield ends the effect: the source, or the object
+/// the effect names (as it begins); `None` if there's none (an illegal target), which
+/// counts as having left.
+fn watched_object(g: &mut Game, until: &UntilEvent, ctx: &mut Ctx) -> Option<ObjectId> {
+    match until {
+        UntilEvent::TargetLeavesBattlefield(slot) => g
+            .resolve_objects(&Sel::Target(*slot), ctx)
+            .into_iter()
+            .next(),
+        _ => ctx.source,
+    }
+}
+
 /// "Exile [objects] until [event]" (CR 610.3). If the event already happened after the
 /// spell or ability was put on the stack (or triggered), nothing is exiled
 /// (CR 610.3a–b).
 pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, ctx: &mut Ctx) {
-    if ended(g, ctx.source, ctx.controller, until) {
+    let watched = watched_object(g, until, ctx);
+    if ended(g, watched, ctx.controller, until) {
         ctx.prev_affected.clear();
         return;
     }
@@ -96,7 +111,7 @@ pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, c
     let id = g.new_effect_id();
     g.untils.push(UntilEffect {
         id,
-        source: ctx.source.unwrap_or(ObjectId(0)),
+        source: watched.unwrap_or(ObjectId(0)),
         controller: ctx.controller,
         until: until.clone(),
         kind: UntilKind::Exiled(exiled),
@@ -105,7 +120,8 @@ pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, c
 
 /// "[Permanents] phase out until [event]" (CR 610.4).
 pub fn exec_phase_out_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, ctx: &mut Ctx) {
-    if ended(g, ctx.source, ctx.controller, until) {
+    let watched = watched_object(g, until, ctx);
+    if ended(g, watched, ctx.controller, until) {
         return;
     }
     let objs: Vec<ObjectId> = objs
@@ -119,7 +135,7 @@ pub fn exec_phase_out_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEven
     let id = g.new_effect_id();
     g.untils.push(UntilEffect {
         id,
-        source: ctx.source.unwrap_or(ObjectId(0)),
+        source: watched.unwrap_or(ObjectId(0)),
         controller: ctx.controller,
         until: until.clone(),
         kind: UntilKind::PhasedOut(objs),

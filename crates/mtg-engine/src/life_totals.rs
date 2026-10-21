@@ -2,6 +2,10 @@
 //! life total of a Two-Headed Giant team (CR 810.4, 810.9), and exchanging life totals
 //! (CR 119.7, 119.8).
 
+/// `Event::Custom` name of a player paying life (CR 119.4), with the amount paid:
+/// "whenever you pay life".
+pub const PAID_LIFE: &str = "pay life";
+
 use crate::game::{Game, Variant};
 use crate::types::*;
 

@@ -15,6 +15,7 @@ fn honor_of_the_pure_follows_color_changes() {
     // CR 613.5 example: Honor of the Pure applies (layer 7c) once an effect turns the
     // creature white (layer 5), and stops applying when it's later turned red.
     cr!("613.5", "613.1e", "613.1g", "611.3a", "611.3b", "613.9");
+    cr_example!("613.5", "Honor of the Pure is an enchantment");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Honor of the Pure");
     let c = t.custom(
@@ -45,6 +46,7 @@ fn honor_of_the_pure_follows_color_changes() {
 fn gray_ogre_layer_7_example() {
     // CR 613.5 example: counter (7c), +4/+4 (7c), +0/+2 anthem (7c), becomes 0/1 (7b).
     cr!("613.5", "613.4b", "613.4c", "613.4");
+    cr_example!("613.5", "Gray Ogre, a 2/2 creature");
     let mut t = TestGame::new(2);
     let ogre = t.battlefield(P0, "Gray Ogre");
     assert_eq!(t.pt(ogre), (2, 2));
@@ -75,6 +77,8 @@ fn switching_power_and_toughness_examples() {
     // CR 613.4d, first example: 1/3 gets +0/+1, is switched (4/1), then gets +5/+0:
     // "unswitched" it would be 6/4, so it's 4/6.
     cr!("613.4d");
+    cr_example!("613.4d", "A new effect gives the creature +5/+0");
+    cr_example!("613.4d", "The two switches essentially cancel each other");
     let mut t = TestGame::new(2);
     let c = t.custom(P0, creature("One Three", 1, 3, &[]), Zone::Battlefield);
     modify_target(&mut t, P0, c, vec![pt(0, 1)]);
@@ -97,6 +101,7 @@ fn switch_outlasting_the_modifier() {
     // CR 613.4d, second example: if the +0/+1 effect ends before the switch effect ends,
     // the creature becomes 3/1.
     cr!("613.4d", "611.2a");
+    cr_example!("613.4d", "If the +0/+1 effect ends before the switch effect ends");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::BeginningOfCombat);
     let c = t.custom(P0, creature("One Three", 1, 3, &[]), Zone::Battlefield);
@@ -126,6 +131,7 @@ fn effect_parts_apply_in_their_own_layers() {
     // its color part in layer 5 and its P/T part in layer 7c. A white-creature anthem
     // (layer 7c) sees the new color.
     cr!("613.6", "613.1e", "613.4c");
+    cr_example!("613.6", "becomes the color of your choice until end of turn");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Honor of the Pure");
     let c = t.custom(
@@ -139,6 +145,7 @@ fn effect_parts_apply_in_their_own_layers() {
         c,
         vec![pt(1, 1), Modification::SetColors(colors(&[Color::White]))],
     );
+    assert_eq!(color_of(&t, c), colors(&[Color::White]));
     assert_eq!(t.pt(c), (4, 4));
 }
 
@@ -147,6 +154,7 @@ fn act_of_treason_control_then_haste() {
     // CR 613.6, second example: Act of Treason's control change applies in layer 2 and
     // "it gains haste" in layer 6.
     cr!("613.6", "613.1b", "613.1f");
+    cr_example!("613.6", "Act of Treason has an effect");
     let mut t = TestGame::new(2);
     let bear = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Mountain", 3);
@@ -166,6 +174,7 @@ fn noncreature_artifacts_become_creatures_same_set_in_7b() {
     // applies in layer 4 and then in layer 7b to the same permanents, even though they're
     // no longer noncreature artifacts by then.
     cr!("613.6", "613.1d", "613.4b", "611.2c");
+    cr_example!("613.6", "All noncreature artifacts become 2/2 artifact creatures");
     let mut t = TestGame::new(2);
     let rock = t.custom(
         P0,

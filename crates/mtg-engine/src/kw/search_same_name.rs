@@ -44,11 +44,15 @@ pub fn parse_search(name: &str) -> Option<(u8, Var)> {
     Some((slot.parse().ok()?, var.parse().ok()?))
 }
 
-/// The general form: "search same name:{zones}:{any}:{object}:{var}" — the zones
-/// searched (`ghl`: graveyard, hand, and library; `l`: library), `all` or `any` (any
+/// The general form: "search same name:{zones}:{any}:{object}:{var}[:{player}]" — the
+/// zones searched (`ghl`: graveyard, hand, and library; `l`: library), `all` or `any` (any
 /// number of cards), the object whose name it is (`t3`: the target in slot 3, `v65`: the
-/// object in variable 65), and the variable for the cards found. The zones are those of
-/// that object's controller (as it last existed; for a card, its owner).
+/// object in variable 65), the variable for the cards found, and optionally whose zones
+/// they are (`p2`: the player targeted in slot 2, `ptrigger`: the player of the trigger
+/// event). Without it, the zones are those of that object's controller (as it last
+/// existed; for a card, its owner). With it, those zones are searched even if there's no
+/// such object ("Search that player's graveyard, hand, and library for all cards with the
+/// same name as the chosen card" when no card was chosen, CR 701.23c).
 const PREFIX_GENERAL: &str = "search same name:";
 
 /// What a general same-name search searches for.
@@ -57,6 +61,8 @@ pub struct SameNameSearch {
     pub any_number: bool,
     pub object: Sel,
     pub var: Var,
+    /// Whose zones are searched, when the text names that player.
+    pub player: Option<PlayerRef>,
 }
 
 /// The instruction finding the cards named like `object` (a target or an object in a
@@ -66,6 +72,7 @@ pub fn general_effect(
     any_number: bool,
     object: &Sel,
     var: Var,
+    player: Option<&PlayerRef>,
 ) -> Option<crate::ability::Effect> {
     let obj = match object {
         Sel::Target(n) => format!("t{n}"),
@@ -74,8 +81,14 @@ pub fn general_effect(
     };
     let zones = if all_zones { "ghl" } else { "l" };
     let any = if any_number { "any" } else { "all" };
+    let player = match player {
+        None => String::new(),
+        Some(PlayerRef::Target(n)) => format!(":p{n}"),
+        Some(PlayerRef::TriggerPlayer) => ":ptrigger".into(),
+        Some(_) => return None,
+    };
     Some(crate::ability::Effect::Custom(
-        format!("{PREFIX_GENERAL}{zones}:{any}:{obj}:{var}").into(),
+        format!("{PREFIX_GENERAL}{zones}:{any}:{obj}:{var}{player}").into(),
     ))
 }
 
@@ -100,11 +113,17 @@ pub fn parse_general(name: &str) -> Option<SameNameSearch> {
         Sel::Var(obj.strip_prefix('v')?.parse().ok()?)
     };
     let var = it.next()?.parse().ok()?;
+    let player = match it.next() {
+        None => None,
+        Some("ptrigger") => Some(PlayerRef::TriggerPlayer),
+        Some(p) => Some(PlayerRef::Target(p.strip_prefix('p')?.parse().ok()?)),
+    };
     Some(SameNameSearch {
         all_zones,
         any_number,
         object,
         var,
+        player,
     })
 }
 
@@ -122,6 +141,7 @@ impl KeywordRules for SearchSameName {
                 any_number: name.starts_with(PREFIX_ANY),
                 object: Sel::Target(slot),
                 var,
+                player: None,
             }
         } else if let Some(s) = parse_general(name) {
             s
@@ -142,11 +162,14 @@ fn run(g: &mut Game, search: &SameNameSearch, ctx: &mut Ctx) {
             any_number,
             ref object,
             var,
+            ref player,
         } = *search;
         let searcher = ctx.controller;
         let target = object.clone();
-        let Some(owner) = g.eval_player(&PlayerRef::ControllerOf(Box::new(target.clone())), ctx)
-        else {
+        let whose = player
+            .clone()
+            .unwrap_or_else(|| PlayerRef::ControllerOf(Box::new(target.clone())));
+        let Some(owner) = g.eval_player(&whose, ctx) else {
             ctx.set_var(var, vec![]);
             return;
         };

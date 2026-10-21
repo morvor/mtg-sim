@@ -39,6 +39,11 @@ fn search_same_name_of(l: &str, b: &mut Builder) -> Option<Effect> {
     ]
     .iter()
     .find_map(|(p, z)| r.strip_prefix(p).map(|r| (*z, r)))?;
+    // "that player's": the zones of the player the text is about (a target or the
+    // trigger's player), searched even if no card was chosen (CR 701.23c).
+    let named_player = (!l.contains("of that spell's controller"))
+        .then(|| b.it_player.clone())
+        .filter(|p| matches!(p, PlayerRef::Target(_) | PlayerRef::TriggerPlayer));
     let (any_number, r) = if let Some(x) = r.strip_prefix("all cards with the same name as ") {
         (false, x)
     } else {
@@ -68,8 +73,8 @@ fn search_same_name_of(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved);
         return None;
     }
-    let search = general_effect(all_zones, any_number, &sel, FOUND)?;
-    let who = PlayerRef::ControllerOf(Box::new(sel));
+    let search = general_effect(all_zones, any_number, &sel, FOUND, named_player.as_ref())?;
+    let who = named_player.unwrap_or_else(|| PlayerRef::ControllerOf(Box::new(sel)));
     if matches!(b.it_player, PlayerRef::You) {
         b.it_player = who.clone();
     }
@@ -99,7 +104,10 @@ fn general_search_player(e: &Effect, it_player: &PlayerRef) -> Option<PlayerRef>
     match e {
         Effect::Custom(n) => {
             let s = parse_general(n)?;
-            Some(PlayerRef::ControllerOf(Box::new(s.object)))
+            Some(
+                s.player
+                    .unwrap_or_else(|| PlayerRef::ControllerOf(Box::new(s.object))),
+            )
         }
         Effect::Seq(v) => v
             .iter()

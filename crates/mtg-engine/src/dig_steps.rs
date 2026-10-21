@@ -152,8 +152,8 @@ fn place(g: &mut Game, cards: Vec<ObjectId>, to: &Destination, ctx: &mut Ctx) ->
             .copied()
             .filter(|o| g.obj(*o).owner == owner)
             .collect();
-        out.extend(mine.iter().copied());
-        rearrange(g, owner, mine, to.position, ctx.controller);
+        rearrange(g, owner, mine.clone(), to.position, ctx.controller);
+        out.extend(mine.iter().map(|o| g.current(*o)));
     }
     out
 }

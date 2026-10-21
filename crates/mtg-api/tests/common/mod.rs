@@ -66,7 +66,14 @@ pub fn random_deck(seed: u64) -> Vec<Arc<CardDef>> {
         if spells.iter().any(|d| d.name.eq_ignore_ascii_case(name)) {
             continue;
         }
-        if let Some(d) = db.get(name).filter(|d| d.is_fully_supported()) {
+        // At least compiled by the tier file too (`docs/verified-cards.tsv`), the bar the
+        // tests' sessions use: a card supported since the file was generated is still
+        // recorded as unsupported there.
+        let tiers = mtg_engine::card_tiers::TierTable::global();
+        if let Some(d) = db.get(name).filter(|d| {
+            d.is_fully_supported()
+                && tiers.tier_of(d).tier >= mtg_engine::card_tiers::Tier::Compiled
+        }) {
             spells.push(d);
         }
     }

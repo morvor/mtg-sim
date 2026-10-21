@@ -740,6 +740,8 @@ pub enum AttackRequirement {
     AttacksPlayerOtherThan(ObjectId, Vec<PlayerId>),
     /// "[creature] attacks [player] if able" (e.g. encore's tokens, CR 702.141a).
     AttacksPlayer(ObjectId, PlayerId),
+    /// "[creature] attacks [planeswalker or battle] if able" (Gideon Jura).
+    AttacksObject(ObjectId, ObjectId),
     /// "if one of [others] attacks, [creature] attacks if able": obeyed if it attacks or
     /// none of the others do.
     AttacksIfAnyAttacks(ObjectId, Vec<ObjectId>),
@@ -760,6 +762,7 @@ impl AttackRequirement {
             AttackRequirement::Attacks(c)
             | AttackRequirement::AttacksPlayerOtherThan(c, _)
             | AttackRequirement::AttacksPlayer(c, _)
+            | AttackRequirement::AttacksObject(c, _)
             | AttackRequirement::AttacksIfAnyAttacks(c, _) => Some(*c),
             AttackRequirement::AttacksWithAny { .. } => None,
         }
@@ -780,6 +783,9 @@ impl AttackRequirement {
                 .any(|(a, t)| a == c && matches!(t, Entity::Player(p) if !ps.contains(p))),
             AttackRequirement::AttacksPlayer(c, p) => {
                 decl.iter().any(|(a, t)| a == c && *t == Entity::Player(*p))
+            }
+            AttackRequirement::AttacksObject(c, o) => {
+                decl.iter().any(|(a, t)| a == c && *t == Entity::Object(*o))
             }
             AttackRequirement::AttacksIfAnyAttacks(c, others) => {
                 decl.iter().any(|(a, _)| a == c) || !decl.iter().any(|(a, _)| others.contains(a))
@@ -849,6 +855,19 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
                     for p in g.players_in_game() {
                         if g.player_filter_matches(defender, p, &ctx) {
                             out.push(AttackRequirement::AttacksPlayer(id, p));
+                        }
+                    }
+                }
+            }
+        }
+        // "[It] attacks ~ this turn if able" (a planeswalker or battle).
+        for (s, c, r, locked) in g.all_restrictions() {
+            if let Restriction::MustAttackObject { attackers, target } = &r {
+                let ctx = Ctx::new(s, c);
+                if g.restriction_applies(id, attackers, &ctx, &locked) {
+                    for o in g.battlefield.clone() {
+                        if g.matches(o, target, &ctx) {
+                            out.push(AttackRequirement::AttacksObject(id, o));
                         }
                     }
                 }
@@ -1186,7 +1205,7 @@ fn perform_attack_declaration(
         if !g.obj(*a).has_keyword(KeywordKind::Vigilance)
             && !crate::kw::attacks_without_tapping(g, *a)
         {
-            g.tap(*a);
+            g.tap_with(*a, false, Some(ap), true);
         }
     }
     // CR 508.1g: optional costs to attack ("as it attacks").

@@ -25,7 +25,7 @@ pub const NONLAND_REVEALED: &str = "parley:nonland cards revealed this way";
 pub const LAND_REVEALED: &str = "parley:land cards revealed this way";
 
 /// The variable holding the cards revealed by [`REVEAL_TOPS`].
-const REVEALED: Var = vars::USER + 207;
+pub const REVEALED: Var = vars::USER + 207;
 
 fn reveal_tops(g: &mut Game, ctx: &mut Ctx) {
     let mut revealed = Vec::new();

@@ -1,4 +1,4 @@
-//! Ashiok, Wicked Manipulator (hand-written, `src/cards/ashiok_wicked_manipulator.rs`).
+//! Ashiok, Wicked Manipulator: its pay-life replacement (compiled, `kw/pay_life_exile_instead.rs`).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;

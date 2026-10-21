@@ -181,6 +181,19 @@ pub fn change_targets(
     how: TargetChange,
     forced: Option<Entity>,
 ) -> bool {
+    change_targets_among(g, chooser, id, how, forced.map(|f| vec![f]).as_deref())
+}
+
+/// [`change_targets`] where each new target must be one of `allowed`, if given: "change
+/// the target to this creature", "change that spell's target to another creature", "The
+/// new target must be a player" (CR 115.7: a further restriction on the new targets).
+pub fn change_targets_among(
+    g: &mut Game,
+    chooser: PlayerId,
+    id: ObjectId,
+    how: TargetChange,
+    forced: Option<&[Entity]>,
+) -> bool {
     if !g.is_live(id) || g.obj(id).zone != Zone::Stack {
         return false;
     }
@@ -219,7 +232,7 @@ pub fn change_targets(
         g.legal_target_candidates(spec, &ctx, id)
             .into_iter()
             .filter(|c| *c != original && *c != Entity::Object(id))
-            .filter(|c| forced.is_none_or(|f| f == *c))
+            .filter(|c| forced.is_none_or(|f| f.contains(c)))
             .collect()
     };
     let ask_new = |g: &mut Game,

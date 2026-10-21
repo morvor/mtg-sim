@@ -417,6 +417,7 @@ fn replacement_effects_apply_once_to_an_event() {
     // CR 614.5 example: two "deals double that damage" effects: 2 damage becomes 8, not 4
     // and not an infinite amount.
     cr!("614.5");
+    cr_example!("614.5", "it deals double that damage to that permanent or player instead");
     let mut t = TestGame::new(2);
     let doubler = || {
         permanent(

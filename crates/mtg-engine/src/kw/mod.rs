@@ -416,6 +416,12 @@ pub trait KeywordRules: Sync + Send {
     fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
         false
     }
+    /// Replaces `p`'s paying `n` (> 0) life, which they can pay (CR 119.4), with something
+    /// else ("If you would pay life ..., exile that many cards ... instead"); returns true
+    /// if it did (the life counts as paid).
+    fn pay_life_instead(&self, g: &mut Game, p: PlayerId, n: u32) -> bool {
+        false
+    }
     /// What a static ability of this keyword does "any time" the game is in some state,
     /// such as a player getting the city's blessing from ascend (CR 702.131b). Checked each
     /// time state-based actions are checked, before them.
@@ -463,11 +469,6 @@ pub trait KeywordRules: Sync + Send {
     /// `searcher` is about to search their own library (before looking for the cards):
     /// e.g. "While you're searching your library, you may cast ~ from your library".
     fn searching_library(&self, g: &mut Game, searcher: PlayerId) {}
-    /// `p` would pay `n` life (CR 119.4), which they can: returns true if this
-    /// implementation's replacement effect did something else instead.
-    fn pay_life_instead(&self, g: &mut Game, p: PlayerId, n: u32) -> bool {
-        false
-    }
     /// The permanents `active` untaps during their untap step (CR 502.3), about to be
     /// untapped: a replacement effect may take some out and do something else instead.
     fn untap_step(&self, g: &mut Game, active: PlayerId, to_untap: &mut Vec<ObjectId>) {}
@@ -1250,6 +1251,11 @@ pub fn on_event(g: &mut Game, ev: &Event) {
     }
 }
 
+/// See [`KeywordRules::pay_life_instead`].
+pub fn pay_life_instead(g: &mut Game, p: PlayerId, n: u32) -> bool {
+    registry().iter().any(|r| r.pay_life_instead(g, p, n))
+}
+
 /// Whether a keyword keeps an unattached or illegally attached Aura from being put into
 /// its owner's graveyard (see [`KeywordRules::keeps_unattached_aura`]).
 pub fn keeps_unattached_aura(g: &Game, aura: ObjectId) -> bool {
@@ -1372,11 +1378,6 @@ pub fn searching_library(g: &mut Game, searcher: PlayerId) {
     for k in registry() {
         k.searching_library(g, searcher);
     }
-}
-
-/// See [`KeywordRules::pay_life_instead`].
-pub fn pay_life_instead(g: &mut Game, p: PlayerId, n: u32) -> bool {
-    registry().iter().any(|k| k.pay_life_instead(g, p, n))
 }
 
 /// See [`KeywordRules::untap_step`].
