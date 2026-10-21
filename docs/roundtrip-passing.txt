@@ -6069,6 +6069,7 @@ Dramatic Finale
 Dramatic Rescue
 Dramatic Reversal
 Dramatist's Puppet
+Drana and Linvala
 Drana's Chosen
 Drana's Emissary
 Drana's Silencer
@@ -9716,6 +9717,7 @@ Greenweaver Druid
 Greenwheel Liberator
 Greenwood Sentinel
 Gregor, Shrewd Magistrate
+Grell Philosopher
 Gremlin Infestation
 Gremlin Mine
 Gremlin Tamer

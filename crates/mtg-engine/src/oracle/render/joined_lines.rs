@@ -14,16 +14,18 @@ pub(super) fn join_lines(a: &str, b: &str) -> Option<String> {
         None => a.split_once(" cost {").map(|(x, y)| (x, format!("{{{y}"))),
     };
     if let Some((spells, cost)) = split {
-        let rest = b
+        let spells_b = b
             .strip_prefix("You may cast ")
-            .or_else(|| b.strip_prefix("you may cast "))?;
-        let spells_b = rest.strip_suffix(" as though it had flash")?;
-        if spells.to_lowercase() == spells_b.to_lowercase() && spells.starts_with("The first ") {
-            return Some(format!(
-                "{spells} costs {cost} and can be cast as though it had flash."
-            ));
+            .or_else(|| b.strip_prefix("you may cast "))
+            .and_then(|r| r.strip_suffix(" as though it had flash"));
+        if let Some(spells_b) = spells_b {
+            if spells.to_lowercase() == spells_b.to_lowercase() && spells.starts_with("The first ")
+            {
+                return Some(format!(
+                    "{spells} costs {cost} and can be cast as though it had flash."
+                ));
+            }
         }
-        return None;
     }
     if let Some(j) = join_same_subject(a, b) {
         return Some(j);
@@ -53,9 +55,17 @@ fn join_same_subject(a: &str, b: &str) -> Option<String> {
     }
     // "You may spend white mana as though it were mana of any color. You may spend other
     // mana only as though it were colorless mana." (one ability on the card: "other" is
-    // the mana the first sentence doesn't name).
-    if a.starts_with("You may spend ") && b.starts_with("You may spend other mana only ") {
-        return Some(format!("{a}. {b}."));
+    // the mana the first sentence names, checked: the second rule lists every other
+    // color).
+    if let Some(m) = b
+        .strip_prefix("You may spend mana other than ")
+        .and_then(|r| r.strip_suffix(" mana only as though it were colorless mana"))
+    {
+        if a.starts_with(&format!("You may spend {m} mana as though it were ")) {
+            return Some(format!(
+                "{a}. You may spend other mana only as though it were colorless mana."
+            ));
+        }
     }
     let look = "You may look at ";
     if let (Some(x), Some(y)) = (

@@ -583,7 +583,12 @@ impl Renderer<'_> {
             || !same(l)
             || !matches!(a.as_ref(), Value::LifeTotal(x) if same(x))
             || !matches!(k.as_ref(), Value::Const(1))
-            || !format!("{n:?}").contains("LifeTotal")
+            // It loses the same amount when its life total is negative.
+            || !matches!(n, Value::Mul(c, m)
+                if matches!(m.as_ref(), Value::Const(-1))
+                    && matches!(c.as_ref(), Value::Mul(a2, k2)
+                        if matches!(a2.as_ref(), Value::LifeTotal(x) if same(x))
+                            && matches!(k2.as_ref(), Value::Const(1))))
         {
             return None;
         }

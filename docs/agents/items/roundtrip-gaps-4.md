@@ -52,8 +52,8 @@ with its reason). Regenerate docs/ROUNDTRIP.md and docs/roundtrip-passing.txt;
 
 26,438 of 30,041 fully supported cards passed at the start (a29dfa98); 26,574 of 30,041
 pass on the branch before the last merge, and 26,597 of 30,252 after merging the later
-landings (origin's passing list at that merge has 26,361 cards). 120 of the 153 cards in
-the taken clusters pass.
+landings (origin's passing list at that merge has 26,361 cards); 26,599 after review
+(gained-ability terms worded). 120 of the 153 cards in the taken clusters pass.
 
 Renderer (new files `cost_amounts.rs`, `cast_from_among.rs`, `same_name_search.rs`,
 `named_effects.rs`, `named_qualities.rs`, `named_statics.rs`, `named_replacements.rs`,
@@ -166,9 +166,10 @@ AST and plays as the text says (wording only) unless noted:
 - Laughing Jasper Flint: "Until end of turn, you may cast spells from among those cards, and
   mana of any type can be spent to cast those spells" (the duration's place).
 - The Enigma Jewel // Locus of Enlightenment: the craft materials ("nonlands with activated
-  abilities") and the gained abilities' "only once each turn" (compiled as
-  `GainedTerms::max_per_turn`; the renderer doesn't word it yet, a dropped quality to look
-  at next).
+  abilities"). (The gained abilities' "only once each turn", `GainedTerms::max_per_turn`,
+  was silently dropped by the renderer; review made it word both gained-ability terms,
+  which also made Drana and Linvala and Grell Philosopher pass. No passing card's AST
+  disagreed with its text about them.)
 - Null Chamber: "you and an opponent each choose a card name other than a basic land card
   name" and the two restrictions in one sentence.
 - Anzrag's Rampage: "a creature card exiled this way".
@@ -177,3 +178,8 @@ AST and plays as the text says (wording only) unless noted:
 - Heroic Defiance: "unless it shares a color" (rendered "as long as it doesn't share").
 - Conundrum Sphinx: each player reveals and puts their card in turn; "If it doesn't, that
   player puts it on the bottom of their library".
+
+Review notes: Celestial Dawn's "nonland cards you own that aren't on the battlefield" is
+compiled for the hand, library, graveyard, exile and command zone only
+(`patterns/statics_other_zones.rs`), so a spell you own that another player controls (on
+the stack) isn't white; an edge left for a later item.

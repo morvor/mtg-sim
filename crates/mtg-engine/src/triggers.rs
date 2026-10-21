@@ -765,7 +765,15 @@ impl Game {
         // event occurs; CR 603.4).
         let mut spent: Vec<u32> = Vec::new();
         for d in self.delayed_triggers.clone() {
-            if let TriggerCond::BeginningOf { .. } = d.trigger {
+            let begins = match &d.trigger {
+                TriggerCond::BeginningOf { .. } => true,
+                // "at the beginning of the next end step, if ..." (CR 603.4).
+                TriggerCond::Where { trigger, .. } => {
+                    matches!(trigger.as_ref(), TriggerCond::BeginningOf { .. })
+                }
+                _ => false,
+            };
+            if begins {
                 // "at the beginning of the next end step" doesn't fire in the step it was
                 // created in (CR 513.2).
                 // A cleanup step can be followed by another cleanup step in the same turn,

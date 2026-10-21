@@ -6453,7 +6453,31 @@ impl Renderer<'_> {
                         join_list(&k, "and")
                     ));
                 }
-                Modification::AddAbilitiesOf { from, which, .. } => {
+                Modification::AddAbilitiesOf { from, which, terms } => {
+                    // The activation instructions for the gained abilities (CR 113.10a).
+                    if let Some(n) = terms.max_per_turn {
+                        let times = match n {
+                            1 => "only once".to_string(),
+                            2 => "no more than twice".to_string(),
+                            n => format!("no more than {} times", number_word(n as i32)),
+                        };
+                        where_clauses.push(format!(
+                            ". You may activate each of those abilities {times} each turn"
+                        ));
+                    }
+                    if let Some(types) = &terms.spend_as_any_color {
+                        let kind = match types.as_slice() {
+                            [] => "mana".to_string(),
+                            [t] => format!(
+                                "{} mana",
+                                t.color().map_or("colorless", |c| c.word())
+                            ),
+                            _ => "mana".to_string(),
+                        };
+                        where_clauses.push(format!(
+                            ". You may spend {kind} as though it were mana of any color to activate those abilities"
+                        ));
+                    }
                     let kinds = match (which.activated, which.triggered, which.only) {
                         (_, _, Some(AbilityClass::Loyalty)) => "loyalty",
                         (_, _, Some(AbilityClass::Mana)) => "mana",

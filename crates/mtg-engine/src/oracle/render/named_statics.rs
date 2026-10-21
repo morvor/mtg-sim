@@ -51,10 +51,25 @@ impl Renderer<'_> {
             };
             return Some(format!("you may spend {from} mana as though it were {to}"));
         }
-        // "You may spend other mana only as though it were colorless mana" (the mana not
-        // named by the ability before it).
-        if name.starts_with("spend rules:only as though colorless:") {
-            return Some("you may spend other mana only as though it were colorless mana".into());
+        // "You may spend blue, black, red, or green mana only as though it were colorless
+        // mana"; with every color but one, "mana other than white mana" (printed "other
+        // mana" after the ability naming that color, `joined_lines.rs` checks).
+        if let Some(r) = name.strip_prefix("spend rules:only as though colorless:") {
+            let listed: Vec<char> = r.chars().collect();
+            let missing: Vec<char> = "WUBRG".chars().filter(|c| !listed.contains(c)).collect();
+            let what = match missing.as_slice() {
+                [m] if listed.len() == 4 => format!("mana other than {} mana", color_word(*m)?),
+                _ => {
+                    let words: Option<Vec<String>> = listed
+                        .iter()
+                        .map(|c| color_word(*c).map(String::from))
+                        .collect();
+                    format!("{} mana", join_list(&words?, "or"))
+                }
+            };
+            return Some(format!(
+                "you may spend {what} only as though it were colorless mana"
+            ));
         }
         // "If ~ is in a graveyard, effects from spells named Flame Burst count it as a card
         // named Flame Burst."
