@@ -239,3 +239,29 @@ fn upkeep_cost_paid(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "~'s echo cost is paid / cumulative upkeep is paid", priority: 100, parse: upkeep_cost_paid } }
+
+/// "Whenever ~ is dealt damage by an attacking creature" (and, through the referent
+/// grammar, "Whenever that creature is dealt damage by an attacking creature this turn",
+/// Glyph of Life): the passive of "Whenever an attacking creature deals damage to ~" —
+/// one event for each source dealing damage to it (CR 120.3, 603.2).
+fn dealt_damage_by(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (combat, src) = if let Some(r) = t.strip_prefix("~ is dealt combat damage by ") {
+        (true, r)
+    } else {
+        (false, t.strip_prefix("~ is dealt damage by ")?)
+    };
+    let kind = if combat { "combat damage" } else { "damage" };
+    let (cond, _, player) = crate::oracle::triggers::parse_trigger_condition(&format!(
+        "whenever {src} deals {kind} to ~"
+    ))?;
+    let ok = match &cond {
+        TriggerCond::DealsDamage { to, .. } => {
+            matches!(to, DamageRecipient::Object(Filter::Source))
+        }
+        _ => false,
+    };
+    ok.then_some((cond, Sel::This, player))
+}
+
+inventory::submit! { TriggerPattern { name: "~ is dealt damage by [source]", priority: 905, parse: dealt_damage_by } }
