@@ -411,6 +411,10 @@ pub struct Choices {
     /// players").
     #[serde(default)]
     pub players: Vec<PlayerId>,
+    /// The objects chosen or revealed for this spell as it was cast ("choose a creature
+    /// you control or reveal a creature card from your hand"), as they were then.
+    #[serde(default)]
+    pub objects: Vec<ObjectId>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

@@ -946,3 +946,47 @@ impl crate::kw::KeywordRules for NameTheyChose {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&NameTheyChose) }
+
+/// `Effect::Custom` (part of a cost): the objects just beheld ("choose a creature you
+/// control or reveal a creature card from your hand", `vars::IT`) are remembered for the
+/// spell (`Choices::objects`).
+pub const REMEMBER_CHOSEN_OBJECTS: &str = "choices: remember the objects chosen as it was cast";
+/// `Value::Custom`: the power of the object chosen or revealed as the spell was cast: its
+/// current power, or, if it has left its zone since, its last known power (Monstrous
+/// Emergence's rulings).
+pub const CHOSEN_OBJECT_POWER: &str = "choices: the power of the chosen object";
+
+pub struct ChosenObjects;
+
+impl crate::kw::KeywordRules for ChosenObjects {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != REMEMBER_CHOSEN_OBJECTS {
+            return false;
+        }
+        let objs: Vec<ObjectId> = ctx
+            .vars
+            .get(&crate::ability::vars::IT)
+            .map(|v| v.iter().filter_map(|e| e.object()).collect())
+            .unwrap_or_default();
+        if let Some(src) = ctx.source {
+            g.objects[src.0 as usize].choices.objects = objs;
+        }
+        true
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != CHOSEN_OBJECT_POWER {
+            return None;
+        }
+        let src = ctx.source?;
+        let o = g.obj(src).choices.objects.first().copied()?;
+        // The same object if it's still where it was; otherwise its last known power.
+        Some(g.obj(o).chars.power.unwrap_or(0) as i64)
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChosenObjects) }

@@ -450,3 +450,154 @@ fn replace_value(
         x => x,
     }
 }
+
+/// Behold a [quality], remembering what was beheld for the spell.
+fn behold_and_remember(quality: Filter) -> Cost {
+    Cost::free().with(CostPart::Effect(Box::new(Effect::seq(vec![
+        Effect::KeywordAction {
+            action: KeywordAction::Behold,
+            who: PlayerRef::You,
+            what: Sel::All(quality),
+            n: Value::c(1),
+        },
+        Effect::Custom(crate::choices::REMEMBER_CHOSEN_OBJECTS.into()),
+    ]))))
+}
+
+/// "As an additional cost to cast ~, choose a creature you control or reveal a creature
+/// card from your hand." / "..., you may reveal a Dragon card from your hand or choose a
+/// Dragon you control.": beholding (CR 701.4a), with what was chosen or revealed
+/// remembered for the spell ("the power of the creature you chose or the card you
+/// revealed").
+fn choose_or_reveal_cost(text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') || !ctx.is_spell() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as an additional cost to cast ~, ")?;
+    let (optional, r) = match r.strip_prefix("you may ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    // "choose a creature you control or reveal a creature card from your hand", "reveal a
+    // Dragon card from your hand or choose a Dragon you control".
+    let (a, b) = r.split_once(" or ")?;
+    let (choose, reveal) = if a.starts_with("choose ") {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    let perm = choose
+        .strip_prefix("choose a ")
+        .or_else(|| choose.strip_prefix("choose an "))?
+        .strip_suffix(" you control")?;
+    let card = reveal
+        .strip_prefix("reveal a ")
+        .or_else(|| reveal.strip_prefix("reveal an "))?
+        .strip_suffix(" card from your hand")?;
+    let (f, false, tail) = parse_object_phrase(perm)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    // The same quality both ways ("a creature" / "a creature card", "a Dragon" / "a
+    // Dragon card").
+    let (g, false, tail) = parse_object_phrase(card)? else {
+        return None;
+    };
+    if !end(tail).is_empty() || format!("{f:?}") != format!("{g:?}") {
+        return None;
+    }
+    let cost = behold_and_remember(f);
+    let change = if optional {
+        CostChange::OptionalAdditionalCost {
+            name: crate::behold::BEHOLD.into(),
+            cost,
+        }
+    } else {
+        CostChange::AdditionalCost(cost)
+    };
+    let mut s = StaticAbility::new(StaticEffect::CostModifier(CostModifier {
+        applies_to: CostTarget::ThisSpell,
+        who: PlayerRel::You,
+        change,
+    }));
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "choose a creature you control or reveal a creature card (cost)", priority: 75, parse: choose_or_reveal_cost } }
+
+/// "~ deals damage equal to the power of the creature you chose or the card you revealed
+/// to target creature".
+fn power_of_chosen_or_revealed(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let phrase = [
+        "damage equal to the power of the creature you chose or the card you revealed",
+        "damage equal to the power of that card or creature",
+    ]
+    .into_iter()
+    .find(|p| l.contains(p))?;
+    let text = l.replacen(phrase, "x damage", 1);
+    let targets = b.targets.len();
+    let Some(e) = parse_clause(&text, b) else {
+        b.targets.truncate(targets);
+        return None;
+    };
+    Some(Effect::seq(vec![
+        Effect::SetX {
+            value: Value::Custom(crate::choices::CHOSEN_OBJECT_POWER.into()),
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "the power of the creature you chose or the card you revealed", priority: 60, parse: power_of_chosen_or_revealed } }
+
+/// "If you revealed a Dragon card or chose a Dragon as you cast ~, ~ deals damage equal
+/// to the power of that card or creature instead." after "~ deals 3 damage to [target]".
+fn if_revealed_or_chose_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you revealed a ") else {
+        return false;
+    };
+    let Some((_, rest)) = r.split_once(" as you cast ~, ") else {
+        return false;
+    };
+    let Some(x) = rest.strip_suffix(" instead") else {
+        return false;
+    };
+    let Effect::DealDamage { source, to, .. } = &*prev else {
+        return false;
+    };
+    // "deals damage equal to the power of that card or creature" to the same recipient.
+    let Some(e) = power_of_chosen_or_revealed(&format!("{x} to it"), b) else {
+        return false;
+    };
+    let Effect::Seq(v) = &e else {
+        return false;
+    };
+    let [set_x, Effect::DealDamage { source: s2, .. }] = v.as_slice() else {
+        return false;
+    };
+    if format!("{s2:?}") != format!("{source:?}") {
+        return false;
+    }
+    let instead = Effect::seq(vec![
+        set_x.clone(),
+        Effect::DealDamage {
+            source: source.clone(),
+            amount: Value::X,
+            to: to.clone(),
+        },
+    ]);
+    let first = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::If {
+        cond: Condition::CostPaid(crate::behold::BEHOLD.into()),
+        then: Box::new(instead),
+        otherwise: Box::new(first),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if you revealed or chose [a card] as you cast ~, ... instead", priority: 60, apply: if_revealed_or_chose_instead } }

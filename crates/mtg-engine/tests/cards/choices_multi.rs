@@ -378,3 +378,78 @@ fn liquid_fire_splits_five_damage_by_the_number_chosen_as_it_was_cast() {
     assert_eq!(t.g.obj(giant).damage, 2);
     assert_eq!(t.life(P1), 17);
 }
+
+/// Monstrous Emergence with the creature chosen or revealed as it's cast (`chosen`) at
+/// Indomitable Ancients (2/10): the damage dealt.
+fn emergence(reveal_wurm: bool) -> u32 {
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    let giant = t.battlefield(P0, "Hill Giant"); // 3/3
+    let wurm = t.hand(P0, "Craw Wurm"); // 6/4
+    let target = t.battlefield(P1, "Indomitable Ancients");
+    let spell = t.hand(P0, "Monstrous Emergence");
+    t.advance_to(P0, Step::PrecombatMain);
+    let pick = if reveal_wurm { wurm } else { giant };
+    t.answer_choose(P0, &[Entity::Object(pick)]);
+    t.cast(P0, spell).target(target).go();
+    t.resolve_all();
+    t.g.obj(target).damage
+}
+
+#[test]
+fn monstrous_emergence_damage_equal_to_the_chosen_or_revealed_creature() {
+    cr!("701.4a", "601.2b");
+    compiles("Monstrous Emergence");
+    assert_eq!(emergence(false), 3, "Hill Giant chosen");
+    assert_eq!(emergence(true), 6, "Craw Wurm revealed");
+}
+
+#[test]
+fn monstrous_emergence_uses_last_known_power_if_the_creature_left() {
+    cr!("608.2h");
+    ruling!(
+        "Monstrous Emergence",
+        "If that creature is no longer on the battlefield when Monstrous Emergence resolves, use that cr"
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2);
+    t.lands(P1, "Mountain", 1);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let target = t.battlefield(P1, "Indomitable Ancients");
+    let spell = t.hand(P0, "Monstrous Emergence");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, spell).target(target).go();
+    // In response, the Giant is destroyed.
+    t.g.destroy(giant, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.g.obj(target).damage, 3);
+}
+
+/// Dragon's Fire at Indomitable Ancients, revealing Shivan Dragon (5/5) or not.
+fn dragons_fire(reveal: bool) -> u32 {
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    let dragon = t.hand(P0, "Shivan Dragon");
+    let target = t.battlefield(P1, "Indomitable Ancients");
+    let spell = t.hand(P0, "Dragon's Fire");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(reveal));
+    t.answer_choose(P0, &[Entity::Object(dragon)]);
+    t.cast(P0, spell).target(target).go();
+    t.resolve_all();
+    t.g.obj(target).damage
+}
+
+#[test]
+fn dragons_fire_deals_the_revealed_dragons_power_instead() {
+    cr!("701.4a", "601.2b");
+    ruling!(
+        "Dragon's Fire",
+        "A Dragon card is a card with the creature type Dragon in its type line"
+    );
+    compiles("Dragon's Fire");
+    assert_eq!(dragons_fire(false), 3);
+    assert_eq!(dragons_fire(true), 5);
+}
