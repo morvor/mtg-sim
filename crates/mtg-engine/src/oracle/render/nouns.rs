@@ -964,6 +964,8 @@ impl Renderer<'_> {
                 np.rel.push(CAST_FROM.into());
             }
             Filter::CastWithCost(name) => np.status.push(name.to_string()),
+            // Checked as the target is chosen; worded as the requirement itself.
+            Filter::AsChosen(f) => self.collect(f, np),
             Filter::History(c) => {
                 let s = self.history_filter_clause(c);
                 np.rel.push(s);

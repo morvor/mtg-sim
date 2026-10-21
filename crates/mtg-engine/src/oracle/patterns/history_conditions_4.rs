@@ -163,6 +163,16 @@ pub fn value_atom(
     if let Some(v) = spells_cast_value(s, b) {
         return Some(v);
     }
+    // "the greatest amount of damage dealt by a source to a permanent or player this
+    // turn" (Impact Resonance).
+    if let Some(rest) =
+        s.strip_prefix("the greatest amount of damage dealt by a source to a permanent or player this turn")
+    {
+        return Some((
+            Value::Custom(crate::kw::damage_history_4::GREATEST_DAMAGE_BY_A_SOURCE.into()),
+            rest.to_string(),
+        ));
+    }
     if let Some(r) = s.strip_prefix("the number of untapped lands ") {
         let (who, r) = named_player(r, b, false)?;
         let rest = r.strip_prefix("controlled at the beginning of this turn")?;
@@ -611,3 +621,175 @@ fn cast_if_same_name_as_cast(l: &str, b: &mut crate::oracle::effects::Builder) -
 }
 
 inventory::submit! { super::EffectPattern { name: "history 4: cast a spell ... if it has the same name as a spell that was cast this turn", priority: 10, parse: cast_if_same_name_as_cast } }
+
+/// "if a Giant, Wizard, or spell you controlled dealt damage to it this turn" (Aegar, the
+/// Freezing Flame): damage dealt this turn to the object the ability is about by such a
+/// source (as it was then controlled, CR 603.10a for sources that left).
+pub fn sources_dealt_damage_to_it(
+    c: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<Condition> {
+    if c.starts_with("~ ") || !c.contains(" dealt damage to it this turn") {
+        return None;
+    }
+    let sel = match &b.it {
+        Sel::This => return None,
+        it if super::oracle_hardening_referents::is_no_referent(it) => return None,
+        it => it.clone(),
+    };
+    let cond = history_condition(&c.replacen(" to it ", " to a permanent ", 1))?;
+    let mut json = serde_json::to_value(&cond).ok()?;
+    let with = serde_json::to_value(DamageRecipient::Object(Filter::In(Box::new(sel)))).ok()?;
+    let mut n = 0;
+    fn walk(v: &mut serde_json::Value, with: &serde_json::Value, n: &mut usize) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if k == "to" && x.get("Object").is_some() {
+                        *x = with.clone();
+                        *n += 1;
+                    } else {
+                        walk(x, with, n);
+                    }
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, with, n)),
+            _ => {}
+        }
+    }
+    walk(&mut json, &with, &mut n);
+    if n != 1 {
+        return None;
+    }
+    serde_json::from_value(json).ok()
+}
+
+// ---------------------------------------------------------------------------
+// "Do the same for [keywords]."
+// ---------------------------------------------------------------------------
+
+/// "If that creature has haste and ~ doesn't, put a haste counter on ~. Do the same for
+/// flying, first strike, ..., and vigilance." (Super-Adaptoid): the sentence again for
+/// each listed keyword in place of the first (each a keyword counter, CR 122.1b), in that
+/// order.
+fn do_the_same_for(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let i = lower.find(". do the same for ")?;
+    let list = lower[i + ". do the same for ".len()..].strip_suffix('.')?;
+    if list.contains(". ") {
+        return None;
+    }
+    let before = &t[..i];
+    let start = before.rfind(". ").map_or(0, |j| j + 2);
+    let sentence = &t[start..i];
+    let s_lower = sentence.to_lowercase();
+    let word = |hay: &str, w: &str| {
+        hay.match_indices(w).any(|(k, _)| {
+            let pre = hay[..k].chars().last();
+            let post = hay[k + w.len()..].chars().next();
+            pre.is_none_or(|c| c == ' ') && post.is_none_or(|c| c == ' ' || c == ',')
+        })
+    };
+    let kws: Vec<String> = crate::keywords::KeywordKind::ALL
+        .iter()
+        .map(|k| k.name().to_lowercase())
+        .filter(|n| word(&s_lower, n))
+        .collect();
+    let [kw] = kws.as_slice() else { return None };
+    let items: Vec<&str> = list
+        .split(", and ")
+        .flat_map(|p| p.split(", "))
+        .flat_map(|p| p.split(" and "))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    // "If that creature has haste and ~ doesn't, ...": "and ~ doesn't have haste".
+    let full = s_lower.replace(" and ~ doesn't,", &format!(" and ~ doesn't have {kw},"));
+    let mut sentences = vec![full.clone()];
+    for item in items {
+        crate::keywords::KeywordKind::from_name(item)?;
+        sentences.push(full.replace(kw.as_str(), item));
+    }
+    let rewritten = format!("{}{}.", &t[..start], sentences.join(". "));
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = t.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: [sentence about a keyword]. Do the same for [keywords].", priority: 90, parse: do_the_same_for } }
+
+// ---------------------------------------------------------------------------
+// "it's the first A, the first B, or the first C you've cast this turn"
+// ---------------------------------------------------------------------------
+
+/// "if it's the first instant spell, the first sorcery spell, or the first Otter spell
+/// other than Alania you've cast this turn" (Alania, Divergent Storm): any of the ordinal
+/// conditions. "Other than ~" is neither the source nor the spell it was (CR 400.7).
+pub fn nth_spell_list(c: &str, b: &mut crate::oracle::effects::Builder) -> Option<Condition> {
+    let r = c.strip_prefix("it's ")?;
+    let body = r.strip_suffix(" you've cast this turn")?;
+    let (list, last) = body.rsplit_once(", or ")?;
+    let mut items: Vec<&str> = list.split(", ").collect();
+    items.push(last);
+    if items.len() < 2 || items.iter().any(|i| !i.starts_with("the ")) {
+        return None;
+    }
+    let other = serde_json::to_value(Filter::Other).ok()?;
+    let not_self = serde_json::to_value(Filter::not(Filter::Custom(
+        crate::kw::damage_history_4::SOURCE_OR_ITS_SPELL.into(),
+    )))
+    .ok()?;
+    let mut conds = Vec::new();
+    for item in items {
+        let cond = super::history_conditions::nth_spell(&format!("it's {item} you've cast this turn"), b)?;
+        let mut json = serde_json::to_value(&cond).ok()?;
+        fn walk(v: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value) {
+            if *v == *from {
+                *v = to.clone();
+                return;
+            }
+            match v {
+                serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, from, to)),
+                serde_json::Value::Object(m) => m.values_mut().for_each(|x| walk(x, from, to)),
+                _ => {}
+            }
+        }
+        walk(&mut json, &other, &not_self);
+        conds.push(serde_json::from_value(json).ok()?);
+    }
+    Some(Condition::Or(conds))
+}
+
+/// "a permanent entered the battlefield face down under your control this turn"
+/// (Oblivious Bookworm, CR 708.2a).
+fn entered_face_down(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let r = c.strip_suffix(" entered the battlefield face down under your control this turn")?;
+    let np = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(np)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let f = Filter::and(vec![
+        f,
+        Filter::ControlledBy(PlayerRel::You),
+        Filter::Custom(crate::kw::damage_history_4::ENTERED_FACE_DOWN.into()),
+    ]);
+    Some(Condition::Compare(
+        Value::EventsThisTurn(Box::new(TriggerCond::EntersBattlefield(f)), Tally::Events),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: a permanent entered the battlefield face down under your control this turn", priority: 900, parse: entered_face_down } }

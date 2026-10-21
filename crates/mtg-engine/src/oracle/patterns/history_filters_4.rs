@@ -539,3 +539,23 @@ pub fn past_with_referent(
         Value::Const(1),
     ))
 }
+
+/// "all creatures except those that share a creature type with a creature that convoked
+/// ~" (Everything Comes to Dust, CR 702.51c).
+fn except_sharing_type_with_convoker<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let rest = t
+        .strip_prefix("except those that share a creature type with a creature that convoked ~")
+        .or_else(|| {
+            t.strip_prefix("except those that share a creature type with a creature that convoked this spell")
+        })?;
+    clause_end(rest).then(|| {
+        (
+            Filter::not(Filter::Custom(
+                crate::kw::damage_history_4::SHARES_TYPE_WITH_CONVOKER.into(),
+            )),
+            rest,
+        )
+    })
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "history 4: except those that share a creature type with a creature that convoked ~", priority: 900, parse: except_sharing_type_with_convoker } }

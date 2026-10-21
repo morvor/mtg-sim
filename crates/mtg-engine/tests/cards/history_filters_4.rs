@@ -954,3 +954,170 @@ fn grim_reminder_drains_opponents_who_cast_a_spell_with_the_revealed_name() {
     assert_eq!(t.life(P1), 14, "cast a Shock this turn");
     assert_eq!(t.life(P2), 18, "cast an Opt (and was Shocked)");
 }
+
+// --- Veteran's Voice: the creature tapped this way -------------------------------------
+
+#[test]
+fn veterans_voice_target_stays_legal_after_the_aura_moves_to_it() {
+    cr!("601.2c", "601.2h", "608.2b");
+    assert_supported("Veteran's Voice");
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let voice = t.battlefield(P0, "Veteran's Voice");
+    t.g.attach(voice, Entity::Object(bear));
+    t.advance_to(P0, Step::PrecombatMain);
+    t.activate(P0, voice, 0, &[Entity::Object(elf)]).unwrap();
+    assert!(t.g.obj(bear).tapped, "the cost tapped the enchanted creature");
+    // In response, the Aura moves onto the target: it isn't the creature tapped this
+    // way, so the target is still legal (CR 608.2b).
+    t.g.attach(voice, Entity::Object(elf));
+    t.resolve_all();
+    assert_eq!(t.pt(elf), (3, 2));
+}
+
+// --- batch 8 ----------------------------------------------------------------------------
+
+#[test]
+fn impact_resonance_divides_the_most_damage_one_source_dealt_to_one_recipient() {
+    cr!("120.3", "601.2d");
+    ruling!(
+        "Impact Resonance",
+        "looks at the entire turn to see the greatest amount of damage dealt from a single source to a single permanent or player"
+    );
+    assert_supported("Impact Resonance");
+    let mut t = TestGame::new(2);
+    let src = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P1, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    // 2 + 1 from one source to the wall (3), 2 from another to a player.
+    t.g.deal_damage(src, Entity::Object(wall), 2, false);
+    t.g.deal_damage(src, Entity::Object(wall), 1, false);
+    t.g.deal_damage(other, Entity::Player(P0), 2, false);
+    t.g.flush_events();
+    let target = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Mountain", 2);
+    let ir = t.hand(P0, "Impact Resonance");
+    t.cast_with(P0, ir, &[Entity::Object(target)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(target).damage, 3);
+}
+
+#[test]
+fn aegar_draws_when_your_giant_wizard_or_spell_had_dealt_damage_to_it() {
+    cr!("120.10", "603.4");
+    assert_supported("Aegar, the Freezing Flame");
+    let mut t = TestGame::new(2);
+    let aegar = t.battlefield(P0, "Aegar, the Freezing Flame");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    let before = t.hand_size(P0);
+    // Excess damage from a creature that isn't a Giant or Wizard: no card.
+    t.g.deal_damage(bears, Entity::Object(a), 5, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before);
+    // Aegar (a Giant Wizard) dealt it damage: a card.
+    t.g.deal_damage(aegar, Entity::Object(b), 5, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+}
+
+#[test]
+fn alania_triggers_on_the_first_instant_sorcery_and_other_otter_spell() {
+    cr!("603.4", "707.10");
+    ruling!(
+        "Alania, Divergent Storm",
+        "Alania’s ability can trigger up to three times in a single turn"
+    );
+    assert_supported("Alania, Divergent Storm");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Alania, Divergent Storm");
+    t.lands(P0, "Mountain", 3);
+    let mut opp_draws = vec![];
+    for _ in 0..2 {
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        let before = t.hand_size(P1);
+        let s = t.hand(P0, "Shock");
+        t.cast_with(P0, s, &[Entity::Player(P1)]).unwrap();
+        t.resolve_all();
+        opp_draws.push(t.hand_size(P1) - before);
+    }
+    assert_eq!(opp_draws, vec![1, 0], "only the first instant spell");
+}
+
+#[test]
+fn super_adaptoid_copies_keywords_as_counters() {
+    cr!("122.1b");
+    assert_supported("Super-Adaptoid");
+    use mtg_engine::keywords::KeywordKind;
+    let mut t = TestGame::new(2);
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.answer_targets(P0, &[Entity::Object(angel)]);
+    let sa = t.enter(P0, "Super-Adaptoid");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(sa, "flying"), 1);
+    assert_eq!(t.counters(sa, "vigilance"), 1);
+    assert_eq!(t.counters(sa, "haste"), 0);
+    assert!(has_kw(&t, sa, KeywordKind::Flying));
+}
+
+#[test]
+fn everything_comes_to_dust_spares_creatures_sharing_a_type_with_a_convoker() {
+    cr!("702.51a", "702.51c");
+    assert_supported("Everything Comes to Dust");
+    use mtg_engine::object::CastMethod;
+    let mut t = TestGame::new(2);
+    let knights: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Youthful Knight")).collect();
+    let their_knight = t.battlefield(P1, "Youthful Knight");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let thopter = t.battlefield(P1, "Ornithopter");
+    t.lands(P0, "Plains", 8);
+    let ecd = t.hand(P0, "Everything Comes to Dust");
+    t.answer_choose(P0, &[Entity::Object(knights[0]), Entity::Object(knights[1])]);
+    t.cast(P0, ecd).method(CastMethod::Normal).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(knights[0]) && t.on_battlefield(their_knight), "Humans and Knights stay");
+    assert!(!t.on_battlefield(bears));
+    assert!(!t.on_battlefield(thopter), "all artifacts");
+}
+
+#[test]
+fn oblivious_bookworm_keeps_the_card_after_a_permanent_entered_face_down() {
+    cr!("708.2a", "708.8");
+    assert_supported("Oblivious Bookworm");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oblivious Bookworm");
+    t.set_step(P0, Step::PostcombatMain);
+    // Nothing face down: draw, then discard.
+    t.answer_yes(P0, true);
+    let before = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before, "drew one, discarded one");
+}
+
+#[test]
+fn oblivious_bookworm_skips_the_discard_after_a_morph_entered_face_down() {
+    cr!("708.2a", "702.37c");
+    use mtg_engine::keywords::KeywordKind;
+    use mtg_engine::object::CastMethod;
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oblivious Bookworm");
+    t.lands(P0, "Plains", 3);
+    let angel = t.hand(P0, "Exalted Angel");
+    t.cast(P0, angel)
+        .method(CastMethod::FaceDown(KeywordKind::Morph))
+        .go();
+    t.resolve_all();
+    t.set_step(P0, Step::PostcombatMain);
+    t.answer_yes(P0, true);
+    let before = t.hand_size(P0);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1, "drew, and no discard");
+}

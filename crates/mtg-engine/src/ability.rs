@@ -1673,6 +1673,12 @@ pub enum Filter {
     /// as [`vars::TESTED`], which its trigger conditions name as
     /// `Filter::In(Sel::Var(TESTED))` (see `oracle/patterns/history_filters_4.rs`).
     History(Box<Condition>),
+    /// A requirement on a target object checked only as the target is chosen, not again
+    /// as the spell or ability resolves (CR 608.2b; see
+    /// `target_rules::relaxed_on_resolution`): Veteran's Voice's "target creature other
+    /// than the creature tapped this way", where the creature to be tapped is the enchanted
+    /// creature as the target is chosen (CR 601.2c, before costs are paid, 601.2h).
+    AsChosen(Box<Filter>),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).

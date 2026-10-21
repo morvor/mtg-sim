@@ -1041,6 +1041,7 @@ impl Game {
                 crate::relational::value_cmp(self, id, lhs, *cmp, rhs, ctx)
             }
             Filter::History(cond) => crate::relational::history_holds(self, id, cond, ctx),
+            Filter::AsChosen(f) => self.matches(id, f, ctx),
             // Checked by whatever chooses the objects together (`relational.rs`).
             Filter::Together(_) => true,
             Filter::Custom(name) => crate::mana_value::custom_parity_filter(self, name, id, c)

@@ -92,7 +92,11 @@ fn parse_triggered_at(
         // "if A, B, and C, [effect]" (Happily Ever After): a list of conditions, when it
         // reads as one.
         let listed = splits.iter().copied().find(|&i| {
-            r[..i].contains(", and ") && super::statics::parse_condition(&r[..i], ctx).is_some()
+            let c = &r[..i];
+            (c.contains(", and ") || c.contains(", or "))
+                && (super::statics::parse_condition(c, ctx).is_some()
+                    || super::patterns::conditions_referents::intervening(c, ctx, &it, &it_player)
+                        .is_some())
         });
         let split = listed
             .or_else(|| splits.first().copied())

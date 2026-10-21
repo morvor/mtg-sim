@@ -1030,6 +1030,8 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
         .or_else(|| source_to_referent(c, b))
         .or_else(|| nth_time_counters(c, b))
         .or_else(|| super::history_conditions_4::first_time_referent(c, b))
+        .or_else(|| super::history_conditions_4::sources_dealt_damage_to_it(c, b))
+        .or_else(|| super::history_conditions_4::nth_spell_list(c, b))
         .or_else(|| phase_condition(c))
         .or_else(|| resolved_ordinal(c))
         .or_else(|| nth_spell(c, b))
@@ -1768,7 +1770,7 @@ inventory::submit! { super::ConditionPattern { name: "history: ordinals and tota
 /// "it's the second creature spell you cast this turn", "it was the second spell you cast
 /// this turn": the spell (the triggering spell, or the source's own) is the Nth matching
 /// spell its controller cast this turn, counting the ones cast up to it.
-fn nth_spell(c: &str, b: &mut Builder) -> Option<Condition> {
+pub(crate) fn nth_spell(c: &str, b: &mut Builder) -> Option<Condition> {
     let r = c
         .strip_prefix("it's the ")
         .or_else(|| c.strip_prefix("it was the "))?;
