@@ -88,31 +88,45 @@ fn cant_attack_you_during_their_next_turn(l: &str, b: &mut Builder) -> Option<Ef
     let rest = l
         .strip_prefix("that player can't attack you")
         .or_else(|| l.strip_prefix("they can't attack you"))?;
-    let planeswalkers = match rest {
-        " or permanents you control during their next turn"
-        | " or planeswalkers you control during their next turn" => true,
-        " during their next turn" => false,
+    // "or permanents you control": planeswalkers and battles you control (a battle you
+    // control can be attacked by a player other than its protector, CR 508.1b);
+    // "or planeswalkers you control": planeswalkers only.
+    let (planeswalkers, permanents) = match rest {
+        " or permanents you control during their next turn" => (false, true),
+        " or planeswalkers you control during their next turn" => (true, false),
+        " during their next turn" => (false, false),
         _ => return None,
     };
     let who = b.it_player.clone();
     if matches!(who, PlayerRef::You) {
         return None;
     }
+    let attackers = Filter::and(vec![
+        Filter::creature(),
+        Filter::ControllerMatches(Box::new(PlayerFilter::Active)),
+    ]);
+    let mut effects = vec![Effect::AddRestriction {
+        restriction: Restriction::CantAttackPlayer {
+            attackers: attackers.clone(),
+            defender: PlayerFilter::You,
+            planeswalkers,
+            battles: false,
+        },
+        duration: Duration::EndOfTurn,
+    }];
+    if permanents {
+        effects.push(Effect::AddRestriction {
+            restriction: Restriction::CantAttackPermanentsOf {
+                attackers,
+                controller: PlayerFilter::You,
+            },
+            duration: Duration::EndOfTurn,
+        });
+    }
     Some(Effect::DuringNext {
         who,
         part: NextTurnPart::Turn,
-        effect: Box::new(Effect::AddRestriction {
-            restriction: Restriction::CantAttackPlayer {
-                attackers: Filter::and(vec![
-                    Filter::creature(),
-                    Filter::ControllerMatches(Box::new(PlayerFilter::Active)),
-                ]),
-                defender: PlayerFilter::You,
-                planeswalkers,
-                battles: false,
-            },
-            duration: Duration::EndOfTurn,
-        }),
+        effect: Box::new(Effect::seq(effects)),
     })
 }
 
@@ -162,7 +176,11 @@ inventory::submit! { EffectPattern { name: "durations 4: [player] plays with the
 
 /// The replacement effect stopping counters from being put on objects or players
 /// (CR 614.1, 122.6; the static form is `r122_cant_have_counters_put.rs`).
-fn counters_prevented(on_objects: Option<Filter>, on_players: Option<PlayerFilter>, d: Duration) -> Effect {
+fn counters_prevented(
+    on_objects: Option<Filter>,
+    on_players: Option<PlayerFilter>,
+    d: Duration,
+) -> Effect {
     Effect::AddReplacement {
         def: ReplacementDef {
             event: ReplacementEvent::PutCounters {
@@ -268,7 +286,13 @@ fn during_that_extra_turn(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     // Only a rule for that turn.
-    if !matches!(&e, Effect::AddRestriction { duration: Duration::EndOfTurn, .. }) {
+    if !matches!(
+        &e,
+        Effect::AddRestriction {
+            duration: Duration::EndOfTurn,
+            ..
+        }
+    ) {
         return false;
     }
     attach_to_extra_turn(prev, e)

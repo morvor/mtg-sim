@@ -224,7 +224,8 @@ fn ashnod_copies_abilities_paid_for_by_sacrificing() {
     assert_eq!(t.named_on_battlefield("Forest").len(), 2);
     // An ability with no sacrifice in its cost isn't copied.
     let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
-    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)]).expect("activate");
+    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)])
+        .expect("activate");
     t.settle();
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();

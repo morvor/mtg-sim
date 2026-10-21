@@ -298,205 +298,205 @@ impl Game {
                 }
                 other => (other, None),
             };
-            let (trigger, per) = match batched {
-                TriggerCond::Batched { trigger, per } => (trigger, per),
-                // A batched alternative of a trigger with several conditions ("when
-                // enchanted creature becomes tapped or is dealt damage"); the other
-                // alternatives trigger per event.
+            let alternatives: Vec<(&Box<TriggerCond>, &BatchPer)> = match batched {
+                TriggerCond::Batched { trigger, per } => vec![(trigger, per)],
+                // Batched alternatives of a trigger with several conditions: "when enchanted
+                // creature becomes tapped or is dealt damage" (the other alternatives
+                // trigger per event), "whenever one or more other permanents phase out
+                // and whenever one or more other cards are put into exile" (each condition
+                // is its own trigger event, CR 603.2c: a batch matching both triggers it
+                // once for each). (A single trigger event with alternatives, "one or more
+                // creatures fight or become blocked", is one `Batched` of an `AnyOf`.)
                 TriggerCond::AnyOf(v) => {
-                    // ("Whenever one or more creatures you control fight or become
-                    // blocked": the batched alternative this batch's events match.)
-                    let alts: Vec<(&Box<TriggerCond>, &BatchPer)> = v
-                        .iter()
+                    let mut probe = Ctx::new(Some(src), ctl);
+                    probe.link = a.link;
+                    probe.ability_uid = a.uid;
+                    v.iter()
                         .filter_map(|c| match c {
                             TriggerCond::Batched { trigger, per } => Some((trigger, per)),
                             _ => None,
                         })
-                        .collect();
-                    let mut probe = Ctx::new(Some(src), ctl);
-                    probe.link = a.link;
-                    probe.ability_uid = a.uid;
-                    let matching = alts.iter().find(|(t, _)| {
-                        batch
-                            .iter()
-                            .any(|ev| !self.trigger_matches_ctx(t, &probe, ev).is_empty())
-                    });
-                    match matching.or(alts.first()) {
-                        Some(x) => *x,
-                        None => continue,
-                    }
+                        .filter(|(t, _)| {
+                            batch
+                                .iter()
+                                .any(|ev| !self.trigger_matches_ctx(t, &probe, ev).is_empty())
+                        })
+                        .collect()
                 }
                 _ => continue,
             };
-            // "… for the first time each turn": the first batch this turn with a matching
-            // event (its events are matched without the qualifier, see below).
-            let (trigger, first_time) = match &**trigger {
-                TriggerCond::FirstTimeEachTurn(inner) => (&**inner, true),
-                other => (other, false),
-            };
-            // Filters like "the chosen color" refer to the ability's linked choices.
-            let mut base = Ctx::new(Some(src), ctl);
-            base.link = a.link;
-            base.ability_uid = a.uid;
-            let mut infos: Vec<EventInfo> = Vec::new();
-            // CR 603.2d: how many additional times each event makes it trigger.
-            let mut extras: Vec<usize> = Vec::new();
-            let gone = looking_back.contains(&(src, a.uid));
-            for ev in batch {
-                if gone && !looks_back(trigger, ev) {
+            for (trigger, per) in alternatives {
+                // "… for the first time each turn": the first batch this turn with a matching
+                // event (its events are matched without the qualifier, see below).
+                let (trigger, first_time) = match &**trigger {
+                    TriggerCond::FirstTimeEachTurn(inner) => (&**inner, true),
+                    other => (other, false),
+                };
+                // Filters like "the chosen color" refer to the ability's linked choices.
+                let mut base = Ctx::new(Some(src), ctl);
+                base.link = a.link;
+                base.ability_uid = a.uid;
+                let mut infos: Vec<EventInfo> = Vec::new();
+                // CR 603.2d: how many additional times each event makes it trigger.
+                let mut extras: Vec<usize> = Vec::new();
+                let gone = looking_back.contains(&(src, a.uid));
+                for ev in batch {
+                    if gone && !looks_back(trigger, ev) {
+                        continue;
+                    }
+                    // "Creatures dying don't cause abilities to trigger" (Hushbringer).
+                    if !on_sacrifice(trigger)
+                        && crate::kw::torpor::suppressed_for(
+                            self,
+                            ev,
+                            Some(src),
+                            ctl,
+                            looks_back(trigger, ev),
+                        )
+                    {
+                        continue;
+                    }
+                    let matched = self.trigger_matches_ctx(trigger, &base, ev);
+                    if !matched.is_empty() {
+                        let extra = self.additional_triggers(src, &t.trigger, ev, None);
+                        extras.extend(std::iter::repeat_n(extra, matched.len()));
+                    }
+                    infos.extend(matched);
+                }
+                if infos.is_empty() {
                     continue;
                 }
-                // "Creatures dying don't cause abilities to trigger" (Hushbringer).
-                if !on_sacrifice(trigger)
-                    && crate::kw::torpor::suppressed_for(
-                        self,
-                        ev,
-                        Some(src),
-                        ctl,
-                        looks_back(trigger, ev),
-                    )
-                {
-                    continue;
-                }
-                let matched = self.trigger_matches_ctx(trigger, &base, ev);
-                if !matched.is_empty() {
-                    let extra = self.additional_triggers(src, &t.trigger, ev, None);
-                    extras.extend(std::iter::repeat_n(extra, matched.len()));
-                }
-                infos.extend(matched);
-            }
-            if infos.is_empty() {
-                continue;
-            }
-            let key = |i: &EventInfo| match per {
-                BatchPer::Batch => None,
-                BatchPer::Player | BatchPer::AnyPlayer => i.player.map(|p| Entity::Player(p)),
-                BatchPer::Recipient => i
-                    .object
-                    .map(Entity::Object)
-                    .or(i.player.map(Entity::Player)),
-                BatchPer::Object => i.object.map(Entity::Object),
-                BatchPer::Other => i.other.map(Entity::Object),
-            };
-            let mut groups: Vec<Vec<EventInfo>> = Vec::new();
-            let mut group_extra: Vec<usize> = Vec::new();
-            for (info, extra) in infos.into_iter().zip(extras) {
-                match groups.iter().position(|g| key(&g[0]) == key(&info)) {
-                    Some(i) => {
-                        groups[i].push(info);
-                        group_extra[i] = group_extra[i].max(extra);
-                    }
-                    None => {
-                        groups.push(vec![info]);
-                        group_extra.push(extra);
-                    }
-                }
-            }
-            if first_time {
-                // Not if an earlier event this turn matched (for the same player, when
-                // grouped by player).
-                let earlier: Vec<Option<Entity>> = self.turn_events[..before_batch]
-                    .iter()
-                    .flat_map(|e| self.trigger_matches_ctx(trigger, &base, e))
-                    .map(|i| key(&i))
-                    .collect();
-                let keep: Vec<bool> = groups
-                    .iter()
-                    .map(|g| !earlier.iter().any(|k| k.is_none() || *k == key(&g[0])))
-                    .collect();
-                let mut k = keep.iter();
-                groups.retain(|_| *k.next().unwrap_or(&true));
-                let mut k = keep.iter();
-                group_extra.retain(|_| *k.next().unwrap_or(&true));
-            }
-            // "one or more opponents each ...": only the first player's group that meets
-            // the condition triggers it.
-            let mut once_done = false;
-            for (g, extra) in groups.into_iter().zip(group_extra) {
-                if once_done {
-                    break;
-                }
-                let mut info = g[0].clone();
-                // "That much"/"that many": the total amount (damage, life, ...), or the
-                // number of events for events without an amount (objects entering, ...).
-                info.amount = g.iter().map(|i| i.amount).sum();
-                // Die rolls always have an amount: their result, which a planar die roll
-                // doesn't have (CR 706.7).
-                let die_roll = matches!(trigger, TriggerCond::RollDie(_));
-                if !die_roll && g.iter().all(|i| i.amount == 0) {
-                    info.amount = g.len() as i32;
-                }
-                // Each attack event reports the size of the whole declaration; "whenever
-                // one or more creatures you control attack, add that much mana" counts the
-                // matching attackers (one event each).
-                if matches!(trigger, TriggerCond::Attacks(_)) {
-                    info.amount = g.len() as i32;
-                }
-                info.objects = Vec::new();
-                for i in &g {
-                    // An event about several objects at once (the creatures attacking a
-                    // player) contributes all of them.
-                    let own = match if matches!(per, BatchPer::Recipient) {
-                        i.other
-                    } else {
-                        i.object.or(i.other)
-                    } {
-                        Some(o) => vec![o],
-                        None => i.objects.clone(),
-                    };
-                    for o in own {
-                        if !info.objects.contains(&o) {
-                            info.objects.push(o);
+                let key = |i: &EventInfo| match per {
+                    BatchPer::Batch => None,
+                    BatchPer::Player | BatchPer::AnyPlayer => i.player.map(|p| Entity::Player(p)),
+                    BatchPer::Recipient => i
+                        .object
+                        .map(Entity::Object)
+                        .or(i.player.map(Entity::Player)),
+                    BatchPer::Object => i.object.map(Entity::Object),
+                    BatchPer::Other => i.other.map(Entity::Object),
+                };
+                let mut groups: Vec<Vec<EventInfo>> = Vec::new();
+                let mut group_extra: Vec<usize> = Vec::new();
+                for (info, extra) in infos.into_iter().zip(extras) {
+                    match groups.iter().position(|g| key(&g[0]) == key(&info)) {
+                        Some(i) => {
+                            groups[i].push(info);
+                            group_extra[i] = group_extra[i].max(extra);
+                        }
+                        None => {
+                            groups.push(vec![info]);
+                            group_extra.push(extra);
                         }
                     }
                 }
-                let mut ctx = base.clone();
-                ctx.event = Some(info.clone());
-                if batch_cond.is_some_and(|c| !self.eval_cond(c, &ctx)) {
-                    continue;
+                if first_time {
+                    // Not if an earlier event this turn matched (for the same player, when
+                    // grouped by player).
+                    let earlier: Vec<Option<Entity>> = self.turn_events[..before_batch]
+                        .iter()
+                        .flat_map(|e| self.trigger_matches_ctx(trigger, &base, e))
+                        .map(|i| key(&i))
+                        .collect();
+                    let keep: Vec<bool> = groups
+                        .iter()
+                        .map(|g| !earlier.iter().any(|k| k.is_none() || *k == key(&g[0])))
+                        .collect();
+                    let mut k = keep.iter();
+                    groups.retain(|_| *k.next().unwrap_or(&true));
+                    let mut k = keep.iter();
+                    group_extra.retain(|_| *k.next().unwrap_or(&true));
                 }
-                if let Some(c) = &t.intervening_if {
-                    if !self.eval_cond(c, &ctx) {
+                // "one or more opponents each ...": only the first player's group that meets
+                // the condition triggers it.
+                let mut once_done = false;
+                for (g, extra) in groups.into_iter().zip(group_extra) {
+                    if once_done {
+                        break;
+                    }
+                    let mut info = g[0].clone();
+                    // "That much"/"that many": the total amount (damage, life, ...), or the
+                    // number of events for events without an amount (objects entering, ...).
+                    info.amount = g.iter().map(|i| i.amount).sum();
+                    // Die rolls always have an amount: their result, which a planar die roll
+                    // doesn't have (CR 706.7).
+                    let die_roll = matches!(trigger, TriggerCond::RollDie(_));
+                    if !die_roll && g.iter().all(|i| i.amount == 0) {
+                        info.amount = g.len() as i32;
+                    }
+                    // Each attack event reports the size of the whole declaration; "whenever
+                    // one or more creatures you control attack, add that much mana" counts the
+                    // matching attackers (one event each).
+                    if matches!(trigger, TriggerCond::Attacks(_)) {
+                        info.amount = g.len() as i32;
+                    }
+                    info.objects = Vec::new();
+                    for i in &g {
+                        // An event about several objects at once (the creatures attacking a
+                        // player) contributes all of them.
+                        let own = match if matches!(per, BatchPer::Recipient) {
+                            i.other
+                        } else {
+                            i.object.or(i.other)
+                        } {
+                            Some(o) => vec![o],
+                            None => i.objects.clone(),
+                        };
+                        for o in own {
+                            if !info.objects.contains(&o) {
+                                info.objects.push(o);
+                            }
+                        }
+                    }
+                    let mut ctx = base.clone();
+                    ctx.event = Some(info.clone());
+                    if batch_cond.is_some_and(|c| !self.eval_cond(c, &ctx)) {
                         continue;
                     }
-                }
-                once_done = matches!(per, BatchPer::AnyPlayer);
-                // CR 603.2h: "Do this only once each turn".
-                if t.do_once_per_turn
-                    && self
-                        .obj(src)
-                        .triggers_this_turn
-                        .get(&(a.uid | turn_keys::DONE_ONCE))
-                        .is_some_and(|n| *n > 0)
-                {
-                    continue;
-                }
-                if t.once_per_turn {
-                    let n = self.objects[src.0 as usize]
-                        .triggers_this_turn
-                        .entry(a.uid)
-                        .or_insert(0);
-                    if *n > 0 {
+                    if let Some(c) = &t.intervening_if {
+                        if !self.eval_cond(c, &ctx) {
+                            continue;
+                        }
+                    }
+                    once_done = matches!(per, BatchPer::AnyPlayer);
+                    // CR 603.2h: "Do this only once each turn".
+                    if t.do_once_per_turn
+                        && self
+                            .obj(src)
+                            .triggers_this_turn
+                            .get(&(a.uid | turn_keys::DONE_ONCE))
+                            .is_some_and(|n| *n > 0)
+                    {
                         continue;
                     }
-                    *n += 1;
-                }
-                // "This ability triggers only once." / "only twice each turn": each time it
-                // would trigger, additional times included (Acrobatic Cheerleader's
-                // rulings).
-                let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
-                for _ in 0..times {
-                    self.trigger_order += 1;
-                    found.push(PendingTrigger {
-                        source: src,
-                        controller: ctl,
-                        ability: a.clone(),
-                        event: info.clone(),
-                        source_lki: Some(Box::new(self.obj(src).chars.clone())),
-                        saved: None,
-                        body: None,
-                        order: self.trigger_order,
-                    });
+                    if t.once_per_turn {
+                        let n = self.objects[src.0 as usize]
+                            .triggers_this_turn
+                            .entry(a.uid)
+                            .or_insert(0);
+                        if *n > 0 {
+                            continue;
+                        }
+                        *n += 1;
+                    }
+                    // "This ability triggers only once." / "only twice each turn": each time it
+                    // would trigger, additional times included (Acrobatic Cheerleader's
+                    // rulings).
+                    let times =
+                        crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
+                    for _ in 0..times {
+                        self.trigger_order += 1;
+                        found.push(PendingTrigger {
+                            source: src,
+                            controller: ctl,
+                            ability: a.clone(),
+                            event: info.clone(),
+                            source_lki: Some(Box::new(self.obj(src).chars.clone())),
+                            saved: None,
+                            body: None,
+                            order: self.trigger_order,
+                        });
+                    }
                 }
             }
         }

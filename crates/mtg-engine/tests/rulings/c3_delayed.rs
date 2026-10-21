@@ -74,13 +74,12 @@ fn elkin_lair_card_not_played_goes_to_the_graveyard() {
         t.set_step(P0, Step::End);
         t.advance_to(P1, Step::PrecombatMain);
         t.resolve_all();
-        let exiled: Vec<ObjectId> = t
-            .g
-            .exile
-            .iter()
-            .copied()
-            .filter(|o| t.g.obj(*o).chars.name == "Forest")
-            .collect();
+        let exiled: Vec<ObjectId> =
+            t.g.exile
+                .iter()
+                .copied()
+                .filter(|o| t.g.obj(*o).chars.name == "Forest")
+                .collect();
         assert_eq!(exiled.len(), 1);
         if play {
             t.play_land(P1, exiled[0]).expect("play it this turn");
@@ -102,23 +101,28 @@ fn mnemonic_betrayal_returns_the_cards_still_exiled() {
     supported("Mnemonic Betrayal");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
-    t.graveyard(P1, "Grizzly Bears");
-    let bolt = t.graveyard(P1, "Lightning Bolt");
+    t.graveyard(P1, "Hill Giant");
+    let bears = t.graveyard(P1, "Grizzly Bears");
     cast_new(&mut t, P0, "Mnemonic Betrayal", &[]);
     t.resolve_all();
     assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_exile("Hill Giant"));
     assert!(t.in_exile("Mnemonic Betrayal"));
-    // P0 casts the Bolt from exile with mana of any type.
-    t.lands(P0, "Island", 1);
-    let bolt = t.g.current(bolt);
-    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    // P0 casts the Bears from exile with mana of any type: they're no longer exiled.
+    t.lands(P0, "Island", 2);
+    let bears = t.g.current(bears);
+    t.cast(P0, bears).go();
     t.resolve_all();
-    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     t.advance_to(P0, Step::End);
     t.resolve_all();
-    assert!(t.in_graveyard(P1, "Grizzly Bears"));
-    assert!(t.in_graveyard(P1, "Lightning Bolt"));
-    assert!(!t.in_exile("Grizzly Bears"));
+    // Only the Hill Giant, still exiled, returns; the Bears stay on the battlefield.
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(!t.in_exile("Hill Giant"));
+    let on = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(on.len(), 1);
+    assert_eq!(t.obj_now(on[0]).controller, P0);
+    assert!(!t.in_graveyard(P1, "Grizzly Bears"));
 }
 
 #[test]
@@ -134,7 +138,12 @@ fn rescue_from_the_underworld_returns_both_cards_at_your_next_upkeep() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.graveyard(P0, "Hill Giant");
     t.answer_choose(P0, &[Entity::Object(bears)]);
-    cast_new(&mut t, P0, "Rescue from the Underworld", &[Entity::Object(giant)]);
+    cast_new(
+        &mut t,
+        P0,
+        "Rescue from the Underworld",
+        &[Entity::Object(giant)],
+    );
     t.resolve_all();
     assert!(t.in_exile("Rescue from the Underworld"));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
@@ -158,7 +167,12 @@ fn rescue_from_the_underworld_a_sacrificed_token_doesnt_return() {
     let token = crate::r_s02_common::create_token(&mut t, P0, "Soldier");
     let giant = t.graveyard(P0, "Hill Giant");
     t.answer_choose(P0, &[Entity::Object(token)]);
-    cast_new(&mut t, P0, "Rescue from the Underworld", &[Entity::Object(giant)]);
+    cast_new(
+        &mut t,
+        P0,
+        "Rescue from the Underworld",
+        &[Entity::Object(giant)],
+    );
     t.resolve_all();
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::Upkeep);
@@ -234,7 +248,7 @@ fn lucius_returns_from_exile_when_that_creature_leaves() {
 
 #[test]
 fn mana_sculpt_adds_the_mana_at_your_next_main_phase() {
-    cr!("603.7a", "605.1b", "601.2h");
+    cr!("603.7a", "601.2h");
     supported("Mana Sculpt");
     for wizard in [true, false] {
         let mut t = TestGame::new(2);

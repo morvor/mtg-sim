@@ -133,7 +133,8 @@ fn ghyrson_starn_exactly_one_damage() {
     t.battlefield(P0, "Ghyrson Starn, Kelermorph");
     // "{T}: This creature deals 1 damage to any target."
     let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
-    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)]).expect("ping");
+    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)])
+        .expect("ping");
     t.settle();
     t.resolve_all();
     // 1 from the Sorcerer, 2 from Ghyrson (whose own 2 damage doesn't trigger it).
@@ -141,7 +142,8 @@ fn ghyrson_starn_exactly_one_damage() {
     // A permanent: Ghyrson deals its 2 damage to that creature.
     let giant = t.battlefield(P1, "Hill Giant");
     t.g.obj_mut(sorcerer).tapped = false;
-    t.activate(P0, sorcerer, 0, &[Entity::Object(giant)]).expect("ping");
+    t.activate(P0, sorcerer, 0, &[Entity::Object(giant)])
+        .expect("ping");
     t.settle();
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Hill Giant"));
@@ -152,6 +154,19 @@ fn ghyrson_starn_exactly_one_damage() {
     t.settle();
     assert_eq!(t.stack_len(), 0);
     assert_eq!(t.life(P1), 14);
+    // Exactly 1 damage to several permanents and players at once: once for each.
+    let pest = t.battlefield(P0, "Pestilence");
+    let ox = t.battlefield(P1, "Craw Wurm");
+    t.lands(P0, "Swamp", 1);
+    t.activate(P0, pest, 0, &[]).expect("pestilence");
+    t.settle();
+    t.resolve();
+    t.settle();
+    // P0, P1, Ghyrson, the Sorcerer and the Wurm.
+    assert_eq!(triggers_on_stack(&t, "2 damage"), 5);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 11);
+    assert_eq!(t.obj_now(ox).damage, 3);
 }
 
 #[test]
@@ -230,7 +245,14 @@ fn ninth_doctor_additional_upkeep_after_the_upkeep() {
     t.advance_to(P0, Step::Draw);
     // The trigger resolved in the upkeep: a second upkeep followed it, in the same turn.
     assert_eq!(t.g.turn.upkeeps, 2);
-    assert_eq!(t.g.turn.step_log.iter().filter(|s| **s == Step::Upkeep).count(), 2);
+    assert_eq!(
+        t.g.turn
+            .step_log
+            .iter()
+            .filter(|s| **s == Step::Upkeep)
+            .count(),
+        2
+    );
     // An untapped Doctor doesn't become untapped: one upkeep the next turn.
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::Draw);
@@ -276,7 +298,7 @@ fn diabolic_servitude_leaving_exiles_the_creature() {
     crate::r_s02_common::destroy(&mut t, servitude);
     t.resolve_all();
     assert!(t.in_exile("Grizzly Bears"));
-    // Returned to hand and recast: a new object Servitude doesn't track.
+    // Returned to its owner's hand: a new object Servitude doesn't track.
     let giant = t.graveyard(P0, "Hill Giant");
     t.answer_targets(P0, &[Entity::Object(giant)]);
     let servitude = t.enter(P0, "Diabolic Servitude");
@@ -284,13 +306,19 @@ fn diabolic_servitude_leaving_exiles_the_creature() {
     t.resolve_all();
     let g = t.named_on_battlefield("Hill Giant")[0];
     let c = t.g.current(g);
-    t.g.move_object(c, mtg_engine::object::Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
-    let g2 = t.hand(P0, "Hill Giant");
-    let _ = g2;
+    t.g.move_object(
+        c,
+        mtg_engine::object::Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    let in_hand = t.g.current(c);
+    assert_eq!(t.obj_now(in_hand).zone, mtg_engine::object::Zone::Hand(P0));
     t.settle();
     crate::r_s02_common::destroy(&mut t, servitude);
     t.resolve_all();
-    assert!(t.in_hand(P0, "Hill Giant"));
+    assert_eq!(t.obj_now(in_hand).zone, mtg_engine::object::Zone::Hand(P0));
+    assert!(!t.in_exile("Hill Giant"));
 }
 
 #[test]
@@ -309,7 +337,12 @@ fn havengul_mystery_transforms_back_when_its_creature_leaves() {
     let returned = t.named_on_battlefield("Grizzly Bears")[0];
     // It leaves the battlefield (bounced): Havengul Mystery transforms.
     let c = t.g.current(returned);
-    t.g.move_object(c, mtg_engine::object::Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        c,
+        mtg_engine::object::Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.settle();
     t.resolve_all();
     assert_eq!(t.obj_now(lab).chars.name.as_str(), "Havengul Laboratory");
@@ -378,13 +411,15 @@ fn prowl_draws_and_converts_when_the_exiled_card_is_played() {
     t.settle();
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
-    assert_eq!(t.obj_now(prowl).chars.name.as_str(), "Prowl, Pursuit Vehicle");
+    assert_eq!(
+        t.obj_now(prowl).chars.name.as_str(),
+        "Prowl, Pursuit Vehicle"
+    );
 }
 
 #[test]
 fn war_doctor_phasing_and_exile() {
     cr!("603.2c", "702.26b");
-    interp!("batched-alternatives-one-batch");
     ruling!(
         "The War Doctor",
         "If The War Doctor phases out at the same time as any other permanents, its first ability won't trigger."
@@ -402,21 +437,32 @@ fn war_doctor_phasing_and_exile() {
     assert_eq!(t.counters(doc, "time"), 1);
     // Cards put into exile from a graveyard.
     let c = t.graveyard(P1, "Island");
-    t.g.move_object(c, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        c,
+        mtg_engine::object::Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.settle();
     t.resolve_all();
     assert_eq!(t.counters(doc, "time"), 2);
-    // Both at the same time: one trigger.
+    // Both at the same time: each condition is its own trigger event, so two triggers.
     let d = t.battlefield(P1, "Forest");
     let e = t.graveyard(P1, "Island");
     t.g.batch_hold += 1;
     mtg_engine::keyword_impls::phase_out(&mut t.g, vec![d]);
-    t.g.move_object(e, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        e,
+        mtg_engine::object::Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.batch_hold -= 1;
     t.g.flush_events();
     t.settle();
+    assert_eq!(t.stack_len(), 2);
     t.resolve_all();
-    assert_eq!(t.counters(doc, "time"), 3);
+    assert_eq!(t.counters(doc, "time"), 4);
     // The Doctor phasing out with another permanent: no trigger.
     let f = t.battlefield(P1, "Mountain");
     mtg_engine::keyword_impls::phase_out(&mut t.g, vec![doc, f]);
@@ -491,7 +537,9 @@ fn watcher_of_hours_surveils_as_time_counters_are_removed_in_exile() {
     let surveils = |t: &TestGame| {
         t.asked()
             .iter()
-            .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::Surveil { .. }))
+            .filter(|(p, d)| {
+                *p == P0 && matches!(d, mtg_engine::decision::Decision::Surveil { .. })
+            })
             .count()
     };
     let mut t = TestGame::new(2);
@@ -517,15 +565,19 @@ fn watcher_of_hours_surveils_as_time_counters_are_removed_in_exile() {
 
 #[test]
 fn risky_move_gaining_control_from_another_player() {
-    cr!("705.2", "108.4");
-    ruling!("Risky Move", "This card does not target any creatures or players.");
+    cr!("705.2", "603.2");
+    ruling!(
+        "Risky Move",
+        "This card does not target any creatures or players."
+    );
     supported("Risky Move");
     for opp in [P0, P2] {
         let mut t = TestGame::new(3);
         let rm = t.battlefield(P0, "Risky Move");
-        let bears = t.battlefield(P1, "Grizzly Bears");
-        // P1 gains control of it in their upkeep, chooses the Bears and that opponent, and
-        // loses the flip.
+        // A creature with shroud can be chosen: the ability doesn't target.
+        let bears = t.battlefield(P1, "Argothian Enchantress");
+        // P1 gains control of it in their upkeep, chooses the creature and that opponent,
+        // and loses the flip.
         t.answer_choose(P1, &[Entity::Object(bears)]);
         t.answer_choose(P1, &[Entity::Player(opp)]);
         t.g.dice.loaded_coins.push_back(false);
@@ -610,7 +662,12 @@ fn hero_of_bretagard_counts_cards_exiled_from_hand_or_by_your_spells() {
     let b = t.hand(P0, "Forest");
     t.g.batch_hold += 1;
     for c in [a, b] {
-        t.g.move_object(c, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+        t.g.move_object(
+            c,
+            mtg_engine::object::Zone::Exile,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        );
     }
     t.g.batch_hold -= 1;
     t.g.end_event_batch();
@@ -629,6 +686,28 @@ fn hero_of_bretagard_counts_cards_exiled_from_hand_or_by_your_spells() {
     cast_new(&mut t, P1, "Swords to Plowshares", &[Entity::Object(giant)]);
     t.resolve_all();
     assert_eq!(t.counters(hero, "+1/+1"), 3);
+    // A card exiled from P0's hand and a permanent exiled by P0's ability at the same
+    // time: one trigger event ("or"), one trigger counting both.
+    let c = t.hand(P0, "Island");
+    let ox = t.battlefield(P1, "Grizzly Bears");
+    t.g.resolving = Some(hero);
+    t.g.batch_hold += 1;
+    for o in [c, ox] {
+        t.g.move_object(
+            o,
+            mtg_engine::object::Zone::Exile,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        );
+    }
+    t.g.batch_hold -= 1;
+    t.g.end_event_batch();
+    t.g.flush_events();
+    t.g.resolving = None;
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(hero, "+1/+1"), 5);
 }
 
 #[test]
@@ -708,11 +787,7 @@ fn imodane_spell_targeting_only_a_creature_dealing_damage_to_it() {
 
 #[test]
 fn zenos_chosen_creature_and_chosen_player() {
-    cr!("607.2d", "701.27a", "104.2a");
-    ruling!(
-        "Zenos yae Galvus // Shinryu, Transcendent Rival",
-        "In the case where you can't choose a creature an opponent controls for Zenos's first ability (probably because your opponents control no creatures), other creatures will still get -2/-2 until end of turn when Zenos's first ability resolves."
-    );
+    cr!("607.2d", "701.27a", "104.2b");
     supported("Zenos yae Galvus");
     let mut t = TestGame::new(3);
     let giant = t.battlefield(P1, "Hill Giant");
@@ -733,7 +808,10 @@ fn zenos_chosen_creature_and_chosen_player() {
     t.answer_choose(P0, &[Entity::Player(P1)]);
     crate::r_s02_common::destroy(&mut t, giant);
     t.resolve_all();
-    assert_eq!(t.obj_now(zenos).chars.name.as_str(), "Shinryu, Transcendent Rival");
+    assert_eq!(
+        t.obj_now(zenos).chars.name.as_str(),
+        "Shinryu, Transcendent Rival"
+    );
     // The chosen player loses: you win the game.
     t.g.players[P1.idx()].life = 0;
     t.settle();
@@ -746,6 +824,10 @@ fn zenos_chosen_creature_and_chosen_player() {
 #[test]
 fn zenos_no_creature_to_choose() {
     cr!("607.2d");
+    ruling!(
+        "Zenos yae Galvus // Shinryu, Transcendent Rival",
+        "In the case where you can't choose a creature an opponent controls for Zenos's first ability (probably because your opponents control no creatures), other creatures will still get -2/-2 until end of turn when Zenos's first ability resolves."
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.enter(P0, "Zenos yae Galvus");

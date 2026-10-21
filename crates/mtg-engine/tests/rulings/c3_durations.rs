@@ -19,7 +19,8 @@ fn immovable_rod_for_as_long_as_it_remains_tapped() {
     t.lands(P0, "Plains", 4);
     let angel = t.battlefield(P1, "Serra Angel");
     t.g.turn.priority = Some(P0);
-    t.activate(P0, rod, 0, &[Entity::Object(angel)]).expect("activate");
+    t.activate(P0, rod, 0, &[Entity::Object(angel)])
+        .expect("activate");
     t.resolve_all();
     assert!(!t.obj_now(angel).has_keyword(KeywordKind::Flying));
     t.set_step(P1, Step::DeclareAttackers);
@@ -72,6 +73,8 @@ fn second_doctor_opponents_who_draw_cant_attack_you_next_turn() {
             t.library_top(p, "Island");
         }
         let bears = t.battlefield(P1, "Grizzly Bears");
+        // "or permanents you control": P0's planeswalker too.
+        let jace = t.battlefield(P0, "Jace Beleren");
         t.answer_yes(P0, false);
         t.answer_yes(P1, draws);
         t.answer_yes(P2, false);
@@ -84,7 +87,16 @@ fn second_doctor_opponents_who_draw_cant_attack_you_next_turn() {
             .collect();
         // It can still attack P2; P0 only if P1 didn't draw.
         assert!(targets.contains(&Entity::Player(P2)));
-        assert_eq!(targets.contains(&Entity::Player(P0)), !draws, "drew: {draws}");
+        assert_eq!(
+            targets.contains(&Entity::Player(P0)),
+            !draws,
+            "drew: {draws}"
+        );
+        assert_eq!(
+            targets.contains(&Entity::Object(jace)),
+            !draws,
+            "drew: {draws}"
+        );
     }
 }
 

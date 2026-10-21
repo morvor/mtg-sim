@@ -44,9 +44,9 @@ use crate::kw::trigger_events::{
     DURING_YOUR_UNTAP_STEP, THE_CAUSE,
 };
 use crate::oracle::effects::Builder;
-use crate::oracle::CompileContext;
 use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
 use crate::oracle::triggers::parse_trigger_condition;
+use crate::oracle::CompileContext;
 
 /// "[subject] to [verb phrase]" as a clause: "a player to shuffle their library" → "a
 /// player shuffles their library", "a land to be put into ..." → "a land is put into
@@ -81,7 +81,9 @@ fn caused_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         "a spell or ability an opponent controls" => Condition::Custom(CAUSED_BY_OPPONENTS.into()),
         _ => {
             // A spell described by an object phrase: "a white instant or sorcery spell".
-            let np = cause.strip_prefix("a ").or_else(|| cause.strip_prefix("an "))?;
+            let np = cause
+                .strip_prefix("a ")
+                .or_else(|| cause.strip_prefix("an "))?;
             let (f, plural, tail) = parse_object_phrase(np)?;
             if plural || !end(tail).is_empty() || !np.ends_with(" spell") {
                 return None;
@@ -97,13 +99,19 @@ fn caused_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         }
     };
     let cond = if own {
-        Condition::And(vec![cond, Condition::Custom(CAUSED_BY_EVENT_PLAYERS.into())])
+        Condition::And(vec![
+            cond,
+            Condition::Custom(CAUSED_BY_EVENT_PLAYERS.into()),
+        ])
     } else {
         cond
     };
     let (trigger, it, player) = parse_trigger_condition(&format!("whenever {}", clause(&rest)?))?;
     // An event of the kinds read here, not a batch or a qualified trigger.
-    if matches!(trigger, TriggerCond::Where { .. } | TriggerCond::Batched { .. }) {
+    if matches!(
+        trigger,
+        TriggerCond::Where { .. } | TriggerCond::Batched { .. }
+    ) {
         return None;
     }
     Some((
@@ -207,7 +215,10 @@ fn each_lose_life(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let (who, r) = if let Some(r) = t.strip_prefix("one or more opponents each lose ") {
         (PlayerRel::Opponent, r)
     } else {
-        (PlayerRel::Any, t.strip_prefix("one or more players each lose ")?)
+        (
+            PlayerRel::Any,
+            t.strip_prefix("one or more players each lose ")?,
+        )
     };
     let (cmp, n, rest) = amount(r)?;
     if rest != "life" {
@@ -363,7 +374,10 @@ fn put_creature_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let (c, it, p) = parse_trigger_condition(&format!("whenever a creature{r}"))?;
     // The noted permanent as it last existed on the battlefield (it has left).
     let noted = |f: Filter| {
-        Filter::and(vec![f, Filter::Custom(crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED.into())])
+        Filter::and(vec![
+            f,
+            Filter::Custom(crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED.into()),
+        ])
     };
     let c = match c {
         TriggerCond::Dies(f) => TriggerCond::Dies(noted(f)),
@@ -411,7 +425,10 @@ fn plays_qualified_card(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let (who, q) = if let Some(q) = t.strip_prefix("you play a card ") {
         ("you play a card", q)
     } else {
-        ("a player plays a card", t.strip_prefix("a player plays a card ")?)
+        (
+            "a player plays a card",
+            t.strip_prefix("a player plays a card ")?,
+        )
     };
     if q.contains("exiled with") {
         return None;
@@ -483,8 +500,8 @@ inventory::submit! { TriggerPattern { name: "trigger grammar 4: [permanents] pha
 
 /// "one or more other permanents phase out and whenever one or more other cards are put
 /// into exile from anywhere" (The War Doctor): two "one or more" trigger conditions, each
-/// of a batch of simultaneous events (the batched alternative a batch's events match; see
-/// the interpretation `batched-alternatives-one-batch`).
+/// of a batch of simultaneous events, and each its own trigger event (CR 603.2c): a batch
+/// with events matching both triggers it once for each (`triggers.rs`).
 fn batched_conjunction(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let t = end(t);
     let (a, b) = t.split_once(" and whenever ")?;
@@ -525,7 +542,12 @@ fn source_exiled() -> Condition {
 pub(crate) fn requires_source_exiled(c: &TriggerCond) -> bool {
     match c {
         TriggerCond::Where { cond, .. } => {
-            let s = |c: &Condition| matches!(c, Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile)));
+            let s = |c: &Condition| {
+                matches!(
+                    c,
+                    Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile))
+                )
+            };
             s(cond) || matches!(cond, Condition::And(v) if v.iter().any(s))
         }
         _ => false,
@@ -584,9 +606,14 @@ inventory::submit! { TriggerPattern { name: "trigger grammar 4: you gain control
 /// opponent").
 fn choose_object_and_player(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("choose ")?;
-    let (obj, player) = ["an opponent", "a player", "target opponent", "target player"]
-        .iter()
-        .find_map(|p| r.strip_suffix(&format!(" and {p}")).map(|o| (o, *p)))?;
+    let (obj, player) = [
+        "an opponent",
+        "a player",
+        "target opponent",
+        "target player",
+    ]
+    .iter()
+    .find_map(|p| r.strip_suffix(&format!(" and {p}")).map(|o| (o, *p)))?;
     if obj.contains(" and ") {
         return None;
     }
@@ -674,8 +701,9 @@ fn spell_or_ability_exiles(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: a spell or ability you control exiles one or more permanents", priority: 100, parse: spell_or_ability_exiles } }
 
 /// "one or more cards are put into exile from your hand or a spell or ability you control
-/// exiles one or more permanents from the battlefield": either batch (see the
-/// interpretation `batched-alternatives-one-batch`).
+/// exiles one or more permanents from the battlefield": one trigger event with two
+/// alternatives, so a batch of events matching either or both triggers it once, and "that
+/// many" counts them all (Ranar's ruling: once for each time, however many were exiled).
 fn exile_batches_either(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let t = end(t);
     let (a, b) = t.split_once(" or a spell or ability ")?;
@@ -684,10 +712,22 @@ fn exile_batches_either(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     }
     let (ca, _, _) = parse_trigger_condition(&format!("whenever {a}"))?;
     let (cb, _, _) = spell_or_ability_exiles(&format!("a spell or ability {b}"))?;
-    if !matches!(ca, TriggerCond::Batched { .. }) {
-        return None;
-    }
-    Some((TriggerCond::AnyOf(vec![ca, cb]), Sel::TriggerObjects, PlayerRef::You))
+    let unbatched = |c: TriggerCond| match c {
+        TriggerCond::Batched {
+            trigger,
+            per: BatchPer::Batch,
+        } if !matches!(*trigger, TriggerCond::FirstTimeEachTurn(_)) => Some(*trigger),
+        _ => None,
+    };
+    let (a, b) = (unbatched(ca)?, unbatched(cb)?);
+    Some((
+        TriggerCond::Batched {
+            trigger: Box::new(TriggerCond::AnyOf(vec![a, b])),
+            per: BatchPer::Batch,
+        },
+        Sel::TriggerObjects,
+        PlayerRef::You,
+    ))
 }
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: one or more [A] or a spell or ability exiles one or more [B]", priority: 100, parse: exile_batches_either } }
@@ -764,9 +804,12 @@ inventory::submit! { EffectPattern { name: "trigger grammar 4: you may return on
 /// "an instant or sorcery spell you control that targets only a single creature deals
 /// damage to that creature" (Imodane, the Pyrohammer): the spell's only target is one
 /// creature (CR 115.9c), and the creature dealt damage is that target.
-fn spell_targeting_only_a_creature_deals_damage_to_it(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+fn spell_targeting_only_a_creature_deals_damage_to_it(
+    t: &str,
+) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let t = end(t);
-    let spell = t.strip_suffix(" that targets only a single creature deals damage to that creature")?;
+    let spell =
+        t.strip_suffix(" that targets only a single creature deals damage to that creature")?;
     let (c, it, p) =
         parse_trigger_condition(&format!("whenever {spell} deals damage to a creature"))?;
     let TriggerCond::DealsDamage {
@@ -887,14 +930,18 @@ inventory::submit! { AbilityPattern { name: "trigger grammar 4: when ~ enters, c
 /// source, CR 607.2d).
 fn chosen_creature_or_player_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     match end(t) {
-        "the chosen creature leaves the battlefield" if card_refers_to_chosen_creature_leaving() => Some((
-            TriggerCond::LeavesBattlefield(Filter::and(vec![
-                Filter::creature(),
-                Filter::Custom(crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED.into()),
-            ])),
-            Sel::TriggerObject,
-            PlayerRef::You,
-        )),
+        "the chosen creature leaves the battlefield"
+            if card_refers_to_chosen_creature_leaving() =>
+        {
+            Some((
+                TriggerCond::LeavesBattlefield(Filter::and(vec![
+                    Filter::creature(),
+                    Filter::Custom(crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED.into()),
+                ])),
+                Sel::TriggerObject,
+                PlayerRef::You,
+            ))
+        }
         "the chosen player loses the game" => Some((
             TriggerCond::Where {
                 trigger: Box::new(TriggerCond::PlayerLoses),
@@ -915,7 +962,10 @@ mod tests {
 
     #[test]
     fn reads_caused_events() {
-        assert_eq!(clause("a player to shuffle their library").as_deref(), Some("a player shuffles their library"));
+        assert_eq!(
+            clause("a player to shuffle their library").as_deref(),
+            Some("a player shuffles their library")
+        );
         assert_eq!(
             clause("a land to be put into your graveyard from the battlefield").as_deref(),
             Some("a land is put into your graveyard from the battlefield")
@@ -940,7 +990,13 @@ mod tests {
             "you untap one or more permanents during your untap step",
             "~ becomes untapped during your untap step",
         ] {
-            assert!(matches!(during_untap_step(t), Some((TriggerCond::Where { .. }, _, _))), "{t}");
+            assert!(
+                matches!(
+                    during_untap_step(t),
+                    Some((TriggerCond::Where { .. }, _, _))
+                ),
+                "{t}"
+            );
         }
         assert!(during_untap_step("you draw a card during your untap step").is_none());
     }
