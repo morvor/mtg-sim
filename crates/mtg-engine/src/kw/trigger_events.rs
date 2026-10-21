@@ -43,6 +43,10 @@ pub const WAS_EXILED_WITH_SOURCE: &str = "linked:was a card exiled with ~";
 /// triggers" (Historian's Boon; CR 714.2c: the chapter ability with the greatest chapter
 /// number among the Saga's; CR 603.3b: it triggers as that ability is put on the stack).
 pub const FINAL_CHAPTER_TRIGGERS: &str = "saga:final chapter ability of a saga you control triggers";
+/// `TriggerCond::Custom`: "When ~ enters attached to a creature" (Infinite Reflection):
+/// the source enters the battlefield attached to a creature, the trigger's other object
+/// ("that creature", as it was attached then: Infinite Reflection's rulings).
+pub const ENTERS_ATTACHED_TO_CREATURE: &str = "attach:~ enters attached to a creature";
 /// `Filter::Custom`: the spell or ability that caused the trigger event.
 pub const THE_CAUSE: &str = "event cause:the spell or ability";
 
@@ -82,6 +86,33 @@ impl KeywordRules for TriggerEvents {
         ctl: crate::types::PlayerId,
         ev: &crate::events::Event,
     ) -> Option<Vec<crate::object::EventInfo>> {
+        if name == ENTERS_ATTACHED_TO_CREATURE {
+            let crate::events::Event::ZoneChange {
+                new,
+                to: crate::object::Zone::Battlefield,
+                ..
+            } = ev
+            else {
+                return Some(vec![]);
+            };
+            if *new != _src {
+                return Some(vec![]);
+            }
+            let host = match g.obj(*new).attached_to {
+                Some(crate::types::Entity::Object(o))
+                    if g.obj(o).is(crate::types::CardType::Creature) =>
+                {
+                    o
+                }
+                _ => return Some(vec![]),
+            };
+            return Some(vec![crate::object::EventInfo {
+                object: Some(*new),
+                other: Some(host),
+                player: Some(ctl),
+                ..Default::default()
+            }]);
+        }
         if name != FINAL_CHAPTER_TRIGGERS {
             return None;
         }

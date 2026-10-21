@@ -599,6 +599,12 @@ impl Renderer<'_> {
     /// A custom trigger event ("~ mutates", "you unlock this door").
     pub(crate) fn custom_trigger(&mut self, name: &str) -> String {
         match name {
+            crate::kw::trigger_events::FINAL_CHAPTER_TRIGGERS => {
+                "the final chapter ability of a Saga you control triggers".into()
+            }
+            crate::kw::trigger_events::ENTERS_ATTACHED_TO_CREATURE => {
+                format!("{} enters attached to a creature", self.me())
+            }
             "visit" => "visit —".into(),
             crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED => {
                 "whenever damage that would be dealt to you is prevented".into()

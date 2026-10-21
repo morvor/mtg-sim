@@ -536,3 +536,28 @@ fn risky_move_gaining_control_from_another_player() {
         assert_eq!(t.obj_now(bears).controller, opp);
     }
 }
+
+#[test]
+fn infinite_reflection_enters_attached_to_a_creature() {
+    cr!("303.4", "707.2");
+    ruling!(
+        "Infinite Reflection",
+        "If Infinite Reflection enters attached to a creature and then becomes attached to a different creature before its \"enters\" trigger resolves, each other nontoken creature you control will become a copy of the first creature."
+    );
+    supported("Infinite Reflection");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P1, "Serra Angel");
+    cast_new(&mut t, P0, "Infinite Reflection", &[Entity::Object(giant)]);
+    t.resolve();
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "becomes a copy"), 1);
+    // Moved to another creature before the trigger resolves: still a copy of the Giant.
+    let aura = t.named_on_battlefield("Infinite Reflection")[0];
+    assert!(t.g.attach(aura, Entity::Object(other)));
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Hill Giant");
+    assert_eq!(t.obj_now(giant).chars.name.as_str(), "Hill Giant");
+}

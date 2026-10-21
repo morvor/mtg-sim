@@ -597,6 +597,20 @@ fn choose_object_and_player(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "trigger grammar 4: choose [an object] and [a player]", priority: 100, parse: choose_object_and_player } }
 
+/// "~ enters attached to a creature" (Infinite Reflection): "that creature" is the one it
+/// entered attached to.
+fn enters_attached_to_creature(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(t) == "~ enters attached to a creature").then(|| {
+        (
+            TriggerCond::Custom(crate::kw::trigger_events::ENTERS_ATTACHED_TO_CREATURE.into()),
+            Sel::TriggerOtherObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: ~ enters attached to a creature", priority: 100, parse: enters_attached_to_creature } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
