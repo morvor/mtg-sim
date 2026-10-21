@@ -53,3 +53,36 @@ fn the_comparison_notices_different_games() {
     b.finish();
     assert!(compare("different seeds", &a.lines(), &b.lines()).is_err());
 }
+
+#[test]
+fn a_subgame_is_seat_symmetric() {
+    // CR 729.2: who goes first in a subgame is determined at random; found by this
+    // property, the engine drew among the players in seat order.
+    cr!("729.2", "101.4");
+    let shahrazad = || deck("16 Plains, 4 Shahrazad, 10 Savannah Lions, 10 Serra Angel");
+    let mut s = setup(vec![shahrazad(), shahrazad(), shahrazad()], 21);
+    s.max_actions = 3000;
+    let rec = Recording {
+        states: true,
+        ..Default::default()
+    };
+    // Subgames nest: play on a thread with room for them.
+    let subgames = std::thread::Builder::new()
+        .stack_size(256 << 20)
+        .spawn(move || {
+            let mut subgames = 0;
+            for r in 1..3 {
+                let mut a = build(&s, 0, rec);
+                a.finish();
+                let mut b = build(&s, r, rec);
+                b.finish();
+                subgames += a.game.subgames.played;
+                compare("subgames", &a.lines(), &b.lines()).unwrap();
+            }
+            subgames
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+    assert!(subgames > 0, "a subgame was played");
+}

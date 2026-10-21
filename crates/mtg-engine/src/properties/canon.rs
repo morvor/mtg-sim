@@ -49,6 +49,34 @@ impl Canon {
         Canon { identity, initial }
     }
 
+    /// The numbering for a subgame (CR 729) being played from the game this numbering is
+    /// for: its own objects, with the same players. `None` for the game itself.
+    pub fn for_subgame(&self, g: &Game) -> Option<Canon> {
+        if g.subgames.depth == 0 {
+            return None;
+        }
+        // The subgame's first objects are the cards it started with (its libraries and
+        // the cards outside it); objects created as it's played follow.
+        let n0 = g
+            .objects
+            .iter()
+            .position(|o| o.prev.is_some() || o.kind != crate::object::ObjKind::Card)
+            .unwrap_or(g.objects.len());
+        let mut order: Vec<(u8, u32)> = g.objects[..n0]
+            .iter()
+            .map(|o| (self.player(o.owner), o.id.0))
+            .collect();
+        order.sort_unstable();
+        let mut initial = vec![0; n0];
+        for (i, (_, id)) in order.into_iter().enumerate() {
+            initial[id as usize] = i as u32;
+        }
+        Some(Canon {
+            identity: self.identity.clone(),
+            initial,
+        })
+    }
+
     pub fn player(&self, p: PlayerId) -> u8 {
         self.identity.get(p.idx()).copied().unwrap_or(p.0)
     }
@@ -329,13 +357,19 @@ impl Canon {
                 );
             }
         }
+        // The order of objects in exile and the command zone doesn't matter.
+        let sorted = |v: &[ObjectId]| -> Vec<ObjectId> {
+            let mut v = v.to_vec();
+            v.sort_by_key(|o| self.obj(*o));
+            v
+        };
         s.push_str("] exile[");
-        for id in &g.exile {
-            self.object(g, *id, &mut s);
+        for id in sorted(&g.exile) {
+            self.object(g, id, &mut s);
         }
         s.push_str("] command[");
-        for id in &g.command {
-            self.object(g, *id, &mut s);
+        for id in sorted(&g.command) {
+            self.object(g, id, &mut s);
         }
         let _ = write!(
             s,

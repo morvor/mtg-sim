@@ -224,6 +224,12 @@ pub fn compare(what: &str, a: &[String], b: &[String]) -> Result<(), String> {
         None if a.len() == b.len() => return Ok(()),
         None => n,
     };
+    // MTG_PROPERTY_DUMP=DIR writes both transcripts there, to look at a difference.
+    if let Ok(dir) = std::env::var("MTG_PROPERTY_DUMP") {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(format!("{dir}/first.txt"), a.join("\n"));
+        let _ = std::fs::write(format!("{dir}/second.txt"), b.join("\n"));
+    }
     let cut = |s: Option<&String>| -> String {
         match s {
             None => "(nothing)".into(),

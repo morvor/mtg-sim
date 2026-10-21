@@ -1486,9 +1486,15 @@ impl Game {
         // CR 603.10f: abilities that trigger when a player loses the game look back in
         // time, before the player's objects leave the game (CR 800.4a).
         self.flush_events();
-        self.after_player_leaves(p);
+        // Players losing at the same time leave together, once all have lost.
+        if self.losing_simultaneously {
+            self.end.leaving.push(p);
+        } else {
+            self.after_player_leaves(p);
+        }
         self.on_player_lost(p);
         if !self.losing_simultaneously {
+            self.finish_leaving();
             self.check_game_over();
         }
     }

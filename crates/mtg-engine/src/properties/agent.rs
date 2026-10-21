@@ -277,11 +277,19 @@ impl Agent for PropertyAgent {
 
     fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
         let mut rec = self.recorder.lock().unwrap_or_else(|e| e.into_inner());
+        // A subgame has objects of its own (CR 729).
+        let main = rec
+            .canon
+            .for_subgame(g)
+            .map(|sub| std::mem::replace(&mut rec.canon, sub));
         rec.before_decision(g, p, d);
         let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let a = st.choose(g, &rec.canon, p, d);
         drop(st);
         rec.after_decision(g, p, d, &a);
+        if let Some(main) = main {
+            rec.canon = main;
+        }
         a
     }
 }
