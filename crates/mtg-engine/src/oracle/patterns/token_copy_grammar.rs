@@ -907,13 +907,20 @@ fn create_join_combat(l: &str, b: &mut Builder) -> Option<Effect> {
         });
     }
     let (base, blocked) = l.split_once(" that's blocking ")?;
+    // "create a token that's a copy of that creature and that's blocking that creature"
+    // (Mirror Match).
+    let base = base.strip_suffix(" and").unwrap_or(base);
     let e = crate::oracle::effects::parse_clause(base, b);
     let Some(e) = e.filter(|e| creates_attacking(e, false)) else {
         restore(b);
         return None;
     };
     let (attacker, tail) = if let Some(t) = blocked.strip_prefix("that creature") {
-        if !b.in_trigger || super::oracle_hardening_referents::is_no_referent(&b.it) {
+        // In a trigger, or for each of several creatures ("for each creature attacking
+        // you ..., create a token ... that's blocking that creature").
+        if !(b.in_trigger || matches!(b.it, Sel::Var(_)))
+            || super::oracle_hardening_referents::is_no_referent(&b.it)
+        {
             restore(b);
             return None;
         }

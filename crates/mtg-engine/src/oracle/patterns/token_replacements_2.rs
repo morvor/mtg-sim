@@ -317,10 +317,24 @@ inventory::submit! { super::EffectPattern { name: "token replacements 2: create 
 /// "They gain haste until end of turn." after "For each opponent, create [tokens] ...":
 /// the tokens each pass created (performed in each pass, right after they're created).
 fn they_after_each_player_creation(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let Effect::ForEachPlayer { effect, .. } = prev else {
-        return false;
+    // The loop: "for each opponent, ..." or "for each creature attacking you, ...".
+    fn the_loop(e: &mut Effect) -> Option<&mut Box<Effect>> {
+        match e {
+            Effect::ForEachPlayer { effect, .. } | Effect::ForEach { effect, .. } => Some(effect),
+            Effect::Seq(v) => v.iter_mut().rev().find_map(the_loop),
+            _ => None,
+        }
+    }
+    // "For each creature attacking you, create a token ..." gathers the tokens all the
+    // passes created as the tokens just created: the instruction follows the loop.
+    let gathered = matches!(prev, Effect::Seq(v)
+        if matches!(v.last(), Some(Effect::Store { var, .. }) if *var == vars::CREATED)
+            && v.iter().any(|e| matches!(e, Effect::ForEach { .. })));
+    let creates = match the_loop(prev) {
+        Some(effect) => creates_tokens(effect) || joins_combat(effect),
+        None => false,
     };
-    if !creates_tokens(effect) && !joins_combat(effect) {
+    if !creates {
         return false;
     }
     let lower = l.to_lowercase();
@@ -348,6 +362,14 @@ fn they_after_each_player_creation(l: &str, prev: &mut Effect, b: &mut Builder) 
     {
         return false;
     }
+    if gathered {
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![old, e]);
+        return true;
+    }
+    let Some(effect) = the_loop(prev) else {
+        return false;
+    };
     let body = std::mem::take(effect.as_mut());
     **effect = Effect::seq(vec![body, e]);
     true
@@ -870,3 +892,27 @@ fn if_the_token(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "token replacements 2: if the token ...", priority: 45, apply: if_the_token } }
+
+/// "[creature] attacking you or a planeswalker you control" (Mirror Match): attacking you
+/// or a planeswalker you control (CR 506.3, 508.1b).
+fn attacking_you_or_your_planeswalker<'a>(t: &'a str, f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = t.strip_prefix("attacking you or a planeswalker you control")?;
+    if !(r.is_empty() || r.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    if !serde_json::to_string(f).is_ok_and(|s| s.contains("\"Creature\"")) {
+        return None;
+    }
+    Some((
+        Filter::Or(vec![
+            Filter::AttackingPlayer(PlayerRel::You),
+            Filter::AttackingObject(Box::new(Filter::and(vec![
+                Filter::Type(crate::types::CardType::Planeswalker),
+                Filter::ControlledBy(PlayerRel::You),
+            ]))),
+        ]),
+        r,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "token replacements 2: attacking you or a planeswalker you control", priority: 90, parse: attacking_you_or_your_planeswalker } }

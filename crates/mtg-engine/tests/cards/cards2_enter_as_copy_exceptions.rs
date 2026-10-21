@@ -111,3 +111,25 @@ fn superior_spider_man_copies_a_graveyard_card_and_exiles_it() {
     assert!(o.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
     assert!(t.in_exile("Serra Angel"));
 }
+
+#[test]
+fn sakashima_of_a_thousand_faces_copies_with_its_other_abilities() {
+    cr!("707.9b", "704.5j");
+    ruling!(
+        "Sakashima of a Thousand Faces",
+        "except that it also has Sakashima's other abilities"
+    );
+    supported("Sakashima of a Thousand Faces");
+    let mut t = TestGame::new(2);
+    let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
+    t.answer_choose(P0, &[obj(isamaru)]);
+    let s = t.enter(P0, "Sakashima of a Thousand Faces");
+    t.resolve_all();
+    // A legendary Isamaru copy, and the legend rule doesn't apply to its controller's
+    // permanents: both stay.
+    assert_eq!(t.obj_now(s).chars.name, "Isamaru, Hound of Konda");
+    assert!(t.on_battlefield(s) && t.on_battlefield(isamaru));
+    assert!(t
+        .obj_now(s)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Partner));
+}

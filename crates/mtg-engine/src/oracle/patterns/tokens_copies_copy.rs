@@ -314,7 +314,9 @@ pub(crate) fn copy_exceptions(
     for c in exception_clauses(masked) {
         let c = c.as_str();
         if loses_other {
-            let r = c.strip_prefix("it's a ").or_else(|| c.strip_prefix("it's an "))?;
+            let r = c
+                .strip_prefix("it's a ")
+                .or_else(|| c.strip_prefix("it's an "))?;
             let (types, with) = match r.split_once(" with ") {
                 Some((t, w)) => (t, Some(w)),
                 None => (r, None),
@@ -340,9 +342,37 @@ pub(crate) fn copy_exceptions(
             }
             continue;
         }
+        // "it has ~'s other abilities" (Sakashima of a Thousand Faces): the abilities
+        // printed on this card besides the one creating the copy effect (CR 707.9b).
+        if c == "it has ~'s other abilities" {
+            let raw = crate::oracle::raw_text();
+            let name = ctx.card_name;
+            let mut any = false;
+            for line in raw.lines() {
+                if line.to_lowercase().contains("enter as a copy") || line.trim().is_empty() {
+                    continue;
+                }
+                let block = crate::oracle::normalize(line, ctx);
+                let _ = name;
+                for a in crate::oracle::parse_ability(&block, ctx)? {
+                    match &a.kind {
+                        AbilityKind::Unsupported(_) => return None,
+                        AbilityKind::Keyword(k) => out.push(Modification::AddKeyword(k.clone())),
+                        _ => out.push(Modification::AddAbility(a)),
+                    }
+                    any = true;
+                }
+            }
+            if !any {
+                return None;
+            }
+            continue;
+        }
         // "its starting loyalty is 1" (Jace, Mirror Mage; CR 306.5b, 707.9b).
         if let Some(n) = c.strip_prefix("its starting loyalty is ") {
-            out.push(crate::kw::copy_exception_mods::starting_loyalty(n.trim().parse().ok()?));
+            out.push(crate::kw::copy_exception_mods::starting_loyalty(
+                n.trim().parse().ok()?,
+            ));
             continue;
         }
         // "it's a legendary Alien named Prisoner Zero" (The Eleventh Hour): its name, and
@@ -375,7 +405,9 @@ pub(crate) fn copy_exceptions(
             if rl.len() != raw.len() {
                 return None;
             }
-            out.push(Modification::SetName(SmolStr::new(raw.get(i..i + name.len())?)));
+            out.push(Modification::SetName(SmolStr::new(
+                raw.get(i..i + name.len())?,
+            )));
             continue;
         }
         if matches!(
@@ -401,8 +433,8 @@ pub(crate) fn copy_exceptions(
             "she has ",
             "he has ",
         ]
-            .iter()
-            .find_map(|p| c.strip_prefix(p))
+        .iter()
+        .find_map(|p| c.strip_prefix(p))
         {
             // "it has this ability", "it has flying and this ability" (CR 707.9a): the
             // ability creating the copy effect.
@@ -500,11 +532,17 @@ pub(crate) fn copy_exceptions(
                 .and_then(only_card_types)
             {
                 // "except it's an enchantment and loses all other card types" (Myrkul).
-                out.push(Modification::SetTypes { types, subtypes: vec![] });
+                out.push(Modification::SetTypes {
+                    types,
+                    subtypes: vec![],
+                });
             } else if let Some(types) = only_card_types(r) {
                 // "except it's an artifact" (Machine God's Effigy): its only card types
                 // are these (CR 205.1a).
-                out.push(Modification::SetTypes { types, subtypes: vec![] });
+                out.push(Modification::SetTypes {
+                    types,
+                    subtypes: vec![],
+                });
             } else if let Some(colors) = only_colors(r) {
                 // "except the token is black" (Penumbra Umbra).
                 out.push(Modification::SetColors(colors));
@@ -667,9 +705,7 @@ pub(crate) fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
         if let Some(rest) = r.strip_prefix("the exiled card") {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
                 let of = match exiled_by() {
-                    ExiledBy::LinkedAbility => {
-                        super::imprint::exiled_card_ref("the exiled card")?
-                    }
+                    ExiledBy::LinkedAbility => super::imprint::exiled_card_ref("the exiled card")?,
                     // Exile records the cards it exiled as "it".
                     ExiledBy::ThisAbility => Sel::Var(vars::IT),
                     ExiledBy::Unclear => return None,
@@ -710,7 +746,10 @@ pub(crate) fn exiled_with_source(r: &str, b: &mut Builder) -> Option<(Sel, Strin
     let (targeted, x) = if let Some(x) = r.strip_prefix("target ") {
         (true, x)
     } else {
-        (false, r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?)
+        (
+            false,
+            r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?,
+        )
     };
     let (i, len) = [" exiled with ~", " exiled with it"]
         .iter()
@@ -853,18 +892,23 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
     let exc_part = match exc_part {
         Some(e) => {
             let (rest, counters) = match e.rsplit_once("it enters with ") {
-                Some((before, c)) if before.is_empty() || before.ends_with(" and ") => {
-                    (before.trim_end_matches(" and ").to_string(), Some(c.to_string()))
-                }
+                Some((before, c)) if before.is_empty() || before.ends_with(" and ") => (
+                    before.trim_end_matches(" and ").to_string(),
+                    Some(c.to_string()),
+                ),
                 _ => (e.clone(), None),
             };
             if let Some(c) = counters {
-                let c = c.strip_prefix("an additional ").map_or(c.clone(), |x| format!("a {x}"));
+                let c = c
+                    .strip_prefix("an additional ")
+                    .map_or(c.clone(), |x| format!("a {x}"));
                 let c = c.replacen(" additional ", " ", 1);
                 let (n, r) = parse_number(&c)?;
                 let (kind, r) = crate::oracle::costs::counter_kind(r)?;
                 let r = r.trim_start();
-                let r = r.strip_prefix("counters").or_else(|| r.strip_prefix("counter"))?;
+                let r = r
+                    .strip_prefix("counters")
+                    .or_else(|| r.strip_prefix("counter"))?;
                 if r.trim() != "on it" {
                     return None;
                 }
@@ -878,8 +922,16 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
         Some(e) if half_pt(&e).is_some() => {
             let up = half_pt(&e)?;
             vec![Modification::SetPT(
-                Some(Value::Div(Box::new(Value::PowerOf(Box::new(of.clone()))), 2, up)),
-                Some(Value::Div(Box::new(Value::ToughnessOf(Box::new(of.clone()))), 2, up)),
+                Some(Value::Div(
+                    Box::new(Value::PowerOf(Box::new(of.clone()))),
+                    2,
+                    up,
+                )),
+                Some(Value::Div(
+                    Box::new(Value::ToughnessOf(Box::new(of.clone()))),
+                    2,
+                    up,
+                )),
             )]
         }
         Some(e) => copy_exceptions(&e, &quotes, b.ctx)?,

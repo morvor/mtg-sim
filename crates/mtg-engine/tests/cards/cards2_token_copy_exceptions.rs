@@ -306,3 +306,40 @@ fn ultron_token_copy_of_a_noncreature_artifact_becomes_a_2_2_robot() {
     assert!(c.has_subtype("Robot"));
     assert_eq!(t.pt(toks[0]), (2, 2));
 }
+
+#[test]
+fn mirror_match_blocks_each_attacker_with_a_copy_of_it() {
+    cr!("509.4", "707.2", "603.7");
+    ruling!(
+        "Mirror Match",
+        "The delayed triggered ability that exiles the tokens will trigger at end of combat no matter what happens to the original creature."
+    );
+    supported("Mirror Match");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Ornithopter");
+    t.lands(P0, "Island", 6);
+    let mm = t.hand(P0, "Mirror Match");
+    t.set_step(P1, Step::PrecombatMain);
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![
+            (bears, Entity::Player(P0)),
+            (giant, Entity::Player(P0)),
+        ]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.g.turn.priority = Some(P0);
+    t.cast(P0, mm).go();
+    t.resolve();
+    assert_eq!(token_named(&t, "Grizzly Bears").len(), 1);
+    assert_eq!(token_named(&t, "Ornithopter").len(), 1);
+    t.advance_to(P1, Step::PostcombatMain);
+    // The Bears traded with their copy; the Ornithopter copy survived combat and was
+    // exiled at end of combat.
+    assert!(!t.on_battlefield(bears) && t.on_battlefield(giant));
+    assert_eq!(t.life(P0), 20);
+    assert!(token_named(&t, "Grizzly Bears").is_empty());
+    assert!(token_named(&t, "Ornithopter").is_empty());
+}
