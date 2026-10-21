@@ -500,3 +500,50 @@ fn crackdown_construct_triggers_for_each_zero_cost_activation() {
     t.resolve_all();
     assert_eq!(t.pt(c), (5, 5));
 }
+
+/// The votes revealed (reported) so far this turn, including the resolving spell's.
+fn votes_revealed(g: &mtg_engine::game::Game) -> usize {
+    g.turn_events
+        .iter()
+        .chain(g.events.iter())
+        .filter(|e| {
+            matches!(e, mtg_engine::events::Event::Custom { name, .. }
+                if name == mtg_engine::kwa::vote::VOTED)
+        })
+        .count()
+}
+
+#[test]
+fn mob_verdict_votes_stay_secret_until_revealed_together() {
+    cr!("701.38a", "701.38b");
+    ruling!(
+        "Mob Verdict",
+        "Before secret votes are revealed, players may announce how they intend to vote, but they can’t reveal what they actually wrote down until all votes are simultaneously revealed."
+    );
+    fn is_vote(d: &Decision) -> bool {
+        matches!(d, Decision::ChooseEntities { prompt, .. } if prompt == "Vote")
+    }
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    let seen: Vec<_> = [P0, P1, P2]
+        .into_iter()
+        .map(|p| crate::r_s01_common::watch(&mut t, p, is_vote, votes_revealed))
+        .collect();
+    // P0 and P2 vote for P1; P1 votes for P0.
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P1, &[Entity::Player(P0)]);
+    t.answer_choose(P2, &[Entity::Player(P1)]);
+    let hand = t.hand_size(P0);
+    cast_resolve(&mut t, P0, "Mob Verdict", &[]);
+    for s in &seen {
+        assert_eq!(*s.lock().unwrap(), vec![0]);
+    }
+    assert_eq!(votes_revealed(&t.g), 3);
+    // Two votes for P1: 4 damage to P1 and the Bears; one vote for P0: a card.
+    assert_eq!(t.life(P1), 16);
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(marked(&t, giant), 0);
+    assert_eq!(t.life(P2), 20);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
