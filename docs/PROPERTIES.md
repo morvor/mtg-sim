@@ -116,6 +116,53 @@ compared up to a consistent renaming, like objects: in debug output by order of 
 appearance (`properties::agent::rename_uids`), in requests by pairing the ids as they are
 met (`replay::AbilityRenaming`).
 
+## Bugs found
+
+Each was fixed, with a regression test citing the rules:
+
+| Property | Bug | Rule | Fix | Test |
+|---|---|---|---|---|
+| seat | A player's opponents were listed in seat order, so defaults among them (the defender of an attack the engine declares when a declaration breaks a requirement) depended on seats | 101.4, 508.1d | `Game::opponents` lists them in APNAP order | `tests/cr/r101_004_opponents_in_apnap_order.rs` |
+| seat | Choices made at random ("target opponent chosen at random", random picks among objects) shuffled candidates listed in seat order | 101.4 | `Game::sort_apnap` before shuffling | same file |
+| seat | Targets that must go together ("two target cards from an opponent's graveyard") were replaced, when they didn't, by the first group among the candidates in seat order | 101.4, 601.2c | candidates in APNAP order for the replacement group | same file |
+| seat | When several players lost at once, only the first in seat order had their objects leave the game (for the next ones the game was already over) | 104.4a, 800.4a | players losing together leave together, once all have lost (`Game::finish_leaving`) | `tests/cr/r800_004a_players_leaving_together.rs` |
+| seat | Players losing at once were handled in seat order, so what happened as the first of them lost (effects ending, characteristics recomputed) depended on seats | 101.4, 104.4a | in APNAP order | same file |
+| seat | A player whose cards outside a subgame left it with them (they lost the subgame) had their main-game hand and permanents put into their library as the subgame ended, as though brought into it | 729.4, 729.5, 800.4a | such cards are left in the main game | same file |
+| seat | Who goes first in a subgame was drawn among the players in seat order; cards returning from a subgame were created in seat order | 729.2, 101.4 | APNAP order | `tests/properties/seat_symmetry.rs` (`a_subgame_is_seat_symmetric`) |
+
+Not bugs in the rules, but found and handled by the properties:
+
+* Ability ids, some links (CR 607.5: links of abilities an effect gives come from the
+  ability-id counter), mana riders' ids and replacement keys are drawn from a counter shared
+  by the whole process, so they differ between two runs of the same game in one process,
+  and between a protocol game and its replay (a Clue's ability as a player investigates,
+  a delayed trigger's ability as it triggers). The comparisons rename them consistently.
+* Prompts name players by seat ("attacking P2") and objects by id ("Forest #53"); the
+  comparison renames those.
+
+## Remaining gaps
+
+* **CR 733.1's exceptions aren't kept.** The engine reverses an illegal action by restoring
+  a copy of the whole game, so it also reverses what CR 733.1 says players may not reverse
+  (moving cards to or from a library, shuffling, revealing library cards). Rollback
+  identity allows this; keeping those parts would need a reversal that knows which actions
+  happened during the attempt.
+* **Ability ids depend on the process.** They come from a global counter (`ability.rs`)
+  and are assigned as abilities are first needed, so the ids in protocol requests
+  (`action.ability`) differ between processes unless both play the same games in the same
+  order. Answers refer to options by index, so replays work; making the ids deterministic
+  would mean allocating them per game, which the caches of derived abilities (shared by all
+  games) don't allow without reworking them.
+* **The fresh links of abilities an effect gives** (`ability_grants::snapshot`) are the
+  ability-id counter modulo 0x7fff, so they can, rarely, equal another link on the same
+  object (CR 607.5 wants them distinct).
+* **Seat symmetry compares what the canonical state shows**: the turn, players, zones and
+  public objects with their status and characteristics, the stack, combat and every
+  decision. Internal bookkeeping that never reaches those (and hidden-information views)
+  is only compared through its effects on later decisions; snapshot equivalence and
+  determinism compare the whole game.
+* **Rollback checks are sampled in long games**: the first 30 actions a game's players
+  start, then every fifth (each check copies and prints the whole game).
+
 ## Results
 
-(See below.)

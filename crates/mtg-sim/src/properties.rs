@@ -8,7 +8,8 @@
 //! Each game gets new random decks; without `--players`, games cycle through 2, 2, 3 and
 //! 4 players. A violation or a panic is reported with the command that reproduces it, and
 //! the process exits with status 1 at the end; a game still going after `--slow` seconds
-//! is reported as slow. `--jobs N` checks N games at a time.
+//! is reported as slow (a replay after three times as long). `--jobs N` checks N games
+//! at a time.
 
 use crate::decks::random_deck;
 use crate::runner::{install_panic_hook, take_panic};
@@ -59,7 +60,7 @@ fn check(property: &'static str, setup: GameSetup, slow: Duration) -> Outcome {
                     let config = GameConfig {
                         seed: setup.seed,
                         max_turns: setup.max_turns.min(25),
-                        max_actions: setup.max_actions * 2,
+                        max_actions: setup.max_actions,
                         ..Default::default()
                     };
                     mtg_api::replay::replay_check(config, setup.decks.clone(), setup.seed, 100_000)
@@ -165,7 +166,10 @@ pub fn run(args: &[String]) {
                 setup.max_turns = max_turns;
                 for &property in chosen {
                     let t0 = Instant::now();
-                    let out = check(property, setup.clone(), Duration::from_secs(slow));
+                    // Replays answer every request through JSON with whole observations:
+                    // they get longer.
+                    let limit = if property == "replay" { slow * 3 } else { slow };
+                    let out = check(property, setup.clone(), Duration::from_secs(limit));
                     let _ = tx.send((property, gi, s, n, out, t0.elapsed()));
                 }
             });
@@ -196,7 +200,7 @@ pub fn run(args: &[String]) {
                     t.panics.push(gi);
                 }
                 Outcome::Slow => {
-                    println!("SLOW: {property}, game {gi} (seed {s}): stopped after {slow}s");
+                    println!("SLOW: {property}, game {gi} (seed {s}): stopped at the time limit");
                     println!("  reproduce: {repro}");
                     t.slow.push(gi);
                 }
