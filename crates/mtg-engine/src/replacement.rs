@@ -21,6 +21,10 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct EtbInfo {
     pub tapped: bool,
+    /// Cards exiled with the entering object while it entered ("As this creature enters,
+    /// exile a creature card from your graveyard"): linked to the permanent's abilities
+    /// (CR 607.2b, 614.12), by link id.
+    pub exiled_as_it_entered: Vec<(u16, ObjectId)>,
     pub counters: Vec<(CounterKind, u32)>,
     /// Counters it enters with that the effect has a player other than its controller put
     /// on it (CR 122.6a: tribute's chosen opponent, CR 702.104a).
@@ -1409,7 +1413,15 @@ impl Game {
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 c.entering = Some(crate::eval::EntryMods::default());
+                let linked_before = self.obj(m.obj).linked.clone();
                 self.exec(&e, &mut c);
+                for (link, objs) in self.obj(m.obj).linked.clone() {
+                    for o in objs {
+                        if !linked_before.get(&link).is_some_and(|v| v.contains(&o)) {
+                            m.etb.exiled_as_it_entered.push((link, o));
+                        }
+                    }
+                }
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);

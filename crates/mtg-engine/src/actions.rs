@@ -552,6 +552,15 @@ impl Game {
             for (link, c) in linked {
                 n.linked_choices.entry(link).or_insert(c);
             }
+            // So are the cards exiled with it as it entered ("As this creature enters,
+            // exile a creature card from your graveyard", CR 607.2b, 614.12).
+            let n = &mut self.objects[new_id.0 as usize];
+            for (link, o) in m.etb.exiled_as_it_entered.iter() {
+                let v = n.linked.entry(*link).or_default();
+                if !v.contains(o) {
+                    v.push(*o);
+                }
+            }
             // So are the objects noted as it entered ("As this creature enters, choose
             // another creature you control", see `linked_notes`).
             crate::linked_notes::carry(self, old_id, new_id);
