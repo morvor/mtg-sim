@@ -828,7 +828,6 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
-<<<<<<< HEAD
             // "Creatures dying don't cause abilities to trigger" (Hushbringer).
             if !on_sacrifice(&d.trigger)
                 && crate::kw::torpor::suppressed_for(
@@ -841,8 +840,6 @@ impl Game {
             {
                 continue;
             }
-            for info in self.trigger_matches_ctx(&d.trigger, &base, ev) {
-=======
             let infos = self.trigger_matches_ctx(&d.trigger, &base, ev);
             if let (
                 true,
@@ -866,7 +863,6 @@ impl Game {
                 }
             }
             for info in infos {
->>>>>>> origin/claude/mtg-rules-engine-lkr27h
                 if d.once {
                     // CR 801.7: an event outside its controller's range of influence
                     // doesn't trigger it; it waits for the next one.
