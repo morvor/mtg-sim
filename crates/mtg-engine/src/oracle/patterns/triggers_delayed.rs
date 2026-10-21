@@ -165,7 +165,7 @@ inventory::submit! {
 /// additional {U}", "whenever a creature attacks this turn, put a +1/+1 counter on it": a
 /// delayed triggered ability that lasts until end of turn (CR 603.7b). Its effect refers
 /// to its own trigger event ("it", "that player") and chooses its own targets.
-fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     // "Until your next turn, whenever ...": it lasts until its controller's next turn.
     let mut until_next_turn = false;
@@ -197,10 +197,19 @@ fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         Some((_, var)) => Sel::Var(var),
         None => it,
     };
-    if matches!(it, Sel::None) && has_object_pronoun(eff) {
+    // (A phrase the trigger event names is a referent: "destroy that creature".)
+    let names_referent = super::trigger_grammar_combat_cast::named_referents(&trigger)
+        .iter()
+        .any(|(p, _)| eff.contains(p.as_str()));
+    if matches!(it, Sel::None) && has_object_pronoun(eff) && !names_referent {
         return None;
     }
-    let mut body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    // Phrases the trigger event names ("Until your next turn, whenever a creature deals
+    // combat damage to Vraska, destroy that creature": the creature dealing damage).
+    let named = super::trigger_grammar_combat_cast::name_referents(&trigger);
+    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player);
+    drop(named);
+    let mut body = body?;
     let mut stores = Vec::new();
     if let Some((slot, var)) = chosen_var {
         if body.modal.is_some() || !body.targets.is_empty() {

@@ -298,8 +298,15 @@ pub fn turn_exiled_face_up(g: &mut Game, id: ObjectId) -> bool {
     true
 }
 
-/// Turns a face-down permanent face up (CR 708.8). Returns true if it did.
+/// Turns a face-down permanent face up (CR 708.8). Returns true if it did. Its controller
+/// turns it face up (the special action, CR 116.2b).
 pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
+    let by = g.obj(id).controller;
+    turn_face_up_by(g, id, by)
+}
+
+/// Turns a face-down permanent face up, `by` the controller of the effect doing it.
+pub fn turn_face_up_by(g: &mut Game, id: ObjectId, by: PlayerId) -> bool {
     let o = g.obj(id);
     if !o.face_down || o.zone != Zone::Battlefield {
         return false;
@@ -360,6 +367,9 @@ pub fn turn_face_up(g: &mut Game, id: ObjectId, _special_action: bool) -> bool {
         g.exec(&e, &mut ctx);
         crate::layers::as_enters_copiable(g, id, before);
     }
-    g.emit(Event::TurnedFaceUp { obj: id });
+    g.emit(Event::TurnedFaceUp {
+        obj: id,
+        by: Some(by),
+    });
     true
 }

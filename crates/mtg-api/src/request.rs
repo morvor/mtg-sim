@@ -720,6 +720,7 @@ pub fn prepare(
                             *c == a && matches!(t, Entity::Player(p) if !ps.contains(&p))
                         }
                         R::AttacksPlayer(c, p) => *c == a && t == Entity::Player(*p),
+                        R::AttacksObject(c, o) => *c == a && t == Entity::Object(*o),
                         // Required only if one of the others attacks.
                         R::AttacksIfAnyAttacks(..) => false,
                         // At least one of the player's creatures, not this one in particular.

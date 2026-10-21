@@ -420,8 +420,13 @@ impl Game {
             }
             Effect::Tap { what } => {
                 let mut tapped = Vec::new();
+                // The player performing the instruction taps them (CR 701.26a): the
+                // controller of the spell or ability, or the player it has do it ("that
+                // player taps an untapped creature they control"; Solitary Sanctuary's
+                // rulings).
+                let by = Some(ctx.controller);
                 for o in self.resolve_objects(what, ctx) {
-                    if self.tap(o) {
+                    if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
                     }
                 }
@@ -574,6 +579,20 @@ impl Game {
                             vec![(a, Entity::Object(b), pa), (b, Entity::Object(a), pb)],
                             false,
                         );
+                    }
+                    // "Whenever a creature you control fights" (each creature that fought).
+                    let mut fought = vec![a];
+                    if b != a {
+                        fought.push(b);
+                    }
+                    for c in fought {
+                        let player = Some(self.obj(c).controller);
+                        self.emit(crate::events::Event::Custom {
+                            name: crate::keyword_actions::FOUGHT.into(),
+                            player,
+                            obj: Some(c),
+                            amount: 0,
+                        });
                     }
                 }
             }
@@ -1255,7 +1274,7 @@ impl Game {
                     turned |= if self.obj(o).zone == Zone::Exile {
                         crate::facedown::turn_exiled_face_up(self, o)
                     } else {
-                        crate::facedown::turn_face_up(self, o, false)
+                        crate::facedown::turn_face_up_by(self, o, ctx.controller)
                     };
                 }
                 ctx.prev_happened = turned;
@@ -1889,6 +1908,9 @@ impl Game {
                     for_rest_of_game: false,
                     performer,
                 });
+                // Which one it is, for a special action that stops it (Glass Asp).
+                ctx.nums
+                    .insert(crate::special_actions::LAST_DELAYED, i64::from(id));
             }
             Effect::NoteLinked { what, replace } => {
                 crate::linked_notes::exec(self, what, *replace, ctx);
@@ -1930,6 +1952,9 @@ impl Game {
                     body: Some(body),
                     order: self.trigger_order,
                 });
+            }
+            Effect::DuringNext { who, part, effect } => {
+                crate::next_turn::schedule(self, who, *part, effect, ctx);
             }
             Effect::AtNext { step, effect } => {
                 self.flush_events();
@@ -3426,6 +3451,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::MustAttackObject { attackers, .. }
         | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,

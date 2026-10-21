@@ -16,6 +16,11 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
     let (dur, main) = match l.strip_prefix("until end of turn, ") {
         Some(m) => (Duration::EndOfTurn, m),
+        // "Until your next turn, your opponents can't cast spells from anywhere other
+        // than their hands." (Avatar's Wrath)
+        None if l.starts_with("until your next turn, ") => {
+            (Duration::UntilYourNextTurn, &l["until your next turn, ".len()..])
+        }
         // "Players can't cast creature or planeswalker spells until the end of your next
         // turn." (Single Combat)
         None => match l.strip_suffix(" until the end of your next turn") {
@@ -46,7 +51,10 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
             | PlayerRef::ControllerOf(_)
             | PlayerRef::OwnerOf(_)
             | PlayerRef::DefendingPlayer
-            | PlayerRef::TriggerPlayer => PlayerFilter::Ref(Box::new(r)),
+            | PlayerRef::TriggerPlayer
+            // "that player" of "each opponent ... during that player's next turn"
+            // (`durations_players.rs`).
+            | PlayerRef::Iterated => PlayerFilter::Ref(Box::new(r)),
             _ => return None,
         };
         (who, rest)
@@ -65,6 +73,8 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     let what = if what == "spells" {
         Filter::Any
+    } else if let Some(z) = what.strip_prefix("spells from ") {
+        crate::oracle::patterns::statics::cast_from_zones(z)?
     } else {
         let (f, plural) = whole_object_phrase(&union_nouns(what))?;
         if !plural || !filter_mentions(&f, &|x| matches!(x, Filter::Spell)) {
