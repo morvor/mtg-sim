@@ -23,7 +23,9 @@ Not chosen for now: C (comparing against Forge or XMage), G (a mutation-testing 
 milestones), H (snapshots of every card's compiled form), I (a one-command intake for new
 sets), J (writing long-tail cards as reviewed data), K (prioritizing by how often cards are played).
 
-## Pause (user, Oct 14 ~20:15)
+## Pause (user, Oct 14 ~20:15) and resume (user, Oct 21)
+
+**Resumed Oct 21, 04:10 UTC.** At the user's request, every worker got the queue below. The hourly check-in is back on.
 
 The week's usage is nearly spent. The rules until the user says to resume (after the weekly
 reset, Oct 16 ~09:00 UTC):
@@ -49,7 +51,7 @@ worktree.
 - **cards-1:** the unfinished ones of `cards2-filters-conditions` and `cards2-referents-values`, then `cards2-costs-replacements`, `cards2-choices-players`. Then re-check the round-1 texts in round2/pending-recheck.tsv whose items have landed.
 - **cards-2:** `cards2-cast-permissions` if unfinished, then `cards2-zones-dig`, `cards2-copies-tokens-counters`, `cards-manual-defs-2`.
 
-Already landed from round 2: `cards2-followups`, `cards2-statics-characteristics`, `cards2-combat`.
+Already landed from round 2: `cards2-followups`, `cards2-statics-characteristics`, `cards2-combat`, `cards2-filters-conditions`, `cards2-referents-values` and `changeling-cda-only`. During the pause, rulings P219, P113 and P079 landed, as did mutation results for layers.rs and casting.rs: 14 of the 15 files, 81.8% caught overall, with combat.rs still to run.
 Also landed: `roundtrip-tail-5`, `every-card-fuzz-2` and the three gap-residual items.
 
 ## The judge audit (E)
