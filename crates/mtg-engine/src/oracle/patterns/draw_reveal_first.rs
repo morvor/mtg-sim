@@ -14,6 +14,10 @@ use crate::oracle::CompileContext;
 
 inventory::submit! { AbilityPattern { name: "reveal the first card you draw each turn; whenever you reveal a [card] this way", priority: 50, parse: reveal_first_draw } }
 
+/// The static ability and the triggered abilities written after it in its paragraph are
+/// linked (CR 603.11, 607.2h).
+const REVEAL_FIRST_DRAW_LINK: u16 = 0x3fa9;
+
 fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(block).to_lowercase();
     let (rest, your_turns, may) = if let Some(r) =
@@ -42,9 +46,10 @@ fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
     } else {
         crate::kw::reveal_first_draw::EACH_TURN
     };
-    out.push(AbilityDef::new(
+    out.push(AbilityDef::with_link(
         AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(name.into()))),
         block,
+        REVEAL_FIRST_DRAW_LINK,
     ));
     for part in rest.split(". whenever you reveal ") {
         let (desc, effect) = part.split_once(" this way, ")?;
@@ -85,7 +90,11 @@ fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
             cond: Condition::And(cond),
         };
         let tr = TriggeredAbility::new(trigger, body);
-        out.push(AbilityDef::new(AbilityKind::Triggered(tr), block));
+        out.push(AbilityDef::with_link(
+            AbilityKind::Triggered(tr),
+            block,
+            REVEAL_FIRST_DRAW_LINK,
+        ));
     }
     Some(out)
 }
