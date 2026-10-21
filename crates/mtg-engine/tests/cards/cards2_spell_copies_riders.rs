@@ -180,3 +180,34 @@ fn sea_gate_stormcaller_copies_the_next_cheap_spell_twice_if_kicked() {
         assert_eq!(t.life(P1), life, "kicked: {kicked}");
     }
 }
+
+#[test]
+fn gandalf_copies_a_big_spell_sharing_a_type_with_a_revealed_card() {
+    cr!("707.10", "701.20a", "707.10f");
+    supported("Gandalf, Westward Voyager");
+    // Craw Wurm shares the creature type with P1's revealed Grizzly Bears.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Gandalf, Westward Voyager");
+    t.library_top(P1, "Grizzly Bears");
+    t.library_top(P2, "Island");
+    t.lands(P0, "Forest", 6);
+    let w = t.hand(P0, "Craw Wurm");
+    let (h0, h1, h2) = (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2));
+    t.cast(P0, w).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 2);
+    assert_eq!(t.hand_size(P0), h0 - 1);
+    assert_eq!((t.hand_size(P1), t.hand_size(P2)), (h1 + 1, h2 + 1));
+    // Overrun (a sorcery) shares no type with them: you draw a card instead.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Gandalf, Westward Voyager");
+    t.library_top(P1, "Grizzly Bears");
+    t.library_top(P2, "Island");
+    t.lands(P0, "Forest", 5);
+    let o = t.hand(P0, "Overrun");
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.cast(P0, o).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), h0 - 1 + 1);
+    assert_eq!(t.hand_size(P1), h1);
+}

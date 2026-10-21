@@ -791,3 +791,73 @@ fn kicked_copy_next_spell_twice(l: &str, prev: &mut Effect, _b: &mut Builder) ->
 }
 
 inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if kicked, copy that spell twice instead", priority: 90, apply: kicked_copy_next_spell_twice } }
+
+/// The cards each opponent revealed from the top of their library.
+const REVEALED_BY_EACH: Var = vars::USER + 5112;
+
+/// "If any of those cards shares a card type with that spell, copy that spell, ..." after
+/// "each opponent reveals the top card of their library" (Gandalf, Westward Voyager): the
+/// cards all of them revealed.
+fn if_any_revealed_shares_a_type(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(rest) =
+        end(&lower).strip_prefix("if any of those cards shares a card type with that spell, ")
+    else {
+        return false;
+    };
+    // "that spell": the spell the ability triggered on (the reveal made "those cards"
+    // the last referent).
+    if !b.in_trigger
+        || !crate::oracle::raw_text()
+            .to_lowercase()
+            .starts_with("whenever you cast ")
+    {
+        return false;
+    }
+    let Effect::ForEachPlayer {
+        who: PlayerRef::EachOpponent,
+        effect,
+    } = prev
+    else {
+        return false;
+    };
+    let Effect::AsPlayer { effect: dig, .. } = &**effect else {
+        return false;
+    };
+    if !matches!(&**dig, Effect::Dig { reveal: true, .. }) {
+        return false;
+    }
+    let saved = std::mem::replace(&mut b.it, Sel::TriggerSpell);
+    let then = crate::oracle::effects::parse_clause(rest, b);
+    b.it = saved;
+    let Some(then) = then else {
+        return false;
+    };
+    let each = std::mem::take(&mut **effect);
+    **effect = Effect::seq(vec![
+        each,
+        Effect::Store {
+            var: REVEALED_BY_EACH,
+            sel: Sel::Union(vec![Sel::Var(REVEALED_BY_EACH), Sel::Var(vars::DUG)]),
+        },
+    ]);
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: REVEALED_BY_EACH,
+            sel: Sel::None,
+        },
+        old,
+        Effect::If {
+            cond: Condition::SelNonEmpty(Sel::Matching(
+                Box::new(Sel::Var(REVEALED_BY_EACH)),
+                Filter::SharesCardType(Box::new(Sel::TriggerSpell)),
+            )),
+            then: Box::new(then),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if any of those cards shares a card type with that spell", priority: 90, apply: if_any_revealed_shares_a_type } }
