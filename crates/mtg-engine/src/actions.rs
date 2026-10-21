@@ -847,9 +847,12 @@ impl Game {
                 }
             }
         }
-        // Linked exile (CR 607): remember cards exiled by a source.
+        // Linked exile (CR 607): remember cards exiled by a source — also by a source
+        // that has left its zone (sacrificed to pay the ability's cost): the ability's
+        // later instructions ("At the beginning of the next end step, return the exiled
+        // cards ...") still find them through its last known information.
         if let (Some(src), Zone::Exile) = (m.source, m.to) {
-            if self.is_live(src) {
+            if self.try_obj(src).is_some() {
                 let link = m.etb.link.unwrap_or(self.current_link);
                 self.objects[src.0 as usize]
                     .linked

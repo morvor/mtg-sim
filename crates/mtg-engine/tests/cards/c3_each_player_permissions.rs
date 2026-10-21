@@ -332,3 +332,35 @@ fn suspend_aggression_each_owner_plays_their_card_until_the_end_of_their_next_tu
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn apple_of_eden_plays_the_opponents_exiled_hand_and_returns_the_rest() {
+    cr!("406.3b", "611.2a", "118.14", "603.7");
+    ruling!(
+        "Apple of Eden, Isu Relic",
+        "Only cards still exiled with Apple of Eden’s ability will be returned to their owner’s hand at the beginning of the next end step."
+    );
+    assert_supported("Apple of Eden, Isu Relic");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let apple = t.battlefield(P0, "Apple of Eden, Isu Relic");
+    t.lands(P0, "Plains", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let forest = t.hand(P1, "Forest");
+    t.activate(P0, apple, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(bolt_x), Zone::Exile);
+    assert!(t.g.obj(bolt_x).face_down);
+    assert_eq!(t.hand_size(P1), 0);
+    assert_eq!(t.life(P0), 16);
+    // A Plains pays for the Bolt; its owner draws a card.
+    t.cast_with(P0, bolt_x, &[Entity::Player(P1)]).expect("cast the Bolt");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P1), 1);
+    // The Forest goes back to P1's hand at the end step.
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(forest)), Zone::Hand(P1));
+}

@@ -2260,7 +2260,9 @@ pub(crate) fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     if let Some(c) = lead_cond {
-        if p.cond_text.is_some() {
+        // (Only for a spell cast as the effect resolves: a lasting permission's leading
+        // condition is the instruction's, with "Otherwise, ..." perhaps after it.)
+        if p.cond_text.is_some() || p.duration.is_some() {
             return false;
         }
         p.cond_text = Some(c);

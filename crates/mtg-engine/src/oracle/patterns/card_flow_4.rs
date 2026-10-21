@@ -6,6 +6,9 @@
 //!
 //! "Exile target nonland permanent and the top card of your library." (Suspend
 //! Aggression): both at once; "those cards" are both.
+//!
+//! "Look at target opponent's hand and exile those cards face down." (Apple of Eden, Isu
+//! Relic): all the cards in that hand, which the player who exiled them has seen.
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -95,3 +98,17 @@ fn exile_target_and_top_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: exile target [permanent] and the top card of your library", priority: 90, parse: exile_target_and_top_card } }
+
+fn look_at_hand_and_exile_face_down(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l.trim()).strip_prefix("look at ")?;
+    let who = r.strip_suffix("'s hand and exile those cards face down")?;
+    if !matches!(who, "target opponent" | "target player") {
+        return None;
+    }
+    crate::oracle::effects::parse_sentence(
+        &format!("exile all cards from {who}'s hand face down"),
+        b,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: look at target opponent's hand and exile those cards face down", priority: 90, parse: look_at_hand_and_exile_face_down } }
