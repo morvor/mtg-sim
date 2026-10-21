@@ -134,3 +134,40 @@ fn stromgald_spy_reveals_the_defending_players_hand() {
     crate::r_s02_common::destroy(&mut t, spy);
     assert!(!mtg_engine::reveal::is_revealed(&t.g, card));
 }
+
+#[test]
+fn suncleanser_creature_cant_have_counters_while_it_remains() {
+    cr!("611.2b", "614.1", "122.1");
+    supported("Suncleanser");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.obj_mut(bears).counters.insert("+1/+1".into(), 2);
+    let how = mtg_engine::event_causes::CounterPut::rule(P0);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let sun = t.enter(P0, "Suncleanser");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    assert_eq!(t.g.put_counters(Entity::Object(bears), "+1/+1", 1, how), 0);
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    crate::r_s02_common::destroy(&mut t, sun);
+    assert_eq!(t.g.put_counters(Entity::Object(bears), "+1/+1", 1, how), 1);
+}
+
+#[test]
+fn suncleanser_opponent_cant_get_counters_while_it_remains() {
+    cr!("611.2b", "614.1", "122.1");
+    let mut t = TestGame::new(2);
+    t.g.players[P1.idx()].counters.insert("poison".into(), 3);
+    let how = mtg_engine::event_causes::CounterPut::rule(P0);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Suncleanser");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.g.player(P1).counter("poison"), 0);
+    assert_eq!(t.g.put_counters(Entity::Player(P1), "poison", 2, how), 0);
+    // Not another player.
+    assert_eq!(t.g.put_counters(Entity::Player(P0), "poison", 1, how), 1);
+}

@@ -160,6 +160,62 @@ fn plays_with_hand_revealed(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "durations 4: [player] plays with their hand revealed [duration]", priority: 100, parse: plays_with_hand_revealed } }
 
+/// The replacement effect stopping counters from being put on objects or players
+/// (CR 614.1, 122.6; the static form is `r122_cant_have_counters_put.rs`).
+fn counters_prevented(on_objects: Option<Filter>, on_players: Option<PlayerFilter>, d: Duration) -> Effect {
+    Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::PutCounters {
+                on_objects,
+                on_players,
+                kind: None,
+            },
+            action: ReplacementAction::Prevent,
+            self_replacement: false,
+            optional: false,
+        },
+        duration: d,
+        uses: None,
+    }
+}
+
+/// "It can't have counters put on it for as long as ~ remains on the battlefield.", "That
+/// player can't get counters for as long as ~ remains on the battlefield." (Suncleanser).
+fn cant_have_counters_for_duration(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (d, l) = crate::oracle::effects::duration_suffix(end(l));
+    if matches!(d, Duration::Permanent) {
+        return None;
+    }
+    let l = l.trim();
+    if let Some(subj) = l.strip_suffix(" can't get counters") {
+        let who = match subj {
+            "that player" | "they" => b.it_player.clone(),
+            _ => return None,
+        };
+        if matches!(who, PlayerRef::You) {
+            return None;
+        }
+        return Some(counters_prevented(
+            None,
+            Some(PlayerFilter::Ref(Box::new(who))),
+            d,
+        ));
+    }
+    let subj = l
+        .strip_suffix(" can't have counters put on it")
+        .or_else(|| l.strip_suffix(" can't have counters put on them"))?;
+    let sel = match subj {
+        "it" | "that creature" | "that permanent" => b.it.clone(),
+        _ => return None,
+    };
+    if matches!(sel, Sel::None | Sel::This) {
+        return None;
+    }
+    Some(counters_prevented(Some(Filter::In(Box::new(sel))), None, d))
+}
+
+inventory::submit! { EffectPattern { name: "durations 4: it can't have counters put on it [duration]", priority: 100, parse: cant_have_counters_for_duration } }
+
 #[cfg(test)]
 mod tests {
     use super::*;
