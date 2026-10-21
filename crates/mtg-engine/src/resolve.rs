@@ -1245,7 +1245,9 @@ impl Game {
             }
             Effect::PhaseOut { what } => {
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.phased_in_permanents();
                 crate::keyword_impls::phase_out(self, objs);
+                self.record_phased_out(before, ctx);
             }
             Effect::TurnFaceUp { what } => {
                 // "Turn ~ face up. If you can't, ..." (CR 609.3).
@@ -1528,10 +1530,15 @@ impl Game {
             Effect::ExchangeLifeTotals { a, b } => {
                 let a = self.eval_player(a, ctx);
                 let b = self.eval_player(b, ctx);
+                let me = ctx.controller;
+                let before = self.player(me).life;
                 ctx.prev_happened = match (a, b) {
                     (Some(a), Some(b)) => crate::life_totals::exchange_life_totals(self, a, b),
                     _ => false,
                 };
+                // "If you lost life this way, draw that many cards." (CR 119.5: exchanging
+                // life totals is gaining or losing the difference).
+                ctx.prev_value = (before - self.player(me).life).max(0) as i64;
             }
             Effect::AddMana {
                 who,
@@ -2196,7 +2203,9 @@ impl Game {
             }
             Effect::PhaseOutUntil { what, until } => {
                 let objs = self.resolve_objects(what, ctx);
+                let before = self.phased_in_permanents();
                 crate::until::exec_phase_out_until(self, objs, until, ctx);
+                self.record_phased_out(before, ctx);
             }
             Effect::SelfReplace {
                 replacement,
@@ -2440,6 +2449,26 @@ impl Game {
             .into_iter()
             .filter_map(|e| e.object())
             .collect()
+    }
+
+    /// The permanents that are phased in.
+    fn phased_in_permanents(&self) -> Vec<ObjectId> {
+        self.battlefield
+            .iter()
+            .copied()
+            .filter(|o| !self.obj(*o).phased_out)
+            .collect()
+    }
+
+    /// Records the permanents of `before` that are now phased out as "phased out this
+    /// way" ([`vars::PHASED_OUT`]).
+    fn record_phased_out(&mut self, before: Vec<ObjectId>, ctx: &mut Ctx) {
+        let now: Vec<Entity> = before
+            .into_iter()
+            .filter(|o| self.is_live(*o) && self.obj(*o).phased_out)
+            .map(Entity::Object)
+            .collect();
+        ctx.set_var(vars::PHASED_OUT, now);
     }
 
     /// Records the objects that were actually dealt damage by `src` since event index

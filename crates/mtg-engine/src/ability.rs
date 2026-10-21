@@ -957,6 +957,9 @@ pub mod vars {
     /// measuring, while its values are evaluated ("with toughness greater than its power",
     /// "the greatest power among creatures you control"; see `relational.rs`).
     pub const TESTED: Var = 6;
+    /// Permanents the most recent phase-out instruction phased out, directly or
+    /// indirectly (CR 702.26g): "each creature that phased out this way".
+    pub const PHASED_OUT: Var = USER + 12_100;
 }
 
 /// Selects players and/or objects.
@@ -987,6 +990,10 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents that were attached to the selected objects as those last existed
+    /// on the battlefield, each as it last existed then if it has since left (CR 608.2h):
+    /// "each Aura you controlled that was attached to it" after it died.
+    AttachedAsItLeft(Box<Sel>),
     /// The permanents or players the selected objects are attached to ("the permanent
     /// target Aura is attached to").
     HostOf(Box<Sel>),

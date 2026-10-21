@@ -200,6 +200,19 @@ impl Game {
                     })
             })
             .collect();
+        // What was attached to each permanent leaving as the moves begin: an Aura or
+        // Equipment leaving at the same time was still attached to it (CR 608.2h).
+        let attachments_before: Vec<(ObjectId, Vec<ObjectId>)> = finals
+            .iter()
+            .filter_map(|(_, e)| match e {
+                ReplEvent::Move(m)
+                    if m.to != Zone::Battlefield && self.obj(m.obj).zone == Zone::Battlefield =>
+                {
+                    Some((m.obj, self.attachments_of(Entity::Object(m.obj))))
+                }
+                _ => None,
+            })
+            .collect();
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -212,6 +225,11 @@ impl Game {
             }
         }
         self.entering = prev_entering;
+        for (o, a) in attachments_before {
+            if let Some(lb) = self.objects[o.0 as usize].left_battlefield.as_mut() {
+                lb.attachments = a;
+            }
+        }
         for o in still_attached {
             if let Some(lb) = self.objects[o.0 as usize].left_battlefield.as_mut() {
                 lb.attached = true;
@@ -474,6 +492,7 @@ impl Game {
                 enchanted: has(self, "Aura"),
                 equipped: has(self, "Equipment"),
                 attached: false,
+                attachments: attached.clone(),
                 blocks: self
                     .combat
                     .as_ref()

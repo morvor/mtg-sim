@@ -115,13 +115,11 @@ fn krosan_adaptation_storm_copy_token_is_not_created() {
 // Fangorn, Tree Shepherd
 
 /// Fangorn's static ability ("You don't lose unspent green mana as steps and phases
-/// end.") compiles; its mana trigger doesn't yet, and these rulings are about the static.
+/// end.") compiles, as does the rest of the card; these rulings are about the static (its
+/// mana trigger is tested in `tests/cards/referents_values.rs`).
 fn fangorn_static_supported() {
     let c = mtg_engine::card::card("Fangorn, Tree Shepherd");
-    assert_eq!(
-        c.unsupported_text(),
-        vec!["Whenever one or more Treefolk you control attack, add twice that much {G}."]
-    );
+    assert!(c.unsupported_text().is_empty());
 }
 
 fn pool_count(t: &TestGame, ty: ManaType) -> usize {

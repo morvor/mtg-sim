@@ -40,6 +40,10 @@ pub fn ungoad(g: &mut Game, obj: ObjectId) {
 
 pub struct Goad;
 
+/// The creatures the most recent goad instruction goaded ("each creature goaded this
+/// way", CR 608.2c).
+pub const GOADED: crate::ability::Var = crate::ability::vars::USER + 12_101;
+
 impl KeywordActionRules for Goad {
     fn actions(&self) -> &'static [KeywordAction] {
         &[KeywordAction::Goad]
@@ -49,12 +53,19 @@ impl KeywordActionRules for Goad {
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
         let objs = g.resolve_objects(a.what, ctx);
         let undo = a.spec.is_some_and(|s| s.undo);
+        let mut goaded = Vec::new();
         for o in objs {
             if undo {
                 ungoad(g, o);
             } else {
                 goad(g, o, ctx.controller);
+                if g.is_live(o) && g.obj(o).goaded_by.contains(&ctx.controller) {
+                    goaded.push(crate::types::Entity::Object(o));
+                }
             }
+        }
+        if !undo {
+            ctx.set_var(GOADED, goaded);
         }
     }
 }
