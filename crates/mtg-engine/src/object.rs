@@ -398,6 +398,10 @@ pub struct Choices {
     /// The choices made for this object from now on are secret (until revealed).
     #[serde(default)]
     pub secret_next: bool,
+    /// For a player's own choices (`by_player`): the spell or ability on the stack whose
+    /// resolution they were made in, if any.
+    #[serde(default)]
+    pub made_during: Option<ObjectId>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

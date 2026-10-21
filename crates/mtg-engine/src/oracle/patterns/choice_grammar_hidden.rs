@@ -110,11 +110,13 @@ fn subject_secretly_chooses(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 /// The ways the text says the secret choices are revealed.
-const REVEALED: [&str; 4] = [
+const REVEALED: [&str; 5] = [
     "those choices are revealed",
     "the choices are revealed",
     "those numbers are revealed",
     "the numbers are revealed",
+    // Wheel of Misfortune.
+    "all players reveal those numbers simultaneously and determine the highest and lowest numbers revealed this way",
 ];
 
 inventory::submit! { EffectPattern { name: "[players] secretly choose", priority: 60, parse: subject_secretly_chooses } }

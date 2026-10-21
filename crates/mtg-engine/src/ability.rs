@@ -1205,6 +1205,10 @@ pub enum PlayerFilter {
     /// opponent who chose silence"): that player's own choice among the source's
     /// per-player choices (CR 607.2d; see `choices::player_choice_matches`).
     Chose(SmolStr),
+    /// A player whose chosen number for the source compares so with the value ("each
+    /// player with the highest number", "each player who didn't choose the lowest
+    /// number"; see `choices.rs`).
+    ChoseNumber(Cmp, Box<Value>),
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,

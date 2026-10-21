@@ -412,6 +412,10 @@ impl Game {
                 crate::multiplayer::two_headed::player_counter(self, p, counters::POISON) > 0
             }
             PlayerFilter::MaxSpeed => self.player(p).speed.unwrap_or(0) >= 4,
+            PlayerFilter::ChoseNumber(c, v) => {
+                let n = self.eval_value(v, ctx);
+                crate::choices::number_chosen_by(self, ctx, p).is_some_and(|x| c.eval(x, n))
+            }
             PlayerFilter::Chose(w) => self
                 .source_choices(ctx)
                 .is_some_and(|ch| crate::choices::player_choice_matches(ch, p, w)),

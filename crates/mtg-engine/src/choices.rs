@@ -164,8 +164,8 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
     copy_choice(kind, &made, entry);
     // Each player's own choice ("each player chooses war or peace"), kept for the
     // object and for the linked abilities.
-    record_for_player(&mut o.choices, p, kind, &made);
-    record_for_player(entry, p, kind, &made);
+    record_for_player(&mut o.choices, p, kind, &made, ctx.stack_obj);
+    record_for_player(entry, p, kind, &made, ctx.stack_obj);
     // A secret choice isn't shown to the other players until it's revealed.
     if made.secret_next {
         for ch in [&mut o.choices, entry] {
@@ -218,6 +218,7 @@ fn record_for_player(
     p: PlayerId,
     kind: &ChoiceKind,
     made: &crate::object::Choices,
+    during: Option<ObjectId>,
 ) {
     let i = match ch.by_player.iter().position(|(q, _)| *q == p) {
         Some(i) => i,
@@ -226,7 +227,9 @@ fn record_for_player(
             ch.by_player.len() - 1
         }
     };
-    copy_choice(kind, made, &mut ch.by_player[i].1);
+    let mine = &mut ch.by_player[i].1;
+    copy_choice(kind, made, mine);
+    mine.made_during = during;
 }
 
 /// What `p` chose for an object, as a word ("war", "red", "Goblin", a card name, a
@@ -568,3 +571,70 @@ impl crate::kw::KeywordRules for ChoiceRules {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChoiceRules) }
+
+/// `Value::Custom` names: the highest and the lowest of the numbers players chose for the
+/// source ("each player with the highest number loses that much life", "each player who
+/// didn't choose the lowest number"), and the number the player performing the
+/// instruction chose ("loses life equal to the number of items they revealed").
+pub const HIGHEST_NUMBER: &str = "choices: the highest number chosen";
+pub const LOWEST_NUMBER: &str = "choices: the lowest number chosen";
+pub const OWN_NUMBER: &str = "choices: the number they chose";
+/// `Condition::Custom`: the numbers chosen for the source are all the same ("If they
+/// match").
+pub const NUMBERS_MATCH: &str = "choices: the chosen numbers match";
+
+/// The numbers players chose for the source, by player: during the resolution of a
+/// spell or ability that had numbers chosen, only those chosen in it ("If they match":
+/// the numbers you and the target opponent just chose).
+fn numbers_chosen(g: &Game, ctx: &Ctx) -> Vec<(PlayerId, i64)> {
+    g.source_choices(ctx)
+        .map(|ch| {
+            let now = ctx.stack_obj.filter(|s| {
+                ch.by_player
+                    .iter()
+                    .any(|(_, c)| c.number.is_some() && c.made_during == Some(*s))
+            });
+            ch.by_player
+                .iter()
+                .filter(|(_, c)| now.is_none() || c.made_during == now)
+                .filter_map(|(p, c)| c.number.map(|n| (*p, n as i64)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The number `p` chose for the source, if any.
+pub fn number_chosen_by(g: &Game, ctx: &Ctx, p: PlayerId) -> Option<i64> {
+    numbers_chosen(g, ctx)
+        .into_iter()
+        .find(|(q, _)| *q == p)
+        .map(|(_, n)| n)
+}
+
+/// The values and conditions about the numbers chosen.
+pub struct ChosenNumbers;
+
+impl crate::kw::KeywordRules for ChosenNumbers {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        let nums = || numbers_chosen(g, ctx).into_iter().map(|(_, n)| n);
+        match name {
+            HIGHEST_NUMBER => Some(nums().max().unwrap_or(0)),
+            LOWEST_NUMBER => Some(nums().min().unwrap_or(0)),
+            OWN_NUMBER => Some(number_chosen_by(g, ctx, ctx.controller).unwrap_or(0)),
+            _ => None,
+        }
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        (name == NUMBERS_MATCH).then(|| {
+            let n: Vec<i64> = numbers_chosen(g, ctx).into_iter().map(|(_, n)| n).collect();
+            n.len() >= 2 && n.iter().all(|x| *x == n[0])
+        })
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChosenNumbers) }
