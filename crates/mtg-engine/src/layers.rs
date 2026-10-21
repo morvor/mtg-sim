@@ -1367,12 +1367,40 @@ impl Game {
                 if !self.ability_functions(o, s.zone, s.is_cda) {
                     continue;
                 }
+                let ctl = o.controller;
+                // "You can't cast ~ unless an opponent lost life this turn", "cast ~ only
+                // during your turn": "you" is the player who would cast it (CR 109.5), not
+                // the card's owner while it's in a hidden or public zone, so the condition
+                // is checked for each player and the restriction applies to those it holds
+                // for.
+                if let (
+                    Some(c),
+                    StaticEffect::Restriction(Restriction::CantCast {
+                        who: PlayerFilter::Any,
+                        what: Filter::Source,
+                    }),
+                ) = (&s.condition, &s.effect)
+                {
+                    for p in self.player_ids() {
+                        if self.eval_cond(c, &Ctx::new(Some(id), p)) {
+                            crate::structure::record(a, &o.chars.name, "static");
+                            st.restrictions.push((
+                                id,
+                                ctl,
+                                Restriction::CantCast {
+                                    who: PlayerFilter::Is(p),
+                                    what: Filter::Source,
+                                },
+                            ));
+                        }
+                    }
+                    continue;
+                }
                 if let Some(c) = &s.condition {
                     if !self.eval_cond(c, &Ctx::new(Some(id), o.controller)) {
                         continue;
                     }
                 }
-                let ctl = o.controller;
                 if !matches!(
                     s.effect,
                     StaticEffect::Continuous { .. } | StaticEffect::Replacement(_)
