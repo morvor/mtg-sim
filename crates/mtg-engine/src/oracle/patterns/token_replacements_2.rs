@@ -510,9 +510,19 @@ fn token_with_pt_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
     if !l.starts_with("create a ") && !l.starts_with("create an ") {
         return None;
     }
-    let (head, value) = l
+    // "with power equal to that card's power and toughness equal to that card's
+    // toughness" (Soul Separator).
+    let (head, value, separate) = match l
         .split_once(" token with base power and toughness each equal to ")
-        .or_else(|| l.split_once(" token with power and toughness each equal to "))?;
+        .or_else(|| l.split_once(" token with power and toughness each equal to "))
+    {
+        Some((h, v)) => (h, v, None),
+        None => {
+            let (h, r) = l.split_once(" token with power equal to ")?;
+            let (p, t) = r.split_once(" and toughness equal to ")?;
+            (h, p, Some(t))
+        }
+    };
     let (_, desc) = head.split_once(' ')?;
     let desc = desc
         .strip_prefix("a ")
@@ -533,6 +543,20 @@ fn token_with_pt_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
         restore(b);
         return None;
     }
+    let t = match separate {
+        Some(t) => {
+            let Some((t, tail)) = crate::oracle::statics::parse_value_phrase(t, b) else {
+                restore(b);
+                return None;
+            };
+            if !end(&tail).is_empty() {
+                restore(b);
+                return None;
+            }
+            t
+        }
+        None => v.clone(),
+    };
     let Some(mut e) =
         crate::oracle::effects::parse_clause(&format!("create a 0/0 {desc} token"), b)
     else {
@@ -545,7 +569,7 @@ fn token_with_pt_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
     };
     spec.power = None;
     spec.toughness = None;
-    spec.pt_values = Some(Box::new((v.clone(), v)));
+    spec.pt_values = Some(Box::new((v, t)));
     Some(e)
 }
 
@@ -603,3 +627,50 @@ fn for_each_of_those_tokens(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
 }
 
 inventory::submit! { super::FollowupPattern { name: "token replacements 2: for each of those tokens, [instruction]", priority: 45, apply: for_each_of_those_tokens } }
+
+/// "The token enters tapped and attacking that player." after creating a token (Echoing
+/// Assault): it's created tapped and attacking the player the ability refers to
+/// (CR 508.4).
+fn token_enters_attacking_that_player(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    if !matches!(
+        end(&lower),
+        "the token enters tapped and attacking that player"
+            | "it enters tapped and attacking that player"
+            | "the tokens enter tapped and attacking that player"
+    ) {
+        return false;
+    }
+    let defender = b.it_player.clone();
+    if !matches!(
+        defender,
+        PlayerRef::TriggerPlayer | PlayerRef::Iterated | PlayerRef::Target(_)
+    ) {
+        return false;
+    }
+    let ok = match prev {
+        Effect::CreateToken {
+            tapped, attacking, ..
+        }
+        | Effect::CreateTokenCopy {
+            tapped, attacking, ..
+        } => {
+            *tapped = true;
+            *attacking = true;
+            true
+        }
+        _ => false,
+    };
+    if !ok {
+        return false;
+    }
+    let inner = std::mem::take(prev);
+    *prev = Effect::TokensJoinCombat {
+        effect: Box::new(inner),
+        attacking: Some(defender),
+        blocking: None,
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: the token enters tapped and attacking that player", priority: 45, apply: token_enters_attacking_that_player } }

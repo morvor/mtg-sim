@@ -56,7 +56,9 @@ fn exception_clauses(masked: &str) -> Vec<String> {
         .replace(" and is a ", "|it's a ")
         .replace(" and is an ", "|it's an ")
         // "except it's 0/0 and has this ability" (Mimeoplasm, Revered One).
-        .replace(" and has this ability", "|it has this ability");
+        .replace(" and has this ability", "|it has this ability")
+        // "except it's 1/1 and has toxic 1" (Kinzu of the Bleak Coven).
+        .replace(" and has ", "|it has ");
     for subj in SUBJECTS {
         for sep in [", and ", " and ", ", "] {
             s = s.replace(&format!("{sep}{subj}"), &format!("|{subj}"));
@@ -303,8 +305,79 @@ pub(crate) fn copy_exceptions(
     ctx: &CompileContext,
 ) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
+    // "except it's a Vehicle artifact with crew 3 and it loses all other card types"
+    // (Imposter Mech): only those types (CR 205.1a; its other subtypes go too).
+    let (masked, loses_other) = match masked.strip_suffix(" and it loses all other card types") {
+        Some(m) => (m, true),
+        None => (masked, false),
+    };
     for c in exception_clauses(masked) {
         let c = c.as_str();
+        if loses_other {
+            let r = c.strip_prefix("it's a ").or_else(|| c.strip_prefix("it's an "))?;
+            let (types, with) = match r.split_once(" with ") {
+                Some((t, w)) => (t, Some(w)),
+                None => (r, None),
+            };
+            let mut card_types = Vec::new();
+            let mut subtypes = Vec::new();
+            for w in types.split_whitespace() {
+                match CardType::from_word(w) {
+                    Some(t) => card_types.push(t),
+                    None if card_types.is_empty() => subtypes.push(subtype_word(w)?),
+                    None => return None,
+                }
+            }
+            if card_types.is_empty() {
+                return None;
+            }
+            out.push(Modification::SetTypes {
+                types: card_types,
+                subtypes,
+            });
+            if let Some(w) = with {
+                out.extend(with_abilities(w, quotes, ctx)?);
+            }
+            continue;
+        }
+        // "its starting loyalty is 1" (Jace, Mirror Mage; CR 306.5b, 707.9b).
+        if let Some(n) = c.strip_prefix("its starting loyalty is ") {
+            out.push(crate::kw::copy_exception_mods::starting_loyalty(n.trim().parse().ok()?));
+            continue;
+        }
+        // "it's a legendary Alien named Prisoner Zero" (The Eleventh Hour): its name, and
+        // these subtypes instead of its others (its card types stay).
+        if let Some((types, name)) = c
+            .strip_prefix("it's a ")
+            .or_else(|| c.strip_prefix("it's an "))
+            .and_then(|r| r.split_once(" named "))
+        {
+            let mut supertypes = Vec::new();
+            let mut subtypes = Vec::new();
+            for w in types.split_whitespace() {
+                match Supertype::from_word(w) {
+                    Some(st) if subtypes.is_empty() => supertypes.push(st),
+                    Some(_) => return None,
+                    None => subtypes.push(subtype_word(w)?),
+                }
+            }
+            if subtypes.is_empty() || name.contains('~') || name.split(' ').count() > 4 {
+                return None;
+            }
+            if !supertypes.is_empty() {
+                out.push(Modification::AddSupertypes(supertypes));
+            }
+            out.push(crate::kw::copy_exception_mods::only_subtypes(&subtypes)?);
+            let raw = crate::oracle::raw_text();
+            let rl = raw.to_lowercase();
+            let needle = format!("named {name}");
+            let i = rl.find(&needle)? + "named ".len();
+            if rl.len() != raw.len() {
+                return None;
+            }
+            out.push(Modification::SetName(SmolStr::new(raw.get(i..i + name.len())?)));
+            continue;
+        }
         if matches!(
             c,
             "it isn't legendary"
@@ -774,6 +847,33 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
     if !end(&tail).is_empty() {
         return None;
     }
+    // "except it enters with an additional +1/+1 counter on it" (Littjara Mirrorlake):
+    // the token enters with those counters (CR 122.6, 707.9e).
+    let mut enters_with: Vec<(crate::types::CounterKind, Value)> = Vec::new();
+    let exc_part = match exc_part {
+        Some(e) => {
+            let (rest, counters) = match e.rsplit_once("it enters with ") {
+                Some((before, c)) if before.is_empty() || before.ends_with(" and ") => {
+                    (before.trim_end_matches(" and ").to_string(), Some(c.to_string()))
+                }
+                _ => (e.clone(), None),
+            };
+            if let Some(c) = counters {
+                let c = c.strip_prefix("an additional ").map_or(c.clone(), |x| format!("a {x}"));
+                let c = c.replacen(" additional ", " ", 1);
+                let (n, r) = parse_number(&c)?;
+                let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+                let r = r.trim_start();
+                let r = r.strip_prefix("counters").or_else(|| r.strip_prefix("counter"))?;
+                if r.trim() != "on it" {
+                    return None;
+                }
+                enters_with.push((kind, n));
+            }
+            (!rest.is_empty()).then_some(rest)
+        }
+        None => None,
+    };
     let mods = match exc_part {
         Some(e) if half_pt(&e).is_some() => {
             let up = half_pt(&e)?;
@@ -790,13 +890,21 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
             vec![]
         }
     };
-    Some(Effect::CreateTokenCopy {
+    let e = Effect::CreateTokenCopy {
         of,
         count,
         controller: PlayerRef::You,
         tapped,
         attacking,
         mods,
+    };
+    Some(if enters_with.is_empty() {
+        e
+    } else {
+        Effect::TokensEnterWithCounters {
+            counters: enters_with,
+            effect: Box::new(e),
+        }
     })
 }
 
