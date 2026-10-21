@@ -22,6 +22,10 @@
 //!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks; `--raw`:
 //!   exact texts, numbers kept, e.g. to write a hand-written ability's `text`). Sticker
 //!   sheets are deferred and left out unless named with `--card`.
+//! * `interpretations [--write [PATH]] [--check]` — the interpretation register
+//!   (`docs/interpretations/`): prints its problems (see `mtg_data::interpretations::check`)
+//!   and the index; `--write` writes the index to `docs/INTERPRETATIONS.md` (or PATH);
+//!   `--check` exits with status 1 on a problem or when that file is out of date.
 //! * `structure-coverage [--write PATH] [--limit N] [--logs DIR] [--card NAME]` — groups
 //!   supported cards' abilities by compiled structure and reports the structures no test
 //!   exercises (see `structure_coverage.rs` for the command sequence).
@@ -1028,6 +1032,64 @@ fn manual_check() {
     }
 }
 
+/// The interpretation register: problems, and the index `docs/INTERPRETATIONS.md`.
+fn interpretations(args: &[String]) {
+    use mtg_data::interpretations as reg;
+    let root = repo_root();
+    let mut write: Option<PathBuf> = None;
+    let mut check = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--write" => {
+                let path = args.get(i + 1).filter(|a| !a.starts_with("--"));
+                write = Some(match path {
+                    Some(p) => {
+                        i += 1;
+                        PathBuf::from(p)
+                    }
+                    None => root.join("docs/INTERPRETATIONS.md"),
+                });
+            }
+            "--check" => check = true,
+            other => {
+                eprintln!("interpretations: unknown argument {other:?}");
+                std::process::exit(2);
+            }
+        }
+        i += 1;
+    }
+    let entries = reg::load(&root.join("docs/interpretations"));
+    let problems = reg::check(&root);
+    for p in &problems {
+        println!("{p}");
+    }
+    let index = reg::render_index(&entries);
+    let provisional = entries.iter().filter(|e| e.status == "provisional").count();
+    println!(
+        "{} entries ({provisional} provisional), {} problems",
+        entries.len(),
+        problems.len()
+    );
+    let mut stale = false;
+    if let Some(path) = &write {
+        std::fs::write(path, &index).expect("write index");
+        println!("wrote {}", path.display());
+    } else {
+        let current =
+            std::fs::read_to_string(root.join("docs/INTERPRETATIONS.md")).unwrap_or_default();
+        if current != index {
+            stale = true;
+            println!(
+                "docs/INTERPRETATIONS.md is out of date: run `mtg-tools interpretations --write`"
+            );
+        }
+    }
+    if check && (!problems.is_empty() || stale) {
+        std::process::exit(1);
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -1037,9 +1099,10 @@ fn main() {
         Some("unsupported") => unsupported(&args[1..]),
         Some("roundtrip") => roundtrip::run(&args[1..]),
         Some("manual-check") => manual_check(),
+        Some("interpretations") => interpretations(&args[1..]),
         Some("structure-coverage") => structure_coverage::run(&args[1..], repo_root()),
         _ => {
-            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check|roundtrip> [--write PATH] [--check]");
+            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check|interpretations|roundtrip> [--write PATH] [--check]");
             std::process::exit(2);
         }
     }

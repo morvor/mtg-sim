@@ -859,6 +859,10 @@ impl Renderer<'_> {
             // What an Aura is moved to must be something it can enchant: the rules say so
             // (CR 303.4j, 701.3b), and the card doesn't.
             Filter::CanBeAttachedBy(_) => {}
+            Filter::CouldAttachTo(s) => {
+                let s = self.sel(s, Case::Obj);
+                np.rel.push(format!("that could enchant {s}"));
+            }
             Filter::Attached => np.status.push("attached".into()),
             Filter::Enchanted => np.status.push("enchanted".into()),
             Filter::Equipped => np.status.push("equipped".into()),
