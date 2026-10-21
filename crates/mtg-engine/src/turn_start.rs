@@ -97,3 +97,42 @@ pub fn kept_for_game(e: &Event) -> bool {
         _ => false,
     }
 }
+
+/// Whether each "this game" history query in `x` (a compiled condition, value or
+/// selection) asks only about events [`kept_for_game`]: the compiler refuses the others,
+/// whose earlier turns' events aren't kept.
+pub fn game_queries_kept<T: serde::Serialize>(x: &T) -> bool {
+    use serde_json::Value as J;
+    let Ok(j) = serde_json::to_value(x) else {
+        return false;
+    };
+    // Trigger conditions matched only by spell cast, cycling and damage events.
+    fn kept(t: &J) -> bool {
+        let J::Object(m) = t else {
+            return false;
+        };
+        m.iter().all(|(k, v)| match k.as_str() {
+            "CastSpell" | "NthSpellCast" | "Cycled" | "DealsDamage" | "IsDealtDamage"
+            | "PlayerDealtDamage" => true,
+            "AnyOf" => v.as_array().is_some_and(|a| a.iter().all(kept)),
+            "Noncombat" => kept(v),
+            "Where" => v.get("trigger").is_some_and(kept),
+            _ => false,
+        })
+    }
+    fn walk(v: &J) -> bool {
+        match v {
+            J::Object(m) => m.iter().all(|(k, x)| {
+                let ok = k != "EventsDuring"
+                    || x.as_array().is_none_or(|a| {
+                        a.first() != Some(&J::String("ThisGame".into()))
+                            || a.get(1).is_some_and(kept)
+                    });
+                ok && walk(x)
+            }),
+            J::Array(a) => a.iter().all(walk),
+            _ => true,
+        }
+    }
+    walk(&j)
+}

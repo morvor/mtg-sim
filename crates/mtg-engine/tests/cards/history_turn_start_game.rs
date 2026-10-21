@@ -62,6 +62,7 @@ fn knights_of_the_black_rose_does_nothing_if_you_became_the_monarch_this_turn() 
 #[test]
 fn mindstorm_crown_draws_if_your_hand_was_empty_as_the_turn_began() {
     cr!("603.4");
+    ruling!("Mindstorm Crown", "doesn’t have an “intervening ‘if’ clause.”");
     assert_supported("Mindstorm Crown");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Mindstorm Crown");
@@ -325,4 +326,78 @@ fn frodo_draws_once_the_ring_has_tempted_you_twice_this_game() {
         next_turn(&mut t, P0, P1, Step::PrecombatMain);
         next_turn(&mut t, P1, P0, Step::PrecombatMain);
     }
+}
+
+/// Compiles `text` as a creature card's rules text, returning the text left unsupported.
+fn unsupported_of(text: &str) -> Vec<String> {
+    use mtg_engine::oracle::{self, CompileContext};
+    let tl = mtg_engine::types::TypeLine::parse("Creature — Test");
+    let ctx = CompileContext {
+        card_name: "Test Card",
+        full_name: "Test Card",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: Some("1"),
+        toughness: Some("1"),
+    };
+    oracle::compile(text, &ctx)
+        .unsupported
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+#[test]
+fn this_game_queries_compile_only_for_events_kept_for_the_game() {
+    // Spell casts, cycles and damage of earlier turns are kept; life gained isn't, so "if
+    // you gained life this game" would read only this turn's events and is refused.
+    assert!(
+        unsupported_of("At the beginning of your end step, if you've cast two or more spells this game, draw a card.").is_empty()
+    );
+    assert!(
+        !unsupported_of("At the beginning of your end step, if you gained life this game, draw a card.").is_empty()
+    );
+    assert!(
+        unsupported_of("At the beginning of your end step, if you gained life this turn, draw a card.").is_empty()
+    );
+}
+
+#[test]
+fn knights_of_the_black_rose_drains_each_new_monarch_this_turn() {
+    cr!("725.1", "603.4");
+    ruling!("Knights of the Black Rose", "even if the most recent monarch was another player");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Knights of the Black Rose");
+    mtg_engine::designations::become_monarch(&mut t.g, P0);
+    t.g.flush_events();
+    next_turn(&mut t, P0, P1, Step::PrecombatMain);
+    mtg_engine::designations::become_monarch(&mut t.g, P2);
+    t.g.flush_events();
+    t.resolve_all();
+    // P2 was the most recent monarch, not you: you were the monarch as the turn began.
+    mtg_engine::designations::become_monarch(&mut t.g, P1);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.life(P2), 18);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 24);
+}
+
+#[test]
+fn mindstorm_crown_counts_the_hand_as_the_turn_began_for_each_crown() {
+    cr!("603.4");
+    ruling!("Mindstorm Crown", "cares about the number of cards in your hand at the time the turn started");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mindstorm Crown");
+    t.battlefield(P0, "Mindstorm Crown");
+    t.g.players[P0.idx()].hand.clear();
+    next_turn(&mut t, P0, P1, Step::PrecombatMain);
+    next_turn(&mut t, P1, P0, Step::Upkeep);
+    // A card comes to hand before the abilities resolve: each still draws.
+    t.hand(P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 3);
+    assert_eq!(t.life(P0), 20);
 }

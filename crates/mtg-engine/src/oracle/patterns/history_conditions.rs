@@ -987,7 +987,10 @@ pub fn history_condition(c: &str) -> Option<Condition> {
         return team_condition(cond);
     }
     let (body, w) = split_window(c)?;
-    clause_or_joined(&body, &w)
+    let cond = clause_or_joined(&body, &w)?;
+    // Only some events of earlier turns are kept for "this game" (`turn_start.rs`).
+    (!matches!(w, Some(HistoryWindow::ThisGame)) || crate::turn_start::game_queries_kept(&cond))
+        .then_some(cond)
 }
 
 /// A condition about your events made about your team's: each event of yours may be a
