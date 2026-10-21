@@ -638,3 +638,44 @@ impl crate::kw::KeywordRules for ChosenNumbers {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChosenNumbers) }
+
+/// `StaticEffect::Custom`: "As ~ becomes attached to a creature, choose a color." The
+/// choice is made each time the permanent becomes attached to a creature, before anything
+/// else happens (it's made as the attachment is done, not by a triggered ability); the
+/// abilities that refer to "the last chosen color" see the most recent one.
+pub const AS_ATTACHED_CHOOSE_COLOR: &str = "choices: as attached to a creature, choose a color";
+
+/// The choices made as a permanent becomes attached.
+pub struct AttachChoices;
+
+impl crate::kw::KeywordRules for AttachChoices {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn on_event(&self, g: &mut Game, ev: &crate::events::Event) {
+        let crate::events::Event::Attached {
+            obj,
+            to: Entity::Object(host),
+        } = ev
+        else {
+            return;
+        };
+        let (obj, host) = (*obj, *host);
+        if !g.is_live(obj) || !g.is_live(host) || !g.obj(host).chars.is_creature() {
+            return;
+        }
+        let has = g.obj(obj).chars.abilities.iter().any(|a| {
+            matches!(&a.kind, crate::ability::AbilityKind::Static(s)
+                if matches!(&s.effect, crate::ability::StaticEffect::Custom(n) if n == AS_ATTACHED_CHOOSE_COLOR))
+        });
+        if !has {
+            return;
+        }
+        let p = g.obj(obj).controller;
+        let mut ctx = Ctx::new(Some(obj), p);
+        make_choice(g, p, &ChoiceKind::Color, &mut ctx);
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&AttachChoices) }

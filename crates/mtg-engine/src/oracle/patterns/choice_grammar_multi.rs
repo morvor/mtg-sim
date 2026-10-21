@@ -54,3 +54,38 @@ fn gains_your_choice_of(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "gains your choice of [abilities]", priority: 60, parse: gains_your_choice_of } }
+
+/// "As ~ becomes attached to a creature, choose a color." (Sanctuary Blade): the choice is
+/// made as the Equipment becomes attached, each time it does (`choices.rs`,
+/// [`crate::choices::AS_ATTACHED_CHOOSE_COLOR`]).
+fn as_attached_choose(l: &str, text: &str, _ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if end(l) != "as ~ becomes attached to a creature, choose a color" {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Custom(
+            crate::choices::AS_ATTACHED_CHOOSE_COLOR.into(),
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "as ~ becomes attached to a creature, choose a color", priority: 60, parse: as_attached_choose } }
+
+/// "the last chosen color" in a static ability: the color chosen most recently for the
+/// permanent, which is the one its later abilities see ("Equipped creature gets +2/+0 and
+/// has protection from the last chosen color", "Prevent all damage that would be dealt to
+/// enchanted creature by sources of the last chosen color"; CR 607.2d).
+fn last_chosen_color(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if !l.contains("the last chosen color") {
+        return None;
+    }
+    let plain = text.replace("the last chosen color", "the chosen color");
+    let mut v = crate::oracle::statics::parse_static(&plain, ctx)?;
+    for a in &mut v {
+        std::sync::Arc::make_mut(a).text = text.to_string();
+    }
+    Some(v)
+}
+
+inventory::submit! { super::StaticPattern { name: "the last chosen color", priority: 60, parse: last_chosen_color } }
