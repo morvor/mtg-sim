@@ -107,3 +107,34 @@ fn loxodon_peacekeeper_tie_is_broken_by_its_controller() {
         .iter()
         .any(|(p, d)| *p == P0 && matches!(d, decision::Decision::ChooseEntities { candidates, .. } if candidates.len() == 2)));
 }
+
+#[test]
+fn curse_of_surveillance_other_target_players_draw_per_curse() {
+    cr!("115.1", "303.4");
+    supported("Curse of Surveillance");
+    let mut t = TestGame::new(3);
+    let c1 = t.battlefield(P0, "Curse of Surveillance");
+    let c2 = t.battlefield(P0, "Curse of Death's Hold");
+    t.g.attach(c1, Entity::Player(P1));
+    t.g.attach(c2, Entity::Player(P1));
+    // P0 targets P0 and P2 (not P1, the enchanted player).
+    t.answer_targets(P0, &[Entity::Player(P0), Entity::Player(P2)]);
+    t.advance_to(P1, Step::Upkeep);
+    let hands = (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2));
+    t.resolve_all();
+    assert_eq!(
+        (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2)),
+        (hands.0 + 2, hands.1, hands.2 + 2)
+    );
+    // P1 wasn't a legal target.
+    let cands: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            decision::Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert!(!cands.is_empty());
+    assert!(cands.iter().all(|c| !c.contains(&Entity::Player(P1))));
+}

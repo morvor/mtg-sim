@@ -46,7 +46,10 @@ fn tally_of_verb(verb: &str) -> Option<Var> {
 
 /// The value grammar's atom (only while a value is read for each player): "the number of
 /// cards they discarded this way", "the number of cards that player drew this way".
-pub fn own_count_atom(s: &str, _b: &mut Builder) -> Option<(Value, String)> {
+pub fn own_count_atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if let Some(v) = super::choices_4::attached_to_player_atom(s, b) {
+        return Some(v);
+    }
     if let Some(v) = accepted_count_atom(s) {
         return Some(v);
     }

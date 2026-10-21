@@ -230,6 +230,64 @@ fn any_stat_is<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
 
 inventory::submit! { FilterSuffixPattern { name: "choices 4: with power, toughness, or mana value N", priority: 95, parse: any_stat_is } }
 
+/// The value grammar's atom "the number of Curses attached to that player" (Curse of
+/// Surveillance): permanents attached to the player "that player" refers to.
+pub fn attached_to_player_atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let r = s.strip_prefix("the number of ")?;
+    let (noun, rest) = r.split_once(" attached to that player")?;
+    if !(rest.is_empty() || rest.starts_with([' ', ',', '.'])) {
+        return None;
+    }
+    if super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+        return None;
+    }
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(noun)?;
+    if !plural || !tail.trim().is_empty() {
+        return None;
+    }
+    Some((
+        Value::Count(Filter::and(vec![
+            f,
+            Filter::AttachedTo(Box::new(Sel::Players(b.it_player.clone()))),
+        ])),
+        rest.to_string(),
+    ))
+}
+
+/// "any number of target players other than that player each draw ..." (Curse of
+/// Surveillance): the targets can't include the player "that player" refers to.
+fn target_players_other_than_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find(" target players other than that player each ")?;
+    if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+        || matches!(b.it_player, PlayerRef::You)
+    {
+        return None;
+    }
+    let that = b.it_player.clone();
+    let rewritten = format!(
+        "{} target players each {}",
+        &l[..i],
+        &l[i + " target players other than that player each ".len()..]
+    );
+    let first = b.targets.len();
+    let e = parse_clause(&rewritten, b)?;
+    if b.targets.len() != first + 1 {
+        return None;
+    }
+    let spec = &mut b.targets[first];
+    let TargetKind::Player(f) = &spec.what else {
+        return None;
+    };
+    spec.what = TargetKind::Player(PlayerFilter::And(vec![
+        f.clone(),
+        PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(that)))),
+    ]));
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: target players other than that player each", priority: 120, parse: target_players_other_than_that_player } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -241,6 +299,7 @@ mod tests {
             ("Creature", "Whenever you attack, choose odd or even. Creatures with mana value of that quality can't block this turn."),
             ("Sorcery", "You may put a +1/+1 counter on a creature. Then choose odd or even. Return each creature with power of the chosen quality to its owner's hand."),
             ("Legendary Creature", "When ~ enter and whenever you cast a spell with power, toughness, or mana value 4, choose one that hasn't been chosen this turn.\n• Create a 0/4 colorless Wall creature token with defender.\n• ~ deal 3 damage to each opponent.\n• Put two +1/+1 counters on target creature.\n• Draw a card."),
+            ("Enchantment — Aura Curse", "Enchant player\nAt the beginning of enchanted player's upkeep, any number of target players other than that player each draw cards equal to the number of Curses attached to that player."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
