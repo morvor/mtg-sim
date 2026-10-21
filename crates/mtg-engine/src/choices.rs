@@ -837,3 +837,29 @@ impl crate::kw::KeywordRules for ChosenColorsCount {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChosenColorsCount) }
+
+/// `Filter::Custom`: has one of the names chosen for the source ("spells with the chosen
+/// names", "all creatures with a name chosen for ~"): the names in its ordered list of
+/// choices (each choice adds one, Day of the Moon's chapters accumulate).
+pub const CHOSEN_NAMES: &str = "choices: has one of the chosen names";
+
+pub struct ChosenNames;
+
+impl crate::kw::KeywordRules for ChosenNames {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name != CHOSEN_NAMES {
+            return None;
+        }
+        let Some(ch) = g.source_choices(ctx) else {
+            return Some(false);
+        };
+        let n = &g.obj(id).chars.name;
+        Some(!n.is_empty() && ch.list.iter().any(|x| x.eq_ignore_ascii_case(n)))
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChosenNames) }

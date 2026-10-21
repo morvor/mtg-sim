@@ -230,3 +230,63 @@ fn bitter_feud_doubles_damage_to_the_other_players_permanents_and_stacks() {
     assert_eq!(t.g.obj(giant).damage, 6);
     assert_eq!(feud(2, P1, Entity::Player(P2)).life(P2), 8, "3 x 4");
 }
+
+#[test]
+fn null_chamber_both_chosen_names_cant_be_cast_or_played() {
+    cr!("101.4", "201.4");
+    ruling!(
+        "Null Chamber",
+        "You choose which opponent makes the choice. Null Chamber does not target that opponent"
+    );
+    compiles("Null Chamber");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Name, Answer::Text("Lightning Bolt".into()));
+    t.answer(P1, DecisionKind::Name, Answer::Text("Mutavault".into()));
+    t.enter(P0, "Null Chamber");
+    t.settle();
+    t.lands(P0, "Mountain", 2);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    assert!(t.cast(P0, bolt).target(Entity::Player(P1)).try_go().is_err());
+    let shock = t.hand(P0, "Shock");
+    assert!(t.cast(P0, shock).target(Entity::Player(P1)).try_go().is_ok());
+    let vault = t.hand(P0, "Mutavault");
+    assert!(t.play_land(P0, vault).is_err(), "the opponent's name");
+}
+
+#[test]
+fn null_chamber_names_must_not_be_basic_land_names() {
+    cr!("201.4a");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Name, Answer::Text("Island".into()));
+    t.answer(P1, DecisionKind::Name, Answer::Text("Forest".into()));
+    t.enter(P0, "Null Chamber");
+    t.settle();
+    let island = t.hand(P0, "Island");
+    assert!(t.play_land(P0, island).is_ok(), "an invalid name names nothing");
+}
+
+#[test]
+fn day_of_the_moon_goads_every_creature_with_a_name_chosen_for_it() {
+    cr!("701.15a", "714.2b");
+    compiles("Day of the Moon");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let lions = t.battlefield(P1, "Savannah Lions");
+    let saga = t.battlefield(P0, "Day of the Moon");
+    t.answer(P0, DecisionKind::Name, Answer::Text("Grizzly Bears".into()));
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).goaded_by, vec![P0]);
+    assert!(t.obj_now(lions).goaded_by.is_empty());
+    t.answer(P0, DecisionKind::Name, Answer::Text("Savannah Lions".into()));
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.obj_now(lions).goaded_by, vec![P0]);
+    assert_eq!(t.obj_now(bears).goaded_by, vec![P0], "still goaded");
+    assert_eq!(t.g.obj(saga).choices.list.len(), 2, "both names are chosen for it");
+}

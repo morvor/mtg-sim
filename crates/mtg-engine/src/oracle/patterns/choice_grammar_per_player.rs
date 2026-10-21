@@ -466,3 +466,77 @@ fn chosen_players_double_damage(
 }
 
 inventory::submit! { super::StaticPattern { name: "Bitter Feud: double damage between the chosen players", priority: 60, parse: chosen_players_double_damage } }
+
+// ---------------------------------------------------------------------------
+// Several chosen names
+// ---------------------------------------------------------------------------
+
+/// "you and an opponent each choose a card name other than a basic land card name": you
+/// choose, then an opponent you choose does (CR 101.4).
+fn you_and_an_opponent_each_choose(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("you and an opponent each choose ")?;
+    let targets = b.targets.len();
+    let Some(mine @ Effect::Choose { .. }) =
+        crate::oracle::effects::parse_clause(&format!("choose {r}"), b)
+    else {
+        b.targets.truncate(targets);
+        return None;
+    };
+    Some(Effect::seq(vec![
+        mine.clone(),
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Opponent,
+        },
+        Effect::AsPlayer {
+            who: PlayerRef::ChosenOpponent,
+            effect: Box::new(mine),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "you and an opponent each choose", priority: 120, parse: you_and_an_opponent_each_choose } }
+
+/// "with a name chosen for ~", "with the chosen names" after an object noun.
+fn with_chosen_names<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    let r = s
+        .strip_prefix("with a name chosen for ~")
+        .or_else(|| s.strip_prefix("with the chosen names"))?;
+    (r.is_empty() || r.starts_with([' ', ',', '.']))
+        .then(|| (Filter::Custom(crate::choices::CHOSEN_NAMES.into()), r))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "with a name chosen for ~", priority: 120, parse: with_chosen_names } }
+
+/// "Spells with the chosen names can't be cast and lands with the chosen names can't be
+/// played." (Null Chamber; the plural of Conjurer's Ban's).
+fn chosen_names_cant_be_cast(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if end(l)
+        != "spells with the chosen names can't be cast and lands with the chosen names can't be played"
+    {
+        return None;
+    }
+    let names = || Filter::Custom(crate::choices::CHOSEN_NAMES.into());
+    let st = |r: Restriction| {
+        AbilityDef::new(
+            AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(r))),
+            text,
+        )
+    };
+    Some(vec![
+        st(Restriction::CantCast {
+            who: PlayerFilter::Any,
+            what: Filter::and(vec![Filter::Card, names()]),
+        }),
+        st(Restriction::CantPlayLandCards {
+            who: PlayerFilter::Any,
+            what: Filter::and(vec![Filter::Type(crate::types::CardType::Land), names()]),
+        }),
+    ])
+}
+
+inventory::submit! { super::StaticPattern { name: "spells with the chosen names can't be cast", priority: 60, parse: chosen_names_cant_be_cast } }
