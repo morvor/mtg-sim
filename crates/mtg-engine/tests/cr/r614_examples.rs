@@ -305,4 +305,23 @@ fn ashiok_pays_life_normally_when_the_library_is_too_small() {
     t.settle();
     assert_eq!(t.life(P0), 18);
     assert_eq!(t.library_size(P0), lib);
+
+    // It doesn't let a player pay more life than they have: at 1 life, Breeding Pool's
+    // 2 life can't be paid, so it enters tapped and nothing is exiled.
+    ruling!(
+        "Ashiok, Wicked Manipulator",
+        "doesn't allow you to attempt to pay an amount of life greater than your current life total"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ashiok, Wicked Manipulator");
+    t.g.players[0].life = 1;
+    let lib = t.library_size(P0);
+    let pool = t.hand(P0, "Breeding Pool");
+    t.answer(P0, DecisionKind::Any, Answer::Bool(true));
+    t.play_land(P0, pool).unwrap();
+    t.settle();
+    let pool = t.named_on_battlefield("Breeding Pool")[0];
+    assert!(t.obj_now(pool).tapped);
+    assert_eq!(t.life(P0), 1);
+    assert_eq!(t.library_size(P0), lib);
 }

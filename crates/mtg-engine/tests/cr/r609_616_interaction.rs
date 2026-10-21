@@ -413,52 +413,66 @@ fn a_modified_event_can_become_subject_to_other_effects() {
     // 1 life returns a card from the graveyard to hand.
     cr!("616.2");
     cr_example!("616.2", "If you would gain life, draw that many cards instead");
-    let mut t = TestGame::new(2);
-    t.custom(
-        P0,
-        permanent(
-            "Life to Cards",
-            &[CardType::Enchantment],
-            vec![replacement(
-                ReplacementEvent::GainLife(PlayerFilter::You),
-                ReplacementAction::Instead(Box::new(Effect::Draw {
-                    who: PlayerRef::You,
-                    n: Value::EventAmount,
-                })),
-            )],
-        ),
-        Zone::Battlefield,
-    );
-    t.custom(
-        P0,
-        permanent(
-            "Cards to Recursion",
-            &[CardType::Enchantment],
-            vec![replacement(
-                ReplacementEvent::Draw(PlayerFilter::You),
-                ReplacementAction::Instead(Box::new(Effect::Move {
-                    what: Sel::Choose {
-                        chooser: PlayerRef::You,
-                        filter: Filter::and(vec![
-                            Filter::InZone(ZoneKind::Graveyard),
-                            Filter::OwnedBy(PlayerRel::You),
-                        ]),
-                        count: Value::c(1),
-                        up_to: false,
-                        store: None,
-                    },
-                    to: Destination::zone(ZoneKind::Hand),
-                })),
-            )],
-        ),
-        Zone::Battlefield,
-    );
-    t.graveyard(P0, "Lightning Bolt");
-    let lib = t.library_size(P0);
-    t.g.gain_life(P0, 1);
-    assert_eq!(t.life(P0), 20);
-    assert!(t.in_hand(P0, "Lightning Bolt"));
-    assert_eq!(t.library_size(P0), lib);
+    // Regardless of the order they came into existence.
+    for life_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let life_to_cards = |t: &mut TestGame| {
+            t.custom(
+                P0,
+                permanent(
+                    "Life to Cards",
+                    &[CardType::Enchantment],
+                    vec![replacement(
+                        ReplacementEvent::GainLife(PlayerFilter::You),
+                        ReplacementAction::Instead(Box::new(Effect::Draw {
+                            who: PlayerRef::You,
+                            n: Value::EventAmount,
+                        })),
+                    )],
+                ),
+                Zone::Battlefield,
+            );
+        };
+        let cards_to_recursion = |t: &mut TestGame| {
+            t.custom(
+                P0,
+                permanent(
+                    "Cards to Recursion",
+                    &[CardType::Enchantment],
+                    vec![replacement(
+                        ReplacementEvent::Draw(PlayerFilter::You),
+                        ReplacementAction::Instead(Box::new(Effect::Move {
+                            what: Sel::Choose {
+                                chooser: PlayerRef::You,
+                                filter: Filter::and(vec![
+                                    Filter::InZone(ZoneKind::Graveyard),
+                                    Filter::OwnedBy(PlayerRel::You),
+                                ]),
+                                count: Value::c(1),
+                                up_to: false,
+                                store: None,
+                            },
+                            to: Destination::zone(ZoneKind::Hand),
+                        })),
+                    )],
+                ),
+                Zone::Battlefield,
+            );
+        };
+        if life_first {
+            life_to_cards(&mut t);
+            cards_to_recursion(&mut t);
+        } else {
+            cards_to_recursion(&mut t);
+            life_to_cards(&mut t);
+        }
+        t.graveyard(P0, "Lightning Bolt");
+        let lib = t.library_size(P0);
+        t.g.gain_life(P0, 1);
+        assert_eq!(t.life(P0), 20);
+        assert!(t.in_hand(P0, "Lightning Bolt"));
+        assert_eq!(t.library_size(P0), lib);
+    }
 }
 
 #[test]

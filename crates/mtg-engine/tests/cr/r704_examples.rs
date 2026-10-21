@@ -82,6 +82,14 @@ fn lichs_mirror_replaces_a_double_game_loss_once() {
     assert!(t.g.permanents_controlled_by(P0).is_empty());
     // 7 cards in hand (Forest + 6 Bears) + Night's Whisper + 3 permanents = 11; 7 drawn.
     assert_eq!(t.library_size(P0), 4);
+    // A single replacement: the library was shuffled once.
+    assert_eq!(
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == P0))
+            .count(),
+        1
+    );
 }
 
 #[test]

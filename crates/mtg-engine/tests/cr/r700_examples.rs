@@ -2,8 +2,8 @@
 //! example is cited by a test in `r700_piles.rs`.
 
 use crate::r600_examples_common::*;
-use crate::r609_common::modify_target;
-use mtg_engine::ability::Modification;
+use crate::r609_common::{modify_target, resolve_effect};
+use mtg_engine::ability::*;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -130,4 +130,32 @@ fn altar_of_the_pantheon_counts_before_purphoros_type_changing_effect() {
     t.resolve_all();
     assert_eq!(t.life(P0), 21);
     assert_eq!(t.g.player(P0).mana_pool.total(), 1);
+    // Devotion is counted before ability-removing effects (layer 6) apply: the Altar still
+    // increases it after losing its abilities, also when devotion is counted outside the
+    // layer system (Gray Merchant of Asphodel's {B}{B} and the Altar: three).
+    ruling!(
+        "Altar of the Pantheon",
+        "If Altar of the Pantheon loses its abilities, you'll still get a bonus to your devotion"
+    );
+    supported("Gray Merchant of Asphodel");
+    let mut t = TestGame::new(2);
+    let altar = t.battlefield(P0, "Altar of the Pantheon");
+    resolve_effect(
+        &mut t,
+        P0,
+        vec![],
+        &[],
+        Effect::Modify {
+            what: Sel::All(Filter::Named("Altar of the Pantheon".into())),
+            mods: vec![Modification::RemoveAllAbilities],
+            duration: Duration::EndOfTurn,
+        },
+    );
+    assert!(t.obj_now(altar).chars.abilities.is_empty());
+    t.lands(P0, "Swamp", 5);
+    let gary = t.hand(P0, "Gray Merchant of Asphodel");
+    t.cast(P0, gary).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 23);
 }

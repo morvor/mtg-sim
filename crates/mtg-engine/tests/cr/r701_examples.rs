@@ -101,6 +101,10 @@ fn splinter_must_find_the_graveyard_howling_mine_but_may_leave_library_ones() {
 fn lobotomy_against_an_empty_hand_searches_but_exiles_nothing() {
     cr!("701.23a");
     cr_example!("701.23c", "Lobotomy says");
+    ruling!(
+        "Lobotomy",
+        "If the player has no cards in their hand, you still get to look through their deck"
+    );
     supported("Lobotomy");
     let mut t = TestGame::new(2);
     assert_eq!(t.hand_size(P1), 0);
@@ -123,6 +127,10 @@ fn lobotomy_against_an_empty_hand_searches_but_exiles_nothing() {
 fn shimian_specter_against_a_hand_of_lands_still_searches_and_shuffles() {
     // The same wording as Lobotomy's, from a trigger: "that player" is the damaged one.
     cr!("701.23a", "701.23c");
+    ruling!(
+        "Shimian Specter",
+        "If the player has no nonland cards in their hand, you can still search that player’s library and have them shuffle it."
+    );
     supported("Shimian Specter");
     let mut t = TestGame::new(2);
     let specter = t.battlefield(P0, "Shimian Specter");

@@ -145,6 +145,7 @@ fn effect_parts_apply_in_their_own_layers() {
         c,
         vec![pt(1, 1), Modification::SetColors(colors(&[Color::White]))],
     );
+    assert_eq!(color_of(&t, c), colors(&[Color::White]));
     assert_eq!(t.pt(c), (4, 4));
 }
 
