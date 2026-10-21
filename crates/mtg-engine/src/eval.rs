@@ -189,6 +189,31 @@ impl View for Current {
     }
 }
 
+/// An attacking creature as it was declared as an attacker (see
+/// `Event::AttackersDeclared::as_declared`, CR 608.2i).
+pub struct AsDeclared<'c> {
+    pub id: ObjectId,
+    pub chars: &'c Characteristics,
+    pub controller: PlayerId,
+}
+
+impl View for AsDeclared<'_> {
+    fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
+        if id == self.id {
+            self.chars
+        } else {
+            &g.obj(id).chars
+        }
+    }
+    fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
+        if id == self.id {
+            self.controller
+        } else {
+            g.obj(id).controller
+        }
+    }
+}
+
 /// A permanent as it entered the battlefield (see `TurnHistory::permanents_entered`).
 struct AsEntered<'c> {
     id: ObjectId,
