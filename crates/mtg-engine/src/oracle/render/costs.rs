@@ -279,6 +279,20 @@ impl Renderer<'_> {
                 let (c, w) = self.counted(count, &noun);
                 format!("reveal {c} from your hand{}", w.unwrap_or_default())
             }
+            CostPart::RevealSelf => "reveal ~ from your hand".into(),
+            CostPart::RemoveCountersFromOne {
+                kind,
+                filter,
+                count,
+            } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let (c, w) = self.counted(count, &noun);
+                let f = self.noun_det(filter, nouns::Det::A);
+                format!("remove {c} from {f}{}", w.unwrap_or_default())
+            }
             CostPart::ExertSelf => "exert ~".into(),
             CostPart::CollectEvidence(n) => format!("collect evidence {n}"),
             CostPart::Forage => "forage".into(),

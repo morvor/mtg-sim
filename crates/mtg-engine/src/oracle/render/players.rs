@@ -375,6 +375,22 @@ impl Renderer<'_> {
                 let v = self.value(v);
                 format!("with total {st} {v} or less")
             }
+            TargetGroup::TotalAtLeast(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v} or greater")
+            }
+            TargetGroup::SameName => "with the same name".into(),
+            TargetGroup::ShareColor => "that share a color".into(),
+            TargetGroup::CardTypesAmong(v) => {
+                let v = self.value(v);
+                format!("with {v} or more card types among them")
+            }
         }
     }
 

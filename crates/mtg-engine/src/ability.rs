@@ -503,6 +503,16 @@ pub enum CostPart {
         filter: Filter,
         count: Value,
     },
+    /// "Reveal ~ from your hand": the card with the ability, which functions in its
+    /// owner's hand (CR 113.6, 701.20a).
+    RevealSelf,
+    /// "Remove X counters from an artifact or creature you control": counters (of `kind`,
+    /// or of any kinds) all from one permanent the player chooses (CR 118.3).
+    RemoveCountersFromOne {
+        kind: Option<CounterKind>,
+        filter: Filter,
+        count: Value,
+    },
     ExertSelf,
     /// "Collect evidence N" (CR 701.59).
     CollectEvidence(u32),
@@ -786,6 +796,18 @@ pub enum TargetGroup {
     /// Their total of a value is at most the value ("with total mana value 6 or less",
     /// "with total mana value X or less", "with total power 10 or less").
     TotalAtMost(TotalStat, Box<Value>),
+    /// All have a name in common ("two nonland cards with the same name", CR 201.2a).
+    SameName,
+    /// There's a color all of them have ("two cards from your hand that share a color",
+    /// CR 105.2).
+    ShareColor,
+    /// Their total of a value is at least the value ("with total mana value 8 or
+    /// greater", "with total power 10 or greater"). Unlike the other relationships, a part
+    /// of such a group needn't have it.
+    TotalAtLeast(TotalStat, Box<Value>),
+    /// There are at least this many card types among them ("with four or more card types
+    /// among them", CR 205.2a). A part of such a group needn't have it.
+    CardTypesAmong(Box<Value>),
 }
 
 /// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library
