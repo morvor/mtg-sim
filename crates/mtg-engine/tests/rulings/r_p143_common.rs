@@ -67,3 +67,41 @@ pub fn entity_choices(t: &TestGame, p: PlayerId, from: usize) -> Vec<(u32, u32, 
         })
         .collect()
 }
+
+/// Wraps `p`'s agent: the first time `p` is asked a decision for which `when` holds, it
+/// answers `answer` (otherwise the scripted answers are used).
+pub fn answer_once_when(
+    t: &mut TestGame,
+    p: PlayerId,
+    when: fn(&mtg_engine::game::Game, &Decision) -> bool,
+    answer: mtg_engine::decision::Answer,
+) {
+    struct Once {
+        inner: Box<dyn mtg_engine::decision::Agent>,
+        when: fn(&mtg_engine::game::Game, &Decision) -> bool,
+        answer: Option<mtg_engine::decision::Answer>,
+    }
+    impl mtg_engine::decision::Agent for Once {
+        fn decide(
+            &mut self,
+            g: &mtg_engine::game::Game,
+            p: PlayerId,
+            d: &Decision,
+        ) -> mtg_engine::decision::Answer {
+            if self.answer.is_some() && (self.when)(g, d) {
+                return self.answer.take().unwrap();
+            }
+            self.inner.decide(g, p, d)
+        }
+    }
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(Once {
+        inner,
+        when,
+        answer: Some(answer),
+    });
+}
