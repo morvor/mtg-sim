@@ -481,6 +481,27 @@ pub trait KeywordRules: Sync + Send {
     fn attacks_without_tapping(&self, g: &Game, attacker: ObjectId) -> bool {
         false
     }
+    /// Whether `p` may activate the mana ability `a` of `src`, a permanent another player
+    /// controls (CR 602.2, 605.3a: normally only its controller may).
+    fn may_activate_others_mana_ability(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+        a: &crate::ability::Ability,
+    ) -> bool {
+        false
+    }
+    /// A spending restriction (CR 106.6) on mana `p` adds to their pool with a mana
+    /// ability of `src` that carries none of its own.
+    fn added_mana_restriction(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+    ) -> Option<crate::mana::ManaRestriction> {
+        None
+    }
     /// `obj` is adapting: returns true if it adapts as though it had no +1/+1 counters on
     /// it (CR 701.46a), using up the effect that says so ("the next time ... adapts").
     fn adapts_ignoring_counters(&self, g: &mut Game, obj: ObjectId) -> bool {
@@ -1286,6 +1307,29 @@ pub fn attacks_without_tapping(g: &Game, attacker: ObjectId) -> bool {
     registry()
         .iter()
         .any(|k| k.attacks_without_tapping(g, attacker))
+}
+
+/// See [`KeywordRules::may_activate_others_mana_ability`].
+pub fn may_activate_others_mana_ability(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+    a: &crate::ability::Ability,
+) -> bool {
+    registry()
+        .iter()
+        .any(|k| k.may_activate_others_mana_ability(g, p, src, a))
+}
+
+/// See [`KeywordRules::added_mana_restriction`].
+pub fn added_mana_restriction(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+) -> Option<crate::mana::ManaRestriction> {
+    registry()
+        .iter()
+        .find_map(|k| k.added_mana_restriction(g, p, src))
 }
 
 /// See [`KeywordRules::blocks_instead`].

@@ -934,7 +934,11 @@ fn add_mana_with(
     // "of the chosen type": the type chosen for the source (CR 607.2d).
     let restriction = restriction
         .as_ref()
-        .map(|r| bind_restriction(g, ctx.source, r));
+        .map(|r| bind_restriction(g, ctx.source, r))
+        .or_else(|| {
+            ctx.source
+                .and_then(|src| crate::kw::added_mana_restriction(g, p, src))
+        });
     let snow = ctx
         .source
         .is_some_and(|s| g.obj(s).chars.has_supertype(Supertype::Snow));
@@ -1067,6 +1071,11 @@ fn source_restriction_ok(g: &Game, p: PlayerId, source: &ManaSource, spend: &Spe
     let AbilityKind::Activated(act) = &source.ability.kind else {
         return true;
     };
+    if effect_restriction(&act.body.effect).is_none() {
+        if let Some(r) = crate::kw::added_mana_restriction(g, p, source.obj) {
+            return r.allows_in(g, p, Some(source.obj), spend);
+        }
+    }
     effect_restriction(&act.body.effect).is_none_or(|r| {
         bind_restriction(g, Some(source.obj), r).allows_in(g, p, Some(source.obj), spend)
     })
@@ -1181,7 +1190,11 @@ pub fn mana_sources_with(
             if act.timing == ActivationTiming::AsInstant {
                 continue;
             }
-            if o.controller != p && !act.any_player && !act.only_opponents {
+            if o.controller != p
+                && !act.any_player
+                && !act.only_opponents
+                && !crate::kw::may_activate_others_mana_ability(g, p, o.id, a)
+            {
                 continue;
             }
             if act.only_opponents && !g.are_opponents(o.controller, p) {
