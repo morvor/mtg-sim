@@ -129,6 +129,17 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "the discarded card's mana value" for a spell whose kicker or additional cost
+    // discards a card (Dralnu's Pet).
+    if let Some(rest) = s.strip_prefix("the discarded card's mana value") {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        if raw.lines().any(|l| l.starts_with("kicker") && l.contains("discard a")) {
+            return Some((
+                Value::Custom(crate::kw::counter_groups::DISCARDED_FOR_COST_MANA_VALUE.into()),
+                rest.to_string(),
+            ));
+        }
+    }
     // "the total mana value of all cards revealed this way" after "each player reveals the
     // top card of their library" (Naya Soulbeast): the cards it revealed.
     if let Some(rest) = s.strip_prefix("the total mana value of all cards revealed this way") {

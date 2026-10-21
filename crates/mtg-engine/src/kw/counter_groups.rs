@@ -237,11 +237,34 @@ pub fn put_event_counters(g: &mut Game, to: &Sel, one_each: bool, ctx: &mut Ctx)
     placed
 }
 
+/// `Value::Custom` name: the mana value of the card discarded to pay the cost of the
+/// spell (or of the spell the permanent was), "the discarded card's mana value" (Dralnu's
+/// Pet's kicker); 0 if none.
+pub const DISCARDED_FOR_COST_MANA_VALUE: &str =
+    "counter groups:mana value of the card discarded for its cost";
+
 struct CounterGroups;
 
 impl KeywordRules for CounterGroups {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != DISCARDED_FOR_COST_MANA_VALUE {
+            return None;
+        }
+        let cast = g.cast_info(ctx)?;
+        Some(
+            cast.cost_objects
+                .iter()
+                .find(|o| {
+                    let now = g.current(**o);
+                    matches!(g.obj(now).zone, crate::object::Zone::Graveyard(_))
+                        && g.obj(**o).kind == crate::object::ObjKind::Card
+                })
+                .map_or(0, |o| g.mana_value_of(*o) as i64),
+        )
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {

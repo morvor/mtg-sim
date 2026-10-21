@@ -172,3 +172,34 @@ fn naya_soulbeast_enters_with_the_total_mana_value_revealed() {
     let nb = t.named_on_battlefield("Naya Soulbeast")[0];
     assert_eq!(t.counters(nb, "+1/+1"), 4 + 2);
 }
+
+#[test]
+fn dralnus_pet_kicked_enters_with_flying_and_the_discarded_cards_mana_value() {
+    cr!("614.1c", "702.33d");
+    supported("Dralnu's Pet");
+    let mut t = TestGame::new(2);
+    let wurm = t.hand(P0, "Craw Wurm");
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 4);
+    let pet = t.hand(P0, "Dralnu's Pet");
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    t.cast(P0, pet).kicked(true).go();
+    t.resolve_all();
+    let p = t.named_on_battlefield("Dralnu's Pet")[0];
+    assert_eq!(t.counters(p, "+1/+1"), 6);
+    assert!(t
+        .obj_now(p)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(t.in_graveyard(P0, "Craw Wurm"));
+    // Not kicked: neither.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    let pet = t.hand(P0, "Dralnu's Pet");
+    t.cast(P0, pet).kicked(false).go();
+    t.resolve_all();
+    let p = t.named_on_battlefield("Dralnu's Pet")[0];
+    assert_eq!(t.counters(p, "+1/+1"), 0);
+    assert!(!t
+        .obj_now(p)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+}

@@ -964,3 +964,35 @@ fn distribute_up_to_that_much_life(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "counters grammar 2: distribute up to that many (life gained)", priority: 70, parse: distribute_up_to_that_much_life } }
+
+/// "If ~ was kicked, it enters with flying and with X +1/+1 counters on it, where X is
+/// ..." (Dralnu's Pet): two modifications of how it enters, each read on its own.
+fn enters_with_and_with(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (head, rest) = l.split_once(" enters with ")?;
+    let (a, b) = rest.split_once(" and with ")?;
+    if !head.starts_with("if ") {
+        return None;
+    }
+    let mut out = Vec::new();
+    for part in [a, b] {
+        let abilities = crate::oracle::parse_ability(&format!("{head} enters with {part}."), ctx)?;
+        if abilities
+            .iter()
+            .any(|x| matches!(x.kind, AbilityKind::Unsupported(_)))
+        {
+            return None;
+        }
+        out.extend(abilities);
+    }
+    for a in &mut out {
+        std::sync::Arc::make_mut(a).text = text.into();
+    }
+    Some(out)
+}
+
+inventory::submit! { super::StaticPattern { name: "counters grammar 2: enters with A and with B", priority: 90, parse: enters_with_and_with } }
