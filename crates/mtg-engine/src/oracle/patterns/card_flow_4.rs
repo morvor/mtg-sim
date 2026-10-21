@@ -159,3 +159,27 @@ fn return_exiled_with_except(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: return all cards exiled with ~ except ~ / all other cards exiled with ~", priority: 90, parse: return_exiled_with_except } }
+
+/// "You may have target player reveal their hand. If you do, choose a nonland card from it
+/// and exile that card." (Thought Prison): the choice, from the hand revealed, if it was
+/// (see `card_flow_reveal_hand`).
+fn f_if_you_do_choose_from_revealed_hand(
+    l: &str,
+    prev: &mut Effect,
+    b: &mut crate::oracle::effects::Builder,
+) -> bool {
+    let Some(r) = end(l.trim()).strip_prefix("if you do, choose ") else {
+        return false;
+    };
+    let Effect::May { effect, .. } = prev else {
+        return false;
+    };
+    let mut inner = (**effect).clone();
+    if !super::card_flow_reveal_hand::choose_from_it(&format!("you choose {r}"), &mut inner, b) {
+        return false;
+    }
+    **effect = inner;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "card flow 4: if you do, choose a card from the revealed hand", priority: 90, apply: f_if_you_do_choose_from_revealed_hand } }

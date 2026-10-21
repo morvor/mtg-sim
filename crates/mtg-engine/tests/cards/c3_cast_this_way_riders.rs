@@ -507,3 +507,40 @@ fn mirror_of_life_trapping_returns_the_other_exiled_permanent_cards() {
     assert_eq!(t.zone(t.g.current(giant)), Zone::Exile);
     assert!(t.on_battlefield(t.g.current(bears)));
 }
+
+#[test]
+fn thought_prison_exiles_a_chosen_card_from_the_revealed_hand() {
+    cr!("607.2a", "701.20a");
+    assert_supported("Thought Prison");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Forest");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.enter(P0, "Thought Prison");
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Exile, "{}", t.dump_log());
+    // A red spell shares a color with the exiled Bolt: 2 damage to its caster.
+    t.lands(P1, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    t.advance_to(P1, Step::PrecombatMain);
+    t.cast_with(P1, shock, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn thought_prison_does_nothing_if_you_dont() {
+    cr!("608.2c");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, false);
+    t.enter(P0, "Thought Prison");
+    t.resolve_all();
+    assert_eq!(t.zone(t.g.current(bolt)), Zone::Hand(P1));
+}
