@@ -18,9 +18,10 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(m) => (Duration::EndOfTurn, m),
         // "Until your next turn, your opponents can't cast spells from anywhere other
         // than their hands." (Avatar's Wrath)
-        None if l.starts_with("until your next turn, ") => {
-            (Duration::UntilYourNextTurn, &l["until your next turn, ".len()..])
-        }
+        None if l.starts_with("until your next turn, ") => (
+            Duration::UntilYourNextTurn,
+            &l["until your next turn, ".len()..],
+        ),
         // "Players can't cast creature or planeswalker spells until the end of your next
         // turn." (Single Combat)
         None => match l.strip_suffix(" until the end of your next turn") {
@@ -54,7 +55,10 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
             | PlayerRef::TriggerPlayer
             // "that player" of "each opponent ... during that player's next turn"
             // (`durations_players.rs`).
-            | PlayerRef::Iterated => PlayerFilter::Ref(Box::new(r)),
+            | PlayerRef::Iterated
+            // "Players dealt damage this way" (`referents_values_4`).
+            | PlayerRef::Var(_)
+            | PlayerRef::Each(_) => PlayerFilter::Ref(Box::new(r)),
             _ => return None,
         };
         (who, rest)

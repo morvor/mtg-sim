@@ -792,6 +792,10 @@ impl Game {
                     .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
                     .filter(|o| self.is_live(*o))
                     .collect();
+                ctx.set_var(
+                    vars::MODIFIED,
+                    objs.iter().map(|o| Entity::Object(*o)).collect(),
+                );
                 if objs.is_empty() {
                     return;
                 }

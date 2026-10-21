@@ -198,12 +198,25 @@ pub struct Introduced(Option<Sel>);
 /// Elf).
 pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) {
     let introduced = matches!(b.it, Sel::Var(v) if v == vars::CREATED || v == INTRODUCED);
-    if !(matches!(b.it, Sel::This) || is_no_referent(&b.it) || introduced) {
+    // "Whenever one or more creatures ... deal combat damage to a player, create a ...
+    // token. Put ... counters on it": a plural trigger object is "them", never "it".
+    let plural_trigger = matches!(b.it, Sel::TriggerObjects);
+    if !(matches!(b.it, Sel::This) || is_no_referent(&b.it) || introduced || plural_trigger) {
         return;
     }
     let mut creates = 0;
     count_creates(e, &mut creates);
     let last = last_instruction_mut(e);
+    if plural_trigger
+        && !matches!(
+            last,
+            Effect::CreateToken { .. }
+                | Effect::CreateTokenWithPT { .. }
+                | Effect::CreateTokenCopy { .. }
+        )
+    {
+        return;
+    }
     match last {
         Effect::CreateToken { .. }
         | Effect::CreateTokenWithPT { .. }

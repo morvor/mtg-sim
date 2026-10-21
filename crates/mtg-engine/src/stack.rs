@@ -1053,8 +1053,26 @@ impl Game {
         for (spec, slot) in specs.iter().zip(targets.iter()) {
             match &spec.divide {
                 Some(total) if !slot.is_empty() => {
-                    let total = self.eval_value(total, ctx).max(0) as u32;
+                    let mut total = self.eval_value(total, ctx).max(0) as u32;
                     let n = slot.len() as u32;
+                    // "Distribute up to N counters among ...": how many is chosen first,
+                    // at least one for each target (CR 601.2d).
+                    if spec.divide_up_to && total > n {
+                        let ans = self.ask(
+                            ctx.controller,
+                            Decision::ChooseNumber {
+                                source: Some(stack_obj),
+                                prompt: "Choose how many to distribute".into(),
+                                min: n as i64,
+                                max: total as i64,
+                            },
+                        );
+                        if let Answer::Number(k) = ans {
+                            if k >= n as i64 && k <= total as i64 {
+                                total = k as u32;
+                            }
+                        }
+                    }
                     let default = {
                         let mut v = vec![total / n.max(1); slot.len()];
                         let rem = total - (total / n.max(1)) * n;

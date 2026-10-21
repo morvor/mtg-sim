@@ -183,14 +183,16 @@ fn where_x_is(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(saved.0);
         b.it = saved.1;
         b.it_player = saved.2;
-        let (x, tail) = read?;
-        if !end(&tail).is_empty() {
-            return None;
-        }
+        let x = match read {
+            Some((x, tail)) if end(&tail).is_empty() => Some(x),
+            _ => None,
+        };
         let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-        if let Some(e) = where_x_is_parts(&clause, v, b, it.clone()) {
-            if !format!("{e:?}").contains(&format!("{:?}", nonnegative(x))) {
-                return Some(e);
+        if let Some(x) = x {
+            if let Some(e) = where_x_is_parts(&clause, v, b, it.clone()) {
+                if !format!("{e:?}").contains(&format!("{:?}", nonnegative(x))) {
+                    return Some(e);
+                }
             }
         }
         b.targets.truncate(saved.0);

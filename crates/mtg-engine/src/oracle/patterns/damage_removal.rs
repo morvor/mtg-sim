@@ -126,6 +126,7 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
         max,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent: false,
         text: String::new(),
         condition: None,

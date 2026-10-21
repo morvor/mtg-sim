@@ -120,11 +120,24 @@ fn if_you_do_after_conditional_may(l: &str, prev: &mut Effect, b: &mut Builder) 
         (false, r, true)
     } else if let Some(r) = l.strip_prefix("if you don't, ") {
         (true, r, true)
-    } else if let Some(r) = l.strip_prefix("if you don't ") {
+    } else if let Some(r) = l
+        .strip_prefix("if you don't ")
+        .or_else(|| l.strip_prefix("if you didn't "))
+    {
         // "If you don't cast it, ...", "If you don't put the card onto the battlefield,
         // ...", "If you don't draw a card this way, ..."
         match r.split_once(", ") {
             Some((_, x)) => (true, x, false),
+            None => return false,
+        }
+    } else if let Some(r) = l
+        .strip_prefix("if you put ")
+        .filter(|r| r.contains(" this way, "))
+    {
+        // "If it's an artifact or creature card, you may reveal it and put it into your
+        // hand. If you put a card into your hand this way, ..." (Sidequest: Catch a Fish).
+        match r.split_once(" this way, ") {
+            Some((_, x)) => (false, x, false),
             None => return false,
         }
     } else {
@@ -329,11 +342,14 @@ fn verb(v: &str) -> Option<Verb> {
             // in `vars::REVEALED`.
             Effect::DigStep(s) => matches!(**s, DigStep::Take { reveal: true, .. }),
             Effect::Seq(v) => v.last().is_some_and(dig_reveal),
+            // "Each player reveals the top card of their library." (`kw/parley.rs` also
+            // records the cards in `vars::REVEALED`).
+            Effect::Custom(n) => n == crate::kw::parley::REVEAL_TOPS,
             _ => false,
         }
     }
     Some(match v {
-        "milled" | "mill" => Verb {
+        "milled" | "mill" | "mills" => Verb {
             kind: |e| matches!(e, Effect::Mill { .. }),
             var: vars::IT,
             back: false,
@@ -411,11 +427,30 @@ enum Quant {
     All,
     /// "no creature cards".
     NoneOf,
+    /// "two cards that share a card type", "two nonland cards that share a color": two of
+    /// the matching objects have a card type (a color) in common.
+    PairSharing(bool),
 }
 
 /// [`quantified`] with the counting quantifiers: "no creature cards", "two or more
 /// cards", "eight or more cards".
 fn quantified_q(s: &str) -> Option<(Filter, Quant, &str)> {
+    if let Some(r) = s.strip_prefix("two ") {
+        for (q, color) in [
+            (" that share a card type", false),
+            (" that share a color", true),
+        ] {
+            if let Some(i) = r.find(q) {
+                let (f, true, tail) = parse_object_phrase(&r[..i])? else {
+                    return None;
+                };
+                if !end(tail).is_empty() {
+                    return None;
+                }
+                return Some((f, Quant::PairSharing(color), r[i + q.len()..].trim_start()));
+            }
+        }
+    }
     if let Some(r) = s.strip_prefix("no ") {
         let (f, true, rest) = parse_object_phrase(r)? else {
             return None;
@@ -465,6 +500,18 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
             return Some((Filter::Or(vec![fx, fy]), rest.trim_start()));
         }
     }
+    // "a creature you controlled": as it last existed (the condition judges the affected
+    // objects that way).
+    if let Some((head, tail)) = r.split_once(" you controlled") {
+        if tail.is_empty() || tail.starts_with(' ') {
+            let s = format!("{head} you control");
+            let (f, _, rest) = parse_object_phrase(&s)?;
+            if !end(rest).is_empty() {
+                return None;
+            }
+            return Some((f, tail.trim_start()));
+        }
+    }
     let (f, _, rest) = parse_object_phrase(r)?;
     Some((f, rest.trim_start()))
 }
@@ -511,6 +558,11 @@ fn this_way_condition_q(c: &str) -> Option<(Filter, Verb, &str, bool, bool, Quan
     if let Some(r) = c.strip_prefix("that ") {
         let (_noun, r) = split_word(r);
         let v = ["is ", "was "].iter().find_map(|x| r.strip_prefix(x))?;
+        // "If that card is returned to its owner's hand this way" (Puppet Master).
+        let v = v
+            .strip_suffix(" to its owner's hand")
+            .or_else(|| v.strip_suffix(" to the battlefield"))
+            .unwrap_or(v);
         return Some((Filter::Any, verb(v)?, v, true, false, Quant::Some));
     }
     let (f, q, rest) = quantified_q(c)?;
@@ -603,8 +655,18 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Effect::Seq(v) => v.clone(),
         other => vec![other.clone()],
     };
+    // "You may choose a nonland card from it. If you do, that player exiles that card. If
+    // a nonblack card is exiled this way, ...": an instruction performed only if a
+    // condition held.
+    let conditional_core = |e: &Effect| match e {
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => Some((**then).clone()),
+        _ => None,
+    };
     let is_kind = |e: &Effect| match e {
         Effect::May { effect, .. } => optional_core(effect).is_some_and(verb.kind),
+        Effect::If { .. } => conditional_core(e).is_some_and(|t| (verb.kind)(&t)),
         other => (verb.kind)(other),
     };
     // A snapshot of what it affected, taken right after it, so that several sentences can
@@ -643,11 +705,22 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Effect::May { effect, .. } => matches!(optional_core(effect), Some(Effect::Move { .. })),
         _ => false,
     };
+    // "For each creature card revealed this way, create a token that's a copy of that
+    // card. ...": instructions that create objects.
+    let makes = |e: &Effect| {
+        serde_json::to_string(e)
+            .is_ok_and(|j| j.contains("CreateToken") || j.contains("CreateCopy"))
+            && !serde_json::to_string(e)
+                .is_ok_and(|j| j.contains("\"Move\"") || j.contains("\"Exile\""))
+    };
     let i = match parts.iter().rposition(is_kind) {
         Some(i)
             if verb.back
                 || parts[i + 1..].iter().all(keeps)
-                || (!names_them && parts[i + 1..].iter().all(|e| keeps(e) || moves(e)))
+                || (!names_them
+                    && parts[i + 1..]
+                        .iter()
+                        .all(|e| keeps(e) || moves(e) || makes(e)))
                 || snap_after(i)
                 || returns_it(i) =>
         {
@@ -656,9 +729,17 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         _ => return false,
     };
     let has_snapshot = snap_after(i);
+    let mut conditional = false;
     let (optional, instr) = match &parts[i] {
         Effect::May { effect, .. } => match optional_core(effect) {
             Some(e) => (true, e.clone()),
+            None => return false,
+        },
+        e @ Effect::If { .. } => match conditional_core(e) {
+            Some(t) => {
+                conditional = true;
+                (false, t)
+            }
             None => return false,
         },
         other => (false, other.clone()),
@@ -703,11 +784,18 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         ]),
     };
     // What the condition checks, and what "it" in the effect refers to.
+    // One target object ("for each player, destroy up to one target creature that player
+    // controls" has several: any of them may be the one the condition asks about).
+    let single = |k: u8| {
+        b.targets
+            .get(k as usize)
+            .is_some_and(|t| matches!(t.max, Value::Const(1)) && t.per_player.is_none())
+    };
     let destroyed_target = match &instr {
         Effect::Destroy {
-            what: what @ Sel::Target(_),
+            what: what @ Sel::Target(k),
             ..
-        } => Some(what.clone()),
+        } if single(*k) => Some(what.clone()),
         _ => None,
     };
     let (mut conds, it) = match (&destroyed_target, word, that) {
@@ -747,6 +835,33 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             Condition::Compare(Value::CountSel(Box::new(matching)), Cmp::Eq, Value::c(0)),
             Some(Sel::Var(THIS_WAY)),
         ),
+        Quant::PairSharing(color) => {
+            let kinds: Vec<Filter> = if color {
+                crate::types::Color::ALL
+                    .into_iter()
+                    .map(Filter::Color)
+                    .collect()
+            } else {
+                crate::types::CardType::ALL
+                    .into_iter()
+                    .map(Filter::Type)
+                    .collect()
+            };
+            let two_of = |k: Filter| {
+                Condition::Compare(
+                    Value::CountSel(Box::new(Sel::Matching(
+                        Box::new(snapshot.clone()),
+                        Filter::and(vec![what.clone(), k]),
+                    ))),
+                    Cmp::Ge,
+                    Value::c(2),
+                )
+            };
+            (
+                Condition::Or(kinds.into_iter().map(two_of).collect()),
+                Some(Sel::Var(THIS_WAY)),
+            )
+        }
         Quant::All => {
             let Some(g) = all_are.clone() else {
                 return false;
@@ -778,7 +893,15 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         Effect::Seq(v) => v,
         other => vec![other],
     };
-    if !has_snapshot {
+    if !has_snapshot && conditional {
+        // Recorded inside the conditional part; nothing was affected if it didn't happen.
+        let store = |sel| Effect::Store { var: SNAPSHOT, sel };
+        if let Effect::If { then, .. } = &mut v[i] {
+            let inner = std::mem::replace(&mut **then, Effect::Noop);
+            **then = Effect::seq(vec![inner, store(Sel::Var(verb.var))]);
+        }
+        v.insert(i, store(Sel::None));
+    } else if !has_snapshot {
         let store = |sel| Effect::Store { var: SNAPSHOT, sel };
         // An optional instruction that wasn't performed affected nothing.
         let snapshot = if optional {

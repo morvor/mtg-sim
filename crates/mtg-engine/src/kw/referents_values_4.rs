@@ -54,6 +54,22 @@ fn as_cast_values(chars: &crate::object::Characteristics) -> Vec<String> {
     out
 }
 
+/// `Filter::Custom` name prefix (then a JSON `Sel`): an object that shares a creature
+/// type with each of the selected objects ("shares a creature type with each creature
+/// tapped this way"; Cryptic Gateway's ruling: not necessarily the same type).
+pub const SHARES_TYPE_WITH_EACH: &str = "rv4:shares a creature type with each:";
+
+/// The filter "shares a creature type with each of [sel]".
+pub fn shares_creature_type_with_each(sel: &crate::ability::Sel) -> crate::ability::Filter {
+    crate::ability::Filter::Custom(
+        format!(
+            "{SHARES_TYPE_WITH_EACH}{}",
+            serde_json::to_string(sel).unwrap_or_default()
+        )
+        .into(),
+    )
+}
+
 pub struct ReferentsValues4;
 
 impl KeywordRules for ReferentsValues4 {
@@ -103,6 +119,20 @@ impl KeywordRules for ReferentsValues4 {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if let Some(json) = name.strip_prefix(SHARES_TYPE_WITH_EACH) {
+            use crate::ability::{Filter, Sel};
+            let Ok(sel) = serde_json::from_str::<Sel>(json) else {
+                return Some(false);
+            };
+            let others = g.eval_sel_objects(&sel, ctx);
+            return Some(
+                !others.is_empty()
+                    && others.iter().all(|x| {
+                        let one = Sel::All(Filter::Objects(vec![*x]));
+                        g.matches(id, &Filter::SharesCreatureType(Box::new(one)), ctx)
+                    }),
+            );
+        }
         if name == p::NOT_SACRIFICED_CARD {
             // CR 400.7: the sacrificed permanent is a new object where it went.
             let sacrificed = ctx.vars.get(&vars::SACRIFICED);
