@@ -157,3 +157,18 @@ fn blue_loyal_raptor_gives_entering_dinosaurs_one_counter_of_each_kind_it_has() 
     let bears = t.enter(P0, "Grizzly Bears");
     assert_eq!(t.counters(bears, "+1/+1"), 0);
 }
+
+#[test]
+fn naya_soulbeast_enters_with_the_total_mana_value_revealed() {
+    cr!("614.1c", "608.2h", "701.20a");
+    supported("Naya Soulbeast");
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 8);
+    let s = t.hand(P0, "Naya Soulbeast");
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let nb = t.named_on_battlefield("Naya Soulbeast")[0];
+    assert_eq!(t.counters(nb, "+1/+1"), 4 + 2);
+}

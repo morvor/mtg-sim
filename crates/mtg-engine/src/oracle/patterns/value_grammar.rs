@@ -129,6 +129,23 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "the total mana value of all cards revealed this way" after "each player reveals the
+    // top card of their library" (Naya Soulbeast): the cards it revealed.
+    if let Some(rest) = s.strip_prefix("the total mana value of all cards revealed this way") {
+        if crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("each player reveals the top card of their library")
+        {
+            return Some((
+                Value::Aggregate(
+                    AggOp::Sum,
+                    Stat::ManaValue,
+                    Box::new(Sel::Var(crate::kw::parley::REVEALED)),
+                ),
+                rest.to_string(),
+            ));
+        }
+    }
     // The phrases of this grammar first; amounts from earlier instructions and this
     // turn's history (`value_results`) when they don't read the whole phrase.
     let saved = (
