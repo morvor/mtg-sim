@@ -71,3 +71,110 @@ fn regenerates_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "replacement riders: when it regenerates this way", priority: 60, apply: regenerates_this_way } }
+
+// ---------------------------------------------------------------------------
+// Damage prevented this way (CR 615.5)
+// ---------------------------------------------------------------------------
+
+/// The prevention effect the instructions so far create, last.
+fn last_prevention(e: &mut Effect) -> Option<&mut ReplacementDef> {
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(last_prevention),
+        Effect::AddReplacement { def, .. }
+            if matches!(def.action, ReplacementAction::Prevent)
+                && matches!(def.event, ReplacementEvent::Damage { .. }) =>
+        {
+            Some(def)
+        }
+        _ => None,
+    }
+}
+
+/// "Whenever damage from a black or red source is prevented this way this turn, you gain
+/// that much life." (Samite Ministration), "When damage is prevented this way, ~ deals
+/// that much damage to that source's controller and you draw that many cards." (New Way
+/// Forward): a triggered ability each time the prevention effect prevents damage, "that
+/// much" being the damage prevented and "that source" its source.
+fn prevented_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let (quality, r) = if let Some(r) = l.strip_prefix("when damage is prevented this way, ") {
+        (None, r)
+    } else if let Some(r) = l.strip_prefix("whenever damage from ") {
+        let Some((src, r)) = r.split_once(" source is prevented this way this turn, ") else {
+            return false;
+        };
+        let Some(f) = source_quality(src) else {
+            return false;
+        };
+        (Some(f), r)
+    } else {
+        return false;
+    };
+    let Some(effect) =
+        super::replacement_grammar::instructions(r, b.ctx, Sel::TriggerObject)
+    else {
+        return false;
+    };
+    let Some(def) = last_prevention(prev) else {
+        return false;
+    };
+    let reflexive = Effect::Reflexive {
+        body: Box::new(Body {
+            targets: vec![],
+            effect,
+            modal: None,
+        }),
+    };
+    let then = match quality {
+        Some(f) => Effect::If {
+            cond: Condition::SelMatches(Sel::TriggerOtherObject, f),
+            then: Box::new(reflexive),
+            otherwise: Box::new(Effect::Noop),
+        },
+        None => reflexive,
+    };
+    def.action = ReplacementAction::PreventAndThen(None, Box::new(then));
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "replacement riders: when damage is prevented this way", priority: 60, apply: prevented_this_way } }
+
+/// "black or red", "black", "artifact": the quality of a source.
+fn source_quality(s: &str) -> Option<Filter> {
+    let s = s.strip_prefix("a ").or_else(|| s.strip_prefix("an ")).unwrap_or(s);
+    let mut alts = Vec::new();
+    for w in s.split(" or ") {
+        alts.push(match crate::types::Color::from_word(w.trim()) {
+            Some(c) => Filter::Color(c),
+            None => return None,
+        });
+    }
+    Some(if alts.len() == 1 {
+        alts.pop()?
+    } else {
+        Filter::Or(alts)
+    })
+}
+
+/// "an opponent of your choice gains control of it" (Khârn the Betrayer): the opponent is
+/// chosen as it happens.
+fn opponent_of_your_choice_gains_control(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = crate::oracle::phrases::end(l)
+        .strip_prefix("an opponent of your choice gains control of ")?;
+    let (what, rest) = crate::oracle::effects::object_ref(r, b)?;
+    if !crate::oracle::phrases::end(&rest).is_empty() {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Opponent,
+        },
+        Effect::GainControl {
+            what,
+            who: PlayerRef::ChosenOpponent,
+            duration: Duration::Permanent,
+        },
+    ]))
+}
+
+inventory::submit! { super::EffectPattern { name: "replacement riders: an opponent of your choice gains control of it", priority: 100, parse: opponent_of_your_choice_gains_control } }
