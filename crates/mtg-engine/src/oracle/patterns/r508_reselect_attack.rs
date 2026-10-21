@@ -42,6 +42,10 @@ fn reselect_attack(l: &str, b: &mut Builder) -> Option<Effect> {
     // "you may" is optional here: the reselection itself lets the player keep the
     // creature attacking what it's attacking.
     let l = l.strip_prefix("you may ").unwrap_or(l);
+    // "you may reselect which player ~ is attacking" (Capricopian): among players.
+    if l == "reselect which player ~ is attacking" {
+        return Some(Effect::Custom(crate::kw::reselect_attack::RESELECT_SELF_PLAYER.into()));
+    }
     if l != "reselect which player or permanent target attacking creature is attacking" {
         return None;
     }

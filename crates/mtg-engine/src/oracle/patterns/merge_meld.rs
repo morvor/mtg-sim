@@ -95,3 +95,46 @@ inventory::submit! { TriggerPattern { name: "this creature mutates", priority: 0
 inventory::submit! { EffectPattern { name: "exile them, then meld them", priority: 0, parse: meld_into } }
 inventory::submit! { ConditionPattern { name: "you both own and control this and its meld partner", priority: 0, parse: own_and_control_pair } }
 inventory::submit! { AbilityPattern { name: "meld pair abilities", priority: 0, parse: meld_block } }
+
+/// "If ~ and a creature named [partner] are attacking, and you both own and control them,
+/// exile them, then meld them into [result]" (Mishra, Claimed by Gix).
+fn meld_attacking_pair(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("if ~ and a creature named ")?;
+    let (_partner, rest) = r.split_once(" are attacking, and you both own and control them, ")?;
+    let result = rest.strip_prefix("exile them, then meld them into ")?;
+    if result.is_empty() {
+        return None;
+    }
+    Some(Effect::Custom(crate::merge::MELD_ATTACKING_PAIR.into()))
+}
+
+inventory::submit! { EffectPattern { name: "if ~ and its meld partner are attacking, meld them", priority: 0, parse: meld_attacking_pair } }
+
+/// "It enters tapped and attacking." after [`meld_attacking_pair`].
+fn meld_enters_attacking(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l.trim()) != "it enters tapped and attacking" {
+        return false;
+    }
+    fn last(e: &mut Effect) -> Option<&mut Effect> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(last),
+            Effect::Custom(n) if n.as_str() == crate::merge::MELD_ATTACKING_PAIR => Some(e),
+            _ => None,
+        }
+    }
+    let Some(e) = last(prev) else {
+        return false;
+    };
+    *e = Effect::Custom(
+        format!(
+            "{}{}",
+            crate::merge::MELD_ATTACKING_PAIR,
+            crate::merge::MELD_ENTERS_ATTACKING
+        )
+        .into(),
+    );
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "the melded permanent enters tapped and attacking", priority: 0, apply: meld_enters_attacking } }

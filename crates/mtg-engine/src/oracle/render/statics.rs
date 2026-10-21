@@ -823,6 +823,10 @@ impl Renderer<'_> {
                 self.activation_permission(&who, ap)
             }
             PlayerModification::Shroud => format!("{subj} have shroud"),
+            PlayerModification::HexproofFrom(f) => {
+                let q = self.quality(f);
+                format!("{subj} have hexproof from {q}")
+            }
             PlayerModification::ProtectionFrom(f) => {
                 let q = self.quality(f);
                 format!("{subj} have protection from {q}")
@@ -1969,6 +1973,11 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
+            Restriction::AttackPlayersDespiteDefender { attackers, players } => format!(
+                "{} can attack players for whom {} as though it didn't have defender",
+                subj(self, attackers),
+                self.condition(players)
+            ),
             Restriction::AttackAsThoughHaste {
                 attackers,
                 defender,
@@ -2156,6 +2165,17 @@ impl Renderer<'_> {
             Restriction::CantAttackPlayerAgain(f) => {
                 let a = subj(self, f);
                 format!("{a} can't attack a player it has already attacked this turn")
+            }
+            Restriction::CantAttackPermanentsOf {
+                attackers,
+                controller,
+            } => {
+                let a = subj(self, attackers);
+                let who = match controller {
+                    PlayerFilter::You => "you control".to_string(),
+                    _ => "a player controls".to_string(),
+                };
+                format!("{a} can't attack a permanent {who}")
             }
             Restriction::CantBeTargeted { what, by } => {
                 let w = subj(self, what);

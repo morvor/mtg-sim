@@ -161,6 +161,11 @@ pub fn predefined(name: &str) -> Option<TokenSpec> {
 /// attacking that player", `Effect::TokensJoinCombat`; empty: no such player).
 pub const TOKEN_DEFENDER: Var = vars::USER + 7356;
 
+/// The attacking creature objects put onto the battlefield by a move instruction block
+/// ("put a creature card from your hand onto the battlefield blocking that creature",
+/// `Effect::TokensJoinCombat` around a move, CR 509.4).
+pub const JOIN_BLOCKING: Var = vars::USER + 13370;
+
 /// The player tokens created attacking now must attack, if an effect says which (`None`
 /// inside: it names no player, so they can't attack).
 pub fn forced_defender(ctx: &crate::eval::Ctx) -> Option<Option<Entity>> {

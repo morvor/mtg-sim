@@ -38,7 +38,7 @@ thread_local! {
 /// the start or a space and precedes a capital letter, "{" or "~"; a closing one follows
 /// a period, "}" or a letter and precedes the end, a space or punctuation (an apostrophe
 /// between letters, as in "can't" or "~'s", is neither).
-fn nested_quotes_doubled(s: &str) -> String {
+pub(crate) fn nested_quotes_doubled(s: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     let mut out = String::with_capacity(s.len());
     let mut open = false;

@@ -906,6 +906,8 @@ fn objects_restriction_effect(l: &str, b: &mut Builder) -> Option<Effect> {
                 | Restriction::CantBlockAlone(_)
                 | Restriction::CantTransform(_)
                 | Restriction::CantActivate { .. }
+                // "it can't be sacrificed this turn" (Slicer, Hired Muscle).
+                | Restriction::CantBeSacrificed(_)
         )
     });
     if !ok || rs.is_empty() {
