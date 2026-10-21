@@ -27,19 +27,7 @@ inventory::submit! { ManualAbility {
             .iter()
             .map(|a| {
                 map_effect(a, TEXT, |e| {
-                    Effect::Seq(vec![
-                        e,
-                        Effect::Custom(EXILED.into()),
-                        Effect::DelayedTrigger {
-                            trigger: TriggerCond::Custom(RETURNS.into()),
-                            body: Box::new(Body::effect(Effect::AddCounters {
-                                what: Sel::TriggerObject,
-                                kind: "+1/+1".into(),
-                                n: Value::Const(2),
-                            })),
-                            once: false,
-                        },
-                    ])
+                    Effect::Seq(vec![e, Effect::Custom(EXILED.into())])
                 })
             })
             .collect()
@@ -73,6 +61,18 @@ impl KeywordRules for Rules {
         for c in exiled {
             g.cards.push(EXILED, vec![src, i64::from(c.0)]);
         }
+        // "When an exiled card enters under your control this way, ...": a delayed
+        // triggered ability lasting until they've returned.
+        super::delayed_for_rest_of_game(
+            g,
+            ctx,
+            TriggerCond::Custom(RETURNS.into()),
+            Body::effect(Effect::AddCounters {
+                what: Sel::TriggerObject,
+                kind: "+1/+1".into(),
+                n: Value::Const(2),
+            }),
+        );
         true
     }
     fn custom_trigger(

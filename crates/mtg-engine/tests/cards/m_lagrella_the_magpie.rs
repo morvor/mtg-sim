@@ -23,3 +23,18 @@ fn returning_cards_under_your_control_get_two_counters() {
     // The Giant returned under its owner's (an opponent's) control.
     assert_eq!(t.counters(giant, "+1/+1"), 0);
 }
+
+#[test]
+fn counters_also_when_lagrella_leaves_on_a_later_turn() {
+    cr!("603.7");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    let lag = t.enter(P0, "Lagrella, the Magpie");
+    t.resolve_all();
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.g.destroy(lag, None);
+    t.resolve_all();
+    let bear = t.named_on_battlefield("Grizzly Bears")[0];
+    assert_eq!(t.counters(bear, "+1/+1"), 2);
+}
