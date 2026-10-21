@@ -247,7 +247,11 @@ fn cast_spell(subj: &PlayerSubject, t: &str) -> Option<Parsed> {
     if let Some(x) = t.strip_prefix("your ").or_else(|| t.strip_prefix("their ")) {
         let (w, x) = split_word(x);
         let n = ordinal(w)?;
-        if let Some(phrase) = x.strip_suffix(" each turn") {
+        // "your second noncreature spell in a turn" (Sapphire Collector): the same.
+        if let Some(phrase) = x
+            .strip_suffix(" each turn")
+            .or_else(|| x.strip_suffix(" in a turn"))
+        {
             let (f, cond) = super::triggers::parse_spell_phrase(phrase)?;
             if cond.is_some() {
                 return None;

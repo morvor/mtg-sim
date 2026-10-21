@@ -222,6 +222,16 @@ impl Renderer<'_> {
         if t.do_once_per_turn {
             s.push_str(" Do this only once each turn.");
         }
+        match t.limit {
+            Some(TriggerLimit::Once) => s.push_str(" This ability triggers only once."),
+            Some(TriggerLimit::PerTurn(2)) => {
+                s.push_str(" This ability triggers only twice each turn.")
+            }
+            Some(TriggerLimit::PerTurn(n)) => {
+                s.push_str(&format!(" This ability triggers only {n} times each turn."))
+            }
+            None => {}
+        }
         if t.cant_be_countered {
             s.push_str(" This ability can't be countered.");
         }

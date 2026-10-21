@@ -438,7 +438,11 @@ impl Game {
                     }
                     *n += 1;
                 }
-                for _ in 0..1 + extra {
+                // "This ability triggers only once." / "only twice each turn": each time it
+                // would trigger, additional times included (Acrobatic Cheerleader's
+                // rulings).
+                let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
+                for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {
                         source: src,
@@ -697,6 +701,10 @@ impl Game {
                 }
                 // CR 603.2d: effects may make an ability trigger additional times.
                 let times = 1 + self.additional_triggers(src, &t.trigger, ev, lookback.as_deref());
+                // "This ability triggers only once." / "only twice each turn": each time it
+                // would trigger, additional times included (Acrobatic Cheerleader's
+                // rulings).
+                let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, times);
                 for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {

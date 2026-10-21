@@ -308,6 +308,20 @@ pub struct TriggeredAbility {
     /// controller hasn't taken the optional action this turn (CR 603.2h).
     #[serde(default)]
     pub do_once_per_turn: bool,
+    /// "This ability triggers only once." / "This ability triggers only twice each turn."
+    /// (see `trigger_limits.rs`).
+    #[serde(default)]
+    pub limit: Option<TriggerLimit>,
+}
+
+/// How many times a triggered ability may trigger ([`TriggeredAbility::limit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerLimit {
+    /// "This ability triggers only once.": once for as long as its source is the same
+    /// object (CR 400.7; Acrobatic Cheerleader's rulings).
+    Once,
+    /// "This ability triggers only twice each turn.": that many times each turn.
+    PerTurn(u32),
 }
 
 /// Whether a triggered ability with this trigger and body is a mana ability (CR 605.1b):
@@ -350,6 +364,7 @@ impl TriggeredAbility {
             zone: FunctionZone::Battlefield,
             cant_be_countered: false,
             do_once_per_turn: false,
+            limit: None,
         }
     }
 }
