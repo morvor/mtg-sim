@@ -7251,7 +7251,13 @@ impl Renderer<'_> {
                 Modification::AddChosenType
                     if mods.iter().any(|m| matches!(m, Modification::RemoveAllCreatureTypes)) =>
                 {
-                    parts.push("becomes {alt:that type|the chosen type}".into())
+                    // A static ability says what the objects are ("Creatures you control
+                    // are the chosen type"); an effect, what they become.
+                    if self.in_static {
+                        parts.push("{alt:becomes|is} {alt:that type|the chosen type}".into())
+                    } else {
+                        parts.push("becomes {alt:that type|the chosen type}".into())
+                    }
                 }
                 Modification::AddChosenType => parts.push(
                     "is the chosen type {opt:in addition to its other types}".into(),

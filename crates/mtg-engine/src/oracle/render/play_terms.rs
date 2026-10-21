@@ -11,7 +11,7 @@ use super::*;
 /// 305.9), so the check says nothing a permission to cast doesn't say.
 /// Also `[x] is in exile and isn't a land`: the permission is for the card as long as
 /// it's exiled (the `bool`).
-fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(&'a PlayTerms, &'a Effect, bool)> {
+fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(PlayTerms, &'a Effect, bool)> {
     let Effect::If {
         cond: Condition::SelMatches(s, cond),
         then,
@@ -38,12 +38,30 @@ fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(&'a PlayTerms, &'a Effect
     if !matches!(otherwise.as_ref(), Effect::Noop) || format!("{s:?}") != format!("{x:?}") {
         return None;
     }
-    let Effect::WithPlayTerms { terms, effect } = then.as_ref() else {
+    // "..., and mana of any type can be spent to cast it": the permission and a rule for
+    // spending mana on that card, the terms said together.
+    let (with_terms, any_type) = match then.as_ref() {
+        Effect::Seq(v) => match v.as_slice() {
+            [w, Effect::SpendAnyTypeMana {
+                who: PlayerRef::You,
+                what,
+                duration: Duration::Permanent,
+            }] if format!("{what:?}") == format!("{x:?}") => (w, true),
+            _ => return None,
+        },
+        other => (other, false),
+    };
+    let Effect::WithPlayTerms { terms, effect } = with_terms else {
         return None;
     };
-    let Effect::GrantPlayPermission { what, .. } = effect.as_ref() else {
+    let Effect::GrantPlayPermission { what, duration, .. } = effect.as_ref() else {
         return None;
     };
+    if any_type && !matches!(duration, Duration::Permanent) {
+        return None;
+    }
+    let mut terms = terms.clone();
+    terms.spend_any_type |= any_type;
     (terms.spells_only && format!("{what:?}") == format!("{x:?}"))
         .then_some((terms, effect, in_exile))
 }
@@ -80,7 +98,7 @@ impl Renderer<'_> {
                 };
                 let saved = self.after_exile;
                 self.after_exile |= in_exile;
-                let s = self.with_play_terms(terms, &g);
+                let s = self.with_play_terms(&terms, &g);
                 self.after_exile = saved;
                 Some(s)
             }
@@ -102,7 +120,7 @@ impl Renderer<'_> {
                 };
                 let saved = self.after_exile;
                 self.after_exile |= in_exile;
-                let s = self.with_play_terms(terms, grant);
+                let s = self.with_play_terms(&terms, grant);
                 self.after_exile = saved;
                 // Cards may say the check anyway: "If it's a nonland card, you may cast
                 // that card this turn."

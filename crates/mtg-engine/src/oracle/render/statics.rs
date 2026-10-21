@@ -130,6 +130,12 @@ impl Renderer<'_> {
         if let Some(l) = self.infinity_static(s) {
             return l;
         }
+        if matches!(&s.effect, StaticEffect::Continuous { affected: Filter::Or(v), .. } if v.len() > 6)
+        {
+            if let Some(l) = self.attempt(|r| r.off_battlefield_static(s)) {
+                return l;
+            }
+        }
         // CR 702.178a: "Max speed — [ability]" means "As long as your speed is 4, this
         // object has [ability]": a static ability that applies as long as you have max
         // speed. Cards may also say the condition.
@@ -145,7 +151,7 @@ impl Renderer<'_> {
         self.static_ability_conditioned(s)
     }
 
-    fn static_ability_conditioned(&mut self, s: &StaticAbility) -> String {
+    pub(crate) fn static_ability_conditioned(&mut self, s: &StaticAbility) -> String {
         // "Cast this spell only during combat": no player can cast it unless (CR 601.3).
         if let (
             Some(Condition::Not(c)),
@@ -884,7 +890,7 @@ impl Renderer<'_> {
         }
     }
 
-    fn spell_noun_plural(&mut self, f: &Filter) -> String {
+    pub(crate) fn spell_noun_plural(&mut self, f: &Filter) -> String {
         if matches!(f, Filter::Source) {
             return self.me();
         }

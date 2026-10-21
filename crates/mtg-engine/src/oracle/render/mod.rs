@@ -50,6 +50,7 @@ mod named_statics;
 mod next_time;
 mod nouns;
 mod object_counts;
+mod off_battlefield;
 mod once_each_turn;
 mod opt_in;
 mod outcomes;
