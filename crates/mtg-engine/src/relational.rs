@@ -31,6 +31,11 @@ pub fn value_cmp(g: &Game, id: ObjectId, lhs: &Value, cmp: Cmp, rhs: &Value, ctx
     cmp.eval(g.eval_value(lhs, &c), g.eval_value(rhs, &c))
 }
 
+/// [`Filter::History`]: whether the history condition holds with `id` as the tested object.
+pub fn history_holds(g: &Game, id: ObjectId, cond: &Condition, ctx: &Ctx) -> bool {
+    g.eval_cond(cond, &testing(ctx, id))
+}
+
 /// [`Value::Extreme`]: the greatest or least of `of` among the selected objects (0 if
 /// there are none).
 pub fn extreme(g: &Game, of: &Value, sel: &Sel, greatest: bool, ctx: &Ctx) -> i64 {

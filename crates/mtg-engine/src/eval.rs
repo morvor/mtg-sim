@@ -465,6 +465,11 @@ impl Game {
             PlayerFilter::FirstDrawInDrawStep => {
                 crate::draw_rules::next_draw_is_first_in_draw_step(self, p)
             }
+            PlayerFilter::History(c) => {
+                let mut c2 = ctx.clone();
+                c2.iter_player = Some(p);
+                self.eval_cond(c, &c2)
+            }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
             PlayerFilter::Or(v) => v.iter().any(|x| self.player_filter_matches(x, p, ctx)),
@@ -1024,6 +1029,7 @@ impl Game {
             Filter::ValueCmp(lhs, cmp, rhs) => {
                 crate::relational::value_cmp(self, id, lhs, *cmp, rhs, ctx)
             }
+            Filter::History(cond) => crate::relational::history_holds(self, id, cond, ctx),
             // Checked by whatever chooses the objects together (`relational.rs`).
             Filter::Together(_) => true,
             Filter::Custom(name) => crate::mana_value::custom_parity_filter(self, name, id, c)

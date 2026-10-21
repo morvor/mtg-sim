@@ -960,6 +960,10 @@ impl Renderer<'_> {
                 np.rel.push(CAST_FROM.into());
             }
             Filter::CastWithCost(name) => np.status.push(name.to_string()),
+            Filter::History(c) => {
+                let s = self.history_filter_clause(c);
+                np.rel.push(s);
+            }
             Filter::DealtDamageThisTurnBy(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("dealt damage by {s} this turn"));

@@ -197,7 +197,11 @@ fn player_condition(r: &str, with: bool, b: &Builder) -> Option<(Condition, Stri
         let worded = if with {
             format!("you have {cond}")
         } else {
-            let Some(c) = as_you(&cond) else { continue };
+            // "who lost life this turn": a history clause, already about the player.
+            let Some(c) = as_you(&cond).or_else(|| super::history_filters_4::as_you_past(&cond))
+            else {
+                continue;
+            };
             format!("you {c}")
         };
         if let Some(c) = crate::oracle::statics::parse_condition(&worded, b.ctx) {

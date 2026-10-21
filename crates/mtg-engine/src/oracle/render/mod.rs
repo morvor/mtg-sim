@@ -37,6 +37,7 @@ mod events_happened;
 mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
+mod history_filters;
 mod history_values;
 mod joined_lines;
 mod keywords;

@@ -133,6 +133,9 @@ const VERBS: &[(&str, &str, &str)] = &[
     ("put", "put", "puts"),
     ("tapped", "tap", "taps"),
     ("came", "come", "comes"),
+    ("fought", "fight", "fights"),
+    ("turned", "turn", "turns"),
+    ("exerted", "exert", "exerts"),
 ];
 
 /// Passive forms: "was put into", "were put into", "was dealt", "was blocked".
@@ -152,6 +155,8 @@ const PASSIVE: &[(&str, &str)] = &[
     ("were returned", "is returned"),
     ("was turned face up", "is turned face up"),
     ("became tapped", "becomes tapped"),
+    ("was removed", "is removed"),
+    ("were removed", "is removed"),
 ];
 
 /// One reading of a history clause: the trigger text it corresponds to, the count it
@@ -480,7 +485,11 @@ fn dealt_damage(subj: &str, negated: bool, x: &str) -> Option<Clause> {
             return None;
         }
         // "by two or more creatures" counts the creatures, not the events.
-        let (src, c2, n2) = counted_object(by)?;
+        let (src, c2, n2) = if by == "~" {
+            ("~".to_string(), Cmp::Ge, 1)
+        } else {
+            counted_object(by)?
+        };
         if c2 != Cmp::Ge || (n2 > 1 && subj != "you") {
             return None;
         }
@@ -689,6 +698,7 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
         |t: &str| crate::oracle::triggers::parse_trigger_condition(&format!("whenever {t}"));
     // "~ is dealt excess damage": the trigger grammar reads it about "a permanent"; the
     // permanent is then ~.
+    // Or about "a creature" for what only creatures do ("~ fights").
     let about_source = || {
         let r = text.strip_prefix("~ ")?;
         let (c, x, y) = parse(&format!("a permanent {r}"))?;
@@ -699,8 +709,19 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
         let c = serde_json::from_str(&json.replace("\"Permanent\"", "\"Source\"")).ok()?;
         Some((c, x, y))
     };
+    let about_source_creature = || {
+        let r = text.strip_prefix("~ ")?;
+        let (c, x, y) = parse(&format!("a creature {r}"))?;
+        let json = serde_json::to_string(&c).ok()?;
+        let creature = "{\"Type\":\"Creature\"}";
+        if json.matches(creature).count() != 1 {
+            return None;
+        }
+        let c = serde_json::from_str(&json.replace(creature, "\"Source\"")).ok()?;
+        Some((c, x, y))
+    };
     // A card put into a hand from the battlefield is returned there.
-    let (cond, _, _) = parse(text).or_else(about_source).or_else(|| {
+    let (cond, _, _) = parse(text).or_else(about_source).or_else(about_source_creature).or_else(|| {
         let i = text.find(" is put into ")?;
         let r = &text[i + " is put into ".len()..];
         if !r.contains("hand from ") {
@@ -1116,7 +1137,7 @@ pub fn object_history(pred: &str, sel: &Sel) -> Option<Condition> {
 
 /// The condition with each "~" ([`Filter::Source`]) in its trigger conditions meaning the
 /// selected object instead.
-fn about(cond: Condition, sel: &Sel) -> Option<Condition> {
+pub fn about(cond: Condition, sel: &Sel) -> Option<Condition> {
     let json = serde_json::to_value(&cond).ok()?;
     let with = serde_json::to_value(Filter::In(Box::new(sel.clone()))).ok()?;
     fn walk(v: serde_json::Value, with: &serde_json::Value, n: &mut usize) -> serde_json::Value {

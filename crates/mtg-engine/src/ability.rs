@@ -1303,6 +1303,11 @@ pub enum PlayerFilter {
     /// (CR 504.1, 121.2) — "except the first one they draw in each of their draw steps"
     /// is `Not` this. See `draw_rules::next_draw_is_first_in_draw_step`.
     FirstDrawInDrawStep,
+    /// A player a game-history condition is true of ("target player who lost life this
+    /// turn", "each player who tapped a land for mana this turn"): the condition evaluated
+    /// with the player as the iterated player (`PlayerRel::Iterated`,
+    /// `PlayerRef::Iterated`; see `oracle/patterns/history_filters_4.rs`).
+    History(Box<Condition>),
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     /// A requirement on a target player checked only as the target is chosen ("target
@@ -1655,6 +1660,12 @@ pub enum Filter {
     /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
     /// by ~ this turn").
     DealtDamageThisTurnBy(Box<Sel>),
+    /// An object a game-history condition is true of ("a creature that fought this turn",
+    /// "a card in a graveyard that was put there from a library this turn", "a creature
+    /// that entered since your last turn ended"): the condition evaluated with the object
+    /// as [`vars::TESTED`], which its trigger conditions name as
+    /// `Filter::In(Sel::Var(TESTED))` (see `oracle/patterns/history_filters_4.rs`).
+    History(Box<Condition>),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).

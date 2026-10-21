@@ -1908,6 +1908,16 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             (TargetKind::Object(f), r)
         }
     };
+    // "target player who lost life this turn" (`patterns::history_filters_4`).
+    let (what, rest) = match what {
+        TargetKind::Player(pf) => {
+            match super::patterns::history_filters_4::player_qualifier(rest) {
+                Some((q, r)) => (TargetKind::Player(PlayerFilter::And(vec![pf, q])), r),
+                None => (TargetKind::Player(pf), rest),
+            }
+        }
+        w => (w, rest),
+    };
     let (what, rest) = player_alternatives(what, &s[..s.len() - rest.len()], rest);
     // "any target of an opponent's choice" (CR 115.1, 601.2c): an opponent chooses it.
     let (chosen_by_opponent, rest) = match rest.trim_start().strip_prefix("of an opponent's choice")
@@ -2239,6 +2249,18 @@ pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     for (p, r) in pairs {
         if let Some(rest) = t.strip_prefix(p) {
             return Some((r, None, rest));
+        }
+    }
+    // "target player who lost life this turn" (`patterns::history_filters_4`).
+    for (p, pf) in [
+        ("target player", PlayerFilter::Any),
+        ("target opponent", PlayerFilter::Opponent),
+    ] {
+        let Some(r) = t.strip_prefix(p) else { continue };
+        if let Some((q, rest)) = super::patterns::history_filters_4::player_qualifier(r) {
+            let text = &t[..t.len() - rest.len()];
+            let spec = TargetSpec::player(PlayerFilter::And(vec![pf, q]), text);
+            return Some((PlayerRef::Target(0), Some(spec), rest.trim_start()));
         }
     }
     if let Some(rest) = t.strip_prefix("target player ") {
