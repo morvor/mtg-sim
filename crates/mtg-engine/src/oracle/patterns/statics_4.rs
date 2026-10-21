@@ -364,3 +364,26 @@ fn as_enters_exchange_text_box(block: &str, ctx: &crate::oracle::CompileContext)
 }
 
 inventory::submit! { super::AbilityPattern { name: "statics 4: as ~ enters, you may exchange its text box and another creature's", priority: 90, parse: as_enters_exchange_text_box } }
+
+/// "Draw two cards, then you may exile a nonland card from your hand with a number of time
+/// counters on it equal to its mana value. Then target opponent does the same. Cards
+/// exiled this way that don't have suspend gain suspend." (The Wedding of River Song): the
+/// cards the spell's exiles linked to it — this resolution's, as a spell's object is new
+/// each time it's cast (CR 607.2a, 702.62a).
+fn f_cards_exiled_this_way_gain_suspend(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l.trim()) != "cards exiled this way that don't have suspend gain suspend" {
+        return false;
+    }
+    let s = format!("{prev:?}");
+    if !s.contains("\"time\"") || !s.contains("link: true") || !_b.ctx.is_spell() {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        super::r702_062_gains_suspend::gains_suspend(Sel::Linked),
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "statics 4: cards exiled this way that don't have suspend gain suspend", priority: 60, apply: f_cards_exiled_this_way_gain_suspend } }
