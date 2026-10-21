@@ -443,3 +443,36 @@ fn arna_kennerud_copies_each_nontoken_attachment_attached_to_the_attacker() {
     assert_eq!(t.pt(bears), (10, 8));
     assert_eq!(t.life(P1), 10);
 }
+
+#[test]
+fn stangg_twin_gets_copies_of_stanggs_auras_and_equipment() {
+    cr!("707.2", "303.4f", "301.5e", "603.7");
+    supported("Stangg, Echo Warrior");
+    let mut t = TestGame::new(2);
+    let stangg = t.battlefield(P0, "Stangg, Echo Warrior");
+    let aura = t.battlefield(P0, "Holy Strength");
+    assert!(t.g.attach(aura, Entity::Object(stangg)));
+    let eq = t.battlefield(P0, "Bonesplitter");
+    assert!(t.g.attach(eq, Entity::Object(stangg)));
+    t.attack(&[(stangg, Entity::Player(P1))], &[]);
+    let twin = t.named_on_battlefield("Stangg Twin");
+    assert_eq!(twin.len(), 1);
+    let twin = twin[0];
+    for name in ["Holy Strength", "Bonesplitter"] {
+        let copies: Vec<_> = t
+            .named_on_battlefield(name)
+            .into_iter()
+            .filter(|o| t.obj_now(*o).is_token())
+            .collect();
+        assert_eq!(copies.len(), 1, "{name}");
+        assert_eq!(t.obj_now(copies[0]).attached_to, Some(Entity::Object(twin)));
+    }
+    assert_eq!(t.pt(twin), (6, 6));
+    assert_eq!(t.life(P1), 8);
+    // All tokens created this way are sacrificed at the beginning of the next end step.
+    t.advance_to_step(Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Stangg Twin").is_empty());
+    assert_eq!(t.named_on_battlefield("Holy Strength").len(), 1);
+    assert_eq!(t.named_on_battlefield("Bonesplitter").len(), 1);
+}

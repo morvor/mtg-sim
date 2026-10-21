@@ -1061,3 +1061,132 @@ fn for_each_attached_copy_attached(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "token replacements 2: for each permanent attached, a copy attached", priority: 90, parse: for_each_attached_copy_attached } }
+
+/// The named token an earlier instruction created ("Stangg Twin"), and the copies made
+/// after it.
+const NAMED_TOKEN: Var = vars::USER + 5108;
+const COPIES_ATTACHED: Var = vars::USER + 5109;
+
+/// "For each Aura and Equipment attached to ~, create a token that's a copy of it attached
+/// to ~ Twin." after "create ~ Twin, a legendary 3/4 ... token" (Stangg, Echo Warrior): a
+/// copy of each, entering attached to the token just created. "The tokens created this
+/// way" are then that token and the copies.
+fn copies_attached_to_named_token(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("for each ") else {
+        return false;
+    };
+    let Some((noun, rest)) =
+        r.split_once(" attached to ~, create a token that's a copy of it attached to ")
+    else {
+        return false;
+    };
+    fn last_create(e: &Effect) -> Option<&TokenSpec> {
+        match e {
+            Effect::CreateToken {
+                spec,
+                count: Value::Const(1),
+                ..
+            } => Some(spec),
+            Effect::Seq(v) => v.last().and_then(last_create),
+            _ => None,
+        }
+    }
+    let Some(spec) = last_create(prev) else {
+        return false;
+    };
+    // "~ twin": the token's name, with the card's name as "~".
+    let name = spec.name.to_lowercase();
+    let Some(suffix) = rest.strip_prefix('~') else {
+        return false;
+    };
+    if suffix.is_empty() || !name.ends_with(suffix) {
+        return false;
+    }
+    let f = match noun {
+        "aura and equipment" => Filter::Or(vec![
+            Filter::Subtype("Aura".into()),
+            Filter::Subtype("Equipment".into()),
+        ]),
+        _ => match parse_object_phrase(noun) {
+            Some((f, false, t)) if end(t).is_empty() => f,
+            _ => return false,
+        },
+    };
+    let each = vars::USER + 5110;
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Store {
+            var: NAMED_TOKEN,
+            sel: Sel::Var(vars::CREATED),
+        },
+        Effect::Store {
+            var: COPIES_ATTACHED,
+            sel: Sel::None,
+        },
+        Effect::ForEach {
+            sel: Sel::All(Filter::and(vec![
+                f,
+                Filter::AttachedToAnyOf(Box::new(Sel::This)),
+            ])),
+            var: each,
+            effect: Box::new(Effect::seq(vec![
+                Effect::TokensEnterAttached {
+                    to: Sel::Var(NAMED_TOKEN),
+                    effect: Box::new(Effect::CreateTokenCopy {
+                        of: Sel::Var(each),
+                        count: Value::c(1),
+                        controller: PlayerRef::You,
+                        tapped: false,
+                        attacking: false,
+                        mods: vec![],
+                    }),
+                },
+                Effect::Store {
+                    var: COPIES_ATTACHED,
+                    sel: Sel::Union(vec![Sel::Var(COPIES_ATTACHED), Sel::Var(vars::CREATED)]),
+                },
+            ])),
+        },
+        Effect::Store {
+            var: vars::CREATED,
+            sel: Sel::Union(vec![Sel::Var(NAMED_TOKEN), Sel::Var(COPIES_ATTACHED)]),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: copies attached to the named token", priority: 90, apply: copies_attached_to_named_token } }
+
+/// "Sacrifice all tokens created this way at the beginning of the next end step." after
+/// creating several groups of tokens: those gathered as the tokens created.
+fn sacrifice_all_tokens_created_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(when) = end(&lower).strip_prefix("sacrifice all tokens created this way ") else {
+        return false;
+    };
+    fn gathered(e: &Effect) -> bool {
+        match e {
+            Effect::Store {
+                var: vars::CREATED,
+                sel: Sel::Union(_),
+            } => true,
+            Effect::Seq(v) => v.last().is_some_and(gathered),
+            _ => false,
+        }
+    }
+    if !gathered(prev) {
+        return false;
+    }
+    let Some(e) =
+        crate::oracle::effects::parse_clause(&format!("sacrifice those tokens {when}"), b)
+    else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: sacrifice all tokens created this way", priority: 90, apply: sacrifice_all_tokens_created_this_way } }
