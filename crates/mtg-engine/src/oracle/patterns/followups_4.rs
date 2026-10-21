@@ -748,6 +748,97 @@ fn for_each_exiled_in_process(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 
 inventory::submit! { FollowupPattern { name: "followups 4: for each card exiled this way, after a repeated process", priority: 120, apply: for_each_exiled_in_process } }
 
+/// Every card put into a hand by a repeated process, over all its passes.
+const PUT_IN_HAND_IN_PROCESS: Var = vars::USER + 41003;
+
+/// Adds, after each instruction of `e` that puts a card into a hand, that card to
+/// [`PUT_IN_HAND_IN_PROCESS`]; the number of such instructions.
+fn accumulate_to_hand(e: &mut Effect) -> usize {
+    match e {
+        Effect::Seq(v) => {
+            let mut n = 0;
+            let mut i = 0;
+            while i < v.len() {
+                if matches!(&v[i], Effect::Move { to, .. } if to.zone == ZoneKind::Hand) {
+                    v.insert(
+                        i + 1,
+                        Effect::Store {
+                            var: PUT_IN_HAND_IN_PROCESS,
+                            sel: Sel::Union(vec![
+                                Sel::Var(PUT_IN_HAND_IN_PROCESS),
+                                Sel::Var(vars::IT),
+                            ]),
+                        },
+                    );
+                    n += 1;
+                    i += 2;
+                } else {
+                    n += accumulate_to_hand(&mut v[i]);
+                    i += 1;
+                }
+            }
+            n
+        }
+        Effect::RepeatProcess { body } => accumulate_to_hand(body),
+        _ => 0,
+    }
+}
+
+/// "~ deals 1 damage to you for each card put into your hand this way." after a process
+/// that repeats (Demonlord Belzenlok): the cards every pass put into your hand, the
+/// damage dealt all at once.
+fn for_each_put_into_hand_in_process(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(head) = l.strip_suffix(" for each card put into your hand this way") else {
+        return false;
+    };
+
+    let Effect::RepeatProcess { body } = prev else {
+        return false;
+    };
+    if format!("{body:?}").contains(&format!("var: {PUT_IN_HAND_IN_PROCESS}")) {
+        return false;
+    }
+    let Some((before, after)) = head.split_once(" deals ") else {
+        return false;
+    };
+    let Some((n, rest)) = parse_number(after) else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    if n.as_const().is_none() || !rest.starts_with("damage to ") {
+        return false;
+    }
+    let clause = format!("{before} deals x {rest}");
+    let Some(e) = super::value_grammar::with_x_defined(true, || parse_clause(&clause, b)) else {
+        return false;
+    };
+    let count = Value::CountSel(Box::new(Sel::Var(PUT_IN_HAND_IN_PROCESS)));
+    let total = match n.as_const() {
+        Some(1) => count,
+        _ => Value::Mul(Box::new(n), Box::new(count)),
+    };
+    let Some(e) = super::r107_numbers::substitute_x(&e, &total) else {
+        return false;
+    };
+    let mut process = std::mem::take(prev);
+    if accumulate_to_hand(&mut process) == 0 {
+        *prev = process;
+        return false;
+    }
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: PUT_IN_HAND_IN_PROCESS,
+            sel: Sel::None,
+        },
+        process,
+        e,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: for each card put into your hand this way, after a repeated process", priority: 120, apply: for_each_put_into_hand_in_process } }
+
 /// Whether the player chose to do the optional instruction in any pass of a process
 /// repeated once (Claim Jumper: "If you search your library this way, shuffle").
 const DID_IN_PROCESS: Var = vars::USER + 41002;

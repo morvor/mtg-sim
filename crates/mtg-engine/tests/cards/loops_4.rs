@@ -115,3 +115,26 @@ fn claim_jumper_repeats_once_if_still_behind() {
     let (_, lands) = claim_jumper(4);
     assert_eq!(lands, 4);
 }
+
+#[test]
+fn demonlord_belzenlok_deals_damage_for_every_card_put_into_hand() {
+    cr!("608.2c");
+    ruling!(
+        "Demonlord Belzenlok",
+        "Land cards exiled this way remain exiled."
+    );
+    supported("Demonlord Belzenlok");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    // From the top: Hill Giant (4: repeat), Forest, Grizzly Bears (2: stop).
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Hill Giant");
+    let d = t.hand(P0, "Demonlord Belzenlok");
+    t.cast(P0, d).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Hill Giant"));
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert!(t.in_exile("Forest"));
+    assert_eq!(t.life(P0), 18);
+}
