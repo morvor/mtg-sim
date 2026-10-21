@@ -57,6 +57,8 @@ impl Game {
                 m
             })
             .collect();
+        // CR 400.6: an object a state-based action is moving at the same time.
+        let moves = crate::zones::contradictory_moves(self, moves);
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         // CR 614.13a, 614.13c: while effects that modify how these objects enter are
@@ -795,6 +797,14 @@ impl Game {
                 }
                 if let Some(attacker) = m.etb.blocking {
                     crate::combat::put_onto_battlefield_blocking(self, new_id, attacker);
+                }
+            }
+            // CR 111.6, 111.7: a token isn't a card. One put into a library stays in that
+            // zone until it ceases to exist, but it isn't among the library's cards: it's
+            // never revealed, drawn or counted as one (the library is still shuffled).
+            Zone::Library(p) if self.objects[new_id.0 as usize].kind == ObjKind::Token => {
+                if m.pos == LibraryPosition::Shuffled {
+                    self.shuffle_library(p);
                 }
             }
             Zone::Library(p) => {
@@ -1781,8 +1791,14 @@ impl Game {
             }));
         }
         let followups = std::mem::replace(&mut self.prevention_followups, outer);
-        self.post_replacement_effects
-            .extend(followups.into_iter().flatten().map(|(_, c, e)| (c, e)));
+        let followups: Vec<(crate::eval::Ctx, Effect)> = followups
+            .into_iter()
+            .flatten()
+            .map(|(_, c, e)| (c, e))
+            .collect();
+        let gains = crate::life_totals::damage_event_gains(self, &finals, &followups);
+        let outer_gains = std::mem::replace(&mut self.damage_event_gains, gains);
+        self.post_replacement_effects.extend(followups);
         crate::prevention::merge_prevention_events(self, first_event);
         // Damage a source would deal to one recipient that redirection effects split
         // (CR 614.9) and brought back together is still dealt at once, as one event.
@@ -1823,6 +1839,7 @@ impl Game {
                 other => self.execute_repl_event(other),
             }
         }
+        self.damage_event_gains = outer_gains;
         crate::excess_damage::record_excess(self, &excess_before, &dealt, combat);
         // CR 702.164c: toxic's poison counters, one event for each player and controller.
         crate::keyword_impls::toxic_counters(self, &dealt, combat);

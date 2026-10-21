@@ -44,6 +44,12 @@ pub enum Who {
     You,
     /// "its owner", "the exiled card's owner", "their owner".
     OwnerOfIt,
+    /// "they", "that player": the player the text last named (`Builder::it_player`, see
+    /// [`Perm::who_ref`]).
+    They,
+    /// "that creature's controller": the controller of the creature the triggered ability
+    /// is about.
+    CreaturesController,
 }
 
 /// What the permission is for.
@@ -75,6 +81,16 @@ pub enum From {
     },
     /// "from among them", "from among those cards": the cards an earlier instruction moved.
     AmongReferent,
+    /// "from the top of your graveyard".
+    GraveyardTop,
+    /// "from any graveyard".
+    AnyGraveyard,
+    /// "from your hand, from your graveyard, or from among cards you own in exile".
+    HandGraveyardOwnedExile,
+    /// "from each opponent's graveyard": one card from each.
+    EachOpponentGraveyard,
+    /// "from that player's graveyard" (the player a triggered ability is about).
+    TriggerPlayerGraveyard,
 }
 
 /// A parsed permission phrase.
@@ -111,6 +127,10 @@ pub struct Perm {
     /// "up to two sorcery spells": how many cards of the class (cast as the effect
     /// resolves).
     pub count: Option<u32>,
+    /// "cast target ..." with "you may" already read as the choice to do it.
+    pub subjectless: bool,
+    /// The player "they" means (filled in where the text is parsed).
+    pub who_ref: Option<PlayerRef>,
 }
 
 impl Perm {
@@ -121,10 +141,12 @@ impl Perm {
         let Some(c) = &self.cond_text else {
             return Some(terms);
         };
-        if let Some(q) = c
-            .strip_prefix("it's ")
-            .filter(|q| q.ends_with(" spell") || q.ends_with(" spells"))
-        {
+        if let Some(q) = c.strip_prefix("it's ").filter(|q| {
+            q.ends_with(" spell")
+                || q.ends_with(" spells")
+                || q.contains(" spell with mana value ")
+                || q.contains(" spells with mana value ")
+        }) {
             let (f, _, rest) = class_phrase(q)?;
             if !rest.trim().is_empty() {
                 return None;
@@ -236,6 +258,8 @@ const LEADS: &[Lead] = &[
         p.your_turn = true;
         set_duration(p, Duration::UntilEndOfYourNextTurn)
     }),
+    // "For each card exiled this way, you may play that card ..." (each of them).
+    ("for each card exiled this way, ", |_| true),
     ("during your turn, ", |p| {
         p.your_turn = true;
         true
@@ -272,6 +296,8 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
         ("its owner may ", Who::OwnerOfIt),
         ("their owner may ", Who::OwnerOfIt),
         ("the exiled card's owner may ", Who::OwnerOfIt),
+        ("they may ", Who::They),
+        ("that creature's controller may ", Who::CreaturesController),
     ] {
         if let Some(r) = s.strip_prefix(w) {
             return Some((who, r));
@@ -332,6 +358,8 @@ fn among_referent(s: &str) -> Option<&str> {
     for w in [
         "the cards exiled this way",
         "cards exiled this way",
+        "cards revealed this way",
+        "the revealed cards",
         "those exiled cards",
         "the exiled cards",
         "those cards",
@@ -471,13 +499,39 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         .filter(|(d, _)| d.contains(" in exile ") || d.starts_with("in exile "))
     {
         let d = d.replacen("in exile ", "", 1);
+        // "cards in exile your opponents own with ice counters on them".
+        let (owner, d) = match d.strip_prefix("your opponents own ") {
+            Some(r) => (Some(Filter::OwnedBy(PlayerRel::Opponent)), r.to_string()),
+            None => (None, d),
+        };
         let desc = format!("cards {} on them", d.trim());
         let f = object_filter(&desc)?;
-        p.zone_filter = Some(f);
+        p.zone_filter = Some(match owner {
+            Some(o) => Filter::and(vec![o, f]),
+            None => f,
+        });
         return Some((From::Exile, rest));
+    }
+    // "from among face-up cards your opponents own from exile" (Ashiok, Nightmare Muse).
+    if let Some(r) = s.strip_prefix(" from among face-up cards your opponents own from exile") {
+        p.zone_filter = Some(Filter::and(vec![
+            Filter::not(Filter::FaceDown),
+            Filter::OwnedBy(PlayerRel::Opponent),
+        ]));
+        return Some((From::Exile, r));
+    }
+    // "from your hand, from your graveyard, or from among cards you own in exile" (Kaya
+    // the Inexorable's emblem): any of those zones.
+    if let Some(r) = s.strip_prefix(" from your hand, from your graveyard, or from among cards you own in exile") {
+        return Some((From::HandGraveyardOwnedExile, r));
     }
     for (p, z) in [
         (" from your graveyard", From::Graveyard),
+        (" from the top of your graveyard", From::GraveyardTop),
+        (" from each opponent's graveyard", From::EachOpponentGraveyard),
+        (" from that player's graveyard", From::TriggerPlayerGraveyard),
+        (" from the triggering player's graveyard", From::TriggerPlayerGraveyard),
+        (" from any graveyard", From::AnyGraveyard),
         (" from exile", From::Exile),
         (" from the top of your library", From::LibraryTop),
         (" from your hand", From::Hand),
@@ -547,6 +601,29 @@ fn strip_tails(mut s: &str, p: &mut Perm) -> Option<()> {
             return Some(());
         }
         let mut done = false;
+        // "if you pay {1} more to cast it [for each other creature card in your
+        // graveyard]": a cost increase for spells cast with the permission (CR 601.2f).
+        if let Some((head, more)) = t.rsplit_once(" if you pay {") {
+            let (n, rest) = more.split_once("} more to cast it")?;
+            let n: u32 = n.parse().ok()?;
+            if p.terms.cost_increase > 0 || p.terms.cost_increase_each.is_some() {
+                return None;
+            }
+            match rest.strip_prefix(" for each ") {
+                Some(what) => {
+                    let v = super::statics::parse_for_each(what, None)?;
+                    p.terms.cost_increase_each = Some(if n == 1 {
+                        v
+                    } else {
+                        Value::Mul(Box::new(Value::c(n as i32)), Box::new(v))
+                    });
+                }
+                None if rest.is_empty() => p.terms.cost_increase = n,
+                None => return None,
+            }
+            s = head;
+            continue;
+        }
         // "you may play cards exiled with ~ as long as you attacked this turn": the
         // condition's own "this turn", not the permission's duration.
         let cond_tail = t
@@ -567,6 +644,27 @@ fn strip_tails(mut s: &str, p: &mut Perm) -> Option<()> {
                     return None;
                 }
                 s = r;
+                done = true;
+                break;
+            }
+        }
+        if done {
+            continue;
+        }
+        // "by [cost] rather than paying its mana cost": a required alternative cost
+        // (CR 118.9b).
+        for tail in [
+            " rather than paying its mana cost",
+            " rather than paying their mana costs",
+            " rather than pay its mana cost",
+        ] {
+            if let Some(r) = t.strip_suffix(tail) {
+                let (head, cost) = r.rsplit_once(" by ")?;
+                if p.terms.alt_cost.is_some() || p.free {
+                    return None;
+                }
+                p.terms.alt_cost = Some(gerund_cost(cost)?);
+                s = head;
                 done = true;
                 break;
             }
@@ -685,6 +783,10 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
                 "you may spend mana as though it were mana of any color to cast ",
                 false,
             ),
+            (
+                "they may spend mana as though it were mana of any color to cast ",
+                false,
+            ),
             ("mana of any type can be spent to cast ", true),
             (
                 "you may spend mana as though it were mana of any type to cast ",
@@ -704,6 +806,28 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
             }
         }
     }
+    // "..., and you may spend colorless mana as though it were mana of any color to cast
+    // that spell", "... mana from snow sources ..." (CR 609.4b).
+    for lead in [", and ", " and "] {
+        for (clause, snow) in [
+            ("you may spend colorless mana as though it were mana of any color to cast ", false),
+            (
+                "you may spend mana from snow sources as though it were mana of any color to cast ",
+                true,
+            ),
+        ] {
+            for obj in ["it", "that spell", "those spells", "them", "that card"] {
+                if let Some(r) = s.strip_suffix(&format!("{lead}{clause}{obj}")) {
+                    if snow {
+                        p.terms.snow_as_any_color = true;
+                    } else {
+                        p.terms.spend_type_as_any_color = Some(crate::mana::ManaType::C);
+                    }
+                    return r.to_string();
+                }
+            }
+        }
+    }
     // "..., and you may cast them as though they had flash" (Azula, Cunning Usurper).
     for suffix in [
         " and you may cast them as though they had flash",
@@ -717,6 +841,28 @@ fn strip_spend(s: &str, p: &mut Perm) -> String {
     s.to_string()
 }
 
+/// "play a land from your graveyard or cast a permanent spell ... from your graveyard"
+/// (Serra Paragon): the zone said once, after both ("play a land or cast a permanent
+/// spell ... from your graveyard").
+fn same_zone_twice(s: &str) -> String {
+    for zone in [
+        " from your graveyard",
+        " from the top of your library",
+        " from exile",
+    ] {
+        for (land, or) in [("play a land", " or cast "), ("play lands", " and cast ")] {
+            let first = format!("{land}{zone}{or}");
+            if let Some(rest) = s.strip_prefix(&first) {
+                // The zone again after the spells, and nowhere else.
+                if rest.matches(zone).count() == 1 && !rest.contains(" from among ") {
+                    return format!("{land}{or}{rest}");
+                }
+            }
+        }
+    }
+    s.to_string()
+}
+
 /// Parses a permission phrase (lowercase, without the final period).
 pub fn parse(l: &str) -> Option<Perm> {
     let mut p = Perm::default();
@@ -725,10 +871,16 @@ pub fn parse(l: &str) -> Option<Perm> {
     // paying their mana costs.": an instruction (the player chooses which, if any).
     let (who, s) = match s.strip_prefix("cast any number of ") {
         Some(_) => (Who::You, s.as_str()),
+        // "cast target ... card from that player's graveyard" after "you may" was read.
+        None if s.starts_with("cast target ") => {
+            p.subjectless = true;
+            (Who::You, s.as_str())
+        }
         None => strip_subject(&s)?,
     };
     p.who = who;
     let s = strip_spend(s, &mut p);
+    let s = same_zone_twice(&s);
     let mut r: &str = &s;
     // The verb, and what it takes.
     if let Some(x) = r.strip_prefix("look at and play ") {
@@ -784,7 +936,13 @@ pub fn parse(l: &str) -> Option<Perm> {
         .then(|| crate::oracle::phrases::parse_target(r))
         .flatten()
     {
-        // "cast target instant or sorcery card from your graveyard this turn".
+        // "cast target instant or sorcery card from your graveyard this turn", "cast
+        // target nonland permanent card from that player's graveyard" (the zone is part of
+        // what the target is).
+        let x = x
+            .strip_prefix(" from that player's graveyard")
+            .or_else(|| x.strip_prefix(" from the triggering player's graveyard"))
+            .unwrap_or(x);
         p.obj = Obj::Target {
             phrase: r[..r.len() - x.len()].trim().to_string(),
         };
@@ -864,6 +1022,20 @@ pub fn parse(l: &str) -> Option<Perm> {
         if let Some((z, x)) = strip_from(rest, &mut p) {
             p.from = Some(z);
             rest = x;
+            // "a spell from among them with mana value 3 or less": a quality after the
+            // cards it's among.
+            if z == From::AmongReferent {
+                if let (Some(q), Obj::Class { what, .. }) = (rest.strip_prefix(" with "), &mut p.obj) {
+                    let stop = [" without paying", " this turn", " until ", " for as long as "]
+                        .iter()
+                        .filter_map(|w| q.find(w))
+                        .min()
+                        .unwrap_or(q.len());
+                    let f = object_filter(&format!("card with {}", &q[..stop]))?;
+                    *what = Filter::and(vec![what.clone(), f]);
+                    rest = &q[stop..];
+                }
+            }
             // "from your graveyard or from exile", "from your hand or the top of your
             // library".
             for (w, z2) in [
@@ -881,6 +1053,17 @@ pub fn parse(l: &str) -> Option<Perm> {
         }
     } else if let Some(x) = rest.strip_prefix(" from exile") {
         rest = x;
+    }
+    // "a card from exile with a discovery counter on it": which cards in exile.
+    if p.from == Some(From::Exile) && p.zone_filter.is_none() {
+        if let Some((d, x)) = rest
+            .strip_prefix(" with ")
+            .and_then(|r| r.split_once(" counter on it").or_else(|| r.split_once(" counters on them")))
+        {
+            let f = object_filter(&format!("card with {d} counter on it"))?;
+            p.zone_filter = Some(f);
+            rest = x;
+        }
     }
     // "You may play that card from exile this turn" (the cards are in exile).
     if matches!(p.obj, Obj::Referent { .. }) && p.from.is_none() {
@@ -1036,6 +1219,8 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
     let who = match p.who {
         Who::You => PlayerRef::You,
         Who::OwnerOfIt => PlayerRef::OwnerOf(Box::new(it.clone())),
+        Who::They => p.who_ref.clone()?,
+        Who::CreaturesController => PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
     };
     let mut terms = p.terms_with_condition(ctx)?;
     // "Until your next turn, you may cast sorcery spells as though they had flash."
@@ -1144,10 +1329,13 @@ fn flash_only(p: &Perm, terms: &PlayTerms) -> bool {
 /// its mana cost": a spell cast as the effect resolves (CR 608.2g), chosen among the
 /// cards with those qualities as the spell each would become (CR 601.3e).
 fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Option<Effect> {
-    if p.lands
-        || terms.flash
+    // "You may play a land from the top of your library or cast a spell ... from the top
+    // of your library" (one card, played as the effect resolves).
+    if p.lands && !(single && p.spells && p.from == Some(From::LibraryTop)) {
+        return None;
+    }
+    if terms.flash
         || terms.extra_cost.is_some()
-        || terms.spend_any_type
         || terms.spend_as_any_color
         || terms.condition.is_some()
     {
@@ -1177,27 +1365,93 @@ fn class_cast_now(p: &Perm, what: Filter, single: bool, terms: &PlayTerms) -> Op
             Filter::InZone(ZoneKind::Exile),
             p.zone_filter.clone()?,
         ]),
+        From::LibraryTop => Filter::In(Box::new(Sel::TopOfLibrary(PlayerRef::You, Value::c(1)))),
+        // "a spell from each opponent's graveyard": one from each, in turn (below).
+        From::EachOpponentGraveyard => {
+            if !single || p.lands {
+                return None;
+            }
+            Filter::and(vec![
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::OwnedBy(PlayerRel::Iterated),
+            ])
+        }
+        From::HandGraveyardOwnedExile => Filter::and(vec![
+            Filter::Or(vec![
+                Filter::InZone(ZoneKind::Hand),
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::InZone(ZoneKind::Exile),
+            ]),
+            Filter::OwnedBy(PlayerRel::You),
+        ]),
         _ => return None,
     };
     if p.from != Some(From::Exile) && p.zone_filter.is_some() {
         return None;
     }
-    Some(Effect::CastCard {
-        who: PlayerRef::You,
-        what: Sel::Choose {
-            chooser: PlayerRef::You,
-            filter: Filter::and(vec![zone, what]),
-            count: Value::c(if single {
-                1
-            } else {
-                p.count.unwrap_or(99) as i32
-            }),
-            up_to: true,
-            store: None,
+    let filter = Filter::and(vec![zone, what]);
+    let choose = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: filter.clone(),
+        count: Value::c(if single {
+            1
+        } else {
+            p.count.unwrap_or(99) as i32
+        }),
+        up_to: true,
+        store: None,
+    };
+    let cast = if p.lands {
+        Effect::PlayCard {
+            who: PlayerRef::You,
+            what: choose,
+            free: p.free,
+            optional: false,
+        }
+    } else {
+        Effect::CastCard {
+            who: PlayerRef::You,
+            what: choose,
+            free: p.free,
+            optional: false,
+        }
+    };
+    if terms.alt_cost.is_some() && p.free {
+        return None;
+    }
+    // "by paying {1} rather than paying its mana cost" (CR 118.9).
+    let cast = match &terms.alt_cost {
+        Some(c) => Effect::WithPlayTerms {
+            terms: PlayTerms {
+                alt_cost: Some(c.clone()),
+                ..Default::default()
+            },
+            effect: Box::new(cast),
         },
-        free: p.free,
-        optional: false,
-    })
+        None => cast,
+    };
+    if p.from == Some(From::EachOpponentGraveyard) {
+        if terms.spend_any_type {
+            return None;
+        }
+        return Some(Effect::ForEachPlayer {
+            who: PlayerRef::EachOpponent,
+            effect: Box::new(cast),
+        });
+    }
+    // "..., and mana of any type can be spent to cast that spell" (CR 118.14): for the
+    // cards it may be cast from among.
+    if terms.spend_any_type {
+        return Some(Effect::seq(vec![
+            Effect::SpendAnyTypeMana {
+                who: PlayerRef::You,
+                what: Sel::All(filter),
+                duration: Duration::EndOfTurn,
+            },
+            cast,
+        ]));
+    }
+    Some(cast)
 }
 
 /// The cards a spell is chosen among as the effect resolves ("you may cast a spell from
@@ -1231,6 +1485,10 @@ fn referent_effect(
     match &p.duration {
         // As the effect resolves (CR 608.2g).
         None => {
+            // "You may cast the exiled card without paying its mana cost if it's an
+            // instant spell with mana value 2 or less": only if the spell it would become
+            // has those qualities (CR 601.3e).
+            let spell_quality = terms.what.take();
             if p.look
                 || terms.flash
                 || terms.extra_cost.is_some()
@@ -1238,9 +1496,16 @@ fn referent_effect(
                 || terms.spend_as_any_color
                 || terms.condition.is_some()
                 || p.who != Who::You
+                || (terms.alt_cost.is_some() && p.free)
             {
                 return None;
             }
+            // "You may cast that card by paying {1} rather than paying its mana cost": the
+            // spell is cast for that cost (CR 118.9).
+            let alt = terms.alt_cost.take().map(|c| PlayTerms {
+                alt_cost: Some(c),
+                ..Default::default()
+            });
             let whole = limit.is_none() && quality.is_none();
             // The cards are remembered (for "put the rest ...", once some are cast).
             let among = if whole { it.clone() } else { Sel::Var(AMONG) };
@@ -1251,10 +1516,21 @@ fn referent_effect(
             if let Some(q) = quality {
                 parts.push(q);
             }
-            // "You may cast it": each of them (a land card can't be cast, CR 305.9).
+            // "You may cast it": each of them (a land card can't be cast, CR 305.9); "...
+            // if it's an instant spell": each of them that would be such a spell.
             let what = if whole {
-                it.clone()
+                match &spell_quality {
+                    Some(q) => Sel::All(Filter::and(vec![
+                        Filter::In(Box::new(it.clone())),
+                        Filter::InZone(zone),
+                        q.clone(),
+                    ])),
+                    None => it.clone(),
+                }
             } else {
+                if let Some(q) = spell_quality {
+                    parts.push(q);
+                }
                 Sel::Choose {
                     chooser: PlayerRef::You,
                     filter: Filter::and(parts),
@@ -1278,6 +1554,13 @@ fn referent_effect(
                     free: p.free,
                     optional: !chooses,
                 }
+            };
+            let cast = match alt {
+                Some(terms) => Effect::WithPlayTerms {
+                    terms,
+                    effect: Box::new(cast),
+                },
+                None => cast,
             };
             Some(if whole {
                 cast
@@ -1311,8 +1594,11 @@ fn referent_effect(
             };
             if p.look {
                 // "You may look at and play that card ...": only the player who gets the
-                // permission looks, and only while it's exiled (CR 406.3b).
-                if p.who != Who::You || !matches!(d, Duration::Permanent) {
+                // permission looks, and only while it's exiled (CR 406.3b). ("... this
+                // turn": having looked at it, they know what it is.)
+                if p.who != Who::You
+                    || !matches!(d, Duration::Permanent | Duration::EndOfTurn)
+                {
                     return None;
                 }
                 return Some(Effect::seq(vec![
@@ -1344,8 +1630,25 @@ fn class_permission_from(
         (Some(_), _) => return None,
         (None, _) => what,
     };
+    let mut terms = terms;
     let (zone, top_only, what) = match from {
         From::Graveyard => (ZoneKind::Graveyard, false, what),
+        From::GraveyardTop => (ZoneKind::Graveyard, true, what),
+        From::AnyGraveyard => {
+            terms.any_owner = true;
+            (ZoneKind::Graveyard, false, what)
+        }
+        From::TriggerPlayerGraveyard => {
+            terms.any_owner = true;
+            (
+                ZoneKind::Graveyard,
+                false,
+                Filter::and(vec![
+                    Filter::OwnedByPlayer(Box::new(PlayerRef::TriggerPlayer)),
+                    what,
+                ]),
+            )
+        }
         From::Exile => (ZoneKind::Exile, false, what),
         From::LibraryTop => (ZoneKind::Library, true, what),
         From::Hand => (ZoneKind::Hand, false, what),
@@ -1360,7 +1663,9 @@ fn class_permission_from(
             }
             (ZoneKind::Exile, false, Filter::and(v))
         }
-        From::AmongReferent => return None,
+        From::AmongReferent | From::HandGraveyardOwnedExile | From::EachOpponentGraveyard => {
+            return None
+        }
     };
     // Spells cast from the hand "without paying their mana costs" are offered that cost
     // by `casting.rs`; nothing else changes how they're cast from there.
@@ -1563,9 +1868,20 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     } else {
         (None, l)
     };
-    let Some(p) = parse(rest) else {
+    let Some(mut p) = parse(rest) else {
         return false;
     };
+    if p.who == Who::They {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            || matches!(b.it_player, PlayerRef::You)
+        {
+            return false;
+        }
+        p.who_ref = Some(b.it_player.clone());
+    }
+    if p.who == Who::CreaturesController && !b.in_trigger {
+        return false;
+    }
     let zone = referent_zone(Some(prev), b);
     if !matches!(p.obj, Obj::Referent { .. }) && p.from != Some(From::AmongReferent) {
         return false;
@@ -1754,15 +2070,29 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
                     who: PlayerRef::You,
                     what: sel.clone(),
                     free: p.free,
-                    optional: true,
+                    optional: !p.subjectless,
                 }
             } else {
                 Effect::PlayCard {
                     who: PlayerRef::You,
                     what: sel.clone(),
                     free: p.free,
-                    optional: true,
+                    optional: !p.subjectless,
                 }
+            };
+            if terms.alt_cost.is_some() && p.free {
+                return None;
+            }
+            // "by paying {1} rather than paying its mana cost" (CR 118.9).
+            let cast = match &terms.alt_cost {
+                Some(c) => Effect::WithPlayTerms {
+                    terms: PlayTerms {
+                        alt_cost: Some(c.clone()),
+                        ..Default::default()
+                    },
+                    effect: Box::new(cast),
+                },
+                None => cast,
             };
             // "..., and mana of any type can be spent to cast that spell" (CR 118.14).
             Some(if terms.spend_any_type {
@@ -1804,7 +2134,7 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
 }
 
 /// The terms of the last permission the effect gives, if it ends by giving one.
-fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
+pub(crate) fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
     match e {
         Effect::WithPlayTerms { terms, .. } => Some(terms),
         Effect::AddPlayerEffect {
@@ -1875,6 +2205,19 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             return true;
         }
     }
+    // "you may cast a spell from each opponent's graveyard ...": each spell cast.
+    let prev = match prev {
+        Effect::ForEachPlayer { effect, .. } if ends_casting(effect) => effect.as_mut(),
+        Effect::Seq(v)
+            if matches!(v.last(), Some(Effect::ForEachPlayer { effect, .. }) if ends_casting(effect)) =>
+        {
+            match v.last_mut() {
+                Some(Effect::ForEachPlayer { effect, .. }) => effect.as_mut(),
+                _ => return false,
+            }
+        }
+        other => other,
+    };
     if ends_casting(prev) {
         let mut filter = Filter::In(Box::new(Sel::Var(vars::IT)));
         if let Some(q) = quality {
@@ -1956,20 +2299,51 @@ fn statics(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     }
     // "[permission]. [rider]."
     if let Some((first, second)) = l.split_once(". ") {
+        // "As long as you control a Giant, [permission]. [rider]."
+        let (cond, first) = match first
+            .strip_prefix("if ")
+            .or_else(|| first.strip_prefix("as long as "))
+            .and_then(|r| r.split_once(", "))
+        {
+            Some((c, rest)) => (Some(c), rest),
+            None => (None, first),
+        };
         let mut p = parse(first)?;
+        if let Some(c) = cond {
+            if p.cond_text.is_some() {
+                return None;
+            }
+            p.cond_text = Some(c.to_string());
+        }
         // "If you cast a creature spell this way, it gains haste until end of turn.",
         // "When you cast an Equipment spell this way, ..." (see `played_this_way`).
         let mut extra = None;
-        if !static_rider(second, &mut p) {
-            extra = super::played_this_way::static_rider(second, &mut p.terms, text, ctx)?;
+        let (spells, lands) = (p.spells, p.lands);
+        if !static_rider(second, &mut p)
+            && !super::permission_riders::apply(
+                second,
+                &mut p.terms,
+                spells,
+                lands,
+                &Builder::new(ctx),
+            )
+        {
+            // "When you do, create a Food token." (The Fourth Doctor): when a card is
+            // played with the permission.
+            let second = super::permission_riders::when_you_do(second, spells, lands);
+            extra = super::played_this_way::static_rider(&second, &mut p.terms, text, ctx)?;
         }
         let mut v = to_statics(&p, text, ctx)?;
         v.extend(extra);
         return Some(v);
     }
     // "If you control a creature with power 4 or greater, you may cast ~ as though it had
-    // flash.": a condition on casting it.
-    if let Some(r) = l.strip_prefix("if ") {
+    // flash.", "As long as you control a Giant, you may cast ~ from your graveyard by
+    // paying {U} rather than paying its mana cost.": a condition on casting it.
+    if let Some(r) = l
+        .strip_prefix("if ")
+        .or_else(|| l.strip_prefix("as long as "))
+    {
         let (c, rest) = r.split_once(", ")?;
         let mut p = parse(rest)?;
         if p.cond_text.is_some() {
@@ -2011,18 +2385,38 @@ fn spell_self_permission(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
     }
     let lower = block.to_lowercase();
     let l = end(lower.trim());
-    if l.contains(". ") {
+    // "[permission]. If you cast ~ this way and it would be put into your graveyard, exile
+    // it instead." (a rider, see `permission_riders`).
+    let (l, rider) = match l.split_once(". ") {
+        Some((a, b)) => (a, Some(b)),
+        None => (l, None),
+    };
+    if rider.is_some_and(|r| r.contains(". ")) {
         return None;
     }
     // "If there are two or more instant and/or sorcery cards in your graveyard, you may
-    // cast ~ as though it had flash." (a condition on casting it).
-    let (cond, l) = match l.strip_prefix("if ").and_then(|r| r.split_once(", ")) {
+    // cast ~ as though it had flash.", "As long as you control a Giant, you may cast ~
+    // from your graveyard by paying {U} rather than paying its mana cost." (a condition on
+    // casting it).
+    let (cond, l) = match l
+        .strip_prefix("if ")
+        .or_else(|| l.strip_prefix("as long as "))
+        .and_then(|r| r.split_once(", "))
+    {
         Some((c, rest)) => (Some(c), rest),
         None => (None, l),
     };
     let mut p = parse(l)?;
     if !matches!(p.obj, Obj::SelfCard) {
         return None;
+    }
+    if let Some(r) = rider {
+        let (spells, lands) = (p.spells, p.lands);
+        if !static_rider(r, &mut p)
+            && !super::permission_riders::apply(r, &mut p.terms, spells, lands, &Builder::new(ctx))
+        {
+            return None;
+        }
     }
     if let Some(c) = cond {
         if p.cond_text.is_some() {

@@ -6185,6 +6185,20 @@ impl Renderer<'_> {
                         where_clauses.push(format!(". The {n} cost is equal to its mana cost"));
                     }
                 }
+                Modification::AddKeywordOwnCost(k, reduce) => {
+                    if keywords.is_empty() && abilities.is_empty() {
+                        parts.push(GRANTS.into());
+                    }
+                    let saved = std::mem::replace(&mut self.granted_keyword, true);
+                    keywords.push(self.keyword_lower(&crate::keywords::Keyword::new(k.kind)));
+                    self.granted_keyword = saved;
+                    let n = k.kind.name().to_lowercase();
+                    where_clauses.push(if *reduce == 0 {
+                        format!(". The {n} cost is equal to its mana cost")
+                    } else {
+                        format!(". Its {n} cost is equal to its mana cost reduced by {{{reduce}}}")
+                    });
+                }
                 Modification::AddKeywordX(k, v) => {
                     let s = self.keyword_lower(k);
                     let v = self.value(v);

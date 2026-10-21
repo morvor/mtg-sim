@@ -100,6 +100,45 @@ pub fn assert_rule_exists(id: &str) {
     );
 }
 
+/// Asserts that the Comprehensive Rules contain rule `id` and that one of its worked
+/// examples (the paragraphs starting "Example:" that follow the rule) contains `needle`
+/// (compared after [`normalize_text`]). Returns the full example text. Used by the
+/// `cr_example!` citation macro.
+pub fn assert_rule_example_exists(id: &str, needle: &str) -> String {
+    assert_rule_exists(id);
+    let rules = comprehensive_rules();
+    let rule = rules.get(id).expect("rule exists");
+    let n = normalize_text(needle);
+    assert!(
+        !n.is_empty(),
+        "cr_example! citation of {id:?}: the substring must not be empty"
+    );
+    let hits: Vec<&String> = rule
+        .examples
+        .iter()
+        .filter(|e| normalize_text(e).contains(&n))
+        .collect();
+    match hits.as_slice() {
+        [one] => (*one).clone(),
+        [] => panic!(
+            "cr_example! citation: no example of rule {id:?} contains {needle:?}.\nExamples of {id}:\n{}",
+            if rule.examples.is_empty() {
+                "  (none)".to_string()
+            } else {
+                rule.examples
+                    .iter()
+                    .map(|e| format!("  - {e}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        ),
+        _ => panic!(
+            "cr_example! citation: {needle:?} matches {} examples of rule {id:?}; use a more distinctive substring",
+            hits.len()
+        ),
+    }
+}
+
 /// Asserts that the named card has a Scryfall ruling containing `needle`
 /// (compared after [`normalize_text`]). Returns the full ruling text.
 pub fn assert_ruling_exists(card_name: &str, needle: &str) -> String {
@@ -158,4 +197,39 @@ macro_rules! interp {
     ($($id:literal),+ $(,)?) => {
         $( $crate::interpretations::assert_interpretation_exists($id); )+
     };
+}
+
+/// Cite one worked example of a Comprehensive Rule from a test:
+/// `cr_example!("613.10", "distinctive substring")`. Panics (failing the test) unless the
+/// rule exists and exactly one of its "Example:" paragraphs contains the substring. Like
+/// `ruling!`, it cites by substring so citations survive the CR adding or reordering
+/// examples. It also counts as citing the rule itself (as `cr!` does) in
+/// `mtg-tools cr-coverage`, which reports example coverage (`--examples`).
+#[macro_export]
+macro_rules! cr_example {
+    ($id:literal, $needle:literal $(,)?) => {
+        $crate::assert_rule_example_exists($id, $needle)
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cr_example_citation_matches_one_example() {
+        let text = crate::cr_example!("120.5", "neither lightning bolt nor the damage");
+        assert!(text.starts_with("Example: A player casts Lightning Bolt"));
+        crate::assert_rule_exists("120.5");
+    }
+
+    #[test]
+    #[should_panic(expected = "no example of rule")]
+    fn cr_example_citation_rejects_unknown_substring() {
+        crate::cr_example!("120.5", "no such example text");
+    }
+
+    #[test]
+    #[should_panic(expected = "matches 3 examples")]
+    fn cr_example_citation_rejects_ambiguous_substring() {
+        crate::cr_example!("107.1b", "example:");
+    }
 }

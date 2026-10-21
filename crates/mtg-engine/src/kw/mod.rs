@@ -1329,10 +1329,13 @@ pub fn with_granted_spell_keywords(
             if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
                 continue;
             }
-            let granted: Vec<&Keyword> = mods
+            let granted: Vec<Keyword> = mods
                 .iter()
                 .filter_map(|m| match m {
-                    Modification::AddKeyword(k) => Some(k),
+                    Modification::AddKeyword(k) => Some(k.clone()),
+                    Modification::AddKeywordOwnCost(k, reduce) => {
+                        Some(crate::layers::own_cost_keyword(k, *reduce, chars))
+                    }
                     _ => None,
                 })
                 .collect();

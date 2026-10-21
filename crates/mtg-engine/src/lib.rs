@@ -177,4 +177,4 @@ pub use types::{Entity, ObjectId, PlayerId};
 
 /// Re-export of the data crate (CR, Scryfall) and its citation macros.
 pub use mtg_data;
-pub use mtg_data::{cr, interp, ruling};
+pub use mtg_data::{cr, cr_example, interp, ruling};

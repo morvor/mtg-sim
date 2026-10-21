@@ -72,6 +72,7 @@ fn a_group_has_different_names_only_if_each_has_a_name() {
     // CR 201.2b and its example: three Demons with different names and a face-down
     // creature made a Demon aren't four Demons with different names.
     cr!("201.2b");
+    cr_example!("201.2b", "Liliana's Contract");
     ruling!(
         "Liliana's Contract",
         "If you don’t control four Demons with different names as your upkeep begins"

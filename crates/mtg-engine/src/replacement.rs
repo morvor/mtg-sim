@@ -1574,8 +1574,19 @@ impl Game {
             ) => {
                 // "Damage that would reduce your life total to less than N reduces it to N
                 // instead": a player with less than N life loses life normally.
+                // The life the player gains as part of the same damage event counts
+                // (CR 120.4d): [lose 5, gain 5] doesn't reduce 2 life to less than 1.
                 let floor = self.eval_value(&v, &ctx) as i32;
-                let life = self.player(player).life;
+                let gains: i32 = if from_damage {
+                    self.damage_event_gains
+                        .iter()
+                        .filter(|(p, _)| *p == player)
+                        .map(|(_, n)| *n as i32)
+                        .sum()
+                } else {
+                    0
+                };
+                let life = self.player(player).life + gains;
                 let amount = if life >= floor && life - (amount as i32) < floor {
                     (life - floor) as u32
                 } else {

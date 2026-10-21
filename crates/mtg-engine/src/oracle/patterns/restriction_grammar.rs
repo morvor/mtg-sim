@@ -693,7 +693,7 @@ fn spells_subject(s: &str) -> Option<Filter> {
 }
 
 /// A static ability a spell has: "This spell can't be countered".
-fn cant_be_countered_ability() -> Ability {
+pub(crate) fn cant_be_countered_ability() -> Ability {
     let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(
         Filter::Source,
     )));
