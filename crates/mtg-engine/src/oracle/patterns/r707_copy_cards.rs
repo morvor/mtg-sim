@@ -63,9 +63,16 @@ fn p_cast_the_copy(l: &str, _b: &mut Builder) -> Option<Effect> {
         Some(r) => (true, r),
         None => (false, l),
     };
+    // "You may cast any number of the copies [without paying their mana costs]": each of
+    // them, if you choose.
+    let (optional, r) = match r.strip_prefix("cast any number of the copies") {
+        Some(x) => (true, format!("cast the copies{x}")),
+        None => (optional, r.to_string()),
+    };
+    let r = r.as_str();
     let r = r
-        .strip_prefix("cast the copy")
-        .or_else(|| r.strip_prefix("cast the copies"))?;
+        .strip_prefix("cast the copies")
+        .or_else(|| r.strip_prefix("cast the copy"))?;
     // "Cast the copies if able without paying their mana costs." (Spelltwine): they
     // must be cast if they can be.
     let (r, if_able) = match r.trim().strip_prefix("if able") {

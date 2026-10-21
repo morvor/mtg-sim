@@ -227,9 +227,15 @@ fn role_token(l: &str, b: &mut Builder) -> Option<Effect> {
     if !spec.subtypes.iter().any(|s| s.as_str() == "Role") {
         return None;
     }
+    // "that Rat" after "for each Rat you control": the object the iteration is at.
+    let that_noun = rest
+        .strip_prefix("that ")
+        .filter(|r| matches!(b.it, Sel::Var(_)) && !r.trim().contains(' '))
+        .map(|_| "");
     let (to, tail) = if let Some(rest) = ["it", "that creature", "that permanent"]
         .iter()
         .find_map(|p| rest.strip_prefix(p))
+        .or(that_noun)
     {
         (b.it.clone(), rest)
     } else if let Some(rest) = rest.strip_prefix('~') {

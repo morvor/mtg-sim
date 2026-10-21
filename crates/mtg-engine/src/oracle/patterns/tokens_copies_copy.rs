@@ -56,7 +56,13 @@ fn exception_clauses(masked: &str) -> Vec<String> {
         .replace(" and is a ", "|it's a ")
         .replace(" and is an ", "|it's an ")
         // "except it's 0/0 and has this ability" (Mimeoplasm, Revered One).
-        .replace(" and has this ability", "|it has this ability");
+        .replace(" and has this ability", "|it has this ability")
+        // "except it's 1/1 and has toxic 1" (Kinzu of the Bleak Coven).
+        .replace(" and has ", "|it has ")
+        // "except it has haste and loses soulbond" (Mirage Phalanx).
+        .replace(" and loses all other card types", "\u{1}")
+        .replace(" and loses ", "|it loses ")
+        .replace('\u{1}', " and loses all other card types");
     for subj in SUBJECTS {
         for sep in [", and ", " and ", ", "] {
             s = s.replace(&format!("{sep}{subj}"), &format!("|{subj}"));
@@ -175,7 +181,8 @@ fn added_colors_and_types(s: &str) -> Option<Vec<Modification>> {
                 colors.insert(c);
                 false
             }
-            None => true,
+            // "a legendary blue and black Zombie" (Olag, Ludevic's Hubris).
+            None => *w != "and",
         })
         .collect();
     if colors.is_colorless() {
@@ -303,8 +310,122 @@ pub(crate) fn copy_exceptions(
     ctx: &CompileContext,
 ) -> Option<Vec<Modification>> {
     let mut out = Vec::new();
+    // "except it's a Vehicle artifact with crew 3 and it loses all other card types"
+    // (Imposter Mech): only those types (CR 205.1a; its other subtypes go too).
+    let (masked, loses_other) = match masked.strip_suffix(" and it loses all other card types") {
+        Some(m) => (m, true),
+        None => (masked, false),
+    };
     for c in exception_clauses(masked) {
         let c = c.as_str();
+        if loses_other {
+            let r = c
+                .strip_prefix("it's a ")
+                .or_else(|| c.strip_prefix("it's an "))?;
+            let (types, with) = match r.split_once(" with ") {
+                Some((t, w)) => (t, Some(w)),
+                None => (r, None),
+            };
+            let mut card_types = Vec::new();
+            let mut subtypes = Vec::new();
+            for w in types.split_whitespace() {
+                match CardType::from_word(w) {
+                    Some(t) => card_types.push(t),
+                    None if card_types.is_empty() => subtypes.push(subtype_word(w)?),
+                    None => return None,
+                }
+            }
+            if card_types.is_empty() {
+                return None;
+            }
+            out.push(Modification::SetTypes {
+                types: card_types,
+                subtypes,
+            });
+            if let Some(w) = with {
+                out.extend(with_abilities(w, quotes, ctx)?);
+            }
+            continue;
+        }
+        // "it has ~'s other abilities" (Sakashima of a Thousand Faces): the abilities
+        // printed on this card besides the one creating the copy effect (CR 707.9b).
+        if c == "it has ~'s other abilities" {
+            let raw = crate::oracle::raw_text();
+            let name = ctx.card_name;
+            let mut any = false;
+            for line in raw.lines() {
+                if line.to_lowercase().contains("enter as a copy") || line.trim().is_empty() {
+                    continue;
+                }
+                let block = crate::oracle::normalize(line, ctx);
+                let _ = name;
+                for a in crate::oracle::parse_ability(&block, ctx)? {
+                    match &a.kind {
+                        AbilityKind::Unsupported(_) => return None,
+                        AbilityKind::Keyword(k) => out.push(Modification::AddKeyword(k.clone())),
+                        _ => out.push(Modification::AddAbility(a)),
+                    }
+                    any = true;
+                }
+            }
+            if !any {
+                return None;
+            }
+            continue;
+        }
+        // "it loses soulbond" (Mirage Phalanx): the copy doesn't have that keyword.
+        if let Some(kw) = c.strip_prefix("it loses ") {
+            let mods = crate::oracle::effects::keyword_mods(kw)?;
+            for m in mods {
+                let Modification::AddKeyword(k) = m else {
+                    return None;
+                };
+                out.push(Modification::RemoveKeyword(k.kind));
+            }
+            continue;
+        }
+        // "its starting loyalty is 1" (Jace, Mirror Mage; CR 306.5b, 707.9b).
+        if let Some(n) = c.strip_prefix("its starting loyalty is ") {
+            out.push(crate::kw::copy_exception_mods::starting_loyalty(
+                n.trim().parse().ok()?,
+            ));
+            continue;
+        }
+        // "it's a legendary Alien named Prisoner Zero" (The Eleventh Hour): its name, and
+        // these subtypes instead of its others (its card types stay).
+        if let Some((types, name)) = c
+            .strip_prefix("it's a ")
+            .or_else(|| c.strip_prefix("it's an "))
+            .and_then(|r| r.split_once(" named "))
+        {
+            let mut supertypes = Vec::new();
+            let mut subtypes = Vec::new();
+            for w in types.split_whitespace() {
+                match Supertype::from_word(w) {
+                    Some(st) if subtypes.is_empty() => supertypes.push(st),
+                    Some(_) => return None,
+                    None => subtypes.push(subtype_word(w)?),
+                }
+            }
+            if subtypes.is_empty() || name.contains('~') || name.split(' ').count() > 4 {
+                return None;
+            }
+            if !supertypes.is_empty() {
+                out.push(Modification::AddSupertypes(supertypes));
+            }
+            out.push(crate::kw::copy_exception_mods::only_subtypes(&subtypes)?);
+            let raw = crate::oracle::raw_text();
+            let rl = raw.to_lowercase();
+            let needle = format!("named {name}");
+            let i = rl.find(&needle)? + "named ".len();
+            if rl.len() != raw.len() {
+                return None;
+            }
+            out.push(Modification::SetName(SmolStr::new(
+                raw.get(i..i + name.len())?,
+            )));
+            continue;
+        }
         if matches!(
             c,
             "it isn't legendary"
@@ -328,8 +449,8 @@ pub(crate) fn copy_exceptions(
             "she has ",
             "he has ",
         ]
-            .iter()
-            .find_map(|p| c.strip_prefix(p))
+        .iter()
+        .find_map(|p| c.strip_prefix(p))
         {
             // "it has this ability", "it has flying and this ability" (CR 707.9a): the
             // ability creating the copy effect.
@@ -427,11 +548,17 @@ pub(crate) fn copy_exceptions(
                 .and_then(only_card_types)
             {
                 // "except it's an enchantment and loses all other card types" (Myrkul).
-                out.push(Modification::SetTypes { types, subtypes: vec![] });
+                out.push(Modification::SetTypes {
+                    types,
+                    subtypes: vec![],
+                });
             } else if let Some(types) = only_card_types(r) {
                 // "except it's an artifact" (Machine God's Effigy): its only card types
                 // are these (CR 205.1a).
-                out.push(Modification::SetTypes { types, subtypes: vec![] });
+                out.push(Modification::SetTypes {
+                    types,
+                    subtypes: vec![],
+                });
             } else if let Some(colors) = only_colors(r) {
                 // "except the token is black" (Penumbra Umbra).
                 out.push(Modification::SetColors(colors));
@@ -594,9 +721,7 @@ pub(crate) fn copied_object(r: &str, b: &mut Builder) -> Option<(Sel, String)> {
         if let Some(rest) = r.strip_prefix("the exiled card") {
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
                 let of = match exiled_by() {
-                    ExiledBy::LinkedAbility => {
-                        super::imprint::exiled_card_ref("the exiled card")?
-                    }
+                    ExiledBy::LinkedAbility => super::imprint::exiled_card_ref("the exiled card")?,
                     // Exile records the cards it exiled as "it".
                     ExiledBy::ThisAbility => Sel::Var(vars::IT),
                     ExiledBy::Unclear => return None,
@@ -637,7 +762,10 @@ pub(crate) fn exiled_with_source(r: &str, b: &mut Builder) -> Option<(Sel, Strin
     let (targeted, x) = if let Some(x) = r.strip_prefix("target ") {
         (true, x)
     } else {
-        (false, r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?)
+        (
+            false,
+            r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?,
+        )
     };
     let (i, len) = [" exiled with ~", " exiled with it"]
         .iter()
@@ -774,12 +902,52 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
     if !end(&tail).is_empty() {
         return None;
     }
+    // "except it enters with an additional +1/+1 counter on it" (Littjara Mirrorlake):
+    // the token enters with those counters (CR 122.6, 707.9e).
+    let mut enters_with: Vec<(crate::types::CounterKind, Value)> = Vec::new();
+    let exc_part = match exc_part {
+        Some(e) => {
+            let (rest, counters) = match e.rsplit_once("it enters with ") {
+                Some((before, c)) if before.is_empty() || before.ends_with(" and ") => (
+                    before.trim_end_matches(" and ").to_string(),
+                    Some(c.to_string()),
+                ),
+                _ => (e.clone(), None),
+            };
+            if let Some(c) = counters {
+                let c = c
+                    .strip_prefix("an additional ")
+                    .map_or(c.clone(), |x| format!("a {x}"));
+                let c = c.replacen(" additional ", " ", 1);
+                let (n, r) = parse_number(&c)?;
+                let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+                let r = r.trim_start();
+                let r = r
+                    .strip_prefix("counters")
+                    .or_else(|| r.strip_prefix("counter"))?;
+                if r.trim() != "on it" {
+                    return None;
+                }
+                enters_with.push((kind, n));
+            }
+            (!rest.is_empty()).then_some(rest)
+        }
+        None => None,
+    };
     let mods = match exc_part {
         Some(e) if half_pt(&e).is_some() => {
             let up = half_pt(&e)?;
             vec![Modification::SetPT(
-                Some(Value::Div(Box::new(Value::PowerOf(Box::new(of.clone()))), 2, up)),
-                Some(Value::Div(Box::new(Value::ToughnessOf(Box::new(of.clone()))), 2, up)),
+                Some(Value::Div(
+                    Box::new(Value::PowerOf(Box::new(of.clone()))),
+                    2,
+                    up,
+                )),
+                Some(Value::Div(
+                    Box::new(Value::ToughnessOf(Box::new(of.clone()))),
+                    2,
+                    up,
+                )),
             )]
         }
         Some(e) => copy_exceptions(&e, &quotes, b.ctx)?,
@@ -790,13 +958,21 @@ pub(crate) fn token_copy_with_exceptions(l: &str, b: &mut Builder) -> Option<Eff
             vec![]
         }
     };
-    Some(Effect::CreateTokenCopy {
+    let e = Effect::CreateTokenCopy {
         of,
         count,
         controller: PlayerRef::You,
         tapped,
         attacking,
         mods,
+    };
+    Some(if enters_with.is_empty() {
+        e
+    } else {
+        Effect::TokensEnterWithCounters {
+            counters: enters_with,
+            effect: Box::new(e),
+        }
     })
 }
 
