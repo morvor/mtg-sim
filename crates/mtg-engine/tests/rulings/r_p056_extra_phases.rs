@@ -426,3 +426,61 @@ fn natures_will_triggers_once_per_combat_damage_step() {
     t.resolve_all();
     assert!(!tapped(&t, mine));
 }
+
+#[test]
+fn combat_celebrant_untaps_all_other_creatures_and_adds_a_combat_without_a_main_phase() {
+    cr!("701.43a", "500.8", "506.1");
+    ruling!(
+        "Combat Celebrant",
+        "Combat Celebrant's ability untaps all of your creatures, not just the ones that are attacking."
+    );
+    ruling!(
+        "Combat Celebrant",
+        "There's no main phase between your combat phases"
+    );
+    supported("Combat Celebrant");
+    let mut t = TestGame::new(2);
+    let celebrant = t.battlefield(P0, "Combat Celebrant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let idle = t.battlefield(P0, "Hill Giant");
+    tap(&mut t, idle);
+    // With vigilance, it could attack again in the additional combat, but it has been
+    // exerted this turn: it can't be exerted again (no third combat).
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        celebrant,
+        vec![mtg_engine::ability::Modification::AddKeyword(
+            KeywordKind::Vigilance.into(),
+        )],
+    );
+    t.answer_yes(P0, true);
+    attack_with(
+        &mut t,
+        &[(celebrant, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert!(t.obj_now(celebrant).exerted);
+    assert!(!tapped(&t, bears) && !tapped(&t, idle));
+    assert!(t.g.is_attacking(bears));
+    let from = t.asked().len();
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(celebrant, Entity::Player(P1))]),
+    );
+    t.answer_yes(P0, true);
+    let steps = steps_of_this_turn(&mut t);
+    let after = after_first_combat(&steps);
+    assert_eq!(after[1], Step::BeginningOfCombat, "{steps:?}");
+    assert_eq!(count(&steps, Step::EndOfCombat), 2, "{steps:?}");
+    assert_eq!(count(&steps, Step::PostcombatMain), 1);
+    let exert_questions = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| {
+            matches!(d, mtg_engine::decision::Decision::YesNo { prompt, .. } if prompt.contains("Exert"))
+        })
+        .count();
+    assert_eq!(exert_questions, 0);
+    // 4 + 2 in the first combat, 4 in the second.
+    assert_eq!(t.life(P1), 10);
+}
