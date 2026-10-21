@@ -844,3 +844,29 @@ fn token_copy_attacking_that_player(l: &str, b: &mut Builder) -> Option<Effect> 
 }
 
 inventory::submit! { super::EffectPattern { name: "token replacements 2: token copy tapped and attacking that player", priority: 85, parse: token_copy_attacking_that_player } }
+
+/// "If the token isn't a creature, it becomes a 2/2 Robot Villain creature in addition to
+/// its other types." (Ultron, Artificial Malevolence): "the token" (and "it") is the token
+/// just created.
+fn if_the_token(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("if the token ") else {
+        return false;
+    };
+    if super::tokens_copies_create::last_create(prev).is_none() {
+        return false;
+    }
+    let saved = (b.it.clone(), b.targets.len());
+    b.it = Sel::Var(vars::CREATED);
+    let e = crate::oracle::effects::parse_sentence(&format!("if it {r}"), b);
+    if e.is_none() || b.targets.len() != saved.1 {
+        b.targets.truncate(saved.1);
+        b.it = saved.0;
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e.expect("checked")]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "token replacements 2: if the token ...", priority: 45, apply: if_the_token } }

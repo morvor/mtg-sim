@@ -266,3 +266,43 @@ fn mardu_siegebreaker_attacks_each_opponent_with_copies_of_the_exiled_card() {
     t.resolve_all();
     assert!(token_named(&t, "Hill Giant").is_empty());
 }
+
+#[test]
+fn orvar_copies_one_of_the_targeted_permanents_you_control() {
+    cr!("115.9b", "603.4", "707.2");
+    supported("Orvar, the All-Form");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Orvar, the All-Form");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Forest", 1);
+    let g = t.hand(P0, "Giant Growth");
+    t.cast(P0, g).target(giant).go();
+    t.resolve_all();
+    assert_eq!(token_named(&t, "Hill Giant").len(), 1);
+    // Targeting an opponent's creature: no copy.
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 1);
+    let g = t.hand(P0, "Giant Growth");
+    t.cast(P0, g).target(theirs).go();
+    t.resolve_all();
+    assert!(token_named(&t, "Grizzly Bears").is_empty());
+    assert_eq!(token_named(&t, "Hill Giant").len(), 1);
+}
+
+#[test]
+fn ultron_token_copy_of_a_noncreature_artifact_becomes_a_2_2_robot() {
+    cr!("707.2", "205.1b");
+    supported("Ultron, Artificial Malevolence");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ultron, Artificial Malevolence");
+    t.lands(P0, "Wastes", 2);
+    t.answer_yes(P0, true);
+    t.enter(P0, "Sol Ring");
+    t.resolve_all();
+    let toks = token_named(&t, "Sol Ring");
+    assert_eq!(toks.len(), 1);
+    let c = &t.obj_now(toks[0]).chars;
+    assert!(c.is(CardType::Creature) && c.is(CardType::Artifact));
+    assert!(c.has_subtype("Robot"));
+    assert_eq!(t.pt(toks[0]), (2, 2));
+}

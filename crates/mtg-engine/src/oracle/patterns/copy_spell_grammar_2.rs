@@ -116,11 +116,63 @@ inventory::submit! { ConditionPattern { name: "copy spell grammar 2: it has a si
 /// "if it has a single target" as an intervening "if" clause of an ability that triggers
 /// on a spell: that spell (`b.it`).
 pub(crate) fn it_has_a_single_target(c: &str, b: &Builder) -> Option<Condition> {
-    if !matches!(b.it, Sel::TriggerSpell) || end(c) != "it has a single target" {
+    if !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    if let Some(f) = targets_one_or_more(c) {
+        return Some(Condition::SelMatches(
+            Sel::TriggerSpell,
+            Filter::StackTargets(Box::new(TargetsFilter::Targets {
+                objects: Some(f),
+                players: None,
+            })),
+        ));
+    }
+    if end(c) != "it has a single target" {
         return None;
     }
     has_a_single_target(c)
 }
+
+/// "it targets one or more other permanents you control" → the permanents' filter.
+fn targets_one_or_more(c: &str) -> Option<Filter> {
+    let r = end(c).strip_prefix("it targets one or more ")?;
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    (plural && end(tail).is_empty()).then(|| Filter::and(vec![f, Filter::Permanent]))
+}
+
+/// "create a token that's a copy of one of those permanents" after "if it targets one or
+/// more other permanents you control" (Orvar, the All-Form): one of the spell's targets
+/// of that kind, chosen as the ability resolves.
+fn copy_of_one_of_those_targets(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    if end(l) != "create a token that's a copy of one of those permanents" {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let i = raw.find("if it targets one or more ")?;
+    let tail = &raw[i + "if ".len()..];
+    let cond = tail.split(", ").next()?;
+    let f = targets_one_or_more(cond)?;
+    Some(Effect::CreateTokenCopy {
+        of: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![f, Filter::TargetOf(Box::new(Sel::TriggerSpell))]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        count: Value::c(1),
+        controller: PlayerRef::You,
+        tapped: false,
+        attacking: false,
+        mods: vec![],
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar 2: a token copy of one of those targeted permanents", priority: 80, parse: copy_of_one_of_those_targets } }
 
 /// "change the target to enchanted creature if able" in an ability that triggers on a
 /// spell (Captured by the Consulate): the spell's target becomes that creature, if it's a
