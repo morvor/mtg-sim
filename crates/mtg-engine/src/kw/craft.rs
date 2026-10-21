@@ -70,6 +70,13 @@ pub fn used_to_craft(g: &Game, permanent: Option<ObjectId>, id: ObjectId) -> boo
         && o.kind == ObjKind::Card
 }
 
+/// Whether `a` is a craft ability (CR 702.167a).
+pub fn is_craft_ability(a: &Ability) -> bool {
+    matches!(&a.kind, AbilityKind::Activated(act) if act.cost.parts.iter().any(|c| {
+        matches!(c, CostPart::Effect(e) if matches!(&**e, Effect::Custom(n) if n.starts_with(EXILE_MATERIALS)))
+    }))
+}
+
 /// The link under which a crafted permanent (and, until it returns, the permanent being
 /// crafted) keeps the exiled cards used to craft it.
 pub const CRAFT_LINK: u16 = 0x3fa7;

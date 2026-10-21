@@ -966,6 +966,7 @@ fn subst_x(v: Value, x: &Value) -> Value {
         Value::X => x.clone(),
         Value::Diff(a, b) => Value::Diff(Box::new(subst_x(*a, x)), Box::new(subst_x(*b, x))),
         Value::Mul(a, b) => Value::Mul(Box::new(subst_x(*a, x)), Box::new(subst_x(*b, x))),
+        Value::DivBy(a, b) => Value::DivBy(Box::new(subst_x(*a, x)), Box::new(subst_x(*b, x))),
         Value::Sum(v) => Value::Sum(v.into_iter().map(|y| subst_x(y, x)).collect()),
         other => other,
     }
@@ -974,7 +975,9 @@ fn subst_x(v: Value, x: &Value) -> Value {
 fn mentions_x(v: &Value) -> bool {
     match v {
         Value::X => true,
-        Value::Diff(a, b) | Value::Mul(a, b) => mentions_x(a) || mentions_x(b),
+        Value::Diff(a, b) | Value::Mul(a, b) | Value::DivBy(a, b) => {
+            mentions_x(a) || mentions_x(b)
+        }
         Value::Sum(v) => v.iter().any(mentions_x),
         _ => false,
     }

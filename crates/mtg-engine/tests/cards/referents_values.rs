@@ -363,9 +363,46 @@ fn oath_of_lim_dul_sacrifices_a_permanent_for_each_life_lost() {
     assert_eq!(left, 1);
 }
 
+/// The discard offers ("... unless you discard a card") P0 was asked about.
+fn discard_offers(t: &TestGame) -> usize {
+    t.asked()
+        .iter()
+        .filter(|(p, d)| {
+            *p == P0
+                && matches!(d, mtg_engine::decision::Decision::YesNo { prompt, .. }
+                    if prompt.contains("Discard"))
+        })
+        .count()
+}
+
 #[test]
 fn oath_of_lim_dul_offers_the_discard_for_each_life_lost() {
-    cr!("119.3", "608.2c");
+    cr!("119.3", "608.2c", "118.12a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Lim-Dûl");
+    let forest = t.battlefield(P0, "Forest");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.hand(P0, "Island");
+    let swamp = t.hand(P0, "Swamp");
+    // Two life lost: two separate offers. For the first, P0 discards (choosing the
+    // Swamp); for the second, P0 declines and sacrifices the Forest.
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(swamp)]);
+    t.answer_yes(P0, false);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.g.lose_life(P0, 2);
+    t.resolve_all();
+    assert_eq!(discard_offers(&t), 2, "one offer for each 1 life lost");
+    assert!(t.in_graveyard(P0, "Swamp"), "the card P0 chose was discarded");
+    assert!(t.in_hand(P0, "Island"));
+    assert!(!t.on_battlefield(forest), "declining: the permanent P0 chose");
+    assert!(t.on_battlefield(bears) && t.on_battlefield(elves));
+}
+
+#[test]
+fn oath_of_lim_dul_without_a_card_to_discard_the_permanent_is_sacrificed() {
+    cr!("119.3", "608.2c", "118.12a");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Oath of Lim-Dûl");
     let perms = [
@@ -374,15 +411,17 @@ fn oath_of_lim_dul_offers_the_discard_for_each_life_lost() {
         t.battlefield(P0, "Llanowar Elves"),
     ];
     t.hand(P0, "Island");
-    // Two life: the one card in hand is discarded for the first, a permanent is sacrificed
-    // for the second.
+    // Two life: the one card in hand is discarded for the first; for the second there's
+    // nothing left to discard, so a permanent is sacrificed even though P0 would discard.
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
     t.g.lose_life(P0, 2);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), 0);
+    assert!(t.in_graveyard(P0, "Island"));
     let left = perms.iter().filter(|id| t.on_battlefield(**id)).count();
     assert_eq!(left, 2);
+    assert!(discard_offers(&t) >= 1);
 }
 
 #[test]

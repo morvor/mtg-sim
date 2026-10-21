@@ -610,7 +610,11 @@ impl Game {
             Entity::Player(p) => self.player(p).in_game() && defending.contains(&p),
             Entity::Object(o) => {
                 let ob = self.obj(o);
-                if !self.is_live(o) || ob.zone != Zone::Battlefield || ob.phased_out {
+                if !self.is_live(o)
+                    || ob.zone != Zone::Battlefield
+                    || ob.phased_out
+                    || crate::kw::cant_be_attacked(self, o)
+                {
                     return false;
                 }
                 (ob.is(CardType::Planeswalker) && defending.contains(&ob.controller))
@@ -706,6 +710,9 @@ pub fn attack_targets(g: &Game) -> Vec<Entity> {
         }
         out.push(Entity::Player(*p));
         for o in g.permanents() {
+            if crate::kw::cant_be_attacked(g, o.id) {
+                continue;
+            }
             if o.is(CardType::Planeswalker) && o.controller == *p {
                 out.push(Entity::Object(o.id));
             }
@@ -1195,7 +1202,9 @@ fn perform_attack_declaration(
     let bands = announce_bands(g, ap, &declared);
     // CR 508.1f: tap attackers (vigilance: 702.20b).
     for (a, _) in &declared {
-        if !g.obj(*a).has_keyword(KeywordKind::Vigilance) {
+        if !g.obj(*a).has_keyword(KeywordKind::Vigilance)
+            && !crate::kw::attacks_without_tapping(g, *a)
+        {
             g.tap_with(*a, false, Some(ap), true);
         }
     }
@@ -1899,6 +1908,11 @@ pub fn declare_blockers_step(g: &mut Game) {
         // "You choose which creatures block this combat and how those creatures block."
         let chosen_by = crate::block_choice::block_decider(g, &group);
         let decider = chosen_by.unwrap_or(decider);
+        // "Instead of declaring blockers, ..." (see `kw::blocks_instead`).
+        if let Some(blocks) = crate::kw::blocks_instead(g, &group) {
+            all_blocks.extend(blocks);
+            continue;
+        }
         let options = block_options(g, &group);
         if options.is_empty() {
             continue;

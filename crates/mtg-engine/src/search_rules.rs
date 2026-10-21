@@ -272,6 +272,9 @@ fn search_one(
         zones.retain(|z| *z != ZoneKind::Library);
     }
     let library_searched = zones.contains(&ZoneKind::Library);
+    if library_searched && p == owner {
+        crate::kw::searching_library(g, p);
+    }
     let mut cands: Vec<ObjectId> = Vec::new();
     for z in &zones {
         match z {

@@ -61,7 +61,12 @@ inventory::submit! { KeywordActionRegistration(&Bolster) }
 
 /// Adapt N for `obj` (CR 701.46a). Returns true if it got counters.
 pub fn adapt(g: &mut Game, obj: ObjectId, n: u32, source: Option<ObjectId>) -> bool {
-    if !on_battlefield(g, obj) || g.obj(obj).counter(counters::PLUS1) > 0 {
+    if !on_battlefield(g, obj) {
+        return false;
+    }
+    // "It adapts as though it had no +1/+1 counters on it."
+    let ignoring = crate::kw::adapts_ignoring_counters(g, obj);
+    if !ignoring && g.obj(obj).counter(counters::PLUS1) > 0 {
         return false;
     }
     g.add_counters(Entity::Object(obj), counters::PLUS1, n, source) > 0

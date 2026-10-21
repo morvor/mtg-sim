@@ -102,6 +102,9 @@ pub struct EntryMods {
     pub on_entry: Vec<Effect>,
     /// Modifications to its copiable values ([`Effect::EnterAs`], CR 707.2).
     pub copiable: Vec<Modification>,
+    /// It enters as a copy of this object (CR 707.9), chosen by the effect.
+    #[serde(default)]
+    pub copy_of: Option<ObjectId>,
 }
 
 impl Ctx {
@@ -1682,6 +1685,14 @@ impl Game {
                     (n + d - 1).div_euclid(d)
                 } else {
                     n.div_euclid(d)
+                }
+            }
+            Value::DivBy(a, d) => {
+                let d = self.eval_value(d, ctx);
+                if d <= 0 {
+                    0
+                } else {
+                    self.eval_value(a, ctx).div_euclid(d)
                 }
             }
             Value::Min(a, b) => self.eval_value(a, ctx).min(self.eval_value(b, ctx)),

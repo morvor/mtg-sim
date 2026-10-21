@@ -27,3 +27,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: spells and abilities with target- or choice-dependent cost changes (Roadside Blowout, Depower, ...).
 - Code: `crates/mtg-engine/src/spell_costs.rs` (`own_change_applies`, `assume_targets`); `crates/mtg-engine/src/activation_costs.rs`; `crates/mtg-api/src/legal.rs`.
 - Tests: `tests/cr/interp_engine_policies.rs` (`a_spell_whose_reduction_depends_on_its_targets_is_listed_as_castable`).
+
+## rider-order: Instructions replacement effects leave for after their events run in the order the effects were applied
+- Kind: interpretation
+- Status: decided
+- Rules: 614.6 "If an event is replaced, it never happens. A modified event occurs instead, which may in turn trigger abilities. ..." / 616.1f "Once the chosen effect has been applied, this process is repeated (taking into account only replacement or prevention effects that would now be applicable) until there are no more left to apply." / 701.19a "... “Regenerate [permanent]” means “The next time [permanent] would be destroyed this turn, instead remove all damage marked on it and its controller taps it. ...”" / 603.12 "A resolving spell or ability may allow or instruct a player to take an action and create a triggered ability that triggers “when [a player] [does or doesn’t]” take that action ..."
+- Question: When one event (Day of Judgment destroying several regenerating creatures, a board wipe with Head of the Hunt out) leaves several riders at once ("When it regenerates this way, ...", "... exile it instead. When you do, ...", "and also ..."), in which order do they happen? The rules are silent; the ones that are triggered abilities are then ordered by their controller (603.3b), but the order they're offered in decides the default and the order of non-triggered riders.
+- Decision: In the order the replacement effects were applied: for simultaneous events, the order the engine replaces them in (objects in battlefield order); for one event, in the order the effects were chosen (616.1f), an effect's own nested riders innermost first. Riders queued while a rider runs happen before the remaining ones.
+- Alternatives: The reverse order (what a stack of pending riders gave); grouping by controller or source.
+- Why: It follows the order the modified events themselves happened in, and with the default trigger order (`default-order-as-listed`) it keeps the earliest rider at the bottom of the stack like any triggers detected in that order.
+- Affects: regeneration riders (Matopi Golem, Skeleton Scavengers, Soldevi Sentry), "When you do" replacement riders (Head of the Hunt, Nemata, Valentin), "and also" replacements, prevention follow-ups queued after damage.
+- Code: `crates/mtg-engine/src/actions.rs` (`run_post_replacement_effects`); `crates/mtg-engine/src/replacement.rs` (queuing `ReplacementAction::Then` riders and regeneration riders).
+- Tests: `tests/cards/rider_order.rs`.

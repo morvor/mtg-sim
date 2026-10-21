@@ -5,6 +5,20 @@ use crate::game::Game;
 use crate::object::*;
 use crate::types::*;
 
+/// The additional copies of `spell` that `controller` makes as an effect has them copy it
+/// one or more times ("If you would copy a spell one or more times, instead copy it that
+/// many times plus an additional time. You may choose new targets for the additional
+/// copy."): each is put onto the stack with new targets allowed. None for an ability.
+pub fn additional_copies(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Vec<ObjectId> {
+    if g.obj(spell).kind == ObjKind::StackAbility {
+        return vec![];
+    }
+    let n = crate::kw::additional_spell_copies(g, controller);
+    (0..n)
+        .filter_map(|_| copy_spell(g, spell, controller, true))
+        .collect()
+}
+
 /// Puts a copy of a spell (or ability) on the stack under `controller`'s control,
 /// optionally letting them choose new targets (CR 707.10c). Returns the copy.
 pub fn copy_spell(
