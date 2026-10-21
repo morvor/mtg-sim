@@ -86,8 +86,8 @@ fn emrakul_discarded_goes_to_exile_then_cast_or_graveyard() {
         "Emrakul, the World Anew",
         "If you discard a card with madness, you discard it into exile instead of into your graveyard. When you do, you can either cast it from exile for its madness cost or put it into your graveyard."
     );
-    // Only its flying/protection line doesn't compile; madness does.
-    crate::r_p190_mana_costs::only_unsupported("Emrakul, the World Anew", "protection from spells");
+    // Every ability compiles, madness included.
+    assert!(card("Emrakul, the World Anew").unsupported_text().is_empty());
     // Declining: it goes to the graveyard.
     let mut t = TestGame::new(2);
     let emrakul = t.hand(P0, "Emrakul, the World Anew");

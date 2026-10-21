@@ -464,3 +464,261 @@ pub fn they_as_tested_controller(f: Filter) -> Filter {
     }
     walk(f, true, &they, &tested_ctl)
 }
+
+/// A list of kinds before a shared noun where an item has words of its own (CR 205: a
+/// supertype, subtype or card type each describes objects; a list of them joined by "or"
+/// or "and" means objects of any of the kinds): "legendary or Rat card" (Nashi, Moon's
+/// Legacy: legendary cards and Rat cards), "Spider and legendary creature you control"
+/// (Miles Morales: Spiders and legendary creatures), "instant, sorcery, and/or Tamiyo
+/// planeswalker cards" (The Tale of Tamiyo). Each item is read with the last item's head
+/// noun and what follows it; what all of them share (the zone, the controller) is said
+/// once. Lists whose items are single words of one kind ("red or white creature",
+/// "Spider and Rogue") are the core grammar's.
+pub fn listed_kinds(s: &str) -> Option<(Filter, bool, &str)> {
+    let s = s.trim_start();
+    let words: Vec<&str> = s.split(' ').collect();
+    let kind_word = |w: &str| head_noun(w).is_some() || adjective(w).is_some();
+    // The items before the last: single kind words, separated by commas and a final
+    // conjunction.
+    let mut items: Vec<&str> = Vec::new();
+    let mut i = 0;
+    let mut conj = None;
+    while i < words.len() {
+        let w = words[i];
+        if matches!(w, "or" | "and" | "and/or") && !items.is_empty() {
+            conj = Some(w);
+            i += 1;
+            break;
+        }
+        let bare = w.trim_end_matches(',');
+        if bare.is_empty() || !kind_word(bare) || matches!(bare, "token" | "tokens") {
+            return None;
+        }
+        // Without a comma, only one item before the conjunction ("legendary or").
+        if !w.ends_with(',')
+            && words
+                .get(i + 1)
+                .is_some_and(|n| !matches!(*n, "or" | "and" | "and/or"))
+        {
+            return None;
+        }
+        items.push(bare);
+        i += 1;
+    }
+    let conj = conj?;
+    // The last item's words up to its head noun: the longest run of kind words.
+    let core_len = words[i..]
+        .iter()
+        .take_while(|w| !w.ends_with(',') && kind_word(w))
+        .count();
+    if core_len < 2 {
+        return None;
+    }
+    let core = &words[i..i + core_len];
+    let head = core[core_len - 1];
+    if head_noun(head).is_none() {
+        return None;
+    }
+    // Which lists: items that are adjectives only, before a last item starting with a
+    // noun ("legendary or Rat card"); or items that are nouns, joined by "and" ("and/or"),
+    // before a qualified last item ("instant, sorcery, and/or Tamiyo planeswalker cards")
+    // or one starting with an adjective ("Spider and legendary creature"). Not a list of
+    // adjectives of one kind ("blue or black noncreature permanent": both noncreature),
+    // nor complete alternatives joined by "or" ("land or nonblack creature", "spell or
+    // nonland permanent": the core grammar's).
+    let noun_only = |w: &str| head_noun(w).is_some() && adjective(w).is_none();
+    let adjective_only = |w: &str| head_noun(w).is_none() && adjective(w).is_some();
+    let ok = if items.iter().all(|w| adjective_only(w)) {
+        noun_only(core[0])
+    } else if items.iter().all(|w| head_noun(w).is_some()) {
+        conj != "or" && (core_len >= 3 || adjective_only(core[0]))
+    } else {
+        false
+    };
+    if !ok {
+        return None;
+    }
+    // A generic head ("card", "permanent", "spell") goes with every item ("legendary or
+    // Rat card": legendary cards; "instant ... cards": instant cards); a type or subtype
+    // head doesn't go with an item that's a noun itself ("Spider and legendary creature":
+    // Spiders).
+    let generic = matches!(
+        head_noun(head),
+        Some(Filter::Card | Filter::Permanent | Filter::Spell)
+    );
+    let last_text = words[i..].join(" ");
+    let (f_last, plural, rest) = parse_object_phrase(&last_text)?;
+    let consumed = &last_text[..last_text.len() - rest.len()];
+    let tail = consumed
+        .strip_prefix(&core.join(" "))
+        .unwrap_or("")
+        .to_string();
+    let mut alts = Vec::new();
+    for x in &items {
+        let phrase = if generic || head_noun(x).is_none() {
+            format!("{x} {head}{tail}")
+        } else {
+            format!("{x}{tail}")
+        };
+        let (f, _, r) = parse_object_phrase(&phrase)?;
+        if !r.trim().is_empty() {
+            return None;
+        }
+        alts.push(f);
+    }
+    alts.push(f_last);
+    // What every alternative says (the zone, the controller, "card"): said once.
+    let parts = |f: &Filter| -> Vec<Filter> {
+        match f {
+            Filter::And(v) => v.clone(),
+            f => vec![f.clone()],
+        }
+    };
+    let key = |f: &Filter| serde_json::to_string(f).unwrap_or_default();
+    let common: Vec<Filter> = parts(&alts[0])
+        .into_iter()
+        .filter(|c| alts.iter().all(|a| parts(a).iter().any(|x| key(x) == key(c))))
+        .collect();
+    let own: Vec<Filter> = alts
+        .iter()
+        .map(|a| {
+            Filter::and(
+                parts(a)
+                    .into_iter()
+                    .filter(|x| !common.iter().any(|c| key(c) == key(x)))
+                    .collect(),
+            )
+        })
+        .collect();
+    if own.iter().any(|f| matches!(f, Filter::Any)) {
+        return None;
+    }
+    let mut v = common;
+    v.push(Filter::Or(own));
+    let rest_start = s.len() - rest.len();
+    Some((Filter::and(v), plural, &s[rest_start..]))
+}
+
+/// A keyword at the start of `s` (the longest name that matches whole words).
+fn keyword_at(s: &str) -> Option<(crate::keywords::KeywordKind, &str)> {
+    crate::keywords::KeywordKind::ALL
+        .iter()
+        .filter_map(|k| {
+            let n = k.name().to_lowercase();
+            let r = s.strip_prefix(n.as_str())?;
+            (r.is_empty() || r.starts_with([' ', ',', '.'])).then_some((n.len(), *k, r))
+        })
+        .max_by_key(|(n, _, _)| *n)
+        .map(|(_, k, r)| (k, r))
+}
+
+/// "without first strike, double strike, or vigilance", "without flying or reach": none
+/// of the keywords (CR 702).
+pub fn without_keyword_list(t: &str) -> Option<(Filter, &str)> {
+    let mut r = t.strip_prefix("without ")?;
+    let mut kws = Vec::new();
+    loop {
+        let (k, rest) = keyword_at(r)?;
+        kws.push(Filter::HasKeyword(k));
+        if let Some(x) = rest
+            .strip_prefix(", or ")
+            .or_else(|| rest.strip_prefix(" or "))
+        {
+            let (k, rest) = keyword_at(x)?;
+            kws.push(Filter::HasKeyword(k));
+            r = rest;
+            break;
+        }
+        r = rest.strip_prefix(", ")?;
+    }
+    if kws.len() < 2 {
+        return None;
+    }
+    Some((Filter::not(Filter::Or(kws)), r))
+}
+
+/// The qualifier a phrase reads after a stand-in head noun ("card"), and the rest.
+fn qualifier_after_card(q: &str) -> Option<(Filter, String)> {
+    let probe = format!("card {q}");
+    let (f, _, rest) = parse_object_phrase(&probe)?;
+    let Filter::And(mut v) = f else { return None };
+    if !matches!(v.first(), Some(Filter::Card)) {
+        return None;
+    }
+    v.remove(0);
+    Some((Filter::and(v), rest.to_string()))
+}
+
+/// "that's an artifact or that has mana value 3 or less" (Desdemona, Freedom's Edge):
+/// either relative clause.
+fn that_or_that<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let body = t.strip_prefix("that")?;
+    let i = body.find(" or that ")?;
+    let (a, b) = (&body[..i], &body[i + " or that".len()..]);
+    let clause = |c: &str| -> Option<(Filter, String)> {
+        let full = format!("that{c}");
+        // "that has mana value 3 or less": "with mana value 3 or less".
+        if let Some(x) = full
+            .strip_prefix("that has ")
+            .or_else(|| full.strip_prefix("that have "))
+        {
+            if let Some(r) = qualifier_after_card(&format!("with {x}")) {
+                return Some(r);
+            }
+        }
+        qualifier_after_card(&full)
+    };
+    let (fa, ra) = clause(a)?;
+    if !ra.trim().is_empty() {
+        return None;
+    }
+    let (fb, rb) = clause(b)?;
+    if matches!(fa, Filter::Any) || matches!(fb, Filter::Any) {
+        return None;
+    }
+    let n = rb.len();
+    Some((Filter::Or(vec![fa, fb]), &t[t.len() - n..]))
+}
+
+/// Qualifiers the core phrase parser reads before its own (it would read a shorter part
+/// of them): [`without_keyword_list`], [`that_or_that`].
+pub fn early_suffix(t: &str) -> Option<(Filter, &str)> {
+    without_keyword_list(t).or_else(|| that_or_that(t, &Filter::Any))
+}
+
+/// "each creature that player controls with power greater than the number of cards in
+/// their hand" (Noetic Scales): "their" is the player who controls the creature, so its
+/// controller's hand.
+fn their_hand<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
+    if !t.starts_with("with ") {
+        return None;
+    }
+    let i = t.find(" their hand")?;
+    let parts = match so_far {
+        Filter::And(v) => v.clone(),
+        f => vec![f.clone()],
+    };
+    let one_player = parts.iter().any(|p| {
+        matches!(
+            p,
+            Filter::ControlledBy(
+                PlayerRel::TriggerPlayer
+                    | PlayerRel::Target(_)
+                    | PlayerRel::Iterated
+                    | PlayerRel::Var(_)
+            ) | Filter::ControlledByPlayer(_)
+        )
+    });
+    if !one_player {
+        return None;
+    }
+    let reworded = format!("{} its controller's hand{}", &t[..i], &t[i + " their hand".len()..]);
+    let (f, rest) = qualifier_after_card(&reworded)?;
+    if matches!(f, Filter::Any) {
+        return None;
+    }
+    let n = rest.len();
+    Some((f, &t[t.len() - n..]))
+}
+
+inventory::submit! { FilterSuffixPattern { name: "with [stat] ... in their hand (its controller's)", priority: 500, parse: their_hand } }

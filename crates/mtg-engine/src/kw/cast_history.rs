@@ -91,7 +91,7 @@ pub fn record_payment(g: &mut Game, spend: &SpendContext, types: &[ManaType], so
 }
 
 /// The cast information of an object: a spell's, or the spell's a permanent was.
-fn object_cast(g: &Game, id: ObjectId) -> Option<&CastInfo> {
+pub(crate) fn object_cast(g: &Game, id: ObjectId) -> Option<&CastInfo> {
     let o = g.try_obj(id)?;
     o.stack
         .as_deref()

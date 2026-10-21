@@ -1457,6 +1457,11 @@ impl Renderer<'_> {
             PlayerFilter::LessThanHalfStartingLife => {
                 "with less than half their starting life total".into()
             }
+            PlayerFilter::History(c) => self.history_player_clause(c),
+            PlayerFilter::HalfStartingLife(c) => {
+                let v = "half their starting life total".to_string();
+                format!("whose life total is {}", super::nouns::cmp_phrase(*c, &v))
+            }
             // "each player who does" (see `opt_in.rs`).
             PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::Var(x) if self.opt_in_quality(*x, true).is_some()) =>
             {

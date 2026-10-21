@@ -38,6 +38,7 @@ mod extremes;
 mod flashback_reduction;
 mod graveyard_this_way;
 mod guesses;
+mod history_filters;
 mod history_values;
 mod joined_lines;
 mod keywords;

@@ -105,7 +105,7 @@ fn singular(np: &str) -> Option<String> {
 }
 
 /// Past-tense verbs and their present forms: (past, base form, third person singular).
-const VERBS: &[(&str, &str, &str)] = &[
+pub(crate) const VERBS: &[(&str, &str, &str)] = &[
     ("cast", "cast", "casts"),
     ("drew", "draw", "draws"),
     ("drawn", "draw", "draws"),
@@ -133,6 +133,13 @@ const VERBS: &[(&str, &str, &str)] = &[
     ("put", "put", "puts"),
     ("tapped", "tap", "taps"),
     ("came", "come", "comes"),
+    ("fought", "fight", "fights"),
+    ("turned", "turn", "turns"),
+    ("exerted", "exert", "exerts"),
+    ("waterbent", "waterbend", "waterbends"),
+    ("earthbent", "earthbend", "earthbends"),
+    ("firebent", "firebend", "firebends"),
+    ("airbent", "airbend", "airbends"),
 ];
 
 /// Passive forms: "was put into", "were put into", "was dealt", "was blocked".
@@ -152,6 +159,9 @@ const PASSIVE: &[(&str, &str)] = &[
     ("were returned", "is returned"),
     ("was turned face up", "is turned face up"),
     ("became tapped", "becomes tapped"),
+    ("blocked or was blocked by", "blocks or becomes blocked by"),
+    ("was removed", "is removed"),
+    ("were removed", "is removed"),
 ];
 
 /// One reading of a history clause: the trigger text it corresponds to, the count it
@@ -423,6 +433,17 @@ fn player_clause_as(c: &str) -> Option<Clause> {
     if rest.starts_with("both ") {
         return None;
     }
+    // "[did something] four or more times": the number of events (Yidaro, Wandering
+    // Monster: "you've cycled a card named ~ four or more times this game").
+    if let Some(head) = rest.strip_suffix(" or more times") {
+        if let Some((obj, num)) = head.rsplit_once(' ') {
+            if let Some((Value::Const(k), "")) = parse_number(num) {
+                if obj.starts_with("a ") || obj.starts_with("an ") {
+                    return Some(Clause::new(format!("{subj} {verb} {obj}"), Cmp::Ge, k, negated));
+                }
+            }
+        }
+    }
     // A counted object: "two or more cards", "a creature spell".
     let (obj, cmp, n) = counted_object(rest).unwrap_or((rest.to_string(), Cmp::Ge, 1));
     let trigger = if obj.is_empty() {
@@ -480,7 +501,11 @@ fn dealt_damage(subj: &str, negated: bool, x: &str) -> Option<Clause> {
             return None;
         }
         // "by two or more creatures" counts the creatures, not the events.
-        let (src, c2, n2) = counted_object(by)?;
+        let (src, c2, n2) = if by == "~" {
+            ("~".to_string(), Cmp::Ge, 1)
+        } else {
+            counted_object(by)?
+        };
         if c2 != Cmp::Ge || (n2 > 1 && subj != "you") {
             return None;
         }
@@ -617,7 +642,7 @@ fn object_clause(c: &str) -> Option<Clause> {
             Some(x) => format!("another {x}"),
             None => np_s,
         };
-        let subj = if np_s == "~" || np_s.starts_with("another ") {
+        let subj = if np_s == "~" || np_s.starts_with("~ ") || np_s.starts_with("another ") {
             np_s
         } else {
             format!("{} {np_s}", article(&np_s))
@@ -650,7 +675,9 @@ fn control_qualifier(np: String, present: String) -> (String, String) {
             (" under your control", "you control"),
             (" under a player's control", ""),
         ] {
-            if present == format!("{verb}{q}") && np != "~" {
+            // "~ entered the battlefield under your control": "~ you control enters" (read
+            // about "a permanent you control", see `trigger_of`).
+            if present == format!("{verb}{q}") && (np != "~" || !ctl.is_empty()) {
                 let np2 = if ctl.is_empty() {
                     np.clone()
                 } else {
@@ -689,6 +716,7 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
         |t: &str| crate::oracle::triggers::parse_trigger_condition(&format!("whenever {t}"));
     // "~ is dealt excess damage": the trigger grammar reads it about "a permanent"; the
     // permanent is then ~.
+    // Or about "a creature" for what only creatures do ("~ fights").
     let about_source = || {
         let r = text.strip_prefix("~ ")?;
         let (c, x, y) = parse(&format!("a permanent {r}"))?;
@@ -699,8 +727,19 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
         let c = serde_json::from_str(&json.replace("\"Permanent\"", "\"Source\"")).ok()?;
         Some((c, x, y))
     };
+    let about_source_creature = || {
+        let r = text.strip_prefix("~ ")?;
+        let (c, x, y) = parse(&format!("a creature {r}"))?;
+        let json = serde_json::to_string(&c).ok()?;
+        let creature = "{\"Type\":\"Creature\"}";
+        if json.matches(creature).count() != 1 {
+            return None;
+        }
+        let c = serde_json::from_str(&json.replace(creature, "\"Source\"")).ok()?;
+        Some((c, x, y))
+    };
     // A card put into a hand from the battlefield is returned there.
-    let (cond, _, _) = parse(text).or_else(about_source).or_else(|| {
+    let (cond, _, _) = parse(text).or_else(about_source).or_else(about_source_creature).or_else(|| {
         let i = text.find(" is put into ")?;
         let r = &text[i + " is put into ".len()..];
         if !r.contains("hand from ") {
@@ -842,14 +881,19 @@ fn clause_or_joined(c: &str, w: &Option<HistoryWindow>) -> Option<Condition> {
     for (sep, all) in [(" or ", false), (" and ", true)] {
         for (i, _) in c.match_indices(sep) {
             let (x, y) = (&c[..i], &c[i + sep.len()..]);
-            // Two subjects, one predicate: "~ and at least two other creatures attacked".
-            if all {
+            // Two subjects, one predicate: "~ and at least two other creatures attacked",
+            // "~ or another artifact entered the battlefield under your control".
+            if all || !x.contains(' ') {
                 if let Some(cy) = object_clause(y) {
                     if let Some(cx) = object_clause(&format!("{x} {}", cy.pred)) {
                         if let (Some(a), Some(b)) =
                             (clause_condition(cx, w), clause_condition(cy, w))
                         {
-                            return Some(Condition::And(vec![a, b]));
+                            return Some(if all {
+                                Condition::And(vec![a, b])
+                            } else {
+                                Condition::Or(vec![a, b])
+                            });
                         }
                     }
                 }
@@ -898,6 +942,7 @@ fn window_suffix(w: &Option<HistoryWindow>) -> &'static str {
         Some(HistoryWindow::PlayersLastTurn(_)) => " during your last turn",
         Some(HistoryWindow::SinceLastTurn(_)) => " since your last turn",
         Some(HistoryWindow::SinceLastUpkeep(_)) => " since your last upkeep",
+        Some(HistoryWindow::ThisGame) => " this game",
     }
 }
 
@@ -913,6 +958,7 @@ fn split_window(c: &str) -> Option<(String, Option<HistoryWindow>)> {
         Some(HistoryWindow::SinceLastTurn(you())),
         Some(HistoryWindow::SinceLastUpkeep(you())),
         Some(HistoryWindow::LastTurn),
+        Some(HistoryWindow::ThisGame),
     ] {
         if let Some(b) = c.strip_suffix(window_suffix(&w)) {
             return Some((b.to_string(), w));
@@ -941,7 +987,10 @@ pub fn history_condition(c: &str) -> Option<Condition> {
         return team_condition(cond);
     }
     let (body, w) = split_window(c)?;
-    clause_or_joined(&body, &w)
+    let cond = clause_or_joined(&body, &w)?;
+    // Only some events of earlier turns are kept for "this game" (`turn_start.rs`).
+    (!matches!(w, Some(HistoryWindow::ThisGame)) || crate::turn_start::game_queries_kept(&cond))
+        .then_some(cond)
 }
 
 /// A condition about your events made about your team's: each event of yours may be a
@@ -987,6 +1036,9 @@ pub fn referent_history(c: &str, b: &mut crate::oracle::effects::Builder) -> Opt
         .or_else(|| their_last_turn(c, Some(b)))
         .or_else(|| source_to_referent(c, b))
         .or_else(|| nth_time_counters(c, b))
+        .or_else(|| super::history_conditions_4::first_time_referent(c, b))
+        .or_else(|| super::history_conditions_4::sources_dealt_damage_to_it(c, b))
+        .or_else(|| super::history_conditions_4::nth_spell_list(c, b))
         .or_else(|| phase_condition(c))
         .or_else(|| resolved_ordinal(c))
         .or_else(|| nth_spell(c, b))
@@ -1116,7 +1168,7 @@ pub fn object_history(pred: &str, sel: &Sel) -> Option<Condition> {
 
 /// The condition with each "~" ([`Filter::Source`]) in its trigger conditions meaning the
 /// selected object instead.
-fn about(cond: Condition, sel: &Sel) -> Option<Condition> {
+pub fn about(cond: Condition, sel: &Sel) -> Option<Condition> {
     let json = serde_json::to_value(&cond).ok()?;
     let with = serde_json::to_value(Filter::In(Box::new(sel.clone()))).ok()?;
     fn walk(v: serde_json::Value, with: &serde_json::Value, n: &mut usize) -> serde_json::Value {
@@ -1358,6 +1410,15 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             Filter::Custom(ch::CAST_THIS_TURN.into()),
         ));
     }
+    // "was cast for its warp cost" (an alternative cost, CR 118.9).
+    if let Some(k) = rest
+        .strip_prefix("was cast for its ")
+        .and_then(|r| r.strip_suffix(" cost"))
+    {
+        let kind = crate::keywords::KeywordKind::from_name(k)?;
+        let f = Filter::Custom(format!("{}{kind:?}", ch::CAST_FOR).into());
+        return Some(status(&w, Condition::SelMatches(Sel::This, f.clone()), f));
+    }
     for (p, neg) in [
         ("was cast", false),
         ("were cast", false),
@@ -1374,15 +1435,6 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             };
             return Some(if neg { not(cond) } else { cond });
         }
-    }
-    // "was cast for its warp cost" (an alternative cost, CR 118.9).
-    if let Some(k) = rest
-        .strip_prefix("was cast for its ")
-        .and_then(|r| r.strip_suffix(" cost"))
-    {
-        let kind = crate::keywords::KeywordKind::from_name(k)?;
-        let f = Filter::Custom(format!("{}{kind:?}", ch::CAST_FOR).into());
-        return Some(status(&w, Condition::SelMatches(Sel::This, f.clone()), f));
     }
     if matches!(rest, "was kicked" | "were kicked") {
         return Some(status(
@@ -1731,7 +1783,7 @@ inventory::submit! { super::ConditionPattern { name: "history: ordinals and tota
 /// "it's the second creature spell you cast this turn", "it was the second spell you cast
 /// this turn": the spell (the triggering spell, or the source's own) is the Nth matching
 /// spell its controller cast this turn, counting the ones cast up to it.
-fn nth_spell(c: &str, b: &mut Builder) -> Option<Condition> {
+pub(crate) fn nth_spell(c: &str, b: &mut Builder) -> Option<Condition> {
     let r = c
         .strip_prefix("it's the ")
         .or_else(|| c.strip_prefix("it was the "))?;

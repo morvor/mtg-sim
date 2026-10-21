@@ -334,9 +334,16 @@ impl Game {
         self.last_turn_history = std::mem::take(&mut self.history);
         self.history.began_at = self.next_timestamp;
         let events = std::mem::take(&mut self.turn_events);
+        self.game_events.extend(
+            events
+                .iter()
+                .filter(|e| crate::turn_start::kept_for_game(e))
+                .cloned(),
+        );
         if let Some(players) = ended {
             crate::history_query::record_turn(self, players, events);
         }
+        crate::turn_start::record(self);
         for p in self.active_players() {
             self.players[p.idx()].turns_taken += 1;
         }
