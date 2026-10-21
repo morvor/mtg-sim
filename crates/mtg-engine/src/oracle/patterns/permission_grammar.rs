@@ -656,6 +656,11 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         (" from exile", From::Exile),
         (" from the top of your library", From::LibraryTop),
         (" from your hand", From::Hand),
+        // "from among cards exiled with ~ this turn" (Maralen, Fae Ascendant).
+        (
+            " from among cards exiled with ~ this turn",
+            From::Linked { owned: false },
+        ),
         (
             " from among cards you own exiled with ~",
             From::Linked { owned: true },
@@ -682,6 +687,11 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
             if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
                 p.linked_it |= p_.ends_with(" with it");
                 p.not_theirs |= p_.contains(" they don't own ");
+                if p_.ends_with(" this turn") {
+                    p.zone_filter = Some(Filter::Custom(
+                        crate::kw::graveyard_history::PUT_THERE_THIS_TURN.into(),
+                    ));
+                }
                 return Some((z, r));
             }
         }
@@ -1914,6 +1924,8 @@ fn class_permission_from(
         (Some(f), From::Exile | From::Graveyard | From::AnyGraveyard) => {
             Filter::and(vec![f.clone(), what])
         }
+        // (Added with the linked cards below.)
+        (Some(_), From::Linked { .. }) => what,
         (Some(_), _) => return None,
         (None, _) => what,
     };
@@ -1945,6 +1957,9 @@ fn class_permission_from(
                 Filter::InZone(ZoneKind::Exile),
                 what,
             ];
+            if let Some(f) = &p.zone_filter {
+                v.push(f.clone());
+            }
             if owned {
                 v.push(Filter::OwnedBy(PlayerRel::You));
             }

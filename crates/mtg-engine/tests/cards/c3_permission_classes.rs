@@ -199,3 +199,41 @@ fn threefold_signal_doesnt_give_two_color_spells_replicate() {
         .iter()
         .any(|(_, d)| matches!(d, Decision::OptionalCost { .. })));
 }
+
+#[test]
+fn maralen_casts_one_spell_exiled_with_it_this_turn_free() {
+    cr!("607.2a", "601.3", "118.9");
+    assert_supported("Maralen, Fae Ascendant");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.library_top(P1, "Grizzly Bears");
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Maralen, Fae Ascendant");
+    t.resolve_all();
+    let bolt_x = t.g.current(bolt);
+    let bears_x = t.g.current(bears);
+    assert_eq!(t.zone(bolt_x), Zone::Exile, "{}", t.dump_log());
+    // One Elf or Faerie: mana value 1 or less.
+    assert!(!try_cast_as(&mut t, P0, bears_x, CastMethod::Free));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(try_cast_as(&mut t, P0, bolt_x, CastMethod::Free));
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn maralen_only_cards_exiled_this_turn() {
+    cr!("607.2a");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    t.library_top(P1, "Forest");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Maralen, Fae Ascendant");
+    t.resolve_all();
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(bolt_x), Zone::Exile);
+    t.advance_to(P1, Step::Upkeep);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(!try_cast_as(&mut t, P0, bolt_x, CastMethod::Free));
+}

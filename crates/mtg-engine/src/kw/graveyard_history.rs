@@ -19,6 +19,9 @@ pub const PUT_THERE_FROM_LIBRARY: &str = "put there from a library this turn";
 /// the battlefield.
 pub const PUT_THERE_NOT_FROM_BATTLEFIELD: &str =
     "put there from anywhere other than the battlefield this turn";
+/// `Filter::Custom`: a card put into its current zone this turn ("cards exiled with ~ this
+/// turn", Maralen, Fae Ascendant).
+pub const PUT_THERE_THIS_TURN: &str = "put into its zone this turn";
 /// `Filter::Custom`: a card its owner put into their graveyard while surveilling this turn
 /// (not a card they saw while surveilling and put there later by other means).
 pub const SURVEILLED_THIS_TURN: &str = "surveilled this turn";
@@ -50,6 +53,7 @@ impl KeywordRules for GraveyardHistory {
                 came_from_this_turn(g, id).is_some_and(|z| z != Zone::Battlefield),
             ),
             SURVEILLED_THIS_TURN => Some(g.history.surveilled.contains(&id)),
+            PUT_THERE_THIS_TURN => Some(came_from_this_turn(g, id).is_some()),
             _ => None,
         }
     }
