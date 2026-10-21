@@ -40,6 +40,7 @@ pub mod cards;
 pub mod cases;
 pub mod casting;
 pub mod casual;
+pub mod bidding;
 pub mod choices;
 pub mod classes;
 pub mod combat;
