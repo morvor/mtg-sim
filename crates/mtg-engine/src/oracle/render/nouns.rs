@@ -1153,6 +1153,19 @@ impl Renderer<'_> {
                     zone_word(z)
                 ))
             }
+            // "from anywhere other than their hands": not in (or cast from) the
+            // caster's own hand (`custom::IN_CASTERS_HAND`).
+            Filter::And(v)
+                if v.len() == 2
+                    && v.iter().any(|x| {
+                        matches!(x, Filter::Custom(n) if n == crate::custom::IN_CASTERS_HAND)
+                    }) =>
+            {
+                np.post.push(format!(
+                    "from anywhere other than {{alt:your|their}} {}",
+                    zone_word(ZoneKind::Hand)
+                ))
+            }
             // "target permanent not named ~".
             Filter::SameNameAs(s) if matches!(s.as_ref(), Sel::This) => {
                 np.post.push(format!("not named {}", self.me()))
