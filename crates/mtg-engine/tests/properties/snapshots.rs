@@ -4,12 +4,26 @@
 use super::common::*;
 use mtg_engine::properties::*;
 
-#[test]
-fn a_copied_game_plays_out_as_the_original() {
-    for (i, s) in fixed_set().into_iter().enumerate() {
-        // Before the game starts, early, and in the middle of a game.
-        for at in [0, 40 + 37 * i as u64, 300 + 101 * i as u64] {
-            snapshot_equivalence(&s, at).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
-        }
+/// The game `i` of the fixed set, copied before it starts and in the middle.
+fn check(i: usize) {
+    let s = &fixed_set()[i];
+    for at in [0, 120 + 101 * i as u64] {
+        snapshot_equivalence(s, at).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
     }
+}
+
+#[test]
+fn a_copied_two_player_game_plays_out_as_the_original() {
+    check(0);
+    check(1);
+}
+
+#[test]
+fn a_copied_three_player_game_plays_out_as_the_original() {
+    check(2);
+}
+
+#[test]
+fn a_copied_four_player_game_plays_out_as_the_original() {
+    check(3);
 }

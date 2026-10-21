@@ -5,19 +5,36 @@ use super::common::*;
 use mtg_engine::properties::*;
 use mtg_engine::*;
 
+/// Every rotation of the seats of game `i` of the fixed set, but one for four players (to
+/// stay fast).
+fn check(i: usize) {
+    let s = &fixed_set()[i];
+    let n = s.players();
+    let rotations: Vec<usize> = if n == 4 { vec![2] } else { (1..n).collect() };
+    for r in rotations {
+        seat_symmetry(s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
+    }
+}
+
 #[test]
-fn rotating_the_seats_changes_nothing() {
+fn swapping_the_seats_of_two_players_changes_nothing() {
     // Simultaneous choices and actions in APNAP order (CR 101.4), simultaneous timestamps
     // in APNAP order (CR 613.7m), turn order from the starting player (CR 103.1).
     cr!("101.4", "613.7m", "103.1");
-    for s in fixed_set() {
-        let n = s.players();
-        // Every rotation for two and three players, one for four (to stay fast).
-        let rotations: Vec<usize> = if n == 4 { vec![2] } else { (1..n).collect() };
-        for r in rotations {
-            seat_symmetry(&s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
-        }
-    }
+    check(0);
+    check(1);
+}
+
+#[test]
+fn rotating_the_seats_of_three_players_changes_nothing() {
+    cr!("101.4", "613.7m", "103.1");
+    check(2);
+}
+
+#[test]
+fn rotating_the_seats_of_four_players_changes_nothing() {
+    cr!("101.4", "613.7m", "103.1");
+    check(3);
 }
 
 #[test]
