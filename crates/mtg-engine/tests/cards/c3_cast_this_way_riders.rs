@@ -789,3 +789,32 @@ fn light_paws_finds_a_cheaper_aura_with_a_new_name_and_attaches_it() {
         .unwrap_or_default();
     assert_eq!(offered.len(), 1, "{offered:?}");
 }
+
+#[test]
+fn the_great_aurora_each_player_draws_as_many_as_they_shuffled_in() {
+    cr!("608.2e", "701.24");
+    ruling!(
+        "The Great Aurora",
+        "The number of cards you draw is equal to the number of permanents on the battlefield that you shuffle into your library plus the number of cards from your hand that you shuffle into your library."
+    );
+    assert_supported("The Great Aurora");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Forest", 9);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Ornithopter");
+    t.hand(P0, "Lightning Bolt");
+    t.hand(P0, "Shock");
+    t.battlefield(P1, "Gray Ogre");
+    t.hand(P1, "Shock");
+    let spell = t.hand(P0, "The Great Aurora");
+    t.answer_choose(P0, &[]);
+    t.answer_choose(P1, &[]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    // P0: two cards in hand and eleven permanents; P1: one and one.
+    assert_eq!(t.hand_size(P0), 13, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P1), 2);
+    assert!(t.named_on_battlefield("Gray Ogre").is_empty());
+    assert!(t.in_exile("The Great Aurora"));
+}

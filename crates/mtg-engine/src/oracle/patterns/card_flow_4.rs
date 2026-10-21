@@ -475,3 +475,62 @@ fn each_exiles_all_but_the_bottom(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: each player exiles all but the bottom N cards of their library", priority: 90, parse: each_exiles_all_but_the_bottom } }
+
+/// The number of cards a shuffle instruction shuffled into a library ("then draw that many
+/// cards").
+const SHUFFLED_COUNT: Var = vars::USER + 9481;
+
+/// "Shuffle all cards from your hand and all permanents you own into your library, then
+/// draw that many cards." / "Each player shuffles ... into their library, then draws that
+/// many cards." (The Great Aurora): the number of cards shuffled in, counted as they are.
+fn shuffle_in_then_draw_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let (each, you_form) = if let Some(r) = l.strip_prefix("each player shuffles ") {
+        let r = r.strip_suffix(" into their library, then draws that many cards")?;
+        let r = r
+            .replace("from their hand", "from your hand")
+            .replace("they own", "you own");
+        if r.contains("their ") || r.contains("they ") {
+            return None;
+        }
+        (true, format!("shuffle {r} into your library"))
+    } else {
+        let r = l
+            .strip_prefix("shuffle ")?
+            .strip_suffix(" into your library, then draw that many cards")?;
+        (false, format!("shuffle {r} into your library"))
+    };
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = b.in_trigger;
+    let shuffle = crate::oracle::effects::parse_clause(&you_form, &mut sub)?;
+    let Effect::ShuffleIntoLibrary { what, .. } = &shuffle else {
+        return None;
+    };
+    if !sub.targets.is_empty() {
+        return None;
+    }
+    let e = Effect::seq(vec![
+        Effect::StoreValue {
+            var: SHUFFLED_COUNT,
+            value: Value::CountSel(Box::new(what.clone())),
+        },
+        shuffle.clone(),
+        Effect::Draw {
+            who: PlayerRef::You,
+            n: Value::Var(SHUFFLED_COUNT),
+        },
+    ]);
+    Some(if each {
+        Effect::ForEachPlayer {
+            who: PlayerRef::EachPlayer,
+            effect: Box::new(Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect: Box::new(e),
+            }),
+        }
+    } else {
+        e
+    })
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: shuffle [cards] into your library, then draw that many cards", priority: 90, parse: shuffle_in_then_draw_that_many } }
