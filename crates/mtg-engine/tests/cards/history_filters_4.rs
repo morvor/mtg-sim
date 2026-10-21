@@ -84,8 +84,11 @@ fn premature_burial_destroys_a_creature_that_entered_since_your_last_turn_ended(
     cr!("608.2b");
     assert_supported("Premature Burial");
     let mut t = TestGame::new(2);
-    let old = t.battlefield(P1, "Grizzly Bears");
-    // P0's turn ends; P1's turn: a creature enters.
+    // During P0's turn, a creature enters; then P0's turn ends.
+    t.advance_to(P0, Step::PrecombatMain);
+    let old = t.enter(P1, "Grizzly Bears");
+    t.g.flush_events();
+    // P1's turn: another creature enters.
     t.set_step(P0, Step::End);
     t.advance_to(P1, Step::PrecombatMain);
     let new = t.enter(P1, "Hill Giant");
@@ -322,7 +325,7 @@ fn activated_sleeper_copies_a_creature_card_put_into_a_graveyard_from_the_battle
 
 #[test]
 fn kutzils_flanker_counts_creatures_that_left_the_battlefield_under_your_control() {
-    cr!("603.10a", "700.4");
+    cr!("400.7", "608.2h");
     assert_supported("Kutzil's Flanker");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Grizzly Bears");
