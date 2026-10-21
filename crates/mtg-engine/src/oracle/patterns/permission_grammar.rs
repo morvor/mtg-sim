@@ -136,8 +136,8 @@ impl Perm {
         if let Some(q) = c.strip_prefix("it's ").filter(|q| {
             q.ends_with(" spell")
                 || q.ends_with(" spells")
-                || q.contains(" spell with ")
-                || q.contains(" spells with ")
+                || q.contains(" spell with mana value ")
+                || q.contains(" spells with mana value ")
         }) {
             let (f, _, rest) = class_phrase(q)?;
             if !rest.trim().is_empty() {
@@ -2196,8 +2196,7 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             def: ReplacementDef {
                 event: ReplacementEvent::ZoneChange {
                     filter,
-                    // (Only a spell: "it" may still be the cards if none was cast.)
-                    from: Some(ZoneKind::Stack),
+                    from: None,
                     to: Some(ZoneKind::Graveyard),
                 },
                 action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
