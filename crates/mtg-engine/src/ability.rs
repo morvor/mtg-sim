@@ -2771,6 +2771,13 @@ pub enum Restriction {
         planeswalkers: bool,
         battles: bool,
     },
+    /// "can't attack [you or] a permanent you control" (Immortal Obligation): no
+    /// planeswalker or battle controlled by a player matching `controller` (with
+    /// [`Restriction::CantAttackPlayer`] for the player).
+    CantAttackPermanentsOf {
+        attackers: Filter,
+        controller: PlayerFilter,
+    },
     /// "is goaded" as a static ability: goaded by the source's controller for as long as
     /// the effect applies (CR 701.15b).
     Goaded(Filter),

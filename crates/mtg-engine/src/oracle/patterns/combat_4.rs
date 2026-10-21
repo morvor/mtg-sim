@@ -1114,3 +1114,72 @@ fn f_if_they_dont_pay(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "combat 4: if they don't pay", priority: 40, apply: f_if_they_dont_pay } }
+
+/// "For as long as that creature has a duty counter on it, it is goaded, can't attack you
+/// or a permanent you control, and can't block creatures you control." (Immortal
+/// Obligation): rule-modifying effects on that creature lasting while it has such a
+/// counter (CR 611.2b).
+fn p_for_as_long_as_it_has_counter(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l.trim());
+    let r = l.strip_prefix("for as long as ")?;
+    let (subject, rest) = r.split_once(" has a ")?;
+    let (kind_words, body) = rest.split_once(" counter on it, ")?;
+    let (kind, tail) = crate::oracle::costs::counter_kind(kind_words)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let n = b.targets.len();
+    let (sel, srest) = object_ref(subject, b)?;
+    if !srest.trim().is_empty() || is_no_referent(&sel) || b.targets.len() != n {
+        b.targets.truncate(n);
+        return None;
+    }
+    let body = body.strip_prefix("it ")?;
+    let f = Filter::In(Box::new(sel.clone()));
+    let mut preds: Vec<&str> = Vec::new();
+    let (head, last) = match body.rsplit_once(", and ") {
+        Some((h, l)) => (h, Some(l)),
+        None => (body, None),
+    };
+    preds.extend(head.split(", "));
+    preds.extend(last);
+    let mut rs = Vec::new();
+    for p in preds {
+        match p.trim() {
+            "can't attack you or a permanent you control" => {
+                rs.push(Restriction::CantAttackPlayer {
+                    attackers: f.clone(),
+                    defender: PlayerFilter::You,
+                    planeswalkers: false,
+                    battles: false,
+                });
+                rs.push(Restriction::CantAttackPermanentsOf {
+                    attackers: f.clone(),
+                    controller: PlayerFilter::You,
+                });
+            }
+            p => rs.extend(super::statics::restriction_predicate(p, &f)?),
+        }
+    }
+    if rs.is_empty() {
+        return None;
+    }
+    // The creature as the effect begins (see `Effect::AddRestriction`).
+    if !matches!(sel, Sel::Var(_) | Sel::Target(_) | Sel::TriggerObject) {
+        return None;
+    }
+    let duration = Duration::WhileCondition(Condition::SelMatches(
+        sel,
+        Filter::HasCounter(Some(kind)),
+    ));
+    Some(Effect::seq(
+        rs.into_iter()
+            .map(|restriction| Effect::AddRestriction {
+                restriction,
+                duration: duration.clone(),
+            })
+            .collect(),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "combat 4: for as long as that creature has a [kind] counter on it, it [restrictions]", priority: 90, parse: p_for_as_long_as_it_has_counter } }

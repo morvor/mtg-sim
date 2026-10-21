@@ -873,6 +873,15 @@ impl Game {
                             self.bind_target_players(f, ctx),
                         ))
                     }
+                    // "For as long as that creature has a duty counter on it, ..."
+                    // (Immortal Obligation): the object named as the effect begins.
+                    Duration::WhileCondition(Condition::SelMatches(
+                        s @ (Sel::Var(_) | Sel::Target(_) | Sel::TriggerObject),
+                        f,
+                    )) => Duration::WhileCondition(Condition::SelMatches(
+                        Sel::All(Filter::Objects(self.resolve_objects(s, ctx))),
+                        f.clone(),
+                    )),
                     d => d.clone(),
                 };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
@@ -3597,6 +3606,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::MustAttackObject { attackers, .. }
+        | Restriction::CantAttackPermanentsOf { attackers, .. }
         | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,

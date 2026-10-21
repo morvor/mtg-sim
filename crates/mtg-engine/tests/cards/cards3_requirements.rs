@@ -201,3 +201,43 @@ fn arcums_whistle_paid_leaves_the_creature_free() {
     to_combat(&mut t, P1);
     assert!(legal_attack(&mut t, &[]));
 }
+
+#[test]
+fn immortal_obligation_creature_attacks_others_while_it_has_a_duty_counter() {
+    cr!("701.15b", "508.1c", "509.1b");
+    supported("Immortal Obligation");
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let card = t.graveyard(P1, "Hill Giant");
+    let spell = t.hand(P0, "Immortal Obligation");
+    t.lands(P0, "Plains", 2);
+    let pw = t.battlefield(P0, "Ajani Goldmane");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, spell).target(Entity::Object(card)).go();
+    t.resolve_all();
+    let giant = t.named_on_battlefield("Hill Giant")[0];
+    assert_eq!(t.g.obj(giant).controller, P1);
+    assert_eq!(t.counters(giant, "duty"), 1);
+    // On P1's turn it must attack, and not P0 or P0's planeswalker.
+    t.g.objects[giant.0 as usize].summoning_sick = false;
+    to_combat(&mut t, P1);
+    assert!(!legal_attack(&mut t, &[]));
+    assert!(!legal_attack(&mut t, &[(giant, Entity::Player(P0))]));
+    assert!(!legal_attack(&mut t, &[(giant, Entity::Object(pw))]));
+    assert!(legal_attack(&mut t, &[(giant, Entity::Player(P2))]));
+    // It can't block P0's creatures.
+    t.g.combat = None;
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, P0, &[(mine, Entity::Player(P1))]);
+    assert!(!legal_blocks(&mut t, &[(giant, mine)]));
+    // Without the duty counter, the effects end.
+    t.g.objects[giant.0 as usize].counters.remove("duty");
+    t.g.dirty = true;
+    assert!(legal_blocks(&mut t, &[(giant, mine)]));
+}

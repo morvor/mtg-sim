@@ -2095,6 +2095,17 @@ impl Renderer<'_> {
                 let a = subj(self, f);
                 format!("{a} can't attack a player it has already attacked this turn")
             }
+            Restriction::CantAttackPermanentsOf {
+                attackers,
+                controller,
+            } => {
+                let a = subj(self, attackers);
+                let who = match controller {
+                    PlayerFilter::You => "you control".to_string(),
+                    _ => "a player controls".to_string(),
+                };
+                format!("{a} can't attack a permanent {who}")
+            }
             Restriction::CantBeTargeted { what, by } => {
                 let w = subj(self, what);
                 let by = self.target_restriction(by);

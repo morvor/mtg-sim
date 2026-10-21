@@ -355,6 +355,17 @@ impl Game {
                             && self.player_filter_matches(pf, p, &ctx)
                     })
                 }
+                // "can't attack a permanent you control": a planeswalker or battle that
+                // player controls (not one they protect).
+                Restriction::CantAttackPermanentsOf {
+                    attackers,
+                    controller,
+                } => {
+                    let ctx = Ctx::new(*s, *c);
+                    matches!(target, Entity::Object(o)
+                        if self.player_filter_matches(controller, self.obj(o).controller, &ctx))
+                        && self.restriction_applies(id, attackers, &ctx, locked)
+                }
                 _ => false,
             })
     }
