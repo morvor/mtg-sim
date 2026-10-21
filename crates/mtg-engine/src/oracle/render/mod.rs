@@ -901,6 +901,9 @@ pub struct Renderer<'a> {
     /// The objects the triggered ability's intervening "if" says exist ("if you control
     /// one or more other creatures that spell could target"): "those creatures" later.
     pub(crate) intervening_exists: Option<Filter>,
+    /// Rendering a static ability: a choice it refers to was made by another ability of
+    /// the object, possibly more than once ("the last chosen color").
+    pub(crate) in_static: bool,
     /// The keyword an activated ability is introduced by ("Boast — ...").
     pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
     /// The head noun of what the cost sacrificed ("the sacrificed artifact").
@@ -1063,6 +1066,7 @@ impl<'a> Renderer<'a> {
             x_for_each: None,
             trigger_names_opponent: false,
             intervening_exists: None,
+            in_static: false,
             keyword_ability: None,
             plural_vars: Vec::new(),
             play_terms: None,
@@ -1233,7 +1237,9 @@ impl<'a> Renderer<'a> {
                     &mut self.grants_to_equipment,
                     statics::grants_to_equipment(s),
                 );
+                let saved_static = std::mem::replace(&mut self.in_static, true);
                 let t = self.static_ability(s);
+                self.in_static = saved_static;
                 self.grants_to_equipment = saved;
                 t
             }

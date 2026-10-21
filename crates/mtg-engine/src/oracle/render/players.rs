@@ -636,22 +636,6 @@ impl Renderer<'_> {
                     .into(),
                 case,
             ),
-            // The objects a "choose" instruction chose ("Target opponent chooses two of
-            // those cards. Put the chosen cards into your graveyard", see
-            // `patterns::choice_grammar_objects`).
-            Sel::Var(crate::oracle::patterns::choice_grammar_objects::CHOSEN) => {
-                let pron = match case {
-                    Case::Subj => "{alt:it|they}",
-                    Case::Obj => "{alt:it|them}",
-                    Case::Poss => "{alt:its|their}",
-                };
-                match case {
-                    Case::Poss => pron.to_string(),
-                    _ => format!(
-                        "{{alt:{pron}|the chosen cards|the chosen card|the chosen creatures|the chosen creature|the chosen permanents|the chosen permanent|those cards|that card}}"
-                    ),
-                }
-            }
             Sel::Var(v) => match *v {
                 vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
                     decline("~".into(), case)

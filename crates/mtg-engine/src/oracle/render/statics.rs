@@ -976,10 +976,10 @@ impl Renderer<'_> {
                 let linked = parts
                     .iter()
                     .any(|x| matches!(x, Filter::In(l) if matches!(l.as_ref(), Sel::Linked)));
-                if linked {
-                    let owned = parts
-                        .iter()
-                        .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)));
+                let owned = parts
+                    .iter()
+                    .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)));
+                if linked && owned {
                     let kind = spell_what(&Filter::and(
                         parts
                             .iter()
@@ -999,10 +999,14 @@ impl Renderer<'_> {
                     } else {
                         self.spell_noun_plural(&kind)
                     };
-                    let you_own = if owned { "you own " } else { "" };
-                    format!("cast {{alt:{s}|{k} from among cards {you_own}exiled with ~}}")
+                    format!("cast {{alt:{s}|{k} from among cards you own exiled with ~}}")
                 } else {
-                    format!("cast {s}")
+                    match s.strip_prefix("spells exiled with ") {
+                        Some(r) => {
+                            format!("cast {{alt:{s}|spells from among cards exiled with {r}}}")
+                        }
+                        None => format!("cast {s}"),
+                    }
                 }
             }
         };

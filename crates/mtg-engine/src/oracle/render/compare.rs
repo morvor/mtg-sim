@@ -315,12 +315,11 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               the verb is said once for both groups of cards.",
     },
     Equivalence {
-        pattern: r"\b(?:all )?other cards (?:revealed this way|from among them)\b|\bthe rest of the revealed cards\b",
+        pattern: r"\b(?:all )?other cards revealed this way\b|\bthe rest of the revealed cards\b",
         replacement: "the rest",
         why: "Anaphora: after an instruction that takes some of the cards revealed, \
               \"all other cards revealed this way\" and \"the rest of the revealed \
-              cards\" are the rest of them (\"cards revealed this way\" is first made \
-              \"cards from among them\", see `where_x_rewrites`).",
+              cards\" are the rest of them.",
     },
     Equivalence {
         pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",

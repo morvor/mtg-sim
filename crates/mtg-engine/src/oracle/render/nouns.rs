@@ -664,6 +664,11 @@ impl Renderer<'_> {
             Filter::Blocking => np.status.push("blocking".into()),
             Filter::Blocked => np.status.push("blocked".into()),
             Filter::Unblocked => np.status.push("unblocked".into()),
+            // "Creatures attacking the last chosen player": the player chosen for the
+            // source, its latest choice (made again each turn).
+            Filter::AttackingPlayer(PlayerRel::Chosen) => {
+                np.post.push("attacking the {opt:last} chosen player".into());
+            }
             Filter::AttackingPlayer(r) => {
                 let who = self.rel_object(*r);
                 np.post.push(format!("attacking {who}"));
@@ -1630,9 +1635,7 @@ impl Renderer<'_> {
             PlayerRel::Defending => "defending player".into(),
             PlayerRel::Active => "the active player".into(),
             PlayerRel::Teammate => "a teammate".into(),
-            // The player chosen for the source: its latest choice ("the last chosen
-            // player" where the choice is made again each turn).
-            PlayerRel::Chosen => "the {opt:last} chosen player".into(),
+            PlayerRel::Chosen => "the chosen player".into(),
             PlayerRel::Var(_) => "{alt:that player|them}".into(),
         }
     }

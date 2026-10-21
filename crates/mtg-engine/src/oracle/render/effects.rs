@@ -5762,6 +5762,13 @@ impl Renderer<'_> {
     /// Moving objects between zones.
     pub(crate) fn move_effect(&mut self, what: &Sel, to: &Destination) -> String {
         let mut w = self.sel(what, Case::Obj);
+        // "Target opponent chooses two of those cards. Put the chosen cards into your
+        // graveyard" (`patterns::choice_grammar_objects`).
+        if matches!(what, Sel::Var(v) if *v == crate::oracle::patterns::choice_grammar_objects::CHOSEN)
+            && (w == "it" || w == "them")
+        {
+            w = format!("{{alt:{w}|the chosen cards|the chosen card}}");
+        }
         // An Aura enchanting a card in a graveyard: "return enchanted creature card to the
         // battlefield" (Animate Dead).
         if matches!(what, Sel::AttachedTo)
