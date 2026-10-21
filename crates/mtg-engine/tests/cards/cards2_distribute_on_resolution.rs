@@ -6,6 +6,7 @@
 
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 fn supported(name: &str) {
@@ -105,4 +106,30 @@ fn invoke_justice_distributes_among_creatures_the_target_player_controls() {
     assert!(t.named_on_battlefield("Serra Angel").len() == 1);
     assert_eq!(t.counters(theirs, "+1/+1"), 4);
     assert_eq!(t.counters(mine, "+1/+1"), 0);
+}
+
+#[test]
+fn lathiel_distributes_counters_equal_to_the_life_gained_this_turn() {
+    cr!("601.2d", "603.4");
+    ruling!(
+        "Lathiel, the Bounteous Dawn",
+        "You may choose no targets if you want."
+    );
+    ruling!(
+        "Lathiel, the Bounteous Dawn",
+        "The triggered ability will consider the total amount of life you've gained that turn"
+    );
+    supported("Lathiel, the Bounteous Dawn");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lathiel, the Bounteous Dawn");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.g.gain_life(P0, 3);
+    t.g.lose_life(P0, 5);
+    t.answer_targets(P0, &[obj(a), obj(b)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 1]));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(a, "+1/+1"), 2);
+    assert_eq!(t.counters(b, "+1/+1"), 1);
 }

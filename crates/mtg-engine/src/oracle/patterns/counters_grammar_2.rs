@@ -933,3 +933,34 @@ fn each_kind_enters_with(
 }
 
 inventory::submit! { super::StaticPattern { name: "counters grammar 2: for each kind of counter on ~, others enter with one", priority: 90, parse: each_kind_enters_with } }
+
+/// "At the beginning of each end step, if you gained life this turn, distribute up to that
+/// many +1/+1 counters among any number of other target creatures." (Lathiel, the
+/// Bounteous Dawn): the amount is the life gained this turn as the ability is put on the
+/// stack, divided among the targets then (CR 601.2d, 603.3d); with no targets nothing is
+/// distributed (its rulings).
+fn distribute_up_to_that_much_life(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("distribute up to that many ")?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("if you gained life this turn, distribute up to that many") {
+        return None;
+    }
+    let (kind, r) = counter_noun(r)?;
+    let kind = kind?;
+    let r = r.trim_start().strip_prefix("among any number of ")?;
+    let (mut spec, tail) = parse_target(r)?;
+    if !end(tail).is_empty() || !matches!(spec.what, TargetKind::Object(_)) {
+        return None;
+    }
+    let n = Value::LifeGainedThisTurn(PlayerRef::You);
+    spec.min = Value::c(0);
+    spec.max = n.clone();
+    spec.divide = Some(n);
+    let text = r[..r.len() - tail.len()].trim().to_string();
+    let slot = b.add_target(spec, &text);
+    Some(Effect::Custom(
+        crate::counter_rules::divided_counters_effect(slot, &kind),
+    ))
+}
+
+inventory::submit! { EffectPattern { name: "counters grammar 2: distribute up to that many (life gained)", priority: 70, parse: distribute_up_to_that_much_life } }
