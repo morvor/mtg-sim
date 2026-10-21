@@ -1729,15 +1729,18 @@ fn sentence_rewrites(s: &str) -> String {
     if let Some(re) = TARGETS_X.get_or_init(|| {
         Regex::new(r"\b(up to |)x ((?:other )?target [^.]*?), where x is ([^.]+?)(\.|$)").ok()
     }) {
-        // Only when that X is the only one the definition is for ("tap X target
-        // creatures. They get -X/-0 ..." keeps its X).
+        // When the clause uses X again ("up to X target creatures you control get +X/+X
+        // ..., where X is V"), the definition stays for the other X.
         s = re
             .replace_all(&s, |c: &regex::Captures| {
                 if c[2]
                     .split(|ch: char| !ch.is_alphanumeric())
                     .any(|w| w == "x")
                 {
-                    return c[0].to_string();
+                    return format!(
+                        "{}{} {}, where x is {}{}",
+                        &c[1], &c[3], &c[2], &c[3], &c[4]
+                    );
                 }
                 format!("{}{} {}{}", &c[1], &c[3], &c[2], &c[4])
             })
