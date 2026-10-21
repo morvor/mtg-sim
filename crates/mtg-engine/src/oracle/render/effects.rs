@@ -2163,15 +2163,18 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("transform {w}")
             }
-            Effect::Regenerate { what, then } => {
+            Effect::Regenerate { what } => {
                 let w = self.sel(what, Case::Obj);
-                match then.as_deref() {
-                    None => format!("regenerate {w}"),
-                    Some(Effect::Reflexive { body }) => {
+                format!("regenerate {w}")
+            }
+            Effect::RegenerateWith { what, then } => {
+                let w = self.sel(what, Case::Obj);
+                match then.as_ref() {
+                    Effect::Reflexive { body } => {
                         let e = self.effect(&body.effect);
                         format!("regenerate {w}. When it regenerates this way, {e}")
                     }
-                    Some(e) => {
+                    e => {
                         let e = self.effect(e);
                         format!("regenerate {w}. {e} if it regenerates this way")
                     }

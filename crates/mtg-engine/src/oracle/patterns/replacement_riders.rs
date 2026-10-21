@@ -3,7 +3,7 @@
 //! that triggers when the shield replaces a destruction), "Regenerate target creature.
 //! You gain control of that creature if it regenerates this way." (Debt of Loyalty: part
 //! of the regeneration itself — the ruling: "instead it regenerates and you gain control
-//! of it"). The shield's rider is `Effect::Regenerate::then`; the regenerated permanent is
+//! of it"). The shield's rider is `Effect::RegenerateWith::then`; the regenerated permanent is
 //! "it" in it.
 
 use super::FollowupPattern;
@@ -12,10 +12,10 @@ use crate::oracle::effects::{parse_effect_text, Builder};
 
 /// The last instruction of the effect (in execution order), if it's a regeneration
 /// without a rider.
-fn last_regenerate(e: &mut Effect) -> Option<&mut Option<Box<Effect>>> {
+fn last_regenerate(e: &mut Effect) -> Option<&mut Effect> {
     match e {
         Effect::Seq(v) => v.last_mut().and_then(last_regenerate),
-        Effect::Regenerate { then, .. } if then.is_none() => Some(then),
+        Effect::Regenerate { .. } => Some(e),
         _ => None,
     }
 }
@@ -53,13 +53,20 @@ fn regenerates_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(slot) = last_regenerate(prev) else {
         return false;
     };
-    *slot = Some(Box::new(if triggered {
+    let Effect::Regenerate { what } = slot else {
+        return false;
+    };
+    let then = Box::new(if triggered {
         Effect::Reflexive {
             body: Box::new(body),
         }
     } else {
         body.effect
-    }));
+    });
+    *slot = Effect::RegenerateWith {
+        what: what.clone(),
+        then,
+    };
     true
 }
 
