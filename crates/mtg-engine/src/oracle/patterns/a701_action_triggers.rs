@@ -157,6 +157,7 @@ fn player_action_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         "airbend" => crate::kwa::bending::AIRBENT_EVENT,
         "earthbend" => crate::kwa::bending::EARTHBENT_EVENT,
         "waterbend" => crate::kwa::bending::WATERBENT_EVENT,
+        "investigate" => crate::keyword_actions::INVESTIGATED,
         _ => return None,
     };
     Some((

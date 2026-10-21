@@ -599,6 +599,10 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         || l.starts_with("you may activate ")
         // A permission to play cards (see `patterns::permission_grammar`).
         || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
+        // "You may return that card ... at the beginning of the next end step if ~ is
+        // still on the battlefield": the choice is the delayed ability's (see
+        // `patterns::delayed_grammar_2`).
+        || (l.starts_with("you may ") && l.ends_with(" if ~ is still on the battlefield"))
         // "... as though those cards were in your graveyard": a permission (CR 609.4, see
         // `patterns::graveyard_play_swap`).
         || (l.starts_with("you may ") && l.ends_with(" as though those cards were in your graveyard"))
@@ -1148,6 +1152,11 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
         (
             " until your next end step",
             Duration::UntilYourNextStep(TriggerStep::End),
+        ),
+        // CR 500.4: until the next end step (of any turn) begins.
+        (
+            " until the next end step",
+            Duration::UntilNextStep(TriggerStep::End),
         ),
         (" until end of combat", Duration::EndOfCombat),
         (

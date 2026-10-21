@@ -38,6 +38,7 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
             | TriggerCond::FirstTimeEachTurn(c)
             | TriggerCond::ThisTurn(c)
             | TriggerCond::UntilYourNextTurn(c)
+            | TriggerCond::ThisCombat(c)
             | TriggerCond::Noncombat(c),
             ev,
         ) => looks_back(c, ev),
@@ -117,7 +118,8 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
         TriggerCond::Where { trigger: c, .. }
         | TriggerCond::FirstTimeEachTurn(c)
         | TriggerCond::ThisTurn(c)
-        | TriggerCond::UntilYourNextTurn(c) => phase_out_trigger(c),
+        | TriggerCond::UntilYourNextTurn(c)
+        | TriggerCond::ThisCombat(c) => phase_out_trigger(c),
         _ => false,
     }
 }
@@ -302,11 +304,25 @@ impl Game {
                 // enchanted creature becomes tapped or is dealt damage"); the other
                 // alternatives trigger per event.
                 TriggerCond::AnyOf(v) => {
-                    match v.iter().find_map(|c| match c {
-                        TriggerCond::Batched { trigger, per } => Some((trigger, per)),
-                        _ => None,
-                    }) {
-                        Some(x) => x,
+                    // ("Whenever one or more creatures you control fight or become
+                    // blocked": the batched alternative this batch's events match.)
+                    let alts: Vec<(&Box<TriggerCond>, &BatchPer)> = v
+                        .iter()
+                        .filter_map(|c| match c {
+                            TriggerCond::Batched { trigger, per } => Some((trigger, per)),
+                            _ => None,
+                        })
+                        .collect();
+                    let mut probe = Ctx::new(Some(src), ctl);
+                    probe.link = a.link;
+                    probe.ability_uid = a.uid;
+                    let matching = alts.iter().find(|(t, _)| {
+                        batch
+                            .iter()
+                            .any(|ev| !self.trigger_matches_ctx(t, &probe, ev).is_empty())
+                    });
+                    match matching.or(alts.first()) {
+                        Some(x) => *x,
                         None => continue,
                     }
                 }
@@ -438,7 +454,11 @@ impl Game {
                     }
                     *n += 1;
                 }
-                for _ in 0..1 + extra {
+                // "This ability triggers only once." / "only twice each turn": each time it
+                // would trigger, additional times included (Acrobatic Cheerleader's
+                // rulings).
+                let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
+                for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {
                         source: src,
@@ -453,6 +473,9 @@ impl Game {
                 }
             }
         }
+        // Delayed triggered abilities about the batch ("whenever either of those creatures
+        // deals combat damage this turn").
+        found.extend(crate::delayed_batches::triggered_by_batch(self, batch));
         // CR 801.7: only events entirely within the controller's range of influence.
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
@@ -697,6 +720,10 @@ impl Game {
                 }
                 // CR 603.2d: effects may make an ability trigger additional times.
                 let times = 1 + self.additional_triggers(src, &t.trigger, ev, lookback.as_deref());
+                // "This ability triggers only once." / "only twice each turn": each time it
+                // would trigger, additional times included (Acrobatic Cheerleader's
+                // rulings).
+                let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, times);
                 for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {
@@ -782,7 +809,7 @@ impl Game {
         once_matches
     }
 
-    fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
+    pub(crate) fn delayed_pending(&self, d: &DelayedTrigger, info: EventInfo) -> PendingTrigger {
         let body = match d.performer {
             Some(p) => crate::resolve::performed_by(d.body.clone(), p),
             None => d.body.clone(),
@@ -1392,7 +1419,12 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::Discards { who, filter }, Event::Discarded { player, card, .. }) => {
+            (
+                TriggerCond::Discards { who, filter },
+                Event::Discarded {
+                    player, card, by, ..
+                },
+            ) => {
                 // CR 701.9c: a card discarded into a hidden zone has undefined
                 // characteristics.
                 if self.player_rel_matches(*who, *player, &ctx)
@@ -1401,6 +1433,7 @@ impl Game {
                     one(EventInfo {
                         player: Some(*player),
                         object: Some(*card),
+                        caused_by: *by,
                         ..Default::default()
                     })
                 } else {
@@ -1482,10 +1515,18 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::BecomesTapped(f), Event::Tapped { obj, .. }) => {
+            (
+                TriggerCond::BecomesTapped(f),
+                Event::Tapped {
+                    obj, by, attacking, ..
+                },
+            ) => {
                 if self.matches(*obj, f, &ctx) {
                     one(EventInfo {
                         object: Some(*obj),
+                        // The player who tapped it ("whenever you tap ...").
+                        player: *by,
+                        attack_declaration: *attacking,
                         ..Default::default()
                     })
                 } else {
@@ -1729,10 +1770,11 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::TurnedFaceUp(f), Event::TurnedFaceUp { obj }) => {
+            (TriggerCond::TurnedFaceUp(f), Event::TurnedFaceUp { obj, by }) => {
                 if self.matches(*obj, f, &ctx) {
                     one(EventInfo {
                         object: Some(*obj),
+                        player: *by,
                         ..Default::default()
                     })
                 } else {
@@ -2110,9 +2152,12 @@ impl Game {
             }
             // Removed in the cleanup step; until then it's the inner condition.
             // Removed as its controller's next turn begins.
-            (TriggerCond::ThisTurn(inner) | TriggerCond::UntilYourNextTurn(inner), ev) => {
-                self.trigger_matches_ctx(inner, base, ev)
-            }
+            (
+                TriggerCond::ThisTurn(inner)
+                | TriggerCond::UntilYourNextTurn(inner)
+                | TriggerCond::ThisCombat(inner),
+                ev,
+            ) => self.trigger_matches_ctx(inner, base, ev),
             (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
                 self.trigger_matches_ctx(inner, base, ev)
             }
@@ -2345,6 +2390,7 @@ fn on_sacrifice(t: &TriggerCond) -> bool {
         | TriggerCond::Batched { trigger, .. }
         | TriggerCond::ThisTurn(trigger)
         | TriggerCond::UntilYourNextTurn(trigger)
+        | TriggerCond::ThisCombat(trigger)
         | TriggerCond::Noncombat(trigger) => on_sacrifice(trigger),
         TriggerCond::AnyOf(ts) => ts.iter().all(on_sacrifice),
         _ => false,

@@ -614,6 +614,7 @@ impl Renderer<'_> {
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "that player ignores this effect until end of turn".into()
                     }
+                    SpecialActionEffect::StopDelayedTrigger => "that ability doesn't trigger".into(),
                 };
                 format!("{who} may {c} any time they could cast an instant. If they do, {what}")
             }
@@ -1797,6 +1798,15 @@ impl Renderer<'_> {
                 let a = subj(self, attackers);
                 let d = self.player_filter_object(defender);
                 format!("{a} attacks {d} each combat if able")
+            }
+            Restriction::MustAttackObject { attackers, target } => {
+                let a = subj(self, attackers);
+                let t = if matches!(target, Filter::Source) {
+                    self.me()
+                } else {
+                    self.noun(target, Num::One)
+                };
+                format!("{a} attacks {t} each combat if able")
             }
             Restriction::MustBlock(f) => format!("{} blocks each combat if able", subj(self, f)),
             Restriction::MustBeBlocked(f) => {
