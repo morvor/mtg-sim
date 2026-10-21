@@ -838,10 +838,11 @@ impl Renderer<'_> {
                 let verb = known.iter().find(|(x, _)| *x == s)?.1.clone();
                 let c = match other {
                     Some(o) => {
-                        let o = self.condition(o);
                         // "If you control a Squirrel or returned a Squirrel card to your
                         // hand this way": the subject said once.
-                        let elide = o.starts_with("you ");
+                        let elide = matches!(o, Condition::Exists(Filter::And(v))
+                            if v.iter().any(|x| matches!(x, Filter::ControlledBy(PlayerRel::You))));
+                        let o = self.condition(o);
                         let c = self.outcome_cond_text(&oc, &verb, elide);
                         format!("{o} or {c}")
                     }
