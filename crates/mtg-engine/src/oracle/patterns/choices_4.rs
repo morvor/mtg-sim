@@ -13,7 +13,7 @@
 use super::{EffectPattern, FilterSuffixPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
-use crate::oracle::phrases::end;
+use crate::oracle::phrases::{end, parse_number};
 
 /// The greatest number among players, determined before any of them acts.
 const MOST: Var = vars::USER + 41010;
@@ -429,6 +429,134 @@ fn controlled_by_that_player_or_controller(l: &str, b: &mut Builder) -> Option<E
 
 inventory::submit! { EffectPattern { name: "choices 4: creatures controlled by that player or by that planeswalker's controller", priority: 120, parse: controlled_by_that_player_or_controller } }
 
+/// One alternative of a choice over objects in several zones, as "you" (the player
+/// choosing, who owns or controls them) words it: "a permanent you control", "cards from
+/// their hand", "a card from your hand or graveyard" (two alternatives).
+fn zone_alternatives(s: &str) -> Option<Vec<Filter>> {
+    let s = s
+        .strip_prefix("a ")
+        .or_else(|| s.strip_prefix("an "))
+        .unwrap_or(s);
+    let you = || PlayerRel::You;
+    for p in [
+        "permanent you control",
+        "permanents you control",
+        "permanent they control",
+        "permanents they control",
+    ] {
+        if s == p {
+            return Some(vec![Filter::and(vec![
+                Filter::Permanent,
+                Filter::ControlledBy(you()),
+            ])]);
+        }
+    }
+    let r = s
+        .strip_prefix("card from ")
+        .or_else(|| s.strip_prefix("cards from "))?;
+    let r = r
+        .strip_prefix("your ")
+        .or_else(|| r.strip_prefix("their "))?;
+    let zones: Vec<ZoneKind> = match r {
+        "hand" => vec![ZoneKind::Hand],
+        "graveyard" => vec![ZoneKind::Graveyard],
+        "hand or graveyard" => vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        _ => return None,
+    };
+    Some(
+        zones
+            .into_iter()
+            .map(|z| {
+                Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(z),
+                    Filter::OwnedBy(you()),
+                ])
+            })
+            .collect(),
+    )
+}
+
+/// "a card from their hand or a permanent they control", "X permanents they control and/or
+/// cards from their hand", "a permanent you control or a card from your hand or
+/// graveyard": the objects the player may choose among, in several zones.
+fn mixed_objects(s: &str) -> Option<Filter> {
+    let parts: Vec<&str> = if s.contains(" and/or ") {
+        s.split(" and/or ").collect()
+    } else {
+        let i = s.find(" or a ").or_else(|| s.find(" or an "))?;
+        vec![&s[..i], &s[i + " or ".len()..]]
+    };
+    let mut alts = vec![];
+    for p in parts {
+        alts.extend(zone_alternatives(p.trim())?);
+    }
+    (alts.len() >= 2).then_some(Filter::Or(alts))
+}
+
+/// "Each opponent exiles a card from their hand or a permanent they control." (Nicol Bolas,
+/// Dragon-God), "each player exiles X permanents they control and/or cards from their
+/// hand" (Descent into Madness), "for each 1 life you lost, exile a permanent you control or
+/// a card from your hand or graveyard" (Lich's Mastery): each player chooses that many of
+/// the objects in any mix of the zones, in APNAP order, then they're exiled at once (CR
+/// 101.4, 608.2e); a player with fewer exiles all they can.
+fn exile_mixed(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (group, r) = if let Some(r) = l.strip_prefix("each opponent exiles ") {
+        (Some(PlayerRef::EachOpponent), r)
+    } else if let Some(r) = l.strip_prefix("each player exiles ") {
+        (Some(PlayerRef::EachPlayer), r)
+    } else if let Some(r) = l.strip_prefix("exile ") {
+        (None, r)
+    } else if let Some(r) = l.strip_prefix("for each 1 life you lost, exile ") {
+        if !b.in_trigger {
+            return None;
+        }
+        (None, r)
+    } else {
+        return None;
+    };
+    let per_life = l.starts_with("for each 1 life you lost, ");
+    let (count, phrase) = if per_life {
+        (Value::EventAmount, r.to_string())
+    } else if let Some(x) = r.strip_prefix("x ") {
+        if !super::value_grammar::x_defined() {
+            return None;
+        }
+        (Value::X, x.to_string())
+    } else if r.starts_with("a ") || r.starts_with("an ") {
+        (Value::c(1), r.to_string())
+    } else {
+        let (n, x) = parse_number(r)?;
+        n.as_const()?;
+        (n, x.trim_start().to_string())
+    };
+    let filter = mixed_objects(&phrase)?;
+    let exile = Effect::Exile {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter,
+            count,
+            up_to: false,
+            store: None,
+        },
+        face_down: false,
+        link: false,
+    };
+    Some(match group {
+        None => exile,
+        Some(who) => Effect::ForEachPlayer {
+            who,
+            effect: Box::new(Effect::AsPlayer {
+                who: PlayerRef::Iterated,
+                effect: Box::new(exile),
+            }),
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: exile [objects] in several zones", priority: 120, parse: exile_mixed } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -444,6 +572,9 @@ mod tests {
             ("Legendary Creature", "Whenever one or more Devils you control attack one or more players, you and those players each draw a card, then discard a card at random."),
             ("Legendary Creature", "Whenever one or more creatures an opponent controls deal combat damage to one or more of your opponents, you and the controller of those creatures each draw a card."),
             ("Sorcery", "Each opponent chooses fame or fortune. For each player who chose fame, gain control of a creature that player controls until end of turn. Untap those creatures and they gain haste until end of turn. For each player who chose fortune, you draw a card and create a Treasure token."),
+            ("Legendary Planeswalker — Bolas", "+1: You draw a card. Each opponent exiles a card from their hand or a permanent they control."),
+            ("Enchantment", "Whenever you lose life, for each 1 life you lost, exile a permanent you control or a card from your hand or graveyard."),
+            ("Enchantment", "At the beginning of your upkeep, put a despair counter on ~, then each player exiles X permanents they control and/or cards from their hand, where X is the number of despair counters on ~."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
