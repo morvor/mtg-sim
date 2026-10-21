@@ -125,3 +125,63 @@ fn reveals_their_library(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "[player] reveals their library", priority: 120, parse: reveals_their_library } }
+
+/// "Opponents can't cast spells with the chosen name until your next turn." (Academic
+/// Probation): "opponents" alone as a subject means "your opponents".
+fn bare_opponents(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("opponents ")?;
+    crate::oracle::effects::parse_clause(&format!("your opponents {r}"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "opponents [do something] (your opponents)", priority: 120, parse: bare_opponents } }
+
+/// "~ deals 4 damage to an opponent chosen at random" (Zaffai, Thunder Conductor): the
+/// opponent is chosen at random as the effect happens, then dealt the damage.
+fn damage_to_random_opponent(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    for (suffix, chooser) in [
+        (" to an opponent chosen at random", "choose an opponent at random"),
+        (" to a player chosen at random", "choose a player at random"),
+    ] {
+        let Some(head) = l.strip_suffix(suffix) else {
+            continue;
+        };
+        if !head.contains(" deals ") {
+            return None;
+        }
+        let targets = b.targets.len();
+        let saved = b.it_player.clone();
+        let choose = crate::oracle::effects::parse_clause(chooser, b);
+        let deal = choose
+            .as_ref()
+            .and_then(|_| crate::oracle::effects::parse_clause(&format!("{head} to that player"), b));
+        match (choose, deal) {
+            (Some(c), Some(d)) if b.targets.len() == targets => {
+                return Some(Effect::seq(vec![c, d]))
+            }
+            _ => {
+                b.targets.truncate(targets);
+                b.it_player = saved;
+                return None;
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! { super::EffectPattern { name: "deals N damage to an opponent chosen at random", priority: 120, parse: damage_to_random_opponent } }
+
+/// "destroy target nonbasic land defending player controls, and creatures that player
+/// controls without flying can't block this turn" (The Motherlode, Excavator): "that
+/// player" after "defending player" is the defending player.
+fn that_defending_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (before, after) = l.split_once("defending player")?;
+    if !after.contains(" that player ") || before.contains("that player") {
+        return None;
+    }
+    let after = after.replace(" that player ", " defending player ");
+    crate::oracle::effects::parse_clause(&format!("{before}defending player{after}"), b)
+}
+
+inventory::submit! { super::EffectPattern { name: "defending player ... that player (the defending player)", priority: 120, parse: that_defending_player } }
