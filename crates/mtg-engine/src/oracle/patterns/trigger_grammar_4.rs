@@ -404,6 +404,104 @@ fn plays_card_exiled_with(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: a player plays a card exiled with ~", priority: 100, parse: plays_card_exiled_with } }
 
+/// "you play a card with two or more card types" (Rendmaw, Creaking Nest): a land played
+/// or a spell cast, described by the card's qualities.
+fn plays_qualified_card(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (who, q) = if let Some(q) = t.strip_prefix("you play a card ") {
+        ("you play a card", q)
+    } else {
+        ("a player plays a card", t.strip_prefix("a player plays a card ")?)
+    };
+    if q.contains("exiled with") {
+        return None;
+    }
+    let phrase = format!("card {q}");
+    let (f, plural, tail) = parse_object_phrase(&phrase)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    let (c, it, p) = parse_trigger_condition(&format!("whenever {who}"))?;
+    let TriggerCond::AnyOf(v) = c else {
+        return None;
+    };
+    let v = v
+        .into_iter()
+        .map(|c| match c {
+            TriggerCond::CastSpell { who, filter } => Some(TriggerCond::CastSpell {
+                who,
+                filter: Filter::and(vec![filter, f.clone()]),
+            }),
+            TriggerCond::LandPlayed { who, filter } => Some(TriggerCond::LandPlayed {
+                who,
+                filter: Filter::and(vec![filter, f.clone()]),
+            }),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some((TriggerCond::AnyOf(v), it, p))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: you play a card [with qualities]", priority: 100, parse: plays_qualified_card } }
+
+/// "one or more [other] permanents [you control] phase out", "[another] permanent phases
+/// out" (CR 702.26b; such abilities look back in time, CR 603.10b).
+fn phase_out(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (batch, np) = if let Some(r) = t.strip_prefix("one or more ") {
+        (true, r.strip_suffix(" phase out")?)
+    } else {
+        (false, t.strip_suffix(" phases out")?)
+    };
+    if np == "~" {
+        return None;
+    }
+    let np = np
+        .strip_prefix("a ")
+        .or_else(|| np.strip_prefix("an "))
+        .unwrap_or(np);
+    let (f, plural, tail) = parse_object_phrase(np)?;
+    if plural != batch
+        || !end(tail).is_empty()
+        || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
+    {
+        return None;
+    }
+    let c = TriggerCond::PhasesOut(Filter::and(vec![f, Filter::Permanent]));
+    let c = if batch {
+        TriggerCond::Batched {
+            trigger: Box::new(c),
+            per: BatchPer::Batch,
+        }
+    } else {
+        c
+    };
+    Some((c, Sel::TriggerObject, PlayerRef::TriggerPlayer))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: [permanents] phase out", priority: 100, parse: phase_out } }
+
+/// "one or more other permanents phase out and whenever one or more other cards are put
+/// into exile from anywhere" (The War Doctor): two "one or more" trigger conditions, each
+/// of a batch of simultaneous events (the batched alternative a batch's events match; see
+/// the interpretation `batched-alternatives-one-batch`).
+fn batched_conjunction(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (a, b) = t.split_once(" and whenever ")?;
+    if !a.starts_with("one or more ") || !b.starts_with("one or more ") {
+        return None;
+    }
+    let (ca, _, _) = parse_trigger_condition(&format!("whenever {a}"))?;
+    let (cb, _, _) = parse_trigger_condition(&format!("whenever {b}"))?;
+    let batched = |c: &TriggerCond| matches!(c, TriggerCond::Batched { .. });
+    if !batched(&ca) || !batched(&cb) {
+        return None;
+    }
+    Some((TriggerCond::AnyOf(vec![ca, cb]), Sel::None, PlayerRef::You))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: one or more [A] and whenever one or more [B]", priority: 100, parse: batched_conjunction } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

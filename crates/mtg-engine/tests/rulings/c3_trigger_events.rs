@@ -380,3 +380,75 @@ fn prowl_draws_and_converts_when_the_exiled_card_is_played() {
     assert_eq!(t.hand_size(P0), hand + 1);
     assert_eq!(t.obj_now(prowl).chars.name.as_str(), "Prowl, Pursuit Vehicle");
 }
+
+#[test]
+fn war_doctor_phasing_and_exile() {
+    cr!("603.2c", "702.26b");
+    interp!("batched-alternatives-one-batch");
+    ruling!(
+        "The War Doctor",
+        "If The War Doctor phases out at the same time as any other permanents, its first ability won't trigger."
+    );
+    supported("The War Doctor");
+    let mut t = TestGame::new(2);
+    let doc = t.battlefield(P0, "The War Doctor");
+    // Two permanents phasing out at once: one trigger.
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    mtg_engine::keyword_impls::phase_out(&mut t.g, vec![a, b]);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(doc, "time"), 1);
+    // Cards put into exile from a graveyard.
+    let c = t.graveyard(P1, "Island");
+    t.g.move_object(c, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(doc, "time"), 2);
+    // Both at the same time: one trigger.
+    let d = t.battlefield(P1, "Forest");
+    let e = t.graveyard(P1, "Island");
+    t.g.batch_hold += 1;
+    mtg_engine::keyword_impls::phase_out(&mut t.g, vec![d]);
+    t.g.move_object(e, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.batch_hold -= 1;
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(doc, "time"), 3);
+    // The Doctor phasing out with another permanent: no trigger.
+    let f = t.battlefield(P1, "Mountain");
+    mtg_engine::keyword_impls::phase_out(&mut t.g, vec![doc, f]);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn rendmaw_card_with_two_or_more_card_types() {
+    cr!("603.2", "205.2a");
+    ruling!(
+        "Rendmaw, Creaking Nest",
+        "The card types in Magic include artifact, battle, creature, enchantment, instant, kindred, land, planeswalker, and sorcery."
+    );
+    supported("Rendmaw, Creaking Nest");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Rendmaw, Creaking Nest");
+    cast_new(&mut t, P0, "Grizzly Bears", &[]);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    cast_new(&mut t, P0, "Ornithopter", &[]);
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Bird"), 1);
+    t.resolve_all();
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
+    assert_eq!(crate::r_s01_common::tokens(&t, P1).len(), 1);
+    // A land with two card types played: it triggers too.
+    let arbor = t.hand(P0, "Dryad Arbor");
+    t.play_land(P0, arbor).expect("play");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Bird"), 1);
+}
