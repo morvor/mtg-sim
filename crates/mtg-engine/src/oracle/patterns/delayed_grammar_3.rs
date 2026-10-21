@@ -34,6 +34,56 @@ fn ends_with_exile(e: &Effect) -> bool {
     }
 }
 
+/// Whether the effect's first instruction exiles a group of objects ("Exile all opponents'
+/// graveyards."), whose cards the following sentences call "those cards" and "them".
+fn starts_with_group_exile(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.first().is_some_and(starts_with_group_exile),
+        Effect::Exile {
+            what: Sel::All(_), ..
+        } => true,
+        _ => false,
+    }
+}
+
+/// "Exile all opponents' graveyards. [...] At the beginning of the next end step, if any
+/// of those cards remain exiled, return them to their owners' graveyards." (Mnemonic
+/// Betrayal): "them" is the exiled cards (the exile instruction's result, CR 603.7c), even
+/// after an instruction in between that doesn't name other objects.
+fn delayed_return_of_group_exiled(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let s = end(s);
+    if !starts_with_group_exile(prev)
+        || !s.starts_with("at the beginning of ")
+        || !s.contains(", if any of those cards remain exiled, ")
+        || !crate::oracle::patterns::oracle_hardening_referents::is_no_referent(&b.it)
+    {
+        return false;
+    }
+    let saved = b.it.clone();
+    b.it = Sel::Var(EXILED_GROUP);
+    let e = crate::oracle::effects::parse_sentence(s, b);
+    b.it = saved;
+    let Some(e) = e else {
+        return false;
+    };
+    // The exiled cards, noted as the exile instruction resolves.
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let note = Effect::Store {
+        var: EXILED_GROUP,
+        sel: Sel::Var(vars::IT),
+    };
+    v.insert(1, note);
+    v.push(e);
+    true
+}
+
+/// The cards a group exile exiled (see [`delayed_return_of_group_exiled`]).
+const EXILED_GROUP: Var = vars::USER + 13_101;
+
+inventory::submit! { FollowupPattern { name: "delayed grammar 3: return them (the group exiled) later", priority: 100, apply: delayed_return_of_group_exiled } }
+
 fn those_exiled_cards_returned_later(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !ends_with_exile(prev) {
         return false;

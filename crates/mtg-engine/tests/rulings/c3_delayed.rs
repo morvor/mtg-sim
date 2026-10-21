@@ -91,3 +91,32 @@ fn elkin_lair_card_not_played_goes_to_the_graveyard() {
         assert_eq!(t.named_on_battlefield("Forest").len(), play as usize);
     }
 }
+
+#[test]
+fn mnemonic_betrayal_returns_the_cards_still_exiled() {
+    cr!("603.7a", "603.7c", "603.4");
+    ruling!(
+        "Mnemonic Betrayal",
+        "Only the cards that remain in exile are returned to their owners’ graveyards."
+    );
+    supported("Mnemonic Betrayal");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.graveyard(P1, "Grizzly Bears");
+    let bolt = t.graveyard(P1, "Lightning Bolt");
+    cast_new(&mut t, P0, "Mnemonic Betrayal", &[]);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_exile("Mnemonic Betrayal"));
+    // P0 casts the Bolt from exile with mana of any type.
+    t.lands(P0, "Island", 1);
+    let bolt = t.g.current(bolt);
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+    assert!(!t.in_exile("Grizzly Bears"));
+}
