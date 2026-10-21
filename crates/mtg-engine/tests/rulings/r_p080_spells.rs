@@ -405,3 +405,20 @@ fn odds_coin_flip_has_no_call_winner_or_loser() {
         .collect();
     assert_eq!(flips, vec![(false, false)]);
 }
+
+#[test]
+fn path_of_mettle_deals_1_damage_to_each_creature_without_the_abilities() {
+    cr!("120.3", "603.2");
+    ruling!(
+        "Path of Mettle // Metzali, Tower of Triumph",
+        "Path of Mettle's first ability deals 1 damage to each creature that doesn't have any of the four listed abilities. It doesn't deal 1 damage to each creature for each ability that creature doesn't have."
+    );
+    supported("Path of Mettle // Metzali, Tower of Triumph");
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.enter(P0, "Path of Mettle // Metzali, Tower of Triumph");
+    t.resolve_all();
+    assert_eq!(damage_on(&t, wurm), 1);
+    assert_eq!(damage_on(&t, angel), 0, "vigilance");
+}

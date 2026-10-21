@@ -220,3 +220,22 @@ fn bury_in_books_with_an_empty_library_puts_the_creature_on_top() {
     assert_eq!(lib.len(), 1);
     assert_eq!(t.g.obj(*lib.last().unwrap()).chars.name, "Grizzly Bears");
 }
+
+#[test]
+fn scriv_creates_no_contract_for_a_creature_it_cant_enchant() {
+    cr!("702.16c", "303.4i");
+    ruling!(
+        "Scriv, the Obligator",
+        "In the rare case that the target creature is a legal target as Scriv's first ability resolves but the target creature can't legally be enchanted by the Contract token, the token won't be created at all."
+    );
+    supported("Azorius First-Wing");
+    // Azorius First-Wing has protection from enchantments (but not from creatures).
+    let mut t = TestGame::new(2);
+    let wing = t.battlefield(P1, "Azorius First-Wing");
+    t.answer_targets(P0, &[obj(wing)]);
+    t.enter(P0, "Scriv, the Obligator");
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Contract").is_empty());
+    assert!(crate::r_s01_common::tokens(&t, P0).is_empty());
+    assert!(t.g.exile.iter().all(|e| t.g.obj(*e).chars.name != "Contract"));
+}

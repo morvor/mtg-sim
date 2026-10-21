@@ -430,3 +430,66 @@ fn misleading_signpost_ignores_attack_costs_and_restrictions() {
     assert_eq!(target_of(&t, bears), Some(Entity::Player(P2)));
     assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 2, "nothing paid");
 }
+
+/// Whether `p` could cast Shock now (with a Mountain).
+fn can_cast_shock(t: &mut TestGame, p: PlayerId) -> bool {
+    let shock = t.hand(p, "Shock");
+    t.lands(p, "Mountain", 1);
+    can_cast_now(t, p, shock)
+}
+
+#[test]
+fn sandswirl_wanderglyph_cares_only_about_attacks_on_you_and_your_planeswalkers() {
+    cr!("508.6", "601.3", "810.7");
+    ruling!(
+        "Unstable Glyphbridge // Sandswirl Wanderglyph",
+        "Sandswirl Wanderglyph's abilities care only about creatures that attack you or planeswalkers you control, not creatures that attack your teammate or planeswalkers they control."
+    );
+    ruling!(
+        "Unstable Glyphbridge // Sandswirl Wanderglyph",
+        "Sandswirl Wanderglyph's abilities won't stop opponents from attacking battles you protect or casting spells after attacking battles you protect."
+    );
+    supported("Unstable Glyphbridge // Sandswirl Wanderglyph");
+    // Two-Headed Giant: P2 attacks P0's teammate P1 and can still cast spells; attacking
+    // P0 (or P0's planeswalker) stops it.
+    // (0: P0's planeswalker, 1: P0, 2: P1) -> whether P2 can still cast spells.
+    for (which, can) in [(0, false), (1, false), (2, true)] {
+        let mut t = two_headed_giant();
+        back_face(&mut t, P0, "Unstable Glyphbridge // Sandswirl Wanderglyph");
+        let jace = t.battlefield(P0, "Jace Beleren");
+        let bears = t.battlefield(P2, "Grizzly Bears");
+        t.set_step(P2, Step::BeginningOfCombat);
+        let to = [obj(jace), Entity::Player(P0), Entity::Player(P1)][which];
+        attack_with(&mut t, &[(bears, to)]);
+        t.resolve_all();
+        assert_eq!(can_cast_shock(&mut t, P2), can, "{to:?}");
+    }
+    // After casting a spell in its turn, P2 can still attack P1 but not P0.
+    let mut t = two_headed_giant();
+    back_face(&mut t, P0, "Unstable Glyphbridge // Sandswirl Wanderglyph");
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.set_step(P2, Step::PrecombatMain);
+    cast_card(&mut t, P2, "Shock", &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    t.g.combat = None;
+    t.set_step(P2, Step::BeginningOfCombat);
+    assert!(!crate::r_s09_common::legal_attack(&mut t, &[(bears, Entity::Player(P0))]));
+    assert!(crate::r_s09_common::legal_attack(&mut t, &[(bears, Entity::Player(P1))]));
+    // A battle P0 protects: P1 may attack it after casting a spell, and can still cast
+    // spells afterwards.
+    let mut t = TestGame::new(2);
+    back_face(&mut t, P0, "Unstable Glyphbridge // Sandswirl Wanderglyph");
+    let battle = t.battlefield(P1, "Invasion of Azgol");
+    t.g.objects[battle.0 as usize].choices.player = Some(P0);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    cast_card(&mut t, P1, "Shock", &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    t.g.combat = None;
+    t.set_step(P1, Step::BeginningOfCombat);
+    assert!(!crate::r_s09_common::legal_attack(&mut t, &[(bears, Entity::Player(P0))]));
+    assert!(crate::r_s09_common::legal_attack(&mut t, &[(bears, obj(battle))]));
+    attack_with(&mut t, &[(bears, obj(battle))]);
+    t.resolve_all();
+    assert!(can_cast_shock(&mut t, P1));
+}

@@ -416,3 +416,33 @@ fn shipwreck_singer_affects_only_creatures_already_attacking() {
     assert_eq!(t.pt(bears), (1, 1));
     assert_eq!(t.zone(bears), Zone::Battlefield);
 }
+
+#[test]
+fn mystifying_maze_target_can_attack_a_planeswalker_or_another_player() {
+    cr!("506.2", "115.1");
+    ruling!(
+        "Mystifying Maze",
+        "The targeted creature doesn’t have to be attacking you. It can be attacking a planeswalker, or (in a multiplayer game) it can be attacking another player."
+    );
+    supported("Mystifying Maze");
+    // P1's Grizzly Bears attack P2 and P1's Hill Giant attacks P0's planeswalker.
+    let mut t = TestGame::new(3);
+    let maze = t.battlefield(P0, "Mystifying Maze");
+    t.lands(P0, "Wastes", 8);
+    let jace = t.battlefield(P0, "Jace Beleren");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P2)), (giant, obj(jace))]);
+    t.resolve_all();
+    t.answer_targets(P0, &[obj(bears)]);
+    activate_containing(&mut t, P0, maze, "Exile target").expect("activated");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    // The Maze untaps for a second test of the planeswalker's attacker.
+    t.g.objects[maze.0 as usize].tapped = false;
+    t.answer_targets(P0, &[obj(giant)]);
+    activate_containing(&mut t, P0, maze, "Exile target").expect("activated");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+}
