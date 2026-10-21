@@ -684,6 +684,7 @@ impl Renderer<'_> {
             "may look at cards exiled with this" => {
                 format!("you may look at cards exiled with {}", me(self))
             }
+            crate::kw::pay_life_exile_instead::PAY_LIFE_EXILE_INSTEAD => "if you would pay life while your library has at least that many cards in it, exile that many cards from the top of your library instead".into(),
             crate::game_terms::DEVOTION_INCREASED => "your devotion to each color and each combination of colors is increased by one".into(),
             "hands revealed:each" => "players play with their hands revealed".into(),
             "hands revealed:opponents" => "your opponents play with their hands revealed".into(),

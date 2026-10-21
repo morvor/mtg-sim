@@ -225,3 +225,84 @@ fn thunder_thrash_elder_with_jund_can_devour_runeclaw_bear_only_once() {
         assert_eq!(offered, if sac == Some(0) { 1 } else { 2 });
     }
 }
+
+#[test]
+fn ashioks_replacement_ignores_a_breeding_pool_entering_from_the_library() {
+    cr!("614.13", "119.4", "614.1a");
+    cr_example!("614.13c", "Ashiok, Wicked Manipulator");
+    supported("Ashiok, Wicked Manipulator");
+    supported("Breeding Pool");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ashiok, Wicked Manipulator");
+    t.custom(
+        P0,
+        custom_card(
+            "Top Gardener",
+            "Enchantment",
+            None,
+            "You may play lands from the top of your library.",
+        ),
+        Zone::Battlefield,
+    );
+    let third = t.library_top(P0, "Hill Giant");
+    let second = t.library_top(P0, "Shock");
+    let first = t.library_top(P0, "Grizzly Bears");
+    let pool = t.library_top(P0, "Breeding Pool");
+    let lib = t.library_size(P0);
+    // P0 plays Breeding Pool from the top of the library and pays 2 life as it enters:
+    // Ashiok's effect exiles the next two cards instead.
+    t.answer(P0, DecisionKind::Any, Answer::Bool(true));
+    t.play_land(P0, pool).unwrap();
+    t.settle();
+    let pool = t.named_on_battlefield("Breeding Pool")[0];
+    assert!(!t.obj_now(pool).tapped);
+    assert_eq!(t.life(P0), 20);
+    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_exile("Shock"));
+    assert!(!t.g.is_live(first) && !t.g.is_live(second));
+    assert_eq!(t.zone(third), Zone::Library(P0));
+    assert_eq!(t.library_size(P0), lib - 3);
+}
+
+#[test]
+fn ashiok_pays_life_normally_when_the_library_is_too_small() {
+    cr!("119.4", "614.1a");
+    ruling!(
+        "Ashiok, Wicked Manipulator",
+        "your library does not have at least that many cards in it, you’ll just pay life as normal"
+    );
+    ruling!("Ashiok, Wicked Manipulator", "first ability isn't optional");
+    for library in [1usize, 2] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Ashiok, Wicked Manipulator");
+        t.g.players[0].library.clear();
+        for _ in 0..library {
+            t.library_top(P0, "Grizzly Bears");
+        }
+        // Breeding Pool from the hand, paying 2 life.
+        let pool = t.hand(P0, "Breeding Pool");
+        t.answer(P0, DecisionKind::Any, Answer::Bool(true));
+        t.play_land(P0, pool).unwrap();
+        t.settle();
+        let pool = t.named_on_battlefield("Breeding Pool")[0];
+        assert!(!t.obj_now(pool).tapped);
+        if library == 2 {
+            // Not optional: the two cards are exiled, no life is paid.
+            assert_eq!(t.life(P0), 20);
+            assert_eq!(t.library_size(P0), 0);
+        } else {
+            assert_eq!(t.life(P0), 18);
+            assert_eq!(t.library_size(P0), 1);
+        }
+    }
+    // An opponent's Ashiok doesn't apply.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Ashiok, Wicked Manipulator");
+    let pool = t.hand(P0, "Breeding Pool");
+    let lib = t.library_size(P0);
+    t.answer(P0, DecisionKind::Any, Answer::Bool(true));
+    t.play_land(P0, pool).unwrap();
+    t.settle();
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(t.library_size(P0), lib);
+}

@@ -1698,7 +1698,7 @@ impl Game {
         if !self.can_pay_life(p, n) {
             return false;
         }
-        if n > 0 {
+        if n > 0 && !crate::kw::pay_life_instead(self, p, n) {
             self.perform_lose_life(p, n);
         }
         true
