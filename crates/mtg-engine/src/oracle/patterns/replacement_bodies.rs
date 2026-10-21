@@ -283,3 +283,127 @@ fn last_of(e: &mut Effect) -> Option<&mut Effect> {
 }
 
 inventory::submit! { super::FollowupPattern { name: "replacement bodies: they may play it this turn (after a draw replaced by exile)", priority: 70, apply: they_may_play_it } }
+
+// ---------------------------------------------------------------------------
+// A life total that would be reduced to N or less (CR 614.1a, 119.3)
+// ---------------------------------------------------------------------------
+
+/// "If your life total would be reduced to 0 or less, instead transform ~ and your life
+/// total becomes 3. Then if ~ didn't transform this way, you lose the game." (Enduring
+/// Angel): a replacement of the life loss (from damage or otherwise) that would bring the
+/// life total to N or less; it doesn't use the stack (its ruling). A permanent that can't
+/// transform (a token, or a copy) doesn't, and its controller loses (CR 701.27d).
+fn life_reduced_to_or_less(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let r = text.strip_prefix("If your life total would be reduced to ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let Value::Const(_) = n else {
+        return None;
+    };
+    let r = r
+        .trim_start()
+        .strip_prefix("or less, instead transform ~ and your life total becomes ")?;
+    let m = r.strip_suffix(". Then if ~ didn't transform this way, you lose the game.")?;
+    let m = Value::c(m.trim().parse().ok()?);
+    let transformed = Condition::SelMatches(
+        Sel::This,
+        Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
+    );
+    let effect = Effect::seq(vec![
+        Effect::Transform { what: Sel::This },
+        Effect::SetLife {
+            who: PlayerRef::You,
+            n: m,
+        },
+        Effect::If {
+            cond: Condition::Not(Box::new(transformed)),
+            then: Box::new(Effect::LoseGame {
+                who: PlayerRef::You,
+            }),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    let def = ReplacementDef {
+        event: ReplacementEvent::Where {
+            event: Box::new(ReplacementEvent::LoseLife(PlayerFilter::You)),
+            cond: Condition::Compare(
+                Value::Diff(
+                    Box::new(Value::LifeTotal(PlayerRef::You)),
+                    Box::new(Value::EventAmount),
+                ),
+                Cmp::Le,
+                n,
+            ),
+        },
+        action: ReplacementAction::Instead(Box::new(effect)),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "replacement bodies: if your life total would be reduced to N or less, instead transform ~", priority: 70, parse: life_reduced_to_or_less } }
+
+// ---------------------------------------------------------------------------
+// Entering that requires a cost (CR 614.1c, 614.12)
+// ---------------------------------------------------------------------------
+
+/// "If ~ would enter, sacrifice two untapped lands instead. If you do, put ~ onto the
+/// battlefield. If you don't, put it into its owner's graveyard." (Lotus Vale): the
+/// permanent enters only if the cost is paid; otherwise it never enters (its ruling). The
+/// replacement applies once to the event (CR 614.5): putting it onto the battlefield isn't
+/// replaced again.
+fn enter_only_if_paid(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let lower = text.to_lowercase();
+    let r = lower.strip_prefix("if ~ would enter, ")?;
+    let (cost_s, rest) = r.split_once(" instead. ")?;
+    if rest != "if you do, put ~ onto the battlefield. if you don't, put it into its owner's graveyard." {
+        return None;
+    }
+    let (cost, false) = crate::oracle::costs::parse_cost(cost_s)? else {
+        return None;
+    };
+    if cost.mana.is_some()
+        || !cost
+            .parts
+            .iter()
+            .all(|p| matches!(p, CostPart::Sacrifice { .. } | CostPart::TapUntapped { .. }))
+    {
+        return None;
+    }
+    let effect = Effect::seq(vec![
+        Effect::PayOptional {
+            who: PlayerRef::You,
+            cost,
+            then: Box::new(Effect::Noop),
+            otherwise: Box::new(Effect::Noop),
+        },
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(Effect::Move {
+                what: Sel::This,
+                to: Destination::battlefield(),
+            }),
+            otherwise: Box::new(Effect::Move {
+                what: Sel::This,
+                to: Destination::zone(ZoneKind::Graveyard),
+            }),
+        },
+    ]);
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(Filter::Source),
+        action: ReplacementAction::Instead(Box::new(effect)),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "replacement bodies: if ~ would enter, [cost] instead; if you do, it enters", priority: 70, parse: enter_only_if_paid } }
