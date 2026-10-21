@@ -331,3 +331,37 @@ fn teferis_realm_the_upkeep_player_chooses_which_permanents_phase_out() {
     assert!(!t.obj_now(aura).phased_out, "an Aura");
     assert!(!t.obj_now(bears).phased_out);
 }
+
+#[test]
+fn conundrum_sphinx_each_player_keeps_the_top_card_if_they_named_it() {
+    cr!("101.4", "701.20a");
+    ruling!(
+        "Conundrum Sphinx",
+        "First the player whose turn it is names a card, then each other player in turn order does the same"
+    );
+    compiles("Conundrum Sphinx");
+    let mut t = TestGame::new(2);
+    let sphinx = t.battlefield(P0, "Conundrum Sphinx");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let island = t.library_top(P1, "Island");
+    t.answer(P0, DecisionKind::Name, Answer::Text("Lightning Bolt".into()));
+    t.answer(P1, DecisionKind::Name, Answer::Text("Forest".into()));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(sphinx, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.resolve_all();
+    assert!(matches!(t.zone(bolt), mtg_engine::object::Zone::Hand(_)), "named it");
+    let namers: Vec<PlayerId> = t
+        .asked()
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::NameCard { .. }))
+        .map(|(p, _)| p)
+        .collect();
+    assert_eq!(namers, vec![P0, P1]);
+    let lib = &t.g.player(P1).library;
+    assert_eq!(lib.first().copied().map(|c| t.g.current(c)), Some(t.g.current(island)), "on the bottom");
+}

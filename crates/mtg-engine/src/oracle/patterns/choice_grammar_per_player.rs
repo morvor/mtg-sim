@@ -651,3 +651,102 @@ fn of_that_type_word(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { super::FollowupPattern { name: "of that type (a chosen card type word)", priority: 20, apply: of_that_type_word } }
+
+/// "Then each player reveals the top card of their library. If the card a player revealed
+/// has the name they chose, that player puts it into their hand. If it doesn't, that
+/// player puts it on the bottom of their library." (Conundrum Sphinx): each player
+/// reveals their top card and moves it by their own chosen name.
+fn revealed_has_the_name_they_chose(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(rest) = end(l).strip_prefix("if the card a player revealed has the name they chose, that player ") else {
+        return false;
+    };
+    const REVEAL: &str = "parley:each player reveals the top card of their library";
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        other => Some(other),
+    };
+    let Some(last) = last else {
+        return false;
+    };
+    if !matches!(last, Effect::Custom(n) if n == REVEAL) {
+        return false;
+    }
+    let Some(pred) = super::player_subjects::as_you(rest) else {
+        return false;
+    };
+    let text = format!(
+        "reveal the top card of your library. if it has the chosen name, {pred}"
+    );
+    let targets = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_effect_text(&text, b) else {
+        b.targets.truncate(targets);
+        return false;
+    };
+    let mut n = 0;
+    let from = serde_json::Value::String("ChosenName".into());
+    let to = serde_json::to_value(Filter::Custom(crate::choices::NAME_THEY_CHOSE.into()))
+        .unwrap_or(serde_json::Value::Null);
+    let Ok(v) = serde_json::to_value(&e) else {
+        return false;
+    };
+    let v = replace_json(v, &from, &to, &mut n);
+    let Ok(e) = serde_json::from_value::<Effect>(v) else {
+        return false;
+    };
+    if n != 1 {
+        b.targets.truncate(targets);
+        return false;
+    }
+    *last = Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(e),
+        }),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if the card a player revealed has the name they chose", priority: 20, apply: revealed_has_the_name_they_chose } }
+
+/// "If it doesn't, that player puts it on the bottom of their library." after the one
+/// above: the other case, for each player.
+fn if_it_doesnt_that_player(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(rest) = end(l).strip_prefix("if it doesn't, that player ") else {
+        return false;
+    };
+    let last = match prev {
+        Effect::Seq(v) => v.last_mut(),
+        other => Some(other),
+    };
+    let Some(Effect::ForEachPlayer { effect, .. }) = last else {
+        return false;
+    };
+    let Effect::AsPlayer { effect: inner, .. } = effect.as_mut() else {
+        return false;
+    };
+    let iff = match inner.as_mut() {
+        Effect::Seq(v) => v.last_mut(),
+        other => Some(other),
+    };
+    let Some(Effect::If { cond, otherwise, .. }) = iff else {
+        return false;
+    };
+    if !matches!(**otherwise, Effect::Noop)
+        || !format!("{cond:?}").contains(crate::choices::NAME_THEY_CHOSE)
+    {
+        return false;
+    }
+    let Some(pred) = super::player_subjects::as_you(rest) else {
+        return false;
+    };
+    let targets = b.targets.len();
+    let Some(e) = crate::oracle::effects::parse_clause(&pred, b) else {
+        b.targets.truncate(targets);
+        return false;
+    };
+    **otherwise = e;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if it doesn't, that player (per player)", priority: 20, apply: if_it_doesnt_that_player } }

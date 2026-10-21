@@ -919,3 +919,30 @@ impl crate::kw::KeywordRules for ChosenTypeWord {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChosenTypeWord) }
+
+/// `Filter::Custom`: has the name the player performing the instruction (`ctx.controller`)
+/// chose for the source ("If the card a player revealed has the name they chose").
+pub const NAME_THEY_CHOSE: &str = "choices: has the name they chose";
+
+pub struct NameTheyChose;
+
+impl crate::kw::KeywordRules for NameTheyChose {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name != NAME_THEY_CHOSE {
+            return None;
+        }
+        let chosen = g.source_choices(ctx).and_then(|ch| {
+            ch.by_player
+                .iter()
+                .find(|(p, _)| *p == ctx.controller)
+                .and_then(|(_, c)| c.card_name.clone())
+        });
+        Some(chosen.is_some_and(|n| !n.is_empty() && g.obj(id).chars.has_name(&n)))
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&NameTheyChose) }
