@@ -300,6 +300,30 @@ fn if_you_win_later(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let t = format!("if {WON_THE_CLASH}, {x}");
     let mut trial = Effect::Seq(parts);
     if crate::oracle_ext::apply_followup_ext(&t, &mut trial, b) {
+        // An alternative ("..., instead") replaces the instruction after the clash, not
+        // the clash and its record, which happen first.
+        if let Effect::If {
+            cond,
+            then,
+            otherwise,
+        } = &trial
+        {
+            if let Effect::Seq(v) = &**otherwise {
+                if v.len() > i + 2 && is_clash(&v[i]) {
+                    let mut out: Vec<Effect> = v[..i + 2].to_vec();
+                    out.push(Effect::If {
+                        cond: cond.clone(),
+                        then: then.clone(),
+                        otherwise: Box::new(Effect::seq(v[i + 2..].to_vec())),
+                    });
+                    trial = Effect::Seq(out);
+                }
+            }
+        }
+        // The condition must come after the clash's record.
+        if !matches!(&trial, Effect::Seq(v) if v.iter().position(is_clash) == Some(i)) {
+            return false;
+        }
         *prev = trial;
         return true;
     }
@@ -331,7 +355,7 @@ fn reveal_until_at(v: &[Effect]) -> Option<usize> {
 /// (Goblin Charbelcher): the previous damage instruction, with twice its amount, if the
 /// condition holds. "The revealed [kind] card" is the card the "reveal cards until you
 /// reveal a [kind] card" instruction found.
-fn double_that_damage_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn double_that_damage_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
     let Some(r) = l.strip_prefix("if ") else {
         return false;
@@ -554,7 +578,12 @@ fn option_sacrificed(c: &str) -> Option<Condition> {
         l.strip_prefix("as an additional cost to cast this spell, ")
             .or_else(|| l.strip_prefix("as an additional cost to cast ~, "))
     })?;
-    let options = options.trim_end_matches('.');
+    // Up to the end of the sentence (reminder text may follow).
+    let options = options
+        .split(". ")
+        .next()
+        .unwrap_or(options)
+        .trim_end_matches('.');
     let (a, b) = options.split_once(" or ")?;
     if a == option || b != option {
         return None;
@@ -602,7 +631,8 @@ fn one_of_those_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let qualifier = if q.is_empty() {
         Filter::Any
     } else {
-        let Some((f, true, tail)) = parse_object_phrase(&format!("cards {q}")) else {
+        let phrase = format!("cards {q}");
+        let Some((f, true, tail)) = parse_object_phrase(&phrase) else {
             return false;
         };
         if !end(tail).is_empty() {
@@ -793,3 +823,111 @@ fn may_return_to_battlefield_instead(l: &str, prev: &mut Effect, b: &mut Builder
 }
 
 inventory::submit! { FollowupPattern { name: "if that land is a [type], you may return that card to the battlefield instead", priority: 60, apply: may_return_to_battlefield_instead } }
+
+/// The card the ability's cost moved, named as the text names it: "the card exiled this
+/// way" after an "Exile a card from your hand" cost (Holistic Wisdom), "that card" after
+/// "Put a card exiled with ~ into its owner's graveyard" (Jester's Scepter). CR 400.7j:
+/// the effect finds it in the public zone it moved to.
+fn cost_card(phrase: &str) -> Option<Sel> {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    // The cost of the activated ability (the line with the instruction).
+    let cost = raw
+        .lines()
+        .filter_map(|l| l.split_once(": ").map(|(c, _)| c.to_string()))
+        .find(|c| {
+            c.contains("exile a card from your hand") || c.contains("put a card exiled with ")
+        })?;
+    match phrase {
+        "the card exiled this way" if cost.contains("exile a card from your hand") => {
+            Some(Sel::Var(crate::zones::COST_EXILED))
+        }
+        "that card"
+            if cost.contains("put a card exiled with ")
+                && cost.contains(" into its owner's graveyard") =>
+        {
+            Some(Sel::Var(crate::zones::COST_MOVED))
+        }
+        _ => None,
+    }
+}
+
+/// "[instruction about target X] if it shares a card type with the card exiled this way",
+/// "Counter target spell if it has the same name as that card.": the instruction happens
+/// only if its target relates so to the card the cost moved.
+fn if_target_relates_to_cost_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (x, c) = l.rsplit_once(" if it ")?;
+    let (relation, phrase) = if let Some(p) = c.strip_prefix("shares a card type with ") {
+        (0, p)
+    } else if let Some(p) = c.strip_prefix("has the same name as ") {
+        (1, p)
+    } else {
+        return None;
+    };
+    let other = cost_card(phrase)?;
+    let first = b.targets.len();
+    let e = parse_clause(x, b)?;
+    // "it": the one target the instruction named.
+    if b.targets.len() != first + 1 {
+        b.targets.truncate(first);
+        return None;
+    }
+    let it = Sel::Target(first as u8);
+    let f = match relation {
+        0 => Filter::SharesCardType(Box::new(other)),
+        _ => Filter::SameNameAs(Box::new(other)),
+    };
+    Some(Effect::If {
+        cond: Condition::SelMatches(it, f),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "[instruction] if it shares a card type with / has the same name as the card the cost moved", priority: 140, parse: if_target_relates_to_cost_card } }
+
+/// "Turn all cards exiled with ~ face up. Counter all spells with those names." (Grimoire
+/// Thief): the spells with any of the names of the cards the previous instruction named
+/// (CR 201.2).
+fn spells_with_those_names(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(noun) = l
+        .strip_prefix("counter all ")
+        .and_then(|r| r.strip_suffix(" with those names"))
+    else {
+        return false;
+    };
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        other => Some(other),
+    };
+    let named = match last {
+        Some(
+            Effect::TurnFaceUp { what } | Effect::Exile { what, .. } | Effect::Move { what, .. },
+        ) if matches!(what, Sel::All(_)) => what.clone(),
+        _ => return false,
+    };
+    let Some((f, true, tail)) = parse_object_phrase(noun) else {
+        return false;
+    };
+    if !end(tail).is_empty()
+        || !super::statics::filter_mentions(&f, &|x| matches!(x, Filter::Spell))
+    {
+        return false;
+    }
+    let _ = b;
+    let e = Effect::CounterSpell {
+        what: Sel::All(Filter::and(vec![f, Filter::SameNameAs(Box::new(named))])),
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        other => Effect::seq(vec![other, e]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "counter all spells with those names", priority: 140, apply: spells_with_those_names } }

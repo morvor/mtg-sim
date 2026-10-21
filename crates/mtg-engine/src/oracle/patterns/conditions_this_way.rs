@@ -699,7 +699,7 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // "them") would have to say where they are now.
     let names_them = x
         .split(|c: char| !c.is_alphanumeric())
-        .any(|w| matches!(w, "it" | "them" | "they" | "those" | "its" | "their"));
+        .any(|w| matches!(w, "it" | "them" | "they" | "those"));
     let moves = |e: &Effect| match e {
         Effect::Move { .. } => true,
         Effect::May { effect, .. } => matches!(optional_core(effect), Some(Effect::Move { .. })),
@@ -824,7 +824,19 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     // The counting quantifiers: the affected objects, each as it last existed if it has
     // left the zone (CR 608.2h).
-    let matching = Sel::Matching(Box::new(snapshot.clone()), what.clone());
+    // Objects the instruction moved are new objects (CR 400.7): they're counted as they
+    // last existed before the move ("four or more nontoken permanents you control" were
+    // returned to hand).
+    let moved = matches!(
+        word,
+        "return" | "returned" | "put" | "exile" | "exiled" | "put into exile" | "destroyed"
+    );
+    let counted = if moved {
+        Sel::Before(Box::new(snapshot.clone()))
+    } else {
+        snapshot.clone()
+    };
+    let matching = Sel::Matching(Box::new(counted), what.clone());
     let (cond, it) = match quant {
         Quant::Some => (cond, it),
         Quant::AtLeast(n) => (

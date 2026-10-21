@@ -16,6 +16,17 @@ fn compiles(name: &str) {
     );
 }
 
+/// The tokens on the battlefield with the subtype (tokens are named for it).
+fn with_subtype(t: &TestGame, sub: &str) -> usize {
+    t.g.battlefield
+        .iter()
+        .filter(|o| {
+            let o = t.g.obj(**o);
+            o.is_token() && o.chars.subtypes.iter().any(|s| s.as_str() == sub)
+        })
+        .count()
+}
+
 fn scried(t: &TestGame, p: PlayerId) -> bool {
     t.asked()
         .iter()
@@ -166,7 +177,7 @@ fn rise_of_the_witch_king_returns_another_permanent_card_to_the_battlefield() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 1);
     t.lands(P0, "Forest", 1);
-    t.lands(P0, "Island", 1);
+    t.lands(P0, "Island", 2);
     t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P1, "Hill Giant");
     let elves = t.graveyard(P0, "Llanowar Elves");
@@ -278,7 +289,7 @@ fn odric_counts_each_listed_ability_once() {
     t.advance_to(P0, Step::PrecombatMain);
     t.enter(P0, "Odric, Blood-Cursed");
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Blood").len(), 2);
+    assert_eq!(with_subtype(&t, "Blood"), 2);
 }
 
 #[test]
@@ -396,9 +407,10 @@ fn dawn_evangel_looks_back_at_the_auras_on_the_creature_that_died() {
     t.lands(P0, "Swamp", 1);
     let murder = t.hand(P0, "Disfigure");
     t.advance_to(P0, Step::PrecombatMain);
-    t.answer_targets(P0, &[Entity::Object(card)]);
     t.cast(P0, murder).target(bear).go();
+    t.answer_targets(P0, &[Entity::Object(card)]);
     t.resolve_all();
+    assert!(!t.on_battlefield(bear));
     assert!(
         t.in_hand(P0, "Llanowar Elves"),
         "an Aura you controlled was attached"
@@ -414,9 +426,10 @@ fn dawn_evangel_looks_back_at_the_auras_on_the_creature_that_died() {
     t.lands(P0, "Swamp", 1);
     let murder = t.hand(P0, "Disfigure");
     t.advance_to(P0, Step::PrecombatMain);
-    t.answer_targets(P0, &[Entity::Object(card)]);
     t.cast(P0, murder).target(bear).go();
+    t.answer_targets(P0, &[Entity::Object(card)]);
     t.resolve_all();
+    assert!(!t.on_battlefield(bear));
     assert!(t.in_graveyard(P0, "Llanowar Elves"));
 }
 
@@ -432,9 +445,7 @@ fn outmuscle_adamant_names_the_creature_you_control() {
     let theirs = t.battlefield(P1, "Hill Giant");
     let spell = t.hand(P0, "Outmuscle");
     t.advance_to(P0, Step::PrecombatMain);
-    t.cast(P0, spell)
-        .targets(&[Entity::Object(mine), Entity::Object(theirs)])
-        .go();
+    t.cast(P0, spell).target(mine).target(theirs).go();
     t.resolve_all();
     // 3/3 Bears fight a 3/3 Giant: the Giant dies, the Bears are indestructible.
     assert!(!t.on_battlefield(theirs));
@@ -513,7 +524,7 @@ fn fold_into_aether_lets_the_countered_spells_controller_put_a_creature() {
     compiles("Fold into Aether");
     let mut t = TestGame::new(2);
     t.lands(P1, "Forest", 2);
-    t.lands(P0, "Island", 3);
+    t.lands(P0, "Island", 4);
     let bears = t.hand(P1, "Grizzly Bears");
     t.hand(P1, "Hill Giant");
     let fold = t.hand(P0, "Fold into Aether");
@@ -547,7 +558,7 @@ fn long_rest_needs_eight_cards_returned() {
     for n in [8usize, 7] {
         let mut t = TestGame::new(2);
         t.g.player_mut(P0).life = 5;
-        t.lands(P0, "Forest", n + 2);
+        t.lands(P0, "Forest", n + 3);
         let cards: Vec<Entity> = names[..n]
             .iter()
             .map(|c| Entity::Object(t.graveyard(P0, c)))
@@ -632,7 +643,7 @@ fn shower_of_coals_deals_four_with_threshold() {
             }
         }
         let giant = t.battlefield(P1, "Hill Giant");
-        let wurm = t.battlefield(P1, "Craw Wurm");
+        let wurm = t.battlefield(P1, "Colossal Dreadmaw");
         let shower = t.hand(P0, "Shower of Coals");
         t.advance_to(P0, Step::PrecombatMain);
         t.cast(P0, shower)
@@ -665,8 +676,11 @@ fn whirlpool_whelm_puts_the_creature_on_top_if_you_win_the_clash() {
         let bear = t.battlefield(P1, "Grizzly Bears");
         let whelm = t.hand(P0, "Whirlpool Whelm");
         t.advance_to(P0, Step::PrecombatMain);
-        t.answer_yes(P0, true);
+
         t.cast(P0, whelm).target(bear).go();
+        // Keep the clash card on top; then put the creature on top of its library.
+        t.answer_yes(P0, false);
+        t.answer_yes(P0, true);
         t.resolve_all();
         let now = t.g.current(bear);
         if win {
@@ -748,11 +762,7 @@ fn rulik_mons_makes_a_goblin_unless_it_put_the_land_onto_the_battlefield() {
         t.advance_to(P0, Step::PrecombatMain);
         t.answer_yes(P0, put);
         t.attack(&[(rulik, Entity::Player(P1))], &[]);
-        assert_eq!(
-            t.named_on_battlefield("Goblin").len(),
-            goblin as usize,
-            "{top} {put}"
-        );
+        assert_eq!(with_subtype(&t, "Goblin"), goblin as usize, "{top} {put}");
         let land = top == "Forest" && put;
         assert_eq!(t.named_on_battlefield("Forest").len(), land as usize);
     }
@@ -763,7 +773,8 @@ fn worlds_within_worlds_returns_the_exiled_cards_to_hand() {
     cr!("608.2c", "400.7");
     compiles("Worlds Within Worlds");
     let mut t = TestGame::new(2);
-    t.lands(P0, "Forest", 5);
+    t.lands(P0, "Forest", 6);
+    t.lands(P0, "Island", 1);
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P1, "Hill Giant");
     let elves = t.hand(P0, "Llanowar Elves");
@@ -791,12 +802,13 @@ fn demonic_junker_checks_whether_your_creature_was_destroyed() {
         let a = t.battlefield(P0, "Grizzly Bears");
         let b = t.battlefield(P1, "Hill Giant");
         t.advance_to(P0, Step::PrecombatMain);
-        let targets: Vec<Entity> = if mine {
-            vec![Entity::Object(a), Entity::Object(b)]
+        // One target for each player (APNAP order).
+        if mine {
+            t.answer_targets(P0, &[Entity::Object(a)]);
         } else {
-            vec![Entity::Object(b)]
-        };
-        t.answer_targets(P0, &targets);
+            t.answer_targets(P0, &[]);
+        }
+        t.answer_targets(P0, &[Entity::Object(b)]);
         let junker = t.enter(P0, "Demonic Junker");
         t.resolve_all();
         assert!(!t.on_battlefield(b));
@@ -857,7 +869,7 @@ fn lifestream_blessing_uses_the_greatest_power_as_it_was_cast() {
     cr!("601.2i", "608.2h", "107.3c");
     compiles("Lifestream's Blessing");
     let mut t = TestGame::new(2);
-    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Forest", 6);
     let wurm = t.battlefield(P0, "Craw Wurm");
     t.battlefield(P0, "Grizzly Bears");
     let blessing = t.hand(P0, "Lifestream's Blessing");
@@ -877,7 +889,7 @@ fn lukka_draws_two_instead_if_a_creature_card_was_discarded() {
     compiles("Mila, Crafty Companion // Lukka, Wayward Bonder");
     for (card, drawn) in [("Grizzly Bears", 2), ("Shock", 1)] {
         let mut t = TestGame::new(2);
-        t.lands(P0, "Mountain", 5);
+        t.lands(P0, "Mountain", 6);
         let lukka = t.hand(P0, "Mila, Crafty Companion // Lukka, Wayward Bonder");
         let discard = t.hand(P0, card);
         t.advance_to(P0, Step::PrecombatMain);
@@ -996,7 +1008,7 @@ fn sidequest_catch_a_fish_transforms_if_it_put_a_card_into_your_hand() {
         t.advance_to(P0, Step::Upkeep);
         t.resolve_all();
         assert_eq!(t.in_hand(P0, top), done, "{top} {take}");
-        assert_eq!(t.named_on_battlefield("Food").len(), done as usize);
+        assert_eq!(with_subtype(&t, "Food"), done as usize);
         assert_eq!(t.obj_now(quest).face == FaceState::Back, done);
     }
 }
@@ -1015,8 +1027,12 @@ fn vault_101_attaches_an_equipment_put_onto_the_battlefield_this_way() {
     t.answer_choose(P0, &[Entity::Object(sword)]);
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(bear)]);
+    // Chapter II: the second lore counter.
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert("lore".into(), 1);
     t.g.add_counters(Entity::Object(saga), "lore", 1, None);
-    t.settle();
+    t.g.flush_events();
     t.resolve_all();
     let s = t.named_on_battlefield("Bonesplitter");
     assert_eq!(s.len(), 1);
@@ -1044,4 +1060,525 @@ fn lathiel_may_distribute_fewer_counters_than_the_life_gained() {
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert_eq!(t.counters(a, "+1/+1"), 1, "up to that many");
+}
+
+#[test]
+fn game_preserve_puts_the_cards_onto_the_battlefield_if_all_are_creatures() {
+    cr!("608.2c", "701.20a");
+    compiles("Game Preserve");
+    for (theirs, all) in [("Hill Giant", true), ("Forest", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Game Preserve");
+        t.advance_to(P1, Step::End);
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P1, theirs);
+        t.advance_to(P0, Step::Upkeep);
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            all as usize,
+            "{theirs}"
+        );
+        if all {
+            let giant = t.named_on_battlefield("Hill Giant");
+            assert_eq!(
+                t.g.obj(giant[0]).controller,
+                P1,
+                "under their owners' control"
+            );
+        }
+    }
+}
+
+#[test]
+fn rise_and_shine_puts_counters_on_each_artifact_that_became_a_creature() {
+    cr!("608.2c", "702.96a");
+    compiles("Rise and Shine");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    let rock = t.battlefield(P0, "Mind Stone");
+    let rise = t.hand(P0, "Rise and Shine");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, rise).target(rock).go();
+    t.resolve_all();
+    assert_eq!(t.counters(rock, "+1/+1"), 4);
+    assert_eq!(t.pt(rock), (4, 4));
+}
+
+#[test]
+fn spry_and_mighty_uses_the_difference_between_the_chosen_powers() {
+    cr!("107.1", "608.2h");
+    ruling!(
+        "Spry and Mighty",
+        "subtract the smaller of those two numbers from the larger one"
+    );
+    ruling!(
+        "Spry and Mighty",
+        "If you don't control two creatures as Spry and Mighty resolves, the spell won't do anything."
+    );
+    compiles("Spry and Mighty");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let small = t.battlefield(P0, "Llanowar Elves");
+    let big = t.battlefield(P0, "Craw Wurm");
+    let spry = t.hand(P0, "Spry and Mighty");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Object(small), Entity::Object(big)]);
+    let before = t.hand_size(P0);
+    t.cast(P0, spry).go();
+    t.resolve_all();
+    // 6 - 1 = 5.
+    assert_eq!(t.hand_size(P0), before - 1 + 5);
+    assert_eq!(t.pt(small), (6, 6));
+    assert_eq!(t.pt(big), (11, 9));
+
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let only = t.battlefield(P0, "Craw Wurm");
+    let spry = t.hand(P0, "Spry and Mighty");
+    t.advance_to(P0, Step::PrecombatMain);
+    let before = t.hand_size(P0);
+    t.cast(P0, spry).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before - 1);
+    assert!(!t
+        .g
+        .obj(only)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+}
+
+#[test]
+fn plasma_caster_damages_the_blocker_if_you_lose_the_flip() {
+    cr!("705.2", "608.2c");
+    compiles("Plasma Caster");
+    for win in [true, false] {
+        let mut t = TestGame::new(2);
+        let bear = t.battlefield(P0, "Grizzly Bears");
+        let caster = t.battlefield(P0, "Plasma Caster");
+        t.g.attach(caster, Entity::Object(bear));
+        let giant = t.battlefield(P1, "Craw Wurm");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            mtg_engine::decision::Answer::Attackers(vec![(bear, Entity::Player(P1))]),
+        );
+        t.answer(
+            P1,
+            DecisionKind::Blockers,
+            mtg_engine::decision::Answer::Blockers(vec![(giant, bear)]),
+        );
+        t.advance_to(P0, Step::DeclareBlockers);
+        // Call heads (the default); the coin comes up heads (a win) or tails.
+        t.g.dice.loaded_coins.push_back(win);
+        t.activate(P0, caster, 0, &[Entity::Object(giant)]).unwrap();
+        t.resolve_all();
+        if win {
+            assert!(!t.on_battlefield(giant), "exiled");
+        } else {
+            assert_eq!(t.g.obj(giant).damage, 1, "1 damage to the chosen creature");
+        }
+    }
+}
+
+#[test]
+fn anowon_draws_if_the_player_milled_a_creature_card() {
+    cr!("608.2c", "701.17a");
+    compiles("Anowon, the Ruin Thief");
+    for (top, draws) in [("Grizzly Bears", 1usize), ("Forest", 0)] {
+        let mut t = TestGame::new(2);
+        let anowon = t.battlefield(P0, "Anowon, the Ruin Thief");
+        // Anowon is a 2/4 Rogue: two cards milled.
+        t.library_top(P1, top);
+        t.library_top(P1, "Island");
+        t.advance_to(P0, Step::PrecombatMain);
+        let before = t.hand_size(P0);
+        t.attack(&[(anowon, Entity::Player(P1))], &[]);
+        assert_eq!(t.graveyard_size(P1), 2);
+        assert_eq!(t.hand_size(P0), before + draws, "{top}");
+    }
+}
+
+#[test]
+fn optimus_prime_gives_trample_to_the_creature_bolster_chose() {
+    cr!("701.39a", "608.2c");
+    compiles("Optimus Prime, Hero // Optimus Prime, Autobot Leader");
+    let mut t = TestGame::new(2);
+    let optimus = t.battlefield(P0, "Optimus Prime, Hero // Optimus Prime, Autobot Leader");
+    mtg_engine::dfc::transform(&mut t.g, optimus);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.attack(&[(bear, Entity::Player(P1))], &[]);
+    assert_eq!(
+        t.counters(bear, "+1/+1"),
+        2,
+        "the creature with the least toughness"
+    );
+    assert!(t
+        .obj_now(bear)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Trample));
+    assert_eq!(t.life(P1), 16);
+    // "When that creature deals combat damage to a player this turn, convert ~."
+    assert_eq!(t.obj_now(optimus).face, FaceState::Front);
+}
+
+#[test]
+fn suppression_ray_stuns_up_to_that_many_creatures_tapped_this_way() {
+    cr!("107.14", "608.2c");
+    compiles("Suppression Ray // Orderly Plaza");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 5);
+    t.g.add_counters(Entity::Player(P0), "energy", 3, None);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P1, "Craw Wurm");
+    t.g.tap(c);
+    let ray = t.hand(P0, "Suppression Ray // Orderly Plaza");
+    t.advance_to(P0, Step::PrecombatMain);
+    // Pay {E}{E} ("any amount" is announced like an X).
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.cast(P0, ray).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert!(t.g.obj(a).tapped && t.g.obj(b).tapped);
+    assert_eq!(t.counters(a, "stun"), 1);
+    assert_eq!(t.counters(b, "stun"), 1);
+    assert_eq!(
+        t.counters(c, "stun"),
+        0,
+        "already tapped: not tapped this way"
+    );
+}
+
+#[test]
+fn scalpelexis_repeats_while_two_exiled_cards_share_a_name() {
+    cr!("201.2a", "608.2c");
+    compiles("Scalpelexis");
+    let mut t = TestGame::new(2);
+    let beast = t.battlefield(P0, "Scalpelexis");
+    // Second four (exiled second): all different. First four: two Forests.
+    for c in [
+        "Plains",
+        "Island",
+        "Swamp",
+        "Mountain",
+        "Forest",
+        "Grizzly Bears",
+        "Forest",
+        "Shock",
+    ] {
+        t.library_top(P1, c);
+    }
+    t.advance_to(P0, Step::PrecombatMain);
+    t.attack(&[(beast, Entity::Player(P1))], &[]);
+    assert_eq!(
+        t.g.objects_in_zone_kind(mtg_engine::ability::ZoneKind::Exile)
+            .len(),
+        8,
+        "two passes"
+    );
+}
+
+#[test]
+fn goblin_charbelcher_deals_double_if_the_land_was_a_mountain() {
+    cr!("608.2c", "701.20a");
+    compiles("Goblin Charbelcher");
+    for (land, dmg) in [("Mountain", 4), ("Forest", 2)] {
+        let mut t = TestGame::new(2);
+        let belcher = t.battlefield(P0, "Goblin Charbelcher");
+        t.lands(P0, "Plains", 3);
+        t.library_top(P0, land);
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P0, "Shock");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.activate(P0, belcher, 0, &[Entity::Player(P1)]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.life(P1), 20 - dmg, "{land}");
+    }
+}
+
+#[test]
+fn back_for_seconds_may_put_one_card_onto_the_battlefield_if_bargained() {
+    cr!("702.166b", "608.2c");
+    ruling!(
+        "Back for Seconds",
+        "If you bargain this spell, you can still choose not to put one of the cards onto the battlefield"
+    );
+    compiles("Back for Seconds");
+    for bargain in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 5);
+        let food = t.battlefield(P0, "Ornithopter");
+        let a = t.graveyard(P0, "Grizzly Bears");
+        let b = t.graveyard(P0, "Craw Wurm");
+        let spell = t.hand(P0, "Back for Seconds");
+        t.advance_to(P0, Step::PrecombatMain);
+        if bargain {
+            t.answer(
+                P0,
+                DecisionKind::OptionalCost,
+                mtg_engine::decision::Answer::Bool(true),
+            );
+            t.answer_choose(P0, &[Entity::Object(food)]);
+        } else {
+            t.answer(
+                P0,
+                DecisionKind::OptionalCost,
+                mtg_engine::decision::Answer::Bool(false),
+            );
+        }
+        t.answer_choose(P0, &[Entity::Object(a)]);
+        t.cast(P0, spell)
+            .targets(&[Entity::Object(a), Entity::Object(b)])
+            .go();
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            bargain as usize
+        );
+        assert!(t.in_hand(P0, "Craw Wurm"));
+        assert_eq!(t.in_hand(P0, "Grizzly Bears"), !bargain);
+    }
+}
+
+#[test]
+fn emeria_shepherd_returns_to_the_battlefield_if_the_land_is_a_plains() {
+    cr!("608.2c", "207.2c");
+    compiles("Emeria Shepherd");
+    for (land, bf) in [("Plains", true), ("Forest", false)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Emeria Shepherd");
+        let card = t.graveyard(P0, "Grizzly Bears");
+        let l = t.hand(P0, land);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_targets(P0, &[Entity::Object(card)]);
+        t.answer_yes(P0, true);
+        t.play_land(P0, l).unwrap();
+        t.settle();
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            bf as usize,
+            "{land}"
+        );
+        assert_eq!(t.in_hand(P0, "Grizzly Bears"), !bf);
+    }
+}
+
+#[test]
+fn once_and_future_adamant_returns_both_cards_to_hand() {
+    cr!("207.2c", "608.2c");
+    compiles("Once and Future");
+    for (lands, adamant) in [("Forest", true), ("Island", false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, lands, 4);
+        if !adamant {
+            t.lands(P0, "Forest", 1);
+        }
+        let a = t.graveyard(P0, "Grizzly Bears");
+        let b = t.graveyard(P0, "Hill Giant");
+        let spell = t.hand(P0, "Once and Future");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.cast(P0, spell).target(a).target(b).go();
+        t.resolve_all();
+        assert!(t.in_hand(P0, "Grizzly Bears"));
+        assert_eq!(t.in_hand(P0, "Hill Giant"), adamant);
+        if !adamant {
+            let top = *t.g.player(P0).library.last().unwrap();
+            assert_eq!(t.g.obj(top).chars.name, "Hill Giant");
+        }
+        assert!(t.in_exile("Once and Future"));
+    }
+}
+
+#[test]
+fn lethal_throwdown_draws_if_the_modified_creature_option_was_paid() {
+    cr!("601.2b", "601.2h", "700.9");
+    compiles("Lethal Throwdown");
+    for modified in [true, false] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 3);
+        let fodder = t.battlefield(P0, "Grizzly Bears");
+        if modified {
+            t.g.add_counters(Entity::Object(fodder), "+1/+1", 1, None);
+        }
+        let target = t.battlefield(P1, "Hill Giant");
+        let spell = t.hand(P0, "Lethal Throwdown");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer(
+            P0,
+            DecisionKind::Option,
+            mtg_engine::decision::Answer::Index(modified as usize),
+        );
+        let before = t.hand_size(P0);
+        t.cast(P0, spell).target(target).go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(fodder) && !t.on_battlefield(target));
+        assert_eq!(t.hand_size(P0), before - 1 + modified as usize);
+    }
+}
+
+#[test]
+fn haunting_imitation_returns_to_hand_if_no_creature_was_revealed() {
+    cr!("608.2c", "701.20a");
+    compiles("Haunting Imitation");
+    for (top, back) in [("Forest", true), ("Grizzly Bears", false)] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Island", 4);
+        t.library_top(P0, "Island");
+        t.library_top(P1, top);
+        let spell = t.hand(P0, "Haunting Imitation");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        assert_eq!(t.in_hand(P0, "Haunting Imitation"), back, "{top}");
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            !back as usize
+        );
+    }
+}
+
+#[test]
+fn aurelias_fury_taps_creatures_and_stops_players_dealt_damage() {
+    cr!("601.2d", "608.2c");
+    compiles("Aurelia's Fury");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Mountain", 3);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let fury = t.hand(P0, "Aurelia's Fury");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bolt2 = t.hand(P2, "Lightning Bolt");
+    t.lands(P1, "Mountain", 1);
+    t.lands(P2, "Mountain", 1);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(
+        P0,
+        DecisionKind::Divide,
+        mtg_engine::decision::Answer::Numbers(vec![2, 1]),
+    );
+    t.cast(P0, fury)
+        .x(3)
+        .targets(&[Entity::Object(wurm), Entity::Player(P1)])
+        .go();
+    t.resolve_all();
+    assert!(
+        t.g.obj(wurm).tapped,
+        "a creature dealt damage this way is tapped"
+    );
+    assert_eq!(t.life(P1), 19);
+    assert!(t
+        .cast(P1, bolt)
+        .target(Entity::Player(P0))
+        .try_go()
+        .is_err());
+    // A player not dealt damage can.
+    assert!(t
+        .cast(P2, bolt2)
+        .target(Entity::Player(P0))
+        .try_go()
+        .is_ok());
+}
+
+#[test]
+fn hoarders_overflow_puts_a_stash_counter_on_itself() {
+    cr!("603.2");
+    compiles("Hoarder's Overflow");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let h = t.enter(P0, "Hoarder's Overflow");
+    t.resolve_all();
+    assert_eq!(t.counters(h, "stash"), 1);
+}
+
+#[test]
+fn malcolm_may_cast_the_discarded_card_with_four_chorus_counters() {
+    cr!("608.2c", "400.7");
+    compiles("Malcolm, Alluring Scoundrel");
+    for (counters, cast) in [(3u32, true), (2, false)] {
+        let mut t = TestGame::new(2);
+        let malcolm = t.battlefield(P0, "Malcolm, Alluring Scoundrel");
+        t.g.add_counters(Entity::Object(malcolm), "chorus", counters, None);
+        let bolt = t.hand(P0, "Lightning Bolt");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.answer_choose(P0, &[Entity::Object(bolt)]);
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.attack(&[(malcolm, Entity::Player(P1))], &[]);
+        t.resolve_all();
+        // 2 combat damage, and 3 from the Bolt cast from the graveyard.
+        assert_eq!(t.life(P1), if cast { 15 } else { 18 }, "{counters}");
+    }
+}
+
+#[test]
+fn primo_puts_counters_equal_to_the_damage_dealt_on_the_token() {
+    cr!("603.2c", "510.2");
+    compiles("Primo, the Unbounded");
+    let mut t = TestGame::new(2);
+    let primo = t.battlefield(P0, "Primo, the Unbounded");
+    t.g.add_counters(Entity::Object(primo), "+1/+1", 2, None);
+    let a = t.battlefield(P0, "Ornithopter");
+    let b = t.battlefield(P0, "Ornithopter");
+    t.g.add_counters(Entity::Object(a), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(b), "+1/+1", 1, None);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P1))], &[]);
+    let fractals: Vec<ObjectId> =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .filter(|o| {
+                t.g.obj(*o)
+                    .chars
+                    .subtypes
+                    .iter()
+                    .any(|s| s.as_str() == "Fractal")
+                    && t.g.obj(*o).is_token()
+            })
+            .collect();
+    assert_eq!(fractals.len(), 1);
+    assert_eq!(t.counters(fractals[0], "+1/+1"), 3);
+}
+
+#[test]
+fn aura_barbs_damages_controllers_and_enchanted_creatures() {
+    cr!("120.3", "608.2c");
+    compiles("Aura Barbs");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let aura = t.battlefield(P1, "Rancor");
+    t.g.attach(aura, Entity::Object(bear));
+    t.battlefield(P0, "Glorious Anthem");
+    let barbs = t.hand(P0, "Aura Barbs");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, barbs).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 18);
+    assert!(!t.on_battlefield(bear), "2 damage to the enchanted 4/2");
+}
+
+#[test]
+fn ultra_magnus_converts_if_the_attackers_have_total_power_eight() {
+    cr!("207.2c", "701.28a");
+    compiles("Ultra Magnus, Tactician // Ultra Magnus, Armored Carrier");
+    for (extra, converts) in [("Craw Wurm", true), ("Grizzly Bears", false)] {
+        let mut t = TestGame::new(2);
+        let um = t.battlefield(
+            P0,
+            "Ultra Magnus, Tactician // Ultra Magnus, Armored Carrier",
+        );
+        mtg_engine::dfc::transform(&mut t.g, um);
+        let other = t.battlefield(P0, extra);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.attack(
+            &[(um, Entity::Player(P1)), (other, Entity::Player(P1))],
+            &[],
+        );
+        assert_eq!(t.obj_now(um).face == FaceState::Front, converts, "{extra}");
+    }
 }

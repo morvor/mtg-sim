@@ -738,7 +738,7 @@ pub fn lookback(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
     if super::referents_instead_4::instead_restates_all(l, effects, b) {
         return true;
     }
-    if !lower.contains(" this way") {
+    if !lower.contains(" this way") && !lower.contains(" instead") {
         return false;
     }
     let mut whole = Effect::Seq(effects.clone());
@@ -749,8 +749,11 @@ pub fn lookback(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
         b.named.len(),
     );
     let ok = super::conditions_this_way::if_this_way(l, &mut whole, b)
+        || if_player_dealt_damage(l, &mut whole, b)
+        || players_dealt_damage_subject(l, &mut whole, b)
         || about_exiled_this_way(l, &mut whole, b)
-        || super::referents_instead_4::this_way_instead_pub(l, &mut whole, b);
+        || super::referents_instead_4::this_way_instead_pub(l, &mut whole, b)
+        || super::referents_instead_4::double_that_damage_instead(l, &mut whole, b);
     if !ok {
         b.targets.truncate(saved.0);
         b.it = saved.1;
@@ -778,6 +781,8 @@ fn ends_with_top_cards(e: &Effect) -> bool {
             ..
         }
         | Effect::Mill { .. } => true,
+        // "that player exiles the top four cards of their library"
+        Effect::AsPlayer { effect, .. } => ends_with_top_cards(effect),
         Effect::Seq(v) => v.last().is_some_and(ends_with_top_cards),
         _ => false,
     }
@@ -970,3 +975,44 @@ fn each_deals_damage_to_its(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "each [object] deals N damage to its controller / the creature it's attached to", priority: 140, parse: each_deals_damage_to_its } }
+
+fn ends_with_discard(e: &Effect) -> bool {
+    match e {
+        Effect::Discard { .. } => true,
+        Effect::Seq(v) => v.last().is_some_and(ends_with_discard),
+        _ => false,
+    }
+}
+
+/// "Draw a card, then discard a card. If there are four or more chorus counters on ~, you
+/// may cast the discarded card without paying its mana cost." (Malcolm, Alluring
+/// Scoundrel): the card the previous discard instruction discarded, where it went
+/// (CR 400.7).
+fn the_discarded_card(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains("the discarded card") || !ends_with_discard(prev) {
+        return false;
+    }
+    let phrase = "the discarded card".to_string();
+    if b.named.iter().any(|(p, _)| *p == phrase) {
+        return false;
+    }
+    b.named
+        .push((phrase.clone(), Sel::Var(crate::discard_rules::DISCARDED)));
+    let e = crate::oracle::effects::parse_sentence(l, b);
+    b.named.retain(|(p, _)| *p != phrase);
+    let Some(e) = e else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            v.push(e);
+            Effect::Seq(v)
+        }
+        other => Effect::seq(vec![other, e]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "the discarded card, after a discard", priority: 160, apply: the_discarded_card } }
