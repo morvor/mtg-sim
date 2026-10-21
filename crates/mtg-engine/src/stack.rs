@@ -1313,7 +1313,7 @@ impl Game {
             }
         }
         let (chosen, all_illegal) = self.recheck_targets(id, &body, &ctx);
-        if all_illegal {
+        if all_illegal && !crate::kw::resolves_despite_illegal_targets(self, id, &body) {
             // CR 608.2b: doesn't resolve.
             self.remove_from_stack(id);
             self.state_triggers_active.remove(&(src, uid));
@@ -1696,7 +1696,7 @@ impl Game {
         if !self.is_live(id) || self.obj(id).zone != Zone::Stack {
             return false;
         }
-        if self.cant_be_countered(id) {
+        if self.cant_be_countered(id) || crate::kw::cant_be_countered_by(self, id, cause.obj) {
             return false;
         }
         self.counter_or_fizzle(id, MoveCause::Counter);

@@ -194,6 +194,33 @@ pub fn spell(
     )
 }
 
+/// Creates a delayed triggered ability (CR 603.7) that triggers each time its condition
+/// is met for the rest of the game, controlled by `ctx`'s controller with `ctx`'s source,
+/// objects and choices.
+pub fn delayed_for_rest_of_game(
+    g: &mut Game,
+    ctx: &crate::eval::Ctx,
+    trigger: crate::ability::TriggerCond,
+    body: crate::ability::Body,
+) {
+    g.flush_events();
+    let id = g.new_effect_id();
+    g.delayed_triggers.push(crate::game::DelayedTrigger {
+        id,
+        source: ctx.source,
+        controller: ctx.controller,
+        trigger,
+        body,
+        once: false,
+        ctx: ctx.clone(),
+        created_turn: g.turn.number,
+        created_step: Some(g.turn.step),
+        created_steps: g.turn.step_log.len(),
+        for_rest_of_game: true,
+        performer: None,
+    });
+}
+
 /// Checks the hand-written definitions against the card data and the tests in
 /// `tests_cards_dir` (the `tests/cards/` directory): returns one message per problem.
 ///

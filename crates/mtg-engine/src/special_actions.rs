@@ -61,6 +61,9 @@ pub struct SpecialState {
     /// meanwhile (kept face down until then, CR 121.8), and the "as you draw it" choices
     /// waiting until then: (player, card, nth card drawn this turn).
     pub casting: u32,
+    /// The activated abilities being activated right now, innermost last (CR 602.2):
+    /// (player, source, ability uid).
+    pub activating: Vec<(PlayerId, ObjectId, u64)>,
     pub drawn_while_casting: Vec<ObjectId>,
     pub deferred_draws: Vec<(PlayerId, ObjectId, u32)>,
     /// Sticker sheets and the stickers on objects (CR 123).

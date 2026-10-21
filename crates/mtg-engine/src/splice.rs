@@ -12,6 +12,9 @@ use crate::types::*;
 use crate::{Answer, Decision};
 use smol_str::SmolStr;
 
+/// `Event::Custom` name: the card `obj` was spliced onto the spell whose id is `amount`.
+pub const SPLICED: &str = "spliced";
+
 /// CR 601.2b, 702.47a–b: offers `p` to splice cards from their hand onto `spell`, which
 /// they're casting with the additional costs `extra` so far. Returns the splice costs to
 /// add to the spell's total cost.
@@ -88,6 +91,14 @@ pub fn offer_splices(g: &mut Game, p: PlayerId, spell: ObjectId, extra: &Cost) -
             player: Some(p),
             obj: Some(*card),
             amount: 0,
+        });
+        // Which cards were spliced onto which spell ("each card with the same name as a
+        // card spliced onto that spell").
+        g.emit(crate::events::Event::Custom {
+            name: SPLICED.into(),
+            player: Some(p),
+            obj: Some(*card),
+            amount: spell.0 as i32,
         });
     }
     // CR 702.47c: the spell gains the rules text of each spliced card, after its own;
