@@ -263,7 +263,10 @@ fn loot_draws_and_discards_within_one_resolution() {
                 t.battlefield(P0, "Coralhelm Chronicler");
                 t.lands(P0, "Mountain", 5);
                 let bolt = t.hand(P0, "Burst Lightning");
-                t.cast(P0, bolt).kicked(true).target(Entity::Player(P0)).go();
+                t.cast(P0, bolt)
+                    .kicked(true)
+                    .target(Entity::Player(P0))
+                    .go();
                 t.resolve();
             },
         ),

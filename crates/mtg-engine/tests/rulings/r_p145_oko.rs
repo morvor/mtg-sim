@@ -1,8 +1,8 @@
 //! Rulings batch P145 — Oko, the Ringleader: becoming a copy of a creature until end of
 //! turn (except he has hexproof), and his −5 token copies.
 
-use crate::r_p145_common::*;
 use crate::r_p057_common::pump;
+use crate::r_p145_common::*;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -161,7 +161,11 @@ fn oko_minus_five_tokens_copy_only_copiable_values() {
     activate_containing(&mut t, P0, oko, "For each other").expect("−5");
     t.resolve_all();
     let copies: Vec<ObjectId> = tokens(&t, P0);
-    assert_eq!(copies.len(), 1, "a copy of Grizzly Bears (Oko isn't copied)");
+    assert_eq!(
+        copies.len(),
+        1,
+        "a copy of Grizzly Bears (Oko isn't copied)"
+    );
     let c = copies[0];
     assert_eq!(name_of(&t, c), "Grizzly Bears");
     assert!(!t.obj_now(c).tapped);

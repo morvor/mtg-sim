@@ -117,7 +117,7 @@ fn phyrexian(t: &mut TestGame, artifacts: usize) {
 
 #[test]
 fn mirrodin_besieged_phyrexian_checks_on_resolution() {
-    cr!("603.3d", "608.2b", "104.3h");
+    cr!("603.3d", "608.2b", "104.3e");
     ruling!(
         "Mirrodin Besieged",
         "If you support the Phyrexians, you must choose a target opponent as your end step begins. Whether that player loses the game is determined only as the ability resolves."
@@ -151,7 +151,7 @@ fn mirrodin_besieged_phyrexian_checks_on_resolution() {
 
 #[test]
 fn mirrodin_besieged_two_headed_giant_team_loses() {
-    cr!("810.8a", "104.3h");
+    cr!("810.8a", "104.3e");
     ruling!(
         "Mirrodin Besieged",
         "In a Two-Headed Giant game, if one player on a team loses the game, that team loses the game."
@@ -380,7 +380,7 @@ fn queen_of_dale_counts_spells_cast_before_she_entered() {
 
 #[test]
 fn ledger_shredder_counts_spells_cast_before_it_entered() {
-    cr!("603.2", "702.163a");
+    cr!("603.2");
     ruling!(
         "Ledger Shredder",
         "Spells that were cast before Ledger Shredder entered the battlefield count. If Ledger Shredder was the first spell you cast this turn, the next spell you cast this turn is your second spell."
@@ -482,7 +482,7 @@ fn mary_read_and_anne_bonny_trigger_once_per_card() {
 
 #[test]
 fn varina_counts_the_zombies_attacked_with() {
-    cr!("603.10", "508.3a", "506.4");
+    cr!("508.3a", "506.4");
     ruling!(
         "Varina, Lich Queen",
         "Varina's first ability counts the number of Zombies you attacked with, even if some of those Zombies leave combat before the triggered ability resolves."
@@ -551,7 +551,7 @@ fn the_locust_god_only_sees_draws() {
 
 #[test]
 fn katara_experience_counters_are_the_players() {
-    cr!("122.1", "122.1d");
+    cr!("122.1");
     ruling!(
         "Katara, Waterbending Master",
         "All experience counters are identical, no matter how you got them."

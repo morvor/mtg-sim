@@ -136,7 +136,10 @@ fn bane_alley_broker_owners_are_known_under_another_controller() {
     let choices = broker_return_choices(&mut t, P1, broker);
     assert_eq!(choices.len(), 2, "both owners' cards");
     assert!(choices.contains(&obj(exiled_elves)) && choices.contains(&obj(exiled_bears)));
-    assert!(t.in_hand(P0, "Llanowar Elves"), "returned to its owner's hand");
+    assert!(
+        t.in_hand(P0, "Llanowar Elves"),
+        "returned to its owner's hand"
+    );
     assert_eq!(t.zone(bears), Zone::Exile);
 }
 
@@ -398,4 +401,3 @@ fn arcade_gannon_losing_it_while_casting_doesnt_matter() {
     t.resolve_all();
     assert!(t.on_battlefield(spell));
 }
-

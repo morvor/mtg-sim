@@ -183,7 +183,7 @@ fn targets_harrier_strix_and_obsessive_stitcher() {
 
 #[test]
 fn sanctum_of_calm_waters_without_shrines() {
-    cr!("608.2h", "121.8");
+    cr!("608.2h", "608.2c");
     ruling!(
         "Sanctum of Calm Waters",
         "If Sanctum of Calm Waters leaves the battlefield while its ability is on the stack, you may control no Shrines as the ability resolves. If so, you may choose to draw zero cards and discard one"
@@ -221,5 +221,8 @@ fn mirror_mad_phantasm_token_mills_the_whole_library() {
     t.resolve_all();
     assert_eq!(t.library_size(P0), 0);
     assert_eq!(t.graveyard_size(P0), lib);
-    assert_eq!(t.named_on_battlefield("Mirror-Mad Phantasm"), vec![phantasm]);
+    assert_eq!(
+        t.named_on_battlefield("Mirror-Mad Phantasm"),
+        vec![phantasm]
+    );
 }

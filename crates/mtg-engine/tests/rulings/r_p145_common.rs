@@ -9,20 +9,20 @@ use mtg_engine::testing::*;
 use mtg_engine::*;
 
 pub use crate::r_p057_common::into_beginning_of_combat;
+pub use crate::r_p057_common::into_upkeep;
 pub use crate::r_p108_common::{end_step, obj, put_counters, resolved};
 pub use crate::r_p143_common::{answer_once_when, asked_of, entity_choices, n_asked};
 pub use crate::r_p146_common::{counter, destroy_together, discard, fill_hand, treasures};
+pub use crate::r_p146_common::{enter_together, stacked_triggers};
 pub use crate::r_p160_common::{activate_resolve, cast_resolve, mana, yes};
+pub use crate::r_s01_common::custom_card;
 pub use crate::r_s01_common::{
     attack_with, block_and_finish, creatures, stack_library, supported, tokens, triggers_on_stack,
     watch,
 };
 pub use crate::r_s02_common::{can_activate, can_cast, can_play_land, create_token, destroy};
-pub use crate::r_s05_common::{enter, move_to, run_from};
-pub use crate::r_p057_common::into_upkeep;
-pub use crate::r_p146_common::{enter_together, stacked_triggers};
-pub use crate::r_s01_common::custom_card;
 pub use crate::r_s04_common::add_mana;
+pub use crate::r_s05_common::{enter, move_to, run_from};
 pub use crate::r_s06_common::activate_containing;
 pub use crate::r_s08_common::legal_cast_methods;
 pub use crate::r_s17_common::name_of;
@@ -56,26 +56,24 @@ pub fn discard_these(t: &mut TestGame, p: PlayerId, cards: &[ObjectId]) {
 
 /// The names of the cards in `p`'s hand, sorted.
 pub fn hand_names(t: &TestGame, p: PlayerId) -> Vec<String> {
-    let mut v: Vec<String> = t
-        .g
-        .player(p)
-        .hand
-        .iter()
-        .map(|id| t.g.obj(*id).chars.name.to_string())
-        .collect();
+    let mut v: Vec<String> =
+        t.g.player(p)
+            .hand
+            .iter()
+            .map(|id| t.g.obj(*id).chars.name.to_string())
+            .collect();
     v.sort();
     v
 }
 
 /// The names of the cards in `p`'s graveyard, sorted.
 pub fn graveyard_names(t: &TestGame, p: PlayerId) -> Vec<String> {
-    let mut v: Vec<String> = t
-        .g
-        .player(p)
-        .graveyard
-        .iter()
-        .map(|id| t.g.obj(*id).chars.name.to_string())
-        .collect();
+    let mut v: Vec<String> =
+        t.g.player(p)
+            .graveyard
+            .iter()
+            .map(|id| t.g.obj(*id).chars.name.to_string())
+            .collect();
     v.sort();
     v
 }

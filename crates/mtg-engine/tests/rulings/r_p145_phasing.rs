@@ -95,7 +95,7 @@ fn a_stolen_creature_phases_in_under_its_owners_control_in_the_thiefs_untap_step
 
 #[test]
 fn teferi_still_activates_one_loyalty_ability_per_turn() {
-    cr!("606.3", "606.6");
+    cr!("606.3");
     ruling!(
         "Teferi, Master of Time",
         "Teferi's first ability doesn't change how many of his abilities you can activate during each turn."

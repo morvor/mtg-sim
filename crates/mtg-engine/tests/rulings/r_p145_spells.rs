@@ -204,14 +204,16 @@ fn abilities_with_illegal_targets_do_nothing() {
     let mut t = TestGame::new(2);
     let minister = t.battlefield(P0, "Traveling Minister");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.activate(P0, minister, 0, &[obj(bears)]).expect("activate");
+    t.activate(P0, minister, 0, &[obj(bears)])
+        .expect("activate");
     destroy(&mut t, bears);
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
     // With a legal target: +1/+0 and 1 life.
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.g.objects[minister.0 as usize].tapped = false;
-    t.activate(P0, minister, 0, &[obj(bears)]).expect("activate");
+    t.activate(P0, minister, 0, &[obj(bears)])
+        .expect("activate");
     t.resolve_all();
     assert_eq!(t.life(P0), 21);
     assert_eq!(t.pt(bears), (3, 2));
@@ -242,7 +244,7 @@ fn abilities_with_illegal_targets_do_nothing() {
 
 #[test]
 fn hard_cover_granted_ability_resolves_without_its_source() {
-    cr!("113.7a", "602.5");
+    cr!("113.7a");
     ruling!(
         "Hard Cover",
         "Once the ability granted by Hard Cover has been activated, it will resolve even if Hard Cover leaves the battlefield before that ability resolves."
@@ -358,7 +360,7 @@ fn sacrificed_creatures_power_is_last_known_information() {
 
 #[test]
 fn attunement_discards_all_when_short() {
-    cr!("701.9b", "121.4");
+    cr!("701.9b");
     ruling!(
         "Attunement",
         "If you have less than 4 cards, discard all you have."
@@ -424,7 +426,10 @@ fn sphinxs_tutelage_repeats_only_for_shared_colors_of_nonland_cards() {
         t.resolve_all();
         t.graveyard_size(P1)
     };
-    assert_eq!(run(&["Ornithopter", "Memnite", "Shock", "Lightning Bolt"]), 2);
+    assert_eq!(
+        run(&["Ornithopter", "Memnite", "Shock", "Lightning Bolt"]),
+        2
+    );
     assert_eq!(
         run(&[
             "Shock",
@@ -441,7 +446,7 @@ fn sphinxs_tutelage_repeats_only_for_shared_colors_of_nonland_cards() {
 
 #[test]
 fn spymasters_vault_conniving_without_discarding_gives_no_counter() {
-    cr!("701.50a", "701.50c");
+    cr!("701.50d", "701.50f");
     ruling!(
         "Spymaster's Vault",
         "If no cards are discarded, most likely because that player's hand is empty and an effect says they can't draw cards, the conniving creature does not receive any +1/+1 counters."

@@ -22,7 +22,7 @@ fn frodo_attacks(t: &mut TestGame, frodo: ObjectId) -> bool {
 
 #[test]
 fn frodo_needs_three_life_gained_this_turn() {
-    cr!("603.4", "119.9", "701.54a");
+    cr!("603.4", "701.54a");
     ruling!(
         "Frodo, Adventurous Hobbit",
         "If you haven't gained 3 or more life by the time Frodo, Adventurous Hobbit attacks, the ability won't trigger at all."
@@ -74,7 +74,11 @@ fn frodo_draws_as_ring_bearer_tempted_twice() {
         t.answer_choose(P0, &[obj(bearer)]);
         t.resolve_all();
         assert_eq!(tempted(&t), 2);
-        assert_eq!(t.hand_size(P0), draws, "Frodo the Ring-bearer: {frodo_bearer}");
+        assert_eq!(
+            t.hand_size(P0),
+            draws,
+            "Frodo the Ring-bearer: {frodo_bearer}"
+        );
     }
 }
 
