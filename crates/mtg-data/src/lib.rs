@@ -3,6 +3,7 @@
 //! * [`scryfall`] — Scryfall bulk-data "Oracle Cards" (one entry per Oracle ID).
 //! * [`rulings`] — Scryfall bulk-data rulings, keyed by Oracle ID.
 //! * [`tags`] — Scryfall oracle tags (functional card tags).
+//! * [`interpretations`] — the interpretation register (`docs/interpretations/`).
 //! * [`rules`] — the Magic: The Gathering Comprehensive Rules, parsed into
 //!   numbered rules and glossary entries.
 //!
@@ -12,6 +13,7 @@
 //! The global accessors ([`cards`], [`rulings`], [`comprehensive_rules`]) load lazily
 //! and cache for the lifetime of the process.
 
+pub mod interpretations;
 pub mod rules;
 pub mod rulings;
 pub mod scryfall;
@@ -144,5 +146,16 @@ macro_rules! cr {
 macro_rules! ruling {
     ($card:literal, $needle:literal $(,)?) => {
         $crate::assert_ruling_exists($card, $needle)
+    };
+}
+
+/// Cite an interpretation-register entry from a test that pins it:
+/// `interp!("changeling-cda-only")`. Panics (failing the test) unless
+/// `docs/interpretations/` has an entry with that id; `cargo test -p mtg-data` checks that
+/// every entry is cited by some test. See [`interpretations`].
+#[macro_export]
+macro_rules! interp {
+    ($($id:literal),+ $(,)?) => {
+        $( $crate::interpretations::assert_interpretation_exists($id); )+
     };
 }
