@@ -38,6 +38,11 @@
 //! owner's control." (Lucius the Eternal; CR 603.7c, 400.7): "~ from exile" is the card
 //! the dies ability exiled (the source's card, a new object), captured as the delayed
 //! ability is created.
+//!
+//! "add an amount of {C} equal to the amount of mana spent to cast that spell" (Mana
+//! Sculpt, after "Counter target spell."): the mana spent on the targeted spell
+//! (`kw/delayed_grammar_3.rs`), also when the mana is added later ("at the beginning of
+//! your next main phase": a delayed triggered ability, not a mana ability, CR 605.1b).
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -388,3 +393,34 @@ fn return_self_from_exile_when_that_creature_leaves(l: &str, b: &mut Builder) ->
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 3: when that creature leaves, return ~ from exile", priority: 50, parse: return_self_from_exile_when_that_creature_leaves } }
+
+fn mana_spent_to_cast_that_spell(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let i = l.find("the amount of mana spent to cast that spell")?;
+    if !l.starts_with("add ") {
+        return None;
+    }
+    // "that spell": the spell the ability targeted (its only target).
+    let [t] = b.targets.as_slice() else {
+        return None;
+    };
+    if !t.text.contains("spell") {
+        return None;
+    }
+    let rewritten = format!(
+        "{}x{}",
+        &l[..i],
+        &l[i + "the amount of mana spent to cast that spell".len()..]
+    );
+    let e = crate::oracle::effects::parse_sentence(&rewritten, b)?;
+    let name = format!("{}0", crate::kw::delayed_grammar_3::MANA_SPENT_ON_TARGET);
+    // X in the instruction is that amount.
+    let json = serde_json::to_string(&e).ok()?;
+    if !json.contains("\"X\"") {
+        return None;
+    }
+    let custom = serde_json::to_string(&Value::Custom(name.into())).ok()?;
+    serde_json::from_str(&json.replace("\"X\"", &custom)).ok()
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 3: add mana equal to the mana spent to cast that spell", priority: 100, parse: mana_spent_to_cast_that_spell } }

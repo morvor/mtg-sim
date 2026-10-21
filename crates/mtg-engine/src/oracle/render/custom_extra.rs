@@ -167,6 +167,9 @@ impl Renderer<'_> {
 
     /// `Value::Custom` names put into words here.
     pub(crate) fn custom_value_extra(&mut self, name: &str) -> Option<String> {
+        if name.starts_with(crate::kw::delayed_grammar_3::MANA_SPENT_ON_TARGET) {
+            return Some("the amount of mana spent to cast that spell".into());
+        }
         if name == crate::kw::trigger_modifiers::LIFE_PAID_AMOUNT {
             return Some("the life paid to activate it".into());
         }

@@ -231,3 +231,25 @@ fn lucius_returns_from_exile_when_that_creature_leaves() {
     assert_eq!(back.len(), 1);
     assert_eq!(t.obj_now(back[0]).controller, P0);
 }
+
+#[test]
+fn mana_sculpt_adds_the_mana_at_your_next_main_phase() {
+    cr!("603.7a", "605.1b", "601.2h");
+    supported("Mana Sculpt");
+    for wizard in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        if wizard {
+            t.battlefield(P0, "Prodigal Sorcerer");
+        }
+        let giant = crate::r_s25_common::cast_new(&mut t, P1, "Hill Giant", &[]);
+        cast_new(&mut t, P0, "Mana Sculpt", &[Entity::Object(giant)]);
+        t.resolve();
+        assert!(t.in_graveyard(P1, "Hill Giant"));
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.resolve_all();
+        let pool = &t.g.player(P0).mana_pool.mana;
+        assert_eq!(pool.len(), if wizard { 4 } else { 0 }, "wizard: {wizard}");
+    }
+}
