@@ -322,7 +322,7 @@ impl Canon {
                 ids(&pl.library),
                 ids(&pl.hand),
                 ids(&pl.graveyard),
-                self.debug(&pl.mana_pool),
+                super::agent::rename_uids(&self.debug(&pl.mana_pool)),
                 pl.lands_played_this_turn,
                 pl.has_lost,
                 pl.has_won,

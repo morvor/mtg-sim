@@ -130,7 +130,8 @@ pub fn full_text(g: &Game) -> String {
 /// runs of the same game in one process number them differently; they're compared up to
 /// renaming, like objects. Renamed: `uid: N` and `ability: N` fields, and map keys that
 /// are ability ids (`activations_this_turn: {N: 1}`). Also renamed: `key: N` fields, which
-/// identify a replacement effect by a mix of its object and ability ids.
+/// identify a replacement effect by a mix of its object and ability ids, links of
+/// abilities effects give (`link: N` from 0x8000 on) and mana riders' ids.
 pub fn rename_uids(s: &str) -> String {
     use regex::Regex;
     use std::collections::HashMap;
@@ -142,7 +143,10 @@ pub fn rename_uids(s: &str) -> String {
     let field = FIELD.get_or_init(|| {
         Regex::new(r"\b(uid|ability|ability_uid|key): (\d+)|(ObjectId\(\d+\)), (\d+)\)").unwrap()
     });
-    let key = KEY.get_or_init(|| Regex::new(r"(\{|, )(\d+): ").unwrap());
+    let key = KEY.get_or_init(|| {
+        Regex::new(r"\b(activations_this_turn|activations|triggers_this_turn): \{([^}]*)\}")
+            .unwrap()
+    });
     let mut names: HashMap<String, usize> = HashMap::new();
     let num = |c: &regex::Captures| c.get(2).or(c.get(4)).unwrap().as_str().to_string();
     for c in field.captures_iter(s) {
@@ -156,35 +160,51 @@ pub fn rename_uids(s: &str) -> String {
             None => format!("{}, u{k})", &c[3]),
         }
     });
-    // Keys of `triggers_this_turn` may carry flags in the high bits (see
+    // The maps keyed by ability ids (`activations_this_turn`, `activations`,
+    // `triggers_this_turn`), whose keys may carry flags in the high bits (see
     // `triggers::turn_keys`): the ability id is renamed, the flags kept.
     let mut names = names;
-    key.replace_all(&s, |c: &regex::Captures| {
-        let Ok(n) = c[2].parse::<u64>() else {
-            return c[0].to_string();
+    let mut rename_key = |n: &str| -> String {
+        let Ok(n) = n.parse::<u64>() else {
+            return n.to_string();
         };
         let flags = n & (3 << 62);
         let base = (n & !(3 << 62)).to_string();
-        let k = match names.get(&base) {
-            Some(k) => *k,
-            None if flags != 0 => {
-                let k = names.len();
-                names.insert(base, k);
-                k
+        let len = names.len();
+        let k = *names.entry(base).or_insert(len);
+        if flags != 0 {
+            format!("u{k}+{flags:x}")
+        } else {
+            format!("u{k}")
+        }
+    };
+    let s = key.replace_all(&s, |c: &regex::Captures| {
+        let entries: Vec<String> = c[2]
+            .split(", ")
+            .filter(|e| !e.is_empty())
+            .map(|e| match e.split_once(": ") {
+                Some((k, v)) => format!("{}: {v}", rename_key(k)),
+                None => e.to_string(),
+            })
+            .collect();
+        format!("{}: {{{}}}", &c[1], entries.join(", "))
+    });
+    // Links of abilities an effect gives fresh links from the counter (CR 607.5), and
+    // mana riders' ids.
+    static OTHER: OnceLock<Regex> = OnceLock::new();
+    let other = OTHER.get_or_init(|| Regex::new(r"(ManaRider \{ id|\blink): (\d+)").unwrap());
+    let mut fresh: HashMap<String, usize> = HashMap::new();
+    other
+        .replace_all(&s, |c: &regex::Captures| {
+            let dynamic = &c[1] != "link" || c[2].parse::<u64>().is_ok_and(|n| n >= 0x8000);
+            if !dynamic {
+                return c[0].to_string();
             }
-            None => return c[0].to_string(),
-        };
-        format!(
-            "{}u{k}{}: ",
-            &c[1],
-            if flags != 0 {
-                format!("+{flags:x}")
-            } else {
-                String::new()
-            }
-        )
-    })
-    .into_owned()
+            let n = fresh.len();
+            let k = *fresh.entry(c[2].to_string()).or_insert(n);
+            format!("{}: f{k}", &c[1])
+        })
+        .into_owned()
 }
 
 /// The game for comparing it before an action and after the action was reversed: its
