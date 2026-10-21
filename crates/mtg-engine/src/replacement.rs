@@ -1411,6 +1411,15 @@ impl Game {
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
                     m.etb.copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
+                    // "It enters as a copy of one of those cards" (CR 707.9).
+                    if let Some(o) = em.copy_of {
+                        if m.etb.copy_of.is_some() {
+                            // CR 707.9e, 707.9g: as for `EnterAsCopy`.
+                            m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
+                            m.etb.copy_extras.clear();
+                        }
+                        m.etb.copy_of = Some(o);
+                    }
                     // CR 614.1c: "it enters with haste" — performed on the permanent as
                     // it's put onto the battlefield.
                     for e in em.on_entry {

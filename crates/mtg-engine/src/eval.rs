@@ -102,6 +102,9 @@ pub struct EntryMods {
     pub on_entry: Vec<Effect>,
     /// Modifications to its copiable values ([`Effect::EnterAs`], CR 707.2).
     pub copiable: Vec<Modification>,
+    /// It enters as a copy of this object (CR 707.9), chosen by the effect.
+    #[serde(default)]
+    pub copy_of: Option<ObjectId>,
 }
 
 impl Ctx {
