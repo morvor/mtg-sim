@@ -1109,6 +1109,7 @@ impl Game {
         self.log(|g| format!("Resolving {}", g.describe(top)));
         // CR 117.2e: no player has priority while a spell or ability is resolving.
         let priority = self.turn.priority.take();
+        let outer = self.resolving.replace(top);
         if is_spell {
             self.resolve_spell(top);
         } else {
@@ -1116,6 +1117,7 @@ impl Game {
         }
         self.turn.priority = priority;
         self.flush_events();
+        self.resolving = outer;
         // CR 104.6, 727: the resolved effect restarted the game.
         crate::restart::restart_if_requested(self);
     }

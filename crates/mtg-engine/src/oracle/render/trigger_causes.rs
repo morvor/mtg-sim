@@ -24,6 +24,11 @@ impl Renderer<'_> {
         cond: &Condition,
         det: &Det,
     ) -> Option<(String, String)> {
+        // "Whenever a spell or ability causes a player to shuffle their library"
+        // (`trigger_grammar_4.rs`).
+        if let Some(r) = self.caused_by_spell(trigger, cond) {
+            return Some(r);
+        }
         // "Whenever an opponent draws a card except the first one they draw in each of
         // their draw steps"; "Whenever you draw your first card during each of your draw
         // steps".
@@ -132,5 +137,81 @@ impl Renderer<'_> {
             String::new(),
             format!("{{alt:{n} {be} milled|{player} mills {n}}}"),
         ))
+    }
+
+    /// "[a spell or ability] causes [subject] to [verb phrase]".
+    fn caused_by_spell(
+        &mut self,
+        trigger: &TriggerCond,
+        cond: &Condition,
+    ) -> Option<(String, String)> {
+        use crate::kw::trigger_events as te;
+        let (cause, own) = match cond {
+            Condition::And(v) if v.len() == 2 && is_custom(&v[1], te::CAUSED_BY_EVENT_PLAYERS) => {
+                (&v[0], true)
+            }
+            c => (c, false),
+        };
+        let cause = if is_custom(cause, te::CAUSED_BY_SPELL_OR_ABILITY) {
+            "a spell or ability".to_string()
+        } else if is_custom(cause, te::CAUSED_BY_OPPONENTS) {
+            "a spell or ability an opponent controls".to_string()
+        } else if let Condition::Compare(Value::CountSel(sel), Cmp::Ge, Value::Const(1)) = cause {
+            let Sel::All(Filter::And(parts)) = sel.as_ref() else {
+                return None;
+            };
+            let is_cause = |f: &Filter| matches!(f, Filter::Custom(n) if n == te::THE_CAUSE);
+            if !parts.iter().any(is_cause) {
+                return None;
+            }
+            let rest: Vec<Filter> = parts.iter().filter(|f| !is_cause(f)).cloned().collect();
+            self.noun_det(&Filter::and(rest), Det::A)
+        } else {
+            return None;
+        };
+        let (subj, vp) = match trigger {
+            // "a land to be put into your graveyard from the battlefield".
+            TriggerCond::Dies(Filter::And(v))
+                if v.iter()
+                    .any(|f| matches!(f, Filter::OwnedBy(PlayerRel::You))) =>
+            {
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|f| !matches!(f, Filter::OwnedBy(PlayerRel::You)))
+                    .cloned()
+                    .collect();
+                (
+                    self.noun_det(&Filter::and(rest), Det::A),
+                    "is put into your graveyard from the battlefield".to_string(),
+                )
+            }
+            _ => self.trigger_event_parts(trigger),
+        };
+        let vp = if vp == "shuffles" || vp == "shuffle" {
+            format!("{vp} their library")
+        } else {
+            vp
+        };
+        let subj = if own {
+            "its controller".to_string()
+        } else {
+            subj
+        };
+        // The verb phrase in the infinitive: "shuffles their library" → "shuffle their
+        // library", "is put into" → "be put into".
+        let vp = if let Some(r) = vp.strip_prefix("is ") {
+            format!("be {r}")
+        } else if subj == "you" {
+            vp
+        } else {
+            let (v, r) = vp.split_once(' ').unwrap_or((vp.as_str(), ""));
+            let v = v
+                .strip_suffix("shes")
+                .map(|x| format!("{x}sh"))
+                .or_else(|| v.strip_suffix('s').map(str::to_string))
+                .unwrap_or_else(|| v.to_string());
+            format!("{v} {r}").trim_end().to_string()
+        };
+        Some((cause, format!("causes {subj} to {vp}")))
     }
 }
