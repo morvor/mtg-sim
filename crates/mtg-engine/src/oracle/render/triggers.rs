@@ -240,6 +240,32 @@ impl Renderer<'_> {
 
     /// "When ~ enters", "At the beginning of your upkeep", "Whenever you cast a spell".
     pub(crate) fn trigger_text(&mut self, t: &TriggerCond) -> String {
+        // "Whenever you tap an untapped creature an opponent controls"
+        // (`trigger_grammar_causes.rs`).
+        let you_tapped = |c: &TriggerCond| match c {
+            TriggerCond::Where { trigger, cond }
+                if matches!(
+                    cond,
+                    Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You)
+                ) =>
+            {
+                match trigger.as_ref() {
+                    TriggerCond::BecomesTapped(f) => Some(f.clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        if let Some(f) = you_tapped(t) {
+            let n = self.noun(&f, Num::One);
+            return format!("whenever you tap an untapped {n}");
+        }
+        if let TriggerCond::Batched { trigger, .. } = t {
+            if let Some(f) = you_tapped(trigger) {
+                let n = self.noun(&f, Num::Many);
+                return format!("whenever you tap one or more untapped {n}");
+            }
+        }
         match t {
             // "At the beginning of the upkeep of enchanted creature's controller", "At the
             // beginning of enchanted player's upkeep": each upkeep whose active player

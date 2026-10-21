@@ -1199,7 +1199,7 @@ fn perform_attack_declaration(
     // CR 508.1f: tap attackers (vigilance: 702.20b).
     for (a, _) in &declared {
         if !g.obj(*a).has_keyword(KeywordKind::Vigilance) {
-            g.tap(*a);
+            g.tap_with(*a, false, Some(ap), true);
         }
     }
     // CR 508.1g: optional costs to attack ("as it attacks").

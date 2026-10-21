@@ -420,8 +420,13 @@ impl Game {
             }
             Effect::Tap { what } => {
                 let mut tapped = Vec::new();
+                // The player performing the instruction taps them (CR 701.26a): the
+                // controller of the spell or ability, or the player it has do it ("that
+                // player taps an untapped creature they control"; Solitary Sanctuary's
+                // rulings).
+                let by = Some(ctx.controller);
                 for o in self.resolve_objects(what, ctx) {
-                    if self.tap(o) {
+                    if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
                     }
                 }

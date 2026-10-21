@@ -329,6 +329,10 @@ pub struct EventInfo {
     /// "whenever a land enters without being played"): see `kw::trigger_event_causes`.
     #[serde(default)]
     pub cause: Option<crate::events::MoveCause>,
+    /// For a permanent becoming tapped: it was tapped by being declared as an attacker
+    /// (CR 508.1f; "if it isn't being declared as an attacker").
+    #[serde(default)]
+    pub attack_declaration: bool,
 }
 
 /// The kind of object on the stack.

@@ -204,7 +204,8 @@ fn declared_attackers_become_tapped() {
         e,
         Event::Tapped {
             obj,
-            for_mana: false
+            for_mana: false,
+            ..
         } if *obj == bears
     )));
 }

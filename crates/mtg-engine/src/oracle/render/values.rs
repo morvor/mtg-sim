@@ -697,6 +697,12 @@ impl Renderer<'_> {
             return s;
         }
         match c {
+            // "if it isn't being declared as an attacker" (`kw/tap_causes.rs`).
+            Condition::SelMatches(Sel::TriggerObject, Filter::Custom(n))
+                if n == crate::oracle::patterns::trigger_grammar_causes::NOT_TAPPED_ATTACKING =>
+            {
+                "it isn't being declared as an attacker".into()
+            }
             // "if you haven't cast the card" (`kw/delayed_conditions.rs`).
             Condition::Custom(n) if n.starts_with(crate::kw::delayed_conditions::STILL_EXILED) => {
                 "{alt:you haven't cast it|it remains exiled|you haven't played it|any of those cards remain exiled}".into()

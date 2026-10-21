@@ -198,6 +198,14 @@ pub enum Event {
     Tapped {
         obj: ObjectId,
         for_mana: bool,
+        /// The player who tapped it: the controller of the spell or ability whose effect
+        /// tapped it, or the player paying a cost or declaring it as an attacker (CR
+        /// 701.26a, 508.1f); `None` when not recorded.
+        #[serde(default)]
+        by: Option<PlayerId>,
+        /// It became tapped by being declared as an attacker (CR 508.1f).
+        #[serde(default)]
+        attacking: bool,
     },
     Untapped {
         obj: ObjectId,

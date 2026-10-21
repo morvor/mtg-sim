@@ -221,7 +221,19 @@ fn trailing_when(l: &str, b: &mut Builder) -> Option<Effect> {
     let (subject, event) = [" dies", " leaves the battlefield"]
         .into_iter()
         .find_map(|e| tail.strip_suffix(e).map(|s| (s, e)))?;
-    if !matches!(subject, "that token" | "~" | "that creature" | "it") || head.contains(',') {
+    if head.contains(',') {
+        return None;
+    }
+    // "Return ~ to the battlefield ... when that token dies." (Tatsumasa), "Return that
+    // card to the battlefield ... when ~ leaves the battlefield." (Portcullis). ("Exile that
+    // token when ~ leaves the battlefield.", "Sacrifice ~ when that token leaves the
+    // battlefield." are the token grammar's, `token_copy_grammar.rs`.)
+    let ok = match (subject, event) {
+        ("that token", " dies") => true,
+        ("~", " leaves the battlefield") => head.starts_with("return that card "),
+        _ => false,
+    };
+    if !ok {
         return None;
     }
     super::delayed_grammar::referent_trigger(&format!("when {subject}{event}, {head}"), b)

@@ -1467,10 +1467,18 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::BecomesTapped(f), Event::Tapped { obj, .. }) => {
+            (
+                TriggerCond::BecomesTapped(f),
+                Event::Tapped {
+                    obj, by, attacking, ..
+                },
+            ) => {
                 if self.matches(*obj, f, &ctx) {
                     one(EventInfo {
                         object: Some(*obj),
+                        // The player who tapped it ("whenever you tap ...").
+                        player: *by,
+                        attack_declaration: *attacking,
                         ..Default::default()
                     })
                 } else {
