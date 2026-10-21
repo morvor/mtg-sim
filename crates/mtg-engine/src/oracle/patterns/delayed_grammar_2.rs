@@ -265,6 +265,7 @@ fn instruction_object(e: &Effect) -> Option<Sel> {
             _ => None,
         },
         Effect::Seq(v) => v.first().and_then(instruction_object),
+        Effect::May { effect, .. } => instruction_object(effect),
         _ => None,
     }
 }
@@ -336,6 +337,25 @@ fn delayed_if_still_exiled(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 2: at the beginning of the next end step, if you haven't cast it, ...", priority: 985, parse: delayed_if_still_exiled } }
+
+/// "..., you may return that card to the battlefield at the beginning of the next end step
+/// if Shirei is still on the battlefield." (Shirei, Shizo's Caretaker): the delayed
+/// ability triggers, and does something, only if the source is still the same permanent
+/// (its rulings: a Shirei that left and returned is a new object).
+fn delayed_if_source_remains(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let head = l.strip_suffix(" if ~ is still on the battlefield")?;
+    if !head.contains(" at the beginning of ") {
+        return None;
+    }
+    let mut e = super::delayed_grammar::delayed_instruction(head, b)?;
+    let cond = |_: &Sel| {
+        Condition::Custom(crate::kw::delayed_conditions::SOURCE_STILL_ON_BATTLEFIELD.into())
+    };
+    with_intervening_if(&mut e, &cond).then_some(e)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 2: ... at the beginning of the next end step if ~ is still on the battlefield", priority: 985, parse: delayed_if_source_remains } }
 
 /// "At the beginning of your next upkeep, put any of those cards you didn't play into your
 /// graveyard." (Three Wishes): a card played from exile left it and is a new object

@@ -16,6 +16,11 @@ use crate::types::Entity;
 /// instruction finds it) is in exile.
 pub const STILL_EXILED: &str = "still exiled:";
 
+/// `Condition::Custom`: the ability's source is still on the battlefield as the same
+/// object (CR 400.7): "at the beginning of the next end step if Shirei is still on the
+/// battlefield" (Shirei, Shizo's Caretaker).
+pub const SOURCE_STILL_ON_BATTLEFIELD: &str = "source still on the battlefield";
+
 struct DelayedConditions;
 
 impl KeywordRules for DelayedConditions {
@@ -24,6 +29,12 @@ impl KeywordRules for DelayedConditions {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        if name == SOURCE_STILL_ON_BATTLEFIELD {
+            return Some(
+                ctx.source
+                    .is_some_and(|s| g.is_live(s) && g.obj(s).zone == Zone::Battlefield),
+            );
+        }
         let var: crate::ability::Var = name.strip_prefix(STILL_EXILED)?.parse().ok()?;
         let objs = ctx.vars.get(&var).cloned().unwrap_or_default();
         Some(objs.into_iter().any(|e| {

@@ -599,6 +599,10 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         || l.starts_with("you may activate ")
         // A permission to play cards (see `patterns::permission_grammar`).
         || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
+        // "You may return that card ... at the beginning of the next end step if ~ is
+        // still on the battlefield": the choice is the delayed ability's (see
+        // `patterns::delayed_grammar_2`).
+        || (l.starts_with("you may ") && l.ends_with(" if ~ is still on the battlefield"))
     {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);
