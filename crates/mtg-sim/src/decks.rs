@@ -1,5 +1,6 @@
 //! Deck lists: parsing "4 Lightning Bolt" files and generating random decks for fuzzing.
 
+use mtg_engine::card_tiers::{Tier, TierTable};
 use mtg_engine::*;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -79,9 +80,12 @@ pub fn parse_decklist(text: &str) -> DeckList {
     DeckList { main, sideboard }
 }
 
+/// The default deck: red-green creatures and burn, every card verified
+/// (`docs/verified-cards.tsv`; Mountain Bandit replaced Raging Goblin, an Arena-only
+/// printing that the tier file doesn't list).
 pub fn default_deck() -> DeckList {
     parse_decklist(
-        "12 Mountain\n12 Forest\n4 Grizzly Bears\n4 Lightning Bolt\n4 Hill Giant\n4 Shock\n4 Raging Goblin\n4 Gray Ogre\n4 Giant Growth\n4 Llanowar Elves\n4 Craw Wurm",
+        "12 Mountain\n12 Forest\n4 Grizzly Bears\n4 Lightning Bolt\n4 Hill Giant\n4 Shock\n4 Mountain Bandit\n4 Gray Ogre\n4 Giant Growth\n4 Llanowar Elves\n4 Craw Wurm",
     )
 }
 
@@ -121,7 +125,9 @@ fn pool() -> &'static [(String, u8)] {
 
 /// A random 60-card deck: one or two colors, 24 basic lands split between them, and 12
 /// distinct fully supported spells in those colors (or colorless), three copies each.
-pub fn random_deck(rng: &mut StdRng) -> DeckList {
+/// With a `bar` (`--cards`), only spells at that tier or above (the basic lands aren't
+/// checked).
+pub fn random_deck(rng: &mut StdRng, bar: Option<(&TierTable, Tier)>) -> DeckList {
     const BASICS: [&str; 5] = ["Plains", "Island", "Swamp", "Mountain", "Forest"];
     let mut colors: Vec<usize> = (0..5).collect();
     colors.shuffle(rng);
@@ -130,6 +136,12 @@ pub fn random_deck(rng: &mut StdRng) -> DeckList {
     let candidates: Vec<&str> = pool()
         .iter()
         .filter(|(_, ci)| ci & !mask == 0)
+        // The tier file first (cheap); the live status as a card is picked.
+        .filter(|(n, _)| {
+            bar.is_none_or(|(t, b)| {
+                b <= Tier::Compiled || t.recorded(n).is_some_and(|c| c.tier >= b)
+            })
+        })
         .map(|(n, _)| n.as_str())
         .collect();
     let mut spells: Vec<Arc<CardDef>> = Vec::new();
@@ -142,7 +154,12 @@ pub fn random_deck(rng: &mut StdRng) -> DeckList {
             continue;
         }
         match CardDb::global().get(name) {
-            Some(def) if def.is_fully_supported() => spells.push(def),
+            Some(def)
+                if def.is_fully_supported()
+                    && bar.is_none_or(|(t, b)| t.tier_of(&def).tier >= b) =>
+            {
+                spells.push(def)
+            }
             _ => {}
         }
     }

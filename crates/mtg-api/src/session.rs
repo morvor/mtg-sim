@@ -6,7 +6,7 @@
 //! # use mtg_api::request::JsonAnswer;
 //! # let decks = vec![];
 //! let mut s = Session::start(Default::default(), decks, vec![Seat::External, Seat::External],
-//!                            Default::default());
+//!                            Default::default()).expect("verified cards only");
 //! while let Some(req) = s.next() {
 //!     // Decide, e.g. take the first option.
 //!     s.answer(mtg_engine::PlayerId(req.seat), JsonAnswer::index(0)).unwrap();
@@ -15,9 +15,11 @@
 //! ```
 
 use crate::agent::{Closed, GameOver, ProtocolAgent, ProtocolOptions, Transport};
+use crate::decks::{check_decks, DeckError};
 use crate::request::{JsonAnswer, Request};
 use crate::view::ResultView;
 use mtg_engine::card::CardDef;
+use mtg_engine::card_tiers::TierTable;
 use mtg_engine::decision::Agent;
 use mtg_engine::turn::Stage;
 use mtg_engine::{Game, GameConfig, GameResult, PlayerId};
@@ -92,19 +94,95 @@ pub struct Session {
 
 impl Session {
     /// Starts a game with `decks` (one per seat) and `seats`. Each external seat's
-    /// decisions come out of [`Session::next`].
+    /// decisions come out of [`Session::next`]. Every card must be at
+    /// `options.min_card_tier` or above (verified by default) in `docs/verified-cards.tsv`
+    /// ([`crate::decks`]); otherwise no game starts and the error lists each card below
+    /// the bar with the checks it fails.
     pub fn start(
         config: GameConfig,
         decks: Vec<Vec<Arc<CardDef>>>,
         seats: Vec<Seat>,
         options: ProtocolOptions,
-    ) -> Session {
+    ) -> Result<Session, DeckError> {
         Self::start_with(config, decks, seats, options, |_| {})
     }
 
-    /// Like [`Session::start`], with `setup` run on the game before it starts (e.g. to
-    /// add sideboards).
+    /// Like [`Session::start`], with `setup` run on the game before it starts. Cards
+    /// `setup` adds aren't checked against the bar: give sideboards to
+    /// [`Session::start_with_sideboards`] instead, which checks them.
     pub fn start_with(
+        config: GameConfig,
+        decks: Vec<Vec<Arc<CardDef>>>,
+        seats: Vec<Seat>,
+        options: ProtocolOptions,
+        setup: impl FnOnce(&mut Game) + Send + 'static,
+    ) -> Result<Session, DeckError> {
+        Self::start_with_tiers(
+            config,
+            decks,
+            vec![],
+            seats,
+            options,
+            TierTable::global(),
+            setup,
+        )
+    }
+
+    /// Like [`Session::start`], with each seat's sideboard (cards outside the game, from
+    /// which a companion may be revealed as the game starts; `sideboards[i]` for seat
+    /// `i`, missing seats have none). The sideboards are held to the same bar as the decks.
+    pub fn start_with_sideboards(
+        config: GameConfig,
+        decks: Vec<Vec<Arc<CardDef>>>,
+        sideboards: Vec<Vec<Arc<CardDef>>>,
+        seats: Vec<Seat>,
+        options: ProtocolOptions,
+    ) -> Result<Session, DeckError> {
+        Self::start_with_tiers(
+            config,
+            decks,
+            sideboards,
+            seats,
+            options,
+            TierTable::global(),
+            |_| {},
+        )
+    }
+
+    /// The general form: decks and sideboards (checked against `options.min_card_tier`
+    /// with the card tiers of `tiers` instead of `docs/verified-cards.tsv`), then `setup`
+    /// run on the game before it starts.
+    pub fn start_with_tiers(
+        config: GameConfig,
+        decks: Vec<Vec<Arc<CardDef>>>,
+        sideboards: Vec<Vec<Arc<CardDef>>>,
+        seats: Vec<Seat>,
+        options: ProtocolOptions,
+        tiers: &TierTable,
+        setup: impl FnOnce(&mut Game) + Send + 'static,
+    ) -> Result<Session, DeckError> {
+        let all: Vec<Vec<Arc<CardDef>>> = decks
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                d.iter()
+                    .chain(sideboards.get(i).into_iter().flatten())
+                    .cloned()
+                    .collect()
+            })
+            .collect();
+        check_decks(tiers, &all, options.min_card_tier)?;
+        Ok(Self::launch(config, decks, seats, options, move |g| {
+            for (i, side) in sideboards.into_iter().enumerate() {
+                if !side.is_empty() && i < g.players.len() {
+                    g.add_to_sideboard(PlayerId(i as u8), side);
+                }
+            }
+            setup(g)
+        }))
+    }
+
+    fn launch(
         config: GameConfig,
         decks: Vec<Vec<Arc<CardDef>>>,
         seats: Vec<Seat>,
