@@ -350,3 +350,103 @@ fn for_each_chosen_color_it_is(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "N life for each of the chosen colors it is", priority: 60, parse: for_each_chosen_color_it_is } }
+
+/// The value a choice made as a cost chooses: "a creature type", "a number between 0 and
+/// 5", "a color".
+fn cost_choice_kind(s: &str) -> Option<ChoiceKind> {
+    Some(match s {
+        "a creature type" => ChoiceKind::CreatureType,
+        "a color" => ChoiceKind::Color,
+        "a card name" => ChoiceKind::CardName,
+        "a basic land type" => ChoiceKind::BasicLandType,
+        "a card type" => ChoiceKind::CardType,
+        _ => {
+            let r = s.strip_prefix("a number between ")?;
+            let (a, b) = r.split_once(" and ")?;
+            let (Value::Const(min), ra) = parse_number(a)? else {
+                return None;
+            };
+            let (Value::Const(max), rb) = parse_number(b)? else {
+                return None;
+            };
+            if !ra.trim().is_empty() || !end(rb).is_empty() || max < min {
+                return None;
+            }
+            ChoiceKind::Number { min, max }
+        }
+    })
+}
+
+/// "choose a creature type" / "choose a number between 0 and 5" as a cost ("As an
+/// additional cost to cast this spell, choose a creature type."): the choice is made as
+/// the spell is cast (CR 601.2b, 601.2f-h) and kept for its resolution and, for a
+/// permanent spell, by the permanent (CR 607.2d).
+fn choose_as_cost(s: &str) -> Option<CostPart> {
+    let r = end(s).strip_prefix("choose ")?;
+    let kind = cost_choice_kind(r)?;
+    Some(CostPart::Effect(Box::new(Effect::Choose {
+        who: PlayerRef::You,
+        kind,
+    })))
+}
+
+inventory::submit! { super::CostPattern { name: "choose [a value] as a cost", priority: 60, parse: choose_as_cost } }
+
+/// "[instruction with X], where X is the chosen number" (Liquid Fire): X is the number
+/// chosen for the spell (as it was cast); "N minus X damage" is N minus that.
+fn x_is_the_chosen_number(l: &str, b: &mut Builder) -> Option<Effect> {
+    let x = end(l).strip_suffix(", where x is the chosen number")?;
+    // "5 minus x damage": a sentinel amount replaced afterwards.
+    const SENTINEL: i32 = 987_654;
+    let mut minus: Option<i32> = None;
+    let mut text = x.to_string();
+    if let Some(at) = text.find(" minus x damage") {
+        let before = &text[..at];
+        let (head, n) = before.rsplit_once(' ')?;
+        let (Value::Const(n), rest) = parse_number(n)? else {
+            return None;
+        };
+        if !rest.trim().is_empty() {
+            return None;
+        }
+        minus = Some(n);
+        text = format!("{head} {SENTINEL} damage{}", &text[at + " minus x damage".len()..]);
+    }
+    let targets = b.targets.len();
+    let Some(mut e) = parse_clause(&text, b) else {
+        b.targets.truncate(targets);
+        return None;
+    };
+    if let Some(n) = minus {
+        let from = serde_json::to_value(Value::c(SENTINEL)).ok()?;
+        let to = serde_json::to_value(Value::Diff(Box::new(Value::c(n)), Box::new(Value::X))).ok()?;
+        let mut k = 0;
+        let v = replace_value(serde_json::to_value(&e).ok()?, &from, &to, &mut k);
+        if k != 1 {
+            b.targets.truncate(targets);
+            return None;
+        }
+        e = serde_json::from_value(v).ok()?;
+    }
+    Some(Effect::seq(vec![Effect::SetX { value: Value::Chosen }, e]))
+}
+
+inventory::submit! { EffectPattern { name: "where X is the chosen number", priority: 60, parse: x_is_the_chosen_number } }
+
+fn replace_value(
+    v: serde_json::Value,
+    from: &serde_json::Value,
+    to: &serde_json::Value,
+    n: &mut usize,
+) -> serde_json::Value {
+    use serde_json::Value as J;
+    if v == *from {
+        *n += 1;
+        return to.clone();
+    }
+    match v {
+        J::Array(a) => J::Array(a.into_iter().map(|x| replace_value(x, from, to, n)).collect()),
+        J::Object(m) => J::Object(m.into_iter().map(|(k, x)| (k, replace_value(x, from, to, n))).collect()),
+        x => x,
+    }
+}

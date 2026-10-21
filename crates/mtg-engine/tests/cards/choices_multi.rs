@@ -332,3 +332,49 @@ fn tablet_of_the_guilds_life_for_each_chosen_color_the_spell_is() {
     assert_eq!(tablet("Izzet Charm"), 2, "blue and red");
     assert_eq!(tablet("Giant Growth"), 0, "neither");
 }
+
+#[test]
+fn caller_of_the_hunt_chooses_a_type_as_it_is_cast_and_counts_it() {
+    cr!("601.2b", "607.2d");
+    compiles("Caller of the Hunt");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 3);
+    t.battlefield(P0, "Raging Goblin");
+    t.battlefield(P1, "Raging Goblin");
+    t.battlefield(P1, "Grizzly Bears");
+    let caller = t.hand(P0, "Caller of the Hunt");
+    t.advance_to(P0, Step::PrecombatMain);
+    let goblin = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == "Goblin")
+        .unwrap();
+    option(&mut t, P0, goblin);
+    let spell = t.cast(P0, caller).go();
+    assert_eq!(
+        t.g.obj(spell).choices.creature_type.as_deref(),
+        Some("Goblin"),
+        "chosen as it was cast"
+    );
+    t.resolve_all();
+    let caller = t.named_on_battlefield("Caller of the Hunt")[0];
+    assert_eq!(t.pt(caller), (2, 2), "two Goblins");
+}
+
+#[test]
+fn liquid_fire_splits_five_damage_by_the_number_chosen_as_it_was_cast() {
+    cr!("601.2b", "118.8");
+    ruling!("Liquid Fire", "You choose the number as you cast the spell");
+    compiles("Liquid Fire");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 6);
+    let giant = t.battlefield(P1, "Indomitable Ancients");
+    let fire = t.hand(P0, "Liquid Fire");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer(P0, DecisionKind::Number, Answer::Number(2));
+    let spell = t.cast(P0, fire).target(giant).go();
+    assert_eq!(t.g.obj(spell).choices.number, Some(2));
+    t.resolve_all();
+    assert_eq!(t.g.obj(giant).damage, 2);
+    assert_eq!(t.life(P1), 17);
+}
