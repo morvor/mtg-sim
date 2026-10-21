@@ -502,6 +502,19 @@ fn batched_conjunction(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: one or more [A] and whenever one or more [B]", priority: 100, parse: batched_conjunction } }
 
+/// "the final chapter ability of a Saga you control triggers" (Historian's Boon).
+fn final_chapter_triggers(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(t) == "the final chapter ability of a saga you control triggers").then(|| {
+        (
+            TriggerCond::Custom(crate::kw::trigger_events::FINAL_CHAPTER_TRIGGERS.into()),
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: the final chapter ability of a Saga you control triggers", priority: 100, parse: final_chapter_triggers } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

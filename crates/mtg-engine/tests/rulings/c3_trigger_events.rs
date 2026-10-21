@@ -452,3 +452,30 @@ fn rendmaw_card_with_two_or_more_card_types() {
     t.settle();
     assert_eq!(triggers_on_stack(&t, "Bird"), 1);
 }
+
+#[test]
+fn historians_boon_final_chapter_triggers() {
+    cr!("714.2c", "603.3b");
+    ruling!(
+        "Historian's Boon",
+        "The final chapter ability of a Saga is the ability with the greatest chapter number among chapter abilities that Saga has."
+    );
+    supported("Historian's Boon");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Historian's Boon");
+    // History of Benalia: I, II — a Knight token; III — Knights get +2/+1.
+    let saga = t.battlefield(P0, "History of Benalia");
+    t.g.obj_mut(saga).counters.insert("lore".into(), 1);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    // Chapter II: no Angel.
+    assert_eq!(t.named_on_battlefield("Angel").len(), 0);
+    assert_eq!(t.counters(saga, "lore"), 2);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    let angels = crate::r_s01_common::with_subtype(&t, P0, "Angel");
+    assert_eq!(angels.len(), 1);
+    assert_eq!(t.pt(angels[0]), (4, 4));
+}

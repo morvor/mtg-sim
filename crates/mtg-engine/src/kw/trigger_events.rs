@@ -39,6 +39,10 @@ pub const NOTED_AS_IT_LAST_EXISTED: &str = "linked:noted, as it last existed";
 /// `Filter::Custom`: the object (a spell cast or a land played) was a card exiled with
 /// the source (CR 607.2a): "Whenever a player plays a card exiled with ~".
 pub const WAS_EXILED_WITH_SOURCE: &str = "linked:was a card exiled with ~";
+/// `TriggerCond::Custom`: "Whenever the final chapter ability of a Saga you control
+/// triggers" (Historian's Boon; CR 714.2c: the chapter ability with the greatest chapter
+/// number among the Saga's; CR 603.3b: it triggers as that ability is put on the stack).
+pub const FINAL_CHAPTER_TRIGGERS: &str = "saga:final chapter ability of a saga you control triggers";
 /// `Filter::Custom`: the spell or ability that caused the trigger event.
 pub const THE_CAUSE: &str = "event cause:the spell or ability";
 
@@ -68,6 +72,66 @@ impl KeywordRules for TriggerEvents {
             })),
             _ => None,
         }
+    }
+
+    fn custom_trigger(
+        &self,
+        g: &Game,
+        name: &str,
+        _src: ObjectId,
+        ctl: crate::types::PlayerId,
+        ev: &crate::events::Event,
+    ) -> Option<Vec<crate::object::EventInfo>> {
+        if name != FINAL_CHAPTER_TRIGGERS {
+            return None;
+        }
+        let crate::events::Event::AbilityTriggeredOnStack { ability, source } = ev else {
+            return Some(vec![]);
+        };
+        let chapters = |t: &crate::ability::TriggerCond| -> Vec<u32> {
+            match t {
+                crate::ability::TriggerCond::Custom(n) => n
+                    .strip_prefix("chapter:")
+                    .map(|r| r.split(',').filter_map(|x| x.trim().parse().ok()).collect())
+                    .unwrap_or_default(),
+                _ => vec![],
+            }
+        };
+        let saga = g.obj(*source);
+        if saga.controller != ctl || !saga.chars.has_subtype("Saga") {
+            return Some(vec![]);
+        }
+        let final_chapter = saga
+            .chars
+            .abilities
+            .iter()
+            .filter_map(|a| match &a.kind {
+                crate::ability::AbilityKind::Triggered(t) => chapters(&t.trigger).into_iter().max(),
+                _ => None,
+            })
+            .max();
+        let si = g.obj(*ability).stack.as_deref();
+        let this_chapters = si.and_then(|si| match &si.kind {
+            crate::object::StackKind::Triggered { ability: a, .. } => match &a.kind {
+                crate::ability::AbilityKind::Triggered(t) => Some(chapters(&t.trigger)),
+                _ => None,
+            },
+            _ => None,
+        });
+        let ok = match (final_chapter, this_chapters) {
+            (Some(f), Some(v)) => v.contains(&f),
+            _ => false,
+        };
+        Some(if ok {
+            vec![crate::object::EventInfo {
+                object: Some(*source),
+                spell: Some(*ability),
+                player: Some(ctl),
+                ..Default::default()
+            }]
+        } else {
+            vec![]
+        })
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
