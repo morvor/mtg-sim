@@ -120,3 +120,68 @@ fn firesong_and_sunspeaker_white_spell_life_gain() {
     assert_eq!(t.life(P0), 28);
     assert_eq!(t.stack_len(), 0);
 }
+
+#[test]
+fn ghyrson_starn_exactly_one_damage() {
+    cr!("603.2", "603.2c");
+    ruling!(
+        "Ghyrson Starn, Kelermorph",
+        "If another source deals exactly 1 damage to a permanent or player multiple times or deals exactly 1 damage to multiple permanents and/or players simultaneously"
+    );
+    supported("Ghyrson Starn, Kelermorph");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ghyrson Starn, Kelermorph");
+    // "{T}: This creature deals 1 damage to any target."
+    let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
+    t.activate(P0, sorcerer, 0, &[Entity::Player(P1)]).expect("ping");
+    t.settle();
+    t.resolve_all();
+    // 1 from the Sorcerer, 2 from Ghyrson (whose own 2 damage doesn't trigger it).
+    assert_eq!(t.life(P1), 17);
+    // A permanent: Ghyrson deals its 2 damage to that creature.
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.obj_mut(sorcerer).tapped = false;
+    t.activate(P0, sorcerer, 0, &[Entity::Object(giant)]).expect("ping");
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.life(P1), 17);
+    // Not exactly 1: no trigger.
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.life(P1), 14);
+}
+
+#[test]
+fn ob_nixilis_opponents_each_lose_exactly_one() {
+    cr!("603.2c", "119.3");
+    ruling!(
+        "Ob Nixilis, Captive Kingpin",
+        "Ob Nixilis's last ability will trigger if an opponent is dealt exactly 1 damage, pays exactly 1 life, or loses exactly 1 life some other way."
+    );
+    supported("Ob Nixilis, Captive Kingpin");
+    let mut t = TestGame::new(3);
+    let ob = t.battlefield(P0, "Ob Nixilis, Captive Kingpin");
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    // "Whenever this creature or another creature you control dies, each opponent loses
+    // 1 life and you gain 1 life.": both opponents lose exactly 1 at once: once.
+    t.battlefield(P0, "Zulaport Cutthroat");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s02_common::destroy(&mut t, bears);
+    t.resolve();
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "+1/+1 counter"), 1);
+    t.resolve_all();
+    assert_eq!(t.counters(ob, "+1/+1"), 1);
+    // 3 life at once: no trigger.
+    t.set_step(P0, Step::PrecombatMain);
+    cast_new(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.counters(ob, "+1/+1"), 1);
+}

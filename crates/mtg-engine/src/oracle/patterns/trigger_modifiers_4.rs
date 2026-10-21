@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn reads_scoped_sources_and_events() {
         let f = sources("~ or an equipment attached to it").expect("cloud");
-        assert!(matches!(f, Filter::Or(ref v) if v.len() == 2 && v[0] == Filter::Source));
+        assert!(matches!(f, Filter::Or(ref v) if v.len() == 2 && matches!(v[0], Filter::Source)));
         assert!(sources("~ or an emblem you own").is_some());
         assert!(sources("a shaman or another wizard you control").is_none());
         assert!(matches!(

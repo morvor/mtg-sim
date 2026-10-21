@@ -29,6 +29,27 @@ impl Renderer<'_> {
         if let Some(r) = self.caused_by_spell(trigger, cond) {
             return Some(r);
         }
+        // "Whenever one or more opponents each lose exactly 1 life" (`trigger_grammar_4.rs`).
+        if let (
+            TriggerCond::Batched {
+                trigger: inner,
+                per: BatchPer::AnyPlayer,
+            },
+            Condition::Compare(Value::EventAmount, cmp, Value::Const(n)),
+        ) = (trigger, cond)
+        {
+            if let TriggerCond::LosesLife { who } = inner.as_ref() {
+                let who = match who {
+                    PlayerRel::Opponent => "one or more opponents",
+                    _ => "one or more players",
+                };
+                let amount = match cmp {
+                    Cmp::Eq => format!("exactly {}", number_word(*n)),
+                    _ => format!("{} or more", number_word(*n)),
+                };
+                return Some((who.to_string(), format!("each lose {amount} life")));
+            }
+        }
         // "Whenever an opponent draws a card except the first one they draw in each of
         // their draw steps"; "Whenever you draw your first card during each of your draw
         // steps".

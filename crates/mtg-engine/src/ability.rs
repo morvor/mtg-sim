@@ -4160,6 +4160,10 @@ pub enum BatchPer {
     Object,
     /// Once per other object (`EventInfo::other`), e.g. the source dealing damage.
     Other,
+    /// Once per batch, if the events of at least one player (`EventInfo::player`) meet the
+    /// trigger's condition on their own ("Whenever one or more opponents each lose
+    /// exactly 1 life": each player's total, CR 603.2c).
+    AnyPlayer,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

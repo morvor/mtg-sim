@@ -370,7 +370,7 @@ impl Game {
             }
             let key = |i: &EventInfo| match per {
                 BatchPer::Batch => None,
-                BatchPer::Player => i.player.map(|p| Entity::Player(p)),
+                BatchPer::Player | BatchPer::AnyPlayer => i.player.map(|p| Entity::Player(p)),
                 BatchPer::Object => i.object.map(Entity::Object),
                 BatchPer::Other => i.other.map(Entity::Object),
             };
@@ -405,7 +405,13 @@ impl Game {
                 let mut k = keep.iter();
                 group_extra.retain(|_| *k.next().unwrap_or(&true));
             }
+            // "one or more opponents each ...": only the first player's group that meets
+            // the condition triggers it.
+            let mut once_done = false;
             for (g, extra) in groups.into_iter().zip(group_extra) {
+                if once_done {
+                    break;
+                }
                 let mut info = g[0].clone();
                 // "That much"/"that many": the total amount (damage, life, ...), or the
                 // number of events for events without an amount (objects entering, ...).
@@ -446,6 +452,7 @@ impl Game {
                         continue;
                     }
                 }
+                once_done = matches!(per, BatchPer::AnyPlayer);
                 // CR 603.2h: "Do this only once each turn".
                 if t.do_once_per_turn
                     && self
