@@ -99,3 +99,51 @@ fn zuko_unchosen_mode_and_you_lose_two_life() {
         .collect();
     assert_eq!(offered, vec![vec![0, 1, 2, 3], vec![1, 2, 3]]);
 }
+
+#[test]
+fn tranquil_frillback_pays_twice_and_chooses_up_to_two_modes() {
+    cr!("603.12", "603.12a", "700.2");
+    ruling!(
+        "Tranquil Frillback",
+        "you may pay {G} up to three times. That is, you may pay {G}, {G}{G}, {G}{G}{G}, or choose not to pay"
+    );
+    supported("Tranquil Frillback");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    t.graveyard(P1, "Grizzly Bears");
+    let f = t.hand(P0, "Tranquil Frillback");
+    // Pay {G} twice, then stop.
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, false);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1, 2]));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, f).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 24);
+    assert_eq!(t.graveyard_size(P1), 0);
+    let maxes: Vec<u32> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseModes { max, .. } => Some(max),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(maxes, vec![2]);
+}
+
+#[test]
+fn tranquil_frillback_without_paying_no_reflexive_ability() {
+    cr!("603.12");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 5);
+    let f = t.hand(P0, "Tranquil Frillback");
+    t.answer_yes(P0, false);
+    t.cast(P0, f).go();
+    t.resolve_all();
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
+}
