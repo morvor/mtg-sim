@@ -1,7 +1,8 @@
 //! Trigger grammar: "a counter is put on" (any kind, Hollowmurk Siege), "one or more of
 //! your opponents are attacked" (Party Dude), "When you cast a spell with the chosen name
 //! for the first time this turn" (Medomai's Prophecy), "Whenever that creature is dealt
-//! damage by an attacking creature this turn" (Glyph of Life).
+//! damage by an attacking creature this turn" (Glyph of Life), "whenever you solve a Case"
+//! (Case File Auditor).
 
 use crate::combat2_common::*;
 use crate::td_next_turn_durations::mana;
@@ -133,4 +134,32 @@ fn glyph_of_life_gains_life_for_damage_attacking_creatures_deal_to_the_wall() {
     t.resolve_all();
     assert_eq!(t.obj_now(wall).damage, 2);
     assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn case_file_auditor_digs_whenever_you_solve_a_case() {
+    cr!("719.3b", "603.2");
+    supported("Case File Auditor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Case File Auditor");
+    let mine = t.battlefield(P0, "Case of the Gateway Express");
+    let theirs = t.battlefield(P1, "Case of the Gateway Express");
+    t.library_top(P0, "Grizzly Bears");
+    let pacifism = t.library_top(P0, "Pacifism");
+    t.library_top(P0, "Grizzly Bears");
+    // An opponent's Case becoming solved: nothing.
+    mtg_engine::cases::solve(&mut t.g, theirs);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    mtg_engine::cases::solve(&mut t.g, mine);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(vec![Entity::Object(pacifism)]),
+    );
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Pacifism"));
+    assert!(!t.in_hand(P0, "Grizzly Bears"));
 }

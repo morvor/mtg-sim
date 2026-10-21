@@ -290,3 +290,23 @@ fn you_turn_face_up(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "whenever you turn a permanent face up", priority: 100, parse: you_turn_face_up } }
+
+/// "Whenever you solve a Case" (Case File Auditor): a Case you control becomes solved
+/// (CR 719.3a-b; `cases.rs` reports it).
+fn you_solve_a_case(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(t) == "you solve a case").then(|| {
+        (
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::PlayerAction {
+                    name: crate::cases::BECAME_SOLVED.into(),
+                    who: PlayerRel::You,
+                }),
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Subtype("Case".into())),
+            },
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "whenever you solve a case", priority: 100, parse: you_solve_a_case } }
