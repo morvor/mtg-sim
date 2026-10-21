@@ -782,6 +782,11 @@ pub struct Game {
     pub observer: Option<EventObserver>,
     /// When queued events are checked for triggers (CR 603.2, 608.2c).
     pub timing: crate::trigger_timing::TriggerTiming,
+    /// While an effect with play terms resolves ([`Effect::WithPlayTerms`]): the
+    /// alternative cost spells cast as it resolves are cast for ("You may cast that card by
+    /// paying {1} rather than paying its mana cost", CR 608.2g, 118.9). Set and restored
+    /// around that effect only (see `permissions::with_resolution_terms`).
+    pub resolution_alt_cost: Option<Cost>,
 }
 
 impl Game {
@@ -898,6 +903,7 @@ impl Game {
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),
+            resolution_alt_cost: None,
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
