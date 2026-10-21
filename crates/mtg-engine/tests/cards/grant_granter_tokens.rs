@@ -23,6 +23,7 @@ fn kill(t: &mut TestGame, id: ObjectId) {
 #[test]
 fn gutter_grime_each_ooze_counts_the_grime_that_created_it() {
     cr!("201.5a", "111.3", "604.3a", "707.2");
+    cr_example!("201.5a", "Gutter Grime");
     ruling!("Gutter Grime", "each Ooze token remembers which one created it");
     ruling!(
         "Gutter Grime",

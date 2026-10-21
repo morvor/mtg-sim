@@ -92,6 +92,7 @@ fn attackers_must_be_untapped_nonbattle_and_controlled_since_turn_began() {
 #[test]
 fn creatures_that_cant_attack_alone_can_attack_together() {
     cr!("508.1c");
+    cr_example!("508.1c", "can't attack alone");
     // Trusty Companion: "This creature can't attack alone."
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Trusty Companion");
@@ -114,6 +115,7 @@ fn creatures_that_cant_attack_alone_can_attack_together() {
 #[test]
 fn requirements_are_maximized_without_breaking_restrictions() {
     cr!("508.1d");
+    cr_example!("508.1d", "attacks if able");
     // CR 508.1d example: one creature "attacks if able", one with no abilities, and "No more
     // than one creature can attack each combat" (Silent Arbiter).
     let mut t = TestGame::new(2);
