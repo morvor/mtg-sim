@@ -70,6 +70,9 @@ pub struct PlayGrant {
     pub free: bool,
     pub source: Option<ObjectId>,
     pub turn: u32,
+    /// The player "your" in the permission's duration means ("until your next turn",
+    /// "until the end of their next turn", CR 611.2a): usually the player who gets it.
+    pub duration_player: PlayerId,
     /// The terms the permission comes with ("you may cast that card", a required
     /// alternative cost, flash, ...).
     pub terms: PlayTerms,
@@ -97,6 +100,7 @@ pub fn grant_play_permission(
             free,
             source,
             turn,
+            duration_player: p,
             terms: PlayTerms::default(),
         });
     }
@@ -284,6 +288,7 @@ fn resolution_alternative_costs(g: &mut Game, p: PlayerId, card: ObjectId) -> Ve
         free: false,
         source: None,
         turn,
+        duration_player: p,
         terms: PlayTerms::default(),
     });
     let alts: Vec<CastOption> = g

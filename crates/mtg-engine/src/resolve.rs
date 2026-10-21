@@ -2182,6 +2182,9 @@ impl Game {
                 crate::permissions::with_resolution_terms(self, terms, |g| g.exec(effect, ctx));
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
+                    if terms.controller_duration {
+                        g.duration_player = ctx.controller;
+                    }
                 }
                 crate::permissions::given(self, before);
             }

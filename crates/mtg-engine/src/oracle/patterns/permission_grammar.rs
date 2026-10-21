@@ -50,6 +50,10 @@ pub enum Who {
     /// "that creature's controller": the controller of the creature the triggered ability
     /// is about.
     CreaturesController,
+    /// "each player may play the card they exiled this way", "players may play cards they
+    /// exiled this way": each player, for the cards they exiled (from their own library or
+    /// hand: the cards they own).
+    EachPlayer,
 }
 
 /// What the permission is for.
@@ -131,6 +135,12 @@ pub struct Perm {
     pub subjectless: bool,
     /// The player "they" means (filled in where the text is parsed).
     pub who_ref: Option<PlayerRef>,
+    /// The duration is said relative to the player who gets the permission ("until that
+    /// player's next end step", "until the end of their next turn"), not to "you".
+    pub dur_grantee: bool,
+    /// "..., and they can't play cards from their hand": for as long as the permission
+    /// lasts, its players can't play cards from their hands.
+    pub no_hand: bool,
 }
 
 impl Perm {
@@ -237,6 +247,14 @@ const LEADS: &[Lead] = &[
     ("until your next end step, ", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),
+    ("until that player's next end step, ", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
+    }),
+    ("until the end of that player's next turn, ", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilEndOfYourNextTurn)
+    }),
     ("until the beginning of your next upkeep, ", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::Upkeep))
     }),
@@ -297,6 +315,8 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
         ("their owner may ", Who::OwnerOfIt),
         ("the exiled card's owner may ", Who::OwnerOfIt),
         ("they may ", Who::They),
+        ("each player may ", Who::EachPlayer),
+        ("players may ", Who::EachPlayer),
         ("that creature's controller may ", Who::CreaturesController),
     ] {
         if let Some(r) = s.strip_prefix(w) {
@@ -309,6 +329,9 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
 /// The phrases naming the cards an earlier instruction moved, with how many of them.
 fn referent(s: &str) -> Option<(Option<u32>, &str)> {
     const WHOLE: &[&str] = &[
+        "the cards they exiled this way",
+        "the card they exiled this way",
+        "cards they exiled this way",
         "the cards exiled this way",
         "cards exiled this way",
         "those exiled cards",
@@ -727,6 +750,14 @@ const TAILS: &[Tail] = &[
     (" until your next end step", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),
+    (" until the end of their next turn", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilEndOfYourNextTurn)
+    }),
+    (" until their next end step", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
+    }),
     (" for as long as it remains exiled", |p| {
         set_duration(p, Duration::Permanent)
     }),
@@ -879,6 +910,13 @@ pub fn parse(l: &str) -> Option<Perm> {
         None => strip_subject(&s)?,
     };
     p.who = who;
+    let s = match s.strip_suffix(", and they can't play cards from their hand") {
+        Some(r) if who == Who::EachPlayer => {
+            p.no_hand = true;
+            r
+        }
+        _ => s,
+    };
     let s = strip_spend(s, &mut p);
     let s = same_zone_twice(&s);
     let mut r: &str = &s;
@@ -928,6 +966,10 @@ pub fn parse(l: &str) -> Option<Perm> {
             rest = &r[head.len()..];
         }
     } else if let Some((limit, x)) = referent(r) {
+        // "the card they exiled this way": only each player's permission for their own.
+        if (r[..r.len() - x.len()].contains(" they exiled")) != (p.who == Who::EachPlayer) {
+            return None;
+        }
         p.exiled_named = r.starts_with("the exiled card");
         p.obj = Obj::Referent { limit };
         rest = x;
@@ -1145,6 +1187,8 @@ pub fn moved(e: &Effect) -> Moved {
             Moved::Unchanged
         }
         Effect::May { effect, .. } => moved(effect),
+        // "Target player exiles the top card of their library."
+        Effect::AsPlayer { effect, .. } => moved(effect),
         Effect::If {
             then, otherwise, ..
         } => match (moved(then), moved(otherwise)) {
@@ -1216,13 +1260,23 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
         return None;
     }
     let it = Sel::Var(vars::IT);
+    if p.who == Who::EachPlayer {
+        return each_player_effect(p, zone?, ctx);
+    }
+    if p.no_hand || (p.dur_grantee && p.who == Who::You) {
+        return None;
+    }
     let who = match p.who {
         Who::You => PlayerRef::You,
         Who::OwnerOfIt => PlayerRef::OwnerOf(Box::new(it.clone())),
         Who::They => p.who_ref.clone()?,
         Who::CreaturesController => PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        Who::EachPlayer => return None,
     };
     let mut terms = p.terms_with_condition(ctx)?;
+    if p.who != Who::You && !p.dur_grantee {
+        terms.controller_duration = p.duration.as_ref().is_some_and(said_of_a_player);
+    }
     // "Until your next turn, you may cast sorcery spells as though they had flash."
     if let (
         Obj::Class {
@@ -1305,6 +1359,91 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
             })
         }
         Obj::SelfCard | Obj::Target { .. } => None,
+    }
+}
+
+/// Whether a duration is said relative to a player ("until your next turn", "for as long
+/// as you control ~").
+fn said_of_a_player(d: &Duration) -> bool {
+    matches!(
+        d,
+        Duration::UntilYourNextTurn
+            | Duration::UntilEndOfYourNextTurn
+            | Duration::UntilYourNextStep(_)
+            | Duration::UntilEndOfCombatOnYourNextTurn
+            | Duration::WhileYouControlSource
+    )
+}
+
+/// The variable iterating over the cards each player exiled.
+const EACH_CARD: Var = vars::USER + 9461;
+
+/// "Until your next end step, each player may play the card they exiled this way",
+/// "Until your next turn, players may play cards they exiled this way, and they can't play
+/// cards from their hand": a permission for each card the players exiled (each from their
+/// own library, see [`each_player_exiled_own`]), given to its owner; "your" in the
+/// duration is the controller's (CR 611.2a).
+fn each_player_effect(p: &Perm, zone: ZoneKind, ctx: &CompileContext) -> Option<Effect> {
+    let Obj::Referent { limit: None } = p.obj else {
+        return None;
+    };
+    let d = p.duration.clone()?;
+    if zone != ZoneKind::Exile || p.look || p.from.is_some_and(|f| f != From::Exile) {
+        return None;
+    }
+    let mut terms = p.terms_with_condition(ctx)?;
+    if !p.dur_grantee {
+        terms.controller_duration = said_of_a_player(&d);
+    }
+    let card = Sel::Var(EACH_CARD);
+    let grant = referent_effect(
+        p,
+        PlayerRef::OwnerOf(Box::new(card.clone())),
+        card,
+        zone,
+        None,
+        None,
+        terms,
+    )?;
+    let mut v = vec![Effect::ForEach {
+        sel: Sel::Var(vars::IT),
+        var: EACH_CARD,
+        effect: Box::new(grant),
+    }];
+    if p.no_hand {
+        let hand = Filter::InZone(ZoneKind::Hand);
+        v.push(Effect::AddRestriction {
+            restriction: Restriction::CantCast {
+                who: PlayerFilter::Any,
+                what: hand.clone(),
+            },
+            duration: d.clone(),
+        });
+        v.push(Effect::AddRestriction {
+            restriction: Restriction::CantPlayLandCards {
+                who: PlayerFilter::Any,
+                what: hand,
+            },
+            duration: d,
+        });
+    }
+    Some(Effect::seq(v))
+}
+
+/// Whether the cards the effect last moved were exiled by each player from the top of
+/// their own library ("Each player exiles the top card of their library.").
+fn each_player_exiled_own(e: &Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what: Sel::TopOfLibrary(PlayerRef::EachPlayer, _),
+            ..
+        } => true,
+        Effect::Seq(v) => v
+            .iter()
+            .rev()
+            .find(|x| !matches!(moved(x), Moved::Unchanged))
+            .is_some_and(each_player_exiled_own),
+        _ => false,
     }
 }
 
@@ -1882,6 +2021,9 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if p.who == Who::CreaturesController && !b.in_trigger {
         return false;
     }
+    if p.who == Who::EachPlayer && !each_player_exiled_own(prev) {
+        return false;
+    }
     let zone = referent_zone(Some(prev), b);
     if !matches!(p.obj, Obj::Referent { .. }) && p.from != Some(From::AmongReferent) {
         return false;
@@ -2027,6 +2169,20 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
             free: p.free,
             optional: true,
         });
+    }
+    // (Each player's permission needs the instruction that exiled the cards: see
+    // `followup`.)
+    if p.who == Who::EachPlayer {
+        return None;
+    }
+    let mut p = p;
+    if p.who == Who::They {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            || matches!(b.it_player, PlayerRef::You)
+        {
+            return None;
+        }
+        p.who_ref = Some(b.it_player.clone());
     }
     let zone = referent_zone(None, b);
     let e = to_effect(&p, zone, b.ctx)?;

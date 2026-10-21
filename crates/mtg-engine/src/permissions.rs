@@ -217,7 +217,7 @@ pub fn allowing(
         // "For as long as you control ~", "during any turn you attacked with ~", "during
         // your next turn", "you may cast red spells from among them" (see `PlayTerms`).
         let ctx = Ctx::new(gr.source, gr.player);
-        if g.effect_expired(&gr.duration, gr.source, gr.player)
+        if g.effect_expired(&gr.duration, gr.source, gr.duration_player)
             // "During your next turn": not before that turn begins (when the permission
             // becomes one that lasts until end of turn, see `turn.rs`).
             || (gr.terms.later_turn && matches!(gr.duration, Duration::UntilEndOfYourNextTurn))
