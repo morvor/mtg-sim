@@ -548,6 +548,22 @@ pub fn spell_relative_cost(cost: &Cost, mv: u32) -> Cost {
             .map(|part| match part {
                 CostPart::PayLife(v) => CostPart::PayLife(fix(v)),
                 CostPart::PayEnergy(v) => CostPart::PayEnergy(fix(v)),
+                // "by waterbending {X} rather than paying its mana cost, where X is its mana
+                // value" (Hama, the Bloodbender).
+                CostPart::Effect(e) => match &**e {
+                    Effect::KeywordAction {
+                        action,
+                        who,
+                        what,
+                        n,
+                    } => CostPart::Effect(Box::new(Effect::KeywordAction {
+                        action: *action,
+                        who: who.clone(),
+                        what: what.clone(),
+                        n: fix(n),
+                    })),
+                    _ => part.clone(),
+                },
                 other => other.clone(),
             })
             .collect(),

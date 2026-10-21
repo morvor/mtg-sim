@@ -658,3 +658,43 @@ fn amped_raptor_casts_the_exiled_card_for_energy_equal_to_its_mana_value() {
         }
     }
 }
+
+#[test]
+fn hama_casts_the_exiled_card_during_your_turn_by_waterbending() {
+    cr!("118.9", "701.67a", "611.2a");
+    ruling!(
+        "Hama, the Bloodbender",
+        "You may only cast a spell this way by paying the waterbend cost."
+    );
+    assert_supported("Hama, the Bloodbender");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.library_top(P1, "Forest");
+    let bears = t.library_top(P1, "Grizzly Bears");
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    let hama = t.enter(P0, "Hama, the Bloodbender");
+    t.resolve_all();
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(bolt_x), Zone::Exile, "{}", t.dump_log());
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    let _ = bears;
+    // Not during an opponent's turn.
+    t.lands(P0, "Island", 1);
+    t.advance_to(P1, Step::Upkeep);
+    let pay = CastMethod::Alternative(mtg_engine::casting::PERMISSION_COST);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.turn.priority = Some(P0);
+    assert!(t.g.cast_spell(P0, bolt_x, pay.clone()).is_err());
+    t.clear_answers();
+    // During P0's turn, waterbending {1} (its mana value): an Island pays for it.
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.g.turn.priority = Some(P0);
+    t.g.cast_spell(P0, bolt_x, pay).expect("cast by waterbending");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    let _ = hama;
+}

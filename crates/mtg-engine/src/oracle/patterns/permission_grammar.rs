@@ -150,6 +150,8 @@ pub struct Perm {
     pub active_player: bool,
     /// "For each of those cards, its owner may play it": each card's owner's permission.
     pub per_card: bool,
+    /// The phrase began "For as long as you control ~, ".
+    pub lead_control: bool,
     /// "the cards they don't own exiled with ~": not owned by the player who gets the
     /// permission (the active player).
     pub not_theirs: bool,
@@ -301,6 +303,11 @@ const LEADS: &[Lead] = &[
     }),
     ("for as long as they remain exiled, ", |p| {
         set_duration(p, Duration::Permanent)
+    }),
+    // (Only right after the instruction that moved the cards: see `followup`.)
+    ("for as long as you control ~, ", |p| {
+        p.lead_control = true;
+        set_duration(p, Duration::WhileYouControlSource)
     }),
     // Not during the turn the permission is given, then until that turn ends.
     ("during your next turn, ", |p| {
@@ -718,6 +725,16 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
 fn gerund_cost(s: &str) -> Option<Cost> {
     // "by paying an amount of {E} equal to its mana value" (Amped Raptor): energy relative
     // to the spell (see `permissions::spell_relative_cost`).
+    // "by waterbending {X} ..., where X is its mana value" (Hama, the Bloodbender): the
+    // waterbend cost relative to the spell (CR 701.67a).
+    if s == "waterbending {x} where x is its mana value" {
+        return Some(Cost::free().with(CostPart::Effect(Box::new(Effect::KeywordAction {
+            action: KeywordAction::Waterbend,
+            who: PlayerRef::You,
+            what: Sel::None,
+            n: Value::ManaValueOf(Box::new(Sel::This)),
+        }))));
+    }
     if s == "paying an amount of {e} equal to its mana value" {
         return Some(Cost {
             mana: None,
@@ -891,6 +908,11 @@ const TAILS: &[Tail] = &[
     (" until your next end step", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),
+    (" during your turn", |p| {
+        let was = p.your_turn;
+        p.your_turn = true;
+        !was
+    }),
     (" until the end of their next turn", |p| {
         p.dur_grantee = true;
         set_duration(p, Duration::UntilEndOfYourNextTurn)
@@ -1038,6 +1060,13 @@ fn same_zone_twice(s: &str) -> String {
 /// Parses a permission phrase (lowercase, without the final period).
 pub fn parse(l: &str) -> Option<Perm> {
     let mut p = Perm::default();
+    // "by waterbending {X} rather than paying its mana cost, where X is its mana value"
+    // (Hama, the Bloodbender): X is part of the cost.
+    let l = l.replace(
+        "waterbending {x} rather than paying its mana cost, where x is its mana value",
+        "waterbending {x} where x is its mana value rather than paying its mana cost",
+    );
+    let l = l.as_str();
     let s = strip_lead(end(l).trim(), &mut p)?;
     // "Cast any number of red instant and/or sorcery cards from your graveyard without
     // paying their mana costs.": an instruction (the player chooses which, if any).
@@ -2327,6 +2356,14 @@ pub(crate) fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if p.who == Who::EachPlayer && !each_player_exiled_own(prev) {
         return false;
     }
+    // "Exile up to one ... card from that player's graveyard. For as long as you control ~,
+    // you may cast the exiled card ..." (Hama, the Bloodbender): about the cards the
+    // previous instruction moved (not cards several earlier instructions exiled).
+    // (A single card: "one of the exiled cards" after several instructions that exiled
+    // cards, Kotose, the Silent Spider, would be all of them.)
+    if p.lead_control && (!matches!(moved(prev), Moved::Cards(_)) || rest.contains(" cards")) {
+        return false;
+    }
     let zone = referent_zone(Some(prev), b);
     if !matches!(p.obj, Obj::Referent { .. }) && p.from != Some(From::AmongReferent) {
         return false;
@@ -2480,7 +2517,7 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     // (Each player's permission needs the instruction that exiled the cards: see
     // `followup`.)
-    if p.who == Who::EachPlayer {
+    if p.who == Who::EachPlayer || p.lead_control {
         return None;
     }
     let mut p = p;
