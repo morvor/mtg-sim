@@ -247,6 +247,32 @@ impl Game {
             ReplEvent::Move(m) if m.to == Zone::Battlefield => {
                 let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
                 let m = m.clone();
+                // The entering object's own conditional entry replacements ("If ~ would
+                // enter and it wasn't cast, exile it instead") apply only if it would have
+                // that ability on the battlefield (CR 614.12: not under Humility, Primeval
+                // Spawn's ruling).
+                let own_where = |c: &Candidate| {
+                    matches!(c.key, ReplKey::Static(s, _) if s == m.obj)
+                        && matches!(c.def.event, ReplacementEvent::Where { .. })
+                };
+                if v.iter().any(own_where) {
+                    let key = |d: &ReplacementDef| serde_json::to_string(d).unwrap_or_default();
+                    let kept: Vec<String> = self.with_hypothetical_entry(&m, |g| {
+                        g.obj(m.obj)
+                            .chars
+                            .abilities
+                            .iter()
+                            .filter_map(|a| match &a.kind {
+                                AbilityKind::Static(s) => match &s.effect {
+                                    StaticEffect::Replacement(d) => Some(key(d)),
+                                    _ => None,
+                                },
+                                _ => None,
+                            })
+                            .collect()
+                    });
+                    v.retain(|c| !own_where(c) || kept.contains(&key(&c.def)));
+                }
                 let ev2 = ev.clone();
                 let mut entry = self.with_hypothetical_entry(&m, |g| {
                     g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly)

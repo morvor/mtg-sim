@@ -45,18 +45,30 @@ fn scries(t: &TestGame) -> usize {
 }
 
 fn color(t: &mut TestGame, p: PlayerId, ty: ManaType) {
-    let i = [ManaType::W, ManaType::U, ManaType::B, ManaType::R, ManaType::G]
-        .iter()
-        .position(|x| *x == ty)
-        .unwrap();
+    let i = [
+        ManaType::W,
+        ManaType::U,
+        ManaType::B,
+        ManaType::R,
+        ManaType::G,
+    ]
+    .iter()
+    .position(|x| *x == ty)
+    .unwrap();
     t.answer(p, DecisionKind::Option, Answer::Index(i));
 }
 
 #[test]
 fn war_room_costs_life_for_each_color_of_your_commanders() {
     cr!("903.4", "903.4f", "119.4");
-    ruling!("War Room", "you pay no life to activate War Room's last ability");
-    ruling!("War Room", "If you don't have a commander, you can't activate War Room's last ability at all.");
+    ruling!(
+        "War Room",
+        "you pay no life to activate War Room's last ability"
+    );
+    ruling!(
+        "War Room",
+        "If you don't have a commander, you can't activate War Room's last ability at all."
+    );
     assert_supported("War Room");
     // Two colors (Kalain is black and red): 2 life.
     let mut t = commander_game();
@@ -130,13 +142,10 @@ fn study_hall_scries_for_each_time_your_commander_was_cast() {
     t.cast(P0, cmd).go();
     t.resolve_all();
     // Cast once from the command zone: scry 1.
-    let n = t
-        .asked()
-        .iter()
-        .find_map(|(_, d)| match d {
-            Decision::Scry { cards, .. } => Some(cards.len()),
-            _ => None,
-        });
+    let n = t.asked().iter().find_map(|(_, d)| match d {
+        Decision::Scry { cards, .. } => Some(cards.len()),
+        _ => None,
+    });
     assert_eq!(n, Some(1));
     // Mana spent on another spell: nothing.
     let mut t = commander_game();
@@ -156,10 +165,7 @@ fn study_hall_scries_for_each_time_your_commander_was_cast() {
 #[test]
 fn opal_palace_gives_your_commander_counters_for_its_casts() {
     cr!("106.6", "903.8", "614.1c");
-    ruling!(
-        "Opal Palace",
-        "includes the most recent time"
-    );
+    ruling!("Opal Palace", "includes the most recent time");
     assert_supported("Opal Palace");
     let mut t = commander_game();
     t.set_step(P0, Step::PrecombatMain);
@@ -209,4 +215,62 @@ fn goblin_psychopath_deals_its_next_combat_damage_to_you_if_you_lose_the_flip() 
             assert_eq!((t.life(P0), t.life(P1)), (15, 20));
         }
     }
+}
+
+#[test]
+fn opal_palace_doubled_mana_gives_two_counters_for_each_cast() {
+    cr!("106.6a", "903.8");
+    ruling!(
+        "Opal Palace",
+        "that commander enters with two counters for each time it's been cast from the command zone this game"
+    );
+    let mut t = commander_game();
+    t.set_step(P0, Step::PrecombatMain);
+    let cmd = t.command(P0, "Kalonian Tusker");
+    make_commander(&mut t, P0, cmd);
+    t.battlefield(P0, "Mana Reflection");
+    let palace = t.battlefield(P0, "Opal Palace");
+    // {1}: a Wastes (its doubled {C}{C} pays it, one {C} left over).
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, palace, 1, &[]).unwrap();
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::G), 2);
+    // {G}{G}: the Palace's two green mana.
+    t.cast(P0, cmd).go();
+    t.resolve_all();
+    let tusker = t.g.current(cmd);
+    assert!(t.on_battlefield(tusker));
+    assert_eq!(t.counters(tusker, "+1/+1"), 2);
+}
+
+#[test]
+fn path_of_ancestry_doubled_mana_scries_once_for_each_mana() {
+    cr!("106.6a", "903.3d");
+    ruling!(
+        "Path of Ancestry",
+        "Each of those abilities will cause you to scry 1. You won't scry 2."
+    );
+    let mut t = commander_game();
+    t.set_step(P0, Step::PrecombatMain);
+    for _ in 0..3 {
+        t.library_top(P0, "Forest");
+    }
+    let k = t.command(P0, "Llanowar Elves");
+    make_commander(&mut t, P0, k);
+    t.battlefield(P0, "Mana Reflection");
+    let path = t.battlefield(P0, "Path of Ancestry");
+    t.activate(P0, path, 0, &[]).unwrap();
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::G), 2);
+    // Elvish Visionary ({1}{G}, an Elf) with both.
+    let c = t.hand(P0, "Elvish Visionary");
+    t.cast(P0, c).go();
+    t.resolve_all();
+    let sizes: Vec<usize> = t
+        .asked()
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::Scry { cards, .. } => Some(cards.len()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sizes, vec![1, 1]);
 }
