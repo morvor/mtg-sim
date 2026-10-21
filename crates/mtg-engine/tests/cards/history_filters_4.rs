@@ -677,3 +677,109 @@ fn sandswirl_wanderglyph_stops_opponents_who_attacked_you_or_your_planeswalkers(
     let s2 = t.hand(P2, "Shock");
     t.cast_with(P2, s2, &[Entity::Player(P1)]).unwrap();
 }
+
+// --- batch 5: the player the ability is about ------------------------------------------
+
+#[test]
+fn tunnel_ignus_punishes_the_second_land_of_the_turn() {
+    cr!("603.4", "305.2");
+    assert_supported("Tunnel Ignus");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tunnel Ignus");
+    t.set_step(P1, Step::PrecombatMain);
+    t.enter(P1, "Forest");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20, "the first land");
+    t.enter(P1, "Forest");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17, "another land entered this turn");
+}
+
+#[test]
+fn confounding_conundrum_bounces_a_land_after_the_second_land_of_the_turn() {
+    cr!("603.4");
+    assert_supported("Confounding Conundrum");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Confounding Conundrum");
+    t.set_step(P1, Step::PrecombatMain);
+    t.enter(P1, "Forest");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.g.permanents_controlled_by(P1).len(), 1);
+    t.enter(P1, "Island");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.g.permanents_controlled_by(P1).len(), 1, "one returned to hand");
+}
+
+#[test]
+fn antagonism_spares_a_player_whose_opponent_was_dealt_damage() {
+    cr!("102.3", "120.2");
+    assert_supported("Antagonism");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Antagonism");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::PostcombatMain);
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "no opponent of P1 was dealt damage");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.g.deal_damage(bears, Entity::Player(P1), 1, false);
+    t.g.flush_events();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20, "P0's opponent P1 was dealt damage this turn");
+}
+
+#[test]
+fn ramses_wins_when_a_player_attacked_by_your_assassin_loses() {
+    cr!("104.2b", "508.1");
+    assert_supported("Ramses, Assassin Lord");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Ramses, Assassin Lord");
+    let killer = t.battlefield(P0, "Hired Poisoner");
+    t.g.players[P1.idx()].life = 2;
+    // A player who wasn't attacked by an Assassin of yours: no win.
+    let mut four = TestGame::new(4);
+    four.battlefield(P0, "Ramses, Assassin Lord");
+    four.g.lose_life(P3, 20);
+    four.g.flush_events();
+    four.resolve_all();
+    assert!(four.has_lost(P3));
+    assert!(four.g.result.is_none());
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(killer, Entity::Player(P1))]),
+    );
+    t.set_step(P0, Step::BeginningOfCombat);
+    // The game ends during the combat damage step.
+    assert!(t.g.run_until(10_000, |g| g.result.is_some()));
+    assert!(t.has_lost(P1));
+    assert_eq!(t.g.result, Some(mtg_engine::game::GameResult::Win(vec![P0])));
+}
+
+#[test]
+fn combat_celebrant_can_be_exerted_once_each_turn() {
+    cr!("701.43a", "508.1g");
+    assert_supported("Combat Celebrant");
+    let mut t = TestGame::new(2);
+    let cc = t.battlefield(P0, "Combat Celebrant");
+    let mut exert_offers = 0;
+    for _ in 0..2 {
+        t.answer_yes(P0, true);
+        let from = t.asked().len();
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.attack(&[(cc, Entity::Player(P1))], &[]);
+        exert_offers += t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| format!("{d:?}").contains("Exert"))
+            .count();
+        // Untapped by the extra combat's trigger or by hand for the second attack.
+        let now = t.g.current(cc);
+        t.g.objects[now.0 as usize].tapped = false;
+    }
+    assert_eq!(exert_offers, 1, "not again once exerted this turn");
+}

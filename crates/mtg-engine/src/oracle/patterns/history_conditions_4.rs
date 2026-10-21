@@ -355,3 +355,145 @@ fn dealt_damage_this_turn_by(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: [player] was dealt damage this turn by [source]", priority: 900, parse: dealt_damage_this_turn_by } }
+
+// ---------------------------------------------------------------------------
+// Conditions about the opponents of the player the ability is about
+// ---------------------------------------------------------------------------
+
+/// "[instruction] unless one of their opponents was dealt damage this turn" (Antagonism):
+/// "their" is the player the ability is about (CR 102.3).
+fn unless_their_opponent(l: &str, b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    use super::oracle_hardening_referents::is_no_player_referent;
+    let l = end(l);
+    let (x, c) = l.rsplit_once(" unless one of their opponents ")?;
+    let who = b.it_player.clone();
+    if matches!(who, PlayerRef::You) || is_no_player_referent(&who) {
+        return None;
+    }
+    let did = player_history(c)?;
+    let cond = Condition::Compare(
+        Value::CountPlayers(PlayerFilter::And(vec![
+            PlayerFilter::OpponentOf(Box::new(who)),
+            did,
+        ])),
+        Cmp::Ge,
+        Value::Const(1),
+    );
+    let e = crate::oracle::effects::parse_clause(x, b)?;
+    Some(Effect::If {
+        cond: Condition::Not(Box::new(cond)),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "history 4: [instruction] unless one of their opponents [did something] this turn", priority: 390, parse: unless_their_opponent } }
+
+/// "[they] were attacked this turn by an Assassin you controlled" (Ramses, Assassin Lord):
+/// a creature matching the phrase (as it was declared, CR 508.1) attacked that player this
+/// turn.
+pub fn was_attacked_by(r: &str, who: &PlayerRef) -> Option<Condition> {
+    let rel = match who {
+        PlayerRef::TriggerPlayer => PlayerRel::TriggerPlayer,
+        PlayerRef::Target(t) => PlayerRel::Target(*t),
+        _ => return None,
+    };
+    let r = end(r);
+    let by = r
+        .strip_prefix("were attacked this turn by ")
+        .or_else(|| r.strip_prefix("was attacked this turn by "))
+        .or_else(|| {
+            r.strip_prefix("were attacked by ")
+                .or_else(|| r.strip_prefix("was attacked by "))?
+                .strip_suffix(" this turn")
+        })?;
+    let np = by
+        .strip_prefix("an ")
+        .or_else(|| by.strip_prefix("a "))?
+        .replace(" you controlled", " you control");
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(&np)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::EventsThisTurn(
+            Box::new(TriggerCond::AttacksRecipient {
+                attacker: f,
+                recipient: DamageRecipient::Player(rel),
+            }),
+            Tally::Events,
+        ),
+        Cmp::Ge,
+        Value::Const(1),
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Exerted this turn
+// ---------------------------------------------------------------------------
+
+/// "~ hasn't been exerted this turn" (Combat Celebrant): no player exerted it this turn
+/// (CR 701.43a).
+fn not_exerted(c: &str) -> Option<Condition> {
+    let c = end(c);
+    let subj = c
+        .strip_suffix(" hasn't been exerted this turn")
+        .or_else(|| c.strip_suffix(" wasn't exerted this turn"))?;
+    if subj != "~" {
+        return None;
+    }
+    // Whoever exerted it (its controller then).
+    let exerted = TriggerCond::Where {
+        trigger: Box::new(TriggerCond::PlayerAction {
+            name: crate::kwa::exert::EXERTED_EVENT.into(),
+            who: PlayerRel::Any,
+        }),
+        cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+    };
+    Some(Condition::Compare(
+        Value::EventsThisTurn(Box::new(exerted), Tally::Events),
+        Cmp::Eq,
+        Value::Const(0),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "history 4: ~ hasn't been exerted this turn", priority: 900, parse: not_exerted } }
+
+/// "If ~ hasn't been exerted this turn, you may exert it as it attacks. When you do, ..."
+/// (Combat Celebrant): the optional attack cost (CR 508.1g) while the condition holds.
+fn conditional_exert(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let r = lower.strip_prefix("if ")?;
+    let (c, rest) = r.split_once(", ")?;
+    let rest_lower = rest.strip_prefix("you may exert it as it attacks.")?;
+    let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+    let orig_rest = &t[t.len() - rest_lower.len()..];
+    let rewritten = format!("You may exert ~ as it attacks.{orig_rest}");
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    let mut out = Vec::new();
+    for a in v {
+        let mut d = (*a).clone();
+        if let AbilityKind::Static(s) = &mut d.kind {
+            let exert = match &s.effect {
+                StaticEffect::OptionalAttackCost { .. } => true,
+                StaticEffect::Custom(n) => n.as_str() == crate::kw::exert::EXERT_AS_ATTACKS,
+                _ => false,
+            };
+            if !exert || s.condition.is_some() {
+                return None;
+            }
+            s.condition = Some(cond.clone());
+        }
+        d.text = t.to_string();
+        out.push(std::sync::Arc::new(d));
+    }
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: if [condition], you may exert it as it attacks", priority: 90, parse: conditional_exert } }

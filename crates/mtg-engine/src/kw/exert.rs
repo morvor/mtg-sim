@@ -35,7 +35,16 @@ impl KeywordRules for ExertAsItAttacks {
                 .iter()
                 .filter_map(|ab| match &ab.kind {
                     AbilityKind::Static(s) => match &s.effect {
-                        StaticEffect::Custom(n) if n.as_str() == EXERT_AS_ATTACKS => Some(ab.link),
+                        // "If ~ hasn't been exerted this turn, you may exert it as it
+                        // attacks" (Combat Celebrant): only while the condition holds.
+                        StaticEffect::Custom(n)
+                            if n.as_str() == EXERT_AS_ATTACKS
+                                && s.condition.as_ref().is_none_or(|c| {
+                                    g.eval_cond(c, &crate::eval::Ctx::new(Some(a), ap))
+                                }) =>
+                        {
+                            Some(ab.link)
+                        }
                         _ => None,
                     },
                     _ => None,
