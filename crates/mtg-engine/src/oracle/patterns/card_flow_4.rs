@@ -3,6 +3,9 @@
 //! (CR 608.2: it's still on the stack) and that many cards with its name. The choice can
 //! be made only if all of them can be exiled (a copy of the spell, which isn't a card, can
 //! be exiled too and ceases to exist, CR 707.10a, 704.5e).
+//!
+//! "Exile target nonland permanent and the top card of your library." (Suspend
+//! Aggression): both at once; "those cards" are both.
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -70,3 +73,25 @@ fn exile_self_and_named(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 4: you may exile ~ and N cards named ~ from your graveyard", priority: 90, parse: exile_self_and_named } }
+
+fn exile_target_and_top_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l.trim()).strip_prefix("exile ")?;
+    let target = r.strip_suffix(" and the top card of your library")?;
+    if !target.starts_with("target ") {
+        return None;
+    }
+    let n0 = b.targets.len();
+    let (sel, rest) = crate::oracle::effects::object_ref(target, b)?;
+    if !rest.trim().is_empty() || b.targets.len() != n0 + 1 || !matches!(sel, Sel::Target(_)) {
+        b.targets.truncate(n0);
+        return None;
+    }
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::Exile {
+        what: Sel::Union(vec![sel, Sel::TopOfLibrary(PlayerRef::You, Value::c(1))]),
+        face_down: false,
+        link: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "card flow 4: exile target [permanent] and the top card of your library", priority: 90, parse: exile_target_and_top_card } }

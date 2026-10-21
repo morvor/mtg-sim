@@ -148,6 +148,8 @@ pub struct Perm {
     pub linked_it: bool,
     /// The permission is the active player's (see [`Who::Active`]).
     pub active_player: bool,
+    /// "For each of those cards, its owner may play it": each card's owner's permission.
+    pub per_card: bool,
     /// "the cards they don't own exiled with ~": not owned by the player who gets the
     /// permission (the active player).
     pub not_theirs: bool,
@@ -294,6 +296,12 @@ const LEADS: &[Lead] = &[
     }),
     // "For each card exiled this way, you may play that card ..." (each of them).
     ("for each card exiled this way, ", |_| true),
+    // "For each of those cards, its owner may play it until the end of their next turn."
+    // (Suspend Aggression): each card's owner, for that card.
+    ("for each of those cards, ", |p| {
+        p.per_card = true;
+        true
+    }),
     ("during your turn, ", |p| {
         p.your_turn = true;
         true
@@ -1385,8 +1393,11 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
         return None;
     }
     let it = Sel::Var(vars::IT);
-    if p.who == Who::EachPlayer {
+    if p.who == Who::EachPlayer || (p.who == Who::OwnerOfIt && p.per_card) {
         return each_player_effect(p, zone?, ctx);
+    }
+    if p.per_card {
+        return None;
     }
     if p.no_hand || (p.dur_grantee && p.who == Who::You) {
         return None;

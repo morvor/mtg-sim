@@ -295,3 +295,40 @@ fn ian_malcolm_only_the_active_player_casts_them() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn suspend_aggression_each_owner_plays_their_card_until_the_end_of_their_next_turn() {
+    cr!("611.2a", "305.1");
+    ruling!(
+        "Suspend Aggression",
+        "Players pay all costs and follow all timing rules for cards played this way."
+    );
+    assert_supported("Suspend Aggression");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Plains", 2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let spell = t.hand(P0, "Suspend Aggression");
+    t.cast(P0, spell).target(bears).go();
+    t.resolve_all();
+    let bears_x = t.g.current(bears);
+    let bolt_x = t.g.current(bolt);
+    assert_eq!(t.zone(bears_x), Zone::Exile, "{}", t.dump_log());
+    assert_eq!(t.zone(bolt_x), Zone::Exile);
+    // P1 casts the Bears (their own card) in their next turn; not P0's Bolt.
+    t.lands(P1, "Forest", 2);
+    t.lands(P1, "Mountain", 1);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert!(t.cast_with(P1, bolt_x, &[Entity::Player(P0)]).is_err());
+    t.clear_answers();
+    t.cast_with(P1, bears_x, &[]).expect("P1 casts the Bears");
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // P0's Bolt: still in P0's next turn.
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast_with(P0, bolt_x, &[Entity::Player(P1)]).expect("P0 casts the Bolt");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}
