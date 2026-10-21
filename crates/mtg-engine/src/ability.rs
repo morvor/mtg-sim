@@ -4372,6 +4372,12 @@ pub enum Effect {
     },
     Regenerate {
         what: Sel,
+        /// What happens when a shield this creates is used: "When it regenerates this
+        /// way, put a -1/-1 counter on it." (a reflexive triggered ability), "You gain
+        /// control of that creature if it regenerates this way." (part of the
+        /// regeneration). The regenerated permanent is `vars::IT` (CR 701.19a).
+        #[serde(default)]
+        then: Option<Box<Effect>>,
     },
     /// Attach the source (or selection) to a target (CR 701.3).
     Attach {

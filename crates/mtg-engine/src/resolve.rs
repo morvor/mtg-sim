@@ -1194,8 +1194,16 @@ impl Game {
                     }
                 }
             }
-            Effect::Regenerate { what } => {
+            Effect::Regenerate { what, then } => {
                 for o in self.resolve_objects(what, ctx) {
+                    if let Some(e) = then {
+                        // (Riders of shields that have worn off are forgotten.)
+                        let live: Vec<u32> = self.replacements.iter().map(|r| r.id).collect();
+                        self.regeneration_riders.retain(|r| live.contains(&r.0));
+                        let id = self.next_effect_id;
+                        self.regeneration_riders
+                            .push((id, ctx.clone(), (**e).clone()));
+                    }
                     // CR 701.19: a regeneration shield for this turn.
                     let id = self.new_effect_id();
                     let ts = self.new_timestamp();

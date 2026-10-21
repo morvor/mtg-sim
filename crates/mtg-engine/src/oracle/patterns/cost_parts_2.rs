@@ -110,6 +110,24 @@ fn remove_from_one(p: &str) -> Option<CostPart> {
 
 inventory::submit! { CostPattern { name: "cost parts: remove N counters from one permanent you control", priority: 50, parse: remove_from_one } }
 
+/// "Pay {1} for each +1/+1 counter on ~": the mana repeated once for each (CR 118, 702.24a
+/// for the same repetition in cumulative upkeep), counted as the cost is paid.
+fn pay_for_each(p: &str) -> Option<CostPart> {
+    let r = strip(p, "pay")?;
+    let (sym, each) = r.split_once(" for each ")?;
+    if !sym.starts_with('{') || !sym.ends_with('}') || sym.contains("{e}") {
+        return None;
+    }
+    let m = crate::mana::ManaCost::parse(&sym.to_uppercase())?;
+    let times = super::statics::parse_for_each(each, Some(&Sel::This))?;
+    Some(CostPart::Repeated {
+        cost: Box::new(Cost::mana(m)),
+        times,
+    })
+}
+
+inventory::submit! { CostPattern { name: "cost parts: pay {N} for each [thing]", priority: 50, parse: pay_for_each } }
+
 /// "Exile a face-down permanent you control face up".
 fn exile_face_down(p: &str) -> Option<CostPart> {
     let r = strip(p, "exile")?.strip_suffix(" face up")?;

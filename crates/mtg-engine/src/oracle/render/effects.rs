@@ -2163,9 +2163,19 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("transform {w}")
             }
-            Effect::Regenerate { what } => {
+            Effect::Regenerate { what, then } => {
                 let w = self.sel(what, Case::Obj);
-                format!("regenerate {w}")
+                match then.as_deref() {
+                    None => format!("regenerate {w}"),
+                    Some(Effect::Reflexive { body }) => {
+                        let e = self.effect(&body.effect);
+                        format!("regenerate {w}. When it regenerates this way, {e}")
+                    }
+                    Some(e) => {
+                        let e = self.effect(e);
+                        format!("regenerate {w}. {e} if it regenerates this way")
+                    }
+                }
             }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
                 // (Naming a target doesn't make "it" in "to it" the target.)

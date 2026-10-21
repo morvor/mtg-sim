@@ -2370,7 +2370,10 @@ fn p_simple_actions(l: &str, b: &mut Builder) -> Option<Effect> {
             what: Sel::None,
             n: Value::c(1),
         },
-        "regenerate ~" => Effect::Regenerate { what: Sel::This },
+        "regenerate ~" => Effect::Regenerate {
+            what: Sel::This,
+            then: None,
+        },
         "transform ~" => Effect::Transform { what: Sel::This },
         "you become the monarch" => Effect::BecomeMonarch {
             who: PlayerRef::You,
@@ -2402,7 +2405,7 @@ fn p_simple_actions(l: &str, b: &mut Builder) -> Option<Effect> {
                 if !end(&tail).is_empty() {
                     return None;
                 }
-                return Some(Effect::Regenerate { what });
+                return Some(Effect::Regenerate { what, then: None });
             }
             return None;
         }

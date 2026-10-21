@@ -1555,6 +1555,13 @@ impl Game {
                 crate::combat::remove_from_combat(self, obj);
                 if let Some(id) = cand.instance {
                     self.replacements.retain(|r| r.id != id);
+                    // "When it regenerates this way, ...": the shield's rider, about the
+                    // regenerated permanent.
+                    if let Some(i) = self.regeneration_riders.iter().position(|r| r.0 == id) {
+                        let (_, mut c, e) = self.regeneration_riders.remove(i);
+                        c.vars.insert(vars::IT, vec![Entity::Object(obj)]);
+                        self.post_replacement_effects.push((c, e));
+                    }
                 }
                 vec![]
             }

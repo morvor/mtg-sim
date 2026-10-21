@@ -1374,6 +1374,7 @@ fn f_no_regen(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         "it can't be regenerated"
             | "they can't be regenerated"
             | "that creature can't be regenerated"
+            | "the creature can't be regenerated"
             | "a creature destroyed this way can't be regenerated"
             | "creatures destroyed this way can't be regenerated"
             | "permanents destroyed this way can't be regenerated"
