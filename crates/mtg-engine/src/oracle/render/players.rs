@@ -190,6 +190,24 @@ impl Renderer<'_> {
                                 || matches!(other, Filter::Not(x)
                                     if matches!(x.as_ref(), Filter::In(_) | Filter::AttachedToSource)))) =>
             {
+                // "any target other than that permanent": other than the object the
+                // trigger event named, not the source.
+                let not_in = v.iter().find_map(|x| match x {
+                    Filter::Not(n) => match n.as_ref() {
+                        Filter::In(s) => Some(s.as_ref().clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                });
+                if let Some(s) = not_in.filter(|s| !matches!(s, Sel::This)) {
+                    let o = match s {
+                        Sel::TriggerObject | Sel::TriggerLki => {
+                            "{alt:that permanent|that creature}".to_string()
+                        }
+                        other => self.sel(&other, Case::Obj),
+                    };
+                    return format!("any target other than {o}");
+                }
                 return "any other target".into();
             }
             TargetKind::ObjectOrPlayer(f, pf) => {

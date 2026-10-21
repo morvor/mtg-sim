@@ -2444,6 +2444,25 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Subj);
                 let o = self.sel(of, Case::Obj);
                 let d = self.duration(duration);
+                // "creatures you control other than ~ become copies of that card": the
+                // source itself left out (`Filter::Other`).
+                if let Sel::All(Filter::And(v)) = what {
+                    if v.iter().any(|x| matches!(x, Filter::Other)) {
+                        let rest = Filter::and(
+                            v.iter().filter(|x| !matches!(x, Filter::Other)).cloned().collect(),
+                        );
+                        let many = self.noun(&rest, Num::Many);
+                        let m = self.me();
+                        if !many.contains(['{', '|']) {
+                            return join_words(&[
+                                format!(
+                                    "{{alt:{w} becomes a copy of {o}|{many} other than {m} become copies of {o}}}"
+                                ),
+                                d,
+                            ]);
+                        }
+                    }
+                }
                 join_words(&[format!("{w} becomes a copy of {o}"), d])
             }
             Effect::BecomeCopyExcept {

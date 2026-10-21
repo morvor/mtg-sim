@@ -181,12 +181,14 @@ impl Renderer<'_> {
             // "a creature or planeswalker they control with the greatest mana value
             // among creatures and planeswalkers they control": the object's own
             // qualities may be said in full too.
-            let head = if plain == bare {
-                bare
-            } else {
-                format!("{{alt:{bare}|{plain}}}")
-            };
-            return Some(format!("{head} with the {w} {x} among {n}{field}"));
+            if plain == bare {
+                return Some(format!("{bare} with the {w} {x} among {n}{field}"));
+            }
+            // Or the comparison among the object's own kind left unsaid ("a creature
+            // they control with the greatest power").
+            return Some(format!(
+                "{{alt:{bare} with the {w} {x} among {n}{field}|{plain} with the {w} {x} among {n}{field}|{plain} with the {w} {x}}}"
+            ));
         }
         Some(format!("{{alt:{}}}", forms.join("|")))
     }

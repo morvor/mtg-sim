@@ -552,6 +552,11 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn amount(&mut self, v: &Value) -> (String, Option<String>) {
+        // "deals damage equal to the excess": the excess damage the trigger event was
+        // about (CR 120.10).
+        if matches!(v, Value::EventAmount) && self.excess_trigger {
+            return ("X".into(), Some(", where X is the excess".into()));
+        }
         // "that much damage", "that many {E}": the same amount, worded for the noun.
         if matches!(v, Value::EventAmount) {
             return ("{alt:that much|that many}".into(), None);
@@ -950,7 +955,28 @@ impl Renderer<'_> {
                     }
                 }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
-                merge_subject(&parts, "and")
+                let merged = merge_subject(&parts, "and");
+                // "if you control artifacts named Crown of Empires and Scepter of Empires".
+                let named = |c: &Condition| match c {
+                    Condition::Exists(Filter::And(f)) => match f.as_slice() {
+                        [Filter::Type(t), Filter::Named(n), Filter::ControlledBy(PlayerRel::You)] => {
+                            Some((*t, n.to_string()))
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(ns) = v.iter().map(named).collect::<Option<Vec<_>>>() {
+                    if ns.len() > 1 && ns.iter().all(|(t, _)| *t == ns[0].0) {
+                        let kind = plural(&ns[0].0.word().to_lowercase());
+                        let names: Vec<String> = ns.into_iter().map(|(_, n)| n).collect();
+                        return format!(
+                            "{{alt:{merged}|you control {kind} named {}}}",
+                            join_list(&names, "and")
+                        );
+                    }
+                }
+                merged
             }
             Condition::Or(v) => {
                 if let Some(s) = self.attempt(|r| r.events_joined(v, "or")) {
