@@ -124,6 +124,49 @@ pub fn collect(
     });
 }
 
+/// "The next creature spell you cast this turn can be cast without paying its mana
+/// cost" (CR 611.2f): the alternative costs effects waiting for `p`'s next matching spell
+/// offer (an ability "You may pay [cost] rather than pay this spell's mana cost" that
+/// spell gains, see `oracle/patterns/next_spell_options.rs`). Casting that spell, however
+/// it's cast, uses the effect up (`next_spell::spell_put_on_stack`).
+fn next_spell_offers(g: &Game, p: PlayerId, card: ObjectId) -> Vec<OfferedAltCost> {
+    let mut out = Vec::new();
+    for e in &g.next_spell_effects {
+        let expired = matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn)
+            && e.created_turn != g.turn.number;
+        if e.player != p || expired {
+            continue;
+        }
+        for m in &e.mods {
+            let Modification::AddAbility(a) = m else {
+                continue;
+            };
+            let AbilityKind::Static(StaticAbility {
+                effect:
+                    StaticEffect::CostModifier(CostModifier {
+                        applies_to: CostTarget::ThisSpell,
+                        change: CostChange::AlternativeCost(cost),
+                        ..
+                    }),
+                ..
+            }) = &a.kind
+            else {
+                continue;
+            };
+            out.push(OfferedAltCost {
+                source: e.source.unwrap_or(card),
+                controller: e.player,
+                who: PlayerRel::You,
+                spells: crate::casting::as_spell_filter(&e.filter),
+                cost: cost.clone(),
+                flash: false,
+                once: None,
+            });
+        }
+    }
+    out
+}
+
 /// Whether a cost is "without paying its mana cost": nothing at all.
 fn is_nothing(c: &Cost) -> bool {
     c.mana.is_none() && c.parts.is_empty()
@@ -133,11 +176,13 @@ fn is_nothing(c: &Cost) -> bool {
 /// cost yet, for each alternative cost other objects offer for the spell it would become
 /// (CR 118.9, 118.9a, 601.2b, 601.3e).
 pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<CastOption>) {
+    let waiting = next_spell_offers(g, p, card);
     let offers: Vec<&OfferedAltCost> = g
         .statics
         .offered_alt_costs
         .iter()
         .filter(|o| g.player_rel_matches(o.who, p, &Ctx::new(Some(o.source), o.controller)))
+        .chain(waiting.iter())
         .collect();
     if offers.is_empty() {
         return;

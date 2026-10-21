@@ -57,6 +57,8 @@ impl Game {
                 m
             })
             .collect();
+        // CR 400.6: an object a state-based action is moving at the same time.
+        let moves = crate::zones::contradictory_moves(self, moves);
         // Apply replacement effects to each move individually.
         let mut finals: Vec<(usize, ReplEvent)> = Vec::new();
         // CR 614.13a, 614.13c: while effects that modify how these objects enter are
@@ -796,6 +798,14 @@ impl Game {
                 }
                 if let Some(attacker) = m.etb.blocking {
                     crate::combat::put_onto_battlefield_blocking(self, new_id, attacker);
+                }
+            }
+            // CR 111.6, 111.7: a token isn't a card. One put into a library stays in that
+            // zone until it ceases to exist, but it isn't among the library's cards: it's
+            // never revealed, drawn or counted as one (the library is still shuffled).
+            Zone::Library(p) if self.objects[new_id.0 as usize].kind == ObjKind::Token => {
+                if m.pos == LibraryPosition::Shuffled {
+                    self.shuffle_library(p);
                 }
             }
             Zone::Library(p) => {

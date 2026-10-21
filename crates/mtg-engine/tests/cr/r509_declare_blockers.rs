@@ -88,6 +88,7 @@ fn blockers_must_be_untapped_nonbattles_blocking_creatures_attacking_their_contr
 #[test]
 fn evasion_restrictions_are_cumulative_and_fixed_once_blocks_are_declared() {
     cr!("509.1b");
+    cr_example!("509.1b", "flying and shadow");
     // CR 509.1b example: an attacker with flying and shadow can't be blocked by a creature
     // with flying but without shadow.
     let mut t = TestGame::new(2);
@@ -152,6 +153,7 @@ fn evasion_restrictions_are_cumulative_and_fixed_once_blocks_are_declared() {
 #[test]
 fn blocking_requirements_are_maximized() {
     cr!("509.1c");
+    cr_example!("509.1c", "blocks if able");
     // CR 509.1c example: one creature "blocks if able", another with no abilities, and a
     // creature with menace attacks: the player must block with both.
     let mut t = TestGame::new(2);

@@ -62,6 +62,52 @@ pub struct ZoneState {
     /// see [`crate::entry_costs`]).
     #[serde(default)]
     pub entry_payments: Vec<crate::entry_costs::EntryPayment>,
+    /// The zone moves of the state-based actions being performed while replaced losses of
+    /// the game are applied (CR 704.3; see [`contradictory_moves`]).
+    #[serde(skip)]
+    pub sba_moves: Vec<MoveEv>,
+    /// The objects of [`Self::sba_moves`] whose controller chose the state-based action's
+    /// move over the replacement's (so they were destroyed, sacrificed, ...).
+    #[serde(skip)]
+    pub sba_moves_chosen: Vec<ObjectId>,
+}
+
+/// CR 400.6: a state-based action and another effect would move the same object at the
+/// same time (lethal damage, and an "if you would lose the game, instead exile this
+/// creature" replacement of a simultaneous loss): its controller, or its owner if it has
+/// none, chooses which to apply.
+pub(crate) fn contradictory_moves(g: &mut Game, moves: Vec<MoveEv>) -> Vec<MoveEv> {
+    if g.zones.sba_moves.is_empty() {
+        return moves;
+    }
+    moves
+        .into_iter()
+        .map(|m| {
+            let Some(i) = g.zones.sba_moves.iter().position(|s| s.obj == m.obj) else {
+                return m;
+            };
+            let sba = g.zones.sba_moves.remove(i);
+            let sba_to = owners_zone(g, sba.obj, sba.to);
+            if sba_to == m.to {
+                return m;
+            }
+            let o = g.obj(m.obj);
+            let who = match o.zone {
+                Zone::Battlefield | Zone::Stack => o.controller,
+                _ => o.owner,
+            };
+            let q = format!(
+                "{}: move it to {:?} rather than to {:?} (state-based action)?",
+                o.chars.name, m.to, sba_to
+            );
+            if g.ask_yes_no(who, Some(m.obj), &q, true) {
+                m
+            } else {
+                g.zones.sba_moves_chosen.push(m.obj);
+                MoveEv { to: sba_to, ..sba }
+            }
+        })
+        .collect()
 }
 
 /// `Event::Custom` name: the top card of a player's library became revealed (CR 401.5).
@@ -637,7 +683,8 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bo
 pub fn may_look(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     g.is_live(id)
         && matches!(g.obj(id).zone, Zone::Exile | Zone::Battlefield)
-        && g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
+        && (g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
+            || crate::kw::look_face_down::may_look(g, p, id))
 }
 
 /// CR 406.3: a player who looked at cards (searching for them, or looking at the top

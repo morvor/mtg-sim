@@ -47,6 +47,16 @@ impl ManaType {
         }
     }
 
+    /// The type named by a one-letter string ("W", "C").
+    pub fn from_letter_str(s: &str) -> Option<ManaType> {
+        let mut it = s.chars();
+        let c = it.next()?;
+        it.next()
+            .is_none()
+            .then(|| ManaType::from_letter(c))
+            .flatten()
+    }
+
     pub fn from_letter(c: char) -> Option<ManaType> {
         match c.to_ascii_uppercase() {
             'C' => Some(ManaType::C),
@@ -497,6 +507,27 @@ pub struct SpendContext {
     /// "Spend only mana produced by basic lands to cast ~": only mana whose source matches
     /// the filter may pay (see `payment_rules`).
     pub only_from: Option<SpendFilter>,
+    /// How the payer may spend mana as though it were mana of another type
+    /// ([`SpendRules`], CR 609.4b).
+    pub rules: SpendRules,
+}
+
+/// Ways a payer may spend mana as though it were mana of another type (CR 609.4b): "You
+/// may spend white mana as though it were red mana." (`as_color`), "You may spend other
+/// mana only as though it were colorless mana." (`colorless_only`), "you may spend mana
+/// from snow sources as though it were mana of any color" (`snow_any_color`). They change
+/// only how a cost may be paid, not the mana spent.
+#[derive(Clone, Debug, Default)]
+pub struct SpendRules {
+    pub as_color: Vec<(ManaType, Color)>,
+    pub colorless_only: Vec<ManaType>,
+    pub snow_any_color: bool,
+}
+
+impl SpendRules {
+    pub fn is_empty(&self) -> bool {
+        self.as_color.is_empty() && self.colorless_only.is_empty() && !self.snow_any_color
+    }
 }
 
 /// The part of a cost's generic mana that X represents, which only mana of `colors` may pay
@@ -848,6 +879,7 @@ pub fn find_payment_with(
         pool,
         usable,
         any: &ctx.any_color,
+        rules: &ctx.rules,
         life_for: &ctx.pay_life_for,
         max_life,
         x_distinct: ctx.x_spend.is_some_and(|x| x.distinct),
@@ -862,8 +894,17 @@ pub fn find_payment_with(
     }
 }
 
-fn matches_color(m: &Mana, c: Color, any: &[ManaType]) -> bool {
-    m.ty.color() == Some(c) || any.contains(&m.ty)
+fn matches_color(m: &Mana, c: Color, any: &[ManaType], rules: &SpendRules) -> bool {
+    (m.ty.color() == Some(c) && !rules.colorless_only.contains(&m.ty))
+        || any.contains(&m.ty)
+        || rules.as_color.contains(&(m.ty, c))
+        || (rules.snow_any_color && m.snow)
+}
+
+/// Whether `m` may pay a {C} symbol: colorless mana, or mana that may be spent only as
+/// though it were colorless (CR 609.4b).
+fn pays_colorless(m: &Mana, rules: &SpendRules) -> bool {
+    m.ty == ManaType::C || rules.colorless_only.contains(&m.ty)
 }
 
 /// The backtracking search behind [`find_payment_with`].
@@ -872,6 +913,7 @@ struct PoolSolver<'a> {
     usable: &'a [bool],
     /// Mana types that may be spent as though they were mana of any color.
     any: &'a [ManaType],
+    rules: &'a SpendRules,
     life_for: &'a [(Color, u32)],
     max_life: u32,
     /// Each mana paying X is of a different color.
@@ -891,7 +933,7 @@ impl PoolSolver<'_> {
         if i == reqs.len() {
             return true;
         }
-        let (pool, any) = (self.pool, self.any);
+        let (pool, any, rules) = (self.pool, self.any, self.rules);
         let req = reqs[i];
         // Generic requirements are all at the end: just count free mana that may pay
         // generic mana.
@@ -923,26 +965,26 @@ impl PoolSolver<'_> {
         };
         let paid = match req {
             Req::Colored(c) | Req::Phyrexian(c) => {
-                self.try_unit(&|m| matches_color(m, c, any), used, plan, &rest)
+                self.try_unit(&|m| matches_color(m, c, any, rules), used, plan, &rest)
             }
-            Req::Colorless => self.try_unit(&|m| m.ty == ManaType::C, used, plan, &rest),
+            Req::Colorless => self.try_unit(&|m| pays_colorless(m, rules), used, plan, &rest),
             // {S} is generic mana that mana from a snow source pays (CR 107.4h).
             Req::Snow => self.try_unit(&|m| m.snow && m.pays_generic(), used, plan, &rest),
             Req::XOf(colors) => self.pay_x(reqs, i, colors, used, plan, x_used),
             Req::Hybrid(a, b) | Req::PhyrexianHybrid(a, b) => self.try_unit(
-                &|m| matches_color(m, a, any) || matches_color(m, b, any),
+                &|m| matches_color(m, a, any, rules) || matches_color(m, b, any, rules),
                 used,
                 plan,
                 &rest,
             ),
             Req::ColorlessHybrid(c) => self.try_unit(
-                &|m| matches_color(m, c, any) || m.ty == ManaType::C,
+                &|m| matches_color(m, c, any, rules) || pays_colorless(m, rules),
                 used,
                 plan,
                 &rest,
             ),
             Req::TwoHybrid(c) => {
-                self.try_unit(&|m| matches_color(m, c, any), used, plan, &rest) || {
+                self.try_unit(&|m| matches_color(m, c, any, rules), used, plan, &rest) || {
                     // Pay two generic instead: splice two Generic reqs at the end.
                     let mut more: Vec<Req> = reqs[i + 1..].to_vec();
                     more.push(Req::Generic);
@@ -1027,7 +1069,7 @@ impl PoolSolver<'_> {
             let mut now = x_used;
             now.insert(c);
             if self.try_unit(
-                &|m| m.pays_generic() && matches_color(m, c, self.any),
+                &|m| m.pays_generic() && matches_color(m, c, self.any, self.rules),
                 used,
                 plan,
                 &|u, p| {

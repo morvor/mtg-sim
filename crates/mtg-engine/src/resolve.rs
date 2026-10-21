@@ -875,6 +875,8 @@ impl Game {
                 let mut effect = effect.clone();
                 // CR 608.2h: amounts are determined as the effect begins.
                 crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
+                // "from that player's graveyard": that player, as the effect begins.
+                crate::permissions::lock_permission_players(self, &mut effect, ctx);
                 self.player_effects.push(PlayerEffect {
                     id,
                     players,
@@ -2151,7 +2153,8 @@ impl Game {
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.
                 let before = self.play_grants.len();
-                self.exec(effect, ctx);
+                // Spells cast as the effect resolves are cast with the terms too.
+                crate::permissions::with_resolution_terms(self, terms, |g| g.exec(effect, ctx));
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                 }
