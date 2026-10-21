@@ -479,3 +479,38 @@ fn historians_boon_final_chapter_triggers() {
     assert_eq!(angels.len(), 1);
     assert_eq!(t.pt(angels[0]), (4, 4));
 }
+
+#[test]
+fn watcher_of_hours_surveils_as_time_counters_are_removed_in_exile() {
+    cr!("702.62a", "113.6b");
+    ruling!(
+        "Watcher of Hours",
+        "Suspend is a keyword that represents three abilities."
+    );
+    supported("Watcher of Hours");
+    let surveils = |t: &TestGame| {
+        t.asked()
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::Surveil { .. }))
+            .count()
+    };
+    let mut t = TestGame::new(2);
+    for _ in 0..4 {
+        t.library_top(P0, "Island");
+    }
+    let w = t.exile(P0, "Watcher of Hours");
+    t.g.obj_mut(w).counters.insert("time".into(), 6);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Draw);
+    assert_eq!(t.counters(w, "time"), 5);
+    assert_eq!(surveils(&t), 1);
+    // On the battlefield, removing a time counter doesn't trigger it.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Island");
+    let w = t.battlefield(P0, "Watcher of Hours");
+    t.g.obj_mut(w).counters.insert("time".into(), 2);
+    t.g.remove_counters_by(Entity::Object(w), "time", 1, Some(P0));
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+}

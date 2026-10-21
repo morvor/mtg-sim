@@ -515,6 +515,51 @@ fn final_chapter_triggers(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 
 inventory::submit! { TriggerPattern { name: "trigger grammar 4: the final chapter ability of a Saga you control triggers", priority: 100, parse: final_chapter_triggers } }
 
+/// The condition "while it's exiled" on the source.
+fn source_exiled() -> Condition {
+    Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile))
+}
+
+/// Whether the trigger event requires its source to be in exile ("while it's exiled"): it
+/// functions there (CR 113.6b).
+pub(crate) fn requires_source_exiled(c: &TriggerCond) -> bool {
+    match c {
+        TriggerCond::Where { cond, .. } => {
+            let s = |c: &Condition| matches!(c, Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile)));
+            s(cond) || matches!(cond, Condition::And(v) if v.iter().any(s))
+        }
+        _ => false,
+    }
+}
+
+/// "you remove a time counter from ~ while it's exiled" (Watcher of Hours): the counter is
+/// removed by you (the effect's controller or the player paying a cost, CR 122.8) from the
+/// card in exile (each counter: "a time counter").
+fn you_remove_counter_while_exiled(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t).strip_prefix("you remove a ")?;
+    let (kind, r) = r.split_once(" counter from ~")?;
+    if r != " while it's exiled" || kind.contains(' ') {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::CountersRemoved {
+                filter: Filter::Source,
+                kind: Some(kind.into()),
+                each: true,
+            }),
+            cond: Condition::And(vec![
+                Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+                source_exiled(),
+            ]),
+        },
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger grammar 4: you remove a [kind] counter from ~ while it's exiled", priority: 100, parse: you_remove_counter_while_exiled } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

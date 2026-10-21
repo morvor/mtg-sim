@@ -311,6 +311,10 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
     if super::patterns::trigger_grammar_events::requires_source_in_graveyard(trigger) {
         return FunctionZone::Graveyard;
     }
+    // "Whenever you remove a time counter from ~ while it's exiled" (CR 113.6b).
+    if super::patterns::trigger_grammar_4::requires_source_exiled(trigger) {
+        return FunctionZone::Exile;
+    }
     match trigger {
         TriggerCond::CastSpell {
             filter: Filter::Source,
