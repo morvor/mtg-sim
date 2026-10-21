@@ -147,3 +147,58 @@ fn tranquil_frillback_without_paying_no_reflexive_ability() {
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
 }
+
+#[test]
+fn resplendent_marshal_dies_exiles_another_creature_card() {
+    cr!("603.12", "400.7");
+    supported("Resplendent Marshal");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Resplendent Marshal");
+    let angel = t.battlefield(P0, "Serra Angel");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let other = t.graveyard(P0, "Baneslayer Angel");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(other)]);
+    t.g.destroy(m, None);
+    t.resolve_all();
+    assert!(t.in_exile("Baneslayer Angel"));
+    assert!(t.in_graveyard(P0, "Resplendent Marshal"));
+    assert_eq!(t.counters(angel, "+1/+1"), 1);
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    // The Marshal itself (now a card in the graveyard) wasn't a choice.
+    let cands: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cands, vec![vec![Entity::Object(other)]]);
+}
+
+#[test]
+fn cemetery_desecrator_exiles_another_card_and_shrinks_by_its_mana_value() {
+    cr!("603.12", "700.2");
+    supported("Cemetery Desecrator");
+    let mut t = TestGame::new(2);
+    let d = t.battlefield(P0, "Cemetery Desecrator");
+    let giant = t.graveyard(P1, "Hill Giant");
+    let target = t.battlefield(P1, "Serra Angel");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    t.answer_targets(P0, &[Entity::Object(target)]);
+    t.g.destroy(d, None);
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    assert!(!t.on_battlefield(target));
+    let cands: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cands, vec![vec![Entity::Object(giant)]]);
+}

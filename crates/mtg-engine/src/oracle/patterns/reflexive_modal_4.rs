@@ -71,6 +71,49 @@ fn pay_up_to_n_times(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "reflexive modal 4: you may pay [mana] up to N times", priority: 100, parse: pay_up_to_n_times } }
 
+/// Adds "other than the source" to the choice of objects an exile makes.
+fn exclude_source(e: &mut Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what: Sel::Choose { filter, .. },
+            ..
+        } => {
+            let f = std::mem::replace(filter, Filter::Any);
+            *filter = Filter::and(vec![
+                f,
+                Filter::not(Filter::Custom(
+                    crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT.into(),
+                )),
+            ]);
+            true
+        }
+        Effect::Seq(v) => v.iter_mut().any(exclude_source),
+        _ => false,
+    }
+}
+
+/// "exile another card from a graveyard" (Cemetery Desecrator), "you may exile another
+/// creature card from your graveyard" (Resplendent Marshal): a card other than the
+/// source, which may itself be in a graveyard after a "dies" trigger (CR 400.7: the card
+/// it became).
+fn exile_another_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("exile another ")?;
+    let (_, zone) = r.rsplit_once(" from ")?;
+    if !zone.ends_with("graveyard") {
+        return None;
+    }
+    let article = if r.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    let mut e = crate::oracle::effects::parse_clause(&format!("exile {article} {r}"), b)?;
+    exclude_source(&mut e).then_some(e)
+}
+
+inventory::submit! { EffectPattern { name: "reflexive modal 4: exile another [card] from a graveyard", priority: 100, parse: exile_another_from_graveyard } }
+
 /// "choose up to that many" (after paying a cost several times): at most X modes.
 fn up_to_that_many(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
     (h == "choose up to that many").then(|| ModalHeader {
@@ -192,6 +235,8 @@ mod tests {
             ("Legendary Creature", "Whenever you scry, choose one and ~ gets +1/+1 until end of turn.\n• ~ must be blocked this turn if able.\n• ~ can't be blocked by more than one creature each combat this turn."),
             ("Creature", "When ~ enters, you may pay {G} up to three times. When you pay this cost one or more times, choose up to that many —\n• Destroy target artifact or enchantment.\n• Exile target player's graveyard.\n• You gain 4 life."),
             ("Legendary Creature", "Whenever ~ becomes tapped, you may pay {1} up to three times. When you do, choose up to that many —\n• Net — Target creature can't block this turn.\n• Explosive — ~ deals 2 damage to target player.\n• Boomerang — Discard a card, then draw a card."),
+            ("Creature", "When ~ enters or dies, exile another card from a graveyard. When you do, choose one —\n• Remove X counters from target permanent, where X is the mana value of the exiled card.\n• Target creature an opponent controls gets -X/-X until end of turn, where X is the mana value of the exiled card."),
+            ("Creature", "When ~ enters or dies, you may exile another creature card from your graveyard. When you do, put a +1/+1 counter on each creature you control other than ~ that shares a creature type with the exiled card."),
             ("Legendary Creature", "At the beginning of your first main phase, choose one that hasn't been chosen and you lose 2 life —\n• Draw a card.\n• Put a +1/+1 counter on ~.\n• Add {R}.\n• Exile ~, then return him to the battlefield under an opponent's control."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
