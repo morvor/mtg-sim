@@ -65,6 +65,13 @@ fn knucklebone_witch_may_grow_when_a_goblin_you_control_dies() {
             0,
             "not an opponent's Goblin or a non-Goblin"
         );
+        assert_eq!(waiting(&t), 0);
+        assert!(
+            !t.asked()
+                .iter()
+                .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. })),
+            "it didn't trigger (not even asked)"
+        );
         t.answer_yes(P0, yes);
         kill(&mut t, g);
         assert_eq!(t.counters(w, "+1/+1"), yes as u32, "accepted: {yes}");
@@ -141,6 +148,7 @@ fn charmed_clothier_attaches_a_royal_role_to_another_creature_you_control() {
 #[test]
 fn hekma_sentinels_grows_once_per_cycle_or_discard() {
     cr!("702.29a", "701.9a", "603.2c");
+    ruling!("Hekma Sentinels", "triggers only once if you cycle a card");
     // "Whenever you cycle or discard a card, this creature gets +1/+1 until end of turn."
     supported("Hekma Sentinels");
     let mut t = TestGame::new(2);
@@ -321,6 +329,10 @@ fn shocking_sharpshooter_pings_an_opponent_when_another_creature_you_control_ent
 #[test]
 fn ox_of_agonas_discards_your_hand_then_draws_three() {
     cr!("603.6a", "701.9a", "121.1");
+    ruling!(
+        "Ox of Agonas",
+        "You draw three cards, even if you discard no cards."
+    );
     // "When this creature enters, discard your hand, then draw three cards."
     supported("Ox of Agonas");
     let mut t = TestGame::new(2);
@@ -503,6 +515,10 @@ fn filthy_cur_makes_you_lose_life_equal_to_damage_dealt_to_it() {
 #[test]
 fn frilled_deathspitter_hits_an_opponent_when_dealt_damage() {
     cr!("603.2", "115.1", "120.3a");
+    ruling!(
+        "Frilled Deathspitter",
+        "If lethal damage is dealt to a creature with an enrage ability, that ability triggers"
+    );
     // "Enrage — Whenever this creature is dealt damage, it deals 2 damage to target
     // opponent or planeswalker."
     supported("Frilled Deathspitter");

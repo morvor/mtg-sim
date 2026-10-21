@@ -233,6 +233,9 @@ fn giant_tortoise_gets_plus_zero_three_while_untapped() {
     t.g.tap(g);
     t.g.recompute();
     assert_eq!(t.pt(g), (1, 1));
+    t.g.untap(g);
+    t.g.recompute();
+    assert_eq!(t.pt(g), (1, 4), "untapped again");
 }
 
 #[test]
@@ -282,6 +285,10 @@ fn leech_fanatic_has_lifelink_during_your_turn() {
 #[test]
 fn treefolk_seedlings_toughness_counts_your_forests() {
     cr!("604.3", "613.4a");
+    ruling!(
+        "Treefolk Seedlings",
+        "The toughness is continuously calculated."
+    );
     // "Treefolk Seedlings's toughness is equal to the number of Forests you control."
     supported("Treefolk Seedlings");
     let mut t = TestGame::new(2);

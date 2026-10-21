@@ -25,6 +25,10 @@ fn ready(t: &mut TestGame, name: &str, land: &str, n: usize) -> ObjectId {
 #[test]
 fn vivisurgeons_insight_draws_three_and_proliferates() {
     cr!("121.1", "701.34a");
+    ruling!(
+        "Vivisurgeon's Insight",
+        "only the ones you want to add another counter to"
+    );
     // "Draw three cards. Proliferate."
     supported("Vivisurgeon's Insight");
     let mut t = TestGame::new(2);
@@ -413,6 +417,7 @@ fn marsh_gas_gives_all_creatures_minus_two_power() {
 #[test]
 fn artificers_epiphany_discards_only_without_artifacts() {
     cr!("121.1", "701.9a", "608.2c");
+    ruling!("Artificer's Epiphany", "even if you want to");
     // "Draw two cards. If you control no artifacts, discard a card."
     supported("Artificer's Epiphany");
     for artifact in [true, false] {
@@ -458,6 +463,10 @@ fn dark_offering_destroys_a_nonblack_creature_and_gains_three() {
 #[test]
 fn hazardous_blast_pings_opposing_creatures_and_stops_them_blocking() {
     cr!("120.3e", "509.1b", "611.2c");
+    ruling!(
+        "Hazardous Blast",
+        "This includes creatures that entered the battlefield"
+    );
     // "~ deals 1 damage to each creature your opponents control. Creatures your
     // opponents control can't block this turn."
     supported("Hazardous Blast");

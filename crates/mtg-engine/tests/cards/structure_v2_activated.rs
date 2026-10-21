@@ -336,7 +336,7 @@ fn frostburn_weird_gets_plus_one_minus_one_per_activation() {
 
 #[test]
 fn welding_jar_regenerates_target_artifact() {
-    cr!("602.2", "701.19a", "701.19b");
+    cr!("602.2", "701.19a");
     // "Sacrifice this artifact: Regenerate target artifact."
     supported("Welding Jar");
     let mut t = TestGame::new(2);

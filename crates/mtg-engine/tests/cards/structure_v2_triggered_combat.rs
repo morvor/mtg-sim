@@ -268,6 +268,7 @@ fn stinkweed_imp_destroys_creatures_it_deals_combat_damage_to() {
 #[test]
 fn no_mercy_destroys_each_creature_that_damages_you() {
     cr!("603.2", "510.3a");
+    ruling!("No Mercy", "not only combat damage");
     // "Whenever a creature deals damage to you, destroy it."
     supported("No Mercy");
     let mut t = TestGame::new(2);
