@@ -323,4 +323,4 @@ fn up_to_one(v: serde_json::Value, n: &mut usize) -> serde_json::Value {
     }
 }
 
-inventory::submit! { EffectPattern { name: "[instruction] for each [word] vote", priority: 55, parse: trailing_word_votes } }
+inventory::submit! { EffectPattern { name: "[instruction] for each [word] vote", priority: 300, parse: trailing_word_votes } }

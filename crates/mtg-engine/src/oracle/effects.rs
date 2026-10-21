@@ -1526,9 +1526,17 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
             if !end(t).is_empty() {
                 return None;
             }
+            // "each white creature and each player who controls a white creature".
+            let (players, rest) = if rest.starts_with(" who ") {
+                let (who, rest) =
+                    super::patterns::choice_grammar::player_phrase(&format!("each player{rest}"), b)?;
+                (who, rest)
+            } else {
+                (PlayerRef::EachPlayer, rest.to_string())
+            };
             return Some((
-                Sel::Union(vec![Sel::All(f), Sel::Players(PlayerRef::EachPlayer)]),
-                rest.to_string(),
+                Sel::Union(vec![Sel::All(f), Sel::Players(players)]),
+                rest,
             ));
         }
     }
@@ -1544,6 +1552,10 @@ pub(crate) fn damage_recipients(s: &str, b: &mut Builder) -> Option<(Sel, String
     for (p, sel) in fixed {
         if let Some(rest) = s.strip_prefix(p) {
             if matches!(sel, Sel::None) {
+                break;
+            }
+            // "each player who controls a white creature": a qualified group (below).
+            if rest.starts_with(" who ") {
                 break;
             }
             if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(',') {
