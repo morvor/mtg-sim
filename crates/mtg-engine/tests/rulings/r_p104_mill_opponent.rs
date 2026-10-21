@@ -208,6 +208,7 @@ fn necrogoyf_counts_itself_in_a_graveyard() {
         "Mystic Redaction",
         "The ability that defines Necrogoyf's power works in all zones, not just the battlefield. If Necrogoyf is in a graveyard, that ability will count itself."
     );
+    // (Scryfall files this Necrogoyf ruling under Mystic Redaction's Oracle id.)
     supported("Necrogoyf");
     let mut t = TestGame::new(2);
     let goyf = t.graveyard(P0, "Necrogoyf");

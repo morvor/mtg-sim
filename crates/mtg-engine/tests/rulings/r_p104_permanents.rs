@@ -238,6 +238,8 @@ fn escaping_a_room_casts_one_half_plus_the_exile_cost() {
     assert_eq!(t.g.exile.len(), 3);
     t.resolve_all();
     assert!(t.on_battlefield(room));
+    let room_now = t.g.current(room);
+    assert_eq!(mtg_engine::rooms::unlocked(&t.g, room_now), [true, false]);
 }
 
 #[test]

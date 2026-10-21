@@ -9,11 +9,11 @@ use crate::r_p146_common::counter;
 use crate::r_p177_common::set_loyalty;
 use crate::r_p189_common::{bounce, set_library};
 use crate::r_s01_common::*;
-use crate::r_s02_common::{can_cast, can_play_land, destroy};
+use crate::r_s02_common::{can_play_land, destroy};
 use crate::r_s05_common::enter;
 use crate::r_s08_common::legal_cast_methods;
 use crate::r_s19_common::add_lore;
-use mtg_engine::object::{CastMethod, Zone};
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -429,6 +429,4 @@ fn gisa_and_karador_permissions_are_chosen_as_you_cast() {
     t.cast(P0, b).method(m[0].clone()).go();
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Walking Corpse").len(), 2);
-    let _ = can_cast;
-    let _ = CastMethod::Normal;
 }

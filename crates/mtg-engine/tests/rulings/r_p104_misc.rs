@@ -57,7 +57,7 @@ fn curator_of_destinies_can_be_targeted_by_a_counterspell() {
 
 #[test]
 fn curator_of_destinies_face_down_pile_isnt_revealed() {
-    cr!("700.3", "406.3");
+    cr!("700.3");
     ruling!(
         "Curator of Destinies",
         "If the opponent chooses the face-down pile to be put into your hand, you don't have to reveal the cards in that pile."
@@ -78,6 +78,8 @@ fn curator_of_destinies_face_down_pile_isnt_revealed() {
         let revealed = crate::r_s31_common::revealed_cards(&t);
         let in_hand = t.in_hand(P0, "Grizzly Bears");
         let down_revealed = revealed.contains(&lib[0]) || revealed.contains(&lib[1]);
+        // The face-up pile is seen by everyone.
+        assert!(lib[2..].iter().all(|c| revealed.contains(c)), "{revealed:?}");
         results.push((in_hand, down_revealed));
     }
     // When the face-down pile went to the hand, none of its cards was revealed.
@@ -561,7 +563,7 @@ fn grisly_anglerfish_creatures_choose_what_they_attack() {
 
 #[test]
 fn grisly_anglerfish_doesnt_force_creatures_that_cant_or_must_pay() {
-    cr!("508.1d", "508.1h", "302.6");
+    cr!("508.1d", "508.1h", "508.1a");
     ruling!(
         "Grizzled Angler // Grisly Anglerfish",
         "If a creature affected by Grisly Anglerfish’s effect hasn’t been under its controller’s control since the turn began, is tapped, or is affected by a spell or ability that says it can’t attack, then it doesn’t attack. If there’s a cost associated with having that creature attack, its controller isn’t forced to pay that cost, so it doesn’t have to attack in that case either."
@@ -663,7 +665,7 @@ fn impromptu_raid_creature_taken_by_another_player_isnt_sacrificed() {
 
 #[test]
 fn wondrous_crucible_copy_not_cast_ceases_to_exist() {
-    cr!("707.10a", "704.5d");
+    cr!("707.10a");
     ruling!(
         "Wondrous Crucible",
         "If you don’t cast the copy (perhaps because there are no legal targets available or you don’t want to), the copy will cease to exist."

@@ -2468,7 +2468,9 @@ fn forget_that_creature(b: &mut Builder, steps: &[Effect]) {
     });
     if to_battlefield {
         b.named
-            .retain(|(n, s)| !(n == "that creature" && matches!(s, Sel::TriggerObject)));
+            .retain(|(n, s)| {
+                !((n == "that creature" || n == "the creature") && matches!(s, Sel::TriggerObject))
+            });
     }
 }
 
