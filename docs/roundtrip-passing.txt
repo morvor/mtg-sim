@@ -745,6 +745,7 @@ Animar, Soul of Elements
 Animate Dead
 Animate Land
 Animating Faerie // Bring to Life
+Animist's Awakening
 Animist's Might
 Anje Falkenrath
 Anje's Ravager
@@ -5202,6 +5203,7 @@ Deathsprout
 Debilitating Injury
 Debris Beetle
 Debris Field Crusher
+Debt to the Deathless
 Debtor's Pulpit
 Debtors' Knell
 Debtors' Transport
@@ -7879,6 +7881,7 @@ Fissure Vent
 Fissure Wizard
 Fist of Suns
 Fistful of Force
+Fists of Flame
 Fists of Ironwood
 Fists of the Anvil
 Fists of the Demigod
@@ -11417,6 +11420,7 @@ Inviolability
 Invisibility
 Invisible Force Field
 Invisible Stalker
+Invisible Woman
 Invocation of Saint Traft
 Invoke Prejudice
 Invoke the Ancients
@@ -16445,6 +16449,7 @@ Phyrexian Scuta
 Phyrexian Slayer
 Phyrexian Snowcrusher
 Phyrexian Soulgorger
+Phyrexian Totem
 Phyrexian Tower
 Phyrexian Tribute
 Phyrexian Triniform
@@ -24567,6 +24572,7 @@ Vapor Snare
 Vaporkin
 Vaporous Djinn
 Variable Chaser // Arc of Fortune
+Varina, Lich Queen
 Varis, Silverymoon Ranger
 Varolz, the Scar-Striped
 Vashta Nerada
