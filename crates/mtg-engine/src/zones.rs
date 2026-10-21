@@ -678,7 +678,8 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bo
 pub fn may_look(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     g.is_live(id)
         && matches!(g.obj(id).zone, Zone::Exile | Zone::Battlefield)
-        && g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
+        && (g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
+            || crate::kw::look_face_down::may_look(g, p, id))
 }
 
 /// CR 406.3: a player who looked at cards (searching for them, or looking at the top
