@@ -248,6 +248,9 @@ impl Renderer<'_> {
     /// something the spell does ("{2} less to cast for each card exiled this way", "{1}
     /// less to cast for each creature it targets").
     pub(crate) fn cost_amount_extra(&mut self, v: &Value) -> Option<(String, String)> {
+        if let Some(r) = self.cost_amount_more(v) {
+            return Some(r);
+        }
         let (k, inner) = match v {
             Value::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
                 (Value::Const(k), Value::Custom(n)) | (Value::Custom(n), Value::Const(k)) => {
@@ -982,13 +985,29 @@ impl Renderer<'_> {
             matches!(x, Filter::Custom(n)
                 if n.as_str() == "basic_effects:source of the ability in target slot 0")
         };
+        // "If an ability of an artifact, creature, or planeswalker is countered this way":
+        // the kinds of permanent the source may be.
+        let kinds: Vec<&Filter> = parts
+            .iter()
+            .copied()
+            .filter(
+                |x| matches!(x, Filter::Or(v) if v.iter().all(|t| matches!(t, Filter::Type(_)))),
+            )
+            .collect();
         if !parts.iter().any(|x| is_source(x))
-            || !parts
-                .iter()
-                .all(|x| is_source(x) || matches!(x, Filter::Permanent))
+            || !parts.iter().all(|x| {
+                is_source(x)
+                    || matches!(x, Filter::Permanent)
+                    || kinds.iter().any(|k| std::ptr::eq(*k, *x))
+            })
+            || kinds.len() > 1
         {
             return None;
         }
+        let kind = kinds.first().map(|k| {
+            let n = self.noun(k, Num::One);
+            with_article(&n)
+        });
         let destroys = matches!(
             rest.first(),
             Some(Effect::If {
@@ -1010,6 +1029,12 @@ impl Renderer<'_> {
                 otherwise,
             }) if matches!(otherwise.as_ref(), Effect::Noop) => {
                 let e = self.effect(then);
+                if let Some(k) = kind {
+                    return Some((
+                        format!("{c}. If an ability of {k} is countered this way, {e}"),
+                        3,
+                    ));
+                }
                 Some((
                     format!(
                         "{{alt:{c}. If a permanent's ability is countered this way, {e}|{c} and {e} if it's on the battlefield|if it's on the battlefield, {c} and {e}}}"
@@ -1038,6 +1063,16 @@ impl Renderer<'_> {
     /// or 3", "your team controls" (you or a teammate, CR 808.2), "from graveyards or exile"
     /// (a spell cast from there, or a card there).
     pub(crate) fn or_quality(&mut self, v: &[Filter]) -> Option<String> {
+        // "with power or toughness 1 or less".
+        if let [Filter::Power(c1, a), Filter::Toughness(c2, b)] = v {
+            if c1 == c2 && format!("{a:?}") == format!("{b:?}") {
+                let n = self.value(a);
+                return Some(format!(
+                    "with power or toughness {}",
+                    super::nouns::cmp_phrase(*c1, &n)
+                ));
+            }
+        }
         if let Some(q) = self.or_predicates(v) {
             return Some(q);
         }

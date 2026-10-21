@@ -3025,6 +3025,9 @@ impl Game {
                     .unwrap_or_default(),
                 check_only: true,
                 cost_of: ctx.cost_of,
+                beginning: src
+                    .filter(|_| ctx.ability_uid != 0)
+                    .map(|s| (s, ctx.ability_uid)),
                 // "You can't spend mana to cast this spell" (see `payment_rules`).
                 no_mana: ctx.cost_of == Some(crate::rule_statics::payment::CostOf::Spell)
                     && crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars)),

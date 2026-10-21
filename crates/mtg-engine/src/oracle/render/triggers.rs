@@ -1333,6 +1333,20 @@ impl Renderer<'_> {
                 let e = self.trigger_event(trigger, det);
                 Ev::new(e.subj, e.vp.replacen("a spell or ability", "a spell", 1))
             }
+            // "Whenever one or more creatures you control become the target of an
+            // activated ability".
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(_, Filter::Custom(n)),
+            } if matches!(trigger.as_ref(), TriggerCond::BecomesTarget { .. })
+                && n == crate::kw::activated_ability_kind::ACTIVATED_ABILITY =>
+            {
+                let e = self.trigger_event(trigger, det);
+                Ev::new(
+                    e.subj,
+                    e.vp.replacen("a spell or ability", "an activated ability", 1),
+                )
+            }
             // "Whenever ~ attacks while saddled".
             TriggerCond::Where {
                 trigger,

@@ -31,7 +31,7 @@
 //!   supported cards' abilities by compiled structure and reports the structures no test
 //!   exercises (see `structure_coverage.rs` for the command sequence).
 //! * `verified [--write] [--out PATH] [--logs DIR] [--report FILE] [--passing PATH]
-//!   [--card NAME]` — every card's tier (unsupported < compiled < round-trip < verified)
+//!   [--fuzz-from TIERS] [--gain N] [--card NAME]` — every card's tier (unsupported < compiled < round-trip < verified)
 //!   and the checks it fails, into `docs/verified-cards.tsv` (see `verified.rs` for the
 //!   regeneration recipe).
 
@@ -714,6 +714,7 @@ fn card_coverage(args: &[String]) {
     md.push_str(
         "\n`mtg-tools verified --card \"Name\"` prints one card's tier and failed checks.\n",
     );
+    md.push_str("\nWhen only tests changed since the last sweep (tests can't change what the sweep finds), skip the sweep and carry each card's sweep results over from the committed tier file: regenerate the structure log, then run `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write` and `card-coverage`. A card the old file listed as unsupported has no recorded sweep result and counts as not swept. `verified --gain 60` lists the unexercised structures with the highest verified gain (the cards whose only failed check is that structure).\n");
     md.push_str("\n## Cards with hand-written abilities\n\nGenuinely unique abilities written directly in the ability AST (`crates/mtg-engine/src/cards/`), each tested in `crates/mtg-engine/tests/cards/m_<card>.rs`; see the policy in `cards/mod.rs`.\n\n| Card | Ability | Why hand-written |\n|---|---|---|\n");
     let mut entries: Vec<&mtg_engine::cards::ManualAbility> = mtg_engine::cards::all().collect();
     entries.sort_by(|a, b| (a.card, a.face, a.text).cmp(&(b.card, b.face, b.text)));
@@ -868,8 +869,10 @@ fn unsupported(args: &[String]) {
 /// All `ruling!("Card", "text")` citations.
 pub fn ruling_citations() -> Vec<(String, String, String)> {
     let mut files = Vec::new();
-    // Only the engine: mtg-data and mtg-tools mention the macro in docs and help text.
+    // Only the engine and the API's tests (hidden information): mtg-data and mtg-tools
+    // mention the macro in docs and help text.
     rust_files(&repo_root().join("crates/mtg-engine"), &mut files);
+    rust_files(&repo_root().join("crates/mtg-api/tests"), &mut files);
     let re =
         Regex::new(r#"(?s)ruling!\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)"#)
             .unwrap();

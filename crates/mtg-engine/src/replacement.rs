@@ -562,7 +562,9 @@ impl Game {
             if applied.contains(&key) {
                 continue;
             }
-            if inst.uses == Some(0) || !in_scope(&inst.def) {
+            if (inst.uses == Some(0) && !self.used_by_this_entry(inst.id, ev))
+                || !in_scope(&inst.def)
+            {
                 continue;
             }
             let ctx = Ctx::new(inst.source, inst.controller);
@@ -736,7 +738,7 @@ impl Game {
     pub(crate) fn instance_matches(&self, id: u32, ev: &ReplEvent) -> bool {
         self.replacements.iter().any(|inst| {
             inst.id == id
-                && inst.uses != Some(0)
+                && (inst.uses != Some(0) || self.used_by_this_entry(inst.id, ev))
                 && self.repl_event_matches(
                     &inst.def.event,
                     &Ctx::new(inst.source, inst.controller),
@@ -1194,6 +1196,18 @@ impl Game {
             .unwrap_or(o.owner)
     }
 
+    /// Whether the limited-use replacement effect `id` was used up by another object
+    /// entering the battlefield at the same time as the one `ev` moves there (see
+    /// `ZoneState::entry_batch_uses`).
+    fn used_by_this_entry(&self, id: u32, ev: &ReplEvent) -> bool {
+        matches!(ev, ReplEvent::Move(m) if m.to == Zone::Battlefield)
+            && self
+                .zones
+                .entry_batch_uses
+                .as_ref()
+                .is_some_and(|v| v.contains(&id))
+    }
+
     fn apply_replacement(
         &mut self,
         cand: &Candidate,
@@ -1212,9 +1226,20 @@ impl Game {
             }
             _ => false,
         };
-        // Use up one application of limited-use effects.
+        // Use up one application of limited-use effects: once for all the objects
+        // entering the battlefield at the same time.
         if let Some(id) = cand.instance {
-            if !unpreventable {
+            let entering = matches!(&ev, ReplEvent::Move(m) if m.to == Zone::Battlefield);
+            let batch = self.zones.entry_batch_uses.as_mut().filter(|_| entering);
+            let again = match batch {
+                Some(used) if used.contains(&id) => true,
+                Some(used) => {
+                    used.push(id);
+                    false
+                }
+                None => false,
+            };
+            if !unpreventable && !again {
                 if let Some(inst) = self.replacements.iter_mut().find(|r| r.id == id) {
                     if let Some(u) = inst.uses.as_mut() {
                         *u = u.saturating_sub(1);
@@ -1495,11 +1520,21 @@ impl Game {
             ) => {
                 // "enter as a copy of [this creature]" refers to the effect's source.
                 let c = ctx.clone();
-                let cands: Vec<ObjectId> = self
+                let mut cands: Vec<ObjectId> = self
                     .objects_matching(&filter, &c)
                     .into_iter()
                     .filter(|o| *o != m.obj)
                     .collect();
+                // A permanent locked in as the effect was created ("they enter as copies of
+                // the chosen creature") that has left the battlefield: its copiable values
+                // as it last existed there (Mystic Reflection's rulings).
+                if let (true, Filter::Objects(v)) = (cands.is_empty(), &filter) {
+                    cands = v
+                        .iter()
+                        .copied()
+                        .filter(|o| !self.is_live(*o) && self.obj(*o).zone == Zone::Battlefield)
+                        .collect();
+                }
                 // "You may have ~ enter as a copy": "you" is the player it enters under
                 // the control of (CR 109.5), who chooses before it enters (CR 614.12a),
                 // e.g. each player for their own card put onto the battlefield by Show

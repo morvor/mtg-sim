@@ -334,6 +334,18 @@ impl Renderer<'_> {
 
     /// Splits a filter into the parts of a noun phrase.
     pub(crate) fn collect(&mut self, f: &Filter, np: &mut Np) {
+        // "a card of the chosen kind" (land or nonland, chosen as a number).
+        if super::object_counts::chosen_kinds(f).is_some() {
+            np.post.push("of the chosen kind".into());
+            return;
+        }
+        // "that shares a land type with a land you control".
+        if let Filter::Or(v) = f {
+            if let Some(s) = self.shares_land_type(v, false) {
+                np.rel.push(s);
+                return;
+            }
+        }
         match f {
             Filter::Any => {}
             Filter::And(v) => {
@@ -603,6 +615,14 @@ impl Renderer<'_> {
                         _ => self.gap("a comparison of values of the object"),
                     };
                     np.post.push(w);
+                    return;
+                }
+                if let Some(s) = self.count_quality(a, *c, b, false) {
+                    if s.starts_with("that ") {
+                        np.rel.push(s);
+                    } else {
+                        np.post.push(s);
+                    }
                     return;
                 }
                 let w = match (own(a), own(b)) {
@@ -981,6 +1001,20 @@ impl Renderer<'_> {
     }
 
     fn collect_not(&mut self, inner: &Filter, np: &mut Np) {
+        // "that doesn't share a land type with a land you control", "that doesn't have the
+        // same name as another permanent you control".
+        if let Filter::Or(v) = inner {
+            if let Some(s) = self.shares_land_type(v, true) {
+                np.rel.push(s);
+                return;
+            }
+        }
+        if let Filter::ValueCmp(a, c, b) = inner {
+            if let Some(s) = self.count_quality(a, *c, b, true) {
+                np.rel.push(s);
+                return;
+            }
+        }
         match inner {
             Filter::Type(t) => np.nons.push(format!("non{}", t.word())),
             Filter::Subtype(s) => np.nons.push(format!("non-{s}")),
@@ -1087,7 +1121,8 @@ impl Renderer<'_> {
             // "all creatures they control not chosen this way", "a creature card that hasn't
             // been chosen" (see `patterns::iteration_grammar`).
             Filter::In(s)
-                if matches!(s.as_ref(), Sel::Var(v) if *v == crate::oracle::patterns::iteration_grammar::CHOSEN) =>
+                if matches!(s.as_ref(), Sel::Var(v) if *v == crate::oracle::patterns::iteration_grammar::CHOSEN
+                    || *v == crate::choices::CHOSEN_OBJECTS_VAR) =>
             {
                 np.rel.push(
                     "{alt:not chosen this way|that {alt:weren't|wasn't} chosen this way|that hasn't been chosen|different}"
@@ -1108,13 +1143,14 @@ impl Renderer<'_> {
                 np.rel
                     .push(format!("that {{alt:doesn't|don't}} share {what} with {w}"));
             }
-            // "each creature except for tokens you control": the same objects.
+            // "each creature except for tokens you control", "a card other than a basic
+            // land card": the same objects.
             other @ Filter::And(_) => {
                 let s = self.noun(other, Num::One);
                 let many = self.noun(other, Num::Many);
+                let a = with_article(&s);
                 np.rel.push(format!(
-                    "{{alt:that isn't {}|except for {many}}}",
-                    with_article(&s)
+                    "{{alt:that isn't {a}|except for {many}|other than {a}|other than {many}}}"
                 ));
             }
             // "target creature other than enchanted creature", "an artifact other than
@@ -1269,6 +1305,29 @@ impl Renderer<'_> {
             let said = |w: &str| f.split(|c: char| !c.is_alphanumeric()).any(|x| x == w);
             let types_said = np.types.iter().all(|t| said(t.word()));
             let subtypes_said = np.subtypes.iter().all(|t| said(t));
+            // "equipped creature that's a Warrior", "... that isn't a Warrior": a subtype
+            // the fixed phrase has no place for, said after it.
+            let only_subtypes = np.status.is_empty()
+                && np.supers.is_empty()
+                && np.colors.is_empty()
+                && np.quality.is_empty()
+                && types_said
+                && np.alts.is_empty()
+                && !np.permanent_card
+                && np.controller_matches.is_none()
+                && np.cast_from.is_none()
+                && np.subtypes.len() + np.nons.len() == 1
+                && np.nons.iter().all(|n| n.starts_with("non-"));
+            if only_subtypes && (!subtypes_said || !np.nons.is_empty()) {
+                let rel = match (np.subtypes.first(), np.nons.first()) {
+                    (Some(t), _) => format!("that's {}", with_article(t)),
+                    (None, Some(n)) => {
+                        format!("that isn't {}", with_article(n.trim_start_matches("non-")))
+                    }
+                    _ => String::new(),
+                };
+                return format!("{f} {rel}");
+            }
             if !np.status.is_empty()
                 || !np.supers.is_empty()
                 || !np.colors.is_empty()

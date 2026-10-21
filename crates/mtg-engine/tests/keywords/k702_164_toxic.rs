@@ -110,6 +110,7 @@ fn toxic_counts_once_per_combat_damage_regardless_of_amount() {
 #[test]
 fn total_toxic_value_is_the_sum_of_its_toxic_abilities() {
     cr!("702.164b", "702.164c");
+    cr_example!("702.164b", "gains toxic 1 due to another effect");
     ruling!(
         "Tyrranax Atrocity",
         "Multiple instances of toxic are cumulative."

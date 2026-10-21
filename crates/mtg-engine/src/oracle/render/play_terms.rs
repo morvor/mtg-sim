@@ -151,11 +151,14 @@ impl Renderer<'_> {
                 {
                     "pay life equal to {alt:its|that spell's} mana value".to_string()
                 }
-                _ => self.gap("an alternative cost for spells cast with a permission"),
+                _ => self.cost_as_payment(c),
             };
-            s.push_str(&format!(
-                ". If you cast a spell this way, {pay} rather than pay its mana cost"
-            ));
+            // "You may cast it by paying {1} rather than paying its mana cost" (an
+            // alternative cost, CR 118.9).
+            let by = super::statics::gerund_first(&pay);
+            s = format!(
+                "{{alt:{s}. If you cast a spell this way, {pay} rather than pay its mana cost|{s} by {by} rather than paying its mana cost}}"
+            );
         }
         if let Some(c) = &terms.extra_cost {
             let pay = self.cost_as_payment(c);
@@ -171,7 +174,7 @@ impl Renderer<'_> {
         }
         if terms.spend_any_type {
             s.push_str(
-                " {alt:and mana of any type can be spent to cast it|and mana of any type can be spent to cast that spell|. You may spend mana as though it were mana of any type to cast that spell|. If you cast a spell this way, you may spend mana as though it were mana of any type to cast it}",
+                " {alt:and mana of any type can be spent to cast it|and mana of any type can be spent to cast that spell|. You may spend mana as though it were mana of any type to cast that spell|. If you cast a spell this way, you may spend mana as though it were mana of any type to cast it|. If you cast a spell this way, mana of any type can be spent to cast it}",
             );
         }
         if terms.cost_increase > 0 {
