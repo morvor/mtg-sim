@@ -96,3 +96,33 @@ fn reversal_of_fortune_casts_a_copy_of_a_card_in_the_opponents_hand() {
     // The card itself stays in their hand.
     assert!(t.in_hand(P1, "Lightning Bolt"));
 }
+
+#[test]
+fn chandra_pyromaster_copies_a_chosen_exiled_card_three_times() {
+    cr!("707.12", "606.3");
+    ruling!(
+        "Chandra, Pyromaster",
+        "While resolving the third ability, you create the copies of the card in exile and cast them from exile."
+    );
+    supported("Chandra, Pyromaster");
+    let mut t = TestGame::new(2);
+    let c = t.battlefield(P0, "Chandra, Pyromaster");
+    t.g.add_counters(Entity::Object(c), "loyalty", 3, None);
+    for _ in 0..12 {
+        t.library_top(P0, "Forest");
+    }
+    t.library_top(P0, "Divination");
+    for _ in 0..4 {
+        t.library_top(P0, "Forest");
+    }
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.activate(P0, c, 2, &[]).unwrap();
+    t.resolve_all();
+    // Three copies of Divination: six cards drawn; the card itself stays exiled.
+    assert_eq!(t.hand_size(P0), hand + 6);
+    assert!(t.in_exile("Divination"));
+}
