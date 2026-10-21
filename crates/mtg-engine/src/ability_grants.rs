@@ -117,7 +117,68 @@ fn gained_link(link: u16, granter: u32, from: u32) -> u16 {
         .wrapping_add(granter as u64 * 31)
         .wrapping_add(from as u64 * 7919)
         .wrapping_add(0x3d1);
-    0x8000 | (h % 0x7fff) as u16
+    0x8000 | (h % 0x4000) as u16
+}
+
+/// The links of the abilities a resolving effect gives ([`snapshot`]): from `0xC000` on,
+/// apart from printed links (below `0x4000`), the links of copied abilities (`0x4000` to
+/// `0x7ffe`, see `layers::copied_link`) and those of abilities a continuously
+/// reevaluated effect gives (`0x8000` to `0xbfff`, [`gained_link`]).
+pub const FRESH_LINK_BASE: u16 = 0xC000;
+const FRESH_LINK_COUNT: u32 = 0x4000;
+
+/// The fresh links a game has handed out (CR 607.5). They're numbered per game, so a
+/// game's links don't depend on what else the process did.
+#[derive(Clone, Debug, Default)]
+pub struct FreshLinks {
+    /// How many have been handed out; the next is `FRESH_LINK_BASE + issued % 0x4000`.
+    pub issued: u32,
+}
+
+/// Every link an object has or had data under: its abilities' links, the choices, cards
+/// and notes kept for them, and the links of abilities continuous effects give.
+fn links_in_use(g: &Game) -> std::collections::HashSet<u16> {
+    let mut used = std::collections::HashSet::new();
+    for o in &g.objects {
+        used.extend(o.chars.abilities.iter().map(|a| a.link));
+        used.extend(o.linked_choices.keys().copied());
+        used.extend(o.linked.keys().copied());
+        used.extend(o.created_by.map(|(_, l)| l));
+    }
+    used.extend(g.linked_notes.links());
+    for e in &g.effects {
+        for m in &e.mods {
+            if let Modification::AddAbility(a) = m {
+                used.insert(a.link);
+            }
+        }
+    }
+    used
+}
+
+/// A link for abilities gained together that no other ability of any object has and no
+/// data is kept under (CR 607.5: "They can't be linked to any other ability, regardless
+/// of what other abilities the object may currently have or may have had in the past").
+/// Links are handed out in order; once all of them have been, the ones still in use are
+/// skipped (`taken`: those handed out for the effect being created).
+fn fresh_link(g: &mut Game, taken: &mut Vec<u16>) -> u16 {
+    let mut used = None;
+    let mut tries = 0;
+    loop {
+        let n = g.fresh_links.issued;
+        g.fresh_links.issued = n.wrapping_add(1);
+        let link = FRESH_LINK_BASE + (n % FRESH_LINK_COUNT) as u16;
+        if n < FRESH_LINK_COUNT && !taken.contains(&link) {
+            taken.push(link);
+            return link;
+        }
+        let used = used.get_or_insert_with(|| links_in_use(g));
+        tries += 1;
+        if (!used.contains(&link) && !taken.contains(&link)) || tries > FRESH_LINK_COUNT {
+            taken.push(link);
+            return link;
+        }
+    }
 }
 
 /// Ability `a` of `from` as an object gains it through an effect of `granter`, with a
@@ -222,19 +283,25 @@ pub fn copied_uids(g: &Game, from: &Sel, which: &AbilitySelection, ctx: &Ctx) ->
 /// the same creature more than once)"), with the links among those gained from one object
 /// kept (CR 607.5).
 pub fn snapshot(
-    g: &Game,
+    g: &mut Game,
     from: &Sel,
     which: &AbilitySelection,
     terms: &GainedTerms,
     ctx: &Ctx,
+    taken: &mut Vec<u16>,
 ) -> Vec<Modification> {
     let mut out = Vec::new();
     for o in sources(g, from, ctx, None) {
         let mut links: HashMap<u16, u16> = HashMap::new();
         for a in gained_from_with(g, which, o, terms) {
-            let link = *links
-                .entry(a.link)
-                .or_insert_with(|| 0x8000 | (next_ability_uid() % 0x7fff) as u16);
+            let link = match links.get(&a.link) {
+                Some(l) => *l,
+                None => {
+                    let l = fresh_link(g, taken);
+                    links.insert(a.link, l);
+                    l
+                }
+            };
             out.push(Modification::AddAbility(AbilityDef::with_link(
                 with_terms(&a.kind, terms),
                 a.text.clone(),
