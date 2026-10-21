@@ -218,6 +218,13 @@ impl KeywordRules for ChoiceGrammar {
             if let Some(n) = nums.choose(&mut g.rng).copied() {
                 ctx.nums.insert(var, n as i64);
                 ctx.prev_value = n as i64;
+                // "As ~ enters, choose 2, 3, or 4 at random." (Haktos the Unscarred): the
+                // permanent's choice, which "the chosen number" refers to (CR 607.2d).
+                if ctx.entering.is_some() {
+                    if let Some(src) = ctx.source {
+                        g.objects[src.0 as usize].choices.number = Some(n);
+                    }
+                }
             }
             return true;
         }

@@ -418,7 +418,32 @@ fn adjective_alternative(r: &str) -> Option<(Filter, bool, &str, &str)> {
     let (f, plural, rest) = parse_object_phrase(r)?;
     let consumed = r[..r.len() - rest.len()].trim_end();
     let noun = consumed.rsplit(' ').next()?;
-    if consumed.contains(" or ") || consumed.contains(',') || head_noun(noun).is_none() {
+    if head_noun(noun).is_none() {
+        // "each artifact or non-Aura enchantment you control": who controls them is
+        // said of both alternatives, so the alternative ends with its noun.
+        let words: Vec<&str> = consumed.split(' ').collect();
+        let k = words.iter().position(|w| head_noun(w).is_some())?;
+        let prefix_len = words[..=k].join(" ").len();
+        let after = r.get(prefix_len..)?;
+        let shared = [
+            "you control",
+            "you don't control",
+            "an opponent controls",
+            "your opponents control",
+        ];
+        if !shared.iter().any(|p| after.trim_start().starts_with(p)) {
+            return None;
+        }
+        if r[..prefix_len].contains(" or ") || r[..prefix_len].contains(',') {
+            return None;
+        }
+        let (f2, pl2, rest2) = parse_object_phrase(&r[..prefix_len])?;
+        if !rest2.trim().is_empty() {
+            return None;
+        }
+        return Some((f2, pl2, after, words[k]));
+    }
+    if consumed.contains(" or ") || consumed.contains(',') {
         return None;
     }
     Some((f, plural, rest, noun))
@@ -511,6 +536,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         return Some(r);
     }
     if let Some(r) = adjective_first_in_list(s) {
+        return Some(r);
+    }
+    // "legendary or Rat card", "instant, sorcery, and/or Tamiyo planeswalker cards".
+    if let Some(r) = super::patterns::filter_qualities::listed_kinds(s) {
         return Some(r);
     }
     let mut s = s.trim_start();
@@ -706,6 +735,23 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             if nw2.ends_with('s') && singular(nw2) != nw2 {
                 plural = true;
             }
+            // "Saga or enchantment creature", "Vehicle or artifact creature": a subtype
+            // that isn't a creature type isn't narrowed by "creature" (no Saga is a
+            // creature); it is an alternative of its own.
+            let (foreign, group): (Vec<Filter>, Vec<Filter>) =
+                if matches!(nf, Filter::Type(CardType::Creature)) && group.len() > 1 {
+                    group
+                        .into_iter()
+                        .partition(|h| matches!(h, Filter::Subtype(st) if !is_creature_type(st)))
+                } else {
+                    (vec![], group)
+                };
+            let (foreign, group) = if group.is_empty() {
+                (vec![], foreign)
+            } else {
+                (foreign, group)
+            };
+            heads.extend(foreign);
             let joined = if group.len() == 1 {
                 group.into_iter().next().unwrap()
             } else {
@@ -1040,6 +1086,10 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::InZone(ZoneKind::Exile), r)
         } else if let Some(r) = t.strip_prefix("on the battlefield") {
             (Filter::InZone(ZoneKind::Battlefield), r)
+        } else if let Some((f, r)) = super::patterns::filter_qualities::early_suffix(t) {
+            // "without first strike, double strike, or vigilance", "that's an artifact or
+            // that has mana value 3 or less" (read before the core's shorter readings).
+            (f, r)
         } else if let Some((f @ Filter::Or(_), r)) = t
             .starts_with("with ")
             .then(|| parse_with_suffix(t))
@@ -1908,6 +1958,16 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
             (TargetKind::Object(f), r)
         }
     };
+    // "target player who lost life this turn" (`patterns::history_filters_4`).
+    let (what, rest) = match what {
+        TargetKind::Player(pf) => {
+            match super::patterns::history_filters_4::player_qualifier(rest) {
+                Some((q, r)) => (TargetKind::Player(PlayerFilter::And(vec![pf, q])), r),
+                None => (TargetKind::Player(pf), rest),
+            }
+        }
+        w => (w, rest),
+    };
     let (what, rest) = player_alternatives(what, &s[..s.len() - rest.len()], rest);
     // "any target of an opponent's choice" (CR 115.1, 601.2c): an opponent chooses it.
     let (chosen_by_opponent, rest) = match rest.trim_start().strip_prefix("of an opponent's choice")
@@ -1951,6 +2011,7 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         max,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent,
         text: String::new(),
         condition: None,
@@ -2238,6 +2299,18 @@ pub fn parse_player(s: &str) -> Option<(PlayerRef, Option<TargetSpec>, &str)> {
     for (p, r) in pairs {
         if let Some(rest) = t.strip_prefix(p) {
             return Some((r, None, rest));
+        }
+    }
+    // "target player who lost life this turn" (`patterns::history_filters_4`).
+    for (p, pf) in [
+        ("target player", PlayerFilter::Any),
+        ("target opponent", PlayerFilter::Opponent),
+    ] {
+        let Some(r) = t.strip_prefix(p) else { continue };
+        if let Some((q, rest)) = super::patterns::history_filters_4::player_qualifier(r) {
+            let text = &t[..t.len() - rest.len()];
+            let spec = TargetSpec::player(PlayerFilter::And(vec![pf, q]), text);
+            return Some((PlayerRef::Target(0), Some(spec), rest.trim_start()));
         }
     }
     if let Some(rest) = t.strip_prefix("target player ") {

@@ -14,13 +14,28 @@ inventory::submit! { EffectPattern { name: "choose one of each, then sacrifice t
 
 /// "you may play an additional land this turn" / "you may play [up to] N additional lands
 /// this turn" (the sentence parser strips the "you may").
-fn additional_land(l: &str, _b: &mut Builder) -> Option<Effect> {
+fn additional_land(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l
         .strip_prefix("you may play ")
         .or_else(|| l.strip_prefix("play "))?;
     // "Up to two additional lands" (older wording): playing them is optional anyway.
     let r = r.strip_prefix("up to ").unwrap_or(r);
+    // "You may play X additional lands this turn." (Nahiri's Lithoforming): each of X
+    // effects lets you play one more land (CR 305.2).
+    if let Some(r) = r.strip_prefix("x additional lands") {
+        if r != " this turn" || !(super::value_grammar::x_defined() || b.ctx.is_spell()) {
+            return None;
+        }
+        return Some(Effect::Repeat {
+            times: Value::X,
+            effect: Box::new(Effect::AddPlayerEffect {
+                who: PlayerRef::You,
+                effect: PlayerModification::AdditionalLandPlays(1),
+                duration: Duration::ThisTurn,
+            }),
+        });
+    }
     let (n, r) = if let Some(r) = r.strip_prefix("an additional land") {
         (1, r)
     } else {
@@ -72,9 +87,7 @@ fn one_of_each(s: &str) -> Option<Vec<Filter>> {
     let mut out = Vec::new();
     for part in s.split(", ") {
         let p = part.trim();
-        let p = p
-            .strip_prefix("an ")
-            .or_else(|| p.strip_prefix("a "))?;
+        let p = p.strip_prefix("an ").or_else(|| p.strip_prefix("a "))?;
         let (f, plural, tail) = parse_object_phrase(p)?;
         if plural || !end(tail).is_empty() {
             return None;
@@ -95,7 +108,10 @@ fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
     let (who, r) = if let Some(r) = l.strip_prefix("each player chooses ") {
         (PlayerRef::EachPlayer, r)
     } else {
-        (PlayerRef::EachOpponent, l.strip_prefix("each opponent chooses ")?)
+        (
+            PlayerRef::EachOpponent,
+            l.strip_prefix("each opponent chooses ")?,
+        )
     };
     // "chooses a permanent they control of each permanent type and sacrifices the rest":
     // one of each of the six permanent types (CR 110.4).
@@ -112,10 +128,15 @@ fn keep_one_of_each(l: &str, _b: &mut Builder) -> Option<Effect> {
         });
     }
     let r = r.strip_suffix(", then sacrifices the rest")?;
-    let (among, list) = if let Some(list) = r.strip_prefix("from among the permanents they control ") {
+    let (among, list) = if let Some(list) =
+        r.strip_prefix("from among the permanents they control ")
+    {
         (Filter::Any, list)
     } else if let Some(list) = r.strip_suffix(" from among the nonland permanents they control") {
-        (Filter::Not(Box::new(Filter::Type(crate::types::CardType::Land))), list)
+        (
+            Filter::Not(Box::new(Filter::Type(crate::types::CardType::Land))),
+            list,
+        )
     } else if let Some(list) = r.strip_suffix(" from among the permanents they control") {
         (Filter::Any, list)
     } else {

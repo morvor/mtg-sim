@@ -454,6 +454,10 @@ impl Game {
                 crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
             }
             // Twice the life total against the starting life total: no rounding.
+            PlayerFilter::HalfStartingLife(cmp) => cmp.eval(
+                2 * self.player(p).life as i64,
+                crate::life_totals::starting_life(self, p) as i64,
+            ),
             PlayerFilter::LessThanHalfStartingLife => {
                 2 * self.player(p).life < crate::life_totals::starting_life(self, p)
             }
@@ -464,6 +468,11 @@ impl Game {
                 .any(|q| self.are_opponents(q, p)),
             PlayerFilter::FirstDrawInDrawStep => {
                 crate::draw_rules::next_draw_is_first_in_draw_step(self, p)
+            }
+            PlayerFilter::History(c) => {
+                let mut c2 = ctx.clone();
+                c2.iter_player = Some(p);
+                self.eval_cond(c, &c2)
             }
             PlayerFilter::Ref(r) => self.eval_players(r, ctx).contains(&p),
             PlayerFilter::And(v) => v.iter().all(|x| self.player_filter_matches(x, p, ctx)),
@@ -829,6 +838,13 @@ impl Game {
                 .iter()
                 .filter_map(|e| e.object())
                 .any(|x| self.obj(x).chars.colors.intersects(c.colors)),
+            Filter::SharesManaValue(sel) => {
+                let mv = crate::mana_value::mana_value_with(self, id, c);
+                self.eval_sel(sel, ctx)
+                    .iter()
+                    .filter_map(|e| e.object())
+                    .any(|x| crate::mana_value::mana_value_with(self, x, &self.obj(x).chars) == mv)
+            }
             Filter::HasKeyword(k) => c.has_keyword(*k),
             Filter::HasCounter(k) => match k {
                 Some(k) => o.counter(k) > 0,
@@ -1024,6 +1040,8 @@ impl Game {
             Filter::ValueCmp(lhs, cmp, rhs) => {
                 crate::relational::value_cmp(self, id, lhs, *cmp, rhs, ctx)
             }
+            Filter::History(cond) => crate::relational::history_holds(self, id, cond, ctx),
+            Filter::AsChosen(f) => self.matches(id, f, ctx),
             // Checked by whatever chooses the objects together (`relational.rs`).
             Filter::Together(_) => true,
             Filter::Custom(name) => crate::mana_value::custom_parity_filter(self, name, id, c)
@@ -1453,6 +1471,7 @@ impl Game {
                 .map_or(0, |p| self.player(p).life as i64),
             // "Your starting life total": the variant's (CR 119.1a-e).
             Value::StartingLife => crate::life_totals::starting_life(self, ctx.controller) as i64,
+            Value::AsTurnBegan(..) => crate::turn_start::value(self, v, ctx),
             // CR 800.4i: for a player who left the game, as last known.
             Value::HandSize(r) => self.eval_player(r, ctx).map_or(0, |p| {
                 crate::multiplayer::zone_size(self, p, ZoneKind::Hand) as i64

@@ -164,13 +164,26 @@ impl Renderer<'_> {
                 _ => false,
             }
         }
+        // "Whenever an opponent attacks", "Whenever ~ deals damage to an opponent": the
+        // event's player is an opponent ("that opponent").
+        fn opponent_event(t: &TriggerCond) -> bool {
+            match t {
+                TriggerCond::PlayerAttacks(PlayerRel::Opponent) => true,
+                TriggerCond::DealsDamage {
+                    to: DamageRecipient::Player(PlayerRel::Opponent),
+                    ..
+                } => true,
+                TriggerCond::Batched { trigger, .. } => opponent_event(trigger),
+                _ => false,
+            }
+        }
         if player_targeted(&t.trigger) {
             self.trigger_player = Some("{alt:that spell's controller|that player}");
         } else if targeted(&t.trigger) {
             // The event's player controls the spell or ability that targeted (CR 115.1).
             self.trigger_player =
                 Some("{alt:that spell's controller|that spell or ability's controller}");
-        } else if matches!(t.trigger, TriggerCond::PlayerAttacks(PlayerRel::Opponent)) {
+        } else if opponent_event(&t.trigger) {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
         let trig = self.trigger_text(&t.trigger);
@@ -195,6 +208,10 @@ impl Renderer<'_> {
             trig.contains('~') && self.other_salient,
         );
         let mut s = trig;
+        self.intervening_exists = match &t.intervening_if {
+            Some(Condition::Exists(f)) => Some(f.clone()),
+            _ => None,
+        };
         if let Some(c) = &t.intervening_if {
             let c = self.condition(c);
             s.push_str(&format!(", if {c}"));
@@ -259,6 +276,24 @@ impl Renderer<'_> {
         if let Some(f) = you_tapped(t) {
             let n = self.noun(&f, Num::One);
             return format!("whenever you tap an untapped {n}");
+        }
+        // "Whenever a basic land is tapped for mana of the chosen color" (Gauntlet of Power).
+        if let TriggerCond::Where {
+            trigger,
+            cond: Condition::Custom(c),
+        } = t
+        {
+            if let (
+                TriggerCond::TappedForMana {
+                    who: PlayerRel::Any,
+                    filter,
+                },
+                crate::kw::mana_produced_chosen_color::PRODUCED_CHOSEN_COLOR,
+            ) = (trigger.as_ref(), c.as_str())
+            {
+                let n = self.noun_det(filter, Det::A);
+                return format!("whenever {n} is tapped for mana of the chosen color");
+            }
         }
         if let TriggerCond::Batched { trigger, .. } = t {
             if let Some(f) = you_tapped(trigger) {
@@ -980,6 +1015,31 @@ impl Renderer<'_> {
                 let o = self.noun_det(filter, det.clone());
                 Ev::new(o, "leaves the battlefield without dying")
             }
+            // "When enchanted permanent dies or is put into exile", "... dies or is put
+            // into the command zone": both from the battlefield.
+            TriggerCond::AnyOf(v)
+                if matches!(v.as_slice(), [TriggerCond::Dies(a), TriggerCond::ZoneChange {
+                    filter: b,
+                    from: Some(ZoneKind::Battlefield),
+                    to: Some(ZoneKind::Exile | ZoneKind::Command),
+                }] if format!("{a:?}") == format!("{b:?}")) =>
+            {
+                let (TriggerCond::Dies(f), TriggerCond::ZoneChange { to: Some(z), .. }) =
+                    (&v[0], &v[1])
+                else {
+                    return Ev::new("", self.gap("dies or is put into"));
+                };
+                let e = self.trigger_event(&TriggerCond::Dies(f.clone()), det.clone());
+                let into = if *z == ZoneKind::Exile {
+                    "exile"
+                } else {
+                    "the command zone"
+                };
+                Ev::new(
+                    e.subj,
+                    format!("{} or is put into {into} {{opt:from the battlefield}}", e.vp),
+                )
+            }
             TriggerCond::AnyOf(v) => {
                 let salient = self.self_salient;
                 let evs: Vec<Ev> = v
@@ -1096,6 +1156,26 @@ impl Renderer<'_> {
                     .unwrap_or(Filter::Any);
                 let n = self.noun_det(&f, Det::A);
                 Ev::new("you", format!("reveal {n} this way"))
+            }
+            // "Whenever one or more creatures attack you": attacking you, not a
+            // planeswalker or battle (the attacked permanent, CR 506.3, 508.1b).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::And(cs),
+            } if matches!(trigger.as_ref(), TriggerCond::Attacks(_))
+                && matches!(
+                    cs.as_slice(),
+                    [
+                        Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+                        Condition::Not(n),
+                    ] if matches!(n.as_ref(), Condition::SelNonEmpty(Sel::TriggerOtherObject))
+                ) =>
+            {
+                let TriggerCond::Attacks(f) = trigger.as_ref() else {
+                    return Ev::new("", self.gap("attacks you"));
+                };
+                let o = self.noun_det(f, det.clone());
+                Ev::new(o, "attacks you")
             }
             // "Whenever you draw your second card each turn".
             TriggerCond::Where { trigger, cond }
@@ -1626,6 +1706,17 @@ impl Renderer<'_> {
                     return Ev::new(
                         "",
                         format!("{{alt:{a} is tapped for mana|you tap {n} for mana}}"),
+                    );
+                }
+                // "Whenever a player taps a Mountain, Forest, or Plains for mana".
+                if matches!(who, PlayerRel::Any)
+                    && matches!(filter, Filter::Or(v) if v.iter().all(|x| matches!(x, Filter::Subtype(_))))
+                {
+                    let a = obj(self, filter);
+                    let n = self.noun_det(filter, Det::A);
+                    return Ev::new(
+                        "",
+                        format!("{{alt:{a} is tapped for mana|a player taps {n} for mana}}"),
                     );
                 }
                 if matches!(who, PlayerRel::Any) {

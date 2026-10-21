@@ -374,9 +374,34 @@ pub fn relaxed_on_resolution(spec: &TargetSpec) -> Option<TargetSpec> {
             _ => None,
         }
     }
+    /// Object requirements that apply only as the target is chosen ([`Filter::AsChosen`]).
+    fn relax_obj(f: &Filter) -> Option<Filter> {
+        match f {
+            Filter::AsChosen(_) => Some(Filter::Any),
+            Filter::And(v) => {
+                let r: Vec<Option<Filter>> = v.iter().map(relax_obj).collect();
+                r.iter().any(|x| x.is_some()).then(|| {
+                    Filter::And(
+                        r.into_iter()
+                            .zip(v)
+                            .map(|(x, o)| x.unwrap_or_else(|| o.clone()))
+                            .collect(),
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
     let what = match &spec.what {
         TargetKind::Player(f) => TargetKind::Player(relax(f)?),
-        TargetKind::ObjectOrPlayer(o, f) => TargetKind::ObjectOrPlayer(o.clone(), relax(f)?),
+        TargetKind::ObjectOrPlayer(o, f) => match (relax_obj(o), relax(f)) {
+            (None, None) => return None,
+            (a, b) => TargetKind::ObjectOrPlayer(
+                a.unwrap_or_else(|| o.clone()),
+                b.unwrap_or_else(|| f.clone()),
+            ),
+        },
+        TargetKind::Object(o) => TargetKind::Object(relax_obj(o)?),
         _ => return None,
     };
     Some(TargetSpec {

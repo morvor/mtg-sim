@@ -15,7 +15,12 @@ use crate::oracle::phrases::{end, parse_number, parse_object_phrase};
 fn draw_cards_equal_to(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (head, value) = l.split_once(" cards equal to ")?;
-    let verb_ok = head == "draw" || head.ends_with(" draws") || head.ends_with(" draw");
+    // Only the drawing instruction: "choose a creature you control, then draw cards equal
+    // to its power" is two instructions, "its" the chosen creature (read by the clause
+    // parser).
+    let verb_ok = (head == "draw" || head.ends_with(" draws") || head.ends_with(" draw"))
+        && !head.contains(", then ")
+        && !head.contains(" and then ");
     if !verb_ok
         || (value.contains(" this way") && !super::value_results::reads_result_value(value, b))
     {

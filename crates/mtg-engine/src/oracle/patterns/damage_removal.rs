@@ -126,6 +126,7 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
         max,
         distinct_from: vec![],
         divide: None,
+        divide_up_to: false,
         chosen_by_opponent: false,
         text: String::new(),
         condition: None,
@@ -629,6 +630,20 @@ fn damage_part(
         };
         return Some((damage(src, v, to), tail2));
     }
+    // CR 107.1a: "half X damage, rounded up, to you" (Eternal Flame): rounded as the
+    // text says.
+    if let Some(h) = s.strip_prefix("half ") {
+        let (amount, r) = amount_phrase(h, where_x)?;
+        let r = strip(r, "damage")?;
+        let (up, r) = match r.strip_prefix(", rounded up,") {
+            Some(r) => (true, r),
+            None => (false, r.strip_prefix(", rounded down,")?),
+        };
+        let r = strip(r, "to")?;
+        let (to, tail) = recipients(r, src, b)?;
+        let half = Value::Div(Box::new(amount), 2, up);
+        return Some((damage(src, half, to), tail));
+    }
     let (amount, r) = amount_phrase(s, where_x)?;
     let r = strip(r, "damage")?;
     if let Some(r2) = strip(r, "divided as you choose among ") {
@@ -849,7 +864,12 @@ fn p_exile_instead(l: &str, b: &mut Builder) -> Option<Effect> {
             Filter::creature(),
             Filter::DealtDamageThisTurnBy(Box::new(Sel::This)),
         ]),
-        _ => return None,
+        // "the creature an opponent controls": a target named again (Unnatural
+        // Aggression).
+        w => match super::replacements_4::target_named_again(w, b) {
+            Some((sel, rest)) if rest.is_empty() => Filter::In(Box::new(sel)),
+            _ => return None,
+        },
     };
     // "Dies" means put into a graveyard from the battlefield (CR 700.4).
     Some(Effect::AddReplacement {

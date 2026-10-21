@@ -364,8 +364,8 @@ fn tale_of_tamiyo_keeps_milling_until_no_shared_type_or_no_cards() {
         "The Tale of Tamiyo",
         "When the first, second, or third chapter ability of The Tale of Tamiyo resolves, the ability will continue until you mill a set of two cards that share no card types or you mill one or fewer cards. You can't just pause the story whenever you want to. (And why would you? It's quite the story.)"
     );
-    // Only chapter IV isn't supported.
-    crate::r_p190_mana_costs::only_unsupported("The Tale of Tamiyo", "IV");
+    // Every chapter compiles.
+    assert!(card("The Tale of Tamiyo").unsupported_text().is_empty());
     // Two lands (share a type): draw, repeat; Bears and Shock (no shared type): stop.
     let mut t = TestGame::new(2);
     stack_library(

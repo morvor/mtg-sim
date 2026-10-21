@@ -487,6 +487,15 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 super::patterns::filters_relational::resolve_in_sentence(e, b, before)
             });
             let Some(mut e) = parsed else {
+                // "Mill a card. You may put a land card milled this way into your hand. You
+                // gain 2 life if a Lesson card is milled this way.": a sentence about what
+                // an instruction before the previous sentence did (`referents_values_4`).
+                if x_defined.is_none()
+                    && super::patterns::referents_values_4::lookback(&s, &mut effects, b)
+                {
+                    b.sentences += 1;
+                    continue;
+                }
                 super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
                 groups::abandon(b, outer_group);
                 return None;
@@ -863,6 +872,10 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
             b.it = sel.clone();
         }
         return Some((sel, rest));
+    }
+    // "the creature an opponent controls" after "target creature an opponent controls".
+    if let Some(r) = super::patterns::replacements_4::target_named_again(s, b) {
+        return Some(r);
     }
     // "the creature with the least power" (see `patterns::filters_relational`).
     if let Some(r) = super::patterns::filters_relational::definite_extreme(s, b) {
@@ -2371,6 +2384,25 @@ fn p_fight(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "gain control of target creature [until end of turn]".
 fn p_gain_control(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "gain control of target creature that attacked you this turn": "this turn" ends the
+    // target's description, not a duration.
+    let whole = l.trim();
+    if whole.ends_with(" this turn") {
+        let saved = b.targets.len();
+        if let Some((what, tail)) = whole
+            .strip_prefix("gain control of ")
+            .and_then(|r| object_ref(r, b))
+        {
+            if end(&tail).is_empty() {
+                return Some(Effect::GainControl {
+                    what,
+                    who: PlayerRef::You,
+                    duration: Duration::Permanent,
+                });
+            }
+        }
+        b.targets.truncate(saved);
+    }
     let (dur, l) = duration_suffix(l);
     let r = l.strip_prefix("gain control of ")?;
     let (what, tail) = object_ref(r, b)?;
@@ -2448,7 +2480,7 @@ fn p_shuffle(l: &str, _b: &mut Builder) -> Option<Effect> {
 pub fn is_mana_effect(e: &Effect) -> bool {
     match e {
         Effect::AddMana { .. } => true,
-        Effect::PersistentMana(inner) => is_mana_effect(inner),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => is_mana_effect(inner),
         // "Each player adds {B}{R}{G}" (Yurlok of Scorch Thrash).
         Effect::ForEachPlayer { effect, .. } => {
             matches!(**effect, Effect::AddMana { .. })

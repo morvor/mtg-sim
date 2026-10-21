@@ -280,6 +280,10 @@ fn capture_refs(e: &Effect, outer_targets: u8, what: Capture) -> Option<(Vec<Eff
                         _ => J::String(s),
                     }
                 }
+                // An ability the instruction creates or grants (a token's "{B}: Regenerate
+                // this token."): its own object and targets, nothing of the creating
+                // ability's (CR 113.7, 111.3).
+                J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
                 J::Object(m) => {
                     if m.len() == 1 {
                         if let Some(J::Number(n)) = m.get("Target") {
@@ -546,8 +550,10 @@ pub(crate) fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
         // "... you may cast that card without paying its mana cost. If that spell would be
         // put into a graveyard, exile it instead.": about the spell the delayed ability
         // casts.
+        // ("If that spell would be put into your graveyard, exile it instead." is read
+        // with the delayed ability: `permission_riders::f_delayed_cast_exiled`.)
         let casts = serde_json::to_string(&effect).is_ok_and(|j| j.contains("CastCard"));
-        if casts && next.starts_with("if ") {
+        if casts && next.starts_with("if ") && !next.starts_with("if that spell would") {
             return None;
         }
     }

@@ -905,6 +905,24 @@ fn put_this_way(c: &str) -> Option<Condition> {
 /// antecedent).
 pub(crate) const DIG_MARK: &str = "\u{1}dig";
 const UNTIL_MARK: &str = "\u{1}dig until";
+/// Marks, in [`Builder::named`], a dig of more than one card: "that card" isn't one of
+/// them (Gollum, Scheming Guide's "look at the top two cards ... Reveal that card", the
+/// top card a guess was about).
+const MANY_MARK: &str = "\u{1}dig of several cards";
+
+/// How many cards the last dig of the effect took from the library, when it says.
+fn source_count(e: &Effect) -> Option<&Value> {
+    match e {
+        Effect::Dig { n, .. } | Effect::Mill { n, .. } => Some(n),
+        Effect::Exile {
+            what: Sel::TopOfLibrary(_, n),
+            ..
+        } => Some(n),
+        Effect::Seq(v) => v.iter().rev().find(|x| source_kind(x).is_some()).and_then(source_count),
+        Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => source_count(effect),
+        _ => None,
+    }
+}
 /// Marks that cards were chosen (and revealed) from among them and left where they are
 /// ("the revealed cards").
 const CHOSEN_MARK: &str = "\u{1}dig-chosen";
@@ -983,8 +1001,12 @@ pub fn note_source(e: Option<&Effect>, b: &mut Builder) {
     } else {
         Sel::Var(vars::DUG)
     };
-    b.named.retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK);
+    b.named
+        .retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK && n != MANY_MARK);
     b.named.push((DIG_MARK.to_string(), rest));
+    if matches!(e.and_then(source_count), Some(Value::Const(k)) if *k > 1) {
+        b.named.push((MANY_MARK.to_string(), Sel::None));
+    }
     // "Then that player puts the rest into their graveyard."
     if let Some(p) = e.and_then(dig_performer) {
         if matches!(b.it_player, PlayerRef::You) {
@@ -1775,12 +1797,25 @@ fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
         }
         "exile" => {
             let mut d = Destination::zone(ZoneKind::Exile);
-            if let Some(r) = after.strip_prefix(" face down") {
+            let mut r = after;
+            if let Some(x) = r.strip_prefix(" face down") {
                 d.face_down = true;
-                (false, d, r)
-            } else {
-                (false, d, after)
+                r = x;
             }
+            // "Exile one of them face down with a hatching counter on it" (The
+            // Dragon-Kami Reborn): with the counters as it's exiled (CR 122.6).
+            if d.face_down {
+                if let Some((with, x)) = r
+                    .strip_prefix(" with ")
+                    .and_then(|x| x.split_once(" on it").map(|(c, t)| (c, t)))
+                {
+                    let (kind, n) =
+                        super::etb_replacement_grammar::counters_on(&format!("{with} on it"))?;
+                    d.with_counters.push((kind, n));
+                    r = x;
+                }
+            }
+            (false, d, r)
         }
         "return" => {
             let r = after.trim_start();
@@ -2157,6 +2192,10 @@ fn reveal_that_card(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
         None => (l, Filter::Any),
     };
     if !matches!(l, "reveal that card" | "reveal it") {
+        return None;
+    }
+    // Several cards were looked at: "that card" is something else.
+    if b.named.iter().any(|(n, _)| n == MANY_MARK) {
         return None;
     }
     let mut to = Destination::library_top();

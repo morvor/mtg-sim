@@ -152,7 +152,10 @@ fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     // discards a card (Dralnu's Pet).
     if let Some(rest) = s.strip_prefix("the discarded card's mana value") {
         let raw = crate::oracle::raw_text().to_lowercase();
-        if raw.lines().any(|l| l.starts_with("kicker") && l.contains("discard a")) {
+        if raw
+            .lines()
+            .any(|l| l.starts_with("kicker") && l.contains("discard a"))
+        {
             return Some((
                 Value::Custom(crate::kw::counter_groups::DISCARDED_FOR_COST_MANA_VALUE.into()),
                 rest.to_string(),
@@ -806,7 +809,11 @@ pub(crate) fn literal_card_name(r: &str) -> Option<(String, &str)> {
         // itself, Food Fight.)
         if let Some(c) = mtg_data::cards().by_name(&title) {
             let consumed: usize = words[..k].iter().map(|w| w.len() + 1).sum::<usize>() - 1;
-            let rest = if k == words.len() { rest } else { &r[consumed..] };
+            let rest = if k == words.len() {
+                rest
+            } else {
+                &r[consumed..]
+            };
             // The exact name (a face's, for a card with two faces).
             let name = c
                 .name
@@ -954,6 +961,19 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
                 }
             }
         }
+        // Registered qualifiers, which may read what the phrase described so far ("cards
+        // in that player's graveyard that were put there from the battlefield this turn").
+        if t.starts_with("that ") {
+            let so_far = Filter::and(parts.clone());
+            if let Some((f, r)) = super::filter_suffix_patterns()
+                .iter()
+                .find_map(|p| (p.parse)(&t, &so_far))
+            {
+                parts.push(f);
+                rest = r.to_string();
+                continue;
+            }
+        }
         break;
     }
     // "other creatures with the same name as that creature": other than that creature,
@@ -979,7 +999,17 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
             })
             .collect();
     }
-    Some((Filter::and(parts), rest))
+    let f = Filter::and(parts);
+    // A count of objects described by their history ("Goblins that entered the
+    // battlefield under your control this turn") counts what happened, gone or not: not
+    // the permanents there now (`patterns::history_filters_4` reads it for cards in a
+    // graveyard or exile only).
+    if serde_json::to_string(&f).is_ok_and(|j| j.contains("\"History\""))
+        && !matches!(f.zone(), Some(ZoneKind::Graveyard | ZoneKind::Exile))
+    {
+        return None;
+    }
+    Some((f, rest))
 }
 
 /// "[thing] among [objects]" kinds of values.
@@ -991,6 +1021,8 @@ fn among_kind(s: &str) -> Option<(Among, &str)> {
         ("permanent type", Among::PermanentTypes),
         ("creature types", Among::CreatureTypes),
         ("creature type", Among::CreatureTypes),
+        ("planeswalker types", Among::PlaneswalkerTypes),
+        ("planeswalker type", Among::PlaneswalkerTypes),
         ("basic land types", Among::BasicLandTypes),
         ("basic land type", Among::BasicLandTypes),
         ("colors", Among::Colors),
@@ -1221,6 +1253,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "mana from a Treasure spent to cast ~" (see `mana_4`).
+    if let Some(v) = super::mana_4::count_phrase(r, b) {
+        return Some(v);
+    }
     // "counters removed this way": an amount chosen for the cost (see `cost_parts`).
     if let Some(v) = super::cost_parts::paid_this_way_prefix(r) {
         return Some(v);
@@ -1325,6 +1361,14 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
             {
                 let (sel, rest) = if let Some(z) = y.strip_prefix("the mana cost of ") {
                     referent(z, b)?
+                } else if let Some((who, z)) = y.split_once("' mana costs") {
+                    // "green mana symbols in those cards' mana costs" (Phosphorescent
+                    // Feast): all of them added up.
+                    let (sel, t) = referent(who, b)?;
+                    if !t.trim().is_empty() {
+                        return None;
+                    }
+                    (sel, z.to_string())
                 } else {
                     let (who, z) = split_possessive(y)
                         .or_else(|| y.strip_prefix("its ").map(|z| ("it", z)))?;
@@ -1529,6 +1573,18 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 }
             }
             let (f, tail) = objects(x, b)?;
+            // "among permanents you control and/or cards in your graveyard" (Happily Ever
+            // After): among the objects of both groups.
+            if let Some(y) = tail.strip_prefix(" and/or ") {
+                let (f2, tail2) = objects(y, b)?;
+                return Some((
+                    Value::DistinctAmong(
+                        kind,
+                        Box::new(Sel::Union(vec![Sel::All(f), Sel::All(f2)])),
+                    ),
+                    tail2,
+                ));
+            }
             return Some((Value::DistinctAmong(kind, Box::new(Sel::All(f))), tail));
         }
         if kind == Among::Colors {
@@ -1643,6 +1699,11 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         || t.starts_with("then "))
     {
         return None;
+    }
+    // "the number of creatures tapped this way": those objects, each as it is now or as it
+    // last existed (one that left the battlefield still counts, CR 608.2h).
+    if let Some(v) = super::referents_values_4::count_this_way(&f) {
+        return Some((v, rest));
     }
     Some((Value::Count(f), rest))
 }

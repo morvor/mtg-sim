@@ -11,7 +11,7 @@ use super::*;
 /// 305.9), so the check says nothing a permission to cast doesn't say.
 /// Also `[x] is in exile and isn't a land`: the permission is for the card as long as
 /// it's exiled (the `bool`).
-fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(&'a PlayTerms, &'a Effect, bool)> {
+fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(PlayTerms, &'a Effect, bool)> {
     let Effect::If {
         cond: Condition::SelMatches(s, cond),
         then,
@@ -38,12 +38,30 @@ fn cast_only_of<'a>(e: &'a Effect, x: &Sel) -> Option<(&'a PlayTerms, &'a Effect
     if !matches!(otherwise.as_ref(), Effect::Noop) || format!("{s:?}") != format!("{x:?}") {
         return None;
     }
-    let Effect::WithPlayTerms { terms, effect } = then.as_ref() else {
+    // "..., and mana of any type can be spent to cast it": the permission and a rule for
+    // spending mana on that card, the terms said together.
+    let (with_terms, any_type) = match then.as_ref() {
+        Effect::Seq(v) => match v.as_slice() {
+            [w, Effect::SpendAnyTypeMana {
+                who: PlayerRef::You,
+                what,
+                duration: Duration::Permanent,
+            }] if format!("{what:?}") == format!("{x:?}") => (w, true),
+            _ => return None,
+        },
+        other => (other, false),
+    };
+    let Effect::WithPlayTerms { terms, effect } = with_terms else {
         return None;
     };
-    let Effect::GrantPlayPermission { what, .. } = effect.as_ref() else {
+    let Effect::GrantPlayPermission { what, duration, .. } = effect.as_ref() else {
         return None;
     };
+    if any_type && !matches!(duration, Duration::Permanent) {
+        return None;
+    }
+    let mut terms = terms.clone();
+    terms.spend_any_type |= any_type;
     (terms.spells_only && format!("{what:?}") == format!("{x:?}"))
         .then_some((terms, effect, in_exile))
 }
@@ -80,7 +98,7 @@ impl Renderer<'_> {
                 };
                 let saved = self.after_exile;
                 self.after_exile |= in_exile;
-                let s = self.with_play_terms(terms, &g);
+                let s = self.with_play_terms(&terms, &g);
                 self.after_exile = saved;
                 Some(s)
             }
@@ -102,7 +120,7 @@ impl Renderer<'_> {
                 };
                 let saved = self.after_exile;
                 self.after_exile |= in_exile;
-                let s = self.with_play_terms(terms, grant);
+                let s = self.with_play_terms(&terms, grant);
                 self.after_exile = saved;
                 // Cards may say the check anyway: "If it's a nonland card, you may cast
                 // that card this turn."
@@ -138,6 +156,10 @@ impl Renderer<'_> {
         let mut s = self.effect(effect);
         self.any_turn_permission = saved_any;
         self.play_terms = saved;
+        // Terms this wording doesn't say: a gap, never silently dropped.
+        if let Some(what) = unworded_effect_terms(terms) {
+            s.push_str(&self.gap(format!("permission term: {what}")));
+        }
         if let Some(u) = &any_turn {
             s = format!("during any turn {u}, {s}");
         }
@@ -202,6 +224,14 @@ impl Renderer<'_> {
             s.push_str(
                 ". If {alt:that spell|that card|it|a spell cast this way} would be put {alt:into a graveyard|into your graveyard}, exile it instead",
             );
+        }
+        // "If that spell would be put into a graveyard, put it on the bottom of its
+        // owner's library instead."
+        if let Some(d) = &terms.graveyard_instead {
+            let dest = self.destination_phrase(d, false, false);
+            s.push_str(&format!(
+                ". If {{alt:that spell|a spell cast this way}} would be put into a graveyard, put it {dest} instead"
+            ));
         }
         s
     }
@@ -275,4 +305,46 @@ impl Renderer<'_> {
         }
         Some(parts.join(". "))
     }
+}
+
+/// The first term of an effect's permission that [`Renderer::with_play_terms`] doesn't
+/// word (`what`, `limit` and `until_another` are worded with the permission's object).
+fn unworded_effect_terms(t: &PlayTerms) -> Option<&'static str> {
+    [
+        (t.on_cast.is_some(), "on cast"),
+        (t.on_land.is_some(), "on land"),
+        (t.cost_reduction > 0, "cost reduction"),
+        (t.free_option.is_some(), "free option"),
+        (t.any_owner, "any owner"),
+        (t.cast_face.is_some(), "cast face"),
+        (t.cost_increase_each.is_some(), "cost increase for each"),
+        (
+            t.spend_type_as_any_color.is_some(),
+            "spend a type as any color",
+        ),
+        (t.snow_as_any_color, "snow as any color"),
+    ]
+    .into_iter()
+    .find_map(|(set, w)| set.then_some(w))
+}
+
+/// The first term of a static permission that [`Renderer::static_permission_terms`]
+/// doesn't word.
+pub(crate) fn unworded_static_terms(t: &PlayTerms) -> Option<&'static str> {
+    [
+        (t.on_land.is_some(), "on land"),
+        (t.cost_reduction > 0, "cost reduction"),
+        (t.free_option.is_some(), "free option"),
+        (t.cast_face.is_some(), "cast face"),
+        (t.cost_increase_each.is_some(), "cost increase for each"),
+        (
+            t.spend_type_as_any_color.is_some(),
+            "spend a type as any color",
+        ),
+        (t.snow_as_any_color, "snow as any color"),
+        (t.graveyard_instead.is_some(), "graveyard instead"),
+        (t.any_owner, "any owner"),
+    ]
+    .into_iter()
+    .find_map(|(set, w)| set.then_some(w))
 }

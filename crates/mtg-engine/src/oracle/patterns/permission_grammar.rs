@@ -50,6 +50,13 @@ pub enum Who {
     /// "that creature's controller": the controller of the creature the triggered ability
     /// is about.
     CreaturesController,
+    /// "each player may play the card they exiled this way", "players may play cards they
+    /// exiled this way": each player, for the cards they exiled (from their own library or
+    /// hand: the cards they own).
+    EachPlayer,
+    /// "During each player's turn, that player may ...": the active player (a static
+    /// permission, CR 601.3).
+    Active,
 }
 
 /// What the permission is for.
@@ -131,6 +138,29 @@ pub struct Perm {
     pub subjectless: bool,
     /// The player "they" means (filled in where the text is parsed).
     pub who_ref: Option<PlayerRef>,
+    /// The duration is said relative to the player who gets the permission ("until that
+    /// player's next end step", "until the end of their next turn"), not to "you".
+    pub dur_grantee: bool,
+    /// "..., and they can't play cards from their hand": for as long as the permission
+    /// lasts, its players can't play cards from their hands.
+    pub no_hand: bool,
+    /// "from among cards exiled with it": "it" must be the source (see [`effect`]).
+    pub linked_it: bool,
+    /// The permission is the active player's (see [`Who::Active`]).
+    pub active_player: bool,
+    /// "For each of those cards, its owner may play it": each card's owner's permission.
+    pub per_card: bool,
+    /// The phrase began "For as long as you control ~, ".
+    pub lead_control: bool,
+    /// "the cards they don't own exiled with ~": not owned by the player who gets the
+    /// permission (the active player).
+    pub not_theirs: bool,
+    /// "play a land and cast a spell from among ...": a land and a spell, one of each
+    /// (each its own once-each-turn use).
+    pub land_and_spell: bool,
+    /// The once-each-turn use this permission is (see `kw/once_each_turn_cast.rs`), when
+    /// the ability has several.
+    pub once_slot: Option<&'static str>,
 }
 
 impl Perm {
@@ -154,6 +184,42 @@ impl Perm {
             terms.what = Some(match terms.what.take() {
                 Some(w) => Filter::and(vec![w, f]),
                 None => f,
+            });
+            return Some(terms);
+        }
+        // "... if you exiled four or more cards this way" (Portent of Calamity): how many of
+        // the cards the effect moved are in exile, as it resolves.
+        if let Some(r) = c.strip_prefix("you exiled ") {
+            // (Only for a spell cast as the effect resolves.)
+            if self.duration.is_some() {
+                return None;
+            }
+            let (n, rest) = parse_number(r)?;
+            if rest.trim() != "or more cards this way" {
+                return None;
+            }
+            let exiled = Value::CountSel(Box::new(Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(vars::IT))),
+                Filter::InZone(ZoneKind::Exile),
+            ]))));
+            let cond = Condition::Compare(exiled, Cmp::Ge, n);
+            terms.condition = Some(match terms.condition.take() {
+                Some(w) => Condition::And(vec![w, cond]),
+                None => cond,
+            });
+            return Some(terms);
+        }
+        // "Once each turn, you may cast a spell from the top of your library if it shares a
+        // card type with a card exiled with ~." (Cemetery Illuminator): a quality of the
+        // spell (CR 601.3e), against the cards exiled with ~ (CR 607.2a).
+        if c == "it shares a card type with a card exiled with ~" {
+            let q = Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Linked)),
+                Filter::InZone(ZoneKind::Exile),
+            ]))));
+            terms.what = Some(match terms.what.take() {
+                Some(w) => Filter::and(vec![w, q]),
+                None => q,
             });
             return Some(terms);
         }
@@ -237,6 +303,14 @@ const LEADS: &[Lead] = &[
     ("until your next end step, ", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),
+    ("until that player's next end step, ", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
+    }),
+    ("until the end of that player's next turn, ", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilEndOfYourNextTurn)
+    }),
     ("until the beginning of your next upkeep, ", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::Upkeep))
     }),
@@ -252,6 +326,11 @@ const LEADS: &[Lead] = &[
     ("for as long as they remain exiled, ", |p| {
         set_duration(p, Duration::Permanent)
     }),
+    // (Only right after the instruction that moved the cards: see `followup`.)
+    ("for as long as you control ~, ", |p| {
+        p.lead_control = true;
+        set_duration(p, Duration::WhileYouControlSource)
+    }),
     // Not during the turn the permission is given, then until that turn ends.
     ("during your next turn, ", |p| {
         p.terms.later_turn = true;
@@ -260,6 +339,12 @@ const LEADS: &[Lead] = &[
     }),
     // "For each card exiled this way, you may play that card ..." (each of them).
     ("for each card exiled this way, ", |_| true),
+    // "For each of those cards, its owner may play it until the end of their next turn."
+    // (Suspend Aggression): each card's owner, for that card.
+    ("for each of those cards, ", |p| {
+        p.per_card = true;
+        true
+    }),
     ("during your turn, ", |p| {
         p.your_turn = true;
         true
@@ -297,6 +382,9 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
         ("their owner may ", Who::OwnerOfIt),
         ("the exiled card's owner may ", Who::OwnerOfIt),
         ("they may ", Who::They),
+        ("each player may ", Who::EachPlayer),
+        ("players may ", Who::EachPlayer),
+        ("during each player's turn, that player may ", Who::Active),
         ("that creature's controller may ", Who::CreaturesController),
     ] {
         if let Some(r) = s.strip_prefix(w) {
@@ -309,7 +397,13 @@ fn strip_subject(s: &str) -> Option<(Who, &str)> {
 /// The phrases naming the cards an earlier instruction moved, with how many of them.
 fn referent(s: &str) -> Option<(Option<u32>, &str)> {
     const WHOLE: &[&str] = &[
+        "the cards they exiled this way",
+        "the card they exiled this way",
+        "cards they exiled this way",
         "the cards exiled this way",
+        // "You may cast the exiled nonland card" after exiling cards until a nonland card
+        // (Black Widow, Super Spy): the card found.
+        "the exiled nonland card",
         "cards exiled this way",
         "those exiled cards",
         "the exiled cards",
@@ -356,6 +450,8 @@ fn referent(s: &str) -> Option<(Option<u32>, &str)> {
 fn among_referent(s: &str) -> Option<&str> {
     let r = s.strip_prefix(" from among ")?;
     for w in [
+        // (Etali, Primal Conqueror: the spells cast from among them are nonland anyway.)
+        "the nonland cards exiled this way",
         "the cards exiled this way",
         "cards exiled this way",
         "cards revealed this way",
@@ -424,8 +520,38 @@ fn class_phrase(s: &str) -> Option<(Filter, bool, &str)> {
         })
         .collect();
     let card_phrase = card_phrase.join(" ");
-    let f = object_filter(&card_phrase)?;
+    let f = match noun_or_phrase(&card_phrase) {
+        Some(f) => f,
+        None => object_filter(&card_phrase).or_else(|| either_phrase(&card_phrase))?,
+    };
     Some((f, single, rest))
+}
+
+/// "noncreature or Robot card" (Vision, Spectral Synthezoid): "a noncreature card" or "a
+/// Robot card", where the object phrase can't read the list itself.
+fn either_phrase(s: &str) -> Option<Filter> {
+    let (head, noun) = s.rsplit_once(' ')?;
+    let (a, b) = head.split_once(" or ")?;
+    if b.contains(" or ") || a.contains(',') {
+        return None;
+    }
+    let fa = object_filter(&format!("{a} {noun}"))?;
+    let fb = object_filter(&format!("{b} {noun}"))?;
+    Some(Filter::Or(vec![fa, fb]))
+}
+
+/// "Vehicle or artifact creature card" (Sanwell, Avenger Ace): a Vehicle card, or an
+/// artifact creature card (a Vehicle isn't a creature card, so "creature" describes only
+/// the second alternative).
+fn noun_or_phrase(s: &str) -> Option<Filter> {
+    let (a, rest) = s.split_once(" or ")?;
+    if !matches!(a, "vehicle" | "equipment") || rest.split(' ').count() < 3 {
+        return None;
+    }
+    let (_, noun) = rest.rsplit_once(' ')?;
+    let fa = object_filter(&format!("{a} {noun}"))?;
+    let fb = object_filter(rest)?;
+    Some(Filter::Or(vec![fa, fb]))
 }
 
 /// A card phrase ("red cards", "creature card with mana value 3 or less") as a filter,
@@ -512,6 +638,44 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         });
         return Some((From::Exile, rest));
     }
+    // "from among cards in your graveyard that were milled this turn" (Raul, Trouble
+    // Shooter), "... that were put there from your library this turn" (Kagha, Shadow
+    // Archdruid), "from among cards in graveyards that were put there from libraries this
+    // turn" (Coram, the Undertaker), "from among cards in your graveyard you've surveilled
+    // this turn" (Eye of Duskmantle): cards in the graveyard qualified by how they got
+    // there this turn (see `kw/graveyard_history.rs`).
+    for (zone, z) in [
+        (" from among cards in your graveyard ", From::Graveyard),
+        (" from among cards in graveyards ", From::AnyGraveyard),
+    ] {
+        let Some(r) = s.strip_prefix(zone) else {
+            continue;
+        };
+        use crate::kw::graveyard_history::*;
+        for (q, name, any_zone) in [
+            (
+                "that were milled this turn",
+                super::zone_move_grammar::MILLED_THIS_TURN,
+                false,
+            ),
+            ("that were put there from your library this turn", PUT_THERE_FROM_LIBRARY, false),
+            ("that were put there from libraries this turn", PUT_THERE_FROM_LIBRARY, true),
+            (
+                "that were put there from anywhere other than the battlefield this turn",
+                PUT_THERE_NOT_FROM_BATTLEFIELD,
+                false,
+            ),
+            ("you've surveilled this turn", SURVEILLED_THIS_TURN, false),
+        ] {
+            if any_zone != (z == From::AnyGraveyard) {
+                continue;
+            }
+            if let Some(x) = r.strip_prefix(q).filter(|x| x.is_empty() || x.starts_with(',')) {
+                p.zone_filter = Some(Filter::Custom(name.into()));
+                return Some((z, x));
+            }
+        }
+    }
     // "from among face-up cards your opponents own from exile" (Ashiok, Nightmare Muse).
     if let Some(r) = s.strip_prefix(" from among face-up cards your opponents own from exile") {
         p.zone_filter = Some(Filter::and(vec![
@@ -525,7 +689,7 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
     if let Some(r) = s.strip_prefix(" from your hand, from your graveyard, or from among cards you own in exile") {
         return Some((From::HandGraveyardOwnedExile, r));
     }
-    for (p, z) in [
+    for (p_, z) in [
         (" from your graveyard", From::Graveyard),
         (" from the top of your graveyard", From::GraveyardTop),
         (" from each opponent's graveyard", From::EachOpponentGraveyard),
@@ -535,6 +699,11 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
         (" from exile", From::Exile),
         (" from the top of your library", From::LibraryTop),
         (" from your hand", From::Hand),
+        // "from among cards exiled with ~ this turn" (Maralen, Fae Ascendant).
+        (
+            " from among cards exiled with ~ this turn",
+            From::Linked { owned: false },
+        ),
         (
             " from among cards you own exiled with ~",
             From::Linked { owned: true },
@@ -547,9 +716,25 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
             " from among the cards exiled with ~",
             From::Linked { owned: false },
         ),
+        (
+            " from among cards exiled with it",
+            From::Linked { owned: false },
+        ),
+        // (Ian Malcolm, Chaotician: see `not_theirs`.)
+        (
+            " from among the cards they don't own exiled with ~",
+            From::Linked { owned: false },
+        ),
     ] {
-        if let Some(r) = s.strip_prefix(p) {
+        if let Some(r) = s.strip_prefix(p_) {
             if r.is_empty() || r.starts_with(' ') || r.starts_with(',') {
+                p.linked_it |= p_.ends_with(" with it");
+                p.not_theirs |= p_.contains(" they don't own ");
+                if p_.ends_with(" this turn") {
+                    p.zone_filter = Some(Filter::Custom(
+                        crate::kw::graveyard_history::PUT_THERE_THIS_TURN.into(),
+                    ));
+                }
                 return Some((z, r));
             }
         }
@@ -560,6 +745,24 @@ fn strip_from<'a>(s: &'a str, p: &mut Perm) -> Option<(From, &'a str)> {
 /// "by discarding a card", "by foraging", "by paying 2 life and exiling a card from your
 /// graveyard": the cost, in the imperative.
 fn gerund_cost(s: &str) -> Option<Cost> {
+    // "by paying an amount of {E} equal to its mana value" (Amped Raptor): energy relative
+    // to the spell (see `permissions::spell_relative_cost`).
+    // "by waterbending {X} ..., where X is its mana value" (Hama, the Bloodbender): the
+    // waterbend cost relative to the spell (CR 701.67a).
+    if s == "waterbending {x} where x is its mana value" {
+        return Some(Cost::free().with(CostPart::Effect(Box::new(Effect::KeywordAction {
+            action: KeywordAction::Waterbend,
+            who: PlayerRef::You,
+            what: Sel::None,
+            n: Value::ManaValueOf(Box::new(Sel::This)),
+        }))));
+    }
+    if s == "paying an amount of {e} equal to its mana value" {
+        return Some(Cost {
+            mana: None,
+            parts: vec![CostPart::PayEnergy(Value::ManaValueOf(Box::new(Sel::This)))],
+        });
+    }
     let mut parts = Vec::new();
     for part in s.split(" and ") {
         let part = part.trim();
@@ -727,6 +930,24 @@ const TAILS: &[Tail] = &[
     (" until your next end step", |p| {
         set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
     }),
+    (" using their sneak abilities", |p| {
+        let was = p.terms.only_keyword.is_some();
+        p.terms.only_keyword = Some(crate::keywords::KeywordKind::Sneak);
+        !was
+    }),
+    (" during your turn", |p| {
+        let was = p.your_turn;
+        p.your_turn = true;
+        !was
+    }),
+    (" until the end of their next turn", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilEndOfYourNextTurn)
+    }),
+    (" until their next end step", |p| {
+        p.dur_grantee = true;
+        set_duration(p, Duration::UntilYourNextStep(TriggerStep::End))
+    }),
     (" for as long as it remains exiled", |p| {
         set_duration(p, Duration::Permanent)
     }),
@@ -866,6 +1087,13 @@ fn same_zone_twice(s: &str) -> String {
 /// Parses a permission phrase (lowercase, without the final period).
 pub fn parse(l: &str) -> Option<Perm> {
     let mut p = Perm::default();
+    // "by waterbending {X} rather than paying its mana cost, where X is its mana value"
+    // (Hama, the Bloodbender): X is part of the cost.
+    let l = l.replace(
+        "waterbending {x} rather than paying its mana cost, where x is its mana value",
+        "waterbending {x} where x is its mana value rather than paying its mana cost",
+    );
+    let l = l.as_str();
     let s = strip_lead(end(l).trim(), &mut p)?;
     // "Cast any number of red instant and/or sorcery cards from your graveyard without
     // paying their mana costs.": an instruction (the player chooses which, if any).
@@ -879,7 +1107,28 @@ pub fn parse(l: &str) -> Option<Perm> {
         None => strip_subject(&s)?,
     };
     p.who = who;
+    let s = match s.strip_suffix(", and they can't play cards from their hand") {
+        Some(r) if who == Who::EachPlayer => {
+            p.no_hand = true;
+            r
+        }
+        _ => s,
+    };
     let s = strip_spend(s, &mut p);
+    // "For as long as those cards remain exiled, you may look at them, you may cast
+    // permanent spells from among them, and ..." (Arvinox, the Mind Flail): looking at the
+    // face-down cards, and the permission (CR 406.3b).
+    let s = match s
+        .strip_prefix("look at them, you may ")
+        .or_else(|| s.strip_prefix("look at them and you may "))
+        .or_else(|| s.strip_prefix("look at them, and you may "))
+    {
+        Some(r) => {
+            p.look = true;
+            r.to_string()
+        }
+        None => s,
+    };
     let s = same_zone_twice(&s);
     let mut r: &str = &s;
     // The verb, and what it takes.
@@ -928,6 +1177,10 @@ pub fn parse(l: &str) -> Option<Perm> {
             rest = &r[head.len()..];
         }
     } else if let Some((limit, x)) = referent(r) {
+        // "the card they exiled this way": only each player's permission for their own.
+        if (r[..r.len() - x.len()].contains(" they exiled")) != (p.who == Who::EachPlayer) {
+            return None;
+        }
         p.exiled_named = r.starts_with("the exiled card");
         p.obj = Obj::Referent { limit };
         rest = x;
@@ -965,7 +1218,11 @@ pub fn parse(l: &str) -> Option<Perm> {
             None => (true, x.strip_prefix(" or cast ")?),
         };
         let (sf, ssingle, x) = class_phrase(x)?;
-        if lsingle != ssingle || lsingle != or {
+        // "play a land and cast a spell from among ..." (Coram, the Undertaker): one of
+        // each.
+        if lsingle && ssingle && !or {
+            p.land_and_spell = true;
+        } else if lsingle != ssingle || lsingle != or {
             return None;
         }
         // "from among [cards]": the qualities of the lands and the spells.
@@ -1145,6 +1402,8 @@ pub fn moved(e: &Effect) -> Moved {
             Moved::Unchanged
         }
         Effect::May { effect, .. } => moved(effect),
+        // "Target player exiles the top card of their library."
+        Effect::AsPlayer { effect, .. } => moved(effect),
         Effect::If {
             then, otherwise, ..
         } => match (moved(then), moved(otherwise)) {
@@ -1164,6 +1423,7 @@ pub fn moved(e: &Effect) -> Moved {
         | Effect::Scry { .. }
         | Effect::Surveil { .. }
         | Effect::AddPlayerCounters { .. }
+        | Effect::AddCounters { .. }
         | Effect::CreateToken { .. }
         | Effect::GrantPlayPermission { .. }
         | Effect::WithPlayTerms { .. }
@@ -1171,6 +1431,10 @@ pub fn moved(e: &Effect) -> Moved {
         | Effect::Store { .. } => Moved::Unchanged,
         // "You may look at those cards for as long as they remain exiled."
         Effect::Custom(n) if n.as_str() == crate::zones::MAY_LOOK_AT_EXILED => Moved::Unchanged,
+        // "Exile all cards from that player's hand, then they draw that many cards."
+        Effect::Custom(n) if n.as_str() == crate::kw::hand_graveyard_actions::RECORD_THAT_MANY => {
+            Moved::Unchanged
+        }
         _ => Moved::Other,
     }
 }
@@ -1210,19 +1474,33 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
     // A second zone is a static permission's; "any number of" is chosen as the effect
     // resolves.
     if p.once_each_turn
+        || p.land_and_spell
         || p.also_from.is_some()
         || ((p.any_number || p.count.is_some()) && p.duration.is_some())
     {
         return None;
     }
     let it = Sel::Var(vars::IT);
+    if p.who == Who::EachPlayer || (p.who == Who::OwnerOfIt && p.per_card) {
+        return each_player_effect(p, zone?, ctx);
+    }
+    if p.per_card {
+        return None;
+    }
+    if p.no_hand || (p.dur_grantee && p.who == Who::You) {
+        return None;
+    }
     let who = match p.who {
         Who::You => PlayerRef::You,
         Who::OwnerOfIt => PlayerRef::OwnerOf(Box::new(it.clone())),
         Who::They => p.who_ref.clone()?,
         Who::CreaturesController => PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
+        Who::EachPlayer | Who::Active => return None,
     };
     let mut terms = p.terms_with_condition(ctx)?;
+    if p.who != Who::You && !p.dur_grantee {
+        terms.controller_duration = p.duration.as_ref().is_some_and(said_of_a_player);
+    }
     // "Until your next turn, you may cast sorcery spells as though they had flash."
     if let (
         Obj::Class {
@@ -1305,6 +1583,91 @@ pub fn to_effect(p: &Perm, zone: Option<ZoneKind>, ctx: &CompileContext) -> Opti
             })
         }
         Obj::SelfCard | Obj::Target { .. } => None,
+    }
+}
+
+/// Whether a duration is said relative to a player ("until your next turn", "for as long
+/// as you control ~").
+fn said_of_a_player(d: &Duration) -> bool {
+    matches!(
+        d,
+        Duration::UntilYourNextTurn
+            | Duration::UntilEndOfYourNextTurn
+            | Duration::UntilYourNextStep(_)
+            | Duration::UntilEndOfCombatOnYourNextTurn
+            | Duration::WhileYouControlSource
+    )
+}
+
+/// The variable iterating over the cards each player exiled.
+const EACH_CARD: Var = vars::USER + 9461;
+
+/// "Until your next end step, each player may play the card they exiled this way",
+/// "Until your next turn, players may play cards they exiled this way, and they can't play
+/// cards from their hand": a permission for each card the players exiled (each from their
+/// own library, see [`each_player_exiled_own`]), given to its owner; "your" in the
+/// duration is the controller's (CR 611.2a).
+fn each_player_effect(p: &Perm, zone: ZoneKind, ctx: &CompileContext) -> Option<Effect> {
+    let Obj::Referent { limit: None } = p.obj else {
+        return None;
+    };
+    let d = p.duration.clone()?;
+    if zone != ZoneKind::Exile || p.look || p.from.is_some_and(|f| f != From::Exile) {
+        return None;
+    }
+    let mut terms = p.terms_with_condition(ctx)?;
+    if !p.dur_grantee {
+        terms.controller_duration = said_of_a_player(&d);
+    }
+    let card = Sel::Var(EACH_CARD);
+    let grant = referent_effect(
+        p,
+        PlayerRef::OwnerOf(Box::new(card.clone())),
+        card,
+        zone,
+        None,
+        None,
+        terms,
+    )?;
+    let mut v = vec![Effect::ForEach {
+        sel: Sel::Var(vars::IT),
+        var: EACH_CARD,
+        effect: Box::new(grant),
+    }];
+    if p.no_hand {
+        let hand = Filter::InZone(ZoneKind::Hand);
+        v.push(Effect::AddRestriction {
+            restriction: Restriction::CantCast {
+                who: PlayerFilter::Any,
+                what: hand.clone(),
+            },
+            duration: d.clone(),
+        });
+        v.push(Effect::AddRestriction {
+            restriction: Restriction::CantPlayLandCards {
+                who: PlayerFilter::Any,
+                what: hand,
+            },
+            duration: d,
+        });
+    }
+    Some(Effect::seq(v))
+}
+
+/// Whether the cards the effect last moved were exiled by each player from the top of
+/// their own library ("Each player exiles the top card of their library.").
+fn each_player_exiled_own(e: &Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what: Sel::TopOfLibrary(PlayerRef::EachPlayer, _),
+            ..
+        } => true,
+        Effect::Seq(v) => v
+            .iter()
+            .rev()
+            .find(|x| !matches!(moved(x), Moved::Unchanged))
+            .is_some_and(each_player_exiled_own),
+        _ => false,
     }
 }
 
@@ -1489,12 +1852,14 @@ fn referent_effect(
             // instant spell with mana value 2 or less": only if the spell it would become
             // has those qualities (CR 601.3e).
             let spell_quality = terms.what.take();
+            // "If you haven't cast a spell this turn, you may cast that card." (Conduit of
+            // Worlds): cast only if the condition holds as the effect resolves.
+            let condition = terms.condition.take();
             if p.look
                 || terms.flash
                 || terms.extra_cost.is_some()
                 || terms.spend_any_type
                 || terms.spend_as_any_color
-                || terms.condition.is_some()
                 || p.who != Who::You
                 || (terms.alt_cost.is_some() && p.free)
             {
@@ -1562,6 +1927,14 @@ fn referent_effect(
                 },
                 None => cast,
             };
+            let cast = match condition {
+                Some(c) => Effect::If {
+                    cond: c,
+                    then: Box::new(cast),
+                    otherwise: Box::new(Effect::Noop),
+                },
+                None => cast,
+            };
             Some(if whole {
                 cast
             } else {
@@ -1626,7 +1999,11 @@ fn class_permission_from(
 ) -> Option<PlayPermission> {
     // "from among cards you own in exile with croak counters on them".
     let what = match (&p.zone_filter, from) {
-        (Some(f), From::Exile) => Filter::and(vec![f.clone(), what]),
+        (Some(f), From::Exile | From::Graveyard | From::AnyGraveyard) => {
+            Filter::and(vec![f.clone(), what])
+        }
+        // (Added with the linked cards below.)
+        (Some(_), From::Linked { .. }) => what,
         (Some(_), _) => return None,
         (None, _) => what,
     };
@@ -1658,6 +2035,9 @@ fn class_permission_from(
                 Filter::InZone(ZoneKind::Exile),
                 what,
             ];
+            if let Some(f) = &p.zone_filter {
+                v.push(f.clone());
+            }
             if owned {
                 v.push(Filter::OwnedBy(PlayerRel::You));
             }
@@ -1690,8 +2070,71 @@ fn class_permission_from(
 
 /// The permission as static abilities (`text` is the ability's text).
 pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    // "During each player's turn, that player may cast a spell from among the cards they
+    // don't own exiled with ~" (Ian Malcolm, Chaotician), "... may play a land or cast a
+    // spell from among cards exiled with ~" (Share the Spoils): the active player's
+    // permission, one card each turn.
+    if p.who == Who::Active {
+        let Obj::Class { what, single: true } = &p.obj else {
+            return None;
+        };
+        if !matches!(p.from, Some(From::Linked { owned: false }))
+            || p.once_each_turn
+            || p.your_turn
+            || p.land_and_spell
+        {
+            return None;
+        }
+        let mut q = p.clone();
+        q.who = Who::You;
+        q.once_each_turn = true;
+        if p.not_theirs {
+            q.obj = Obj::Class {
+                what: Filter::and(vec![
+                    what.clone(),
+                    Filter::not(Filter::OwnedBy(PlayerRel::Active)),
+                ]),
+                single: true,
+            };
+        }
+        q.active_player = true;
+        q.not_theirs = false;
+        return to_statics(&q, text, ctx);
+    }
+    if p.not_theirs {
+        return None;
+    }
     if p.who != Who::You || p.duration.is_some() || p.look || p.any_number || p.count.is_some() {
         return None;
+    }
+    // "During each of your turns, you may play a land and cast a spell from among ...":
+    // a permission to play a land and one to cast a spell, each usable once each turn.
+    if p.land_and_spell {
+        let Obj::Class {
+            what: Filter::Or(v),
+            ..
+        } = &p.obj
+        else {
+            return None;
+        };
+        if v.len() != 2 || !p.your_turn || p.once_each_turn {
+            return None;
+        }
+        let mut out = Vec::new();
+        for (i, slot) in [(0, "land"), (1, "spell")] {
+            let mut q = p.clone();
+            q.land_and_spell = false;
+            q.once_each_turn = true;
+            q.once_slot = Some(slot);
+            q.lands = i == 0;
+            q.spells = i == 1;
+            q.obj = Obj::Class {
+                what: v[i].clone(),
+                single: true,
+            };
+            out.extend(to_statics(&q, text, ctx)?);
+        }
+        return Some(out);
     }
     // "You may cast ~ as though it had flash by tapping three untapped creatures you
     // control with flying in addition to paying its other costs." (CR 601.3c): flash for
@@ -1729,7 +2172,7 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
         conds.push(Condition::YourTurn);
     }
     if p.once_each_turn {
-        conds.push(once_unused(""));
+        conds.push(once_unused(p.once_slot.unwrap_or("")));
     }
     conds.extend(play_condition);
     let condition = match conds.len() {
@@ -1847,6 +2290,10 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
         perms
             .into_iter()
             .map(|pp| {
+                let mut pp = pp;
+                if p.active_player {
+                    pp.who = PlayerRel::Active;
+                }
                 let mut s = StaticAbility::new(StaticEffect::PlayPermission(pp.clone()));
                 s.zone = fzone(&pp);
                 s.condition = condition.clone();
@@ -1859,18 +2306,69 @@ pub fn to_statics(p: &Perm, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
 /// A permission sentence after the instruction that moved the cards it's about ("Exile
 /// the top card of your library. You may play that card this turn."), with an optional
 /// leading condition ("If you do, ...", "If it's red, ...").
-fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+pub(crate) fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l).trim();
-    let (cond, rest) = if let Some(r) = l.strip_prefix("if you do, ") {
+    // "If you don't cast it this way, you may cast it this turn." (Rashmi and Ragavan):
+    // whether the spell was cast as the effect resolved.
+    let (cond, rest) = if let Some(r) = l
+        .strip_prefix("if you do, ")
+        .or_else(|| l.strip_prefix("if you cast it this way, "))
+    {
         (Some(Condition::PrevHappened), r)
-    } else if let Some(r) = l.strip_prefix("if you don't, ") {
+    } else if let Some(r) = l
+        .strip_prefix("if you don't, ")
+        .or_else(|| l.strip_prefix("if you don't cast it this way, "))
+    {
         (Some(Condition::Not(Box::new(Condition::PrevHappened))), r)
     } else {
         (None, l)
     };
-    let Some(mut p) = parse(rest) else {
+    // "If an instant or sorcery card is exiled this way, you may cast it ..." (Taster of
+    // Wares): the permission is for the exiled card only if it has that quality (as a
+    // spell, it must have it, CR 601.3e).
+    let (quality, rest) = match rest
+        .strip_prefix("if an ")
+        .or_else(|| rest.strip_prefix("if a "))
+        .and_then(|r| r.split_once(" card is exiled this way, "))
+    {
+        Some((q, r)) => match object_filter(&format!("{q} card")) {
+            Some(f) => (Some(f), r),
+            None => return false,
+        },
+        None => (None, rest),
+    };
+    // "If you haven't cast a spell this turn, you may cast that card." (Conduit of
+    // Worlds): a condition on the permission (or on the cast, as the effect resolves).
+    let (lead_cond, reworded) = match rest
+        .strip_prefix("if ")
+        .and_then(|r| r.split_once(", you may "))
+    {
+        Some((c, r)) if cond.is_none() && quality.is_none() && !c.starts_with("you do") => {
+            (Some(c.to_string()), format!("you may {r}"))
+        }
+        _ => (None, rest.to_string()),
+    };
+    let rest = reworded.as_str();
+    let Some(mut p) = parse(rest).filter(|p| !p.linked_it) else {
         return false;
     };
+    if let Some(c) = lead_cond {
+        // (Only for a spell cast as the effect resolves: a lasting permission's leading
+        // condition is the instruction's, with "Otherwise, ..." perhaps after it.)
+        if p.cond_text.is_some() || p.duration.is_some() {
+            return false;
+        }
+        p.cond_text = Some(c);
+    }
+    if let Some(q) = quality {
+        if !matches!(p.obj, Obj::Referent { limit: None }) {
+            return false;
+        }
+        p.terms.what = Some(match p.terms.what.take() {
+            Some(w) => Filter::and(vec![w, q]),
+            None => q,
+        });
+    }
     if p.who == Who::They {
         if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
             || matches!(b.it_player, PlayerRef::You)
@@ -1880,6 +2378,17 @@ fn followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         p.who_ref = Some(b.it_player.clone());
     }
     if p.who == Who::CreaturesController && !b.in_trigger {
+        return false;
+    }
+    if p.who == Who::EachPlayer && !each_player_exiled_own(prev) {
+        return false;
+    }
+    // "Exile up to one ... card from that player's graveyard. For as long as you control ~,
+    // you may cast the exiled card ..." (Hama, the Bloodbender): about the cards the
+    // previous instruction moved (not cards several earlier instructions exiled).
+    // (A single card: "one of the exiled cards" after several instructions that exiled
+    // cards, Kotose, the Silent Spider, would be all of them.)
+    if p.lead_control && (!matches!(moved(prev), Moved::Cards(_)) || rest.contains(" cards")) {
         return false;
     }
     let zone = referent_zone(Some(prev), b);
@@ -1998,6 +2507,11 @@ fn keep_earlier_moved(prev: &mut Effect, e: Effect) -> Effect {
 /// "it" means after an earlier instruction moved them.
 pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let p = parse(l)?;
+    // "Whenever this Vehicle attacks, you may cast an instant or sorcery spell from among
+    // cards exiled with it." (Kylox's Voltstrider): only where "it" is the source.
+    if p.linked_it && !matches!(b.it, Sel::This) {
+        return None;
+    }
     if matches!(p.obj, Obj::Target { .. }) {
         return target_effect(&p, b);
     }
@@ -2028,8 +2542,50 @@ pub fn effect(l: &str, b: &mut Builder) -> Option<Effect> {
             optional: true,
         });
     }
+    // (Each player's permission needs the instruction that exiled the cards: see
+    // `followup`.)
+    if p.who == Who::EachPlayer || p.lead_control {
+        return None;
+    }
+    let mut p = p;
+    if p.who == Who::They {
+        if super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+            || matches!(b.it_player, PlayerRef::You)
+        {
+            return None;
+        }
+        p.who_ref = Some(b.it_player.clone());
+    }
+    // "Exile a face-down permanent you control face up: You may play that card this turn."
+    // (Primordial Mist): the card the cost exiled (CR 400.7j).
+    if matches!(b.it, Sel::Var(v) if v == crate::zones::COST_EXILED)
+        && matches!(p.obj, Obj::Referent { limit: None })
+    {
+        let e = to_effect(&p, Some(ZoneKind::Exile), b.ctx)?;
+        return Some(Effect::seq(vec![
+            Effect::Store {
+                var: vars::IT,
+                sel: Sel::All(Filter::and(vec![
+                    Filter::In(Box::new(b.it.clone())),
+                    Filter::InZone(ZoneKind::Exile),
+                ])),
+            },
+            e,
+        ]));
+    }
     let zone = referent_zone(None, b);
     let e = to_effect(&p, zone, b.ctx)?;
+    // "Then put the rest of the exiled cards into your hand." (Portent of Calamity): the
+    // cards chosen among that are still where they were.
+    if let (Some(z), true) = (zone, stores_among(&e)) {
+        b.named.push((
+            super::r406_exile_until::THE_REST.into(),
+            Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(AMONG))),
+                Filter::InZone(z),
+            ])),
+        ));
+    }
     super::choice_grammar_objects::permission_for_chosen(e, None, b)
 }
 
@@ -2058,7 +2614,6 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
     match &p.duration {
         None => {
             if terms.flash
-                || terms.extra_cost.is_some()
                 || terms.spend_as_any_color
                 || terms.condition.is_some()
                 || terms.exile_instead
@@ -2083,16 +2638,19 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
             if terms.alt_cost.is_some() && p.free {
                 return None;
             }
-            // "by paying {1} rather than paying its mana cost" (CR 118.9).
-            let cast = match &terms.alt_cost {
-                Some(c) => Effect::WithPlayTerms {
+            // "by paying {1} rather than paying its mana cost" (CR 118.9), "by paying
+            // {R}{R} in addition to its other costs" (CR 601.2b, 601.2f).
+            let cast = if terms.alt_cost.is_some() || terms.extra_cost.is_some() {
+                Effect::WithPlayTerms {
                     terms: PlayTerms {
-                        alt_cost: Some(c.clone()),
+                        alt_cost: terms.alt_cost.clone(),
+                        extra_cost: terms.extra_cost.clone(),
                         ..Default::default()
                     },
                     effect: Box::new(cast),
-                },
-                None => cast,
+                }
+            } else {
+                cast
             };
             // "..., and mana of any type can be spent to cast that spell" (CR 118.14).
             Some(if terms.spend_any_type {
@@ -2136,7 +2694,8 @@ fn target_effect(p: &Perm, b: &mut Builder) -> Option<Effect> {
 /// The terms of the last permission the effect gives, if it ends by giving one.
 pub(crate) fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
     match e {
-        Effect::WithPlayTerms { terms, .. } => Some(terms),
+        // (Not the terms of spells cast as the effect resolves.)
+        Effect::WithPlayTerms { terms, effect } if !ends_casting(effect) => Some(terms),
         Effect::AddPlayerEffect {
             effect: PlayerModification::PlayPermission(pp),
             ..
@@ -2153,6 +2712,7 @@ pub(crate) fn last_terms(e: &mut Effect) -> Option<&mut PlayTerms> {
 fn ends_casting(e: &Effect) -> bool {
     match e {
         Effect::CastCard { .. } => true,
+        Effect::WithPlayTerms { effect, .. } => ends_casting(effect),
         Effect::Seq(v) => v.last().is_some_and(ends_casting),
         _ => false,
     }
@@ -2192,16 +2752,32 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
         quality = Some(f);
         r
     };
-    if !matches!(
-        r,
-        "your graveyard, exile it instead" | "a graveyard, exile it instead"
-    ) {
-        return false;
-    }
+    // "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    // library instead." (Kylox's Voltstrider).
+    let to = match r {
+        "your graveyard, exile it instead" | "a graveyard, exile it instead" => {
+            Destination::zone(ZoneKind::Exile)
+        }
+        "your graveyard, put it on the bottom of its owner's library instead"
+        | "a graveyard, put it on the bottom of its owner's library instead" => {
+            let mut to = Destination::zone(ZoneKind::Library);
+            to.position = LibraryPosition::Bottom;
+            to
+        }
+        _ => return false,
+    };
+    let exile = to.zone == ZoneKind::Exile;
     // (A permission to play lands as well: only its spells are cast.)
     if quality.is_none() {
         if let Some(terms) = last_terms(prev) {
-            terms.exile_instead = true;
+            if exile {
+                terms.exile_instead = true;
+            } else {
+                if terms.graveyard_instead.is_some() || terms.exile_instead {
+                    return false;
+                }
+                terms.graveyard_instead = Some(to);
+            }
             return true;
         }
     }
@@ -2230,7 +2806,7 @@ fn exile_instead(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
                     from: None,
                     to: Some(ZoneKind::Graveyard),
                 },
-                action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                action: ReplacementAction::MoveInstead(to),
                 self_replacement: false,
                 optional: false,
             },

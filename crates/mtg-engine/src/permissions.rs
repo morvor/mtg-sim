@@ -124,8 +124,10 @@ pub fn with_resolution_terms<R>(
     f: impl FnOnce(&mut Game) -> R,
 ) -> R {
     let prev = std::mem::replace(&mut g.resolution_alt_cost, terms.alt_cost.clone());
+    let prev_extra = std::mem::replace(&mut g.resolution_extra_cost, terms.extra_cost.clone());
     let r = f(g);
     g.resolution_alt_cost = prev;
+    g.resolution_extra_cost = prev_extra;
     r
 }
 
@@ -217,7 +219,7 @@ pub fn allowing(
         // "For as long as you control ~", "during any turn you attacked with ~", "during
         // your next turn", "you may cast red spells from among them" (see `PlayTerms`).
         let ctx = Ctx::new(gr.source, gr.player);
-        if g.effect_expired(&gr.duration, gr.source, gr.player)
+        if g.effect_expired(&gr.duration, gr.source, gr.duration_player())
             // "During your next turn": not before that turn begins (when the permission
             // becomes one that lasts until end of turn, see `turn.rs`).
             || (gr.terms.later_turn && matches!(gr.duration, Duration::UntilEndOfYourNextTurn))
@@ -459,6 +461,14 @@ pub fn attach(
             if perm.terms.cast_face.is_some_and(|f| f != opt.face) {
                 continue;
             }
+            // "using their sneak abilities": only for that keyword's cost.
+            if perm
+                .terms
+                .only_keyword
+                .is_some_and(|k| opt.method != CastMethod::Keyword(k))
+            {
+                continue;
+            }
             let changes_the_way = perm.terms.flash
                 || perm.requires_cost()
                 || perm.terms.cost_reduction > 0
@@ -546,6 +556,22 @@ pub fn spell_relative_cost(cost: &Cost, mv: u32) -> Cost {
             .map(|part| match part {
                 CostPart::PayLife(v) => CostPart::PayLife(fix(v)),
                 CostPart::PayEnergy(v) => CostPart::PayEnergy(fix(v)),
+                // "by waterbending {X} rather than paying its mana cost, where X is its mana
+                // value" (Hama, the Bloodbender).
+                CostPart::Effect(e) => match &**e {
+                    Effect::KeywordAction {
+                        action,
+                        who,
+                        what,
+                        n,
+                    } => CostPart::Effect(Box::new(Effect::KeywordAction {
+                        action: *action,
+                        who: who.clone(),
+                        what: what.clone(),
+                        n: fix(n),
+                    })),
+                    _ => part.clone(),
+                },
                 other => other.clone(),
             })
             .collect(),

@@ -744,6 +744,10 @@ pub struct TargetSpec {
     pub distinct_from: Vec<u8>,
     /// "Divide N damage among any number of targets" (CR 601.2d).
     pub divide: Option<Value>,
+    /// With `divide`: "distribute up to N counters": the amount divided is chosen too,
+    /// from the number of targets up to N.
+    #[serde(default)]
+    pub divide_up_to: bool,
     /// Targets chosen by an opponent (CR 601.7).
     pub chosen_by_opponent: bool,
     /// Human-readable description ("target creature you control").
@@ -903,6 +907,7 @@ impl TargetSpec {
             max: Value::Const(1),
             distinct_from: vec![],
             divide: None,
+            divide_up_to: false,
             chosen_by_opponent: false,
             text: text.into(),
             condition: None,
@@ -1019,6 +1024,12 @@ pub mod vars {
     /// Permanents the most recent phase-out instruction phased out, directly or
     /// indirectly (CR 702.26g): "each creature that phased out this way".
     pub const PHASED_OUT: Var = USER + 12_100;
+    /// Players dealt damage by the most recent damage effect ("if a player is dealt
+    /// damage this way", "the number of opponents dealt damage this way").
+    pub const DAMAGED_PLAYERS: Var = USER + 14_000;
+    /// Objects the most recent "becomes"/"gets" instruction (`Effect::Modify`) applied to
+    /// ("each artifact that became a creature this way").
+    pub const MODIFIED: Var = USER + 14_020;
 }
 
 /// Selects players and/or objects.
@@ -1292,6 +1303,15 @@ pub enum PlayerFilter {
     /// (CR 504.1, 121.2) — "except the first one they draw in each of their draw steps"
     /// is `Not` this. See `draw_rules::next_draw_is_first_in_draw_step`.
     FirstDrawInDrawStep,
+    /// A player a game-history condition is true of ("target player who lost life this
+    /// turn", "each player who tapped a land for mana this turn"): the condition evaluated
+    /// with the player as the iterated player (`PlayerRel::Iterated`,
+    /// `PlayerRef::Iterated`; see `oracle/patterns/history_filters_4.rs`).
+    History(Box<Condition>),
+    /// A player whose life total compares so with half their own starting life total ("a
+    /// player's life total is less than or equal to half their starting life total"):
+    /// twice the life total against the starting life total, no rounding (CR 119.1).
+    HalfStartingLife(Cmp),
     /// One of the players a reference resolves to ("enchanted player").
     Ref(Box<PlayerRef>),
     /// A requirement on a target player checked only as the target is chosen ("target
@@ -1552,6 +1572,9 @@ pub enum Filter {
     SharesCreatureType(Box<Sel>),
     SharesCardType(Box<Sel>),
     SharesColor(Box<Sel>),
+    /// Has the same mana value as one of the selected objects ("protection from each mana
+    /// value among artifacts you control", CR 202.3, 702.16a).
+    SharesManaValue(Box<Sel>),
     HasKeyword(KeywordKind),
     HasCounter(Option<CounterKind>),
     /// The number of counters of a kind (of all kinds: None) on it compared with a value
@@ -1644,6 +1667,18 @@ pub enum Filter {
     /// Was dealt damage this turn by an object in the selection ("a creature dealt damage
     /// by ~ this turn").
     DealtDamageThisTurnBy(Box<Sel>),
+    /// An object a game-history condition is true of ("a creature that fought this turn",
+    /// "a card in a graveyard that was put there from a library this turn", "a creature
+    /// that entered since your last turn ended"): the condition evaluated with the object
+    /// as [`vars::TESTED`], which its trigger conditions name as
+    /// `Filter::In(Sel::Var(TESTED))` (see `oracle/patterns/history_filters_4.rs`).
+    History(Box<Condition>),
+    /// A requirement on a target object checked only as the target is chosen, not again
+    /// as the spell or ability resolves (CR 608.2b; see
+    /// `target_rules::relaxed_on_resolution`): Veteran's Voice's "target creature other
+    /// than the creature tapped this way", where the creature to be tapped is the enchanted
+    /// creature as the target is chosen (CR 601.2c, before costs are paid, 601.2h).
+    AsChosen(Box<Filter>),
     /// Is a basic land type, e.g. "nonbasic land" = Land and Not(Supertype(Basic)).
     /// Of the color chosen by the source's linked ability ("the chosen color",
     /// CR 607.2d). Matches nothing if no such choice was made (CR 607.5a).
@@ -1741,6 +1776,11 @@ pub enum Value {
     PlayerCounters(PlayerRef, CounterKind),
     LifeTotal(PlayerRef),
     StartingLife,
+    /// A player's state as the turn began ("that player's life total as the turn began",
+    /// "the number of untapped lands they controlled at the beginning of this turn", 1 if
+    /// they were the monarch), recorded as each turn begins (`turn_start.rs`); the sum
+    /// for several players.
+    AsTurnBegan(TurnStartStat, PlayerRef),
     HandSize(PlayerRef),
     LibrarySize(PlayerRef),
     GraveyardSize(PlayerRef),
@@ -1892,6 +1932,19 @@ pub enum HistoryWindow {
     /// "since [player's] last upkeep": from the latest upkeep of the player's before this
     /// one, including this turn so far.
     SinceLastUpkeep(PlayerRef),
+    /// "this game": the events of the whole game kept for such queries (spells cast,
+    /// cards cycled, damage dealt; `turn_start::kept_for_game`).
+    ThisGame,
+}
+
+/// What [`Value::AsTurnBegan`] reads of a player's state as the turn began.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TurnStartStat {
+    Life,
+    HandSize,
+    /// 1 if the player was the monarch (CR 725), else 0.
+    Monarch,
+    UntappedLands,
 }
 
 /// How [`Value::EventsThisTurn`] tallies the events it finds.
@@ -1940,6 +1993,8 @@ pub enum Among {
     /// Card types that are permanent types (CR 110.4a).
     PermanentTypes,
     CreatureTypes,
+    /// Planeswalker types (CR 205.3j) of planeswalkers.
+    PlaneswalkerTypes,
     /// Plains, Island, Swamp, Mountain, Forest (CR 205.3i).
     BasicLandTypes,
     Colors,
@@ -2140,6 +2195,11 @@ pub enum NextTurnPart {
     /// "during [player]'s next combat phase": the first combat phase of a turn of that
     /// player that begins after the effect is created.
     CombatPhase,
+    /// "during that combat phase", "at the beginning of that combat": the additional combat
+    /// phase the instruction before added to this turn (see `kw::added_combat_phases`).
+    /// Nothing waits if it added none; the effect is dropped if that combat phase doesn't
+    /// begin this turn.
+    AddedCombatPhase,
 }
 
 /// A phase or step an effect adds to a turn (CR 500.8–500.10).
@@ -2638,6 +2698,31 @@ pub enum StepKind {
     Turn,
 }
 
+/// A change to the mana a permanent is tapped for ([`ReplacementAction::ManaChange`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManaChange {
+    /// It applies only when the permanent is tapped for at least this much mana ("is
+    /// tapped for two or more mana"); 0 for any.
+    pub min_amount: u32,
+    /// The mana that changes: all of it (`None`), or only mana of these types ("instead of
+    /// white mana"; "instead of any other color": the colored mana).
+    pub only: Option<Vec<crate::mana::ManaType>>,
+    /// What that mana becomes.
+    pub to: ManaChangeTo,
+    /// "instead of any other type and amount": the permanent produces this many mana in
+    /// place of all it would produce. `None`: each changed mana stays one mana.
+    pub amount: Option<u32>,
+}
+
+/// What [`ManaChange`] turns the mana into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManaChangeTo {
+    Type(crate::mana::ManaType),
+    /// "mana of a color of your choice": the player tapping the permanent chooses a color
+    /// each time it applies.
+    ColorOfChoice,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ReplacementAction {
     /// Enters tapped (CR 614.1c).
@@ -2732,6 +2817,11 @@ pub enum ReplacementAction {
     /// "[A permanent tapped for mana] produces [type] instead of any other type"
     /// (CR 106.12b): each mana it would produce is of that type; the amount is unchanged.
     ManaTypeInstead(crate::mana::ManaType),
+    /// Other changes to the mana a permanent tapped for mana produces (CR 106.12b; see
+    /// `mana_change.rs`): "If a land is tapped for two or more mana, it produces {C}
+    /// instead of any other type and amount.", "it produces mana of a color of your choice
+    /// instead of any other type", "it produces colorless mana instead of white mana".
+    ManaChange(ManaChange),
     /// Prevent part of each damage event (CR 615.1a), evaluated for that event
     /// (`Value::EventAmount` is the damage): "prevent half that damage, rounded up",
     /// "prevent all but 1 of that damage", "you may prevent X of that damage, where X is
@@ -2762,6 +2852,13 @@ pub enum Restriction {
         defender: PlayerFilter,
         planeswalkers: bool,
         battles: bool,
+    },
+    /// "can't attack [you or] a permanent you control" (Immortal Obligation): no
+    /// planeswalker or battle controlled by a player matching `controller` (with
+    /// [`Restriction::CantAttackPlayer`] for the player).
+    CantAttackPermanentsOf {
+        attackers: Filter,
+        controller: PlayerFilter,
     },
     /// "is goaded" as a static ability: goaded by the source's controller for as long as
     /// the effect applies (CR 701.15b).
@@ -2820,6 +2917,14 @@ pub enum Restriction {
     },
     /// "can attack as though it didn't have defender" (overrides CR 702.3b).
     AttackDespiteDefender(Filter),
+    /// "~ can attack players who attacked you during their last turn as though it didn't
+    /// have defender" (Weathered Sentinels; overrides CR 702.3b for some players): it can
+    /// attack a player for whom `players` holds, evaluated with that player as the
+    /// iterated player ([`PlayerRef::Iterated`]); not planeswalkers or battles.
+    AttackPlayersDespiteDefender {
+        attackers: Filter,
+        players: Box<Condition>,
+    },
     /// "[attackers] can attack as though they had haste" (CR 302.6, 508.1a with 609.4):
     /// they may attack though their controller hasn't controlled them continuously since
     /// their most recent turn began. With `defender`, only those players and planeswalkers
@@ -3538,6 +3643,10 @@ pub enum StaticEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum PlayerModification {
     Hexproof,
+    /// "You have hexproof from blue" (CR 702.11d on a player, Veil of Summer): spells with
+    /// the quality and abilities from sources with it that the player's opponents control
+    /// can't target them.
+    HexproofFrom(Filter),
     Shroud,
     ProtectionFrom(Filter),
     MaxHandSize(Option<Value>),
@@ -3729,6 +3838,26 @@ pub struct PlayTerms {
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
     pub way: u32,
+    /// "Until your next end step, each player may play the card they exiled this way": a
+    /// duration said relative to the controller of the effect giving the permission, not
+    /// to the player who gets it (see `PlayGrant::duration_player`).
+    #[serde(default)]
+    pub controller_duration: bool,
+    /// For an effect's permission given with `controller_duration`: that controller (set
+    /// as the permission is given).
+    #[serde(default)]
+    pub duration_player: Option<PlayerId>,
+    /// "If that spell doesn't target a creature you control, it costs {8} more to cast
+    /// this way." (Mavinda, Students' Advocate): a generic increase (CR 601.2f) for a spell
+    /// cast with the permission that has no target with these qualities (relative to the
+    /// permission's source and player) once its targets are chosen (CR 601.2c).
+    #[serde(default)]
+    pub cost_increase_unless_targets: Option<(u32, Filter)>,
+    /// "You may cast creature spells from your graveyard using their sneak abilities."
+    /// (Ninja Teen): spells are cast with the permission only for that keyword's cost
+    /// (and its other rules), not their mana costs.
+    #[serde(default)]
+    pub only_keyword: Option<crate::keywords::KeywordKind>,
 }
 
 impl PlayTerms {
@@ -3797,6 +3926,13 @@ impl PlayTerms {
             self.spend_type_as_any_color = other.spend_type_as_any_color;
         }
         self.snow_as_any_color |= other.snow_as_any_color;
+        self.controller_duration |= other.controller_duration;
+        if other.only_keyword.is_some() {
+            self.only_keyword = other.only_keyword;
+        }
+        if other.cost_increase_unless_targets.is_some() {
+            self.cost_increase_unless_targets = other.cost_increase_unless_targets.clone();
+        }
         if other.cost_increase_each.is_some() {
             self.cost_increase_each = other.cost_increase_each.clone();
         }
@@ -4777,6 +4913,11 @@ pub enum Effect {
     /// (CR 500.4): the mana the inner effect adds stays in its pool until the turn's cleanup
     /// step ends (the effect ends in CR 514.2).
     PersistentMana(Box<Effect>),
+    /// "[Add mana]. Until end of combat, you don't lose this mana as steps end." (Avatar
+    /// Roku, Firebender; as firebending's mana, CR 702.189a): the mana the inner effect adds
+    /// doesn't empty from its pool as the steps of combat end; it's lost as the combat
+    /// phase's end of combat step ends (CR 500.4).
+    CombatMana(Box<Effect>),
     /// "This Class's level becomes N" (a class level bar's activated ability, CR 107.16a,
     /// 716.2a).
     SetClassLevel {

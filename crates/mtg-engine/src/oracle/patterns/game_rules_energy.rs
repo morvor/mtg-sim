@@ -135,6 +135,8 @@ fn reword_energy_paid(l: &str) -> Option<String> {
         s = format!("if you do, {r}");
     }
     s = s.replace(", where x is the amount of {e} paid this way", "");
+    // "unless its controller pays {1} for each {E} paid this way" (Aether Spike).
+    s = s.replace("{1} for each {e} paid this way", "{x}");
     s = s.replace("the amount of {e} paid this way", "x");
     // "gets -1/-1 until end of turn for each {E} paid this way": X times the change.
     if let Some((head, tail)) = s.split_once(" for each {e} paid this way") {

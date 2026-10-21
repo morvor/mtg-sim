@@ -126,6 +126,7 @@ impl Game {
         let mut etb = EtbInfo::default();
         let attack = self.destination_attack(d, owner, ctx);
         d.apply_etb(&mut etb, owner, attack);
+        etb.blocking = self.destination_block(d, ctx).or(etb.blocking);
         etb
     }
 
@@ -143,6 +144,22 @@ impl Game {
         m.pos = d.pos;
         let attack = self.destination_attack(d, owner, ctx);
         d.apply_etb(&mut m.etb, owner, attack);
+        if let Some(a) = self.destination_block(d, ctx) {
+            m.etb.blocking = Some(a);
+        }
+    }
+
+    /// "Put [a creature card] onto the battlefield blocking that creature"
+    /// (`Effect::TokensJoinCombat` around a move): the attacking creature it blocks as it
+    /// enters (CR 509.4).
+    fn destination_block(&self, d: &PreparedDestination, ctx: &Ctx) -> Option<ObjectId> {
+        if d.zone != ZoneKind::Battlefield {
+            return None;
+        }
+        ctx.vars
+            .get(&crate::tokens::JOIN_BLOCKING)
+            .and_then(|v| v.first())
+            .and_then(|e| e.object())
     }
 
     /// What an object put onto the battlefield attacking attacks: the player who'll control
@@ -157,6 +174,28 @@ impl Game {
             return None;
         }
         let who = d.controller_of(owner);
+        // "Put it onto the battlefield tapped and attacking that player [or a planeswalker
+        // they control]" (`Effect::TokensJoinCombat` around a move): only what the effect
+        // names (CR 508.4).
+        if let Some(ds) = ctx.vars.get(&crate::tokens::TOKEN_DEFENDER) {
+            let preferred = ds.first().copied();
+            let mut options = crate::combat::attack_target_options(self, preferred);
+            options.retain(|t| ds.contains(t));
+            if options.len() <= 1 {
+                return options.first().copied();
+            }
+            return self
+                .ask_entities(
+                    who,
+                    None,
+                    "Choose what the creature is attacking",
+                    options,
+                    1,
+                    1,
+                )
+                .first()
+                .copied();
+        }
         self.attack_target_for_new_attacker(who, ctx)
     }
 }

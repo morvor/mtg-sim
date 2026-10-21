@@ -411,7 +411,7 @@ fn counters_events(r: &str) -> Option<Parsed> {
     let r = end(r);
     // "a +1/+1 counter is removed from ~": each counter removed is a trigger event, however
     // it's removed.
-    if let Some(x) = r.strip_prefix("a ") {
+    if let Some(x) = r.strip_prefix("a ").or_else(|| r.strip_prefix("an ")) {
         if let Some((kind, rest)) = crate::oracle::costs::counter_kind(x) {
             if rest.trim_start() == "counter is removed from ~" {
                 return Some((
@@ -421,6 +421,25 @@ fn counters_events(r: &str) -> Option<Parsed> {
                         each: true,
                     },
                     Sel::This,
+                    PlayerRef::You,
+                ));
+            }
+            // "an oil counter is removed from a permanent you control".
+            if let Some(obj) = rest.trim_start().strip_prefix("counter is removed from ") {
+                let np = obj.strip_prefix("a ").or_else(|| obj.strip_prefix("an "))?;
+                let (filter, false, tail) = parse_object_phrase(np)? else {
+                    return None;
+                };
+                if !tail.trim().is_empty() {
+                    return None;
+                }
+                return Some((
+                    TriggerCond::CountersRemoved {
+                        filter,
+                        kind: Some(kind),
+                        each: true,
+                    },
+                    Sel::TriggerObject,
                     PlayerRef::You,
                 ));
             }
