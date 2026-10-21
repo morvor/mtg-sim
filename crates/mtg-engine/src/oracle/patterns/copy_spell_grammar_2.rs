@@ -328,3 +328,80 @@ fn if_the_copy_is_a_permanent_spell(l: &str, prev: &mut Effect, _b: &mut Builder
 }
 
 inventory::submit! { FollowupPattern { name: "copy spell grammar 2: if the copy is a permanent spell, it gains", priority: 45, apply: if_the_copy_is_a_permanent_spell } }
+
+/// "Exile an instant or sorcery card at random from your graveyard. Then copy each card
+/// exiled with ~." (Arcane Bombardment): the exile is linked to the ability (CR 607.2a),
+/// and every card exiled with it so far that's still in exile is copied (CR 707.12).
+fn copy_each_card_exiled_with(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let l = end(&lower);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if l != "copy each card exiled with ~" {
+        return false;
+    }
+    fn link_last_exile(e: &mut Effect) -> bool {
+        match e {
+            Effect::Exile {
+                face_down: false,
+                link,
+                ..
+            } => {
+                *link = true;
+                true
+            }
+            Effect::Seq(v) => v.last_mut().is_some_and(link_last_exile),
+            _ => false,
+        }
+    }
+    if !link_last_exile(prev) {
+        return false;
+    }
+    let copy = Effect::CopyCard {
+        what: Sel::All(Filter::And(vec![
+            Filter::In(Box::new(Sel::Linked)),
+            Filter::InZone(ZoneKind::Exile),
+        ])),
+        named: None,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, copy]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "copy spell grammar 2: then copy each card exiled with ~", priority: 45, apply: copy_each_card_exiled_with } }
+
+/// "You may copy an instant or sorcery card in it." after "Target opponent reveals their
+/// hand." (Reversal of Fortune): a copy of a card the controller chooses from that hand,
+/// created in that zone (CR 707.12).
+fn copy_a_card_in_revealed_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("copy ")?.strip_suffix(" in it")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("reveals their hand") {
+        return None;
+    }
+    let owner = match &b.it_player {
+        p @ (PlayerRef::Target(_) | PlayerRef::TriggerPlayer) => p.clone(),
+        _ => return None,
+    };
+    let (f, plural, tail) = parse_object_phrase(r)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::CopyCard {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                f,
+                Filter::InZone(ZoneKind::Hand),
+                Filter::OwnedByPlayer(Box::new(owner)),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        named: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "copy spell grammar 2: copy a card in the revealed hand", priority: 80, parse: copy_a_card_in_revealed_hand } }
