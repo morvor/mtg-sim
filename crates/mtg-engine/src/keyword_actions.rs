@@ -1,5 +1,9 @@
 //! Keyword actions (CR 701) implemented in code.
 
+/// `Event::Custom` name of a player investigating (CR 701.16a): "whenever you
+/// investigate".
+pub const INVESTIGATED: &str = "investigated";
+
 use crate::ability::*;
 use crate::eval::Ctx;
 use crate::game::Game;
@@ -25,6 +29,13 @@ pub fn perform(
         KeywordAction::Investigate => {
             for p in players {
                 for _ in 0..k {
+                    // "Whenever you investigate": each time (Erdwal Illuminator).
+                    g.emit(crate::events::Event::Custom {
+                        name: INVESTIGATED.into(),
+                        player: Some(p),
+                        obj: None,
+                        amount: 0,
+                    });
                     if let Some(spec) = crate::tokens::predefined("Clue") {
                         let chars = crate::tokens::token_characteristics(&spec);
                         g.create_tokens(
