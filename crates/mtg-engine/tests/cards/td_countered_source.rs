@@ -80,7 +80,7 @@ fn trickbind_countering_a_spell_ability_without_a_permanent_restricts_nothing() 
 
 #[test]
 fn tishanas_tidebinder_removes_abilities_while_it_remains() {
-    cr!("701.6a", "613.1f");
+    cr!("701.6a", "613.1f", "613.7");
     ruling!(
         "Tishana's Tidebinder",
         "If the affected permanent gains an ability after Tishana's Tidebinder's effect begins to apply to it, it will keep that ability."
@@ -93,10 +93,26 @@ fn tishanas_tidebinder_removes_abilities_while_it_remains() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
     assert!(t.obj_now(rod).chars.abilities.is_empty());
-    // Tishana leaves: the Rod has its ability again.
+    // An ability it gains later (a later timestamp, CR 613.7) is kept.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::Objects(vec![rod])),
+            mods: vec![mtg_engine::ability::Modification::AddKeyword(
+                mtg_engine::keywords::Keyword::new(mtg_engine::keywords::KeywordKind::Flying),
+            )],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(t
+        .obj_now(rod)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    // Tishana leaves: the Rod has its ability again (and still flying).
     t.g.destroy(tish, None);
     t.resolve_all();
-    assert_eq!(t.obj_now(rod).chars.abilities.len(), 1);
+    assert_eq!(t.obj_now(rod).chars.abilities.len(), 2);
 }
 
 #[test]

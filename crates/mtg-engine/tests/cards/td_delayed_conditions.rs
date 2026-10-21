@@ -4,6 +4,7 @@
 //! Wishes).
 
 use crate::combat2_common::*;
+use crate::td_duration_endpoints::may_cast;
 use crate::td_next_turn_durations::mana;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -93,7 +94,14 @@ fn grinning_totem_card_goes_to_the_graveyard_at_your_next_upkeep_if_not_played()
     t.advance_to(P1, Step::End);
     t.resolve_all();
     assert_eq!(t.zone(exiled), Zone::Exile);
+    mana(&mut t, P0);
+    assert!(may_cast(&mut t, P0, exiled));
+    // As P0's upkeep begins the permission ends, before the delayed ability resolves.
     t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    mana(&mut t, P0);
+    assert!(!may_cast(&mut t, P0, exiled));
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
 }
@@ -123,8 +131,15 @@ fn three_wishes_puts_the_unplayed_cards_into_your_graveyard() {
     // Still exiled through the opponent's turn.
     t.advance_to(P1, Step::End);
     assert_eq!(t.zone(t.g.current(a)), Zone::Exile);
-    // P0's next upkeep.
+    let bolt = t.g.current(a);
+    mana(&mut t, P0);
+    assert!(may_cast(&mut t, P0, bolt));
+    // P0's next upkeep: the permission has ended as the delayed ability waits.
     t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    mana(&mut t, P0);
+    assert!(!may_cast(&mut t, P0, bolt));
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));

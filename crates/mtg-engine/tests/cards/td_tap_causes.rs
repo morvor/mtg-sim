@@ -43,6 +43,21 @@ fn solitary_sanctuary_ignores_an_already_tapped_creature_and_the_opponents_own_t
     assert!(!t.g.tap_with(theirs, false, Some(P0), false));
     t.settle();
     assert_eq!(t.stack_len(), 0);
+    // A spell P0 controls has P1 tap it: P1 taps it, not P0.
+    t.g.objects[theirs.0 as usize].tapped = false;
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &Effect::AsPlayer {
+            who: mtg_engine::ability::PlayerRef::Player(P1),
+            effect: Box::new(Effect::Tap {
+                what: Sel::All(Filter::Objects(vec![theirs])),
+            }),
+        },
+        &mut ctx,
+    );
+    t.settle();
+    assert!(t.obj_now(theirs).tapped);
+    assert_eq!(t.stack_len(), 0);
     // P1 taps it by attacking with it: P1 tapped it, not P0.
     t.g.objects[theirs.0 as usize].tapped = false;
     t.answer_targets(P0, &[Entity::Object(mine)]);

@@ -163,3 +163,28 @@ fn case_file_auditor_digs_whenever_you_solve_a_case() {
     assert!(t.in_hand(P0, "Pacifism"));
     assert!(!t.in_hand(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn medomais_prophecy_draws_nothing_if_that_name_was_cast_earlier_this_turn() {
+    cr!("603.7b");
+    let mut t = TestGame::new(2);
+    let saga = t.battlefield(P0, "Medomai's Prophecy");
+    t.answer(P0, DecisionKind::Name, Answer::Text("Lightning Bolt".into()));
+    for _ in 0..2 {
+        t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+        t.resolve_all();
+    }
+    // A Lightning Bolt before chapter III: the next one isn't the first this turn.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    mana(&mut t, P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.resolve_all();
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let before = t.hand_size(P0);
+    mana(&mut t, P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before - 1);
+}

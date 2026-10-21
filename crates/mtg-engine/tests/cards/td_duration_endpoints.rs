@@ -10,7 +10,7 @@ use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 /// Whether casting `card` is among `p`'s legal actions now.
-fn may_cast(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+pub fn may_cast(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
     t.g.recompute();
     t.g.turn.priority = Some(p);
     t.g.legal_actions(p)
@@ -41,8 +41,11 @@ fn brazen_cannonade_card_is_playable_until_end_of_combat_on_your_next_turn() {
     let bolt = cannonade_exiles(&mut t, "Lightning Bolt");
     mana(&mut t, P0);
     assert!(may_cast(&mut t, P0, bolt));
-    // During the opponent's turn too.
+    // During the opponent's turn too, after their combat.
     t.advance_to(P1, Step::Upkeep);
+    mana(&mut t, P0);
+    assert!(may_cast(&mut t, P0, bolt));
+    t.advance_to(P1, Step::PostcombatMain);
     mana(&mut t, P0);
     assert!(may_cast(&mut t, P0, bolt));
     // P0's next turn, through its combat.

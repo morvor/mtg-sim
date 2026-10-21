@@ -110,4 +110,35 @@ fn neyith_draws_once_for_creatures_fighting_or_becoming_blocked() {
     t.advance_to(P0, Step::DeclareBlockers);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), before + 1);
+    // Dealing combat damage isn't fighting: nothing more.
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+}
+
+#[test]
+fn neyith_draws_once_when_two_of_your_creatures_fight_and_one_dies() {
+    cr!("701.14a", "603.2c", "603.10a");
+    ruling!(
+        "Neyith of the Dire Hunt",
+        "You draw just one card as Neyith’s first ability resolves, no matter how many creatures you control fought"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Neyith of the Dire Hunt");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let hand = t.hand_size(P0);
+    // An effect makes them fight each other.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &mtg_engine::ability::Effect::Fight {
+            a: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::Objects(vec![wurm])),
+            b: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::Objects(vec![bears])),
+        },
+        &mut ctx,
+    );
+    t.resolve_all();
+    // The Bears died fighting; both fought: one card.
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.hand_size(P0), hand + 1);
 }

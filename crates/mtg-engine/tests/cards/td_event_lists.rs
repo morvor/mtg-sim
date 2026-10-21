@@ -95,11 +95,7 @@ fn syr_konrad_triggers_on_each_kind_of_creature_card_event() {
 
 #[test]
 fn tergrid_takes_sacrificed_and_discarded_permanent_cards() {
-    cr!("603.2", "603.10a");
-    ruling!(
-        "Tergrid, God of Fright // Tergrid's Lantern",
-        "it doesn't matter which graveyard it goes to"
-    );
+    cr!("603.2");
     supported("Tergrid, God of Fright // Tergrid's Lantern");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Tergrid, God of Fright // Tergrid's Lantern");
@@ -127,3 +123,63 @@ fn tergrid_takes_sacrificed_and_discarded_permanent_cards() {
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
 }
 
+
+#[test]
+fn tergrid_takes_a_permanent_its_owner_isnt_the_sacrificing_opponent() {
+    cr!("603.2");
+    ruling!(
+        "Tergrid, God of Fright // Tergrid's Lantern",
+        "If an opponent sacrifices a nontoken permanent, it doesn't matter which graveyard it goes to."
+    );
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Tergrid, God of Fright // Tergrid's Lantern");
+    // P1 controls a creature P2 owns: sacrificed, it goes to P2's graveyard.
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.g.objects[bears.0 as usize].controller = P1;
+    t.g.objects[bears.0 as usize].base_controller = P1;
+    t.g.recompute();
+    let edict = t.hand(P0, "Diabolic Edict");
+    mana(&mut t, P0);
+    t.answer_yes(P0, true);
+    t.cast_with(P0, edict, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    let got = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(got.len(), 1);
+    assert_eq!(t.obj_now(got[0]).controller, P0);
+}
+
+#[test]
+fn tergrid_card_that_left_the_graveyard_and_returned_is_a_new_object() {
+    cr!("400.7");
+    ruling!(
+        "Tergrid, God of Fright // Tergrid's Lantern",
+        "If the card leaves the graveyard before Tergrid's ability resolves, you can't put it onto the battlefield, even if it returns to the graveyard before the ability resolves."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tergrid, God of Fright // Tergrid's Lantern");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let edict = t.hand(P0, "Diabolic Edict");
+    mana(&mut t, P0);
+    t.answer_yes(P0, true);
+    t.cast_with(P0, edict, &[Entity::Player(P1)]).unwrap();
+    // The Edict resolves; Tergrid's ability waits on the stack.
+    t.resolve();
+    assert_eq!(t.stack_len(), 1);
+    let card = t.g.current(bears);
+    assert_eq!(t.zone(card), mtg_engine::object::Zone::Graveyard(P1));
+    // The card leaves the graveyard and returns to it.
+    let exiled = t
+        .g
+        .move_object(card, mtg_engine::object::Zone::Exile, events::MoveCause::Effect, Some(P1))
+        .unwrap();
+    t.g.move_object(
+        exiled,
+        mtg_engine::object::Zone::Graveyard(P1),
+        events::MoveCause::Effect,
+        Some(P1),
+    )
+    .unwrap();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}

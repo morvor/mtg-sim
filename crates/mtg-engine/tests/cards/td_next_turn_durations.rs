@@ -263,7 +263,10 @@ fn empty_city_ruse_skips_every_combat_phase_of_that_players_next_turn() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     cast_resolve(&mut t, P0, "Empty City Ruse", &[Entity::Player(P1)]);
     // P0's own combat phase this turn still happens.
+    let turn = t.g.turn.number;
     t.advance_to(P0, Step::BeginningOfCombat);
+    assert_eq!(t.g.turn.number, turn);
+    assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
     // P1's turn has no combat phase.
     t.advance_to(P1, Step::PrecombatMain);
     t.answer(

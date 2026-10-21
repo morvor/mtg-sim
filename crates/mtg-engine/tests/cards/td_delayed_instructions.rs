@@ -58,6 +58,18 @@ fn portcullis_holds_the_creature_until_it_leaves() {
     let elves = t.enter(P1, "Llanowar Elves");
     t.resolve_all();
     assert_eq!(t.zone(t.g.current(elves)), Zone::Exile);
+    // Portcullis loses its abilities: the delayed ability was set up already.
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    t.g.exec(
+        &mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::All(mtg_engine::ability::Filter::Objects(vec![gate])),
+            mods: vec![mtg_engine::ability::Modification::RemoveAllAbilities],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(t.obj_now(gate).chars.abilities.is_empty());
     t.g.destroy(gate, None);
     t.resolve_all();
     let back = named(&t, "Llanowar Elves");

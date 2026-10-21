@@ -314,5 +314,10 @@ fn goblin_flotilla_gives_first_strike_this_combat_unless_you_pay() {
         .obj_now(blocker)
         .chars
         .has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
+    // "That creature" is the other creature, not the Flotilla.
+    assert!(!t
+        .obj_now(flotilla)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
 }
 
