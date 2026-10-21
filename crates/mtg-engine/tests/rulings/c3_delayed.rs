@@ -120,3 +120,49 @@ fn mnemonic_betrayal_returns_the_cards_still_exiled() {
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
     assert!(!t.in_exile("Grizzly Bears"));
 }
+
+#[test]
+fn rescue_from_the_underworld_returns_both_cards_at_your_next_upkeep() {
+    cr!("603.7a", "400.7j");
+    ruling!(
+        "Rescue from the Underworld",
+        "Rescue from the Underworld is exiled as it resolves, not later as its delayed trigger resolves."
+    );
+    supported("Rescue from the Underworld");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    cast_new(&mut t, P0, "Rescue from the Underworld", &[Entity::Object(giant)]);
+    t.resolve_all();
+    assert!(t.in_exile("Rescue from the Underworld"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+}
+
+#[test]
+fn rescue_from_the_underworld_a_sacrificed_token_doesnt_return() {
+    cr!("603.7a", "400.7j", "111.8");
+    ruling!(
+        "Rescue from the Underworld",
+        "If you sacrifice a creature token to cast Rescue from the Underworld, it won't return to the battlefield, although the target creature card will."
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let token = crate::r_s02_common::create_token(&mut t, P0, "Soldier");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(token)]);
+    cast_new(&mut t, P0, "Rescue from the Underworld", &[Entity::Object(giant)]);
+    t.resolve_all();
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 0);
+}

@@ -17,6 +17,11 @@
 //! the card, put it into its owner's graveyard" (`delayed_grammar_2.rs` and the
 //! interpretation `delayed-if-not-played-means-still-exiled`: the card is still exiled),
 //! the card's owner being the player who exiled it from their hand.
+//!
+//! "Return that card and the sacrificed card to the battlefield under your control at the
+//! beginning of your next upkeep." (Rescue from the Underworld): "the sacrificed card" is
+//! the card the sacrifice cost put into a public zone (CR 400.7j: a token sacrificed
+//! returns nothing; one put into another public zone instead returns from there).
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -177,3 +182,29 @@ fn if_the_player_hasnt_played_the_card(l: &str, b: &mut Builder) -> Option<Effec
 }
 
 inventory::submit! { EffectPattern { name: "delayed grammar 3: if the player hasn't played the card, they put it into their graveyard", priority: 100, parse: if_the_player_hasnt_played_the_card } }
+
+/// Adds the sacrificed card to what the (delayed) return instruction moves.
+fn add_sacrificed_card(e: &mut Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.iter_mut().rev().any(add_sacrificed_card),
+        Effect::DelayedTrigger { body, .. } => add_sacrificed_card(&mut body.effect),
+        Effect::Move { what, .. } => {
+            let old = std::mem::replace(what, Sel::None);
+            *what = Sel::Union(vec![old, Sel::Var(crate::zones::COST_MOVED)]);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn and_the_sacrificed_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, tail) = l.split_once(" and the sacrificed card ")?;
+    if !head.starts_with("return ") {
+        return None;
+    }
+    let mut e = crate::oracle::effects::parse_sentence(&format!("{head} {tail}"), b)?;
+    add_sacrificed_card(&mut e).then_some(e)
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 3: return [object] and the sacrificed card", priority: 100, parse: and_the_sacrificed_card } }
