@@ -105,7 +105,7 @@ fn singular(np: &str) -> Option<String> {
 }
 
 /// Past-tense verbs and their present forms: (past, base form, third person singular).
-const VERBS: &[(&str, &str, &str)] = &[
+pub(crate) const VERBS: &[(&str, &str, &str)] = &[
     ("cast", "cast", "casts"),
     ("drew", "draw", "draws"),
     ("drawn", "draw", "draws"),
@@ -136,6 +136,10 @@ const VERBS: &[(&str, &str, &str)] = &[
     ("fought", "fight", "fights"),
     ("turned", "turn", "turns"),
     ("exerted", "exert", "exerts"),
+    ("waterbent", "waterbend", "waterbends"),
+    ("earthbent", "earthbend", "earthbends"),
+    ("firebent", "firebend", "firebends"),
+    ("airbent", "airbend", "airbends"),
 ];
 
 /// Passive forms: "was put into", "were put into", "was dealt", "was blocked".

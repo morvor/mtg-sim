@@ -855,3 +855,56 @@ fn any_of_that_damage_by(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "history 4: any of that damage was dealt by [a source]", priority: 900, parse: any_of_that_damage_by } }
+
+/// "Whenever you waterbend, earthbend, firebend, or airbend, draw a card. Then if you've
+/// done all four this turn, transform ~." (Avatar Aang): each of the trigger's actions
+/// happened this turn.
+fn done_all_of_them(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let lower = t.to_lowercase();
+    let r = lower.strip_prefix("whenever you ")?;
+    // "A, B, C, or D, [effect]" / "A or B, [effect]".
+    let (head, rest) = r.split_once(" or ")?;
+    let last = rest.split_once(", ")?.0;
+    let mut items: Vec<&str> = head.trim_end_matches(',').split(", ").collect();
+    items.push(last);
+    if items.iter().any(|w| w.contains(' ')) {
+        return None;
+    }
+    let n = items.len();
+    let word = match n {
+        2 => "both",
+        3 => "all three",
+        4 => "all four",
+        _ => return None,
+    };
+    let marker = format!(" then if you've done {word} this turn, ");
+    let i = lower.find(&marker)?;
+    let pasts: Option<Vec<String>> = items
+        .iter()
+        .map(|v| {
+            super::history_conditions::VERBS
+                .iter()
+                .find(|(_, base, _)| base == v)
+                .map(|(past, _, _)| format!("you've {past} this turn"))
+        })
+        .collect();
+    let cond = pasts?.join(" and ");
+    let rewritten = format!(
+        "{} Then if {cond}, {}",
+        &t[..i],
+        &t[i + marker.len()..]
+    );
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = t.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "history 4: then if you've done all four this turn", priority: 90, parse: done_all_of_them } }

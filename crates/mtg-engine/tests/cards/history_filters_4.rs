@@ -1186,3 +1186,24 @@ fn lolths_emblem_tops_up_the_life_loss_to_eight() {
     t.resolve_all();
     assert_eq!(t.life(P1), 12, "3 combat damage, then 5 more: 8 this turn");
 }
+
+#[test]
+fn avatar_aang_transforms_once_all_four_bendings_happened_this_turn() {
+    cr!("701.65a", "603.4");
+    assert_supported("Avatar Aang // Aang, Master of Elements");
+    let mut t = TestGame::new(2);
+    let aang = t.battlefield(P0, "Avatar Aang // Aang, Master of Elements");
+    let before = t.hand_size(P0);
+    for (i, b) in ["waterbend", "earthbend", "firebend", "airbend"].iter().enumerate() {
+        mtg_engine::kwa::emit(&mut t.g, b, P0, None, 0);
+        t.g.flush_events();
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), before + i + 1);
+        let name = t.obj_now(aang).chars.name.to_string();
+        if i < 3 {
+            assert_eq!(name, "Avatar Aang", "not all four yet");
+        } else {
+            assert_eq!(name, "Aang, Master of Elements");
+        }
+    }
+}
