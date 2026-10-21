@@ -202,3 +202,32 @@ fn sewers_of_estark_on_an_attacker_makes_it_unblockable() {
     t.resolve_all();
     assert!(!legal_blocks(&mut t, &[(wall, bears)]));
 }
+
+#[test]
+fn camel_prevents_desert_damage_to_itself_and_its_band_while_attacking() {
+    cr!("702.22a", "615.1a");
+    supported("Camel");
+    let mut t = TestGame::new(2);
+    let camel = t.battlefield(P0, "Camel");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    let d1 = t.battlefield(P1, "Desert");
+    let d2 = t.battlefield(P1, "Desert");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    declare(
+        &mut t,
+        P0,
+        &[
+            (camel, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+            (lions, Entity::Player(P1)),
+        ],
+    );
+    t.advance_to(P0, Step::EndOfCombat);
+    t.activate(P1, d1, 1, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.g.obj(bears).damage, 0);
+    t.activate(P1, d2, 1, &[Entity::Object(lions)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Savannah Lions"));
+}
