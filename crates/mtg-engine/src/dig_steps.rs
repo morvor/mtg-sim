@@ -50,6 +50,20 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
                 .into_iter()
                 .filter(|o| !taken.contains(o))
                 .collect();
+            if cards.is_empty() && shuffled_into_library(to) {
+                // "Then shuffle the rest into your library" with no rest: the library is
+                // shuffled anyway (CR 701.24d).
+                let mut owners: Vec<PlayerId> = ctx
+                    .var_objects(vars::DUG)
+                    .iter()
+                    .map(|o| g.obj(*o).owner)
+                    .collect();
+                owners.sort_unstable_by_key(|p| p.idx());
+                owners.dedup();
+                for p in owners {
+                    g.shuffle_library(p);
+                }
+            }
             let placed = place(g, cards, to, ctx);
             note_placed(ctx, &placed);
             // "for each card put into your graveyard this way".
@@ -128,6 +142,13 @@ fn remaining(g: &Game, from: &Sel, ctx: &Ctx) -> Vec<ObjectId> {
 /// Whether `to` leaves the cards where they are.
 pub fn in_place(to: &Destination) -> bool {
     to.zone == ZoneKind::Library && matches!(to.position, LibraryPosition::FromTop(0))
+}
+
+/// Whether `to` shuffles the cards into their owners' libraries.
+fn shuffled_into_library(to: &Destination) -> bool {
+    to.zone == ZoneKind::Library
+        && matches!(to.position, LibraryPosition::Shuffled)
+        && to.position_choice.is_empty()
 }
 
 /// Puts `cards` `to`; returns the objects they are afterwards. Cards already in their
