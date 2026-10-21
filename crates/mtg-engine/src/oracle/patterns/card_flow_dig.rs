@@ -277,7 +277,8 @@ fn take_from_among(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some((desc, r)) = r.split_once(" from among them") else {
         return false;
     };
-    let Some(filter) = card_filter(desc, b) else {
+    // "a card that shares a creature type with it": "it" as before the dig.
+    let Some(filter) = card_filter(desc, b).and_then(|f| super::dig_grammar::with_prev_it(f, b)) else {
         return false;
     };
     let r = r.trim_start();

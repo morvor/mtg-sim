@@ -90,8 +90,12 @@ fn put_her_nth(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "Shuffle ~ into your library from your graveyard" (Kogla and Yidaro, after discarding
 /// it as a cost): the card if it's in your graveyard (the object the source became).
-fn shuffle_self_from_graveyard(l: &str, _b: &mut Builder) -> Option<Effect> {
-    if end(l) != "shuffle ~ into your library from your graveyard" {
+fn shuffle_self_from_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "When you cycle ~, shuffle it into your library from your graveyard." (Yidaro): "it"
+    // is ~.
+    let it_is_self = end(l) == "shuffle it into your library from your graveyard"
+        && matches!(b.it, Sel::This);
+    if end(l) != "shuffle ~ into your library from your graveyard" && !it_is_self {
         return None;
     }
     Some(Effect::ShuffleIntoLibrary {
@@ -137,6 +141,16 @@ fn self_and(s: &str, b: &mut Builder) -> Option<Sel> {
     }
     // "put ~ and each creature blocking or blocked by it on top of their owners'
     // libraries" (Vortex Elemental).
+    // "put ~ and each creature it's blocking on top of their owners' libraries" (Gomazoa).
+    if r == "each creature it's blocking" {
+        return Some(Sel::Union(vec![
+            Sel::This,
+            Sel::All(Filter::and(vec![
+                Filter::Type(crate::types::CardType::Creature),
+                Filter::BlockedBySource,
+            ])),
+        ]));
+    }
     if r == "each creature blocking or blocked by it" {
         return Some(Sel::Union(vec![
             Sel::This,

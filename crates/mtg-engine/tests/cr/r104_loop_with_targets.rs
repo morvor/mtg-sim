@@ -8,6 +8,7 @@ use mtg_engine::*;
 #[test]
 fn a_loop_of_targeted_triggered_abilities_is_a_draw() {
     cr!("104.4b", "732.5");
+    interp!("mandatory-loop-detection");
     // Faceless Devourer: "When ~ enters, exile another target creature with shadow.
     // When ~ leaves the battlefield, return the exiled card to the battlefield under its
     // owner's control."

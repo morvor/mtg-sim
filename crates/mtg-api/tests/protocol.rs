@@ -42,6 +42,7 @@ fn scripted(lines: &[&str]) -> Scripted {
 #[test]
 fn invalid_answers_get_an_error_and_are_asked_again() {
     cr!("117.1");
+    interp!("external-agent-invalid-answers");
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 1);
     let bolt = t.hand(P0, "Lightning Bolt");
@@ -96,6 +97,7 @@ fn invalid_answers_get_an_error_and_are_asked_again() {
 
 #[test]
 fn too_many_invalid_answers_fall_back_to_the_default() {
+    interp!("external-agent-invalid-answers");
     let t = TestGame::new(2);
     let s = scripted(&[r#"{"index": 7}"#, r#"{"index": 8}"#, r#"{"index": 9}"#]);
     let mut agent = ProtocolAgent::new(

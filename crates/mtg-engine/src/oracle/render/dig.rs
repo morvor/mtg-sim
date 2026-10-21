@@ -230,8 +230,32 @@ impl Renderer<'_> {
                 filter,
                 count,
                 exile,
+                total,
+                cap,
             } => {
                 let p = self.possessive_for(who);
+                let verb = if *exile { "exile" } else { "reveal" };
+                if let Some(stat) = total {
+                    let stat = match stat {
+                        TotalStat::ManaValue => "mana value",
+                        TotalStat::Power => "power",
+                        TotalStat::Toughness => "toughness",
+                        TotalStat::PowerAndToughness => "power and toughness",
+                    };
+                    let v = self.value(count);
+                    let (subj, done) = if p == "your" {
+                        ("you", verb.to_string())
+                    } else {
+                        (
+                            "{alt:they|that player}",
+                            "{alt:have|has} exiled".to_string(),
+                        )
+                    };
+                    let vp = format!(
+                        "{verb} cards from the top of {p} library until {subj} {done} cards with total {stat} {v} or greater{{opt: this way}}"
+                    );
+                    return self.with_subject(who, &vp, false);
+                }
                 let noun = self.card_noun(filter);
                 let n = match count {
                     Value::Const(1) => with_article(&noun),
@@ -241,10 +265,27 @@ impl Renderer<'_> {
                         format!("{v} {}", plural(&noun))
                     }
                 };
-                let verb = if *exile { "exile" } else { "reveal" };
                 let subj = if p == "your" { "you" } else { "they" };
-                let vp =
-                    format!("{verb} cards from the top of {p} library until {subj} {verb} {n}");
+                if let Some(cap) = cap {
+                    let c = self.value(cap);
+                    let vp = format!(
+                        "{verb} cards from the top of {p} library until {n} or {c} cards are revealed, whichever comes first"
+                    );
+                    return self.with_subject(who, &vp, false);
+                }
+                let are = if matches!(count, Value::Const(1)) {
+                    "is"
+                } else {
+                    "are"
+                };
+                let done = if *exile { "exiled" } else { "revealed" };
+                let vp = if p == "your" {
+                    format!("{verb} cards from the top of {p} library until {subj} {verb} {n}")
+                } else {
+                    format!(
+                        "{verb} cards from the top of {p} library until {{alt:{subj} {verb} {n}|{n} {are} {done}}}"
+                    )
+                };
                 self.with_subject(who, &vp, false)
             }
         }

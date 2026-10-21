@@ -34,6 +34,7 @@ fn secrets() -> (TestGame, ObjectId, ObjectId) {
 #[test]
 fn opponents_hand_and_libraries_are_hidden() {
     cr!("400.2", "401.2", "402.3");
+    interp!("hidden-information");
     let (t, _, _) = secrets();
     let p0 = json(&observe(&t.g, Some(P0)));
     // The opponent's hand: only its size (CR 402.3).
@@ -79,6 +80,7 @@ fn opponents_hand_and_libraries_are_hidden() {
 #[test]
 fn face_down_permanents_are_seen_only_by_their_controller() {
     cr!("708.5", "708.2");
+    interp!("hidden-information");
     let (t, akroma, _) = secrets();
     let p0 = observe(&t.g, Some(P0));
     let p0_json = json(&p0);
@@ -119,6 +121,7 @@ fn face_down_exiled_cards_are_hidden_until_a_player_may_look() {
 #[test]
 fn requests_and_events_dont_leak_hidden_cards() {
     cr!("402.3", "708.5");
+    interp!("hidden-information");
     let (mut t, _, _) = secrets();
     let before = t.g.event_feed.len();
     t.g.draw_cards(P1, 1);
@@ -283,4 +286,20 @@ fn an_open_choice_is_shown_to_every_player() {
     let o = observe(&t.g, Some(P1));
     let a = o.battlefield.iter().find(|o| o.id == angel.0).unwrap();
     assert_eq!(a.choices, vec!["P0 chose war", "P1 chose peace"]);
+}
+
+#[test]
+fn every_players_mana_pool_is_public() {
+    cr!("106.4");
+    interp!("hidden-information");
+    // Announcing mana in pools (CR 106.4a, 106.4b) is a communication procedure; the
+    // engine keeps every pool public instead.
+    let mut t = TestGame::new(2);
+    t.g.add_mana(
+        P1,
+        vec![mtg_engine::mana::Mana::new(mtg_engine::mana::ManaType::R)],
+        None,
+    );
+    let obs = observe(&t.g, Some(P0));
+    assert_eq!(obs.players[1].mana_pool.get("R"), Some(&1));
 }

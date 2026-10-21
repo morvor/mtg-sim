@@ -829,10 +829,39 @@ impl Renderer<'_> {
                 format!("{syms} was spent to cast {}", self.me())
             }
             Condition::And(v) => {
+                if let Some(s) = self.attempt(|r| r.events_joined(v, "and")) {
+                    return s;
+                }
+                if let Some(s) = self.attempt(|r| r.cast_from_elsewhere(v)) {
+                    return s;
+                }
+                // "if it's the second creature spell you cast this turn".
+                if let [Condition::SelMatches(Sel::TriggerSpell, k), Condition::Compare(a, cmp, b)] =
+                    v.as_slice()
+                {
+                    if let Some(s) = self.attempt(|r| r.nth_spell_cast(a, *cmp, b, Some(k))) {
+                        return s;
+                    }
+                }
+                // "if it's the first combat phase of your turn".
+                if let [Condition::YourTurn, Condition::Custom(n)] = v.as_slice() {
+                    if n == crate::kw::activated_ability_kind::FIRST_COMBAT_PHASE {
+                        return "it's the first combat phase of your turn".into();
+                    }
+                }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "and")
             }
             Condition::Or(v) => {
+                if let Some(s) = self.attempt(|r| r.events_joined(v, "or")) {
+                    return s;
+                }
+                if let Some(s) = self.attempt(|r| r.some_of_them_history(v)) {
+                    return s;
+                }
+                if let Some(s) = self.attempt(|r| r.own_entered_or_cast(v)) {
+                    return s;
+                }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
                 merge_subject(&parts, "or")
             }
@@ -845,6 +874,12 @@ impl Renderer<'_> {
             Condition::Compare(a, cmp, b) => self.compare_condition(a, *cmp, b),
             Condition::Exists(f) => self.exists(f, false),
             Condition::SelNonEmpty(s) => {
+                if let Some(h) = self.attempt(|r| r.some_of_them_history(std::slice::from_ref(c))) {
+                    return h;
+                }
+                if let Some(h) = self.attempt(|r| r.acted_on_this_way(s)) {
+                    return h;
+                }
                 let s = self.sel(s, Case::Subj);
                 format!("{s} exists")
             }
@@ -892,6 +927,11 @@ impl Renderer<'_> {
                     _ => format!("{subj} {t}"),
                 }
             }
+            // "if ~ didn't attack this turn".
+            Condition::SelMatches(s, Filter::AttackedThisTurn) => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} attacked this turn")
+            }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
                     return c;
@@ -927,7 +967,9 @@ impl Renderer<'_> {
             // 601.2a); cards casting their own card say "if you cast it from your ...".
             Condition::CastFrom(z) => {
                 let z = zone_word(*z);
-                format!("{{alt:you cast it from your {z}|~ {{alt:was|is}} cast from a {z}}}")
+                // Your own card is in your zone (CR 400.3): "from a graveyard" is "from
+                // your graveyard".
+                format!("{{alt:you cast it from your {z}|~ {{alt:was|is}} cast from a {z}|~ {{alt:was|is}} cast from your {z}}}")
             }
             Condition::AllTriggerConditionsThisTurn(v) => {
                 let parts: Vec<String> = v.iter().map(|t| self.happened_this_turn(t)).collect();
@@ -990,6 +1032,11 @@ impl Renderer<'_> {
     }
 
     fn negated_condition(&mut self, c: &Condition) -> String {
+        if let Condition::Compare(a, cmp, b) = c {
+            if let Some(s) = self.attempt(|r| r.events_compare(a, *cmp, b, true)) {
+                return s;
+            }
+        }
         if let Condition::Custom(n) = c {
             if let Some(s) = self.custom_condition_terms(n, true) {
                 return s;
@@ -1000,6 +1047,11 @@ impl Renderer<'_> {
             Condition::YourTurn => "it's not your turn".into(),
             Condition::NotYourTurn => "it's your turn".into(),
             Condition::PrevHappened => "you don't".into(),
+            // "if ~ didn't attack this turn".
+            Condition::SelMatches(s, Filter::AttackedThisTurn) => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} didn't attack this turn")
+            }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, true) {
                     return c;
@@ -1463,6 +1515,9 @@ impl Renderer<'_> {
     }
 
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
+        if let Some(s) = self.attempt(|r| r.events_compare(a, cmp, b, false)) {
+            return s;
+        }
         if let Some(s) = self.this_turn_compare(a, cmp, b) {
             return s;
         }
@@ -1527,6 +1582,14 @@ impl Renderer<'_> {
                     cmp_phrase(cmp, &n.to_string())
                 );
             }
+        }
+        if let Value::Custom(name) = a {
+            if let Some(s) = self.attempt(|r| r.cast_history_compare(name, cmp, b)) {
+                return s;
+            }
+        }
+        if let Some(s) = self.attempt(|r| r.nth_spell_cast(a, cmp, b, None)) {
+            return s;
         }
         if let (Value::Custom(name), Value::Const(n)) = (a, b) {
             if let Some(s) = self.custom_compare(name, cmp, *n) {

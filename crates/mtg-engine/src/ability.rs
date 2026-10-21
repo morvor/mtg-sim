@@ -767,6 +767,9 @@ pub enum TargetGroup {
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
+    /// There's a land type all of them have ("two basic land cards that share a land
+    /// type", CR 205.3i).
+    ShareLandType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
     /// No two of them are controlled by the same player ("with different controllers",
@@ -823,6 +826,15 @@ pub enum DigStep {
         filter: Filter,
         count: Value,
         exile: bool,
+        /// "until they have exiled cards with total mana value 4 or greater": the cards
+        /// matching `filter` are counted by this stat (a running total) instead of one
+        /// each.
+        #[serde(default)]
+        total: Option<TotalStat>,
+        /// "until an artifact card or X cards are revealed, whichever comes first": at most
+        /// this many cards are revealed.
+        #[serde(default)]
+        cap: Option<Value>,
     },
 }
 
@@ -1037,6 +1049,9 @@ pub enum Sel {
     /// The top N cards of each of the players' libraries ("the top two cards of your
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
+    /// The bottom N cards of each of the players' libraries ("the bottom card of your
+    /// library", CR 401.2), bottom first.
+    BottomOfLibrary(PlayerRef, Value),
     /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
     /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
     /// has since changed zones is a new object the note doesn't find (CR 400.7).
@@ -1498,6 +1513,10 @@ pub enum Filter {
     /// An object each of the selected objects could legally be attached to right now
     /// ("another permanent it can enchant", CR 301.5c, 303.4).
     CanBeAttachedBy(Box<Sel>),
+    /// An object (an Aura or Equipment card, say) that could legally be attached to each
+    /// of the selected objects or players right now ("an Aura card that could enchant that
+    /// creature", CR 303.4a, 301.5c): the reverse of [`Filter::CanBeAttachedBy`].
+    CouldAttachTo(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").

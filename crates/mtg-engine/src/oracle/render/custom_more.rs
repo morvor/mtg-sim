@@ -45,7 +45,9 @@ impl Renderer<'_> {
             "melee:opponents you attacked with a creature this combat" => {
                 "{alt:the number of players you attacked this combat|the number of opponents you attacked with a creature this combat}".into()
             }
-            "opponents being attacked" => "the number of opponents you're attacking".into(),
+            "opponents being attacked" => {
+                "the number of opponents {alt:you're attacking|being attacked}".into()
+            }
             "opponents you attacked this turn" => {
                 "the number of opponents you attacked this turn".into()
             }
