@@ -513,3 +513,124 @@ fn barrin_counts_a_returned_token() {
     end_step(&mut t, P0);
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+/// The candidates of each object choice `p` was asked since `from`.
+fn offers(t: &TestGame, p: PlayerId, from: usize) -> Vec<Vec<ObjectId>> {
+    asked_since(t, from)
+        .into_iter()
+        .filter_map(|(q, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if q == p => {
+                Some(candidates.iter().filter_map(|e| e.object()).collect())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn liliana_ultimate_opponents_choose_in_order_then_sacrifice_the_rest_at_once() {
+    cr!("101.4", "101.4c", "110.4", "701.21a");
+    ruling!(
+        "Liliana, Dreadhorde General",
+        "As Liliana's last ability resolves, the next opponent in turn order (or, if it's somehow an opponent's turn, that opponent) makes all of their choices for it, then each other opponent in turn order does the same, knowing the choices made before them. Then all the unchosen permanents are sacrificed at the same time."
+    );
+    ruling!(
+        "Liliana, Dreadhorde General",
+        "The permanent types are artifact, creature, enchantment, land, and planeswalker. Supertypes, like legendary, aren't permanent types."
+    );
+    supported("Liliana, Dreadhorde General");
+    let mut t = TestGame::new(3);
+    let lili = pw(&mut t, P0, "Liliana, Dreadhorde General", 10);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    // P1: two lands and two legendary creatures; keeps a land and a creature.
+    let f1 = t.battlefield(P1, "Forest");
+    let f2 = t.battlefield(P1, "Forest");
+    let l1 = t.battlefield(P1, "Isamaru, Hound of Konda");
+    let l2 = t.battlefield(P1, "Thalia, Guardian of Thraben");
+    // P2: an artifact and two creatures.
+    let art = t.battlefield(P2, "Bonesplitter");
+    let c1 = t.battlefield(P2, "Hill Giant");
+    let c2 = t.battlefield(P2, "Gray Ogre");
+    t.answer_choose(P1, &[o(l2)]);
+    t.answer_choose(P1, &[o(f1)]);
+    t.answer_choose(P2, &[o(art)]);
+    t.answer_choose(P2, &[o(c2)]);
+    let seen: Vec<_> = [P1, P2]
+        .into_iter()
+        .map(|p| {
+            watch(
+                &mut t,
+                p,
+                |d| matches!(d, Decision::ChooseEntities { .. }),
+                |g| g.permanents().count(),
+            )
+        })
+        .collect();
+    let before = t.g.permanents().count();
+    let from = t.asked().len();
+    t.activate(P0, lili, 2, &[]).unwrap();
+    t.resolve();
+    let order: Vec<PlayerId> = asked_since(&t, from)
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
+        .map(|(p, _)| p)
+        .collect();
+    // P1 made all of its choices before P2 made any.
+    let last_p1 = order.iter().rposition(|p| *p == P1).unwrap();
+    let first_p2 = order.iter().position(|p| *p == P2).unwrap();
+    assert!(last_p1 < first_p2);
+    assert!(!order.contains(&P0));
+    for s in &seen {
+        assert!(s.lock().unwrap().iter().all(|n| *n == before));
+    }
+    // Being legendary didn't let P1 keep a second creature.
+    for id in [mine, f1, l2, art, c2] {
+        assert!(t.on_battlefield(id));
+    }
+    for id in [f2, l1, c1] {
+        assert!(!t.on_battlefield(id));
+    }
+}
+
+#[test]
+fn liliana_ultimate_a_permanent_counts_for_any_of_its_types() {
+    cr!("101.4c");
+    ruling!(
+        "Liliana, Dreadhorde General",
+        "While making choices for Liliana's last ability, if a permanent has more than one permanent type, it can count for any of them."
+    );
+    // An artifact creature as the artifact, another creature as the creature, an
+    // enchantment creature as the enchantment.
+    let mut t = TestGame::new(2);
+    let lili = pw(&mut t, P0, "Liliana, Dreadhorde General", 10);
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let ench_creature = t.battlefield(P1, "Boon Satyr");
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    t.answer_choose(P1, &[o(thopter)]);
+    t.answer_choose(P1, &[o(bears)]);
+    t.answer_choose(P1, &[o(ench_creature)]);
+    t.activate(P0, lili, 2, &[]).unwrap();
+    t.resolve();
+    for id in [thopter, bears, ench_creature] {
+        assert!(t.on_battlefield(id));
+    }
+    assert!(!t.on_battlefield(anthem));
+    // An enchantment creature as both the creature and the enchantment, though there's
+    // another creature and another enchantment.
+    let mut t = TestGame::new(2);
+    let lili = pw(&mut t, P0, "Liliana, Dreadhorde General", 10);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let ench_creature = t.battlefield(P1, "Boon Satyr");
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    t.answer_choose(P1, &[o(ench_creature)]);
+    t.answer_choose(P1, &[o(ench_creature)]);
+    let from = t.asked().len();
+    t.activate(P0, lili, 2, &[]).unwrap();
+    t.resolve();
+    let offered = offers(&t, P1, from);
+    assert_eq!(offered.len(), 2);
+    assert!(offered.iter().all(|c| c.contains(&ench_creature)));
+    assert!(t.on_battlefield(ench_creature));
+    assert!(!t.on_battlefield(bears) && !t.on_battlefield(anthem));
+}
