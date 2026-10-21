@@ -1,0 +1,12 @@
+## default-priority-pass: stub
+## default-mulligan-keep: stub
+## default-yes-no: stub
+## default-first-listed-choice: stub
+## default-optional-costs-declined: stub
+## default-numbers: stub
+## default-order-as-listed: stub
+## default-combat-declarations: stub
+## default-damage-assignment: stub
+## default-scry-surveil: stub
+## default-division: stub
+## default-card-name: stub
