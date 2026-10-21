@@ -270,8 +270,63 @@ fn a_secret_choice_is_shown_only_to_its_chooser_until_revealed() {
     let p1 = json(&observe(&t.g, Some(P1)));
     assert!(!p1.contains("chose P2"), "{p1}");
     // Revealing it (the cost of its ability) shows it to everyone.
-    t.activate(P0, archon, 0, &[Entity::Object(archon)]).unwrap();
+    t.activate(P0, archon, 0, &[Entity::Object(archon)])
+        .unwrap();
     assert_eq!(view(&t, P1), vec!["P0 chose P2".to_string()]);
+}
+
+/// An agent that records what its player observes when asked to choose a number.
+struct Peeker(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl mtg_engine::decision::Agent for Peeker {
+    fn decide(
+        &mut self,
+        game: &mtg_engine::game::Game,
+        player: PlayerId,
+        decision: &Decision,
+    ) -> mtg_engine::decision::Answer {
+        if matches!(decision, Decision::ChooseNumber { .. }) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_string(&observe(game, Some(player))).unwrap());
+            return mtg_engine::decision::Answer::Number(3);
+        }
+        mtg_engine::decision::Answer::Default
+    }
+}
+
+#[test]
+fn a_later_player_choosing_secretly_doesnt_see_the_earlier_secret_choices() {
+    cr!("101.4");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.set_agent(P1, Box::new(Peeker(seen.clone())));
+    t.answer(
+        P0,
+        DecisionKind::Number,
+        mtg_engine::decision::Answer::Number(42),
+    );
+    let ogre = t.enter(P0, "Menacing Ogre");
+    t.resolve_all();
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 1, "P1 chose a number");
+    // "Each player secretly chooses a number": P0 chose first, but P1 doesn't see it.
+    assert!(!seen[0].contains("chose 42"), "{}", seen[0]);
+    assert!(seen[0].contains("P0 chose secretly"), "{}", seen[0]);
+    // Once revealed, everyone sees both numbers.
+    let after = json(&observe(&t.g, Some(P1)));
+    assert!(
+        after.contains("P0 chose 42") && after.contains("P1 chose 3"),
+        "{after}"
+    );
+    assert_eq!(
+        (t.life(P0), t.life(P1)),
+        (20 - 42, 20),
+        "the highest number"
+    );
+    let _ = ogre;
 }
 
 #[test]
@@ -279,8 +334,16 @@ fn an_open_choice_is_shown_to_every_player() {
     cr!("607.2d");
     let mut t = TestGame::new(2);
     t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
-    t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(0));
-    t.answer(P1, DecisionKind::Option, mtg_engine::decision::Answer::Index(1));
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(0),
+    );
+    t.answer(
+        P1,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
     let angel = t.enter(P0, "Archangel of Strife");
     t.settle();
     let o = observe(&t.g, Some(P1));

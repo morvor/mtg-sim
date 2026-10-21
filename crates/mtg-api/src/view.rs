@@ -259,10 +259,13 @@ fn choices_view(g: &Game, viewer: Viewer, o: &GameObject) -> Vec<String> {
         .iter()
         .map(|(p, c)| {
             let who = crate::describe::player_name(*p);
-            let visible = viewer
-                .is_none_or(|v| mtg_engine::choices::choice_visible(g, o.id, *p, v));
+            let visible =
+                viewer.is_none_or(|v| mtg_engine::choices::choice_visible(g, o.id, *p, v));
             if visible {
-                format!("{who} chose {}", mtg_engine::choices::describe(c).join(", "))
+                format!(
+                    "{who} chose {}",
+                    mtg_engine::choices::describe(c).join(", ")
+                )
             } else {
                 format!("{who} chose secretly")
             }

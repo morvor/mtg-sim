@@ -51,7 +51,11 @@ fn archangel_of_strife_each_players_creatures_get_the_bonus_that_player_chose() 
     assert_eq!(order, vec![P0, P1], "the active player chooses first");
     assert_eq!(t.pt(mine), (5, 2), "war: +3/+0");
     assert_eq!(t.pt(theirs), (2, 5), "peace: +0/+3");
-    assert_eq!(t.pt(angel), (9, 6), "it enters as a 9/6 with its controller's war");
+    assert_eq!(
+        t.pt(angel),
+        (9, 6),
+        "it enters as a 9/6 with its controller's war"
+    );
 }
 
 #[test]
@@ -109,15 +113,16 @@ fn master_of_ceremonies_each_opponents_choice_gives_both_of_you_its_reward() {
     let treasures = |t: &TestGame, p: PlayerId| {
         t.g.battlefield
             .iter()
-            .filter(|id| t.g.obj(**id).controller == p && t.g.obj(**id).chars.has_subtype("Treasure"))
+            .filter(|id| {
+                t.g.obj(**id).controller == p && t.g.obj(**id).chars.has_subtype("Treasure")
+            })
             .count()
     };
-    let citizens = t
-        .g
-        .battlefield
-        .iter()
-        .filter(|id| t.g.obj(**id).chars.has_subtype("Citizen"))
-        .count();
+    let citizens =
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).chars.has_subtype("Citizen"))
+            .count();
     assert_eq!(treasures(&t, P0), 1, "P1 chose money");
     assert_eq!(treasures(&t, P1), 1);
     assert_eq!(treasures(&t, P2), 0);
@@ -177,7 +182,11 @@ fn sower_of_discord_damage_to_one_chosen_player_makes_the_other_lose_life() {
     let shock = t.hand(P0, "Shock");
     t.cast(P0, shock).target(Entity::Player(P0)).go();
     t.resolve_all();
-    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (18, 17, 17), "P0 wasn't chosen");
+    assert_eq!(
+        (t.life(P0), t.life(P1), t.life(P2)),
+        (18, 17, 17),
+        "P0 wasn't chosen"
+    );
 }
 
 /// P1 or P0 casts Lightning Bolt at `target` with Bitter Feud(s) choosing P1 and P2.
@@ -205,9 +214,17 @@ fn bitter_feud_doubles_damage_from_one_chosen_player_to_the_other() {
     );
     compiles("Bitter Feud");
     assert_eq!(feud(1, P1, Entity::Player(P2)).life(P2), 14, "doubled");
-    assert_eq!(feud(1, P1, Entity::Player(P0)).life(P0), 17, "P0 isn't chosen");
+    assert_eq!(
+        feud(1, P1, Entity::Player(P0)).life(P0),
+        17,
+        "P0 isn't chosen"
+    );
     assert_eq!(feud(1, P0, Entity::Player(P1)).life(P1), 17, "P0's source");
-    assert_eq!(feud(1, P1, Entity::Player(P1)).life(P1), 17, "not the other player");
+    assert_eq!(
+        feud(1, P1, Entity::Player(P1)).life(P1),
+        17,
+        "not the other player"
+    );
 }
 
 #[test]
@@ -241,15 +258,27 @@ fn null_chamber_both_chosen_names_cant_be_cast_or_played() {
     compiles("Null Chamber");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
-    t.answer(P0, DecisionKind::Name, Answer::Text("Lightning Bolt".into()));
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        Answer::Text("Lightning Bolt".into()),
+    );
     t.answer(P1, DecisionKind::Name, Answer::Text("Mutavault".into()));
     t.enter(P0, "Null Chamber");
     t.settle();
     t.lands(P0, "Mountain", 2);
     let bolt = t.hand(P0, "Lightning Bolt");
-    assert!(t.cast(P0, bolt).target(Entity::Player(P1)).try_go().is_err());
+    assert!(t
+        .cast(P0, bolt)
+        .target(Entity::Player(P1))
+        .try_go()
+        .is_err());
     let shock = t.hand(P0, "Shock");
-    assert!(t.cast(P0, shock).target(Entity::Player(P1)).try_go().is_ok());
+    assert!(t
+        .cast(P0, shock)
+        .target(Entity::Player(P1))
+        .try_go()
+        .is_ok());
     let vault = t.hand(P0, "Mutavault");
     assert!(t.play_land(P0, vault).is_err(), "the opponent's name");
 }
@@ -264,7 +293,10 @@ fn null_chamber_names_must_not_be_basic_land_names() {
     t.enter(P0, "Null Chamber");
     t.settle();
     let island = t.hand(P0, "Island");
-    assert!(t.play_land(P0, island).is_ok(), "an invalid name names nothing");
+    assert!(
+        t.play_land(P0, island).is_ok(),
+        "an invalid name names nothing"
+    );
 }
 
 #[test]
@@ -282,13 +314,21 @@ fn day_of_the_moon_goads_every_creature_with_a_name_chosen_for_it() {
     t.resolve_all();
     assert_eq!(t.obj_now(bears).goaded_by, vec![P0]);
     assert!(t.obj_now(lions).goaded_by.is_empty());
-    t.answer(P0, DecisionKind::Name, Answer::Text("Savannah Lions".into()));
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        Answer::Text("Savannah Lions".into()),
+    );
     t.g.add_counters(Entity::Object(saga), "lore", 1, None);
     t.settle();
     t.resolve_all();
     assert_eq!(t.obj_now(lions).goaded_by, vec![P0]);
     assert_eq!(t.obj_now(bears).goaded_by, vec![P0], "still goaded");
-    assert_eq!(t.g.obj(saga).choices.list.len(), 2, "both names are chosen for it");
+    assert_eq!(
+        t.g.obj(saga).choices.list.len(),
+        2,
+        "both names are chosen for it"
+    );
 }
 
 #[test]
@@ -315,7 +355,7 @@ fn selective_obliteration_keeps_colorless_and_the_color_each_controller_chose() 
 
 #[test]
 fn teferis_realm_the_upkeep_player_chooses_which_permanents_phase_out() {
-    cr!("702.26a", "303.4");
+    cr!("702.26b");
     ruling!("Teferi's Realm", "Can affect itself if you choose");
     compiles("Teferi's Realm");
     let mut t = TestGame::new(2);
@@ -345,7 +385,11 @@ fn conundrum_sphinx_each_player_keeps_the_top_card_if_they_named_it() {
     t.advance_to(P0, Step::BeginningOfCombat);
     let bolt = t.library_top(P0, "Lightning Bolt");
     let island = t.library_top(P1, "Island");
-    t.answer(P0, DecisionKind::Name, Answer::Text("Lightning Bolt".into()));
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        Answer::Text("Lightning Bolt".into()),
+    );
     t.answer(P1, DecisionKind::Name, Answer::Text("Forest".into()));
     t.answer(
         P0,
@@ -354,7 +398,10 @@ fn conundrum_sphinx_each_player_keeps_the_top_card_if_they_named_it() {
     );
     t.advance_to(P0, Step::DeclareAttackers);
     t.resolve_all();
-    assert!(matches!(t.zone(bolt), mtg_engine::object::Zone::Hand(_)), "named it");
+    assert!(
+        matches!(t.zone(bolt), mtg_engine::object::Zone::Hand(_)),
+        "named it"
+    );
     let namers: Vec<PlayerId> = t
         .asked()
         .into_iter()
@@ -363,5 +410,9 @@ fn conundrum_sphinx_each_player_keeps_the_top_card_if_they_named_it() {
         .collect();
     assert_eq!(namers, vec![P0, P1]);
     let lib = &t.g.player(P1).library;
-    assert_eq!(lib.first().copied().map(|c| t.g.current(c)), Some(t.g.current(island)), "on the bottom");
+    assert_eq!(
+        lib.first().copied().map(|c| t.g.current(c)),
+        Some(t.g.current(island)),
+        "on the bottom"
+    );
 }

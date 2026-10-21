@@ -24,7 +24,10 @@ fn number(t: &mut TestGame, p: PlayerId, n: i64) {
 #[test]
 fn menacing_ogre_each_player_with_the_highest_number_loses_that_much_life() {
     cr!("608.2c");
-    ruling!("Menacing Ogre", "You have to choose zero or a positive number");
+    ruling!(
+        "Menacing Ogre",
+        "You have to choose zero or a positive number"
+    );
     compiles("Menacing Ogre");
     let mut t = TestGame::new(3);
     t.set_step(P0, Step::PrecombatMain);
@@ -82,7 +85,10 @@ fn wheel_of_misfortune_highest_number_deals_damage_and_others_than_lowest_wheel(
         (20, 13, 13, 13)
     );
     assert!(t.in_hand(P0, "Grizzly Bears"), "P0 chose the lowest number");
-    assert!(t.in_graveyard(P1, "Grizzly Bears"), "P1 discarded their hand");
+    assert!(
+        t.in_graveyard(P1, "Grizzly Bears"),
+        "P1 discarded their hand"
+    );
     assert_eq!(t.hand_size(P1), 7);
     assert_eq!(t.hand_size(P2), 7);
 }
@@ -111,11 +117,12 @@ fn goblin_game_each_player_tied_for_fewest_loses_half() {
     t.lands(P0, "Mountain", 7);
     let game = t.hand(P0, "Goblin Game");
     t.advance_to(P0, Step::PrecombatMain);
-    number(&mut t, P0, 2);
-    number(&mut t, P1, 2);
+    number(&mut t, P0, 3);
+    number(&mut t, P1, 3);
     t.cast(P0, game).go();
     t.resolve_all();
-    assert_eq!((t.life(P0), t.life(P1)), (9, 9));
+    // 20 - 3 = 17, then each loses half of 17 rounded up (9).
+    assert_eq!((t.life(P0), t.life(P1)), (8, 8));
     let min = t.asked().iter().find_map(|(_, d)| match d {
         mtg_engine::decision::Decision::ChooseNumber { min, .. } => Some(*min),
         _ => None,
@@ -139,12 +146,11 @@ fn safe(a: i64, b: i64) -> (bool, usize, usize) {
     number(&mut t, P1, b);
     t.activate(P0, safe, 0, &[Entity::Player(P1)]).unwrap();
     t.resolve_all();
-    let exiled = t
-        .g
-        .exile
-        .iter()
-        .filter(|id| t.g.obj(**id).owner == P0)
-        .count();
+    let exiled =
+        t.g.exile
+            .iter()
+            .filter(|id| t.g.obj(**id).owner == P0)
+            .count();
     (t.on_battlefield(safe), t.hand_size(P0) - hand, exiled)
 }
 

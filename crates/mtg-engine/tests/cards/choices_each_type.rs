@@ -105,7 +105,8 @@ fn tragic_arrogance_you_choose_what_each_player_keeps() {
     t.lands(P0, "Plains", 5);
     let mine = t.battlefield(P0, "Grizzly Bears");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    let lions = t.battlefield(P1, "Savannah Lions");
+    // Hexproof: it can still be chosen, as it isn't targeted.
+    let lions = t.battlefield(P1, "Gladecover Scout");
     let forest = t.battlefield(P1, "Forest");
     let spell = t.hand(P0, "Tragic Arrogance");
     t.advance_to(P0, Step::PrecombatMain);
@@ -114,10 +115,12 @@ fn tragic_arrogance_you_choose_what_each_player_keeps() {
     t.cast(P0, spell).go();
     t.resolve_all();
     assert!(t.on_battlefield(mine) && t.on_battlefield(lions) && t.on_battlefield(forest));
-    assert!(!t.on_battlefield(bears), "P0 chose the Lions for P1");
-    let p1_choices = t
-        .asked()
-        .iter()
-        .any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. }));
+    assert!(
+        !t.on_battlefield(bears),
+        "P0 chose the hexproof Scout for P1"
+    );
+    let p1_choices = t.asked().iter().any(|(p, d)| {
+        *p == P1 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })
+    });
     assert!(!p1_choices, "you choose for each player");
 }

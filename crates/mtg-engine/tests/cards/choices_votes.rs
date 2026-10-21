@@ -109,7 +109,10 @@ fn cirdan_each_player_draws_for_votes_received_and_the_others_may_put_a_permanen
     t.enter(P0, "Círdan the Shipwright");
     t.resolve_all();
     assert_eq!(t.hand_size(P1), h1 + 2, "two votes");
-    assert!(!t.named_on_battlefield("Grizzly Bears").is_empty(), "no votes: P0 may put one");
+    assert!(
+        !t.named_on_battlefield("Grizzly Bears").is_empty(),
+        "no votes: P0 may put one"
+    );
     assert_eq!(t.hand_size(P0), h0 - 1);
 }
 
@@ -151,7 +154,10 @@ fn custodi_squire_returns_the_card_with_the_most_votes() {
     t.answer_choose(P1, &[Entity::Object(thopter)]);
     t.enter(P0, "Custodi Squire");
     t.resolve_all();
-    assert!(t.in_hand(P0, "Grizzly Bears") && t.in_hand(P0, "Ornithopter"), "tied");
+    assert!(
+        t.in_hand(P0, "Grizzly Bears") && t.in_hand(P0, "Ornithopter"),
+        "tied"
+    );
 }
 
 /// Vault 11 at chapter II with P1's Grizzly Bears; votes for creatures (`None`: no
@@ -181,8 +187,16 @@ fn vault(votes: [Option<bool>; 2]) -> (bool, usize) {
 fn vault_11_secret_votes_for_up_to_one_creature() {
     cr!("701.38a", "714.2b");
     compiles("Vault 11: Voter's Dilemma");
-    assert_eq!(vault([None, None]), (true, 1), "no creature got votes: draw");
-    assert_eq!(vault([Some(true), None]), (false, 0), "destroy the most voted");
+    assert_eq!(
+        vault([None, None]),
+        (true, 1),
+        "no creature got votes: draw"
+    );
+    assert_eq!(
+        vault([Some(true), None]),
+        (false, 0),
+        "destroy the most voted"
+    );
 }
 
 #[test]
@@ -193,17 +207,43 @@ fn expropriate_for_each_money_vote_you_gain_a_permanent_the_voter_owns() {
         "each vote made for a council's dilemma card adds to the ultimate effect"
     );
     compiles("Expropriate");
-    let mut t = TestGame::new(2);
+    let mut t = TestGame::new(3);
     t.lands(P0, "Island", 9);
     let bears = t.battlefield(P1, "Grizzly Bears");
+    let lions = t.battlefield(P2, "Savannah Lions");
+    let mine = t.battlefield(P0, "Hill Giant");
     let spell = t.hand(P0, "Expropriate");
     t.advance_to(P0, Step::PrecombatMain);
     vote_word(&mut t, P0, 0); // time
     vote_word(&mut t, P1, 1); // money
+    vote_word(&mut t, P2, 1); // money
     t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(lions)]);
     t.cast(P0, spell).go();
     t.resolve_all();
-    assert_eq!(t.obj_now(bears).controller, P0, "P1's money vote: their permanent");
+    assert_eq!(
+        t.obj_now(bears).controller,
+        P0,
+        "P1's money vote: their permanent"
+    );
+    assert_eq!(t.obj_now(lions).controller, P0, "P2's money vote: theirs");
+    assert_eq!(t.obj_now(mine).controller, P0);
+    // Only permanents the voter owns were offered for each money vote.
+    let offered: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if p == P0 => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 2, "one choice per money vote");
+    assert!(offered[0]
+        .iter()
+        .all(|e| e.object().is_some_and(|o| t.g.obj(o).owner == P1)));
+    assert!(offered[1]
+        .iter()
+        .all(|e| e.object().is_some_and(|o| t.g.obj(o).owner == P2)));
     assert_eq!(t.g.extra_turns.len(), 1, "one time vote");
 }
 
@@ -227,7 +267,9 @@ fn erestor_rewards_opponents_who_voted_like_you_and_scries_for_the_others() {
     let treasures = |p: PlayerId| {
         t.g.battlefield
             .iter()
-            .filter(|id| t.g.obj(**id).controller == p && t.g.obj(**id).chars.has_subtype("Treasure"))
+            .filter(|id| {
+                t.g.obj(**id).controller == p && t.g.obj(**id).chars.has_subtype("Treasure")
+            })
             .count()
     };
     assert_eq!((treasures(P1), treasures(P2)), (1, 0));
@@ -256,7 +298,15 @@ fn selvalas_stampede_creatures_for_wild_votes_permanents_from_hand_for_free_vote
     t.answer_choose(P0, &[Entity::Object(thopter)]);
     t.cast(P0, spell).go();
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "one wild vote");
-    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1, "one free vote");
+    assert_eq!(
+        t.named_on_battlefield("Grizzly Bears").len(),
+        1,
+        "one wild vote"
+    );
+    assert_eq!(
+        t.named_on_battlefield("Ornithopter").len(),
+        1,
+        "one free vote"
+    );
     assert!(!t.in_graveyard(P0, "Island"), "the rest shuffled in");
 }

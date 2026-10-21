@@ -17,7 +17,11 @@ fn compiles(name: &str) {
 
 /// `p` guesses yes (index 0) or no (index 1).
 fn guess(t: &mut TestGame, p: PlayerId, yes: bool) {
-    t.answer(p, DecisionKind::Option, Answer::Index(if yes { 0 } else { 1 }));
+    t.answer(
+        p,
+        DecisionKind::Option,
+        Answer::Index(if yes { 0 } else { 1 }),
+    );
 }
 
 fn clues(t: &TestGame, p: PlayerId) -> usize {
@@ -54,7 +58,11 @@ fn the_seventh_doctor_wrong_guess_lets_you_cast_it_free_otherwise_investigate() 
     cr!("608.2c", "701.16a");
     compiles("The Seventh Doctor");
     assert_eq!(seventh_doctor(false), (true, 0), "guessed wrong: cast it");
-    assert_eq!(seventh_doctor(true), (false, 1), "guessed right: investigate");
+    assert_eq!(
+        seventh_doctor(true),
+        (false, 1),
+        "guessed right: investigate"
+    );
 }
 
 #[test]
@@ -100,7 +108,10 @@ fn pendulum(in_hand: bool, yes: bool, reveal: bool) -> usize {
 #[test]
 fn liars_pendulum_draws_only_if_you_reveal_and_they_guessed_wrong() {
     cr!("608.2c");
-    ruling!("Liar's Pendulum", "If your opponent was wrong, you draw a card");
+    ruling!(
+        "Liar's Pendulum",
+        "If your opponent was wrong, you draw a card"
+    );
     ruling!(
         "Liar's Pendulum",
         "You can’t draw a card if you don’t reveal your hand"
@@ -108,15 +119,21 @@ fn liars_pendulum_draws_only_if_you_reveal_and_they_guessed_wrong() {
     compiles("Liar's Pendulum");
     assert_eq!(pendulum(true, false, true), 1, "wrong guess, revealed");
     assert_eq!(pendulum(true, true, true), 0, "right guess");
-    assert_eq!(pendulum(false, true, true), 1, "wrong guess: it isn't there");
+    assert_eq!(
+        pendulum(false, true, true),
+        1,
+        "wrong guess: it isn't there"
+    );
     assert_eq!(pendulum(true, false, false), 0, "not revealed");
 }
 
 /// Gollum attacks with a Forest on top of P0's library (or an empty library); P0 chooses
-/// land, P1 guesses `yes`. Returns (Gollum still attacking, cards drawn).
-fn gollum(top: Option<&str>, yes: bool) -> (bool, usize) {
+/// land, P1 guesses `yes`, then P1 tries to block Gollum with Grizzly Bears. Returns
+/// (Gollum still attacking after the trigger, cards drawn, Gollum was blocked, the game).
+fn gollum_game(top: Option<&str>, yes: bool) -> (bool, usize, bool, TestGame) {
     let mut t = TestGame::new(2);
     let gollum = t.battlefield(P0, "Gollum, Scheming Guide");
+    let bears = t.battlefield(P1, "Grizzly Bears");
     t.advance_to(P0, Step::BeginningOfCombat);
     if top.is_none() {
         t.g.players[0].library.clear();
@@ -134,12 +151,26 @@ fn gollum(top: Option<&str>, yes: bool) -> (bool, usize) {
     let hand = t.hand_size(P0);
     t.advance_to(P0, Step::DeclareAttackers);
     t.resolve_all();
-    let attacking = t
-        .g
-        .combat
-        .as_ref()
-        .is_some_and(|c| c.attacker(gollum).is_some());
-    (attacking, t.hand_size(P0) - hand)
+    let attacking = t.g.is_attacking(gollum);
+    let drawn = t.hand_size(P0).saturating_sub(hand);
+    let mut blocked = false;
+    if attacking && !t.has_lost(P0) {
+        t.answer(
+            P1,
+            DecisionKind::Blockers,
+            Answer::Blockers(vec![(bears, gollum)]),
+        );
+        t.advance_to(P0, Step::DeclareBlockers);
+        blocked = t.g.is_blocking(bears);
+    }
+    (attacking, drawn, blocked, t)
+}
+
+/// Whether the log shows the Forest on top of P0's library being revealed.
+fn revealed_forest(t: &TestGame) -> bool {
+    t.dump_log()
+        .lines()
+        .any(|l| l.to_lowercase().contains("reveal") && l.contains("Forest"))
 }
 
 #[test]
@@ -150,17 +181,26 @@ fn gollum_right_guess_removes_it_from_combat_otherwise_you_draw() {
         "You reveal the card even if your opponent guessed correctly"
     );
     compiles("Gollum, Scheming Guide");
-    assert_eq!(gollum(Some("Forest"), true), (false, 0), "right: removed");
-    assert_eq!(gollum(Some("Forest"), false), (true, 1), "wrong: draw");
+    let (attacking, drawn, _, t) = gollum_game(Some("Forest"), true);
+    assert_eq!((attacking, drawn), (false, 0), "right: removed");
+    assert!(
+        revealed_forest(&t),
+        "revealed even though they guessed right"
+    );
+    let (attacking, drawn, blocked, t) = gollum_game(Some("Forest"), false);
+    assert_eq!((attacking, drawn), (true, 1), "wrong: draw");
+    assert!(revealed_forest(&t));
+    assert!(!blocked, "and Gollum can't be blocked this turn");
 }
 
 #[test]
 fn gollum_with_an_empty_library_no_guess_is_right() {
-    cr!("608.2c");
+    cr!("608.2c", "704.5b");
     ruling!(
         "Gollum, Scheming Guide",
         "your opponent's guess will not be right no matter what they guess"
     );
-    let (attacking, _) = gollum(None, true);
+    let (attacking, _, _, t) = gollum_game(None, true);
     assert!(attacking, "the guess wasn't right");
+    assert!(t.has_lost(P0), "you attempt to draw from an empty library");
 }
