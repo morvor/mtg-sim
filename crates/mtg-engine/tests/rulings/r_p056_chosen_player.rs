@@ -162,7 +162,7 @@ fn saskia_returning_chooses_a_player_again() {
 
 #[test]
 fn saskia_does_nothing_once_the_chosen_player_left_the_game() {
-    cr!("800.4a", "800.4h");
+    cr!("800.4a");
     ruling!(
         "Saskia the Unyielding",
         "Once the chosen player has left the game, Saskia's triggered ability will have no effect."

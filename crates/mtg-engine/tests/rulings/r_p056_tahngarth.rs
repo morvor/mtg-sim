@@ -169,7 +169,7 @@ fn only_players_and_planeswalkers_still_attacked_can_be_chosen() {
 
 #[test]
 fn it_cant_attack_the_controller_of_an_attacked_planeswalker() {
-    cr!("508.4", "506.3d");
+    cr!("508.4");
     ruling!(
         "Tahngarth, First Mate",
         "If an opponent is attacking a planeswalker but not that planeswalker's controller, Tahngarth can't attack that player."
