@@ -599,6 +599,9 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         || l.starts_with("you may activate ")
         // A permission to play cards (see `patterns::permission_grammar`).
         || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
+        // "... as though those cards were in your graveyard": a permission (CR 609.4, see
+        // `patterns::graveyard_play_swap`).
+        || (l.starts_with("you may ") && l.ends_with(" as though those cards were in your graveyard"))
     {
         if let Some(e) = parse_simple(l, b) {
             return Some(e);

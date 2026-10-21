@@ -81,3 +81,26 @@ pub fn mana_value_with(g: &Game, id: ObjectId, c: &Characteristics) -> u32 {
     }
     0
 }
+
+/// The `Filter::Custom` predicates "with an even / odd mana value" (CR 202.3; 0 is even)
+/// evaluated against the characteristics being viewed: those a card would have as the
+/// spell proposed with its chosen X (CR 601.2e, 601.3a), not only its current ones.
+pub fn custom_parity_filter(
+    g: &Game,
+    name: &str,
+    id: ObjectId,
+    c: &Characteristics,
+) -> Option<bool> {
+    use crate::kw::{combat_limits, companion};
+    use crate::oracle::patterns::zone_move_grammar;
+    let odd = match name {
+        combat_limits::EVEN_MANA_VALUE
+        | companion::EVEN_MANA_VALUE
+        | zone_move_grammar::EVEN_MANA_VALUE => false,
+        combat_limits::ODD_MANA_VALUE
+        | companion::ODD_MANA_VALUE
+        | zone_move_grammar::ODD_MANA_VALUE => true,
+        _ => return None,
+    };
+    Some((mana_value_with(g, id, c) % 2 == 1) == odd)
+}
