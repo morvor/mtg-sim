@@ -106,3 +106,25 @@ fn caused_by_opponent(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "trigger causes: a spell or ability an opponent controls causes you to discard", priority: 100, parse: caused_by_opponent } }
+
+/// "At the beginning of each of your main phases" (Frontier Siege, Carpet of Flowers):
+/// each main phase of your turns, the first one and any later ones (CR 505.1).
+fn each_of_your_main_phases(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(t) != "at the beginning of each of your main phases" {
+        return None;
+    }
+    let at = |step| TriggerCond::BeginningOf {
+        step,
+        whose: PlayerRel::You,
+    };
+    Some((
+        TriggerCond::AnyOf(vec![
+            at(TriggerStep::PrecombatMain),
+            at(TriggerStep::PostcombatMain),
+        ]),
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "at the beginning of each of your main phases", priority: 100, parse: each_of_your_main_phases } }

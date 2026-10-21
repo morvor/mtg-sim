@@ -49,3 +49,33 @@ mod tests {
         assert!(limit_suffix("Draw a card.").is_none());
     }
 }
+
+/// "At the beginning of each of your main phases, if you haven't added mana with this
+/// ability this turn, you may add ..." (Carpet of Flowers): the ability triggers (and does
+/// something as it resolves) only if its controller hasn't added mana with it this turn —
+/// the same rule as "You may add .... Do this only once each turn." (CR 603.2h, 603.4).
+fn if_you_havent_added_mana_with_this(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<crate::ability::Ability>> {
+    use crate::ability::*;
+    const IF: &str = ", if you haven't added mana with this ability this turn, ";
+    let t = block.trim();
+    let i = t.find(IF)?;
+    let rest = &t[i + IF.len()..];
+    if !rest.starts_with("you may add ") {
+        return None;
+    }
+    let body = format!("{}, {rest}", &t[..i]);
+    let a = crate::oracle::triggers::parse_triggered(&body, ctx)?;
+    let AbilityKind::Triggered(mut tr) = a.kind.clone() else {
+        return None;
+    };
+    if !matches!(tr.body.effect, Effect::May { .. }) {
+        return None;
+    }
+    tr.do_once_per_turn = true;
+    Some(vec![AbilityDef::new(AbilityKind::Triggered(tr), t)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "if you haven't added mana with this ability this turn", priority: 0, parse: if_you_havent_added_mana_with_this } }

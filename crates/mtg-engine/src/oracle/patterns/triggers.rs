@@ -299,6 +299,11 @@ fn possessive(s: &str) -> Option<(Whose, &str)> {
     let s = s.trim_start();
     for (p, w) in [
         ("each of your ", Whose::Rel(PlayerRel::You)),
+        // "each of enchanted player's postcombat main phases" (Shadow of the Second Sun).
+        (
+            "each of enchanted player's ",
+            Whose::Player(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))),
+        ),
         ("your ", Whose::Rel(PlayerRel::You)),
         ("each player's ", Whose::Rel(PlayerRel::Any)),
         ("each opponent's ", Whose::Rel(PlayerRel::Opponent)),
