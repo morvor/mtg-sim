@@ -730,6 +730,42 @@ fn f_delayed_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     true
 }
 
+/// "At the beginning of your next upkeep, choose a basic land type. ~ gains landwalk of
+/// the chosen type until the end of that turn." (Giant Slug): when the delayed
+/// instruction is only a choice, the next sentence using "the chosen" is what's done with
+/// it, in the delayed ability ("that turn" is the turn it triggers in).
+fn f_delayed_choice_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains("the chosen ") || split_delay(l).is_some() || l.contains("target") {
+        return false;
+    }
+    match last_delayed(prev) {
+        Some(Effect::DelayedTrigger { body, .. })
+            if matches!(body.effect, Effect::Choose { .. }) && body.targets.is_empty() => {}
+        _ => return false,
+    }
+    let text = match l.strip_suffix(" until the end of that turn") {
+        Some(r) => format!("{r} until end of turn"),
+        None => l.to_string(),
+    };
+    let saved = save(b);
+    let n0 = b.targets.len();
+    let parsed = parse_sentence(&text, b);
+    let new_targets = b.targets.len() > n0;
+    b.targets.truncate(n0);
+    restore(b, saved);
+    let Some(e) = parsed.filter(|_| !new_targets) else {
+        return false;
+    };
+    let Some(Effect::DelayedTrigger { body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    body.effect = Effect::seq(vec![std::mem::take(&mut body.effect), e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: what's done with a delayed choice", priority: 45, apply: f_delayed_choice_continues } }
+
 /// "Whenever you attack this turn, create two 1/1 red Warrior creature tokens that are
 /// tapped and attacking. Sacrifice them at the beginning of the next end step." (Dalkovan
 /// Encampment): a sentence about the tokens a delayed triggered ability creates is part

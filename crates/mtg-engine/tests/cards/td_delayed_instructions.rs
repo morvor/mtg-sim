@@ -126,3 +126,38 @@ fn meandering_towershell_returns_attacking_on_your_next_turn_only() {
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 15);
 }
+
+#[test]
+fn giant_slug_chooses_its_landwalk_at_your_next_upkeep_for_that_turn() {
+    cr!("603.7a", "702.14c");
+    ruling!(
+        "Giant Slug",
+        "When that ability resolves, you choose a basic land type."
+    );
+    supported("Giant Slug");
+    let mut t = TestGame::new(2);
+    let slug = t.battlefield(P0, "Giant Slug");
+    t.battlefield(P1, "Island");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.lands(P0, "Swamp", 5);
+    t.activate(P0, slug, 0, &[]).unwrap();
+    t.resolve_all();
+    // Nothing yet this turn.
+    let kw = |t: &TestGame| {
+        t.obj_now(slug)
+            .has_keyword(keywords::KeywordKind::Landwalk)
+    };
+    assert!(!kw(&t));
+    t.advance_to(P1, Step::Upkeep);
+    // Your next upkeep: choose Island (index 1).
+    t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(1));
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(kw(&t));
+    to_combat(&mut t, P0);
+    declare(&mut t, P0, &[(slug, Entity::Player(P1))]);
+    assert!(!legal_blocks(&mut t, &[(wall, slug)]));
+    // Until the end of that turn only.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!kw(&t));
+}
