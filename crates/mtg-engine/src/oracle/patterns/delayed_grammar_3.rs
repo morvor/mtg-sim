@@ -32,6 +32,12 @@
 //! control deals combat damage to a player this turn, copy the exiled card. You may cast
 //! the copy without paying its mana cost." (Surge to Victory; CR 603.7c, 707.12): the
 //! card the first instruction exiled, captured as it's exiled.
+//!
+//! "When ~ dies, exile it and choose target creature an opponent controls. When that
+//! creature leaves the battlefield, return ~ from exile to the battlefield under its
+//! owner's control." (Lucius the Eternal; CR 603.7c, 400.7): "~ from exile" is the card
+//! the dies ability exiled (the source's card, a new object), captured as the delayed
+//! ability is created.
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -336,3 +342,49 @@ fn cast_the_copy_after_this_turn_copy(s: &str, prev: &mut Effect, b: &mut Builde
 }
 
 inventory::submit! { FollowupPattern { name: "delayed grammar 3: you may cast the copy (of the exiled card, this turn)", priority: 40, apply: cast_the_copy_after_this_turn_copy } }
+
+/// The card "exile it" exiled (see [`return_self_from_exile_when_that_creature_leaves`]).
+const EXILED_SELF: Var = vars::USER + 13_103;
+
+fn return_self_from_exile_when_that_creature_leaves(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (cond, eff) = l.split_once(", ")?;
+    if eff != "return ~ from exile to the battlefield under its owner's control"
+        || !cond.starts_with("when that creature ")
+    {
+        return None;
+    }
+    // The ability exiled its source's card first ("When ~ dies, exile it and ...").
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("dies, exile it and ") {
+        return None;
+    }
+    let mut e = super::delayed_grammar::referent_trigger(&format!("{cond}, draw a card"), b)?;
+    fn patch(e: &mut Effect) -> bool {
+        match e {
+            Effect::Seq(v) => v.iter_mut().any(patch),
+            Effect::DelayedTrigger { body, .. } => {
+                let mut to = Destination::battlefield();
+                to.controller = Some(PlayerRef::OwnerOf(Box::new(Sel::Var(EXILED_SELF))));
+                body.effect = Effect::Move {
+                    what: Sel::Var(EXILED_SELF),
+                    to,
+                };
+                true
+            }
+            _ => false,
+        }
+    }
+    if !patch(&mut e) {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: EXILED_SELF,
+            sel: Sel::Var(vars::IT),
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "delayed grammar 3: when that creature leaves, return ~ from exile", priority: 50, parse: return_self_from_exile_when_that_creature_leaves } }

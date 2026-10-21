@@ -213,3 +213,21 @@ fn surge_to_victory_copies_the_exiled_card_for_each_combat_damage_trigger() {
     assert_eq!(t.life(P1), 14);
     assert!(t.in_exile("Lightning Bolt"));
 }
+
+#[test]
+fn lucius_returns_from_exile_when_that_creature_leaves() {
+    cr!("603.7a", "603.7c", "400.7");
+    supported("Lucius the Eternal");
+    let mut t = TestGame::new(2);
+    let lucius = t.battlefield(P0, "Lucius the Eternal");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    crate::r_s02_common::destroy(&mut t, lucius);
+    t.resolve_all();
+    assert!(t.in_exile("Lucius the Eternal"));
+    crate::r_s02_common::destroy(&mut t, bears);
+    t.resolve_all();
+    let back = t.named_on_battlefield("Lucius the Eternal");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.obj_now(back[0]).controller, P0);
+}
