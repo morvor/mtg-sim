@@ -608,6 +608,104 @@ fn taps_untapped(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "followups 4: [player] taps N untapped [objects] they control", priority: 120, parse: taps_untapped } }
 
+/// "If the last card exiled isn't a land card, repeat this process." (Rally the Horde):
+/// after several instructions that each exile one card, "the last card exiled" is the
+/// card the latest of them exiled, what "it" refers to.
+fn the_last_card_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if the last card exiled ") else {
+        return false;
+    };
+    if !matches!(b.it, Sel::Var(_)) || !format!("{prev:?}").contains("Exile") {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_sentence(&format!("if it {r}"), b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: if the last card exiled ...", priority: 120, apply: the_last_card_exiled } }
+
+/// Every card exiled by a process of single-card exiles, over all its passes.
+const EXILED_IN_PROCESS: Var = vars::USER + 41001;
+
+/// Adds, after each exile of `e`, the card it exiled to [`EXILED_IN_PROCESS`]; the number
+/// of exiles.
+fn accumulate_exiles(e: &mut Effect) -> usize {
+    match e {
+        Effect::Seq(v) => {
+            let mut n = 0;
+            let mut i = 0;
+            while i < v.len() {
+                if matches!(v[i], Effect::Exile { .. }) {
+                    v.insert(
+                        i + 1,
+                        Effect::Store {
+                            var: EXILED_IN_PROCESS,
+                            sel: Sel::Union(vec![Sel::Var(EXILED_IN_PROCESS), Sel::Var(vars::IT)]),
+                        },
+                    );
+                    n += 1;
+                    i += 2;
+                } else {
+                    n += accumulate_exiles(&mut v[i]);
+                    i += 1;
+                }
+            }
+            n
+        }
+        Effect::RepeatProcess { body } => accumulate_exiles(body),
+        _ => 0,
+    }
+}
+
+/// "Create a 1/1 red Warrior creature token for each nonland card exiled this way." after
+/// a process of exiles that repeats (Rally the Horde): the cards every exile of every
+/// pass exiled.
+fn for_each_exiled_in_process(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.ends_with(" exiled this way") || !l.contains(" for each ") {
+        return false;
+    }
+    let Effect::RepeatProcess { body } = prev else {
+        return false;
+    };
+    let d = format!("{body:?}");
+    if d.matches("Exile {").count() < 2 || d.contains(&format!("var: {EXILED_IN_PROCESS}")) {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_sentence(l, b) else {
+        return false;
+    };
+    let Ok(json) = serde_json::to_string(&e) else {
+        return false;
+    };
+    let last = r#""Before":{"Var":0}"#;
+    if json.matches(last).count() != 1 {
+        return false;
+    }
+    let json = json.replace(last, &format!(r#""Before":{{"Var":{EXILED_IN_PROCESS}}}"#));
+    let Ok(e) = serde_json::from_str::<Effect>(&json) else {
+        return false;
+    };
+    let mut process = std::mem::take(prev);
+    accumulate_exiles(&mut process);
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: EXILED_IN_PROCESS,
+            sel: Sel::None,
+        },
+        process,
+        e,
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: for each card exiled this way, after a repeated process", priority: 120, apply: for_each_exiled_in_process } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
