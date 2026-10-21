@@ -995,8 +995,19 @@ impl Game {
         }
     }
 
+    /// Runs the instructions replacement effects left for after their modified events, in
+    /// the order they were queued: the order the effects were applied (interpretation
+    /// `rider-order`). Instructions queued while one runs come before the rest.
     pub(crate) fn run_post_replacement_effects(&mut self) {
-        while let Some((mut c, e)) = self.post_replacement_effects.pop() {
+        let mut batch = std::collections::VecDeque::new();
+        loop {
+            let queued = std::mem::take(&mut self.post_replacement_effects);
+            for item in queued.into_iter().rev() {
+                batch.push_front(item);
+            }
+            let Some((mut c, e)) = batch.pop_front() else {
+                break;
+            };
             if c.nums.remove(&crate::replacement::FOLLOW_IT).is_some() {
                 if let Some(v) = c.vars.get_mut(&vars::IT) {
                     for e in v.iter_mut() {
