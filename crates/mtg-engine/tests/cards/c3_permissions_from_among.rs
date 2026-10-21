@@ -57,7 +57,7 @@ fn doom_reigns_supreme_casts_up_to_two_of_the_exiled_cards_free() {
     t.settle();
     assert!(t.on_battlefield(doom));
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    t.answer_choose(P0, &[Entity::Object(bolt), Entity::Object(shock)]);
+    t.answer_choose_moved(P0, &[Entity::Object(bolt), Entity::Object(shock)]);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.g.add_counters(Entity::Object(doom), "plan", 1, None);
@@ -135,7 +135,7 @@ fn etali_casts_any_number_of_the_nonland_cards_exiled_free() {
     let shock = t.library_top(P0, "Shock");
     let bolt = t.library_top(P1, "Lightning Bolt");
     let mountain = t.library_top(P1, "Mountain");
-    t.answer_choose(P0, &[Entity::Object(shock), Entity::Object(bolt)]);
+    t.answer_choose_moved(P0, &[Entity::Object(shock), Entity::Object(bolt)]);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.enter(P0, "Etali, Primal Conqueror // Etali, Primal Sickness");
@@ -351,7 +351,7 @@ fn portent_of_calamity_casts_one_free_only_with_four_or_more_exiled() {
         .map(Entity::Object)
         .collect();
         t.answer_choose(P0, &chosen);
-        t.answer_choose(P0, &[Entity::Object(bears)]);
+        t.answer_choose_moved(P0, &[Entity::Object(bears)]);
         t.cast(P0, spell).x(4).go();
         t.resolve_all();
         let bears_now = t.g.current(bears);

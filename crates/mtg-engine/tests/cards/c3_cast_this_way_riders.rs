@@ -588,7 +588,7 @@ fn dubious_challenge_opponent_takes_one_exiled_creature_and_you_get_the_rest() {
     let giant = t.library_top(P0, "Hill Giant");
     let spell = t.hand(P0, "Dubious Challenge");
     t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(giant)]);
-    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_choose_moved(P1, &[Entity::Object(bears)]);
     t.cast(P0, spell).target(P1).go();
     t.resolve_all();
     let bears_x = t.g.current(bears);
@@ -674,7 +674,7 @@ fn hama_casts_the_exiled_card_during_your_turn_by_waterbending() {
     let bears = t.library_top(P1, "Grizzly Bears");
     let bolt = t.library_top(P1, "Lightning Bolt");
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.answer_choose_moved(P0, &[Entity::Object(bolt)]);
     let hama = t.enter(P0, "Hama, the Bloodbender");
     t.resolve_all();
     let bolt_x = t.g.current(bolt);

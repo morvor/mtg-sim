@@ -92,7 +92,7 @@ fn sanwell_casts_a_vehicle_or_an_artifact_creature_spell_from_among_them() {
     let thopter = t.library_top(P0, "Ornithopter");
     t.library_top(P0, "Divination");
     t.library_top(P0, "Darksteel Relic");
-    t.answer_choose(P0, &[Entity::Object(copter)]);
+    t.answer_choose_moved(P0, &[Entity::Object(copter)]);
     t.g.tap(sanwell);
     t.resolve_all();
     // The choice offered: the Vehicle and the artifact creature, not the Bears (a
