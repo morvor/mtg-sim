@@ -138,7 +138,9 @@ fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     if !b.in_trigger
         || !matches!(b.it_player, PlayerRef::TriggerPlayer)
-        || !(l.contains("that player controls") || l.contains("from that player's graveyard"))
+        || !(l.contains("that player controls")
+            || l.contains("that opponent controls")
+            || l.contains("from that player's graveyard"))
         || l.contains("target player")
         || l.contains("target opponent")
     {
@@ -146,6 +148,7 @@ fn that_player_controls(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let s = l
         .replace("that player controls", "the triggering player controls")
+        .replace("that opponent controls", "the triggering player controls")
         .replace(
             "from that player's graveyard",
             "from the triggering player's graveyard",

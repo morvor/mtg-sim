@@ -2885,14 +2885,26 @@ fn parse_line(
             // change of the objects in that state, as "as long as it's a token" above.
             // Only a state of the object itself ("it's a token"): the same as "as long as
             // it's a token".
-            if !negate
-                && body.also.is_empty()
+            // "Enchanted creature gets +3/+3 unless it shares a color with ...": while it
+            // isn't in that state.
+            if body.also.is_empty()
                 && body.outs.iter().all(|o| matches!(o, Out::Mod(_)))
                 && super::statics_conditions::pronoun_state(c).is_some()
             {
-                if let Some((cond, _)) = parse_static_condition(c, body.subject.it.as_ref(), ctx) {
+                let cond = parse_static_condition(c, body.subject.it.as_ref(), ctx)
+                    .map(|x| x.0)
+                    .or_else(|| {
+                        let it = body.subject.it.clone()?;
+                        let f = super::statics_conditions::pronoun_state(c)?;
+                        Some(Condition::SelMatches(it, f))
+                    });
+                if let Some(cond) = cond {
                     let mut conds2 = conds.clone();
-                    conds2.push(cond);
+                    conds2.push(if negate {
+                        Condition::Not(Box::new(cond))
+                    } else {
+                        cond
+                    });
                     return Some((body, and_all(conds2)));
                 }
             }

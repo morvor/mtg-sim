@@ -1726,7 +1726,14 @@ impl Game {
             && !opt.method.eq(&CastMethod::FaceDown(KeywordKind::Morph))
         {
             // CR 303.4a / 115.1b: an Aura spell targets what it will enchant.
-            if let Some(spec) = crate::attach::aura_target_spec(&chars) {
+            if let Some(mut spec) = crate::attach::aura_target_spec(&chars) {
+                // "You can't choose an untapped creature as ~'s target as you cast it."
+                if let (Some(no), TargetKind::Object(f)) = (
+                    crate::oracle::patterns::targets_grammar_2::cast_target_forbidden(&chars),
+                    &spec.what,
+                ) {
+                    spec.what = TargetKind::Object(Filter::and(vec![f.clone(), Filter::not(no)]));
+                }
                 if body.targets.is_empty() {
                     body.targets.push(spec);
                 }

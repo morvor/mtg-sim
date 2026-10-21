@@ -633,7 +633,7 @@ fn for_each_spent(l: &str, b: &mut Builder) -> Option<Effect> {
 /// ("for each {B}{B} spent, each opponent discards a card": each opponent discards that
 /// many cards at once, CR 701.9; creating that many tokens is one event, CR 111.1); anything
 /// else is repeated (drawing is one card at a time anyway, CR 121.2).
-fn times_over(e: Effect, times: Value) -> Effect {
+pub(crate) fn times_over(e: Effect, times: Value) -> Effect {
     let scale = |n: &mut Value| {
         *n = match std::mem::replace(n, Value::c(0)) {
             Value::Const(1) => times.clone(),
@@ -845,6 +845,11 @@ fn not_chosen_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
         "not chosen this way",
         "that weren't chosen this way",
         "that wasn't chosen this way",
+        // "destroy all creatures except creatures chosen this way" (Unstable Glyphbridge).
+        "except creatures chosen this way",
+        "except permanents chosen this way",
+        "except the chosen creatures",
+        "except the chosen permanents",
     ]
     .iter()
     .find_map(|p| s.strip_prefix(p))?;
@@ -1025,6 +1030,26 @@ fn for_each_object(l: &str, b: &mut Builder) -> Option<Effect> {
         };
         for n in &nouns {
             b.named.push((format!("that {n}"), Sel::Var(EACH)));
+        }
+        // Targets that may be players or objects ("Choose any number of target
+        // creatures, planeswalkers, and/or players. For each of them, ... to that
+        // permanent or player"): each of them, whichever it is.
+        if let Sel::Target(i) = &sel {
+            if b
+                .targets
+                .get(*i as usize)
+                .is_some_and(|t| matches!(t.what, TargetKind::ObjectOrPlayer(..)))
+            {
+                for p in [
+                    "that permanent or player",
+                    "that player or permanent",
+                    "that player or planeswalker",
+                    "that creature or player",
+                    "that player or creature",
+                ] {
+                    b.named.push((p.to_string(), Sel::Var(EACH)));
+                }
+            }
         }
         let body = parse_clause(&they_as_its_controller(y), b);
         b.named.truncate(saved.3);

@@ -1,6 +1,7 @@
 //! "Target opponent sacrifices half the creatures they control of their choice, rounded
 //! up." / "Target opponent discards half the cards in their hand, rounded up." (Rush of
-//! Dread): half a number, rounded as the text says (CR 107.1a).
+//! Dread): half a number, rounded as the text says (CR 107.1a). Also "a tenth of the
+//! creatures they control" (Legate Lanius, Caesar's Ace).
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -12,6 +13,8 @@ fn rounding(s: &str) -> Option<bool> {
     match end(s).trim() {
         ", rounded up" | "rounded up" => Some(true),
         ", rounded down" | "rounded down" => Some(false),
+        // "Round up each time." after the instructions (CR 107.1a).
+        "" => super::value_grammar::half_rounding(),
         _ => None,
     }
 }
@@ -34,6 +37,9 @@ fn half_edict_or_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     let parsed = (|| {
         if let Some(r) = rest.strip_prefix("discards half the cards in their hand") {
             let up = rounding(r)?;
+            // One player's hand: "each player discards half ..." is each player's own
+            // (read by the iteration grammar as each player in turn, "you").
+            rel_of(&who)?;
             return Some(Effect::Discard {
                 who: who.clone(),
                 n: Value::Div(Box::new(Value::HandSize(who.clone())), 2, up),
@@ -41,7 +47,12 @@ fn half_edict_or_discard(l: &str, b: &mut Builder) -> Option<Effect> {
                 filter: Filter::Any,
             });
         }
-        let r = rest.strip_prefix("sacrifices half the ")?;
+        // "sacrifices a tenth of the creatures they control of their choice, rounded up"
+        // (Legate Lanius): a tenth.
+        let (r, parts) = match rest.strip_prefix("sacrifices half the ") {
+            Some(r) => (r, 2),
+            None => (rest.strip_prefix("sacrifices a tenth of the ")?, 10),
+        };
         let (noun, r) = r.split_once(" they control")?;
         let r = r.strip_prefix(" of their choice").unwrap_or(r);
         let up = rounding(r)?;
@@ -55,7 +66,7 @@ fn half_edict_or_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(Effect::Sacrifice {
             who: who.clone(),
             filter: f,
-            count: Value::Div(Box::new(Value::Count(theirs)), 2, up),
+            count: Value::Div(Box::new(Value::Count(theirs)), parts, up),
         })
     })();
     if parsed.is_none() {

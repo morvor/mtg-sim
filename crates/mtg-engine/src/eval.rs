@@ -1194,6 +1194,21 @@ impl Game {
                 .and_then(|s| self.obj(s).attached_to)
                 .into_iter()
                 .collect(),
+            Sel::AttachedAsItLeft(s) => {
+                let mut out: Vec<Entity> = Vec::new();
+                for e in self.eval_sel(s, ctx) {
+                    let Some(o) = e.object() else { continue };
+                    let Some(l) = self.obj(o).left_battlefield.as_deref() else {
+                        continue;
+                    };
+                    for a in &l.attachments {
+                        if !out.contains(&Entity::Object(*a)) {
+                            out.push(Entity::Object(*a));
+                        }
+                    }
+                }
+                out
+            }
             Sel::HostOf(s) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for e in self.eval_sel(s, ctx) {
@@ -1536,6 +1551,11 @@ impl Game {
             Value::DistinctNames(f) => {
                 let objs = self.objects_matching(f, ctx);
                 crate::names::distinct_name_count(objs.iter().map(|o| &self.obj(*o).chars)) as i64
+            }
+            Value::LargestSameNameGroup(f) => {
+                let objs = self.objects_matching(f, ctx);
+                crate::names::largest_same_name_group(objs.iter().map(|o| &self.obj(*o).chars))
+                    as i64
             }
             Value::ManaValuesAmong(f) => {
                 let objs = self.objects_matching(f, ctx);

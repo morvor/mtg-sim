@@ -679,6 +679,11 @@ impl Renderer<'_> {
                 decline(n, case)
             }
             Sel::AttachedToThis => decline("each permanent attached to ~".into(), case),
+            // "the permanents that were attached to it".
+            Sel::AttachedAsItLeft(s) => {
+                let s = self.sel(s, Case::Obj);
+                decline(format!("the permanents that were attached to {s}"), case)
+            }
             // "the permanent target Aura is attached to".
             Sel::HostOf(s) => {
                 let s = self.sel(s, Case::Subj);

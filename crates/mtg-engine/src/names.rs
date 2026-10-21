@@ -26,6 +26,22 @@ pub fn distinct_name_count<'a>(objs: impl IntoIterator<Item = &'a Characteristic
     picked.len()
 }
 
+/// The size of the largest group of the objects that all share one name (CR 201.2a): for
+/// each name any of them has, how many of them have it. An object with all names of
+/// nonlegendary creature cards (CR 612.7) has each of those names; objects with no name
+/// are in no group.
+pub fn largest_same_name_group<'a>(objs: impl IntoIterator<Item = &'a Characteristics>) -> usize {
+    let named: Vec<&Characteristics> = objs.into_iter().filter(|c| c.has_a_name()).collect();
+    let all_names = named.iter().filter(|c| c.all_creature_names).count();
+    let mut best = all_names;
+    for c in &named {
+        for n in c.names() {
+            best = best.max(named.iter().filter(|o| o.has_name(n)).count());
+        }
+    }
+    best
+}
+
 /// Whether `first` has a different name than each of `others` (CR 201.2c): it has at
 /// least one name and no names in common with any of them, even if some of them have no
 /// name. An object with no name doesn't have a different name than anything.

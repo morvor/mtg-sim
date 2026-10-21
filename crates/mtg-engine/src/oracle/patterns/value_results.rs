@@ -25,6 +25,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = life_lost_this_way(r) {
         return Some(v);
     }
+    // Counters an earlier instruction removed (`referents_results`).
+    if let Some(v) = super::referents_results::count_ext(r, b) {
+        return Some(v);
+    }
     // Attractions visited this turn (`un_stickers_attractions`).
     if let Some(v) = super::un_stickers_attractions::count(r) {
         return Some(v);
@@ -44,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // Amounts of earlier instructions (`referents_results`).
+    if let Some(v) = super::referents_results::atom_ext(s, b) {
+        return Some(v);
+    }
     if let Some(v) = trigger_spell_value(s, b) {
         return Some(v);
     }
@@ -889,6 +897,23 @@ fn players_who(r: &str, _b: &Builder) -> Option<(Value, String)> {
 fn life_in_groups(r: &str, b: &Builder) -> Option<(Value, String)> {
     let (n, x) = parse_number(r)?;
     let k = n.as_const().filter(|k| *k > 0)?;
+    // "for each 1 damage dealt to you this turn".
+    if let Some(y) = x.trim_start().strip_prefix("damage dealt to you") {
+        let rest = this_turn(y)?;
+        let total = events(
+            TriggerCond::PlayerDealtDamage {
+                who: PlayerRel::You,
+                combat_only: false,
+            },
+            Tally::Amount,
+        );
+        let v = if k == 1 {
+            total
+        } else {
+            Value::Div(Box::new(total), k, false)
+        };
+        return Some((v, rest.to_string()));
+    }
     let x = x.trim_start().strip_prefix("life ")?;
     let (who, x) = player_perfect(x, b)?;
     let (cond, x) = if let Some(x) = x.strip_prefix("lost") {
@@ -1177,6 +1202,10 @@ fn event_amount(s: &str, b: &Builder) -> Option<(Value, String)> {
     if !triggers_on(b, &damage) {
         return None;
     }
+    // "that player discards cards equal to the damage": the damage the trigger event dealt.
+    if x.is_empty() || x.starts_with([',', '.', ';', '"']) {
+        return Some((Value::EventAmount, x.to_string()));
+    }
     let x = x.strip_prefix(" dealt").or_else(|| {
         [
             " it dealt",
@@ -1367,7 +1396,19 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     let head = &r[..i];
     let yours = Some(Filter::OwnedBy(PlayerRel::You));
     let theirs = their_rel(b).map(Filter::OwnedBy);
-    let verbs: [(&str, Var, Option<Filter>); 18] = [
+    let verbs: [(&str, Var, Option<Filter>); 25] = [
+        // "Forests put onto the battlefield this way" (Hunting Wilds): the permanents.
+        (" put onto the battlefield", vars::IT, None),
+        // "each card exiled from their hand this way" (Necromentia).
+        (" exiled from their hand", vars::IT, Some(Filter::InZone(ZoneKind::Hand))),
+        (" exiled from your hand", vars::IT, Some(Filter::InZone(ZoneKind::Hand))),
+        // "each creature goaded this way" (CR 701.15).
+        (" goaded", crate::kwa::goad::GOADED, None),
+        // "each creature dealt damage this way" (the objects actually dealt damage).
+        (" dealt damage", vars::DAMAGED, None),
+        // "each creature that phased out this way" (CR 702.26).
+        (" that phased out", vars::PHASED_OUT, None),
+        (" phased out", vars::PHASED_OUT, None),
         (" destroyed", DESTROYED, None),
         (" sacrificed", vars::SACRIFICED, None),
         (" exiled", vars::IT, None),
@@ -1477,7 +1518,12 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
             }
         }
     }
-    let (f, _, tail) = parse_object_phrase(noun)?;
+    // "each spell and ability countered this way" (Glen Elendra's Answer): all of them.
+    let (f, _, tail) = if matches!(noun, "spell and ability" | "spells and abilities") {
+        (Filter::Any, false, "")
+    } else {
+        parse_object_phrase(noun)?
+    };
     if !tail.trim().is_empty() {
         return None;
     }
@@ -1488,7 +1534,10 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     // 400.7); the noun says what they were ("the permanent exiled this way", "spells
     // countered this way"), and their characteristics are those they last had (CR
     // 608.2h). The destroyed, sacrificed or tapped permanents are kept as they were.
-    let from = if var == vars::IT && head.contains(" put into ") && head.contains("graveyard") {
+    let from = if head.ends_with(" put onto the battlefield") {
+        // The permanents they became (CR 400.7), as they are now.
+        Sel::Var(vars::IT)
+    } else if var == vars::IT && head.contains(" put into ") && head.contains("graveyard") {
         // "Put into a graveyard this way": the cards the instruction moved (or a dig's
         // selections and "the rest" put there) that are in a graveyard: not a milled card
         // a replacement effect exiled instead (CR 614.1a, 701.17c), nor the card a dig put
@@ -1923,6 +1972,11 @@ pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
             _ => false,
         }
     }
+    // ("you may sacrifice another creature": the same, if you do.)
+    let e = match e {
+        Effect::May { effect, .. } => effect.as_ref(),
+        e => e,
+    };
     let sacrifices_one = match e {
         Effect::Sacrifice {
             who, count, filter, ..

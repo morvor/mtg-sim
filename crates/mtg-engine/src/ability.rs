@@ -957,6 +957,9 @@ pub mod vars {
     /// measuring, while its values are evaluated ("with toughness greater than its power",
     /// "the greatest power among creatures you control"; see `relational.rs`).
     pub const TESTED: Var = 6;
+    /// Permanents the most recent phase-out instruction phased out, directly or
+    /// indirectly (CR 702.26g): "each creature that phased out this way".
+    pub const PHASED_OUT: Var = USER + 12_100;
 }
 
 /// Selects players and/or objects.
@@ -987,6 +990,10 @@ pub enum Sel {
     TriggerPlayer,
     /// The permanent or player this object is attached to ("enchanted creature").
     AttachedTo,
+    /// The permanents that were attached to the selected objects as those last existed
+    /// on the battlefield, each as it last existed then if it has since left (CR 608.2h):
+    /// "each Aura you controlled that was attached to it" after it died.
+    AttachedAsItLeft(Box<Sel>),
     /// The permanents or players the selected objects are attached to ("the permanent
     /// target Aura is attached to").
     HostOf(Box<Sel>),
@@ -1710,6 +1717,11 @@ pub enum Value {
     /// "the number of differently named [objects]": the most objects matching the filter
     /// that have different names (CR 201.2b). Objects with no name don't count.
     DistinctNames(Filter),
+    /// "[N or more objects] with the same name (as one another)": the most matching
+    /// objects that all have one name in common (CR 201.2a; an object with all names of
+    /// nonlegendary creature cards has each of them, CR 612.7). Objects with no name don't
+    /// count.
+    LargestSameNameGroup(Filter),
     /// "the number of different mana values among [objects]": how many distinct mana
     /// values the matching objects have (CR 202.3; a land card's is 0, X is 0 off the
     /// stack, CR 202.3e).
