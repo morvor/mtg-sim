@@ -202,7 +202,8 @@ fn yore_tiller_nephilim_in_multiplayer() {
     let combat = t.g.combat.as_ref().unwrap();
     let g = t.g.current(giant);
     let att = combat.attackers.iter().find(|a| a.id == g).expect("attacking");
-    assert!(matches!(att.target, Some(Entity::Player(p)) if p == P1 || p == P2));
+    // P0 may attack several players: it chose P1, not the player Yore-Tiller attacks.
+    assert_eq!(att.target, Some(Entity::Player(P1)));
 }
 
 #[test]
@@ -224,7 +225,8 @@ fn silent_sentinel_returns_auras_without_targeting() {
     t.resolve_all();
     assert!(t.on_battlefield(pac));
     assert_eq!(t.obj_now(pac).attached_to, Some(obj(scout)));
-    // No creature to enchant but Silent Sentinel... remove all creatures: it stays.
+    // Silent Sentinel is the only creature, and it leaves before the trigger resolves:
+    // there's nothing to enchant, so Pacifism stays in the graveyard.
     let mut t = TestGame::new(2);
     let ss = t.battlefield(P0, "Silent Sentinel");
     let pac = t.graveyard(P0, "Pacifism");

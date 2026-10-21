@@ -28,13 +28,19 @@ fn ogre_geargrabber_attaches_after_attacks_trigger_window() {
     let mut t = TestGame::new(2);
     let ogre = t.battlefield(P0, "Ogre Geargrabber");
     let sword = t.battlefield(P1, "Sword of the Animist");
+    let forest = t.library_top(P0, "Forest");
     t.set_step(P0, Step::BeginningOfCombat);
     t.answer_targets(P0, &[obj(sword)]);
+    // Were the Sword's attack trigger put on the stack, P0 would search for the Forest.
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(forest)]);
     attack_with(&mut t, &[(ogre, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 1, "only Ogre Geargrabber's trigger");
     t.resolve_all();
     assert_eq!(t.obj_now(sword).controller, P0);
     assert_eq!(attached_to(&t, sword), Some(obj(ogre)));
     assert_eq!(t.stack_len(), 0, "the Sword's attack trigger didn't trigger");
+    assert_eq!(t.zone(forest), Zone::Library(P0), "no land was searched for");
 }
 
 #[test]

@@ -529,11 +529,25 @@ fn thran_quarry_triggers_at_every_end_step() {
     cr!("513.2", "603.4");
     ruling!("Thran Quarry", "Triggers at the end of every player’s turn.");
     supported("Thran Quarry");
+    // On an opponent's turn: it enters during P1's upkeep, and P1's end step sacrifices it.
     let mut t = TestGame::new(2);
+    t.advance_to(P1, Step::Upkeep);
     let q = t.battlefield(P0, "Thran Quarry");
     t.advance_to(P1, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "it triggered at the opponent's end step");
     t.resolve_all();
     assert!(!t.on_battlefield(q));
+    // With a creature it doesn't trigger.
+    let mut t = TestGame::new(2);
+    t.advance_to(P1, Step::Upkeep);
+    let q = t.battlefield(P0, "Thran Quarry");
+    t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P1, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert!(t.on_battlefield(q));
 }
 
 #[test]
