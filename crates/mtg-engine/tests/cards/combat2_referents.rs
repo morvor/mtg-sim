@@ -69,6 +69,7 @@ fn war_tax_doesnt_tax_attackers_already_declared() {
 #[test]
 fn war_tax_with_x_zero_makes_attacking_optional() {
     cr!("118.5", "508.1d");
+    interp!("combat-tax-of-zero-is-a-cost");
     ruling!(
         "War Tax",
         "a cost of zero is not automatically paid, so the controller can choose to not pay"
@@ -98,6 +99,7 @@ fn war_tax_with_x_zero_makes_attacking_optional() {
 #[test]
 fn war_cadence_with_x_zero_makes_blocking_optional() {
     cr!("118.5", "509.1c");
+    interp!("combat-tax-of-zero-is-a-cost");
     ruling!(
         "War Cadence",
         "You can use this to make your creatures unable to block an attacker."

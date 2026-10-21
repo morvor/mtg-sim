@@ -49,9 +49,10 @@ fn face_down_exile_cards_compile() {
         "Gandalf, Goblins' Bane // Flameshape",
     ]);
     // "You may cast the exiled card ... if it's an instant spell with mana value 2 or
-    // less": a card exiled face down has no characteristics to check (CR 406.3a), so the
-    // condition isn't one the engine can evaluate there (see `dig_grammar_review.rs`).
-    assert!(!card("Discover the Impossible").unsupported_text().is_empty());
+    // less": a card exiled face down has no characteristics (CR 406.3a); the quality is
+    // that of the spell it would become (CR 601.3e, `spell_choice::matching_faces`; see
+    // `tests/cards/resolution_casts.rs`).
+    assert!(card("Discover the Impossible").unsupported_text().is_empty());
 }
 
 #[test]

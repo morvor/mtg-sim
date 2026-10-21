@@ -75,16 +75,36 @@ fn p_cast_the_copy(l: &str, _b: &mut Builder) -> Option<Effect> {
     if if_able && optional {
         return None;
     }
+    // "You may cast the copy by paying {3} rather than paying its mana cost." (CR 118.9)
+    let alt = r
+        .trim()
+        .strip_prefix("by paying ")
+        .and_then(|x| x.strip_suffix(" rather than paying its mana cost"))
+        .filter(|c| c.starts_with('{'))
+        .and_then(|c| crate::oracle::costs::parse_cost(c))
+        .filter(|(_, loyalty)| !loyalty)
+        .map(|(c, _)| c);
     let free = match r.trim() {
         "" => false,
         "without paying its mana cost" | "without paying their mana costs" => true,
+        _ if alt.is_some() => false,
         _ => return None,
     };
-    Some(Effect::CastCard {
+    let cast = Effect::CastCard {
         who: PlayerRef::You,
         what: Sel::Var(vars::CREATED),
         free,
         optional,
+    };
+    Some(match alt {
+        Some(c) => Effect::WithPlayTerms {
+            terms: PlayTerms {
+                alt_cost: Some(c),
+                ..Default::default()
+            },
+            effect: Box::new(cast),
+        },
+        None => cast,
     })
 }
 

@@ -34,6 +34,7 @@ fn secrets() -> (TestGame, ObjectId, ObjectId) {
 #[test]
 fn opponents_hand_and_libraries_are_hidden() {
     cr!("400.2", "401.2", "402.3");
+    interp!("hidden-information");
     let (t, _, _) = secrets();
     let p0 = json(&observe(&t.g, Some(P0)));
     // The opponent's hand: only its size (CR 402.3).
@@ -79,6 +80,7 @@ fn opponents_hand_and_libraries_are_hidden() {
 #[test]
 fn face_down_permanents_are_seen_only_by_their_controller() {
     cr!("708.5", "708.2");
+    interp!("hidden-information");
     let (t, akroma, _) = secrets();
     let p0 = observe(&t.g, Some(P0));
     let p0_json = json(&p0);
@@ -119,6 +121,7 @@ fn face_down_exiled_cards_are_hidden_until_a_player_may_look() {
 #[test]
 fn requests_and_events_dont_leak_hidden_cards() {
     cr!("402.3", "708.5");
+    interp!("hidden-information");
     let (mut t, _, _) = secrets();
     let before = t.g.event_feed.len();
     t.g.draw_cards(P1, 1);
@@ -242,4 +245,124 @@ fn every_player_sees_a_face_down_permanents_public_characteristics() {
     }
     let p0 = json(&observe(&t.g, Some(P0)));
     assert!(!p0.contains("Hill Giant"), "{p0}");
+}
+
+#[test]
+fn a_secret_choice_is_shown_only_to_its_chooser_until_revealed() {
+    cr!("607.2d");
+    let mut t = TestGame::new(3);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let archon = t.enter(P0, "Guardian Archon");
+    t.settle();
+    let view = |t: &TestGame, v: PlayerId| {
+        observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == archon.0)
+            .unwrap()
+            .choices
+    };
+    // P0 made the choice and sees it; the others see only that a choice was made.
+    assert_eq!(view(&t, P0), vec!["P0 chose P2".to_string()]);
+    assert_eq!(view(&t, P1), vec!["P0 chose secretly".to_string()]);
+    assert_eq!(view(&t, P2), vec!["P0 chose secretly".to_string()]);
+    let p1 = json(&observe(&t.g, Some(P1)));
+    assert!(!p1.contains("chose P2"), "{p1}");
+    // Revealing it (the cost of its ability) shows it to everyone.
+    t.activate(P0, archon, 0, &[Entity::Object(archon)])
+        .unwrap();
+    assert_eq!(view(&t, P1), vec!["P0 chose P2".to_string()]);
+}
+
+/// An agent that records what its player observes when asked to choose a number.
+struct Peeker(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl mtg_engine::decision::Agent for Peeker {
+    fn decide(
+        &mut self,
+        game: &mtg_engine::game::Game,
+        player: PlayerId,
+        decision: &Decision,
+    ) -> mtg_engine::decision::Answer {
+        if matches!(decision, Decision::ChooseNumber { .. }) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(serde_json::to_string(&observe(game, Some(player))).unwrap());
+            return mtg_engine::decision::Answer::Number(3);
+        }
+        mtg_engine::decision::Answer::Default
+    }
+}
+
+#[test]
+fn a_later_player_choosing_secretly_doesnt_see_the_earlier_secret_choices() {
+    cr!("101.4");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.set_agent(P1, Box::new(Peeker(seen.clone())));
+    t.answer(
+        P0,
+        DecisionKind::Number,
+        mtg_engine::decision::Answer::Number(42),
+    );
+    let ogre = t.enter(P0, "Menacing Ogre");
+    t.resolve_all();
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 1, "P1 chose a number");
+    // "Each player secretly chooses a number": P0 chose first, but P1 doesn't see it.
+    assert!(!seen[0].contains("chose 42"), "{}", seen[0]);
+    assert!(seen[0].contains("P0 chose secretly"), "{}", seen[0]);
+    // Once revealed, everyone sees both numbers.
+    let after = json(&observe(&t.g, Some(P1)));
+    assert!(
+        after.contains("P0 chose 42") && after.contains("P1 chose 3"),
+        "{after}"
+    );
+    assert_eq!(
+        (t.life(P0), t.life(P1)),
+        (20 - 42, 20),
+        "the highest number"
+    );
+    let _ = ogre;
+}
+
+#[test]
+fn an_open_choice_is_shown_to_every_player() {
+    cr!("607.2d");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(0),
+    );
+    t.answer(
+        P1,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    let angel = t.enter(P0, "Archangel of Strife");
+    t.settle();
+    let o = observe(&t.g, Some(P1));
+    let a = o.battlefield.iter().find(|o| o.id == angel.0).unwrap();
+    assert_eq!(a.choices, vec!["P0 chose war", "P1 chose peace"]);
+}
+
+#[test]
+fn every_players_mana_pool_is_public() {
+    cr!("106.4");
+    interp!("hidden-information");
+    // Announcing mana in pools (CR 106.4a, 106.4b) is a communication procedure; the
+    // engine keeps every pool public instead.
+    let mut t = TestGame::new(2);
+    t.g.add_mana(
+        P1,
+        vec![mtg_engine::mana::Mana::new(mtg_engine::mana::ManaType::R)],
+        None,
+    );
+    let obs = observe(&t.g, Some(P0));
+    assert_eq!(obs.players[1].mana_pool.get("R"), Some(&1));
 }

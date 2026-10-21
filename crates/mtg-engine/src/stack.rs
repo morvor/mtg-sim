@@ -808,6 +808,9 @@ impl Game {
                 if let Some(si) = self.objects[stack_obj.0 as usize].stack.as_mut() {
                     si.chosen_values.insert(CHOOSER_KEY, o.0 as i64);
                 }
+                // "An opponent chooses target creature they control": the target's
+                // description can refer to the opponent choosing it.
+                ctx.chosen_player = Some(o);
                 o
             } else if let Some(who) = &spec.chosen_by {
                 // "target ... of their choice": that player chooses (CR 601.2c).

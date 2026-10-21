@@ -124,8 +124,8 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
             && (r.is_empty() || r.starts_with(' '))
         {
-            // The attacking player is the active player (CR 506.2).
-            return Some((PlayerRef::ActivePlayer, r.to_string()));
+            // The attacking player (CR 506.2, 805.10c).
+            return Some((PlayerRef::AttackingPlayer, r.to_string()));
         }
         return None;
     }
@@ -211,7 +211,9 @@ pub fn player_phrase(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
             ));
         }
     }
-    None
+    // More player phrases ("each of your opponents", "each player who controls a white
+    // creature", "target opponent whose turn it is", "another target player").
+    super::player_phrases_2::player_phrase(s, b)
 }
 
 /// The player the text chose with "choose target player/opponent" (see

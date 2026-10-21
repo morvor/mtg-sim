@@ -210,7 +210,14 @@ impl Game {
                 }
             }
             Effect::Store { var, sel } => {
-                let v = self.resolve_sel(sel, ctx);
+                let mut v = self.resolve_sel(sel, ctx);
+                // "~" after its cost moved it (CR 400.7j).
+                if matches!(sel, Sel::This) {
+                    v = v
+                        .into_iter()
+                        .map(|e| self.found_after_move(e, ctx))
+                        .collect();
+                }
                 ctx.vars.insert(*var, v);
             }
             Effect::StoreValue { var, value } => {
@@ -433,7 +440,18 @@ impl Game {
                 // 120.2); the amount is evaluated for each of them (`vars::AFFECTED`).
                 let multi = matches!(source, Sel::All(_) | Sel::Union(_));
                 let srcs: Vec<ObjectId> = if multi {
-                    self.resolve_objects(source, ctx)
+                    let v = self.resolve_objects(source, ctx);
+                    match source {
+                        // "Equipped creature has '..., Unattach ~: It deals 1 damage ...'"
+                        // (Razor Boomerang): the granter deals the damage even if it has
+                        // left the battlefield, as it last existed there (CR 608.2h).
+                        Sel::All(Filter::Objects(ids))
+                            if v.is_empty() && crate::granted_by::is_bound_granter(source) =>
+                        {
+                            ids.clone()
+                        }
+                        _ => v,
+                    }
                 } else {
                     self.damage_source(source, ctx).into_iter().collect()
                 };
@@ -821,6 +839,8 @@ impl Game {
                 let mut effect = effect.clone();
                 // CR 608.2h: amounts are determined as the effect begins.
                 crate::kw::spell_cost_grammar::lock_player_effect(self, &mut effect, ctx);
+                // "from that player's graveyard": that player, as the effect begins.
+                crate::permissions::lock_permission_players(self, &mut effect, ctx);
                 self.player_effects.push(PlayerEffect {
                     id,
                     players,
@@ -1194,29 +1214,8 @@ impl Game {
                     }
                 }
             }
-            Effect::Regenerate { what } => {
-                for o in self.resolve_objects(what, ctx) {
-                    // CR 701.19: a regeneration shield for this turn.
-                    let id = self.new_effect_id();
-                    let ts = self.new_timestamp();
-                    self.replacements.push(ReplacementInstance {
-                        id,
-                        source: ctx.source,
-                        controller: ctx.controller,
-                        timestamp: ts,
-                        duration: Duration::EndOfTurn,
-                        def: ReplacementDef {
-                            event: ReplacementEvent::Destroy(Filter::Any),
-                            action: ReplacementAction::Regenerate,
-                            self_replacement: false,
-                            optional: false,
-                        },
-                        uses: Some(1),
-                        objects: Some(vec![o]),
-                        remaining: None,
-                    });
-                }
-            }
+            Effect::Regenerate { what } => self.regenerate(what, None, ctx),
+            Effect::RegenerateWith { what, then } => self.regenerate(what, Some(then), ctx),
             Effect::Attach { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
                 // "Attach ~ to a creature you control. If you do, ...": whether anything
@@ -2086,7 +2085,8 @@ impl Game {
             Effect::WithPlayTerms { terms, effect } => {
                 // The permissions the effect gives come with the terms.
                 let before = self.play_grants.len();
-                self.exec(effect, ctx);
+                // Spells cast as the effect resolves are cast with the terms too.
+                crate::permissions::with_resolution_terms(self, terms, |g| g.exec(effect, ctx));
                 for g in self.play_grants.iter_mut().skip(before) {
                     g.terms.merge(terms);
                 }
@@ -2433,10 +2433,13 @@ impl Game {
             return e;
         }
         let now = self.current(o);
-        let moved = ctx
-            .vars
-            .get(&vars::IT)
-            .is_some_and(|v| v.contains(&Entity::Object(now)));
+        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
+        // ~: ... Return ~ to the battlefield ...", CR 400.7j).
+        let moved = [vars::IT, crate::zones::COST_MOVED].iter().any(|v| {
+            ctx.vars
+                .get(v)
+                .is_some_and(|v| v.contains(&Entity::Object(now)))
+        });
         if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
             Entity::Object(now)
         } else {
@@ -2628,6 +2631,17 @@ impl Game {
                     match ctx
                         .source
                         .and_then(|s| self.obj(s).choices.basic_land_type.clone())
+                    {
+                        Some(t) => Modification::SetBasicLandType(vec![t]),
+                        None => m.clone(),
+                    }
+                }
+                // "becomes the second chosen type" (`choices.rs`): locked in likewise.
+                Modification::Custom { name, .. } if name == crate::choices::SECOND_CHOSEN_TYPE => {
+                    match ctx
+                        .source
+                        .and_then(|s| self.obj(s).choices.list.get(1).cloned())
+                        .filter(|t| crate::types::is_basic_land_type(t))
                     {
                         Some(t) => Modification::SetBasicLandType(vec![t]),
                         None => m.clone(),
@@ -3518,4 +3532,38 @@ pub(crate) fn performed_by(mut body: Body, p: PlayerId) -> Body {
         }
     }
     body
+}
+
+impl Game {
+    /// CR 701.19a: a regeneration shield for this turn on each object, with the rider
+    /// `then` performed when it's used ("When it regenerates this way, ...").
+    fn regenerate(&mut self, what: &Sel, then: Option<&Effect>, ctx: &mut Ctx) {
+        for o in self.resolve_objects(what, ctx) {
+            if let Some(e) = then {
+                // (Riders of shields that have worn off are forgotten.)
+                let live: Vec<u32> = self.replacements.iter().map(|r| r.id).collect();
+                self.regeneration_riders.retain(|r| live.contains(&r.0));
+                let id = self.next_effect_id;
+                self.regeneration_riders.push((id, ctx.clone(), e.clone()));
+            }
+            let id = self.new_effect_id();
+            let ts = self.new_timestamp();
+            self.replacements.push(ReplacementInstance {
+                id,
+                source: ctx.source,
+                controller: ctx.controller,
+                timestamp: ts,
+                duration: Duration::EndOfTurn,
+                def: ReplacementDef {
+                    event: ReplacementEvent::Destroy(Filter::Any),
+                    action: ReplacementAction::Regenerate,
+                    self_replacement: false,
+                    optional: false,
+                },
+                uses: Some(1),
+                objects: Some(vec![o]),
+                remaining: None,
+            });
+        }
+    }
 }

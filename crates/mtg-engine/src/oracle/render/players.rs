@@ -307,6 +307,7 @@ impl Renderer<'_> {
                     TargetGroup::ShareCreatureType => "that share a creature type".to_string(),
                     TargetGroup::ShareCardType => "that share a card type".to_string(),
                     TargetGroup::SharePermanentType => "that share a permanent type".to_string(),
+                    TargetGroup::ShareLandType => "that share a land type".to_string(),
                     g => self.target_group(g),
                 };
                 // "two target creature cards that share a creature type from your
@@ -351,6 +352,7 @@ impl Renderer<'_> {
             TargetGroup::ShareCreatureType => "that share a creature type".into(),
             TargetGroup::ShareCardType => "that share a card type".into(),
             TargetGroup::SharePermanentType => "that share a permanent type".into(),
+            TargetGroup::ShareLandType => "that share a land type".into(),
             TargetGroup::ShareNoCreatureType => "that share no creature types".into(),
             TargetGroup::DifferentNames => "with different names".into(),
             TargetGroup::DifferentControllers => "with different controllers".into(),
@@ -374,6 +376,22 @@ impl Renderer<'_> {
                 };
                 let v = self.value(v);
                 format!("with total {st} {v} or less")
+            }
+            TargetGroup::TotalAtLeast(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v} or greater")
+            }
+            TargetGroup::SameName => "with the same name".into(),
+            TargetGroup::ShareColor => "that share a color".into(),
+            TargetGroup::CardTypesAmong(v) => {
+                let v = self.value(v);
+                format!("with {v} or more card types among them")
             }
         }
     }
@@ -936,6 +954,17 @@ impl Renderer<'_> {
                 let p = self.player(p, Case::Poss);
                 decline(format!("the top card of {p} graveyard"), case)
             }
+            Sel::BottomOfLibrary(p, n) => {
+                let p = self.player(p, Case::Poss);
+                let s = match n {
+                    Value::Const(1) => format!("the bottom card of {p} library"),
+                    other => {
+                        let v = self.value(other);
+                        format!("the bottom {v} cards of {p} library")
+                    }
+                };
+                decline(s, case)
+            }
             Sel::TopOfLibrary(p, n) => {
                 let p = self.player(p, Case::Poss);
                 let s = match n {
@@ -1128,6 +1157,12 @@ impl Renderer<'_> {
                 "{alt:that player|that attacking player|the attacking player}".into()
             }
             PlayerRef::ActivePlayer => "that player".into(),
+            PlayerRef::AttackingPlayer if self.attack_trigger => {
+                "{alt:that player|that attacking player|the attacking player}".into()
+            }
+            PlayerRef::AttackingPlayer => {
+                "{alt:the attacking player|attacking player|that attacking player}".into()
+            }
             PlayerRef::DefendingPlayer => "defending player".into(),
             PlayerRef::ChosenPlayer(_) => "the chosen player".into(),
             // "the player with the most life" (the one an intervening "if a player has more
@@ -1346,6 +1381,12 @@ impl Renderer<'_> {
                 }
             }
             PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::Chose(w) => format!("who chose {w}"),
+            PlayerFilter::ChosenPlayers => "who is one of the chosen players".into(),
+            PlayerFilter::ChoseNumber(c, v) => {
+                let v = self.value(v);
+                format!("who chose a number {}", nouns::cmp_phrase(*c, &v))
+            }
             PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
             PlayerFilter::VotedLikeYou(false) => {
                 "who voted for a choice you didn't vote for".into()

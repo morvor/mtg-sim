@@ -1,7 +1,10 @@
 //! Coverage and reporting tools.
 //!
-//! * `cr-coverage [--write PATH] [--check]` — which Comprehensive Rules are cited by tests
-//!   (via `cr!(...)`) or exempted (`docs/cr-exemptions.tsv`).
+//! * `cr-coverage [--write PATH] [--check] [--range LO HI] [--examples]` — which
+//!   Comprehensive Rules are cited by tests (via `cr!(...)` or `cr_example!(...)`) or
+//!   exempted (`docs/cr-exemptions/*.tsv`), and which of the rules' worked examples are
+//!   cited by `cr_example!(rule, substring)` or exempted (`docs/cr-exemptions/examples.tsv`);
+//!   `--examples [--range 600-611]` lists each example with its rule and status.
 //! * `card-coverage [--write PATH]` — how many cards the oracle compiler fully supports
 //!   (and of those, how many round-trip: see `roundtrip`), and the most common
 //!   unsupported ability texts.
@@ -19,6 +22,10 @@
 //!   cards whose sole unsupported text is that one, i.e. the cards it alone blocks; `--raw`:
 //!   exact texts, numbers kept, e.g. to write a hand-written ability's `text`). Sticker
 //!   sheets are deferred and left out unless named with `--card`.
+//! * `interpretations [--write [PATH]] [--check]` — the interpretation register
+//!   (`docs/interpretations/`): prints its problems (see `mtg_data::interpretations::check`)
+//!   and the index; `--write` writes the index to `docs/INTERPRETATIONS.md` (or PATH);
+//!   `--check` exits with status 1 on a problem or when that file is out of date.
 //! * `structure-coverage [--write PATH] [--limit N] [--logs DIR] [--card NAME]` — groups
 //!   supported cards' abilities by compiled structure and reports the structures no test
 //!   exercises (see `structure_coverage.rs` for the command sequence).
@@ -80,7 +87,159 @@ pub fn cr_citations() -> BTreeMap<String, BTreeSet<String>> {
             }
         }
     }
+    // `cr_example!("rule", "...")` also cites its rule.
+    for (rule, _, file) in cr_example_citations() {
+        out.entry(rule).or_default().insert(file);
+    }
     out
+}
+
+/// All `cr_example!("rule", "substring")` citations in the engine's sources and tests:
+/// (rule, substring, file). Only the engine: mtg-data documents the macro.
+pub fn cr_example_citations() -> Vec<(String, String, String)> {
+    let mut files = Vec::new();
+    rust_files(&repo_root().join("crates/mtg-engine"), &mut files);
+    let re = Regex::new(
+        r#"(?s)cr_example!\s*\(\s*"(\d{3}(?:\.\d+[a-z]*)?)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)"#,
+    )
+    .unwrap();
+    let mut out = Vec::new();
+    for f in files {
+        let Ok(text) = std::fs::read_to_string(&f) else {
+            continue;
+        };
+        let rel = f
+            .strip_prefix(repo_root())
+            .unwrap_or(&f)
+            .display()
+            .to_string();
+        for m in re.captures_iter(&text) {
+            out.push((m[1].to_string(), unescape(&m[2]), rel.clone()));
+        }
+    }
+    out
+}
+
+/// The file listing exempted CR examples: `rule<TAB>substring<TAB>reason`.
+const EXAMPLE_EXEMPTIONS: &str = "docs/cr-exemptions/examples.tsv";
+
+/// Exempted CR examples from [`EXAMPLE_EXEMPTIONS`]: (rule, substring, reason, line).
+pub fn example_exemptions() -> Vec<(String, String, String, usize)> {
+    let mut out = Vec::new();
+    let Ok(text) = std::fs::read_to_string(repo_root().join(EXAMPLE_EXEMPTIONS)) else {
+        return out;
+    };
+    for (i, line) in text.lines().enumerate() {
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let rule = parts.next().unwrap_or("").trim().to_string();
+        let needle = parts.next().unwrap_or("").trim().to_string();
+        let reason = parts.next().unwrap_or("").trim().to_string();
+        out.push((rule, needle, reason, i + 1));
+    }
+    out
+}
+
+/// Whether rule `id` is within `[lo, hi]` in document order, a bound including the rules
+/// under it: "611" includes 611.1 and 611.2c, "702.19" includes 702.19a..702.19z.
+fn rule_in_range(id: &str, lo: &str, hi: &str) -> bool {
+    let key = mtg_data::rules::rule_sort_key;
+    let under = |b: &str| {
+        id == b
+            || id.strip_prefix(b).is_some_and(|rest| {
+                rest.starts_with('.') && !b.contains('.')
+                    || rest.starts_with(|c: char| c.is_ascii_lowercase())
+            })
+    };
+    (key(id) >= key(lo) || under(lo)) && (key(id) <= key(hi) || under(hi))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExampleStatus {
+    Covered,
+    Exempt,
+    Open,
+}
+
+/// Every worked example in the CR, with its coverage status, plus the problems found in
+/// citations and exemptions (unknown rule, substring matching none or several examples,
+/// missing reason).
+struct ExampleCoverage {
+    /// (rule id, example text, status, citing files or exemption reason)
+    examples: Vec<(String, String, ExampleStatus, String)>,
+    problems: Vec<String>,
+}
+
+fn example_coverage() -> ExampleCoverage {
+    let rules = mtg_data::comprehensive_rules();
+    let mut problems = Vec::new();
+    // (rule, example index) → citing files / exemption reason
+    let mut cited: BTreeMap<(String, usize), BTreeSet<String>> = BTreeMap::new();
+    let mut exempt: BTreeMap<(String, usize), String> = BTreeMap::new();
+    let resolve = |rule: &str, needle: &str| -> Result<usize, String> {
+        let Some(r) = rules.get(rule) else {
+            return Err("no such rule".into());
+        };
+        let n = mtg_data::normalize_text(needle);
+        if n.is_empty() {
+            return Err("empty substring".into());
+        }
+        let hits: Vec<usize> = r
+            .examples
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| mtg_data::normalize_text(e).contains(&n))
+            .map(|(i, _)| i)
+            .collect();
+        match hits.as_slice() {
+            [i] => Ok(*i),
+            [] => Err("matches none of the rule's examples".into()),
+            _ => Err(format!("matches {} of the rule's examples", hits.len())),
+        }
+    };
+    for (rule, needle, file) in cr_example_citations() {
+        match resolve(&rule, &needle) {
+            Ok(i) => {
+                cited.entry((rule, i)).or_default().insert(file);
+            }
+            Err(e) => problems.push(format!("citation {rule} {needle:?} ({file}): {e}")),
+        }
+    }
+    for (rule, needle, reason, line) in example_exemptions() {
+        if reason.is_empty() {
+            problems.push(format!(
+                "exemption {rule} {needle:?} ({EXAMPLE_EXEMPTIONS}:{line}): no reason"
+            ));
+        }
+        match resolve(&rule, &needle) {
+            Ok(i) => {
+                exempt.insert((rule, i), reason);
+            }
+            Err(e) => problems.push(format!(
+                "exemption {rule} {needle:?} ({EXAMPLE_EXEMPTIONS}:{line}): {e}"
+            )),
+        }
+    }
+    let mut examples = Vec::new();
+    for r in rules.all() {
+        for (i, e) in r.examples.iter().enumerate() {
+            let key = (r.id.clone(), i);
+            let (st, note) = if let Some(files) = cited.get(&key) {
+                (
+                    ExampleStatus::Covered,
+                    files.iter().cloned().collect::<Vec<_>>().join(", "),
+                )
+            } else if let Some(reason) = exempt.get(&key) {
+                (ExampleStatus::Exempt, reason.clone())
+            } else {
+                (ExampleStatus::Open, String::new())
+            };
+            examples.push((r.id.clone(), e.clone(), st, note));
+        }
+    }
+    ExampleCoverage { examples, problems }
 }
 
 /// Exemptions from `docs/cr-exemptions.tsv` and every `docs/cr-exemptions/*.tsv`.
@@ -91,6 +250,7 @@ pub fn exemptions() -> BTreeMap<String, String> {
             .flatten()
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|x| x == "tsv"))
+            .filter(|p| !p.ends_with(EXAMPLE_EXEMPTIONS))
             .collect();
         v.sort();
         paths.extend(v);
@@ -170,6 +330,23 @@ fn cr_coverage(args: &[String]) {
         100.0 * exempt as f64 / total as f64,
         100.0 * unc as f64 / total as f64
     ));
+    // Worked examples.
+    let exc = example_coverage();
+    let ex_total = exc.examples.len();
+    let ex_count = |s: ExampleStatus| exc.examples.iter().filter(|e| e.2 == s).count();
+    let (ex_cov, ex_ex, ex_open) = (
+        ex_count(ExampleStatus::Covered),
+        ex_count(ExampleStatus::Exempt),
+        ex_count(ExampleStatus::Open),
+    );
+    let pct = |n: usize| 100.0 * n as f64 / ex_total.max(1) as f64;
+    md.push_str("## Worked examples\n\nThe paragraphs starting \"Example:\" that follow a rule. An example is **covered** when a test cites it with `cr_example!(\"<rule>\", \"<substring>\")` (which fails unless exactly one of that rule's examples contains the substring), or **exempt** with a reason in `docs/cr-exemptions/examples.tsv`. List them with `cr-coverage --examples [--range 600 611]`.\n\n");
+    md.push_str(&format!(
+        "| | Examples | % |\n|---|---:|---:|\n| Covered by tests | {ex_cov} | {:.1}% |\n| Exempt (with reason) | {ex_ex} | {:.1}% |\n| **Open** | **{ex_open}** | {:.1}% |\n| Total examples | {ex_total} | |\n\n",
+        pct(ex_cov),
+        pct(ex_ex),
+        pct(ex_open)
+    ));
     // Per section.
     md.push_str("## By section\n\n| Section | Title | Rules | Covered | Uncovered |\n|---|---|---:|---:|---:|\n");
     for sec in rules.all().filter(|r| r.kind == RuleKind::Section) {
@@ -206,6 +383,7 @@ fn cr_coverage(args: &[String]) {
     }
     let mut write = None;
     let mut check = false;
+    let mut examples_mode = false;
     let mut range: Option<(String, String)> = None;
     let mut i = 0;
     while i < args.len() {
@@ -215,25 +393,70 @@ fn cr_coverage(args: &[String]) {
                 i += 1;
             }
             "--check" => check = true,
+            "--examples" => examples_mode = true,
             "--range" => {
-                range = Some((args[i + 1].clone(), args[i + 2].clone()));
-                i += 2;
+                // `--range 600 611` or `--range 600-611`.
+                let a = args[i + 1].clone();
+                if let Some((lo, hi)) = a.split_once('-') {
+                    range = Some((lo.to_string(), hi.to_string()));
+                    i += 1;
+                } else {
+                    range = Some((a, args[i + 2].clone()));
+                    i += 2;
+                }
             }
             _ => {}
         }
         i += 1;
     }
+    if examples_mode {
+        // Print every example (in the range, if given) with its rule and status.
+        let in_range = |id: &str| match &range {
+            None => true,
+            Some((lo, hi)) => rule_in_range(id, lo, hi),
+        };
+        let (mut n, mut cov, mut exm, mut open) = (0, 0, 0, 0);
+        for (id, text, st, note) in &exc.examples {
+            if !in_range(id) {
+                continue;
+            }
+            n += 1;
+            let label = match st {
+                ExampleStatus::Covered => {
+                    cov += 1;
+                    "covered"
+                }
+                ExampleStatus::Exempt => {
+                    exm += 1;
+                    "exempt"
+                }
+                ExampleStatus::Open => {
+                    open += 1;
+                    "OPEN"
+                }
+            };
+            println!("{label:>8}  {id:<9} {}", text.replace('\n', " / "));
+            if !note.is_empty() {
+                println!("{:>8}  {:<9}   -> {note}", "", "");
+            }
+        }
+        match &range {
+            Some((lo, hi)) => print!("range {lo}..{hi}: "),
+            None => print!("all rules: "),
+        }
+        println!("{n} examples, {cov} covered, {exm} exempt, {open} open");
+        for p in &exc.problems {
+            println!("INVALID example {p}");
+        }
+        if check && (open > 0 || !exc.problems.is_empty()) {
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Some((lo, hi)) = &range {
         // Print the status of every rule whose id is within [lo, hi] (inclusive, by document
         // order prefix: "702.19" includes 702.19a..702.19z).
-        let key = |id: &str| mtg_data::rules::rule_sort_key(id);
-        let (klo, khi) = (key(lo), key(hi));
-        let in_range = |id: &str| {
-            let k = key(id);
-            let base = id.trim_end_matches(|c: char| c.is_ascii_lowercase());
-            let kb = key(base);
-            (k >= klo || kb >= klo) && (k <= khi || kb <= khi)
-        };
+        let in_range = |id: &str| rule_in_range(id, lo, hi);
         let mut n = 0;
         let mut unc = 0;
         for r in &numbered {
@@ -272,8 +495,15 @@ fn cr_coverage(args: &[String]) {
         total,
         100.0 * (total - unc) as f64 / total as f64
     );
+    println!(
+        "CR examples: {ex_cov} covered, {ex_ex} exempt, {ex_open} open of {ex_total} ({:.1}% covered or exempt)",
+        pct(ex_cov + ex_ex)
+    );
     if !invalid.is_empty() {
         println!("INVALID citations (no such rule): {invalid:?}");
+    }
+    for p in &exc.problems {
+        println!("INVALID example {p}");
     }
     for (id, _) in &ex {
         if rules.get(id).is_none() {
@@ -284,7 +514,7 @@ fn cr_coverage(args: &[String]) {
         std::fs::write(repo_root().join(&p), md).expect("write report");
         println!("wrote {p}");
     }
-    if check && (unc > 0 || !invalid.is_empty()) {
+    if check && (unc > 0 || !invalid.is_empty() || !exc.problems.is_empty()) {
         std::process::exit(1);
     }
 }
@@ -897,6 +1127,64 @@ fn manual_check() {
     }
 }
 
+/// The interpretation register: problems, and the index `docs/INTERPRETATIONS.md`.
+fn interpretations(args: &[String]) {
+    use mtg_data::interpretations as reg;
+    let root = repo_root();
+    let mut write: Option<PathBuf> = None;
+    let mut check = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--write" => {
+                let path = args.get(i + 1).filter(|a| !a.starts_with("--"));
+                write = Some(match path {
+                    Some(p) => {
+                        i += 1;
+                        PathBuf::from(p)
+                    }
+                    None => root.join("docs/INTERPRETATIONS.md"),
+                });
+            }
+            "--check" => check = true,
+            other => {
+                eprintln!("interpretations: unknown argument {other:?}");
+                std::process::exit(2);
+            }
+        }
+        i += 1;
+    }
+    let entries = reg::load(&root.join("docs/interpretations"));
+    let problems = reg::check(&root);
+    for p in &problems {
+        println!("{p}");
+    }
+    let index = reg::render_index(&entries);
+    let provisional = entries.iter().filter(|e| e.status == "provisional").count();
+    println!(
+        "{} entries ({provisional} provisional), {} problems",
+        entries.len(),
+        problems.len()
+    );
+    let mut stale = false;
+    if let Some(path) = &write {
+        std::fs::write(path, &index).expect("write index");
+        println!("wrote {}", path.display());
+    } else {
+        let current =
+            std::fs::read_to_string(root.join("docs/INTERPRETATIONS.md")).unwrap_or_default();
+        if current != index {
+            stale = true;
+            println!(
+                "docs/INTERPRETATIONS.md is out of date: run `mtg-tools interpretations --write`"
+            );
+        }
+    }
+    if check && (!problems.is_empty() || stale) {
+        std::process::exit(1);
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -906,10 +1194,11 @@ fn main() {
         Some("unsupported") => unsupported(&args[1..]),
         Some("roundtrip") => roundtrip::run(&args[1..]),
         Some("manual-check") => manual_check(),
+        Some("interpretations") => interpretations(&args[1..]),
         Some("structure-coverage") => structure_coverage::run(&args[1..], repo_root()),
         Some("verified") => verified::run(&args[1..], repo_root()),
         _ => {
-            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check|roundtrip|verified> [--write PATH] [--check]");
+            eprintln!("usage: mtg-tools <cr-coverage|card-coverage|rulings-coverage|unsupported|structure-coverage|manual-check|interpretations|roundtrip|verified> [--write PATH] [--check]");
             std::process::exit(2);
         }
     }

@@ -152,6 +152,7 @@ fn mana_pool_empties_between_steps_of_the_same_phase() {
 #[test]
 fn undefined_mana_type_produces_no_mana() {
     cr!("106.5");
+    cr_example!("106.5", "activating Meteor Crater's mana ability produces no mana");
     ruling!(
         "Exotic Orchard",
         "Exotic Orchard can't be tapped for colorless mana"
@@ -203,6 +204,7 @@ fn restricted_mana_keeps_its_type() {
 #[test]
 fn doubling_cube_doubles_restricted_mana_without_the_restriction() {
     cr!("106.6");
+    cr_example!("106.6", "Doubling Cube");
     let mut t = TestGame::new(2);
     let zigs = t.lands(P0, "Ancient Ziggurat", 2);
     t.answer(P0, DecisionKind::Option, Answer::Index(3)); // red
@@ -309,6 +311,7 @@ fn increased_mana_creates_a_delayed_trigger_for_each_mana() {
 #[test]
 fn could_produce_exotic_orchard_examples() {
     cr!("106.7");
+    cr_example!("106.7", "each Exotic Orchard could produce {G}");
     ruling!(
         "Exotic Orchard",
         "Lands that produce mana based only on what other lands \"could produce\" won't help each other"

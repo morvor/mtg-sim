@@ -621,6 +621,14 @@ impl Renderer<'_> {
                 let w = self.target_group(g);
                 np.post.push(w);
             }
+            // "creatures controlled by players who chose war" (`choice_grammar_per_player`).
+            Filter::ControllerMatches(pf) if matches!(pf.as_ref(), PlayerFilter::Chose(_)) => {
+                let PlayerFilter::Chose(w) = pf.as_ref() else {
+                    return;
+                };
+                np.controller_matches =
+                    Some(format!("controlled by {{alt:players|a player}} who chose {w}"));
+            }
             Filter::ControllerMatches(pf) => {
                 let p = self.player_filter_noun(pf, Num::One);
                 np.controller_matches = Some(format!("whose controller is {}", with_article(&p)));
@@ -859,6 +867,10 @@ impl Renderer<'_> {
             // What an Aura is moved to must be something it can enchant: the rules say so
             // (CR 303.4j, 701.3b), and the card doesn't.
             Filter::CanBeAttachedBy(_) => {}
+            Filter::CouldAttachTo(s) => {
+                let s = self.sel(s, Case::Obj);
+                np.rel.push(format!("that could enchant {s}"));
+            }
             Filter::Attached => np.status.push("attached".into()),
             Filter::Enchanted => np.status.push("enchanted".into()),
             Filter::Equipped => np.status.push("equipped".into()),

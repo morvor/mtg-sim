@@ -2167,6 +2167,19 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Obj);
                 format!("regenerate {w}")
             }
+            Effect::RegenerateWith { what, then } => {
+                let w = self.sel(what, Case::Obj);
+                match then.as_ref() {
+                    Effect::Reflexive { body } => {
+                        let e = self.effect(&body.effect);
+                        format!("regenerate {w}. When it regenerates this way, {e}")
+                    }
+                    e => {
+                        let e = self.effect(e);
+                        format!("regenerate {w}. {e} if it regenerates this way")
+                    }
+                }
+            }
             Effect::Attach { what, to } | Effect::AttachAsCreature { what, to } => {
                 // (Naming a target doesn't make "it" in "to it" the target.)
                 let salient = self.self_salient;
@@ -3755,6 +3768,15 @@ impl Renderer<'_> {
                     parts.push(format!(
                         "{{alt:if you don't|if you didn't put a card into your hand this way}}, {t}"
                     ));
+                    i += 2;
+                    continue;
+                }
+            }
+            // "secretly choose an opponent" (`choices.rs`).
+            if let (Some(Effect::Custom(n)), Some(next)) = (v.get(i), v.get(i + 1)) {
+                if n == crate::choices::SECRET_NEXT {
+                    let e = self.effect(next);
+                    parts.push(format!("secretly {e}"));
                     i += 2;
                     continue;
                 }
@@ -5967,7 +5989,7 @@ impl Renderer<'_> {
                 _ => None,
             },
             Sel::All(f) | Sel::Choose { filter: f, .. } => f.zone(),
-            Sel::TopOfLibrary(..) => Some(ZoneKind::Library),
+            Sel::TopOfLibrary(..) | Sel::BottomOfLibrary(..) => Some(ZoneKind::Library),
             _ => None,
         }
     }
@@ -6130,6 +6152,20 @@ impl Renderer<'_> {
                         let n = k.kind.name().to_lowercase();
                         where_clauses.push(format!(". The {n} cost is equal to its mana cost"));
                     }
+                }
+                Modification::AddKeywordOwnCost(k, reduce) => {
+                    if keywords.is_empty() && abilities.is_empty() {
+                        parts.push(GRANTS.into());
+                    }
+                    let saved = std::mem::replace(&mut self.granted_keyword, true);
+                    keywords.push(self.keyword_lower(&crate::keywords::Keyword::new(k.kind)));
+                    self.granted_keyword = saved;
+                    let n = k.kind.name().to_lowercase();
+                    where_clauses.push(if *reduce == 0 {
+                        format!(". The {n} cost is equal to its mana cost")
+                    } else {
+                        format!(". Its {n} cost is equal to its mana cost reduced by {{{reduce}}}")
+                    });
                 }
                 Modification::AddKeywordX(k, v) => {
                     let s = self.keyword_lower(k);
@@ -6630,6 +6666,22 @@ impl Renderer<'_> {
             ChoiceKind::CardType => "a card type".into(),
             ChoiceKind::OddOrEven => "odd or even".into(),
             ChoiceKind::Word(v) => join_list(v, "or"),
+            ChoiceKind::Distinct(n, v)
+                if *v == ["Plains", "Island", "Swamp", "Mountain", "Forest"] =>
+            {
+                format!(
+                    "{} basic land types",
+                    crate::oracle::render::number_word(*n as i32)
+                )
+            }
+            ChoiceKind::Players(n) => {
+                format!("{} players", crate::oracle::render::number_word(*n as i32))
+            }
+            ChoiceKind::Distinct(n, v) => format!(
+                "{} abilities from among {}",
+                crate::oracle::render::number_word(*n as i32),
+                join_list(v, "and")
+            ),
         }
     }
 
@@ -7507,7 +7559,7 @@ pub(crate) fn is_plural_sel(s: &Sel) -> bool {
     match s {
         Sel::All(_) | Sel::TriggerObjects | Sel::Linked | Sel::Union(_) | Sel::AllTargets => true,
         Sel::Choose { count, .. } => !matches!(count, Value::Const(1)),
-        Sel::TopOfLibrary(_, n) => !matches!(n, Value::Const(1)),
+        Sel::TopOfLibrary(_, n) | Sel::BottomOfLibrary(_, n) => !matches!(n, Value::Const(1)),
         _ => false,
     }
 }
@@ -7580,6 +7632,10 @@ pub(crate) fn either_form(a: String, b: String) -> String {
 }
 
 pub(crate) fn third_person(vp: &str) -> String {
+    // An adverb before the verb: "secretly chooses".
+    if let Some(r) = vp.strip_prefix("secretly ") {
+        return format!("secretly {}", third_person(r));
+    }
     let (verb, rest) = match vp.split_once(' ') {
         Some((v, r)) => (v, format!(" {r}")),
         None => (vp, String::new()),

@@ -55,6 +55,7 @@ fn a_delayed_triggered_ability_does_something_later() {
 #[test]
 fn a_delayed_trigger_wont_trigger_on_events_before_it_was_created() {
     cr!("603.7a");
+    cr_example!("603.7a", "When this creature becomes untapped");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P1, "Hill Giant");
@@ -210,6 +211,7 @@ fn simultaneous_events_let_the_controller_choose_which_causes_the_delayed_trigge
 #[test]
 fn a_delayed_trigger_affects_its_object_despite_changes_but_not_a_new_object() {
     cr!("603.7c");
+    cr_example!("603.7c", "Exile this creature at the beginning of the next end step");
     // "{0}: Exile this creature at the beginning of the next end step."
     let doomed = || {
         CB::new("Doomed")

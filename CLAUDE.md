@@ -11,7 +11,7 @@ instead of relying on memory. Notably: combat damage assignment order no longer 
 ## Crates
 
 - `crates/mtg-data` — loaders: Scryfall cards/rulings/tags, CR parser. Defines the
-  `cr!` and `ruling!` citation macros.
+  `cr!`, `ruling!` and `interp!` citation macros and the interpretation-register check.
 - `crates/mtg-engine` — the engine.
 - `crates/mtg-api` — external decision interface: per-player observations, every legal
   option for every decision, the JSON agent protocol (`docs/AGENT_PROTOCOL.md`),
@@ -127,6 +127,11 @@ note anything new you run into there.
 - Use `mtg_engine::testing::TestGame` (see its docs and `tests/smoke.rs`). Use real cards
   via `t.battlefield(P0, "Card Name")` etc. For rules that need a custom object, build a
   `CardDef::custom(...)`.
+- Judgment calls (an ambiguous or silent rule you chose a reading of, a knowing deviation from
+  the CR, or a policy for a choice the rules leave to players) go in the interpretation
+  register, `docs/interpretations/<area>.md` (index: `docs/INTERPRETATIONS.md`, regenerate with
+  `mtg-tools interpretations --write`): add an entry, or cite an existing one, with
+  `interp!("<id>")` in the tests that pin it (`cargo test -p mtg-data` checks the register).
 - Rules that have genuinely no engine-testable behavior (purely informational text,
   physical-card presentation, tournament/draft procedures) may be listed in
   `docs/cr-exemptions/<area>.tsv` as `rule<TAB>reason` (one file per area, to avoid merge conflicts). Be conservative: deck-construction rules,
@@ -144,6 +149,7 @@ cargo test -p mtg-engine --test cr             # one test binary
 cargo run --release -p mtg-tools -- cr-coverage
 cargo run --release -p mtg-tools -- card-coverage
 cargo run --release -p mtg-tools -- manual-check   # hand-written abilities: current, compiled-first, tested
+cargo run --release -p mtg-tools -- interpretations --write   # judgment-call register index docs/INTERPRETATIONS.md
 cargo run --release -p mtg-tools -- rulings-coverage --card "Tarmogoyf"
 cargo run --release -p mtg-tools -- unsupported --limit 50 --filter "enters"
 rm -rf target/structlog && MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace

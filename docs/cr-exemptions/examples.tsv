@@ -1,0 +1,4 @@
+# Exempted Comprehensive Rules worked examples ("Example:" paragraphs).
+# rule<TAB>substring<TAB>reason. The substring must match exactly one of that rule's examples
+# (compared lowercased with quotes, dashes and whitespace folded). Exempt only an example no
+# game can show (it explains a term), or one tested elsewhere (cite it there instead).

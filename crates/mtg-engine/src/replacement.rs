@@ -21,6 +21,10 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct EtbInfo {
     pub tapped: bool,
+    /// Cards exiled with the entering object while it entered ("As this creature enters,
+    /// exile a creature card from your graveyard"): linked to the permanent's abilities
+    /// (CR 607.2b, 614.12), by link id.
+    pub exiled_as_it_entered: Vec<(u16, ObjectId)>,
     pub counters: Vec<(CounterKind, u32)>,
     /// Counters it enters with that the effect has a player other than its controller put
     /// on it (CR 122.6a: tribute's chosen opponent, CR 702.104a).
@@ -1162,8 +1166,11 @@ impl Game {
     }
 
     /// Checks an entering object against a filter "as it would exist on the battlefield"
-    /// (CR 614.12). We approximate with its current characteristics plus the
-    /// modifications already made to how it enters, and the player who will control it.
+    /// (CR 614.12), with the player who will control it. When `replace` gathers the
+    /// effects that modify how a permanent enters, this runs inside
+    /// `with_hypothetical_entry`, so the object's characteristics are those it would have
+    /// on the battlefield; the queries over all effects (`applicable_replacements` and the
+    /// like) see its current characteristics.
     fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
         let view = EnteringView {
             obj: m.obj,
@@ -1221,6 +1228,18 @@ impl Game {
             ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
         };
         let mut action = cand.def.action.clone();
+        // "... instead. When you do, ...": the instruction after the modified event.
+        while let ReplacementAction::Then(inner, then) = action {
+            let mut c = ctx.clone();
+            let info = event_info_of(&ev);
+            if let Some(o) = info.object {
+                c.vars.insert(vars::IT, vec![Entity::Object(o)]);
+                c.nums.insert(FOLLOW_IT, 1);
+            }
+            c.event = Some(info);
+            self.post_replacement_effects.push((c, *then));
+            action = *inner;
+        }
         // "Reveal that card and put it on top of your library instead": the card is
         // revealed where it is (CR 701.20b) by the player it's moving away from, then the
         // event is modified as any other move elsewhere.
@@ -1397,7 +1416,15 @@ impl Game {
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 c.entering = Some(crate::eval::EntryMods::default());
+                let linked_before = self.obj(m.obj).linked.clone();
                 self.exec(&e, &mut c);
+                for (link, objs) in self.obj(m.obj).linked.clone() {
+                    for o in objs {
+                        if !linked_before.get(&link).is_some_and(|v| v.contains(&o)) {
+                            m.etb.exiled_as_it_entered.push((link, o));
+                        }
+                    }
+                }
                 if let Some(em) = c.entering.take() {
                     m.etb.tapped |= em.tapped;
                     m.etb.counters.extend(em.counters);
@@ -1555,6 +1582,13 @@ impl Game {
                 crate::combat::remove_from_combat(self, obj);
                 if let Some(id) = cand.instance {
                     self.replacements.retain(|r| r.id != id);
+                    // "When it regenerates this way, ...": the shield's rider, about the
+                    // regenerated permanent.
+                    if let Some(i) = self.regeneration_riders.iter().position(|r| r.0 == id) {
+                        let (_, mut c, e) = self.regeneration_riders.remove(i);
+                        c.vars.insert(vars::IT, vec![Entity::Object(obj)]);
+                        self.post_replacement_effects.push((c, e));
+                    }
                 }
                 vec![]
             }
@@ -1571,8 +1605,19 @@ impl Game {
             ) => {
                 // "Damage that would reduce your life total to less than N reduces it to N
                 // instead": a player with less than N life loses life normally.
+                // The life the player gains as part of the same damage event counts
+                // (CR 120.4d): [lose 5, gain 5] doesn't reduce 2 life to less than 1.
                 let floor = self.eval_value(&v, &ctx) as i32;
-                let life = self.player(player).life;
+                let gains: i32 = if from_damage {
+                    self.damage_event_gains
+                        .iter()
+                        .filter(|(p, _)| *p == player)
+                        .map(|(_, n)| *n as i32)
+                        .sum()
+                } else {
+                    0
+                };
+                let life = self.player(player).life + gains;
                 let amount = if life >= floor && life - (amount as i32) < floor {
                     (life - floor) as u32
                 } else {
@@ -1589,7 +1634,10 @@ impl Game {
                 }
             }
             (ReplacementAction::Add(v), ev) => {
-                let d = self.eval_value(&v, &ctx).max(0) as u32;
+                // (The amount may depend on the event's: "damage equal to ~'s power".)
+                let mut c = ctx.clone();
+                c.event = Some(event_info_of(&ev));
+                let d = self.eval_value(&v, &c).max(0) as u32;
                 vec![scale_event(ev, |n| n + d)]
             }
             (
@@ -1964,6 +2012,11 @@ fn event_amount(ev: &ReplEvent) -> Option<u32> {
         _ => None,
     }
 }
+
+/// A context flag: "it" in an instruction performed after a replacement's modified event
+/// (`ReplacementAction::Then`) is the object the event moved, wherever it went ("exile it
+/// instead. Return it to the battlefield ...", CR 400.7: the same card, followed).
+pub const FOLLOW_IT: Var = vars::USER + 4242;
 
 pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
     let mut e = EventInfo::default();

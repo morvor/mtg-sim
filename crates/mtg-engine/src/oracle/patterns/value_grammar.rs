@@ -1008,6 +1008,13 @@ fn players(s: &str) -> Option<(PlayerFilter, &str)> {
     } else {
         return None;
     };
+    // "the number of players in the game" (players who have left aren't in it).
+    if let Some(rest) = r.strip_prefix("in the game") {
+        if matches!(base, PlayerFilter::Any) && word_end(rest) {
+            return Some((base, rest));
+        }
+        return None;
+    }
     if let Some(rest) = r.strip_prefix("you have") {
         if matches!(base, PlayerFilter::Opponent) && word_end(rest) {
             return Some((base, rest));
@@ -1760,6 +1767,7 @@ mod tests {
             "the number of cards named ~ in all graveyards",
             "one plus the number of cards named ~ in your graveyard",
             "the number of opponents you have",
+            "the number of players in the game",
             "the number of opponents who control an artifact",
             "the number of your opponents with four or more cards in hand",
             "the number of opponents who control more lands than you",

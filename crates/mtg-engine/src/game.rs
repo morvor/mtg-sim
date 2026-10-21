@@ -616,6 +616,10 @@ pub struct Game {
     pub replacements: Vec<ReplacementInstance>,
     pub delayed_triggers: Vec<DelayedTrigger>,
     pub pending_triggers: Vec<PendingTrigger>,
+    /// What happens when a regeneration shield is used ("When it regenerates this way,
+    /// ..."): the shield's replacement effect id, the context of the effect that created
+    /// it, and the instruction (see `Effect::Regenerate`).
+    pub regeneration_riders: Vec<(u32, crate::eval::Ctx, Effect)>,
     pub statics: ActiveStatics,
     pub history: TurnHistory,
     /// The previous turn's history ("if no spells were cast last turn").
@@ -673,6 +677,12 @@ pub struct Game {
     /// the prevention effects applied to them, one per prevention effect (keyed as in
     /// `prevention::damage_prevented`), for all the damage it prevented (CR 615.5, 615.13).
     pub prevention_followups: Option<Vec<(u64, crate::eval::Ctx, Effect)>>,
+    /// While the results of simultaneous damage events are being applied: the life each
+    /// player gains as part of that damage event and hasn't gained yet (lifelink, and
+    /// prevention effects' "you gain life equal to the damage prevented"). A replacement
+    /// effect that looks at whether the event would reduce a life total below a number
+    /// looks at the whole event (CR 120.4d).
+    pub damage_event_gains: Vec<(PlayerId, u32)>,
     /// Link id (CR 607) used when recording exiled cards on the source.
     pub current_link: u16,
     /// State triggers that have triggered and haven't left the stack (CR 603.8).
@@ -776,6 +786,11 @@ pub struct Game {
     pub observer: Option<EventObserver>,
     /// When queued events are checked for triggers (CR 603.2, 608.2c).
     pub timing: crate::trigger_timing::TriggerTiming,
+    /// While an effect with play terms resolves ([`Effect::WithPlayTerms`]): the
+    /// alternative cost spells cast as it resolves are cast for ("You may cast that card by
+    /// paying {1} rather than paying its mana cost", CR 608.2g, 118.9). Set and restored
+    /// around that effect only (see `permissions::with_resolution_terms`).
+    pub resolution_alt_cost: Option<Cost>,
 }
 
 impl Game {
@@ -818,6 +833,7 @@ impl Game {
             replacements: vec![],
             delayed_triggers: vec![],
             pending_triggers: vec![],
+            regeneration_riders: vec![],
             statics: ActiveStatics::default(),
             history: TurnHistory::default(),
             last_turn_history: TurnHistory::default(),
@@ -847,6 +863,7 @@ impl Game {
             repl_context: vec![],
             post_replacement_effects: vec![],
             prevention_followups: None,
+            damage_event_gains: vec![],
             current_link: 0,
             state_triggers_active: BTreeSet::new(),
             saved_ctx: BTreeMap::new(),
@@ -891,6 +908,7 @@ impl Game {
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),
+            resolution_alt_cost: None,
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {

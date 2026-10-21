@@ -34,6 +34,7 @@ pub mod attack_choice;
 pub mod attraction_cards;
 pub mod battle;
 pub mod behold;
+pub mod bidding;
 pub mod block_choice;
 pub mod card;
 pub mod card_tiers;
@@ -124,6 +125,7 @@ pub mod replacement;
 pub mod resolve;
 pub mod restart;
 pub mod reveal;
+pub mod reveal_library;
 pub mod rooms;
 pub mod rule_statics;
 pub mod saga;
@@ -175,4 +177,4 @@ pub use types::{Entity, ObjectId, PlayerId};
 
 /// Re-export of the data crate (CR, Scryfall) and its citation macros.
 pub use mtg_data;
-pub use mtg_data::{cr, ruling};
+pub use mtg_data::{cr, cr_example, interp, ruling};

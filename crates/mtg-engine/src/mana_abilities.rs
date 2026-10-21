@@ -1181,7 +1181,11 @@ pub fn mana_sources_with(
             if act.timing == ActivationTiming::AsInstant {
                 continue;
             }
-            if o.controller != p && !act.any_player && !act.only_opponents {
+            if let Some(f) = &act.activator {
+                if !g.player_filter_matches(f, p, &Ctx::new(Some(o.id), o.controller)) {
+                    continue;
+                }
+            } else if o.controller != p && !act.any_player && !act.only_opponents {
                 continue;
             }
             if act.only_opponents && !g.are_opponents(o.controller, p) {
@@ -1637,13 +1641,32 @@ pub fn plan_payment(
         mana_sources_with(g, p, reserve, spend.reserve_may_tap)
     };
     // Mana that may be spent as though it were mana of any color (CR 602.1e) can meet
-    // any colored requirement.
-    let widen = |mut types: Vec<ManaType>| {
-        if types.iter().any(|t| spend.any_color.contains(t)) {
+    // any colored requirement; white mana spent as though it were red can meet a red one;
+    // mana spent only as though it were colorless meets only generic and {C} ones
+    // (CR 609.4b).
+    let rules = crate::kw::spend_rules::with_player_rules(g, p, &spend.rules);
+    let widen_snow = |types: Vec<ManaType>, snow: bool| {
+        let mut types: Vec<ManaType> = types
+            .into_iter()
+            .map(|t| {
+                if rules.colorless_only.contains(&t) {
+                    ManaType::C
+                } else {
+                    t
+                }
+            })
+            .collect();
+        if types.iter().any(|t| spend.any_color.contains(t)) || (snow && rules.snow_any_color) {
             for c in ALL_COLORS {
                 if !types.contains(&c) {
                     types.push(c);
                 }
+            }
+        }
+        for (from, c) in &rules.as_color {
+            let to = ManaType::from_color(*c);
+            if types.contains(from) && !types.contains(&to) {
+                types.push(to);
             }
         }
         types
@@ -1654,7 +1677,7 @@ pub fn plan_payment(
             break;
         }
         units.push(Unit {
-            types: widen(vec![m.ty]),
+            types: widen_snow(vec![m.ty], m.snow),
             snow: m.snow,
             source: None,
             pool_index: Some(i),
@@ -1669,7 +1692,7 @@ pub fn plan_payment(
         let generic_ok = source_pays_generic(s);
         for u in &s.units {
             units.push(Unit {
-                types: widen(u.clone()),
+                types: widen_snow(u.clone(), snow),
                 snow,
                 source: Some(si),
                 pool_index: None,
@@ -2138,6 +2161,7 @@ pub fn pay_mana(
     // mana of particular colors (CR 609.4b).
     let mut adjusted = spend.clone();
     adjusted.pay_life_for = crate::payment_rules::life_for_mana(g, p);
+    adjusted.rules = crate::kw::spend_rules::with_player_rules(g, p, &spend.rules);
     if crate::as_though::spends_as_any_color(g, p) {
         adjusted.any_color = ManaType::ALL.to_vec();
     }

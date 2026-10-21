@@ -132,6 +132,7 @@ fn the_cost_is_adding_or_removing_loyalty_counters_and_may_be_modified() {
 #[test]
 fn multiple_loyalty_costs_combine_into_one() {
     cr!("606.5");
+    cr_example!("606.5", "Carth the Lion");
     // Carth the Lion: "Planeswalkers' loyalty abilities you activate cost an additional
     // [+1] to activate."
     let mut t = TestGame::new(2);

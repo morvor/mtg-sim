@@ -199,6 +199,11 @@ pub struct ActivatedAbility {
     /// source's controller may activate it, and its controller can't.
     #[serde(default)]
     pub only_opponents: bool,
+    /// "Only the controller of the enchanted creature may activate this ability." (CR
+    /// 602.2): the players who may activate it (relative to the source and its
+    /// controller), instead of its controller.
+    #[serde(default)]
+    pub activator: Option<PlayerFilter>,
     /// "Activate only once": how many times the ability may be activated over the
     /// object's existence (CR 400.7: a new object can activate it again).
     #[serde(default)]
@@ -240,6 +245,7 @@ impl ActivatedAbility {
             zone: FunctionZone::Battlefield,
             any_player: false,
             only_opponents: false,
+            activator: None,
             max_total: None,
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
@@ -503,6 +509,16 @@ pub enum CostPart {
         filter: Filter,
         count: Value,
     },
+    /// "Reveal ~ from your hand": the card with the ability, which functions in its
+    /// owner's hand (CR 113.6, 701.20a).
+    RevealSelf,
+    /// "Remove X counters from an artifact or creature you control": counters (of `kind`,
+    /// or of any kinds) all from one permanent the player chooses (CR 118.3).
+    RemoveCountersFromOne {
+        kind: Option<CounterKind>,
+        filter: Filter,
+        count: Value,
+    },
     ExertSelf,
     /// "Collect evidence N" (CR 701.59).
     CollectEvidence(u32),
@@ -526,6 +542,9 @@ pub enum CostPart {
         cost: Box<Cost>,
         times: Value,
     },
+    /// "Discard a card or pay {2}": one of these costs, which the player chooses as the
+    /// cost is paid among those they can pay (CR 118.3, 601.2h; a ward cost, CR 702.21a).
+    OneOf(Vec<Cost>),
 }
 
 // ---------------------------------------------------------------------------
@@ -767,6 +786,9 @@ pub enum TargetGroup {
     /// There's a permanent type (artifact, battle, creature, enchantment, land,
     /// planeswalker) all of them have.
     SharePermanentType,
+    /// There's a land type all of them have ("two basic land cards that share a land
+    /// type", CR 205.3i).
+    ShareLandType,
     /// No two of them have a creature type in common ("that share no creature types").
     ShareNoCreatureType,
     /// No two of them are controlled by the same player ("with different controllers",
@@ -786,6 +808,18 @@ pub enum TargetGroup {
     /// Their total of a value is at most the value ("with total mana value 6 or less",
     /// "with total mana value X or less", "with total power 10 or less").
     TotalAtMost(TotalStat, Box<Value>),
+    /// All have a name in common ("two nonland cards with the same name", CR 201.2a).
+    SameName,
+    /// There's a color all of them have ("two cards from your hand that share a color",
+    /// CR 105.2).
+    ShareColor,
+    /// Their total of a value is at least the value ("with total mana value 8 or
+    /// greater", "with total power 10 or greater"). Unlike the other relationships, a part
+    /// of such a group needn't have it.
+    TotalAtLeast(TotalStat, Box<Value>),
+    /// There are at least this many card types among them ("with four or more card types
+    /// among them", CR 205.2a). A part of such a group needn't have it.
+    CardTypesAmong(Box<Value>),
 }
 
 /// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library
@@ -823,6 +857,15 @@ pub enum DigStep {
         filter: Filter,
         count: Value,
         exile: bool,
+        /// "until they have exiled cards with total mana value 4 or greater": the cards
+        /// matching `filter` are counted by this stat (a running total) instead of one
+        /// each.
+        #[serde(default)]
+        total: Option<TotalStat>,
+        /// "until an artifact card or X cards are revealed, whichever comes first": at most
+        /// this many cards are revealed.
+        #[serde(default)]
+        cap: Option<Value>,
     },
 }
 
@@ -1037,6 +1080,9 @@ pub enum Sel {
     /// The top N cards of each of the players' libraries ("the top two cards of your
     /// library"), top first.
     TopOfLibrary(PlayerRef, Value),
+    /// The bottom N cards of each of the players' libraries ("the bottom card of your
+    /// library", CR 401.2), bottom first.
+    BottomOfLibrary(PlayerRef, Value),
     /// The objects the linked abilities of the source noted ([`Effect::NoteLinked`],
     /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
     /// has since changed zones is a new object the note doesn't find (CR 400.7).
@@ -1110,6 +1156,12 @@ pub enum PlayerRef {
     TriggerPlayer,
     /// The active player.
     ActivePlayer,
+    /// "The attacking player": the active player (CR 506.2). With shared team turns, one
+    /// specific attacking player: for an ability of a blocking creature, or one that refers
+    /// to a blocking creature, the controller of the attacking creature that blocking
+    /// creature is blocking; otherwise (or if that leaves several) the one the ability's
+    /// controller chooses (CR 805.10c). See `teams::attacking_player_candidates`.
+    AttackingPlayer,
     /// The defending player (CR 508.5).
     DefendingPlayer,
     /// A player chosen during resolution by the controller.
@@ -1201,6 +1253,17 @@ pub enum PlayerFilter {
     /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
     /// `kwa::vote::voted_like`.
     VotedLikeYou(bool),
+    /// A player who chose this word for the source ("players who chose war", "each
+    /// opponent who chose silence"): that player's own choice among the source's
+    /// per-player choices (CR 607.2d; see `choices::player_choice_matches`).
+    Chose(SmolStr),
+    /// A player whose chosen number for the source compares so with the value ("each
+    /// player with the highest number", "each player who didn't choose the lowest
+    /// number"; see `choices.rs`).
+    ChoseNumber(Cmp, Box<Value>),
+    /// One of the players chosen for the source by "choose two players" ("one of the
+    /// chosen players").
+    ChosenPlayers,
     /// A player whose life total is less than half their own starting life total (CR
     /// 119.1; "that player has less than half their starting life total").
     LessThanHalfStartingLife,
@@ -1490,6 +1553,10 @@ pub enum Filter {
     /// An object each of the selected objects could legally be attached to right now
     /// ("another permanent it can enchant", CR 301.5c, 303.4).
     CanBeAttachedBy(Box<Sel>),
+    /// An object (an Aura or Equipment card, say) that could legally be attached to each
+    /// of the selected objects or players right now ("an Aura card that could enchant that
+    /// creature", CR 303.4a, 301.5c): the reverse of [`Filter::CanBeAttachedBy`].
+    CouldAttachTo(Box<Sel>),
     /// Attached to something ("equipped", "enchanted").
     Attached,
     /// Has an Aura/Equipment attached ("enchanted creature" in "each enchanted creature").
@@ -2140,6 +2207,11 @@ pub enum Modification {
     /// is ..."): X is reevaluated each time characteristics are computed (CR 702.1b). It
     /// becomes the keyword's N, and the value of {X} in its cost.
     AddKeywordX(Keyword, Value),
+    /// Adds a keyword whose cost is the object's mana cost reduced by {N} generic mana
+    /// ("Each creature spell you cast has emerge. The emerge cost is equal to its mana
+    /// cost.", "... has foretell. Its foretell cost is equal to its mana cost reduced by
+    /// {2}."; CR 702.119a, 702.143a, 702.94a): computed for each object it applies to.
+    AddKeywordOwnCost(Keyword, u32),
     /// Adds each keyword of these kinds, with all its variants and variables, that an
     /// object matching the filter has ("... has flying. The same is true for first strike,
     /// landwalk, protection, ...", CR 702.1c).
@@ -2233,6 +2305,7 @@ impl Modification {
             | AddThisAbility
             | AddKeyword(_)
             | AddKeywordX(..)
+            | AddKeywordOwnCost(..)
             | AddKeywordsOf { .. }
             | AddAbilitiesOf { .. }
             | RemoveKeyword(_)
@@ -2606,6 +2679,13 @@ pub enum ReplacementAction {
     /// ...". Unlike [`ReplacementAction::PreventAmount`] in a one-shot effect, it isn't a
     /// shield that is used up.
     PreventPortion(Value),
+    /// The action, and then an instruction performed right after the modified event, with
+    /// the object the event was about as "it" (`vars::IT`): "exile it instead. When you
+    /// do, create a 2/2 green Wolf creature token" (a reflexive triggered ability each time
+    /// the effect applies, CR 603.12, 614.6), "exile it instead. Return it to the
+    /// battlefield ... at the beginning of the next end step" (a delayed triggered
+    /// ability for each object, CR 603.7).
+    Then(Box<ReplacementAction>, Box<Effect>),
 }
 
 /// Rule-modifying effects (CR 613.11): restrictions and requirements.
@@ -3229,10 +3309,13 @@ pub enum CostChange {
 
 /// A rule about announcing or paying the cost of the spell or activated ability whose text
 /// states it (see `payment_rules.rs`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CostRule {
     /// "X can't be 0." (CR 107.3a): the least value that may be announced for X.
     XAtLeast(u32),
+    /// "X can't be greater than the number of players in the game." (CR 107.3a, 601.2b):
+    /// the greatest value that may be announced for X, determined as X is announced.
+    XAtMost(Box<Value>),
     /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
     /// only colored mana on X.": only mana of these colors may pay the part of the cost
     /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
@@ -3252,6 +3335,15 @@ pub enum CostRule {
     /// cost; none may without a choice (CR 607.5a).
     OnlyChosenColor,
 }
+
+impl PartialEq for CostRule {
+    fn eq(&self, other: &Self) -> bool {
+        // (`Value` has no equality of its own: compared as data.)
+        serde_json::to_string(self).ok() == serde_json::to_string(other).ok()
+    }
+}
+
+impl Eq for CostRule {}
 
 /// Static abilities (CR 604) and what they do.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -3529,6 +3621,44 @@ pub struct PlayTerms {
     /// becomes.
     #[serde(default)]
     pub on_cast: Option<Box<Effect>>,
+    /// "If you do, it gains \"...\"" for a land played with the permission: done as it's
+    /// played, with `Var(IT)` the land (CR 305.1, 400.7i).
+    #[serde(default)]
+    pub on_land: Option<Box<Effect>>,
+    /// "Spells you cast this way cost {2} less to cast" (CR 601.2f): a generic reduction
+    /// for spells cast with the permission.
+    #[serde(default)]
+    pub cost_reduction: u32,
+    /// "You may cast Equipment spells this way without paying their mana costs": spells
+    /// with these qualities (relative to the permission's source and player) may also be
+    /// cast with the permission without paying their mana costs (CR 118.9).
+    #[serde(default)]
+    pub free_option: Option<Filter>,
+    /// "If that spell would be put into a graveyard, put it on the bottom of its owner's
+    /// library instead": where each spell cast with the permission goes instead (CR 614.1a).
+    #[serde(default)]
+    pub graveyard_instead: Option<Destination>,
+    /// "from any graveyard": a static permission's zone is every player's, not only its
+    /// player's.
+    #[serde(default)]
+    pub any_owner: bool,
+    /// "you may cast it from your graveyard as an Adventure": spells are cast with the
+    /// permission only as that face or half (CR 715.3).
+    #[serde(default)]
+    pub cast_face: Option<crate::object::FaceState>,
+    /// "if you pay {1} more to cast it for each other creature card in your graveyard": a
+    /// generic cost increase for spells cast with the permission (CR 601.2f), counted
+    /// relative to the permission's source and player as the cost is determined.
+    #[serde(default)]
+    pub cost_increase_each: Option<Value>,
+    /// "you may spend colorless mana as though it were mana of any color to cast that
+    /// spell": mana of this type, for spells cast with the permission (CR 609.4b).
+    #[serde(default)]
+    pub spend_type_as_any_color: Option<ManaType>,
+    /// "you may spend mana from snow sources as though it were mana of any color to cast
+    /// those spells" (CR 609.4b, 106.3).
+    #[serde(default)]
+    pub snow_as_any_color: bool,
     /// The effect that gave the permission (0: none recorded), which "cast this way"
     /// refers to (see `permissions::PermissionUse`).
     #[serde(default)]
@@ -3579,6 +3709,33 @@ impl PlayTerms {
                 Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
                 None => e.clone(),
             });
+        }
+        if let Some(e) = &other.on_land {
+            self.on_land = Some(match self.on_land.take() {
+                Some(mine) => Box::new(Effect::seq(vec![*mine, (**e).clone()])),
+                None => e.clone(),
+            });
+        }
+        self.cost_reduction += other.cost_reduction;
+        if let Some(f) = &other.free_option {
+            self.free_option = Some(match self.free_option.take() {
+                Some(w) => Filter::Or(vec![w, f.clone()]),
+                None => f.clone(),
+            });
+        }
+        self.any_owner |= other.any_owner;
+        if other.cast_face.is_some() {
+            self.cast_face = other.cast_face;
+        }
+        if other.spend_type_as_any_color.is_some() {
+            self.spend_type_as_any_color = other.spend_type_as_any_color;
+        }
+        self.snow_as_any_color |= other.snow_as_any_color;
+        if other.cost_increase_each.is_some() {
+            self.cost_increase_each = other.cost_increase_each.clone();
+        }
+        if other.graveyard_instead.is_some() {
+            self.graveyard_instead = other.graveyard_instead.clone();
         }
     }
 }
@@ -4336,6 +4493,14 @@ pub enum Effect {
     Regenerate {
         what: Sel,
     },
+    /// Regeneration with what happens when a shield this creates is used: "When it
+    /// regenerates this way, put a -1/-1 counter on it." (a reflexive triggered ability),
+    /// "You gain control of that creature if it regenerates this way." (part of the
+    /// regeneration). The regenerated permanent is `vars::IT` (CR 701.19a).
+    RegenerateWith {
+        what: Sel,
+        then: Box<Effect>,
+    },
     /// Attach the source (or selection) to a target (CR 701.3).
     Attach {
         what: Sel,
@@ -4898,6 +5063,12 @@ pub enum ChoiceKind {
     /// One of several words with no rules meaning, e.g. anchor words ("choose Khans or
     /// Dragons", CR 607.2f, 607.2m, 614.12b).
     Word(Vec<String>),
+    /// "choose two basic land types", "choose two abilities from among first strike,
+    /// vigilance, and lifelink": that many different ones of the listed words, in order
+    /// (kept as the chosen list, see `object::Choices::list`).
+    Distinct(u8, Vec<String>),
+    /// "choose two players": that many different players (`object::Choices::players`).
+    Players(u8),
 }
 
 /// Keyword actions (CR 701) that aren't expressible as simple effect sequences.

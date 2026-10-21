@@ -343,8 +343,8 @@ name for one's own.
   `loyalty`, `defense`, `keywords`, `text` (Oracle text), `granted` (abilities its text
   doesn't show, given by effects), `counters`, `tapped`, `flipped`, `transformed`,
   `phased_out`, `face_down`, `damage`, `summoning_sick`, `attached_to`, `attachments`,
-  `token`, and `combat` (`attacking` whom, `blocked`, `blockers`; `blocking` which
-  attackers).
+  `token`, `combat` (`attacking` whom, `blocked`, `blockers`; `blocking` which
+  attackers), and `choices` (what each player chose for it, "P1 chose war").
 * `stack`: top first; each with `id`, `kind` (`spell`, `activated_ability`,
   `triggered_ability`), `controller`, `name`, `source`, `text`, chosen `modes`, `x`,
   `targets` (one list per target slot) and `target_names`, and for spells `card`.
@@ -367,6 +367,9 @@ see:
   (CR 708.2); their controller also sees `face_down_card`, what it really is (CR 708.5).
 * Face-down exiled cards: listed without identity, unless the viewer may look at them
   (CR 406.3).
+* Secret choices ("secretly choose an opponent", "each player secretly chooses a
+  number"): until they're revealed, a permanent's `choices` show other players only
+  that the choice was made ("P1 chose secretly"); the player who made it sees it.
 * A player controlling another player sees what that player can see (CR 723.4).
 * Cards hidden from the viewer have no id in options and events ("a hidden card").
   Cards in a library or hand that a decision offers as options (searching, scrying,
