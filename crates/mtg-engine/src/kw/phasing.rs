@@ -43,12 +43,17 @@ pub fn untap_step(g: &mut Game, active: PlayerId) {
     }
 }
 
-/// Everything attached to the objects, recursively (Auras on Equipment, ...).
+/// Everything attached to the objects, recursively (Auras on Equipment, ...), that phases
+/// out with them: one that "can't phase out" stays (and so does what's attached to it;
+/// it's then attached to a phased-out permanent, CR 704.5m).
 fn attached_closure(g: &Game, objs: &[ObjectId]) -> Vec<ObjectId> {
     let mut out: Vec<ObjectId> = Vec::new();
     let mut todo: Vec<ObjectId> = objs.to_vec();
     while let Some(o) = todo.pop() {
         for a in g.attachments_of(Entity::Object(o)) {
+            if crate::prohibitions::object_cant(g, a, crate::ability::ObjectAction::PhasedOut) {
+                continue;
+            }
             if !out.contains(&a) {
                 out.push(a);
                 todo.push(a);
