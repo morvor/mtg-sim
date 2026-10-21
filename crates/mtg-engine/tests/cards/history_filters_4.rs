@@ -220,3 +220,157 @@ fn papalymo_totolymo_makes_only_opponents_who_lost_life_sacrifice() {
     assert!(t.on_battlefield(b), "P2 didn't");
     assert!(matches!(t.zone(pap), Zone::Graveyard(_)));
 }
+
+/// The candidates of the latest choice of objects `p` was asked to make.
+fn offered_choice(t: &TestGame, p: PlayerId) -> Vec<Entity> {
+    t.asked()
+        .into_iter()
+        .rev()
+        .find_map(|(q, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } if q == p => {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .expect("no choice was asked")
+}
+
+#[test]
+fn jabaris_influence_takes_a_creature_that_attacked_you_this_turn() {
+    cr!("508.1", "608.2b");
+    assert_supported("Jabari's Influence");
+    let mut t = TestGame::new(2);
+    let attacker = t.battlefield(P1, "Grizzly Bears");
+    let stayed = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(attacker, Entity::Player(P0))], &[]);
+    t.advance_to(P1, Step::PostcombatMain);
+    t.lands(P0, "Plains", 5);
+    let ji = t.hand(P0, "Jabari's Influence");
+    t.cast_with(P0, ji, &[Entity::Object(attacker)]).unwrap();
+    assert_eq!(offered(&t, P0), vec![Entity::Object(attacker)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(attacker).controller, P0);
+    assert_eq!(t.counters(attacker, "-1/-0"), 1);
+    assert_eq!(t.obj_now(stayed).controller, P1);
+}
+
+#[test]
+fn ghost_of_ramirez_depietro_returns_a_card_discarded_or_milled_this_turn() {
+    cr!("603.4", "701.9a", "701.17a");
+    assert_supported("Ghost of Ramirez DePietro");
+    let mut t = TestGame::new(2);
+    let ghost = t.battlefield(P0, "Ghost of Ramirez DePietro");
+    let old = t.graveyard(P1, "Hill Giant");
+    let d = t.hand(P1, "Grizzly Bears");
+    let discarded = t.g.discard(P1, d, None).unwrap();
+    t.library_top(P1, "Llanowar Elves");
+    let milled = t.g.mill(P1, 1)[0];
+    t.g.flush_events();
+    t.answer_targets(P0, &[Entity::Object(discarded)]);
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(ghost, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    let mut c = offered(&t, P0);
+    c.sort_by_key(|e| e.object());
+    let mut want = vec![Entity::Object(discarded), Entity::Object(milled)];
+    want.sort_by_key(|e| e.object());
+    assert_eq!(c, want, "not the card that was there before this turn");
+    assert!(!c.contains(&Entity::Object(old)));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn emrakul_the_world_anew_has_protection_from_permanents_cast_this_turn() {
+    cr!("702.16e");
+    assert_supported("Emrakul, the World Anew");
+    let mut t = TestGame::new(2);
+    let emrakul = t.battlefield(P0, "Emrakul, the World Anew");
+    let placed = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Forest", 2);
+    let b = t.hand(P1, "Grizzly Bears");
+    t.cast_with(P1, b, &[]).unwrap();
+    t.resolve_all();
+    let bears = t.g.current(b);
+    t.g.deal_damage(bears, Entity::Object(emrakul), 2, false);
+    t.g.flush_events();
+    assert_eq!(t.obj_now(emrakul).damage, 0, "the bears were cast this turn");
+    t.g.deal_damage(placed, Entity::Object(emrakul), 3, false);
+    t.g.flush_events();
+    assert_eq!(t.obj_now(emrakul).damage, 3, "the giant wasn't cast");
+}
+
+#[test]
+fn activated_sleeper_copies_a_creature_card_put_into_a_graveyard_from_the_battlefield() {
+    cr!("707.9", "400.7");
+    assert_supported("Activated Sleeper");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.destroy(giant, None);
+    let died = t.g.current(giant);
+    let d = t.hand(P1, "Grizzly Bears");
+    t.g.discard(P1, d, None);
+    t.graveyard(P0, "Llanowar Elves");
+    t.g.flush_events();
+    t.answer_choose(P0, &[Entity::Object(died)]);
+    let s = t.enter(P0, "Activated Sleeper");
+    assert_eq!(offered_choice(&t, P0), vec![Entity::Object(died)]);
+    assert_eq!(t.obj_now(s).chars.name.as_str(), "Hill Giant");
+    assert!(t.obj_now(s).chars.subtypes.iter().any(|x| x.as_str() == "Phyrexian"));
+}
+
+#[test]
+fn kutzils_flanker_counts_creatures_that_left_the_battlefield_under_your_control() {
+    cr!("603.10a", "700.4");
+    assert_supported("Kutzil's Flanker");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.g.destroy(a, None);
+    t.g.move_object(b, Zone::Hand(P0), mtg_engine::events::MoveCause::Return, None);
+    t.g.destroy(theirs, None);
+    t.g.flush_events();
+    t.lands(P0, "Plains", 3);
+    let k = t.hand(P0, "Kutzil's Flanker");
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.cast(P0, k).go();
+    t.resolve_all();
+    assert_eq!(t.counters(k, "+1/+1"), 2);
+}
+
+#[test]
+fn wreck_hunter_counts_nonland_cards_put_into_that_graveyard_from_the_battlefield() {
+    cr!("700.4", "400.7");
+    assert_supported("Wreck Hunter");
+    let mut t = TestGame::new(2);
+    let c = t.battlefield(P1, "Hill Giant");
+    let land = t.battlefield(P1, "Forest");
+    t.g.destroy(c, None);
+    t.g.destroy(land, None);
+    let d = t.hand(P1, "Grizzly Bears");
+    t.g.discard(P1, d, None);
+    t.g.flush_events();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Wreck Hunter");
+    t.resolve_all();
+    assert_eq!(count_named(&t, P0, "Powerstone"), 1);
+}
+
+#[test]
+fn hope_of_ghirapur_targets_a_player_it_dealt_combat_damage_to() {
+    cr!("510.2", "115.1");
+    assert_supported("Hope of Ghirapur");
+    let mut t = TestGame::new(3);
+    let hope = t.battlefield(P0, "Hope of Ghirapur");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[(hope, Entity::Player(P1)), (bears, Entity::Player(P2))],
+        &[],
+    );
+    t.advance_to(P0, Step::PostcombatMain);
+    t.activate(P0, hope, 0, &[Entity::Player(P1)]).unwrap();
+    assert_eq!(offered(&t, P0), vec![Entity::Player(P1)]);
+}

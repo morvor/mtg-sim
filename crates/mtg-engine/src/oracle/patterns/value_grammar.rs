@@ -947,6 +947,19 @@ pub fn objects(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
         }
         b.targets.truncate(saved);
         b.it_player = saved_player;
+        // Registered qualifiers, which may read what the phrase described so far ("cards
+        // in that player's graveyard that were put there from the battlefield this turn").
+        if t.starts_with("that ") {
+            let so_far = Filter::and(parts.clone());
+            if let Some((f, r)) = super::filter_suffix_patterns()
+                .iter()
+                .find_map(|p| (p.parse)(&t, &so_far))
+            {
+                parts.push(f);
+                rest = r.to_string();
+                continue;
+            }
+        }
         // The shared parser's qualifiers after one of ours ("creatures that player
         // controls with flying"): read after a stand-in noun.
         if t.starts_with("with ") || t.starts_with("without ") || t.starts_with("that ") {

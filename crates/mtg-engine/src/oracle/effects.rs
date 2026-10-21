@@ -2380,6 +2380,25 @@ fn p_fight(l: &str, b: &mut Builder) -> Option<Effect> {
 
 /// "gain control of target creature [until end of turn]".
 fn p_gain_control(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "gain control of target creature that attacked you this turn": "this turn" ends the
+    // target's description, not a duration.
+    let whole = l.trim();
+    if whole.ends_with(" this turn") {
+        let saved = b.targets.len();
+        if let Some((what, tail)) = whole
+            .strip_prefix("gain control of ")
+            .and_then(|r| object_ref(r, b))
+        {
+            if end(&tail).is_empty() {
+                return Some(Effect::GainControl {
+                    what,
+                    who: PlayerRef::You,
+                    duration: Duration::Permanent,
+                });
+            }
+        }
+        b.targets.truncate(saved);
+    }
     let (dur, l) = duration_suffix(l);
     let r = l.strip_prefix("gain control of ")?;
     let (what, tail) = object_ref(r, b)?;

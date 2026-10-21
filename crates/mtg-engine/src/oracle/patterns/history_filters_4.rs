@@ -85,13 +85,117 @@ fn object_predicate(pred: &str, window: &str, so_far: &Filter) -> Option<Conditi
             p = p.replace(&format!("from {who}"), "from a library");
         }
     }
-    let cond = history_condition(&format!("~ {p}{window}"))?;
-    about(cond, &Sel::Var(vars::TESTED))
+    // "was discarded": a player discarded it (the card in its new zone).
+    let cond = if matches!(p.as_str(), "was discarded" | "were discarded") {
+        if !in_graveyard {
+            return None;
+        }
+        let t = TriggerCond::Discards {
+            who: PlayerRel::Any,
+            filter: Filter::Source,
+        };
+        let v = match window {
+            " this turn" => Value::EventsThisTurn(Box::new(t), Tally::Events),
+            _ => return None,
+        };
+        Condition::Compare(v, Cmp::Ge, Value::Const(1))
+    } else {
+        history_condition(&format!("~ {p}{window}"))?
+    };
+    let cond = about(cond, &Sel::Var(vars::TESTED))?;
+    identity(cond, so_far)
+}
+
+/// The condition with each trigger condition that judges the object as it was before the
+/// event (leaving the battlefield or a graveyard, CR 603.10a) about what the tested
+/// object was before its latest zone change ([`crate::relational::TESTED_PRIOR`]): the
+/// object the event made it (CR 400.7). Such a clause describes an object in another zone
+/// than the battlefield ("a card in a graveyard that was put there from the battlefield");
+/// an object on the battlefield, or anywhere, isn't one that left it ("for each creature
+/// that left the battlefield this turn" counts creatures that are gone). Events about
+/// another object than the tested one or what it was (a spell cast, which became the
+/// permanent) aren't read.
+fn identity(cond: Condition, so_far: &Filter) -> Option<Condition> {
+    use serde_json::Value as J;
+    let mut json = serde_json::to_value(&cond).ok()?;
+    let tested = serde_json::to_value(Filter::In(Box::new(Sel::Var(vars::TESTED)))).ok()?;
+    let prior = serde_json::to_value(Filter::In(Box::new(Sel::Var(
+        crate::relational::TESTED_PRIOR,
+    ))))
+    .ok()?;
+    fn replace(v: &mut J, from: &J, to: &J) {
+        if *v == *from {
+            *v = to.clone();
+            return;
+        }
+        match v {
+            J::Array(a) => a.iter_mut().for_each(|x| replace(x, from, to)),
+            J::Object(m) => m.values_mut().for_each(|x| replace(x, from, to)),
+            _ => {}
+        }
+    }
+    // Trigger conditions about the tested object: (kind, judged before the event).
+    fn walk(v: &mut J, from: &J, to: &J, looked_back: &mut bool, bad: &mut bool) {
+        match v {
+            J::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    match k.as_str() {
+                        "Dies" | "LeavesBattlefield" | "Sacrificed" | "YouSacrifice" => {
+                            *looked_back = true;
+                            replace(x, from, to);
+                        }
+                        "ZoneChange" => {
+                            let back = matches!(
+                                x.get("from").and_then(|f| f.as_str()),
+                                Some("Battlefield" | "Graveyard")
+                            ) && x.get("to").and_then(|t| t.as_str()) != Some("Battlefield");
+                            if back {
+                                *looked_back = true;
+                                replace(x, from, to);
+                            }
+                        }
+                        "CastSpell" | "NthSpellCast" | "SpellCopied" | "AbilityActivated"
+                        | "AbilityResolved" | "AbilityTriggered" | "SpellCountered"
+                        | "CounteredBy" | "BecomesTarget" => *bad = true,
+                        _ => walk(x, from, to, looked_back, bad),
+                    }
+                }
+            }
+            J::Array(a) => a
+                .iter_mut()
+                .for_each(|x| walk(x, from, to, looked_back, bad)),
+            _ => {}
+        }
+    }
+    let (mut looked_back, mut bad) = (false, false);
+    walk(&mut json, &tested, &prior, &mut looked_back, &mut bad);
+    if bad {
+        return None;
+    }
+    if looked_back && matches!(so_far.zone(), None | Some(ZoneKind::Battlefield)) {
+        return None;
+    }
+    serde_json::from_value(json).ok()
+}
+
+/// "that was cast this turn", "that were cast this turn" (a spell, or a permanent that
+/// was one): how it was cast (`kw/cast_history.rs`).
+fn cast_status(pred: &str) -> Option<Filter> {
+    use crate::kw::cast_history as ch;
+    Some(match pred {
+        "was cast this turn" | "were cast this turn" => Filter::Custom(ch::CAST_THIS_TURN.into()),
+        _ => return None,
+    })
 }
 
 /// "that [past predicate] [window]" after an object phrase.
 fn that_clause<'a>(t: &'a str, so_far: &Filter) -> Option<(Filter, &'a str)> {
     let body = t.strip_prefix("that ")?;
+    for w in ["was cast this turn", "were cast this turn"] {
+        if let Some(rest) = body.strip_prefix(w).filter(|r| clause_end(r)) {
+            return Some((cast_status(w)?, rest));
+        }
+    }
     for (pred, window, rest) in windowed(body) {
         if pred.is_empty() {
             continue;

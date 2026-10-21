@@ -357,8 +357,15 @@ fn object_history(r: &str) -> Option<(Value, String)> {
     let you = || Some(Filter::ControlledBy(PlayerRel::You));
     let yours = || Some(Filter::OwnedBy(PlayerRel::You));
     // CR 700.4: "dies" means is put into a graveyard from the battlefield.
-    let markers: [(&str, fn(Filter) -> TriggerCond, Option<Filter>); 12] = [
+    let markers: [(&str, fn(Filter) -> TriggerCond, Option<Filter>); 14] = [
         (" that died under your control", TriggerCond::Dies, you()),
+        // As it left: under your control (CR 603.10a).
+        (
+            " that left the battlefield under your control",
+            TriggerCond::LeavesBattlefield,
+            you(),
+        ),
+        (" that left the battlefield", TriggerCond::LeavesBattlefield, None),
         (" that died", TriggerCond::Dies, None),
         (
             " that were put into your graveyard from the battlefield",
