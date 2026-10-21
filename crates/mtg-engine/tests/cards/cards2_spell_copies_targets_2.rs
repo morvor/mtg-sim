@@ -325,3 +325,23 @@ fn agrus_kos_copies_an_ability_targeting_it_for_each_other_creature_you_control(
     assert_eq!(t.obj_now(agrus).damage, 1);
     assert_eq!(t.obj_now(theirs).damage, 0);
 }
+
+#[test]
+fn parnesse_lets_an_opponent_copy_a_spell_you_copy() {
+    cr!("707.10", "707.10c");
+    supported("Parnesse, the Subtle Brush");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Parnesse, the Subtle Brush");
+    t.lands(P0, "Island", 3);
+    let opt = t.hand(P0, "Opt");
+    let spell = t.cast(P0, opt).go();
+    let tc = t.hand(P0, "Twincast");
+    t.cast(P0, tc).target(spell).go();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P1, true);
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.resolve_all();
+    // P0's Opt and P0's copy: two cards; P1's copy: one card.
+    assert_eq!(t.hand_size(P0), h0 + 2);
+    assert_eq!(t.hand_size(P1), h1 + 1);
+}
