@@ -29,3 +29,22 @@ fn a_signet_filters_a_forests_mana_to_cast_a_spell() {
     let giant = t.hand(P0, "Centaur Courser");
     assert!(t.cast(P0, giant).try_go().is_err());
 }
+
+#[test]
+fn a_filters_cost_is_paid_with_other_sources_keeping_pool_mana_for_the_spell() {
+    cr!("605.3a", "601.2g");
+    // {R} already in the pool, a Forest and a Golgari Signet pay {B}{R}{G}: the Forest's
+    // {G} pays the Signet's {1}, and the {R} in the pool stays for the spell.
+    let mut t = TestGame::new(2);
+    let signet = t.battlefield(P0, "Golgari Signet");
+    let forest = t.lands(P0, "Forest", 1)[0];
+    t.g.players[P0.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::R, 1);
+    let thrinax = t.hand(P0, "Sprouting Thrinax");
+    t.cast(P0, thrinax).go();
+    assert!(t.obj_now(signet).tapped && t.obj_now(forest).tapped);
+    assert!(t.g.player(P0).mana_pool.is_empty());
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Sprouting Thrinax").len(), 1);
+}

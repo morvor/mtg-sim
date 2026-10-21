@@ -38,6 +38,10 @@ pub struct ManaSource {
     /// paid with other mana before it's activated (CR 605.3a, 601.2g). Such abilities are
     /// planned only when a cost can't be paid without one (see [`plan_payment`]).
     pub mana: Option<ManaCost>,
+    /// In a plan, for a mana ability that costs mana: the units of the mana pool (indices
+    /// into the pool as the payment began) planned for its own cost. The rest of the
+    /// pool's mana is kept for the cost being paid while it's activated (see `pay_mana`).
+    pub cost_pool: Vec<usize>,
 }
 
 const ALL_COLORS: [ManaType; 5] = [
@@ -1384,6 +1388,7 @@ fn sources_inner(
                         offer: None,
                         life,
                         mana: filter_cost.clone(),
+                        cost_pool: Vec::new(),
                     });
                 }
             }
@@ -1473,6 +1478,7 @@ fn offer_sources(g: &Game, p: PlayerId) -> Vec<ManaSource> {
                 offer: Some(id),
                 life: life_each,
                 mana: None,
+                cost_pool: Vec::new(),
             });
         }
     }
@@ -1700,10 +1706,11 @@ fn plan_with_filter(
 ) -> Option<Vec<(ManaSource, Vec<ManaType>)>> {
     // Cheap test first: does the player control any mana ability with a mana cost?
     let any = g.permanents().any(|o| {
-        o.chars.abilities.iter().any(|a| {
-            matches!(&a.kind, AbilityKind::Activated(act)
+        o.controller == p
+            && o.chars.abilities.iter().any(|a| {
+                matches!(&a.kind, AbilityKind::Activated(act)
                 if act.is_mana_ability && act.cost.mana.as_ref().is_some_and(|m| !m.is_zero()))
-        })
+            })
     });
     if !any {
         return None;
@@ -1733,29 +1740,41 @@ fn plan_with_filter(
             cost_of: Some(crate::rule_statics::payment::CostOf::ManaAbility),
             ..Default::default()
         };
-        let Some((first, pool_used)) = solve_payment(g, p, &f_reqs, &f_spend, &others, &[]) else {
-            continue;
-        };
-        // The rest of the cost: the filter's mana, the pool mana left, and the sources
-        // not already used.
-        let mut rest: Vec<ManaSource> = others
-            .into_iter()
-            .filter(|s| !first.iter().any(|(a, _)| same(a, s) || a.conflicts_with(s)))
-            .collect();
-        let mut fs = f.clone();
-        fs.mana = None;
-        rest.push(fs);
-        let Some((second, _)) = solve_payment(g, p, reqs, spend, &rest, &pool_used) else {
-            continue;
-        };
-        let (with_f, after): (Vec<_>, Vec<_>) = second.into_iter().partition(|(s, _)| same(s, f));
-        if with_f.is_empty() {
-            continue;
+        // Its cost is paid with other sources' mana if possible, keeping the pool's mana
+        // for the rest of the cost; otherwise with the pool's mana too.
+        let all_pool: Vec<usize> = (0..g.player(p).mana_pool.mana.len()).collect();
+        for skip in [all_pool.as_slice(), &[]] {
+            let Some((first, pool_used)) = solve_payment(g, p, &f_reqs, &f_spend, &others, skip)
+            else {
+                continue;
+            };
+            // The rest of the cost: the filter's mana, the pool mana left, and the sources
+            // not already used.
+            let mut rest: Vec<ManaSource> = others
+                .iter()
+                .filter(|s| !first.iter().any(|(a, _)| same(a, s) || a.conflicts_with(s)))
+                .cloned()
+                .collect();
+            let mut fs = f.clone();
+            fs.mana = None;
+            rest.push(fs);
+            let Some((second, _)) = solve_payment(g, p, reqs, spend, &rest, &pool_used) else {
+                continue;
+            };
+            let (mut with_f, after): (Vec<_>, Vec<_>) =
+                second.into_iter().partition(|(s, _)| same(s, f));
+            if with_f.is_empty() {
+                continue;
+            }
+            for (s, _) in &mut with_f {
+                s.mana = f.mana.clone();
+                s.cost_pool = pool_used.clone();
+            }
+            let mut out = first;
+            out.extend(with_f);
+            out.extend(after);
+            return Some(out);
         }
-        let mut out = first;
-        out.extend(with_f);
-        out.extend(after);
-        return Some(out);
     }
     None
 }
@@ -2318,6 +2337,7 @@ pub fn pay_mana(
     };
     let plan_now = try_pool(g, 0);
     if plan_now.is_none() {
+        let pool_len = g.player(p).mana_pool.mana.len();
         let plan = plan_payment(g, p, cost, spend, reserve)?;
         for (src, types) in plan {
             // Triggered mana abilities (CR 605.4a, "whenever enchanted land is tapped for
@@ -2339,11 +2359,26 @@ pub fn pay_mana(
             if !g.is_live(src.obj) || g.obj(src.obj).zone != Zone::Battlefield {
                 continue;
             }
+            // A mana ability that costs mana (CR 605.3a): its cost is paid with the mana
+            // planned for it, so the pool's other mana stays for the cost being paid.
+            let mut held = Vec::new();
+            if src.mana.is_some() {
+                let pool = &mut g.players[p.idx()].mana_pool.mana;
+                for i in (0..pool_len.min(pool.len())).rev() {
+                    if !src.cost_pool.contains(&i) {
+                        held.push(pool.remove(i));
+                    }
+                }
+                held.reverse();
+            }
             g.mana_hint = Some(types);
             let prev_reserve = std::mem::replace(&mut g.mana_reserve, reserve);
             let r = g.activate_ability(p, src.obj, src.ability.uid);
             g.mana_reserve = prev_reserve;
             g.mana_hint = None;
+            if !held.is_empty() {
+                g.players[p.idx()].mana_pool.mana.splice(0..0, held);
+            }
             if r.is_err() {
                 return None;
             }

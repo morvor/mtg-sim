@@ -453,12 +453,16 @@ fn heartless_summoning_reduces_siege_wurm_before_convoke() {
     cr_example!("702.51b", "Heartless Summoning says, in part");
     supported("Heartless Summoning");
     supported("Siege Wurm");
+    // Heartless Summoning's -1/-1 applies: Grizzly Bears (green) and Hill Giants (red,
+    // the "other creatures") survive it as 1/1s and 2/2s.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Heartless Summoning");
     // {3}{G}{G}: two green creatures and three others pay it all.
     let greens: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
-    let others: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Memnite")).collect();
-    let extra = t.battlefield(P0, "Memnite");
+    let others: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Hill Giant")).collect();
+    let extra = t.battlefield(P0, "Hill Giant");
+    t.settle();
+    assert!(greens.iter().chain(others.iter()).all(|c| t.g.is_live(*c)));
     let all: Vec<Entity> = greens
         .iter()
         .chain(others.iter())
@@ -473,13 +477,12 @@ fn heartless_summoning_reduces_siege_wurm_before_convoke() {
     assert!(!t.obj_now(extra).tapped);
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Siege Wurm").len(), 1);
-    // Up to two green creatures and up to three others, the rest with mana: two green
-    // creatures, one other and three lands (one of them for {G}... no: the green is paid
-    // by creatures) pay {3}{G}{G}.
+    // Fewer creatures tapped: the remainder is paid with mana. A green creature and
+    // another creature pay {G} and {1}; three Forests pay the remaining {2}{G}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Heartless Summoning");
     let g1 = t.battlefield(P0, "Grizzly Bears");
-    let m1 = t.battlefield(P0, "Memnite");
+    let m1 = t.battlefield(P0, "Hill Giant");
     t.lands(P0, "Forest", 3);
     t.answer_choose(P0, &[Entity::Object(g1), Entity::Object(m1)]);
     let wurm = t.hand(P0, "Siege Wurm");
@@ -488,6 +491,13 @@ fn heartless_summoning_reduces_siege_wurm_before_convoke() {
     assert_eq!(tapped_lands(&t, P0), 3);
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Siege Wurm").len(), 1);
+    // The total cost is {3}{G}{G} (reduced by {2}): four Forests and no creatures to
+    // tap can't pay it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Heartless Summoning");
+    t.lands(P0, "Forest", 4);
+    let wurm = t.hand(P0, "Siege Wurm");
+    assert!(t.cast(P0, wurm).try_go().is_err());
 }
 
 // --- 702.103d: bestow -------------------------------------------------------------------
