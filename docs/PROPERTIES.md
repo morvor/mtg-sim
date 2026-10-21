@@ -184,7 +184,10 @@ actions, so some games pile up effects and slow down). Checked again one by one 
 longer limit, nine of them held (five with up to 8,000 requests, four with up to 4,000); game 1178
 was still going after 30 minutes, its requests ever slower — a slow game, not a
 difference (`mtg-sim --properties --property replay --seed 10 --only 1178`). So 1,999 of
-2,000 replays held and none differed.
+2,000 replays held and none differed. On the command line, a game against
+`examples/random_client.py` recorded with `--transcript` replays with `--agent
+1=replay:FILE` in a new process without a difference, and with another seed the first
+request is reported as differing.
 
 Earlier runs found the bugs above: seat symmetry 12 violations in 300 games (`--seed 3`)
 and 4 in 2,000 (`--seed 10`), all fixed; snapshot and determinism flagged ability ids,
