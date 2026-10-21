@@ -63,6 +63,10 @@ struct Delay {
     /// "this turn's next end of combat", "your next main phase this turn": it ends with
     /// the turn if it hasn't triggered by then.
     this_turn: bool,
+    /// "the end step of that player's next turn", "the declare attackers step on your
+    /// next turn": that step of a turn the player begins after the delayed ability is
+    /// created (not this turn's).
+    next_turn: bool,
 }
 
 impl Delay {
@@ -82,13 +86,33 @@ impl Delay {
         } else {
             TriggerCond::AnyOf(conds)
         };
+        let t = match self.turns_taken() {
+            Some(v) if self.next_turn => TriggerCond::Where {
+                trigger: Box::new(t),
+                cond: Condition::Compare(v, Cmp::Eq, Value::Var(TURNS_TAKEN)),
+            },
+            _ => t,
+        };
         if self.this_turn {
             TriggerCond::ThisTurn(Box::new(t))
         } else {
             t
         }
     }
+
+    /// How many turns the player whose next turn it names has begun.
+    fn turns_taken(&self) -> Option<Value> {
+        match self.whose {
+            Whose::You => Some(Value::TurnsTaken(PlayerRef::You)),
+            Whose::ThatPlayer => Some(Value::TurnsTaken(PlayerRef::Var(WHOSE))),
+            Whose::Any => None,
+        }
+    }
 }
+
+/// The number of turns the player will have begun during their next turn, as a "next
+/// turn" delayed ability is created: it triggers only during that turn.
+const TURNS_TAKEN: Var = vars::USER + 6405;
 
 /// The step part of a delay phrase: "end step", "upkeep", "main phase", ...
 fn step_words(s: &str) -> Option<Vec<TriggerStep>> {
@@ -115,6 +139,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         steps: vec![TriggerStep::EndOfCombat],
         whose: Whose::Any,
         this_turn,
+        next_turn: false,
     };
     match s {
         "end of combat" | "the end of combat" => return Some(eoc(false)),
@@ -122,6 +147,26 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         _ => {}
     }
     let r = s.strip_prefix("the beginning of ")?;
+    // "the end step of that player's next turn", "the declare attackers step on your next
+    // turn".
+    for (sep, whose) in [
+        (" of that player's next turn", Whose::ThatPlayer),
+        (" of their next turn", Whose::ThatPlayer),
+        (" on your next turn", Whose::You),
+        (" of your next turn", Whose::You),
+    ] {
+        if let Some(step) = r.strip_suffix(sep).and_then(|x| x.strip_prefix("the ")) {
+            if step == "main phase" {
+                return None;
+            }
+            return Some(Delay {
+                steps: step_words(step)?,
+                whose,
+                this_turn: false,
+                next_turn: true,
+            });
+        }
+    }
     let (r, this_turn) = match r.strip_suffix(" this turn") {
         Some(x) => (x, true),
         None => (r, false),
@@ -142,6 +187,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         steps: step_words(step)?,
         whose,
         this_turn,
+        next_turn: false,
     })
 }
 
@@ -370,7 +416,7 @@ fn that_player(inner: &str, b: &Builder) -> Option<PlayerRef> {
     Some(b.it_player.clone())
 }
 
-fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (delay, inner) = split_delay(l)?;
     let inner = inner.trim();
@@ -527,6 +573,12 @@ fn delayed_instruction(l: &str, b: &mut Builder) -> Option<Effect> {
             sel: Sel::Players(p),
         });
     }
+    if delay.next_turn {
+        stores.push(Effect::StoreValue {
+            var: TURNS_TAKEN,
+            value: Value::Sum(vec![delay.turns_taken()?, Value::c(1)]),
+        });
+    }
     stores.push(Effect::DelayedTrigger {
         trigger: delay.trigger(),
         body: Box::new(Body {
@@ -677,6 +729,42 @@ fn f_delayed_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     true
 }
+
+/// "At the beginning of your next upkeep, choose a basic land type. ~ gains landwalk of
+/// the chosen type until the end of that turn." (Giant Slug): when the delayed
+/// instruction is only a choice, the next sentence using "the chosen" is what's done with
+/// it, in the delayed ability ("that turn" is the turn it triggers in).
+fn f_delayed_choice_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains("the chosen ") || split_delay(l).is_some() || l.contains("target") {
+        return false;
+    }
+    match last_delayed(prev) {
+        Some(Effect::DelayedTrigger { body, .. })
+            if matches!(body.effect, Effect::Choose { .. }) && body.targets.is_empty() => {}
+        _ => return false,
+    }
+    let text = match l.strip_suffix(" until the end of that turn") {
+        Some(r) => format!("{r} until end of turn"),
+        None => l.to_string(),
+    };
+    let saved = save(b);
+    let n0 = b.targets.len();
+    let parsed = parse_sentence(&text, b);
+    let new_targets = b.targets.len() > n0;
+    b.targets.truncate(n0);
+    restore(b, saved);
+    let Some(e) = parsed.filter(|_| !new_targets) else {
+        return false;
+    };
+    let Some(Effect::DelayedTrigger { body, .. }) = last_delayed(prev) else {
+        return false;
+    };
+    body.effect = Effect::seq(vec![std::mem::take(&mut body.effect), e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "delayed grammar: what's done with a delayed choice", priority: 45, apply: f_delayed_choice_continues } }
 
 /// "Whenever you attack this turn, create two 1/1 red Warrior creature tokens that are
 /// tapped and attacking. Sacrifice them at the beginning of the next end step." (Dalkovan
@@ -950,6 +1038,36 @@ fn referent_subject(s: &str, b: &mut Builder) -> Option<(Sel, Filter)> {
     if s.starts_with("a ") || s.starts_with("an ") || s.starts_with("each ") {
         return None;
     }
+    // "either of those creatures", "any of those creatures", "one of those creatures": any
+    // of the objects "those creatures" refers to (an event about one of them, not a choice
+    // of one).
+    for p in [
+        "either of those ",
+        "any of those ",
+        "one of those ",
+        "either of them",
+        "any of them",
+        "one of them",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            let plural = if p.ends_with("them") {
+                if !r.is_empty() {
+                    return None;
+                }
+                "them".to_string()
+            } else {
+                format!("those {r}")
+            };
+            let (sel, rest) = object_ref(&plural, b)?;
+            if !rest.trim().is_empty() || refs::is_no_referent(&sel) {
+                return None;
+            }
+            if matches!(sel, Sel::Choose { .. } | Sel::This) {
+                return None;
+            }
+            return Some((sel, Filter::In(Box::new(Sel::Var(REFERENT)))));
+        }
+    }
     // "When the creature an opponent controls dies this turn" after "target creature an
     // opponent controls": that target.
     if let Some(r) = s.strip_prefix("the ") {
@@ -1089,7 +1207,7 @@ fn x_is_event_amount(e: &Effect) -> Option<Effect> {
     amount_is(e, &Value::EventAmount)
 }
 
-fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
+pub(crate) fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (when, r) = if let Some(r) = l.strip_prefix("when ") {
         (true, r)
@@ -1166,7 +1284,13 @@ fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
                 trigger,
                 TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)
             );
+            // "Whenever either of those creatures deals combat damage ..., put a +1/+1
+            // counter on it": the one that dealt the damage.
+            let group_subject = ["either of ", "any of ", "one of "]
+                .iter()
+                .any(|p| subject_s.starts_with(p));
             b.it = match it {
+                Sel::This if deals_damage(&trigger) && group_subject => Sel::TriggerOtherObject,
                 Sel::This if deals_damage(&trigger) => Sel::Var(REFERENT),
                 Sel::This if leaves => Sel::TriggerLki,
                 Sel::This => Sel::TriggerObject,

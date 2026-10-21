@@ -590,13 +590,19 @@ impl Renderer<'_> {
     /// Whether a custom trigger renders as a complete trigger phrase (with its own
     /// trigger word).
     pub(crate) fn custom_trigger_is_complete(&self, name: &str) -> bool {
-        name == "visit" || name.starts_with("door unlocked:") || name == crate::kw::exert::EXERTED
+        name == "visit"
+            || name.starts_with("door unlocked:")
+            || name == crate::kw::exert::EXERTED
+            || name == crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED
     }
 
     /// A custom trigger event ("~ mutates", "you unlock this door").
     pub(crate) fn custom_trigger(&mut self, name: &str) -> String {
         match name {
             "visit" => "visit —".into(),
+            crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED => {
+                "whenever damage that would be dealt to you is prevented".into()
+            }
             // "You may exert ~ as it attacks. When you do, ..." (CR 701.43).
             crate::kw::exert::EXERTED => "when you do".into(),
             n if n.starts_with("door unlocked:") => "when you unlock this door".into(),
@@ -684,6 +690,8 @@ impl Renderer<'_> {
             "may look at cards exiled with this" => {
                 format!("you may look at cards exiled with {}", me(self))
             }
+            crate::kw::pay_life_exile_instead::PAY_LIFE_EXILE_INSTEAD => "if you would pay life while your library has at least that many cards in it, exile that many cards from the top of your library instead".into(),
+            crate::game_terms::DEVOTION_INCREASED => "your devotion to each color and each combination of colors is increased by one".into(),
             "hands revealed:each" => "players play with their hands revealed".into(),
             "hands revealed:opponents" => "your opponents play with their hands revealed".into(),
             "opponents' creatures targetable as though no hexproof" => "creatures your opponents control with hexproof can be the targets of spells and abilities you control as though they didn't have hexproof".into(),

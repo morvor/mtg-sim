@@ -372,6 +372,8 @@ impl Game {
         for p in actives {
             self.expire_until_next_turn(p);
         }
+        // Effects that apply "during [that player's] next turn" begin.
+        crate::next_turn::turn_began(self);
         self.log(|g| format!("--- Turn {} ({}) ---", g.turn.number, active));
         // CR 723.1: player-controlling effects for this turn start (and last turn's end).
         crate::player_control::turn_began(self);
@@ -458,6 +460,8 @@ impl Game {
             }
             Step::BeginningOfCombat => {
                 self.turn.combat_phases += 1;
+                // "... during its controller's next combat phase".
+                crate::next_turn::combat_began(self);
                 crate::combat::begin_combat(self);
             }
             Step::DeclareAttackers => crate::combat::declare_attackers_step(self),
@@ -822,6 +826,7 @@ impl Game {
             self.choose_untaps(active, &mut to_untap);
             self.limit_untaps(active, &mut to_untap);
             self.untap_during_others_untap_steps(&mut to_untap);
+            crate::kw::untap_step(self, active, &mut to_untap);
             for id in to_untap {
                 self.untap(id);
             }
@@ -991,6 +996,11 @@ impl Game {
 
     /// Removes continuous effects whose duration matches.
     pub fn expire_effects(&mut self, pred: impl Fn(&Duration) -> bool) {
+        // "Until end of combat on your next turn" ends with the first combat phase of that
+        // turn, or with the turn.
+        if pred(&Duration::EndOfCombat) || pred(&Duration::EndOfTurn) {
+            crate::next_turn::expire_end_of_combat_on_next_turn(self);
+        }
         self.effects.retain(|e| !pred(&e.duration));
         self.rule_effects.retain(|e| !pred(&e.duration));
         self.player_effects.retain(|e| !pred(&e.duration));
@@ -1072,7 +1082,9 @@ impl Game {
         let ts = step.trigger_step();
         let actives = self.active_players();
         let until = |d: &Duration, c: PlayerId| {
-            matches!(d, Duration::UntilYourNextStep(s) if *s == ts) && actives.contains(&c)
+            (matches!(d, Duration::UntilYourNextStep(s) if *s == ts) && actives.contains(&c))
+                // "until the next end step": any player's.
+                || matches!(d, Duration::UntilNextStep(s) if *s == ts)
         };
         self.effects.retain(|e| !until(&e.duration, e.controller));
         self.rule_effects

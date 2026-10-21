@@ -329,6 +329,19 @@ pub struct EventInfo {
     /// "whenever a land enters without being played"): see `kw::trigger_event_causes`.
     #[serde(default)]
     pub cause: Option<crate::events::MoveCause>,
+    /// For counters being put on something, the kind ("put the same number and kind of
+    /// counters on ~").
+    #[serde(default)]
+    pub counter_kind: Option<CounterKind>,
+    /// For a permanent becoming tapped: it was tapped by being declared as an attacker
+    /// (CR 508.1f; "if it isn't being declared as an attacker").
+    #[serde(default)]
+    pub attack_declaration: bool,
+    /// The controller of the spell or ability that caused the event, when the event
+    /// records it ("whenever a spell or ability an opponent controls causes you to discard
+    /// a card").
+    #[serde(default)]
+    pub caused_by: Option<PlayerId>,
 }
 
 /// The kind of object on the stack.
@@ -505,6 +518,10 @@ pub struct GameObject {
     pub activations: BTreeMap<u64, u32>,
     /// Times each triggered ability (by uid) has triggered/resolved this turn.
     pub triggers_this_turn: BTreeMap<u64, u32>,
+    /// Times each triggered ability with a limit "only once" (by uid) has triggered since
+    /// this object came into existence (CR 400.7, `trigger_limits.rs`).
+    #[serde(default)]
+    pub triggers_ever: BTreeMap<u64, u32>,
     /// Timestamp when this permanent gained the world supertype (CR 704.5k).
     pub world_since: Option<Timestamp>,
     /// Sticker/merge/other extra state for rarely used rules.
@@ -655,6 +672,7 @@ impl GameObject {
             activations_this_turn: BTreeMap::new(),
             activations: BTreeMap::new(),
             triggers_this_turn: BTreeMap::new(),
+            triggers_ever: BTreeMap::new(),
             world_since: None,
             merged_with: vec![],
             monstrous: false,

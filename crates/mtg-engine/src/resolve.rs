@@ -420,8 +420,13 @@ impl Game {
             }
             Effect::Tap { what } => {
                 let mut tapped = Vec::new();
+                // The player performing the instruction taps them (CR 701.26a): the
+                // controller of the spell or ability, or the player it has do it ("that
+                // player taps an untapped creature they control"; Solitary Sanctuary's
+                // rulings).
+                let by = Some(ctx.controller);
                 for o in self.resolve_objects(what, ctx) {
-                    if self.tap(o) {
+                    if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
                     }
                 }
@@ -575,6 +580,20 @@ impl Game {
                             false,
                         );
                     }
+                    // "Whenever a creature you control fights" (each creature that fought).
+                    let mut fought = vec![a];
+                    if b != a {
+                        fought.push(b);
+                    }
+                    for c in fought {
+                        let player = Some(self.obj(c).controller);
+                        self.emit(crate::events::Event::Custom {
+                            name: crate::keyword_actions::FOUGHT.into(),
+                            player,
+                            obj: Some(c),
+                            amount: 0,
+                        });
+                    }
                 }
             }
             Effect::AddCounters { what, kind, n } => {
@@ -686,6 +705,53 @@ impl Game {
                     }
                 }
                 ctx.prev_value = total as i64;
+            }
+            Effect::CountersFromAmong {
+                from,
+                to,
+                kind,
+                min,
+                max,
+                each_missing_kind,
+            } => {
+                let n = crate::kw::counter_groups::counters_from_among(
+                    self,
+                    from,
+                    to.as_ref(),
+                    kind.as_ref(),
+                    min,
+                    max.as_ref(),
+                    *each_missing_kind,
+                    ctx,
+                );
+                ctx.prev_value = n as i64;
+                ctx.prev_happened = n > 0;
+            }
+            Effect::DistributeCounters {
+                n,
+                kind,
+                among,
+                min_objects,
+                max_objects,
+                up_to,
+            } => {
+                let n = crate::kw::counter_groups::distribute(
+                    self,
+                    n,
+                    kind,
+                    among,
+                    *min_objects,
+                    *max_objects,
+                    *up_to,
+                    ctx,
+                );
+                ctx.prev_value = n as i64;
+                ctx.prev_happened = n > 0;
+            }
+            Effect::PutEventCounters { to, one_each } => {
+                let n = crate::kw::counter_groups::put_event_counters(self, to, *one_each, ctx);
+                ctx.prev_value = n as i64;
+                ctx.prev_happened = n > 0;
             }
             Effect::PutCountersOf { from, to, kind } => {
                 // "Its counters": the counters the object had as it last existed (CR 122.8),
@@ -1065,6 +1131,9 @@ impl Game {
                             *new_targets,
                         ));
                     }
+                    if n > 0 {
+                        copies.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                    }
                 }
                 // CR 405.3: the copies are put on the stack at once, in the order
                 // their controller chooses.
@@ -1121,13 +1190,21 @@ impl Game {
                 let fixed = self.fix_mods(mods, ctx);
                 let mut copies = vec![];
                 for o in self.resolve_objects(what, ctx) {
+                    let mut made = vec![];
                     for _ in 0..n {
-                        if let Some(c) =
-                            crate::copy::copy_spell(self, o, ctx.controller, *new_targets)
-                        {
-                            crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
-                            copies.push(c);
-                        }
+                        made.extend(crate::copy::copy_spell(
+                            self,
+                            o,
+                            ctx.controller,
+                            *new_targets,
+                        ));
+                    }
+                    if n > 0 {
+                        made.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                    }
+                    for c in made {
+                        crate::copy::add_copy_exceptions(self, c, ctx.controller, &fixed);
+                        copies.push(c);
                     }
                 }
                 crate::copy::order_copies(self, ctx.controller, &copies);
@@ -1181,16 +1258,27 @@ impl Game {
             }
             Effect::ChangeTargets { what, who, how, to } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
+                // The new target(s) must be among these ("to this creature", "to another
+                // creature", "the new target must be a player").
                 let forced = match to {
-                    Some(sel) => match self.resolve_sel(sel, ctx).into_iter().next() {
-                        Some(e) => Some(e),
-                        None => return,
-                    },
+                    Some(sel) => {
+                        let v = self.resolve_sel(sel, ctx);
+                        if v.is_empty() {
+                            return;
+                        }
+                        Some(v)
+                    }
                     None => None,
                 };
                 let mut changed = false;
                 for o in self.resolve_objects(what, ctx) {
-                    changed |= crate::target_rules::change_targets(self, p, o, *how, forced);
+                    changed |= crate::target_rules::change_targets_among(
+                        self,
+                        p,
+                        o,
+                        *how,
+                        forced.as_deref(),
+                    );
                 }
                 ctx.prev_happened = changed;
             }
@@ -1255,7 +1343,7 @@ impl Game {
                     turned |= if self.obj(o).zone == Zone::Exile {
                         crate::facedown::turn_exiled_face_up(self, o)
                     } else {
-                        crate::facedown::turn_face_up(self, o, false)
+                        crate::facedown::turn_face_up_by(self, o, ctx.controller)
                     };
                 }
                 ctx.prev_happened = turned;
@@ -1335,23 +1423,22 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    match &targets {
+                    let made = match &targets {
                         Some(ts) => {
-                            crate::copy_rules::copy_with_target(
-                                self,
-                                o,
-                                ctx.controller,
-                                ts.clone(),
-                            );
+                            crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
+                                .into_iter()
+                                .count()
                         }
-                        None => {
-                            crate::copy_rules::copy_for_each_target(
-                                self,
-                                o,
-                                ctx.controller,
-                                among.as_ref().map(|f| (f, &*ctx)),
-                            );
-                        }
+                        None => crate::copy_rules::copy_for_each_target(
+                            self,
+                            o,
+                            ctx.controller,
+                            among.as_ref().map(|f| (f, &*ctx)),
+                        )
+                        .len(),
+                    };
+                    if made > 0 {
+                        crate::copy::additional_copies(self, o, ctx.controller);
                     }
                 }
             }
@@ -1889,6 +1976,9 @@ impl Game {
                     for_rest_of_game: false,
                     performer,
                 });
+                // Which one it is, for a special action that stops it (Glass Asp).
+                ctx.nums
+                    .insert(crate::special_actions::LAST_DELAYED, i64::from(id));
             }
             Effect::NoteLinked { what, replace } => {
                 crate::linked_notes::exec(self, what, *replace, ctx);
@@ -1930,6 +2020,9 @@ impl Game {
                     body: Some(body),
                     order: self.trigger_order,
                 });
+            }
+            Effect::DuringNext { who, part, effect } => {
+                crate::next_turn::schedule(self, who, *part, effect, ctx);
             }
             Effect::AtNext { step, effect } => {
                 self.flush_events();
@@ -2248,6 +2341,12 @@ impl Game {
             Effect::Custom(name) => crate::custom::custom_effect(self, name, ctx),
             Effect::TokensEnterWithCounters { counters, effect } => {
                 crate::tokens::enter_with_counters(self, counters, effect, ctx)
+            }
+            Effect::TokensEnterAttached { to, effect } => {
+                let to = self.resolve_sel(to, ctx).into_iter().next();
+                let prev = self.token_attach.replace(to);
+                self.exec(effect, ctx);
+                self.token_attach = prev;
             }
         }
     }
@@ -3039,8 +3138,9 @@ impl Game {
             .and_then(|c| ctx.source.and_then(|src| c.attack_target(src)));
         let mut options = crate::combat::attack_target_options(self, preferred);
         // "... that's tapped and attacking that player" (`Effect::TokensJoinCombat`).
-        if let Some(d) = crate::tokens::forced_defender(ctx) {
-            options.retain(|t| Some(*t) == d);
+        // "... attacking that player or a planeswalker they control": any of those.
+        if let Some(ds) = ctx.vars.get(&crate::tokens::TOKEN_DEFENDER) {
+            options.retain(|t| ds.contains(t));
         }
         spec.attacking = options.first().copied();
         let prev = std::mem::replace(&mut self.token_attack_options, options);
@@ -3429,6 +3529,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
+        | Restriction::MustAttackObject { attackers, .. }
         | Restriction::CantAttackPlayer { attackers, .. }
         | Restriction::AttackAsThoughHaste { attackers, .. } => Some(attackers),
         _ => None,

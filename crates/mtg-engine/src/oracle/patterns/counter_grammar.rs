@@ -80,6 +80,11 @@ pub fn counter_noun(s: &str) -> Option<(Option<CounterKind>, &str)> {
 fn object_or_player_target(s: &str, b: &mut Builder) -> Option<Sel> {
     let r = s.trim().strip_prefix("up to one ").unwrap_or(s.trim());
     let up_to = r.len() != s.trim().len();
+    // "another target permanent or opponent": not the source.
+    let (another, r) = match r.strip_prefix("another ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
     let r = r.strip_prefix("target ")?;
     let (objs, pf) = if let Some(o) = r.strip_suffix(", or opponent") {
         (o, PlayerFilter::Opponent)
@@ -101,6 +106,11 @@ fn object_or_player_target(s: &str, b: &mut Builder) -> Option<Sel> {
     if !end(tail).is_empty() {
         return None;
     }
+    let f = if another {
+        Filter::and(vec![f, Filter::Other])
+    } else {
+        f
+    };
     let mut spec = TargetSpec::any_target();
     spec.what = TargetKind::ObjectOrPlayer(f, pf);
     if up_to {

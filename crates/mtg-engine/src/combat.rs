@@ -610,7 +610,11 @@ impl Game {
             Entity::Player(p) => self.player(p).in_game() && defending.contains(&p),
             Entity::Object(o) => {
                 let ob = self.obj(o);
-                if !self.is_live(o) || ob.zone != Zone::Battlefield || ob.phased_out {
+                if !self.is_live(o)
+                    || ob.zone != Zone::Battlefield
+                    || ob.phased_out
+                    || crate::kw::cant_be_attacked(self, o)
+                {
                     return false;
                 }
                 (ob.is(CardType::Planeswalker) && defending.contains(&ob.controller))
@@ -706,6 +710,9 @@ pub fn attack_targets(g: &Game) -> Vec<Entity> {
         }
         out.push(Entity::Player(*p));
         for o in g.permanents() {
+            if crate::kw::cant_be_attacked(g, o.id) {
+                continue;
+            }
             if o.is(CardType::Planeswalker) && o.controller == *p {
                 out.push(Entity::Object(o.id));
             }
@@ -733,6 +740,8 @@ pub enum AttackRequirement {
     AttacksPlayerOtherThan(ObjectId, Vec<PlayerId>),
     /// "[creature] attacks [player] if able" (e.g. encore's tokens, CR 702.141a).
     AttacksPlayer(ObjectId, PlayerId),
+    /// "[creature] attacks [planeswalker or battle] if able" (Gideon Jura).
+    AttacksObject(ObjectId, ObjectId),
     /// "if one of [others] attacks, [creature] attacks if able": obeyed if it attacks or
     /// none of the others do.
     AttacksIfAnyAttacks(ObjectId, Vec<ObjectId>),
@@ -753,6 +762,7 @@ impl AttackRequirement {
             AttackRequirement::Attacks(c)
             | AttackRequirement::AttacksPlayerOtherThan(c, _)
             | AttackRequirement::AttacksPlayer(c, _)
+            | AttackRequirement::AttacksObject(c, _)
             | AttackRequirement::AttacksIfAnyAttacks(c, _) => Some(*c),
             AttackRequirement::AttacksWithAny { .. } => None,
         }
@@ -773,6 +783,9 @@ impl AttackRequirement {
                 .any(|(a, t)| a == c && matches!(t, Entity::Player(p) if !ps.contains(p))),
             AttackRequirement::AttacksPlayer(c, p) => {
                 decl.iter().any(|(a, t)| a == c && *t == Entity::Player(*p))
+            }
+            AttackRequirement::AttacksObject(c, o) => {
+                decl.iter().any(|(a, t)| a == c && *t == Entity::Object(*o))
             }
             AttackRequirement::AttacksIfAnyAttacks(c, others) => {
                 decl.iter().any(|(a, _)| a == c) || !decl.iter().any(|(a, _)| others.contains(a))
@@ -842,6 +855,19 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
                     for p in g.players_in_game() {
                         if g.player_filter_matches(defender, p, &ctx) {
                             out.push(AttackRequirement::AttacksPlayer(id, p));
+                        }
+                    }
+                }
+            }
+        }
+        // "[It] attacks ~ this turn if able" (a planeswalker or battle).
+        for (s, c, r, locked) in g.all_restrictions() {
+            if let Restriction::MustAttackObject { attackers, target } = &r {
+                let ctx = Ctx::new(s, c);
+                if g.restriction_applies(id, attackers, &ctx, &locked) {
+                    for o in g.battlefield.clone() {
+                        if g.matches(o, target, &ctx) {
+                            out.push(AttackRequirement::AttacksObject(id, o));
                         }
                     }
                 }
@@ -1176,8 +1202,10 @@ fn perform_attack_declaration(
     let bands = announce_bands(g, ap, &declared);
     // CR 508.1f: tap attackers (vigilance: 702.20b).
     for (a, _) in &declared {
-        if !g.obj(*a).has_keyword(KeywordKind::Vigilance) {
-            g.tap(*a);
+        if !g.obj(*a).has_keyword(KeywordKind::Vigilance)
+            && !crate::kw::attacks_without_tapping(g, *a)
+        {
+            g.tap_with(*a, false, Some(ap), true);
         }
     }
     // CR 508.1g: optional costs to attack ("as it attacks").
@@ -1880,6 +1908,11 @@ pub fn declare_blockers_step(g: &mut Game) {
         // "You choose which creatures block this combat and how those creatures block."
         let chosen_by = crate::block_choice::block_decider(g, &group);
         let decider = chosen_by.unwrap_or(decider);
+        // "Instead of declaring blockers, ..." (see `kw::blocks_instead`).
+        if let Some(blocks) = crate::kw::blocks_instead(g, &group) {
+            all_blocks.extend(blocks);
+            continue;
+        }
         let options = block_options(g, &group);
         if options.is_empty() {
             continue;

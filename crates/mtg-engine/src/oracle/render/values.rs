@@ -463,6 +463,11 @@ impl Renderer<'_> {
                 let r = if *up { "up" } else { "down" };
                 format!("{v} divided by {n}, rounded {r}")
             }
+            Value::DivBy(v, d) => {
+                let v = self.value(v);
+                let d = self.value(d);
+                format!("{v} divided evenly by {d}, rounded down")
+            }
             Value::Min(a, b) => {
                 let a = self.value(a);
                 let b = self.value(b);
@@ -697,6 +702,22 @@ impl Renderer<'_> {
             return s;
         }
         match c {
+            // "if it isn't being declared as an attacker" (`kw/tap_causes.rs`).
+            Condition::SelMatches(Sel::TriggerObject, Filter::Custom(n))
+                if n == crate::oracle::patterns::trigger_grammar_causes::NOT_TAPPED_ATTACKING =>
+            {
+                "it isn't being declared as an attacker".into()
+            }
+            // "a spell or ability an opponent controls causes ..." (`kw/tap_causes.rs`).
+            Condition::Custom(n)
+                if n == crate::oracle::patterns::trigger_grammar_causes::CAUSED_BY_OPPONENT =>
+            {
+                "a spell or ability an opponent controls caused it".into()
+            }
+            // "if you haven't cast the card" (`kw/delayed_conditions.rs`).
+            Condition::Custom(n) if n.starts_with(crate::kw::delayed_conditions::STILL_EXILED) => {
+                "{alt:you haven't cast it|it remains exiled|you haven't played it|any of those cards remain exiled}".into()
+            }
             Condition::Always => self.gap("Condition::Always"),
             Condition::Never => self.gap("Condition::Never"),
             // CR 702.62b: a card is suspended if it's in exile, has suspend, and has a
@@ -1894,6 +1915,13 @@ impl Renderer<'_> {
             Duration::UntilYourNextStep(s) => {
                 let s = self.step_name(*s);
                 format!("until your next {s}")
+            }
+            Duration::UntilEndOfCombatOnYourNextTurn => {
+                "until end of combat on your next turn".into()
+            }
+            Duration::UntilNextStep(s) => {
+                let s = self.step_name(*s);
+                format!("until the next {s}")
             }
             Duration::UntilPlaneswalk { away_from_plane } => {
                 if *away_from_plane {

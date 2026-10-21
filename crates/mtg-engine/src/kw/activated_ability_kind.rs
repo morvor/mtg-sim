@@ -168,7 +168,7 @@ impl KeywordRules for ActivatedAbilityKind {
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
         if name == TURNED_FACE_UP_THIS_TURN {
             return Some(g.turn_events.iter().any(
-                |e| matches!(e, Event::TurnedFaceUp { obj } if g.current(*obj) == g.current(id)),
+                |e| matches!(e, Event::TurnedFaceUp { obj, .. } if g.current(*obj) == g.current(id)),
             ));
         }
         if name == ATTACKING_YOU_OR_YOUR_PLANESWALKER {

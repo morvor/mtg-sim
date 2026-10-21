@@ -23,6 +23,22 @@ pub(crate) fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFi
             let (objects, _) = targeted_thing(&s["you or ".len()..])?;
             (objects, Some(PlayerFilter::You))
         }
+        // "a single permanent or player" (Radiate), "a single opponent or a single
+        // permanent an opponent controls" (Zevlor): an object of a kind or a player.
+        _ if s.ends_with(" or player") => {
+            let (objects, players) = targeted_thing(s.strip_suffix(" or player")?)?;
+            if players.is_some() {
+                return None;
+            }
+            (objects, Some(PlayerFilter::Any))
+        }
+        _ if s.starts_with("a single opponent or ") => {
+            let (objects, players) = targeted_thing(&s["a single opponent or ".len()..])?;
+            if players.is_some() {
+                return None;
+            }
+            (objects, Some(PlayerFilter::Opponent))
+        }
         _ => {
             let s = s.strip_prefix("a single ").unwrap_or(s);
             let s = s
@@ -40,7 +56,7 @@ pub(crate) fn targeted_thing(s: &str) -> Option<(Option<Filter>, Option<PlayerFi
 
 /// Splits a qualifier describing a stack object's targets off a target phrase: "with a
 /// single target", "that targets only [...]", "that targets [...]" (CR 115.9).
-fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) {
+pub(crate) fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) {
     // Only at the end: "... with a single target unless its controller pays {2}" is
     // more than a target phrase.
     if let Some((head, tail)) = s.split_once(" with a single target") {
@@ -90,11 +106,24 @@ fn stack_target(s: &str, b: &mut Builder) -> Option<Sel> {
     Some(Sel::Target(slot))
 }
 
+/// Whether the ability's text triggers on a spell being cast ("whenever a player casts a
+/// spell that targets ~").
+fn cast_trigger_text() -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.lines().any(|l| {
+        (l.starts_with("whenever ") || l.starts_with("when "))
+            && (l.contains(" casts a") || l.contains("you cast a"))
+            && l.contains(" spell")
+    })
+}
+
 /// "change the target of X", "change the targets of X", "change a target of X", "change
 /// any targets of X", "choose new targets for X", each optionally ending "to ~".
 fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
-    let heads: [(&str, TargetChange); 6] = [
+    let heads: [(&str, TargetChange); 7] = [
         ("change the target of ", TargetChange::All),
+        // "You may choose a new target for it." (a spell with one target).
+        ("choose a new target for ", TargetChange::ChooseNew),
         ("change the targets of ", TargetChange::All),
         ("change the target or targets of ", TargetChange::All),
         ("change a target of ", TargetChange::One),
@@ -112,6 +141,22 @@ fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     // (Commandeer): "it" is the target spell of the sentence before.
     let what = match (what, &b.it) {
         ("it", Sel::Target(n)) if is_stack_target(b, *n) => Sel::Target(*n),
+        // "Whenever a player casts a spell that targets ~, ... You may choose new targets
+        // for that spell." (Speedball, New Warrior): the spell the ability triggered on.
+        ("that spell" | "it", Sel::TriggerSpell) => Sel::TriggerSpell,
+        // ... after another sentence about something else ("~ gets +2/+2 until end of
+        // turn. You may choose new targets for that spell.").
+        ("that spell", _) if b.in_trigger && cast_trigger_text() => Sel::TriggerSpell,
+        // An ability of an instant or sorcery that works on the stack ("Any player may
+        // activate this ability but only if ~ is on the stack", Lightning Storm): the
+        // spell itself.
+        ("it" | "~", _)
+            if b.ctx.is_spell()
+                && !b.in_trigger
+                && crate::oracle::raw_text().to_lowercase().contains(" is on the stack") =>
+        {
+            Sel::This
+        }
         _ => stack_target(what, b)?,
     };
     // "You may choose new targets for target instant or sorcery spell. Then copy that

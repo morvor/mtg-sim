@@ -275,6 +275,7 @@ fn guesses_whether(l: &str, b: &mut Builder) -> Option<Effect> {
         var: GUESSED_RIGHT,
         value: right,
     });
+    pre.push(custom(crate::choices::GUESSED));
     Some(Effect::seq(pre))
 }
 

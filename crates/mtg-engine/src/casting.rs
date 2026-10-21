@@ -190,6 +190,10 @@ pub fn cast_during_resolution(
     cast_during_resolution_as(g, p, card, method, None)
 }
 
+/// `Event::Custom` name: the activated mana ability of `obj` that `player` activated
+/// resolved, producing `amount` mana.
+pub const MANA_ABILITY_RESOLVED: &str = "mana ability resolved";
+
 /// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
 /// the characteristics the effect allows, CR 601.3e), if given.
 pub fn cast_during_resolution_as(
@@ -2010,7 +2014,19 @@ impl Game {
         // CR 903.8: the commander tax (each commander separately, CR 702.124d).
         let tax = crate::kw::partner::commander_tax(self, p, card);
         if tax > 0 {
-            add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
+            if crate::kw::commander_tax_paid_with_life(self, p, card) {
+                // "Rather than pay {2} for each previous time ..., pay 2 life that many
+                // times."
+                add_cost(
+                    &mut cost,
+                    &Cost {
+                        mana: None,
+                        parts: vec![CostPart::PayLife(Value::Const(tax as i32))],
+                    },
+                );
+            } else {
+                add_cost(&mut cost, &Cost::mana(ManaCost::generic(tax)));
+            }
         }
         // "A spell cast this way costs {2} more to cast": an increase that comes with the
         // permission it's cast with.
@@ -2154,7 +2170,13 @@ impl Game {
             if !self.player_filter_matches(f, p, &Ctx::new(Some(src), who)) {
                 return false;
             }
-        } else if who != p && !act.any_player && !act.only_opponents {
+        } else if who != p
+            && !act.any_player
+            && !act.only_opponents
+            && !(act.is_mana_ability
+                && o.zone == Zone::Battlefield
+                && crate::kw::may_activate_others_mana_ability(self, p, src, a))
+        {
             return false;
         }
         // "Only your opponents may activate this ability" (CR 602.2).
@@ -2307,7 +2329,8 @@ impl Game {
         pay_ctx.ability_uid = a.uid;
         let chars = o.chars.clone();
         let payable_at = |x: i32, pay_ctx: &Ctx| {
-            let cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
+            let mut cost = self.ability_total_cost_with(p, src, a, act, None, x as u32, None);
+            crate::kw::activation_payable_otherwise(self, p, src, a, &mut cost);
             self.can_pay_cost_optimistic_in(p, &cost, Some(src), &chars, pay_ctx)
                 // CR 118.9: or an alternative cost it could be activated for.
                 || crate::activation_costs::alternative_costs(self, p, src, a, act)
@@ -2528,7 +2551,10 @@ impl Game {
         }
         let snapshot = self.clone();
         self.special.casting += 1;
-        match self.activate_inner(p, src, &a, &act) {
+        self.special.activating.push((p, src, a.uid));
+        let result = self.activate_inner(p, src, &a, &act);
+        self.special.activating.pop();
+        match result {
             Ok(r) => {
                 // CR 602.2e: the ability became activated.
                 crate::draw_rules::finish_casting(self);
@@ -2661,15 +2687,23 @@ impl Game {
             self.exec(&body.effect, &mut ctx);
             crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
+            let mana: Vec<crate::mana::ManaType> = self
+                .players
+                .iter()
+                .zip(pools_before)
+                .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                .collect();
+            // "Whenever a mana ability of [this creature] resolves, ... the amount of mana
+            // [it] produced" (CR 605.3b).
+            self.emit(Event::Custom {
+                name: MANA_ABILITY_RESOLVED.into(),
+                player: Some(p),
+                obj: Some(src),
+                amount: mana.len() as i32,
+            });
             // CR 106.12a: "tapped for mana" triggers when such an ability resolves and
             // produces mana.
             if tapped_for_mana {
-                let mana: Vec<crate::mana::ManaType> = self
-                    .players
-                    .iter()
-                    .zip(pools_before)
-                    .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
-                    .collect();
                 if !mana.is_empty() {
                     self.emit(Event::TappedForMana {
                         obj: src,
@@ -2720,6 +2754,9 @@ impl Game {
             self.ability_total_cost_and_x(p, src, a, act, Some(id), x as u32, alt.as_ref());
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
+        // Paying part of it other than with mana ("you may tap an untapped creature you
+        // control rather than pay that mana").
+        crate::kw::pay_activation_otherwise(self, p, src, a, &mut cost);
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {
@@ -3500,7 +3537,7 @@ impl Game {
         match part {
             CostPart::Tap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
-                if !self.tap(s) {
+                if !self.tap_with(s, false, Some(p), false) {
                     return bad("can't tap");
                 }
             }
@@ -3795,7 +3832,7 @@ impl Game {
                 for o in pick {
                     paid.objects.push(o);
                     paid.tapped.push(o);
-                    self.tap(o);
+                    self.tap_with(o, false, Some(p), false);
                 }
             }
             // Crew (CR 702.122a): see `kw/crew.rs`.

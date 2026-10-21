@@ -1403,7 +1403,25 @@ impl Game {
                 c.cast = m.etb.cast.clone();
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 let n = self.eval_value(&v, &c).max(0) as u32;
-                if n > 0 {
+                if k.as_str() == crate::ability::EACH_KIND_ON_SOURCE {
+                    // "For each kind of counter on ~, each other Dinosaur you control
+                    // enters with a counter of that kind on it" (Blue, Loyal Raptor): that
+                    // many of each kind on the source as the permanent enters.
+                    if let Some(src) = cand.source.filter(|s| self.is_live(*s)) {
+                        let kinds: Vec<CounterKind> = self
+                            .obj(src)
+                            .counters
+                            .iter()
+                            .filter(|(_, n)| **n > 0)
+                            .map(|(k, _)| k.clone())
+                            .collect();
+                        for kind in kinds {
+                            if n > 0 {
+                                m.etb.counters.push((kind, n));
+                            }
+                        }
+                    }
+                } else if n > 0 {
                     m.etb.counters.push((k, n));
                 }
                 vec![ReplEvent::Move(m)]
@@ -1439,6 +1457,15 @@ impl Game {
                     m.etb.copy_exceptions.extend(em.copy_exceptions);
                     m.etb.copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
+                    // "It enters as a copy of one of those cards" (CR 707.9).
+                    if let Some(o) = em.copy_of {
+                        if m.etb.copy_of.is_some() {
+                            // CR 707.9e, 707.9g: as for `EnterAsCopy`.
+                            m.etb.copy_exceptions = m.etb.own_copy_exceptions.clone();
+                            m.etb.copy_extras.clear();
+                        }
+                        m.etb.copy_of = Some(o);
+                    }
                     // CR 614.1c: "it enters with haste" — performed on the permanent as
                     // it's put onto the battlefield.
                     for e in em.on_entry {
@@ -1688,6 +1715,106 @@ impl Game {
                         source,
                     },
                 ]
+            }
+            (
+                ReplacementAction::TokensInsteadOf { specs, each },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                let chosen: Vec<TokenSpec> = if each {
+                    specs
+                } else {
+                    let labels = specs
+                        .iter()
+                        .map(|s| {
+                            crate::tokens::token_characteristics_in(self, s, &ctx)
+                                .name
+                                .to_string()
+                        })
+                        .collect();
+                    let i =
+                        self.ask_option(ctx.controller, ctx.source, "Create which tokens", labels);
+                    specs.get(i).cloned().into_iter().collect()
+                };
+                chosen
+                    .iter()
+                    .map(|spec| ReplEvent::CreateTokens {
+                        controller,
+                        spec: Box::new(TokenCreate {
+                            chars: crate::tokens::token_characteristics_in(self, spec, &ctx),
+                            card: crate::tokens::predefined_card(spec),
+                            tapped: tokens.tapped,
+                            attacking: tokens.attacking,
+                            copy_of: None,
+                            copy_exceptions: vec![],
+                        }),
+                        count,
+                        source,
+                    })
+                    .collect()
+            }
+            (
+                ReplacementAction::TokenCopiesInstead { of, choose },
+                ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                },
+            ) => {
+                let mut c = ctx.clone();
+                let target = match (&of, &choose) {
+                    (Some(sel), _) => crate::copy_rules::token_copy_sources(self, sel, &mut c)
+                        .into_iter()
+                        .next(),
+                    (None, Some(f)) => {
+                        let cands: Vec<ObjectId> = self
+                            .permanent_ids()
+                            .into_iter()
+                            .filter(|o| self.matches(*o, f, &c))
+                            .collect();
+                        self.ask_objects(
+                            c.controller,
+                            c.source,
+                            "Choose an object to copy",
+                            cands,
+                            1,
+                            1,
+                        )
+                        .into_iter()
+                        .next()
+                    }
+                    (None, None) => None,
+                };
+                let original = ReplEvent::CreateTokens {
+                    controller,
+                    spec: tokens,
+                    count,
+                    source,
+                };
+                let Some(t) = target else {
+                    return vec![original];
+                };
+                let ReplEvent::CreateTokens { spec: tokens, .. } = &original else {
+                    return vec![original];
+                };
+                vec![ReplEvent::CreateTokens {
+                    controller,
+                    spec: Box::new(TokenCreate {
+                        chars: self.obj(t).copiable.clone(),
+                        card: self.obj(t).card.clone(),
+                        tapped: tokens.tapped,
+                        attacking: tokens.attacking,
+                        copy_of: Some(t),
+                        copy_exceptions: vec![],
+                    }),
+                    count,
+                    source,
+                }]
             }
             (
                 ReplacementAction::TokensInstead { spec },
@@ -2029,6 +2156,8 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.object = Some(m.obj);
             // Why it would move ("creatures played by your opponents", CR 305.1).
             e.cause = Some(m.cause);
+            // What moves it: a card discarded to pay its own cycling cost was cycled.
+            e.other = m.source;
         }
         ReplEvent::Damage {
             source,

@@ -512,6 +512,93 @@ fn counter_and_destroy_source(l: &str, b: &mut Builder) -> Option<Effect> {
     Some(e)
 }
 
+/// "If a permanent's ability is countered this way, activated abilities of that
+/// permanent can't be activated this turn." (Trickbind; its rulings: mana abilities
+/// included), "If an ability of an artifact, creature, or planeswalker is countered this
+/// way, that permanent loses all abilities for as long as ~ remains on the battlefield."
+/// (Tishana's Tidebinder: the source's types are checked as the ability resolves).
+fn countered_source_followup(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let s = end(s);
+    let Some(r) = s.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((who, then)) = r.split_once(" is countered this way, ") else {
+        return false;
+    };
+    let kind = if who == "a permanent's ability" {
+        Filter::Any
+    } else if let Some(list) = who.strip_prefix("an ability of ") {
+        let list = list.replacen("an ", "", 1).replacen("a ", "", 1);
+        let mut types = Vec::new();
+        for w in list.replace(", or ", ", ").replace(" or ", ", ").split(", ") {
+            let Some(t) = crate::types::CardType::from_word(w.trim()) else {
+                return false;
+            };
+            types.push(Filter::Type(t));
+        }
+        if types.len() < 2 {
+            return false;
+        }
+        Filter::Or(types)
+    } else {
+        return false;
+    };
+    let Some(slot) = counter_slot(prev) else {
+        return false;
+    };
+    if !matches!(
+        b.targets.get(slot as usize).map(|t| &t.what),
+        Some(TargetKind::Ability(_) | TargetKind::SpellOrAbility(_))
+    ) {
+        return false;
+    }
+    let source = Sel::Var(COUNTERED_SOURCE);
+    let effect = if then == "activated abilities of that permanent can't be activated this turn" {
+        Effect::AddRestriction {
+            restriction: Restriction::CantActivate {
+                who: PlayerFilter::Any,
+                sources: Filter::In(Box::new(source.clone())),
+                include_mana: true,
+            },
+            duration: Duration::EndOfTurn,
+        }
+    } else {
+        let Some(r) = then.strip_prefix("that permanent ") else {
+            return false;
+        };
+        let saved = (b.targets.len(), b.it.clone());
+        b.it = source.clone();
+        let e = crate::oracle::effects::parse_clause(&format!("it {r}"), b);
+        b.it = saved.1;
+        match e {
+            Some(e) if b.targets.len() == saved.0 => e,
+            _ => {
+                b.targets.truncate(saved.0);
+                return false;
+            }
+        }
+    };
+    let counter = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: COUNTERED_SOURCE,
+            sel: Sel::All(Filter::and(vec![
+                Filter::Permanent,
+                kind,
+                Filter::Custom(crate::kw::basic_effects::source_of_slot(slot).into()),
+            ])),
+        },
+        counter,
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(effect),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "counter: if a permanent's ability is countered this way, [effect on it]", priority: 110, apply: countered_source_followup } }
 inventory::submit! { EffectPattern { name: "counter: described stack objects", priority: 40, parse: counter_described } }
 inventory::submit! { EffectPattern { name: "counter: and destroy its source", priority: 40, parse: counter_and_destroy_source } }
 inventory::submit! { EffectPattern { name: "counter: exile spells and counter abilities", priority: 40, parse: exile_spells_counter_abilities } }

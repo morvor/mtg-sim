@@ -36,7 +36,11 @@ fn other_player_copies(l: &str, b: &mut Builder) -> Option<Effect> {
         if !matches!(b.it, Sel::TriggerSpell) || matches!(b.it_player, PlayerRef::You) {
             return None;
         }
-        return Some(copied_by(b.it_player.clone(), Sel::TriggerSpell, new_targets));
+        return Some(copied_by(
+            b.it_player.clone(),
+            Sel::TriggerSpell,
+            new_targets,
+        ));
     }
     let r = l.strip_prefix("the controller of ")?;
     let r = r.strip_suffix(" copies it")?;
@@ -64,6 +68,10 @@ fn player_may_choose_new_targets(s: &str, prev: &mut Effect, _b: &mut Builder) -
         end(&l),
         "the player may choose new targets for the copy"
             | "that player may choose new targets for the copy"
+            // "Up to one target opponent may also copy that spell. They may choose new
+            // targets for that copy." (Parnesse, the Subtle Brush).
+            | "they may choose new targets for that copy"
+            | "they may choose new targets for the copy"
     ) {
         return false;
     }
@@ -73,6 +81,13 @@ fn player_may_choose_new_targets(s: &str, prev: &mut Effect, _b: &mut Builder) -
                 *new_targets = true;
                 true
             }
+            Effect::May { effect, .. } => match effect.as_mut() {
+                Effect::CopySpell { new_targets, .. } => {
+                    *new_targets = true;
+                    true
+                }
+                _ => false,
+            },
             _ => false,
         },
         _ => false,

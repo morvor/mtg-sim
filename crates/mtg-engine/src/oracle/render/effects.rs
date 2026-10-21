@@ -1696,6 +1696,80 @@ impl Renderer<'_> {
                 let t = self.sel(to, Case::Obj);
                 format!("move {c} {f} onto {t}")
             }
+            Effect::CountersFromAmong {
+                from,
+                to,
+                kind,
+                min,
+                max,
+                each_missing_kind,
+            } => {
+                let noun = match kind {
+                    Some(k) => counter_name(k),
+                    None => "counter".into(),
+                };
+                let t = to.as_ref().map(|t| self.sel(t, Case::Obj));
+                if *each_missing_kind {
+                    let f = self.sel(from, Case::Obj);
+                    let t = t.unwrap_or_default();
+                    return format!("move a {noun} of each kind not on {t} from {f} onto {t}");
+                }
+                let qty = match (min, max) {
+                    (Value::Const(0), None) => format!("any number of {}", plural(&noun)),
+                    (Value::Const(1), None) => format!("one or more {}", plural(&noun)),
+                    (Value::Const(0), Some(m)) => {
+                        let (c, _) = self.counted(m, &noun);
+                        format!("up to {c}")
+                    }
+                    (n, _) => self.counted(n, &noun).0,
+                };
+                let f = match from {
+                    Sel::All(f) => {
+                        let f = f.clone();
+                        let on_bf = |x: &Filter| matches!(x, Filter::InZone(ZoneKind::Battlefield));
+                        let f = match f {
+                            Filter::And(v) => Filter::and(v.into_iter().filter(|x| !on_bf(x)).collect()),
+                            f => f,
+                        };
+                        format!("among {}", self.noun(&f, Num::Many))
+                    }
+                    s => self.sel(s, Case::Obj),
+                };
+                match t {
+                    Some(t) => format!("move {qty} from {f} onto {t}"),
+                    None => format!("remove {qty} from {f}"),
+                }
+            }
+            Effect::DistributeCounters {
+                n,
+                kind,
+                among,
+                min_objects,
+                max_objects,
+                up_to,
+            } => {
+                let noun = counter_name(kind);
+                let (c, w) = self.counted(n, &noun);
+                let c = if *up_to { format!("up to {c}") } else { c };
+                let g = match among {
+                    Sel::All(f) => self.noun(f, Num::Many),
+                    s => self.sel(s, Case::Obj),
+                };
+                let q = match (min_objects, max_objects) {
+                    (_, Some(3)) => "one, two, or three",
+                    (_, Some(2)) => "one or two",
+                    _ => "any number of",
+                };
+                format!("distribute {c} among {q} {g}{}", w.unwrap_or_default())
+            }
+            Effect::PutEventCounters { to, one_each } => {
+                let t = self.sel(to, Case::Obj);
+                if *one_each {
+                    format!("put one of each of those kinds of counters on {t}")
+                } else {
+                    format!("put the same number and kind of counters on {t}")
+                }
+            }
             Effect::PutCountersOf { from, to, kind } => {
                 let f = self.sel(from, Case::Poss);
                 let t = self.sel(to, Case::Obj);
@@ -2060,11 +2134,16 @@ impl Renderer<'_> {
                 }
                 let d = self.duration(duration);
                 let c = self.cost(&def.cost);
+                if let SpecialActionEffect::StopDelayedTrigger = &def.action {
+                    let who = self.player_filter_object(&def.who);
+                    return format!("{{alt:unless {who} pays {c} before that step|{who} may pay {c} before then to stop it}}");
+                }
                 let what = match &def.action {
                     SpecialActionEffect::Effect(e) => self.effect(e),
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "ignore this effect until end of turn".into()
                     }
+                    SpecialActionEffect::StopDelayedTrigger => String::new(),
                 };
                 let once = if *repeatable {
                     ""
@@ -2695,6 +2774,49 @@ impl Renderer<'_> {
                 };
                 format!("when you do, {}", lower_first(&b))
             }
+            Effect::DuringNext { who, part, effect } => {
+                let p = self.player(who, super::players::Case::Poss);
+                let when = match part {
+                    NextTurnPart::Turn => format!("during {p} next turn"),
+                    NextTurnPart::CombatPhase => format!("during {p} next combat phase"),
+                };
+                // "Target opponent skips all combat phases of their next turn."
+                if let Effect::AddReplacement { def, .. } = &**effect {
+                    if let ReplacementEvent::SkipStep {
+                        step: StepKind::Combat,
+                        ..
+                    } = def.event
+                    {
+                        let subj = self.player(who, super::players::Case::Subj);
+                        return format!("{subj} skips all combat phases of their next turn");
+                    }
+                }
+                let e = self.effect(effect);
+                // "Each opponent can't cast ... during that player's next turn."
+                if matches!(who, PlayerRef::EachOpponent | PlayerRef::EachPlayer)
+                    && *part == NextTurnPart::Turn
+                {
+                    if let Some(rest) = e.strip_prefix("{alt:that player|them} ") {
+                        let subj = self.player(who, super::players::Case::Subj);
+                        let rest = rest.replace(" this turn", "");
+                        return format!("{subj} {rest} during that player's next turn");
+                    }
+                }
+                let e = e
+                    .replace(" this turn", "")
+                    .replace(" this combat", "")
+                    .replace(" until end of combat", "");
+                // "that creature can't attack during its controller's next turn", "target
+                // creature ... attacks during its controller's next combat phase if able".
+                if let PlayerRef::ControllerOf(_) = who {
+                    let when = when.replace(&format!("during {p} "), "during its controller's ");
+                    return match e.strip_suffix(" if able") {
+                        Some(r) => format!("{r} {when} if able"),
+                        None => format!("{e} {when}"),
+                    };
+                }
+                format!("{{alt:{when}, {e}|{e} {when}}}")
+            }
             Effect::AtNext { step, effect } => {
                 let s = match step {
                     TriggerStep::EndOfCombat => "at end of combat".to_string(),
@@ -2707,6 +2829,11 @@ impl Renderer<'_> {
                 } else {
                     format!("{{alt:{s}, {e}|{e} {s}}}")
                 }
+            }
+            Effect::TokensEnterAttached { to, effect } => {
+                let e = self.effect(effect);
+                let t = self.sel(to, Case::Obj);
+                format!("{e} attached to {t}")
             }
             Effect::TokensEnterWithCounters { counters, effect } => {
                 let e = self.effect(effect);
@@ -3025,7 +3152,13 @@ impl Renderer<'_> {
             }
             Effect::ExileUntil { what, until } => {
                 let w = self.sel(what, Case::Obj);
-                let u = until_event(until);
+                let u = match until {
+                    UntilEvent::TargetLeavesBattlefield(o) => {
+                        let o = self.sel(&Sel::Target(*o), Case::Subj);
+                        format!("{o} leaves the battlefield")
+                    }
+                    _ => until_event(until),
+                };
                 format!("exile {w} until {u}")
             }
             Effect::PhaseOutUntil { what, until } => {
@@ -7588,6 +7721,7 @@ fn until_event(u: &UntilEvent) -> String {
     match u {
         UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
         UntilEvent::OpponentBecomesMonarch => "an opponent becomes the monarch".into(),
+        UntilEvent::TargetLeavesBattlefield(_) => "that permanent leaves the battlefield".into(),
     }
 }
 
