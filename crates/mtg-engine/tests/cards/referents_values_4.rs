@@ -1988,3 +1988,301 @@ fn cait_gets_counters_if_you_discarded_the_greatest_mana_value() {
         assert_eq!(t.counters(cait, "+1/+1"), n, "{mine} vs {theirs}");
     }
 }
+
+// --- Batch 5 ---------------------------------------------------------------------------
+
+thread_local! {
+    static PICK: std::cell::RefCell<Vec<&'static str>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Answers entity choices among cards by name (the cards' ids change as they move): the
+/// candidates named in `PICK`.
+fn pick_named(g: &mtg_engine::game::Game, d: &Decision) -> Option<mtg_engine::decision::Answer> {
+    let Decision::ChooseEntities { candidates, .. } = d else {
+        return None;
+    };
+    let want = PICK.with(|w| w.borrow().clone());
+    if want.is_empty() {
+        return None;
+    }
+    let picks: Vec<Entity> = candidates
+        .iter()
+        .filter(|e| {
+            e.object()
+                .is_some_and(|o| want.contains(&g.obj(o).chars.name.as_str()))
+        })
+        .copied()
+        .collect();
+    (!picks.is_empty()).then_some(mtg_engine::decision::Answer::Entities(picks))
+}
+
+/// Routes `p`'s entity choices through [`pick_named`].
+fn pick_by_name(t: &mut TestGame, p: PlayerId, names: &[&'static str]) {
+    struct Picker {
+        inner: Box<dyn mtg_engine::decision::Agent>,
+    }
+    impl mtg_engine::decision::Agent for Picker {
+        fn decide(
+            &mut self,
+            g: &mtg_engine::game::Game,
+            p: PlayerId,
+            d: &Decision,
+        ) -> mtg_engine::decision::Answer {
+            pick_named(g, d).unwrap_or_else(|| self.inner.decide(g, p, d))
+        }
+    }
+    PICK.with(|w| *w.borrow_mut() = names.to_vec());
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(Picker { inner });
+}
+
+#[test]
+fn shriekwood_devourer_untaps_up_to_the_greatest_attacking_power() {
+    cr!("701.26b", "608.2h");
+    compiles("Shriekwood Devourer");
+    for (big, picked, untapped) in [(false, 3, 2), (true, 5, 5)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Shriekwood Devourer");
+        let bear = t.battlefield(P0, "Grizzly Bears");
+        let maw = t.battlefield(P0, "Colossal Dreadmaw");
+        let lands = t.lands(P0, "Forest", 5);
+        t.advance_to(P0, Step::PrecombatMain);
+        for l in &lands {
+            t.g.tap(*l);
+        }
+        let ents: Vec<Entity> = lands[..picked].iter().map(|l| Entity::Object(*l)).collect();
+        t.answer_choose(P0, &ents);
+        let mut attackers = vec![(bear, Entity::Player(P1))];
+        if big {
+            attackers.push((maw, Entity::Player(P1)));
+        }
+        t.attack(&attackers, &[]);
+        let n = lands.iter().filter(|l| !t.g.obj(**l).tapped).count();
+        // With only the Bears attacking, X is 2: choosing three lands isn't allowed.
+        assert!(n <= untapped, "{big}: {n}");
+        if big {
+            assert_eq!(n, 5);
+        }
+    }
+}
+
+#[test]
+fn taeko_grows_when_another_creature_leaves_without_dying() {
+    cr!("603.4", "700.4");
+    compiles("Taeko, the Patient Avalanche");
+    for (spell, grows) in [("Unsummon", true), ("Lightning Bolt", false)] {
+        let mut t = TestGame::new(2);
+        let taeko = t.battlefield(P0, "Taeko, the Patient Avalanche");
+        let bear = t.battlefield(P0, "Grizzly Bears");
+        t.lands(P0, if grows { "Island" } else { "Mountain" }, 1);
+        let s = t.hand(P0, spell);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.cast(P0, s).target(bear).go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(bear));
+        assert_eq!(t.counters(taeko, "+1/+1"), grows as u32, "{spell}");
+        assert_eq!(scried(&t, P0), grows);
+    }
+}
+
+#[test]
+fn arcane_artisan_exiles_the_tokens_it_made_when_it_leaves() {
+    cr!("607.2a", "603.7c");
+    compiles("Arcane Artisan");
+    let mut t = TestGame::new(2);
+    let artisan = t.battlefield(P0, "Arcane Artisan");
+    t.lands(P0, "Island", 3);
+    t.library_top(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Llanowar Elves");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.activate(P0, artisan, 0, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "the copy");
+    t.g.destroy(artisan, None);
+    t.settle();
+    t.advance_to_step(Step::End);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.on_battlefield(other), "only the tokens it created");
+}
+
+#[test]
+fn veterans_voice_targets_a_creature_other_than_the_one_it_taps() {
+    cr!("602.2", "118.12");
+    compiles("Veteran's Voice");
+    // The enchanted creature alone: no legal target.
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let voice = t.battlefield(P0, "Veteran's Voice");
+    t.g.attach(voice, Entity::Object(bear));
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(t.activate(P0, voice, 0, &[Entity::Object(bear)]).is_err());
+    assert!(!t.g.obj(bear).tapped);
+
+    let mut t = TestGame::new(2);
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let elf = t.battlefield(P0, "Llanowar Elves");
+    let voice = t.battlefield(P0, "Veteran's Voice");
+    t.g.attach(voice, Entity::Object(bear));
+    t.advance_to(P0, Step::PrecombatMain);
+    t.activate(P0, voice, 0, &[Entity::Object(elf)]).unwrap();
+    t.resolve_all();
+    assert!(t.g.obj(bear).tapped);
+    assert_eq!(t.pt(elf), (3, 2));
+}
+
+#[test]
+fn bringer_of_the_last_gift_returns_only_cards_that_were_already_there() {
+    cr!("701.21a", "400.7");
+    compiles("Bringer of the Last Gift");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 8);
+    let bringer = t.hand(P0, "Bringer of the Last Gift");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    let elf = t.battlefield(P1, "Llanowar Elves");
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P1, "Craw Wurm");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, bringer).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(bear) && !t.on_battlefield(elf));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    let giant = t.named_on_battlefield("Hill Giant");
+    let wurm = t.named_on_battlefield("Craw Wurm");
+    assert_eq!((giant.len(), wurm.len()), (1, 1));
+    assert_eq!(t.g.obj(giant[0]).controller, P0);
+    assert_eq!(t.g.obj(wurm[0]).controller, P1);
+}
+
+#[test]
+fn heart_shaped_herb_returns_the_sacrificed_creature_card() {
+    cr!("701.21a", "725.1");
+    compiles("Heart-Shaped Herb");
+    let mut t = TestGame::new(2);
+    let herb = t.battlefield(P0, "Heart-Shaped Herb");
+    let bear = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.activate(P0, herb, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_ne!(t.g.current(bear), bear, "sacrificed, then returned");
+    let back = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.counters(back[0], "+1/+1"), 3);
+    assert_eq!(t.g.monarch, Some(P0));
+}
+
+#[test]
+fn cache_grab_makes_food_for_a_squirrel_controlled_or_returned() {
+    cr!("608.2c", "111.10b");
+    compiles("Cache Grab");
+    for (control, pick, food) in [
+        (false, "Grizzly Bears", 0),
+        (false, "Squirrel Mob", 1),
+        (true, "Grizzly Bears", 1),
+    ] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 2);
+        for c in ["Hill Giant", "Squirrel Mob", "Grizzly Bears", "Forest"] {
+            t.library_top(P0, c);
+        }
+        if control {
+            t.battlefield(P0, "Squirrel Mob");
+        }
+        let grab = t.hand(P0, "Cache Grab");
+        t.advance_to(P0, Step::PrecombatMain);
+        pick_by_name(&mut t, P0, &[pick]);
+        t.answer_yes(P0, true);
+        t.cast(P0, grab).go();
+        t.resolve_all();
+        assert!(t.in_hand(P0, pick), "{pick}");
+        assert_eq!(with_subtype(&t, "Food"), food, "{control} {pick}");
+    }
+}
+
+#[test]
+fn depala_reveals_the_top_x_cards_paid_for() {
+    cr!("107.3", "701.20a");
+    compiles("Depala, Pilot Exemplar");
+    let mut t = TestGame::new(2);
+    let depala = t.battlefield(P0, "Depala, Pilot Exemplar");
+    t.lands(P0, "Mountain", 2);
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Dwarven Trader");
+    t.library_top(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.attack(&[(depala, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Dwarven Trader"), "a Dwarf among the top two");
+    assert!(!t.in_hand(P0, "Grizzly Bears") && !t.in_hand(P0, "Hill Giant"));
+}
+
+#[test]
+fn knickknack_ouphe_reveals_the_top_x_cards() {
+    cr!("107.3m", "303.4");
+    compiles("Knickknack Ouphe");
+    for x in [1i64, 2] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 3);
+        t.library_top(P0, "Rancor");
+        t.library_top(P0, "Hill Giant");
+        let ouphe = t.hand(P0, "Knickknack Ouphe");
+        t.advance_to(P0, Step::PrecombatMain);
+        pick_by_name(&mut t, P0, &["Rancor"]);
+        t.cast(P0, ouphe).x(x).go();
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Rancor").len(),
+            (x == 2) as usize,
+            "X = {x}"
+        );
+    }
+}
+
+#[test]
+fn dragonhawk_deals_damage_for_the_cards_still_exiled() {
+    cr!("603.7c", "400.7");
+    compiles("Dragonhawk, Fate's Tempest");
+    for play in [false, true] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 5);
+        t.library_top(P0, "Forest");
+        let hawk = t.hand(P0, "Dragonhawk, Fate's Tempest");
+        t.advance_to(P0, Step::PrecombatMain);
+        t.cast(P0, hawk).go();
+        t.resolve_all();
+        let exiled = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Forest");
+        assert_eq!(exiled.len(), 1, "X is 1: Dragonhawk itself");
+        if play {
+            t.play_land(P0, exiled[0]).unwrap();
+        }
+        t.advance_to_step(Step::End);
+        t.resolve_all();
+        assert_eq!(t.life(P1), if play { 20 } else { 18 }, "played: {play}");
+    }
+}
+
+#[test]
+fn toralf_deals_the_excess_damage_to_another_target() {
+    cr!("120.10");
+    compiles("Toralf, God of Fury");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Toralf, God of Fury");
+    t.lands(P0, "Mountain", 1);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, bolt).target(bear).go();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bear));
+    assert_eq!(t.life(P1), 19, "3 damage to a 2-toughness creature: 1 excess");
+}

@@ -173,6 +173,11 @@ impl KeywordRules for ReferentsValues4 {
                     }),
             );
         }
+        if name == p::STILL_EXILED_CARD {
+            // CR 400.7: a card played or otherwise moved from exile is a new object; the
+            // one in exile is the same object only while it stays there.
+            return Some(g.is_live(id) && g.current(id) == id && g.obj(id).zone == crate::object::Zone::Exile);
+        }
         if name == p::NOT_SACRIFICED_CARD {
             // CR 400.7: the sacrificed permanent is a new object where it went.
             let sacrificed = ctx.vars.get(&vars::SACRIFICED);

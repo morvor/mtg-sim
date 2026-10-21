@@ -16,7 +16,8 @@ fn untap_up_to(l: &str, _b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (n, rest) = parse_number(r)?;
-    if !matches!(n, Value::Const(2..)) {
+    // "up to X lands, where X is ..." (Shriekwood Devourer), or the spell's X.
+    if !matches!(n, Value::Const(2..) | Value::X) {
         return None;
     }
     let (f, plural, tail) = parse_object_phrase(rest)?;

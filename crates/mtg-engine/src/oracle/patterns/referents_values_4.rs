@@ -1622,3 +1622,215 @@ fn if_you_discarded_the_greatest(l: &str, prev: &mut Effect, b: &mut Builder) ->
 }
 
 inventory::submit! { FollowupPattern { name: "if you discarded the card with the greatest mana value among those cards", priority: 140, apply: if_you_discarded_the_greatest } }
+
+/// Rewordings of a whole ability into a form the grammar reads, each with the same
+/// meaning:
+///
+/// * "Whenever another creature you control leaves the battlefield, if it didn't die,
+///   ..." (Taeko, the Patient Avalanche): whether it died is a fact of the event, true or
+///   false both as it triggers and as it resolves (CR 603.4), so it reads as "leaves the
+///   battlefield without dying" (to any zone but a graveyard, CR 700.4).
+/// * "When ~ leaves the battlefield, exile all tokens created with it ..." (Arcane
+///   Artisan): "it" is ~ (CR 607.2a-style link to its own tokens).
+/// * "Tap enchanted creature: Target creature other than the creature tapped this way
+///   ..." (Veteran's Voice): the creature the cost taps is the enchanted creature.
+fn reworded_ability(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<crate::ability::Ability>> {
+    if super::referents_results::in_standard() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    if lower.len() != block.len() {
+        return None;
+    }
+    let (from, to): (&str, &str) = if lower.contains(" leaves the battlefield, if it didn't die, ")
+    {
+        (
+            " leaves the battlefield, if it didn't die, ",
+            " leaves the battlefield without dying, ",
+        )
+    } else if lower.starts_with("when ~ leaves the battlefield, ")
+        && lower.contains(" tokens created with it")
+    {
+        (" tokens created with it", " tokens created with ~")
+    } else if lower.starts_with("tap enchanted creature: ")
+        && lower.contains(" other than the creature tapped this way ")
+    {
+        (
+            " other than the creature tapped this way ",
+            " other than enchanted creature ",
+        )
+    } else {
+        return None;
+    };
+    // (A target "other than the creature tapped this way" would otherwise be read as the
+    // creatures a tap instruction tapped, which there are none of as targets are chosen.)
+    let cost_tap = from.contains("tapped this way");
+    if !cost_tap && super::referents_results::standard_ok(block, ctx) {
+        return None;
+    }
+    let i = lower.find(from)?;
+    let rewritten = format!("{}{to}{}", &block[..i], &block[i + from.len()..]);
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    let text = crate::oracle::strip_ability_word(block.trim());
+    Some(
+        v.into_iter()
+            .map(|a| {
+                let mut d = (*a).clone();
+                d.text = text.to_string();
+                std::sync::Arc::new(d)
+            })
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "referents 4: reworded abilities (if it didn't die, tokens created with it, the creature tapped this way)", priority: 50, parse: reworded_ability } }
+
+/// The cards in graveyards before an instruction, for "that weren't put there this way".
+const PUT_THERE: Var = vars::USER + 14_016;
+
+thread_local! {
+    static PUT_THERE_OK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "Each player sacrifices all other creatures they control. Then each player returns
+/// all creature cards from their graveyard that weren't put there this way to the
+/// battlefield." (Bringer of the Last Gift): the cards the sacrifice put into graveyards,
+/// recorded right after it.
+fn returns_cards_not_put_there(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !l.contains(" that weren't put there this way") {
+        return false;
+    }
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        e => Some(e),
+    };
+    let sacrifices = last.is_some_and(|e| {
+        serde_json::to_string(e).is_ok_and(|j| j.contains("Sacrifice") && !j.contains("\"Move\""))
+    });
+    if !sacrifices {
+        return false;
+    }
+    PUT_THERE_OK.with(|c| c.set(true));
+    let e = crate::oracle::effects::parse_sentence(l, b);
+    PUT_THERE_OK.with(|c| c.set(false));
+    let Some(e) = e else {
+        return false;
+    };
+    // The cards in graveyards before it (nothing else is put there in between, so the
+    // others are those it put there).
+    let store = Effect::Store {
+        var: PUT_THERE,
+        sel: Sel::All(Filter::InZone(ZoneKind::Graveyard)),
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = match old {
+        Effect::Seq(mut v) => {
+            let sac = v.pop().unwrap_or(Effect::Noop);
+            v.extend([store, sac, e]);
+            Effect::Seq(v)
+        }
+        o => Effect::Seq(vec![store, o, e]),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "... that weren't put there this way (after a sacrifice)", priority: 140, apply: returns_cards_not_put_there } }
+
+fn not_put_there<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
+    if !PUT_THERE_OK.with(|c| c.get()) {
+        return None;
+    }
+    let rest = s.trim_start().strip_prefix("that weren't put there this way")?;
+    Some((Filter::In(Box::new(Sel::Var(PUT_THERE))), rest))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "that weren't put there this way", priority: 100, parse: not_put_there } }
+
+/// "If you control a Squirrel or returned a Squirrel card to your hand this way, create a
+/// Food token." (Cache Grab): either condition, the second about the instruction before.
+fn if_condition_or_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if you ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some((a, verb)) = c.split_once(" or ") else {
+        return false;
+    };
+    if verb.contains(" or ") || a.contains(',') {
+        return false;
+    }
+    let Some(ca) = crate::oracle::statics::parse_condition(&format!("you {a}"), b.ctx) else {
+        return false;
+    };
+    let mut trial = prev.clone();
+    let saved = (b.targets.len(), b.it.clone(), b.named.len());
+    if !super::conditions_this_way::if_this_way(&format!("if you {verb} this way, {x}"), &mut trial, b)
+    {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.named.truncate(saved.2);
+        return false;
+    }
+    // The condition the look-back made is the last instruction's.
+    let Effect::Seq(v) = &mut trial else {
+        return false;
+    };
+    let Some(Effect::If { cond, .. }) = v.last_mut() else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        b.named.truncate(saved.2);
+        return false;
+    };
+    *cond = Condition::Or(vec![ca, std::mem::replace(cond, Condition::Always)]);
+    *prev = trial;
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "if you [condition] or [did something] this way", priority: 140, apply: if_condition_or_this_way } }
+
+/// `Filter::Custom`: a card that is still the same object in exile (see
+/// `kw::referents_values_4`).
+pub const STILL_EXILED_CARD: &str = "rv4:still exiled";
+
+/// "At the beginning of your next end step, ~ deals 2 damage to each opponent for each of
+/// those cards that are still exiled." (Dragonhawk, Fate's Tempest): of the cards exiled
+/// (and still remembered by the delayed ability, CR 603.7c), those not played or otherwise
+/// moved (CR 400.7).
+fn for_each_still_exiled(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.starts_with("at the beginning of ")
+        || l.matches(" for each of those cards that are still exiled").count() != 1
+    {
+        return None;
+    }
+    let t = l.replacen(
+        " for each of those cards that are still exiled",
+        " for each of those cards",
+        1,
+    );
+    let e = crate::oracle::effects::parse_sentence(&t, b)?;
+    let mut j = serde_json::to_string(&e).ok()?;
+    let count = r#"{"CountSel":{"Var":"#;
+    if j.matches(count).count() != 1 {
+        return None;
+    }
+    let i = j.find(count)?;
+    let after = i + count.len();
+    let close = after + j[after..].find('}')?;
+    let var = &j[after..close];
+    if var.parse::<u32>().is_err() {
+        return None;
+    }
+    let filter = serde_json::to_string(&Filter::Custom(STILL_EXILED_CARD.into())).ok()?;
+    let replacement = format!(r#"{{"CountSel":{{"Matching":[{{"Var":{var}}},{filter}]}}"#);
+    j.replace_range(i..close + 1, &replacement);
+    serde_json::from_str(&j).ok()
+}
+
+inventory::submit! { super::EffectPattern { name: "at the beginning of ..., for each of those cards that are still exiled", priority: 980, parse: for_each_still_exiled } }

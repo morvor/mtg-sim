@@ -1309,7 +1309,12 @@ fn trigger_spell_value(s: &str, b: &Builder) -> Option<(Value, String)> {
 /// to the one permanent it damaged), and in a "whenever [a permanent] is dealt excess
 /// damage" trigger "that excess damage" (the triggering event's).
 fn excess(s: &str, b: &Builder) -> Option<(Value, String)> {
-    if let Some(rest) = s.strip_prefix("that excess damage") {
+    // "~ deals damage equal to the excess to any target" (Toralf, God of Fury): the same.
+    let that_excess = s.strip_prefix("that excess damage").or_else(|| {
+        s.strip_prefix("the excess")
+            .filter(|r| !r.starts_with(" damage"))
+    });
+    if let Some(rest) = that_excess {
         // Only a trigger on excess damage has one (not "Whenever ~ deals combat damage to
         // a creature, if that creature was dealt excess damage this turn, ...").
         let raw = crate::oracle::raw_text().to_lowercase();
@@ -2000,12 +2005,17 @@ pub fn note_sacrificed(e: &Effect, b: &mut Builder) {
             .retain(|(n, sel)| !(n == "that creature" && ours(sel)));
         b.named
             .push(("that creature".to_string(), Sel::Var(vars::SACRIFICED)));
+        // "You may sacrifice a creature. If you do, return that card to the battlefield"
+        // (Heart-Shaped Herb): the sacrificed creature's card, followed to the graveyard.
+        b.named.retain(|(n, sel)| !(n == "that card" && ours(sel)));
+        b.named
+            .push(("that card".to_string(), Sel::Var(vars::SACRIFICED)));
         return;
     }
     let names_target = serde_json::to_string(e).is_ok_and(|j| j.contains("\"Target\""));
     if names_target {
         b.named
-            .retain(|(n, sel)| !(n == "that creature" && ours(sel)));
+            .retain(|(n, sel)| !((n == "that creature" || n == "that card") && ours(sel)));
     }
 }
 
