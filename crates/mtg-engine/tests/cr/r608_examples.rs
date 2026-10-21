@@ -126,8 +126,7 @@ fn search_party_captain_counts_a_creature_attacked_with_that_is_no_longer_a_crea
     // Search Party Captain ({3}{W}) costs {1} less: three Plains pay for it.
     let plains = t.lands(P0, "Plains", 3);
     let captain = t.hand(P0, "Search Party Captain");
-    let r = t.cast(P0, captain).try_go();
-    assert!(r.is_ok(), "{r:?} {}", t.dump_log());
+    t.cast(P0, captain).go();
     assert!(plains.iter().all(|p| t.obj(*p).tapped));
     t.resolve();
     assert_eq!(t.named_on_battlefield("Search Party Captain").len(), 1);
