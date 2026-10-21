@@ -140,3 +140,25 @@ fn galactus_must_attack_the_opponent_with_the_most_life_unless_the_herald_is_aro
     t.battlefield(P0, "Silver Surfer, Galactus's Herald");
     assert!(legal_attack(&mut t, &[]));
 }
+
+#[test]
+fn gogo_copies_a_creature_and_both_must_attack() {
+    cr!("707.2", "508.1d");
+    supported("Gogo, Mysterious Mime");
+    let mut t = TestGame::new(2);
+    let gogo = t.battlefield(P0, "Gogo, Mysterious Mime");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.set_step(P0, Step::PrecombatMain);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    // A Hill Giant (3/3) named Gogo, and both get +2/+0.
+    assert_eq!(t.pt(gogo), (5, 3));
+    assert_eq!(t.pt(giant), (5, 3));
+    assert!(t.g.obj(gogo).chars.name.starts_with("Gogo"));
+    let p1 = Entity::Player(P1);
+    assert!(!legal_attack(&mut t, &[]));
+    assert!(!legal_attack(&mut t, &[(gogo, p1)]));
+    assert!(legal_attack(&mut t, &[(gogo, p1), (giant, p1)]));
+}

@@ -936,3 +936,87 @@ fn a_attacked_with_exactly_one_other(block: &str, ctx: &crate::oracle::CompileCo
 }
 
 inventory::submit! { super::AbilityPattern { name: "combat 4: if you attacked with exactly one other creature this combat, ... that creature", priority: 90, parse: a_attacked_with_exactly_one_other } }
+
+/// The target the last instruction of `e` makes the source a copy of ("you may have ~
+/// become a copy of another target creature you control").
+fn copied_target(e: &Effect) -> Option<u8> {
+    match e {
+        Effect::Seq(v) => v.last().and_then(copied_target),
+        Effect::May { effect, .. } => copied_target(effect),
+        Effect::BecomeCopyExcept {
+            what: Sel::This,
+            of: Sel::Target(k),
+            ..
+        } => Some(*k),
+        _ => None,
+    }
+}
+
+/// "If you do, ~ and that creature each get +1/+1 and gain haste until end of turn and
+/// attack this turn if able." after "you may have ~ become a copy of another target
+/// creature you control" (Gogo, Mysterious Mime): "that creature" is the creature copied.
+fn f_that_creature_after_copy(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l.trim());
+    if !l.contains("that creature") {
+        return false;
+    }
+    let Some(k) = copied_target(prev) else {
+        return false;
+    };
+    let saved = (b.it.clone(), b.named.len(), b.targets.len());
+    b.it = Sel::Target(k);
+    b.named.push(("that creature".into(), Sel::Target(k)));
+    // "[A] and [B] each get ... and attack this turn if able": both instructions.
+    let text = l.to_string();
+    let parsed = match text.rsplit_once(" and attack this turn if able") {
+        Some((head, "")) if head.contains(" each get ") => {
+            let subject = head
+                .strip_prefix("if you do, ")
+                .and_then(|h| h.split_once(" each get "))
+                .map(|(s, _)| s.to_string());
+            match subject {
+                Some(s) => crate::oracle::effects::parse_sentence(head, b).and_then(|e| {
+                    // Each of the two attacks this turn if able.
+                    let (x, y) = s.split_once(" and ")?;
+                    let mut att = Vec::new();
+                    for one in [x, y] {
+                        att.push(crate::oracle::effects::parse_clause(
+                            &format!("{one} attacks this turn if able"),
+                            b,
+                        )?);
+                    }
+                    Some(add_to_if_you_do(e, Effect::seq(att)))
+                }),
+                None => None,
+            }
+        }
+        _ => crate::oracle::effects::parse_sentence(&text, b),
+    };
+    b.it = saved.0;
+    b.named.truncate(saved.1);
+    let Some(e) = parsed.filter(|_| b.targets.len() == saved.2) else {
+        b.targets.truncate(saved.2);
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+/// Adds `more` to the instructions an "If you do, ..." performs.
+fn add_to_if_you_do(e: Effect, more: Effect) -> Effect {
+    match e {
+        Effect::If {
+            cond,
+            then,
+            otherwise,
+        } => Effect::If {
+            cond,
+            then: Box::new(Effect::seq(vec![*then, more])),
+            otherwise,
+        },
+        other => Effect::seq(vec![other, more]),
+    }
+}
+
+inventory::submit! { FollowupPattern { name: "combat 4: that creature (the creature copied)", priority: 50, apply: f_that_creature_after_copy } }
