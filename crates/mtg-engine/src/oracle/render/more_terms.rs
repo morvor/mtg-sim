@@ -191,6 +191,33 @@ impl Renderer<'_> {
         if let Some(s) = self.may_reveal_top(v) {
             return Some((s, 3));
         }
+        if let Some(s) = self.reveal_top_if(v) {
+            return Some((s, 3));
+        }
+        // "Scry 3, then you may reveal the top card of your library. If a creature card is
+        // revealed this way, draw a card.": an instruction between remembering nothing
+        // yet and the reveal.
+        if let [store @ Effect::Store {
+            var: vars::IT,
+            sel: Sel::None,
+        }, between, may @ Effect::May { .. }, cond @ Effect::If { .. }, ..] = v
+        {
+            if !matches!(
+                between,
+                Effect::May { .. } | Effect::If { .. } | Effect::Store { .. }
+            ) {
+                let rest = [store.clone(), may.clone(), cond.clone()];
+                let saved = (self.var_defs.len(), self.gaps.len());
+                let b = self.effect(between);
+                match self.may_reveal_top(&rest) {
+                    Some(s) => return Some((format!("{b}. {s}"), 4)),
+                    None => {
+                        self.var_defs.truncate(saved.0);
+                        self.gaps.truncate(saved.1);
+                    }
+                }
+            }
+        }
         // "Move any number of +1/+1 counters from target creature onto another target
         // creature": a number chosen, then that many moved.
         if let [c, Effect::MoveCounters {
@@ -349,6 +376,36 @@ impl Renderer<'_> {
             }
         }
         None
+    }
+
+    /// "Reveal the top card of your library. If a creature card is revealed this way,
+    /// ...": the one card revealed is "it" ("If it's a creature card, ...").
+    fn reveal_top_if(&mut self, v: &[Effect]) -> Option<String> {
+        let [Effect::Store {
+            var: vars::IT,
+            sel: Sel::None,
+        }, dig @ Effect::Dig {
+            n: Value::Const(1),
+            reveal: true,
+            take: Value::Const(0),
+            ..
+        }, Effect::If {
+            cond: Condition::SelMatches(Sel::Var(vars::IT), f),
+            then,
+            otherwise,
+        }, ..] = v
+        else {
+            return None;
+        };
+        if !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let m = self.effect(dig);
+        let n = self.noun_det(f, super::nouns::Det::A);
+        let t = self.effect(then);
+        Some(format!(
+            "{m}. {{alt:If {n} is revealed this way|If it's {n}}}, {t}"
+        ))
     }
 
     /// "You may reveal the top card of your library. If a land card is revealed this way,

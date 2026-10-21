@@ -3257,7 +3257,11 @@ pub(crate) fn cast_from_zones(z: &str) -> Option<Filter> {
         z,
         "anywhere other than their hands" | "anywhere other than their hand"
     ) {
-        return Some(Filter::not(zone(ZoneKind::Hand)));
+        // "Their hands": each caster's own hand (`custom::IN_CASTERS_HAND`).
+        return Some(Filter::not(Filter::and(vec![
+            zone(ZoneKind::Hand),
+            Filter::Custom(crate::custom::IN_CASTERS_HAND.into()),
+        ])));
     }
     let mut v = Vec::new();
     for w in z.split(" or ") {

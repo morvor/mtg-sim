@@ -337,6 +337,12 @@ impl Renderer<'_> {
         match f {
             Filter::Subtype(s) => format!("{}walk", s.to_lowercase()),
             Filter::ChosenType => "landwalk of the chosen type".into(),
+            // One landwalk per land type of the sacrificed land (`statics_4`).
+            Filter::Custom(n)
+                if n == crate::oracle::patterns::statics_4::LAND_TYPES_OF_SACRIFICED =>
+            {
+                "landwalk of each of the land types of the sacrificed land".into()
+            }
             other => {
                 let n = self.noun(other, Num::One);
                 format!("{n}walk")

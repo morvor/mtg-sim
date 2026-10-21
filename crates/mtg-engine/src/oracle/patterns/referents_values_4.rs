@@ -1728,7 +1728,7 @@ fn tapped_this_way_target(d: crate::ability::AbilityDef) -> Option<crate::abilit
 }
 
 /// The cards in graveyards before an instruction, for "that weren't put there this way".
-const PUT_THERE: Var = vars::USER + 14_016;
+pub const PUT_THERE: Var = vars::USER + 14_016;
 
 thread_local! {
     static PUT_THERE_OK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
