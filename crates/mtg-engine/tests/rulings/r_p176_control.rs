@@ -85,7 +85,11 @@ fn etb_steals_end_when_the_source_leaves_or_changes_controllers() {
         give_control(&mut t, src, P1);
         assert_eq!(controller(&mut t, bears), P1, "{name} changed controllers");
         give_control(&mut t, src, P0);
-        assert_eq!(controller(&mut t, bears), P1, "regaining {name} doesn't help");
+        assert_eq!(
+            controller(&mut t, bears),
+            P1,
+            "regaining {name} doesn't help"
+        );
     }
 }
 
@@ -125,7 +129,11 @@ fn roil_elemental_needs_to_stay_under_your_control() {
     destroy(&mut t, roil_id);
     assert_eq!(controller(&mut t, bears), P1, "Roil left: the effect ended");
     let (mut t, _, bears) = roil(|t, r| give_control(t, r, P1));
-    assert_eq!(controller(&mut t, bears), P1, "Roil changed controllers first");
+    assert_eq!(
+        controller(&mut t, bears),
+        P1,
+        "Roil changed controllers first"
+    );
 }
 
 /// P0 controls Willbreaker and casts Giant Growth at P1's Bears: Willbreaker's trigger is
@@ -166,12 +174,24 @@ fn willbreaker_control_lasts_only_while_you_control_it() {
     let (mut t, wb, bears) = willbreaker(|_, _| {});
     assert_eq!(controller(&mut t, bears), P0);
     give_control(&mut t, wb, P1);
-    assert_eq!(controller(&mut t, bears), P1, "Willbreaker changed controllers");
+    assert_eq!(
+        controller(&mut t, bears),
+        P1,
+        "Willbreaker changed controllers"
+    );
     give_control(&mut t, wb, P0);
-    assert_eq!(controller(&mut t, bears), P1, "regaining Willbreaker doesn't help");
+    assert_eq!(
+        controller(&mut t, bears),
+        P1,
+        "regaining Willbreaker doesn't help"
+    );
 
     let (mut t, _, bears) = willbreaker(|t, wb| give_control(t, wb, P1));
-    assert_eq!(controller(&mut t, bears), P1, "lost Willbreaker before resolution");
+    assert_eq!(
+        controller(&mut t, bears),
+        P1,
+        "lost Willbreaker before resolution"
+    );
 }
 
 /// P0 activates Vedalken Shackles (two Islands) at P1's Bears; `meddle` runs before the
@@ -526,7 +546,12 @@ fn bond_of_passion_affects_the_target_that_is_still_legal() {
     // The creature becomes illegal: the damage is still dealt.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    cast_only(&mut t, P0, "Bond of Passion", &[obj(bears), Entity::Player(P1)]);
+    cast_only(
+        &mut t,
+        P0,
+        "Bond of Passion",
+        &[obj(bears), Entity::Player(P1)],
+    );
     destroy(&mut t, bears);
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
@@ -588,7 +613,10 @@ fn call_for_aid_creatures_cant_be_sacrificed_so_you_sacrifice_your_own() {
     // P1's Diabolic Edict: P0 tries to sacrifice the Giant.
     t.answer_choose(P0, &[obj(giant)]);
     cast_resolve(&mut t, P1, "Diabolic Edict", &[Entity::Player(P0)]);
-    assert!(t.in_graveyard(P0, "Grizzly Bears"), "P0's own creature was sacrificed");
+    assert!(
+        t.in_graveyard(P0, "Grizzly Bears"),
+        "P0's own creature was sacrificed"
+    );
     assert!(t.on_battlefield(giant));
     // With only the stolen creature left, another Edict does nothing.
     cast_resolve(&mut t, P1, "Diabolic Edict", &[Entity::Player(P0)]);
