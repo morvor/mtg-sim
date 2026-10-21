@@ -36,6 +36,7 @@ pub mod battle;
 pub mod behold;
 pub mod block_choice;
 pub mod card;
+pub mod card_tiers;
 pub mod cards;
 pub mod cases;
 pub mod casting;

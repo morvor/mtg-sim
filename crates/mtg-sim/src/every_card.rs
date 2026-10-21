@@ -962,6 +962,36 @@ fn reasons(c: &PoolCard, abilities: &[Tracked], u: &Usage) -> Vec<String> {
     out
 }
 
+/// Whether the sweep cast or played a card, for the report's outcome lines: "cast",
+/// "exempt: why" (a card the sweep can't cast: a supplementary-deck or conspiracy card, or
+/// one with no mana cost that wasn't cast some other way), or "not cast: why".
+fn cast_outcome(c: &PoolCard, why: &[String], u: &Usage) -> String {
+    let supplementary = mtg_engine::variants::is_nontraditional(&c.def)
+        || c.def
+            .front()
+            .chars
+            .card_types
+            .contains(CardType::Conspiracy);
+    if supplementary {
+        return "exempt: supplementary-deck or conspiracy card".into();
+    }
+    if u.cast.contains(&c.def.name) {
+        return "cast".into();
+    }
+    if c.def.front().chars.mana_cost.is_none()
+        && !c.is_land()
+        && !u.offered_cast.contains(&c.def.name)
+    {
+        return "exempt: no mana cost".into();
+    }
+    let reason = why
+        .iter()
+        .find(|w| w.starts_with("never cast") || w.starts_with("never played"))
+        .map(String::as_str)
+        .unwrap_or("never cast");
+    format!("not cast: {reason}")
+}
+
 /// Runs `mtg-sim --every-card ...`.
 pub fn run(args: &[String]) {
     let o = parse(args);
@@ -1063,6 +1093,8 @@ fn summarize(pool: &[PoolCard], results: &[CardResult], o: &Options, el: Duratio
     let mut by_reason: BTreeMap<String, Vec<&str>> = BTreeMap::new();
     let mut by_kind: BTreeMap<&str, usize> = BTreeMap::new();
     let mut rows: Vec<String> = Vec::new();
+    // One line per card: whether it was cast and which kinds of games failed.
+    let mut outcomes: Vec<String> = Vec::new();
     for r in results {
         let c = &pool[r.index];
         *by_kind.entry(r.kind).or_default() += 1;
@@ -1090,6 +1122,19 @@ fn summarize(pool: &[PoolCard], results: &[CardResult], o: &Options, el: Duratio
         if why.is_empty() {
             exercised += 1;
         }
+        outcomes.push(format!(
+            "outcome\t{}\t{}\t{}\t{}",
+            r.index,
+            c.def.name,
+            cast_outcome(c, &why, &usage),
+            r.failures
+                .iter()
+                .map(|(_, kind, _)| *kind)
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
         for w in &why {
             let reason = w.split('\t').next().unwrap_or("");
             by_reason
@@ -1164,6 +1209,13 @@ fn summarize(pool: &[PoolCard], results: &[CardResult], o: &Options, el: Duratio
             for e in v {
                 let _ = writeln!(f, "failure\t{e}\t{k}");
             }
+        }
+        let _ = writeln!(
+            f,
+            "# outcome<TAB>index<TAB>card<TAB>cast | exempt: why | not cast: why<TAB>failed game kinds"
+        );
+        for o in &outcomes {
+            let _ = writeln!(f, "{o}");
         }
     }
     if n_fail > 0 {
