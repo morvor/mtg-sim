@@ -3,7 +3,8 @@
 //!
 //! For the rest of the turn its controller may activate the mana abilities of lands other
 //! players control (CR 605.3a), and that mana can be spent only to cast spells (CR 106.6).
-//! (A land whose mana ability any player may already activate is treated the same.)
+//! (No land has a mana ability any player may activate, so mana a player taps another
+//! player's land for is always mana this effect let them make.)
 
 use super::{spell, ManualAbility};
 use crate::ability::*;
@@ -58,9 +59,10 @@ impl KeywordRules for Rules {
         g: &Game,
         p: PlayerId,
         src: ObjectId,
-        _a: &Ability,
+        a: &Ability,
     ) -> bool {
-        applies(g, p, src)
+        // "Tap lands for mana": its mana abilities with {T} in their costs.
+        matches!(&a.kind, AbilityKind::Activated(act) if act.cost.has_tap()) && applies(g, p, src)
     }
     fn added_mana_restriction(
         &self,

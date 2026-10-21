@@ -1824,6 +1824,9 @@ pub enum Value {
     Mul(Box<Value>, Box<Value>),
     /// Integer division, rounded up or down.
     Div(Box<Value>, i32, bool),
+    /// The first value divided evenly by the second, rounded down; 0 when the second is 0
+    /// or less ("X damage divided evenly, rounded down, among any number of targets").
+    DivBy(Box<Value>, Box<Value>),
     Min(Box<Value>, Box<Value>),
     Max(Box<Value>, Box<Value>),
     /// The first value if the condition holds, otherwise the second ("choose one. If you

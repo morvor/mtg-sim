@@ -38,3 +38,32 @@ fn opponents_copies_arent_affected() {
     t.resolve_all();
     assert_eq!(t.life(P0), 14);
 }
+
+#[test]
+fn casualty_copies_get_an_additional_copy_with_the_same_exceptions() {
+    cr!("702.153a", "707.9");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Twinning Staff");
+    // Craw Wurm: a 6/4, sacrificed for Ob Nixilis's casualty X ("The copy isn't
+    // legendary and has starting loyalty X").
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 1);
+    let spell = t.hand(P0, "Ob Nixilis, the Adversary");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    t.cast(P0, spell).x(6).go();
+    t.resolve_all();
+    let obs = t.named_on_battlefield("Ob Nixilis, the Adversary");
+    assert_eq!(obs.len(), 3, "the original and two copies");
+    let tokens: Vec<_> = obs
+        .iter()
+        .filter(|id| t.g.obj(**id).kind == mtg_engine::object::ObjKind::Token)
+        .copied()
+        .collect();
+    assert_eq!(tokens.len(), 2);
+    for tok in tokens {
+        assert!(!t.g.obj(tok).chars.is_legendary());
+        assert_eq!(t.counters(tok, "loyalty"), 6);
+    }
+}

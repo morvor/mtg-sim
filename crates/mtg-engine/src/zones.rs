@@ -777,7 +777,14 @@ fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
             .collect();
         let copies: Vec<ObjectId> = players
             .into_iter()
-            .filter_map(|p| crate::copy::copy_spell(g, spell, p, false))
+            .flat_map(|p| {
+                let Some(c) = crate::copy::copy_spell(g, spell, p, false) else {
+                    return vec![];
+                };
+                let mut v = vec![c];
+                v.extend(crate::copy::additional_copies(g, spell, p));
+                v
+            })
             .collect();
         order_simultaneous_stack_objects(g, &copies);
         if new_targets {

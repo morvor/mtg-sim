@@ -1,5 +1,5 @@
-//! Fireball (hand-written, `src/cards/fireball.rs`): X damage divided evenly, rounded
-//! down, among the targets still legal as it resolves.
+//! Fireball: X damage divided evenly, rounded down, among the targets still legal as it
+//! resolves (compiled, `oracle/patterns/damage_divided_evenly.rs`).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -59,4 +59,25 @@ fn more_targets_than_x_deals_nothing() {
     t.resolve();
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.obj_now(a).damage, 0);
+}
+
+#[test]
+fn dwarven_catapult_divides_among_all_creatures_the_opponent_controls() {
+    cr!("120.3e");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Grizzly Bears");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    // Dwarven Catapult: "deals X damage divided evenly, rounded down, among all creatures
+    // target opponent controls." X = 7 among three creatures: 2 each.
+    t.lands(P0, "Mountain", 8);
+    let s = t.hand(P0, "Dwarven Catapult");
+    t.cast(P0, s).x(7).target(P1).go();
+    t.resolve();
+    assert_eq!(t.obj_now(a).damage, 2);
+    assert_eq!(t.obj_now(b).damage, 2);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.obj_now(mine).damage, 0);
+    assert_eq!(t.life(P1), 20);
 }

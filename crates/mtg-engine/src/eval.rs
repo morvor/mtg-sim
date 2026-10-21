@@ -1684,6 +1684,14 @@ impl Game {
                     n.div_euclid(d)
                 }
             }
+            Value::DivBy(a, d) => {
+                let d = self.eval_value(d, ctx);
+                if d <= 0 {
+                    0
+                } else {
+                    self.eval_value(a, ctx).div_euclid(d)
+                }
+            }
             Value::Min(a, b) => self.eval_value(a, ctx).min(self.eval_value(b, ctx)),
             Value::Max(a, b) => self.eval_value(a, ctx).max(self.eval_value(b, ctx)),
             Value::If(c, a, b) => {

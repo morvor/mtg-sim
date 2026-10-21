@@ -63,9 +63,12 @@ impl KeywordRules for Rules {
         if !g.ask_yes_no(ctx.controller, ctx.source, "Copy the countered spell?", true) {
             return true;
         }
-        let copies: Vec<_> = crate::copy::copy_spell(g, spell, ctx.controller, true)
+        let mut copies: Vec<_> = crate::copy::copy_spell(g, spell, ctx.controller, true)
             .into_iter()
             .collect();
+        if !copies.is_empty() {
+            copies.extend(crate::copy::additional_copies(g, spell, ctx.controller));
+        }
         crate::copy::order_copies(g, ctx.controller, &copies);
         true
     }

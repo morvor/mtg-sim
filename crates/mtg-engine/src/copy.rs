@@ -5,8 +5,6 @@ use crate::game::Game;
 use crate::object::*;
 use crate::types::*;
 
-/// Puts a copy of a spell (or ability) on the stack under `controller`'s control,
-/// optionally letting them choose new targets (CR 707.10c). Returns the copy.
 /// The additional copies of `spell` that `controller` makes as an effect has them copy it
 /// one or more times ("If you would copy a spell one or more times, instead copy it that
 /// many times plus an additional time. You may choose new targets for the additional
@@ -21,6 +19,8 @@ pub fn additional_copies(g: &mut Game, spell: ObjectId, controller: PlayerId) ->
         .collect()
 }
 
+/// Puts a copy of a spell (or ability) on the stack under `controller`'s control,
+/// optionally letting them choose new targets (CR 707.10c). Returns the copy.
 pub fn copy_spell(
     g: &mut Game,
     spell: ObjectId,

@@ -2551,7 +2551,10 @@ impl Game {
         }
         let snapshot = self.clone();
         self.special.casting += 1;
-        match self.activate_inner(p, src, &a, &act) {
+        self.special.activating.push((p, src, a.uid));
+        let result = self.activate_inner(p, src, &a, &act);
+        self.special.activating.pop();
+        match result {
             Ok(r) => {
                 // CR 602.2e: the ability became activated.
                 crate::draw_rules::finish_casting(self);

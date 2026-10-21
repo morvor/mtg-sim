@@ -1,7 +1,8 @@
 //! The Celestial Toymaker: "At the beginning of each end step, each opponent loses 2 life
 //! for each spell or ability that caused one or more players to guess or to group cards or
 //! permanents into a pile this turn." Grouping into piles (CR 700.3) is reported by the
-//! pile instructions (`piles.rs`); no implemented instruction makes players guess.
+//! pile instructions (`piles.rs`), guessing by the guessing instructions (`choices.rs`);
+//! a spell or ability that did both, or did either several times, counts once.
 
 use super::{map_effect, parse, ManualAbility};
 use crate::ability::*;
@@ -11,7 +12,7 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::kw::{KeywordRegistration, KeywordRules};
 
-const PILERS: &str = "card:The Celestial Toymaker:spells and abilities that grouped into piles this turn";
+const PILERS: &str = "card:The Celestial Toymaker:spells and abilities that caused guessing or grouping into piles this turn";
 const TEXT: &str = "At the beginning of each end step, each opponent loses 2 life for each spell or ability that caused one or more players to guess or to group cards or permanents into a pile this turn.";
 
 inventory::submit! { ManualAbility {
@@ -51,7 +52,7 @@ impl KeywordRules for Rules {
         else {
             return;
         };
-        if name != crate::piles::GROUPED_INTO_PILES {
+        if name != crate::piles::GROUPED_INTO_PILES && name != crate::choices::GUESSED {
             return;
         }
         let turn = i64::from(g.turn.number);

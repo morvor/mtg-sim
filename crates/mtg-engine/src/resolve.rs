@@ -1346,23 +1346,22 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    match &targets {
+                    let made = match &targets {
                         Some(ts) => {
-                            crate::copy_rules::copy_with_target(
-                                self,
-                                o,
-                                ctx.controller,
-                                ts.clone(),
-                            );
+                            crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
+                                .into_iter()
+                                .count()
                         }
-                        None => {
-                            crate::copy_rules::copy_for_each_target(
-                                self,
-                                o,
-                                ctx.controller,
-                                among.as_ref().map(|f| (f, &*ctx)),
-                            );
-                        }
+                        None => crate::copy_rules::copy_for_each_target(
+                            self,
+                            o,
+                            ctx.controller,
+                            among.as_ref().map(|f| (f, &*ctx)),
+                        )
+                        .len(),
+                    };
+                    if made > 0 {
+                        crate::copy::additional_copies(self, o, ctx.controller);
                     }
                 }
             }

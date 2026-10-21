@@ -31,3 +31,19 @@ fn nothing_without_piles() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn opponents_lose_2_life_for_an_ability_that_made_a_player_guess() {
+    cr!("603.2");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "The Celestial Toymaker");
+    // Liar's Pendulum: "{2}, {T}: Choose a card name. Target opponent guesses whether a
+    // card with that name is in your hand. ..."
+    let pendulum = t.battlefield(P0, "Liar's Pendulum");
+    t.lands(P0, "Island", 2);
+    t.activate(P0, pendulum, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}

@@ -1,13 +1,12 @@
 //! Market Gnome: "When ~ is exiled from the battlefield while you're activating a craft
 //! ability, you gain 1 life and draw a card." It triggers when it's exiled as a material
 //! to pay a craft ability's cost (CR 702.167a); the ability goes on the stack above the
-//! craft ability (ruling). (Being exiled while activating mana abilities during that
-//! payment isn't modelled.)
+//! craft ability (ruling), or while a mana ability activated during that payment exiles
+//! it (the game records which abilities are being activated).
 
 use super::{parse, ManualAbility};
 use crate::ability::*;
 use crate::eval::Ctx;
-use crate::events::MoveCause;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::kw::{KeywordRegistration, KeywordRules};
@@ -43,26 +42,20 @@ impl KeywordRules for Rules {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
     }
-    /// It was exiled to pay a cost, as one of the materials a craft ability exiled.
+    /// It was exiled while its controller was activating a craft ability: as a material
+    /// paying the craft cost, or by a mana ability activated during that payment.
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         if name != CRAFTING {
             return None;
         }
-        let Some(ev) = &ctx.event else {
-            return Some(false);
-        };
-        let Some(exiled) = ev.object else {
-            return Some(false);
-        };
-        Some(
-            ev.cause == Some(MoveCause::Cost)
-                && g.objects.iter().any(|o| {
-                    o.controller == ctx.controller
-                        && o.linked
-                            .get(&crate::kw::craft::CRAFT_LINK)
-                            .is_some_and(|v| v.contains(&exiled))
-                }),
-        )
+        Some(g.special.activating.iter().any(|(p, src, uid)| {
+            *p == ctx.controller
+                && g.obj(*src)
+                    .chars
+                    .abilities
+                    .iter()
+                    .any(|a| a.uid == *uid && crate::kw::craft::is_craft_ability(a))
+        }))
     }
 }
 
