@@ -271,3 +271,101 @@ fn seal_of_cleansing_isnt_forced_to_end_a_mandatory_loop_with_an_artifact() {
     assert!(t.g.is_live(seal) && t.obj(seal).zone == Zone::Battlefield);
     assert!(t.g.actions_taken < 500, "recognized quickly");
 }
+
+/// The active player pumps their creature while it's smaller than `target`; the nonactive
+/// player answers each activation with an ability that changes nothing ("loses flying" on
+/// a creature without flying).
+struct Pumper {
+    pump: ObjectId,
+    pump_uid: u64,
+    clip: ObjectId,
+    clip_uid: u64,
+    creature: ObjectId,
+    target: i32,
+    answered: Vec<ObjectId>,
+}
+
+impl Agent for Pumper {
+    fn name(&self) -> &str {
+        "pumper"
+    }
+    fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
+        match d {
+            Decision::Priority { actions } => {
+                let pump = Action::Activate {
+                    source: self.pump,
+                    ability: self.pump_uid,
+                };
+                let clip = Action::Activate {
+                    source: self.clip,
+                    ability: self.clip_uid,
+                };
+                if p == P0 && g.stack.is_empty() && g.obj(self.creature).power() < self.target {
+                    if actions.contains(&pump) {
+                        return Answer::Action(pump);
+                    }
+                }
+                if p == P1 && g.stack.len() == 1 {
+                    let top = g.stack[0];
+                    if g.obj(top).controller == P0
+                        && !self.answered.contains(&top)
+                        && actions.contains(&clip)
+                    {
+                        self.answered.push(top);
+                        return Answer::Action(clip);
+                    }
+                }
+                Answer::Action(Action::Pass)
+            }
+            Decision::ChooseTargets { .. } => {
+                Answer::Entities(vec![Entity::Object(self.creature)])
+            }
+            Decision::DeclareAttackers { .. } => Answer::Attackers(vec![]),
+            Decision::DeclareBlockers { .. } => Answer::Blockers(vec![]),
+            _ => Answer::Default,
+        }
+    }
+}
+
+#[test]
+fn a_repetition_that_grows_a_creature_never_returns_to_an_earlier_state() {
+    cr!("732.3");
+    // Both players act each time around, and the piled-up "+1/+1" effects are identical,
+    // but the creature grows: the game never reaches the same state twice, so it isn't a
+    // fragmented loop and nobody is made to stop.
+    let mut t = TestGame::new(2);
+    let grower = custom_card(
+        "Swelling Brute",
+        "Creature — Beast",
+        Some((1, 1)),
+        "{0}: This creature gets +1/+1 until end of turn.",
+    );
+    let clip = custom_card(
+        "Wing Clipper",
+        "Artifact",
+        None,
+        "{0}: Target creature loses flying until end of turn.",
+    );
+    let creature = t.custom(P0, grower, Zone::Battlefield);
+    let clipper = t.custom(P1, clip, Zone::Battlefield);
+    let (u0, u1) = (ability_uid(&t, creature), ability_uid(&t, clipper));
+    let agent = || Pumper {
+        pump: creature,
+        pump_uid: u0,
+        clip: clipper,
+        clip_uid: u1,
+        creature,
+        target: 12,
+        answered: Vec::new(),
+    };
+    t.g.set_agent(P0, Box::new(agent()));
+    t.g.set_agent(P1, Box::new(agent()));
+    let ok = t
+        .g
+        .run_until(3000, |g| g.turn.step != Step::PrecombatMain || g.is_over());
+    assert!(ok);
+    assert_eq!(t.g.result, None);
+    assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
+    assert_eq!(t.obj(creature).power(), 12);
+    assert_eq!(t.obj(creature).toughness(), 12);
+}

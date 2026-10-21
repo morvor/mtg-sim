@@ -179,14 +179,15 @@ fn storyweave_puts_counters_on_each_enchantment_creature_entering_the_next_time(
         d.faces[0].chars.toughness = Some(1);
         d
     };
-    // Two enchantment creatures and a plain creature enter together; and an opponent's
-    // enchantment creature at the same time isn't one P0 controls.
+    // An opponent's enchantment creature isn't one P0 controls: it gets no counters and
+    // doesn't use the effect up.
+    let theirs = t.custom(P1, nymph(), Zone::Graveyard(P1));
+    let theirs = enter_together(&mut t, P1, &[theirs]);
+    // Two enchantment creatures and a plain creature enter together.
     let a = t.custom(P0, nymph(), Zone::Graveyard(P0));
     let b = t.custom(P0, nymph(), Zone::Graveyard(P0));
     let c = t.graveyard(P0, "Grizzly Bears");
     let entered = enter_together(&mut t, P0, &[a, b, c]);
-    let theirs = t.custom(P1, nymph(), Zone::Graveyard(P1));
-    let theirs = enter_together(&mut t, P1, &[theirs]);
     assert_eq!(entered.len(), 3);
     assert_eq!(t.counters(entered[0], "+1/+1"), 2);
     assert_eq!(t.counters(entered[1], "+1/+1"), 2);
