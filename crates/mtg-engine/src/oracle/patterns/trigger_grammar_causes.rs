@@ -209,3 +209,33 @@ fn damage_to_you_prevented(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "whenever damage that would be dealt to you is prevented", priority: 100, parse: damage_to_you_prevented } }
+
+/// "When ~'s echo cost is paid" (Shah of Naar Isle), "Whenever you pay ~'s cumulative
+/// upkeep" / "Whenever ~'s cumulative upkeep is paid" (Hibernation's End, Balduvian
+/// Fallen), "When a player doesn't pay ~'s cumulative upkeep" (Heart of Bogardan): the
+/// keyword's upkeep trigger resolving with (or without) the payment (CR 702.30a,
+/// 702.24a; `kw/echo.rs`, `kw/cumulative_upkeep.rs`).
+fn upkeep_cost_paid(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    use crate::kw::{cumulative_upkeep as cu, echo};
+    let name = match end(t) {
+        "~'s echo cost is paid" => echo::ECHO_PAID,
+        "you pay ~'s cumulative upkeep" | "~'s cumulative upkeep is paid" => {
+            cu::CUMULATIVE_UPKEEP_PAID
+        }
+        "a player doesn't pay ~'s cumulative upkeep" => cu::CUMULATIVE_UPKEEP_NOT_PAID,
+        _ => return None,
+    };
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::PlayerAction {
+                name: name.into(),
+                who: PlayerRel::Any,
+            }),
+            cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+        },
+        Sel::This,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "~'s echo cost is paid / cumulative upkeep is paid", priority: 100, parse: upkeep_cost_paid } }

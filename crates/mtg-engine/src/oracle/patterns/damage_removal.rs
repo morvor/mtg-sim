@@ -141,7 +141,11 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
 /// Value phrases used in damage amounts, on top of the shared value grammar.
 fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim_start();
-    if let Some(r) = s.strip_prefix("twice ") {
+    // ("twice N minus 2" is the shared grammar's: "twice" binds tighter.)
+    if let Some(r) = s
+        .strip_prefix("twice ")
+        .filter(|r| !r.contains(" minus ") && !r.contains(" plus "))
+    {
         let (v, rest) = value_phrase(r, b)?;
         return Some((Value::Mul(Box::new(Value::c(2)), Box::new(v)), rest));
     }

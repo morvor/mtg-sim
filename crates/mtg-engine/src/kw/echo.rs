@@ -13,6 +13,11 @@ use crate::types::*;
 /// The intervening "if" of the echo trigger (a [`Condition::Custom`]).
 pub const CAME_UNDER_CONTROL: &str = "came under your control since your last upkeep";
 
+/// `Effect::Custom` performed, and `Event::Custom` emitted, when a permanent's echo cost
+/// is paid: "When ~'s echo cost is paid" (Shah of Naar Isle). The event is about the
+/// permanent and the player who paid.
+pub const ECHO_PAID: &str = "echo cost paid";
+
 pub struct Echo;
 
 /// Whether the permanent `id` came under its controller's control since the beginning of
@@ -52,7 +57,7 @@ impl KeywordRules for Echo {
         let pay = Effect::PayOptional {
             who: PlayerRef::You,
             cost,
-            then: Box::new(Effect::Noop),
+            then: Box::new(Effect::Custom(ECHO_PAID.into())),
             otherwise: Box::new(Effect::SacrificeObjects { what: Sel::This }),
         };
         let effect = match &kw.x {
@@ -73,6 +78,14 @@ impl KeywordRules for Echo {
         )])
     }
 
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if name != ECHO_PAID {
+            return false;
+        }
+        upkeep_payment_event(g, ECHO_PAID, ctx);
+        true
+    }
+
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         if name != CAME_UNDER_CONTROL {
             return None;
@@ -85,3 +98,14 @@ impl KeywordRules for Echo {
 }
 
 inventory::submit! { KeywordRegistration(&Echo) }
+
+/// Reports a payment (or non-payment) of an upkeep cost of the ability's source (echo,
+/// cumulative upkeep) as an event about that permanent and the player.
+pub(crate) fn upkeep_payment_event(g: &mut Game, name: &str, ctx: &Ctx) {
+    g.emit(crate::events::Event::Custom {
+        name: name.into(),
+        player: Some(ctx.controller),
+        obj: ctx.source,
+        amount: 0,
+    });
+}
