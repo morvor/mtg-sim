@@ -783,3 +783,28 @@ impl crate::kw::KeywordRules for ChosenList {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChosenList) }
+
+/// `Value::Custom`: how many of the colors chosen for the source the triggering object
+/// is ("if it's at least one of the chosen colors, you gain 1 life for each of the chosen
+/// colors it is", Tablet of the Guilds).
+pub const CHOSEN_COLORS_IT_IS: &str = "choices: the chosen colors it is";
+
+pub struct ChosenColorsCount;
+
+impl crate::kw::KeywordRules for ChosenColorsCount {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        if name != CHOSEN_COLORS_IT_IS {
+            return None;
+        }
+        let chosen = g.source_choices(ctx).and_then(|c| c.colors)?;
+        let it = ctx.event.as_ref().and_then(|e| e.spell.or(e.object))?;
+        let colors = g.obj(it).chars.colors;
+        Some(chosen.iter().filter(|c| colors.contains(*c)).count() as i64)
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChosenColorsCount) }

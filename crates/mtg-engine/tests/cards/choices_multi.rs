@@ -291,3 +291,44 @@ fn scrying_glass_draws_if_exactly_the_chosen_number_of_the_chosen_color() {
     assert_eq!(scrying_glass(1), 1);
     assert_eq!(scrying_glass(2), 0);
 }
+
+/// Tablet of the Guilds with blue and red chosen; P0 casts `spell`: P0's life gained.
+fn tablet(spell: &str) -> i32 {
+    use mtg_engine::types::{Color, ColorSet};
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let pairs: Vec<ColorSet> = (1..32u8)
+        .map(ColorSet)
+        .filter(|s| s.iter().count() == 2)
+        .collect();
+    let i = pairs
+        .iter()
+        .position(|s| s.contains(Color::Blue) && s.contains(Color::Red))
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    t.enter(P0, "Tablet of the Guilds");
+    t.lands(P0, "Volcanic Island", 2);
+    t.lands(P0, "Tropical Island", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let card = t.hand(P0, spell);
+    let b = t.cast(P0, card);
+    let b = match spell {
+        "Lightning Bolt" => b.target(Entity::Player(P1)),
+        "Giant Growth" => b.target(bears),
+        // Izzet Charm: draw two cards, then discard two cards.
+        _ => b.modes(&[2]),
+    };
+    b.go();
+    t.resolve_all();
+    t.life(P0) - 20
+}
+
+#[test]
+fn tablet_of_the_guilds_life_for_each_chosen_color_the_spell_is() {
+    cr!("603.4", "105.2");
+    ruling!("Tablet of the Guilds", "You must choose two different colors");
+    compiles("Tablet of the Guilds");
+    assert_eq!(tablet("Lightning Bolt"), 1, "red");
+    assert_eq!(tablet("Izzet Charm"), 2, "blue and red");
+    assert_eq!(tablet("Giant Growth"), 0, "neither");
+}

@@ -309,3 +309,44 @@ fn exactly_the_chosen_number(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "if that library contains exactly the chosen number of cards ...", priority: 60, parse: exactly_the_chosen_number } }
+
+/// "it's at least one of the chosen colors" (of the triggering spell or object).
+fn at_least_one_chosen_color(c: &str) -> Option<Condition> {
+    // About the triggering object (it exists, and its colors are counted).
+    (end(c) == "it's at least one of the chosen colors").then(|| {
+        Condition::And(vec![
+            Condition::SelMatches(Sel::TriggerObject, Filter::Any),
+            Condition::Compare(
+                Value::Custom(crate::choices::CHOSEN_COLORS_IT_IS.into()),
+                Cmp::Ge,
+                Value::c(1),
+            ),
+        ])
+    })
+}
+
+inventory::submit! { super::ConditionPattern { name: "it's at least one of the chosen colors", priority: 60, parse: at_least_one_chosen_color } }
+
+/// "you gain 1 life for each of the chosen colors it is".
+fn for_each_chosen_color_it_is(l: &str, b: &mut Builder) -> Option<Effect> {
+    let head = end(l).strip_suffix(" life for each of the chosen colors it is")?;
+    let (pre, n) = head.rsplit_once(' ')?;
+    let (Value::Const(n), rest) = parse_number(n)? else {
+        return None;
+    };
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let e = parse_clause(&format!("{pre} x life"), b)?;
+    Some(Effect::seq(vec![
+        Effect::SetX {
+            value: Value::Mul(
+                Box::new(Value::c(n)),
+                Box::new(Value::Custom(crate::choices::CHOSEN_COLORS_IT_IS.into())),
+            ),
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "N life for each of the chosen colors it is", priority: 60, parse: for_each_chosen_color_it_is } }
