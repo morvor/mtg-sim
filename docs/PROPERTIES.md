@@ -184,7 +184,7 @@ ability sets characteristics ("it becomes your choice of a 3/3 creature with fly
 ...") makes its own choice as it enters, on top of the copied values ("there will be two
 copy effects", Corrupted Shapeshifter's rulings; CR 707.2): for those cards the power,
 toughness, abilities, types, subtypes and colors aren't compared. Cards that can't be
-copied this way in the fixture are counted (743: spells that can't be cast there, Auras
+copied this way in the fixture are counted (about 745: spells that can't be cast there, Auras
 with nothing they could enchant).
 
 **The dynamic check** (`properties::copies::check_dynamic`): the same script with the
