@@ -1,0 +1,342 @@
+id	card	probe_text	result
+opp-chooses-top2	Divination	Target opponent chooses one of the top two cards of your library. Put that card into your hand and the other into your graveyard.	FAIL
+opp-chooses-hand	Divination	Target opponent chooses a card in your hand. Discard that card.	FAIL
+cast-the-other	Divination	Exile the top three cards of your library. An opponent chooses one of those cards. Put that card into your graveyard. You may cast the other cards without paying their mana costs.	FAIL
+cast-the-rest	Divination	Exile the top three cards of your library. You may cast the rest without paying their mana costs.	FAIL
+aura-attached-ret	Divination	Return target Aura card from your graveyard to the battlefield attached to target creature you control.	OK
+aura-anynum	Divination	Return any number of Aura cards from your graveyard to the battlefield attached to creatures you control.	FAIL
+aura-search-attached	Grizzly Bears	When ~ enters, search your library for an Aura card, put it onto the battlefield attached to ~, then shuffle.	OK
+aura-couldenchant	Grizzly Bears	When ~ enters, search your library for an Aura card that could enchant ~, put it onto the battlefield attached to ~, then shuffle.	OK
+still-on-bf	Grizzly Bears	When ~ enters, draw a card. If ~ is still on the battlefield, put a +1/+1 counter on it.	FAIL
+attach-player	Curse of Death's Hold	When ~ enters, attach it to target player.	OK
+attach-random-opp	Curse of Death's Hold	At the beginning of your upkeep, attach ~ to an opponent chosen at random.	FAIL
+attach-another-opp	Curse of Death's Hold	At the beginning of your upkeep, attach ~ to another one of your opponents.	FAIL
+choose-random-creature	Pacifism	When enchanted creature dies, return ~ to the battlefield attached to a creature chosen at random.	OK
+reveal-until-ctl	Divination	The controller of target artifact reveals cards from the top of their library until they reveal an artifact card. That player puts that card onto the battlefield, then shuffles.	FAIL
+reveal-until-shares	Divination	Destroy target permanent. Its controller reveals cards from the top of their library until they reveal a card that shares a card type with it, puts that card onto the battlefield, then shuffles.	OK
+foreach-exiled-reveal	Divination	Exile target creature. For each creature exiled this way, its controller reveals cards from the top of their library until they reveal a creature card, puts that card onto the battlefield, then shuffles.	OK
+put-under-opp	Divination	Search your library for a basic land card and put it onto the battlefield tapped under an opponent's control, then shuffle.	OK
+put-split	Divination	Search your library for up to three basic land cards and reveal them. Put one of them onto the battlefield tapped and the rest into your hand. Then shuffle.	OK
+put-two-of-them	Divination	Search your library for up to four basic land cards and reveal them. Put two of them onto the battlefield tapped and the rest into your hand. Then shuffle.	OK
+top-or-bottom-owner	Divination	The owner of target nonland permanent puts it on their choice of the top or bottom of their library.	OK
+top-or-bottom-owner2	Divination	Target nonland permanent's owner puts it on the top or bottom of their library.	OK
+same-name-exile	Divination	Exile target card from a graveyard and all other cards from graveyards with the same name as that card.	OK
+same-name-perm	Divination	Exile target card from a graveyard and all permanents with that name.	OK
+same-name-chosen-land	Divination	Choose a land you control. Search your library for a basic land card with the same name as the chosen land, put it onto the battlefield tapped, then shuffle.	OK
+gy-or-exile	Grizzly Bears	{2}{G}: Return ~ from your graveyard or from exile to the battlefield tapped.	FAIL
+gy-or-hand-exile-counter	Grizzly Bears	When ~ enters, you may exile a creature card from your hand or graveyard.	FAIL
+exile-put-counter	Grizzly Bears	When ~ enters, you may exile a creature card from your graveyard and put a cage counter on it.	OK
+each-opp-exile-revealed	Grizzly Bears	When ~ enters, each opponent reveals their hand. For each opponent, exile a creature card they revealed this way.	FAIL
+play-from-exile-counter	Grizzly Bears	You may play lands and cast spells from among cards you own in exile with fetch counters on them.	OK
+play-exiled-by-you	Grizzly Bears	You may play cards exiled with ~.	OK
+spend-any-color-exiled	Grizzly Bears	You may play cards exiled with ~, and you may spend mana as though it were mana of any color to cast those spells.	OK
+emblem-quoted	Grizzly Bears	When ~ enters, you get an emblem with "Creatures you control get +1/+1."	OK
+each-player-exiled-with	Grizzly Bears	Each player may play lands and cast spells from among cards they own exiled with ~.	FAIL
+for-as-long-one-of	Grizzly Bears	When ~ enters, exile the top three cards of target opponent's library. For as long as you control ~, you may play one of the exiled cards.	OK
+once-each-turn-play	Grizzly Bears	Once each turn, you may play a card from exile with a collection counter on it.	OK
+for-each-type-cast	Divination	Exile the top eight cards of your library. Until end of turn, for each nonland card type, you may cast a spell of that type from among the exiled cards without paying its mana cost.	FAIL
+up-to-one-andor	Divination	You may cast up to one target instant card and/or up to one target sorcery card from your graveyard without paying their mana costs.	FAIL
+each-of-those-opp	Grizzly Bears	Whenever one or more creatures you control deal damage to your opponents, exile the top card of each of those opponents' libraries.	FAIL
+exiled-gains-quoted	Divination	Exile a card from your hand. It gains "At the beginning of your upkeep, if ~ is exiled, draw a card."	OK
+last-time-counter	Divination	Exile a card from your hand and put three time counters on it. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it without paying its mana cost."	OK
+exile-spell-counters	Grizzly Bears	Whenever you cast your second spell each turn, exile that spell with four time counters on it. If it doesn't have suspend, it gains suspend.	OK
+mana-art-split	Grizzly Bears	Each spell you cast has flying if mana from an artifact was spent to cast it.	FAIL
+treasure-first-spell	Grizzly Bears	The first spell you cast each turn has cascade.	OK
+any-type-one-spell	Divination	For one spell this turn, you may spend mana as though it were mana of any type to pay that spell's mana cost.	FAIL
+any-color-thisturn	Divination	Until end of turn, you may spend mana as though it were mana of any color to cast spells.	FAIL
+reveal-first-draw	Grizzly Bears	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant card this way, draw a card.	OK
+reveal-first-draw2	Grizzly Bears	Reveal the first card you draw each turn. Whenever you reveal a land card this way, draw a card.	OK
+0a	Phyrexian Grimoire	{4}, {T}: Target opponent chooses a card in your graveyard. Exile that card.	OK
+0b	Phyrexian Grimoire	{4}, {T}: Choose one of the top two cards of your graveyard. Exile that card.	FAIL
+1a	Shadow the Hedgehog	Each spell you cast has split second.	OK
+1b	Shadow the Hedgehog	Whenever you cast a spell, if mana from an artifact was spent to cast it, draw a card.	FAIL
+2a	Emergent Ultimatum	Search your library for up to three monocolored cards with different names and exile them. You may cast those cards without paying their mana costs. Exile ~.	OK
+3a	Ensnared by the Mara	Each opponent faces a villainous choice — They exile cards from the top of their library until they exile a nonland card, then you may cast that card without paying its mana cost, or that player loses 4 life.	OK
+3b	Ensnared by the Mara	Each opponent exiles cards from the top of their library until they exile a nonland card. You may cast that card without paying its mana cost.	OK
+3c	Ensnared by the Mara	Each opponent faces a villainous choice — That player loses 2 life, or that player exiles the top four cards of their library and ~ deals damage equal to the total mana value of those exiled cards to that player.	FAIL
+4a	Storm Herald	When ~ enters, return up to two target Aura cards from your graveyard to the battlefield attached to target creature you control.	OK
+5a	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, that player can't cast spells.	OK
+5b	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time, you may play the top card of their library, and you may spend mana as though it were mana of any color to cast spells this way.	FAIL
+5c	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of their library.	FAIL
+6a	Alaundo the Seer	{T}: Draw a card, then exile a card from your hand and put a number of time counters on it equal to its mana value. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it without paying its mana cost."	OK
+6b	Alaundo the Seer	{T}: Draw a card. Then remove a time counter from each other card you own in exile.	OK
+7a	Shape Anew	The controller of target artifact sacrifices it. That player draws a card.	FAIL
+7b	Shape Anew	Destroy target artifact. Its controller reveals cards from the top of their library until they reveal an artifact card. That player puts that card onto the battlefield, then shuffles all other cards revealed this way into their library.	OK
+8a	Mirror of Fate	{T}, Sacrifice ~: Choose up to seven target face-up exiled cards you own. Put them on top of your library.	OK
+8b	Mirror of Fate	{T}, Sacrifice ~: Exile all the cards from your library.	OK
+9a	Auratouched Mage	When ~ enters, search your library for an Aura card that could enchant it, put it onto the battlefield attached to ~, then shuffle.	OK
+10a	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, draw a card.	OK
+10b	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, copy that card and you may cast the copy.	FAIL
+11a	Curse of Leeches // Leeching Lurker	As ~ enters, attach it to a player.	FAIL
+12a	Evelyn, the Covetous	Once each turn, you may play a card from exile with a collection counter on it, and you may spend mana as though it were mana of any color to cast it.	OK
+12b	Evelyn, the Covetous	Once each turn, you may play a card from exile with a collection counter on it if it was exiled by an ability you controlled.	FAIL
+13a	Maddening Hex	Whenever enchanted player casts a noncreature spell, roll a d6. ~ deals damage to that player equal to the result. Then attach ~ to another target opponent.	FAIL
+14a	Canoptek Wraith	When ~ deals combat damage to a player, you may pay {3} and sacrifice it. If you do, choose a land you control. Then search your library for up to two basic land cards with the same name as the chosen land, put them onto the battlefield tapped, then shuffle.	OK
+15a	Wandering Archaic // Explore the Vastlands	Each player looks at the top five cards of their library and may reveal a land card from among them. Each player puts the cards they revealed this way into their hand and the rest on the bottom of their library in a random order.	FAIL
+15b	Wandering Archaic // Explore the Vastlands	Each player looks at the top five cards of their library. Each player may put a land card from among them into their hand and the rest on the bottom of their library in a random order.	FAIL
+16a	Haldan, Avid Arcanist	You may play lands and cast noncreature spells from among cards you own in exile that have fetch counters on them.	OK
+17a	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards and put them onto the battlefield tapped under your control, then shuffle.	OK
+18a	Reweave	Target permanent's controller sacrifices it. If the player does, they draw a card.	OK
+18b	Reweave	Destroy target permanent. Its controller reveals cards from the top of their library until they reveal a permanent card that shares a card type with the destroyed permanent, puts that card onto the battlefield, then shuffles.	FAIL
+20a	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Those permanents' owners shuffle them into their libraries.	FAIL
+20b	Guff Rewrites History	Shuffle target nonland permanent into its owner's library.	OK
+21a	Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, each opponent reveals their hand. For each opponent, exile a creature card that player revealed this way until ~ leaves the battlefield.	FAIL
+21b	Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, target opponent reveals their hand. Exile a creature card from it until ~ leaves the battlefield.	OK
+22a	Valki, God of Lies // Tibalt, Cosmic Impostor	As ~ enters, you get an emblem with "You may play cards exiled with ~."	FAIL
+22b	Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, you get an emblem with "You may play cards exiled with ~, and you may spend mana as though it were mana of any color to cast those spells."	OK
+24a	Chaotic Transformation	Exile up to one target artifact and/or up to one target creature. For each permanent exiled this way, its controller reveals cards from the top of their library until they reveal a card that shares a card type with it, puts that card onto the battlefield, then shuffles.	FAIL
+25a	Curse of Misfortunes	At the beginning of your upkeep, you may search your library for a Curse card, put it onto the battlefield attached to enchanted player, then shuffle.	FAIL
+25b	Curse of Misfortunes	At the beginning of your upkeep, you may search your library for a Curse card that doesn't have the same name as a permanent you control, put it into your hand, then shuffle.	OK
+26a	Verdant Mastery	Search your library for up to four basic land cards and reveal them. Put one of them onto the battlefield tapped under an opponent's control. Put two of them onto the battlefield tapped under your control and the rest into your hand. Then shuffle.	FAIL
+26b	Verdant Mastery	Search your library for up to four basic land cards and reveal them. Put two of them onto the battlefield tapped under your control and the rest into your hand. Then shuffle.	OK
+27a	Moratorium Stone	{2}{W}{B}, {T}, Sacrifice ~: Exile target nonland card from a graveyard, all other cards from graveyards with the same name as that card, and all permanents with that name.	FAIL
+27b	Moratorium Stone	{2}{W}{B}, {T}, Sacrifice ~: Exile target nonland card from a graveyard and all other cards from graveyards with the same name as that card.	OK
+28a	Kotose, the Silent Spider	When ~ enters, exile target card other than a basic land card from an opponent's graveyard. For as long as you control ~, you may play one of the exiled cards, and you may spend mana as though it were mana of any color to cast it.	FAIL
+28b	Kotose, the Silent Spider	When ~ enters, exile target card other than a basic land card from an opponent's graveyard. For as long as you control ~, you may play that card, and you may spend mana as though it were mana of any color to cast it.	OK
+29a	Enchantment Alteration	Attach target Aura attached to a creature to another creature.	OK
+30a	Aminatou's Augury	Exile the top eight cards of your library. You may put a land card from among them onto the battlefield. Until end of turn, you may cast a spell from among the exiled cards without paying its mana cost.	OK
+31a	Kaboom!	Choose any number of target players or planeswalkers. For each of them, reveal cards from the top of your library until you reveal a nonland card, ~ deals damage equal to that card's mana value to that player or planeswalker, then you put the revealed cards on the bottom of your library in any order.	FAIL
+31b	Kaboom!	Choose target player. Reveal cards from the top of your library until you reveal a nonland card, ~ deals damage equal to that card's mana value to that player, then you put the revealed cards on the bottom of your library in any order.	FAIL
+32a	Knowledge Pool	Whenever a player casts a spell from their hand, that player exiles it. If the player does, they may cast a spell from among cards exiled with ~ without paying its mana cost.	OK
+33a	Share the Spoils	During each player's turn, that player may play a land or cast a spell from among cards exiled with ~.	OK
+33b	Share the Spoils	During each player's turn, that player may play a land or cast a spell from among cards exiled with ~. When they do, exile the top card of their library.	FAIL
+34a	Endless Detour	The owner of target nonland permanent or card in a graveyard puts it on their choice of the top or bottom of their library.	OK
+34b	Endless Detour	The owner of target spell puts it on their choice of the top or bottom of their library.	OK
+35a	Finale of Promise	You may cast up to one target instant card from your graveyard with mana value X or less without paying its mana cost.	OK
+36a	Gonti, Night Minister	Whenever a creature deals combat damage to one of your opponents, its controller looks at the top card of that opponent's library and exiles it face down.	FAIL
+36b	Gonti, Night Minister	Whenever a creature you control deals combat damage to one of your opponents, you look at the top card of that opponent's library and exile it face down. You may play that card for as long as it remains exiled.	FAIL
+37a	Indomitable Creativity	Destroy X target artifacts and/or creatures. For each permanent destroyed this way, its controller reveals cards from the top of their library until an artifact or creature card is revealed and puts that card onto the battlefield, then shuffles.	OK
+38a	Shared Fate	Each player may look at cards they exiled with ~.	FAIL
+38b	Shared Fate	You may look at cards exiled with ~, and you may play lands and cast spells from among those cards.	OK
+39a	Flickerform	{2}{W}{W}: Exile enchanted creature and all Auras attached to it. At the beginning of the next end step, return that card to the battlefield under its owner's control.	OK
+40a	Bruna, Light of Alabaster	Whenever ~ attacks or blocks, you may attach to it any number of Auras on the battlefield.	FAIL
+40b	Bruna, Light of Alabaster	Whenever ~ attacks or blocks, you may put onto the battlefield attached to it any number of Aura cards that could enchant it from your graveyard and/or hand.	FAIL
+41a	Infectious Rage	When enchanted creature dies, return ~ to the battlefield attached to a creature chosen at random.	OK
+42a	Rain of Riches	The first spell you cast each turn that mana from a Treasure was spent to cast has cascade.	FAIL
+42b	Rain of Riches	Each spell you cast that mana from a Treasure was spent to cast has cascade.	FAIL
+44a	Cass, Hand of Vengeance	Whenever ~ or another creature you control dies, if it was enchanted or equipped, return any number of Aura cards that were attached to it from your graveyard to the battlefield attached to target creature.	FAIL
+44b	Cass, Hand of Vengeance	Whenever ~ dies, attach any number of Equipment that were attached to it to target creature.	FAIL
+45a	Guild Feud	At the beginning of your upkeep, target opponent reveals the top three cards of their library, may put a creature card from among them onto the battlefield, then puts the rest into their graveyard.	FAIL
+45b	Guild Feud	At the beginning of your upkeep, reveal the top three cards of your library. You may put a creature card from among them onto the battlefield. Put the rest into your graveyard.	OK
+46a	Grifter's Blade	As ~ enters, choose a creature you control. If you do, it enters attached to that creature.	FAIL
+47a	Territorial Hellkite	At the beginning of combat on your turn, choose an opponent at random. ~ attacks that player this combat if able.	OK
+47b	Territorial Hellkite	At the beginning of combat on your turn, choose an opponent that ~ didn't attack during your last combat. ~ attacks that player this combat if able.	FAIL
+48a	Metamorphic Alteration	As ~ enters, choose a creature. Enchanted creature is a copy of the chosen creature.	FAIL
+49a	Hellish Rebuke	Until end of turn, permanents your opponents control gain "When ~ deals damage to you, sacrifice ~."	OK
+49b	Hellish Rebuke	Until end of turn, creatures your opponents control gain "When ~ deals damage, sacrifice ~. You lose 2 life."	FAIL
+50a	Uvilda, Dean of Perfection // Nassari, Dean of Expression	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "At the beginning of your upkeep, if ~ is exiled, remove a refine counter from it."	OK
+50b	Uvilda, Dean of Perfection // Nassari, Dean of Expression	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "When the last refine counter is removed from ~, if it's exiled, you may cast it. It costs {4} less to cast this way."	FAIL
+51a	Monk Class	At the beginning of your upkeep, exile the top card of your library. For as long as it remains exiled, it has "You may cast ~ from exile."	FAIL
+51b	Monk Class	At the beginning of your upkeep, exile the top card of your library. You may cast it as long as you've cast another spell this turn.	OK
+52a	Timothar, Baron of Bats	Whenever another nontoken Vampire you control dies, you may pay {1} and exile it. If you do, create a 1/1 black Bat creature token with flying. It gains "When ~ deals combat damage to a player, sacrifice it."	OK
+52b	Timothar, Baron of Bats	Whenever another nontoken Vampire you control dies, you may pay {1} and exile it. If you do, create a 1/1 black Bat creature token with flying and "When ~ deals combat damage to a player, sacrifice it and return the exiled card to the battlefield tapped."	FAIL
+53a	Glyph of Reincarnation	Destroy all creatures that were blocked by target creature this turn.	FAIL
+53b	Glyph of Reincarnation	Destroy all creatures blocked by target Wall this turn.	FAIL
+54a	Paleontologist's Pick-Axe // Dinosaur Headdress	Equipped creature is a copy of the chosen card.	FAIL
+55a	Symbiote Spider-Man	{2}{U/B}, Exile ~ from your graveyard: Put a +1/+1 counter on target creature you control. It gains ~'s abilities. Activate only as a sorcery.	FAIL
+55b	Symbiote Spider-Man	{2}{U/B}, Exile ~ from your graveyard: Put a +1/+1 counter on target creature you control. It gains flying. Activate only as a sorcery.	OK
+56a	Shuriken	Equipped creature has "{T}, Unattach ~: ~ deals 2 damage to target creature. That creature's controller gains control of ~."	OK
+57a	Scheming Fence	As ~ enters, choose a nonland permanent. Activated abilities of the chosen permanent can't be activated.	FAIL
+58a	Scheming Fence	~ has all activated abilities of the chosen permanent.	FAIL
+58b	Scheming Fence	As ~ enters, choose a nonland permanent. ~ has all activated abilities of the chosen permanent except for loyalty abilities.	FAIL
+59a	Toggo, Goblin Weaponsmith	Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature has '{1}, {T}, Sacrifice Rock: This creature deals 2 damage to any target'" and equip {1}.	FAIL
+59b	Toggo, Goblin Weaponsmith	Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature gets +1/+1" and equip {1}.	OK
+60a	Glyph of Delusion	Put X glyph counters on target creature that target creature blocked this turn, where X is the power of that blocked creature.	FAIL
+60b	Glyph of Delusion	Put a glyph counter on target creature. The creature gains "~ doesn't untap during your untap step if it has a glyph counter on it."	OK
+61a	Mairsil, the Pretender	When ~ enters, you may exile an artifact or creature card from your graveyard and put a cage counter on it.	OK
+62a	Close Encounter	As an additional cost to cast ~, choose a creature you control.	FAIL
+63a	Close Encounter	As an additional cost to cast ~, choose a creature you control. ~ deals damage equal to the power of the chosen creature to target creature.	FAIL
+64a	Nethergoyf	Escape—{2}{B}, Exile four other cards from your graveyard.	OK
+64b	Winter, Cynical Opportunist	At the beginning of your end step, you may exile any number of cards from your graveyard. If you do, put a permanent card from among them onto the battlefield with a finality counter on it.	FAIL
+65a	Caged Sun	Whenever a land's ability causes you to add one or more mana of the chosen color, draw a card.	FAIL
+65b	Caged Sun	Whenever a land you control is tapped for mana of the chosen color, add an additional one mana of that color.	FAIL
+66a	Fabrication Foundry	{2}{W}, {T}, Exile one or more other artifacts you control with total mana value X: Draw a card.	FAIL
+66b	Fabrication Foundry	{2}{W}, {T}, Sacrifice one or more other artifacts you control with total mana value X: Draw a card.	FAIL
+67a	Baron Helmut Zemo	Exile any number of black cards from your graveyard: Draw a card.	OK
+69a	Foraging Wickermaw	{1}: Add one mana of any color. Activate only once each turn.	OK
+69b	Foraging Wickermaw	{1}: Choose a color. ~ becomes that color until end of turn.	FAIL
+70a	Charmed Pendant	{T}, Mill a card: Add {C}.	OK
+70b	Charmed Pendant	{T}, Mill a card: For each colored mana symbol in the milled card's mana cost, you gain 1 life.	FAIL
+71a	Boreal Outrider	Whenever you cast a creature spell, if {S} was spent to cast it, that creature enters with an additional +1/+1 counter on it.	FAIL
+72a	Araumi of the Dead Tide	{T}, Exile two cards from your graveyard: Target creature card in your graveyard gains encore until end of turn. The encore cost is equal to its mana cost.	FAIL
+72b	Araumi of the Dead Tide	{T}, Exile cards from your graveyard equal to the number of opponents you have: Draw a card.	FAIL
+73a	Protective Sphere	{1}, Pay 1 life: Prevent all damage that would be dealt to you this turn by a source of your choice.	OK
+73b	Protective Sphere	{1}, Pay 1 life: Prevent all damage that would be dealt to you this turn by a source of your choice that shares a color with ~.	FAIL
+74a	Omnath, Locus of All	At the beginning of your first main phase, look at the top card of your library. You may reveal that card if it has three or more colored mana symbols in its mana cost. If you do, put it into your hand.	FAIL
+74b	Omnath, Locus of All	At the beginning of your first main phase, look at the top card of your library. You may reveal that card. If you do, add three mana in any combination of its colors and put it into your hand. If you don't reveal it, put it into your hand.	FAIL
+75a	Aladdin's Lamp	{X}, {T}: The next time you would draw a card this turn, instead look at the top X cards of your library, put all but one of them on the bottom of your library in a random order, then draw a card.	FAIL
+75b	Aladdin's Lamp	{X}, {T}: The next time you would draw a card this turn, instead scry X, then draw a card.	FAIL
+76a	Megatron, Tyrant // Megatron, Destructive Force	Whenever ~ attacks, you may sacrifice another artifact. When you do, ~ deals damage equal to the sacrificed artifact's mana value to target creature. If excess damage would be dealt to that creature this way, instead that damage is dealt to that creature's controller.	FAIL
+77a	Incubation Druid	{T}: Add one mana of any type that a land you control could produce. If ~ has a +1/+1 counter on it, add three mana of any one color instead.	OK
+78a	Mourner's Shield	{2}, {T}: Prevent all damage that would be dealt this turn by a source of your choice that shares a color with target creature.	FAIL
+79a	Urgent Necropsy	As an additional cost to cast ~, collect evidence X.	FAIL
+80a	Hall of Gemstone	At the beginning of each player's upkeep, that player chooses a color. Until end of turn, lands tapped for mana produce mana of the chosen color.	FAIL
+81a	Flash	You may put a creature card from your hand onto the battlefield. If you do, sacrifice it unless you pay its mana cost.	FAIL
+81b	Flash	You may put a creature card from your hand onto the battlefield. If you do, sacrifice it unless you pay {2}.	OK
+82a	Balduvian Fallen	Whenever ~'s cumulative upkeep is paid, it gets +1/+0 until end of turn.	OK
+83a	Jötun Grunt	Cumulative upkeep—Put a card from a graveyard on the bottom of its owner's library.	OK
+84a	Light Up the Night	Flashback—{3}{R}, Remove X loyalty counters from among planeswalkers you control.	OK
+85a	Vault 112: Sadistic Simulation	{CHAPTER} III — Pay any amount of {E}. Draw a card.	OK
+86a	Mythos of Snapdax	Each player chooses an artifact, a creature, an enchantment, and a planeswalker from among the nonland permanents they control, then sacrifices the rest. If {B}{R} was spent to cast ~, draw a card.	OK
+87a	Terra, Magical Adept // Esper Terra	{CHAPTER} IV — Add {W}{W}{U}{U}.	OK
+88a	Guile	If a spell or ability you control would counter a spell, instead exile that spell.	FAIL
+89a	Unpredictable Cyclone	If a cycling ability of another nonland card would cause you to draw a card, instead exile the top card of your library.	FAIL
+90a	Snowfall	Whenever an Island is tapped for mana, its controller adds an additional {U}.	OK
+91a	Convergence of Dominion	As long as you control your commander, activated abilities of cards in your graveyard cost {2} less to activate.	OK
+91b	Convergence of Dominion	Activated abilities of creatures you control cost {2} less to activate. This effect can't reduce the mana in that ability's activation cost to less than one mana.	FAIL
+92a	Spinning Darkness	You may exile three black cards from your graveyard rather than pay ~'s mana cost.	OK
+93a	Back from the Brink	Exile a creature card from your graveyard and pay {2}: Create a token that's a copy of that card. Activate only as a sorcery.	FAIL
+94a	Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, red creatures get +1/+1 until end of turn.	FAIL
+94b	Chaos Moon	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, red creatures get +1/+1 and whenever a player taps a Mountain for mana, that player adds an additional {R}.	FAIL
+95a	Vazi, Keen Negotiator	Whenever an opponent casts a spell or activates an ability, if mana from a Treasure was spent to cast it, draw a card.	OK
+96a	Uba Mask	If a player would draw a card, that player exiles the top card of their library face up instead.	FAIL
+97a	Words of War	{1}: The next time you would draw a card this turn, you gain 2 life instead.	OK
+98a	Whippoorwill	{G}{G}, {T}: Target creature can't be regenerated this turn. Damage that would be dealt to that creature this turn can't be prevented.	FAIL
+99a	Bigger on the Inside	Enchanted permanent has "{T}: Target player adds two mana of any one color."	OK
+99b	Bigger on the Inside	Enchanted permanent has "{T}: Add two mana of any one color. The next spell you cast this turn has cascade."	OK
+100a	Wheel of Potential	Each player may exile their hand and draw that many cards.	OK
+101a	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. When that creature leaves the battlefield this turn, sacrifice ~.	OK
+101b	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. Creatures dealt damage by that creature this turn can't be regenerated this turn.	FAIL
+102a	Phyrexian Dreadnought	When ~ enters, sacrifice it unless you sacrifice three creatures.	OK
+103a	Plumb the Forbidden	As an additional cost to cast ~, you may sacrifice a creature.	OK
+103b	Plumb the Forbidden	As an additional cost to cast ~, sacrifice one or more creatures.	FAIL
+104a	Celestial Reunion	As an additional cost to cast ~, you may behold a creature.	OK
+107a	Sunbird Standard // Sunbird Effigy	{T}: For each color among permanents you control, add one mana of that color.	OK
+108a	Zur's Weirding	If a player would draw a card, they reveal it instead.	FAIL
+109a	Rain of Gore	If a player would gain life, that player loses that much life instead.	OK
+110a	Security Rhox	You may pay {R}{G} rather than pay ~'s mana cost. Spend only mana produced by Treasures to cast ~.	FAIL
+111a	Shared Fate	If a player would draw a card, that player exiles the top card of an opponent's library face down instead.	FAIL
+113a	Rift Elemental	{1}{R}, Remove a time counter from a permanent you control: ~ gets +2/+0 until end of turn.	OK
+114a	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage from a creature is prevented this way, you gain 1 life.	FAIL
+115a	False Dawn	Until end of turn, spells and abilities you control that would add colored mana instead add that much white mana.	FAIL
+116a	Sasaya, Orochi Ascendant // Sasaya's Essence	Whenever a land you control is tapped for mana, add an additional one mana of any type that land produced.	OK
+117a	Torrent of Lava	Each creature has "{T}: Prevent the next 1 damage that would be dealt to ~ this turn."	FAIL
+118a	Sokrates, Athenian Teacher	{T}: Until end of turn, target creature gains "If ~ would deal combat damage to a player, prevent that damage."	OK
+119a	Martyrdom	Until end of turn, target creature you control gains "{0}: The next 1 damage that would be dealt to target creature, planeswalker, or player this turn is dealt to ~ instead."	OK
+121a	Cover of Winter	If a creature would deal combat damage to you, prevent 1 of that damage.	OK
+121b	Cover of Winter	If a creature would deal combat damage to you and/or one or more creatures you control, prevent 1 of that damage.	OK
+122a	Cemetery Prowler	Spells you cast cost {1} less to cast for each card exiled with ~.	OK
+123a	Bloatfly Swarm	If damage would be dealt to ~ while it has a +1/+1 counter on it, prevent that damage and remove that many +1/+1 counters from it.	OK
+124a	The Last Agni Kai	Target creature you control fights target creature an opponent controls. If the creature the opponent controls is dealt excess damage this way, you gain that much life.	FAIL
+125a	Twilight Diviner	Whenever one or more other creatures you control enter, if they were cast from a graveyard, create a token that's a copy of one of them.	FAIL
+125b	Twilight Diviner	Whenever one or more other creatures you control enter, create a token that's a copy of one of them.	FAIL
+127a	Jailbreak	Return target permanent card in an opponent's graveyard to the battlefield under their control. Return up to one target permanent card with equal or lesser mana value from your graveyard to the battlefield.	FAIL
+130a	Eriette, the Beguiler	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, gain control of that permanent for as long as that Aura is attached to it.	FAIL
+131a	Backdraft	Choose target player who cast one or more sorcery spells this turn.	OK
+132a	Springheart Nantuko	Whenever a land you control enters, you may pay {1}{G}. If you do, create a token that's a copy of that land.	FAIL
+133a	Faramir, Prince of Ithilien	At the beginning of your end step, choose an opponent. At the beginning of that player's next end step, you draw a card.	OK
+134a	Soulflayer	If a creature card with flying was exiled with ~'s delve ability, ~ has flying.	FAIL
+136a	The Eagles Are Coming!	Choose target creature you own. Return it to your hand.	OK
+137a	Stolen Uniform	Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. Attach it to the chosen creature.	OK
+138a	Grishnákh, Brash Instigator	When ~ enters, amass Orcs 2. When you do, until end of turn, gain control of target nonlegendary creature an opponent controls with power 2 or less.	FAIL
+139a	Semester's End	Exile any number of target creatures you control. At the beginning of the next end step, return each of them to the battlefield under its owner's control. Each of them enters with an additional +1/+1 counter on it.	FAIL
+140a	Call the Spirit Dragons	At the beginning of your upkeep, for each color, put a +1/+1 counter on a Dragon you control of that color.	OK
+141a	River Song	Whenever an opponent scries, put a +1/+1 counter on ~. Then ~ deals damage to that player equal to its power.	FAIL
+142a	Rinoa, Angel Wing	Whenever one or more attacking creatures you control die, you may return one of them to the battlefield tapped under its owner's control.	FAIL
+143a	Hordewing Skaab	Whenever one or more Zombies you control deal combat damage to one or more of your opponents, you may draw a card.	OK
+144a	Taigam, Master Opportunist	Whenever you cast your second spell each turn, copy it, then exile that spell with four time counters on it.	OK
+146a	Hofri Ghostforge	Whenever another nontoken creature you control dies, exile it. If you do, create a token that's a copy of that creature, except it's a Spirit in addition to its other types.	OK
+147a	Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card or sacrifice a permanent.	OK
+148a	Zimone, Mystery Unraveler	Whenever a land you control enters, manifest dread if this is the first time this ability has resolved this turn.	OK
+148b	Zimone, Mystery Unraveler	Whenever a land you control enters, you may turn a permanent you control face up.	FAIL
+149a	Glimpse the Impossible	Exile the top three cards of your library. You may play those cards this turn. At the beginning of the next end step, if any of those cards remain exiled, put them into your graveyard, then create a 0/1 colorless Eldrazi Spawn creature token for each card put into your graveyard this way.	OK
+150a	Captain America, First Avenger	{3}, Unattach an Equipment from ~: He deals 2 damage divided as you choose among one, two, or three targets.	OK
+151a	Yannik, Scavenging Sentinel	When ~ enters, exile another creature you control until ~ leaves the battlefield. When you do, put X +1/+1 counters on target creature, where X is the exiled creature's power.	FAIL
+152a	Paranormal Analyst	Whenever you manifest dread, draw a card.	OK
+153a	Vault 21: House Gambit	{CHAPTER} III — Reveal up to five nonland cards from your hand. Create a Treasure token for each card revealed this way.	OK
+154a	Turf War	Whenever a creature deals combat damage to a player, if that player controls one or more lands with contested counters on them, draw a card.	OK
+155a	Overclocked Electromancer	Whenever ~ deals combat damage to a creature, if that creature was dealt excess damage this turn, you get {E}.	OK
+156a	Sword of Hearth and Home	Whenever equipped creature deals combat damage to a player, exile up to one target creature you own, then return it to the battlefield under your control.	OK
+157a	Caravan Vigil	Search your library for a land card, reveal it, put it into your hand, then shuffle. You may put that card onto the battlefield instead of putting it into your hand if a creature died this turn.	FAIL
+158a	Central Elevator // Promising Stairs	At the beginning of your upkeep, surveil 1. You win the game if there are eight or more unlocked doors among Rooms you control.	OK
+159a	Wonderscape Sage	{T}, Return a land you control to its owner's hand: Draw a card. Then discard a card.	OK
+160a	Spellweaver Helix	Whenever a player casts a card, if it has the same name as a card exiled with ~, draw a card.	FAIL
+161a	Ulalek, Fused Atrocity	Whenever you cast an Eldrazi spell, you may pay {C}{C}. If you do, copy all spells you control.	FAIL
+163a	Infinite Authority	Whenever enchanted creature blocks or becomes blocked by a creature with toughness 3 or less, destroy the other creature at end of combat.	OK
+164a	Soundwave, Sonic Spy // Soundwave, Superior Captain	Whenever one or more creature tokens you control deal combat damage to a player, exile target instant or sorcery card from their graveyard. Copy it. You may cast the copy without paying its mana cost.	FAIL
+165a	Magus of the Jar	{T}, Sacrifice ~: Each player exiles all cards from their hand face down and draws seven cards. At the beginning of the next end step, each player discards their hand.	OK
+166a	Ambitious Augmenter	When ~ dies, if it had one or more counters on it, create a 0/0 green and blue Fractal creature token.	OK
+167a	Godsend	Whenever equipped creature blocks or becomes blocked by one or more creatures, you may exile target creature blocking or blocked by it.	FAIL
+168a	Spirit of Resilience	Whenever one or more cards leave your graveyard, put a +1/+1 counter on ~.	OK
+169a	Breeches, Brazen Plunderer	Whenever one or more Pirates you control deal damage to your opponents, draw a card.	OK
+170a	Spoils of War	X is the number of artifact and/or creature cards in an opponent's graveyard.	FAIL
+171a	Boreas Charger	When ~ leaves the battlefield, choose an opponent who controls more lands than you. Draw a card.	OK
+172a	False Cure	Until end of turn, whenever a player gains life, that player loses 2 life.	FAIL
+erA	Eriette, the Beguiler	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, gain control of that permanent for as long as you control ~.	FAIL
+erB	Eriette, the Beguiler	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls with mana value 3 or less, gain control of that permanent.	FAIL
+bdA	Backdraft	Choose a player who lost life this turn. That player draws a card.	FAIL
+bdB	Backdraft	Target player who cast one or more sorcery spells this turn loses 2 life.	OK
+cpA	Divination	Exile target instant card from your graveyard. Copy it. You may cast the copy without paying its mana cost.	OK
+cpB	Divination	Exile target instant card from your graveyard. Copy that card. You may cast the copy without paying its mana cost.	OK
+cmA	Divination	Count the number of permanents. If the number is odd, draw a card.	FAIL
+cmB	Divination	If the number of permanents is odd, draw a card.	OK
+emA	Emergent Ultimatum	Search your library for up to three monocolored cards with different names and exile them. An opponent chooses one of those cards. Shuffle that card into your library.	OK
+moA	Mirror of Fate	{T}, Sacrifice ~: Choose up to seven face-up exiled cards you own. Put them on top of your library.	FAIL
+mySA	Mythos of Snapdax	Each player chooses an artifact, a creature, an enchantment, and a planeswalker from among the nonland permanents they control, then sacrifices the rest. If {B}{R} was spent to cast ~, draw a card.	OK
+torA	Torrent of Lava	Each creature has "{T}: You gain 1 life."	FAIL
+torB	Torrent of Lava	As long as ~ is on the stack, each creature has "{T}: You gain 1 life."	FAIL
+guA	Guile	If a spell or ability you control would counter a spell, you gain 1 life instead.	FAIL
+rgA	Rain of Gore	If a spell would cause its controller to gain life, that player loses that much life instead.	FAIL
+ucA	Unpredictable Cyclone	If a cycling ability would cause you to draw a card, instead exile the top card of your library.	FAIL
+fdA	False Dawn	Until end of turn, you may spend white mana as though it were mana of any color.	FAIL
+whA	Whippoorwill	Damage that would be dealt to target creature this turn can't be prevented.	FAIL
+faA	Faramir, Prince of Ithilien	At the beginning of your end step, choose an opponent. At the beginning of that player's next end step, you draw a card if they didn't attack you that turn.	FAIL
+rsA	River Song	Whenever an opponent searches their library, ~ deals 1 damage to that player.	OK
+rsB	River Song	Whenever an opponent scries, ~ deals 1 damage to that player.	OK
+sgA	Spoils of War	As an additional cost to cast ~, choose an opponent. X is the number of artifact and creature cards in that player's graveyard.	FAIL
+gbA	Grishnákh, Brash Instigator	When ~ enters, amass Orcs 2. When you do, gain control of target nonlegendary creature an opponent controls with power less than or equal to the amassed Army's power until end of turn.	OK
+tdA	Twilight Diviner	Whenever one or more other creatures you control enter, if they entered from a graveyard, draw a card.	OK
+zmA	Zimone, Mystery Unraveler	Whenever a land you control enters, turn target face-down permanent you control face up.	OK
+stA	Soulflayer	As long as a creature card with flying was exiled with ~'s delve ability, ~ has flying.	FAIL
+R-costsets	Grizzly Bears	Sacrifice any number of creatures with total power 5 or greater: Draw a card.	OK
+R-costsets2	Grizzly Bears	{T}, Exile cards from your graveyard equal to the number of creatures you control: Draw a card.	FAIL
+R-addcost	Divination	As an additional cost to cast ~, choose a creature you control. Draw two cards.	FAIL
+R-addcost2	Divination	As an additional cost to cast ~, sacrifice one or more creatures. Draw two cards.	FAIL
+R-manasym	Divination	For each green mana symbol in the mana costs of cards in your hand, you gain 1 life.	FAIL
+R-manasym2	Divination	Reveal the top card of your library. You gain life equal to the number of colored mana symbols in its mana cost.	FAIL
+R-mananeut	Grizzly Bears	Whenever a land you control is tapped for mana, its controller may add an additional {G}.	FAIL
+R-manaprov	Grizzly Bears	Whenever you cast a spell, if mana from a Treasure was spent to cast it, draw a card.	OK
+R-manaprov2	Grizzly Bears	Spend only mana produced by Treasures to cast creature spells.	FAIL
+R-manarepl	Grizzly Bears	Lands you control tapped for mana produce {G} instead of any other type.	FAIL
+R-drawrep	Grizzly Bears	If you would draw a card, reveal it instead.	FAIL
+R-drawrep2	Grizzly Bears	{1}: The next time you would draw a card this turn, instead mill a card, then draw a card.	FAIL
+R-prev	Divination	Prevent all damage a source of your choice that shares a color with target creature would deal this turn.	FAIL
+R-prevX	Grizzly Bears	If a source would deal damage to you, prevent X of that damage, where X is the number of +1/+1 counters on ~.	OK
+R-copystatic	Pacifism	Enchanted creature is a copy of target creature.	FAIL
+R-gainabil	Grizzly Bears	~ has all activated abilities of creatures your opponents control.	OK
+R-gainabil2	Divination	Target creature gains all abilities of another target creature until end of turn.	FAIL
+R-batch	Grizzly Bears	Whenever one or more creatures you control die, return one of them to your hand.	FAIL
+R-batch2	Grizzly Bears	Whenever one or more creatures you control deal combat damage to one or more players, draw a card for each player dealt damage this way.	FAIL
+R-results	Divination	Each player mills three cards. You draw a card for each land card put into a graveyard this way.	OK
+R-excess	Divination	~ deals 5 damage to target creature. You gain life equal to the excess damage dealt this way.	OK
+R-costref	Grizzly Bears	{1}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+R-costref2	Grizzly Bears	{T}, Exile a creature card from your graveyard: Draw cards equal to the exiled card's mana value.	OK
+R-values	Divination	X is the number of creature cards in target opponent's graveyard. Draw X cards.	FAIL
+R-spelltgt	Divination	Counter target spell if it targets you.	FAIL
+R-instead	Divination	Search your library for a land card, reveal it, put it into your hand, then shuffle. If you control a Forest, put that card onto the battlefield instead of putting it into your hand.	FAIL
+R-combathist	Grizzly Bears	{T}: Destroy target creature that ~ blocked this turn.	FAIL
+R-zones	Divination	Return target creature card from your graveyard or from exile to your hand.	OK
+R-asenters	Grizzly Bears	As ~ enters, you gain 3 life.	OK
+R-splitctl	Divination	Each opponent may search their library for a basic land card and put it onto the battlefield tapped, then shuffle.	OK
+R-revctl	Divination	Target opponent reveals cards from the top of their library until they reveal a creature card. That player puts that card onto the battlefield, then shuffles.	OK
+R-perm	Grizzly Bears	You may play lands and cast spells from among cards you exiled with ~.	FAIL
+R-grant-ex	Divination	Exile target creature card from your graveyard. It gains "You may cast this card from exile."	OK
+R-monument	Monument to Perfection	{T}: Draw a card. Activate only if there are nine or more lands with different names among the basic, Sphere, and Locus lands you control.	OK
+ca1	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value divided as you choose among one, two, or three targets.	FAIL
+ca2	Captain America, First Avenger	{3}, Unattach an Equipment from ~: He deals damage equal to that Equipment's mana value to any target.	OK
+ca3	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+ca4	Grizzly Bears	{3}: ~ deals damage equal to its power divided as you choose among one, two, or three targets.	OK
+cw1	Cover of Winter	If a creature would deal combat damage to you and/or one or more creatures you control, prevent X of that damage, where X is the number of age counters on ~.	FAIL
+cw2	Cover of Winter	If a creature would deal combat damage to you, prevent X of that damage, where X is the number of age counters on ~.	OK
+cw3	Cover of Winter	If a creature would deal combat damage to you, prevent 1 of that damage.	OK
+eu1	Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card. You draw a card for each land card put into a graveyard this way.	FAIL
+T-effecttrig	Divination	Until end of turn, whenever a player gains life, you draw a card.	OK
+T-effecttrig2	Divination	Until end of turn, whenever a creature you control attacks, you gain 1 life.	OK
+T-nextcast	Divination	When you next cast an instant spell this turn, copy that spell.	OK
+T-nextcast2	Divination	When you next cast an instant spell or activate a loyalty ability this turn, copy that spell or ability.	FAIL
+T-delayed-enter	Divination	Return target creature card from your graveyard to the battlefield. When that creature enters, you gain 2 life.	FAIL
+T-losecontrol	Divination	Gain control of target artifact until end of turn. When you lose control of that artifact this turn, draw a card.	FAIL
+T-aslong-copy	Grizzly Bears	{2}{U}: Tap another target creature. ~ becomes a copy of that creature for as long as that creature remains tapped.	FAIL
+T-aslong-copy2	Grizzly Bears	{2}{U}: ~ becomes a copy of target creature until end of turn.	OK
+T-castcard	Grizzly Bears	Whenever a player casts an instant or sorcery card, you gain 1 life.	FAIL
+T-untap-trig	Grizzly Bears	{T}: Tap target creature. When ~ becomes untapped, untap that creature.	OK

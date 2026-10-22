@@ -21,6 +21,13 @@ pub const WAS_CAST: &str = "was_cast";
 pub const PERMANENT_WAS_CAST: &str = "permanent_was_cast";
 pub const PERMANENT_CAST_FROM_HAND: &str = "permanent_cast_from_hand";
 
+/// A card in the hand of the player a cast prohibition is checked for (`Ctx::iter_player`,
+/// the caster): "their hands" in "can't cast spells from anywhere other than their hands"
+/// (Drannith Magistrate) is the caster's own hand, not another player's (a card cast from
+/// an opponent's hand, Reversal of Fortune's ruling). A spell on the stack matches if it is
+/// being (or was) cast from its caster's own hand (`CastInfo::from_hand_of`).
+pub const IN_CASTERS_HAND: &str = "in_casters_hand";
+
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
     let _ = (g, id, ctx);
     // Filters evaluated by keyword implementations (e.g. convoke, CR 702.51c).
@@ -91,6 +98,17 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> bool {
             let host = ctx.source.and_then(|s| g.obj(s).attached_to);
             host.is_some() && g.obj(id).attached_to == host
         }
+        IN_CASTERS_HAND => match g.obj(id).zone {
+            Zone::Hand(q) => ctx.iter_player.is_none_or(|p| p == q),
+            Zone::Stack => {
+                let o = g.obj(id);
+                let caster = ctx.iter_player.unwrap_or(o.controller);
+                o.stack
+                    .as_ref()
+                    .is_some_and(|si| si.cast.from_hand_of == Some(caster))
+            }
+            _ => false,
+        },
         // "with toughness greater than its power".
         "toughness_gt_power" => g.obj(id).toughness() > g.obj(id).power(),
         _ => false,

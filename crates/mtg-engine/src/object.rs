@@ -285,6 +285,10 @@ pub struct CastInfo {
     /// (CR 307.5a).
     #[serde(default)]
     pub instant_timing: bool,
+    /// The player whose hand it was cast from, if it was cast from a hand (a card cast
+    /// from an opponent's hand, Reversal of Fortune).
+    #[serde(default)]
+    pub from_hand_of: Option<PlayerId>,
     /// Cards exiled from a graveyard to pay for it with delve (CR 702.66a), as they are in
     /// exile: the cards "exiled with it".
     #[serde(default)]
