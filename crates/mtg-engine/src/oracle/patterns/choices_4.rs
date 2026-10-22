@@ -967,6 +967,39 @@ fn you_and_that_opponent_exchange_creatures(l: &str, b: &mut Builder) -> Option<
 
 inventory::submit! { EffectPattern { name: "choices 4: you and that opponent each gain control of all creatures the other controls", priority: 120, parse: you_and_that_opponent_exchange_creatures } }
 
+/// The player chosen by "another player of your choice".
+const OF_YOUR_CHOICE: Var = vars::USER + 41018;
+
+/// "another player of your choice may gain control of that permanent" (Stardew Valley):
+/// you choose another player as the instruction is performed, and that player may gain
+/// control of it.
+fn another_player_of_your_choice_may(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("another player of your choice may ")?;
+    let r = r.strip_prefix("gain control of ")?;
+    let (what, rest) = crate::oracle::effects::object_ref(r, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let choose =
+        crate::kw::choice_grammar::choose_player_effect(OF_YOUR_CHOICE, PlayerFilter::NotYou)?;
+    Some(Effect::seq(vec![
+        choose,
+        Effect::AsPlayer {
+            who: PlayerRef::Var(OF_YOUR_CHOICE),
+            effect: Box::new(Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(Effect::GainControl {
+                    what,
+                    who: PlayerRef::You,
+                    duration: Duration::Permanent,
+                }),
+            }),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: another player of your choice may gain control of it", priority: 120, parse: another_player_of_your_choice_may } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -995,6 +1028,7 @@ mod tests {
             ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player who controls more creatures than they do and is their opponent. The first player may reveal cards from the top of their library until they reveal a creature card. If the first player does, that player puts that card onto the battlefield and all other cards revealed this way into their graveyard."),
             ("Sorcery", "Each player puts a vow counter on a creature they control and sacrifices the rest. Each of those creatures can't attack you or planeswalkers you control for as long as it has a vow counter on it."),
             ("Instant", "Untap all creatures you control and all creatures target opponent controls. You and that opponent each gain control of all creatures the other controls until end of turn. Those creatures gain haste until end of turn."),
+            ("Land", "{3}, {T}: Choose target permanent you control. Draw a card, then another player of your choice may gain control of that permanent. Activate only as a sorcery."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

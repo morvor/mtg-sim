@@ -259,3 +259,21 @@ fn reins_of_power_you_and_that_opponent_swap_creatures() {
     t.resolve_all();
     assert_eq!(t.obj_now(giant).controller, P0);
 }
+
+#[test]
+fn stardew_valley_another_player_of_your_choice_may_take_the_permanent() {
+    cr!("608.2c");
+    supported("Stardew Valley");
+    let mut t = TestGame::new(3);
+    let sv = t.battlefield(P0, "Stardew Valley");
+    t.lands(P0, "Plains", 3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.answer_yes(P2, true);
+    let hand = t.hand_size(P0);
+    // Its third activated ability (after the mana ability and the Food one).
+    t.activate(P0, sv, 2, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.obj_now(bears).controller, P2);
+}
