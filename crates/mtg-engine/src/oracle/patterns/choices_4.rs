@@ -1389,6 +1389,38 @@ fn from_among_the_other_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 
 inventory::submit! { FollowupPattern { name: "choices 4: from among the other cards exiled this way", priority: 120, apply: from_among_the_other_cards } }
 
+/// "You choose one of them and exile it." (Vizkopa Confessor): as "You choose one of
+/// them. Exile that card."
+fn choose_one_of_them_and(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("you choose one of them and ") else {
+        return false;
+    };
+    let Some(act) = r.strip_suffix(" it") else {
+        return false;
+    };
+    if act.contains(' ') {
+        return false;
+    }
+    if !crate::oracle_ext::apply_followup_ext("you choose one of them", prev, b) {
+        match crate::oracle::effects::parse_sentence("you choose one of them", b) {
+            Some(e) => {
+                let old = std::mem::take(prev);
+                *prev = Effect::seq(vec![old, e]);
+            }
+            None => return false,
+        }
+    }
+    let Some(e2) = crate::oracle::effects::parse_sentence(&format!("{act} that card"), b) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e2]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choices 4: you choose one of them and [verb] it", priority: 120, apply: choose_one_of_them_and } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1423,6 +1455,7 @@ mod tests {
             ("Creature", "Flying\nAt the beginning of your end step, choose a creature card in an opponent's graveyard, then that player chooses a creature card in your graveyard. You may return those cards to the battlefield under their owners' control."),
             ("Artifact", "When ~ enters, surveil 1.\n{3}{W}, {T}, Exile two creature cards from your graveyard, Sacrifice ~: An opponent chooses one of the exiled cards. You put that card on the bottom of your library and return the other to the battlefield tapped. You become the monarch."),
             ("Legendary Creature", "At the beginning of your upkeep, each player exiles cards from the top of their library until they exile a nonland card. An opponent chooses a nonland card exiled this way. You may cast up to two spells from among the other cards exiled this way without paying their mana costs."),
+            ("Creature", "Extort\nWhen ~ enters, pay any amount of life. Target opponent reveals that many cards from their hand. You choose one of them and exile it."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

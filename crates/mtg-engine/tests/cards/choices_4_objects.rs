@@ -412,3 +412,31 @@ fn plargg_and_nassari_an_opponent_chooses_one_you_cast_from_the_others() {
     assert_eq!(g.len(), 1);
     assert_eq!(t.obj_now(g[0]).controller, P0);
 }
+
+#[test]
+fn vizkopa_confessor_you_choose_one_of_the_revealed_cards_and_exile_it() {
+    cr!("119.4", "701.20a");
+    ruling!(
+        "Vizkopa Confessor",
+        "The amount of life you pay is chosen when Vizkopa Confessor's last ability resolves."
+    );
+    supported("Vizkopa Confessor");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 3);
+    t.lands(P0, "Swamp", 2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let giant = t.hand(P1, "Hill Giant");
+    t.hand(P1, "Opt");
+    let v = t.hand(P0, "Vizkopa Confessor");
+    // Pay 2 life; P1 reveals the Bolt and the Giant; P0 exiles the Giant.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer(P0, DecisionKind::X, decision::Answer::Number(2));
+    t.answer_choose(P1, &[Entity::Object(bolt), Entity::Object(giant)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, v).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    assert!(t.in_exile("Hill Giant"));
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    assert!(t.in_hand(P1, "Opt"));
+}
