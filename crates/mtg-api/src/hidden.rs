@@ -17,11 +17,14 @@
 //!   order, each keeping its id;
 //! * the identity of a face-down card the viewer can't look at (a face-down permanent or
 //!   spell, a card exiled face down): exchanged with that of a hidden library card of the
-//!   same owner.
+//!   same owner;
+//! * which card is where in a face-down deck in the command zone (Attraction, planar,
+//!   scheme): the identities of its hidden cards of a type are exchanged.
 //!
 //! Only objects that have been hidden from the viewer since they were put into their
-//! zone are changed (a card returned to a hand from a graveyard was seen). The cards a
-//! decision offers from a library (a search) are left alone, since the decision shows them.
+//! zone are changed (not a card returned to a hand from a graveyard, nor one revealed
+//! since). The cards a decision offers from a library (a search) are left alone, since the
+//! decision shows them.
 //!
 //! [`check_start`] checks object ids where they're made: two games whose decks are the
 //! same cards in different orders (so each library holds them in another order) must look
@@ -66,6 +69,8 @@ struct Checker {
     rng: ChaCha8Rng,
     every: u64,
     cursor: usize,
+    /// The seat's decisions so far.
+    count: u64,
     shared: Arc<Mutex<Shared>>,
 }
 
@@ -125,6 +130,24 @@ pub fn hidden_variant(
     keep: &[ObjectId],
     rng: &mut ChaCha8Rng,
 ) -> (Game, u64) {
+    // Cards revealed since they were put into their zone are known (CR 701.20a): the
+    // event feed holds the reveals.
+    let mut keep: Vec<ObjectId> = keep.to_vec();
+    for e in g.event_feed.since(0) {
+        if let mtg_engine::events::Event::Custom {
+            name, obj: Some(o), ..
+        } = &e
+        {
+            let n = name.as_str();
+            if n == mtg_engine::reveal::REVEALED
+                || n == mtg_engine::facedown::REVEALED
+                || n == mtg_engine::zones::TOP_REVEALED
+            {
+                keep.push(*o);
+            }
+        }
+    }
+    let keep = &keep[..];
     let mut v = crate::legal::sandbox(g, |_| Box::new(mtg_engine::decision::PassiveAgent));
     // The sandbox records no events; the copy keeps the original's for the requests.
     v.event_feed = g.event_feed.clone();
@@ -177,28 +200,22 @@ pub fn hidden_variant(
             v.players[pi].library[*i] = id;
         }
         // The face-down decks in the command zone (Attraction, planar and scheme decks):
-        // the order of the hidden cards, and which card is which among those of a type.
-        let slots: Vec<usize> = v
+        // which card is where among the hidden cards of a type. (Their objects are
+        // numbered in their order once the deck is shuffled, so the cards change places,
+        // not the objects.)
+        let mut deck: Vec<ObjectId> = v
             .command
             .iter()
-            .enumerate()
-            .filter(|(_, id)| {
-                let o = v.obj(**id);
-                o.face_down && o.owner == p && free(&v, id)
+            .copied()
+            .filter(|id| {
+                let o = v.obj(*id);
+                o.face_down && o.owner == p && o.card.is_some() && free(&v, id)
             })
-            .map(|(i, _)| i)
             .collect();
-        let mut ids: Vec<ObjectId> = slots.iter().map(|i| v.command[*i]).collect();
-        ids.shuffle(rng);
-        for (i, id) in slots.iter().zip(&ids) {
-            if v.command[*i] != *id {
-                changed += 1;
-            }
-            v.command[*i] = *id;
-        }
-        for k in 1..ids.len() {
-            let (a, b) = (ids[k - 1], ids[k]);
-            if v.obj(a).base.card_types == v.obj(b).base.card_types && rng.gen_bool(0.5) {
+        deck.shuffle(rng);
+        for k in 1..deck.len() {
+            let (a, b) = (deck[k - 1], deck[k]);
+            if v.obj(a).base.card_types == v.obj(b).base.card_types {
                 exchange(&mut v, a, b);
                 changed += 1;
             }
@@ -252,16 +269,17 @@ fn shown_by(d: &Decision) -> Vec<ObjectId> {
     v
 }
 
-/// The request `seat` gets for `d` in `g`, with the events since `cursor`, as JSON.
-fn request_text(g: &Game, seat: PlayerId, player: PlayerId, d: &Decision, cursor: usize) -> String {
-    let prepared = prepare(
-        g,
-        seat,
-        player,
-        d,
-        g.actions_taken,
-        &PresentOptions::default(),
-    );
+/// The request `seat` gets for `d` in `g` (its `id`th decision, as the protocol numbers
+/// them, `ProtocolAgent`), with the events since `cursor`, as JSON.
+fn request_text(
+    g: &Game,
+    seat: PlayerId,
+    player: PlayerId,
+    d: &Decision,
+    id: u64,
+    cursor: usize,
+) -> String {
+    let prepared = prepare(g, seat, player, d, id, &PresentOptions::default());
     let mut req = prepared.request;
     req.events = describe_events(g, Some(seat), &g.event_feed.since(cursor));
     serde_json::to_string_pretty(&req).unwrap_or_default()
@@ -294,6 +312,7 @@ impl Agent for Checker {
     }
 
     fn decide(&mut self, g: &Game, player: PlayerId, d: &Decision) -> Answer {
+        self.count += 1;
         let check = {
             let mut s = self.shared.lock().unwrap();
             s.summary.decisions += 1;
@@ -304,8 +323,8 @@ impl Agent for Checker {
         if check {
             let (variant, changed) = hidden_variant(g, self.seat, &shown_by(d), &mut self.rng);
             if changed > 0 {
-                let a = request_text(g, self.seat, player, d, self.cursor);
-                let b = request_text(&variant, self.seat, player, d, self.cursor);
+                let a = request_text(g, self.seat, player, d, self.count, self.cursor);
+                let b = request_text(&variant, self.seat, player, d, self.count, self.cursor);
                 let mut s = self.shared.lock().unwrap();
                 s.summary.checked += 1;
                 s.summary.changed += changed;
@@ -345,6 +364,7 @@ pub fn check_game(
                 rng: ChaCha8Rng::seed_from_u64(seed ^ (0x41dd_e700 + i as u64)),
                 every: every.max(1),
                 cursor: 0,
+                count: 0,
                 shared: shared.clone(),
             }) as Box<dyn Agent>
         })
@@ -375,18 +395,23 @@ pub fn check_game(
 /// An agent that keeps its hand and records its first request.
 struct FirstRequest {
     seat: PlayerId,
+    count: u64,
     out: Arc<Mutex<Vec<(PlayerId, String)>>>,
 }
 
 impl Agent for FirstRequest {
     fn decide(&mut self, g: &Game, player: PlayerId, d: &Decision) -> Answer {
+        self.count += 1;
         let mut out = self.out.lock().unwrap();
         // Once the libraries are shuffled and the opening hands drawn (before that the
         // decks are in the order they were given, which no one sees but which the ids
         // follow).
         let drawn = g.players.iter().any(|q| !q.hand.is_empty());
         if drawn && !out.iter().any(|(p, _)| *p == self.seat) {
-            out.push((self.seat, request_text(g, self.seat, player, d, 0)));
+            out.push((
+                self.seat,
+                request_text(g, self.seat, player, d, self.count, 0),
+            ));
         }
         match d {
             Decision::Mulligan { .. } => Answer::Bool(false),
@@ -409,6 +434,7 @@ fn first_requests(
         .map(|i| {
             Box::new(FirstRequest {
                 seat: PlayerId(i as u8),
+                count: 0,
                 out: out.clone(),
             }) as Box<dyn Agent>
         })

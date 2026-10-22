@@ -138,7 +138,7 @@ client on both seats), shortened where marked `…`.
 |---|---|
 | `type` | `"decision"` |
 | `version` | Protocol version, currently `1` (see [Versioning](#versioning)). |
-| `id` | Identifies the decision within the game (increasing). Re-asks of the same decision keep the id. An answer may echo it. |
+| `id` | Identifies the decision among this seat's decisions (increasing: the number of decisions asked of the seat so far, so it says nothing about the other players' decisions). Re-asks of the same decision keep the id. An answer may echo it. |
 | `seat` | The seat whose agent is asked. |
 | `player` | The player the decision is for: the seat itself, unless it controls another player (CR 723, e.g. Mindslaver). |
 | `kind` | What is being decided (table below). |

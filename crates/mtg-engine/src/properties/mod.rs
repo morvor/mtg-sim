@@ -16,6 +16,16 @@
 //!   a game played through the agent protocol is checked in `mtg-api`.)
 //!
 //! Every check returns a [`Summary`] or a description of the first difference.
+//!
+//! The properties checked over every card or many small cases (`docs/PROPERTIES.md`,
+//! properties 5, 7 and 8; property 6, hidden information, is in `mtg_api::hidden`):
+//!
+//! * [`copies`]: a copy has the original's copiable values (CR 707), for every card, and
+//!   plays out as the original does;
+//! * [`payment`]: the automatic mana payer against a brute-force search (CR 601.2g–h,
+//!   106, 107.4);
+//! * [`damage`]: the combat damage assignments the engine accepts against those the rules
+//!   allow (CR 510.1, 702.19).
 
 pub mod agent;
 pub mod canon;

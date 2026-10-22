@@ -186,7 +186,7 @@ fn case_seeds(a: &Args) -> Vec<(u64, u64)> {
 /// assignments compared).
 fn run_cases(a: &Args, name: &str, check: impl Fn(u64) -> Result<u64, String> + Sync) -> bool {
     let seeds = case_seeds(a);
-    let tally = Mutex::new((0u64, 0u64, Vec::<String>::new()));
+    let tally = Mutex::new((0u64, 0u64, Vec::<String>::new(), 0u64));
     parallel(&seeds, a.jobs, |(i, s)| {
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check(*s)));
         let mut t = tally.lock().unwrap();
@@ -194,6 +194,7 @@ fn run_cases(a: &Args, name: &str, check: impl Fn(u64) -> Result<u64, String> + 
             Ok(Ok(n)) => {
                 t.0 += 1;
                 t.1 += n;
+                t.3 += u64::from(n == 0);
             }
             Ok(Err(e)) => t.2.push(format!(
                 "VIOLATION: {e}\n  reproduce: mtg-sim --properties --property {name} --seed {} --only {i}",
@@ -206,18 +207,18 @@ fn run_cases(a: &Args, name: &str, check: impl Fn(u64) -> Result<u64, String> + 
             )),
         }
     });
-    let (held, n, mut bad) = tally.into_inner().unwrap();
+    let (held, n, mut bad, zero) = tally.into_inner().unwrap();
     bad.sort();
     for b in &bad {
         println!("{b}");
     }
     let what = if name == "payment" {
-        "payable"
+        format!("{n} payable")
     } else {
-        "assignments compared"
+        format!("{n} assignments compared; {zero} skipped")
     };
     println!(
-        "{name}: {} cases, {held} held ({n} {what}), {} violations",
+        "{name}: {} cases, {held} held ({what}), {} violations",
         seeds.len(),
         bad.len()
     );

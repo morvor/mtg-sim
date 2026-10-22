@@ -156,9 +156,10 @@ impl<T: Transport> Agent for ProtocolAgent<T> {
             self.stats.fallbacks += 1;
             return Answer::Default;
         }
-        // Unique within the game (the engine counts the decisions it asks for), so the
-        // seats' requests don't share ids.
-        let id = g.actions_taken;
+        // This seat's decisions, counted: the number of decisions the game has asked of
+        // every player would tell the seat about the others' hidden decisions (whether a
+        // player was asked to reveal a card from an opening hand, CR 400.2).
+        let id = self.stats.decisions;
         let mut present = self.options.present.clone();
         if player != self.seat {
             // CR 723.6: the controller of another player can't make them concede.

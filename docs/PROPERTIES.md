@@ -42,7 +42,9 @@ cargo run --release -p mtg-sim -- --properties --property damage --games 20000 -
 `copies` takes `--from N --count M` (cards of the pool sorted by name) or `--card NAME`;
 `copies-dynamic` checks every `--stride`th card (default 100) from `--from`; `hidden`,
 `payment` and `damage` check `--games` cases from `--seed` (`--only G` replays case G).
-Each violation is printed with the command that reproduces it.
+Each violation is printed with the command that reproduces it. `MTG_COPY_DEBUG=1` prints
+both games' outcomes and logs for a dynamic copy check (`--card NAME`), and
+`MTG_DAMAGE_DEBUG=1` every assignment a combat damage case compares.
 
 For properties 1–4: Games get new random decks (`mtg-sim`'s random 60-card decks of fully
 supported cards) and cycle through 2, 2, 3 and 4 players unless `--players N` is given; they
@@ -220,16 +222,17 @@ identical, object ids included:
 
 * another player's hand: the identities of hidden hand cards are exchanged with those of
   hidden library cards (the hand keeps its size, each object its id);
-* the order of every library, the player's own too, and of every face-down deck in the
-  command zone (Attraction, planar, scheme): the hidden cards change places, each keeping
-  its id;
+* the order of every library, the player's own too: the hidden cards change places, each
+  keeping its id;
 * the identity of a face-down card the player can't look at (a face-down permanent or
   spell, a card exiled face down): exchanged with that of a hidden library card of the
-  same owner; and which card is which among the hidden cards of a command-zone deck.
+  same owner; and which card is where in a face-down deck in the command zone
+  (Attraction, planar, scheme; their objects are numbered in their order once shuffled,
+  so the cards are exchanged, not the objects).
 
-Only objects hidden from the player since they were put into their zone are changed (a
-card returned to a hand from a graveyard was seen), and the cards a decision shows from
-a library (a search) are left alone.
+Only objects hidden from the player since they were put into their zone are changed (not
+a card returned to a hand from a graveyard, nor one revealed since: the event feed holds
+the reveals), and the cards a decision shows from a library (a search) are left alone.
 
 **Ids** (`check_start`): two games whose decks hold the same cards in different orders
 (each library then holds them in another order, and the objects get their ids in the
@@ -311,6 +314,20 @@ Each was fixed, with a regression test citing the rules:
 | seat | Players losing at once were handled in seat order, so what happened as the first of them lost (effects ending, characteristics recomputed) depended on seats | 101.4, 104.4a | in APNAP order | same file |
 | seat | A player whose cards outside a subgame left it with them (they lost the subgame) had their main-game hand and permanents put into their library as the subgame ended, as though brought into it | 729.4, 729.5, 800.4a | such cards are left in the main game | same file |
 | seat | Who goes first in a subgame was drawn among the players in seat order; cards returning from a subgame were created in seat order | 729.2, 101.4 | APNAP order | `tests/properties/seat_symmetry.rs` (`a_subgame_is_seat_symmetric`) |
+| copies | The exceptions of a Clone-like card's own "enter as a copy ..., except ..." applied to a copy effect it entered with otherwise: a token copy of Callidus Assassin that copied nothing as it entered had its "destroy" trigger, and so did a Clone copying it that declined the copied choice | 707.9a, 707.5, 614.12 | the exceptions belong to the copy effect the next enter-as-copy replacement creates, and are dropped if it copies nothing (`EtbInfo::own_copy_exceptions`) | `tests/cr/r707_009_copy_exceptions_and_values.rs` |
+| copies | A copy's values were read as it entered, after its own copied "as this enters" ability had changed the original: a token copy of Ixidron was a face-down 2/2 | 707.2, 614.12a | the values are fixed as the copy is determined (`EtbInfo::copy_values`); interpretation `copy-values-fixed-when-determined` | same file |
+| copies (dynamic) | A permanent entering as a copy applied the copied values' own abilities as its "as this enters" effects, with their links rather than the links they have on the copy: a Clone of Tyrannical Pitlord didn't give the chosen creature +3/+3 | 707.7, 607.2d, 614.12 | the copy effect's id is given as the copy is determined (`EtbInfo::copy_effect`), and the copied abilities are the candidates | `tests/cr/r707_007_copied_linked_abilities.rs` |
+| copies (dynamic) | An activated ability's targets and conditions were checked without its link: a Clone of Gelatinous Cube couldn't activate Dissolve on the card it exiled | 607.2a, 602.2b | `Game::can_activate` evaluates with the ability's link | same file |
+| copies (dynamic) | Delayed and reflexive triggered abilities had link 0, not the link of the ability that created them: a copy of Identity Thief never returned the card it exiled (as any delayed trigger of an ability with a link would) | 603.7c, 603.12, 607.2a | they have the creating ability's link | same file |
+| copies (dynamic) | Cards exiled by instructions other than "exile" (a search, a dig) were exiled with link 0: a copy of Parallel Thoughts couldn't draw from its pile, a copy of The Creation of Avacyn couldn't turn its card face up | 607.2a | every instruction sets the link its moves use (`Game::exec`) | same file |
+| copies (dynamic) | The abilities a keyword stands for had link 0 even when the keyword had another: a copy of Smuggler's Buggy couldn't cast the card hideaway exiled | 707.7, 607.2a, 702.75a | derived abilities take the keyword's link (`keyword_impls::derived_by_keyword`) | same file |
+| copies (dynamic) | Only the ante card itself, not a copy of it, could add a card to the ante zone | 407.3, 707.2 | the object's characteristics count, not only its card | same file |
+| payment | The payer didn't count the damage pain lands deal before Phyrexian life is paid, so it missed payments that needed a pain land's painless mana | 601.2g–h, 107.4f, 119.4 | `ManaSource::damage`, counted against the life left for symbols; damage sources are used last | `tests/cr/r601_002h_pain_damage_before_phyrexian_life.rs` |
+| damage | A trampler's lethal damage counted only the damage of creatures assigning before it: two tramplers in a band blocked by one creature couldn't share the lethal damage; nor could two attackers with trample over planeswalkers share the planeswalker's loyalty | 702.19b–c, 510.1e | each assignment is checked counting what the later attackers could assign, then the total; an illegal total is assigned again | `tests/keywords/k702_019_trample_counts_damage_assigned_after_it.rs` |
+| hidden | The cards of Attraction, planar and scheme decks kept the ids they were made with, in the deck's order, after the decks were shuffled: the order of the ids in the command zone told which card was where | 400.2, 406.3, 103.3a, 717.2 | the cards become new objects in their shuffled order (`zones::renumber_shuffled_deck`) | `crates/mtg-api/tests/hidden_information.rs` |
+| hidden | Conspiracies put into the command zone stayed the same objects (no new object on a zone change), with ids in the order of the cards outside the game: a face-down one's id told which card it was | 400.7, 702.106a | new objects, in random order | `tests/cr/r400_007_conspiracies_into_the_command_zone.rs` |
+| hidden | A request's `id` was the number of decisions the game had asked of every player, so a seat could tell that another player had been asked something private (whether to begin the game with a Leyline from their opening hand) | 400.2, 402.3, 103.6 | the id numbers the seat's own decisions (`ProtocolAgent`; `docs/AGENT_PROTOCOL.md`) | `crates/mtg-api/tests/hidden_information.rs` (`request_ids_dont_count_other_players_hidden_decisions`) |
+| hidden | Cards looked at and then exiled face down by a separate instruction ("Look at the top two cards of target opponent's library and exile those cards face down", Petty Larceny) couldn't be looked at, though they could be cast: the offer to cast one depended on what it was | 406.3, 406.3b | the player who looked at them may go on looking at them | `tests/cr/r406_003_look_then_exile_face_down.rs` |
 
 Not bugs in the rules, but found and handled by the properties:
 
@@ -321,6 +338,16 @@ Not bugs in the rules, but found and handled by the properties:
   a delayed trigger's ability as it triggers). The comparisons rename them consistently.
 * Prompts name players by seat ("attacking P2") and objects by id ("Forest #53"); the
   comparison renames those.
+* Properties 5–8 found these to be the rules, not bugs: a copy of a card with an "as this
+  enters" choice that sets characteristics makes its own choice on top of the copied
+  values (Corrupted Shapeshifter's rulings); a copy of a double-faced card that isn't
+  double-faced can't transform (CR 701.27c); a copy of a Clone-like creature applies the
+  copied "enter as a copy" ability too (Corrupted Shapeshifter's rulings); a copy of an
+  Aura that can't enchant anything can't enter.
+* Before the decks are shuffled, objects have ids in the order the decks were given (the
+  hidden information property compares first requests once the opening hands are drawn).
+  Registered as the policy `deck-order-ids-before-shuffle`
+  (docs/interpretations/decisions-policies.md).
 
 ## Remaining gaps
 
@@ -353,6 +380,26 @@ Not bugs in the rules, but found and handled by the properties:
   determinism compare the whole game.
 * **Rollback checks are sampled in long games**: the first 30 actions a game's players
   start, then every fifth (each check copies and prints the whole game).
+* **Copies.** The static check copies permanents in four ways and spells by
+  `copy::copy_spell`; copies of activated and triggered abilities aren't covered, and a
+  spell copy's resolution is only compared for permanent spells (as a token). "Enters as
+  a copy" uses Clone, Sculpting Steel, Copy Enchantment or Vesuva, so a planeswalker or
+  battle is copied only as a token and by becoming a copy. 743 copies couldn't be made in
+  the fixture (mostly spells with no legal target there or costs it can't pay). The
+  dynamic check's script is short (entering, the first four activated abilities with the
+  default choices, an attack, the next turn), and it stops once the card leaves the
+  battlefield.
+* **Hidden information** is checked where random play goes: decisions random agents
+  reach, with random decks and two fixed decks of secrets. Cards a decision shows from a
+  library are taken to be legitimately shown; a decision that wrongly showed another
+  player's library card wouldn't be caught.
+* **Mana payment** covers the 21 sources of the catalog: no mana abilities that cost mana
+  (filter lands, which the payer plans one per payment), no conditional mana (Eldrazi
+  Temple), no cost changes, convoke, delve or improvise, no "as though mana of any color",
+  and at most five sources.
+* **Combat damage** covers two players, blockers blocking several attackers only through
+  bands, no "bands with other", no damage prevention or redirection, and no "assigns
+  combat damage as though it weren't blocked".
 
 ## Results
 
@@ -391,3 +438,40 @@ and determinism found no engine bug.
 After merging the card-tier work (sessions and `mtg-sim` decks now default to verified
 cards; the property games keep using every fully supported card), 100 more games of each
 property (`--seed 20`) held.
+
+### Properties 5–8
+
+Latest runs (release build, 4-core machine, `--jobs 3`):
+
+| Property | Scope | Compared | Violations | Time (wall) |
+|---|---|---|---|---|
+| copies | all 31,181 cards of the pool | 173,906 copies (743 not made in the fixture) | 0 | 69 s (about 50 s of it compiling the cards) |
+| copies-dynamic | all 31,181 cards (`--stride 1`): 24,043 permanents | 76,235 steps | 0 | 95 s |
+| hidden | 400 games (`--seed 2`) | 88,177 decisions, 12,643,130 objects changed in the copies | 0 | 152 s |
+| hidden | 2,000 games (`--seed 3`) | 442,369 decisions, 63,422,643 objects changed in the copies | 0 | 795 s |
+| payment | 1,000,000 boards (`--seed 2`) and 200,000 (`--seed 1`) | 368,266 and 73,363 payable | 0 | 112 s and 22 s |
+| damage | 200,000 combats (`--seed 2`), 2,948 skipped | 2,323,462 joint assignments | 0 | 190 s |
+
+The first runs found the bugs above. The first full static copy run reported 328
+mismatches on 54 cards: 2 bugs (the exceptions of Clone-like cards on copies that copied
+nothing, 22 cards; Ixidron), and the rest the check's own mistakes, since fixed (a Clone
+can't copy a God that isn't a creature; a card whose "as this enters" ability sets
+characteristics makes its own choice; Jinnie Fay's replacement applied to the token copy
+it controlled). The first full dynamic run reported 26 differences: the link bugs above
+(Tyrannical Pitlord, Gelatinous Cube, Identity Thief, Parallel Thoughts, The Creation of
+Avacyn, Smuggler's Buggy; Crypt Champion's difference went with them), the ante card,
+and differences the rules call for (a double-faced card's copy that isn't double-faced
+can't transform, so the check copies double-faced cards with tokens; a copy is a different
+card once it leaves the battlefield — Elvish Eulogist counting itself in the graveyard,
+dredge — so the comparison stops there). The payment check found the pain-land bug in
+its first 20,000 boards (8 cases, all at 2 life); the damage check found the trample bug
+as soon as banded tramplers were generated (5 in 400 combats); the hidden information
+check found the command-zone ids at the start, the request ids, and Petty Larceny's cards
+(1 game in 2,000); its own mistakes are fixed (cards revealed since they were drawn are
+known; the cards of command-zone decks are numbered by position once shuffled).
+
+`cargo test` runs samples: the static copy check on every 20th name of the pool (1,558
+cards), the dynamic check on every 300th (104 cards), 300 payment boards, 60 combats, and
+six hidden-information tests (four games, ids at the start in 22 setups, request ids). They
+add about 11 s to `tests/properties` (33 s instead of 22 s in a debug build; the copy
+checks compile their cards) and 6 s for `crates/mtg-api/tests/hidden_information.rs`.

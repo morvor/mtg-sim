@@ -233,3 +233,15 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: Void, Menacing Ogre, Wheel of Misfortune, Mindblaze, Goblin Game, "As ~ enters, choose a number", bidding (Illicit Auction, Pain's Reward, ...), "move any number of counters".
 - Code: `crates/mtg-engine/src/choices.rs` (`MAX_CHOSEN_NUMBER`); `crates/mtg-engine/src/oracle/patterns/choice_grammar_secret_numbers.rs`, `choice_grammar_multi.rs`, `etb_choices.rs`, `r122_move_counters.rs`; `crates/mtg-engine/src/bidding.rs`.
 - Tests: `tests/cards/choices_number_ceiling.rs`.
+
+## deck-order-ids-before-shuffle: Until the decks are shuffled, cards' ids follow the order the decks were given in
+- Kind: policy
+- Status: decided
+- Rules: 103.3 "Each player shuffles their deck so that the cards are in a random order. Each player may then shuffle or cut their opponents’ decks. The players’ decks become their libraries." / 400.2 "... Library and hand are hidden zones, even if all the cards in one such zone happen to be revealed." / 401.2 "Each library must be kept in a single face-down pile. Players can’t look at or change the order of cards in a library."
+- Question: Object ids are visible to agents (an object in a hidden zone is shown with its id). Cards are made into objects from the deck lists as the game is set up, so their ids follow the lists' order. Does that tell anyone which hidden card is which?
+- Decision: Not once the decks are shuffled. Library objects keep their ids but aren't shown; cards drawn, moved or put anywhere become new objects with new ids (CR 400.7); the cards of face-down decks kept in the command zone (Attraction, planar and scheme decks) become new objects in their shuffled order (`zones::renumber_shuffled_deck`); conspiracies put into the command zone become new objects in random order. Before the decks are shuffled (the decisions of the game's setup, such as choosing who goes first or which conspiracies to put into the command zone), the ids of a deck's face-down cards in the command zone follow the order the deck was given in, which the shuffle then makes meaningless.
+- Alternatives: Make every card a new object, in random order, before any decision is asked; or shuffle the deck lists before making their objects (which would change every seeded game).
+- Why: Before the shuffle, the order of a deck is the player's own arrangement and says nothing about the game's hidden information once play begins; the hidden information property compares what players see from the opening hands on.
+- Affects: decisions during the game's setup (choosing the starting player, conspiracies, companions) in games with Attraction, planar or scheme decks.
+- Code: `crates/mtg-engine/src/game.rs` (`Game::new`); `crates/mtg-engine/src/zones.rs` (`renumber_shuffled_deck`); `crates/mtg-engine/src/start.rs` (`conspiracies_to_command_zone`); `crates/mtg-api/src/hidden.rs` (`check_start`).
+- Tests: `crates/mtg-api/tests/hidden_information.rs` (`object_ids_dont_tell_hidden_cards_apart`, `the_ids_of_face_down_decks_in_the_command_zone_dont_tell_their_cards`).

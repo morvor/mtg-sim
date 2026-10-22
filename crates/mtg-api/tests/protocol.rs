@@ -179,15 +179,20 @@ fn illegal_attacks_are_rejected_with_the_reason() {
 fn drive(s: &mut Session, seed: u64) -> (u32, u32) {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let (mut asked, mut errors) = (0, 0);
-    let mut last_id = 0;
+    // Ids number each seat's own decisions (hidden information: not the others').
+    let mut last_id: std::collections::HashMap<u8, u64> = Default::default();
     while let Some(req) = s.next() {
         asked += 1;
+        let last = last_id.get(&req.seat).copied().unwrap_or(0);
         if req.error.is_some() {
             errors += 1;
         } else {
-            assert_ne!(req.id, last_id, "a new decision has a new id");
+            assert!(
+                req.id > last,
+                "a new decision of the seat has a new, greater id"
+            );
         }
-        last_id = req.id;
+        last_id.insert(req.seat, req.id);
         assert!(req.observation.is_some());
         let a = common::random_answer(&req, &mut rng);
         s.answer(PlayerId(req.seat), a).unwrap();

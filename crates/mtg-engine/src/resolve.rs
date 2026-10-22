@@ -303,6 +303,22 @@ impl Game {
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let res = crate::merge::found_all(self, res);
+                // "Look at the top two cards of target opponent's library and exile those
+                // cards face down": the player who looked at them may go on looking at them
+                // (CR 406.3).
+                if *face_down {
+                    let looked = ctx.vars.get(&vars::DUG).cloned().unwrap_or_default();
+                    let seen: Vec<ObjectId> = res
+                        .iter()
+                        .copied()
+                        .filter(|n| {
+                            self.obj(*n)
+                                .prev
+                                .is_some_and(|p| looked.contains(&Entity::Object(p)))
+                        })
+                        .collect();
+                    crate::zones::looked_then_exiled(self, ctx.controller, &seen);
+                }
                 self.current_link = prev_link;
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 // "Exile a creature card from your graveyard. If you do, ...": whether

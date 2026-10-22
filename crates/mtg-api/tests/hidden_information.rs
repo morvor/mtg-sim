@@ -90,6 +90,7 @@ fn requests_dont_depend_on_hidden_information_in_random_games() {
 #[test]
 fn object_ids_dont_tell_hidden_cards_apart() {
     cr!("400.2", "401.2", "402.3");
+    interp!("deck-order-ids-before-shuffle");
     for seed in 1..=3 {
         check_start(&config(seed), &secret_decks(), seed)
             .unwrap_or_else(|e| panic!("secret decks, seed {seed}: {e}"));
@@ -136,6 +137,7 @@ const ATTRACTIONS: [&str; 10] = [
 #[test]
 fn the_ids_of_face_down_decks_in_the_command_zone_dont_tell_their_cards() {
     cr!("400.2", "406.3", "103.3a", "717.2");
+    interp!("deck-order-ids-before-shuffle");
     let lands = [(20usize, "Plains"), (20, "Island")];
     let attractions = vec![with(&lands, &ATTRACTIONS), with(&lands, &ATTRACTIONS[..3])];
     for seed in 1..=3 {
@@ -210,4 +212,60 @@ fn the_ids_of_face_down_conspiracies_dont_tell_them_apart() {
         )
         .unwrap_or_else(|e| panic!("{e}"));
     }
+}
+
+/// P1's first request after the opening-hand actions in a session where P0 (who goes
+/// first) holds `deck` and declines everything it's offered.
+fn first_request_of_p1(deck: Vec<Arc<CardDef>>) -> String {
+    use mtg_api::{AnswerSpec, JsonAnswer, ProtocolOptions, Seat, Session};
+    let config = GameConfig {
+        seed: 5,
+        starting_player: Some(PlayerId(0)),
+        ..Default::default()
+    };
+    let options = ProtocolOptions {
+        min_card_tier: mtg_engine::card_tiers::Tier::Unsupported,
+        ..Default::default()
+    };
+    let mut s = Session::start(
+        config,
+        vec![deck, deck_of_plains()],
+        vec![Seat::External, Seat::External],
+        options,
+    )
+    .unwrap();
+    let mut p1 = 0;
+    while let Some(req) = s.next() {
+        if req.seat == 1 {
+            p1 += 1;
+            // Its first decision after the opening-hand actions (CR 103.6): the second.
+            if p1 == 2 {
+                return serde_json::to_string(&req).unwrap();
+            }
+            s.answer(PlayerId(1), JsonAnswer::yes_no(false)).unwrap();
+            continue;
+        }
+        let a = match req.answer {
+            AnswerSpec::YesNo => JsonAnswer::yes_no(false),
+            _ => JsonAnswer::default_choice(),
+        };
+        s.answer(PlayerId(0), a).unwrap();
+    }
+    panic!("P1 was never asked anything");
+}
+
+fn deck_of_plains() -> Vec<Arc<CardDef>> {
+    deck(&[(40, "Plains")])
+}
+
+/// A request's id numbers the seat's own decisions: counting every player's would tell P1
+/// that P0 was asked whether to begin the game with a Leyline from their opening hand.
+#[test]
+fn request_ids_dont_count_other_players_hidden_decisions() {
+    cr!("400.2", "402.3", "103.6");
+    let leylines = deck(&[(20, "Plains"), (20, "Leyline of the Void")]);
+    assert_eq!(
+        first_request_of_p1(leylines),
+        first_request_of_p1(deck_of_plains())
+    );
 }
