@@ -367,3 +367,22 @@ fn oath_of_ghouls_targets_an_opponent_with_fewer_creature_cards_in_their_graveya
         .collect();
     assert_eq!(players.first(), Some(&vec![Entity::Player(P1)]));
 }
+
+#[test]
+fn oath_of_druids_reveals_until_a_creature_if_the_first_player_does() {
+    cr!("115.1", "701.20a");
+    supported("Oath of Druids");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Druids");
+    t.battlefield(P1, "Hill Giant");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Forest");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    // The draw step hasn't happened: the revealed cards are the ones put on top.
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.in_graveyard(P0, "Forest"));
+}

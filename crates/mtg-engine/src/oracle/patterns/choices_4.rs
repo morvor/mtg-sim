@@ -807,6 +807,21 @@ pub(super) fn fewer_cards_in_graveyard(r: &str, who: &PlayerRef) -> Option<Playe
     Some(PlayerFilter::History(Box::new(cond)))
 }
 
+/// "If the first player does, ..." (Oath of Druids): "the first player" is the player who
+/// chose the target ("that player chooses target player ..."), the one given the optional
+/// instruction; as "if they do".
+fn if_the_first_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if the first player does, ") else {
+        return false;
+    };
+    if !b.named.iter().any(|(n, _)| n == "the first player") {
+        return false;
+    }
+    crate::oracle_ext::apply_followup_ext(&format!("if they do, {r}"), prev, b)
+}
+
+inventory::submit! { FollowupPattern { name: "choices 4: if the first player does", priority: 10, apply: if_the_first_player_does } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -832,6 +847,7 @@ mod tests {
             ("Legendary Creature", "Whenever you attack, target attacking creature can't be blocked this turn. It connives. Then choose another attacking creature with lesser power. That creature gains double strike until end of turn."),
             ("Creature", "{B}, {T}: Choose target opponent who has at least two fewer creature cards in their graveyard than you do as you activate this ability. Destroy target nonblack creature that player controls."),
             ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player whose graveyard has fewer creature cards in it than their graveyard does and is their opponent. The first player may return a creature card from their graveyard to their hand."),
+            ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player who controls more creatures than they do and is their opponent. The first player may reveal cards from the top of their library until they reveal a creature card. If the first player does, that player puts that card onto the battlefield and all other cards revealed this way into their graveyard."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
