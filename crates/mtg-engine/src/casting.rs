@@ -3695,7 +3695,7 @@ impl Game {
             CostPart::DiscardSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
-                if self.discard(p, s, src).is_none() {
+                if self.discard_for_cost(p, s, src).is_none() {
                     return bad("can't discard");
                 }
             }
@@ -3738,13 +3738,13 @@ impl Game {
                 };
                 for c in pick {
                     paid.objects.push(c);
-                    self.discard(p, c, src);
+                    self.discard_for_cost(p, c, src);
                 }
             }
             CostPart::DiscardHand => {
                 for c in self.player(p).hand.clone() {
                     paid.objects.push(c);
-                    self.discard(p, c, src);
+                    self.discard_for_cost(p, c, src);
                 }
             }
             CostPart::ExileSelf => {
@@ -4185,6 +4185,21 @@ impl Game {
         Ok(())
     }
 
+    /// Discards `card` to pay a cost (CR 701.9a). A cost isn't an effect, wherever it's
+    /// paid ("unless you discard a card" as an ability resolves, CR 118.12, too):
+    /// `discard_rules::DISCARDED_BY_EFFECT` doesn't match it.
+    fn discard_for_cost(
+        &mut self,
+        p: PlayerId,
+        card: ObjectId,
+        src: Option<ObjectId>,
+    ) -> Option<ObjectId> {
+        self.special.cost_discards += 1;
+        let new = self.discard(p, card, src);
+        self.special.cost_discards -= 1;
+        new
+    }
+
     /// Rough upper bound of mana the player could produce now (for choosing X).
     pub fn max_mana_available(&self, p: PlayerId) -> u32 {
         self.player(p).mana_pool.total() as u32
@@ -4291,8 +4306,9 @@ pub fn add_cost(total: &mut Cost, c: &Cost) {
 }
 
 /// Cost parts involving random elements or moving objects from a library to a public
-/// zone (CR 601.2h).
-fn cost_part_pays_last(c: &CostPart) -> bool {
+/// zone (CR 601.2h): paid after every other part of the cost. (Public for the CR 733.1
+/// reachability scan, `tests/cr/r733_001_reversal_reachability.rs`.)
+pub fn cost_part_pays_last(c: &CostPart) -> bool {
     matches!(
         c,
         CostPart::Discard { random: true, .. }

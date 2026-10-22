@@ -76,8 +76,9 @@ impl KeywordRules for CumulativeUpkeep {
 
 inventory::submit! { KeywordRegistration(&CumulativeUpkeep) }
 
-/// Multiplies the count of a cost part by `n`, or returns None if it has no count.
-fn scaled(part: &CostPart, n: i64) -> Option<CostPart> {
+/// Multiplies the count of a cost part by `n`, or returns None if it has no count. (Public
+/// for the CR 733.1 reachability scan, `tests/cr/r733_001_reversal_reachability.rs`.)
+pub fn scaled(part: &CostPart, n: i64) -> Option<CostPart> {
     let m = |v: &Value| Value::Mul(Box::new(Value::c(n as i32)), Box::new(v.clone()));
     Some(match part {
         CostPart::PayLife(v) => CostPart::PayLife(m(v)),

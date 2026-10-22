@@ -155,7 +155,11 @@ fn carissa_chooses_alexs_mode_although_he_is_out_of_her_range() {
         .collect();
     assert_eq!(asked, vec![carissa]);
     t.resolve_all();
-    assert_eq!(t.hand_size(alex), hand - 1 + 2, "Carissa chose \"you draw two cards\"");
+    assert_eq!(
+        t.hand_size(alex),
+        hand - 1 + 2,
+        "Carissa chose \"you draw two cards\""
+    );
 }
 
 #[test]
@@ -213,7 +217,11 @@ fn rob_aura(t: &mut TestGame, rob: PlayerId, name: &str, trigger: &str, to: Obje
 #[test]
 fn becomes_blocked_triggers_but_becomes_blocked_by_a_creature_out_of_range_doesnt() {
     cr!("801.7", "509.3c", "509.3d");
-    cr_example!("801.7", "Whenever enchanted creature becomes blocked by a creature");
+    cr_example!(
+        "801.7",
+        "Whenever enchanted creature becomes blocked by a creature"
+    );
+    interp!("range-combat-trigger-events");
     supported("Runeclaw Bear");
     // Rob is P0, Alex (to his left) P1; Alex attacks P2, two seats from Rob.
     let (rob, alex, left) = (P0, P1, P2);
@@ -246,8 +254,20 @@ fn becomes_blocked_triggers_but_becomes_blocked_by_a_creature_out_of_range_doesn
     let mut t = TestGame::with_config(5, GameConfig::free_for_all());
     let bear = t.battlefield(alex, "Runeclaw Bear");
     let blocker = t.battlefield(left, "Grizzly Bears");
-    rob_aura(&mut t, rob, "Blocked Aura", "Whenever enchanted creature becomes blocked, you gain 1 life.", bear);
-    rob_aura(&mut t, rob, "Blocked By Aura", "Whenever enchanted creature becomes blocked by a creature, you gain 2 life.", bear);
+    rob_aura(
+        &mut t,
+        rob,
+        "Blocked Aura",
+        "Whenever enchanted creature becomes blocked, you gain 1 life.",
+        bear,
+    );
+    rob_aura(
+        &mut t,
+        rob,
+        "Blocked By Aura",
+        "Whenever enchanted creature becomes blocked by a creature, you gain 2 life.",
+        bear,
+    );
     t.set_step(alex, Step::BeginningOfCombat);
     declare(&mut t, &[(bear, Entity::Player(left))]);
     block(&mut t, left, &[(blocker, bear)]);
@@ -285,13 +305,16 @@ fn extractor_demon_carissas_triggers_and_alexs_doesnt() {
     t.g.destroy(bear, None);
     t.settle();
     assert!(t.in_graveyard(alex, "Runeclaw Bear"));
-    let sources: Vec<ObjectId> = t
-        .g
-        .stack
-        .iter()
-        .map(|s| t.g.ability_source_of(*s))
-        .collect();
-    assert_eq!(sources, vec![carissa_demon], "only Carissa's Demon triggered");
+    let sources: Vec<ObjectId> =
+        t.g.stack
+            .iter()
+            .map(|s| t.g.ability_source_of(*s))
+            .collect();
+    assert_eq!(
+        sources,
+        vec![carissa_demon],
+        "only Carissa's Demon triggered"
+    );
     assert!(!sources.contains(&alex_demon));
     let lib = t.library_size(P3);
     t.resolve_all();
@@ -382,7 +405,10 @@ fn prevent_creature_damage() -> mtg_engine::card::CardDef {
 #[test]
 fn alexs_creature_damage_prevention_doesnt_stop_carissas_creature() {
     cr!("801.13b");
-    cr_example!("801.13b", "Prevent all damage that would be dealt by creatures");
+    cr_example!(
+        "801.13b",
+        "Prevent all damage that would be dealt by creatures"
+    );
     // Alex (P0), Rob (P1), Carissa (P2).
     let (alex, rob, carissa) = (P0, P1, P2);
     let mut t = ranged(5, 1);
@@ -437,6 +463,12 @@ fn alexs_fog_doesnt_prevent_combat_damage_between_carissa_and_rob() {
     t.resolve();
     assert!(t.in_graveyard(alex, "Fog"));
     go_to(&mut t, Step::EndOfCombat);
-    assert!(!t.on_battlefield(attacker), "Rob's creature dealt it damage");
-    assert!(!t.on_battlefield(blocker), "Carissa's creature dealt it damage");
+    assert!(
+        !t.on_battlefield(attacker),
+        "Rob's creature dealt it damage"
+    );
+    assert!(
+        !t.on_battlefield(blocker),
+        "Carissa's creature dealt it damage"
+    );
 }

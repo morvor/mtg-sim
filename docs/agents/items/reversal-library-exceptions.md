@@ -4,12 +4,17 @@ WHY: on Oct 21 the user decided to follow CR 733.1 exactly (register entry `ille
 
 - **What the rules say.** 733.1 ends: "Players may not reverse actions that moved cards to a library, moved cards from a library to any zone other than the stack, caused a library to be shuffled, or caused cards from a library to be revealed."
 - **What the engine does.** It reverses an illegal action by restoring a copy of the whole game taken before the attempt (`Game::roll_back`). That also undoes those library actions.
-- **Which cards reach it.** The scan test `tests/cr/r733_001_reversal_reachability.rs` found 16 fully supported cards (`KNOWN_REACHABLE`). Each has a replacement effect that turns an ordinary payment into a library action:
+- **Which cards reach it.** The scan test `tests/cr/r733_001_reversal_reachability.rs` found 22 fully supported cards (`KNOWN_REACHABLE`; the user was told of the first 16, and the decision covers all of them). Each has a replacement effect, or a rule implemented in code, that turns something in the middle of a payment into a library action:
   - Darksteel Colossus or Progenitus sacrificed for mana: the card is shuffled into its owner's library instead;
   - Ashiok, Wicked Manipulator: paying life exiles cards from the top of your library instead;
   - Lich: gaining life draws cards instead;
   - Angel of Suffering with Shivan Reef's damage: the damage mills instead;
-  - and the others the test lists.
+  - the five found later reach it through longer chains:
+    - a redirection (Swans of Bryn Argoll with Pariah);
+    - a loss (Lich's Mirror with Nefarious Lich; Stunning Reversal);
+    - a card returning from an "until" exile while a payment is made: Banisher Priest is sacrificed to Ashnod's Altar for mana, and Don't Blink's effect shuffles the creature it had exiled into its owner's library;
+    - Library of Leng and Nephalia Academy, counted conservatively;
+  - and the others the test lists, with the game tests that reproduce each chain.
 
   For example, cast Fling with Ashnod's Altar, Darksteel Colossus and a Mountain. You sacrifice the Colossus to the Altar for mana, which shuffles it into its owner's library. No creature is left for Fling's sacrifice, so the cast is reversed, but by the rules the Colossus stays in the library.
 
