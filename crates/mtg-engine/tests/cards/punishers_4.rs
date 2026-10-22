@@ -184,3 +184,27 @@ fn sirocco_each_blue_instant_is_discarded_unless_its_owner_pays_four_life() {
     assert!(t.in_hand(P1, "Opt"));
     assert_eq!(t.life(P1), 12);
 }
+
+#[test]
+fn sivriss_mills_for_each_opponent_and_returns_unless_they_pay() {
+    cr!("118.12a");
+    ruling!(
+        "Sivriss, Nightmare Speaker",
+        "first mill a card for the first opponent in turn order"
+    );
+    supported("Sivriss, Nightmare Speaker");
+    let mut t = TestGame::new(3);
+    let s = t.battlefield(P0, "Sivriss, Nightmare Speaker");
+    let orni = t.battlefield(P0, "Ornithopter");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(orni)]);
+    // P1 (first) doesn't pay; P2 pays.
+    t.answer_yes(P1, false);
+    t.answer_yes(P2, true);
+    t.activate(P0, s, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Hill Giant"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!((t.life(P1), t.life(P2)), (20, 17));
+}

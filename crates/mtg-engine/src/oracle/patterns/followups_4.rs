@@ -1402,6 +1402,43 @@ fn for_each_revealed_discard_unless(l: &str, prev: &mut Effect, b: &mut Builder)
 
 inventory::submit! { FollowupPattern { name: "followups 4: for each card revealed this way, that player discards that card unless they pay", priority: 25, apply: for_each_revealed_discard_unless } }
 
+/// "For each opponent, you mill a card, then return that card from your graveyard to your
+/// hand unless that player pays 3 life." (Sivriss, Nightmare Speaker): for each opponent in
+/// turn order, one at a time, you mill a card, that opponent decides whether to pay, and
+/// the card returns unless they paid (Sivriss rulings; CR 118.12a).
+fn for_each_opponent_mill_return_unless(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("for each opponent, you mill a card, then return that card from your graveyard to your hand unless that player pays ")?;
+    let cost_text = if r.starts_with('{') {
+        r.to_string()
+    } else {
+        format!("pay {r}")
+    };
+    let cost = crate::oracle::keywords::parse_keyword_cost(&cost_text)?;
+    Some(Effect::InTurnOrder {
+        first: TurnOrderStart::NextOpponent,
+        who: PlayerFilter::Opponent,
+        effect: Box::new(Effect::seq(vec![
+            Effect::Mill {
+                who: PlayerRef::You,
+                n: Value::c(1),
+            },
+            Effect::PayOptional {
+                who: PlayerRef::Iterated,
+                cost,
+                then: Box::new(Effect::Noop),
+                otherwise: Box::new(Effect::Move {
+                    what: Sel::Var(vars::DUG),
+                    to: Destination::zone(ZoneKind::Hand),
+                }),
+            },
+        ])),
+        direction: Default::default(),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: for each opponent, you mill a card, then return that card unless that player pays", priority: 120, parse: for_each_opponent_mill_return_unless } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1426,6 +1463,7 @@ mod tests {
             ("Sorcery", "Choose target nonland permanent. Its owner may put it on top of their library. If they do, ~ deals 2 damage to them. If they didn't put the card on top of their library, they put it on the bottom."),
             ("Legendary Creature", "Whenever ~ deals combat damage to a player, that player gains control of target permanent you control. Then each player loses life and discards cards equal to the number of permanents they control but don't own."),
             ("Instant", "Target player reveals their hand. For each blue instant card revealed this way, that player discards that card unless they pay 4 life."),
+            ("Legendary Creature", "{T}, Sacrifice another creature or an artifact: For each opponent, you mill a card, then return that card from your graveyard to your hand unless that player pays 3 life."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
