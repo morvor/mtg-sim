@@ -710,6 +710,31 @@ fn pair_reveal_followups(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "choices 4: each lose life equal to the card revealed by the other player", priority: 120, apply: pair_reveal_followups } }
 
+/// "Cast this spell only during an opponent's turn. Tap target creature that player
+/// controls. That creature deals damage equal to its power to the player." (Delirium):
+/// "that player" and "the player" are the opponent whose turn it is, the active player.
+fn that_player_whose_turn_it_is(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("cast this spell only during an opponent's turn") {
+        return None;
+    }
+    if l.contains("that player")
+        && super::oracle_hardening_referents::is_no_player_referent(&b.it_player)
+    {
+        let e = parse_clause(&l.replace("that player", "the active player"), b)?;
+        b.it_player = PlayerRef::ActivePlayer;
+        return Some(e);
+    }
+    let h = l.strip_suffix(" to the player")?;
+    if !matches!(b.it_player, PlayerRef::ActivePlayer) {
+        return None;
+    }
+    parse_clause(&format!("{h} to that player"), b)
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: that player during an opponent's turn (the active player)", priority: 120, parse: that_player_whose_turn_it_is } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -731,6 +756,7 @@ mod tests {
             ("Sorcery", "Convoke\nFor each player, you choose a creature that player controls. Then each player sacrifices all other creatures they control that don't share a creature type with the chosen creature they control."),
             ("Creature", "At the beginning of your upkeep, you and target opponent each reveal the top card of your library. You each lose life equal to the mana value of the card revealed by the other player. You each put the card you revealed into your hand."),
             ("Enchantment", "At the beginning of your end step, two target players each reveal the top card of their library. They each lose life equal to the mana value of the card revealed by the other player. Then they each put the card they revealed into their hand."),
+            ("Instant", "Cast this spell only during an opponent's turn.\nTap target creature that player controls. That creature deals damage equal to its power to the player. Prevent all combat damage that would be dealt to and dealt by the creature this turn."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

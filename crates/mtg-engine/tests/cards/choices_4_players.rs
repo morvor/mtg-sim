@@ -271,3 +271,25 @@ fn parker_luck_two_target_players_each_lose_the_others_mana_value() {
     assert!(t.in_hand(P1, "Hill Giant"));
     assert!(t.in_hand(P2, "Lightning Bolt"));
 }
+
+#[test]
+fn delirium_the_active_players_creature_deals_damage_to_them() {
+    cr!("608.2c");
+    ruling!(
+        "Delirium",
+        "Tapping the creature is part of the effect and not the cost, therefore you can cast this targeting a tapped creature."
+    );
+    supported("Delirium");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 1);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Delirium");
+    t.advance_to(P1, Step::PrecombatMain);
+    t.g.objects[giant.0 as usize].tapped = true;
+    t.cast(P0, spell).target(Entity::Object(giant)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20);
+    assert!(t.obj_now(giant).tapped);
+}
