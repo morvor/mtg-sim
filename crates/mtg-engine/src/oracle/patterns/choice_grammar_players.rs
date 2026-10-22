@@ -135,6 +135,18 @@ fn choose_a_player(l: &str, b: &mut Builder) -> Option<Effect> {
                 Box::new(Value::LifeTotal(PlayerRef::Iterated)),
             )),
         )),
+        // "choose an opponent with the most life among your opponents" (The Master,
+        // Gallifrey's End): any of them tied for the most.
+        "with the most life among your opponents" if matches!(base, PlayerFilter::Opponent) => {
+            Some(PlayerFilter::Life(
+                Cmp::Ge,
+                Box::new(Value::OverPlayers(
+                    AggOp::Max,
+                    PlayerFilter::Opponent,
+                    Box::new(Value::LifeTotal(PlayerRef::Iterated)),
+                )),
+            ))
+        }
         _ => Some(compared_with_you(rest)?),
     };
     // "choose an opponent" alone is the core's (the ETB-style choice).
@@ -179,7 +191,8 @@ fn that_player_chooses_target_player(l: &str, b: &mut Builder) -> Option<Effect>
     spec.chosen_by = Some(chooser.clone());
     let slot = b.add_target(spec, &text);
     b.it_player = chooser.clone();
-    b.named.push(("the first player".into(), Sel::Players(chooser)));
+    b.named
+        .push(("the first player".into(), Sel::Players(chooser)));
     b.named.push((
         "the second player".into(),
         Sel::Players(PlayerRef::Target(slot)),

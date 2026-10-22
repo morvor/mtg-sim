@@ -130,3 +130,33 @@ fn seize_the_spotlight_fame_steals_and_untaps_fortune_draws() {
             .count();
     assert_eq!(treasures, 1);
 }
+
+#[test]
+fn the_master_chooses_an_opponent_with_the_most_life_who_faces_a_villainous_choice() {
+    cr!("701.55a");
+    supported("The Master, Gallifrey's End");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "The Master, Gallifrey's End");
+    let orni = t.battlefield(P0, "Ornithopter");
+    t.g.player_mut(P2).life = 15;
+    t.answer_yes(P0, true);
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    t.g.destroy(orni, None);
+    t.resolve_all();
+    assert_eq!((t.life(P1), t.life(P2)), (16, 15));
+    assert!(t.in_exile("Ornithopter"));
+    // Only P1 could be chosen.
+    let players: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            decision::Decision::ChooseEntities { candidates, .. }
+                if candidates.iter().all(|c| matches!(c, Entity::Player(_))) =>
+            {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(players.iter().all(|c| c == &vec![Entity::Player(P1)]));
+}
