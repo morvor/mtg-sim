@@ -269,7 +269,8 @@ pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
     {
         return None;
     }
-    let mut text = effect.to_string();
+    // (Plural "the exiled cards" is kept as written, see below.)
+    let mut text = effect.replace("the exiled cards", "\u{1}");
     let mut changed = false;
     for (from, to) in [
         ("the exiled card", "that card"),
@@ -280,6 +281,12 @@ pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
             text = text.replace(from, to);
             changed = true;
         }
+    }
+    // "An opponent chooses one of the exiled cards." (Coin of Fate): the cards are what
+    // "it" refers to (`oracle/patterns/choices_4.rs`).
+    if text.contains('\u{1}') {
+        text = text.replace('\u{1}', "the exiled cards");
+        changed = true;
     }
     // "Exile a face-down permanent you control face up: You may play that card this
     // turn." (Primordial Mist): "that card", before the effect names anything else.

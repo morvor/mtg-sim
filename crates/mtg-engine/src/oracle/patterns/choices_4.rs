@@ -1192,6 +1192,68 @@ fn choose_then_that_player_chooses(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: choose a card in an opponent's graveyard, then that player chooses one in yours", priority: 120, parse: choose_then_that_player_chooses } }
 
+/// The card an opponent chose among the cards a cost exiled, and the others.
+const OPPONENT_CHOSE: Var = vars::USER + 41041;
+const NOT_CHOSEN: Var = vars::USER + 41042;
+
+/// "An opponent chooses one of the exiled cards." (Coin of Fate): the cards the ability's
+/// exile cost exiled (CR 400.7j); the opponent who chooses is chosen by you (CR 801.5a,
+/// see `Game::deciding_opponent`). "That card" is the chosen one and "the other" the rest.
+fn an_opponent_chooses_one_of_the_exiled(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "an opponent chooses one of the exiled cards" {
+        return None;
+    }
+    if !matches!(b.it, Sel::Var(v) if v == crate::zones::COST_EXILED) {
+        return None;
+    }
+    let exiled = Sel::Var(crate::zones::COST_EXILED);
+    let e = Effect::seq(vec![
+        crate::kw::choice_grammar::deciding_opponent_effect(TAKER)?,
+        Effect::Store {
+            var: OPPONENT_CHOSE,
+            sel: Sel::Choose {
+                chooser: PlayerRef::Var(TAKER),
+                filter: Filter::In(Box::new(exiled.clone())),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Store {
+            var: NOT_CHOSEN,
+            sel: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(exiled)),
+                Filter::not(Filter::In(Box::new(Sel::Var(OPPONENT_CHOSE)))),
+            ])),
+        },
+    ]);
+    b.it = Sel::Var(OPPONENT_CHOSE);
+    b.named.push(("the other".into(), Sel::Var(NOT_CHOSEN)));
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: an opponent chooses one of the exiled cards", priority: 120, parse: an_opponent_chooses_one_of_the_exiled } }
+
+/// "You put that card on the bottom of your library and return the other to the
+/// battlefield tapped." after [`an_opponent_chooses_one_of_the_exiled`].
+fn that_card_and_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    let (first, second) = l.split_once(" and return the other ")?;
+    let other = b
+        .named
+        .iter()
+        .find(|(n, _)| n == "the other")
+        .map(|(_, s)| s.clone())?;
+    let e1 = parse_clause(first, b)?;
+    let saved = std::mem::replace(&mut b.it, other);
+    let e2 = parse_clause(&format!("return it {second}"), b);
+    b.it = saved;
+    Some(Effect::seq(vec![e1, e2?]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: [that card] and return the other", priority: 120, parse: that_card_and_the_other } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1224,6 +1286,7 @@ mod tests {
             ("Creature", "At the beginning of your upkeep, sacrifice two Swamps. If you can't, tap ~, and an opponent may gain control of a creature you control of their choice for as long as ~ remains on the battlefield.\n{T}: Gain control of target creature for as long as ~ remains on the battlefield."),
             ("Creature", "First strike\n{T}: Reveal your hand and discard a card of target opponent's choice. Then that player reveals their hand and discards a card of your choice. Activate only as a sorcery."),
             ("Creature", "Flying\nAt the beginning of your end step, choose a creature card in an opponent's graveyard, then that player chooses a creature card in your graveyard. You may return those cards to the battlefield under their owners' control."),
+            ("Artifact", "When ~ enters, surveil 1.\n{3}{W}, {T}, Exile two creature cards from your graveyard, Sacrifice ~: An opponent chooses one of the exiled cards. You put that card on the bottom of your library and return the other to the battlefield tapped. You become the monarch."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

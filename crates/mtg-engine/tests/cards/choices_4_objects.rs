@@ -365,3 +365,25 @@ fn dawnbreak_reclaimer_each_chooses_and_both_return_under_their_owners_control()
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+#[test]
+fn coin_of_fate_an_opponent_chooses_one_of_the_exiled_cards() {
+    cr!("400.7j", "602.2b");
+    supported("Coin of Fate");
+    let mut t = TestGame::new(2);
+    let coin = t.battlefield(P0, "Coin of Fate");
+    t.lands(P0, "Plains", 4);
+    let giant = t.graveyard(P0, "Hill Giant");
+    let angel = t.graveyard(P0, "Serra Angel");
+    t.answer_choose(P0, &[Entity::Object(giant), Entity::Object(angel)]);
+    // The opponent picks the Serra Angel (as it is in exile now) for the library.
+    t.answer_choose_moved(P1, &[Entity::Object(angel)]);
+    t.activate(P0, coin, 0, &[]).unwrap();
+    t.resolve_all();
+    let bottom = *t.g.player(P0).library.first().expect("library");
+    assert_eq!(t.obj_now(bottom).chars.name.as_str(), "Serra Angel");
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert!(t.obj_now(g[0]).tapped);
+    assert_eq!(t.g.monarch, Some(P0));
+}
