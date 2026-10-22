@@ -671,6 +671,10 @@ pub struct Game {
     /// Game-level designations.
     pub monarch: Option<PlayerId>,
     pub initiative: Option<PlayerId>,
+    /// The game's turn order has been reversed an odd number of times ("Reverse the
+    /// game's turn order."): play proceeds to the right instead of to the left
+    /// (CR 101.4). Seats don't move (`seats.rs`).
+    pub turn_order_reversed: bool,
     /// Day/night (CR 731): None = neither.
     pub day: Option<bool>,
     /// Number of spells the active player cast last turn, for day/night (with shared
@@ -893,6 +897,7 @@ impl Game {
             dirty: true,
             monarch: None,
             initiative: None,
+            turn_order_reversed: false,
             day: None,
             spells_cast_last_turn_by_active: 0,
             extra_turns: vec![],
@@ -1043,9 +1048,8 @@ impl Game {
     /// (APNAP order, CR 101.4).
     pub fn apnap(&self) -> Vec<PlayerId> {
         let n = self.players.len();
-        let a = self.turn.active.idx();
         (0..n)
-            .map(|i| PlayerId(((a + i) % n) as u8))
+            .map(|i| self.seat_in_turn_order(self.turn.active, i))
             .filter(|p| self.player(*p).in_game())
             .collect()
     }
@@ -1086,11 +1090,25 @@ impl Game {
             .collect()
     }
 
+    /// The player `k` seats after `from` in turn order, counting every seat (players who
+    /// left the game included): to the left, or to the right once the game's turn order
+    /// has been reversed (CR 101.4).
+    pub fn seat_in_turn_order(&self, from: PlayerId, k: usize) -> PlayerId {
+        let n = self.players.len().max(1);
+        let k = k % n;
+        let i = if self.turn_order_reversed {
+            (from.idx() + n - k) % n
+        } else {
+            (from.idx() + k) % n
+        };
+        PlayerId(i as u8)
+    }
+
     /// Next player in turn order who is still in the game.
     pub fn next_player(&self, p: PlayerId) -> PlayerId {
         let n = self.players.len();
         for i in 1..=n {
-            let q = PlayerId(((p.idx() + i) % n) as u8);
+            let q = self.seat_in_turn_order(p, i);
             if self.player(q).in_game() {
                 return q;
             }

@@ -203,6 +203,10 @@ pub fn venture(g: &mut Game, p: PlayerId, source: Option<ObjectId>) {
 /// Ventures into the dungeon, or with `name`, "venture into [name]" (CR 701.49d): a new
 /// dungeon must be the named one.
 pub fn venture_into(g: &mut Game, p: PlayerId, source: Option<ObjectId>, name: Option<&str>) {
+    // CR 101.2: "can't venture" effects.
+    if crate::kw::venture_prohibited(g, p) {
+        return;
+    }
     let Some((d, room)) = marker(g, p) else {
         bring_in_dungeon(g, p, source, name);
         return;

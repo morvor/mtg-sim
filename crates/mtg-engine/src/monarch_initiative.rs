@@ -251,7 +251,7 @@ fn successor(g: &Game, leaving: PlayerId) -> Option<PlayerId> {
     }
     let n = g.players.len();
     (1..=n)
-        .map(|i| PlayerId(((active.idx() + i) % n) as u8))
+        .map(|i| g.seat_in_turn_order(active, i))
         .find(|q| *q != leaving && g.player(*q).in_game())
 }
 

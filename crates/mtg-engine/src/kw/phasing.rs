@@ -164,13 +164,14 @@ pub fn turns_would_have_begun(g: &mut Game, after: PlayerId, next: PlayerId) {
         return;
     }
     let mut skipped: Vec<PlayerId> = Vec::new();
-    let mut i = (after.idx() + 1) % n;
-    while i != next.idx() && i != after.idx() {
-        let q = PlayerId(i as u8);
+    for k in 1..n {
+        let q = g.seat_in_turn_order(after, k);
+        if q == next {
+            break;
+        }
         if !g.player(q).in_game() {
             skipped.push(q);
         }
-        i = (i + 1) % n;
     }
     if skipped.is_empty() {
         return;
