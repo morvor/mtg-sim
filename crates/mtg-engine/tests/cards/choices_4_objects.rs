@@ -310,3 +310,23 @@ fn infernal_denizen_without_swamps_an_opponent_may_take_a_creature_while_it_rema
     t.resolve_all();
     assert_eq!(t.obj_now(bears).controller, P0);
 }
+
+#[test]
+fn rakdos_augermage_each_discards_a_card_the_other_chooses() {
+    cr!("701.9a", "701.20a");
+    supported("Rakdos Augermage");
+    let mut t = TestGame::new(2);
+    let aug = t.battlefield(P0, "Rakdos Augermage");
+    let mine = t.hand(P0, "Lightning Bolt");
+    t.hand(P0, "Shock");
+    let theirs = t.hand(P1, "Hill Giant");
+    t.hand(P1, "Grizzly Bears");
+    t.answer_choose(P1, &[Entity::Object(mine)]);
+    t.answer_choose(P0, &[Entity::Object(theirs)]);
+    t.activate(P0, aug, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert!(t.in_hand(P0, "Shock"));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+}

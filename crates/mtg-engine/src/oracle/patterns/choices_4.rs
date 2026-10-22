@@ -1065,6 +1065,69 @@ fn an_opponent_may_take_one_of_their_choice(l: &str, _b: &mut Builder) -> Option
 
 inventory::submit! { EffectPattern { name: "choices 4: an opponent may gain control of a creature you control of their choice", priority: 120, parse: an_opponent_may_take_one_of_their_choice } }
 
+/// The card chosen by another player for a discard.
+const DISCARD_CHOSEN: Var = vars::USER + 41036;
+
+/// "Reveal your hand and discard a card of target opponent's choice." / "Then that player
+/// reveals their hand and discards a card of your choice." (Rakdos Augermage): the player
+/// reveals their hand, the other player chooses a card from it, and the first discards it.
+fn reveal_and_discard_of_choice(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (who, r) = if let Some(r) = l.strip_prefix("reveal your hand and discard a card of ") {
+        (PlayerRef::You, r)
+    } else if let Some(r) = l.strip_prefix("that player reveals their hand and discards a card of ")
+    {
+        let p = b.it_player.clone();
+        if super::oracle_hardening_referents::is_no_player_referent(&p)
+            || matches!(p, PlayerRef::You)
+        {
+            return None;
+        }
+        (p, r)
+    } else {
+        return None;
+    };
+    let chooser = match r {
+        "your choice" => PlayerRef::You,
+        "target opponent's choice" => {
+            let text = "target opponent";
+            let slot = b.add_target(TargetSpec::player(PlayerFilter::Opponent, text), text);
+            b.it_player = PlayerRef::Target(slot);
+            PlayerRef::Target(slot)
+        }
+        _ => return None,
+    };
+    if format!("{who:?}") == format!("{chooser:?}") {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        Effect::RevealHand { who: who.clone() },
+        Effect::Store {
+            var: DISCARD_CHOSEN,
+            sel: Sel::Choose {
+                chooser,
+                filter: Filter::and(vec![
+                    Filter::Card,
+                    Filter::InZone(ZoneKind::Hand),
+                    Filter::OwnedByPlayer(Box::new(who.clone())),
+                ]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Discard {
+            who,
+            n: Value::c(1),
+            random: false,
+            filter: Filter::In(Box::new(Sel::Var(DISCARD_CHOSEN))),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: reveal your hand and discard a card of [player]'s choice", priority: 120, parse: reveal_and_discard_of_choice } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1095,6 +1158,7 @@ mod tests {
             ("Instant", "Untap all creatures you control and all creatures target opponent controls. You and that opponent each gain control of all creatures the other controls until end of turn. Those creatures gain haste until end of turn."),
             ("Land", "{3}, {T}: Choose target permanent you control. Draw a card, then another player of your choice may gain control of that permanent. Activate only as a sorcery."),
             ("Creature", "At the beginning of your upkeep, sacrifice two Swamps. If you can't, tap ~, and an opponent may gain control of a creature you control of their choice for as long as ~ remains on the battlefield.\n{T}: Gain control of target creature for as long as ~ remains on the battlefield."),
+            ("Creature", "First strike\n{T}: Reveal your hand and discard a card of target opponent's choice. Then that player reveals their hand and discards a card of your choice. Activate only as a sorcery."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
