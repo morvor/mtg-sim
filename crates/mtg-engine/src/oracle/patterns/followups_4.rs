@@ -1439,6 +1439,81 @@ fn for_each_opponent_mill_return_unless(l: &str, _b: &mut Builder) -> Option<Eff
 
 inventory::submit! { EffectPattern { name: "followups 4: for each opponent, you mill a card, then return that card unless that player pays", priority: 120, parse: for_each_opponent_mill_return_unless } }
 
+/// The creature each player would sacrifice unless they pay its mana cost.
+const PRICED: Var = vars::USER + 41023;
+
+const TARIFF_TIES: &str =
+    "if two or more creatures a player controls are tied for greatest, that player chooses one";
+
+/// "Each player sacrifices the creature they control with the greatest mana value unless
+/// they pay that creature's mana cost. If two or more creatures a player controls are tied
+/// for greatest, that player chooses one." (Tariff): in APNAP order each player chooses
+/// among their creatures tied for the greatest mana value and whether to pay its mana cost
+/// (CR 118.12a); the creatures not paid for are sacrificed at the same time (Tariff
+/// rulings).
+fn sacrifices_greatest_unless_pay_its_cost(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("each player sacrifices the creature they control with the greatest mana value unless they pay that creature's mana cost")?;
+    if !r.is_empty() {
+        return None;
+    }
+    // Who breaks ties is said by the next sentence.
+    if !crate::oracle::raw_text()
+        .to_lowercase()
+        .contains(TARIFF_TIES)
+    {
+        return None;
+    }
+    let _ = b;
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(
+        "creature you control with the greatest mana value among creatures you control",
+    )?
+    else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(Effect::seq(vec![
+                Effect::Store {
+                    var: PRICED,
+                    sel: Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+                        count: Value::c(1),
+                        up_to: false,
+                        store: None,
+                    },
+                },
+                Effect::PayOptional {
+                    who: PlayerRef::You,
+                    cost: Cost {
+                        mana: None,
+                        parts: vec![CostPart::PayManaCostOf(Box::new(Sel::Var(PRICED)))],
+                    },
+                    then: Box::new(Effect::Noop),
+                    otherwise: Box::new(Effect::SacrificeObjects {
+                        what: Sel::Var(PRICED),
+                    }),
+                },
+            ])),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "followups 4: each player sacrifices the creature with the greatest mana value unless they pay its mana cost", priority: 120, parse: sacrifices_greatest_unless_pay_its_cost } }
+
+/// Tariff's tie sentence: already part of [`sacrifices_greatest_unless_pay_its_cost`].
+fn tariff_ties(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    end(l) == TARIFF_TIES && format!("{prev:?}").contains(&format!("var: {PRICED}"))
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: if two or more creatures a player controls are tied for greatest", priority: 120, apply: tariff_ties } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1464,6 +1539,7 @@ mod tests {
             ("Legendary Creature", "Whenever ~ deals combat damage to a player, that player gains control of target permanent you control. Then each player loses life and discards cards equal to the number of permanents they control but don't own."),
             ("Instant", "Target player reveals their hand. For each blue instant card revealed this way, that player discards that card unless they pay 4 life."),
             ("Legendary Creature", "{T}, Sacrifice another creature or an artifact: For each opponent, you mill a card, then return that card from your graveyard to your hand unless that player pays 3 life."),
+            ("Sorcery", "Each player sacrifices the creature they control with the greatest mana value unless they pay that creature's mana cost. If two or more creatures a player controls are tied for greatest, that player chooses one."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

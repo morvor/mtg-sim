@@ -208,3 +208,35 @@ fn sivriss_mills_for_each_opponent_and_returns_unless_they_pay() {
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert_eq!((t.life(P1), t.life(P2)), (20, 17));
 }
+
+#[test]
+fn tariff_each_player_pays_their_greatest_creatures_mana_cost_or_sacrifices_it() {
+    cr!("118.12a", "101.4");
+    ruling!(
+        "Tariff",
+        "you need to pay the creature's actual mana cost (including color) to keep it on the battlefield"
+    );
+    supported("Tariff");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Plains", 2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let p1_bears = t.battlefield(P1, "Grizzly Bears");
+    let lands = t.lands(P1, "Mountain", 4);
+    let a = t.battlefield(P2, "Grizzly Bears");
+    let b = t.battlefield(P2, "Runeclaw Bear");
+    let spell = t.hand(P0, "Tariff");
+    // P1 pays {3}{R} for the Hill Giant; P2 picks the Runeclaw Bear and doesn't pay.
+    t.answer_yes(P1, true);
+    t.answer_choose(P2, &[Entity::Object(b)]);
+    t.answer_yes(P2, false);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    // P0's lands paid for Tariff: P0 couldn't pay.
+    assert!(!t.on_battlefield(mine));
+    assert!(t.on_battlefield(giant));
+    assert!(t.on_battlefield(p1_bears));
+    assert!(lands.iter().all(|l| t.obj_now(*l).tapped));
+    assert!(t.on_battlefield(a));
+    assert!(!t.on_battlefield(b));
+}
