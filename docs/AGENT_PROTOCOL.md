@@ -328,7 +328,8 @@ name for one's own.
   `postcombat_main`, `ending`), `step` (`untap`, `upkeep`, `draw`, `precombat_main`,
   `beginning_of_combat`, `declare_attackers`, `declare_blockers`,
   `first_strike_damage`, `combat_damage`, `end_of_combat`, `postcombat_main`, `end`,
-  `cleanup`), `priority`, `day_night`, `monarch`, `initiative`, `result`.
+  `cleanup`), `priority`, `day_night`, `turn_order_reversed` (present and `true` once
+  the game's turn order has been reversed, Aeon Engine), `monarch`, `initiative`, `result`.
 * `players`: for each player `life`, `poison` and the other player `counters`,
   `mana_pool` (by type: `W`, `U`, `B`, `R`, `G`, `C`), `hand_count` and the `hand` cards
   the viewer may see, `library_count` and `library_known` (pairs of position from the

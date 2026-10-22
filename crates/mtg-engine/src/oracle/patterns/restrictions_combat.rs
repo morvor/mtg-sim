@@ -73,6 +73,7 @@ fn lockable(r: &Restriction) -> bool {
             | Restriction::CantAttackAlone(_)
             | Restriction::CantBlockAlone(_)
             | Restriction::MinBlockers { .. }
+            | Restriction::MaxBlockedBy { .. }
             | Restriction::CantBeTargeted { .. }
             | Restriction::CantBe { .. }
     )

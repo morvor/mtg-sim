@@ -375,7 +375,7 @@ impl Game {
     }
 
     fn each_slot_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
-        specs.iter().all(|s| {
+        specs.iter().enumerate().all(|(i, s)| {
             let min = self.target_min(s, ctx);
             // Targets chosen for each player: a player with no legal choice gets none.
             min == 0 || s.condition.is_some() || s.per_player.is_some() || {
@@ -394,6 +394,15 @@ impl Game {
                 } else {
                     self.legal_target_candidates(s, ctx, stack_obj)
                 };
+                // A slot about the player chosen as an earlier target ("Choose target
+                // opponent ... Destroy target creature that player controls"), before any
+                // target is chosen: possible with some legal target of that slot.
+                let cands = if cands.len() < min && ctx.targets.is_empty() {
+                    self.candidates_with_earlier_target(specs, i, ctx, stack_obj)
+                        .unwrap_or(cands)
+                } else {
+                    cands
+                };
                 cands.len() >= min
                     && s.together.as_ref().is_none_or(|grp| {
                         crate::target_groups::find_group(self, grp, &cands, min, ctx).is_some()
@@ -401,6 +410,34 @@ impl Game {
                     && self.related_partner_possible(specs, s, &cands, ctx, stack_obj)
             }
         })
+    }
+
+    /// The candidates for slot `i` whose description refers to the player chosen for an
+    /// earlier slot `j` ("target creature that player controls"), with the earlier slot's
+    /// legal target that gives the most of them; None if it doesn't refer to one.
+    fn candidates_with_earlier_target(
+        &self,
+        specs: &[TargetSpec],
+        i: usize,
+        ctx: &Ctx,
+        stack_obj: ObjectId,
+    ) -> Option<Vec<Entity>> {
+        let TargetKind::Object(f) = &specs[i].what else {
+            return None;
+        };
+        let j = (0..i).find(|j| {
+            matches!(specs[*j].what, TargetKind::Player(_))
+                && format!("{f:?}").contains(&format!("ControlledByPlayer(Target({j}))"))
+        })?;
+        self.legal_target_candidates(&specs[j], ctx, stack_obj)
+            .into_iter()
+            .map(|p| {
+                let mut c = ctx.clone();
+                c.targets = vec![vec![]; j + 1];
+                c.targets[j] = vec![p];
+                self.legal_target_candidates(&specs[i], &c, stack_obj)
+            })
+            .max_by_key(|v| v.len())
     }
 
     /// The fewest targets a slot requires: its minimum, but never more than its maximum
@@ -1142,6 +1179,7 @@ impl Game {
         self.log(|g| format!("Resolving {}", g.describe(top)));
         // CR 117.2e: no player has priority while a spell or ability is resolving.
         let priority = self.turn.priority.take();
+        let outer = self.resolving.replace(top);
         if is_spell {
             self.resolve_spell(top);
         } else {
@@ -1149,6 +1187,7 @@ impl Game {
         }
         self.turn.priority = priority;
         self.flush_events();
+        self.resolving = outer;
         // CR 104.6, 727: the resolved effect restarted the game.
         crate::restart::restart_if_requested(self);
     }

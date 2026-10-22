@@ -41,11 +41,54 @@ impl Renderer<'_> {
             ),
             other => other.clone(),
         };
+        let zone = match pp.zone {
+            ZoneKind::Graveyard => "from your graveyard",
+            ZoneKind::Exile => "from exile",
+            ZoneKind::Hand => "from your hand",
+            ZoneKind::Library if pp.top_only => "from the top of your library",
+            _ => return None,
+        };
         let thing = match (pp.lands, pp.spells) {
             (true, false) => "play a land".to_string(),
             (false, true) => {
                 let n = self.spell_noun(&what, Det::A);
                 format!("cast {n}")
+            }
+            // "play a historic land or cast a historic permanent spell", "play a land from
+            // your graveyard or cast a permanent spell with mana value 3 or less from your
+            // graveyard": a land or a nonland card.
+            (true, true) => {
+                let Filter::Or(v) = &pp.what else {
+                    return None;
+                };
+                let is_land = |f: &Filter| match f {
+                    Filter::Type(CardType::Land) => true,
+                    Filter::And(p) => p.iter().any(|x| matches!(x, Filter::Type(CardType::Land))),
+                    _ => false,
+                };
+                let [land, spell] = v.as_slice() else {
+                    return None;
+                };
+                if !is_land(land) || is_land(spell) {
+                    return None;
+                }
+                let strip = |f: &Filter| {
+                    match f {
+                    Filter::And(p) => Filter::and(
+                        p.iter()
+                            .filter(|x| {
+                                !matches!(x, Filter::Card)
+                                    && !matches!(x, Filter::Not(l) if matches!(l.as_ref(), Filter::Type(CardType::Land)))
+                            })
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                }
+                };
+                let l = self.noun_det(&strip(land), Det::A);
+                let n = self.spell_noun(&strip(spell), Det::A);
+                format!("{{alt:play {l} or cast {n}|play {l} {zone} or cast {n}}}")
             }
             _ => return None,
         };

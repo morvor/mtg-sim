@@ -1498,6 +1498,10 @@ impl Game {
         let mut cast_info = CastInfo {
             method: opt.method.clone(),
             from: from_kind,
+            from_hand_of: match from {
+                Zone::Hand(q) => Some(q),
+                _ => None,
+            },
             was_cast: true,
             turn: self.turn.number,
             instant_timing: !sorcery_time,
@@ -1934,6 +1938,7 @@ impl Game {
             // With any mana another player already spent on it (assist, CR 702.132a).
             si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
             si.cast.cost_objects = paid.objects.clone();
+            si.cast.life_paid += paid.life;
         }
         // "The sacrificed creature" (resolution reads the spell's saved context).
         if !paid.sacrificed.is_empty() {
@@ -2872,6 +2877,11 @@ impl Game {
         }
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
         crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
+        // What was paid to activate it (Phyrexian life is recorded as the mana is paid).
+        if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+            si.cast.life_paid += paid.life;
+            si.cast.loyalty_removed = paid.loyalty_removed;
+        }
         self.saved_ctx.insert(id, ctx.clone());
         self.record_activation(p, src, a.uid);
         // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
@@ -3621,6 +3631,7 @@ impl Game {
                 if !self.may_pay_life_for_cost(p, n, ctx) || !self.pay_life(p, n) {
                     return bad("can't pay life");
                 }
+                paid.life += n;
             }
             CostPart::Loyalty(n) => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
@@ -3631,15 +3642,17 @@ impl Game {
                         *n as u32,
                         crate::event_causes::CounterPut::cost(p, Some(s)),
                     );
-                } else if *n < 0
-                    && self.remove_counters_by(
+                } else if *n < 0 {
+                    let removed = self.remove_counters_by(
                         Entity::Object(s),
                         counters::LOYALTY,
                         (-*n) as u32,
                         Some(p),
-                    ) < (-*n) as u32
-                {
-                    return bad("not enough loyalty");
+                    );
+                    if removed < (-*n) as u32 {
+                        return bad("not enough loyalty");
+                    }
+                    paid.loyalty_removed += removed;
                 }
             }
             CostPart::SacrificeSelf => {
@@ -3688,7 +3701,7 @@ impl Game {
             CostPart::DiscardSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
-                if self.discard(p, s, src).is_none() {
+                if self.discard_for_cost(p, s, src).is_none() {
                     return bad("can't discard");
                 }
             }
@@ -3731,13 +3744,13 @@ impl Game {
                 };
                 for c in pick {
                     paid.objects.push(c);
-                    self.discard(p, c, src);
+                    self.discard_for_cost(p, c, src);
                 }
             }
             CostPart::DiscardHand => {
                 for c in self.player(p).hand.clone() {
                     paid.objects.push(c);
-                    self.discard(p, c, src);
+                    self.discard_for_cost(p, c, src);
                 }
             }
             CostPart::ExileSelf => {
@@ -4178,6 +4191,21 @@ impl Game {
         Ok(())
     }
 
+    /// Discards `card` to pay a cost (CR 701.9a). A cost isn't an effect, wherever it's
+    /// paid ("unless you discard a card" as an ability resolves, CR 118.12, too):
+    /// `discard_rules::DISCARDED_BY_EFFECT` doesn't match it.
+    fn discard_for_cost(
+        &mut self,
+        p: PlayerId,
+        card: ObjectId,
+        src: Option<ObjectId>,
+    ) -> Option<ObjectId> {
+        self.special.cost_discards += 1;
+        let new = self.discard(p, card, src);
+        self.special.cost_discards -= 1;
+        new
+    }
+
     /// Rough upper bound of mana the player could produce now (for choosing X).
     pub fn max_mana_available(&self, p: PlayerId) -> u32 {
         self.player(p).mana_pool.total() as u32
@@ -4266,6 +4294,10 @@ pub struct PaidCost {
     /// The permanents among `objects` that a "tap an untapped [permanent]" cost tapped
     /// ("the creature tapped this way").
     pub tapped: Vec<ObjectId>,
+    /// The life a life payment cost paid (CR 119.4).
+    pub life: u32,
+    /// The loyalty counters a loyalty cost removed (CR 606.4).
+    pub loyalty_removed: u32,
 }
 
 /// Adds one cost to another.
@@ -4280,8 +4312,9 @@ pub fn add_cost(total: &mut Cost, c: &Cost) {
 }
 
 /// Cost parts involving random elements or moving objects from a library to a public
-/// zone (CR 601.2h).
-fn cost_part_pays_last(c: &CostPart) -> bool {
+/// zone (CR 601.2h): paid after every other part of the cost. (Public for the CR 733.1
+/// reachability scan, `tests/cr/r733_001_reversal_reachability.rs`.)
+pub fn cost_part_pays_last(c: &CostPart) -> bool {
     matches!(
         c,
         CostPart::Discard { random: true, .. }

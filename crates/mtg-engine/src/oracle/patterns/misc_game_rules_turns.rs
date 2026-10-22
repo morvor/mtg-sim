@@ -35,7 +35,7 @@ inventory::submit! { StaticPattern { name: "misc: players skip extra turns", pri
 
 /// Adds `then` to what happens as the last extra turn `e` creates begins. Only a single
 /// extra turn qualifies ("that turn").
-fn attach_to_extra_turn(e: &mut Effect, then: Effect) -> bool {
+pub(crate) fn attach_to_extra_turn(e: &mut Effect, then: Effect) -> bool {
     match e {
         Effect::Seq(v) => v
             .last_mut()
@@ -57,7 +57,7 @@ fn attach_to_extra_turn(e: &mut Effect, then: Effect) -> bool {
 }
 
 /// Whether the previous sentence ends with exactly one extra turn for one player.
-fn ends_with_one_extra_turn(e: &Effect) -> bool {
+pub(crate) fn ends_with_one_extra_turn(e: &Effect) -> bool {
     match e {
         Effect::Seq(v) => {
             let turns = v

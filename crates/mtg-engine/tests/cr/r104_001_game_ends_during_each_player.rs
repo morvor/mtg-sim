@@ -22,3 +22,20 @@ fn a_win_while_each_player_draws_ends_the_game_before_they_discard() {
     // Nobody discarded: the game ended with the draws.
     assert_eq!(t.graveyard_size(P1), 0);
 }
+
+#[test]
+fn a_win_while_each_player_draws_ends_the_game_before_anyone_chooses_a_discard() {
+    cr!("104.1", "104.2b", "608.2e");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Laboratory Maniac");
+    t.g.players[0].library.clear();
+    // "{T}: Each player draws a card, then discards a card." The discard is a choice each
+    // player makes, planned for all of them together; once P0 has won nobody makes it.
+    let broker = t.battlefield(P0, "Lore Broker");
+    t.hand(P1, "Island");
+    t.activate(P0, broker, 0, &[]).expect("activate Lore Broker");
+    t.resolve_all();
+    assert_eq!(t.g.result, Some(GameResult::Win(vec![P0])));
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert!(t.in_hand(P1, "Island"));
+}

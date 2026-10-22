@@ -148,6 +148,10 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // Each player's own number, read for each player in turn (`followups_4`).
+    if let Some(v) = super::followups_4::own_count_atom(s, b) {
+        return Some(v);
+    }
     // "the discarded card's mana value" for a spell whose kicker or additional cost
     // discards a card (Dralnu's Pet).
     if let Some(rest) = s.strip_prefix("the discarded card's mana value") {

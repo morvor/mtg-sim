@@ -61,6 +61,28 @@ Also landed: `roundtrip-tail-5`, `every-card-fuzz-2` and the three gap-residual 
 - **mutation:** after the survivor re-run lands, rulings batches P064 and P185.
 - **rulings-1:** P126, P176, P141, P142, P111. **rulings-2:** P194, P193, P046. Next in the pool: P063 P147 P186 P089 P006 ...
 
+### Hold for the weekly usage limit (Oct 21, 21:45 UTC)
+
+The workers' rate-limit status turned to a warning on the weekly window, which resets Fri Oct 23 09:00 UTC. As with the user's choice on Oct 14, every worker finishes and lands the items it is running, then stops and reports. Queued items wait until the coordinator sends "resume": after the reset, or sooner if the user says so. Running when the hold began:
+- compile: `roundtrip-pairs-1`;
+- cards-1: `cards3-triggers-durations` (review) and `cards3-followups-choices`;
+- cards-2: `cards3-manual-defs` and `cards4-plan`;
+- structure: `property-tests-2`;
+- mutation: the review of the survivor re-run;
+- rulings-1: P176;
+- rulings-2: P194.
+
+Waiting:
+- cards-1: `cards3-game-rules-dice`;
+- mutation: P064, P185;
+- rulings-1: P141, P142, P111;
+- rulings-2: P193, P046;
+- compile: the rest of its round-trip items.
+
+### The 733.1 entry (user, Oct 21 evening)
+
+The scan test written for `illegal-action-reversal-restores-libraries` found that 16 supported cards do reach 733.1's library exceptions, through replacement effects. Its review and the newer card pool later raised the count to 22; the user's decision covers them all. When the user accepted the entry, the claim was that none could. The user chose to fix it: item `reversal-library-exceptions` (items/reversal-library-exceptions.md). It goes to the structure worker after `property-tests-2`, once the hold ends.
+
 ## The judge audit (E)
 
 **Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.

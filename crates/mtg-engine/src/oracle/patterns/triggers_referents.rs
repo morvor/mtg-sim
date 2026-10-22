@@ -390,6 +390,9 @@ fn has_event_amount(t: &TriggerCond) -> bool {
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)
         | TriggerCond::Noncombat(trigger) => has_event_amount(trigger),
+        // "Whenever one or more cards are put into exile from your hand or a spell or
+        // ability you control exiles one or more permanents ...": each alternative's.
+        TriggerCond::AnyOf(v) => !v.is_empty() && v.iter().all(has_event_amount),
         _ => false,
     }
 }

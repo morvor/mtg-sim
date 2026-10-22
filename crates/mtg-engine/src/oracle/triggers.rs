@@ -29,7 +29,13 @@ fn that_player_is_the_triggers(eff: &str) -> bool {
         };
         let found = s.match_indices("that player").any(|(i, _)| {
             let before = &s[..i];
-            !(before.contains("each opponent ") || before.contains("each player ") || named(before))
+            // ("for each opponent, choose a nonland permanent that player controls": each
+            // of them too.)
+            !(before.contains("each opponent ")
+                || before.contains("each player ")
+                || before.contains("for each opponent, ")
+                || before.contains("for each player, ")
+                || named(before))
         });
         targeted = named(s);
         found
@@ -322,6 +328,10 @@ pub(crate) fn trigger_zone(trigger: &TriggerCond, eff: &str) -> FunctionZone {
     // "Whenever a creature you control dies while ~ is in your graveyard" (CR 113.6).
     if super::patterns::trigger_grammar_events::requires_source_in_graveyard(trigger) {
         return FunctionZone::Graveyard;
+    }
+    // "Whenever you remove a time counter from ~ while it's exiled" (CR 113.6b).
+    if super::patterns::trigger_grammar_4::requires_source_exiled(trigger) {
+        return FunctionZone::Exile;
     }
     match trigger {
         TriggerCond::CastSpell {

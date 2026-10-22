@@ -78,7 +78,6 @@ fn great_intelligences_plan_may_cast_a_spell_for_free() {
 #[test]
 fn nicol_bolas_ultimate_spares_opponents_with_a_legendary_creature() {
     cr!("104.3e");
-    // (Its +1 ability is another construct; the -8 compiles.)
     assert!(!card("Nicol Bolas, Dragon-God")
         .unsupported_text()
         .iter()
@@ -87,8 +86,8 @@ fn nicol_bolas_ultimate_spares_opponents_with_a_legendary_creature() {
     let bolas = t.battlefield(P0, "Nicol Bolas, Dragon-God");
     t.g.add_counters(Entity::Object(bolas), "loyalty", 4, None);
     t.battlefield(P2, "Isamaru, Hound of Konda");
-    // The -8 is its last activated ability (after the -3).
-    t.activate(P0, bolas, 1, &[]).unwrap();
+    // The -8 is its last activated ability (after the +1 and the -3).
+    t.activate(P0, bolas, 2, &[]).unwrap();
     t.resolve_all();
     assert!(t.has_lost(P1));
     assert!(!t.has_lost(P2));

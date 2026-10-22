@@ -683,6 +683,10 @@ pub struct Observation {
     /// "day", "night", or absent if it's neither (CR 731).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub day_night: Option<String>,
+    /// The game's turn order has been reversed (Aeon Engine): play proceeds to the right
+    /// (CR 101.4). Absent while it proceeds to the left.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub turn_order_reversed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub monarch: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -720,6 +724,7 @@ pub fn observe(g: &Game, viewer: Viewer) -> Observation {
             .map(|id| stack_object_view(g, viewer, *id))
             .collect(),
         day_night: g.day.map(|d| if d { "day" } else { "night" }.to_string()),
+        turn_order_reversed: g.turn_order_reversed,
         monarch: g.monarch.map(|p| p.0),
         initiative: g.initiative.map(|p| p.0),
         ante: g

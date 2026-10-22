@@ -30,12 +30,24 @@ Format and kinds: `docs/agents/items/interpretation-register.md`; index:
 
 ## range-combat-trigger-events: The trigger event of "attacks", "blocks" and "blocks or becomes blocked" is the creature alone (CR 801.7)
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 801.7 "A triggered ability doesn’t trigger unless its trigger event happens entirely within the range of influence of its source’s controller." and its example: "Whenever enchanted creature becomes blocked" triggers "because the entire event (Runeclaw Bear becomes blocked) happens within Rob’s range of influence", while "Whenever enchanted creature becomes blocked by a creature" doesn't, "because that event includes the blocking creature, which is out of Rob’s range."
 - Question: The example settles "becomes blocked" versus "becomes blocked by a creature". Which players and creatures are part of the event of the other combat triggers that don't name them: "whenever [a creature] attacks" (the player, planeswalker or battle it attacks; the other attacking creatures), "whenever [a creature] blocks" (the creature it blocks) and "whenever [a creature] blocks or becomes blocked" (the creature it blocks or is blocked by)?
-- Decision: As in the example, only what the trigger condition names: the event of "[a creature] attacks", "blocks", "becomes blocked" and "blocks or becomes blocked" is that creature attacking, blocking or becoming blocked, and it happens within a player's range of influence if the creature is within it. Conditions that name the other party ("attacks you", "attacks a player", "blocks a creature", "becomes blocked by a creature") still include it.
+- Decision: Decided by the user, Oct 21: as in the example, only what the trigger condition names. The event of "[a creature] attacks", "blocks", "becomes blocked" and "blocks or becomes blocked" is that creature attacking, blocking or becoming blocked, and it happens within a player's range of influence if the creature is within it. Conditions that name the other party ("attacks you", "attacks a player", "blocks a creature", "becomes blocked by a creature") still include it.
 - Alternatives: Treat "attacks" as including what the creature attacks and "blocks" as including the creature it blocks (the engine's earlier behavior), so that a third player's ability about another player's creature doesn't trigger when that creature fights someone out of the third player's range.
 - Why: The example's reasoning is that the event consists of what the trigger condition describes; "blocks" and "attacks" are worded like "becomes blocked", without the other party.
 - Affects: games with the limited range of influence option only (CR 801; Emperor, Grand Melee): abilities of a player's permanents about another player's creature (Auras, "whenever a creature attacks/blocks") when that creature attacks or blocks with or against a player out of the first player's range.
 - Code: `crates/mtg-engine/src/multiplayer/range.rs` (`trigger_in_range`).
 - Tests: `tests/cr/r801_combat_trigger_events.rs` (`attacks_and_becomes_blocked_ignore_the_defending_player_and_blockers_out_of_range`, `blocks_ignores_the_attacker_out_of_range_but_blocks_a_creature_doesnt`); `tests/cr/r801_examples.rs` (`becomes_blocked_triggers_but_becomes_blocked_by_a_creature_out_of_range_doesnt`).
+
+## venture-limit-looks-at-whole-turn: "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn
+- Kind: interpretation
+- Status: provisional
+- Rules: Keen-Eared Sentry: "Each opponent can't venture into the dungeon more than once each turn." / 101.2 "When a rule or effect allows or directs something to happen, and another effect states that it can’t happen, the “can’t” effect takes precedence." / Rule of Law ruling: "Rule of Law looks at the entire turn to see if a player has cast a spell, even if Rule of Law wasn’t on the battlefield when that spell was cast."
+- Question: Does an opponent's venture made this turn before Keen-Eared Sentry came under its controller's control count toward the limit? And does taking the initiative (whose triggered ability ventures into Undercity, CR 725.2) count as a venture?
+- Decision: Every venture this turn counts (a venture marker moved into a room, CR 309.4c), including those before the Sentry arrived and those of the initiative; once an opponent has ventured this turn, any further venture by them does nothing (the initiative is still taken).
+- Alternatives: Count only the ventures made while the Sentry was on the battlefield: would let an opponent venture again in the turn the Sentry arrives, unlike the rulings for the analogous "can't cast more than one spell each turn" (Rule of Law, Deafening Silence, Arcane Laboratory).
+- Why: The "each turn" limit is worded like Rule of Law's, whose rulings look at the whole turn; venturing into Undercity is venturing into the dungeon (CR 701.49d).
+- Affects: Keen-Eared Sentry.
+- Code: `crates/mtg-engine/src/cards/keen_eared_sentry.rs` (`venture_prohibited`); `crates/mtg-engine/src/dungeons.rs` (`venture_into`).
+- Tests: `tests/cards/m_keen_eared_sentry.rs` (`an_opponent_ventures_only_once_each_turn`, `ventures_before_it_entered_count_and_without_it_there_is_no_limit`).

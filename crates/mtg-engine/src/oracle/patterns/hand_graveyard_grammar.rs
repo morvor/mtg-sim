@@ -1002,7 +1002,7 @@ fn p_for_each_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
 /// `e` performed `count` times over, as one instruction (the number is determined once,
 /// CR 608.2h): an amount multiplied, a cost paid that many times (CR 118.12), that many
 /// cards chosen at once.
-fn scale(e: Effect, count: Value) -> Option<Effect> {
+pub(crate) fn scale(e: Effect, count: Value) -> Option<Effect> {
     let times = |k: i32| {
         if k == 1 {
             count.clone()

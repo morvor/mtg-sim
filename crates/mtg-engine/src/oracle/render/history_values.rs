@@ -121,7 +121,7 @@ impl Renderer<'_> {
                 format!("the number of {n} sacrificed this turn")
             }
             (TriggerCond::TokenCreated(f), Tally::Events) => {
-                let (f, _) = without(f, &Filter::ControlledBy(PlayerRel::You));
+                let (f, _) = without(f, &Filter::OwnedBy(PlayerRel::You));
                 let n = self.many(&f, "tokens");
                 format!("the number of {n} you created this turn")
             }
@@ -164,7 +164,13 @@ impl Renderer<'_> {
                         "the {{opt:amount of}} damage {{opt:already}} dealt to {to} this turn"
                     );
                 }
+                // "by sources they controlled": the sources' controllers as the damage was
+                // dealt.
+                let saved = self.default_head.replace("source");
+                let past = std::mem::replace(&mut self.control_past, true);
                 let s = self.noun(source, Num::Many);
+                self.default_head = saved;
+                self.control_past = past;
                 format!(
                     "the {{opt:amount of}} damage dealt to {to} {{opt:so far}} this turn by {s}"
                 )

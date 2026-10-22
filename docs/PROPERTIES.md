@@ -353,13 +353,26 @@ Not bugs in the rules, but found and handled by the properties:
 
 * **CR 733.1's exceptions aren't kept.** The engine reverses an illegal action by restoring
   a copy of the whole game, so it also reverses what CR 733.1 says players may not reverse
-  (moving cards to or from a library, shuffling, revealing library cards). A scan of the
-  compiled costs and mana abilities of every fully supported card found none that can
-  reach it (a cost's library actions are paid after everything that can make the action
-  illegal, and no supported mana ability touches a library), so it's registered as the
-  provisional deviation `illegal-action-reversal-restores-libraries`
-  (docs/interpretations/stack-casting-costs.md, with the cards found). The scan also found
-  that Thought Lash's cumulative upkeep could be paid in part; that's fixed.
+  (moving cards to or from a library, shuffling, revealing library cards). It's the
+  deviation `illegal-action-reversal-restores-libraries`
+  (docs/interpretations/stack-casting-costs.md). The user accepted it on Oct 21 while no
+  supported card was known to reach it, with the plan to fix it when one could. A cost's
+  library actions are paid after everything that can make the action illegal, and no
+  supported mana ability touches a library; the test
+  `tests/cr/r733_001_reversal_reachability.rs` checks that on every run by scanning every
+  fully supported card, and follows what replacement effects and the rules the engine
+  applies in the middle of a payment (`until::check_untils`) make of it. It found that 22
+  supported cards do reach the difference, through replacement effects and one rule
+  implemented in code that make something that happens in the middle of a payment a
+  library action (Darksteel Colossus sacrificed to Ashnod's Altar for mana while casting a
+  spell that then can't be cast is shuffled into its library, and the reversal undoes the
+  shuffle; with Ashiok, Wicked Manipulator, the life Mana Confluence costs exiles library
+  cards instead; with Pariah on Swans of Bryn Argoll, Shivan Reef's damage draws a card).
+  Told of the 16 found first, the user chose to follow 733.1 exactly (item
+  `reversal-library-exceptions`, which covers the six found since too); it will change
+  the rollback property to "exactly, except the library actions 733.1 keeps". The entry
+  lists the cards. The first, one-off scan also found that Thought Lash's
+  cumulative upkeep could be paid in part; that's fixed.
 * **Links of abilities continuous effects give are hashes.** Abilities a static or
   other continuously reevaluated effect gives (`layers::acquired_ability`,
   `ability_grants::gained_link`) get links hashed from the ability, the granter and the

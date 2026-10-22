@@ -44,8 +44,7 @@ fn enchanted_creature_dies_returns_the_creature_and_then_the_aura() {
         .build();
     let bears = t.battlefield(P0, "Grizzly Bears");
     let a = t.custom(P0, aura, Zone::Battlefield);
-    t.g.objects[a.0 as usize].attached_to = Some(Entity::Object(bears));
-    t.g.recompute();
+    assert!(t.g.attach(a, Entity::Object(bears)));
     t.g.destroy(bears, None);
     t.settle();
     assert!(t.in_graveyard(P0, "Undying Pact"));

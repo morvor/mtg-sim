@@ -88,6 +88,11 @@ pub trait KeywordRules: Sync + Send {
     fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
         false
     }
+    /// Whether a rule this implementation defines prohibits `p` from venturing into the
+    /// dungeon now (CR 101.2, 701.49). Called for every registered implementation.
+    fn venture_prohibited(&self, g: &Game, p: PlayerId) -> bool {
+        false
+    }
     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
     /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
     /// Called for every registered implementation.
@@ -1202,6 +1207,11 @@ pub fn land_play_prohibited(g: &Game, p: PlayerId, card: ObjectId) -> bool {
     registry()
         .iter()
         .any(|r| r.land_play_prohibited(g, p, card))
+}
+
+/// See [`KeywordRules::venture_prohibited`].
+pub fn venture_prohibited(g: &Game, p: PlayerId) -> bool {
+    registry().iter().any(|r| r.venture_prohibited(g, p))
 }
 
 /// See [`KeywordRules::target_forbidden`].

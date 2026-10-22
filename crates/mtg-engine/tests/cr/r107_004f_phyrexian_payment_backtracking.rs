@@ -29,3 +29,29 @@ fn hybrid_and_two_phyrexian_symbols_paid_with_the_one_payment_that_fits_the_life
     assert_eq!(t.life(P0), 1);
     assert_eq!(t.g.players[0].mana_pool.total(), 0);
 }
+
+#[test]
+fn an_abandoned_way_of_paying_doesnt_count_phyrexian_symbols_paid_with_life() {
+    cr!("107.4f", "601.2h", "702.150a");
+    let mut t = TestGame::new(2);
+    t.g.players[0].life = 3;
+    // The same cost on a compleated planeswalker with five loyalty: the payment that fits
+    // pays one Phyrexian symbol with life, so it enters with 5 - 2 loyalty counters (the
+    // abandoned way, which paid one with life before running out, doesn't count).
+    t.g.players[0].mana_pool.add_type(ManaType::G, 1);
+    t.g.players[0].mana_pool.add_type(ManaType::B, 1);
+    let mut def = crate::r703_common::oracle_card(
+        "Test Compleated Walker",
+        "Legendary Planeswalker — Test",
+        "{B/G}{G/P}{G/P}",
+        None,
+        "Compleated",
+    );
+    def.faces[0].chars.loyalty = Some(5);
+    let w = t.custom(P0, def, Zone::Hand(P0));
+    t.cast(P0, w).go();
+    assert_eq!(t.life(P0), 1);
+    t.resolve_all();
+    assert!(t.on_battlefield(w));
+    assert_eq!(t.counters(w, "loyalty"), 3);
+}

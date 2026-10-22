@@ -205,8 +205,63 @@ impl Renderer<'_> {
                 terms.cost_increase
             ));
         }
-        if terms.lands_enter_tapped {
+        // "If you do, it enters tapped": a land played this way, and a permanent spell
+        // cast this way, enters tapped (CR 614.1d, 614.12).
+        let enters_tapped_on_cast = terms.on_cast.as_ref().is_some_and(|e| enters_tapped(e));
+        if terms.lands_enter_tapped && enters_tapped_on_cast {
+            s.push_str(". If you do, it enters tapped");
+        } else if terms.lands_enter_tapped {
             s.push_str(". Each land played this way enters tapped");
+        }
+        // What casting a spell this way does to it: "That spell has undaunted", "If you
+        // do, it has affinity for artifacts".
+        if let (Some(e), false) = (&terms.on_cast, enters_tapped_on_cast) {
+            match self.on_cast_words(e) {
+                Some(w) => s.push_str(&w),
+                None => s.push_str(&self.gap("permission term: on cast")),
+            }
+        }
+        // "Spells you cast this way cost {2} less to cast" (CR 601.2f).
+        if terms.cost_reduction > 0 {
+            s.push_str(&format!(
+                ". {{alt:Spells you cast this way cost|A spell cast this way costs|Each spell cast this way costs}} {{{}}} less to cast",
+                terms.cost_reduction
+            ));
+        }
+        // "You may cast Equipment spells this way without paying their mana costs" (CR
+        // 118.9).
+        if let Some(f) = &terms.free_option {
+            let what = match f {
+                Filter::Any => "{alt:cards|spells}".to_string(),
+                f => {
+                    let f = match f {
+                        Filter::And(v) => Filter::and(
+                            v.iter()
+                                .filter(|x| !matches!(x, Filter::Card))
+                                .cloned()
+                                .collect(),
+                        ),
+                        other => other.clone(),
+                    };
+                    self.spell_noun(&f, Det::Plural)
+                }
+            };
+            let verb = if matches!(f, Filter::Any) && !terms.spells_only {
+                "play"
+            } else {
+                "cast"
+            };
+            s.push_str(&format!(
+                ". You may {verb} {what} this way without paying their mana costs"
+            ));
+        }
+        // "and you may spend colorless mana as though it were mana of any color to cast
+        // that spell" (CR 609.4b).
+        if let Some(t) = &terms.spend_type_as_any_color {
+            let m = mana_type_words(*t);
+            s.push_str(&format!(
+                " {{alt:and you may spend {m} mana as though it were mana of any color to cast that spell|. You may spend {m} mana as though it were mana of any color to cast {{alt:that spell|it}}}}"
+            ));
         }
         // "you may play that card if you control a Kavu".
         if let Some(c) = terms.condition.as_ref().filter(|_| any_turn.is_none()) {
@@ -307,21 +362,110 @@ impl Renderer<'_> {
     }
 }
 
+/// Whether a spell's on-cast effect is "it enters tapped" (a one-use replacement for the
+/// spell, `Var(IT)`).
+fn enters_tapped(e: &Effect) -> bool {
+    matches!(e, Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::In(s)),
+            action: ReplacementAction::AsEnters(a),
+            ..
+        },
+        ..
+    } if matches!(s.as_ref(), Sel::Var(vars::IT))
+        && matches!(a.as_ref(), Effect::EnterTapped))
+}
+
+/// "colorless", "red": a type of mana.
+fn mana_type_words(t: crate::mana::ManaType) -> String {
+    use crate::mana::ManaType as M;
+    match t {
+        M::C => "colorless".into(),
+        M::W => "white".into(),
+        M::U => "blue".into(),
+        M::B => "black".into(),
+        M::R => "red".into(),
+        M::G => "green".into(),
+    }
+}
+
+impl Renderer<'_> {
+    /// "Until the end of your next turn, you may play those cards. If ~ was cast from a
+    /// graveyard, you may play cards this way without paying their mana costs.": the same
+    /// permission, free if the condition holds.
+    pub(crate) fn free_if_permission(&mut self, e: &Effect) -> Option<String> {
+        let Effect::If {
+            cond,
+            then,
+            otherwise,
+        } = e
+        else {
+            return None;
+        };
+        let Effect::WithPlayTerms { terms, effect } = then.as_ref() else {
+            return None;
+        };
+        let free = terms.free_option.clone()?;
+        let only_free = PlayTerms {
+            free_option: Some(free.clone()),
+            ..terms.clone()
+        };
+        let plain = PlayTerms {
+            free_option: Some(free.clone()),
+            ..Default::default()
+        };
+        if format!("{only_free:?}") != format!("{plain:?}")
+            || format!("{effect:?}") != format!("{otherwise:?}")
+            || !matches!(
+                effect.as_ref(),
+                Effect::GrantPlayPermission {
+                    who: PlayerRef::You,
+                    ..
+                }
+            )
+            || !matches!(free, Filter::Any)
+        {
+            return None;
+        }
+        let o = self.effect(otherwise);
+        let c = self.condition(cond);
+        Some(format!(
+            "{o}. If {c}, you may play cards this way without paying their mana costs"
+        ))
+    }
+
+    /// What casting a spell with a permission does to it ("That spell has undaunted",
+    /// "If you do, it has affinity for artifacts"), if it's a keyword it gains.
+    fn on_cast_words(&mut self, e: &Effect) -> Option<String> {
+        let Effect::Modify {
+            what: Sel::Var(vars::IT),
+            mods,
+            duration: Duration::Permanent,
+        } = e
+        else {
+            return None;
+        };
+        let mut kws = Vec::new();
+        for m in mods {
+            let Modification::AddKeyword(k) = m else {
+                return None;
+            };
+            kws.push(self.keyword(k));
+        }
+        let k = join_list(&kws, "and");
+        Some(format!(
+            ". {{alt:That spell has {k}|If you do, it has {k}|If you cast a spell this way, it has {k}}}"
+        ))
+    }
+}
+
 /// The first term of an effect's permission that [`Renderer::with_play_terms`] doesn't
 /// word (`what`, `limit` and `until_another` are worded with the permission's object).
 fn unworded_effect_terms(t: &PlayTerms) -> Option<&'static str> {
     [
-        (t.on_cast.is_some(), "on cast"),
         (t.on_land.is_some(), "on land"),
-        (t.cost_reduction > 0, "cost reduction"),
-        (t.free_option.is_some(), "free option"),
         (t.any_owner, "any owner"),
-        (t.cast_face.is_some(), "cast face"),
         (t.cost_increase_each.is_some(), "cost increase for each"),
-        (
-            t.spend_type_as_any_color.is_some(),
-            "spend a type as any color",
-        ),
         (t.snow_as_any_color, "snow as any color"),
     ]
     .into_iter()

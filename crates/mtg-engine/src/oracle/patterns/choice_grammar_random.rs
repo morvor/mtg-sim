@@ -276,11 +276,32 @@ fn one_of_them_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let them = super::pronoun_groups::plural_object_ref("them", b)??.0;
-    let what = Sel::AtRandom {
-        filter: Filter::In(Box::new(them)),
+    let random = |filter: Filter| Sel::AtRandom {
+        filter,
         count: Value::c(1),
         store: None,
     };
+    let what = random(Filter::In(Box::new(them.clone())));
+    // "Destroy one of them chosen at random." (Chaos Defiler): the one destroyed is chosen
+    // at random from those without indestructible, if any were chosen (Chaos Defiler
+    // rulings).
+    if verb == "destroy" && r == "one of them chosen at random" {
+        let destructible = Filter::and(vec![
+            Filter::In(Box::new(them)),
+            Filter::not(Filter::HasKeyword(crate::keywords::KeywordKind::Indestructible)),
+        ]);
+        return Some(Effect::If {
+            cond: Condition::SelNonEmpty(Sel::All(destructible.clone())),
+            then: Box::new(Effect::Destroy {
+                what: random(destructible),
+                no_regen: false,
+            }),
+            otherwise: Box::new(Effect::Destroy {
+                what,
+                no_regen: false,
+            }),
+        });
+    }
     match verb {
         "destroy" => Some(Effect::Destroy {
             what,

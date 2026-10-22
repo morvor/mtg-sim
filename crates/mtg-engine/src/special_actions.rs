@@ -61,6 +61,12 @@ pub struct SpecialState {
     /// meanwhile (kept face down until then, CR 121.8), and the "as you draw it" choices
     /// waiting until then: (player, card, nth card drawn this turn).
     pub casting: u32,
+    /// Cards being discarded to pay a cost right now (`Game::pay_cost_part`), also where
+    /// `casting` is 0: a cost paid as a spell or ability resolves (CR 118.12), an attack or
+    /// block cost, a special action's cost. A cost isn't an effect, so "if an effect causes
+    /// you to discard a card" doesn't apply to such a discard (Library of Leng's ruling,
+    /// `discard_rules::DISCARDED_BY_EFFECT`).
+    pub cost_discards: u32,
     /// The activated abilities being activated right now, innermost last (CR 602.2):
     /// (player, source, ability uid).
     pub activating: Vec<(PlayerId, ObjectId, u64)>,

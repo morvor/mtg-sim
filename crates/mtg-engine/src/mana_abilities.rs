@@ -2496,6 +2496,15 @@ pub fn pay_mana(
     if plan.life > 0 && !g.pay_life(p, plan.life) {
         return None;
     }
+    // The life paid for the spell or ability being paid for (Phyrexian mana).
+    let paying_for = spend
+        .ability_on_stack
+        .or(spend.source.filter(|_| spend.is_spell));
+    if let (Some(id), true) = (paying_for, plan.life > 0) {
+        if let Some(si) = g.objects[id.0 as usize].stack.as_mut() {
+            si.cast.life_paid += plan.life;
+        }
+    }
     if let (true, Some(spell), true) = (spend.is_spell, spend.source, plan.phyrexian > 0) {
         crate::kw::compleated::record_phyrexian_life(g, spell, plan.phyrexian);
     }

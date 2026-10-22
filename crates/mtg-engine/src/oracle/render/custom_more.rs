@@ -24,6 +24,28 @@ pub(crate) fn custom_player_mod_more(name: &str, subj: &str) -> Option<String> {
 
 impl Renderer<'_> {
     pub(crate) fn custom_value_more(&mut self, name: &str) -> Option<String> {
+        // "the number of Mountains you control as you cast ~": the value as the spell
+        // was cast (`kw::referents_values_4`).
+        if let Some(j) = name.strip_prefix(crate::kw::referents_values_4::AS_CAST_VALUE) {
+            let v: Value = serde_json::from_str(j).ok()?;
+            let saved = std::mem::replace(&mut self.control_past, true);
+            let s = self.value(&v);
+            self.control_past = saved;
+            let m = self.me();
+            return Some(format!("{s} as you cast {m}"));
+        }
+        // "the discarded card's mana value": the card discarded to pay its cost.
+        if name == crate::kw::counter_groups::DISCARDED_FOR_COST_MANA_VALUE {
+            return Some(
+                "{alt:the discarded card's mana value|the mana value of the discarded card}".into(),
+            );
+        }
+        // "its total toxic value" (CR 702.164b).
+        if let Some(j) = name.strip_prefix(crate::kw::referents_values_4::TOTAL_TOXIC) {
+            let sel: Sel = serde_json::from_str(j).ok()?;
+            let s = self.sel(&sel, super::players::Case::Poss);
+            return Some(format!("{s} total toxic value"));
+        }
         Some(match name {
             "cards put into enchanted player's graveyard this turn" => {
                 "the number of cards put into {alt:their|enchanted player's} graveyard from anywhere this turn".into()
@@ -75,7 +97,19 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_condition_more(&mut self, name: &str) -> Option<String> {
+        // "defending player controls three or more creatures that share a creature type".
+        if let Some(k) = name.strip_prefix(crate::kw::combat_history_4::DEFENDING_SHARE_A_TYPE) {
+            let k: i32 = k.parse().ok()?;
+            let w = number_word(k);
+            return Some(format!(
+                "defending player controls {{alt:{w} or more|at least {w}}} creatures that share a creature type"
+            ));
+        }
         Some(match name {
+            // CR 701.43a.
+            crate::kw::exert::NOT_EXERTED_THIS_TURN => {
+                format!("{} hasn't been exerted this turn", self.me())
+            }
             "creature_died_under_an_opponents_control_this_turn" => {
                 "a creature died under an opponent's control this turn".into()
             }
