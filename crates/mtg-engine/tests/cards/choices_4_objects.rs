@@ -330,3 +330,38 @@ fn rakdos_augermage_each_discards_a_card_the_other_chooses() {
     assert!(t.in_graveyard(P1, "Hill Giant"));
     assert!(t.in_hand(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn dawnbreak_reclaimer_each_chooses_and_both_return_under_their_owners_control() {
+    cr!("110.2");
+    ruling!(
+        "Dawnbreak Reclaimer",
+        "You choose which opponent will choose a creature card in your graveyard."
+    );
+    supported("Dawnbreak Reclaimer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Dawnbreak Reclaimer");
+    let giant = t.graveyard(P1, "Hill Giant");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant");
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(g.len(), 1);
+    assert_eq!(b.len(), 1);
+    assert_eq!(t.obj_now(g[0]).controller, P1);
+    assert_eq!(t.obj_now(b[0]).controller, P0);
+    // With no creature card in an opponent's graveyard, an opponent still chooses one of
+    // yours.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Dawnbreak Reclaimer");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+}

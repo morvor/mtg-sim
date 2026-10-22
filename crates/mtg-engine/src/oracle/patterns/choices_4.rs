@@ -1128,6 +1128,70 @@ fn reveal_and_discard_of_choice(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: reveal your hand and discard a card of [player]'s choice", priority: 120, parse: reveal_and_discard_of_choice } }
 
+/// The cards chosen in each other's graveyards and the opponent choosing.
+const THEIR_CARD: Var = vars::USER + 41037;
+const YOUR_CARD: Var = vars::USER + 41038;
+const CHOOSING_OPPONENT: Var = vars::USER + 41039;
+
+/// "choose a creature card in an opponent's graveyard, then that player chooses a creature
+/// card in your graveyard. You may return those cards to the battlefield under their
+/// owners' control." (Dawnbreak Reclaimer): you must choose one if any opponent has one;
+/// with none, you choose the opponent who chooses in your graveyard (Dawnbreak Reclaimer
+/// rulings).
+fn choose_then_that_player_chooses(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("choose a ")?;
+    let (noun, r) = r.split_once(" in an opponent's graveyard, then that player chooses a ")?;
+    let noun2 = r.strip_suffix(" in your graveyard")?;
+    let (f, false, t1) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    let (f2, false, t2) = crate::oracle::phrases::parse_object_phrase(noun2)? else {
+        return None;
+    };
+    if !t1.trim().is_empty() || !t2.trim().is_empty() {
+        return None;
+    }
+    let choose = |chooser: PlayerRef, f: Filter, owner: Filter| Sel::Choose {
+        chooser,
+        filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Graveyard), owner]),
+        count: Value::c(1),
+        up_to: false,
+        store: None,
+    };
+    let e = Effect::seq(vec![
+        Effect::Store {
+            var: THEIR_CARD,
+            sel: choose(PlayerRef::You, f, Filter::OwnedBy(PlayerRel::Opponent)),
+        },
+        Effect::If {
+            cond: Condition::SelNonEmpty(Sel::Var(THEIR_CARD)),
+            then: Box::new(Effect::Store {
+                var: CHOOSING_OPPONENT,
+                sel: Sel::Players(PlayerRef::OwnerOf(Box::new(Sel::Var(THEIR_CARD)))),
+            }),
+            otherwise: Box::new(crate::kw::choice_grammar::choose_player_effect(
+                CHOOSING_OPPONENT,
+                PlayerFilter::Opponent,
+            )?),
+        },
+        Effect::Store {
+            var: YOUR_CARD,
+            sel: choose(
+                PlayerRef::Var(CHOOSING_OPPONENT),
+                f2,
+                Filter::OwnedBy(PlayerRel::You),
+            ),
+        },
+    ]);
+    let both = Sel::Union(vec![Sel::Var(THEIR_CARD), Sel::Var(YOUR_CARD)]);
+    b.it = both.clone();
+    b.named.push(("those cards".into(), both));
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: choose a card in an opponent's graveyard, then that player chooses one in yours", priority: 120, parse: choose_then_that_player_chooses } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1159,6 +1223,7 @@ mod tests {
             ("Land", "{3}, {T}: Choose target permanent you control. Draw a card, then another player of your choice may gain control of that permanent. Activate only as a sorcery."),
             ("Creature", "At the beginning of your upkeep, sacrifice two Swamps. If you can't, tap ~, and an opponent may gain control of a creature you control of their choice for as long as ~ remains on the battlefield.\n{T}: Gain control of target creature for as long as ~ remains on the battlefield."),
             ("Creature", "First strike\n{T}: Reveal your hand and discard a card of target opponent's choice. Then that player reveals their hand and discards a card of your choice. Activate only as a sorcery."),
+            ("Creature", "Flying\nAt the beginning of your end step, choose a creature card in an opponent's graveyard, then that player chooses a creature card in your graveyard. You may return those cards to the battlefield under their owners' control."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
