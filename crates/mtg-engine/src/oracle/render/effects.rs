@@ -8227,7 +8227,6 @@ impl Renderer<'_> {
             ManaProduction::DevotionToChosenColor => {
                 "an amount of mana of that color equal to your devotion to that color".into()
             }
-            ManaProduction::Custom(name) => format!("one mana of the type {name} names"),
         }
     }
 
