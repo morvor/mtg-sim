@@ -22,6 +22,13 @@ pub fn compared(s: &str, than: &str, who: &PlayerRef) -> Option<PlayerFilter> {
     let s = s.trim();
     let s = s.strip_suffix(" do").unwrap_or(s);
     let r = s.strip_suffix(&format!(" than {than}"))?;
+    // "who has at least two fewer creature cards in their graveyard than you" (Keeper of
+    // the Dead), "who has fewer creature cards in their graveyard than they" (Oath of
+    // Ghouls, from "whose graveyard has fewer creature cards in it than their graveyard
+    // does").
+    if let Some(f) = super::choices_4::fewer_cards_in_graveyard(r, who) {
+        return Some(f);
+    }
     if let Some(r) = r.strip_prefix("who has ") {
         // "at least two more", "more"
         let (cmp, extra, r) = if let Some(x) = r.strip_prefix("at least ") {
@@ -174,7 +181,18 @@ inventory::submit! { EffectPattern { name: "choice grammar: choose a player [des
 /// (the Oaths): a target chosen by "that player" (CR 601.2c), compared with them; "the
 /// first player" is the chooser, "the second player" the target.
 fn that_player_chooses_target_player(l: &str, b: &mut Builder) -> Option<Effect> {
-    let r = end(l).strip_prefix("that player chooses target player who ")?;
+    let l = end(l);
+    // "whose graveyard has fewer creature cards in it than their graveyard does" (Oath of
+    // Ghouls).
+    let whose;
+    let r = match l.strip_prefix("that player chooses target player whose graveyard has ") {
+        Some(r) => {
+            let (cmp, rest) = r.split_once(" in it than their graveyard does")?;
+            whose = format!("has {cmp} in their graveyard than they do{rest}");
+            whose.as_str()
+        }
+        None => l.strip_prefix("that player chooses target player who ")?,
+    };
     let pred = r.strip_suffix(" and is their opponent")?;
     let chooser = b.it_player.clone();
     if super::oracle_hardening_referents::is_no_player_referent(&chooser)

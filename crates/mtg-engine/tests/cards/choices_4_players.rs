@@ -293,3 +293,77 @@ fn delirium_the_active_players_creature_deals_damage_to_them() {
     assert_eq!(t.life(P0), 20);
     assert!(t.obj_now(giant).tapped);
 }
+
+#[test]
+fn keeper_of_the_dead_targets_an_opponent_with_two_fewer_creature_cards() {
+    cr!("115.1", "601.2c");
+    ruling!(
+        "Keeper of the Dead",
+        "It is only necessary that the condition be true as you activate the ability."
+    );
+    supported("Keeper of the Dead");
+    let mut t = TestGame::new(3);
+    let keeper = t.battlefield(P0, "Keeper of the Dead");
+    t.lands(P0, "Swamp", 1);
+    for _ in 0..3 {
+        t.graveyard(P0, "Grizzly Bears");
+    }
+    t.graveyard(P2, "Grizzly Bears");
+    t.graveyard(P2, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P2, "Hill Giant");
+    t.activate(P0, keeper, 0, &[Entity::Player(P1), Entity::Object(bears)])
+        .unwrap();
+    // The condition no longer holds as it resolves: it still resolves.
+    t.graveyard(P1, "Hill Giant");
+    t.graveyard(P1, "Hill Giant");
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    // P2 (one fewer) wasn't a legal target.
+    let players: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            decision::Decision::ChooseTargets { candidates, .. }
+                if candidates.iter().all(|c| matches!(c, Entity::Player(_))) =>
+            {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(players, vec![vec![Entity::Player(P1)]]);
+}
+
+#[test]
+fn oath_of_ghouls_targets_an_opponent_with_fewer_creature_cards_in_their_graveyard() {
+    cr!("115.1", "608.2b");
+    ruling!(
+        "Oath of Ghouls",
+        "A player can’t be targeted by this ability unless it’s true"
+    );
+    supported("Oath of Ghouls");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Oath of Ghouls");
+    let a = t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P1, "Grizzly Bears");
+    t.graveyard(P2, "Grizzly Bears");
+    t.graveyard(P2, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.advance_to(P0, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    let players: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            decision::Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(players.first(), Some(&vec![Entity::Player(P1)]));
+}

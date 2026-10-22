@@ -775,6 +775,38 @@ fn choose_another_with_lesser_power(l: &str, b: &mut Builder) -> Option<Effect> 
 
 inventory::submit! { EffectPattern { name: "choices 4: choose another [object] with lesser power", priority: 120, parse: choose_another_with_lesser_power } }
 
+/// "who has [at least N] fewer [cards] in their graveyard than [player]" (with the
+/// "than [player]" already removed): a player compared with `who` by the number of those
+/// cards in each graveyard.
+pub(super) fn fewer_cards_in_graveyard(r: &str, who: &PlayerRef) -> Option<PlayerFilter> {
+    let r = r.strip_prefix("who has ")?;
+    let (n, r) = match r.strip_prefix("at least ") {
+        Some(x) => {
+            let (n, x) = parse_number(x)?;
+            n.as_const()?;
+            (Some(n), x.trim_start())
+        }
+        None => (None, r),
+    };
+    let noun = r
+        .strip_prefix("fewer ")?
+        .strip_suffix(" in their graveyard")?;
+    let (f, true, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let mine = Value::CardsInGraveyard(PlayerRef::Iterated, f.clone());
+    let theirs = Value::CardsInGraveyard(who.clone(), f);
+    let cond = match n {
+        // At least N fewer: mine + N <= theirs.
+        Some(n) => Condition::Compare(Value::Sum(vec![mine, n]), Cmp::Le, theirs),
+        None => Condition::Compare(mine, Cmp::Lt, theirs),
+    };
+    Some(PlayerFilter::History(Box::new(cond)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -798,6 +830,8 @@ mod tests {
             ("Enchantment", "At the beginning of your end step, two target players each reveal the top card of their library. They each lose life equal to the mana value of the card revealed by the other player. Then they each put the card they revealed into their hand."),
             ("Instant", "Cast this spell only during an opponent's turn.\nTap target creature that player controls. That creature deals damage equal to its power to the player. Prevent all combat damage that would be dealt to and dealt by the creature this turn."),
             ("Legendary Creature", "Whenever you attack, target attacking creature can't be blocked this turn. It connives. Then choose another attacking creature with lesser power. That creature gains double strike until end of turn."),
+            ("Creature", "{B}, {T}: Choose target opponent who has at least two fewer creature cards in their graveyard than you do as you activate this ability. Destroy target nonblack creature that player controls."),
+            ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player whose graveyard has fewer creature cards in it than their graveyard does and is their opponent. The first player may return a creature card from their graveyard to their hand."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
