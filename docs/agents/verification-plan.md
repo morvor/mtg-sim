@@ -81,7 +81,7 @@ Waiting:
 
 ### The 733.1 entry (user, Oct 21 evening)
 
-The scan test written for `illegal-action-reversal-restores-libraries` found that 16 supported cards do reach 733.1's library exceptions, through replacement effects. When the user accepted the entry, the claim was that none could. The user chose to fix it: item `reversal-library-exceptions` (items/reversal-library-exceptions.md). It goes to the structure worker after `property-tests-2`, once the hold ends.
+The scan test written for `illegal-action-reversal-restores-libraries` found that 16 supported cards do reach 733.1's library exceptions, through replacement effects. Its review and the newer card pool later raised the count to 22; the user's decision covers them all. When the user accepted the entry, the claim was that none could. The user chose to fix it: item `reversal-library-exceptions` (items/reversal-library-exceptions.md). It goes to the structure worker after `property-tests-2`, once the hold ends.
 
 ## The judge audit (E)
 

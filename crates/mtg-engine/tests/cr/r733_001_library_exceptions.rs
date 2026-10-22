@@ -2,9 +2,10 @@
 //! moved cards from a library to any zone other than the stack, caused a library to be
 //! shuffled, or caused cards from a library to be revealed." The engine reverses an
 //! illegal action by restoring the whole game (register entry
-//! `illegal-action-reversal-restores-libraries`); no supported card can reach the
-//! exceptions, because a cost's library actions are paid after everything that can make
-//! the action illegal.
+//! `illegal-action-reversal-restores-libraries`); a cost's library actions are paid after
+//! everything that can make the action illegal. Which fully supported cards can reach the
+//! exceptions anyway (through replacement effects, and rules the engine applies in the
+//! middle of a payment) is checked on every test run by `r733_001_reversal_reachability.rs`.
 
 use crate::r506_common::custom_card;
 use mtg_engine::events::Event;

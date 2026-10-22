@@ -1,7 +1,9 @@
 //! CR 701.9 Discard.
 //!
 //! * "If an effect causes you to discard a card" (Library of Leng) applies to discards
-//!   caused by effects, not to discarding as a cost ([`DISCARDED_BY_EFFECT`]).
+//!   caused by effects, not to discarding as a cost, wherever the cost is paid: also a
+//!   cost paid as a spell or ability resolves ("unless you discard a card", CR 118.12)
+//!   ([`DISCARDED_BY_EFFECT`]).
 //! * A discarded card that an effect puts into a hidden zone instead of its owner's
 //!   graveyard, without revealing it, has undefined characteristics (CR 701.9c): it's
 //!   still discarded ("whenever a player discards a card" triggers), but nothing that
@@ -15,7 +17,9 @@ use crate::object::Zone;
 use crate::types::*;
 
 /// `Filter::Custom` name: the card is being discarded because of an effect, not to pay a
-/// cost (costs are paid while a spell is cast or an ability activated).
+/// cost: neither while a spell is cast or an ability activated (mana abilities included)
+/// nor as a cost paid otherwise (a cost paid as a spell or ability resolves, CR 118.12; an
+/// attack or block cost; a special action's cost: `SpecialState::cost_discards`).
 pub const DISCARDED_BY_EFFECT: &str = "discarded by an effect";
 
 /// "The discarded card": the cards discarded to pay the cost of the resolving spell or
@@ -25,7 +29,7 @@ pub const DISCARDED: Var = vars::USER + 145;
 
 pub fn custom_filter(g: &Game, name: &str, _id: ObjectId, _ctx: &Ctx) -> Option<bool> {
     match name {
-        DISCARDED_BY_EFFECT => Some(g.special.casting == 0),
+        DISCARDED_BY_EFFECT => Some(g.special.casting == 0 && g.special.cost_discards == 0),
         _ => None,
     }
 }
