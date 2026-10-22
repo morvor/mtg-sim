@@ -1,0 +1,2978 @@
+//! The dig grammar: what happens to cards looked at, revealed, milled or exiled from the
+//! top of a library (CR 401, 701.20), composed step by step instead of as fixed sentences.
+//!
+//! * Source: "Look at the top N cards of your library", "Reveal the top N cards", "Mill N
+//!   cards", "Exile the top N cards", "Reveal cards from the top of your library until you
+//!   reveal N [kind] cards", "look at that many cards from the top of your library". The
+//!   cards are kept in [`vars::DUG`] as the source resolves.
+//! * Selection steps ([`DigStep::Take`]): "[you may] put/reveal/exile/return/choose
+//!   [count] [description] from among them/those cards/the milled cards/the revealed cards
+//!   [and put it/them] [destination]", "put [count] of them [destination]", with a
+//!   count ("a", "up to two", "any number of", "all", "a random", "X"), an "and/or" list
+//!   ("a creature card and/or a land card": one of each), and a destination ("into your
+//!   hand", "onto the battlefield tapped and attacking", "onto the battlefield with a
+//!   shield counter on it", "on top of your library in any order", ...).
+//! * Rest step ([`DigStep::Rest`]): "put the rest [destination]", "the rest of the
+//!   revealed cards", "all other cards revealed this way", "all revealed cards not cast
+//!   this way", "the revealed cards", "shuffle the rest into your library".
+//!
+//! Each step is a sentence of its own (or a part of one joined by "and" / ", then"), so
+//! conditions ("If you do, ...", "If ~ was bargained, ...") and other instructions
+//! between the steps compose with them.
+
+use super::card_flow_search::card_filter;
+use crate::ability::*;
+use crate::types::{CardType, Color};
+use crate::oracle::effects::Builder;
+use crate::oracle::patterns::{EffectPattern, FollowupPattern};
+use crate::oracle::phrases::*;
+
+inventory::submit! {
+    EffectPattern { name: "dig: a step on the cards dug", priority: 1000, parse: step_sentence }
+}
+inventory::submit! {
+    EffectPattern { name: "dig: look at / reveal / exile N cards from the top", priority: 200, parse: source_sentence }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: a step on the cards dug (after the source)", priority: 200, apply: step_followup }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: you may put [cards] from among them ...", priority: 200, apply: may_take_followup }
+}
+
+/// Whether a dig of "that many" cards (the triggering event's amount) has a trigger with an
+/// amount: damage dealt, creatures attacking. `None` rejects the ability.
+pub fn check_that_many(e: &Effect, trigger: &TriggerCond) -> Option<()> {
+    fn uses_event_amount(e: &Effect) -> bool {
+        match e {
+            Effect::Dig {
+                n: Value::EventAmount,
+                ..
+            }
+            | Effect::Mill {
+                n: Value::EventAmount,
+                ..
+            }
+            | Effect::Exile {
+                what: Sel::TopOfLibrary(_, Value::EventAmount),
+                ..
+            } => true,
+            Effect::Seq(v) => v.iter().any(uses_event_amount),
+            Effect::May { effect, .. } => uses_event_amount(effect),
+            Effect::If {
+                then, otherwise, ..
+            } => uses_event_amount(then) || uses_event_amount(otherwise),
+            _ => false,
+        }
+    }
+    fn has_amount(t: &TriggerCond) -> bool {
+        match t {
+            TriggerCond::Batched { trigger, .. }
+            | TriggerCond::Where { trigger, .. }
+            | TriggerCond::FirstTimeEachTurn(trigger)
+            | TriggerCond::Noncombat(trigger) => has_amount(trigger),
+            TriggerCond::AnyOf(v) => v.iter().all(has_amount),
+            TriggerCond::DealsDamage { .. }
+            | TriggerCond::IsDealtDamage { .. }
+            | TriggerCond::PlayerDealtDamage { .. }
+            | TriggerCond::DealtExcessDamage { .. }
+            | TriggerCond::Attacks(_)
+            | TriggerCond::PlayerAttacks(_)
+            | TriggerCond::PlayerAttacksWith { .. }
+            | TriggerCond::PlayerAttacked { .. } => true,
+            _ => false,
+        }
+    }
+    (!uses_event_amount(e) || has_amount(trigger)).then_some(())
+}
+
+/// "You may put a creature card and/or a land card from among them into your hand.", "You
+/// may put any number of them into your hand and the rest into your graveyard.": an
+/// optional selection is a choice of up to that many cards (what follows, "the rest",
+/// happens either way), not "you may" around the whole instruction. Only where no other
+/// pattern reads the sentence.
+fn may_take_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !dug(b) || !l.starts_with("you may ") {
+        return false;
+    }
+    let saved = (
+        b.named.clone(),
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+        b.group.clone(),
+    );
+    b.named.retain(|(n, _)| n != DIG_MARK);
+    let others = crate::oracle::effects::parse_sentence(l, b).is_some();
+    (b.named, b.it, b.it_player, b.group) = (
+        saved.0.clone(),
+        saved.2.clone(),
+        saved.3.clone(),
+        saved.4.clone(),
+    );
+    b.targets.truncate(saved.1);
+    if others {
+        return false;
+    }
+    let Some(v) = parse_take(l, b) else {
+        (b.named, b.it, b.it_player, b.group) = (saved.0, saved.2, saved.3, saved.4);
+        b.targets.truncate(saved.1);
+        return false;
+    };
+    let old = std::mem::take(prev);
+    let mut all = vec![old];
+    all.extend(v);
+    *prev = Effect::seq(all);
+    b.it = Sel::Var(vars::IT);
+    true
+}
+inventory::submit! {
+    crate::oracle::patterns::ConditionPattern { name: "dig: if you put [cards] into your hand this way", priority: 200, parse: put_this_way }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: you may play the cards exiled from the top", priority: 200, apply: may_play_dug }
+}
+inventory::submit! {
+    crate::oracle::patterns::ConditionPattern { name: "dig: there is a [card] and a [card] in your graveyard", priority: 200, parse: cards_in_graveyard }
+}
+
+/// "there is an instant card and a sorcery card in your graveyard" (Flow State): a card
+/// of each description.
+fn cards_in_graveyard(c: &str) -> Option<Condition> {
+    let r = end(c)
+        .strip_prefix("there is ")?
+        .strip_suffix(" in your graveyard")?;
+    let (a, c2) = r.split_once(" and ")?;
+    let mut out = Vec::new();
+    for d in [a, c2] {
+        let d = d.strip_prefix("a ").or_else(|| d.strip_prefix("an "))?;
+        let (f, _, rest) = parse_object_phrase(d)?;
+        if !rest.trim().is_empty() || !d.ends_with(" card") {
+            return None;
+        }
+        out.push(Condition::Exists(Filter::and(vec![
+            f,
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::OwnedBy(PlayerRel::You),
+        ])));
+    }
+    Some(Condition::And(out))
+}
+inventory::submit! {
+    EffectPattern { name: "dig: [source], [steps] / [source] and [instruction]", priority: 200, parse: source_then_steps }
+}
+inventory::submit! {
+    EffectPattern { name: "dig: mill that many cards", priority: 200, parse: mill_that_many }
+}
+inventory::submit! {
+    EffectPattern { name: "dig: draw a card and reveal it", priority: 200, parse: draw_and_reveal }
+}
+
+/// "draw a card and reveal it" (Sindbad, Pact Weapon): the card drawn is revealed
+/// (CR 701.20a), and is what "it" and "that card" mean next.
+fn draw_and_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "draw a card and reveal it" {
+        return None;
+    }
+    let mut in_place = Destination::library_top();
+    in_place.position = LibraryPosition::FromTop(0);
+    // "that card" is the card drawn; "it" and "the creature" keep meaning what they did
+    // (Pact Weapon: "The creature gets +X/+X ..., where X is that card's mana value").
+    for p in ["that card", "the revealed card"] {
+        b.named.push((p.to_string(), Sel::Var(vars::IT)));
+    }
+    // "Draw a card and reveal it. If it isn't a land card, discard it." (Sindbad): "it"
+    // is the card drawn, outside a trigger whose "it" is the triggering object.
+    if !b.in_trigger {
+        b.it = Sel::Var(vars::IT);
+    }
+    b.named.push((DRAWN_MARK.to_string(), Sel::Var(vars::IT)));
+    Some(Effect::seq(vec![
+        Effect::Draw {
+            who: PlayerRef::You,
+            n: Value::c(1),
+        },
+        Effect::DigStep(Box::new(DigStep::Take {
+            from: Sel::Var(vars::REVEALED),
+            chooser: PlayerRef::You,
+            filter: Filter::Any,
+            each_of: vec![],
+            count: None,
+            up_to: false,
+            random: false,
+            reveal: true,
+            to: in_place,
+        })),
+    ]))
+}
+inventory::submit! {
+    EffectPattern { name: "dig: return [this] to [a zone] and [cards milled this way] to [another]", priority: 200, parse: return_two_ways }
+}
+
+/// "Return ~ to its owner's hand and up to one creature card milled this way to the
+/// battlefield under your control." (Avatar Destiny): two returns with their own
+/// destinations, after a dig ("milled this way").
+fn return_two_ways(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("return ")?;
+    if !dug(b) || !r.contains(" this way to ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    for (i, _) in r.match_indices(" and ") {
+        let (first, second) = (&r[..i], &r[i + " and ".len()..]);
+        if !first.contains(" to ") || !second.contains(" to ") {
+            continue;
+        }
+        let Some(a) = crate::oracle::effects::parse_clause(&format!("return {first}"), b) else {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+            continue;
+        };
+        let Some(c) = crate::oracle::effects::parse_clause(&format!("return {second}"), b) else {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+            continue;
+        };
+        // The cards "milled this way" are found before the other return changes what the
+        // last instruction affected (the two happen at once).
+        return Some(if second.contains(" this way ") {
+            Effect::seq(vec![c, a])
+        } else {
+            Effect::seq(vec![a, c])
+        });
+    }
+    None
+}
+
+inventory::submit! {
+    FollowupPattern { name: "dig: put [N] of them [somewhere] after casting one of the cards found", priority: 300, apply: take_after_cast }
+}
+
+/// "Exile cards from the top of your library until you exile two nonland cards .... You
+/// may cast one of those two cards without paying its mana cost. Put one of them into your
+/// hand." (Invasion of Alara): "them" are the cards found that are still exiled (casting
+/// one changed what the last instruction affected).
+fn take_after_cast(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        e => Some(e),
+    };
+    if !dug(b) || !matches!(last, Some(Effect::CastCard { .. })) {
+        return false;
+    }
+    let l = end(l);
+    if !(l.starts_with("put ") && l.contains(" of them ")) {
+        return false;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(v) = parse_take(l, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let mut out = Vec::new();
+    for e in v {
+        match e {
+            Effect::DigStep(step) => match *step {
+                DigStep::Take {
+                    chooser,
+                    filter,
+                    each_of,
+                    count,
+                    up_to,
+                    random,
+                    reveal,
+                    to,
+                    ..
+                } => out.push(Effect::DigStep(Box::new(DigStep::Take {
+                    from: Sel::Var(vars::DUG_FOUND),
+                    chooser,
+                    filter,
+                    each_of,
+                    count,
+                    up_to,
+                    random,
+                    reveal,
+                    to,
+                }))),
+                _ => {
+                    b.targets.truncate(saved.0);
+                    b.it = saved.1;
+                    return false;
+                }
+            },
+            _ => {
+                b.targets.truncate(saved.0);
+                b.it = saved.1;
+                return false;
+            }
+        }
+    }
+    let old = std::mem::take(prev);
+    let mut all = vec![old];
+    all.extend(out);
+    *prev = Effect::seq(all);
+    b.it = Sel::Var(vars::IT);
+    true
+}
+
+const DRAWN_MARK: &str = "\u{1}drawn and revealed";
+
+inventory::submit! {
+    EffectPattern { name: "dig: discard the card drawn and revealed", priority: 200, parse: discard_drawn }
+}
+
+/// "Draw a card and reveal it. If it isn't a land card, discard it." (Sindbad): you
+/// discard the card drawn (if it's still in your hand, CR 701.9a).
+fn discard_drawn(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !matches!(end(l), "discard it" | "discard that card") {
+        return None;
+    }
+    let drawn = b
+        .named
+        .iter()
+        .find_map(|(n, s)| (n == DRAWN_MARK).then(|| s.clone()))?;
+    let it = if end(l) == "discard it" {
+        &b.it
+    } else {
+        &drawn
+    };
+    if format!("{it:?}") != format!("{drawn:?}") {
+        return None;
+    }
+    Some(Effect::Discard {
+        who: PlayerRef::You,
+        n: Value::c(1),
+        random: false,
+        filter: Filter::and(vec![Filter::Card, Filter::In(Box::new(drawn))]),
+    })
+}
+
+inventory::submit! {
+    FollowupPattern { name: "dig: otherwise, you may put that card ...", priority: 200, apply: otherwise_put_untaken }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: if [condition], instead [selection]", priority: 50, apply: dig_instead }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: [instruction] for each card put [somewhere] this way", priority: 150, apply: for_each_put_this_way }
+}
+inventory::submit! {
+    FollowupPattern { name: "dig: if it's a double-faced card, you may transform it", priority: 150, apply: transform_if_double_faced }
+}
+
+/// "If it's a double-faced card, you may transform it." after putting a card from among
+/// them onto the battlefield (Nick Fury, Agent of S.H.I.E.L.D.): the permanent it became.
+fn transform_if_double_faced(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "if it's a double-faced card, you may transform it" {
+        return false;
+    }
+    let to_battlefield = steps_rev(prev)
+        .first()
+        .is_some_and(|s| matches!(s, DigStep::Take { to, .. } if to.zone == ZoneKind::Battlefield));
+    if !to_battlefield
+        || !matches!(prev, Effect::Seq(v) if matches!(v.last(), Some(Effect::DigStep(_))))
+    {
+        return false;
+    }
+    let it = Sel::Var(vars::IT);
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::SelMatches(
+                it.clone(),
+                Filter::Custom(crate::kw::dig_filters::DOUBLE_FACED.into()),
+            ),
+            then: Box::new(Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(Effect::Transform { what: it }),
+            }),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+/// The dig steps of an effect, last first.
+fn steps_rev(e: &Effect) -> Vec<&DigStep> {
+    match e {
+        Effect::DigStep(s) => vec![&**s],
+        Effect::Seq(v) => v.iter().rev().flat_map(steps_rev).collect(),
+        _ => vec![],
+    }
+}
+
+/// "You lose 3 life for each card you put into your hand this way.", "Create a Treasure
+/// token for each card put into your graveyard this way.": as many times as the previous
+/// selection (or the rest) put cards there.
+fn for_each_put_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some((clause, what)) = l.rsplit_once(" for each card ") else {
+        return false;
+    };
+    let zone = match what {
+        "you put into your hand this way" | "put into your hand this way" => ZoneKind::Hand,
+        "put into your graveyard this way" | "you put into your graveyard this way" => {
+            ZoneKind::Graveyard
+        }
+        _ => return false,
+    };
+    // The step that put cards there: the last selection or the rest.
+    let Some(count) = steps_rev(prev).into_iter().find_map(|s| match s {
+        DigStep::Take { to, .. } if to.zone == zone => Some(Value::Var(vars::DUG_CHOSEN)),
+        DigStep::Rest { to, .. } if to.zone == zone => Some(Value::Var(vars::DUG)),
+        _ => None,
+    }) else {
+        return false;
+    };
+    // Only when the previous sentence ends with that step.
+    let last_is_step = match prev {
+        Effect::Seq(v) => matches!(v.last(), Some(Effect::DigStep(_))),
+        Effect::DigStep(_) => true,
+        _ => false,
+    };
+    if !last_is_step {
+        return false;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(e) = crate::oracle::effects::parse_sentence(clause, b)
+        .and_then(|e| super::damage_removal_foreach::multiply(e, count))
+    else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! {
+    FollowupPattern { name: "dig: if you put fewer than N [cards] [somewhere] this way, [instruction] a number of times equal to the difference", priority: 150, apply: fewer_than_this_way }
+}
+
+/// "Put up to two land cards from among them onto the battlefield tapped .... If you put
+/// fewer than two lands onto the battlefield this way, proliferate a number of times equal
+/// to the difference." (Expand the Sphere): N minus the number of cards the selection put
+/// there.
+fn fewer_than_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you put fewer than ") else {
+        return false;
+    };
+    let Some((what, clause)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some(clause) = clause.strip_suffix(" a number of times equal to the difference") else {
+        return false;
+    };
+    let Some((n, rest)) = parse_number(what) else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let Some((noun, zone)) = [
+        (" onto the battlefield", ZoneKind::Battlefield),
+        (" into your hand", ZoneKind::Hand),
+    ]
+    .iter()
+    .find_map(|(p, z)| rest.strip_suffix(p).map(|x| (x, *z))) else {
+        return false;
+    };
+    // The kind of cards counted is the kind the selection took.
+    let kind = match noun {
+        "cards" => None,
+        "lands" | "land cards" => Some(Filter::Type(crate::types::CardType::Land)),
+        "creatures" | "creature cards" => Some(Filter::Type(crate::types::CardType::Creature)),
+        _ => return false,
+    };
+    // The last selection (the rest may follow it).
+    let Some(DigStep::Take { to, filter, .. }) = steps_rev(prev)
+        .into_iter()
+        .find(|s| matches!(s, DigStep::Take { .. }))
+    else {
+        return false;
+    };
+    if to.zone != zone {
+        return false;
+    }
+    if let Some(k) = kind {
+        if !format!("{filter:?}").contains(&format!("{k:?}")) {
+            return false;
+        }
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let Some(e) = crate::oracle::effects::parse_clause(clause, b) else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return false;
+    };
+    let diff = Value::Diff(Box::new(n.clone()), Box::new(Value::Var(vars::DUG_CHOSEN)));
+    let repeat = Effect::If {
+        cond: Condition::Compare(Value::Var(vars::DUG_CHOSEN), Cmp::Lt, n),
+        then: Box::new(Effect::Repeat {
+            times: diff,
+            effect: Box::new(e),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, repeat]);
+    true
+}
+
+/// The selection part of a dig the previous sentence made, split off its source: a
+/// [`Effect::Dig`] that takes cards becomes a dig that only looks, followed by the
+/// selection (and the rest). Returns the index in `v` where the selection starts.
+fn split_selection(prev: &mut Effect) -> Option<usize> {
+    if let Effect::Dig {
+        who,
+        n,
+        reveal,
+        filter,
+        take,
+        take_up_to,
+        take_to,
+        rest_to,
+    } = prev
+    {
+        if matches!(take, Value::Const(0)) {
+            return None;
+        }
+        let mut in_place = Destination::library_top();
+        in_place.position = LibraryPosition::FromTop(0);
+        let mut v = vec![
+            Effect::Dig {
+                who: who.clone(),
+                n: n.clone(),
+                reveal: *reveal,
+                filter: Filter::Any,
+                take: Value::c(0),
+                take_up_to: true,
+                take_to: Destination::zone(ZoneKind::Hand),
+                rest_to: in_place,
+            },
+            Effect::DigStep(Box::new(DigStep::Take {
+                from: dug_sel(),
+                chooser: PlayerRef::You,
+                filter: filter.clone(),
+                each_of: vec![],
+                count: Some(take.clone()),
+                up_to: *take_up_to,
+                random: false,
+                reveal: false,
+                to: take_to.clone(),
+            })),
+        ];
+        if !crate::dig_steps::in_place(rest_to) {
+            v.push(Effect::DigStep(Box::new(DigStep::Rest {
+                from: dug_sel(),
+                to: rest_to.clone(),
+            })));
+        }
+        *prev = Effect::Seq(v);
+        return Some(1);
+    }
+    let Effect::Seq(v) = prev else {
+        return None;
+    };
+    if v.len() < 2 {
+        return None;
+    }
+    let is_take =
+        |e: &Effect| matches!(e, Effect::DigStep(s) if matches!(**s, DigStep::Take { .. }));
+    let is_rest =
+        |e: &Effect| matches!(e, Effect::DigStep(s) if matches!(**s, DigStep::Rest { .. }));
+    let last = v.len() - 1;
+    let start = if is_take(&v[last]) {
+        last
+    } else if is_rest(&v[last]) && is_take(&v[last - 1]) {
+        last - 1
+    } else {
+        return None;
+    };
+    // The selection follows the source directly (or in an earlier sentence).
+    (start == 0 || source_kind(&v[start - 1]).is_some()).then_some(start)
+}
+
+/// "If you gained life this turn, you may instead reveal two creature and/or land cards
+/// from among them and put them into your hand.", "If there is an instant card and a
+/// sorcery card in your graveyard, instead put two of them into your hand and the rest on
+/// the bottom of your library in any order.", "If ~ was cast using teamwork, put any
+/// number of creature cards from among them onto the battlefield instead.": another
+/// selection from the same cards, instead of the previous one.
+fn dig_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, x)) = r.split_once(", ") else {
+        return false;
+    };
+    let step_text = if let Some(x) = x.strip_prefix("instead ") {
+        x.to_string()
+    } else if let Some(x) = x.strip_prefix("you may instead ") {
+        format!("you may {x}")
+    } else if let Some(x) = x.strip_suffix(" instead") {
+        x.to_string()
+    } else {
+        return false;
+    };
+    let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) else {
+        return false;
+    };
+    let saved = (prev.clone(), b.named.clone(), b.targets.len());
+    let Some(start) = split_selection(prev).filter(|s| *s > 0 || dug(b)) else {
+        *prev = saved.0;
+        return false;
+    };
+    note_source(Some(prev), b);
+    let Some(new) = parse_take(&step_text, b) else {
+        *prev = saved.0;
+        b.named = saved.1;
+        b.targets.truncate(saved.2);
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        *prev = saved.0;
+        return false;
+    };
+    let old = v.split_off(start);
+    v.push(Effect::If {
+        cond,
+        then: Box::new(Effect::seq(new)),
+        otherwise: Box::new(Effect::seq(old)),
+    });
+    b.it = Sel::Var(vars::IT);
+    true
+}
+
+/// "Otherwise, you may put that card on the bottom of your library." after "Reveal the
+/// top card of your library. If it's a creature card, put it onto the battlefield.": the
+/// card if it wasn't taken.
+fn otherwise_put_untaken(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("otherwise, ") else {
+        return false;
+    };
+    let (may, r) = match r.strip_prefix("you may ") {
+        Some(x) => (true, x),
+        None => (false, r),
+    };
+    let Some(r) = r
+        .strip_prefix("put that card ")
+        .or_else(|| r.strip_prefix("put it "))
+    else {
+        return false;
+    };
+    let Some((to, "")) = destination(r) else {
+        return false;
+    };
+    let taken_one = match prev {
+        Effect::Dig {
+            n: Value::Const(1),
+            take: Value::Const(1),
+            take_up_to: false,
+            take_to,
+            rest_to,
+            ..
+        } => crate::dig_steps::in_place(rest_to) && take_to.zone != to.zone,
+        _ => false,
+    };
+    if !taken_one {
+        return false;
+    }
+    let step = Effect::DigStep(Box::new(DigStep::Rest {
+        from: dug_sel(),
+        to,
+    }));
+    let step = if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(step),
+        }
+    } else {
+        step
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, step]);
+    true
+}
+
+/// "you may mill that many cards", "you mill that many cards" in a triggered ability: the
+/// triggering event's amount ("Whenever ~ deals combat damage to a player").
+fn mill_that_many(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you ").unwrap_or(l);
+    if l != "mill that many cards" || !b.in_trigger {
+        return None;
+    }
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::Mill {
+        who: PlayerRef::You,
+        n: Value::EventAmount,
+    })
+}
+
+/// Whether the effect ends by exiling the top cards of a library (perhaps optionally).
+fn ends_exiling_top(e: &Effect) -> bool {
+    match e {
+        Effect::Exile {
+            what: Sel::TopOfLibrary(..),
+            face_down: false,
+            ..
+        } => true,
+        Effect::Seq(v) => v.last().is_some_and(ends_exiling_top),
+        Effect::May { effect, .. } => ends_exiling_top(effect),
+        // "If you do, exile the top two cards of your library."
+        Effect::If {
+            then, otherwise, ..
+        } if matches!(**otherwise, Effect::Noop) => ends_exiling_top(then),
+        _ => false,
+    }
+}
+
+/// "You may play those cards this turn", "You may play those cards until the end of your
+/// next turn", "Until end of turn, you may cast spells from among those exiled cards"
+/// after exiling cards from the top of your library ("you may exile that many cards from
+/// the top of your library"): permissions for the exiled cards.
+fn may_play_dug(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let (duration, spells_only) = match l {
+        "you may play those cards this turn" | "until end of turn, you may play those cards" => {
+            (Duration::EndOfTurn, false)
+        }
+        "you may play those cards until the end of your next turn"
+        | "until the end of your next turn, you may play those cards" => {
+            (Duration::UntilEndOfYourNextTurn, false)
+        }
+        "until end of turn, you may cast spells from among those exiled cards"
+        | "until end of turn, you may cast spells from among those cards"
+        | "you may cast spells from among those cards this turn" => (Duration::EndOfTurn, true),
+        _ => return false,
+    };
+    if !ends_exiling_top(prev) {
+        return false;
+    }
+    let grant = Effect::GrantPlayPermission {
+        who: PlayerRef::You,
+        what: Sel::Var(vars::DUG),
+        duration,
+        free: false,
+    };
+    let grant = if spells_only {
+        grant.cast_only()
+    } else {
+        grant
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, grant]);
+    true
+}
+
+/// "Look at the top ten cards of your library, exile up to two creature cards from among
+/// them, then shuffle.", "Reveal the top five cards of your library and separate them
+/// into two piles.": a dig and what's done with the cards in one sentence.
+fn source_then_steps(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    // Only a sentence that starts by digging, and goes on about the cards.
+    if !["look at ", "reveal ", "exile the top ", "mill "]
+        .iter()
+        .any(|p| l.starts_with(p))
+        || !(l.contains(" them") || l.contains(" those cards") || l.contains(" the rest"))
+    {
+        return None;
+    }
+    for sep in [", ", " and "] {
+        let mut from = 0;
+        while let Some(i) = l[from..].find(sep).map(|i| i + from) {
+            from = i + sep.len();
+            let (a, c) = (&l[..i], &l[i + sep.len()..]);
+            if c.starts_with("then ") && sep == ", " {
+                continue;
+            }
+            let saved = (b.targets.len(), b.it.clone(), b.named.clone());
+            let Some(ea) = crate::oracle::effects::parse_simple(a, b) else {
+                (
+                    b.targets.truncate(saved.0),
+                    b.it = saved.1.clone(),
+                    b.named = saved.2.clone(),
+                );
+                continue;
+            };
+            if !ends_with_dig(&ea) {
+                b.targets.truncate(saved.0);
+                (b.it, b.named) = (saved.1, saved.2);
+                continue;
+            }
+            note_source(Some(&ea), b);
+            b.it = Sel::Var(vars::DUG);
+            let ec = if sep == ", " {
+                parse_step(c, b)
+            } else {
+                crate::oracle::effects::parse_simple(c, b)
+            };
+            match ec {
+                Some(ec) => return Some(Effect::seq(vec![ea, ec])),
+                None => {
+                    b.targets.truncate(saved.0);
+                    (b.it, b.named) = (saved.1, saved.2);
+                }
+            }
+        }
+    }
+    None
+}
+
+inventory::submit! {
+    EffectPattern { name: "dig: [effect] if you revealed it / put [cards] ... this way", priority: 200, parse: trailing_this_way }
+}
+
+/// "Create a 1/1 blue Fish creature token if you revealed it this way." (Fisher's
+/// Talent): the conditions of [`put_this_way`] after the instruction they condition.
+fn trailing_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (x, c) = end(l).rsplit_once(" if ")?;
+    if !dug(b) || !c.ends_with(" this way") || x.contains(',') || x.contains(" if ") {
+        return None;
+    }
+    let cond = put_this_way(c)?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let Some(e) = crate::oracle::effects::parse_clause(x, b) else {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return None;
+    };
+    Some(Effect::If {
+        cond,
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+/// "if you didn't put a card into your hand this way", "if you put no cards into your
+/// hand this way", "if you put a Town card into your hand this way": about the cards the
+/// previous instruction chose ([`DigStep::Take`] sets whether it chose any and `vars::IT`
+/// to them).
+fn put_this_way(c: &str) -> Option<Condition> {
+    let c = end(c);
+    // "if you revealed it this way" (Fisher's Talent): whether a card was revealed by the
+    // previous selection: the cards the dig's selections took (`vars::REVEALED` also
+    // holds cards only looked at).
+    if matches!(
+        c,
+        "you revealed it this way" | "you revealed a card this way"
+    ) {
+        return Some(Condition::Compare(
+            Value::CountSel(Box::new(Sel::Var(vars::DUG_TAKEN))),
+            Cmp::Ge,
+            Value::c(1),
+        ));
+    }
+    // "If you didn't put the revealed card onto the battlefield this way" (Break Out): the
+    // card revealed from among them is still in the library.
+    if c == "you didn't put the revealed card onto the battlefield this way" {
+        return Some(Condition::Exists(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(vars::DUG_CHOSEN))),
+            Filter::InZone(ZoneKind::Library),
+        ])));
+    }
+    if matches!(
+        c,
+        "you didn't put a card into your hand this way"
+            | "you don't put a card into your hand this way"
+            | "you put no cards into your hand this way"
+            | "you didn't put a card into your hand"
+    ) {
+        return Some(Condition::Not(Box::new(Condition::PrevHappened)));
+    }
+    let desc = c
+        .strip_prefix("you put ")?
+        .strip_suffix(" into your hand this way")?;
+    let desc = desc
+        .strip_prefix("a ")
+        .or_else(|| desc.strip_prefix("an "))?;
+    let (f, _, rest) = parse_object_phrase(desc)?;
+    if !rest.trim().is_empty() || !desc.ends_with(" card") {
+        return None;
+    }
+    Some(Condition::Exists(Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(vars::IT))),
+        f,
+    ])))
+}
+
+/// Marks (in `Builder::named`) that the text has dug cards ("from among them" has an
+/// antecedent).
+pub(crate) const DIG_MARK: &str = "\u{1}dig";
+const UNTIL_MARK: &str = "\u{1}dig until";
+/// Marks, in [`Builder::named`], a dig of more than one card: "that card" isn't one of
+/// them (Gollum, Scheming Guide's "look at the top two cards ... Reveal that card", the
+/// top card a guess was about).
+const MANY_MARK: &str = "\u{1}dig of several cards";
+
+/// How many cards the last dig of the effect took from the library, when it says.
+fn source_count(e: &Effect) -> Option<&Value> {
+    match e {
+        Effect::Dig { n, .. } | Effect::Mill { n, .. } => Some(n),
+        Effect::Exile {
+            what: Sel::TopOfLibrary(_, n),
+            ..
+        } => Some(n),
+        Effect::Seq(v) => v.iter().rev().find(|x| source_kind(x).is_some()).and_then(source_count),
+        Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => source_count(effect),
+        _ => None,
+    }
+}
+/// Marks that cards were chosen (and revealed) from among them and left where they are
+/// ("the revealed cards").
+const CHOSEN_MARK: &str = "\u{1}dig-chosen";
+
+/// What kind of dig the effect ends with: `Some(true)` for revealing cards until some are
+/// found (the cards found aren't part of "the rest"), `Some(false)` for other digs.
+fn source_kind(e: &Effect) -> Option<bool> {
+    match e {
+        Effect::Dig { .. }
+        | Effect::Mill { .. }
+        | Effect::Exile {
+            what: Sel::TopOfLibrary(..),
+            ..
+        } => Some(false),
+        Effect::RevealUntil { .. } => Some(true),
+        // "Each player reveals the top card of their library." (parley)
+        Effect::Custom(name) if name == crate::kw::parley::REVEAL_TOPS => Some(false),
+        Effect::DigStep(s) => matches!(**s, DigStep::Until { .. }).then_some(true),
+        Effect::Seq(v) => v.iter().rev().find_map(source_kind),
+        Effect::May { effect, .. } => source_kind(effect),
+        // "Target opponent reveals the top seven cards of their library."
+        Effect::AsPlayer { effect, .. } => source_kind(effect),
+        Effect::If {
+            then, otherwise, ..
+        } => source_kind(then).or_else(|| source_kind(otherwise)),
+        _ => None,
+    }
+}
+
+/// The player another player's dig was performed by ("Target opponent reveals the top
+/// seven cards of their library": that player).
+fn dig_performer(e: &Effect) -> Option<PlayerRef> {
+    match e {
+        Effect::AsPlayer { who, effect } if source_kind(effect).is_some() => Some(who.clone()),
+        Effect::RevealUntil { who, .. } if !matches!(who, PlayerRef::You) => Some(who.clone()),
+        Effect::DigStep(s) => match &**s {
+            DigStep::Until { who, .. } if !matches!(who, PlayerRef::You) => Some(who.clone()),
+            _ => None,
+        },
+        Effect::Seq(v) => v.iter().rev().find(|x| source_kind(x).is_some()).and_then(dig_performer),
+        _ => None,
+    }
+}
+
+/// Whether the last dig of the effect revealed (or exiled) cards until some were found.
+pub(super) fn ends_with_until(e: &Effect) -> bool {
+    source_kind(e) == Some(true)
+}
+
+/// Whether the effect ends with a dig or a dig step (so the next sentence may continue
+/// it).
+fn ends_with_dig(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.last().is_some_and(ends_with_dig),
+        Effect::May { effect, .. } => ends_with_dig(effect),
+        Effect::If {
+            then, otherwise, ..
+        } => ends_with_dig(then) || ends_with_dig(otherwise),
+        other => matches!(other, Effect::DigStep(_)) || source_kind(other).is_some(),
+    }
+}
+
+/// Called after each sentence of an effect text (see `oracle::effects`): notes that cards
+/// were dug, and what "the rest" of them is.
+pub fn note_source(e: Option<&Effect>, b: &mut Builder) {
+    let Some(until) = e.and_then(source_kind) else {
+        return;
+    };
+    let rest = if until {
+        // "Reveal cards ... until you reveal a creature card. You may cast that card ...
+        // Put the rest ...": the cards revealed other than the ones found.
+        Sel::All(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(vars::DUG))),
+            Filter::not(Filter::In(Box::new(Sel::Var(vars::DUG_FOUND)))),
+        ]))
+    } else {
+        Sel::Var(vars::DUG)
+    };
+    b.named
+        .retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK && n != MANY_MARK);
+    b.named.push((DIG_MARK.to_string(), rest));
+    if matches!(e.and_then(source_count), Some(Value::Const(k)) if *k > 1) {
+        b.named.push((MANY_MARK.to_string(), Sel::None));
+    }
+    // "Then that player puts the rest into their graveyard."
+    if let Some(p) = e.and_then(dig_performer) {
+        if matches!(b.it_player, PlayerRef::You) {
+            b.it_player = p;
+        }
+    }
+    // The one card a "reveal until" looked for ("When you reveal a nonland card this way").
+    if let Some(f) = e.and_then(until_one) {
+        b.named.push((UNTIL_MARK.to_string(), Sel::All(f)));
+    }
+}
+
+/// The description of the one card the last "reveal until" of `e` looked for.
+fn until_one(e: &Effect) -> Option<Filter> {
+    match e {
+        Effect::RevealUntil { filter, .. } => Some(filter.clone()),
+        Effect::DigStep(s) => match &**s {
+            DigStep::Until {
+                filter,
+                count: Value::Const(1),
+                exile: false,
+                ..
+            } => Some(filter.clone()),
+            _ => None,
+        },
+        Effect::Seq(v) => v.iter().rev().find_map(until_one),
+        Effect::AsPlayer { effect, .. } => until_one(effect),
+        _ => None,
+    }
+}
+
+/// "the milled cards", "the revealed cards", "the exiled cards" (in a value: "the greatest
+/// mana value among the milled cards"): the cards dug, after a dig.
+pub fn dug_objects(s: &str, b: &Builder) -> Option<(Filter, String)> {
+    if !dug(b) {
+        return None;
+    }
+    for p in [
+        "the milled cards",
+        "the cards milled this way",
+        "the revealed cards",
+        "the cards revealed this way",
+        "the exiled cards",
+        "the cards exiled this way",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((Filter::In(Box::new(dug_sel())), r.to_string()));
+        }
+    }
+    None
+}
+
+/// Notes that the text has cards to choose among and distribute like dug cards (cards a
+/// search found and left where they are): "the rest" is `rest`.
+pub(super) fn mark_dug(b: &mut Builder, rest: Sel) {
+    b.named.retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK && n != CHOSEN_MARK);
+    b.named.push((DIG_MARK.to_string(), rest));
+}
+
+/// "An opponent chooses two of those cards": `chooser` chooses `count` of the cards (all
+/// of them if there are no more), which stay where they are ("the chosen cards").
+pub(super) fn choose_in_place(chooser: PlayerRef, count: Value, b: &mut Builder) -> Effect {
+    let mut to = Destination::library_top();
+    to.position = LibraryPosition::FromTop(0);
+    if !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        b.named
+            .push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    // "Put the chosen card into your hand and the other into your graveyard."
+    let among = rest_sel(b);
+    let others = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(among.clone())),
+        Filter::not(Filter::In(Box::new(Sel::Var(vars::DUG_CHOSEN)))),
+    ]));
+    for n in ["the chosen card", "the chosen cards"] {
+        b.named.push((n.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    for n in ["the other", "the others", "the rest"] {
+        b.named.push((n.to_string(), others.clone()));
+    }
+    Effect::DigStep(Box::new(DigStep::Take {
+        from: among,
+        chooser,
+        filter: Filter::Any,
+        each_of: vec![],
+        count: Some(count),
+        up_to: false,
+        random: false,
+        reveal: false,
+        to,
+    }))
+}
+
+/// Whether an earlier sentence dug cards (a step on them is read by this grammar).
+pub fn dug(b: &Builder) -> bool {
+    b.named.iter().any(|(n, _)| n == DIG_MARK)
+}
+
+fn dug_sel() -> Sel {
+    Sel::Var(vars::DUG)
+}
+
+/// What "the rest" means (see [`note_source`]).
+fn rest_sel(b: &Builder) -> Sel {
+    b.named
+        .iter()
+        .find(|(n, _)| n == DIG_MARK)
+        .map(|(_, s)| s.clone())
+        .unwrap_or_else(dug_sel)
+}
+
+/// "from among them" and the like: the cards dug.
+fn among_ref(s: &str) -> Option<&str> {
+    for p in [
+        "them",
+        "those cards",
+        "the milled cards",
+        "the cards milled this way",
+        "the revealed cards",
+        "the cards revealed this way",
+        "the exiled cards",
+        "the cards exiled this way",
+        "those exiled cards",
+        "the looked-at cards",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            if r.is_empty() || r.starts_with([' ', ',']) {
+                return Some(r);
+            }
+        }
+    }
+    None
+}
+
+/// Library positions: "on top of your library", "back on top of that player's library in
+/// any order", "on the bottom of your library in a random order", "on the bottom in any
+/// order", "back".
+fn library_dest(s: &str) -> Option<(Destination, &str)> {
+    let (top, r) = if let Some(r) = ["back on top of ", "on top of "]
+        .iter()
+        .find_map(|p| s.strip_prefix(p))
+    {
+        (true, r)
+    } else if let Some(r) = s.strip_prefix("on the bottom") {
+        (false, r)
+    } else if let Some(r) = s.strip_prefix("back") {
+        // "put one back", "put the rest back in any order": on top.
+        let r2 = r.strip_prefix(" on top").unwrap_or(r);
+        let mut d = Destination::library_top();
+        d.position = LibraryPosition::Top;
+        return Some((d, strip_order(r2).1));
+    } else {
+        return None;
+    };
+    // "of your library", "of that player's library", "of their library", "of that
+    // library", "of the library", "of their owners' libraries", or nothing ("on the
+    // bottom in a random order").
+    let r = if top {
+        library_of(r)?
+    } else {
+        match r.strip_prefix(" of ") {
+            Some(x) => library_of(x)?,
+            None => r,
+        }
+    };
+    let (random, r) = strip_order(r);
+    let mut d = if top {
+        Destination::library_top()
+    } else {
+        Destination::library_bottom()
+    };
+    if random {
+        if top {
+            return None;
+        }
+        d.position = LibraryPosition::BottomRandom;
+    }
+    Some((d, r))
+}
+
+fn library_of(s: &str) -> Option<&str> {
+    [
+        "your library",
+        "that player's library",
+        "their library",
+        "that library",
+        "the library",
+        "their owners' libraries",
+        "its owner's library",
+    ]
+    .iter()
+    .find_map(|p| s.strip_prefix(p))
+}
+
+/// " in any order" / " in a random order" (whether random).
+fn strip_order(s: &str) -> (bool, &str) {
+    if let Some(r) = s.strip_prefix(" in any order") {
+        (false, r)
+    } else if let Some(r) = s.strip_prefix(" in a random order") {
+        (true, r)
+    } else {
+        (false, s)
+    }
+}
+
+/// Where cards go: "into your hand", "into your graveyard", "onto the battlefield tapped
+/// and attacking under your control with a shield counter on it", a library position.
+pub(super) fn destination(s: &str) -> Option<(Destination, &str)> {
+    let s = s.trim_start();
+    for p in [
+        "into your hand",
+        "in your hand",
+        "into their owner's hand",
+        "into its owner's hand",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((Destination::zone(ZoneKind::Hand), r));
+        }
+    }
+    for p in [
+        "into your graveyard",
+        "into that player's graveyard",
+        "into their graveyard",
+        "into their owners' graveyards",
+        "into its owner's graveyard",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((Destination::zone(ZoneKind::Graveyard), r));
+        }
+    }
+    if let Some(mut r) = s.strip_prefix("onto the battlefield") {
+        let mut d = Destination::battlefield().under_your_control();
+        if let Some(x) = r.strip_prefix(" tapped") {
+            d.tapped = true;
+            r = x;
+        }
+        if let Some(x) = r.strip_prefix(" and attacking") {
+            if !d.tapped {
+                return None;
+            }
+            d.attacking = true;
+            r = x;
+        }
+        if let Some(x) = r.strip_prefix(" under your control") {
+            r = x;
+        }
+        // "with a shield counter on it", "with an indestructible counter on it".
+        if let Some(x) = r
+            .strip_prefix(" with a ")
+            .or_else(|| r.strip_prefix(" with an "))
+        {
+            let (k, x) = crate::oracle::costs::counter_kind(x)?;
+            let x = x.trim_start().strip_prefix("counter on it")?;
+            d.with_counters.push((k, Value::c(1)));
+            r = x;
+        }
+        return Some((d, r));
+    }
+    library_dest(s)
+}
+
+/// A counted description: "a land card", "up to two creature cards", "any number of
+/// creature and/or land cards", "all artifact cards", "a random creature card", "X cards",
+/// "a creature card and/or a land card".
+struct Counted {
+    filter: Filter,
+    each_of: Vec<Filter>,
+    count: Option<Value>,
+    up_to: bool,
+    random: bool,
+    /// A number without "of them" ("Put one into your hand and exile the rest"): only
+    /// with "the rest" in the same sentence.
+    implicit: bool,
+}
+
+/// A card description, also an "or" list of kinds the shared object grammar doesn't read
+/// as one phrase ("a blue or artifact card", "a Knight, Aura, Equipment, or legendary
+/// artifact card", "land and/or legendary permanent cards with mana value X or less"):
+/// each kind with the qualifiers that follow "card(s)", and "with mana value N or M".
+pub(super) fn dig_card_filter(desc: &str, b: &mut Builder) -> Option<Filter> {
+    let desc = desc.trim();
+    if matches!(desc, "card" | "cards") {
+        return Some(Filter::Card);
+    }
+    // "creature and/or Vehicle cards with different powers": a requirement on the cards
+    // chosen together (`relational.rs`), about all of them.
+    if let Some((i, j, grp)) = find_group_phrase(desc).filter(|(_, j, _)| *j == desc.len()) {
+        let _ = j;
+        let f = dig_card_filter(&desc[..i], b)?;
+        return Some(Filter::and(vec![f, Filter::Together(grp)]));
+    }
+    // "a card with doctor's companion" (CR 702.124m).
+    if desc == "card with doctor's companion" {
+        return Some(Filter::and(vec![
+            Filter::Card,
+            Filter::Custom(crate::kw::dig_filters::DOCTORS_COMPANION.into()),
+        ]));
+    }
+    if let Some(f) = card_filter(desc, b) {
+        return Some(f);
+    }
+    // "[kinds] card(s)[qualifiers]".
+    let (kinds, rest) = desc
+        .split_once(" cards")
+        .or_else(|| desc.split_once(" card"))?;
+    if !(rest.is_empty() || rest.starts_with(' ')) {
+        return None;
+    }
+    let noun = if desc.contains(" cards") {
+        "cards"
+    } else {
+        "card"
+    };
+    // "with mana value 2 or 3".
+    let (rest, mv_alts) = match rest.strip_prefix(" with mana value ") {
+        Some(r) => match r.split_once(" or ") {
+            Some((a, c)) if a.parse::<i32>().is_ok() && c.parse::<i32>().is_ok() => (
+                "",
+                Some(vec![
+                    Filter::ManaValue(Cmp::Eq, Box::new(Value::c(a.parse().ok()?))),
+                    Filter::ManaValue(Cmp::Eq, Box::new(Value::c(c.parse().ok()?))),
+                ]),
+            ),
+            _ => (rest, None),
+        },
+        None => (rest, None),
+    };
+    let mut alts = Vec::new();
+    for part in kinds
+        .split(", or ")
+        .flat_map(|p| p.split(", and/or "))
+        .flat_map(|p| p.split(" and/or "))
+        .flat_map(|p| p.split(" or "))
+        .flat_map(|p| p.split(", "))
+    {
+        let part = part.trim();
+        if part.is_empty() {
+            return None;
+        }
+        if part == "double-faced" && rest.is_empty() {
+            alts.push(Filter::and(vec![
+                Filter::Card,
+                Filter::Custom(crate::kw::dig_filters::DOUBLE_FACED.into()),
+            ]));
+            continue;
+        }
+        alts.push(card_filter(&format!("{part} {noun}{rest}"), b)?);
+    }
+    // "creature and/or Vehicle cards with different powers": a requirement on the cards
+    // chosen together is about all of them, whichever kind each is (`relational.rs`).
+    let mut groups: Vec<TargetGroup> = Vec::new();
+    if alts.len() > 1 {
+        for a in alts.iter_mut() {
+            let (f, g) = crate::relational::split_groups(std::mem::replace(a, Filter::Any));
+            *a = f;
+            for x in g {
+                if !groups.iter().any(|y| format!("{y:?}") == format!("{x:?}")) {
+                    groups.push(x);
+                }
+            }
+        }
+    }
+    let kinds = match alts.len() {
+        0 => return None,
+        1 => alts.pop()?,
+        _ => {
+            let mut parts = vec![Filter::Or(alts)];
+            parts.extend(groups.into_iter().map(Filter::Together));
+            Filter::and(parts)
+        }
+    };
+    Some(match mv_alts {
+        Some(m) => Filter::and(vec![kinds, Filter::Or(m)]),
+        None if kinds_is_list(desc) => kinds,
+        None => return None,
+    })
+}
+
+/// Whether the description is a list of kinds (not one the grammar rejected for another
+/// reason).
+fn kinds_is_list(desc: &str) -> bool {
+    desc.contains(" or ") || desc.contains(" and/or ") || desc.contains(", ")
+}
+
+fn counted(s: &str, may: bool, b: &mut Builder) -> Option<Counted> {
+    let s = s.trim();
+    // "a creature card and/or a land card", "an angel card, a demon card, and/or a dragon
+    // card": one of each.
+    if s.contains(" and/or a") {
+        let parts: Vec<&str> = s
+            .split(", and/or ")
+            .flat_map(|p| p.split(" and/or "))
+            .flat_map(|p| p.split(", "))
+            .collect();
+        if parts.len() >= 2
+            && parts
+                .iter()
+                .all(|p| p.starts_with("a ") || p.starts_with("an "))
+        {
+            let mut each = Vec::new();
+            for p in &parts {
+                let d = p.split_once(' ')?.1;
+                each.push(dig_card_filter(d, b)?);
+            }
+            return Some(Counted {
+                filter: Filter::Any,
+                count: Some(Value::c(each.len() as i32)),
+                each_of: each,
+                up_to: may,
+                random: false,
+                implicit: false,
+            });
+        }
+    }
+    let (count, up_to, random, desc) = if let Some(r) = s.strip_prefix("any number of ") {
+        (Some(Value::c(999)), true, false, r)
+    } else if let Some(r) = s.strip_prefix("up to ") {
+        let (n, r) = parse_number(r)?;
+        (Some(n), true, false, r)
+    } else if let Some(r) = s.strip_prefix("all ") {
+        if may {
+            return None;
+        }
+        (None, false, false, r)
+    } else if let Some(r) = s
+        .strip_prefix("a random ")
+        .or_else(|| s.strip_prefix("one random "))
+    {
+        (Some(Value::c(1)), false, true, r)
+    } else {
+        let (n, r) = parse_number(s)?;
+        (Some(n), may, false, r)
+    };
+    let filter = dig_card_filter(desc, b)?;
+    Some(Counted {
+        filter,
+        each_of: vec![],
+        count,
+        up_to,
+        random,
+        implicit: false,
+    })
+}
+
+/// "[count] of them", "[count] of those cards", "one", "any number of them".
+fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
+    let (count, up_to, r) = if let Some(r) = s.strip_prefix("any number ") {
+        (Value::c(999), true, r)
+    } else if let Some(r) = s.strip_prefix("up to ") {
+        let (n, r) = parse_number(r)?;
+        (n, true, r)
+    } else {
+        let (n, r) = parse_number(s)?;
+        (n, may, r)
+    };
+    let r = r.trim_start();
+    let mut implicit = false;
+    let r = match r
+        .strip_prefix("of them")
+        .or_else(|| r.strip_prefix("of those cards"))
+        .or_else(|| r.strip_prefix("of the revealed cards"))
+        // "one of those two cards" (the cards a "reveal until" found).
+        .or_else(|| {
+            ["two", "three", "four", "five"].iter().find_map(|n| {
+                r.strip_prefix("of those ")?
+                    .strip_prefix(n)?
+                    .strip_prefix(" cards")
+            })
+        }) {
+        Some(x) => x,
+        // "Put one into your hand and exile the rest", "Put one back": a number word.
+        None if !s.starts_with("a ") && !s.starts_with("an ") && !s.starts_with("any ") => {
+            implicit = true;
+            let r = format!(" {r}");
+            let off = s.len() - r.len();
+            &s[off..]
+        }
+        None => return None,
+    };
+    // "Exile four of them at random."
+    let (random, r) = match r.strip_prefix(" at random") {
+        Some(x) => (true, x),
+        None => (false, r),
+    };
+    Some((
+        Counted {
+            filter: Filter::Any,
+            each_of: vec![],
+            count: Some(count),
+            up_to: up_to && !random,
+            random,
+                implicit,
+        },
+        r,
+    ))
+}
+
+/// Pronouns for the chosen cards after "and put": "it", "them", "that card", "those
+/// cards", "the revealed cards".
+fn strip_chosen_pronoun(s: &str) -> Option<&str> {
+    [
+        "it ",
+        "them ",
+        "that card ",
+        "those cards ",
+        "the revealed cards ",
+        "the revealed card ",
+    ]
+    .iter()
+    .find_map(|p| s.strip_prefix(p))
+}
+
+/// What the rest is called: "the rest", "the rest of the revealed cards", "the rest of
+/// the cards", "all other cards revealed this way", "all revealed cards not cast this
+/// way", "the other cards exiled this way", "the revealed cards", "all cards revealed this
+/// way", "the other".
+fn rest_noun(s: &str) -> Option<(bool, &str)> {
+    // The cards not chosen (nor found by revealing until).
+    for p in [
+        "the rest of the revealed cards",
+        "the rest of the cards revealed this way",
+        "the rest of the cards exiled this way",
+        "the rest of the cards",
+        "the rest of the exiled cards",
+        "the rest of those exiled cards",
+        "the rest of those revealed cards",
+        "the rest of those cards",
+        "the rest",
+        "all other cards revealed this way",
+        "all other revealed cards",
+        "the other cards revealed this way",
+        "the other cards exiled this way",
+        "all other cards exiled this way",
+        "the other",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            if r.is_empty() || r.starts_with(' ') {
+                return Some((false, r));
+            }
+        }
+    }
+    // All the cards still there.
+    for p in [
+        "all revealed cards not cast this way",
+        "the exiled cards that weren't cast this way",
+        "the exiled cards not cast this way",
+        "the revealed cards that weren't cast this way",
+        "the revealed cards not cast this way",
+        "all cards revealed this way that weren't put onto the battlefield",
+        "all cards revealed this way",
+        "the revealed cards",
+        "the revealed card",
+        "the milled cards",
+    ] {
+        if let Some(r) = s.strip_prefix(p) {
+            return Some((true, r));
+        }
+    }
+    None
+}
+
+/// The cards "the rest" (`all`: "all cards revealed this way") means.
+fn rest_of(all: bool, rest: &Sel) -> Sel {
+    if all {
+        dug_sel()
+    } else {
+        rest.clone()
+    }
+}
+
+/// The rest's destination ("on the bottom of your library in a random order", "into your
+/// graveyard", "back in any order", "into your hand").
+fn rest_step(dest: &str, rest: &Sel) -> Option<Effect> {
+    let (to, tail) = destination(dest)?;
+    if !tail.is_empty() {
+        return None;
+    }
+    Some(Effect::DigStep(Box::new(DigStep::Rest {
+        from: rest.clone(),
+        to,
+    })))
+}
+
+/// "[then] put the rest ...", "shuffle the rest into your library", "exile the rest".
+fn parse_rest(l: &str, rest: &Sel) -> Option<Effect> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    // "then you put the rest of those cards on the bottom of your library".
+    let you = l.strip_prefix("you put ").map(|r| format!("put {r}"));
+    let l = you.as_deref().unwrap_or(l);
+    if let Some(r) = l.strip_prefix("put ") {
+        let (all, r) = rest_noun(r)?;
+        return rest_step(r.trim_start(), &rest_of(all, rest));
+    }
+    if let Some(r) = l.strip_prefix("shuffle ") {
+        let (all, r) = rest_noun(r)?;
+        if r != " into your library" {
+            return None;
+        }
+        let mut to = Destination::library_top();
+        to.position = LibraryPosition::Shuffled;
+        return Some(Effect::DigStep(Box::new(DigStep::Rest {
+            from: rest_of(all, rest),
+            to,
+        })));
+    }
+    if let Some(r) = l.strip_prefix("exile ") {
+        let (all, r) = rest_noun(r)?;
+        if !r.is_empty() {
+            return None;
+        }
+        return Some(Effect::DigStep(Box::new(DigStep::Rest {
+            from: rest_of(all, rest),
+            to: Destination::zone(ZoneKind::Exile),
+        })));
+    }
+    None
+}
+
+/// "and the rest [destination]" / ", then put the rest [destination]" / " and put the rest
+/// ..." / ", then shuffle" after a selection.
+fn rest_tail(s: &str, rest: &Sel, mut builder: Option<&mut Builder>) -> Option<Vec<Effect>> {
+    if s.is_empty() {
+        return Some(vec![]);
+    }
+    if s == ", then shuffle" || s == " and shuffle" {
+        return Some(vec![Effect::Shuffle {
+            who: PlayerRef::You,
+        }]);
+    }
+    for sep in [" and ", ", then ", ", and "] {
+        if let Some(r) = s.strip_prefix(sep) {
+            if let Some(e) = parse_rest(r, rest) {
+                return Some(vec![e]);
+            }
+            // "and the rest into your graveyard" (the verb is the selection's).
+            if let Some((all, r2)) = rest_noun(r) {
+                if let Some(e) = rest_step(r2.trim_start(), &rest_of(all, rest)) {
+                    return Some(vec![e]);
+                }
+                // "and the rest onto the battlefield tapped, then shuffle".
+                if let Some(x) = r2.trim_start().strip_suffix(", then shuffle") {
+                    if let Some(e) = rest_step(x, &rest_of(all, rest)) {
+                        return Some(vec![
+                            e,
+                            Effect::Shuffle {
+                                who: PlayerRef::You,
+                            },
+                        ]);
+                    }
+                }
+            }
+            // "and up to one Elf card from among them into your hand": another selection.
+            if let Some(b) = builder.as_deref_mut() {
+                let again = if r.starts_with("put ") || r.starts_with("exile ") {
+                    r.to_string()
+                } else {
+                    format!("put {r}")
+                };
+                if let Some(v) = parse_take(&again, b) {
+                    return Some(v);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// A selection step, possibly followed by the rest ("Put a land card from among them
+/// onto the battlefield and the rest into your graveyard.").
+fn parse_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if let Some(v) = per_kind_take(l, b) {
+        return Some(v);
+    }
+    let (may, r) = match l.strip_prefix("you may ") {
+        Some(r) => (true, r),
+        None => (false, l),
+    };
+    let (verb, r) = ["put ", "reveal ", "exile ", "return ", "choose "]
+        .iter()
+        .find_map(|v| r.strip_prefix(v).map(|r| (v.trim(), r)))?;
+    // The count and description, and what follows the reference to the cards.
+    let mut from = dug_sel();
+    let (c, after) = if let Some((desc, after)) = r.split_once(" from the chosen pile") {
+        // "Put a card from the chosen pile into your hand" (CR 700.3).
+        from = Sel::Var(crate::piles::CHOSEN);
+        (counted(desc, may, b)?, after)
+    } else if let Some((desc, after)) = r.split_once(" from among ") {
+        let after = among_ref(after)?;
+        (counted(desc, may, b)?, after)
+    } else if let Some(x) = r
+        .strip_prefix("any number of those ")
+        .filter(|x| x.contains(" cards"))
+    {
+        // "Put any number of those permanent cards onto the battlefield": the cards found.
+        let (desc, after) = x.split_once(" cards")?;
+        from = Sel::Var(vars::DUG_CHOSEN);
+        let filter = dig_card_filter(&format!("{desc} cards"), b)?;
+        (
+            Counted {
+                filter,
+                each_of: vec![],
+                count: Some(Value::c(999)),
+                up_to: true,
+                random: false,
+                implicit: false,
+            },
+            after,
+        )
+    } else if let Some((desc, after)) = r
+        .split_once(" revealed this way")
+        .or_else(|| r.split_once(" exiled this way"))
+        .or_else(|| r.split_once(" milled this way"))
+    {
+        // "Put all creature cards revealed this way into your hand": the cards dug, or
+        // the ones revealed from among them ("You may reveal up to two creature and/or
+        // land cards from among them, ... Put all land cards revealed this way onto the
+        // battlefield").
+        if b.named.iter().any(|(n, _)| n == CHOSEN_MARK) && r.contains(" revealed this way") {
+            from = Sel::Var(vars::DUG_CHOSEN);
+        }
+        (counted(desc, may, b)?, after)
+    } else if let Some((desc, after)) = ["the exiled ", "the revealed "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+        .and_then(|x| {
+            x.split_once(" that weren't cast this way")
+                .or_else(|| x.split_once(" not cast this way"))
+        })
+        .filter(|_| !may)
+    {
+        // "put the exiled instant and sorcery cards that weren't cast this way into your
+        // hand": all those still there (a card cast has left, CR 400.7).
+        let filter = dig_card_filter(desc, b)?;
+        (
+            Counted {
+                filter,
+                each_of: vec![],
+                count: None,
+                up_to: false,
+                random: false,
+                implicit: false,
+            },
+            after,
+        )
+    } else if let Some(x) = r.strip_prefix("all of them ").filter(|_| !may) {
+        // "put all of them with that name into your hand": all the cards dug that have
+        // the quality.
+        let at = [" into ", " onto ", " on "]
+            .iter()
+            .filter_map(|p| x.find(p))
+            .min()?;
+        let filter = dig_card_filter(&format!("cards {}", &x[..at]), b)?;
+        (
+            Counted {
+                filter,
+                each_of: vec![],
+                count: None,
+                up_to: false,
+                random: false,
+                implicit: false,
+            },
+            &x[at..],
+        )
+    } else {
+        counted_of_them(r, may)?
+    };
+    let mut c = c;
+    c.filter = with_prev_it(c.filter, b)?;
+    // "choose from among them a card with flying, ..." isn't this.
+    let (reveal, to, tail) = match verb {
+        "reveal" => {
+            if after.is_empty() || after.starts_with(',') {
+                let mut d = Destination::library_top();
+                d.position = LibraryPosition::FromTop(0);
+                (true, d, after)
+            } else {
+                let r = after.strip_prefix(" and put ")?;
+                let r = strip_chosen_pronoun(r)?;
+                let (d, t) = destination(r)?;
+                (true, d, t)
+            }
+        }
+        "choose" => {
+            let mut d = Destination::library_top();
+            d.position = LibraryPosition::FromTop(0);
+            (false, d, after)
+        }
+        "exile" => {
+            let mut d = Destination::zone(ZoneKind::Exile);
+            let mut r = after;
+            if let Some(x) = r.strip_prefix(" face down") {
+                d.face_down = true;
+                r = x;
+            }
+            // "Exile one of them face down with a hatching counter on it" (The
+            // Dragon-Kami Reborn): with the counters as it's exiled (CR 122.6).
+            if d.face_down {
+                if let Some((with, x)) = r
+                    .strip_prefix(" with ")
+                    .and_then(|x| x.split_once(" on it").map(|(c, t)| (c, t)))
+                {
+                    let (kind, n) =
+                        super::etb_replacement_grammar::counters_on(&format!("{with} on it"))?;
+                    d.with_counters.push((kind, n));
+                    r = x;
+                }
+            }
+            (false, d, r)
+        }
+        "return" => {
+            let r = after.trim_start();
+            if let Some(t) = r.strip_prefix("to your hand") {
+                (false, Destination::zone(ZoneKind::Hand), t)
+            } else if let Some(t) = r.strip_prefix("to the battlefield") {
+                (false, Destination::battlefield().under_your_control(), t)
+            } else {
+                return None;
+            }
+        }
+        _ => {
+            let (d, t) = destination(after)?;
+            (false, d, t)
+        }
+    };
+    // A revealed card goes to a hidden zone or stays in the library (CR 701.20a); "put
+    // all ... onto the battlefield" needs no reveal.
+    if reveal && matches!(to.zone, ZoneKind::Battlefield | ZoneKind::Graveyard) {
+        return None;
+    }
+    let chosen_in_place = crate::dig_steps::in_place(&to);
+    let face_down = to.face_down;
+    let mut out = vec![Effect::DigStep(Box::new(DigStep::Take {
+        from,
+        chooser: PlayerRef::You,
+        filter: c.filter,
+        each_of: c.each_of,
+        count: c.count,
+        up_to: c.up_to,
+        random: c.random,
+        reveal,
+        to,
+    }))];
+    let rest = rest_sel(b);
+    out.extend(rest_tail(tail, &rest, Some(b))?);
+    let has_rest = out
+        .iter()
+        .any(|e| matches!(e, Effect::DigStep(s) if matches!(**s, DigStep::Rest { .. })));
+    if c.implicit && !has_rest {
+        return None;
+    }
+    if chosen_in_place && !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        b.named
+            .push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    forget_that_creature(b, &out);
+    if face_down && !exiled_face_down(b) {
+        b.named
+            .push((FACE_DOWN_MARK.to_string(), Sel::Var(vars::IT)));
+    }
+    Some(out)
+}
+
+/// "For each card type, you may exile a card of that type from among them." (Portent of
+/// Calamity), "For each card type among noncreature spells you've cast this turn, you may
+/// put a card of that type from among the revealed cards into your hand." (Hurkyl,
+/// Master Wizard), "For each of those colors, you may exile a card of that color from
+/// among the revealed cards." (Sanar, after "X is the number of colors among permanents
+/// you control"): one card for each kind, each standing for a different one (a card of
+/// several types or colors counts as any one of them).
+fn per_kind_take(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
+    let r = l.strip_prefix("for each ")?;
+    let (kinds, rest) = r.split_once(", ")?;
+    let types = |extra: &dyn Fn(CardType) -> Option<Filter>| -> Vec<Filter> {
+        CardType::ALL
+            .iter()
+            .map(|t| match extra(*t) {
+                Some(e) => Filter::and(vec![Filter::Type(*t), e]),
+                None => Filter::Type(*t),
+            })
+            .collect()
+    };
+    let (each_of, noun): (Vec<Filter>, &str) = match kinds {
+        "card type" => (types(&|_| None), "type"),
+        // "among noncreature spells you've cast this turn".
+        "card type among noncreature spells you've cast this turn" => (
+            types(&|t| {
+                Some(Filter::ValueCmp(
+                    Box::new(Value::SpellsCastThisTurn(
+                        PlayerRef::You,
+                        Filter::and(vec![
+                            Filter::not(Filter::Type(CardType::Creature)),
+                            Filter::Type(t),
+                        ]),
+                    )),
+                    Cmp::Ge,
+                    Box::new(Value::c(1)),
+                ))
+            }),
+            "type",
+        ),
+        // "those colors": the colors among permanents you control, as the text defined
+        // them.
+        "of those colors"
+            if crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("the number of colors among permanents you control") =>
+        {
+            (
+                Color::ALL
+                    .iter()
+                    .map(|c| {
+                        Filter::and(vec![
+                            Filter::Color(*c),
+                            Filter::ValueCmp(
+                                Box::new(Value::CountSel(Box::new(Sel::All(Filter::and(vec![
+                                    Filter::Permanent,
+                                    Filter::InZone(ZoneKind::Battlefield),
+                                    Filter::ControlledBy(PlayerRel::You),
+                                    Filter::Color(*c),
+                                ]))))),
+                                Cmp::Ge,
+                                Box::new(Value::c(1)),
+                            ),
+                        ])
+                    })
+                    .collect(),
+                "color",
+            )
+        }
+        _ => return None,
+    };
+    let r = rest.strip_prefix("you may ")?;
+    let (verb, r) = r.split_once(' ')?;
+    let after = r.strip_prefix(&format!("a card of that {noun} from among "))?;
+    let mut v = parse_take(
+        &format!("you may {verb} any number of cards from among {after}"),
+        b,
+    )?;
+    let Some(Effect::DigStep(step)) = v.first_mut() else {
+        return None;
+    };
+    let DigStep::Take {
+        each_of: e,
+        count,
+        filter,
+        ..
+    } = &mut **step
+    else {
+        return None;
+    };
+    *count = Some(Value::c(each_of.len() as i32));
+    *e = each_of;
+    *filter = Filter::Card;
+    Some(v)
+}
+
+/// Marks that cards dug were exiled face down (see [`exiled_face_down`]).
+const FACE_DOWN_MARK: &str = "\u{1}dig-face-down";
+
+/// Whether the text exiled cards dug face down: an exiled card has no characteristics
+/// while it's face down (CR 406.3a), so a later "if it's an instant spell with mana value
+/// 2 or less" about it isn't a condition the engine can check (the player looks at the
+/// card).
+pub fn exiled_face_down(b: &Builder) -> bool {
+    b.named.iter().any(|(n, _)| n == FACE_DOWN_MARK)
+}
+
+/// "the nonland card", "the creature card", "the card with the chosen name": the one card
+/// the last "reveal until" looked for (it found at most one), described again.
+fn found_card_ref<'a>(r: &'a str, b: &Builder) -> Option<&'a str> {
+    let until = b.named.iter().find_map(|(n, s)| match s {
+        Sel::All(f) if n == UNTIL_MARK => Some(f.clone()),
+        _ => None,
+    })?;
+    let x = r.strip_prefix("the ")?;
+    if let Some(rest) = x.strip_prefix("card with the chosen name") {
+        return Some(rest);
+    }
+    let (desc, rest) = x
+        .split_once(" card ")
+        .map(|(d, r)| (format!("{d} card"), r))?;
+    let _ = until;
+    // A description of the card looked for (only it was found).
+    let mut sub = Builder::new(b.ctx);
+    dig_card_filter(&desc, &mut sub)?;
+    Some(&r[r.len() - rest.len() - 1..])
+}
+
+/// "Put that card onto the battlefield and the rest on the bottom of your library in a
+/// random order", "Put those land cards onto the battlefield tapped and the rest ...",
+/// "put the revealed cards into your hand, then shuffle": the card(s) found or chosen.
+fn parse_put_found(l: &str, b: &Builder) -> Option<Vec<Effect>> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (verb, r) = if let Some(r) = l.strip_prefix("put ") {
+        ("put", r)
+    } else if let Some(r) = l.strip_prefix("exile ") {
+        ("exile", r)
+    } else if let Some(r) = l.strip_prefix("shuffle ") {
+        // "Shuffle the chosen cards into your library and put the rest into your hand."
+        ("shuffle", r)
+    } else {
+        return None;
+    };
+    let chosen_mark = b.named.iter().any(|(n, _)| n == CHOSEN_MARK);
+    let (from, r) = if let Some(r) = r
+        .strip_prefix("that card")
+        .or_else(|| r.strip_prefix("it"))
+        .filter(|r| r.is_empty() || r.starts_with(' '))
+    {
+        (Sel::Var(vars::IT), r)
+    } else if let Some(r) = [
+        "those land cards",
+        "those permanent cards",
+        "those creature cards",
+        "those nonland cards",
+        "those cards",
+        "the nonland cards revealed this way",
+        "the chosen cards",
+    ]
+    .iter()
+    .find_map(|p| r.strip_prefix(p))
+    {
+        (Sel::Var(vars::DUG_CHOSEN), r)
+    } else if let Some(r) = found_card_ref(r, b) {
+        // "Put the nonland card into your hand" after revealing until a nonland card.
+        (Sel::Var(vars::DUG_FOUND), r)
+    } else if let Some(r) = ["the revealed cards", "the revealed card"]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+    {
+        // Cards revealed from among them ("You may reveal up to two creature cards from
+        // among them. ... put the revealed cards into your hand."), or all the cards
+        // revealed ("Each player reveals the top card of their library. You may put the
+        // revealed cards into their owners' graveyards.").
+        if chosen_mark {
+            (Sel::Var(vars::DUG_CHOSEN), r)
+        } else {
+            (dug_sel(), r)
+        }
+    } else {
+        return None;
+    };
+    let (to, tail) = if verb == "exile" {
+        (Destination::zone(ZoneKind::Exile), r)
+    } else if verb == "shuffle" {
+        let mut to = Destination::library_top();
+        to.position = LibraryPosition::Shuffled;
+        (to, r.strip_prefix(" into your library")?)
+    } else {
+        destination(r)?
+    };
+    // "Put that card onto the battlefield attached to that creature" (CR 301.5c,
+    // 303.4f): the creature the trigger is about.
+    let (mut to, tail) = (to, tail);
+    if let Some(t) = tail.strip_prefix(" attached to that creature") {
+        if to.zone != ZoneKind::Battlefield {
+            return None;
+        }
+        let creature = b
+            .named
+            .iter()
+            .find_map(|(n, s)| (n == "that creature").then(|| s.clone()))?;
+        to.attached_to = Some(creature);
+        return finish_put_found(from, to, t, b);
+    }
+    // "Put it into your hand." alone is an ordinary instruction.
+    if tail.is_empty() && matches!(from, Sel::Var(vars::IT)) && to.zone != ZoneKind::Library {
+        return None;
+    }
+    finish_put_found(from, to, tail, b)
+}
+
+/// The selection of the cards found or chosen ([`parse_put_found`]) and the rest.
+fn finish_put_found(from: Sel, to: Destination, tail: &str, b: &Builder) -> Option<Vec<Effect>> {
+    let mut out = vec![Effect::DigStep(Box::new(DigStep::Take {
+        from,
+        chooser: PlayerRef::You,
+        filter: Filter::Any,
+        each_of: vec![],
+        count: None,
+        up_to: false,
+        random: false,
+        reveal: false,
+        to,
+    }))];
+    out.extend(rest_tail(tail, &rest_sel(b), None)?);
+    Some(out)
+}
+
+/// "a creature card, a land card, and a noncreature, nonland card": the descriptions of a
+/// list each starting with an article (a description may itself contain commas).
+fn articled_list(s: &str) -> Option<Vec<&str>> {
+    let mut out: Vec<&str> = Vec::new();
+    let mut start = 0;
+    let bytes = s;
+    let mut i = 0;
+    while let Some(k) = bytes[i..].find(", ") {
+        let at = i + k;
+        let next = &bytes[at + 2..];
+        let next = next.strip_prefix("and ").unwrap_or(next);
+        if next.starts_with("a ") || next.starts_with("an ") {
+            out.push(&s[start..at]);
+            start = s.len() - next.len();
+        }
+        i = at + 2;
+    }
+    out.push(&s[start..]);
+    (out.len() >= 2
+        && out
+            .iter()
+            .all(|p| p.starts_with("a ") || p.starts_with("an ")))
+    .then_some(out)
+}
+
+/// "An opponent chooses from among them a creature card, a land card, and a noncreature,
+/// nonland card.": one card of each description, chosen by that player; they stay where
+/// they are ("the chosen cards").
+fn chooses_from_among(l: &str, b: &mut Builder) -> Option<Effect> {
+    let (chooser, r) = if let Some(r) = l.strip_prefix("an opponent chooses from among ") {
+        (PlayerRef::EachOpponent, r)
+    } else if let Some(r) = l.strip_prefix("choose from among ") {
+        (PlayerRef::You, r)
+    } else {
+        return None;
+    };
+    let r = among_ref(r)?.strip_prefix(' ')?;
+    // "a card with flying, a card with first strike, and so on for double strike,
+    // deathtouch, ..., and vigilance": the list spelled out.
+    let expanded;
+    let r = match r.split_once(", and so on for ") {
+        Some((head, more)) => {
+            let last = head.rsplit(", ").next()?;
+            let template = last.strip_prefix("a card with ")?;
+            let _ = template;
+            let more: Vec<&str> = more
+                .split(", and ")
+                .flat_map(|p| p.split(", "))
+                .collect();
+            let mut items: Vec<String> = head.split(", ").map(str::to_string).collect();
+            items.extend(more.iter().map(|k| format!("a card with {k}")));
+            let n = items.len();
+            expanded = format!("{}, and {}", items[..n - 1].join(", "), items[n - 1]);
+            expanded.as_str()
+        }
+        None => r,
+    };
+    let parts = articled_list(r)?;
+    let mut each = Vec::new();
+    for p in parts {
+        each.push(dig_card_filter(p.split_once(' ')?.1, b)?);
+    }
+    let mut to = Destination::library_top();
+    to.position = LibraryPosition::FromTop(0);
+    if !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        b.named
+            .push((CHOSEN_MARK.to_string(), Sel::Var(vars::DUG_CHOSEN)));
+    }
+    Some(Effect::DigStep(Box::new(DigStep::Take {
+        from: dug_sel(),
+        chooser,
+        filter: Filter::Any,
+        count: Some(Value::c(each.len() as i32)),
+        each_of: each,
+        up_to: false,
+        random: false,
+        reveal: false,
+        to,
+    })))
+}
+
+/// "you may reveal that card", "you may reveal it" after looking at the top card: the
+/// card is revealed (or not), and stays where it is.
+fn reveal_that_card(l: &str, b: &mut Builder) -> Option<Vec<Effect>> {
+    // "reveal it if it's a land card" (Fisher's Talent): only a card of that kind.
+    let (l, filter) = match l.split_once(" if it's ") {
+        Some((x, desc)) => {
+            let desc = desc
+                .strip_prefix("a ")
+                .or_else(|| desc.strip_prefix("an "))?;
+            (x, dig_card_filter(desc, b)?)
+        }
+        None => (l, Filter::Any),
+    };
+    if !matches!(l, "reveal that card" | "reveal it") {
+        return None;
+    }
+    // Several cards were looked at: "that card" is something else.
+    if b.named.iter().any(|(n, _)| n == MANY_MARK) {
+        return None;
+    }
+    let mut to = Destination::library_top();
+    to.position = LibraryPosition::FromTop(0);
+    Some(vec![Effect::DigStep(Box::new(DigStep::Take {
+        from: dug_sel(),
+        chooser: PlayerRef::You,
+        filter,
+        each_of: vec![],
+        count: Some(Value::c(1)),
+        up_to: false,
+        random: false,
+        reveal: true,
+        to,
+    }))])
+}
+
+/// One step: a selection, the found cards, or the rest.
+fn parse_step(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if let Some(e) = other_player_puts(l, b) {
+        return Some(e);
+    }
+    if let Some(e) = one_other_rest(l, b) {
+        return Some(e);
+    }
+    if let Some(v) = parse_take(l, b) {
+        return Some(Effect::seq(v));
+    }
+    if let Some(e) = chooses_from_among(l, b) {
+        return Some(e);
+    }
+    // "You put the chosen cards into your hand."
+    let l = l
+        .strip_prefix("you put ")
+        .map_or(l.to_string(), |r| format!("put {r}"));
+    let l = l.as_str();
+    // "You may put that card on the bottom of your library.", "You may reveal that card."
+    let (may, r) = match l.strip_prefix("you may ") {
+        Some(r) => (true, r),
+        None => (false, l),
+    };
+    let v = parse_put_found(r, b)
+        .or_else(|| reveal_that_card(r, b))
+        .or_else(|| parse_rest(r, &rest_sel(b)).map(|e| vec![e]))?;
+    forget_that_creature(b, &v);
+    let e = Effect::seq(v);
+    Some(if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(e),
+        }
+    } else {
+        e
+    })
+}
+
+/// "Then that player puts the rest into their graveyard.", "That player puts all cards
+/// revealed this way on the bottom of their library in a random order.": the player whose
+/// library was dug puts the cards somewhere. Who does it matters only for an order they
+/// choose, so ordered library positions aren't read here (the controller would order
+/// them).
+fn other_player_puts(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = ["that player puts ", "the player puts ", "they put "]
+        .iter()
+        .find_map(|p| l.strip_prefix(p))?;
+    if matches!(b.it_player, PlayerRef::You) {
+        return None;
+    }
+    let who = b.it_player.clone();
+    // "..., then you put the creature card onto the battlefield under your control."
+    let (r, yours) = match r.split_once(", then you put ") {
+        Some((a, c)) => (a, Some(format!("put {c}"))),
+        None => (r, None),
+    };
+    // "puts the rest of the revealed cards into their graveyard and puts the card with
+    // the chosen name on top of their library": two instructions.
+    let (r, also) = match r.split_once(" and puts ") {
+        Some((a, c)) => (a, Some(format!("put {c}"))),
+        None => (r, None),
+    };
+    let put = format!("put {r}");
+    let mut v = parse_put_found(&put, b)
+        .or_else(|| parse_rest(&put, &rest_sel(b)).map(|e| vec![e]))
+        .or_else(|| {
+            // "puts all noncreature cards revealed this way into their graveyard": all of
+            // them, no choice.
+            let v = parse_take(&put, b)?;
+            v.iter()
+                .all(|e| {
+                    matches!(e, Effect::DigStep(s) if matches!(&**s,
+                        DigStep::Take { count: None, .. } | DigStep::Rest { .. }))
+                })
+                .then_some(v)
+        })?;
+    // The player who puts a card onto the battlefield controls it (CR 110.2a).
+    for e in v.iter_mut() {
+        if let Effect::DigStep(s) = e {
+            if let DigStep::Take { to, .. } | DigStep::Rest { to, .. } = &mut **s {
+                if to.zone == ZoneKind::Battlefield {
+                    to.controller = Some(who.clone());
+                }
+            }
+        }
+    }
+    if let Some(a) = also {
+        v.extend(parse_put_found(&a, b)?);
+    }
+    if let Some(y) = yours {
+        v.extend(parse_put_found(&y, b)?);
+    }
+    let ordered = v.iter().any(|e| match e {
+        Effect::DigStep(s) => match &**s {
+            // The one card a reveal found.
+            DigStep::Take {
+                from: Sel::Var(vars::DUG_FOUND),
+                ..
+            } => false,
+            DigStep::Take { to, .. } | DigStep::Rest { to, .. } => {
+                to.zone == ZoneKind::Library
+                    && matches!(to.position, LibraryPosition::Top | LibraryPosition::Bottom)
+            }
+            DigStep::Until { .. } => false,
+        },
+        _ => false,
+    });
+    if ordered {
+        return None;
+    }
+    forget_that_creature(b, &v);
+    Some(Effect::seq(v))
+}
+
+/// "Put one of the chosen cards onto the battlefield, the other chosen cards into your
+/// hand, and the rest into your graveyard." (Selective Adaptation): the cards chosen
+/// (and left where they were) split two ways, then the rest.
+fn one_other_rest(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !b.named.iter().any(|(n, _)| n == CHOSEN_MARK) {
+        return None;
+    }
+    let r = l.strip_prefix("put one of the chosen cards ")?;
+    let (d1, r) = destination(r)?;
+    let r = r.strip_prefix(", the other chosen cards ")?;
+    let (d2, r) = destination(r)?;
+    let r = r.strip_prefix(", and the rest ")?;
+    let rest = rest_step(r, &rest_sel(b))?;
+    let take = |count: Option<Value>, to: Destination| {
+        Effect::DigStep(Box::new(DigStep::Take {
+            from: Sel::Var(vars::DUG_CHOSEN),
+            chooser: PlayerRef::You,
+            filter: Filter::Any,
+            each_of: vec![],
+            count,
+            up_to: false,
+            random: false,
+            reveal: false,
+            to,
+        }))
+    };
+    let v = vec![take(Some(Value::c(1)), d1), take(None, d2), rest];
+    forget_that_creature(b, &v);
+    Some(Effect::seq(v))
+}
+
+fn step_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
+    if !dug(b) {
+        return None;
+    }
+    let e = parse_step(l, b)?;
+    b.it = Sel::Var(vars::IT);
+    Some(e)
+}
+
+fn step_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    // A sentence after the one that dug is read as a sentence of its own (the other
+    // patterns first, see `step_sentence`); this is for a step joined to the dig in one
+    // sentence ("Mill four cards, then put ...").
+    if dug(b) || !ends_with_dig(prev) {
+        return false;
+    }
+    let saved = (
+        b.named.clone(),
+        b.targets.len(),
+        b.it.clone(),
+        b.it_player.clone(),
+    );
+    if crate::oracle::effects::parse_simple(l, b).is_some() {
+        (b.named, b.it, b.it_player) = (saved.0, saved.2, saved.3);
+        b.targets.truncate(saved.1);
+        return false;
+    }
+    (b.it, b.it_player) = (saved.2.clone(), saved.3.clone());
+    b.targets.truncate(saved.1);
+    note_source(Some(prev), b);
+    let Some(e) = parse_step(l, b) else {
+        b.named = saved.0;
+        return false;
+    };
+    // The mark is set again after the whole sentence (`note_source`).
+    b.named = saved.0;
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    b.it = Sel::Var(vars::IT);
+    true
+}
+
+/// "look at that many cards from the top of your library", "reveal a number of cards
+/// from the top of your library equal to ...", "exile the top N cards of your library",
+/// "reveal cards from the top of your library until you reveal two land cards", "look at
+/// the top X plus one cards of your library".
+fn source_sentence(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if let Some(e) = until_source(l, b) {
+        return Some(e);
+    }
+    let (verb, r) = ["look at ", "reveal ", "exile "]
+        .iter()
+        .find_map(|v| l.strip_prefix(v).map(|r| (v.trim(), r)))?;
+    let saved = b.targets.len();
+    let parsed = source_amount(r, b).and_then(|(n, lib)| Some((n, library_owner(&lib, b)?)));
+    let Some((n, who)) = parsed else {
+        b.targets.truncate(saved);
+        return None;
+    };
+    // An X: a spell's X, or one the text defines ("where X is ...").
+    let spell_x = x_allowed(l, b);
+    if format!("{n:?}").contains('X') && !spell_x {
+        b.targets.truncate(saved);
+        return None;
+    }
+    keep_that_creature(b);
+    b.it = Sel::Var(vars::IT);
+    Some(match verb {
+        "exile" => Effect::Exile {
+            what: Sel::TopOfLibrary(who, n),
+            face_down: false,
+            link: false,
+        },
+        _ => Effect::Dig {
+            who,
+            n,
+            reveal: verb == "reveal",
+            filter: Filter::Any,
+            take: Value::c(0),
+            take_up_to: true,
+            take_to: Destination::zone(ZoneKind::Hand),
+            rest_to: {
+                let mut d = Destination::library_top();
+                d.position = LibraryPosition::FromTop(0);
+                d
+            },
+        },
+    })
+}
+
+/// "Whenever a creature attacks you ..., reveal the top card of your library. If it's a
+/// Forest card, remove that creature from combat." (Lost in the Woods): "it" comes to mean
+/// the cards dug, but "that creature" still means the triggering creature (a card in a
+/// library isn't a creature), until a card dug is put onto the battlefield
+/// ([`forget_that_creature`]).
+pub(super) fn keep_that_creature(b: &mut Builder) {
+    // "Whenever equipped creature attacks, defending player reveals cards ... until they
+    // reveal a land card. The creature gets +1/+0 ..." (Trepanation Blade): "the
+    // creature" too is still the trigger's creature, not the card found.
+    for phrase in ["that creature", "the creature"] {
+        if b.in_trigger
+            && matches!(b.it, Sel::TriggerObject)
+            && !b.named.iter().any(|(n, _)| n == phrase)
+        {
+            b.named.push((phrase.to_string(), Sel::TriggerObject));
+        }
+    }
+    // "You may put a card that shares a creature type with it from among them into your
+    // hand" (Tajuru Paragon): a qualifier's "it" is still what it was before the dig.
+    b.named.retain(|(n, _)| n != PREV_IT_MARK);
+    if super::filters_relational::names_one_object(&b.it) {
+        b.named.push((PREV_IT_MARK.to_string(), b.it.clone()));
+    }
+}
+
+/// What "it" (or "that creature") meant before the text dug cards (see
+/// [`keep_that_creature`]).
+const PREV_IT_MARK: &str = "\u{1}dig-prev-it";
+
+/// A selection's description with "it" / "that creature" in a qualifier ("a card that
+/// shares a creature type with it") made the object "it" was before the dig.
+pub(super) fn with_prev_it(f: Filter, b: &Builder) -> Option<Filter> {
+    if !super::filters_relational::mentions_referent(&f) {
+        return Some(f);
+    }
+    // Without one, the qualifier is left for the sentence's "it" (it may still mean
+    // something there).
+    let Some(prev) = b
+        .named
+        .iter()
+        .find_map(|(n, s)| (n == PREV_IT_MARK).then(|| s.clone()))
+    else {
+        return Some(f);
+    };
+    super::filters_relational::substitute(&f, &prev)
+}
+
+/// After cards dug are put onto the battlefield, "that creature" may be one of them
+/// ("Return that creature to its owner's hand at end of combat", Arthur, Marigold Knight).
+fn forget_that_creature(b: &mut Builder, steps: &[Effect]) {
+    let to_battlefield = steps.iter().any(|e| {
+        matches!(e, Effect::DigStep(s) if matches!(&**s, DigStep::Take { to, .. } if to.zone == ZoneKind::Battlefield))
+    });
+    if to_battlefield {
+        b.named
+            .retain(|(n, s)| {
+                !((n == "that creature" || n == "the creature") && matches!(s, Sel::TriggerObject))
+            });
+    }
+}
+
+/// How many cards from the top of which library: "the top X plus one cards of your
+/// library", "the top card of defending player's library", "that many cards from the top
+/// of your library", "a number of cards from the top of your library equal to ...".
+fn source_amount(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let that_many = |r: &str, b: &Builder| -> Option<String> {
+        let x = r.strip_prefix("that many cards from the top of ")?;
+        // The triggering event's amount ("deals combat damage to a player, look at that
+        // many cards").
+        b.in_trigger.then(|| x.to_string())
+    };
+    if let Some(r) = r.strip_prefix("the top card of ") {
+        return Some((Value::c(1), r.to_string()));
+    }
+    // "Shuffle your library, then reveal the top card.": your library.
+    if r == "the top card" {
+        return Some((Value::c(1), "your library".into()));
+    }
+    // "Reveal the cards in your library." (Guided Passage).
+    if r == "the cards in your library" {
+        return Some((Value::LibrarySize(PlayerRef::You), "your library".into()));
+    }
+    // "exile cards equal to its power from the top of its owner's library".
+    if let Some(x) = r.strip_prefix("cards equal to ") {
+        let (n, tail) = super::value_grammar::parse_value(x, b)?;
+        let lib = tail.trim_start().strip_prefix("from the top of ")?;
+        return Some((n, lib.to_string()));
+    }
+    // "Exile cards from the top of your library equal to the excess damage dealt to that
+    // creature this way."
+    if let Some(x) = r.strip_prefix("cards from the top of ") {
+        let (lib, v) = x.split_once(" equal to ")?;
+        // The excess damage the previous damage instruction dealt (CR 120.10).
+        if matches!(
+            v,
+            "the excess damage dealt to that creature this way"
+                | "the excess damage dealt this way"
+        ) {
+            return Some((Value::Var(vars::EXCESS), lib.to_string()));
+        }
+        let (n, tail) = super::value_grammar::parse_value(v, b)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some((n, lib.to_string()));
+    }
+    if let Some(r) = r.strip_prefix("the top ") {
+        // "the top two cards of", "the top X plus one cards of", "the top X cards of".
+        if let Some((n, r)) = parse_number(r) {
+            let r = r.trim_start();
+            if let Some(x) = r.strip_prefix("plus one cards of ") {
+                return Some((Value::Sum(vec![n, Value::c(1)]), x.to_string()));
+            }
+            if let Some(x) = r.strip_prefix("cards of ") {
+                return Some((n, x.to_string()));
+            }
+        }
+        let (n, r) = super::value_grammar::parse_value(r, b)?;
+        let r = r.strip_prefix(" cards of ")?;
+        return Some((n, r.to_string()));
+    }
+    if let Some(lib) = that_many(r, b) {
+        return Some((Value::EventAmount, lib));
+    }
+    if let Some(r) = r.strip_prefix("a number of cards from the top of ") {
+        let (lib, rest) = r.split_once(" equal to ")?;
+        let (n, tail) = super::value_grammar::parse_value(rest, b)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        return Some((n, lib.to_string()));
+    }
+    let (n, r) = super::value_grammar::parse_value(r, b)?;
+    let r = r.strip_prefix(" cards from the top of ")?;
+    Some((n, r.to_string()))
+}
+
+/// Whose library: "your library", "defending player's library", "that library" / "that
+/// player's library" (the player the text is about).
+fn library_owner(s: &str, b: &Builder) -> Option<PlayerRef> {
+    use super::oracle_hardening_referents::is_no_player_referent;
+    Some(match s {
+        "your library" => PlayerRef::You,
+        "defending player's library" => PlayerRef::DefendingPlayer,
+        "that library" | "that player's library" | "their library"
+            if matches!(b.it_player, PlayerRef::TriggerPlayer | PlayerRef::Target(_)) =>
+        {
+            b.it_player.clone()
+        }
+        // "exile the top card of that player's library" (the attacking opponent).
+        "that player's library"
+            if !matches!(b.it_player, PlayerRef::You | PlayerRef::Iterated)
+                && !is_no_player_referent(&b.it_player) =>
+        {
+            b.it_player.clone()
+        }
+        // "from the top of its owner's library" (the creature that died).
+        "its owner's library" if super::filters_relational::names_one_object(&b.it) => {
+            PlayerRef::OwnerOf(Box::new(b.it.clone()))
+        }
+        _ => return None,
+    })
+}
+
+/// "reveal cards from the top of your library until you reveal two land cards", "exile
+/// cards from the top of your library until you exile X permanent cards, where X is ...".
+fn until_source(l: &str, b: &mut Builder) -> Option<Effect> {
+    let saved = b.targets.len();
+    let saved_player = b.it_player.clone();
+    let r = until_source_inner(l, b);
+    if r.is_none() {
+        b.targets.truncate(saved);
+        b.it_player = saved_player;
+    }
+    r
+}
+
+/// Who reveals (or exiles) cards until when: "reveal cards from the top of your library
+/// until you reveal ", "target opponent reveals cards from the top of their library until
+/// they reveal ", "that player reveals cards from the top of their library until [a
+/// creature card] is revealed", "each opponent exiles cards from the top of their library
+/// until they have exiled cards with total mana value 5 or greater this way". Returns the
+/// player, whether the cards are exiled, and the description of what's looked for
+/// (with "cards with total ..." and "..., whichever comes first" left in it).
+fn until_subject(l: &str, b: &mut Builder) -> Option<(PlayerRef, bool, String)> {
+    if let Some(r) = l
+        .strip_prefix("reveal cards from the top of your library until you reveal ")
+        .or_else(|| l.strip_prefix("reveal cards from the top of it until you reveal "))
+    {
+        return Some((PlayerRef::You, false, r.to_string()));
+    }
+    if let Some(r) = l.strip_prefix("exile cards from the top of your library until you exile ") {
+        return Some((PlayerRef::You, true, r.to_string()));
+    }
+    let (subj, exile, r) = if let Some((s, r)) =
+        l.split_once(" reveals cards from the top of their library until ")
+    {
+        (s, false, r)
+    } else if let Some((s, r)) = l.split_once(" exiles cards from the top of their library until ")
+    {
+        (s, true, r)
+    } else {
+        return None;
+    };
+    let (who, tail) = crate::oracle::effects::player_ref(subj, b)?;
+    if !tail.trim().is_empty() || matches!(who, PlayerRef::You) {
+        return None;
+    }
+    let passive = if exile { " exiled" } else { " revealed" };
+    // "until they reveal a creature card" is the player's own instruction ("reveal cards
+    // from the top of your library until you reveal ...", performed by them: the player
+    // subject grammar); the forms here have no such reading.
+    let desc = if let Some(x) = ["they have exiled ", "that player has exiled "]
+        .iter()
+        .find_map(|p| r.strip_prefix(p))
+        .filter(|x| exile && x.starts_with("cards with total "))
+    {
+        x.to_string()
+    } else if let Some(x) = r
+        .strip_suffix(&format!(" is{passive}"))
+        .or_else(|| r.strip_suffix(&format!(" are{passive}")))
+    {
+        x.to_string()
+    } else if let Some((x, _)) = r
+        .split_once(&format!(" are{passive}, whichever comes first"))
+        .filter(|(_, t)| t.is_empty())
+    {
+        format!("{x}, whichever comes first")
+    } else {
+        return None;
+    };
+    Some((who, exile, desc))
+}
+
+fn until_source_inner(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let (who, exile, r) = until_subject(l, b)?;
+    let r = r.as_str();
+    if super::card_flow_reveal_until::implicit_comparison_with_source(r, b) {
+        return None;
+    }
+    // "cards with total mana value 4 or greater [this way]": a running total.
+    if let Some(x) = r.strip_prefix("cards with total ") {
+        let x = x.strip_suffix(" this way").unwrap_or(x);
+        let (stat, x) = if let Some(x) = x.strip_prefix("mana value ") {
+            (TotalStat::ManaValue, x)
+        } else if let Some(x) = x.strip_prefix("power ") {
+            (TotalStat::Power, x)
+        } else {
+            return None;
+        };
+        let (n, x) = parse_number(x)?;
+        if x.trim() != "or greater" {
+            return None;
+        }
+        if format!("{n:?}").contains('X') && !x_allowed(l, b) {
+            return None;
+        }
+        keep_that_creature(b);
+        b.it = Sel::Var(vars::IT);
+        return Some(Effect::DigStep(Box::new(DigStep::Until {
+            who,
+            filter: Filter::Card,
+            count: n,
+            exile,
+            total: Some(stat),
+            cap: None,
+        })));
+    }
+    // "an artifact card or X cards are revealed, whichever comes first": a cap.
+    let (r, cap) = match r.strip_suffix(", whichever comes first") {
+        Some(x) => {
+            let (desc, c) = x.rsplit_once(" or ")?;
+            let (c, tail) = parse_number(c)?;
+            if !matches!(tail.trim(), "cards" | "card") {
+                return None;
+            }
+            if format!("{c:?}").contains('X') && !x_allowed(l, b) {
+                return None;
+            }
+            (desc, Some(c))
+        }
+        None => (r, None),
+    };
+    let (n, filter) = if let Some(x) = r.strip_prefix("that many ").filter(|_| !b.in_trigger) {
+        // "Exile all creatures you control, then reveal cards ... until you reveal that
+        // many creature cards": as many as the previous instruction affected.
+        (
+            Value::CountSel(Box::new(Sel::Var(vars::IT))),
+            dig_card_filter(x, b),
+        )
+    } else if (r.starts_with("a ") || r.starts_with("an ")) && !r.starts_with("a number of ") {
+        // One card: "a Doctor card, a card with doctor's companion, or a Vehicle card", "a
+        // nonlegendary, nonland card with mana value 3 or less" (the plain forms are
+        // `card_flow_reveal_until`'s).
+        (Value::c(1), one_of_articled(r, b))
+    } else if let Some(r) = r.strip_prefix("a number of ") {
+        let (desc, v) = r.split_once(" equal to ")?;
+        let (n, tail) = super::value_grammar::parse_value(v, b)?;
+        if !tail.trim().is_empty() {
+            return None;
+        }
+        (n, dig_card_filter(desc, b))
+    } else {
+        let (n, r) = parse_number(r)?;
+        // An X: a spell's X, or one the text defines ("where X is ...").
+        let spell_x = x_allowed(l, b);
+        if matches!(n, Value::X) && !spell_x {
+            return None;
+        }
+        (n, dig_card_filter(r, b))
+    };
+    let filter = filter?;
+    keep_that_creature(b);
+    b.it = Sel::Var(vars::IT);
+    Some(Effect::DigStep(Box::new(DigStep::Until {
+        who,
+        filter: Filter::and(vec![Filter::Card, filter]),
+        count: n,
+        exile,
+        total: None,
+        cap,
+    })))
+}
+
+/// Whether an X in the instruction `l` has a value: a spell's X, one the text defines
+/// ("where X is ..."), or, in a "When you cast this spell" trigger, the spell's X (the
+/// trigger's X is the spell's, CR 107.3e; see `triggers.rs`).
+fn x_allowed(l: &str, b: &Builder) -> bool {
+    if (b.ctx.is_spell() && !b.in_trigger) || super::value_grammar::x_defined() {
+        return true;
+    }
+    b.in_trigger
+        && crate::oracle::raw_text()
+            .to_lowercase()
+            .lines()
+            .any(|line| {
+                line.strip_prefix("when you cast this spell, ")
+                    .is_some_and(|r| r.contains(l))
+            })
+}
+
+inventory::submit! {
+    FollowupPattern { name: "dig: when you reveal a [card] this way, [reflexive trigger]", priority: 200, apply: when_revealed_this_way }
+}
+
+/// "Reveal cards from the top of your library until you reveal a nonland card. ... When
+/// you reveal a nonland card this way, ~ deals damage equal to that card's mana value to
+/// any target." (Calibrated Blast): a reflexive triggered ability (CR 603.12) that
+/// triggers if the reveal found the card it looked for (a library can run out first);
+/// "that card" is the card found.
+fn when_revealed_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("when you reveal ") else {
+        return false;
+    };
+    let Some((desc, body)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some(until) = b.named.iter().find_map(|(n, s)| match s {
+        Sel::All(f) if n == UNTIL_MARK => Some(format!("{f:?}")),
+        _ => None,
+    }) else {
+        return false;
+    };
+    let Some(f) = desc
+        .strip_prefix("a ")
+        .or_else(|| desc.strip_prefix("an "))
+        .and_then(|d| dig_card_filter(d, b))
+    else {
+        return false;
+    };
+    // The same description as the cards revealed until.
+    let same = [
+        Filter::And(vec![Filter::Card, f.clone()]),
+        Filter::and(vec![Filter::Card, f]),
+    ];
+    if !same.iter().any(|f| format!("{f:?}") == until) {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(vars::DUG_FOUND);
+    sub.it_player = b.it_player.clone();
+    let Some(effect) = crate::oracle::effects::parse_effect_text(body, &mut sub) else {
+        return false;
+    };
+    let reflexive = Effect::Reflexive {
+        body: Box::new(Body {
+            targets: sub.targets,
+            effect,
+            modal: None,
+        }),
+    };
+    let found = Condition::Compare(
+        Value::CountSel(Box::new(Sel::Var(vars::DUG_FOUND))),
+        Cmp::Ge,
+        Value::c(1),
+    );
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: found,
+            then: Box::new(reflexive),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+/// "a Doctor card, a card with doctor's companion, or a Vehicle card": any of them; or one
+/// description with its article.
+fn one_of_articled(s: &str, b: &mut Builder) -> Option<Filter> {
+    let parts: Vec<&str> = s
+        .split(", or ")
+        .flat_map(|p| p.split(" or "))
+        .flat_map(|p| p.split(", "))
+        .collect();
+    let articled = |p: &str| p.starts_with("a ") || p.starts_with("an ");
+    if parts.len() >= 2 && parts.iter().all(|p| articled(p)) {
+        let mut alts = Vec::new();
+        for p in parts {
+            alts.push(dig_card_filter(p.split_once(' ')?.1, b)?);
+        }
+        return Some(Filter::Or(alts));
+    }
+    dig_card_filter(s.split_once(' ')?.1, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn destinations() {
+        for (s, zone) in [
+            ("into your hand", ZoneKind::Hand),
+            (
+                "onto the battlefield tapped and attacking",
+                ZoneKind::Battlefield,
+            ),
+            (
+                "onto the battlefield with a shield counter on it",
+                ZoneKind::Battlefield,
+            ),
+            ("on the bottom in a random order", ZoneKind::Library),
+            (
+                "back on top of that player's library in any order",
+                ZoneKind::Library,
+            ),
+            (
+                "on the bottom of your library in any order",
+                ZoneKind::Library,
+            ),
+            ("into that player's graveyard", ZoneKind::Graveyard),
+        ] {
+            let (d, r) = destination(s).unwrap_or_else(|| panic!("{s}"));
+            assert_eq!(d.zone, zone, "{s}");
+            assert!(r.is_empty(), "{s}: {r}");
+        }
+        let (d, _) = destination("on the bottom of your library in a random order").unwrap();
+        assert_eq!(d.position, LibraryPosition::BottomRandom);
+        let (d, _) = destination("onto the battlefield tapped and attacking").unwrap();
+        assert!(d.tapped && d.attacking);
+        assert!(destination("onto the battlefield and attacking").is_none());
+    }
+
+    #[test]
+    fn rests() {
+        for s in [
+            "put the rest into your graveyard",
+            "then put the rest on the bottom of your library in a random order",
+            "put the rest of the revealed cards on the bottom of your library in any order",
+            "put all other cards revealed this way into your graveyard",
+            "put all revealed cards not cast this way on the bottom of your library in a random order",
+            "shuffle the rest into your library",
+            "put the rest back in any order",
+            "put the rest on the bottom in a random order",
+        ] {
+            assert!(parse_rest(s, &dug_sel()).is_some(), "{s}");
+        }
+        assert!(parse_rest(
+            "put the rest into your library third from the top",
+            &dug_sel()
+        )
+        .is_none());
+    }
+
+    fn with_builder<T>(f: impl FnOnce(&mut Builder) -> T) -> T {
+        let tl = crate::types::TypeLine::parse("Sorcery");
+        let ctx = crate::oracle::CompileContext {
+            card_name: "X",
+            full_name: "X",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        let mut b = Builder::new(&ctx);
+        f(&mut b)
+    }
+
+    #[test]
+    fn card_descriptions() {
+        with_builder(|b| {
+            for d in [
+                "blue or artifact card",
+                "land or double-faced card",
+                "land or legendary turtle card",
+                "knight, aura, equipment, or legendary artifact card",
+                "creature card or garruk planeswalker card",
+                "land and/or legendary permanent cards with mana value x or less",
+                "permanent card with mana value 3 or less",
+                "artifact card with mana value 2 or 3",
+                "hero or enchantment card",
+                "nonland, nonlegendary card",
+            ] {
+                assert!(dig_card_filter(d, b).is_some(), "{d}");
+            }
+        });
+    }
+}

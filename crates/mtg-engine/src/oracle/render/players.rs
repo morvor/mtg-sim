@@ -1,0 +1,1712 @@
+//! Selections ([`Sel`]), players ([`PlayerRef`], [`PlayerFilter`]) and targets.
+
+use super::nouns::{possessive, Det};
+use super::*;
+
+/// A filter matching every card in a zone ("exile target player's graveyard"): the zone
+/// and its owner.
+fn whole_zone(f: &Filter) -> Option<(ZoneKind, Option<PlayerRel>)> {
+    let atoms: Vec<&Filter> = match f {
+        Filter::And(v) => v.iter().collect(),
+        other => vec![other],
+    };
+    let mut zone = None;
+    let mut owner = None;
+    for a in atoms {
+        match a {
+            Filter::InZone(z)
+                if matches!(z, ZoneKind::Graveyard | ZoneKind::Hand | ZoneKind::Library) =>
+            {
+                zone = Some(*z)
+            }
+            Filter::OwnedBy(r) => owner = Some(*r),
+            Filter::Card | Filter::Any => {}
+            _ => return None,
+        }
+    }
+    zone.map(|z| (z, owner))
+}
+
+/// Grammatical role of a reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Case {
+    Subj,
+    Obj,
+    Poss,
+}
+
+/// [`Renderer::trigger_player`] for an event an opponent performs ("Whenever an opponent
+/// attacks"): "that opponent" as well as "that player".
+pub(crate) const OPPONENT_EVENT: &str = "that opponent";
+
+pub(crate) fn decline(s: String, case: Case) -> String {
+    match case {
+        // Alternative wordings each take the possessive.
+        Case::Poss if s.starts_with("{alt:") && s.ends_with('}') => {
+            let inner = &s["{alt:".len()..s.len() - 1];
+            let alts: Vec<String> = inner.split('|').map(possessive).collect();
+            format!("{{alt:{}}}", alts.join("|"))
+        }
+        Case::Poss => possessive(&s),
+        _ => s,
+    }
+}
+
+impl Renderer<'_> {
+    /// Whether target slot `i` is a player target.
+    fn slot_is_player(&self, i: u8) -> bool {
+        self.targets
+            .get(i as usize)
+            .is_some_and(|t| matches!(t.what, TargetKind::Player(_)))
+    }
+
+    fn slot_is_many(&self, i: u8) -> bool {
+        self.targets
+            .get(i as usize)
+            .is_some_and(|t| t.max.as_const() != Some(1))
+    }
+
+    /// The first mention of target slot `i` ("target creature", "up to two target
+    /// creatures"); later mentions are pronouns.
+    pub(crate) fn target_phrase(&mut self, i: u8) -> String {
+        let mut s = self.target_phrase_core(i);
+        let Some(t) = self.targets.get(i as usize).cloned() else {
+            return s;
+        };
+        if t.chosen_by_opponent {
+            // "target creature of an opponent's choice they control": the chosen player
+            // is the opponent who chooses it (CR 601.2c).
+            if let Some((head, tail)) = s.split_once(" the chosen player controls") {
+                s = format!("{head}{tail} of an opponent's choice they control");
+            } else {
+                s.push_str(" of an opponent's choice");
+            }
+        }
+        // "target creature of their choice": another player chooses it (CR 601.2c).
+        if let Some(p) = &t.chosen_by {
+            let poss = self.player(p, Case::Poss);
+            s.push_str(&format!(" of {poss} choice"));
+        }
+        // "any target chosen at random".
+        if t.random {
+            s.push_str(" chosen at random");
+        }
+        s
+    }
+
+    fn target_phrase_core(&mut self, i: u8) -> String {
+        let Some(t) = self.targets.get(i as usize).cloned() else {
+            return self.gap(format!("target slot {i} out of range"));
+        };
+        let other = !t.distinct_from.is_empty();
+        // "N damage divided as you choose among any number of targets" or "... among up to
+        // N targets": each target gets at least one (CR 601.2d), so "any number" (CR
+        // 107.1c) is at most N.
+        let divided_any = t.fixed_min() == Some(0)
+            && t.divide
+                .as_ref()
+                .is_some_and(|d| format!("{d:?}") == format!("{:?}", t.max));
+        let count = match (t.fixed_min(), t.max.as_const()) {
+            // "X target creatures": exactly that many (the minimum is the maximum).
+            (None, _) if format!("{:?}", t.min) == format!("{:?}", t.max) => {
+                Some(self.value(&t.max))
+            }
+            (None, _) => Some(self.gap("a target minimum other than a number or the maximum")),
+            (Some(1), Some(1)) => None,
+            (Some(0), Some(m)) if m >= 99 => Some("any number of".into()),
+            (Some(n), Some(m)) if n == m => Some(number_word(m)),
+            (Some(0), Some(m)) if m >= 1 => Some(format!("up to {}", number_word(m))),
+            (Some(1), Some(2)) => Some("one or two".into()),
+            (Some(a), Some(m)) if a >= 1 && m > a && m - a <= 3 => {
+                let words: Vec<String> = (a..=m).map(number_word).collect();
+                Some(join_list(&words, "or"))
+            }
+            // "One or more target creatures" (no upper bound, as "any number" is written).
+            (Some(1), Some(m)) if m >= 99 => Some("one or more".into()),
+            (Some(1), Some(m)) if m > 1 && m < 99 => Some(format!("one or {}", number_word(m))),
+            (Some(0), Some(_)) | (Some(0), None) if matches!(t.max, Value::Const(_)) => {
+                Some("any number of".into())
+            }
+            (Some(n), None) => {
+                // "up to that many target lands": the amount just paid.
+                let v = if matches!(t.max, Value::X) && self.extra.x_paid {
+                    "that many".to_string()
+                } else {
+                    self.value(&t.max)
+                };
+                if n == 0 {
+                    Some(format!("up to {v}"))
+                } else {
+                    Some(v)
+                }
+            }
+            (_, Some(m)) => Some(m.to_string()),
+        };
+        // Cards say either.
+        let count = match count {
+            Some(c) if divided_any && c != "any number of" => {
+                Some(format!("{{alt:any number of|{c}}}"))
+            }
+            c => c,
+        };
+        let many = count.as_deref().is_some_and(|c| c != "up to one");
+        let num = if many { Num::Many } else { Num::One };
+        let core = match &t.what {
+            TargetKind::Object(f) => self.noun(f, num),
+            TargetKind::Spell(f) => {
+                let n = self.noun(f, num);
+                if n.contains("spell") || n.contains("~") {
+                    n
+                } else {
+                    match num {
+                        Num::One => format!("{n} spell"),
+                        Num::Many => format!("{n} spells"),
+                    }
+                }
+            }
+            TargetKind::Player(pf) => self.player_filter_noun(pf, num),
+            TargetKind::AnyTarget => {
+                // "any number of targets" for divided damage up to X (CR 601.2d).
+                let count = if t.divide.is_some() && t.max.as_const().is_none() {
+                    Some("any number of".to_string())
+                } else {
+                    count
+                };
+                return match (count, other) {
+                    (None, false) => "any target".into(),
+                    (None, true) => "any other target".into(),
+                    (Some(c), false) => format!("{c} targets"),
+                    (Some(c), true) => format!("{c} other targets"),
+                };
+            }
+            // "any other target": other than the object dealing the damage.
+            TargetKind::ObjectOrPlayer(Filter::And(v), PlayerFilter::Any)
+                if count.is_none()
+                    && matches!(v.as_slice(), [Filter::Or(kinds), other]
+                        if kinds.len() == 3
+                            && kinds.iter().all(|k| matches!(k,
+                                Filter::Type(CardType::Creature | CardType::Planeswalker | CardType::Battle)))
+                            && (matches!(other, Filter::Other)
+                                || matches!(other, Filter::Not(x)
+                                    if matches!(x.as_ref(), Filter::In(_) | Filter::AttachedToSource)))) =>
+            {
+                // "any target other than that permanent": other than the object the
+                // trigger event named, not the source.
+                let not_in = v.iter().find_map(|x| match x {
+                    Filter::Not(n) => match n.as_ref() {
+                        Filter::In(s) => Some(s.as_ref().clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                });
+                if let Some(s) = not_in.filter(|s| !matches!(s, Sel::This)) {
+                    let o = match s {
+                        Sel::TriggerObject | Sel::TriggerLki => {
+                            "{alt:that permanent|that creature}".to_string()
+                        }
+                        other => self.sel(&other, Case::Obj),
+                    };
+                    return format!("any target other than {o}");
+                }
+                return "any other target".into();
+            }
+            TargetKind::ObjectOrPlayer(f, pf) => {
+                let o = self.noun(f, num);
+                let p = self.player_filter_noun(pf, num);
+                // "target player or planeswalker", "target creature or player".
+                if o.starts_with("planeswalker") || o.starts_with("battle") {
+                    format!("{p} or {o}")
+                } else if let Some((head, last)) =
+                    o.rsplit_once(" or ").filter(|_| !o.contains(['{', '|']))
+                {
+                    // "target artifact, creature, planeswalker, or opponent": one list.
+                    format!("{}, {last}, or {p}", head.trim_end_matches(','))
+                } else {
+                    format!("{o} or {p}")
+                }
+            }
+            TargetKind::Ability(f) => {
+                let base = match num {
+                    Num::One => "activated or triggered ability",
+                    Num::Many => "activated and/or triggered abilities",
+                };
+                self.stack_object_noun(f, base)
+            }
+            // "target instant spell, sorcery spell, or triggered ability": the
+            // alternatives name what they are.
+            TargetKind::SpellOrAbility(f @ Filter::Or(_)) => self.noun(f, num),
+            // "target spell, activated ability, or triggered ability": the abilities on the
+            // stack are activated or triggered ones (CR 113.1).
+            TargetKind::SpellOrAbility(Filter::Any) if matches!(num, Num::One) => {
+                "{alt:spell or ability|spell, activated ability, or triggered ability}".into()
+            }
+            TargetKind::SpellOrAbility(f) => {
+                let base = match num {
+                    Num::One => "spell or ability",
+                    Num::Many => "spells and/or abilities",
+                };
+                self.stack_object_noun(f, base)
+            }
+        };
+        // "another target creature" when the filter says "other" is in `core` already.
+        // After an earlier target object, "other" means other than that object; a filter
+        // also excluding the source says something the text can't, and is left as is
+        // ("other target other creature").
+        let other_than_object = t.distinct_from.iter().any(|j| {
+            self.targets.get(*j as usize).is_some_and(|e| {
+                matches!(
+                    e.what,
+                    TargetKind::Object(_) | TargetKind::ObjectOrPlayer(..) | TargetKind::AnyTarget
+                )
+            })
+        });
+        let (core, other) = match core.strip_prefix("other ") {
+            Some(rest) if !(other && other_than_object) => (rest.to_string(), true),
+            _ => (core, other),
+        };
+        let mut s = match count {
+            // "target creature other than ~" (other than the object itself).
+            None if other && !other_than_object && !core.contains('{') => {
+                let m = self.me();
+                format!("{{alt:another target {core}|target {core} other than {m}}}")
+            }
+            // "to a second target creature": other than the target named before.
+            None if other => format!("{{alt:another|a second}} target {core}"),
+            None => format!("target {core}"),
+            Some(c) if other => format!("{c} other target {core}"),
+            Some(c) => format!("{c} target {core}"),
+        };
+
+        // A requirement on the targets taken together (CR 115.3).
+        let one = matches!(t.max, Value::Const(1));
+        match &t.together {
+            None => {}
+            _ if one => {}
+            Some(TargetGroup::SameOwner) => {
+                let before = s.clone();
+                for g in [" in a graveyard", " in graveyards"] {
+                    s = s.replacen(g, " from a single graveyard", 1);
+                }
+                // "two target cards from an opponent's graveyard": one opponent's.
+                for g in [
+                    " in your opponents' graveyards",
+                    " in your opponents' graveyard",
+                ] {
+                    s = s.replacen(g, " in an opponent's graveyard", 1);
+                }
+                // "two target cards from an opponent's graveyard": one graveyard.
+                if s == before && !s.contains("graveyard") {
+                    s.push_str(" a single player owns");
+                }
+            }
+            // "two target creatures controlled by the same opponent".
+            Some(TargetGroup::SameController)
+                if s.contains(" {alt:an opponent controls|your opponents control}")
+                    || s.ends_with(" your opponents control")
+                    || s.ends_with(" an opponent controls") =>
+            {
+                for c in [
+                    " {alt:an opponent controls|your opponents control}",
+                    " your opponents control",
+                    " an opponent controls",
+                ] {
+                    if let Some(head) = s.strip_suffix(c) {
+                        s = head.to_string();
+                        break;
+                    }
+                }
+                s.push_str(" {alt:controlled by the same opponent|a single opponent controls}")
+            }
+            Some(TargetGroup::SameController) => {
+                s.push_str(" {alt:a single player controls|controlled by the same player}")
+            }
+            Some(g) => {
+                let w = match g {
+                    TargetGroup::ShareCreatureType => "that share a creature type".to_string(),
+                    TargetGroup::ShareCardType => "that share a card type".to_string(),
+                    TargetGroup::SharePermanentType => "that share a permanent type".to_string(),
+                    TargetGroup::ShareLandType => "that share a land type".to_string(),
+                    g => self.target_group(g),
+                };
+                // "two target creature cards that share a creature type from your
+                // graveyard": the requirement may come before the zone.
+                let zone = [" in your graveyard", " in a graveyard", " in graveyards"]
+                    .into_iter()
+                    .find(|z| s.ends_with(z));
+                match zone {
+                    Some(z) if !w.contains(['{', '|']) => {
+                        let head = &s[..s.len() - z.len()];
+                        s = format!("{{alt:{head} {w}{z}|{s} {w}}}");
+                    }
+                    _ => s.push_str(&format!(" {w}")),
+                }
+            }
+        }
+        // A relationship with the targets of an earlier instance of "target" ("another
+        // target creature with the same controller", "that shares a card type with it").
+        match &t.related_to {
+            None => {}
+            Some((_, TargetGroup::SameController)) => s.push_str(" with the same controller"),
+            Some((_, TargetGroup::ShareCardType)) => s.push_str(" that shares a card type with it"),
+            Some((_, TargetGroup::ShareCardTypeAmong(_))) => {
+                s.push_str(" that shares one of those types with it")
+            }
+            Some((_, g)) => {
+                let w = self.gap(format!("a relationship with another target: {g:?}"));
+                s.push_str(&format!(" {w}"));
+            }
+        }
+        s
+    }
+
+    /// A requirement on objects chosen together ("with different names", "with total
+    /// mana value 6 or less").
+    pub(crate) fn target_group(&mut self, g: &TargetGroup) -> String {
+        match g {
+            TargetGroup::SameOwner => "a single player owns".into(),
+            TargetGroup::SameController => {
+                "{alt:a single player controls|controlled by the same player}".into()
+            }
+            TargetGroup::ShareCreatureType => "that share a creature type".into(),
+            TargetGroup::ShareCardType => "that share a card type".into(),
+            TargetGroup::SharePermanentType => "that share a permanent type".into(),
+            TargetGroup::ShareLandType => "that share a land type".into(),
+            TargetGroup::ShareNoCreatureType => "that share no creature types".into(),
+            TargetGroup::DifferentNames => "with different names".into(),
+            TargetGroup::DifferentControllers => "with different controllers".into(),
+            TargetGroup::DifferentManaValues => "with different mana values".into(),
+            TargetGroup::DifferentPowers => "with different powers".into(),
+            TargetGroup::EqualToughness => "with equal toughness".into(),
+            TargetGroup::ShareCardTypeAmong(types) => {
+                let words: Vec<String> = types
+                    .iter()
+                    .map(|t| format!("{t:?}").to_lowercase())
+                    .collect();
+                format!("that share {}", join_list(&words, "or"))
+            }
+            TargetGroup::OnePerCardType => "one of each card type".into(),
+            TargetGroup::TotalAtMost(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v} or less")
+            }
+            TargetGroup::TotalAtLeast(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v} or greater")
+            }
+            TargetGroup::SameName => "with the same name".into(),
+            TargetGroup::ShareColor => "that share a color".into(),
+            TargetGroup::CardTypesAmong(v) => {
+                let v = self.value(v);
+                format!("with {v} or more card types among them")
+            }
+        }
+    }
+
+    fn stack_object_noun(&mut self, f: &Filter, base: &str) -> String {
+        let flat: Vec<&Filter> = match f {
+            Filter::And(v) => v.iter().collect(),
+            Filter::Any => vec![],
+            other => vec![other],
+        };
+        let mut extra = Vec::new();
+        // "target activated ability", "target triggered ability you control".
+        let mut base = base.to_string();
+        for x in flat.iter() {
+            if let Filter::Custom(n) = x {
+                match n.as_str() {
+                    "stack:activated ability" => base = "activated ability".into(),
+                    "stack:triggered ability" => base = "triggered ability".into(),
+                    // CR 606.2.
+                    crate::kw::game_rules::LOYALTY_ABILITY => base = "loyalty ability".into(),
+                    _ => {}
+                }
+            }
+        }
+        let flat: Vec<&Filter> = flat
+            .into_iter()
+            .filter(|x| {
+                let kind = |f: &Filter| {
+                    matches!(f, Filter::Custom(n)
+                    if n == "stack:activated ability" || n == "stack:triggered ability")
+                };
+                // "activated or triggered ability": both kinds, what an ability on the
+                // stack is (CR 113.1).
+                !kind(x)
+                    && !matches!(x, Filter::Or(v) if v.iter().all(kind))
+                    && !matches!(x, Filter::Custom(n) if n == crate::kw::game_rules::LOYALTY_ABILITY)
+            })
+            .collect();
+        // "loyalty ability of a planeswalker": its source is one.
+        let flat: Vec<&Filter> = if base == "loyalty ability" {
+            flat.into_iter()
+                .filter(|x| {
+                    let of_pw = matches!(x, Filter::AbilityFrom(f)
+                        if matches!(f.as_ref(), Filter::Type(CardType::Planeswalker)));
+                    if of_pw {
+                        base = "loyalty ability of a planeswalker".into();
+                    }
+                    !of_pw
+                })
+                .collect()
+        } else {
+            flat
+        };
+        for x in flat {
+            match x {
+                Filter::Spell | Filter::SpellOnStack | Filter::Any => {}
+                Filter::ControlledBy(r) => {
+                    let c = self.controls_phrase(*r, Num::One);
+                    extra.push(c);
+                }
+                // "target spell or ability that targets a creature", "... with a single
+                // target": qualities of the spell or ability itself.
+                Filter::Targets(t) => {
+                    let t = self.noun_det(t, Det::A);
+                    extra.push(format!("that targets {t}"));
+                }
+                Filter::StackTargets(tf) => {
+                    let s = self.targets_filter(tf);
+                    extra.push(s);
+                }
+                // "activated ability from an artifact source".
+                Filter::AbilityFrom(f) => {
+                    let saved = self.default_head.replace("source");
+                    let mut np = super::nouns::Np::default();
+                    self.collect(f, &mut np);
+                    let q = self.np_text(&np, Num::One, false);
+                    self.default_head = saved;
+                    let q = if q.ends_with(" source") || q == "source" {
+                        q
+                    } else {
+                        format!("{q} source")
+                    };
+                    extra.push(format!("from {}", with_article(&q)));
+                }
+                other => {
+                    let s = self.noun(other, Num::One);
+                    extra.push(s);
+                }
+            }
+        }
+        if extra.is_empty() {
+            base
+        } else {
+            format!("{base} {}", extra.join(" "))
+        }
+    }
+
+    /// Mentions target slot `i`: the first time its full phrase, then a pronoun.
+    pub(crate) fn target_mention(&mut self, i: u8, case: Case) -> String {
+        let idx = i as usize;
+        if idx >= self.targets.len() {
+            if let Some(n) = self.targeted_noun {
+                return decline(n.to_string(), case);
+            }
+            return self.gap(format!("target slot {i} out of range"));
+        }
+        if !self.introduced[idx] {
+            self.introduced[idx] = true;
+            // "~ deals 1 damage to target creature blocking it": the object itself, just
+            // named, may still be "it" in a target's blocking relation to it.
+            let was = std::mem::replace(&mut self.self_salient, false);
+            let saved = std::mem::replace(&mut self.self_before_target, was && !self.other_salient);
+            let p = self.target_phrase(i);
+            self.self_before_target = saved;
+            return decline(p, case);
+        }
+        if self.slot_is_player(i) {
+            return match case {
+                // "Target player shuffles their graveyard into their library."
+                Case::Poss => "{alt:that player's|their}".into(),
+                // "Target opponent loses life equal to the number of creatures they
+                // control": the subject, named again in the amount.
+                Case::Subj if self.they_target == Some(i) => "{alt:that player|they}".into(),
+                Case::Obj if self.they_target == Some(i) => "{alt:that player|them}".into(),
+                _ => "that player".into(),
+            };
+        }
+        if self.slot_is_many(i) {
+            return match case {
+                Case::Subj => "they".into(),
+                Case::Obj => "them".into(),
+                Case::Poss => "their".into(),
+            };
+        }
+        // "~ deals 3 damage to any target. ... to that permanent or player": a target
+        // that may be a player or an object.
+        if matches!(case, Case::Obj)
+            && self
+                .targets
+                .get(idx)
+                .is_some_and(|t| matches!(t.what, TargetKind::AnyTarget))
+        {
+            return "{alt:it|that permanent or player}".into();
+        }
+        // "~ deals 7 damage divided as you choose among one, two, or three targets. ...
+        // instead ~ deals 7 damage to each of those permanents and/or players."
+        if self.targets.get(idx).is_some_and(|t| t.divide.is_some()) && !matches!(case, Case::Poss)
+        {
+            return "{alt:it|them|each of those permanents and/or players|each of them}".into();
+        }
+        // "Target creature you control fights target creature an opponent controls. If
+        // the creature an opponent controls would die this turn, ...": one of several
+        // targets named again by its words.
+        if !matches!(case, Case::Poss) && self.targets.len() >= 2 {
+            if let Some(words) = self
+                .targets
+                .get(idx)
+                .and_then(|t| t.text.strip_prefix("target "))
+                .filter(|w| {
+                    (w.ends_with(" control") || w.ends_with(" controls"))
+                        && !w.contains(['{', '|'])
+                        && !w.contains(" or ")
+                })
+            {
+                return format!("{{alt:it|the {words}}}");
+            }
+        }
+        match case {
+            Case::Poss => "its".into(),
+            _ => "it".into(),
+        }
+    }
+
+    pub(crate) fn target_player_mention(&mut self, i: u8) -> String {
+        self.target_mention(i, Case::Obj)
+    }
+
+    /// A selection of objects/players.
+    pub(crate) fn sel(&mut self, s: &Sel, case: Case) -> String {
+        if let Some(r) = self.sel_extra(s, case) {
+            return r;
+        }
+        if let Some(r) = self.graveyard_this_way(s, case) {
+            return r;
+        }
+        let it = |case: Case| match case {
+            Case::Poss => "its".to_string(),
+            _ => "it".to_string(),
+        };
+        let them = |case: Case| match case {
+            Case::Subj => "they".to_string(),
+            Case::Obj => "them".to_string(),
+            Case::Poss => "their".to_string(),
+        };
+        match s {
+            Sel::None => self.gap("Sel::None"),
+            Sel::This if self.granted_keyword => it(case),
+            Sel::This => {
+                let m = self.me();
+                decline(m, case)
+            }
+            Sel::Target(i) => self.target_mention(*i, case),
+            Sel::AllTargets => {
+                let any_new = self.introduced.iter().any(|b| !b);
+                if any_new {
+                    let n = self.targets.len() as u8;
+                    let parts: Vec<String> =
+                        (0..n).map(|i| self.target_mention(i, Case::Obj)).collect();
+                    decline(join_list(&parts, "and"), case)
+                } else {
+                    them(case)
+                }
+            }
+            // The source remembered for a delayed trigger: "~" or "it".
+            Sel::Var(v)
+                if self
+                    .var_defs
+                    .iter()
+                    .any(|(x, s, _)| x == v && matches!(s, Sel::This)) =>
+            {
+                decline("~it".into(), case)
+            }
+            Sel::Var(v) if self.var_defs.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .var_defs
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.var_defs[i].2 = true;
+                let s = self.var_defs[i].1.clone();
+                let r = self.sel(&s, case);
+                // Found by the controller before another player acts ("each player mills
+                // cards equal to your Ring-bearer's power"): its "your" is still yours.
+                if self.in_as_player && self.outer_vars.contains(v) {
+                    format!(" {r}")
+                        .replace(" your", &format!(" {}your", super::KEEP_YOU))
+                        .trim_start()
+                        .to_string()
+                } else {
+                    r
+                }
+            }
+            Sel::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .target_vars
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.target_vars[i].2 = true;
+                decline(self.target_vars[i].1.clone(), case)
+            }
+            // "each permanent with the most votes or tied for most votes" (CR 701.38a).
+            Sel::Var(crate::kwa::vote::WINNERS) if self.vote_noun.is_some() => {
+                let n = self.vote_noun.clone().unwrap_or_default();
+                decline(
+                    format!("each {n} with the most votes or tied for most votes"),
+                    case,
+                )
+            }
+            Sel::Var(v) if self.plural_vars.contains(v) => them(case),
+            // The objects chosen by "for each player, choose ..." / "starting with you, each
+            // player chooses ..." (see `patterns::iteration_grammar`).
+            Sel::Var(crate::oracle::patterns::iteration_grammar::CHOSEN) => decline(
+                "{alt:each permanent chosen this way|each creature chosen this way|each card chosen this way|the chosen creatures|the chosen cards|the chosen permanents|those creatures|those cards|them}"
+                    .into(),
+                case,
+            ),
+            Sel::Var(v) => match *v {
+                vars::SACRIFICED if self.sacrificed.as_deref() == Some("~") => {
+                    decline("~".into(), case)
+                }
+                vars::SACRIFICED => {
+                    // "Target player sacrifices a creature. ... that creature's toughness".
+                    // Whatever was sacrificed was a permanent (CR 701.21a): "the
+                    // sacrificed permanent" whatever its type.
+                    let n = self.sacrificed.clone().unwrap_or_else(|| "creature".into());
+                    decline(
+                        format!("{{alt:the sacrificed {n}|that {n}|the sacrificed permanent}}"),
+                        case,
+                    )
+                }
+                vars::CREATED => it(case),
+                // "a card for each card exiled from their hand this way".
+                crate::search_rules::FROM_HAND => {
+                    let v = self.search_verb.unwrap_or("put");
+                    decline(
+                        format!("each card {v} from {{alt:their|that player's}} hand this way"),
+                        case,
+                    )
+                }
+                _ => it(case),
+            },
+            Sel::TriggerObject
+            | Sel::TriggerLki
+            | Sel::TriggerSpell
+            | Sel::TriggerOtherObject
+            | Sel::TriggerObjects
+            | Sel::TriggerPlayer
+                if !self.event_scope =>
+            {
+                self.gap("the triggering object outside a triggered ability")
+            }
+            // Another object while "it" is the object itself (named again since the
+            // trigger condition): cards say "that creature" (`that-object`, which matches
+            // only that wording, see `compare::token_eq`).
+            // "the other creature" of a block.
+            Sel::TriggerObject if self.block_pair_trigger => {
+                self.block_pair_other(case).unwrap_or_default()
+            }
+            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell
+                if self.self_salient && !self.other_salient && !self.trigger_is_self =>
+            {
+                decline("that-object".into(), case)
+            }
+            Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerSpell => {
+                self.self_salient = false;
+                self.other_salient = true;
+                self.self_named_in_clause = false;
+                it(case)
+            }
+            Sel::TriggerOtherObject => it(case),
+            Sel::TriggerObjects => them(case),
+            Sel::TriggerPlayer => decline("that player".into(), case),
+            Sel::AttachedTo => {
+                let n = self.attached_noun();
+                decline(n, case)
+            }
+            Sel::AttachedToThis => decline("each permanent attached to ~".into(), case),
+            // "the permanents that were attached to it".
+            Sel::AttachedAsItLeft(s) => {
+                let s = self.sel(s, Case::Obj);
+                decline(format!("the permanents that were attached to {s}"), case)
+            }
+            // "the permanent target Aura is attached to".
+            Sel::HostOf(s) => {
+                let s = self.sel(s, Case::Subj);
+                decline(format!("the permanent {s} is attached to"), case)
+            }
+            // "Reveal it and put it into your hand": the card, unless it has since become a
+            // permanent (a new object, CR 400.7), which the instruction can't find.
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(_), Filter::Not(z)]
+                    if matches!(z.as_ref(), Filter::InZone(ZoneKind::Battlefield))) =>
+            {
+                let Filter::In(x) = &v[0] else {
+                    return self.gap("Sel::All");
+                };
+                let x = (**x).clone();
+                self.sel(&x, case)
+            }
+            // "Sacrifice those tokens at end of combat": the tokens created, those you
+            // still control (a player sacrifices only permanents they control, CR
+            // 701.21a).
+            Sel::All(Filter::And(v))
+                if matches!(v.as_slice(), [Filter::In(c), Filter::ControlledBy(PlayerRel::You)]
+                    if matches!(c.as_ref(), Sel::Var(x) if *x == vars::CREATED)) =>
+            {
+                decline("{alt:those tokens|the tokens|that token|the token}".into(), case)
+            }
+            // The cards exiled with this object that are still in exile: "the exiled card"
+            // (an object that exiles one card, as with imprint) or "each card exiled with
+            // ~".
+            Sel::All(Filter::And(v))
+                if v.len() == 2
+                    && matches!(&v[0], Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
+                    && matches!(v[1], Filter::InZone(ZoneKind::Exile)) =>
+            {
+                decline(
+                    "{alt:the exiled card|each card exiled with ~it}".into(),
+                    case,
+                )
+            }
+            Sel::All(f) => {
+                if let Some(z) = whole_zone(f) {
+                    let s = self.whole_zone_phrase(z.0, z.1);
+                    return decline(s, case);
+                }
+                let s = self.noun_det(f, Det::Each);
+                // "each creature card in a graveyard" is each one in all graveyards.
+                let s = if s.ends_with(" in a graveyard") || s.contains(" in a graveyard ") {
+                    s.replacen(
+                        " in a graveyard",
+                        " {alt:in a graveyard|in all graveyards|in graveyards}",
+                        1,
+                    )
+                } else {
+                    s
+                };
+                // "Untap all creatures you control. They gain hexproof ...": the group
+                // just named is "them".
+                let key = format!("{f:?}");
+                let repeated = self.last_group.as_deref() == Some(key.as_str());
+                self.last_group = Some(key);
+                if repeated && !s.contains(['{', '|']) && !matches!(case, Case::Poss) {
+                    let pron = if matches!(case, Case::Subj) {
+                        "they"
+                    } else {
+                        "them"
+                    };
+                    return format!("{{alt:{pron}|{s}}}");
+                }
+                decline(s, case)
+            }
+            Sel::Players(p) => self.player(p, case),
+            // "You choose one of them": one of the cards revealed.
+            Sel::Choose {
+                chooser,
+                filter: Filter::In(from),
+                count,
+                ..
+            } if matches!(
+                from.as_ref(),
+                Sel::Var(crate::kw::reveal_from_hand::REVEALED)
+            ) =>
+            {
+                let n = match count {
+                    Value::Const(n) => number_word(*n),
+                    other => self.value(other),
+                };
+                let mut s = format!("{n} of them");
+                if !matches!(chooser, PlayerRef::You) {
+                    let c = self.player(chooser, Case::Poss);
+                    s = format!("{s} of {c} choice");
+                }
+                decline(s, case)
+            }
+            // "Reveal any number of green cards in your hand": up to all of them.
+            Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count: Value::CountSel(all),
+                up_to: true,
+                ..
+            } if matches!(all.as_ref(), Sel::All(f) if format!("{f:?}") == format!("{filter:?}")) =>
+            {
+                let n = self.noun_det(filter, Det::Plural);
+                decline(format!("any number of {n}"), case)
+            }
+            Sel::Choose {
+                chooser,
+                filter,
+                count,
+                up_to,
+                ..
+            } => {
+                // "Put one of them into their graveyard": one of the cards just named.
+                if let (Filter::In(g), Value::Const(n), false, PlayerRef::You) =
+                    (filter, count, *up_to, chooser)
+                {
+                    if matches!(g.as_ref(), Sel::Var(v) if *v == vars::IT) {
+                        // "Put a deathtouch counter on either of them" (one of the two).
+                        if *n == 1 {
+                            return decline("{alt:one|either} of them".into(), case);
+                        }
+                        return decline(format!("{} of them", number_word(*n)), case);
+                    }
+                    // "Tap up to three target creatures. Put a stun counter on one of
+                    // them.": one of the targets.
+                    if let Sel::Target(i) = g.as_ref() {
+                        if self.slot_is_many(*i) && self.introduced.get(*i as usize) == Some(&true)
+                        {
+                            return decline(format!("{} of them", number_word(*n)), case);
+                        }
+                    }
+                }
+                let det = if *up_to && unbounded_choice(filter, count) {
+                    Det::Count("any number of".into())
+                } else if *up_to {
+                    let n = match count {
+                        Value::Const(n) => number_word(*n),
+                        other => self.value(other),
+                    };
+                    Det::UpTo(n)
+                } else {
+                    self.det_for(count)
+                };
+                let mut s = self.noun_det(filter, det);
+                if !matches!(chooser, PlayerRef::You) {
+                    let c = self.player(chooser, Case::Poss);
+                    s = format!("{s} of {c} choice");
+                }
+                decline(s, case)
+            }
+            Sel::AtRandom { filter, count, .. } => {
+                let det = self.det_for(count);
+                let s = self.noun_det(filter, det);
+                // "a card at random from your graveyard".
+                if let Some((head, zone)) = s.split_once(" in your ") {
+                    if !head.contains('{') && !zone.contains(' ') {
+                        return decline(
+                            format!(
+                                "{{alt:{s} chosen at random|{head} at random from your {zone}}}"
+                            ),
+                            case,
+                        );
+                    }
+                }
+                decline(format!("{s} chosen at random"), case)
+            }
+            Sel::Linked => decline("each card exiled with ~it".into(), case),
+            Sel::LinkedNoted => decline("the last chosen card".into(), case),
+            Sel::Before(inner) => self.sel(inner, case),
+            Sel::ThisTurn(c) => {
+                let s = match self.this_turn_objects(c) {
+                    Some(s) => s,
+                    None => self.gap(format!("Sel::ThisTurn({c:?})")),
+                };
+                decline(s, case)
+            }
+            Sel::EventsDuring(w, c) => {
+                let g = self.gap(format!("Sel::EventsDuring({w:?}, {c:?})"));
+                decline(g, case)
+            }
+            // "the creatures destroyed this way": the objects an earlier instruction acted
+            // on.
+            Sel::Matching(inner, f)
+                if self
+                    .this_way_of(match inner.as_ref() {
+                        Sel::Before(x) => x.as_ref(),
+                        x => x,
+                    })
+                    .is_some() =>
+            {
+                let inner = match inner.as_ref() {
+                    Sel::Before(x) => x.as_ref(),
+                    x => x,
+                };
+                let (verb, _, _) = self.this_way_of(inner).unwrap_or(("affected", false, None));
+                let n = self.noun(f, Num::Many);
+                decline(format!("{n} {verb} this way"), case)
+            }
+            Sel::Matching(inner, f) => {
+                let f = Filter::and(vec![f.clone(), Filter::In(inner.clone())]);
+                let n = self.noun(&f, Num::Many);
+                decline(format!("the {n}"), case)
+            }
+            Sel::CreatorLinked => decline("the exiled card".into(), case),
+            Sel::ExiledWithCardsNamed(n) => {
+                decline(format!("a card you exiled with cards named {n}"), case)
+            }
+            // "the exiled card" in another ability than the one that exiled it: the
+            // parser's alternatives for what this ability exiled (none here) and what
+            // the object's linked ability exiled (CR 607.2a).
+            Sel::Union(v)
+                if v.iter().any(is_linked_exiled)
+                    && v.iter().all(|p| {
+                        is_linked_exiled(p)
+                            || matches!(p, Sel::Var(_))
+                            || matches!(p, Sel::Matching(x, Filter::InZone(ZoneKind::Exile)) if matches!(x.as_ref(), Sel::Var(_)))
+                    }) =>
+            {
+                let linked = v.iter().find(|p| is_linked_exiled(p)).cloned().unwrap_or(Sel::None);
+                self.sel(&linked, case)
+            }
+            Sel::Union(v) if self.block_pair_both(v, case).is_some() => {
+                self.block_pair_both(v, case).unwrap_or_default()
+            }
+            Sel::Union(v) => {
+                // "a creature card and/or a land card from your hand": up to one of each,
+                // from the same zone of yours.
+                let one_from = |x: &Sel| match x {
+                    Sel::Choose {
+                        chooser: PlayerRef::You,
+                        filter: Filter::And(f),
+                        count: Value::Const(1),
+                        up_to: true,
+                        store: None,
+                    } => {
+                        let zone = f.iter().find_map(|a| match a {
+                            Filter::InZone(z) => Some(*z),
+                            _ => None,
+                        })?;
+                        let yours = f.iter().any(|a| {
+                            matches!(a, Filter::OwnedBy(PlayerRel::You))
+                                || matches!(a, Filter::OwnedByPlayer(p) if matches!(p.as_ref(), PlayerRef::You))
+                        });
+                        let rest: Vec<Filter> = f
+                            .iter()
+                            .filter(|a| {
+                                !matches!(
+                                    a,
+                                    Filter::InZone(_) | Filter::OwnedBy(_) | Filter::OwnedByPlayer(_)
+                                )
+                            })
+                            .cloned()
+                            .collect();
+                        (yours && matches!(zone, ZoneKind::Hand | ZoneKind::Graveyard))
+                            .then(|| (zone, Filter::and(rest)))
+                    }
+                    _ => None,
+                };
+                let each: Option<Vec<(ZoneKind, Filter)>> = v.iter().map(one_from).collect();
+                let and_or = match each {
+                    Some(e) if e.len() == 2 && e.iter().all(|(z, _)| *z == e[0].0) => {
+                        let ns: Vec<String> =
+                            e.iter().map(|(_, f)| self.noun_det(f, Det::A)).collect();
+                        let z = zone_word(e[0].0);
+                        Some(format!("{} from your {z}", join_list(&ns, "and/or")))
+                    }
+                    _ => None,
+                };
+                let mut parts: Vec<String> = v.iter().map(|x| self.sel(x, Case::Obj)).collect();
+                // "target creature and all other creatures with the same name as that
+                // creature": the union already leaves out the one named first.
+                if let [Sel::Target(_), Sel::All(_)] = v.as_slice() {
+                    if let Some(rest) = parts[1].strip_prefix("all ") {
+                        parts[1] = format!("all {{opt:other}} {rest}");
+                    } else {
+                        parts[1] = format!("{{opt:other}} {}", parts[1]);
+                    }
+                }
+                // "up to one target creature card and up to one target noncreature
+                // permanent card from your graveyard": the zone said once, at the end.
+                if parts.len() > 1 {
+                    for z in [" in your graveyard", " in your hand", " in exile"] {
+                        if parts.iter().all(|p| p.ends_with(z)) {
+                            let n = parts.len();
+                            for p in parts.iter_mut().take(n - 1) {
+                                p.truncate(p.len() - z.len());
+                                p.push_str(&format!(" {{opt:{}}}", z.trim()));
+                            }
+                            break;
+                        }
+                    }
+                }
+                // "your hand and graveyard": whole zones of the same player, the owner said
+                // once.
+                if let [a, b] = parts.as_slice() {
+                    if let (Some(x), Some(y)) = (a.strip_prefix("your "), b.strip_prefix("your ")) {
+                        if !x.contains(' ') && !y.contains(' ') {
+                            return decline(
+                                format!("{{alt:your {x} and your {y}|your {x} and {y}}}"),
+                                case,
+                            );
+                        }
+                    }
+                }
+                // "your hand, graveyard, and all permanents you own": a list of zones of
+                // the same player, the owner said once or for each.
+                if parts.len() > 2 {
+                    let orig = parts.clone();
+                    for i in 1..parts.len() {
+                        let one_zone = orig[i]
+                            .strip_prefix("your ")
+                            .filter(|x| !x.contains(' '))
+                            .map(str::to_string);
+                        if let (true, Some(z)) = (orig[i - 1].starts_with("your "), one_zone) {
+                            parts[i] = format!("{{opt:your}} {z}");
+                        }
+                    }
+                }
+                // "each opponent and each creature and planeswalker they control".
+                if parts.first().is_some_and(|p| p == "each opponent") {
+                    for p in parts.iter_mut().skip(1) {
+                        *p = p.replace("your opponents control", "they control");
+                    }
+                }
+                let joined = join_list(&parts, "and");
+                match and_or {
+                    Some(a) => decline(format!("{{alt:{joined}|{a}}}"), case),
+                    None => decline(joined, case),
+                }
+            }
+            Sel::TopOfGraveyard(p) => {
+                let p = self.player(p, Case::Poss);
+                decline(format!("the top card of {p} graveyard"), case)
+            }
+            Sel::BottomOfLibrary(p, n) => {
+                let p = self.player(p, Case::Poss);
+                let s = match n {
+                    Value::Const(1) => format!("the bottom card of {p} library"),
+                    other => {
+                        let v = self.value(other);
+                        format!("the bottom {v} cards of {p} library")
+                    }
+                };
+                decline(s, case)
+            }
+            Sel::TopOfLibrary(p, n) => {
+                let p = self.player(p, Case::Poss);
+                let s = match n {
+                    Value::Const(_) | Value::EventAmount | Value::Prev => self.top_cards(n, &p),
+                    other => {
+                        let v = self.value(other);
+                        // "a number of cards from the top of your library equal to the
+                        // number of ...": the same cards, the number said after them.
+                        // Or "the top X cards of your library, where X is ..." (CR 107.3),
+                        // said where the cards are the last words of the sentence.
+                        if !matches!(other, Value::X | Value::Var(_)) {
+                            format!("{{alt:a number of cards from the top of {p} library equal to {v}|the top X cards of {p} library, where X is {v}}}")
+                        } else {
+                            format!("the top {v} cards of {p} library")
+                        }
+                    }
+                };
+                decline(s, case)
+            }
+        }
+    }
+
+    /// "target player's graveyard", "each opponent's graveyard", "all graveyards".
+    fn whole_zone_phrase(&mut self, z: ZoneKind, owner: Option<PlayerRel>) -> String {
+        let zw = zone_word(z);
+        match owner {
+            None | Some(PlayerRel::Any) => format!("all {}", plural(zw)),
+            Some(PlayerRel::Opponent) => format!("each opponent's {zw}"),
+            Some(r) => {
+                let p = self.rel_possessive(r, Num::One);
+                format!("{p} {zw}")
+            }
+        }
+    }
+
+    /// A player reference.
+    pub(crate) fn player(&mut self, p: &PlayerRef, case: Case) -> String {
+        let s = match p {
+            PlayerRef::Player(_) => "that player".to_string(),
+            PlayerRef::You => {
+                return match case {
+                    Case::Poss => "your".into(),
+                    _ => "you".into(),
+                }
+            }
+            PlayerRef::EachOpponent => "each opponent".into(),
+            PlayerRef::EachPlayer => "each player".into(),
+            PlayerRef::EachOtherPlayer => "each other player".into(),
+            PlayerRef::Target(i) => return self.target_mention(*i, case),
+            // "Whenever a player attacks one of your opponents, that attacking player ...":
+            // the controller of the creatures attacking.
+            PlayerRef::ControllerOf(sel)
+                if self.attack_trigger && matches!(sel.as_ref(), Sel::TriggerObjects) =>
+            {
+                return match case {
+                    Case::Poss => {
+                        "{alt:their|that attacking player's|the attacking player's}".into()
+                    }
+                    _ => "{alt:that attacking player|the attacking player}".into(),
+                };
+            }
+            // "Whenever a land enters under an opponent's control, that player loses 2
+            // life": the opponent the trigger named.
+            PlayerRef::ControllerOf(sel)
+                if self.trigger_names_opponent
+                    && matches!(sel.as_ref(), Sel::TriggerObject | Sel::TriggerLki) =>
+            {
+                "{alt:that player|its controller}".into()
+            }
+            // "Creatures enchanted player controls": the "controller" of a player is that
+            // player.
+            PlayerRef::ControllerOf(sel)
+                if matches!(sel.as_ref(), Sel::AttachedTo)
+                    && self.attached_noun().ends_with(" player") =>
+            {
+                let n = self.attached_noun();
+                return match case {
+                    Case::Poss => format!("{n}'s"),
+                    _ => n,
+                };
+            }
+            // "Counter target spell unless its controller pays {1}. That player discards a
+            // card": the controller named before, the one player the text names (no player
+            // target, no other player the event names).
+            PlayerRef::ControllerOf(sel)
+                if matches!(case, Case::Subj)
+                    && matches!(
+                        sel.as_ref(),
+                        Sel::Target(_) | Sel::TriggerObject | Sel::TriggerLki
+                    )
+                    && self.trigger_player.is_none()
+                    && !self.targets.iter().any(|t| {
+                        matches!(
+                            t.what,
+                            TargetKind::Player(_)
+                                | TargetKind::AnyTarget
+                                | TargetKind::ObjectOrPlayer(..)
+                        )
+                    }) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:{s} controller|that player}}")
+            }
+            // "Target player or planeswalker. That player or that planeswalker's controller
+            // discards ...": the player, or the controller of the permanent (a player
+            // controls themself, as `ControllerOf` reads it).
+            PlayerRef::ControllerOf(sel)
+                if !matches!(case, Case::Poss)
+                    && matches!(sel.as_ref(), Sel::Target(i)
+                        if matches!(self.targets.get(*i as usize).map(|t| &t.what),
+                            Some(TargetKind::ObjectOrPlayer(..)))) =>
+            {
+                let Sel::Target(i) = sel.as_ref() else {
+                    return self.gap("player or controller");
+                };
+                let Some(TargetKind::ObjectOrPlayer(f, _)) =
+                    self.targets.get(*i as usize).map(|t| t.what.clone())
+                else {
+                    return self.gap("player or controller");
+                };
+                let n = self.noun(&f, Num::One);
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:that player or that {n}'s controller|{s} controller}}")
+            }
+            PlayerRef::ControllerOf(sel) => {
+                let s = self.sel(sel, Case::Poss);
+                format!("{s} controller")
+            }
+            // "Return target permanent to its owner's hand. Then that player discards a
+            // card": the owner, the one player the text has named (no player target,
+            // no other player the event names).
+            PlayerRef::OwnerOf(sel)
+                if matches!(case, Case::Subj)
+                    && matches!(
+                        sel.as_ref(),
+                        Sel::Target(_) | Sel::TriggerObject | Sel::TriggerLki
+                    )
+                    && self.trigger_player.is_none()
+                    && !self.targets.iter().any(|t| {
+                        matches!(
+                            t.what,
+                            TargetKind::Player(_)
+                                | TargetKind::AnyTarget
+                                | TargetKind::ObjectOrPlayer(..)
+                        )
+                    }) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                // "The owner of target nonland permanent puts it ...".
+                match s.strip_suffix("'s").filter(|o| o.starts_with("target ")) {
+                    Some(o) => format!("{{alt:{s} owner|the owner of {o}}}"),
+                    None => format!("{{alt:{s} owner|that player}}"),
+                }
+            }
+            PlayerRef::OwnerOf(sel) => {
+                let s = self.sel(sel, Case::Poss);
+                format!("{s} owner")
+            }
+            // "Whenever an opponent attacks with creatures, ... that opponent loses 3
+            // life".
+            PlayerRef::TriggerPlayer if self.trigger_player == Some(OPPONENT_EVENT) => {
+                return match case {
+                    Case::Subj => "{alt:that player|that opponent|they}".into(),
+                    Case::Obj => "{alt:that player|that opponent|them}".into(),
+                    Case::Poss => "{alt:that player's|that opponent's|their}".into(),
+                };
+            }
+            PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
+                self.trigger_player.unwrap_or("that player").into()
+            }
+            // "Whenever an opponent draws a card, they lose 2 life" / "... that player
+            // loses 2 life".
+            PlayerRef::TriggerPlayer | PlayerRef::Iterated => {
+                return match case {
+                    Case::Subj => "{alt:that player|they}".into(),
+                    Case::Obj => "{alt:that player|them}".into(),
+                    Case::Poss => "{alt:that player's|their}".into(),
+                }
+            }
+            PlayerRef::Var(v) if self.target_vars.iter().any(|(x, _, used)| x == v && !used) => {
+                let i = self
+                    .target_vars
+                    .iter()
+                    .position(|(x, _, used)| x == v && !used)
+                    .unwrap_or(0);
+                self.target_vars[i].2 = true;
+                self.target_vars[i].1.clone()
+            }
+            PlayerRef::Var(_) => "that player".into(),
+            // The active player: in an attack trigger, the attacking player (CR 506.2).
+            PlayerRef::ActivePlayer if self.attack_trigger => {
+                "{alt:that player|that attacking player|the attacking player}".into()
+            }
+            PlayerRef::ActivePlayer => "that player".into(),
+            PlayerRef::AttackingPlayer if self.attack_trigger => {
+                "{alt:that player|that attacking player|the attacking player}".into()
+            }
+            PlayerRef::AttackingPlayer => {
+                "{alt:the attacking player|attacking player|that attacking player}".into()
+            }
+            PlayerRef::DefendingPlayer => "defending player".into(),
+            PlayerRef::ChosenPlayer(_) => "the chosen player".into(),
+            // "the player with the most life" (the one an intervening "if a player has more
+            // life than each other player" makes it).
+            PlayerRef::Each(pf) if self.most_of(pf).is_some() => {
+                let (stat, _) = self.most_of(pf).unwrap_or_default();
+                match stat.as_str() {
+                    "life" => "the player with the most life".into(),
+                    "cards in hand" => "the player who has the most cards in hand".into(),
+                    noun => format!("the player who controls the most {noun}"),
+                }
+            }
+            PlayerRef::Each(pf) => {
+                let n = self.player_filter_noun(pf, Num::One);
+                format!("each {n}")
+            }
+            PlayerRef::Owner => "~'s owner".into(),
+            PlayerRef::Seat { of, side, opponent } => {
+                let who = if *opponent { "opponent" } else { "player" };
+                let s = match (of.as_ref(), side) {
+                    (PlayerRef::Iterated, SeatSide::Chosen) => {
+                        "the next player in {alt:the chosen|that} direction".to_string()
+                    }
+                    (_, SeatSide::Chosen) => {
+                        format!("the {who} next to you in the chosen direction")
+                    }
+                    (of, side) => {
+                        let side = if *side == SeatSide::Left {
+                            "left"
+                        } else {
+                            "right"
+                        };
+                        let o = self.player(of, Case::Poss);
+                        format!("the {who} to {o} {side}")
+                    }
+                };
+                return match case {
+                    Case::Poss => format!("{s}'s"),
+                    _ => s,
+                };
+            }
+            // "Choose an opponent. ... the chosen player's hand".
+            PlayerRef::ChosenOpponent if matches!(case, Case::Poss) => {
+                return "the chosen {alt:opponent's|player's}".into();
+            }
+            PlayerRef::ChosenOpponent => "the chosen {alt:opponent|player}".into(),
+            PlayerRef::Monarch => "the monarch".into(),
+            PlayerRef::LinkedNoted => "that player".into(),
+        };
+        decline(s, case)
+    }
+
+    /// For a filter "has the greatest [life / cards in hand / number of objects]" (the
+    /// most of it among all players): the stat ("life", "cards in hand", or the plural
+    /// noun), and whether it's the controlled-objects form.
+    pub(crate) fn most_of(&mut self, pf: &PlayerFilter) -> Option<(String, bool)> {
+        let is_max = |v: &Value| matches!(v, Value::OverPlayers(AggOp::Max, PlayerFilter::Any, _));
+        match pf {
+            PlayerFilter::Life(Cmp::Eq, v) if is_max(v) => Some(("life".into(), false)),
+            PlayerFilter::HandSize(Cmp::Eq, v) if is_max(v) => {
+                Some(("cards in hand".into(), false))
+            }
+            PlayerFilter::Controls(f, Cmp::Eq, v) if is_max(v) => {
+                Some((self.noun(f, Num::Many), true))
+            }
+            _ => None,
+        }
+    }
+
+    /// "player", "opponent", "player with 10 or less life".
+    pub(crate) fn player_filter_noun(&mut self, pf: &PlayerFilter, num: Num) -> String {
+        let base = |n: &str| match num {
+            Num::One => n.to_string(),
+            Num::Many => plural(n),
+        };
+        match pf {
+            PlayerFilter::Any => base("player"),
+            PlayerFilter::Opponent => base("opponent"),
+            PlayerFilter::NotYou => base("other player"),
+            PlayerFilter::You | PlayerFilter::Controller => "you".into(),
+            PlayerFilter::Is(_) => "that player".into(),
+            PlayerFilter::Monarch => "the monarch".into(),
+            PlayerFilter::Defending => "defending player".into(),
+            PlayerFilter::Active => "the active player".into(),
+            PlayerFilter::Ref(r) => self.player(r, Case::Obj),
+            // "player who controls more lands than they do and is their opponent".
+            PlayerFilter::And(v)
+                if matches!(v.as_slice(), [PlayerFilter::OpponentOf(_), _])
+                    && self.player_quality_terms(pf).is_some() =>
+            {
+                let q = self.player_quality_terms(pf).unwrap_or_default();
+                format!("{} {q}", base("player"))
+            }
+            PlayerFilter::And(v) => {
+                let mut head = base("player");
+                let mut quals = Vec::new();
+                // "each other opponent": other than the player the text named.
+                let mut other_than_named = false;
+                for x in v {
+                    match x {
+                        PlayerFilter::Any => {}
+                        PlayerFilter::Opponent => head = base("opponent"),
+                        PlayerFilter::NotYou => head = base("other player"),
+                        PlayerFilter::Not(n) if matches!(n.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::TriggerPlayer | PlayerRef::Target(_))) => {
+                            other_than_named = true
+                        }
+                        other => quals.push(self.player_quality(other)),
+                    }
+                }
+                if other_than_named {
+                    head = format!("other {head}");
+                }
+                if quals.is_empty() {
+                    head
+                } else {
+                    format!("{head} {}", join_list(&quals, "and"))
+                }
+            }
+            PlayerFilter::Or(v) => {
+                let parts: Vec<String> =
+                    v.iter().map(|x| self.player_filter_noun(x, num)).collect();
+                join_list(&parts, "or")
+            }
+            other => {
+                let q = self.player_quality(other);
+                format!("{} {q}", base("player"))
+            }
+        }
+    }
+
+    /// A player as an object ("you", "an opponent", "a player").
+    pub(crate) fn player_filter_object(&mut self, pf: &PlayerFilter) -> String {
+        match pf {
+            PlayerFilter::You | PlayerFilter::Controller => "you".into(),
+            PlayerFilter::Monarch => "the monarch".into(),
+            PlayerFilter::Defending => "defending player".into(),
+            PlayerFilter::Active => "the active player".into(),
+            PlayerFilter::Ref(r) => self.player(r, Case::Obj),
+            PlayerFilter::Is(_) => "that player".into(),
+            other => {
+                let n = self.player_filter_noun(other, Num::One);
+                with_article(&n)
+            }
+        }
+    }
+
+    /// A quality of a player ("with 10 or less life", "who controls an Island").
+    fn player_quality(&mut self, pf: &PlayerFilter) -> String {
+        if let Some(s) = self.player_quality_terms(pf) {
+            return s;
+        }
+        match pf {
+            PlayerFilter::Any => String::new(),
+            PlayerFilter::Is(_) => "that is that player".into(),
+            PlayerFilter::You | PlayerFilter::Controller => "who is you".into(),
+            PlayerFilter::Opponent => "who is an opponent".into(),
+            PlayerFilter::FirstDrawInDrawStep => self.gap("PlayerFilter::FirstDrawInDrawStep"),
+            PlayerFilter::NotYou => "other than you".into(),
+            PlayerFilter::DealtDamageThisTurn => "who was dealt damage this turn".into(),
+            PlayerFilter::Life(c, v) => {
+                let v = self.value(v);
+                format!("with {} life", nouns::cmp_phrase(*c, &v))
+            }
+            PlayerFilter::HandSize(c, v) => {
+                let v = self.value(v);
+                format!("with {} cards in hand", nouns::cmp_phrase(*c, &v))
+            }
+            PlayerFilter::GraveyardSize(c, v) => {
+                let v = self.value(v);
+                format!(
+                    "with {} cards in their graveyard",
+                    nouns::cmp_phrase(*c, &v)
+                )
+            }
+            PlayerFilter::Monarch => "who is the monarch".into(),
+            // "Each opponent attacking that player": an opponent controlling a creature
+            // attacking that player (CR 506.4: the attacking player controls the
+            // attackers).
+            PlayerFilter::Controls(f, Cmp::Ge, v)
+                if matches!(f.as_ref(), Filter::Custom(n) if n == "attacking the event's player")
+                    && matches!(v.as_ref(), Value::Const(1)) =>
+            {
+                "{alt:who controls a permanent attacking that player|attacking that player}".into()
+            }
+            PlayerFilter::Controls(f, c, v) => {
+                let n = self.count_phrase(f, *c, v);
+                format!("who controls {n}")
+            }
+            PlayerFilter::Counters(k, c, v) => {
+                let v = self.value(v);
+                format!("with {} {} counters", nouns::cmp_phrase(*c, &v), k.as_str())
+            }
+            PlayerFilter::Defending => "who is the defending player".into(),
+            PlayerFilter::Active => "whose turn it is".into(),
+            PlayerFilter::AttackedThisTurn => "who attacked this turn".into(),
+            PlayerFilter::CastSpellThisTurn => "who cast a spell this turn".into(),
+            PlayerFilter::Poisoned => "who is poisoned".into(),
+            PlayerFilter::HasInitiative => "who has the initiative".into(),
+            PlayerFilter::AttackRelation {
+                attacking,
+                other,
+                past,
+                planeswalkers,
+            } => {
+                let o = self.player_filter_object(other);
+                let pw = if *planeswalkers {
+                    " and/or a planeswalker they control"
+                } else {
+                    ""
+                };
+                match (attacking, past) {
+                    (true, false) => format!("who is attacking {o}{pw}"),
+                    (true, true) => format!("who attacked {o}{pw}"),
+                    (false, false) => format!("being attacked by {o}"),
+                    (false, true) => format!("who was attacked by {o}"),
+                }
+            }
+            PlayerFilter::MaxSpeed => "with max speed".into(),
+            PlayerFilter::Chose(w) => format!("who chose {w}"),
+            PlayerFilter::ChosenPlayers => "who is one of the chosen players".into(),
+            PlayerFilter::ChoseNumber(c, v) => {
+                if let Some(f) = self.chose_number_filter(*c, v) {
+                    return f;
+                }
+                let v = self.value(v);
+                format!("who chose a number {}", nouns::cmp_phrase(*c, &v))
+            }
+            PlayerFilter::VotedLikeYou(true) => "who voted for a choice you voted for".into(),
+            PlayerFilter::VotedLikeYou(false) => {
+                "who voted for a choice you didn't vote for".into()
+            }
+            PlayerFilter::LessThanHalfStartingLife => {
+                "with less than half their starting life total".into()
+            }
+            PlayerFilter::History(c) => self.history_player_clause(c),
+            PlayerFilter::HalfStartingLife(c) => {
+                let v = "half their starting life total".to_string();
+                format!("whose life total is {}", super::nouns::cmp_phrase(*c, &v))
+            }
+            // "each player who does" (see `opt_in.rs`).
+            PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::Var(x) if self.opt_in_quality(*x, true).is_some()) =>
+            {
+                let PlayerRef::Var(x) = r.as_ref() else {
+                    return String::new();
+                };
+                self.opt_in_quality(*x, true).unwrap_or_default()
+            }
+            PlayerFilter::Ref(r) => {
+                let p = self.player(r, Case::Obj);
+                format!("who is {p}")
+            }
+            PlayerFilter::And(v) => {
+                let parts: Vec<String> = v.iter().map(|x| self.player_quality(x)).collect();
+                join_list(&parts, "and")
+            }
+            PlayerFilter::Or(v) => {
+                let parts: Vec<String> = v.iter().map(|x| self.player_quality(x)).collect();
+                join_list(&parts, "or")
+            }
+            // "Each opponent discards a card. ... each opponent who can't": who owns none
+            // of the cards discarded this way. Discarding is mandatory, so a player who
+            // discarded nothing couldn't (CR 701.9a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(),
+                    PlayerRef::OwnerOf(s) if matches!(s.as_ref(), Sel::All(Filter::In(v))
+                        if matches!(v.as_ref(), Sel::Var(crate::discard_rules::DISCARDED))))) =>
+            {
+                "who {alt:can't|didn't discard a card this way}".into()
+            }
+            // "Each opponent sacrifices a creature of their choice. Each opponent who
+            // can't ...": who controlled none of the permanents sacrificed this way.
+            // Sacrificing is mandatory, so a player who sacrificed nothing couldn't (CR
+            // 701.21a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(),
+                    PlayerRef::ControllerOf(s) if matches!(s.as_ref(), Sel::Var(vars::SACRIFICED)))) =>
+            {
+                "who {alt:can't|didn't sacrifice a permanent this way}".into()
+            }
+            // "each player who doesn't" (see `opt_in.rs`).
+            PlayerFilter::Not(x) if matches!(x.as_ref(), PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::Var(v) if self.opt_in_quality(*v, false).is_some())) =>
+            {
+                let PlayerFilter::Ref(r) = x.as_ref() else {
+                    return String::new();
+                };
+                let PlayerRef::Var(v) = r.as_ref() else {
+                    return String::new();
+                };
+                self.opt_in_quality(*v, false).unwrap_or_default()
+            }
+            // "Each player who received no votes" (the players voted for are each vote's
+            // choice, CR 701.38a).
+            PlayerFilter::Not(x)
+                if matches!(x.as_ref(), PlayerFilter::Ref(r)
+                    if matches!(r.as_ref(), PlayerRef::Var(crate::kwa::vote::VOTES_CAST))) =>
+            {
+                "who received no votes".into()
+            }
+            PlayerFilter::Not(x) => {
+                let q = self.player_quality(x);
+                format!("not {q}")
+            }
+            PlayerFilter::OpponentOf(r) => {
+                let p = self.player(r, Case::Obj);
+                format!("who is an opponent of {p}")
+            }
+            PlayerFilter::AsChosen(x) => {
+                let q = self.player_quality(x);
+                format!("{q} as you activate this ability")
+            }
+        }
+    }
+
+    /// "three or more creatures", "no Islands", "fewer creatures than you".
+    pub(crate) fn count_phrase(&mut self, f: &Filter, c: Cmp, v: &Value) -> String {
+        match (c, v) {
+            (Cmp::Ge, Value::Const(1)) | (Cmp::Gt, Value::Const(0)) => self.noun_det(f, Det::A),
+            (Cmp::Eq, Value::Const(0))
+            | (Cmp::Lt, Value::Const(1))
+            | (Cmp::Le, Value::Const(0)) => {
+                let n = self.noun(f, Num::Many);
+                format!("no {n}")
+            }
+            (c, Value::Const(n)) => {
+                let w = number_word(*n);
+                let q = match c {
+                    Cmp::Eq => format!("exactly {w}"),
+                    Cmp::Ge => format!("{w} or more"),
+                    Cmp::Le => format!("{w} or fewer"),
+                    Cmp::Gt => format!("more than {w}"),
+                    Cmp::Lt => format!("fewer than {w}"),
+                    Cmp::Ne => format!("other than {w}"),
+                };
+                let num = if *n == 1 && matches!(c, Cmp::Eq | Cmp::Le) {
+                    Num::One
+                } else {
+                    Num::Many
+                };
+                let n = self.noun(f, num);
+                format!("{q} {n}")
+            }
+            (c, other) => {
+                // "more lands than you": than the number of those the player controls.
+                let conj = |f: &Filter| -> Vec<Filter> {
+                    match f {
+                        Filter::And(v) => v.clone(),
+                        other => vec![other.clone()],
+                    }
+                };
+                let theirs = match other {
+                    Value::Count(g) => {
+                        let (fc, gc) = (conj(f), conj(g));
+                        let extra: Vec<&Filter> = gc
+                            .iter()
+                            .filter(|x| !fc.iter().any(|y| format!("{x:?}") == format!("{y:?}")))
+                            .collect();
+                        match extra.as_slice() {
+                            [Filter::ControlledBy(r)] if gc.len() == fc.len() + 1 => Some(*r),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                let v = match theirs {
+                    Some(r) => self.rel_object(r),
+                    None => self.value(other),
+                };
+                let n = self.noun(f, Num::Many);
+                match c {
+                    Cmp::Gt => format!("more {n} than {v}"),
+                    Cmp::Lt => format!("fewer {n} than {v}"),
+                    Cmp::Ge => format!("at least as many {n} as {v}"),
+                    Cmp::Le => format!("no more {n} than {v}"),
+                    Cmp::Eq => format!("the same number of {n} as {v}"),
+                    Cmp::Ne => format!("a different number of {n} than {v}"),
+                }
+            }
+        }
+    }
+}
+
+/// Whether "up to [count]" of the objects `filter` matches is never fewer than all of them
+/// (the count is at least the number of such objects there can be), so the choice is of
+/// "any number of" them (CR 107.1c).
+fn unbounded_choice(filter: &Filter, count: &Value) -> bool {
+    let conj = |f: &Filter| -> Vec<String> {
+        match f {
+            Filter::And(v) => v.iter().map(|x| format!("{x:?}")).collect(),
+            Filter::Any => vec![],
+            other => vec![format!("{other:?}")],
+        }
+    };
+    match count {
+        Value::Const(n) => *n >= 99,
+        // Every object the choice is from is one of those counted.
+        Value::Count(g) => {
+            let f = conj(filter);
+            conj(g).iter().all(|c| f.contains(c))
+        }
+        Value::CountSel(s) => match s.as_ref() {
+            Sel::All(g) => {
+                let f = conj(filter);
+                conj(g).iter().all(|c| f.contains(c))
+            }
+            _ => false,
+        },
+        // "any number of cards from your hand"
+        Value::HandSize(PlayerRef::You) => {
+            let f = conj(filter);
+            f.contains(&format!("{:?}", Filter::InZone(ZoneKind::Hand)))
+                && f.contains(&format!("{:?}", Filter::OwnedBy(PlayerRel::You)))
+        }
+        _ => false,
+    }
+}
+
+/// The cards exiled with this object that are still in exile (CR 607.2a).
+fn is_linked_exiled(s: &Sel) -> bool {
+    matches!(s, Sel::All(Filter::And(v)) if v.len() == 2
+        && matches!(&v[0], Filter::In(x) if matches!(x.as_ref(), Sel::Linked))
+        && matches!(v[1], Filter::InZone(ZoneKind::Exile)))
+}

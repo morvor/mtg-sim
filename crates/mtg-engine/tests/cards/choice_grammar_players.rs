@@ -1,0 +1,473 @@
+//! "Choose target opponent/player." as a sentence of its own (CR 115.1a, 601.2c): the
+//! player is chosen as the spell or ability is put on the stack, and "that player",
+//! "they" and "the chosen player" refer to them afterward.
+
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+fn compiles(name: &str) {
+    let def = card(name);
+    assert!(
+        def.unsupported_text().is_empty(),
+        "{name} has unsupported text: {:?}",
+        def.unsupported_text()
+    );
+}
+
+#[test]
+fn curious_herd_the_number_of_artifacts_that_player_controls() {
+    cr!("115.1a", "601.2c");
+    compiles("Curious Herd");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Forest", 4);
+    t.battlefield(P1, "Ornithopter");
+    t.battlefield(P1, "Ornithopter");
+    t.battlefield(P2, "Ornithopter");
+    let spell = t.hand(P0, "Curious Herd");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve();
+    assert_eq!(t.g.battlefield.iter().filter(|o| t.g.obj(**o).chars.subtypes.iter().any(|s| s == "Beast")).count(), 2);
+}
+
+#[test]
+fn haunt_the_network_the_chosen_player_loses_life() {
+    cr!("115.1a", "601.2c");
+    compiles("Haunt the Network");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Swamp", 2);
+    let spell = t.hand(P0, "Haunt the Network");
+    t.cast(P0, spell).target(P2).go();
+    t.resolve();
+    // Two Thopters: the chosen player loses 2 life and you gain 2.
+    assert_eq!(t.life(P2), 18);
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn the_fall_of_kroog_that_player_and_creatures_they_control() {
+    cr!("115.1a", "601.2c");
+    compiles("The Fall of Kroog");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 6);
+    let land = t.battlefield(P1, "Forest");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let mine = t.battlefield(P0, "Llanowar Elves");
+    let spell = t.hand(P0, "The Fall of Kroog");
+    t.cast(P0, spell).targets(&[Entity::Player(P1), Entity::Object(land)]).go();
+    t.resolve();
+    assert!(!t.on_battlefield(land));
+    assert_eq!(t.life(P1), 17);
+    assert!(t.on_battlefield(bears));
+    assert!(!t.on_battlefield(elves));
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn courageous_resolve_fateful_hour_three_instructions() {
+    // "you can't lose life this turn, you can't lose the game this turn, and your opponents
+    // can't win the game this turn": a series of instructions, all under the condition.
+    cr!("704.5a", "120.3a");
+    compiles("Courageous Resolve");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    t.g.player_mut(P0).life = 5;
+    let spell = t.hand(P0, "Courageous Resolve");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 5, "{}", t.dump_log());
+    // At 0 life (set directly) the player still doesn't lose this turn.
+    t.g.player_mut(P0).life = 0;
+    t.settle();
+    assert!(!t.has_lost(P0));
+}
+
+#[test]
+fn courageous_resolve_above_six_life_does_nothing_more() {
+    cr!("120.3a");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    t.g.player_mut(P0).life = 6;
+    let spell = t.hand(P0, "Courageous Resolve");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, bolt).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 3);
+}
+
+#[test]
+fn keeper_of_the_flame_condition_only_as_you_activate() {
+    cr!("115.1a", "602.2b", "608.2b");
+    ruling!(
+        "Keeper of the Flame",
+        "It is only necessary that the condition be true as you activate the ability."
+    );
+    ruling!(
+        "Keeper of the Flame",
+        "A different opposing player may be targeted each time the ability is activated."
+    );
+    compiles("Keeper of the Flame");
+    let mut t = TestGame::new(3);
+    let keeper = t.battlefield(P0, "Keeper of the Flame");
+    t.lands(P0, "Mountain", 1);
+    t.g.player_mut(P0).life = 15;
+    t.g.player_mut(P2).life = 10;
+    // P2 has less life than P0: not a legal target; P1 is.
+    t.activate(P0, keeper, 0, &[Entity::Player(P2)]).expect("activates");
+    // The life totals change before it resolves: it still resolves.
+    t.g.player_mut(P0).life = 30;
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "{}", t.dump_log());
+    assert_eq!(t.life(P2), 10);
+}
+
+#[test]
+fn keeper_of_the_flame_cant_be_activated_without_an_opponent_with_more_life() {
+    cr!("115.1a", "602.2b");
+    let mut t = TestGame::new(2);
+    let keeper = t.battlefield(P0, "Keeper of the Flame");
+    t.lands(P0, "Mountain", 1);
+    t.g.player_mut(P1).life = 20;
+    assert!(t.activate(P0, keeper, 0, &[Entity::Player(P1)]).is_err());
+}
+
+#[test]
+fn keepers_of_the_beasts_and_mind_compare_with_you() {
+    cr!("115.1a");
+    compiles("Keeper of the Beasts");
+    compiles("Keeper of the Mind");
+    compiles("Keeper of the Light");
+    // Keeper of the Beasts: an opponent who controls more creatures than you.
+    let mut t = TestGame::new(2);
+    let keeper = t.battlefield(P0, "Keeper of the Beasts");
+    t.lands(P0, "Forest", 1);
+    assert!(t.activate(P0, keeper, 0, &[Entity::Player(P1)]).is_err());
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.activate(P0, keeper, 0, &[Entity::Player(P1)]).expect("activates");
+    t.resolve_all();
+    let beasts = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.subtypes.iter().any(|s| s == "Beast"))
+        .count();
+    assert_eq!(beasts, 1, "{}", t.dump_log());
+    // Keeper of the Mind: at least two more cards in hand than you.
+    let mut t = TestGame::new(2);
+    let keeper = t.battlefield(P0, "Keeper of the Mind");
+    t.lands(P0, "Island", 1);
+    t.hand(P1, "Forest");
+    assert!(t.activate(P0, keeper, 0, &[Entity::Player(P1)]).is_err());
+    t.hand(P1, "Forest");
+    let before = t.hand_size(P0);
+    t.activate(P0, keeper, 0, &[Entity::Player(P1)]).expect("activates");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), before + 1);
+}
+
+#[test]
+fn skull_rend_those_players_each_discard_at_random() {
+    cr!("701.9b", "120.3a");
+    compiles("Skull Rend");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 3);
+    for p in [P1, P2] {
+        t.hand(p, "Forest");
+        t.hand(p, "Island");
+        t.hand(p, "Plains");
+    }
+    let mine = t.hand_size(P0);
+    let spell = t.hand(P0, "Skull Rend");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    for p in [P1, P2] {
+        assert_eq!(t.life(p), 18);
+        assert_eq!(t.hand_size(p), 1, "{}", t.dump_log());
+    }
+    assert_eq!(t.hand_size(P0), mine);
+}
+
+#[test]
+fn stuffy_doll_deals_that_much_damage_to_the_chosen_player() {
+    cr!("607.2d", "614.12");
+    compiles("Stuffy Doll");
+    let mut t = TestGame::new(3);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let doll = t.enter(P0, "Stuffy Doll");
+    t.resolve_all();
+    t.g.obj_mut(doll).summoning_sick = false;
+    // "{T}: Stuffy Doll deals 1 damage to itself."
+    t.activate(P0, doll, 0, &[]).expect("activates");
+    t.resolve_all();
+    assert_eq!(t.life(P2), 19, "{}", t.dump_log());
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn saskia_combat_damage_is_dealt_again_to_the_chosen_player() {
+    cr!("607.2d", "510.2");
+    compiles("Saskia the Unyielding");
+    let mut t = TestGame::new(3);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.enter(P0, "Saskia the Unyielding");
+    t.resolve_all();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 18, "{}", t.dump_log());
+}
+
+#[test]
+fn cinderheart_giant_damage_to_a_random_creature_an_opponent_controls() {
+    cr!("608.2d", "120.3");
+    compiles("Cinderheart Giant");
+    compiles("Scab-Clan Giant");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Cinderheart Giant");
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    // Kill the Giant (7/6) with damage: "When ~ dies, it deals 7 damage to a creature an
+    // opponent controls chosen at random."
+    t.g.obj_mut(giant).damage = 5;
+    t.cast(P0, bolt).target(giant).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(theirs), "{}", t.dump_log());
+    assert!(t.on_battlefield(mine));
+}
+
+#[test]
+fn discerning_financier_another_player_gains_control_of_the_treasure() {
+    cr!("608.2d");
+    compiles("Discerning Financier");
+    let mut t = TestGame::new(3);
+    let fin = t.battlefield(P0, "Discerning Financier");
+    t.lands(P0, "Plains", 3);
+    let spec = mtg_engine::tokens::predefined("Treasure").expect("Treasure token");
+    let tc = mtg_engine::replacement::TokenCreate {
+        chars: mtg_engine::tokens::token_characteristics(&spec),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    let treasure = t.g.create_tokens(P0, tc, 1, None)[0];
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    t.activate(P0, fin, 0, &[Entity::Object(treasure)]).expect("activates");
+    t.resolve_all();
+    assert_eq!(t.obj_now(treasure).controller, P2, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn the_black_gate_a_player_with_the_most_life() {
+    cr!("608.2d", "509.1b");
+    compiles("The Black Gate");
+    let mut t = TestGame::new(3);
+    let gate = t.battlefield(P0, "The Black Gate");
+    t.lands(P0, "Swamp", 2);
+    t.g.player_mut(P1).life = 25;
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    // P2 doesn't have the most life: P1 is chosen.
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let idx = 1;
+    t.activate(P0, gate, idx, &[Entity::Object(bears)]).expect("activates");
+    t.resolve_all();
+    let giant = t.named_on_battlefield("Hill Giant")[0];
+    t.attack(&[(bears, Entity::Player(P1))], &[(giant, bears)]);
+    assert_eq!(t.life(P1), 23, "{}", t.dump_log());
+}
+
+#[test]
+fn priest_of_forgotten_gods_you_add_mana_and_draw() {
+    cr!("106.4", "701.21a");
+    compiles("Priest of Forgotten Gods");
+    let mut t = TestGame::new(2);
+    let priest = t.battlefield(P0, "Priest of Forgotten Gods");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P1, "Hill Giant");
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.activate(P0, priest, 0, &[Entity::Player(P1)]).expect("activates");
+    t.resolve();
+    assert_eq!(t.life(P1), 18);
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2, "{}", t.dump_log());
+}
+
+#[test]
+fn scheming_symmetry_each_of_them_searches() {
+    cr!("115.1a", "701.23a");
+    compiles("Scheming Symmetry");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Swamp", 1);
+    let bottom1 = t.library_top(P1, "Lightning Bolt");
+    t.library_top(P1, "Forest");
+    t.library_top(P1, "Forest");
+    let bottom2 = t.library_top(P2, "Grizzly Bears");
+    t.library_top(P2, "Island");
+    t.answer_choose(P1, &[Entity::Object(bottom1)]);
+    t.answer_choose(P2, &[Entity::Object(bottom2)]);
+    let spell = t.hand(P0, "Scheming Symmetry");
+    t.cast(P0, spell)
+        .targets(&[Entity::Player(P1), Entity::Player(P2)])
+        .go();
+    t.resolve_all();
+    let top = |t: &TestGame, p: PlayerId| {
+        let lib = &t.g.player(p).library;
+        t.g.obj(*lib.last().unwrap()).chars.name.to_string()
+    };
+    let top1 = top(&t, P1);
+    let top2 = top(&t, P2);
+    assert_eq!(top1, "Lightning Bolt", "{}", t.dump_log());
+    assert_eq!(top2, "Grizzly Bears");
+}
+
+#[test]
+fn choice_of_damnations_lose_that_much_life() {
+    cr!("608.2d");
+    ruling!(
+        "Choice of Damnations",
+        "After the opponent chooses a number, Choice of Damnations’ controller may choose to make that opponent either lose that much life or make that opponent sacrifice permanents."
+    );
+    compiles("Choice of Damnations");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    t.answer(P1, DecisionKind::Number, mtg_engine::decision::Answer::Number(7));
+    t.answer_yes(P0, true);
+    let spell = t.hand(P0, "Choice of Damnations");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 13, "{}", t.dump_log());
+}
+
+#[test]
+fn choice_of_damnations_sacrifice_all_but_that_many() {
+    cr!("608.2d", "701.21a");
+    ruling!(
+        "Choice of Damnations",
+        "If the opponent must sacrifice all but a number of permanents, that opponent chooses that many permanents and then sacrifices the rest."
+    );
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 6);
+    let keep = t.battlefield(P1, "Grizzly Bears");
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Forest");
+    t.answer(P1, DecisionKind::Number, mtg_engine::decision::Answer::Number(1));
+    t.answer_yes(P0, false);
+    t.answer_choose(P1, &[Entity::Object(keep)]);
+    let spell = t.hand(P0, "Choice of Damnations");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(t.on_battlefield(keep), "{}", t.dump_log());
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+}
+
+#[test]
+fn oath_of_mages_the_upkeep_player_chooses_an_opponent_with_more_life() {
+    cr!("601.2c", "603.3d");
+    ruling!(
+        "Oath of Mages",
+        "The ability can only target an opponent of the current player."
+    );
+    compiles("Oath of Mages");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Mages");
+    t.g.player_mut(P1).life = 15;
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Draw);
+    // P1 (15 life) chose P0 (20 life) and had the Oath deal 1 damage to them.
+    assert_eq!(t.life(P0), 19, "{}", t.dump_log());
+    assert_eq!(t.life(P1), 15);
+    // In P0's upkeep no opponent of P0 has more life: nothing happens.
+    t.advance_to(P0, Step::Draw);
+    assert_eq!(t.life(P1), 15);
+}
+
+#[test]
+fn oath_of_mages_the_upkeep_player_chooses_among_their_opponents() {
+    cr!("601.2c", "603.3d");
+    // Three players: in P1's upkeep, P1 (not the Oath's controller) chooses between P0
+    // and P2.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Oath of Mages");
+    t.g.player_mut(P1).life = 15;
+    t.answer_targets(P1, &[Entity::Player(P2)]);
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::End);
+    let from = t.asked().len();
+    t.advance_to(P1, Step::Draw);
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, vec![P1], "the upkeep's player chooses the target");
+    assert_eq!(t.life(P2), 19, "{}", t.dump_log());
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn oath_of_lieges_the_land_enters_under_the_current_players_control() {
+    cr!("601.2c", "701.23a");
+    ruling!(
+        "Oath of Lieges",
+        "The land card enters under the current player's control."
+    );
+    compiles("Oath of Lieges");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Lieges");
+    t.lands(P0, "Plains", 2);
+    let forest = t.library_top(P1, "Forest");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(forest)]);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Draw);
+    let f = t.g.current(forest);
+    assert!(t.on_battlefield(f), "{}", t.dump_log());
+    assert_eq!(t.obj_now(f).controller, P1);
+}
+
+#[test]
+fn oath_of_scholars_discard_hand_and_draw_three() {
+    cr!("601.2c");
+    compiles("Oath of Scholars");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Scholars");
+    for _ in 0..3 {
+        t.hand(P0, "Forest");
+    }
+    t.hand(P1, "Island");
+    for _ in 0..5 {
+        t.library_top(P1, "Island");
+    }
+    t.answer_yes(P1, true);
+    t.set_step(P0, Step::End);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), 3, "{}", t.dump_log());
+    assert!(t.in_graveyard(P1, "Island"));
+}

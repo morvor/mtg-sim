@@ -1,0 +1,82 @@
+cards	text	example_card	piece_kind	failing_piece
+2	Spend only black mana on X.	Consume Spirit	sent	Spend only black mana on X.
+2	Until end of turn, any time you could activate a mana ability, you may pay N life. If you do, add {C}.	Yavimaya Bloomsage // Channel	sent	Until end of turn, any time you could activate a mana ability, you may pay N life.
+2	{T}: Choose a color. Add one mana of that color for each different power among creatures you control.	Selvala, Eager Trailblazer	sent	Add one mana of that color for each different power among creatures you control.
+1	-N: You get an emblem with "Swamps you control have '{T}: Add {B}{B}{B}{B}.'"	Liliana of the Dark Realms	quote	Swamps you control have '{T}: Add {B}{B}{B}{B}.'
+1	Adamant — If at least three green mana was spent to cast ~, the creature you control gains indestructible until end of turn.	Outmuscle	sent	If at least three green mana was spent to cast ~, the creature you control gains indestructible until end of turn.
+1	Add X mana of any one color, where X is N plus the sacrificed creature's mana value. Spend this mana only to cast creature spells.	Metamorphosis	sent	Add X mana of any one color, where X is N plus the sacrificed creature's mana value.
+1	All lands lose all abilities except mana abilities.	Blood Sun	sent	All lands lose all abilities except mana abilities.
+1	Alluring Eyes — {T}: Goad target creature an opponent controls. That player draws a card. You add {R}.	Red Death, Shipwrecker	sent	You add {R}.
+1	At the beginning of each end step, each player who tapped a land for mana this turn sacrifices a land of their choice. ~ deals N damage to each player who sacrificed a Plains this way.	Desolation	sent	each player who tapped a land for mana this turn sacrifices a land of their choice.
+1	At the beginning of each postcombat main phase, the active player adds {C}{C} for each of your opponents who lost life this turn.	Belbe, Corrupted Observer	sent	the active player adds {C}{C} for each of your opponents who lost life this turn.
+1	At the beginning of your first main phase, add {R}{R}. Spend this mana only to cast Room spells and unlock doors.	Smoky Lounge // Misty Salon	conj	Spend this mana only to cast Room spells and unlock doors.
+1	Choose one — / • Add two mana of any one color and two mana of any other color. Spend this mana only to cast creature or enchantment spells. / • Creatures you control get +N/+N until end of turn.	Open the Omenpaths	mode	• Add two mana of any one color and two mana of any other color. Spend this mana only to cast creature or enchantment spells.
+1	Choose one. If you control a commander as you cast ~, you may choose both instead. / • Add {R} for each card in target opponent's hand. / • Exile the top three cards of your library. You may play them this turn.	Jeska's Will	mode	• Add {R} for each card in target opponent's hand.
+1	Chroma — ~'s power and toughness are each equal to the number of black mana symbols in the mana costs of cards in your graveyard.	Umbra Stalker	sent	~'s power and toughness are each equal to the number of black mana symbols in the mana costs of cards in your graveyard.
+1	Converge — Target player draws X cards, ~ deals X damage to any target, and you gain X life, where X is the number of colors of mana spent to cast ~.	Together as One	sent	Target player draws X cards, ~ deals X damage to any target, and you gain X life, where X is the number of colors of mana spent to cast ~.
+1	Destroy target land that is snow or could produce {C}.	Break the Ice	sent	Destroy target land that is snow or could produce {C}.
+1	Each creature you control with a mana ability gets +N/+N.	Raggadragga, Goreguts Boss	sent	Each creature you control with a mana ability gets +N/+N.
+1	Each player chooses an artifact, a creature, an enchantment, and a planeswalker from among the nonland permanents they control, then sacrifices the rest. If {B}{R} was spent to cast ~, you choose the permanents for each player instead.	Mythos of Snapdax	sent	If {B}{R} was spent to cast ~, you choose the permanents for each player instead.
+1	Enchanted permanent has "{T}: Target player adds two mana of any one color. The next spell they cast this turn has cascade."	Bigger on the Inside	quote	Target player adds two mana of any one color.
+1	Exile a card from your graveyard: Add {C}. Spend this mana only to cast a spell that's one or more colors without {X} in its mana cost.	Titans' Nest	sent	Spend this mana only to cast a spell that's one or more colors without {X} in its mana cost.
+1	Human creatures you control have "{T}: Add one mana of any of ~'s colors."	Katilda, Dawnhart Prime	quote	Add one mana of any of ~'s colors.
+1	Mana of any type can be spent to activate ~'s abilities.	Sharkey, Tyrant of the Shire	sent	Mana of any type can be spent to activate ~'s abilities.
+1	Pay N life: Add two mana of any one color. Spend this mana only to cast Equipment spells or activate equip abilities. Activate only once each turn.	Ronin, Shadow Stalker	sent	Spend this mana only to cast Equipment spells or activate equip abilities.
+1	Sacrifice a land: Add one mana of any type the sacrificed land could produce.	Squandered Resources	sent	Add one mana of any type the sacrificed land could produce.
+1	Sacrifice any number of lands, then add that much {C}.	Mana Seism	sent	Sacrifice any number of lands, then add that much {C}.
+1	Spend only colored mana on X. No more than one mana of each color may be spent this way.	Emblazoned Golem	sent	Spend only colored mana on X.
+1	Spend only mana produced by basic lands to cast ~.	Imperiosaur	sent	Spend only mana produced by basic lands to cast ~.
+1	Spend only mana produced by creatures to cast ~.	Myr Superion	sent	Spend only mana produced by creatures to cast ~.
+1	Target creature you control fights target creature an opponent controls. If the creature the opponent controls is dealt excess damage this way, add that much {R}.	The Last Agni Kai	sent	If the creature the opponent controls is dealt excess damage this way, add that much {R}.
+1	When ~ enters, choose a player. That player adds two mana of any one color they choose.	Stadium Vendors	sent	That player adds two mana of any one color they choose.
+1	Whenever a player casts a spell, any other player may pay that spell's mana cost. If a player does, counter the spell.	Ice Cave	sent	any other player may pay that spell's mana cost.
+1	Whenever ~ deals combat damage to a player, look at the top card of that player's library, then exile it face down. You may play it for as long as it remains exiled. Mana of any type can be spent to cast a spell this way.	Klaw, Master of Sound	sent	Mana of any type can be spent to cast a spell this way.
+1	You can spend mana of any type to cast creature spells.	Vizier of the Menagerie	sent	You can spend mana of any type to cast creature spells.
+1	{CHAPTER} II — Add {W}{U}. Spend this mana only to foretell cards or cast spells that have foretell.	Niko Defies Destiny	sent	Spend this mana only to foretell cards or cast spells that have foretell.
+1	{CHAPTER} II — ~ gains "Creatures you control have '{T}: Add {R}, {G}, or {W}.'"	Huatli, Poet of Unity // Roar of the Fifth People	sent	~ gains "Creatures you control have '{T}: Add {R}, {G}, or {W}.'"
+1	{CHAPTER} IV — Add {W}{W}, {U}{U}, {B}{B}, {R}{R}, and {G}{G}. Exile ~, then return it to the battlefield .	Terra, Magical Adept // Esper Terra	sent	Add {W}{W}, {U}{U}, {B}{B}, {R}{R}, and {G}{G}.
+1	{N}, {T}, Sacrifice ~: Add two mana of different colors.	Guild Globe	sent	Add two mana of different colors.
+1	{N}, {T}: Add two mana of different colors. Spend this mana only to cast planeswalker spells.	Interplanar Beacon	sent	Add two mana of different colors.
+1	{N}, {T}: Draw two cards. Spend only mana of the chosen color to activate this ability.	Throne of Eldraine	sent	Spend only mana of the chosen color to activate this ability.
+1	{N}, {T}: Each player adds {B}{R}{G}.	Yurlok of Scorch Thrash	sent	Each player adds {B}{R}{G}.
+1	{N}, {T}: Put a charge counter on ~. Note the type of mana spent to pay this activation cost. Activate only if there are no charge counters on ~.	Jeweled Amulet	sent	Note the type of mana spent to pay this activation cost.
+1	{T}, Mill a card: Target player adds one mana of any color.	The Warring Triad	sent	Target player adds one mana of any color.
+1	{T}, Remove X charge counters from ~: Add an amount of {C} equal to X plus one.	Kyren Toy	sent	Add an amount of {C} equal to X plus one.
+1	{T}, Remove a charge counter from ~: Add one mana of ~'s last noted type.	Jeweled Amulet	sent	Add one mana of ~'s last noted type.
+1	{T}, Remove a charge counter from ~: Add two mana of any one color. Spend this mana only to cast kicked spells.	Throne of Makindi	sent	Spend this mana only to cast kicked spells.
+1	{T}, Remove a component counter from ~: Add two mana of different colors.	Component Pouch	sent	Add two mana of different colors.
+1	{T}: A player of your choice adds {C}.	Victory Chimes	sent	A player of your choice adds {C}.
+1	{T}: Add X mana of any one color, where X is the amount of life you gained this turn.	Accomplished Alchemist	sent	Add X mana of any one color, where X is the amount of life you gained this turn.
+1	{T}: Add X mana of any one color, where X is the greatest number of creatures you control that have a creature type in common.	White Lotus Tile	sent	Add X mana of any one color, where X is the greatest number of creatures you control that have a creature type in common.
+1	{T}: Add X mana of any one color, where X is the greatest toughness among other creatures you control.	Arbor Adherent	sent	Add X mana of any one color, where X is the greatest toughness among other creatures you control.
+1	{T}: Add X mana of any one color, where X is the number of soul counters on ~. Spend this mana only to cast instant, sorcery, Demon, and Spirit spells.	Séance Board	sent	Spend this mana only to cast instant, sorcery, Demon, and Spirit spells.
+1	{T}: Add X mana of any one color, where X is ~'s power. Spend this mana only to cast creature spells with mana value N or greater or creature spells with {X} in their mana costs.	Helga, Skittish Seer	sent	Spend this mana only to cast creature spells with mana value N or greater or creature spells with {X} in their mana costs.
+1	{T}: Add four mana of the chosen color. Spend this mana only to cast monocolored spells of that color.	Throne of Eldraine	sent	Spend this mana only to cast monocolored spells of that color.
+1	{T}: Add one mana of any color among legendary creature cards in your graveyard.	The Grey Havens	sent	Add one mana of any color among legendary creature cards in your graveyard.
+1	{T}: Add one mana of any color among legendary creatures and planeswalkers you control.	Mox Amber	sent	Add one mana of any color among legendary creatures and planeswalkers you control.
+1	{T}: Add one mana of any color among legendary permanents you control.	Plaza of Heroes	sent	Add one mana of any color among legendary permanents you control.
+1	{T}: Add one mana of any color. Spend this mana only to cast a Dragon spell or an Omen spell.	Maelstrom of the Spirit Dragon	sent	Spend this mana only to cast a Dragon spell or an Omen spell.
+1	{T}: Add one mana of any color. Spend this mana only to cast a Time Lord or Alien spell or activate an ability of a Time Lord or Alien.	Gallifrey Council Chamber	sent	Spend this mana only to cast a Time Lord or Alien spell or activate an ability of a Time Lord or Alien.
+1	{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.	Secluded Courtyard	sent	Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.
+1	{T}: Add one mana of any color. Spend this mana only to cast a spell of the chosen type or activate an ability of a source of the chosen type.	Eclipsed Realms	sent	Spend this mana only to cast a spell of the chosen type or activate an ability of a source of the chosen type.
+1	{T}: Add one mana of any of the exiled card's colors.	Chrome Mox	sent	Add one mana of any of the exiled card's colors.
+1	{T}: Add one mana of any of the exiled cards' colors.	Pit of Offerings	sent	Add one mana of any of the exiled cards' colors.
+1	{T}: Add two mana of different colors.	Firemind Vessel	sent	Add two mana of different colors.
+1	{T}: Add {C}. Spend this mana only to cast a colorless spell, activate an ability of a colorless permanent, or pay a cost that contains {C}.	Cultivator Drone	sent	Spend this mana only to cast a colorless spell, activate an ability of a colorless permanent, or pay a cost that contains {C}.
+1	{T}: Add {G}. Spend this mana only to cast a creature spell of the chosen type or a legendary creature spell.	Kolvori, God of Kinship // The Ringhart Crest	sent	Spend this mana only to cast a creature spell of the chosen type or a legendary creature spell.
+1	{T}: Add {G}{G}. Spend this mana only to cast kicked spells.	Elfhame Druid	sent	Spend this mana only to cast kicked spells.
+1	{T}: Add {G}{U}. Spend this mana only to cast spells with mana value N or greater or spells with {X} in their mana costs.	Troyan, Gutsy Explorer	sent	Spend this mana only to cast spells with mana value N or greater or spells with {X} in their mana costs.
+1	{T}: Add {R}. Spend this mana only to cast an Elemental spell or a Chandra planeswalker spell.	Chandra's Embercat	sent	Spend this mana only to cast an Elemental spell or a Chandra planeswalker spell.
+1	{T}: Add {R}. Spend this mana only to cast an Equipment spell or activate an equip ability.	Freya Crescent	sent	Spend this mana only to cast an Equipment spell or activate an equip ability.
+1	{T}: Add {R}{R}. Spend this mana only to activate power-up abilities.	Quinjet Technician	sent	Spend this mana only to activate power-up abilities.
+1	{T}: Add {R}{R}. Spend this mana only to cast Dwarf, Equipment, and Saga spells.	Fíli and Kíli, Joyous	sent	Spend this mana only to cast Dwarf, Equipment, and Saga spells.
+1	{T}: Add {U} or {C}{U}. Spend this mana only to pay cumulative upkeep costs.	Adarkar Unicorn	sent	Spend this mana only to pay cumulative upkeep costs.
+1	{T}: Add {U}. Spend this mana only to cast an instant or sorcery spell or a kicked spell.	Volshe Tideturner	sent	Spend this mana only to cast an instant or sorcery spell or a kicked spell.
+1	{T}: Add {U}. Spend this mana only to foretell a card from your hand or cast an instant or sorcery spell.	Karfell Harbinger	sent	Spend this mana only to foretell a card from your hand or cast an instant or sorcery spell.
+1	{T}: Add {U}. Spend this mana only to pay a disturb cost or cast an instant or sorcery spell.	Unblinking Observer	sent	Spend this mana only to pay a disturb cost or cast an instant or sorcery spell.
+1	{T}: Choose a player. That player adds one mana of any color they choose.	Spectral Searchlight	sent	That player adds one mana of any color they choose.
+1	{X}, {T}: ~ deals X damage to target creature. Spend only red mana on X.	Crimson Hellkite	sent	Spend only red mana on X.
+1	{X}: ~ deals X damage to each creature and each player. Spend only black mana on X.	Crypt Rats	sent	Spend only black mana on X.
+1	~ deals N damage divided as you choose among one, two, or three targets. If at least seven red mana was spent to cast ~, instead ~ deals N damage to each of those permanents and/or players.	Sundering Stroke	sent	If at least seven red mana was spent to cast ~, instead ~ deals N damage to each of those permanents and/or players.
+1	~ has all activated abilities of lands your opponents control except mana abilities.	Sharkey, Tyrant of the Shire	sent	~ has all activated abilities of lands your opponents control except mana abilities.
+1	~ has flying and indestructible as long as you have six or more unspent mana.	Ozai, the Phoenix King	conj	~ has flying and indestructible as long as you have six or more unspent mana.
