@@ -899,6 +899,74 @@ fn each_cant_attack_while_it_has_counter(l: &str, prev: &mut Effect, _b: &mut Bu
 
 inventory::submit! { FollowupPattern { name: "choices 4: each of those creatures can't attack you while it has a counter", priority: 120, apply: each_cant_attack_while_it_has_counter } }
 
+/// The two players exchanging their creatures, and the creatures they exchanged.
+const PAIR: Var = vars::USER + 41016;
+const EXCHANGED: Var = vars::USER + 41017;
+
+/// "You and that opponent each gain control of all creatures the other controls until end
+/// of turn." (Reins of Power): both sets of creatures are determined first, then control
+/// of all of them changes at the same time (CR 608.2e); "those creatures"
+/// later are all of them.
+fn you_and_that_opponent_exchange_creatures(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("you and that opponent each gain control of all ")?;
+    let (noun, dur) = r.split_once(" the other controls")?;
+    let other = b.it_player.clone();
+    if super::oracle_hardening_referents::is_no_player_referent(&other)
+        || matches!(other, PlayerRef::You)
+    {
+        return None;
+    }
+    let (f, true, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    let probe = format!("x{dur}");
+    let (duration, rest) = crate::oracle::effects::duration_suffix(&probe);
+    if rest.trim() != "x" {
+        return None;
+    }
+    let pair = PlayerFilter::Ref(Box::new(PlayerRef::Var(PAIR)));
+    let e = Effect::seq(vec![
+        Effect::Store {
+            var: PAIR,
+            sel: Sel::Union(vec![Sel::Players(PlayerRef::You), Sel::Players(other)]),
+        },
+        Effect::Store {
+            var: EXCHANGED,
+            sel: Sel::All(Filter::and(vec![
+                f.clone(),
+                Filter::ControllerMatches(Box::new(pair.clone())),
+            ])),
+        },
+        Effect::ForEachPlayer {
+            who: PlayerRef::Var(PAIR),
+            effect: Box::new(Effect::GainControl {
+                what: Sel::All(Filter::and(vec![
+                    f,
+                    Filter::In(Box::new(Sel::Var(EXCHANGED))),
+                    Filter::ControllerMatches(Box::new(PlayerFilter::And(vec![
+                        pair,
+                        PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
+                            PlayerRef::Iterated,
+                        )))),
+                    ]))),
+                ])),
+                who: PlayerRef::Iterated,
+                duration,
+            }),
+        },
+    ]);
+    b.it = Sel::Var(EXCHANGED);
+    b.named
+        .push(("those creatures".into(), Sel::Var(EXCHANGED)));
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: you and that opponent each gain control of all creatures the other controls", priority: 120, parse: you_and_that_opponent_exchange_creatures } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -926,6 +994,7 @@ mod tests {
             ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player whose graveyard has fewer creature cards in it than their graveyard does and is their opponent. The first player may return a creature card from their graveyard to their hand."),
             ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player who controls more creatures than they do and is their opponent. The first player may reveal cards from the top of their library until they reveal a creature card. If the first player does, that player puts that card onto the battlefield and all other cards revealed this way into their graveyard."),
             ("Sorcery", "Each player puts a vow counter on a creature they control and sacrifices the rest. Each of those creatures can't attack you or planeswalkers you control for as long as it has a vow counter on it."),
+            ("Instant", "Untap all creatures you control and all creatures target opponent controls. You and that opponent each gain control of all creatures the other controls until end of turn. Those creatures gain haste until end of turn."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

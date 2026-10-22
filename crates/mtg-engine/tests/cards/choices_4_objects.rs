@@ -223,3 +223,39 @@ fn promise_of_loyalty_vowed_creatures_cant_attack_you_while_they_have_the_counte
     t.g.recompute();
     assert!(t.g.can_attack_target(angel, Entity::Player(P0)));
 }
+
+#[test]
+fn reins_of_power_you_and_that_opponent_swap_creatures() {
+    cr!("608.2e", "611.2c");
+    ruling!(
+        "Reins of Power",
+        "It is perfectly legal for either or both players to have zero creatures."
+    );
+    supported("Reins of Power");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Island", 4);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P2, "Serra Angel");
+    t.g.objects[bears.0 as usize].tapped = true;
+    t.g.objects[giant.0 as usize].tapped = true;
+    let spell = t.hand(P0, "Reins of Power");
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    let g = t.obj_now(giant);
+    assert_eq!(g.controller, P0);
+    assert!(!g.tapped);
+    assert!(g.has_keyword(keywords::KeywordKind::Haste));
+    let b = t.obj_now(bears);
+    assert_eq!(b.controller, P1);
+    assert!(b.has_keyword(keywords::KeywordKind::Haste));
+    assert_eq!(t.obj_now(other).controller, P2);
+    // With no creatures on one side, the other side still changes control.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 4);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let spell = t.hand(P0, "Reins of Power");
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).controller, P0);
+}
