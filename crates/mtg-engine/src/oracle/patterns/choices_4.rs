@@ -1000,6 +1000,71 @@ fn another_player_of_your_choice_may(l: &str, b: &mut Builder) -> Option<Effect>
 
 inventory::submit! { EffectPattern { name: "choices 4: another player of your choice may gain control of it", priority: 120, parse: another_player_of_your_choice_may } }
 
+/// The opponent and the creature of "an opponent may gain control of a creature you
+/// control of their choice", and the player who controlled it.
+const TAKER: Var = vars::USER + 41019;
+const TAKEN: Var = vars::USER + 41029;
+const GIVER: Var = vars::USER + 41035;
+
+/// "an opponent may gain control of a creature you control of their choice for as long as
+/// ~ remains on the battlefield" (Infernal Denizen): the opponent who decides (chosen by
+/// you, CR 801.5a, see `Game::deciding_opponent`) chooses one of your creatures and may
+/// gain control of it for that long.
+fn an_opponent_may_take_one_of_their_choice(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("an opponent may gain control of a ")?;
+    let (noun, dur) = r.split_once(" you control of their choice")?;
+    let duration = match dur {
+        " for as long as ~ remains on the battlefield" => Duration::WhileSourceOnBattlefield,
+        " until end of turn" => Duration::EndOfTurn,
+        "" => Duration::Permanent,
+        _ => return None,
+    };
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: GIVER,
+            sel: Sel::Players(PlayerRef::You),
+        },
+        crate::kw::choice_grammar::deciding_opponent_effect(TAKER)?,
+        Effect::AsPlayer {
+            who: PlayerRef::Var(TAKER),
+            effect: Box::new(Effect::May {
+                who: PlayerRef::You,
+                effect: Box::new(Effect::seq(vec![
+                    Effect::Store {
+                        var: TAKEN,
+                        sel: Sel::Choose {
+                            chooser: PlayerRef::You,
+                            filter: Filter::and(vec![
+                                f,
+                                Filter::InZone(ZoneKind::Battlefield),
+                                Filter::ControllerMatches(Box::new(PlayerFilter::Ref(Box::new(
+                                    PlayerRef::Var(GIVER),
+                                )))),
+                            ]),
+                            count: Value::c(1),
+                            up_to: false,
+                            store: None,
+                        },
+                    },
+                    Effect::GainControl {
+                        what: Sel::Var(TAKEN),
+                        who: PlayerRef::You,
+                        duration,
+                    },
+                ])),
+            }),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: an opponent may gain control of a creature you control of their choice", priority: 120, parse: an_opponent_may_take_one_of_their_choice } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1029,6 +1094,7 @@ mod tests {
             ("Sorcery", "Each player puts a vow counter on a creature they control and sacrifices the rest. Each of those creatures can't attack you or planeswalkers you control for as long as it has a vow counter on it."),
             ("Instant", "Untap all creatures you control and all creatures target opponent controls. You and that opponent each gain control of all creatures the other controls until end of turn. Those creatures gain haste until end of turn."),
             ("Land", "{3}, {T}: Choose target permanent you control. Draw a card, then another player of your choice may gain control of that permanent. Activate only as a sorcery."),
+            ("Creature", "At the beginning of your upkeep, sacrifice two Swamps. If you can't, tap ~, and an opponent may gain control of a creature you control of their choice for as long as ~ remains on the battlefield.\n{T}: Gain control of target creature for as long as ~ remains on the battlefield."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {

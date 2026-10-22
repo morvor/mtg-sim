@@ -277,3 +277,36 @@ fn stardew_valley_another_player_of_your_choice_may_take_the_permanent() {
     assert_eq!(t.hand_size(P0), hand + 1);
     assert_eq!(t.obj_now(bears).controller, P2);
 }
+
+#[test]
+fn infernal_denizen_without_swamps_an_opponent_may_take_a_creature_while_it_remains() {
+    cr!("611.2b");
+    ruling!(
+        "Infernal Denizen",
+        "Remember that taking a creature is optional so your opponent is not forced to take the Denizen."
+    );
+    supported("Infernal Denizen");
+    let mut t = TestGame::new(2);
+    let d = t.battlefield(P0, "Infernal Denizen");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.advance_to(P0, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.obj_now(d).tapped);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    // Control lasts only while the Denizen remains on the battlefield.
+    t.g.destroy(d, None);
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P0);
+    // Taking one is optional.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Infernal Denizen");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P1, false);
+    t.advance_to(P0, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P0);
+}
