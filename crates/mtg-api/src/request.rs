@@ -115,6 +115,13 @@ pub struct OptionView {
     /// Combat damage: the damage that's lethal for this recipient.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lethal: Option<u32>,
+    /// Combat damage, when other attackers assign theirs after this one: the damage this
+    /// recipient must be assigned before any goes beyond it if those attackers assign all
+    /// they can to it (CR 702.19b–c). An answer that meets only these is checked once
+    /// every attacker's damage is assigned (CR 510.1e); if the blocking creatures don't
+    /// all end up assigned lethal damage, all of it is assigned again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lethal_counting_later: Option<u32>,
     /// Modes with pawprints: this mode's pawprints (CR 700.2i).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<u32>,
@@ -792,10 +799,14 @@ pub fn prepare(
                 recipients,
                 lethal,
                 trample,
+                lethal_counting_later,
             } => {
                 let (mut views, pay) = entity_options(recipients);
                 for (v, l) in views.iter_mut().zip(lethal) {
                     v.lethal = Some(*l);
+                }
+                for (v, l) in views.iter_mut().zip(lethal_counting_later.iter().flatten()) {
+                    v.lethal_counting_later = Some(*l);
                 }
                 (
                     format!(
@@ -1141,6 +1152,7 @@ impl Prepared {
             creature,
             recipients,
             lethal,
+            lethal_counting_later,
             ..
         } = &self.decision
         else {
@@ -1168,13 +1180,21 @@ impl Prepared {
             && recipients.len() >= 2
             && Some(recipients[recipients.len() - 2]) == target;
         let nb = recipients.len() - 1 - usize::from(spill);
-        let beyond: i64 = v[nb..].iter().sum();
-        if beyond > 0 && (0..nb).any(|i| (v[i] as u32) < lethal.get(i).copied().unwrap_or(0)) {
-            return Err("with trample, each blocking creature must be assigned lethal damage before any is assigned beyond them (CR 702.19b)".into());
+        // The minimums: `lethal`, or those counting the damage the attackers assigning
+        // after this one can assign (checked with the total assignment, CR 510.1e).
+        let check = |lethal: &[u32]| -> Result<(), String> {
+            let beyond: i64 = v[nb..].iter().sum();
+            if beyond > 0 && (0..nb).any(|i| (v[i] as u32) < lethal.get(i).copied().unwrap_or(0)) {
+                return Err("with trample, each blocking creature must be assigned lethal damage before any is assigned beyond them (CR 702.19b)".into());
+            }
+            if spill && v[nb + 1] > 0 && (v[nb] as u32) < lethal.get(nb).copied().unwrap_or(0) {
+                return Err("the planeswalker must be assigned lethal damage before its controller is assigned any (CR 702.19c)".into());
+            }
+            Ok(())
+        };
+        match lethal_counting_later {
+            Some(later) => check(lethal).or_else(|_| check(later)),
+            None => check(lethal),
         }
-        if spill && v[nb + 1] > 0 && (v[nb] as u32) < lethal.get(nb).copied().unwrap_or(0) {
-            return Err("the planeswalker must be assigned lethal damage before its controller is assigned any (CR 702.19c)".into());
-        }
-        Ok(())
     }
 }

@@ -73,6 +73,23 @@ fn banded_tramplers(a: [i64; 2], b: [i64; 2]) -> (i32, bool) {
     t.answer(P0, DecisionKind::Damage, Answer::Numbers(a.to_vec()));
     t.answer(P0, DecisionKind::Damage, Answer::Numbers(b.to_vec()));
     t.advance_to(P0, Step::EndOfCombat);
+    // The first trampler's decision offers the minimum counting the second's 3 damage to
+    // the 0/4 (4 - 3); the second, assigning last, only the lethal counting what's
+    // already assigned to it.
+    let offered: Vec<_> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::AssignCombatDamage {
+                creature,
+                lethal_counting_later,
+                ..
+            } => Some((creature, lethal_counting_later)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered[0], (x, Some(vec![1])));
+    assert_eq!(offered[1].1, None);
     (t.life(P1), !t.on_battlefield(wall))
 }
 
@@ -86,6 +103,7 @@ fn tramplers_may_count_each_others_damage_to_a_shared_blocker() {
 #[test]
 fn a_total_assignment_without_lethal_damage_is_illegal_and_assigned_again() {
     cr!("702.19b", "510.1e");
+    interp!("trample-reassignment-counts-only-assigned-damage");
     // 1 + 1 isn't lethal: the assignment is illegal, the player assigns again (here the
     // defaults: 3 to the Wall, then 1 more and 2 to the player).
     assert_eq!(banded_tramplers([1, 2], [1, 2]), (18, true));

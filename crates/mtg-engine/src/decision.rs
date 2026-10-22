@@ -162,12 +162,22 @@ pub enum Decision {
     /// planeswalker's controller. `lethal` gives the lethal damage for each creature
     /// recipient, followed in that last case by the damage the planeswalker must be
     /// assigned before its controller can be. Answer `Numbers`.
+    ///
+    /// `lethal_counting_later`, when other attackers assign their combat damage after this
+    /// one in the step: like `lethal`, the damage each blocker (and the planeswalker) must
+    /// be assigned before damage goes beyond it if those attackers assign all they can to
+    /// it (CR 702.19b–c count damage being assigned during the same step). An answer that
+    /// meets only these is checked with the total assignment (CR 510.1e): if the blockers
+    /// don't all end up assigned lethal damage, every attacker's damage is assigned again,
+    /// counting only damage already assigned.
     AssignCombatDamage {
         creature: ObjectId,
         amount: u32,
         recipients: Vec<Entity>,
         lethal: Vec<u32>,
         trample: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lethal_counting_later: Option<Vec<u32>>,
     },
     /// Scry (CR 701.22): split into top (in order) and bottom. Answer `Split(top, bottom)`.
     Scry { cards: Vec<ObjectId> },

@@ -67,6 +67,7 @@ impl KeywordRules for Rules {
                 recipients: recipients.clone(),
                 lethal: vec![0; n],
                 trample: false,
+                lethal_counting_later: None,
             },
         );
         let split: Vec<u32> = match ans {

@@ -2614,6 +2614,7 @@ fn assign_trample_damage(
             recipients: recipients.clone(),
             lethal,
             trample: target.is_some(),
+            lethal_counting_later: relaxed.as_ref().map(|r| r.lethal.clone()),
         },
     );
     let mut relied = false;
@@ -2725,6 +2726,7 @@ fn divide_freely(
             recipients: recipients.clone(),
             lethal,
             trample: false,
+            lethal_counting_later: None,
         },
     );
     let assignment: Vec<u32> = match ans {

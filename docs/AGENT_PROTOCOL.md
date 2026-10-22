@@ -197,7 +197,7 @@ Each option has `index` and `text`, and, depending on the decision:
   doesn't show it.
 * `required` (attackers): choosing this option obeys an attack requirement ("attacks
   each combat if able", goad); a declaration must obey as many requirements as possible.
-* `group`, `group_max`, `target` (attackers and blockers), `lethal` (combat damage),
+* `group`, `group_max`, `target` (attackers and blockers), `lethal` and `lethal_counting_later` (combat damage),
   `cost` (pawprint modes), `value` (yes/no).
 
 Example (`declare_attackers`, from the same game):
@@ -255,7 +255,7 @@ present it must be the request's `id`. `"type": "answer"` may be included.
 | `order` | `{"indices": [2, 0, 1]}` | A permutation of all option indices, first first. |
 | `number` (`min`, `max`?) | `{"number": 2}` | `min` ≤ n ≤ `max` (no upper bound if `max` is absent). |
 | `divide` (`total`, `min_each`) | `{"numbers": [2, 1]}` | One number per option, each ≥ `min_each`, adding up to `total`. |
-| `assign_damage` (`total`, `trample`) | `{"numbers": [4, 2]}` | One number per option, ≥ 0, adding up to `total`. With `trample`, nothing to the options after the blocking creatures (those with `lethal`, in order) until each blocking creature has its `lethal` damage, and nothing to a planeswalker's controller until the planeswalker has its `lethal` (CR 702.19b–c). |
+| `assign_damage` (`total`, `trample`) | `{"numbers": [4, 2]}` | One number per option, ≥ 0, adding up to `total`. With `trample`, nothing to the options after the blocking creatures (those with `lethal`, in order) until each blocking creature has its `lethal` damage, and nothing to a planeswalker's controller until the planeswalker has its `lethal` (CR 702.19b–c). When other attackers assign their damage after this one, options may also carry `lethal_counting_later`: the lower minimums if those attackers assign all they can to the same creatures and planeswalker. An answer that meets only those is legal, but the total assignment is checked once every attacker's damage is assigned (CR 510.1e); if a blocking creature isn't assigned lethal damage in total, all the attackers' damage is assigned again (new requests), and then only `lethal` counts. |
 | `yes_no` | `{"bool": true}` | `{"index": 0}` (no) and `{"index": 1}` (yes) work too. |
 | `split` (`first`, `second`) | `{"split": [[1], [0, 2]]}` | Every option index in exactly one of the two lists; the first list is the top of the library from the top down, the second the bottom (scry) or graveyard (surveil), in order. |
 | `text` (`what: "card_name"`) | `{"text": "Lightning Bolt"}` | The exact name of a card. |

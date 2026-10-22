@@ -178,6 +178,7 @@ fn samples(t: &mut TestGame) -> Vec<(Decision, JsonAnswer, Answer)> {
                 recipients: vec![o(bears)],
                 lethal: vec![2],
                 trample: false,
+                lethal_counting_later: None,
             },
             JsonAnswer::numbers(vec![3]),
             Answer::Numbers(vec![3]),
@@ -303,4 +304,35 @@ fn answer_specs_name_their_shape() {
             _ => {}
         }
     }
+}
+
+#[test]
+fn trample_minimums_counting_later_attackers_are_offered_and_accepted() {
+    cr!("702.19b", "510.1e");
+    // A trampler with 2 power blocked by a 3/3, with another attacker assigning 2 or more
+    // to that blocker after it: 1 to the blocker and 1 to the player is legal if the
+    // other attacker's damage makes the total lethal (checked by the engine afterwards).
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let decision = |later: Option<Vec<u32>>| Decision::AssignCombatDamage {
+        creature: bears,
+        amount: 2,
+        recipients: vec![Entity::Object(giant), Entity::Player(P1)],
+        lethal: vec![3],
+        trample: true,
+        lethal_counting_later: later,
+    };
+    let opts = PresentOptions::default();
+    let answer = JsonAnswer::numbers(vec![1, 1]);
+    let p = prepare(&t.g, P0, P0, &decision(Some(vec![1])), 1, &opts);
+    round_trip(&p.request);
+    assert_eq!(p.request.options[0].lethal, Some(3));
+    assert_eq!(p.request.options[0].lethal_counting_later, Some(1));
+    assert_eq!(p.convert(&t.g, &answer), Ok(Answer::Numbers(vec![1, 1])));
+    assert!(p.convert(&t.g, &JsonAnswer::numbers(vec![0, 2])).is_err());
+    // Without other attackers assigning later, only `lethal` counts.
+    let p = prepare(&t.g, P0, P0, &decision(None), 2, &opts);
+    assert_eq!(p.request.options[0].lethal_counting_later, None);
+    assert!(p.convert(&t.g, &answer).is_err());
 }
