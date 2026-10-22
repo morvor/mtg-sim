@@ -153,7 +153,8 @@ permanents: the face that's up; a token copy is double-faced with the same face 
 for it), 707.10f (a copy of a permanent spell becomes a token).
 
 **The static check** (`properties::copies::check_card`), for every fully supported card
-(the pool `mtg-sim --every-card` uses: real paper playable cards, one per name; 31,181).
+(the pool `mtg-sim --every-card` uses: real paper playable cards, one per name; 31,310 at
+the latest run).
 For a permanent card, with each face that can be up (the front, the back of a
 double-faced card, a flip card flipped):
 
@@ -397,7 +398,7 @@ Not bugs in the rules, but found and handled by the properties:
   `copy::copy_spell`; copies of activated and triggered abilities aren't covered, and a
   spell copy's resolution is only compared for permanent spells (as a token). "Enters as
   a copy" uses Clone, Sculpting Steel, Copy Enchantment or Vesuva, so a planeswalker or
-  battle is copied only as a token and by becoming a copy. 743 copies couldn't be made in
+  battle is copied only as a token and by becoming a copy. About 745 copies couldn't be made in
   the fixture (mostly spells with no legal target there or costs it can't pay). The
   dynamic check's script is short (entering, the first four activated abilities with the
   default choices, an attack, the next turn), and it stops once the card leaves the
@@ -464,6 +465,12 @@ Latest runs (release build, 4-core machine, `--jobs 3`):
 | hidden | 2,000 games (`--seed 3`) | 442,369 decisions, 63,422,643 objects changed in the copies | 0 | 795 s |
 | payment | 1,000,000 boards (`--seed 2`) and 200,000 (`--seed 1`) | 368,266 and 73,363 payable | 0 | 112 s and 22 s |
 | damage | 200,000 combats (`--seed 2`), 2,948 skipped | 2,323,462 joint assignments | 0 | 190 s |
+
+After merging the base branch again (Oct 22; the pool grew to 31,310 cards), every
+property held once more: copies 174,616 copies (745 not made), copies-dynamic 24,139
+permanents and 76,513 steps, 200,000 payment boards (`--seed 4`), 20,000 combats
+(`--seed 4`, 238,301 assignments) and 200 hidden-information games (`--seed 4`, 43,237
+decisions), all without a violation.
 
 The first runs found the bugs above. The first full static copy run reported 328
 mismatches on 54 cards: 2 bugs (the exceptions of Clone-like cards on copies that copied
