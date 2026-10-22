@@ -1314,6 +1314,94 @@ fn loses_life_and_discards_equal_to(l: &str, b: &mut Builder) -> Option<Effect> 
 
 inventory::submit! { EffectPattern { name: "followups 4: each player loses life and discards cards equal to", priority: 120, parse: loses_life_and_discards_equal_to } }
 
+/// The card a "for each [card] revealed this way" punisher is about.
+const EACH_REVEALED: Var = vars::USER + 41009;
+
+/// "Target player reveals their hand. For each blue instant card revealed this way, that
+/// player discards that card unless they pay 4 life." (Sirocco): for each of those cards,
+/// one at a time, the player chooses whether to pay (CR 118.12a); if they don't, they
+/// discard that card.
+fn for_each_revealed_discard_unless(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("for each ") else {
+        return false;
+    };
+    let Some((thing, rest)) = r.split_once(" revealed this way, ") else {
+        return false;
+    };
+    let Some(cost) = rest
+        .strip_prefix("that player discards that card unless they pay ")
+        .or_else(|| rest.strip_prefix("they discard that card unless they pay "))
+    else {
+        return false;
+    };
+    let who = b.it_player.clone();
+    if super::oracle_hardening_referents::is_no_player_referent(&who)
+        || matches!(who, PlayerRef::You)
+    {
+        return false;
+    }
+    // The cards, read as "for each [thing] revealed this way" counts them.
+    let mut counted = prev.clone();
+    if !crate::oracle_ext::apply_followup_ext(
+        &format!("you draw a card for each {thing} revealed this way"),
+        &mut counted,
+        b,
+    ) && crate::oracle::effects::parse_sentence(
+        &format!("you draw a card for each {thing} revealed this way"),
+        b,
+    )
+    .map(|e| {
+        counted = Effect::seq(vec![prev.clone(), e]);
+    })
+    .is_none()
+    {
+        return false;
+    }
+    let Effect::Seq(v) = &counted else {
+        return false;
+    };
+    let Some(Effect::Draw {
+        n: Value::CountSel(cards),
+        ..
+    }) = v.last()
+    else {
+        return false;
+    };
+    // "4 life", "{2}".
+    let cost_text = if cost.starts_with('{') {
+        cost.to_string()
+    } else {
+        format!("pay {cost}")
+    };
+    let Some(cost) = crate::oracle::keywords::parse_keyword_cost(&cost_text) else {
+        return false;
+    };
+    let each = Effect::ForEach {
+        sel: (**cards).clone(),
+        var: EACH_REVEALED,
+        effect: Box::new(Effect::AsPlayer {
+            who,
+            effect: Box::new(Effect::PayOptional {
+                who: PlayerRef::You,
+                cost,
+                then: Box::new(Effect::Noop),
+                otherwise: Box::new(Effect::Discard {
+                    who: PlayerRef::You,
+                    n: Value::c(1),
+                    random: false,
+                    filter: Filter::In(Box::new(Sel::Var(EACH_REVEALED))),
+                }),
+            }),
+        }),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, each]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "followups 4: for each card revealed this way, that player discards that card unless they pay", priority: 25, apply: for_each_revealed_discard_unless } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1337,6 +1425,7 @@ mod tests {
             ("Creature", "When ~ enters, for each opponent, exile up to one target creature that player controls and that player gains life equal to its power."),
             ("Sorcery", "Choose target nonland permanent. Its owner may put it on top of their library. If they do, ~ deals 2 damage to them. If they didn't put the card on top of their library, they put it on the bottom."),
             ("Legendary Creature", "Whenever ~ deals combat damage to a player, that player gains control of target permanent you control. Then each player loses life and discards cards equal to the number of permanents they control but don't own."),
+            ("Instant", "Target player reveals their hand. For each blue instant card revealed this way, that player discards that card unless they pay 4 life."),
             ("Creature", "When ~ enters, each opponent may investigate. Each opponent who doesn't loses 1 life. You investigate X times, where X is one plus the number of opponents who investigated this way."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");

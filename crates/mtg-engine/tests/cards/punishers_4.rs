@@ -155,3 +155,32 @@ fn palantir_of_orthanc_mills_x_and_that_player_loses_their_total() {
     assert_eq!(t.counters(p, "influence"), 2);
     assert_eq!(t.life(P1), 20 - 6);
 }
+
+fn sirocco(pay: bool) -> TestGame {
+    supported("Sirocco");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.hand(P1, "Counterspell");
+    t.hand(P1, "Opt");
+    t.hand(P1, "Lightning Bolt");
+    t.answer_yes(P1, pay);
+    t.answer_yes(P1, pay);
+    let s = t.hand(P0, "Sirocco");
+    t.cast(P0, s).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    t
+}
+
+#[test]
+fn sirocco_each_blue_instant_is_discarded_unless_its_owner_pays_four_life() {
+    cr!("118.12a");
+    let t = sirocco(false);
+    assert!(t.in_graveyard(P1, "Counterspell"));
+    assert!(t.in_graveyard(P1, "Opt"));
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    assert_eq!(t.life(P1), 20);
+    let t = sirocco(true);
+    assert!(t.in_hand(P1, "Counterspell"));
+    assert!(t.in_hand(P1, "Opt"));
+    assert_eq!(t.life(P1), 12);
+}
