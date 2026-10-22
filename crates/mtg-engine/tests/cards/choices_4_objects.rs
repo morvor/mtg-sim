@@ -159,3 +159,38 @@ fn winnowing_each_player_keeps_creatures_sharing_a_type_with_the_chosen_one() {
     assert!(t.on_battlefield(angel));
     assert!(!t.on_battlefield(elves));
 }
+
+#[test]
+fn kamiz_chooses_another_attacker_with_lesser_power() {
+    cr!("508.1", "701.50a");
+    supported("Kamiz, Obscura Oculus");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kamiz, Obscura Oculus");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let angel = t.battlefield(P0, "Serra Angel");
+    let forest = t.hand(P0, "Forest");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_choose(P0, &[Entity::Object(forest)]);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.attack(
+        &[
+            (giant, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+            (angel, Entity::Player(P1)),
+        ],
+        &[],
+    );
+    assert!(t.in_graveyard(P0, "Forest"));
+    // Bears (2) dealt double damage; the 3-power Giant and 4-power Angel couldn't be chosen.
+    assert_eq!(t.life(P1), 20 - 3 - 4 - 2 * 2);
+    let cands: Vec<Vec<Entity>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert!(cands.contains(&vec![Entity::Object(bears)]));
+}

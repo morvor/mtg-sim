@@ -735,6 +735,46 @@ fn that_player_whose_turn_it_is(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: that player during an opponent's turn (the active player)", priority: 120, parse: that_player_whose_turn_it_is } }
 
+/// "Then choose another attacking creature with lesser power." (Kamiz, Obscura Oculus):
+/// another than the object "it" refers to, with lesser power than it has as the choice is
+/// made.
+fn choose_another_with_lesser_power(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = l.strip_prefix("choose another ")?;
+    let noun = r.strip_suffix(" with lesser power")?;
+    let it = b.it.clone();
+    if !matches!(it, Sel::Target(_)) {
+        return None;
+    }
+    let article = if noun.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    let mut e = parse_clause(&format!("choose {article} {noun}"), b)?;
+    let store = match &mut e {
+        Effect::Seq(v) => v.first_mut()?,
+        e => e,
+    };
+    let Effect::Store {
+        sel: Sel::Choose { filter, .. },
+        ..
+    } = store
+    else {
+        return None;
+    };
+    let f = std::mem::replace(filter, Filter::Any);
+    *filter = Filter::and(vec![
+        f,
+        Filter::not(Filter::In(Box::new(it.clone()))),
+        Filter::Power(Cmp::Lt, Box::new(Value::PowerOf(Box::new(it)))),
+    ]);
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: choose another [object] with lesser power", priority: 120, parse: choose_another_with_lesser_power } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -757,6 +797,7 @@ mod tests {
             ("Creature", "At the beginning of your upkeep, you and target opponent each reveal the top card of your library. You each lose life equal to the mana value of the card revealed by the other player. You each put the card you revealed into your hand."),
             ("Enchantment", "At the beginning of your end step, two target players each reveal the top card of their library. They each lose life equal to the mana value of the card revealed by the other player. Then they each put the card they revealed into their hand."),
             ("Instant", "Cast this spell only during an opponent's turn.\nTap target creature that player controls. That creature deals damage equal to its power to the player. Prevent all combat damage that would be dealt to and dealt by the creature this turn."),
+            ("Legendary Creature", "Whenever you attack, target attacking creature can't be blocked this turn. It connives. Then choose another attacking creature with lesser power. That creature gains double strike until end of turn."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
