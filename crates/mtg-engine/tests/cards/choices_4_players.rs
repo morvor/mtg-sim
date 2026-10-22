@@ -80,7 +80,7 @@ fn scholarship_sponsor_players_search_for_the_difference_in_lands() {
 
 #[test]
 fn loxodon_peacekeeper_goes_to_the_player_with_the_lowest_life_total() {
-    cr!("101.4");
+    cr!("613.1b");
     supported("Loxodon Peacekeeper");
     let mut t = TestGame::new(3);
     let ele = t.battlefield(P0, "Loxodon Peacekeeper");
@@ -92,7 +92,7 @@ fn loxodon_peacekeeper_goes_to_the_player_with_the_lowest_life_total() {
 
 #[test]
 fn loxodon_peacekeeper_tie_is_broken_by_its_controller() {
-    cr!("101.4");
+    cr!("608.2c", "613.1b");
     supported("Loxodon Peacekeeper");
     let mut t = TestGame::new(3);
     let ele = t.battlefield(P0, "Loxodon Peacekeeper");
@@ -344,6 +344,8 @@ fn oath_of_ghouls_targets_an_opponent_with_fewer_creature_cards_in_their_graveya
     );
     supported("Oath of Ghouls");
     let mut t = TestGame::new(3);
+    // (Set up after the other players' upkeeps.)
+    t.advance_to(P2, Step::End);
     t.battlefield(P0, "Oath of Ghouls");
     let a = t.graveyard(P0, "Grizzly Bears");
     t.graveyard(P0, "Hill Giant");
@@ -353,19 +355,20 @@ fn oath_of_ghouls_targets_an_opponent_with_fewer_creature_cards_in_their_graveya
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(a)]);
-    t.advance_to(P0, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert!(t.in_hand(P0, "Grizzly Bears"));
+    // In P0's upkeep only P1 (one creature card against P0's two) could be targeted, not
+    // P2 (two, not fewer).
     let players: Vec<Vec<Entity>> = t
         .asked()
         .into_iter()
-        .filter_map(|(_, d)| match d {
-            decision::Decision::ChooseTargets { candidates, .. } => Some(candidates),
+        .filter_map(|(p, d)| match d {
+            decision::Decision::ChooseTargets { candidates, .. } if p == P0 => Some(candidates),
             _ => None,
         })
         .collect();
-    assert_eq!(players.first(), Some(&vec![Entity::Player(P1)]));
+    assert_eq!(players, vec![vec![Entity::Player(P1)]]);
 }
 
 #[test]

@@ -138,6 +138,31 @@ fn chaos_defiler_chooses_one_per_opponent_then_destroys_one_at_random() {
 }
 
 #[test]
+fn chaos_defiler_destroys_one_without_indestructible_when_there_is_one() {
+    cr!("702.12b");
+    ruling!(
+        "Chaos Defiler",
+        "one of the permanents without indestructible will be randomly chosen and destroyed"
+    );
+    use rand::SeedableRng;
+    for seed in 0..8u64 {
+        let mut t = TestGame::new(3);
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        t.lands(P0, "Swamp", 3);
+        t.lands(P0, "Mountain", 2);
+        let myr = t.battlefield(P1, "Darksteel Myr");
+        let bears = t.battlefield(P2, "Grizzly Bears");
+        let cd = t.hand(P0, "Chaos Defiler");
+        t.answer_choose(P0, &[Entity::Object(myr)]);
+        t.answer_choose(P0, &[Entity::Object(bears)]);
+        t.cast(P0, cd).go();
+        t.resolve_all();
+        assert!(!t.on_battlefield(bears), "seed {seed}");
+        assert!(t.on_battlefield(myr), "seed {seed}");
+    }
+}
+
+#[test]
 fn winnowing_each_player_keeps_creatures_sharing_a_type_with_the_chosen_one() {
     cr!("608.2c");
     supported("Winnowing");
