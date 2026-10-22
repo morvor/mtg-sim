@@ -478,6 +478,9 @@ fn custom_rule(name: &str) -> CustomRule {
         "don't lose the game for having 0 or less life",
         "radiation: gain life rather than lose life",
         "skip extra turns",
+        // Keen-Eared Sentry: a venture that would exceed the limit doesn't happen
+        // (`kw::venture_prohibited`); venturing moves a marker, no library card.
+        "card:Keen-Eared Sentry:opponents venture at most once each turn",
         "opponents skip extra turns",
         // Targets, hexproof and ward; what may be cast, activated or played, from where, when
         // and how often; what casting and activating cost (life paid instead of mana is
