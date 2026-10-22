@@ -194,3 +194,32 @@ fn kamiz_chooses_another_attacker_with_lesser_power() {
         .collect();
     assert!(cands.contains(&vec![Entity::Object(bears)]));
 }
+
+#[test]
+fn promise_of_loyalty_vowed_creatures_cant_attack_you_while_they_have_the_counter() {
+    cr!("101.4", "611.2b");
+    ruling!(
+        "Promise of Loyalty",
+        "If the vow counter is removed from the creature, it can attack as normal."
+    );
+    supported("Promise of Loyalty");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 5);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let spell = t.hand(P0, "Promise of Loyalty");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P1, &[Entity::Object(angel)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+    assert!(!t.on_battlefield(elves));
+    assert_eq!(t.counters(bears, "vow"), 1);
+    assert_eq!(t.counters(angel, "vow"), 1);
+    assert!(!t.g.can_attack_target(angel, Entity::Player(P0)));
+    t.g.remove_counters(Entity::Object(angel), "vow", 1);
+    t.g.recompute();
+    assert!(t.g.can_attack_target(angel, Entity::Player(P0)));
+}

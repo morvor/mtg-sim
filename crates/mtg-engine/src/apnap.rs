@@ -168,6 +168,11 @@ impl Game {
     }
 }
 
+/// The permanents the players kept with the latest
+/// [`crate::ability::Effect::KeepAndSacrificeRest`] ("each player puts a vow counter on a
+/// creature they control and sacrifices the rest": the creatures that get the counters).
+pub const KEPT: crate::ability::Var = crate::ability::vars::USER + 41024;
+
 /// Executes [`crate::ability::Effect::KeepAndSacrificeRest`] (CR 101.4, 101.4c).
 pub fn keep_and_sacrifice_rest(
     g: &mut Game,
@@ -180,6 +185,7 @@ pub fn keep_and_sacrifice_rest(
     let players = g.eval_players(who, ctx);
     let round = g.apnap_choices.len();
     let mut sacrifice: Vec<(ObjectId, PlayerId)> = Vec::new();
+    let mut all_kept: Vec<ObjectId> = Vec::new();
     let requests = players.into_iter().map(|p| (p, ())).collect();
     let rctx: &crate::eval::Ctx = ctx;
     g.apnap_round(requests, |g, p, ()| {
@@ -219,6 +225,7 @@ pub fn keep_and_sacrifice_rest(
             }
         }
         g.record_apnap_choice(p, kept.clone());
+        all_kept.extend(kept.iter().copied());
         sacrifice.extend(
             mine.into_iter()
                 .filter(|o| !kept.contains(o))
@@ -231,6 +238,7 @@ pub fn keep_and_sacrifice_rest(
     sacrifice.retain(|(o, _)| !g.sacrifice_forbidden(*o, cause.as_ref()));
     let res = g.sacrifice_simultaneously(&sacrifice);
     g.end_apnap_choices(round);
+    ctx.set_var(KEPT, all_kept.into_iter().map(Entity::Object).collect());
     ctx.prev_value = res.len() as i64;
     ctx.prev_happened = !res.is_empty();
 }

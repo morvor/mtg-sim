@@ -822,6 +822,83 @@ fn if_the_first_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
 
 inventory::submit! { FollowupPattern { name: "choices 4: if the first player does", priority: 10, apply: if_the_first_player_does } }
 
+/// The creature a vow counter's restriction is about.
+const VOWED: Var = vars::USER + 41015;
+
+/// "Each player puts a vow counter on a creature they control and sacrifices the rest.
+/// Each of those creatures can't attack you or planeswalkers you control for as long as it
+/// has a vow counter on it." (Promise of Loyalty): each player chooses a creature to keep
+/// (CR 101.4), it gets the counter, and the rest are sacrificed at the same time.
+fn puts_counter_on_one_and_sacrifices_the_rest(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("each player puts a ")?;
+    let (kind, r) = r.split_once(" counter on a ")?;
+    let noun = r.strip_suffix(" they control and sacrifices the rest")?;
+    if kind.contains(' ') {
+        return None;
+    }
+    let keep = parse_clause(
+        &format!("each player chooses a {noun} they control and sacrifices the rest"),
+        b,
+    )?;
+    if !matches!(keep, Effect::KeepAndSacrificeRest { .. }) {
+        return None;
+    }
+    let kept = Sel::Var(crate::apnap::KEPT);
+    b.it = kept.clone();
+    b.named.push(("those creatures".into(), kept.clone()));
+    Some(Effect::seq(vec![
+        keep,
+        Effect::AddCounters {
+            what: kept,
+            kind: kind.into(),
+            n: Value::c(1),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: each player puts a counter on a creature and sacrifices the rest", priority: 120, parse: puts_counter_on_one_and_sacrifices_the_rest } }
+
+/// "Each of those creatures can't attack you or planeswalkers you control for as long as it
+/// has a vow counter on it." after [`puts_counter_on_one_and_sacrifices_the_rest`]: for
+/// each of them, a restriction lasting while it has that counter.
+fn each_cant_attack_while_it_has_counter(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("each of those creatures can't attack you or planeswalkers you control for as long as it has a ") else {
+        return false;
+    };
+    let Some(kind) = r.strip_suffix(" counter on it") else {
+        return false;
+    };
+    if !format!("{prev:?}").contains(&format!("Var({})", crate::apnap::KEPT)) {
+        return false;
+    }
+    let restriction = Effect::AddRestriction {
+        restriction: Restriction::CantAttackPlayer {
+            attackers: Filter::In(Box::new(Sel::Var(VOWED))),
+            defender: PlayerFilter::You,
+            planeswalkers: true,
+            battles: false,
+        },
+        duration: Duration::WhileCondition(Condition::SelMatches(
+            Sel::Var(VOWED),
+            Filter::HasCounter(Some(kind.into())),
+        )),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::ForEach {
+            sel: Sel::Var(crate::apnap::KEPT),
+            var: VOWED,
+            effect: Box::new(restriction),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choices 4: each of those creatures can't attack you while it has a counter", priority: 120, apply: each_cant_attack_while_it_has_counter } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -848,6 +925,7 @@ mod tests {
             ("Creature", "{B}, {T}: Choose target opponent who has at least two fewer creature cards in their graveyard than you do as you activate this ability. Destroy target nonblack creature that player controls."),
             ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player whose graveyard has fewer creature cards in it than their graveyard does and is their opponent. The first player may return a creature card from their graveyard to their hand."),
             ("Enchantment", "At the beginning of each player's upkeep, that player chooses target player who controls more creatures than they do and is their opponent. The first player may reveal cards from the top of their library until they reveal a creature card. If the first player does, that player puts that card onto the battlefield and all other cards revealed this way into their graveyard."),
+            ("Sorcery", "Each player puts a vow counter on a creature they control and sacrifices the rest. Each of those creatures can't attack you or planeswalkers you control for as long as it has a vow counter on it."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
