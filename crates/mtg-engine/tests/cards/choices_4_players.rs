@@ -236,3 +236,38 @@ fn concussive_bolt_that_planeswalkers_controllers_creatures_cant_block() {
     assert!(t.in_graveyard(P1, "Jace Beleren"));
     assert!(!t.g.can_block_at_all(bears));
 }
+
+#[test]
+fn keen_duelist_each_loses_the_other_players_revealed_mana_value() {
+    cr!("701.20a");
+    supported("Keen Duelist");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Keen Duelist");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    // On P1's turn (after their draw).
+    t.advance_to(P1, Step::End);
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P1, "Grizzly Bears");
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (18, 16));
+    assert!(t.in_hand(P0, "Hill Giant"));
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn parker_luck_two_target_players_each_lose_the_others_mana_value() {
+    cr!("701.20a", "115.3");
+    supported("Parker Luck");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Parker Luck");
+    t.library_top(P1, "Hill Giant");
+    t.library_top(P2, "Lightning Bolt");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P2)]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (20, 19, 16));
+    assert!(t.in_hand(P1, "Hill Giant"));
+    assert!(t.in_hand(P2, "Lightning Bolt"));
+}

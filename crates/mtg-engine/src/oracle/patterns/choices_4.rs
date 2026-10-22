@@ -593,6 +593,123 @@ fn sacrifices_others_not_sharing_with_chosen(l: &str, b: &mut Builder) -> Option
 
 inventory::submit! { EffectPattern { name: "choices 4: each player sacrifices all other creatures that don't share a creature type with the chosen creature", priority: 120, parse: sacrifices_others_not_sharing_with_chosen } }
 
+/// "two target players each reveal the top card of their library" (Parker Luck): two
+/// different target players (CR 115.3), each revealing.
+fn two_target_players_each_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("two target players each ")?;
+    if r != "reveal the top card of their library" {
+        return None;
+    }
+    let first = b.targets.len();
+    let e0 = parse_clause("target player reveals the top card of their library", b)?;
+    let e1 = parse_clause("target player reveals the top card of their library", b)?;
+    if b.targets.len() != first + 2 {
+        return None;
+    }
+    b.targets[first + 1].distinct_from.push(first as u8);
+    Some(Effect::seq(vec![e0, e1]))
+}
+
+inventory::submit! { EffectPattern { name: "choices 4: two target players each reveal the top card of their library", priority: 120, parse: two_target_players_each_reveal } }
+
+/// The cards the two players of a pair revealed ("the card revealed by the other player").
+const REVEALED_FIRST: Var = vars::USER + 41013;
+const REVEALED_SECOND: Var = vars::USER + 41014;
+
+/// The two players whose top cards `prev` revealed, one after the other.
+fn revealing_pair(prev: &Effect) -> Option<(PlayerRef, PlayerRef)> {
+    let Effect::Seq(v) = prev else {
+        return None;
+    };
+    let players: Vec<PlayerRef> = v
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Dig {
+                who,
+                n: Value::Const(1),
+                reveal: true,
+                ..
+            } => Some(who.clone()),
+            Effect::AsPlayer { who, effect } => match &**effect {
+                Effect::Dig {
+                    who: PlayerRef::You,
+                    n: Value::Const(1),
+                    reveal: true,
+                    ..
+                } => Some(who.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    match players.as_slice() {
+        [a, b] if v.len() == 2 => Some((a.clone(), b.clone())),
+        _ => None,
+    }
+}
+
+/// "You each lose life equal to the mana value of the card revealed by the other player."
+/// (Keen Duelist), "They each lose life equal to ..." (Parker Luck), after two players each
+/// revealed the top card of their library; then "You each put the card you revealed into
+/// your hand." / "Then they each put the card they revealed into their hand."
+fn pair_reveal_followups(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let lose = matches!(
+        l,
+        "you each lose life equal to the mana value of the card revealed by the other player"
+            | "they each lose life equal to the mana value of the card revealed by the other player"
+    );
+    let put = matches!(
+        l,
+        "you each put the card you revealed into your hand"
+            | "they each put the card they revealed into their hand"
+    );
+    if !lose && !put {
+        return false;
+    }
+    let mv = |v: Var| Value::ManaValueOf(Box::new(Sel::Var(v)));
+    let to_hand = |v: Var| Effect::Move {
+        what: Sel::Var(v),
+        to: Destination::zone(ZoneKind::Hand),
+    };
+    // After the reveals: what each revealed, then the life loss.
+    if lose {
+        let Some((a, b2)) = revealing_pair(prev) else {
+            return false;
+        };
+        let old = std::mem::take(prev);
+        *prev = Effect::seq(vec![
+            old,
+            Effect::Store {
+                var: REVEALED_FIRST,
+                sel: Sel::TopOfLibrary(a.clone(), Value::c(1)),
+            },
+            Effect::Store {
+                var: REVEALED_SECOND,
+                sel: Sel::TopOfLibrary(b2.clone(), Value::c(1)),
+            },
+            Effect::LoseLife {
+                who: a,
+                n: mv(REVEALED_SECOND),
+            },
+            Effect::LoseLife {
+                who: b2,
+                n: mv(REVEALED_FIRST),
+            },
+        ]);
+        return true;
+    }
+    if !format!("{prev:?}").contains(&format!("var: {REVEALED_SECOND}")) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, to_hand(REVEALED_FIRST), to_hand(REVEALED_SECOND)]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choices 4: each lose life equal to the card revealed by the other player", priority: 120, apply: pair_reveal_followups } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -612,6 +729,8 @@ mod tests {
             ("Enchantment", "Whenever you lose life, for each 1 life you lost, exile a permanent you control or a card from your hand or graveyard."),
             ("Enchantment", "At the beginning of your upkeep, put a despair counter on ~, then each player exiles X permanents they control and/or cards from their hand, where X is the number of despair counters on ~."),
             ("Sorcery", "Convoke\nFor each player, you choose a creature that player controls. Then each player sacrifices all other creatures they control that don't share a creature type with the chosen creature they control."),
+            ("Creature", "At the beginning of your upkeep, you and target opponent each reveal the top card of your library. You each lose life equal to the mana value of the card revealed by the other player. You each put the card you revealed into your hand."),
+            ("Enchantment", "At the beginning of your end step, two target players each reveal the top card of their library. They each lose life equal to the mana value of the card revealed by the other player. Then they each put the card they revealed into their hand."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
