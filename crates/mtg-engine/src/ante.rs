@@ -66,8 +66,15 @@ pub fn is_ante_card(card: &CardDef) -> bool {
     })
 }
 
+/// Whether the object has the ante text: the card it is, or what it is now (a copy of an
+/// ante card has its text, CR 707.2).
 fn object_is_ante_card(g: &Game, id: ObjectId) -> bool {
-    g.obj(id).card.as_deref().is_some_and(is_ante_card)
+    let o = g.obj(id);
+    o.card.as_deref().is_some_and(is_ante_card)
+        || o.chars.abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Static(s)
+                if matches!(&s.effect, StaticEffect::Custom(n) if n.as_str() == ANTE_CARD))
+        })
 }
 
 /// CR 407.3: when not playing for ante, ante cards can't be in a deck or sideboard.

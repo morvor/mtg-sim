@@ -89,6 +89,8 @@ fn a_hidden_agenda_goes_face_down_with_a_secretly_chosen_name() {
     t.answer_choose(P0, &[Entity::Object(c)]);
     name(&mut t, P0, "Grizzly Bears");
     t.g.start();
+    // A new object in the command zone (CR 400.7).
+    let c = t.g.current(c);
     assert_eq!(t.zone(c), Zone::Command);
     assert!(t.obj(c).face_down);
     // The name is kept with the face-down card, which has no characteristics; only its

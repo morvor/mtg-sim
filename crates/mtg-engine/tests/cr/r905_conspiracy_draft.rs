@@ -342,7 +342,8 @@ fn hidden_agenda_conspiracies_start_face_down() {
     let mut t = conspiracy_pregame(3);
     let side = t.g.add_to_sideboard(P1, vec![card("Brago's Favor")]);
     t.g.start();
-    let c = side[0];
+    // A new object in the command zone (CR 400.7).
+    let c = t.g.current(side[0]);
     assert_eq!(t.zone(c), Zone::Command);
     assert!(t.obj(c).face_down);
     // Any time they have priority — even during another player's turn — they may turn it

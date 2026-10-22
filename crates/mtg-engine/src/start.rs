@@ -10,6 +10,7 @@ use crate::eval::Ctx;
 use crate::game::{Game, Variant};
 use crate::object::Zone;
 use crate::types::*;
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::BTreeMap;
@@ -440,12 +441,17 @@ fn conspiracies_to_command_zone(g: &mut Game) {
             }
             _ => cands.clone(),
         };
+        // Each becomes a new object in the command zone (CR 400.7), numbered in an order
+        // unrelated to the deck's, so the ids of the face-down ones don't tell them apart
+        // (CR 702.106a, 406.3).
+        let mut pick = pick;
+        pick.shuffle(g.rng_for(p));
         for c in pick {
             g.players[p.idx()].sideboard.retain(|x| *x != c);
-            g.objects[c.0 as usize].zone = Zone::Command;
+            let n = g.create_incarnation(c, Zone::Command);
             // CR 702.106a: face down, with a secretly chosen card name.
-            crate::kw::hidden_agenda::as_put_into_command_zone(g, p, c);
-            g.command.push(c);
+            crate::kw::hidden_agenda::as_put_into_command_zone(g, p, n);
+            g.command.push(n);
         }
     }
     g.dirty = true;

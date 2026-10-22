@@ -31,11 +31,16 @@ impl Game {
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        // Cards an instruction exiles are exiled with the source of the ability performing
+        // it, for the abilities linked to it (CR 607.2a): by its link, however they're
+        // exiled ("search your library for seven cards, exile them", a dig).
+        let prev_link = std::mem::replace(&mut self.current_link, ctx.link);
         if crate::trigger_timing::is_sequencing(e) {
             self.exec_effect(e, ctx);
         } else {
             self.atomically(|g| g.exec_effect(e, ctx));
         }
+        self.current_link = prev_link;
     }
 
     /// Performs one effect (see [`Game::exec`]).
@@ -2058,12 +2063,15 @@ impl Game {
                 // targets) until a player would receive priority. It's controlled by the
                 // controller of the resolving spell or ability (CR 603.7d–e).
                 self.trigger_order += 1;
-                let ability = AbilityDef::new(
+                // With the link of the ability that created it (CR 603.12, 607.2; see
+                // `delayed_pending`).
+                let ability = AbilityDef::with_link(
                     AbilityKind::Triggered(TriggeredAbility::new(
                         TriggerCond::Custom("reflexive".into()),
                         (**body).clone(),
                     )),
                     "reflexive trigger",
+                    ctx.link,
                 );
                 let src = ctx
                     .stack_obj

@@ -363,9 +363,10 @@ pub fn shuffle_planar_decks(g: &mut Game) {
             .collect();
         let mut ids: Vec<ObjectId> = slots.iter().map(|i| g.command[*i]).collect();
         ids.shuffle(&mut g.rng);
-        for (i, id) in slots.into_iter().zip(ids) {
-            g.command[i] = id;
+        for (i, id) in slots.iter().zip(ids) {
+            g.command[*i] = id;
         }
+        crate::zones::renumber_shuffled_deck(g, &slots);
     }
 }
 

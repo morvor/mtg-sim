@@ -41,7 +41,10 @@ fn scheme_decks_are_shuffled_before_the_game_begins() {
         t.g.start();
         let order = mtg_engine::variants::scheme_deck(&t.g, P0);
         assert_eq!(order.len(), SCHEMES.len());
-        orders.insert(order);
+        // The cards' order (the objects are numbered anew in their shuffled order).
+        orders.insert(order.iter()
+            .map(|id| t.g.obj(*id).card.as_ref().map(|c| c.name.to_string()))
+            .collect::<Vec<_>>());
     }
     assert!(orders.len() > 1, "the scheme deck was never shuffled");
 }

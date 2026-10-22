@@ -65,6 +65,16 @@ fn build_derived(kw: &Keyword) -> Vec<Ability> {
     crate::kw::derived(kw)
 }
 
+/// `d` (a derived ability, link 0) with the link `link`, one ability (uid) per pair.
+fn linked_derived(d: &Ability, link: u16) -> Ability {
+    static C: OnceLock<Mutex<HashMap<(u64, u16), Ability>>> = OnceLock::new();
+    let cache = C.get_or_init(Default::default);
+    let mut m = cache.lock().unwrap();
+    m.entry((d.uid, link))
+        .or_insert_with(|| AbilityDef::with_link(d.kind.clone(), d.text.clone(), link))
+        .clone()
+}
+
 /// Appends derived abilities for every keyword on the object.
 pub fn expand_keywords(chars: &mut Characteristics) {
     let extra = derived_by_keyword(chars);
@@ -91,7 +101,13 @@ pub fn derived_by_keyword(chars: &Characteristics) -> Vec<(u64, Ability)> {
                 format!("{base}#{nth}")
             };
             *nth += 1;
-            let derived = derived_abilities_keyed(k, key);
+            let mut derived = derived_abilities_keyed(k, key);
+            // The abilities a keyword stands for are linked as the keyword is: a keyword a
+            // copy effect gives has its own link (CR 607.5, 707.7), so hideaway's exile
+            // and the ability that casts "the exiled card" stay linked on a copy.
+            if a.link != 0 {
+                derived = derived.iter().map(|d| linked_derived(d, a.link)).collect();
+            }
             for d in &derived {
                 crate::structure::note_derived(d, a, &chars.name);
             }

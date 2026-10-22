@@ -26,6 +26,7 @@ pub mod decks;
 pub mod describe;
 pub mod events;
 pub mod external;
+pub mod hidden;
 pub mod legal;
 pub mod replay;
 pub mod request;

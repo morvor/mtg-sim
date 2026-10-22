@@ -26,6 +26,7 @@
 
 use crate::ability::*;
 use crate::card::{CardDb, CardDef, Layout};
+use crate::game::Game;
 use crate::object::*;
 use crate::testing::{TestGame, P0, P1};
 use crate::types::*;
@@ -297,7 +298,7 @@ fn vanilla(name: &str) -> CardDef {
 /// attached to).
 fn fixture() -> TestGame {
     let mut t = TestGame::new(2);
-    t.g.logging = false;
+    t.g.logging = std::env::var("MTG_COPY_DEBUG").is_ok();
     for p in [P0, P1] {
         t.custom(p, vanilla("Anchor"), Zone::Battlefield);
         t.battlefield(p, "Wastes");
@@ -817,4 +818,311 @@ pub fn sample(offset: usize, stride: usize) -> Vec<Arc<CardDef>> {
         .cloned()
         .collect();
     supported(&names)
+}
+
+// ---------------------------------------------------------------------------
+// The dynamic check
+// ---------------------------------------------------------------------------
+
+/// A nontoken card that enters as a copy of `of` (an object in exile): a Clone for any
+/// permanent, so the copy enters the battlefield as a card the way the original does.
+fn cloner(of: ObjectId) -> CardDef {
+    let mut c = vanilla("Dynamic Cloner");
+    c.faces[0].chars.abilities = vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::EnterAsCopy {
+                    filter: Filter::Objects(vec![of]),
+                    optional: false,
+                    tapped: false,
+                },
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        "You may have this enter as a copy of that card.",
+    )];
+    c
+}
+
+/// What the dynamic check compares: the players (life, counters, hand, library and
+/// graveyard sizes, the names in graveyards and exile, mana pools, lost), the permanents
+/// (name, controller, status, counters, power and toughness, damage, what they're attached
+/// to) and the stack — leaving out the subject itself once it has left the battlefield (a
+/// card goes to a graveyard where the copy, a different card, goes as itself).
+const LEFT: &str = "the subject has left the battlefield";
+
+fn outcome(g: &Game, subject: ObjectId) -> String {
+    if g.obj(subject).next.is_some() || !g.is_live(subject) {
+        return LEFT.to_string();
+    }
+    let cur = g.current(subject);
+    let skip = (g.obj(cur).zone != Zone::Battlefield).then_some(cur);
+    let name = |id: &ObjectId| -> Option<String> {
+        (Some(*id) != skip).then(|| g.obj(*id).chars.name.to_string())
+    };
+    let mut out = String::new();
+    for p in &g.players {
+        let mut grave: Vec<String> = p.graveyard.iter().filter_map(name).collect();
+        grave.sort();
+        let hand = p.hand.iter().filter(|id| Some(**id) != skip).count();
+        out += &format!(
+            "P{}: life {} counters {:?} hand {} library {} graveyard {:?} pool {:?} lost {}\n",
+            p.id.0,
+            p.life,
+            p.counters,
+            hand,
+            p.library.len(),
+            grave,
+            p.mana_pool.mana.iter().map(|m| m.ty).collect::<Vec<_>>(),
+            p.has_lost
+        );
+    }
+    let mut exile: Vec<String> = g.exile.iter().filter_map(name).collect();
+    exile.sort();
+    out += &format!("exile {exile:?}\n");
+    let mut perms: Vec<String> = g
+        .battlefield
+        .iter()
+        .map(|id| {
+            let o = g.obj(*id);
+            format!(
+                "{} P{} tapped {} counters {:?} {:?}/{:?} damage {} attached {:?} face down {}",
+                o.chars.name,
+                o.controller.0,
+                o.tapped,
+                o.counters,
+                o.chars.power.map(|_| o.power()),
+                o.chars.toughness.map(|_| o.toughness()),
+                o.damage,
+                o.attached_to.map(|e| match e {
+                    Entity::Object(x) => g.obj(x).chars.name.to_string(),
+                    Entity::Player(p) => format!("P{}", p.0),
+                }),
+                o.face_down
+            )
+        })
+        .collect();
+    perms.sort();
+    for p in perms {
+        out += &p;
+        out.push('\n');
+    }
+    let stack: Vec<String> = g
+        .stack
+        .iter()
+        .map(|id| g.obj(*id).chars.name.to_string())
+        .collect();
+    out += &format!("stack {stack:?}\n");
+    out
+}
+
+/// Plays the script with the subject `subject` on the battlefield, recording the outcome
+/// at each step: as it entered (its triggered abilities resolved), after each of its
+/// activated abilities was activated and resolved, after it attacked (a creature), and at
+/// the beginning of its controller's next turn.
+fn script(t: &mut TestGame, subject: ObjectId) -> Vec<(String, String)> {
+    let mut steps = Vec::new();
+    t.resolve_all();
+    steps.push(("entered".to_string(), outcome(&t.g, subject)));
+    let n =
+        t.g.obj(t.g.current(subject))
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+            .count();
+    for i in 0..n.min(4) {
+        let cur = t.g.current(subject);
+        if t.g.obj(cur).zone != Zone::Battlefield {
+            break;
+        }
+        let count =
+            t.g.obj(cur)
+                .chars
+                .abilities
+                .iter()
+                .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+                .count();
+        if i >= count {
+            break;
+        }
+        fill_pool(t, P0);
+        let _ = t.activate(P0, cur, i, &[]);
+        t.resolve_all();
+        crate::mana_abilities::empty_pool(&mut t.g, P0);
+        steps.push((format!("activated ability {i}"), outcome(&t.g, subject)));
+    }
+    let cur = t.g.current(subject);
+    if t.g.obj(cur).zone == Zone::Battlefield && t.g.obj(cur).is_creature() {
+        t.g.objects[cur.0 as usize].summoning_sick = false;
+        t.g.objects[cur.0 as usize].tapped = false;
+        t.answer(
+            P0,
+            crate::testing::DecisionKind::Attackers,
+            crate::decision::Answer::Attackers(vec![(cur, Entity::Player(P1))]),
+        );
+        let reached = t.g.run_until(4000, |g| {
+            g.turn.active == P0
+                && g.turn.step == crate::turn::Step::EndOfCombat
+                && g.turn.stage == crate::turn::Stage::Priority
+        });
+        t.clear_answers();
+        t.resolve_all();
+        steps.push((
+            format!("attacked (end of combat reached: {reached})"),
+            outcome(&t.g, subject),
+        ));
+    }
+    t.g.run_until(4000, |g| {
+        g.turn.active == P0
+            && g.turn.step == crate::turn::Step::PrecombatMain
+            && g.turn.number > 1
+            && g.turn.stage == crate::turn::Stage::Priority
+    });
+    t.resolve_all();
+    steps.push(("next turn".to_string(), outcome(&t.g, subject)));
+    steps
+}
+
+/// The fixture of the dynamic check: each player has creatures to target and fight, and
+/// lands; the card is in its owner's exile (the copy's source).
+fn dynamic_fixture(def: &Arc<CardDef>) -> (TestGame, ObjectId) {
+    let mut t = fixture();
+    for p in [P0, P1] {
+        t.battlefield(p, "Grizzly Bears");
+        t.battlefield(p, "Forest");
+        t.battlefield(p, "Plains");
+    }
+    let exiled = t.custom(P0, (**def).clone(), Zone::Exile);
+    (t, exiled)
+}
+
+/// The dynamic check of one permanent card: the same script with the card itself and
+/// with a card that entered as a copy of it must give the same outcomes. `Ok(steps)` or
+/// the first difference.
+pub fn check_dynamic(def: &Arc<CardDef>) -> Result<usize, String> {
+    if !is_permanent_card(def) || !def.characteristics(FaceState::Front).is_permanent_type() {
+        return Ok(0);
+    }
+    let (mut a, _) = dynamic_fixture(def);
+    let before = a.g.objects.len();
+    let original = enter(&mut a, P0, def, FaceState::Front);
+    // It couldn't enter the battlefield in the fixture (an Aura with nothing it could
+    // enchant) and was put there directly: the copy couldn't enter either.
+    if a.g.obj(original).prev.is_none() && original.0 as usize >= before {
+        return Ok(0);
+    }
+    let (mut b, exiled) = dynamic_fixture(def);
+    // A card entering as a copy of it; for a double-faced card, a token that's a copy of
+    // it, which is double-faced too and can transform (CR 707.8a; a copy that isn't
+    // double-faced can't, CR 701.27c).
+    let copy = if def.layout.is_double_faced() {
+        let before = b.g.objects.len();
+        let mut ctx = crate::eval::Ctx::new(None, P0);
+        ctx.set_var(ORIG, vec![Entity::Object(exiled)]);
+        b.g.exec(
+            &Effect::CreateTokenCopy {
+                of: Sel::Var(ORIG),
+                count: Value::Const(1),
+                controller: PlayerRef::You,
+                tapped: false,
+                attacking: false,
+                mods: vec![],
+            },
+            &mut ctx,
+        );
+        match new_permanents(&b, before).first() {
+            Some(t) => *t,
+            None => return Err(format!("{}: no token copy was created", def.name)),
+        }
+    } else {
+        let cl = Arc::new(cloner(exiled));
+        enter(&mut b, P0, &cl, FaceState::Front)
+    };
+    if b.g.obj(copy).chars.name != a.g.obj(original).chars.name {
+        return Err(format!(
+            "{}: the copy entered as {}, not as a copy",
+            def.name,
+            b.g.obj(copy).chars.name
+        ));
+    }
+    let sa = script(&mut a, original);
+    let sb = script(&mut b, copy);
+    if std::env::var("MTG_COPY_DEBUG").is_ok() {
+        for ((step, x), (_, y)) in sa.iter().zip(&sb) {
+            eprintln!("== {step}\n-- original:\n{x}-- copy:\n{y}");
+        }
+        eprintln!(
+            "== original log:\n{}\n== copy log:\n{}",
+            a.dump_log(),
+            b.dump_log()
+        );
+    }
+    for ((step, x), (_, y)) in sa.iter().zip(&sb) {
+        // Once the subject has left the battlefield the two are different cards (a copy is
+        // a copy only as long as it's on the battlefield: the card it is goes to the
+        // graveyard as itself, a token ceases to exist), so the comparison ends.
+        match (x.as_str() == LEFT, y.as_str() == LEFT) {
+            (true, true) => return Ok(sa.len()),
+            (false, false) => {}
+            (left, _) => {
+                return Err(format!(
+                    "{}: after \"{step}\" the {} has left the battlefield, the {} hasn't",
+                    def.name,
+                    if left { "original" } else { "copy" },
+                    if left { "copy" } else { "original" }
+                ))
+            }
+        }
+        if x != y {
+            let diff: Vec<String> = x
+                .lines()
+                .zip(y.lines())
+                .filter(|(l, m)| l != m)
+                .map(|(l, m)| format!("  original: {l}\n  copy:     {m}"))
+                .collect();
+            return Err(format!(
+                "{}: after \"{step}\" the outcomes differ:\n{}",
+                def.name,
+                diff.join("\n")
+            ));
+        }
+    }
+    if sa.len() != sb.len() {
+        return Err(format!(
+            "{}: the script took {} steps with the original and {} with the copy",
+            def.name,
+            sa.len(),
+            sb.len()
+        ));
+    }
+    Ok(sa.len())
+}
+
+/// The dynamic check over `cards`: (cards checked, steps compared, differences).
+pub fn check_dynamic_cards(cards: &[Arc<CardDef>]) -> (usize, usize, Vec<String>) {
+    let mut checked = 0;
+    let mut steps = 0;
+    let mut bad = Vec::new();
+    for def in cards {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check_dynamic(def))) {
+            Ok(Ok(0)) => {}
+            Ok(Ok(n)) => {
+                checked += 1;
+                steps += n;
+            }
+            Ok(Err(e)) => bad.push(e),
+            Err(e) => bad.push(format!(
+                "{}: panic: {}",
+                def.name,
+                e.downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+                    .unwrap_or_default()
+            )),
+        }
+    }
+    (checked, steps, bad)
 }

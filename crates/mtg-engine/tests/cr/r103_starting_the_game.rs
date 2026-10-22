@@ -393,11 +393,13 @@ fn conspiracies_go_from_the_sideboard_to_the_command_zone() {
     );
     t.answer_choose(P0, &[Entity::Object(side[0]), Entity::Object(side[1])]);
     t.g.start();
-    assert_eq!(t.g.obj(side[0]).zone, Zone::Command);
-    assert!(t.g.obj(side[0]).face_down, "hidden agenda");
-    assert_eq!(t.g.obj(side[1]).zone, Zone::Command);
-    assert!(!t.g.obj(side[1]).face_down);
-    assert_eq!(t.g.obj(side[2]).zone, Zone::Outside(P0));
+    // Each is a new object in the command zone (CR 400.7).
+    let now = |i: usize| t.g.obj(t.g.current(side[i]));
+    assert_eq!(now(0).zone, Zone::Command);
+    assert!(now(0).face_down, "hidden agenda");
+    assert_eq!(now(1).zone, Zone::Command);
+    assert!(!now(1).face_down);
+    assert_eq!(now(2).zone, Zone::Outside(P0));
 }
 
 // ---------------------------------------------------------------------------
@@ -460,10 +462,13 @@ fn supplementary_decks_are_shuffled_too() {
             vec![deck, fillers(20)],
         );
         t.g.start();
-        // Face-down cards have no characteristics; compare the objects' order.
+        // Face-down cards have no characteristics; compare the cards' order (the objects
+        // are numbered anew in their shuffled order, so their ids don't tell).
         let order = mtg_engine::planechase::planar_deck(&t.g, P0);
         assert_eq!(order.len(), planes.len());
-        orders.insert(order);
+        orders.insert(order.iter()
+            .map(|id| t.g.obj(*id).card.as_ref().map(|c| c.name.to_string()))
+            .collect::<Vec<_>>());
     }
     assert!(orders.len() > 1);
 }

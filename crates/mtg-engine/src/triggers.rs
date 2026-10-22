@@ -854,7 +854,11 @@ impl Game {
         // "Until end of turn, whenever a player taps an Island for mana, that player adds
         // an additional {U}" is a mana ability too (CR 605.1b).
         tr.is_mana_ability = is_triggered_mana_ability(&d.trigger, &d.body);
-        let ability = AbilityDef::new(AbilityKind::Triggered(tr), "delayed trigger");
+        // It refers to what the links of the ability that created it refer to ("the exiled
+        // card", CR 603.7c, 607.2): it has that ability's link, which an ability a copy
+        // effect gives has its own of (CR 707.7).
+        let ability =
+            AbilityDef::with_link(AbilityKind::Triggered(tr), "delayed trigger", d.ctx.link);
         PendingTrigger {
             source: d.source.unwrap_or(ObjectId(0)),
             controller: d.controller,

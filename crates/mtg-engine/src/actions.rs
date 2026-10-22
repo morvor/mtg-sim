@@ -613,7 +613,7 @@ impl Game {
                 let mut copy_effect = None;
                 if let Some(src) = m.etb.copy_of {
                     let values = Box::new(m.etb.copied_values(self, src).clone());
-                    let id = self.new_effect_id();
+                    let id = m.etb.copy_effect.unwrap_or_else(|| self.new_effect_id());
                     copy_effect = Some(id);
                     let ts = self.obj(new_id).timestamp;
                     self.effects.push(ContinuousEffect {
@@ -2099,6 +2099,7 @@ impl Game {
                     // Its copiable values are fixed as the token is created (CR 111.10,
                     // 707.2c).
                     etb.copy_values = Some((src, Box::new(self.obj(src).copiable.clone())));
+                    etb.copy_effect = Some(self.new_effect_id());
                 }
             }
         }

@@ -2080,7 +2080,7 @@ fn resolve_chosen(f: &Filter, g: &Game, ctx: &Ctx) -> Option<Filter> {
 /// Abilities an object has because of a copy effect are linked to each other, not to
 /// abilities the object had from another copy effect (CR 607.5, 607.5a). Cached so their
 /// identity is stable across recomputation.
-fn copied_ability(a: &Ability, effect: u32) -> Ability {
+pub(crate) fn copied_ability(a: &Ability, effect: u32) -> Ability {
     use std::sync::{Mutex, OnceLock};
     static CACHE: OnceLock<Mutex<HashMap<(u64, u32), Ability>>> = OnceLock::new();
     let m = CACHE.get_or_init(Default::default);

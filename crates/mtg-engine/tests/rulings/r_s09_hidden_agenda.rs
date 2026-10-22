@@ -199,6 +199,8 @@ fn only_conspiracies_go_to_the_command_zone_and_only_hidden_agendas_face_down() 
         .collect();
     assert!(offered.iter().all(|c| !c.contains(&Entity::Object(bears))));
     assert_eq!(t.zone(bears), Zone::Outside(P0));
+    // New objects in the command zone (CR 400.7).
+    let (power_play, favor) = (t.g.current(power_play), t.g.current(favor));
     assert_eq!(t.zone(power_play), Zone::Command);
     assert!(!t.obj(power_play).face_down);
     assert_eq!(t.zone(favor), Zone::Command);
@@ -320,6 +322,8 @@ fn the_card_is_named_as_the_game_begins_not_when_turned_face_up() {
         .filter(|(p, d)| *p == P0 && matches!(d, Decision::NameCard { .. }))
         .count();
     assert_eq!(named_at_start, 1);
+    // A new object in the command zone (CR 400.7).
+    let side = [t.g.current(side[0])];
     assert_eq!(chosen_names(&t.g, side[0]), vec!["Grizzly Bears"]);
     // Turning it face up asks for no name; it keeps the one chosen.
     t.g.run_until(10_000, |g| {

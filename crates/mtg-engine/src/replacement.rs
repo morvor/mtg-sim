@@ -52,6 +52,12 @@ pub struct EtbInfo {
     /// object to copy was chosen. Effects applied as it enters ("as this enters, turn all
     /// other nontoken creatures face down") don't change what it copies.
     pub copy_values: Option<(ObjectId, Box<Characteristics>)>,
+    /// The id of the copy effect it enters with, given as the copy is determined: the
+    /// characteristics it would have on the battlefield, which the replacement effects
+    /// that apply as it enters are looked up from (CR 614.12), have the abilities it will
+    /// have, links included (abilities a copy effect gives are linked per copy effect,
+    /// CR 607.5, 707.7).
+    pub copy_effect: Option<u32>,
     /// Modifications to its copiable values from "as this enters" abilities that set
     /// power and toughness (CR 707.2), applied after any copy effect it enters with.
     pub copiable_mods: Vec<Modification>,
@@ -512,7 +518,22 @@ impl Game {
                             .collect()
                     })
                     .unwrap_or_default();
-                let abilities = chars.map_or(&o.chars.abilities, |c| &c.abilities);
+                // The abilities it will have through the copy effect are the copied ones,
+                // with the links they have on the copy (CR 607.5, 707.7): what their
+                // "as this enters" effects note and choose is for the abilities linked to
+                // them there.
+                let copied: Vec<Ability>;
+                let abilities = match (m.etb.copy_of, m.etb.copy_effect, chars) {
+                    (Some(_), Some(eid), Some(c)) => {
+                        copied = c
+                            .abilities
+                            .iter()
+                            .map(|a| crate::layers::copied_ability(a, eid))
+                            .collect();
+                        &copied
+                    }
+                    _ => chars.map_or(&o.chars.abilities, |c| &c.abilities),
+                };
                 let entering_ctx = Ctx::new(Some(m.obj), self.entering_controller(m));
                 for a in abilities.iter().chain(derived.iter()) {
                     if let AbilityKind::Static(s) = &a.kind {
@@ -878,7 +899,7 @@ impl Game {
         if let Some(src) = m.etb.copy_of {
             let values = Box::new(m.etb.copied_values(self, src).clone());
             self.effects.push(ContinuousEffect {
-                id: 0,
+                id: m.etb.copy_effect.unwrap_or(0),
                 source: Some(id),
                 controller,
                 timestamp: saved_next_ts,
@@ -1566,6 +1587,7 @@ impl Game {
                         m.etb.copy_extras = std::mem::take(&mut m.etb.own_copy_extras);
                         m.etb.copy_of = Some(o);
                         m.etb.copy_values = Some((o, Box::new(self.obj(o).copiable.clone())));
+                        m.etb.copy_effect = Some(self.new_effect_id());
                     }
                     // CR 614.1c: "it enters with haste" — performed on the permanent as
                     // it's put onto the battlefield.
@@ -1634,6 +1656,7 @@ impl Game {
                     m.etb.copy_extras = std::mem::take(&mut m.etb.own_copy_extras);
                     m.etb.copy_of = Some(*o);
                     m.etb.copy_values = Some((*o, Box::new(self.obj(*o).copiable.clone())));
+                    m.etb.copy_effect = Some(self.new_effect_id());
                     // "Enter tapped as a copy of": only as a copy (Vesuva's rulings).
                     if tapped {
                         m.etb.tapped = true;

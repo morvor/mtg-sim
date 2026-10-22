@@ -2320,7 +2320,11 @@ impl Game {
         // then be payable.
         let mut least_x: Option<i32> = None;
         if let Some(c) = &act.condition {
-            let ctx = Ctx::new(Some(src), p);
+            // The ability's own link: "exiled with ~" and the like refer to the abilities
+            // linked to it (CR 607.2, 607.5; a copy's abilities have links of their own,
+            // CR 707.7).
+            let mut ctx = Ctx::new(Some(src), p);
+            ctx.link = a.link;
             if !self.eval_cond(c, &ctx) {
                 let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
                     || act.cost.parts.iter().any(cost_part_has_x);
@@ -2350,7 +2354,8 @@ impl Game {
         if self.split_second_on_stack() && !act.is_mana_ability {
             return false;
         }
-        let ctx = Ctx::new(Some(src), p);
+        let mut ctx = Ctx::new(Some(src), p);
+        ctx.link = a.link;
         if act.body.modal.is_none() && !self.targets_possible(&act.body.targets, &ctx, src) {
             // CR 602.2b, 601.2b: the value of X is announced before targets are chosen,
             // so targets that depend on X ("target creature card with mana value X") are
@@ -2372,6 +2377,7 @@ impl Game {
         }
         let x = least_x.unwrap_or(0);
         let mut pay_ctx = Ctx::new(Some(src), p);
+        pay_ctx.link = a.link;
         pay_ctx.cost_of = Some(if act.is_mana_ability {
             crate::rule_statics::payment::CostOf::ManaAbility
         } else {

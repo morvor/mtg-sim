@@ -63,10 +63,10 @@ fn conspiracies_start_the_game_in_the_command_zone_from_the_sideboard() {
     t.answer_choose(P0, &[Entity::Object(side[0]), Entity::Object(side[1])]);
     t.g.start();
     assert_eq!(t.zone(side[0]), Zone::Command);
-    assert!(!t.obj(side[0]).face_down);
+    assert!(!t.obj_now(side[0]).face_down);
     // Hidden agenda: face down.
     assert_eq!(t.zone(side[1]), Zone::Command);
-    assert!(t.obj(side[1]).face_down);
+    assert!(t.obj_now(side[1]).face_down);
     assert_eq!(t.zone(side[2]), Zone::Outside(P0));
     // They're not part of the library that was shuffled.
     assert_eq!(t.g.player(P0).library.len() + t.hand_size(P0), 40);

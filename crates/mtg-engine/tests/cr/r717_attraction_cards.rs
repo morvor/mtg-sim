@@ -115,7 +115,10 @@ fn attractions_start_the_game_in_a_shuffled_attraction_deck() {
         t.g.start();
         let order = attraction_deck(&t.g, P0);
         assert_eq!(order.len(), 10);
-        orders.insert(order);
+        // The cards' order (the objects are numbered anew in their shuffled order).
+        orders.insert(order.iter()
+            .map(|id| t.g.obj(*id).card.as_ref().map(|c| c.name.to_string()))
+            .collect::<Vec<_>>());
     }
     // Shuffled before the game begins.
     assert!(orders.len() > 1);

@@ -389,6 +389,21 @@ pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
     }
 }
 
+/// After a face-down deck kept in the command zone (an Attraction, planar or scheme deck)
+/// is shuffled: its cards, at `slots` of the command zone, become new objects in their new
+/// order. Their ids were given as the decks were made, in the decks' order, so other
+/// players could tell from them which card is where (CR 400.2, 406.3; 103.3a: these decks
+/// are shuffled and hidden like libraries).
+pub fn renumber_shuffled_deck(g: &mut Game, slots: &[usize]) {
+    for i in slots {
+        let old = g.command[*i];
+        let new = g.create_incarnation(old, Zone::Command);
+        g.objects[new.0 as usize].face_down = true;
+        g.command[*i] = new;
+    }
+    g.dirty = true;
+}
+
 /// CR 400.9: a face-up object in the command zone that's turned face down becomes a new
 /// object; it's put at the end of the command zone's order (the bottom of its deck).
 /// Returns the object it is now.

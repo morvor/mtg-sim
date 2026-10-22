@@ -23,3 +23,22 @@ fn copies_of_a_sample_of_cards_have_their_copiable_values() {
     }
     assert!(mismatches.is_empty(), "{} mismatches", mismatches.len());
 }
+
+#[test]
+fn a_copy_plays_out_as_the_original_on_a_sample_of_cards() {
+    let t1 = std::time::Instant::now();
+    let cards = match std::env::var("MTG_COPY_CARD") {
+        Ok(name) => supported(&[name]),
+        Err(_) => sample(7, 300),
+    };
+    let (checked, steps, bad) = check_dynamic_cards(&cards);
+    eprintln!(
+        "{checked} of {} cards checked, {steps} steps compared in {:?}",
+        cards.len(),
+        t1.elapsed()
+    );
+    for b in &bad {
+        eprintln!("{b}");
+    }
+    assert!(bad.is_empty(), "{} differences", bad.len());
+}
