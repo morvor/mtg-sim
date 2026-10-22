@@ -387,3 +387,28 @@ fn coin_of_fate_an_opponent_chooses_one_of_the_exiled_cards() {
     assert!(t.obj_now(g[0]).tapped);
     assert_eq!(t.g.monarch, Some(P0));
 }
+
+#[test]
+fn plargg_and_nassari_an_opponent_chooses_one_you_cast_from_the_others() {
+    cr!("101.4");
+    ruling!(
+        "Plargg and Nassari",
+        "In a two-player game, assuming each player eventually exiles a nonland card, your opponent will choose one of them, and you'll be able to cast the other one."
+    );
+    supported("Plargg and Nassari");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Plargg and Nassari");
+    t.advance_to(P1, Step::End);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.library_top(P0, "Forest");
+    let giant = t.library_top(P1, "Hill Giant");
+    t.answer_choose_moved(P1, &[Entity::Object(bolt)]);
+    t.answer_choose_moved(P0, &[Entity::Object(giant)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.in_exile("Lightning Bolt"));
+    assert!(t.in_exile("Forest"));
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert_eq!(t.obj_now(g[0]).controller, P0);
+}

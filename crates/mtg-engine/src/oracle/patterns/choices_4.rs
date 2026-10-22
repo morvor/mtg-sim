@@ -1254,6 +1254,141 @@ fn that_card_and_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "choices 4: [that card] and return the other", priority: 120, parse: that_card_and_the_other } }
 
+/// The cards every player exiled ("cards exiled this way"), the one an opponent chose, and
+/// the others.
+const ALL_EXILED: Var = vars::USER + 41043;
+const OTHER_EXILED: Var = vars::USER + 41044;
+
+/// Adds, after each reveal-until in `e`, the cards it exiled to [`ALL_EXILED`].
+fn collect_until_exiles(e: &mut Effect) -> bool {
+    match e {
+        Effect::RevealUntil { found_to, .. } if found_to.zone == ZoneKind::Exile => {
+            let r = std::mem::take(e);
+            *e = Effect::seq(vec![
+                r,
+                Effect::Store {
+                    var: ALL_EXILED,
+                    sel: Sel::Union(vec![Sel::Var(ALL_EXILED), Sel::Var(vars::DUG)]),
+                },
+            ]);
+            true
+        }
+        Effect::ForEachPlayer { effect, .. } | Effect::AsPlayer { effect, .. } => {
+            collect_until_exiles(effect)
+        }
+        _ => false,
+    }
+}
+
+/// "Each player exiles cards from the top of their library until they exile a nonland
+/// card. An opponent chooses a nonland card exiled this way." (Plargg and Nassari): the
+/// opponent who chooses is chosen by you (Plargg and Nassari rulings); "the other cards
+/// exiled this way" are the rest of every player's exiled cards.
+fn an_opponent_chooses_one_exiled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("an opponent chooses a ") else {
+        return false;
+    };
+    let Some(noun) = r.strip_suffix(" exiled this way") else {
+        return false;
+    };
+    let Some((f, false, tail)) = crate::oracle::phrases::parse_object_phrase(noun) else {
+        return false;
+    };
+    if !tail.trim().is_empty() {
+        return false;
+    }
+    let mut process = prev.clone();
+    if !collect_until_exiles(&mut process) {
+        return false;
+    }
+    let Some(decider) = crate::kw::choice_grammar::deciding_opponent_effect(TAKER) else {
+        return false;
+    };
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: ALL_EXILED,
+            sel: Sel::None,
+        },
+        process,
+        decider,
+        Effect::Store {
+            var: OPPONENT_CHOSE,
+            sel: Sel::Choose {
+                chooser: PlayerRef::Var(TAKER),
+                filter: Filter::and(vec![f, Filter::In(Box::new(Sel::Var(ALL_EXILED)))]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Store {
+            var: OTHER_EXILED,
+            sel: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(ALL_EXILED))),
+                Filter::not(Filter::In(Box::new(Sel::Var(OPPONENT_CHOSE)))),
+            ])),
+        },
+    ]);
+    b.named.push((
+        "the other cards exiled this way".into(),
+        Sel::Var(OTHER_EXILED),
+    ));
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choices 4: an opponent chooses a card exiled this way", priority: 120, apply: an_opponent_chooses_one_exiled_this_way } }
+
+/// "You may cast up to two spells from among the other cards exiled this way without
+/// paying their mana costs." after [`an_opponent_chooses_one_exiled_this_way`].
+fn from_among_the_other_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("you may cast up to ") else {
+        return false;
+    };
+    let Some(n) = r.strip_suffix(
+        " spells from among the other cards exiled this way without paying their mana costs",
+    ) else {
+        return false;
+    };
+    let Some((n, rest)) = parse_number(n) else {
+        return false;
+    };
+    if !rest.trim().is_empty() || n.as_const().is_none() {
+        return false;
+    }
+    let Some(other) = b
+        .named
+        .iter()
+        .find(|(n, _)| n == "the other cards exiled this way")
+        .map(|(_, s)| s.clone())
+    else {
+        return false;
+    };
+    // Each spell is cast during the resolution, in any order (Plargg and Nassari rulings).
+    let cast = Effect::CastCard {
+        who: PlayerRef::You,
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::In(Box::new(other)),
+                Filter::InZone(ZoneKind::Exile),
+                Filter::not(Filter::Type(crate::types::CardType::Land)),
+                Filter::Card,
+            ]),
+            count: n,
+            up_to: true,
+            store: None,
+        },
+        free: true,
+        optional: false,
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, cast]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "choices 4: from among the other cards exiled this way", priority: 120, apply: from_among_the_other_cards } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
@@ -1287,6 +1422,7 @@ mod tests {
             ("Creature", "First strike\n{T}: Reveal your hand and discard a card of target opponent's choice. Then that player reveals their hand and discards a card of your choice. Activate only as a sorcery."),
             ("Creature", "Flying\nAt the beginning of your end step, choose a creature card in an opponent's graveyard, then that player chooses a creature card in your graveyard. You may return those cards to the battlefield under their owners' control."),
             ("Artifact", "When ~ enters, surveil 1.\n{3}{W}, {T}, Exile two creature cards from your graveyard, Sacrifice ~: An opponent chooses one of the exiled cards. You put that card on the bottom of your library and return the other to the battlefield tapped. You become the monarch."),
+            ("Legendary Creature", "At the beginning of your upkeep, each player exiles cards from the top of their library until they exile a nonland card. An opponent chooses a nonland card exiled this way. You may cast up to two spells from among the other cards exiled this way without paying their mana costs."),
             ("Sorcery", "Each player with fewer cards in hand than the player with the most cards in hand draws cards equal to the difference."),
             ("Creature", "When ~ enters, each player who controls fewer lands than the player who controls the most lands searches their library for a number of basic land cards less than or equal to the difference, puts those cards onto the battlefield tapped, then shuffles."),
         ] {
