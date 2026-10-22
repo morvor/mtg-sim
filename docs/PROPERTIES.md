@@ -472,6 +472,6 @@ known; the cards of command-zone decks are numbered by position once shuffled).
 
 `cargo test` runs samples: the static copy check on every 20th name of the pool (1,558
 cards), the dynamic check on every 300th (104 cards), 300 payment boards, 60 combats, and
-six hidden-information tests (four games, ids at the start in 22 setups, request ids). They
+six hidden-information tests (four games, ids at the start in 19 setups, request ids). They
 add about 11 s to `tests/properties` (33 s instead of 22 s in a debug build; the copy
 checks compile their cards) and 6 s for `crates/mtg-api/tests/hidden_information.rs`.
