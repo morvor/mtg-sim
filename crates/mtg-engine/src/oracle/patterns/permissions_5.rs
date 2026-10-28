@@ -251,3 +251,70 @@ fn its_controller_looks_and_exiles(block: &str, ctx: &CompileContext) -> Option<
 }
 
 inventory::submit! { AbilityPattern { name: "permissions 5: its controller looks at and exiles a card; they may play it", priority: 40, parse: its_controller_looks_and_exiles } }
+
+/// Replaces `from` (serialized) with `to` in the ability's kind; false if `from` isn't
+/// there exactly `times` times.
+fn replace_in_kind<T: serde::Serialize>(a: &mut AbilityDef, from: &T, to: &T, times: usize) -> Option<()> {
+    let json = serde_json::to_string(&a.kind).ok()?;
+    let from = serde_json::to_string(from).ok()?;
+    let to = serde_json::to_string(to).ok()?;
+    if json.matches(&from).count() != times {
+        return None;
+    }
+    a.kind = serde_json::from_str(&json.replace(&from, &to)).ok()?;
+    Some(())
+}
+
+/// "If the player does, they may cast a spell from among other cards exiled with ~
+/// without paying its mana cost." (Knowledge Pool): the cards exiled with the source but
+/// the one just exiled (CR 607.2a).
+fn other_cards_exiled_with(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const OTHER: &str = " from among other cards exiled with ~";
+    if !block.contains(OTHER) || block.contains('\n') {
+        return None;
+    }
+    let rewritten = block.replacen(OTHER, " from among cards exiled with ~", 1);
+    compile_as(&rewritten, block, ctx, |a| {
+        let linked = Filter::In(Box::new(Sel::Linked));
+        let other = Filter::And(vec![
+            Filter::In(Box::new(Sel::Linked)),
+            Filter::not(Filter::In(Box::new(Sel::Var(vars::IT)))),
+        ]);
+        // The instruction just before it exiled the card ("that player exiles it").
+        if !serde_json::to_string(&a.kind).ok()?.contains("\"Exile\"") {
+            return None;
+        }
+        replace_in_kind(a, &linked, &other, 1)
+    })
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: from among other cards exiled with ~", priority: 40, parse: other_cards_exiled_with } }
+
+/// "For as long as you control ~, you may play one of the exiled cards, ..." (Kotose, the
+/// Silent Spider) after several instructions that exiled cards: one of all the cards the
+/// ability exiled (with its source, CR 607.2a), not only the last instruction's.
+fn one_of_the_exiled_cards(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const LEAD: &str = "For as long as you control ~, you may play one of the exiled cards";
+    let (before, after) = block.split_once(LEAD)?;
+    if block.contains('\n') || before.matches("exile").count() < 2 {
+        return None;
+    }
+    let rewritten = format!("{before}You may play one of the exiled cards for as long as you control ~{after}");
+    compile_as(&rewritten, block, ctx, |a| {
+        let json = serde_json::to_string(&a.kind).ok()?;
+        let grant = "\"GrantPlayPermission\":{\"who\":\"You\",\"what\":{\"Var\":0}";
+        if json.matches(grant).count() != 1 || json.matches("\"Exile\"").count() < 2 {
+            return None;
+        }
+        let all = serde_json::to_string(&Sel::All(Filter::and(vec![
+            Filter::In(Box::new(Sel::Linked)),
+            Filter::InZone(ZoneKind::Exile),
+        ])))
+        .ok()?;
+        let new = format!("\"GrantPlayPermission\":{{\"who\":\"You\",\"what\":{all}");
+        a.kind = serde_json::from_str(&json.replace(grant, &new)).ok()?;
+        Some(())
+    })
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: for as long as you control ~, you may play one of the exiled cards", priority: 40, parse: one_of_the_exiled_cards } }

@@ -881,6 +881,21 @@ fn other_than<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
         if plural {
             return None;
         }
+        // "target card other than a basic land card from an opponent's graveyard"
+        // (Kotose, the Silent Spider): the zone that ends the phrase is where the target
+        // is, not part of what it isn't.
+        if x.contains(" from ") {
+            if let Filter::And(v) = &f {
+                let (place, kind): (Vec<Filter>, Vec<Filter>) = v.iter().cloned().partition(|p| {
+                    matches!(p, Filter::InZone(_) | Filter::OwnedBy(_))
+                });
+                if !place.is_empty() && !kind.is_empty() {
+                    let mut out = vec![Filter::not(Filter::and(kind))];
+                    out.extend(place);
+                    return Some((Filter::and(out), rest));
+                }
+            }
+        }
         return Some((Filter::not(f), rest));
     }
     let (sel, rest) = object_in(r)?;
