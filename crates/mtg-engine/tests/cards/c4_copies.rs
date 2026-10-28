@@ -105,3 +105,41 @@ fn spirit_of_resilience_may_become_a_copy_of_a_card_that_left_the_graveyard() {
     assert_eq!(t.g.obj(spirit).chars.name.as_str(), "Serra Angel");
     assert_eq!(t.pt(spirit), (5, 5));
 }
+
+fn fourteenth_doctor(copy: bool) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    let seventh = t.library_top(P0, "The Seventh Doctor");
+    let milled = t
+        .g
+        .move_object(
+            seventh,
+            mtg_engine::object::Zone::Graveyard(P0),
+            mtg_engine::events::MoveCause::Mill,
+            Some(P0),
+        )
+        .expect("milled");
+    if copy {
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[Entity::Object(milled)]);
+    } else {
+        t.answer_yes(P0, false);
+        t.answer_choose(P0, &[]);
+    }
+    let doc = t.enter(P0, "The Fourteenth Doctor");
+    t.settle();
+    t.resolve_all();
+    (t, doc)
+}
+
+#[test]
+fn the_fourteenth_doctor_gains_haste_only_if_it_entered_as_a_copy() {
+    cr!("614.1c", "707.9");
+    supported("The Fourteenth Doctor");
+    let haste = mtg_engine::keywords::KeywordKind::Haste;
+    let (t, doc) = fourteenth_doctor(true);
+    assert_eq!(t.obj_now(doc).chars.name.as_str(), "The Seventh Doctor", "{}", t.dump_log());
+    assert!(t.obj_now(doc).has_keyword(haste));
+    let (t, doc) = fourteenth_doctor(false);
+    assert_eq!(t.obj_now(doc).chars.name.as_str(), "The Fourteenth Doctor");
+    assert!(!t.obj_now(doc).has_keyword(haste));
+}

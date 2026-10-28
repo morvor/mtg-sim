@@ -101,3 +101,60 @@ fn become_copy_of_one_of_those_cards(l: &str, b: &mut crate::oracle::effects::Bu
 }
 
 inventory::submit! { super::EffectPattern { name: "copies 5: become a copy of [a card] from among those cards", priority: 100, parse: become_copy_of_one_of_those_cards } }
+
+/// "You may have ~ enter as a copy of [object]. If you do, it gains haste until end of
+/// turn." (The Fourteenth Doctor): an effect that happens only if it enters as a copy
+/// ([`Effect::EnterCopyExtra`], CR 614.1c, 707.9), performed on the permanent as it
+/// enters.
+fn enter_as_copy_if_you_do(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() || !block.is_ascii() {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    if !lower.starts_with("you may have ~ enter ") {
+        return None;
+    }
+    let i = lower.find(". if you do, ")?;
+    let first = &block[..i + 1];
+    let rest = end(&lower[i + ". if you do, ".len()..]);
+    let rest = rest.strip_prefix("it ")?;
+    let body = crate::oracle::effects::parse_body_with_it(&format!("~ {rest}."), ctx, Sel::This)?;
+    if !body.targets.is_empty() || body.modal.is_some() {
+        return None;
+    }
+    let mut out = crate::oracle::parse_ability(first, ctx)?;
+    // Only the plain optional copy replacement.
+    let [a] = out.as_mut_slice() else {
+        return None;
+    };
+    let AbilityKind::Static(st) = &a.kind else {
+        return None;
+    };
+    let StaticEffect::Replacement(d) = &st.effect else {
+        return None;
+    };
+    if !matches!(d.action, ReplacementAction::EnterAsCopy { optional: true, .. }) {
+        return None;
+    }
+    let extra = Effect::EnterCopyExtra {
+        only_if: None,
+        mods: vec![],
+        // Performed as it enters, with the permanent as its source (`actions.rs`).
+        effect: Box::new(body.effect),
+    };
+    std::sync::Arc::make_mut(a).text = block.into();
+    out.push(AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::AsEnters(Box::new(extra)),
+                self_replacement: true,
+                optional: false,
+            },
+        ))),
+        block,
+    ));
+    Some(out)
+}
+
+inventory::submit! { super::AbilityPattern { name: "copies 5: you may have ~ enter as a copy of [object]. If you do, it [effect]", priority: 40, parse: enter_as_copy_if_you_do } }
