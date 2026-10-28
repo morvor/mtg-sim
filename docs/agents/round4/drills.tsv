@@ -883,3 +883,31 @@ P-shape-full	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 an
 P-shape-chosen	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / ~'s power is equal to the chosen number and its toughness is equal to 7 minus that number.	FAIL
 P-shape-pow	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / At the beginning of your upkeep, you may choose a number between 0 and 7. / ~'s power is equal to the last chosen number and its toughness is equal to 7 minus the last chosen number.	FAIL
 P-shape-pow2	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / ~'s power is equal to the chosen number and its toughness is equal to the chosen number.	FAIL
+P-R-oppchoice-cr	Divination	Sacrifice a creature of an opponent's choice.	FAIL
+P-R-oppchoice-tgt	Grizzly Bears	When ~ enters, target opponent may have it deal 2 damage to any target of their choice.	FAIL
+P-R-random-look	Divination	Look at two cards at random in target opponent's hand.	FAIL
+P-R-or-pump	Divination	Target creature gets +2/+2 or gains flying until end of turn.	FAIL
+P-R-results-sac	Divination	Sacrifice a creature. If you sacrifice a Goblin this way, draw a card.	FAIL
+P-R-other-two	Divination	Choose two target creatures. Destroy one of them. The other gets +1/+1 until end of turn.	FAIL
+P-R-repeat-mill	Divination	Mill a card, then repeat this process until a land card is put into your graveyard this way.	FAIL
+P-R-half-up	Fireball	~ deals half X damage, rounded up, to you.	OK
+P-R-destroy-each	Divination	Each player destroys a creature they control.	FAIL
+P-R-nodmg-bears	Grizzly Bears	Whenever ~ attacks and isn't blocked, you may have it assign no combat damage this turn.	FAIL
+P-R-block-unless	Grizzly Bears	~ can't block unless two other creatures block.	FAIL
+P-R-untap-group	Divination	Each creature you control doesn't untap during its controller's next untap step.	FAIL
+P-R-ench-other	Pacifism	Enchanted creature can't be enchanted by other Auras.	OK
+P-R-cda-turn	Grizzly Bears	During your turn, ~'s power is equal to the number of cards in your hand.	FAIL
+P-R-hist-blocked	Grizzly Bears	At the beginning of your end step, if ~ has blocked this turn, draw a card.	OK
+P-R-state-pow	Grizzly Bears	When ~'s power is 0 or less, sacrifice it.	FAIL
+P-R-limit-hand	Icy Manipulator	{1}: Draw a card. Activate no more times each turn than the number of cards in your hand.	FAIL
+P-R-losectl	Divination	Gain control of target creature. Sacrifice it when you lose control of ~.	FAIL
+P-R-thisturn-trig	Divination	This turn, whenever a creature dies, you gain 1 life.	FAIL
+P-R-until-step	Divination	Target creature gets +2/+2 until its controller's next untap step.	FAIL
+P-R-nexttime-draw	Icy Manipulator	{T}: The next time you would draw a card this turn, instead you gain 1 life.	FAIL
+P-R-prev-target	Grizzly Bears	Prevent all damage that would be dealt to ~ by abilities that target it.	FAIL
+P-R-cant-prev	Shock	Damage that would be dealt by ~ can't be prevented. ~ deals 2 damage to any target.	FAIL
+P-R-untap-repl	Glorious Anthem	If a creature you control would untap during your untap step, you gain 1 life instead.	FAIL
+P-R-enter-repl	Icy Manipulator	If ~ would enter, you may pay 2 life instead. If you do, put ~ onto the battlefield.	FAIL
+P-R-soulx-para	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield.	OK
+P-R-soulx-para2	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield. Put a +2/+2 counter on that creature if the exiled creature was a Thrull.	FAIL
+P-R-soulx-para3	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield. If the exiled creature was a Thrull, put a +2/+2 counter on that creature.	FAIL
