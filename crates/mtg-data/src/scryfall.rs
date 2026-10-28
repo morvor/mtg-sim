@@ -134,6 +134,13 @@ pub const PAPER_FORMATS: &[&str] = &[
     "predh",
 ];
 
+/// Digital versions of paper cards that the legality rule of [`ScryfallCard::is_paper`]
+/// would count as paper: their oracle record is online-only and differs from the paper
+/// card's, yet Scryfall lists it legal in a paper format. "Name Sticker" Goblin is the MTGO
+/// version of the Unfinity card _____ Goblin (it rolls a d20 instead of using a name
+/// sticker) and is listed legal in Commander; _____ Goblin itself stays a paper card.
+pub const DIGITAL_VERSIONS: &[&str] = &["\"Name Sticker\" Goblin"];
+
 impl ScryfallCard {
     /// True for a paper card: one with a paper printing. Every tool decides "paper" by this
     /// one rule (and `deferred()` in `scripts/rulings_batches.py` mirrors it in Python).
@@ -146,8 +153,12 @@ impl ScryfallCard {
     /// includes "paper", or if it is legal, restricted or banned in a format played with
     /// paper cards ([`PAPER_FORMATS`]). What this leaves out is what `docs/DEFERRED.md`
     /// defers: cards with no paper printing (Alchemy and Arena-only sets, legal only in
-    /// Arena formats) and digital versions of cards (the "A-" rebalanced cards).
+    /// Arena formats) and digital versions of cards (the "A-" rebalanced cards, and the few
+    /// online-only versions listed legal in a paper format, [`DIGITAL_VERSIONS`]).
     pub fn is_paper(&self) -> bool {
+        if DIGITAL_VERSIONS.contains(&self.name.as_str()) {
+            return false;
+        }
         self.games.is_empty()
             || self.games.iter().any(|g| g == "paper")
             || PAPER_FORMATS

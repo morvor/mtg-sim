@@ -72,3 +72,16 @@ fn alchemy_rebalanced_cards_are_not_paper() {
     banned.legalities.insert("vintage".into(), "banned".into());
     assert!(banned.is_paper());
 }
+
+/// A digital version listed legal in a paper format: "Name Sticker" Goblin, the MTGO
+/// version of _____ Goblin, is not paper; the paper card is.
+#[test]
+fn the_mtgo_name_sticker_goblin_is_a_digital_version() {
+    let cards = mtg_data::cards();
+    let mtgo = cards.by_name("\"Name Sticker\" Goblin").unwrap();
+    assert_eq!(mtgo.games, vec!["mtgo".to_string()]);
+    assert_eq!(mtgo.legality("commander"), Some("legal"));
+    assert!(!mtgo.is_paper());
+    let paper = cards.by_name("_____ Goblin").unwrap();
+    assert!(paper.is_paper());
+}

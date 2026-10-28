@@ -501,9 +501,15 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         match &fuzz_from {
             Some(old) => {
                 let text = std::fs::read_to_string(old).unwrap_or_default();
+                // Merging the same report again replaces its earlier line.
+                let same_report = format!(
+                    "every-card report {} ",
+                    report.strip_prefix(&root).unwrap_or(&report).display()
+                );
                 swept.extend(
                     text.lines()
                         .filter_map(|l| l.strip_prefix(SWEPT))
+                        .filter(|l| merged == 0 || !l.contains(&same_report))
                         .map(str::to_string),
                 );
                 if swept.is_empty() {

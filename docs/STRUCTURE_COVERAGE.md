@@ -16,7 +16,7 @@ Every ability of every supported card (paper, legal in some format, fully unders
 | Card abilities (card, structure) | 59056 | 43178 | 73.1% |
 | Supported cards with abilities (structure-verified) | 31305 | 17640 | 56.3% |
 
-31667 of 32160 cards are supported (362 of them have no abilities).
+31667 of 32159 cards are supported (362 of them have no abilities).
 
 | Kind | Structures | Exercised | % |
 |---|---:|---:|---:|

@@ -57,23 +57,28 @@ Decided 2026-10-01.
 
 - **Scope:** cards with no paper printing and digital versions of cards, and their
   mechanics: perpetual, seek, conjure, spellbooks, draft from a spellbook, intensity,
-  specialize, boons and similar. That is 854 cards on the 2026-09-24 data: MTG Arena and
+  specialize, boons and similar. That is 855 cards on the 2026-09-24 data: MTG Arena and
   Alchemy cards (hbg, the y-sets, j21, Arena starter and box cards; 657 of them are legal in
   some format, all of them Arena formats: alchemy, historic, timeless, brawl,
   standardbrawl, gladiator, competitivebrawl), MTGO-only cards (the 74 MTGO vanguards and one
   promo) and the old Astral and Sega digital cards (18);
-  and the "A-" rebalanced Alchemy versions of paper cards (the oracle data in `data/` has
-  none as separate cards).
+  and digital versions of paper cards: the "A-" rebalanced Alchemy versions (the oracle
+  data in `data/` has none as separate cards) and "Name Sticker" Goblin, the MTGO version of
+  the Unfinity card _____ Goblin (an MTGO-only record that rolls a d20 instead of using a
+  name sticker, yet Scryfall lists it legal in Commander; excluded Oct 28 under the user's
+  "ignore ... digital versions of cards", card-support-plan-4.md, "Paper-scope texts",
+  decision 1). Its text is in `docs/agents/round4/deferred.tsv`.
 - **What counts as paper** (fixed Oct 28, item `paper-scope-1`): every tool uses one rule,
   `ScryfallCard::is_paper()` (`crates/mtg-data/src/scryfall.rs`; `deferred()` in
   `scripts/rulings_batches.py` mirrors it): a card is paper if its oracle record's `games`
   is empty or includes "paper", or it is legal, restricted or banned in a format played
   with paper cards (standard, pioneer, modern, legacy, vintage, pauper, commander,
-  oathbreaker, paupercommander, duel, oldschool, premodern, predh). The oracle record is
-  one printing, and for 1,062 paper cards (City of Traitors, Fastbond, Memnite, Raging
+  oathbreaker, paupercommander, duel, oldschool, premodern, predh), except the digital
+  versions in `DIGITAL_VERSIONS` ("Name Sticker" Goblin). The oracle record is
+  one printing, and for 1,061 paper cards (City of Traitors, Fastbond, Memnite, Raging
   Goblin, ...) it is an online-only reprint (Masters Edition I-IV, Tempest Remastered,
   Vintage Masters, MTGO duel decks, Arena starter cards, promos). Until then the tools
-  looked at `games` only and counted 1,916 digital-only cards, leaving those 1,062 out.
+  looked at `games` only and counted 1,916 digital-only cards, leaving those 1,061 out (and "Name Sticker" Goblin, which the legality rule alone would add).
 - **Paper cards with these mechanics** (round-2 card plan, Oct 14): Pearl Collector
   (perpetual) and Tenacious Pup (a boon) are paper cards whose abilities use these
   digital-only mechanics; they stay unsupported with the mechanics
@@ -101,7 +106,7 @@ Decided 2026-10-02.
 - **Status:** `card-coverage` and `unsupported` already skip them. Rulings that apply only
   to such cards are DEFERRED in `scripts/rulings_batches.py`. Together with digital-only
   cards, sticker sheets and the dexterity cards (below), that is 1,817 ruling texts on
-  Oct 28, after the paper-scope fix counted the 1,062 paper cards with an online-only
+  Oct 28, after the paper-scope fix counted the 1,061 paper cards with an online-only
   oracle printing as paper (2,520 on Oct 21; 2,636 on Oct 2: a text that a test has cited
   or an exemption has listed since then counts as CITED or EXEMPT instead).
 

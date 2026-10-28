@@ -5,7 +5,6 @@
 # Swept: 2025 cards, every-card report target/every-card-partial.tsv written 2026-10-28 (a partial sweep, merged over the carried-over results)
 name	tier	failed	notes
 "Lifetime" Pass Holder	compiled	round-trip; structure (1 of 3 unexercised)	
-"Name Sticker" Goblin	unsupported	compiled (1 unsupported)	
 +2 Mace	verified		
 A Good Day to Pie	unsupported	compiled (1 unsupported)	
 A Killer Among Us	compiled	round-trip	
