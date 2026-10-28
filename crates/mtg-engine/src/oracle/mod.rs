@@ -782,6 +782,21 @@ fn touches_library(cost: &Cost, effect: &Effect) -> bool {
             "TopOfLibrary",
             "BottomOfLibrary",
             "PutFromHandOnLibrary",
+            // Effects that take cards from the top of a library (looking at, revealing,
+            // or exiling them) or put cards into one.
+            "Dig",
+            "DigStep",
+            "RevealUntil",
+            "ShuffleInto",
+            "PutOnLibrary",
+            "SearchPile",
+            // Keyword actions that move cards to or from a library (CR 701).
+            "Manifest",
+            "ManifestDread",
+            "Cloak",
+            "Connive",
+            "Discover",
+            "Learn",
         ];
         match v {
             J::String(s) => NAMES.contains(&s.as_str()),

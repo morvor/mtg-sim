@@ -3,7 +3,7 @@
 //! whose targets become illegal, and returning Auras with Brought Back.
 
 use crate::r_s01_common::*;
-use crate::r_s02_common::{destroy, target_candidates};
+use crate::r_s02_common::destroy;
 use crate::r_s03_common::respond;
 use crate::r_s05_common::move_to;
 use crate::r_s06_common::give_control;
@@ -641,7 +641,6 @@ fn brought_back_auras_choose_a_legal_existing_object_to_enchant() {
     let aura = t.named_on_battlefield("Pacifism")[0];
     assert_eq!(crate::r_s06_common::attached_to(&t, aura), Some(Entity::Object(troll)));
     assert!(t.obj(aura).tapped);
-    let _ = target_candidates;
 }
 
 /// Puts Pacifism onto `on`, then destroys it; returns the Pacifism.

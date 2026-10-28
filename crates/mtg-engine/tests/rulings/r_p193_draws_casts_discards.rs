@@ -292,16 +292,21 @@ fn sawblade_skinripper_needs_a_sacrifice_before_the_end_step() {
     crate::r_p216_common::sacrifice(&mut t, P0, bears);
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
-    // A sacrifice before the end step: 1 damage.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Sawblade Skinripper");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    crate::r_p216_common::sacrifice(&mut t, P0, bears);
-    t.answer_targets(P0, &[Entity::Player(P1)]);
-    t.advance_to(P0, Step::End);
-    t.settle();
-    t.resolve_all();
-    assert_eq!(t.life(P1), 19);
+    // Sacrifices before the end step: that many damage (one per permanent sacrificed).
+    for n in [1, 2] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Sawblade Skinripper");
+        for _ in 0..n {
+            let bears = t.battlefield(P0, "Grizzly Bears");
+            crate::r_p216_common::sacrifice(&mut t, P0, bears);
+        }
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.advance_to(P0, Step::End);
+        t.settle();
+        assert_eq!(t.stack_len(), 1);
+        t.resolve_all();
+        assert_eq!(t.life(P1), 20 - n, "sacrificed: {n}");
+    }
 }
 
 #[test]
