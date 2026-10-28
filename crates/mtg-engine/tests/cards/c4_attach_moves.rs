@@ -258,3 +258,40 @@ fn storm_herald_returns_auras_attached_to_creatures_you_control_then_exiles_them
     t.resolve_all();
     assert!(t.in_exile("Holy Strength") && t.in_exile("Unholy Strength"));
 }
+
+#[test]
+fn springheart_nantuko_copies_the_enchanted_creature_or_makes_an_insect() {
+    cr!("702.103a", "111.10");
+    assert_supported("Springheart Nantuko");
+    // Attached to a creature P0 controls, and paid: a copy of that creature.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 4);
+    let n = t.hand(P0, "Springheart Nantuko");
+    t.cast(P0, n)
+        .method(mtg_engine::object::CastMethod::Keyword(keywords::KeywordKind::Bestow))
+        .target(Entity::Object(bears))
+        .go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (3, 3));
+    t.answer_yes(P0, true);
+    let land = t.hand(P0, "Forest");
+    t.play_land(P0, land).unwrap();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+    assert!(t.named_on_battlefield("Insect").is_empty());
+    // Not attached: no payment is offered; an Insect token.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Springheart Nantuko");
+    t.lands(P0, "Forest", 2);
+    let land = t.hand(P0, "Forest");
+    t.play_land(P0, land).unwrap();
+    t.resolve_all();
+    let insects: Vec<_> = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.has_subtype("Insect") && t.g.obj(**o).is_token())
+        .collect();
+    assert_eq!(insects.len(), 1);
+}

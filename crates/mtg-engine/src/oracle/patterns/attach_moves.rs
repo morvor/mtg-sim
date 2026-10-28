@@ -598,3 +598,63 @@ fn return_auras_attached_to_creatures_you_control(block: &str, ctx: &CompileCont
 }
 
 inventory::submit! { AbilityPattern { name: "attach moves: return Aura cards attached to creatures you control", priority: 40, parse: return_auras_attached_to_creatures_you_control } }
+
+/// "[trigger], you may pay {1}{G} if ~ is attached to a creature you control. If you do,
+/// create a token that's a copy of that creature. If you didn't create a token this way,
+/// create a 1/1 green Insect creature token." (Springheart Nantuko): the payment is
+/// offered only while it's attached to a creature you control; "that creature" is the
+/// enchanted creature; otherwise (no payment, or no token created) the Insect.
+fn pay_if_attached_then_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (trigger, rest) = block.split_once(", you may pay ")?;
+    let (cost, rest) = rest.split_once(" if ~ is attached to a creature you control. If you do, ")?;
+    let (copy, other) = rest.split_once(". If you didn't create a token this way, ")?;
+    if block.contains('\n') || copy != "create a token that's a copy of that creature" {
+        return None;
+    }
+    let paid = crate::oracle::parse_ability(
+        &format!("{trigger}, you may pay {cost}. If you do, create a token that's a copy of enchanted creature."),
+        ctx,
+    )?;
+    let fallback = crate::oracle::parse_ability(&format!("{trigger}, {other}"), ctx)?;
+    let ([p], [f]) = (paid.as_slice(), fallback.as_slice()) else {
+        return None;
+    };
+    let (AbilityKind::Triggered(pt), AbilityKind::Triggered(ft)) = (&p.kind, &f.kind) else {
+        return None;
+    };
+    let pay = pt.body.effect.clone();
+    if !matches!(pay, Effect::PayOptional { .. }) || !matches!(ft.body.effect, Effect::CreateToken { .. }) {
+        return None;
+    }
+    let attached = Condition::SelMatches(
+        Sel::AttachedTo,
+        Filter::and(vec![
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::ControlledBy(PlayerRel::You),
+        ]),
+    );
+    let mut a = (**p).clone();
+    let AbilityKind::Triggered(t) = &mut a.kind else {
+        return None;
+    };
+    t.body.effect = Effect::seq(vec![
+        Effect::Store {
+            var: vars::CREATED,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::If {
+            cond: attached,
+            then: Box::new(pay),
+            otherwise: Box::new(Effect::Noop),
+        },
+        Effect::If {
+            cond: Condition::Not(Box::new(Condition::SelNonEmpty(Sel::Var(vars::CREATED)))),
+            then: Box::new(ft.body.effect.clone()),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    a.text = block.to_string();
+    Some(vec![Arc::new(a)])
+}
+
+inventory::submit! { AbilityPattern { name: "attach moves: you may pay if ~ is attached to a creature you control", priority: 40, parse: pay_if_attached_then_copy } }
