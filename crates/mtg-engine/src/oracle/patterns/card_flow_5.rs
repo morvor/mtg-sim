@@ -335,6 +335,15 @@ fn player_reveals_until(l: &str, b: &mut Builder) -> Option<Effect> {
         let (desc, tail) = rest.split_once(" is revealed")?;
         format!("{desc}{tail}")
     };
+    // Only a whole instruction chain ("..., puts that card onto the battlefield, then
+    // shuffles", "... and exiles that card"): a bare reveal is the player subject
+    // grammar's, which the next sentences ("That player puts that card ...") continue.
+    if ![", puts ", " and puts ", " and exiles ", ", put ", ", then "]
+        .iter()
+        .any(|p| rest.contains(p))
+    {
+        return None;
+    }
     let mut mine = format!("reveal cards from the top of your library until you reveal {rest}");
     for (third, base) in [
         (", puts ", ", put "),
@@ -436,3 +445,77 @@ fn those_players_put_the_exiled_cards(l: &str, prev: &mut Effect, _b: &mut Build
 }
 
 inventory::submit! { super::FollowupPattern { name: "card flow 5: those players put the exiled cards onto the battlefield, then shuffle", priority: 90, apply: those_players_put_the_exiled_cards } }
+
+/// "Choose any number of target players or planeswalkers. For each of them, reveal cards
+/// from the top of your library until you reveal a nonland card, ~ deals damage equal to
+/// that card's mana value to that player or planeswalker, then you put the revealed cards
+/// on the bottom of your library in any order." (Kaboom!): for each target in turn, a
+/// reveal-until, damage from the card found, and the revealed cards put on the bottom
+/// (CR 701.20a, 608.2c).
+fn for_each_target_reveal_damage(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each of them, ")?;
+    let (reveal, rest) = r.split_once(", ~ deals damage equal to that card's mana value to that ")?;
+    let (_noun, then) = rest.split_once(", then ")?;
+    if !reveal.starts_with("reveal cards from the top of your library until you reveal ") {
+        return None;
+    }
+    let slot = b.targets.len().checked_sub(1)?;
+    if !matches!(
+        b.targets[slot].what,
+        TargetKind::ObjectOrPlayer(..) | TargetKind::Player(_) | TargetKind::Object(_)
+    ) || b.targets[slot].max.as_const().is_some_and(|m| m < 2)
+    {
+        return None;
+    }
+    let then = then.strip_prefix("you ").unwrap_or(then);
+    if then != "put the revealed cards on the bottom of your library in any order" {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let e1 = parse_clause(reveal, b);
+    // All the cards revealed, the one found (`vars::IT`) included.
+    let e3 = Effect::Move {
+        what: Sel::All(Filter::and(vec![
+            Filter::Or(vec![
+                Filter::In(Box::new(Sel::Var(vars::DUG))),
+                Filter::In(Box::new(Sel::Var(vars::IT))),
+                Filter::In(Box::new(Sel::Var(vars::REVEALED))),
+            ]),
+            Filter::InZone(ZoneKind::Library),
+        ])),
+        to: Destination::library_bottom(),
+    };
+    let Some(e1) = e1 else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    if b.targets.len() != saved.0 || !matches!(e1, Effect::RevealUntil { .. }) {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    let each = super::iteration_grammar::EACH;
+    Some(Effect::ForEach {
+        sel: Sel::Target(slot as u8),
+        var: each,
+        // One target at a time, the whole process for each (Kaboom!'s ruling: "those
+        // targets will be handled one at a time"): one instruction, not three performed
+        // for all of them together (`simultaneous.rs`).
+        effect: Box::new(Effect::If {
+            cond: Condition::Always,
+            then: Box::new(Effect::seq(vec![
+                e1,
+                Effect::DealDamage {
+                    source: Sel::This,
+                    amount: Value::ManaValueOf(Box::new(Sel::Var(vars::IT))),
+                    to: Sel::Var(each),
+                },
+                e3,
+            ])),
+            otherwise: Box::new(Effect::Noop),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "card flow 5: for each of them, reveal until, damage equal to that card's mana value, then put the revealed cards", priority: 90, parse: for_each_target_reveal_damage } }

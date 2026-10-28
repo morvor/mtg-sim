@@ -118,3 +118,30 @@ fn indomitable_creativity_exiled_cards_enter_together_under_their_owners_control
     let islands_in = |p| t.g.player(p).library.iter().filter(|o| t.g.obj(**o).name() == "Island").count();
     assert_eq!((islands_in(P0), islands_in(P1)), (1, 1));
 }
+
+#[test]
+fn kaboom_reveals_and_deals_damage_for_each_target() {
+    cr!("701.20a", "608.2c");
+    ruling!("Kaboom!", "those targets will be handled one at a time");
+    assert_supported("Kaboom!");
+    let mut t = TestGame::new(2);
+    let jace = t.battlefield(P1, "Jace Beleren");
+    // Bottom to top: Hill Giant (4), Island, Grizzly Bears (2), Island.
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.lands(P0, "Mountain", 5);
+    let k = t.hand(P0, "Kaboom!");
+    t.cast(P0, k)
+        .targets(&[Entity::Player(P1), Entity::Object(jace)])
+        .go();
+    t.resolve();
+    // P1 first: Grizzly Bears (2); then Jace: Hill Giant (4) — Bears and the Island were
+    // put on the bottom.
+    assert_eq!(t.life(P1), 18);
+    assert!(t.in_graveyard(P1, "Jace Beleren"));
+    let lib = &t.g.player(P0).library;
+    let bottom: Vec<&str> = lib.iter().take(4).map(|o| t.g.obj(*o).name()).collect();
+    assert!(bottom.contains(&"Grizzly Bears") && bottom.contains(&"Hill Giant"));
+}
