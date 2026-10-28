@@ -105,6 +105,15 @@ pub struct EntryMods {
     /// It enters as a copy of this object (CR 707.9), chosen by the effect.
     #[serde(default)]
     pub copy_of: Option<ObjectId>,
+    /// It enters attached to this object or player, chosen by the effect ("As ~ enters,
+    /// choose a creature you control it could be attached to. If you do, it enters
+    /// attached to that creature.", CR 301.5b, 303.4f).
+    #[serde(default)]
+    pub attach_to: Option<Entity>,
+    /// It's put into its owner's graveyard instead of onto the battlefield ("If you can't,
+    /// put ~ into its owner's graveyard instead of onto the battlefield", CR 614.1c).
+    #[serde(default)]
+    pub graveyard_instead: bool,
 }
 
 impl Ctx {
@@ -1343,6 +1352,31 @@ impl Game {
             // CR 607.2a, 400.7: a linked object that has since changed zones is a new
             // object the link no longer finds ("If it returns to exile later in the turn,
             // you can't play it again").
+            // An emblem's "cards exiled with ~": those exiled with the object that
+            // created it, or with the permanent that object became as it entered (an
+            // emblem created "as ~ enters"; Tibalt, Cosmic Impostor's ruling: "even after
+            // that Tibalt leaves the battlefield").
+            Sel::Linked
+                if ctx.source.is_some_and(|s| {
+                    self.obj(s).kind == crate::object::ObjKind::Emblem
+                        && self.obj(s).created_by.is_some()
+                }) =>
+            {
+                let mut v: Vec<Entity> = Vec::new();
+                let creator = ctx.source.and_then(|s| self.obj(s).created_by);
+                let chain = creator.map(|(c, _)| [Some(c), self.obj(c).next]);
+                let link = creator.map_or(0, |(_, l)| l);
+                for o in chain.into_iter().flatten().flatten() {
+                    if let Some(l) = self.obj(o).linked.get(&link) {
+                        v.extend(
+                            l.iter()
+                                .filter(|x| self.obj(**x).next.is_none())
+                                .map(|x| Entity::Object(*x)),
+                        );
+                    }
+                }
+                v
+            }
             Sel::Linked => ctx
                 .source
                 .map(|s| {
