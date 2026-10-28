@@ -1715,7 +1715,10 @@ impl Game {
                 mana,
                 restriction,
             } => {
-                crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                let added =
+                    crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                // "~ becomes that color" (Foraging Wickermaw): the colors of the mana added.
+                crate::kw::mana_ability_added::record_added(ctx, &added);
                 // "Add {R}. When you do, ..." (Rubble Rouser): adding mana is done.
                 ctx.prev_happened = true;
             }
@@ -2853,6 +2856,16 @@ impl Game {
                     }
                     Modification::AddKeyword(k)
                 }
+                // "~ becomes that color" after "Add one mana of any color": the color of
+                // the mana just added (locked in now).
+                Modification::Custom { name, .. }
+                    if name == crate::kw::mana_ability_added::BECOMES_COLOR_ADDED =>
+                {
+                    match crate::kw::mana_ability_added::added_colors(ctx) {
+                        Some(cs) => Modification::SetColors(cs),
+                        None => m.clone(),
+                    }
+                }
                 Modification::SetChosenColor => {
                     match ctx.source.and_then(|s| self.obj(s).choices.color) {
                         Some(c) => Modification::SetColors(ColorSet::single(c)),
@@ -3437,6 +3450,15 @@ impl Game {
                     vec![]
                 } else {
                     vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
+            ManaProduction::CouldProduceAmount(f, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                let types = crate::mana_abilities::types_could_produce(self, f, ctx);
+                if types.is_empty() || k == 0 {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types); k]
                 }
             }
             ManaProduction::CouldProduceColor(f) => {

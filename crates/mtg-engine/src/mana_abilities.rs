@@ -118,6 +118,14 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::CouldProduceAmount(f, n) => {
+                let t = types_could_produce(g, f, ctx);
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t; g.eval_value(n, ctx).max(0) as usize]
+                }
+            }
             ManaProduction::CouldProduceColor(f) => {
                 let t: Vec<ManaType> = types_could_produce(g, f, ctx)
                     .into_iter()
@@ -207,6 +215,13 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 }
             }
             any.then_some(out)
+        }
+        // "add one mana of any type that land produced for each ...": the units, that
+        // many times.
+        Effect::Repeat { times, effect } => {
+            let u = production_units(g, effect, ctx)?;
+            let n = g.eval_value(times, ctx).max(0) as usize;
+            Some(std::iter::repeat_n(u, n).flatten().collect())
         }
         Effect::ChooseOne { options, .. } => {
             // e.g. "Add {R} or {G}": union per unit position of the first option size.
@@ -322,6 +337,10 @@ fn collect_could_produce(
     match e {
         Effect::AddMana {
             mana: ManaProduction::CouldProduce(f),
+            ..
+        }
+        | Effect::AddMana {
+            mana: ManaProduction::CouldProduceAmount(f, _),
             ..
         }
         | Effect::AddMana {
@@ -785,8 +804,8 @@ pub fn resolve_add_mana(
     mana: &ManaProduction,
     restriction: &Option<ManaRestriction>,
     ctx: &Ctx,
-) {
-    add_mana_with(g, who, mana, restriction, None, ctx);
+) -> Vec<ManaType> {
+    add_mana_with(g, who, mana, restriction, None, ctx)
 }
 
 /// Resolves `Effect::AddManaWithSpentTrigger` (CR 106.6): each unit of mana produced by
@@ -935,7 +954,7 @@ fn add_mana_with(
     restriction: &Option<ManaRestriction>,
     rider: Option<ManaRider>,
     ctx: &Ctx,
-) {
+) -> Vec<ManaType> {
     let p = g.eval_player(who, ctx).unwrap_or(ctx.controller);
     let mut produced = g.produce_mana(p, mana, ctx);
     // Tapped for mana: a mana ability of this permanent with {T} in its cost is resolving.
@@ -1023,10 +1042,11 @@ fn add_mana_with(
         .collect();
     if units.is_empty() {
         // CR 106.5: mana of an undefined type isn't produced.
-        return;
+        return vec![];
     }
     // CR 106.12a: `add_mana` reports the permanent as tapped for mana.
     g.add_mana(p, units, ctx.source);
+    produced
 }
 
 /// Binds a restriction that refers to a choice made for the mana's source ("of the chosen

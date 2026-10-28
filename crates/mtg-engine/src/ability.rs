@@ -337,6 +337,11 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
     fn from_mana_ability(t: &TriggerCond) -> bool {
         match t {
             TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
+            // "Whenever a land's ability causes you to add one or more mana of the chosen
+            // color" (Caged Sun): triggers from resolving an activated mana ability.
+            TriggerCond::Custom(n) if crate::kw::mana_ability_added::is_mana_ability_trigger(n) => {
+                true
+            }
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
             | TriggerCond::ThisCombat(t)
@@ -350,6 +355,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
         match e {
             Effect::AddMana { .. } => true,
             Effect::Seq(v) => v.iter().any(could_add_mana),
+            Effect::Repeat { effect, .. } => could_add_mana(effect),
             Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| could_add_mana(e)),
             _ => false,
         }
@@ -2500,6 +2506,10 @@ pub enum ManaProduction {
     /// One mana of any *color* that a permanent matching the filter could produce
     /// (CR 106.7), e.g. "any color that a land an opponent controls could produce".
     CouldProduceColor(Filter),
+    /// N mana of one type that a permanent matching the filter could produce (CR 106.7):
+    /// "Add one mana of any type that a land you control could produce. If ~ has a +1/+1
+    /// counter on it, add three mana of that type instead." (Incubation Druid).
+    CouldProduceAmount(Filter, Value),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
     /// One mana of one of the listed types or of the color chosen for the source

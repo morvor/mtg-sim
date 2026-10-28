@@ -8140,6 +8140,10 @@ impl Renderer<'_> {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any color that {n} could produce")
             }
+            ManaProduction::CouldProduceAmount(_, n) => {
+                let (a, _) = self.amount(n);
+                format!("{a} mana of that type")
+            }
             ManaProduction::ChosenColor(n) => match n {
                 Value::Const(1) => "one mana of {alt:the chosen color|that color}".into(),
                 Value::Const(k) => format!("{} mana of the chosen color", number_word(*k)),

@@ -2755,12 +2755,30 @@ impl Game {
             self.exec(&body.effect, &mut ctx);
             crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
-            let mana: Vec<crate::mana::ManaType> = self
+            let added: Vec<(PlayerId, Vec<crate::mana::ManaType>)> = self
                 .players
                 .iter()
                 .zip(pools_before)
-                .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                .enumerate()
+                .map(|(i, (pl, n))| {
+                    (
+                        PlayerId(i as u8),
+                        pl.mana_pool.mana.iter().skip(n).map(|m| m.ty).collect(),
+                    )
+                })
                 .collect();
+            let mana: Vec<crate::mana::ManaType> =
+                added.iter().flat_map(|(_, m)| m.iter().copied()).collect();
+            // CR 605.1b: the mana each player added because of it.
+            for (player, m) in added {
+                if !m.is_empty() {
+                    self.emit(Event::ManaAbilityAdded {
+                        obj: src,
+                        player,
+                        mana: m,
+                    });
+                }
+            }
             // "Whenever a mana ability of [this creature] resolves, ... the amount of mana
             // [it] produced" (CR 605.3b).
             self.emit(Event::Custom {
