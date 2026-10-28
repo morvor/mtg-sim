@@ -2572,6 +2572,8 @@ mod tests {
             ("Creature", "When ~ enters, return target creature card of an opponent's choice from your graveyard to your hand."),
             ("Creature", "Whenever one or more creature cards are put into your graveyard from your library, put one of them onto the battlefield."),
             ("Creature", "Whenever one or more land cards are put into your graveyard from your library, put them onto the battlefield tapped."),
+            // It functions in both zones (`FunctionZone::GraveyardOrExile`, CR 113.6m).
+            ("Creature", "{2}: Return ~ from your graveyard or from exile to the battlefield tapped."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
         }
@@ -2588,8 +2590,9 @@ mod tests {
             ("Sorcery", "Return the exiled cards to their owner's hand."),
             // "Another" relative to something the grammar doesn't track.
             ("Sorcery", "Return another creature card from your graveyard to your hand."),
-            // An ability functions in one zone (CR 113.6m).
-            ("Creature", "{2}: Return ~ from your graveyard or from exile to the battlefield tapped."),
+            // An ability functions where its card is moved from (CR 113.6m): not in two
+            // zones other than the graveyard and exile.
+            ("Creature", "{2}: Return ~ from your hand or from exile to the battlefield tapped."),
             // All the cards must come from one graveyard.
             ("Sorcery", "Put two creature cards from a single graveyard onto the battlefield under your control."),
             // Unknown modifier.

@@ -1656,6 +1656,10 @@ pub fn names_one_object(it: &Sel) -> bool {
             | Sel::TriggerOtherObject
             | Sel::AttachedTo
     ) || matches!(it, Sel::Var(v) if *v == vars::SACRIFICED)
+        // The object a "for each [objects], ..." instruction is being performed for (one
+        // at a time: "For each permanent exiled this way, its controller reveals cards ...
+        // until they reveal a card that shares a card type with it").
+        || matches!(it, Sel::Var(v) if *v == super::iteration_grammar::EACH)
 }
 
 /// "Target player sacrifices a creature with the greatest power among creatures they

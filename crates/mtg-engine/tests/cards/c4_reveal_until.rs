@@ -54,3 +54,67 @@ fn reweave_reveals_until_a_card_sharing_a_type_with_the_sacrificed_permanent() {
     assert_eq!(t.obj_now(giant[0]).controller, P1);
     assert!(t.named_on_battlefield("Sol Ring").is_empty());
 }
+
+#[test]
+fn chaotic_transformation_each_controller_reveals_for_each_exiled_permanent() {
+    cr!("701.20a", "608.2c");
+    ruling!("Chaotic Transformation", "The target permanents are exiled all at the same time");
+    assert_supported("Chaotic Transformation");
+    let mut t = TestGame::new(2);
+    let ring = t.battlefield(P0, "Sol Ring");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // P0 reveals until an artifact; P1 until a creature.
+    t.library_top(P0, "Ornithopter");
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P1, "Craw Wurm");
+    t.library_top(P1, "Sol Ring");
+    t.lands(P0, "Mountain", 6);
+    let c = t.hand(P0, "Chaotic Transformation");
+    t.cast(P0, c)
+        .target(Entity::Object(ring))
+        .target(Entity::Object(bears))
+        .go();
+    t.resolve();
+    assert!(t.in_exile("Sol Ring") && t.in_exile("Grizzly Bears"));
+    let thopter = t.named_on_battlefield("Ornithopter");
+    assert_eq!(thopter.len(), 1);
+    assert_eq!(t.obj_now(thopter[0]).controller, P0);
+    let wurm = t.named_on_battlefield("Craw Wurm");
+    assert_eq!(wurm.len(), 1);
+    assert_eq!(t.obj_now(wurm[0]).controller, P1);
+    // The cards revealed before them stayed in the libraries.
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert!(t.named_on_battlefield("Sol Ring").is_empty());
+}
+
+#[test]
+fn indomitable_creativity_exiled_cards_enter_together_under_their_owners_control() {
+    cr!("701.20a", "101.4");
+    ruling!("Indomitable Creativity", "All of the exiled cards are put onto the battlefield at the same time");
+    ruling!("Indomitable Creativity", "That player doesn't choose one type");
+    assert_supported("Indomitable Creativity");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Ornithopter");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.library_top(P0, "Craw Wurm");
+    t.library_top(P0, "Island");
+    t.library_top(P1, "Sol Ring");
+    t.library_top(P1, "Island");
+    t.lands(P0, "Mountain", 5);
+    let c = t.hand(P0, "Indomitable Creativity");
+    t.answer(P0, DecisionKind::X, decision::Answer::Number(2));
+    t.cast(P0, c)
+        .x(2)
+        .targets(&[Entity::Object(a), Entity::Object(b)])
+        .go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Ornithopter") && t.in_graveyard(P1, "Grizzly Bears"));
+    let wurm = t.named_on_battlefield("Craw Wurm");
+    let ring = t.named_on_battlefield("Sol Ring");
+    assert_eq!((wurm.len(), ring.len()), (1, 1));
+    assert_eq!(t.obj_now(wurm[0]).controller, P0);
+    assert_eq!(t.obj_now(ring[0]).controller, P1);
+    // The Islands revealed first stayed in the libraries (then shuffled).
+    let islands_in = |p| t.g.player(p).library.iter().filter(|o| t.g.obj(**o).name() == "Island").count();
+    assert_eq!((islands_in(P0), islands_in(P1)), (1, 1));
+}
