@@ -1,11 +1,15 @@
 //! CR 733.1's exceptions: "Players may not reverse actions that moved cards to a library,
 //! moved cards from a library to any zone other than the stack, caused a library to be
 //! shuffled, or caused cards from a library to be revealed." The engine reverses an
-//! illegal action by restoring the whole game (register entry
-//! `illegal-action-reversal-restores-libraries`); a cost's library actions are paid after
-//! everything that can make the action illegal. Which fully supported cards can reach the
-//! exceptions anyway (through replacement effects, and rules the engine applies in the
-//! middle of a payment) is checked on every test run by `r733_001_reversal_reachability.rs`.
+//! illegal action by restoring the whole game, then performs those library actions again
+//! (`reversal.rs`, register entry `illegal-action-reversal-restores-libraries`); a cost's
+//! library actions are paid after everything that can make the action illegal, so only
+//! replacement effects, rules applied in the middle of a payment and triggered mana
+//! abilities make them while an action can still turn out illegal. Which fully supported
+//! cards can reach the exceptions (through replacement effects, and rules the engine
+//! applies in the middle of a payment) is checked on every test run by
+//! `r733_001_reversal_reachability.rs`; `r733_001_kept_library_actions.rs` tests what a
+//! reversal keeps.
 
 use crate::r506_common::custom_card;
 use mtg_engine::events::Event;
@@ -41,8 +45,8 @@ fn library_costs_are_paid_after_every_other_cost() {
 }
 
 #[test]
-fn a_reversed_action_also_reverses_a_draw_made_while_attempting_it() {
-    cr!("605.1b");
+fn a_reversed_action_keeps_a_draw_made_while_attempting_it() {
+    cr!("605.1b", "733.1");
     interp!("illegal-action-reversal-restores-libraries");
     interp!("reversal-undoes-mana-abilities");
     let mut t = TestGame::new(2);
@@ -79,23 +83,23 @@ fn a_reversed_action_also_reverses_a_draw_made_while_attempting_it() {
         .method(CastMethod::Normal)
         .try_go();
     assert!(r.is_err());
-    // CR 733.1 says the draw can't be reversed. The engine restores the whole game: the
-    // card is back on top of the library, and the hand is as it was.
-    assert_eq!(t.g.library_top(P0), Some(top));
-    assert_eq!(t.g.obj(top).zone, Zone::Library(P0));
-    assert_eq!((t.hand_size(P0), t.library_size(P0)), (hand, library));
+    // CR 733.1: the draw can't be reversed. The card stays in the hand; the mana
+    // abilities (the Pilgrim's tap, both mana) and the cast are reversed.
+    let drawn = t.g.current(top);
+    assert_eq!(t.g.obj(drawn).zone, Zone::Hand(P0));
+    assert_eq!((t.hand_size(P0), t.library_size(P0)), (hand + 1, library - 1));
     assert!(!t.g.obj(pilgrim).tapped);
     assert!(t.g.player(P0).mana_pool.mana.is_empty());
     assert_eq!(t.g.obj(spell).zone, Zone::Hand(P0));
-    // With a second creature to tap, the same payment is legal and the draw stays.
+    // With a second creature to tap, the same payment is legal and draws the next card.
     t.battlefield(P0, "Grizzly Bears");
+    let next = t.g.library_top(P0).unwrap();
     t.cast(P0, spell)
         .target(Entity::Object(bear))
         .method(CastMethod::Normal)
         .go();
-    let drawn = t.g.current(top);
-    assert_eq!(t.g.obj(drawn).zone, Zone::Hand(P0));
-    assert_eq!((t.hand_size(P0), t.library_size(P0)), (hand, library - 1));
+    assert_eq!(t.g.obj(t.g.current(next)).zone, Zone::Hand(P0));
+    assert_eq!(t.library_size(P0), library - 2);
 }
 
 #[test]

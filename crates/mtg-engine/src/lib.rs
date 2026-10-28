@@ -128,6 +128,7 @@ pub mod repeat_process;
 pub mod replacement;
 pub mod resolve;
 pub mod restart;
+pub mod reversal;
 pub mod reveal;
 pub mod reveal_library;
 pub mod rooms;

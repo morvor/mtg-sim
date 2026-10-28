@@ -38,6 +38,9 @@ pub struct Recorder {
     /// The number of objects the game had at the latest decision (to notice a restart).
     objects_seen: usize,
     pub rollbacks_checked: u64,
+    /// Of those, the reversals that kept library actions (CR 733.1), which are checked
+    /// for what they must undo only (see [`undone_difference`]).
+    pub rollbacks_keeping_library_actions: u64,
     pub violations: Vec<String>,
 }
 
@@ -88,6 +91,18 @@ impl Recorder {
                     ));
                 } else if g.turn.illegal_attempts == attempts + 1 {
                     self.rollbacks_checked += 1;
+                    if g.reversals.kept > before.reversals.kept {
+                        // CR 733.1: the library actions stay, and what they cause (a
+                        // triggered ability, a token ceasing to exist) follows.
+                        self.rollbacks_keeping_library_actions += 1;
+                        if let Some(d) = undone_difference(&before, g) {
+                            self.violations.push(format!(
+                                "turn {}: an action of player {} was reversed keeping its                                  library actions, but {d} (CR 733.1)",
+                                g.turn.number, p.0
+                            ));
+                        }
+                        return;
+                    }
                     let (a, b) = (rollback_view(&before), rollback_view(g));
                     if a != b {
                         self.violations.push(format!(
@@ -226,10 +241,13 @@ pub fn rename_uids(s: &str) -> String {
 
 /// The game for comparing it before an action and after the action was reversed: its
 /// debug output without the simulation's bookkeeping (decision and check counters, the
-/// count of reversed attempts, the log) and without the loop watch, which records the
-/// choices players made at priority, including attempts (CR 732.3, 104.4b).
+/// count of reversed attempts, the log, the events recorded for observers, whose positions
+/// don't go back) and without the loop watch, which records the choices players made at
+/// priority, including attempts (CR 732.3, 104.4b).
 pub fn rollback_view(g: &Game) -> String {
     let mut c = g.clone();
+    c.event_feed = Default::default();
+    c.reversals = Default::default();
     c.actions_taken = 0;
     c.sba_checks = 0;
     c.turn.illegal_attempts = 0;
@@ -241,6 +259,43 @@ pub fn rollback_view(g: &Game) -> String {
     c.end.loop_controllers.clear();
     c.shortcuts = Default::default();
     format!("{c:?}")
+}
+
+/// For a reversal that kept library actions (CR 733.1), which change libraries, hands,
+/// graveyards, exile and the permanents put into a library, and may trigger abilities:
+/// what differs among what the reversal must still undo. Each player's life total,
+/// counters and mana pool; each permanent that's still on the battlefield, as it was
+/// (tapped, counters, damage, controller); and the stack, which may only have triggered
+/// abilities added on top.
+pub fn undone_difference(before: &Game, after: &Game) -> Option<String> {
+    for (a, b) in before.players.iter().zip(&after.players) {
+        if a.life != b.life {
+            return Some(format!("{}'s life went from {} to {}", a.id, a.life, b.life));
+        }
+        if a.counters != b.counters {
+            return Some(format!("{}'s counters changed", a.id));
+        }
+        if format!("{:?}", a.mana_pool) != format!("{:?}", b.mana_pool) {
+            return Some(format!("{}'s mana pool changed", a.id));
+        }
+    }
+    for id in &before.battlefield {
+        if !after.is_in_zone(*id, crate::object::Zone::Battlefield) {
+            continue;
+        }
+        let (x, y) = (before.obj(*id), after.obj(*id));
+        if x.tapped != y.tapped
+            || x.counters != y.counters
+            || x.damage != y.damage
+            || x.controller != y.controller
+        {
+            return Some(format!("{} changed on the battlefield", y.chars.name));
+        }
+    }
+    if after.stack.get(..before.stack.len()) != Some(&before.stack[..]) {
+        return Some("the stack changed".into());
+    }
+    None
 }
 
 /// Where two long strings first differ, with some context.

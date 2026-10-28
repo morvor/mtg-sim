@@ -97,7 +97,7 @@
 //! them on with (`StaticEffect::Custom`, `PlayerModification::Custom`,
 //! `Modification::Custom`): [`custom_rule`] classifies each name, and an unclassified one
 //! fails the scan. Ashiok, Wicked Manipulator's (paying life exiles cards from the top of a
-//! library instead) is one of (e)'s ways: `a_reversed_cast_reverses_cards_exiled_instead_of_paying_life_for_mana`.
+//! library instead) is one of (e)'s ways: `a_reversed_cast_keeps_cards_exiled_instead_of_paying_life_for_mana`.
 //! The hooks keywords use for themselves (convoke's and delve's payments, exert, gift,
 //! miracle's reveal of a drawn card, morph's, foretell's, plot's and suspend's special
 //! actions) touch no library while an action is attempted either; that was read from their
@@ -4177,16 +4177,32 @@ fn the_cost_parts_the_scan_says_cant_fail_dont_fail_in_a_game() {
 // The paths, in a game
 // ===========================================================================
 
-/// Records the zone changes of a game while an action is attempted (the observer isn't
-/// reversed with the game).
-fn zone_changes(t: &mut TestGame) -> Arc<Mutex<Vec<(ObjectId, Zone, Zone)>>> {
-    let log: Arc<Mutex<Vec<(ObjectId, Zone, Zone)>>> = Arc::default();
-    let l = log.clone();
-    t.g.observer = Some(EventObserver::new(move |_, ev| {
-        if let Event::ZoneChange { old, from, to, .. } = ev {
-            l.lock().unwrap().push((*old, *from, *to));
-        }
-    }));
+/// The zone changes of a game while an action is attempted, and those the reversal keeps
+/// (CR 733.1), made again on the restored game. The observer isn't reversed with the game.
+#[derive(Default)]
+struct Moves {
+    attempt: Vec<(ObjectId, Zone, Zone)>,
+    kept: Vec<(ObjectId, Zone, Zone)>,
+    reversed: bool,
+}
+
+/// Records the zone changes of a game (see [`Moves`]).
+fn zone_changes(t: &mut TestGame) -> Arc<Mutex<Moves>> {
+    let log: Arc<Mutex<Moves>> = Arc::default();
+    let (l, l2) = (log.clone(), log.clone());
+    t.g.observer = Some(
+        EventObserver::new(move |_, ev| {
+            if let Event::ZoneChange { old, from, to, .. } = ev {
+                let mut m = l.lock().unwrap();
+                if m.reversed {
+                    m.kept.push((*old, *from, *to));
+                } else {
+                    m.attempt.push((*old, *from, *to));
+                }
+            }
+        })
+        .with_rollback(move |_| l2.lock().unwrap().reversed = true),
+    );
     log
 }
 
@@ -4205,20 +4221,27 @@ fn toll(t: &mut TestGame, name: &str, what: &str) -> ObjectId {
     t.custom(P0, def, Zone::Hand(P0))
 }
 
+/// The state of the game's random generators.
+fn randomness(t: &TestGame) -> String {
+    format!("{:?} {:?}", t.g.rng, t.g.player_rngs)
+}
+
 #[test]
-fn a_reversed_cast_reverses_a_card_shuffled_into_a_library_by_a_replacement_effect() {
-    cr!("733.1", "601.2g");
+fn a_reversed_cast_keeps_a_card_shuffled_into_a_library_by_a_replacement_effect() {
+    cr!("733.1", "601.2g", "400.7");
     interp!("illegal-action-reversal-restores-libraries");
+    interp!("reversal-undoes-mana-abilities");
     let mut t = TestGame::new(2);
     // "Sacrifice a creature: Add {C}{C}."
-    t.battlefield(P0, "Ashnod's Altar");
+    let altar = t.battlefield(P0, "Ashnod's Altar");
     // "If ~ would be put into a graveyard from anywhere, reveal ~ and shuffle it into its
     // owner's library instead."
     let colossus = t.battlefield(P0, "Darksteel Colossus");
-    t.lands(P0, "Mountain", 1);
+    let mountain = t.lands(P0, "Mountain", 1)[0];
     // "As an additional cost to cast this spell, sacrifice a creature."
     let fling = t.hand(P0, "Fling");
     let library = t.g.player(P0).library.clone();
+    let random = randomness(&t);
     let moves = zone_changes(&mut t);
     // Paying {1}{R} sacrifices the Colossus to the Altar (the Mountain makes only {R}),
     // which shuffles it into the library; then no creature is left to sacrifice for Fling.
@@ -4228,31 +4251,55 @@ fn a_reversed_cast_reverses_a_card_shuffled_into_a_library_by_a_replacement_effe
         .method(CastMethod::Normal)
         .try_go();
     assert!(r.is_err());
-    assert!(moves
-        .lock()
-        .unwrap()
+    let m = moves.lock().unwrap();
+    assert!(m
+        .attempt
         .iter()
         .any(|(o, from, to)| *o == colossus
             && *from == Zone::Battlefield
             && *to == Zone::Library(P0)));
-    // CR 733.1: moving a card to a library and shuffling it can't be reversed. The engine
-    // restores the whole game: the Colossus is back on the battlefield, the library as it
-    // was.
-    assert!(t.on_battlefield(colossus));
-    assert_eq!(t.g.player(P0).library, library);
+    // CR 733.1: moving a card to a library and shuffling it can't be reversed. The
+    // Colossus leaves the battlefield for the library again, a new object (CR 400.7), in
+    // the shuffled library; the shuffle's randomness stays used.
+    assert_eq!(
+        m.kept,
+        vec![(colossus, Zone::Battlefield, Zone::Library(P0))]
+    );
+    let now = t.g.current(colossus);
+    assert_ne!(now, colossus);
+    assert_eq!(t.zone(now), Zone::Library(P0));
+    assert!(!t.on_battlefield(colossus));
+    let mut expected = library.clone();
+    expected.push(now);
+    let mut lib = t.g.player(P0).library.clone();
+    lib.sort();
+    expected.sort();
+    assert_eq!(lib, expected);
+    assert_ne!(randomness(&t), random);
+    assert_eq!(t.g.reversals.kept, 2);
+    // Everything else is undone: the mana ability (its mana, the Mountain's tap), the
+    // cast.
+    assert!(t.on_battlefield(altar));
+    assert!(!t.g.obj(mountain).tapped);
+    assert!(t.g.player(P0).mana_pool.mana.is_empty());
     assert_eq!(t.g.obj(fling).zone, Zone::Hand(P0));
+    assert!(t.g.stack.is_empty());
 }
 
 #[test]
-fn a_reversed_cast_reverses_a_mill_a_replacement_effect_made_of_a_lands_damage() {
-    cr!("733.1", "601.2g");
+fn a_reversed_cast_keeps_a_mill_a_replacement_effect_made_of_a_lands_damage() {
+    cr!("733.1", "601.2g", "701.17a");
     interp!("illegal-action-reversal-restores-libraries");
+    ruling!(
+        "Angel of Suffering",
+        "Damage that would be dealt to you will be prevented even if you can't mill"
+    );
     let mut t = TestGame::new(2);
     // "If damage would be dealt to you, prevent that damage and mill twice that many
     // cards."
     t.battlefield(P0, "Angel of Suffering");
     // "{T}: Add {U} or {R}. ~ deals 1 damage to you."
-    t.battlefield(P0, "Shivan Reef");
+    let reef = t.battlefield(P0, "Shivan Reef");
     let spell = toll(&mut t, "Scrap Toll", "an artifact");
     let library = t.g.player(P0).library.clone();
     let moves = zone_changes(&mut t);
@@ -4260,34 +4307,53 @@ fn a_reversed_cast_reverses_a_mill_a_replacement_effect_made_of_a_lands_damage()
     // then no artifact is there to sacrifice.
     let r = t.cast(P0, spell).method(CastMethod::Normal).try_go();
     assert!(r.is_err());
-    let milled = moves
-        .lock()
-        .unwrap()
+    let m = moves.lock().unwrap();
+    let milled = |v: &[(ObjectId, Zone, Zone)]| {
+        v.iter()
+            .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Graveyard(P0))
+            .map(|(o, _, _)| *o)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(milled(&m.attempt).len(), 2);
+    // The mill stays (CR 733.1): the top two cards are in the graveyard, the rest of the
+    // library as it was.
+    let top_two: Vec<ObjectId> = library[library.len() - 2..].iter().rev().copied().collect();
+    assert_eq!(milled(&m.kept), top_two);
+    assert_eq!(m.kept.len(), 2);
+    assert_eq!(t.g.player(P0).library, library[..library.len() - 2]);
+    assert_eq!(t.graveyard_size(P0), 2);
+    assert!(t
+        .g
+        .turn_events
         .iter()
-        .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Graveyard(P0))
-        .count();
-    assert_eq!(milled, 2);
-    // The engine restores the library (CR 733.1 says the mill stays).
-    assert_eq!(t.g.player(P0).library, library);
-    assert_eq!(t.graveyard_size(P0), 0);
+        .any(|e| matches!(e, Event::Milled { player, cards } if *player == P0 && cards.len() == 2)));
+    // The damage, its prevention and the mana ability are undone.
+    assert_eq!(t.g.player(P0).life, 20);
+    assert!(!t.g.obj(reef).tapped);
+    assert_eq!(t.g.obj(spell).zone, Zone::Hand(P0));
 }
 
 #[test]
-fn a_reversed_cast_reverses_cards_exiled_instead_of_paying_life_for_mana() {
+fn a_reversed_cast_keeps_cards_exiled_instead_of_paying_life_for_mana() {
     cr!("733.1", "601.2g");
     interp!("illegal-action-reversal-restores-libraries");
+    ruling!(
+        "Ashiok, Wicked Manipulator",
+        "You can't choose to pay life instead of exiling cards"
+    );
     let mut t = TestGame::new(2);
     // "If you would pay life while your library has at least that many cards in it, exile
     // that many cards from the top of your library instead."
     t.battlefield(P0, "Ashiok, Wicked Manipulator");
     // "{T}, Pay 1 life: Add one mana of any color."
-    t.battlefield(P0, "Mana Confluence");
+    let confluence = t.battlefield(P0, "Mana Confluence");
     // "Sacrifice a creature: Add {C}{C}."
     t.battlefield(P0, "Ashnod's Altar");
     let bears = t.battlefield(P0, "Grizzly Bears");
     // "As an additional cost to cast this spell, sacrifice a creature."
     let fling = t.hand(P0, "Fling");
     let library = t.g.player(P0).library.clone();
+    let top = *library.last().unwrap();
     let moves = zone_changes(&mut t);
     // Paying {1}{R}: Mana Confluence makes the {R}, and the life it costs becomes the top
     // card of the library exiled; the Altar sacrifices the Bears for the {1}. Then no
@@ -4298,25 +4364,34 @@ fn a_reversed_cast_reverses_cards_exiled_instead_of_paying_life_for_mana() {
         .method(CastMethod::Normal)
         .try_go();
     assert!(r.is_err());
-    let exiled = moves
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Exile)
-        .count();
-    assert_eq!(exiled, 1);
-    // CR 733.1: moving a card from a library to exile can't be reversed. The engine
-    // restores the whole game: the Bears are back, the library as it was.
+    let m = moves.lock().unwrap();
+    let exiled = |v: &[(ObjectId, Zone, Zone)]| {
+        v.iter()
+            .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Exile)
+            .count()
+    };
+    assert_eq!(exiled(&m.attempt), 1);
+    // CR 733.1: moving a card from a library to exile can't be reversed; it's the only
+    // action kept.
+    assert_eq!(m.kept, vec![(top, Zone::Library(P0), Zone::Exile)]);
+    assert_eq!(t.zone(t.g.current(top)), Zone::Exile);
+    assert_eq!(t.g.player(P0).library, library[..library.len() - 1]);
+    // The rest is undone: the Bears are back, Mana Confluence untapped, the life (never
+    // paid) as it was.
     assert!(t.on_battlefield(bears));
-    assert_eq!(t.g.player(P0).library, library);
+    assert!(!t.g.obj(confluence).tapped);
     assert_eq!(t.g.player(P0).life, 20);
     assert_eq!(t.g.obj(fling).zone, Zone::Hand(P0));
 }
 
 #[test]
-fn a_reversed_cast_reverses_a_draw_a_redirected_lands_damage_causes() {
-    cr!("733.1", "601.2g", "615.5");
+fn a_reversed_cast_keeps_a_draw_a_redirected_lands_damage_causes() {
+    cr!("733.1", "601.2g", "615.5", "121.1");
     interp!("illegal-action-reversal-restores-libraries");
+    ruling!(
+        "Swans of Bryn Argoll",
+        "checks who that permanent’s controller is at the time that damage is prevented"
+    );
     let mut t = TestGame::new(2);
     // "If a source would deal damage to this creature, prevent that damage. The source's
     // controller draws cards equal to the damage prevented this way."
@@ -4325,36 +4400,49 @@ fn a_reversed_cast_reverses_a_draw_a_redirected_lands_damage_causes() {
     let pariah = t.battlefield(P0, "Pariah");
     assert!(t.g.attach(pariah, Entity::Object(swans)));
     // "{T}: Add {U} or {R}. ~ deals 1 damage to you."
-    t.battlefield(P0, "Shivan Reef");
+    let reef = t.battlefield(P0, "Shivan Reef");
     let spell = toll(&mut t, "Scrap Toll", "an artifact");
     let library = t.g.player(P0).library.clone();
+    let top = *library.last().unwrap();
     let hand = t.g.player(P0).hand.clone();
+    let drawn = t.g.history.cards_drawn.get(&P0).copied().unwrap_or(0);
     let moves = zone_changes(&mut t);
     // Paying {R} taps Shivan Reef; its damage is dealt to the Swans instead, which prevent
     // it, and P0 (the Reef's controller) draws a card. Then no artifact is there to
     // sacrifice.
     let r = t.cast(P0, spell).method(CastMethod::Normal).try_go();
     assert!(r.is_err());
-    let drawn = moves
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Hand(P0))
-        .count();
-    assert_eq!(drawn, 1);
-    // CR 733.1 says the draw stays; the engine restores the library and the hand.
-    assert_eq!(t.g.player(P0).library, library);
-    assert_eq!(t.g.player(P0).hand, hand);
+    let m = moves.lock().unwrap();
+    let draws = |v: &[(ObjectId, Zone, Zone)]| {
+        v.iter()
+            .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Hand(P0))
+            .count()
+    };
+    assert_eq!(draws(&m.attempt), 1);
+    // CR 733.1: the draw stays, and counts as a draw this turn.
+    assert_eq!(m.kept, vec![(top, Zone::Library(P0), Zone::Hand(P0))]);
+    let card = t.g.current(top);
+    let mut expected = hand.clone();
+    expected.push(card);
+    assert_eq!(t.g.player(P0).hand, expected);
+    assert_eq!(t.g.player(P0).library, library[..library.len() - 1]);
+    assert_eq!(t.g.history.cards_drawn.get(&P0).copied(), Some(drawn + 1));
+    // The damage, its redirection and prevention, and the mana ability are undone.
     assert!(t.on_battlefield(swans));
+    assert_eq!(t.g.obj(swans).damage, 0);
+    assert!(!t.g.obj(reef).tapped);
+    assert_eq!(t.g.obj(spell).zone, Zone::Hand(P0));
 }
 
 #[test]
-fn a_reversed_cast_reverses_what_lichs_mirror_does_with_a_loss_in_the_middle_of_a_payment() {
-    cr!("733.1", "601.2g", "104.3e");
+fn a_reversed_cast_keeps_what_lichs_mirror_does_with_a_loss_in_the_middle_of_a_payment() {
+    cr!("733.1", "601.2g", "104.3e", "603.10a");
     interp!("illegal-action-reversal-restores-libraries");
+    interp!("reversal-kept-library-actions-trigger");
     let mut t = TestGame::new(2);
     // "If damage would be dealt to you, exile that many cards from your graveyard instead.
-    // If you can't, you lose the game."
+    // If you can't, you lose the game." and "When Nefarious Lich leaves the battlefield,
+    // you lose the game."
     let lich = t.battlefield(P0, "Nefarious Lich");
     // "If you would lose the game, instead shuffle your hand, your graveyard, and all
     // permanents you own into your library, then draw seven cards and your life total
@@ -4363,34 +4451,54 @@ fn a_reversed_cast_reverses_what_lichs_mirror_does_with_a_loss_in_the_middle_of_
     // "{T}: Add {U} or {R}. ~ deals 1 damage to you."
     let reef = t.battlefield(P0, "Shivan Reef");
     assert_eq!(t.graveyard_size(P0), 0);
+    t.g.player_mut(P0).life = 7;
     let spell = toll(&mut t, "Creature Toll", "a creature");
-    let library = t.g.player(P0).library.clone();
+    let library = t.g.player(P0).library.len();
     let moves = zone_changes(&mut t);
     // Paying {R} taps Shivan Reef; with no card in the graveyard to exile for its damage,
     // P0 would lose the game, and Lich's Mirror shuffles the three permanents into the
     // library and draws seven. Then no creature is there to sacrifice.
     let r = t.cast(P0, spell).method(CastMethod::Normal).try_go();
     assert!(r.is_err());
-    let log = moves.lock().unwrap().clone();
-    let shuffled_in = log
-        .iter()
-        .filter(|(o, _, to)| [lich, mirror, reef].contains(o) && *to == Zone::Library(P0))
-        .count();
-    let drawn = log
-        .iter()
-        .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Hand(P0))
-        .count();
-    assert_eq!((shuffled_in, drawn), (3, 7));
-    // CR 733.1 says these library actions stay; the engine restores the whole game.
-    assert_eq!(t.g.player(P0).library, library);
+    let m = moves.lock().unwrap();
+    let count = |v: &[(ObjectId, Zone, Zone)]| {
+        let shuffled_in = v
+            .iter()
+            .filter(|(o, _, to)| [lich, mirror, reef].contains(o) && *to == Zone::Library(P0))
+            .count();
+        let drawn = v
+            .iter()
+            .filter(|(_, from, to)| *from == Zone::Library(P0) && *to == Zone::Hand(P0))
+            .count();
+        (shuffled_in, drawn)
+    };
+    assert_eq!(count(&m.attempt), (3, 7));
+    // CR 733.1: the permanents shuffled into the library and the seven cards drawn stay.
+    assert_eq!(count(&m.kept), (3, 7));
+    assert_eq!(m.kept.len(), 10);
     for o in [lich, mirror, reef] {
-        assert!(t.on_battlefield(o));
+        assert!(!t.on_battlefield(o));
+        assert!(matches!(t.zone(t.g.current(o)), Zone::Library(_) | Zone::Hand(_)));
     }
-    assert_eq!(t.g.player(P0).life, 20);
+    assert_eq!(t.g.player(P0).library.len(), library + 3 - 7);
+    // The spell was on the stack, not in the hand, as the hand was shuffled away: it
+    // returns to the hand with the seven cards drawn.
+    assert_eq!(t.hand_size(P0), 8);
+    assert_eq!(t.g.obj(spell).zone, Zone::Hand(P0));
+    // The loss, the damage and "your life total becomes 20" are undone.
+    assert!(t.g.player(P0).in_game());
+    assert_eq!(t.g.player(P0).life, 7);
+    // Nefarious Lich left the battlefield, which stays: its leaves-the-battlefield
+    // ability triggers (CR 603.10a).
+    assert!(t
+        .g
+        .pending_triggers
+        .iter()
+        .any(|p| p.source == lich && p.controller == P0));
 }
 
 #[test]
-fn a_reversed_cast_reverses_a_creature_shuffled_into_a_library_as_an_exile_ends() {
+fn a_reversed_cast_keeps_a_creature_shuffled_into_a_library_as_an_exile_ends() {
     cr!("733.1", "601.2g", "610.3");
     interp!("illegal-action-reversal-restores-libraries");
     let mut t = TestGame::new(2);
@@ -4427,19 +4535,32 @@ fn a_reversed_cast_reverses_a_creature_shuffled_into_a_library_as_an_exile_ends(
         .method(CastMethod::Normal)
         .try_go();
     assert!(r.is_err());
+    let m = moves.lock().unwrap();
     assert!(
-        moves
-            .lock()
-            .unwrap()
+        m.attempt
             .iter()
             .any(|(o, from, to)| *o == exiled && *from == Zone::Exile && *to == Zone::Library(P1)),
         "{:?}",
-        moves.lock().unwrap()
+        m.attempt
     );
-    // CR 733.1 says moving the card to a library stays; the engine restores the whole game.
-    assert_eq!(t.g.player(P1).library, library);
-    assert_eq!(t.zone(exiled), Zone::Exile);
+    // CR 733.1: moving the card to a library stays, though the Priest's leaving, which
+    // made it return, is undone.
+    assert_eq!(m.kept, vec![(exiled, Zone::Exile, Zone::Library(P1))]);
+    let now = t.g.current(exiled);
+    assert_eq!(t.zone(now), Zone::Library(P1));
+    assert_eq!(t.g.player(P1).library.len(), library.len() + 1);
     assert!(t.on_battlefield(priest));
+    // The exile has nothing left to return when the Priest leaves.
+    let priest_card = t.g.current(priest);
+    t.g.move_object(
+        priest_card,
+        Zone::Graveyard(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    t.settle();
+    assert_eq!(t.zone(t.g.current(exiled)), Zone::Library(P1));
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
 }
 
 #[test]
