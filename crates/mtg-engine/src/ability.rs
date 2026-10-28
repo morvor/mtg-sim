@@ -2373,6 +2373,12 @@ pub enum Modification {
         name: SmolStr,
         layer: Layer,
     },
+    /// A static ability's copy effect: "Enchanted creature is a copy of the chosen
+    /// creature" (CR 707.2, 613.2a): the affected objects have the copiable values of the
+    /// selected object, locked in as the effect first begins to apply (later changes to
+    /// that object's copiable values, or its leaving the battlefield, don't change them).
+    /// Applied in layer 1 with the copy effects (see `static_copy.rs`).
+    CopyOf(Box<Sel>),
 }
 
 impl Modification {
@@ -2421,6 +2427,7 @@ impl Modification {
             ModifyPT(..) => Layer::L7cModify,
             SwitchPT => Layer::L7dSwitch,
             Custom { layer, .. } => *layer,
+            CopyOf(_) => Layer::L1aCopy,
         }
     }
 }

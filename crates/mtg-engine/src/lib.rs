@@ -149,6 +149,7 @@ pub mod splice;
 pub mod stack;
 pub mod stack_ability_filters;
 pub mod start;
+pub mod static_copy;
 pub mod stickers;
 pub mod structure;
 pub mod subgame;
