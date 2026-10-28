@@ -763,3 +763,57 @@ fn search_equal_to_the_difference(block: &str, ctx: &crate::oracle::CompileConte
 }
 
 inventory::submit! { super::AbilityPattern { name: "card flow 5: search for a number of cards equal to the difference", priority: 40, parse: search_equal_to_the_difference } }
+
+const SPLIT_OPPONENT: Var = vars::USER + 52006;
+
+/// "Search your library for up to four basic land cards and reveal them. Put one of them
+/// onto the battlefield tapped under an opponent's control if the {3}{G} cost was paid.
+/// Put two of them onto the battlefield tapped under your control and the rest into your
+/// hand. Then shuffle." (Verdant Mastery): a three-way split of the cards found, the first
+/// part (if the condition holds) under the control of an opponent you choose.
+fn search_split_with_opponent(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    let (search, rest) = block.split_once(". Put one of them onto the battlefield tapped under an opponent's control if ")?;
+    let (cond, rest) = rest.split_once(". ")?;
+    if !ctx.is_spell() || block.contains('\n') {
+        return None;
+    }
+    let cond = crate::oracle::statics::parse_condition(&cond.to_lowercase(), ctx)?;
+    let v = crate::oracle::parse_ability(&format!("{search}. {rest}"), ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let AbilityKind::Spell(s) = &mut a.kind else {
+        return None;
+    };
+    let Effect::SearchCards(spec) = &mut s.body.effect else {
+        return None;
+    };
+    if spec.dests.len() != 2 {
+        return None;
+    }
+    let mut to = Destination::battlefield();
+    to.tapped = true;
+    to.controller = Some(PlayerRef::Var(SPLIT_OPPONENT));
+    spec.dests.insert(
+        0,
+        SearchDest {
+            count: Some(Value::If(
+                Box::new(cond),
+                Box::new(Value::c(1)),
+                Box::new(Value::c(0)),
+            )),
+            to,
+            or: vec![],
+        },
+    );
+    let search = std::mem::replace(&mut s.body.effect, Effect::Noop);
+    s.body.effect = Effect::seq(vec![
+        crate::kw::choice_grammar::choose_player_effect(SPLIT_OPPONENT, PlayerFilter::Opponent)?,
+        search,
+    ]);
+    a.text = block.to_string();
+    Some(vec![std::sync::Arc::new(a)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "card flow 5: put one of them under an opponent's control if ...", priority: 40, parse: search_split_with_opponent } }

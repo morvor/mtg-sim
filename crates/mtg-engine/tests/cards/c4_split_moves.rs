@@ -138,3 +138,40 @@ fn boreas_charger_finds_as_many_plains_as_the_land_difference() {
     assert_eq!(plains.iter().filter(|p| t.obj_now(**p).tapped).count(), 1);
     assert_eq!(t.hand_size(P0), hand + 2);
 }
+
+fn verdant_game() -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    for n in ["Forest", "Forest", "Island", "Plains"] {
+        t.library_top(P0, n);
+    }
+    let v = t.hand(P0, "Verdant Mastery");
+    t.lands(P0, "Forest", 6);
+    (t, v)
+}
+
+#[test]
+fn verdant_mastery_gives_an_opponent_a_land_only_for_the_alternative_cost() {
+    cr!("118.9", "701.23a");
+    assert_supported("Verdant Mastery");
+    let (mut t, v) = verdant_game();
+    let alt = t
+        .cast_options(P0, v)
+        .into_iter()
+        .map(|o| o.method)
+        .find(|m| matches!(m, CastMethod::Alternative(_)))
+        .unwrap();
+    let hand = t.hand_size(P0) - 1;
+    t.cast(P0, v).method(alt).go();
+    t.resolve_all();
+    let theirs = t.g.battlefield.iter().filter(|o| t.g.obj(**o).controller == P1).count();
+    assert_eq!(theirs, 1);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // Without it: two onto the battlefield, the rest into the hand.
+    let (mut t, v) = verdant_game();
+    let hand = t.hand_size(P0) - 1;
+    t.cast(P0, v).go();
+    t.resolve_all();
+    let theirs = t.g.battlefield.iter().filter(|o| t.g.obj(**o).controller == P1).count();
+    assert_eq!(theirs, 0);
+    assert_eq!(t.hand_size(P0), hand + 2);
+}
