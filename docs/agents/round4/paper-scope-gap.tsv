@@ -116,3 +116,4 @@ Harsh Justice	This turn, whenever an attacking creature deals combat damage to y
 Rasputin Dreamweaver	At the beginning of your upkeep, if ~ started the turn untapped, put a dream counter on it.	me3	vintage,legacy,commander,predh
 Farrel's Mantle	Whenever enchanted creature attacks and isn't blocked, its controller may have it deal damage equal to its power plus N to another target creature. If that player does, the attacking creature assigns no combat damage this turn.	me2	vintage,legacy,commander,predh
 Freyalise's Winds	If a permanent with a wind counter on it would untap during its controller's untap step, remove all wind counters from it instead.	me3	vintage,legacy,premodern,commander,predh
+Shapeshifter	~'s power is equal to the last chosen number and its toughness is equal to N minus that number.	me4	vintage,legacy,premodern,commander,predh

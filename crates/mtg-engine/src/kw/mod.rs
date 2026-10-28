@@ -213,6 +213,13 @@ pub trait KeywordRules: Sync + Send {
     fn resolved_destination_replaces(&self) -> bool {
         true
     }
+    /// Whether [`KeywordRules::resolved_destination`] is an effect that applies wherever
+    /// the card would go ("exile it instead of putting it anywhere else": flashback,
+    /// jump-start, ...): another effect replacing the spell's being put into its owner's
+    /// graveyard may be applied first (CR 616.1), and then this one no longer applies.
+    fn resolved_destination_anywhere_else(&self) -> bool {
+        false
+    }
     /// After an instant or sorcery spell with this keyword resolved and was put where it
     /// goes (`new` is the card there, e.g. in exile after
     /// [`KeywordRules::resolved_destination`] sent it there), e.g. rebound's delayed
@@ -953,6 +960,39 @@ pub fn resolved_destination_by(
         .iter()
         .find_map(|r| r.global_resolved_destination(g, spell))
         .map(|d| (d, Some(format!("Put it into {:?} instead", d.0))))
+}
+
+/// The destination an effect applying to the spell gives it as it resolves
+/// ([`KeywordRules::global_resolved_destination`], e.g. Feather, the Redeemed's "exile
+/// that card instead of putting it into your graveyard"), with a description.
+pub fn global_resolved_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<((Zone, LibraryPosition), String)> {
+    registry()
+        .iter()
+        .find_map(|r| r.global_resolved_destination(g, spell))
+        .map(|d| (d, format!("Put it into {:?} instead", d.0)))
+}
+
+/// The destination a keyword's "exile it instead of putting it anywhere else" effect gives
+/// the spell as it resolves (see [`KeywordRules::resolved_destination_anywhere_else`]),
+/// with a description.
+pub fn anywhere_else_destination(
+    g: &Game,
+    spell: ObjectId,
+) -> Option<((Zone, LibraryPosition), String)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind)
+            .filter(|r| r.resolved_destination_anywhere_else())
+            .find_map(|r| r.resolved_destination(g, spell, kw))
+            .map(|d| {
+                (
+                    d,
+                    format!("{}: put it into {:?} instead", kw.kind.name(), d.0),
+                )
+            })
+    })
 }
 
 /// Every destination keywords give the spell as it resolves (see
