@@ -193,3 +193,37 @@ fn bruna_attaches_auras_and_puts_aura_cards_onto_the_battlefield_attached_to_it(
     // Holy Strength twice (+1/+2) and Unholy Strength (+2/+1).
     assert_eq!(t.pt(bruna), (p + 1 + 1 + 2, tough + 2 + 2 + 1));
 }
+
+#[test]
+fn cass_returns_the_auras_and_moves_the_equipment_that_were_attached_to_it() {
+    cr!("608.2h", "303.4f", "701.3a");
+    assert_supported("Cass, Hand of Vengeance");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cass, Hand of Vengeance");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let hs = t.battlefield(P0, "Holy Strength");
+    t.g.attach(hs, Entity::Object(bears));
+    let other = t.graveyard(P0, "Unholy Strength");
+    let sword = t.battlefield(P0, "Short Sword");
+    t.g.attach(sword, Entity::Object(bears));
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.g.move_object(bears, Zone::Graveyard(P0), MoveCause::Destroy, None);
+    t.settle();
+    let hs_gy = t.g.current(hs);
+    assert_eq!(t.zone(hs_gy), Zone::Graveyard(P0));
+    t.answer_choose(P0, &[Entity::Object(hs_gy)]);
+    t.answer_choose(P0, &[Entity::Object(sword)]);
+    t.resolve_all();
+    let h = t.named_on_battlefield("Holy Strength");
+    assert_eq!(h.len(), 1);
+    assert_eq!(t.obj_now(h[0]).attached_to, Some(Entity::Object(giant)));
+    assert_eq!(t.obj_now(sword).attached_to, Some(Entity::Object(giant)));
+    // An Aura card that wasn't attached to it stays in the graveyard (and wasn't offered).
+    assert_eq!(t.zone(other), Zone::Graveyard(P0));
+    let offered = t.asked().into_iter().find_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+        _ => None,
+    });
+    assert!(!offered.unwrap().contains(&Entity::Object(other)));
+}

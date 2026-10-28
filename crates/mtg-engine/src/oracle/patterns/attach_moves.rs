@@ -410,3 +410,62 @@ fn attach_and_put_auras_onto_it(block: &str, ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { AbilityPattern { name: "attach moves: attach to it any number of Auras and put Aura cards onto the battlefield attached to it", priority: 40, parse: attach_and_put_auras_onto_it } }
+
+/// "Whenever ~ or another creature you control dies, if it was enchanted or equipped,
+/// return any number of Aura cards that were attached to it from your graveyard to the
+/// battlefield attached to target creature, then attach any number of Equipment that were
+/// attached to it to that creature." (Cass, Hand of Vengeance): the Auras and Equipment
+/// attached to the creature as it last existed on the battlefield (CR 608.2h).
+fn return_auras_and_equipment_that_were_attached(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const BODY: &str = ", return any number of Aura cards that were attached to it from your graveyard to the battlefield attached to target creature, then attach any number of Equipment that were attached to it to that creature.";
+    let trigger = block.strip_suffix(BODY)?;
+    if block.contains('\n') {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(&format!("{trigger}, destroy target creature."), ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let AbilityKind::Triggered(t) = &mut a.kind else {
+        return None;
+    };
+    if t.body.targets.len() != 1 || !matches!(t.body.effect, Effect::Destroy { .. }) {
+        return None;
+    }
+    let any = |f: Filter| Sel::Choose {
+        chooser: PlayerRef::You,
+        count: Value::Count(f.clone()),
+        filter: f,
+        up_to: true,
+        store: None,
+    };
+    let auras = Filter::and(vec![
+        Filter::Subtype("Aura".into()),
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::OwnedBy(PlayerRel::You),
+        Filter::Custom(crate::kw::attached_before::WAS_ATTACHED_TO_TRIGGER_OBJECT.into()),
+    ]);
+    let equipment = Filter::and(vec![
+        Filter::Subtype("Equipment".into()),
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::AttachedToAnyOf(Box::new(Sel::TriggerLki)),
+    ]);
+    let mut onto = Destination::battlefield();
+    onto.attached_to = Some(Sel::Target(0));
+    t.body.effect = Effect::seq(vec![
+        Effect::Move {
+            what: any(auras),
+            to: onto,
+        },
+        Effect::Attach {
+            what: any(equipment),
+            to: Sel::Target(0),
+        },
+    ]);
+    a.text = block.to_string();
+    Some(vec![Arc::new(a)])
+}
+
+inventory::submit! { AbilityPattern { name: "attach moves: return Aura cards and attach Equipment that were attached to it", priority: 40, parse: return_auras_and_equipment_that_were_attached } }
