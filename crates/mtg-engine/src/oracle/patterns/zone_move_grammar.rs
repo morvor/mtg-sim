@@ -1110,12 +1110,14 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
                 // "~ from your hand", "~ from exile", "~ from your graveyard or from exile":
                 // only from there.
                 if let Some((f, _, r)) = from_zone(&rest, b, subject) {
-                    // An ability functions in one zone (CR 113.6m): "~ from your
-                    // graveyard or from exile" would need two.
+                    // An ability functions where its card is moved from (CR 113.6m):
+                    // of two zones, only "from your graveyard or from exile"
+                    // (`FunctionZone::GraveyardOrExile`, see `self_move_zone`).
                     if matches!(sel, Sel::This)
                         && matches!(f.zone(), None)
                         && matches!(f, Filter::Or(_) | Filter::And(_))
                         && format!("{f:?}").matches("InZone").count() > 1
+                        && !rest.trim_start().starts_with("from your graveyard or from exile")
                     {
                         return None;
                     }
@@ -2125,6 +2127,9 @@ pub fn self_move_zone(effect: &str) -> Option<FunctionZone> {
     for verb in ["return ~", "put ~", "return this card", "put this card"] {
         for (i, _) in effect.match_indices(verb) {
             let after = &effect[i + verb.len()..];
+            if after.starts_with(" from your graveyard or from exile") {
+                return Some(FunctionZone::GraveyardOrExile);
+            }
             if after.starts_with(" from exile") {
                 return Some(FunctionZone::Exile);
             }

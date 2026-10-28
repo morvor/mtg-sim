@@ -290,6 +290,9 @@ pub enum FunctionZone {
     Command,
     /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
     Anywhere,
+    /// Functions in its owner's graveyard and in exile ("Return ~ from your graveyard or
+    /// from exile to the battlefield", CR 113.6m).
+    GraveyardOrExile,
     /// Functions everywhere except the given zone, even outside the game (an ability that
     /// states which zones it doesn't function in, CR 113.6c).
     AnywhereExcept(ZoneKind),
