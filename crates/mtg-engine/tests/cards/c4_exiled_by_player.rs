@@ -142,3 +142,29 @@ fn shared_fate_exiles_an_opponents_top_card_face_down_for_the_drawing_player() {
     t.resolve();
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn gonti_night_minister_the_attacking_creatures_controller_exiles_and_may_play() {
+    cr!("406.3", "118.14", "601.3");
+    assert_supported("Gonti, Night Minister");
+    // P1's creature deals combat damage to P2, an opponent of Gonti's controller P0.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Gonti, Night Minister");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    let bolt = t.library_top(P2, "Lightning Bolt");
+    t.attack(&[(bears, Entity::Player(P2))], &[]);
+    let bolt = t.g.current(bolt);
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    assert!(t.g.obj(bolt).face_down);
+    // P1 looked at it and may play it; mana of any type (a Forest) can be spent.
+    assert!(mtg_engine::zones::may_look(&t.g, P1, bolt));
+    assert!(!mtg_engine::zones::may_look(&t.g, P0, bolt));
+    t.advance_to(P1, Step::PostcombatMain);
+    t.lands(P0, "Mountain", 1);
+    assert!(t.cast_with(P0, bolt, &[Entity::Player(P2)]).is_err());
+    t.lands(P1, "Forest", 1);
+    t.cast(P1, bolt).target(Entity::Player(P2)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P2), 20 - 2 - 3);
+}

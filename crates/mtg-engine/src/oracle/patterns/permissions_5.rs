@@ -199,3 +199,55 @@ fn draw_exiles_opponents_top(block: &str, _ctx: &CompileContext) -> Option<Vec<A
 }
 
 inventory::submit! { AbilityPattern { name: "permissions 5: a player exiles an opponent's top card face down instead of drawing", priority: 40, parse: draw_exiles_opponents_top } }
+
+/// The triggered ability's body effect.
+fn trigger_body(a: &mut AbilityDef) -> Option<&mut Effect> {
+    match &mut a.kind {
+        AbilityKind::Triggered(t) => Some(&mut t.body.effect),
+        _ => None,
+    }
+}
+
+/// "Whenever a creature deals combat damage to one of your opponents, its controller looks
+/// at the top card of that opponent's library and exiles it face down. They may play that
+/// card for as long as it remains exiled. Mana of any type can be spent to cast a spell
+/// this way." (Gonti, Night Minister): the creature's controller does it all as if they
+/// were "you" (they look, exile, and get the permission and its terms); the card is
+/// exiled by them.
+fn its_controller_looks_and_exiles(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (trigger, rest) = block.split_once(", its controller looks at ")?;
+    if !trigger.starts_with("Whenever ") || block.contains('\n') {
+        return None;
+    }
+    let (first, others) = rest.split_once(". ")?;
+    let (what, how) = first.split_once(" and exiles it")?;
+    let what = what.replace("that opponent's library", "that player's library");
+    let others = others.strip_prefix("They may ")?;
+    let rewritten = format!(
+        "{trigger}, look at {what}, then exile it{how}. You may {others}"
+    );
+    // Who "its controller" is, as the trigger's text reads it.
+    let probe = crate::oracle::parse_ability(
+        &format!("{trigger}, its controller draws a card."),
+        ctx,
+    )?;
+    let mut probe = (*probe.first()?.clone()).clone();
+    let Effect::Draw { who, .. } = trigger_body(&mut probe)? else {
+        return None;
+    };
+    let who = who.clone();
+    if !matches!(who, PlayerRef::ControllerOf(_)) {
+        return None;
+    }
+    compile_as(&rewritten, block, ctx, |a| {
+        let body = trigger_body(a)?;
+        let e = std::mem::replace(body, Effect::Noop);
+        *body = Effect::AsPlayer {
+            who: who.clone(),
+            effect: Box::new(e),
+        };
+        Some(())
+    })
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: its controller looks at and exiles a card; they may play it", priority: 40, parse: its_controller_looks_and_exiles } }
