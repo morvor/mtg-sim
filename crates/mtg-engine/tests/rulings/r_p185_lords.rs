@@ -268,3 +268,39 @@ fn hivestone_affects_only_creatures_on_the_battlefield_and_not_slivers_twice() {
     assert_eq!(n, 1);
     assert_eq!(t.pt(legion), (9, 9));
 }
+
+#[test]
+fn nightpack_ambusher_looks_at_every_spell_cast_this_turn() {
+    cr!("603.4", "513.1");
+    ruling!(
+        "Nightpack Ambusher",
+        "If you cast a spell that was countered, Nightpack Ambusher’s last ability doesn’t trigger."
+    );
+    ruling!(
+        "Nightpack Ambusher",
+        "Nightpack Ambusher looks at the entire turn to see if you have cast a spell, even if Nightpack Ambusher wasn’t on the battlefield when that spell was cast. Notably, you won’t get a Wolf token during your end step if you cast Nightpack Ambusher during your turn."
+    );
+    supported("Nightpack Ambusher");
+    // 0: no spell (a token); 1: a countered spell; 2: Nightpack Ambusher itself cast.
+    for case in 0..3 {
+        let mut t = TestGame::new(2);
+        if case != 2 {
+            t.battlefield(P0, "Nightpack Ambusher");
+        }
+        if case == 1 {
+            let spell =
+                crate::r_s25_common::cast_new(&mut t, P0, "Shock", &[Entity::Player(P1)]);
+            t.g.counter(spell, None);
+            t.g.flush_events();
+        }
+        if case == 2 {
+            crate::r_s25_common::cast_new(&mut t, P0, "Nightpack Ambusher", &[]);
+            t.resolve_all();
+            assert_eq!(t.named_on_battlefield("Nightpack Ambusher").len(), 1);
+        }
+        t.advance_to(P0, mtg_engine::turn::Step::End);
+        t.resolve_all();
+        let wolves = tokens(&t, P0).len();
+        assert_eq!(wolves, (case == 0) as usize, "case {case}");
+    }
+}
