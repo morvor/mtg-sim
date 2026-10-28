@@ -2371,6 +2371,17 @@ pub(crate) fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
             out.push((p.to_string(), s));
         }
     };
+    // "Whenever one or more creatures you control die, ... one of them": the cards they
+    // became (see `referents_batches::DIED_BATCH`).
+    if let TriggerCond::Batched {
+        trigger: inner,
+        per: BatchPer::Batch,
+    } = trigger
+    {
+        if matches!(**inner, TriggerCond::Dies(_)) {
+            push(super::referents_batches::DIED_BATCH, Sel::TriggerObjects);
+        }
+    }
     match trigger {
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)
