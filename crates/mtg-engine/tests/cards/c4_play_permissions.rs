@@ -3,7 +3,7 @@
 //! (Knowledge Pool), ...
 
 use crate::basic_effects_common::*;
-use mtg_engine::object::Zone;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -102,4 +102,55 @@ fn share_the_spoils_playing_a_card_exiles_the_players_top_card() {
     // One card a turn: the exiled Forest can't be played now.
     let forest = t.g.find_in_zone(Zone::Exile, "Forest")[0];
     assert!(t.play_land(P0, forest).is_err());
+}
+
+#[test]
+fn aminatous_augury_one_free_spell_of_each_nonland_card_type() {
+    cr!("601.3", "118.9");
+    ruling!("Aminatou's Augury", "you may cast it as either of those types");
+    assert_supported("Aminatou's Augury");
+    let mut t = TestGame::new(2);
+    let names = [
+        "Ornithopter",
+        "Lightning Bolt",
+        "Shock",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Divination",
+        "Forest",
+        "Island",
+    ];
+    let ids: Vec<ObjectId> = names.iter().map(|n| t.library_top(P0, n)).collect();
+    t.lands(P0, "Island", 8);
+    let aug = t.hand(P0, "Aminatou's Augury");
+    // Put the Forest onto the battlefield.
+    t.answer_choose_moved(P0, &[Entity::Object(ids[6])]);
+    t.cast(P0, aug).go();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    let cur = |t: &TestGame, i: usize| t.g.current(ids[i]);
+    // An instant (Bolt), then not a second instant (Shock).
+    let bolt = cur(&t, 1);
+    t.cast(P0, bolt).method(CastMethod::Free).target(Entity::Player(P1)).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    let shock = cur(&t, 2);
+    assert!(t.cast_with(P0, shock, &[Entity::Player(P1)]).is_err());
+    // A creature (Bears), then not another creature (Hill Giant).
+    let bears = cur(&t, 3);
+    t.cast(P0, bears).method(CastMethod::Free).go();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    let giant = cur(&t, 4);
+    assert!(t.cast_with(P0, giant, &[]).is_err());
+    // An artifact creature cast as the artifact (the creature's permission is used up).
+    let thopter = cur(&t, 0);
+    t.cast(P0, thopter).method(CastMethod::Free).go();
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+    // A sorcery.
+    let div = cur(&t, 5);
+    t.cast(P0, div).method(CastMethod::Free).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Divination"));
 }

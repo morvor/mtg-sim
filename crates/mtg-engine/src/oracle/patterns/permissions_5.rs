@@ -382,3 +382,77 @@ fn when_they_do(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
 }
 
 inventory::submit! { AbilityPattern { name: "permissions 5: [each player's permission]. when they do, ...", priority: 40, parse: when_they_do } }
+
+/// "Until end of turn, for each nonland card type, you may cast a spell of that type from
+/// among the exiled cards without paying its mana cost." (Aminatou's Augury): one
+/// permission for each nonland card type, each usable once; a card of several types may be
+/// cast with any one of its types' permissions (its ruling; CR 601.3: the player chooses
+/// which permission they use).
+fn for_each_card_type(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const EACH: &str = "for each nonland card type, you may cast a spell of that type from among";
+    if !block.contains(EACH) || block.contains('\n') {
+        return None;
+    }
+    let rewritten = block.replacen(EACH, "you may cast a spell from among", 1);
+    compile_as(&rewritten, block, ctx, |a| {
+        let AbilityKind::Spell(s) = &mut a.kind else {
+            return None;
+        };
+        let Effect::Seq(v) = &mut s.body.effect else {
+            return None;
+        };
+        // "the exiled cards": those the first instruction exiled from the top of the
+        // library (`vars::DUG`) that are still there, not what a later instruction took.
+        if !matches!(v.first(), Some(Effect::Exile { what: Sel::TopOfLibrary(..), .. })) {
+            return None;
+        }
+        let last = v.last_mut()?;
+        let Effect::WithPlayTerms { terms, effect } = last else {
+            return None;
+        };
+        if terms.limit != Some(1) {
+            return None;
+        }
+        let Effect::GrantPlayPermission {
+            who,
+            what: Sel::Var(vars::IT),
+            duration,
+            free,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        let effect = Box::new(Effect::GrantPlayPermission {
+            who: who.clone(),
+            what: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(vars::DUG))),
+                Filter::InZone(ZoneKind::Exile),
+            ])),
+            duration: duration.clone(),
+            free: *free,
+        });
+        let mut per_type = Vec::new();
+        for t in crate::types::CardType::ALL {
+            use crate::types::CardType::*;
+            if !matches!(
+                t,
+                Artifact | Battle | Creature | Enchantment | Instant | Kindred | Planeswalker | Sorcery
+            ) {
+                continue;
+            }
+            let mut terms = terms.clone();
+            terms.what = Some(match terms.what.take() {
+                Some(w) => Filter::and(vec![w, Filter::Type(t)]),
+                None => Filter::Type(t),
+            });
+            per_type.push(Effect::WithPlayTerms {
+                terms,
+                effect: effect.clone(),
+            });
+        }
+        *last = Effect::Seq(per_type);
+        Some(())
+    })
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: for each nonland card type, a spell of that type", priority: 40, parse: for_each_card_type } }
