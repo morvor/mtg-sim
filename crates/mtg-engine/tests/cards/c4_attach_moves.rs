@@ -143,3 +143,29 @@ fn curse_of_misfortunes_finds_a_curse_with_another_name_attached_to_that_player(
     let offered = offered.expect("a choice of Curse cards");
     assert!(!offered.contains(&Entity::Object(same)));
 }
+
+#[test]
+fn flickerform_returns_the_creature_and_its_auras_attached_to_it() {
+    cr!("400.7", "303.4f", "603.7a");
+    assert_supported("Flickerform");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let ff = t.battlefield(P0, "Flickerform");
+    t.g.attach(ff, Entity::Object(bears));
+    let hs = t.battlefield(P0, "Holy Strength");
+    t.g.attach(hs, Entity::Object(bears));
+    t.lands(P0, "Plains", 4);
+    t.activate(P0, ff, 0, &[]).unwrap();
+    t.resolve();
+    assert!(t.in_exile("Grizzly Bears") && t.in_exile("Flickerform") && t.in_exile("Holy Strength"));
+    t.advance_to_step(mtg_engine::turn::Step::End);
+    t.resolve_all();
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1);
+    for n in ["Flickerform", "Holy Strength"] {
+        let a = t.named_on_battlefield(n);
+        assert_eq!(a.len(), 1, "{n}");
+        assert_eq!(t.obj_now(a[0]).attached_to, Some(Entity::Object(b[0])), "{n}");
+    }
+    assert_eq!(t.pt(b[0]), (3, 4));
+}

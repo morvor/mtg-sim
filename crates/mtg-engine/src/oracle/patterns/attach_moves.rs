@@ -255,3 +255,98 @@ fn search_curse_attached_to_player(block: &str, ctx: &CompileContext) -> Option<
 }
 
 inventory::submit! { AbilityPattern { name: "attach moves: search for a Curse and put it onto the battlefield attached to that player", priority: 40, parse: search_curse_attached_to_player } }
+
+const FLICKER_AURAS: Var = vars::USER + 52022;
+const FLICKER_CREATURE: Var = vars::USER + 52023;
+const FLICKER_OTHERS: Var = vars::USER + 52024;
+
+/// "Exile enchanted creature and all Auras attached to it. At the beginning of the next
+/// end step, return that card to the battlefield under its owner's control. If you do,
+/// return the other cards exiled this way to the battlefield under their owners' control
+/// attached to that creature." (Flickerform): "that card" is the creature card; the Aura
+/// cards return attached to the permanent it became (CR 400.7, 303.4f). The creature is
+/// exiled first, then its Auras (no state-based actions in between, CR 704.3).
+fn exile_with_auras_and_return_attached(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (cost, effect) = crate::oracle::split_cost(block)?;
+    if effect.trim()
+        != "Exile enchanted creature and all Auras attached to it. At the beginning of the next end step, return that card to the battlefield under its owner's control. If you do, return the other cards exiled this way to the battlefield under their owners' control attached to that creature."
+    {
+        return None;
+    }
+    // The ability itself, with a placeholder effect, for its cost and timing.
+    let v = crate::oracle::parse_ability(&format!("{cost}: Draw a card."), ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let AbilityKind::Activated(act) = &mut a.kind else {
+        return None;
+    };
+    let owner_control = |s: Sel| {
+        let mut d = Destination::battlefield();
+        d.controller = Some(PlayerRef::OwnerOf(Box::new(s)));
+        d
+    };
+    let mut attached = owner_control(Sel::Var(FLICKER_OTHERS));
+    attached.attached_to = Some(Sel::Var(vars::IT));
+    let exiled = |v: Var| {
+        Sel::All(Filter::and(vec![
+            Filter::In(Box::new(Sel::Var(v))),
+            Filter::InZone(ZoneKind::Exile),
+        ]))
+    };
+    let delayed = Effect::DelayedTrigger {
+        trigger: TriggerCond::BeginningOf {
+            step: TriggerStep::End,
+            whose: PlayerRel::Any,
+        },
+        body: Box::new(Body::effect(Effect::seq(vec![
+            Effect::Move {
+                what: exiled(FLICKER_CREATURE),
+                to: owner_control(Sel::Var(FLICKER_CREATURE)),
+            },
+            Effect::If {
+                cond: Condition::PrevHappened,
+                then: Box::new(Effect::Move {
+                    what: exiled(FLICKER_OTHERS),
+                    to: attached,
+                }),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ]))),
+        once: true,
+    };
+    act.body = Body::effect(Effect::seq(vec![
+        Effect::Store {
+            var: FLICKER_AURAS,
+            sel: Sel::All(Filter::and(vec![
+                Filter::Subtype("Aura".into()),
+                Filter::AttachedToAnyOf(Box::new(Sel::AttachedTo)),
+                Filter::InZone(ZoneKind::Battlefield),
+            ])),
+        },
+        Effect::Exile {
+            what: Sel::AttachedTo,
+            face_down: false,
+            link: false,
+        },
+        Effect::Store {
+            var: FLICKER_CREATURE,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::Exile {
+            what: Sel::Var(FLICKER_AURAS),
+            face_down: false,
+            link: false,
+        },
+        Effect::Store {
+            var: FLICKER_OTHERS,
+            sel: Sel::Var(vars::IT),
+        },
+        delayed,
+    ]));
+    a.text = block.to_string();
+    Some(vec![Arc::new(a)])
+}
+
+inventory::submit! { AbilityPattern { name: "attach moves: exile enchanted creature and its Auras, return them attached", priority: 40, parse: exile_with_auras_and_return_attached } }
