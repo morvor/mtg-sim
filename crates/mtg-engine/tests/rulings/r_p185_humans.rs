@@ -140,7 +140,7 @@ fn katilda_gives_no_flashback_cost_to_a_card_without_a_mana_cost() {
 
 #[test]
 fn repel_the_abominable_prevents_by_the_source_dealing_the_damage() {
-    cr!("609.7a", "615.1a", "701.14a");
+    cr!("120.2b", "609.7b", "615.1a", "701.14a");
     ruling!(
         "Repel the Abominable",
         "If a spell or ability causes damage to be dealt, it will indicate what object deals the damage. The object dealing damage might not be the spell itself."
@@ -257,7 +257,7 @@ fn rukarumels_type_applies_before_typal_enters_replacements() {
 
 #[test]
 fn angel_of_glorys_rise_exiles_only_zombie_permanents() {
-    cr!("611.2c", "608.2c");
+    cr!("109.2");
     ruling!(
         "Angel of Glory's Rise",
         "Only Zombie permanents on the battlefield are exiled. Zombie cards in other zones are not."

@@ -39,7 +39,7 @@ fn blue_sliver() -> mtg_engine::card::CardDef {
 
 #[test]
 fn constricting_sliver_grants_itself_the_exile_ability_and_it_lasts_until_that_sliver_leaves() {
-    cr!("610.3", "610.3a", "603.6a", "400.7");
+    cr!("610.3", "603.6a", "400.7");
     ruling!(
         "Constricting Sliver",
         "When Constricting Sliver enters the battlefield, the ability it gives itself will trigger."
@@ -77,7 +77,7 @@ fn constricting_sliver_grants_itself_the_exile_ability_and_it_lasts_until_that_s
 
 #[test]
 fn constricting_sliver_leaving_before_its_trigger_resolves_exiles_nothing() {
-    cr!("610.3c");
+    cr!("610.3b");
     ruling!(
         "Constricting Sliver",
         "If a Sliver leaves the battlefield before its enters-the-battlefield ability resolves, the target creature won’t be exiled."
@@ -93,7 +93,9 @@ fn constricting_sliver_leaving_before_its_trigger_resolves_exiles_nothing() {
     assert_eq!(t.stack_len(), 1);
     destroy(&mut t, s);
     t.resolve_all();
-    assert!(t.on_battlefield(bears));
+    // Never exiled (not exiled and returned): still the same object.
+    assert!(t.g.is_live(bears) && t.g.obj(bears).zone == Zone::Battlefield);
+    assert!(t.g.untils.is_empty());
 }
 
 #[test]
@@ -126,21 +128,22 @@ fn constricting_sliver_returns_the_card_under_its_owners_control() {
         "Constricting Sliver",
         "The exiled card will return to the battlefield under its owner’s control."
     );
-    let mut t = TestGame::new(2);
-    // P0's Bears, controlled by P1.
-    let bears = t.battlefield(P0, "Grizzly Bears");
+    let mut t = TestGame::new(3);
+    // P2's Bears, controlled by P1, exiled by P0's Sliver: it returns under P2's control
+    // (not its last controller's, nor the Sliver controller's).
+    let bears = t.battlefield(P2, "Grizzly Bears");
     give_control(&mut t, bears, P1);
     let cs = constrict(&mut t, "Constricting Sliver", bears);
     assert_eq!(t.zone(bears), Zone::Exile);
     destroy(&mut t, cs);
     t.settle();
     let back = t.named_on_battlefield("Grizzly Bears")[0];
-    assert_eq!(t.obj_now(back).controller, P0);
+    assert_eq!(t.obj_now(back).controller, P2);
 }
 
 #[test]
 fn constricting_sliver_returned_card_cant_copy_the_sliver_that_left() {
-    cr!("610.3c", "707.5", "614.1c");
+    cr!("610.3", "610.3c", "707.5", "614.1c");
     ruling!(
         "Constricting Sliver",
         "The exiled card returns to the battlefield immediately after the Sliver leaves the battlefield. Nothing happens between the two events, including state-based actions. The two creatures aren’t on the battlefield at the same time. For example, if the returning creature is a Mercurial Pretender, it can’t enter the battlefield as a copy of the Sliver."
@@ -395,7 +398,7 @@ fn two_thorncaster_slivers_trigger_separately() {
 
 #[test]
 fn harmonic_and_dormant_slivers_grant_triggers_controlled_by_the_entering_slivers_controller() {
-    cr!("603.3a", "113.6", "603.6a");
+    cr!("603.3a", "603.6a");
     ruling!(
         "Harmonic Sliver",
         "The ability Harmonic Sliver grants itself triggers when it enters the battlefield."

@@ -313,7 +313,7 @@ fn hivestone_affects_only_creatures_on_the_battlefield_and_not_slivers_twice() {
 
 #[test]
 fn nightpack_ambusher_looks_at_every_spell_cast_this_turn() {
-    cr!("603.4", "513.1");
+    cr!("603.4");
     ruling!(
         "Nightpack Ambusher",
         "If you cast a spell that was countered, Nightpack Ambusher’s last ability doesn’t trigger."

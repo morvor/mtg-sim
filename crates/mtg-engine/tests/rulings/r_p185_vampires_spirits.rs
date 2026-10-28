@@ -22,7 +22,7 @@ use mtg_engine::*;
 
 #[test]
 fn bloodlord_of_vaasgoth_doesnt_give_bloodthirst_to_a_clone_spell() {
-    cr!("707.5", "702.54a", "601.2i");
+    cr!("707.5", "702.54a");
     ruling!(
         "Bloodlord of Vaasgoth",
         "A creature spell like Phantasmal Image that may enter as a copy of a creature is not a Vampire creature spell, even if you intend on copying a Vampire creature when that creature enters."
@@ -303,7 +303,7 @@ fn blood_age_general_pumps_only_spirits_attacking_as_it_resolves_until_end_of_tu
 
 #[test]
 fn clash_of_realities_grants_enters_triggers_and_typeless_creatures_are_non_spirits() {
-    cr!("603.6a", "613.1f", "205.3m");
+    cr!("603.6a", "613.1f");
     ruling!(
         "Clash of Realities",
         "Clash of Realities's abilities apply as each creature enters and gives them an \"enters\" ability."
@@ -472,7 +472,7 @@ fn long_forgotten_gohei_reduces_the_total_cost_with_splice_once() {
 
 #[test]
 fn teller_of_tales_chooses_tap_or_untap_on_resolution() {
-    cr!("608.2c", "603.3");
+    cr!("608.2d");
     ruling!(
         "Teller of Tales",
         "You choose whether or not to tap or untap the creature when the ability resolves."
@@ -499,7 +499,7 @@ fn teller_of_tales_chooses_tap_or_untap_on_resolution() {
 
 #[test]
 fn faces_of_the_past_taps_or_untaps_all_sharing_a_type_chosen_on_resolution() {
-    cr!("608.2c");
+    cr!("608.2d");
     ruling!(
         "Faces of the Past",
         "You choose whether to tap or untap during resolution."
@@ -534,7 +534,7 @@ fn faces_of_the_past_taps_or_untaps_all_sharing_a_type_chosen_on_resolution() {
 
 #[test]
 fn orchard_warden_uses_the_treefolks_toughness_as_it_resolves_or_its_last_known() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Orchard Warden",
         "The creature’s toughness is checked as this ability resolves. If the creature has left the battlefield, use its last known information."
@@ -575,4 +575,41 @@ fn basalt_ravager_counts_the_largest_shared_type_group_as_it_resolves() {
     vanilla(&mut t, P1, "Creature — Human Warrior", (1, 1));
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn splice_is_offered_by_the_total_cost_with_increases_and_alternative_costs() {
+    cr!("601.2f", "702.47a", "118.9");
+    // (Regression for splice offers checking only mana cost + splice cost.)
+    // Thalia: Lava Spike costs {1}{R}; spliced with Glacial Ray, {2}{R}{R}. With three
+    // Mountains the splice isn't affordable (the spell itself still is); with four it is.
+    // Omniscience: Lava Spike cast without paying its mana cost; spliced, it costs only
+    // the splice cost {1}{R}, affordable with two Mountains.
+    for (permanent, mountains, free, spliced) in [
+        ("Thalia, Guardian of Thraben", 3, false, false),
+        ("Thalia, Guardian of Thraben", 4, false, true),
+        ("Omniscience", 2, true, true),
+    ] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Grizzly Bears");
+        t.battlefield(P0, permanent);
+        t.lands(P0, "Mountain", mountains);
+        let spell = t.hand(P0, "Lava Spike");
+        t.hand(P0, "Glacial Ray");
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+        let mut b = t
+            .cast(P0, spell)
+            .targets(&[Entity::Player(P1)])
+            .targets(&[Entity::Player(P1)]);
+        if free {
+            b = b.method(mtg_engine::object::CastMethod::Free);
+        }
+        let r = b.try_go();
+        assert!(r.is_ok(), "{permanent} {mountains}: {r:?}");
+        t.resolve_all();
+        let dealt = 20 - t.life(P1);
+        assert_eq!(dealt, if spliced { 5 } else { 3 }, "{permanent} {mountains}");
+        let paid = if free { 2 } else if spliced { 4 } else { 2 };
+        assert_eq!(tapped_lands(&t, P0), paid, "{permanent} {mountains}");
+    }
 }

@@ -38,7 +38,7 @@ fn locthwain_lancer_triggers_for_each_nontoken_knight_dying_with_it() {
 
 #[test]
 fn venerable_knight_cant_save_a_knight_dealt_lethal_damage_with_it() {
-    cr!("704.3", "603.10a", "603.3d");
+    cr!("704.3", "603.10a");
     ruling!(
         "Venerable Knight",
         "If a Knight you control is dealt lethal damage at the same time as Venerable Knight, they die at the same time. That Knight can't receive a counter from Venerable Knight's ability in time to save it."
@@ -183,8 +183,22 @@ fn vineshaper_mystic_cant_target_the_same_merfolk_twice() {
     t.enter(P0, "Vineshaper Mystic");
     t.g.flush_events();
     t.settle();
+    // The trigger goes on the stack, but the Guard can't be its target twice (the
+    // answer is rejected).
+    assert_eq!(t.stack_len(), 1);
     t.resolve_all();
-    assert!(t.counters(guard, counters::PLUS1) <= 1);
+    assert!(t.counters(guard, counters::PLUS1) < 2);
+    // Two different Merfolk: one counter each.
+    let mut t = TestGame::new(2);
+    let guard = t.battlefield(P0, "Maritime Guard");
+    let other = t.battlefield(P0, "Maritime Guard");
+    t.answer_targets(P0, &[Entity::Object(guard), Entity::Object(other)]);
+    t.enter(P0, "Vineshaper Mystic");
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(guard, counters::PLUS1), 1);
+    assert_eq!(t.counters(other, counters::PLUS1), 1);
 }
 
 #[test]
@@ -399,7 +413,7 @@ fn griffin_canyon_can_target_an_untapped_griffin() {
 
 #[test]
 fn ramosian_revivalist_returns_a_rebel_permanent_card() {
-    cr!("110.4", "115.1");
+    cr!("115.1");
     ruling!(
         "Ramosian Revivalist",
         "A “permanent card” is an artifact card, a creature card, an enchantment card, a planeswalker card, or a land card. Most “Rebel permanent cards” are creature cards."
