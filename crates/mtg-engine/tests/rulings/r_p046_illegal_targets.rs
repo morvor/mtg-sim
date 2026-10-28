@@ -145,7 +145,7 @@ fn pest_infestation_with_every_target_illegal_creates_no_pests() {
 
 #[test]
 fn unravel_the_aether_shuffles_only_with_a_legal_target() {
-    cr!("608.2b", "701.24a");
+    cr!("608.2b", "701.24a", "111.7");
     ruling!(
         "Unravel the Aether",
         "If the artifact or enchantment is an illegal target as Unravel the Aether tries to resolve, it won’t resolve and none of its effects will happen. No library will be shuffled."
