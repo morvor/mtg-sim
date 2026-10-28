@@ -324,3 +324,35 @@ fn zurgo_bellstriker_and_helmsmasher_have_different_names() {
     t.settle();
     assert!(t.on_battlefield(a) && t.on_battlefield(b));
 }
+
+#[test]
+fn soulflayer_delve_exiles_at_most_its_generic_requirement() {
+    cr!("702.66a");
+    ruling!(
+        "Soulflayer",
+        "You can’t exile more cards from your graveyard than you’d need to pay Soulflayer’s generic mana requirement."
+    );
+    // Soulflayer's keyword-granting ability isn't compiled; its delve (the subject of this
+    // ruling) is.
+    let mut t = TestGame::new(2);
+    let cards: Vec<ObjectId> = (0..6).map(|_| t.graveyard(P0, "Wind Drake")).collect();
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Soulflayer");
+    let all: Vec<Entity> = cards.iter().map(|c| obj(*c)).collect();
+    t.answer_choose(P0, &all);
+    let from = t.asked().len();
+    t.cast(P0, s).go();
+    let maxes: Vec<usize> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { prompt, max, .. }
+                if prompt.contains("delve") =>
+            {
+                Some(*max as usize)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(maxes, vec![4], "at most four cards for its {{4}}");
+    assert!(t.graveyard_size(P0) >= 2, "two cards stayed in the graveyard");
+}

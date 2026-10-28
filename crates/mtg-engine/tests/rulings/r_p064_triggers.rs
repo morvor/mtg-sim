@@ -231,10 +231,29 @@ fn marketwatch_phantom_checks_power_only_as_the_creature_enters() {
     assert_eq!(triggers_from(&t, m), 1);
     cast_and_resolve(&mut t, P0, "Giant Growth", &[obj(b)]);
     assert!(flies(&mut t, m), "the Bears' power grew after it triggered");
-    // A creature entering with +1/+1 counters has them counted: Hill Giant is too big.
+    // A 2/2 entering with a +1/+1 counter has it counted: power 3, no trigger.
     let mut t = TestGame::new(2);
     let m = t.battlefield(P0, "Marketwatch Phantom");
-    t.enter(P0, "Hill Giant");
+    let bears = t.g.create_card_object(
+        mtg_engine::card::card("Grizzly Bears"),
+        P0,
+        mtg_engine::object::Zone::Nowhere,
+    );
+    t.g.move_object_ev(mtg_engine::replacement::MoveEv {
+        obj: bears,
+        to: mtg_engine::object::Zone::Battlefield,
+        pos: mtg_engine::ability::LibraryPosition::Top,
+        cause: mtg_engine::events::MoveCause::Effect,
+        by: Some(P0),
+        etb: mtg_engine::replacement::EtbInfo {
+            controller: Some(P0),
+            counters: vec![("+1/+1".into(), 1)],
+            ..Default::default()
+        },
+        source: None,
+    })
+    .expect("entered");
+    t.g.flush_events();
     t.settle();
     assert_eq!(triggers_from(&t, m), 0);
 }
