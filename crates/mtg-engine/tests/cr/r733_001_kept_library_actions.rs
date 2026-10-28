@@ -241,6 +241,37 @@ fn a_library_card_revealed_while_attempting_an_action_stays_known() {
 }
 
 #[test]
+fn the_rollback_property_accepts_a_reversal_that_kept_library_actions() {
+    cr!("733.1");
+    interp!("illegal-action-reversal-restores-libraries");
+    use mtg_engine::properties::agent::{rollback_view, undone_difference};
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ashnod's Altar");
+    t.battlefield(P0, "Darksteel Colossus");
+    let mountain = t.lands(P0, "Mountain", 1)[0];
+    let fling = t.hand(P0, "Fling");
+    let before = t.g.clone();
+    let r = t
+        .cast(P0, fling)
+        .target(Entity::Player(P1))
+        .method(CastMethod::Normal)
+        .try_go();
+    assert!(r.is_err());
+    // The game differs (the Colossus is in the library), but not in what the reversal
+    // must undo (docs/PROPERTIES.md, rollback identity).
+    assert!(t.g.reversals.kept > before.reversals.kept);
+    assert_ne!(rollback_view(&before), rollback_view(&t.g));
+    assert_eq!(undone_difference(&before, &t.g), None);
+    // A payment left in place would be noticed.
+    let mut wrong = t.g.clone();
+    wrong.objects[mountain.0 as usize].tapped = true;
+    assert!(undone_difference(&before, &wrong).is_some());
+    let mut wrong = t.g.clone();
+    wrong.player_mut(P0).life -= 1;
+    assert!(undone_difference(&before, &wrong).is_some());
+}
+
+#[test]
 fn a_reversal_without_library_actions_restores_the_game_exactly() {
     cr!("733.1");
     interp!("reversal-undoes-mana-abilities");
