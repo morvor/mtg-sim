@@ -708,3 +708,58 @@ fn each_player_digs(block: &str, ctx: &crate::oracle::CompileContext) -> Option<
 }
 
 inventory::submit! { super::AbilityPattern { name: "card flow 5: each player looks at the top N cards and may reveal ...", priority: 40, parse: each_player_digs } }
+
+/// "choose an opponent who controls more lands than you. Search your library for a number
+/// of Plains cards equal to the difference, ..." (Boreas Charger): the difference between
+/// the chosen opponent's lands and yours, as the search begins.
+fn search_equal_to_the_difference(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    const CHOOSE: &str = "choose an opponent who controls more lands than you. Search your library for a number of ";
+    let (before, after) = block.split_once(CHOOSE)?;
+    let (kind, rest) = after.split_once(" cards equal to the difference, ")?;
+    if block.contains('\n') {
+        return None;
+    }
+    let rewritten = format!(
+        "{before}choose an opponent who controls more lands than you. Search your library for up to two {kind} cards, {rest}"
+    );
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let body = match &mut a.kind {
+        AbilityKind::Triggered(t) => &mut t.body.effect,
+        _ => return None,
+    };
+    let Effect::Seq(steps) = body else {
+        return None;
+    };
+    let [Effect::Custom(choose), Effect::SearchCards(spec)] = steps.as_mut_slice() else {
+        return None;
+    };
+    let var: Var = choose
+        .strip_prefix("choice_grammar:choose player:[")?
+        .split(',')
+        .next()?
+        .parse()
+        .ok()?;
+    let [part] = spec.parts.as_mut_slice() else {
+        return None;
+    };
+    let lands_of = |p: PlayerRef| {
+        Value::Count(Filter::and(vec![
+            Filter::Type(crate::types::CardType::Land),
+            Filter::InZone(ZoneKind::Battlefield),
+            Filter::ControlledByPlayer(Box::new(p)),
+        ]))
+    };
+    part.count = Value::Diff(
+        Box::new(lands_of(PlayerRef::Var(var))),
+        Box::new(lands_of(PlayerRef::You)),
+    );
+    part.up_to = false;
+    a.text = block.to_string();
+    Some(vec![std::sync::Arc::new(a)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "card flow 5: search for a number of cards equal to the difference", priority: 40, parse: search_equal_to_the_difference } }

@@ -117,3 +117,24 @@ fn explore_the_vastlands_each_player_digs_their_own_library() {
     assert!(bottom(P0).contains(&"Grizzly Bears".to_string()));
     assert_eq!((t.life(P0), t.life(P1)), (23, 23));
 }
+
+#[test]
+fn boreas_charger_finds_as_many_plains_as_the_land_difference() {
+    cr!("701.23a", "107.1");
+    assert_supported("Boreas Charger");
+    let mut t = TestGame::new(2);
+    let charger = t.battlefield(P0, "Boreas Charger");
+    t.lands(P0, "Plains", 1);
+    t.lands(P1, "Mountain", 4);
+    for _ in 0..4 {
+        t.library_top(P0, "Plains");
+    }
+    let hand = t.hand_size(P0);
+    t.g.move_object(charger, Zone::Graveyard(P0), events::MoveCause::Effect, None);
+    t.resolve_all();
+    // 4 - 1 = 3 Plains: one onto the battlefield tapped, two into the hand.
+    let plains = t.named_on_battlefield("Plains");
+    assert_eq!(plains.len(), 2);
+    assert_eq!(plains.iter().filter(|p| t.obj_now(**p).tapped).count(), 1);
+    assert_eq!(t.hand_size(P0), hand + 2);
+}
