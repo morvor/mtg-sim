@@ -418,7 +418,7 @@ fn pool() -> &'static [(String, u8)] {
             if !c.is_playable_card() || !c.is_legal_somewhere() {
                 continue;
             }
-            if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+            if !c.is_paper() {
                 continue;
             }
             let front = c.type_line.as_deref().unwrap_or("");
