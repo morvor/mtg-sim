@@ -10,6 +10,12 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::types::*;
 
+/// `Filter::Custom`: one of the cards the latest instruction acted on ("it"/"those cards",
+/// `vars::IT`) that has the same mana value as another of them ("For each of those cards
+/// that has the same mana value as another card revealed this way", Vault 21: House
+/// Gambit).
+pub const SAME_MANA_VALUE_AS_ANOTHER_OF_IT: &str = "same mana value as another of those cards";
+
 pub struct Referents5;
 
 impl KeywordRules for Referents5 {
@@ -23,6 +29,18 @@ impl KeywordRules for Referents5 {
                 g.is_live(id)
                     && crate::kwa::manifest::dread_graveyard_cards(g, ctx).contains(&id),
             );
+        }
+        if name == SAME_MANA_VALUE_AS_ANOTHER_OF_IT {
+            let group: Vec<ObjectId> = ctx
+                .vars
+                .get(&crate::ability::vars::IT)
+                .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                .unwrap_or_default();
+            if !group.contains(&id) {
+                return Some(false);
+            }
+            let mv = |o: ObjectId| g.mana_value_of(o);
+            return Some(group.iter().any(|o| *o != id && mv(*o) == mv(id)));
         }
         None
     }

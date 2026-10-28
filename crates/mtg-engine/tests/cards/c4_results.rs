@@ -152,3 +152,31 @@ fn call_the_spirit_dragons_doesnt_win_with_four_dragons() {
     assert!(!t.has_lost(P1), "{}", t.dump_log());
     assert_eq!(t.counters(ids[0], "+1/+1"), 1);
 }
+
+#[test]
+fn vault_21_makes_treasure_for_each_revealed_card_sharing_a_mana_value() {
+    cr!("202.3", "714.2b");
+    supported("Vault 21: House Gambit");
+    let mut t = TestGame::new(2);
+    let saga = t.battlefield(P0, "Vault 21: House Gambit");
+    let a = t.hand(P0, "Shock");
+    let b = t.hand(P0, "Lightning Bolt");
+    let c = t.hand(P0, "Grizzly Bears");
+    let d = t.hand(P0, "Divination");
+    let e = t.hand(P0, "Hill Giant");
+    let _ = (c, d, e);
+    // Chapter III: reveal Shock, Lightning Bolt (mana value 1 each) and Grizzly Bears
+    // (2): two Treasures.
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b), Entity::Object(c)]);
+    t.g.add_counters(Entity::Object(saga), "lore", 2, None);
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.settle();
+    t.resolve_all();
+    let treasures = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.g.obj(**o).chars.has_subtype("Treasure"))
+        .count();
+    assert_eq!(treasures, 2, "{}", t.dump_log());
+}

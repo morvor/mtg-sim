@@ -512,3 +512,27 @@ fn if_you_put_counters_on_n(l: &str, prev: &mut Effect, b: &mut Builder) -> bool
 }
 
 inventory::submit! { FollowupPattern { name: "referents 5: if you put [kind] counters on N [objects] this way", priority: 100, apply: if_you_put_counters_on_n } }
+
+/// "Reveal up to five nonland cards from your hand. For each of those cards that has the
+/// same mana value as another card revealed this way, create a Treasure token." (Vault 21:
+/// House Gambit): the instruction once for each revealed card sharing its mana value with
+/// another revealed card (CR 202.3).
+fn for_each_sharing_mana_value(l: &str, b: &mut Builder) -> Option<Effect> {
+    let rest = end(l).strip_prefix(
+        "for each of those cards that has the same mana value as another card revealed this way, ",
+    )?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("reveal up to") && !raw.contains("reveal ") {
+        return None;
+    }
+    let e = parse_clause(rest, b)?;
+    Some(Effect::Repeat {
+        times: Value::CountSel(Box::new(Sel::Matching(
+            Box::new(Sel::Var(vars::IT)),
+            Filter::Custom(crate::kw::referents_5::SAME_MANA_VALUE_AS_ANOTHER_OF_IT.into()),
+        ))),
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: for each of those cards that has the same mana value as another card revealed this way", priority: 100, parse: for_each_sharing_mana_value } }
