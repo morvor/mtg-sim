@@ -348,3 +348,43 @@ fn skyship_weatherlight_leaving_strands_its_exiled_cards() {
     assert_eq!(t.hand_size(P0), 1);
     let _ = Zone::Exile;
 }
+
+/// Puts Gathering Stone onto the battlefield for P0, choosing the creature type `ty`.
+fn gathering_stone(t: &mut TestGame, ty: &str) {
+    // The options offered (every creature type), from a throwaway game.
+    let mut probe = TestGame::new(2);
+    enter(&mut probe, P0, "Gathering Stone");
+    let options = probe
+        .asked()
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            decision::Decision::ChooseOption { options, .. } => Some(options),
+            _ => None,
+        })
+        .expect("a creature type is chosen");
+    let i = options.iter().position(|o| o == ty).expect("the type");
+    t.answer(P0, DecisionKind::Option, decision::Answer::Index(i));
+    enter(t, P0, "Gathering Stone");
+    t.resolve_all();
+}
+
+#[test]
+fn gathering_stone_reduces_only_generic_mana() {
+    cr!("601.2f", "118.7d");
+    ruling!(
+        "Gathering Stone",
+        "Gathering Stone's second ability applies only to generic mana in the total cost of spells you cast of the chosen type."
+    );
+    supported("Gathering Stone");
+    // Elvish Visionary ({1}{G}) costs {G}; Llanowar Elves ({G}) still costs {G}.
+    let mut t = TestGame::new(2);
+    gathering_stone(&mut t, "Elf");
+    t.lands(P0, "Forest", 1);
+    let v = t.hand(P0, "Elvish Visionary");
+    assert!(t.cast(P0, v).try_go().is_ok());
+    let mut t = TestGame::new(2);
+    gathering_stone(&mut t, "Elf");
+    t.lands(P0, "Wastes", 1);
+    let e = t.hand(P0, "Llanowar Elves");
+    assert!(t.cast(P0, e).try_go().is_err());
+}

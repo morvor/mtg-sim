@@ -407,3 +407,21 @@ fn sword_of_the_realms_triggers_for_a_token_that_cant_return() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn atla_palani_triggers_for_eggs_dying_with_it() {
+    cr!("603.10a", "603.6c");
+    ruling!(
+        "Atla Palani, Nest Tender",
+        "If Atla Palani dies at the same time as one or more Eggs you control, its last ability triggers for each of those Eggs."
+    );
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Atla Palani, Nest Tender");
+    let e1 = create_token(&mut t, P0, "Egg");
+    let e2 = create_token(&mut t, P0, "Egg");
+    stack_library(&mut t, P0, &["Grizzly Bears", "Hill Giant"]);
+    destroy_together(&mut t, &[a, e1, e2]);
+    assert_eq!(stacked_triggers(&t), 2);
+    t.resolve_all();
+    assert_eq!(creatures(&t, P0).len(), 2);
+}
