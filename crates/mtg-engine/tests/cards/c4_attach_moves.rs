@@ -169,3 +169,27 @@ fn flickerform_returns_the_creature_and_its_auras_attached_to_it() {
     }
     assert_eq!(t.pt(b[0]), (3, 4));
 }
+
+#[test]
+fn bruna_attaches_auras_and_puts_aura_cards_onto_the_battlefield_attached_to_it() {
+    cr!("701.3a", "303.4f");
+    assert_supported("Bruna, Light of Alabaster");
+    let mut t = TestGame::new(2);
+    let bruna = t.battlefield(P0, "Bruna, Light of Alabaster");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let on_bears = t.battlefield(P1, "Holy Strength");
+    t.g.attach(on_bears, Entity::Object(bears));
+    let in_gy = t.graveyard(P0, "Holy Strength");
+    let in_hand = t.hand(P0, "Unholy Strength");
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    let (p, tough) = t.pt(bruna);
+    t.answer_choose(P0, &[Entity::Object(on_bears)]);
+    t.answer_choose(P0, &[Entity::Object(in_gy), Entity::Object(in_hand)]);
+    t.attack(&[(bruna, Entity::Player(P1))], &[]);
+    let on_bruna = t.g.attachments_of(Entity::Object(bruna));
+    assert_eq!(on_bruna.len(), 3);
+    // The Aura P1 controlled is still P1's, now on Bruna.
+    assert_eq!(t.obj_now(on_bears).attached_to, Some(Entity::Object(bruna)));
+    // Holy Strength twice (+1/+2) and Unholy Strength (+2/+1).
+    assert_eq!(t.pt(bruna), (p + 1 + 1 + 2, tough + 2 + 2 + 1));
+}

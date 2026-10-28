@@ -350,3 +350,63 @@ fn exile_with_auras_and_return_attached(block: &str, ctx: &CompileContext) -> Op
 }
 
 inventory::submit! { AbilityPattern { name: "attach moves: exile enchanted creature and its Auras, return them attached", priority: 40, parse: exile_with_auras_and_return_attached } }
+
+/// "[trigger], you may attach to it any number of Auras on the battlefield and you may put
+/// onto the battlefield attached to it any number of Aura cards that could enchant it from
+/// your graveyard and/or hand." (Bruna, Light of Alabaster): Auras chosen (not targeted)
+/// are attached to the source (CR 701.3a: one that can't legally be stays where it is);
+/// Aura cards that could enchant it are put onto the battlefield attached to it (CR
+/// 303.4f).
+fn attach_and_put_auras_onto_it(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const BODY: &str = ", you may attach to it any number of Auras on the battlefield and you may put onto the battlefield attached to it any number of Aura cards that could enchant it from your graveyard and/or hand.";
+    let trigger = block.strip_suffix(BODY)?;
+    if block.contains('\n') || !trigger.starts_with("Whenever ~ ") {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(&format!("{trigger}, draw a card."), ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let AbilityKind::Triggered(t) = &mut a.kind else {
+        return None;
+    };
+    let auras = Filter::and(vec![
+        Filter::Subtype("Aura".into()),
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::not(Filter::AttachedTo(Box::new(Sel::This))),
+    ]);
+    let cards = Filter::and(vec![
+        Filter::Subtype("Aura".into()),
+        Filter::Card,
+        Filter::Or(vec![
+            Filter::InZone(ZoneKind::Graveyard),
+            Filter::InZone(ZoneKind::Hand),
+        ]),
+        Filter::OwnedBy(PlayerRel::You),
+        Filter::CouldAttachTo(Box::new(Sel::This)),
+    ]);
+    let any = |f: Filter| Sel::Choose {
+        chooser: PlayerRef::You,
+        count: Value::Count(f.clone()),
+        filter: f,
+        up_to: true,
+        store: None,
+    };
+    let mut onto = Destination::battlefield();
+    onto.attached_to = Some(Sel::This);
+    t.body = Body::effect(Effect::seq(vec![
+        Effect::Attach {
+            what: any(auras),
+            to: Sel::This,
+        },
+        Effect::Move {
+            what: any(cards),
+            to: onto,
+        },
+    ]));
+    a.text = block.to_string();
+    Some(vec![Arc::new(a)])
+}
+
+inventory::submit! { AbilityPattern { name: "attach moves: attach to it any number of Auras and put Aura cards onto the battlefield attached to it", priority: 40, parse: attach_and_put_auras_onto_it } }
