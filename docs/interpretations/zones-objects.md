@@ -16,3 +16,27 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: learn (Lessons), wishes (Burning Wish, Glittering Wish, ...), Coax from the Blind Eternities, Research // Development, The Raven's Warning, Eyetwitch.
 - Code: `crates/mtg-engine/src/start.rs` (`Game::add_to_sideboard`); `crates/mtg-engine/src/object.rs` (`Zone::Outside`).
 - Tests: `tests/cards/game_rules_outside.rs` (`coax_takes_an_eldrazi_from_outside_the_game_or_face_up_exile`).
+
+## auras-returned-to-chosen-hosts-one-at-a-time: Aura cards returned "attached to creatures you control" enter one at a time
+- Kind: deviation
+- Status: provisional
+- Rules: 303.4f "If an Aura is entering the battlefield under a player's control by any means other than by resolving as an Aura spell, and the effect putting it onto the battlefield doesn't specify the object or player the Aura will enchant, that player chooses what it will enchant as the Aura enters the battlefield. ..." / 608.2c "The controller of the spell or ability follows its instructions in the order written. ..."
+- Question: "Return any number of Aura cards from your graveyard to the battlefield attached to creatures you control" (Storm Herald) returns the Auras in one instruction, each with its own host among the creatures you control. Moving them simultaneously needs a host per card, which the move instruction (one `attached_to` for all the objects it moves) can't express.
+- Decision: The Aura cards are chosen, then for each in turn a creature you control it could enchant is chosen and the Aura is returned attached to it (an Aura with no such creature stays in the graveyard, CR 303.4g). They enter one after another, not at the same time.
+- Alternatives: A per-object host on the move (a destination that asks the controller to choose among a filter for each Aura as they enter together): exact, but needs a new destination field. The difference shows only for abilities that trigger on or look at Auras entering together.
+- Why: The host choices and the restriction to creatures you control are exact; only the simultaneity differs, and no supported card's outcome depends on it today.
+- Affects: Storm Herald.
+- Code: `crates/mtg-engine/src/oracle/patterns/attach_moves.rs` (`return_auras_attached_to_creatures_you_control`).
+- Tests: `tests/cards/c4_attach_moves.rs` (`storm_herald_returns_auras_attached_to_creatures_you_control_then_exiles_them`).
+
+## alteration-host-of-two-types: "Another permanent of that type" for a host with both named types
+- Kind: interpretation
+- Status: provisional
+- Rules: 701.3a "To attach an Aura, Equipment, or Fortification to an object or player means to take it from where it's currently attached, if anywhere, and put it onto that object or player. ..."
+- Question: Enchantment Alteration moves "target Aura attached to a creature or land to another permanent of that type". For an Aura on a land creature (Dryad Arbor), "that type" could be either.
+- Decision: A host that's a creature is treated as a creature (the first type named): the Aura moves to another creature.
+- Alternatives: Let the caster choose either type, or allow any permanent sharing either type.
+- Why: The text reads "that type" as one type; a host of both types is rare and the first named type is the simplest reading.
+- Affects: Enchantment Alteration.
+- Code: `crates/mtg-engine/src/oracle/patterns/attach_moves.rs` (`to_another_permanent_of_that_type`).
+- Tests: `tests/cards/c4_attach_moves.rs` (`enchantment_alteration_moves_an_aura_to_a_permanent_of_its_hosts_type`).

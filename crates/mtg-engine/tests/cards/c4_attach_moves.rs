@@ -73,6 +73,7 @@ fn maddening_hex_moves_to_another_opponent_at_random() {
 fn enchantment_alteration_moves_an_aura_to_a_permanent_of_its_hosts_type() {
     cr!("701.3a", "115.1");
     ruling!("Enchantment Alteration", "Only targets the Aura");
+    interp!("alteration-host-of-two-types");
     assert_supported("Enchantment Alteration");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -231,6 +232,7 @@ fn cass_returns_the_auras_and_moves_the_equipment_that_were_attached_to_it() {
 #[test]
 fn storm_herald_returns_auras_attached_to_creatures_you_control_then_exiles_them() {
     cr!("303.4f", "614.1a", "603.7a");
+    interp!("auras-returned-to-chosen-hosts-one-at-a-time");
     assert_supported("Storm Herald");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
