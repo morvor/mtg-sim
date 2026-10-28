@@ -191,6 +191,7 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
         ZoneKind::Exile => o.zone == Zone::Exile,
         ZoneKind::Hand => o.zone == Zone::Hand(p),
         ZoneKind::Command => o.zone == Zone::Command,
+        ZoneKind::Outside => o.zone == Zone::Outside(p),
         _ => false,
     }
 }
@@ -407,6 +408,7 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             ZoneKind::Exile => g.exile.clone(),
             ZoneKind::Hand => g.player(p).hand.clone(),
             ZoneKind::Command => g.command.clone(),
+            ZoneKind::Outside => g.player(p).sideboard.clone(),
             _ => vec![],
         };
         for c in cards {

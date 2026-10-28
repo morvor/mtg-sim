@@ -6547,6 +6547,7 @@ impl Renderer<'_> {
             ZoneKind::Hand => "hand",
             ZoneKind::Exile => "exile",
             ZoneKind::Battlefield => "battlefield",
+            ZoneKind::Outside => "outside the game",
             _ => "zone",
         };
         let zones: Vec<&str> = spec.zones.iter().map(zone).collect();

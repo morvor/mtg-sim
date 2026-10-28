@@ -576,6 +576,9 @@ fn zones<'a>(
             "library" => ZoneKind::Library,
             "graveyard" => ZoneKind::Graveyard,
             "hand" => ZoneKind::Hand,
+            // "Search your library, graveyard, and/or outside the game" (Invasion of
+            // Arcavios): the cards you own outside the game (CR 400.11b).
+            "outside the game" if matches!(whose, PlayerRef::You) => ZoneKind::Outside,
             _ => return None,
         };
         if zones.contains(&k) {

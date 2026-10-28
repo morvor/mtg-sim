@@ -176,3 +176,112 @@ fn each_player_on_your_team(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game rules 4: each player on your team", priority: 100, parse: each_player_on_your_team } }
+
+/// "Search your library, graveyard, and/or outside the game for an instant or sorcery card
+/// you own" (Invasion of Arcavios): every card in your own library, graveyard, hand, and
+/// outside the game is a card you own (CR 108.3, 400.11b), so "you own" adds nothing.
+fn search_for_cards_you_own(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, rest) = l.split_once(" for ")?;
+    if !head.starts_with("search your ") || head.contains("'s ") {
+        return None;
+    }
+    let (spec, tail) = rest.split_once(',').unwrap_or((rest, ""));
+    let spec2 = spec
+        .replace(" cards you own", " cards")
+        .replace(" card you own", " card");
+    if spec2 == spec {
+        return None;
+    }
+    let sep = if tail.is_empty() && !rest.contains(',') {
+        ""
+    } else {
+        ","
+    };
+    parse_clause(&format!("{head} for {spec2}{sep}{tail}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "game rules 4: search your zones for a card you own", priority: 100, parse: search_for_cards_you_own } }
+
+/// Cards you own outside the game (CR 400.11b).
+fn outside_cards(quality: Filter) -> Filter {
+    Filter::and(vec![
+        quality,
+        Filter::Card,
+        Filter::InZone(ZoneKind::Outside),
+        Filter::OwnedBy(PlayerRel::You),
+    ])
+}
+
+/// "You may play a card you own from outside the game this turn." (Wish): one card you
+/// own outside the game may be played this turn, chosen as it's played (its rulings),
+/// following the normal timing rules and paying its costs.
+fn may_play_from_outside(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("you may ").unwrap_or(l);
+    let (spells_only, r) = if let Some(r) = l.strip_prefix("play ") {
+        (false, r)
+    } else {
+        (true, l.strip_prefix("cast ")?)
+    };
+    let r = r.strip_suffix(" you own from outside the game this turn")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let f = if r == "card" {
+        Filter::Card
+    } else {
+        let (f, false, tail) = parse_object_phrase(r)? else {
+            return None;
+        };
+        if !end(tail).is_empty() {
+            return None;
+        }
+        f
+    };
+    Some(Effect::WithPlayTerms {
+        terms: PlayTerms {
+            spells_only,
+            limit: Some(1),
+            ..Default::default()
+        },
+        effect: Box::new(Effect::GrantPlayPermission {
+            who: PlayerRef::You,
+            what: Sel::All(outside_cards(f)),
+            duration: Duration::EndOfTurn,
+            free: false,
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "game rules 4: you may play a card you own from outside the game this turn", priority: 100, parse: may_play_from_outside } }
+
+/// "Cast any number of Eldrazi spells from among cards you own outside the game without
+/// paying their mana costs." (Spawnsire of Ulamog): cast as the ability resolves, one at a
+/// time (CR 608.2g), from outside the game (CR 400.11b).
+fn cast_any_number_from_outside(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("cast any number of ")?.strip_suffix(
+        " from among cards you own outside the game without paying their mana costs",
+    )?;
+    let (before, after) = r.split_once("spells")?;
+    let desc = format!("{before}cards{after}");
+    let (quality, _, tail) = parse_object_phrase(desc.trim())?;
+    if !end(tail).trim().is_empty() {
+        return None;
+    }
+    Some(Effect::CastCard {
+        who: PlayerRef::You,
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                outside_cards(quality),
+                Filter::not(Filter::Type(crate::types::CardType::Land)),
+            ]),
+            count: Value::c(99),
+            up_to: true,
+            store: None,
+        },
+        free: true,
+        optional: false,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "game rules 4: cast any number of spells from among cards you own outside the game", priority: 100, parse: cast_any_number_from_outside } }
