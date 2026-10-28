@@ -684,12 +684,14 @@ impl Renderer<'_> {
                 let m = self.me();
                 np.post.push(format!("{{opt:that's}} blocking {m}"))
             }
+            // "target creature it's blocking": a creature the source blocks is blocked by
+            // it (CR 509.1g).
             Filter::BlockedBySource if self.self_before_target => {
-                np.post.push("blocked by ~it".into())
+                np.post.push("{alt:blocked by ~it|~it is blocking}".into())
             }
             Filter::BlockedBySource => {
                 let m = self.me();
-                np.post.push(format!("blocked by {m}"))
+                np.post.push(format!("{{alt:blocked by {m}|{m} is blocking}}"))
             }
             Filter::BlockingAnyOf(s) => {
                 let s = self.sel(s, Case::Obj);
@@ -1541,6 +1543,13 @@ impl Renderer<'_> {
             ctrl.push(' ');
             ctrl.push_str(c);
         }
+        // "a card you own exiled with ~": the quality says where it is.
+        if np.zone_said && np.zone == Some(ZoneKind::Exile) && np.controller.is_none() {
+            if let Some(o) = np.owner.take() {
+                ctrl.push(' ');
+                ctrl.push_str(&self.owns_phrase(o));
+            }
+        }
         if chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control" {
             let ch = chosen[0];
             let c = ctrl.trim_start();
@@ -1555,6 +1564,19 @@ impl Renderer<'_> {
             }
         } else {
             s.push_str(&ctrl);
+        }
+        // "target creature without flying that's attacking you": the ability lacked may
+        // come first.
+        let attacking_after_without =
+            !(chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control")
+                && !np.without.is_empty()
+                && np.with.is_empty()
+                && np.with_on.is_empty()
+                && np.post.len() == 1
+                && np.post[0].starts_with("attacking ");
+        if !(chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control")
+            && !attacking_after_without
+        {
             for p in &np.post {
                 s.push(' ');
                 s.push_str(p);
@@ -1570,7 +1592,15 @@ impl Renderer<'_> {
             s.push_str(" with ");
             s.push_str(&join_list(&with, "and"));
         }
-        if !np.without.is_empty() {
+        if attacking_after_without {
+            let w = join_list(&np.without, "or");
+            let a = &np.post[0];
+            let that = match num {
+                Num::One => "that's",
+                Num::Many => "that are",
+            };
+            s.push_str(&format!(" {{alt:{a} without {w}|without {w} {that} {a}}}"));
+        } else if !np.without.is_empty() {
             s.push_str(" without ");
             s.push_str(&join_list(&np.without, "or"));
         }

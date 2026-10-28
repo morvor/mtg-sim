@@ -1,0 +1,66 @@
+# roundtrip-pairs-2: the 3+-card clusters after paper-scope-1, and the next 25 two-card clusters
+
+Part of the `roundtrip-followups.md` stream. Baseline (Oct 28, origin 52c17bfe, after
+paper-scope-1 counted 1,061 more paper cards): 27,828 of 31,667 fully supported cards pass;
+3,705 mismatch (939 single-card clusters, 242 two-card clusters and the clusters below).
+Many of the newly counted cards (Masters Edition, Vintage Masters, Tempest Remastered
+reprints: old cards with old wordings) are new to the round trip. Runs alone.
+
+CLUSTERS TAKEN (from `roundtrip --clusters 1200` on 52c17bfe): every cluster of 3+ cards,
+then the first 25 two-card clusters in the tool's order:
+   24  gap: Filter  [Resplendent Marshal; Rendmaw, Creaking Nest; Oblivious Bookworm]
+   13  gap: EventsThisTurn  [Angel of Destiny; Boxing Ring; Ramses, Assassin Lord]
+    9  gap: Effect  [Divine Intervention; Clockwork Steed; Clockwork Avian]
+    4  gap: Condition  [Reset; Zimone, All-Questioning; Hero of Bretagard]
+    4  oracle `have` vs rendered `∅`  [Varchild's War-Riders; Flaring Flame-Kin; Shyft]
+    4  oracle `without flying that is attacking` vs rendered `attacking you without flying`  [Giant Trap Door Spider; Snow Fortress; Hunting Kavu]
+    3  gap: StaticEffect  [Heartwood Dryad; Wall of Diffusion; Ranar the Ever-Watchful]
+    3  gap: Value  [Impact Resonance; Taste of Paradise; Explosion of Riches]
+    3  gap: remembering Before  [Oversimplify; Faerie Slumber Party; Luminate Primordial]
+    3  oracle `cast of the chosen type` vs rendered `of {alt:the chosen type|that type} cast`  [Stenn, Paranoid Partisan; Cloud Key; Umori, the Collector]
+    3  oracle `creature token of the chosen` vs rendered `colorless chosen color chosen type`  [Volrath's Laboratory; Riptide Replicator; Sarpadian Empires, Vol. VII]
+    3  oracle `it is blocking` vs rendered `blocked by ~it`  [Goblin Snowman; Wall of Vipers; Tinder Wall]
+    3  oracle `nonbasic` vs rendered `not basic`  [Choking Sands; Helldozer; Molten Rain]
+    3  oracle `that player exile a card` vs rendered `exile a card in {alt:that player's|its}`  [Fiend of the Shadows; Elkin Lair; Kheru Mind-Eater]
+    3  oracle `that player exile card from` vs rendered `{alt:that player|it} exile card from the`  [Dazzling Sphinx; Black Widow, Super Spy; Gríma, Saruman's Footman]
+    3  oracle `where x is the number` vs rendered `∅`  [Thief of Blood; Hellfire; Thromok the Insatiable]
+    3  oracle `would be put to owner` vs rendered `you own would be put`  [Yawgmoth's Will; Gaea's Will; Necrodominance]
+    3  oracle `you own exiled with ~` vs rendered `exiled with ~it you own`  [Gustha's Scepter; Bottled Cloister; Endless Horizons]
+    3  oracle `∅` vs rendered `a permanent {opt:that is}`  [Dream Prowler; Security Bypass; Yuan-Ti Malison]
+    2  gap: qualities of an alternative list  [Soldevi Adnate; Desdemona, Freedom's Edge]
+    2  gap: remembering TopOfLibrary  [Parker Luck; Keen Duelist]
+    2  gap: several remembered numbers  [Hawkeye, Master Marksman; Tranquil Frillback]
+    2  oracle `1 of it to owner` vs rendered `a card from among it`  [Browse; Flow State]
+    2  oracle `1 of it` vs rendered `a card drawn this way`  [Krovikan Sorcerer; Soldevi Sage]
+    2  oracle `1 or more +1/+1 counter` vs rendered `x +1/+1 counter from among`  [Jetfire, Ingenious Scientist // Jetfire, Air Guardian; Ooze Flux]
+    2  oracle `1 or more +1/+1 counter` vs rendered `x +1/+1 counter from ~`  [Simic Manipulator; Arcee, Sharpshooter // Arcee, Acrobatic Coupe]
+    2  oracle `1 or more {e} if` vs rendered `{alt:any amount of|one or more} {e} if you do`  [Pia Nalaar, Chief Mechanic; Localized Destruction]
+    2  oracle `1 or more` vs rendered `any number of`  [Loamcrafter Faun; Specter of Mortality]
+    2  oracle `a +1/+1 counter on ~it` vs rendered `x +1/+1 counter on it`  [Michelangelo, On the Scene; Batroc the Leaper]
+    2  oracle `a card name exile the` vs rendered `{alt:a|any} card name exile the`  [Demonic Consultation; Divining Witch]
+    2  oracle `a card name reveal a` vs rendered `{alt:a|any} card name reveal a`  [Cursed Scroll; Magus of the Scroll]
+    2  oracle `a card name that player` vs rendered `{alt:a|any} card name reveal the`  [Vexing Arcanix; Petra Sphinx]
+    2  oracle `a opponent control deal combat` vs rendered `your opponent control deal combat`  [Nelly Borca, Impulsive Accuser; Norn's Decree]
+    2  oracle `a opponent control deal x` vs rendered `{alt:an opponent controls|your opponents control} deal x damage to`  [Dong Zhou, the Tyrant; Alpha Brawl]
+    2  oracle `a opponent control until ~` vs rendered `{alt:an opponent controls|your opponents control} until ~ leave the`  [Turncoat Kunoichi; Driftgloom Coyote]
+    2  oracle `a opponent control would die` vs rendered `{alt:an opponent controls|your opponents control} would die exile it`  [Ravenloft Adventurer; Ravenous Slime]
+    2  oracle `any player may activate this` vs rendered `activate only during any upkeep`  [Armageddon Clock; Infinite Hourglass]
+    2  oracle `base power become equal to` vs rendered `have base power`  [Belligerent Yearling; PuPu UFO]
+    2  oracle `block or crew vehicle it` vs rendered `or block {alt:enchanted permanent's|its} activated ability`  [Bound in Gold; Intercessor's Arrest]
+    2  oracle `blocking or` vs rendered `{opt:that is} blocking ~ or each`  [Greater Werewolf; Kjeldoran Frostbeast]
+    2  oracle `card name other than a` vs rendered `not basic land card name`  [Desperate Research; Necromentia]
+    2  oracle `card` vs rendered `∅`  [Garruk's Harbinger; Sanctum of Shattered Heights]
+    2  oracle `cast any number of the` vs rendered `may cast it`  [Bloodthirsty Adversary; The Tale of Tamiyo]
+    2  oracle `cast of the chosen type` vs rendered `of {alt:the chosen type|that type} cast cost {1}`  [Gathering Stone; Herald's Horn]
+
+Note: clusters where the rendered side is `∅` for content the Oracle text has (e.g. "where
+x is the number" on Thief of Blood, Hellfire, Thromok) may mean the compiled ability lost
+that content — a parser bug, not a renderer gap. Check each.
+
+For each card: triage — parser bug first (does the AST mean what the text says, in
+multiplayer, with control changes, tokens, copies, replacement effects, zero-quantity
+choices?) with a fix + in-game test in `tests/cards/roundtrip_pairs_2.rs` that fails on the
+old code + a row in the bug table (`FINDINGS` in crates/mtg-tools/src/roundtrip.rs); else
+renderer wording (independently of the parser), or a CR-justified equivalence. Add "Parser
+bugs found" and "Remaining" sections. Regenerate docs/ROUNDTRIP.md and
+docs/roundtrip-passing.txt; `roundtrip --check` must pass.

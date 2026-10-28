@@ -36,6 +36,10 @@ pub(crate) struct ExtraState {
     /// In a "whenever the Ring tempts you" trigger, whose event object is the creature
     /// chosen as your Ring-bearer (CR 701.54a).
     pub ring_tempts: bool,
+    /// The duration of a replacement effect a resolving instruction creates, said with
+    /// its event ("If a card would be put into your graveyard from anywhere this turn"):
+    /// taken by the event's words, else said after the effect.
+    pub event_duration: Option<String>,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").

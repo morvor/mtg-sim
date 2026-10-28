@@ -923,6 +923,17 @@ impl Renderer<'_> {
                 let g = self.gap(format!("Sel::EventsDuring({w:?}, {c:?})"));
                 decline(g, case)
             }
+            // "creatures that died this way": the permanents an earlier instruction put into
+            // a graveyard from the battlefield (CR 700.4), as they last existed there.
+            Sel::Matching(inner, f)
+                if matches!(inner.as_ref(), Sel::Before(x)
+                    if matches!(x.as_ref(), Sel::Matching(y, Filter::InZone(ZoneKind::Graveyard))
+                        if matches!(y.as_ref(), Sel::Var(v) if *v == vars::IT)
+                            && self.this_way_of(y).is_some())) =>
+            {
+                let n = self.noun(f, Num::Many);
+                decline(format!("{n} that died this way"), case)
+            }
             // "the creatures destroyed this way": the objects an earlier instruction acted
             // on.
             Sel::Matching(inner, f)

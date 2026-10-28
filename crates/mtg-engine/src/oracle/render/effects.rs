@@ -90,6 +90,17 @@ impl Renderer<'_> {
                         return Some((who.clone(), format!("discard {s}"), false));
                     }
                 }
+                // "Draw two cards, then discard one of them": one of the cards drawn.
+                if let (Filter::In(sel), Value::Const(1), false) = (filter, n, *random) {
+                    if self.this_way_of(sel).is_some_and(|(v, _, _)| v == "drawn") {
+                        self.it_done = Some("cards discarded this way".into());
+                        return Some((
+                            who.clone(),
+                            "discard {alt:a card drawn this way|one of them}".into(),
+                            false,
+                        ));
+                    }
+                }
                 // "... for each card discarded this way".
                 self.it_done = Some("cards discarded this way".into());
                 let noun = self.card_noun(filter);
@@ -4041,8 +4052,26 @@ impl Renderer<'_> {
                 return s;
             }
         }
-        let s = self.replacement(def, *uses);
         let d = self.duration(duration);
+        // "If a card would be put into your graveyard from anywhere this turn, exile that
+        // card instead."
+        let zone_change = matches!(
+            def.event,
+            ReplacementEvent::ZoneChange {
+                from: None,
+                to: Some(_),
+                ..
+            }
+        );
+        if zone_change && uses.is_none() && (d == "this turn" || d == "until end of turn") {
+            self.extra.event_duration = Some("this turn".into());
+        }
+        let s = self.replacement(def, *uses);
+        if zone_change && self.extra.event_duration.take().is_none() && uses.is_none() {
+            if d == "this turn" || d == "until end of turn" {
+                return s;
+            }
+        }
         // "All damage that would be dealt to target creature this turn is dealt to
         // you instead."
         if (d == "this turn" || d == "until end of turn")
@@ -5372,7 +5401,7 @@ impl Renderer<'_> {
     }
 
     /// `actor_vp` without side effects on target introduction or gaps.
-    fn actor_vp_peek(&mut self, e: &Effect) -> Option<(PlayerRef, String, bool)> {
+    pub(super) fn actor_vp_peek(&mut self, e: &Effect) -> Option<(PlayerRef, String, bool)> {
         let saved_i = self.introduced.clone();
         let saved_g = self.gaps.len();
         let r = self.actor_vp(e);
@@ -6014,9 +6043,34 @@ impl Renderer<'_> {
         }
         let p = self.player(who, Case::Subj);
         let inner = self.effect(effect);
+        // "you may have target creature get +X/+X ..., where X is ~'s power", "you may
+        // have ~ become the color or colors of your choice": the value kept or the choice
+        // made first isn't said apart.
+        let main = match effect {
+            Effect::Seq(v) => {
+                let rest: Vec<&Effect> = v
+                    .iter()
+                    .filter(|e| {
+                        !matches!(
+                            e,
+                            Effect::StoreValue { .. }
+                                | Effect::Choose {
+                                    kind: ChoiceKind::Colors | ChoiceKind::Color,
+                                    ..
+                                }
+                        )
+                    })
+                    .collect();
+                match rest.as_slice() {
+                    [one] => *one,
+                    _ => effect,
+                }
+            }
+            e => e,
+        };
         // An effect with its own subject: "you may have ~ deal 3 damage to ...".
         let has_subject = matches!(
-            effect,
+            main,
             Effect::DealDamage { .. }
                 | Effect::DealDamageExcess { .. }
                 | Effect::DealDividedDamage { .. }
@@ -6026,10 +6080,10 @@ impl Renderer<'_> {
                 | Effect::Modify { .. }
                 | Effect::PhaseOut { .. }
                 | Effect::AddRestriction { .. }
-        ) || matches!(effect, Effect::KeywordAction { action, .. }
+        ) || matches!(main, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))
             // "You may have that creature's controller create a token".
-            || matches!(effect, Effect::AsPlayer { who: w, .. } if !matches!(w, PlayerRef::You));
+            || matches!(main, Effect::AsPlayer { who: w, .. } if !matches!(w, PlayerRef::You));
         if has_subject
             && !inner.starts_with("gain control")
             && !inner.starts_with("switch")
@@ -7097,13 +7151,29 @@ impl Renderer<'_> {
         } else if let (Some(p), Some(t)) = (spec.power, spec.toughness) {
             words.push(format!("{p}/{t}"));
         }
+        // "a 2/2 creature token of the chosen color and type": placeholders for the
+        // choices made for the source (`tokens::CHOSEN_COLOR`, `CHOSEN_TYPE`).
+        let chosen_color = spec
+            .subtypes
+            .iter()
+            .any(|s| s.as_str() == crate::tokens::CHOSEN_COLOR);
+        let chosen_type = spec
+            .subtypes
+            .iter()
+            .any(|s| s.as_str() == crate::tokens::CHOSEN_TYPE);
         let colors: Vec<String> = color_words(spec.colors);
         if colors.is_empty() {
-            words.push("colorless".into());
+            if !chosen_color {
+                words.push("colorless".into());
+            }
         } else {
             words.push(join_list(&colors, "and"));
         }
         for s in &spec.subtypes {
+            if s.as_str() == crate::tokens::CHOSEN_COLOR || s.as_str() == crate::tokens::CHOSEN_TYPE
+            {
+                continue;
+            }
             words.push(s.to_string());
         }
         let mut types = spec.card_types.clone();
@@ -7117,7 +7187,12 @@ impl Renderer<'_> {
         for t in &types {
             words.push(t.word().to_string());
         }
-        let mut tail = String::new();
+        let mut tail = match (chosen_color && colors.is_empty(), chosen_type) {
+            (true, true) => " of the chosen color and type".to_string(),
+            (true, false) => " of the chosen color".to_string(),
+            (false, true) => " of the chosen type".to_string(),
+            (false, false) => String::new(),
+        };
         if !spec.name.is_empty()
             && !spec
                 .subtypes
@@ -7878,7 +7953,17 @@ impl Renderer<'_> {
             let mut grants = keywords.clone();
             grants.extend(abilities.iter().cloned());
             if !grants.is_empty() {
-                let g = format!("{has} {}", join_list(&grants, "and"));
+                // "has trample, and has "{R}: ..."": the quoted abilities may have a verb
+                // of their own.
+                let g = if !keywords.is_empty() && !abilities.is_empty() {
+                    format!(
+                        "{has} {} and {{opt:{has}}} {}",
+                        join_list(&keywords, "and"),
+                        join_list(&abilities, "and")
+                    )
+                } else {
+                    format!("{has} {}", join_list(&grants, "and"))
+                };
                 match parts.iter().position(|p| p == GRANTS) {
                     Some(i) => parts[i] = g,
                     None => parts.push(g),
@@ -8006,7 +8091,14 @@ impl Renderer<'_> {
             }
             // "choose any card name": any card in the Oracle card reference (CR 201.4).
             ChoiceKind::CardName => "{alt:a|any} card name".into(),
-            ChoiceKind::CardNameFiltered(f) => format!("a {f} card name"),
+            // "a card name other than a basic land card name" (`choices.rs`: "not:...").
+            ChoiceKind::CardNameFiltered(f) => match f.strip_prefix("not:") {
+                Some(n) => format!(
+                    "a card name other than {}",
+                    with_article(&format!("{n} card name"))
+                ),
+                None => format!("a {f} card name"),
+            },
             ChoiceKind::Number { min, max } => self.number_choice(*min, *max),
             ChoiceKind::Opponent => "an opponent".into(),
             ChoiceKind::Player => "a player".into(),

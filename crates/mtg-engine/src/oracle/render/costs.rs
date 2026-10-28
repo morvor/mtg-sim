@@ -347,7 +347,23 @@ impl Renderer<'_> {
                     w.unwrap_or_default()
                 )
             }
-            CostPart::Effect(e) => self.effect(e),
+            CostPart::Effect(e) => {
+                let s = self.effect(e);
+                // "Cumulative upkeep—Have an opponent create a 1/1 red Survivor creature
+                // token" ("—An opponent gains 1 life"): a cost another player performs.
+                let last = match &**e {
+                    Effect::Seq(v) => v.last(),
+                    e => Some(e),
+                };
+                let by_other = last
+                    .and_then(|l| self.actor_vp_peek(l))
+                    .is_some_and(|(w, _, _)| !matches!(w, PlayerRef::You));
+                if by_other {
+                    format!("{{opt:have}} {s}")
+                } else {
+                    s
+                }
+            }
             CostPart::PayManaCostOf(s) => {
                 let s = self.sel(s, players::Case::Poss);
                 format!("pay {s} mana cost")

@@ -237,9 +237,12 @@ fn amount_phrase<'a>(s: &'a str, where_x: &Option<Value>) -> Option<(Value, &'a 
     if s.starts_with("a ") || s.starts_with("an ") {
         return None;
     }
+    // "X plus 3 damage, where X is ..." (Hellfire): the defined X wherever the amount
+    // uses it.
     let n = match (n, where_x) {
         (Value::X, Some(v)) => v.clone(),
-        (n, _) => n,
+        (n, Some(v)) => super::a701_action_triggers::substitute_x(&n, v)?,
+        (n, None) => n,
     };
     Some((n, r))
 }
