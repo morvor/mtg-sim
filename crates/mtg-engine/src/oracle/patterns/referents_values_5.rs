@@ -334,3 +334,66 @@ fn returned_land_had_nonbasic_type(c: &str) -> Option<Condition> {
 }
 
 inventory::submit! { super::ConditionPattern { name: "referents 5: that land (returned by the cost) had a nonbasic land type", priority: 100, parse: returned_land_had_nonbasic_type } }
+
+/// "When ~ dies, if it had one or more counters on it, create a 0/0 ... token, then put
+/// ~'s counters on that token." (Ambitious Augmenter): the counters ~ had as it last
+/// existed on the battlefield (CR 608.2h), each kind and number.
+fn put_sources_counters_on(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("put ~'s counters on ")?;
+    let (to, rest) = crate::oracle::effects::object_ref(r, b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let from = if raw.contains("when ~ dies,") || raw.contains("when this creature dies,") {
+        if !b.in_trigger {
+            return None;
+        }
+        Sel::TriggerLki
+    } else {
+        Sel::This
+    };
+    Some(Effect::PutCountersOf {
+        from,
+        to,
+        kind: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: put ~'s counters on [object]", priority: 100, parse: put_sources_counters_on } }
+
+/// "Otherwise, you may turn a permanent you control face up." (Zimone, Mystery
+/// Unraveler): only a face-down permanent can be turned face up (CR 702.37e, 708.7), so
+/// the choice is among those.
+fn turn_a_permanent_face_up(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains("turn a permanent you control face up") {
+        return None;
+    }
+    parse_sentence(
+        &l.replace(
+            "turn a permanent you control face up",
+            "turn a face-down permanent you control face up",
+        ),
+        b,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: turn a permanent you control face up", priority: 100, parse: turn_a_permanent_face_up } }
+
+/// "Whenever you cast your second spell each turn, copy it, then exile the spell you cast
+/// with four time counters on it." (Taigam, Master Opportunist): the spell the trigger is
+/// about.
+fn the_spell_you_cast(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains("the spell you cast") || !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if raw.matches("cast").count() < 2 || !raw.contains("whenever you cast ") {
+        return None;
+    }
+    parse_sentence(&l.replace("the spell you cast", "that spell"), b)
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: the spell you cast (the triggering spell)", priority: 100, parse: the_spell_you_cast } }
