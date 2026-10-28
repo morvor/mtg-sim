@@ -202,3 +202,56 @@ fn if_still_on_battlefield_attach(block: &str, ctx: &CompileContext) -> Option<V
 }
 
 inventory::submit! { AbilityPattern { name: "attach moves: if ~ is still on the battlefield, put that Aura card onto the battlefield attached to it", priority: 40, parse: if_still_on_battlefield_attach } }
+
+/// The search instruction of an ability's body: its filter and destination.
+fn search_of(e: &mut Effect) -> Option<(&mut Filter, &mut Destination)> {
+    match e {
+        Effect::Search { filter, to, .. } => Some((filter, to)),
+        Effect::Seq(v) => v.iter_mut().find_map(search_of),
+        Effect::May { effect, .. } => search_of(effect),
+        _ => None,
+    }
+}
+
+/// "At the beginning of your upkeep, you may search your library for a Curse card that
+/// doesn't have the same name as a Curse attached to enchanted player, put it onto the
+/// battlefield attached to that player, then shuffle." (Curse of Misfortunes): a Curse put
+/// onto the battlefield attached to a player (CR 303.4f), not one with the name of a Curse
+/// already on them.
+fn search_curse_attached_to_player(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const NAME: &str = " that doesn't have the same name as a Curse attached to enchanted player";
+    const ONTO: &str = "put it onto the battlefield attached to that player";
+    if !block.contains(NAME) || !block.contains(ONTO) || block.contains('\n') {
+        return None;
+    }
+    let rewritten = block
+        .replacen(NAME, "", 1)
+        .replacen(ONTO, "put it onto the battlefield", 1);
+    let v = crate::oracle::parse_ability(&rewritten, ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let AbilityKind::Triggered(t) = &mut a.kind else {
+        return None;
+    };
+    let (filter, to) = search_of(&mut t.body.effect)?;
+    if to.zone != ZoneKind::Battlefield {
+        return None;
+    }
+    let enchanted = PlayerRef::ControllerOf(Box::new(Sel::AttachedTo));
+    let curses_there = Sel::All(Filter::and(vec![
+        Filter::Subtype("Curse".into()),
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::AttachedTo(Box::new(Sel::Players(enchanted.clone()))),
+    ]));
+    *filter = Filter::and(vec![
+        filter.clone(),
+        Filter::not(Filter::SameNameAs(Box::new(curses_there))),
+    ]);
+    to.attached_to = Some(Sel::Players(enchanted));
+    a.text = block.to_string();
+    Some(vec![Arc::new(a)])
+}
+
+inventory::submit! { AbilityPattern { name: "attach moves: search for a Curse and put it onto the battlefield attached to that player", priority: 40, parse: search_curse_attached_to_player } }

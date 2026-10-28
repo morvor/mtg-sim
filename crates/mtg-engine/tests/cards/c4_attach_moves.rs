@@ -117,3 +117,29 @@ fn auratouched_mage_attaches_the_aura_if_still_on_the_battlefield() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Holy Strength"));
 }
+
+#[test]
+fn curse_of_misfortunes_finds_a_curse_with_another_name_attached_to_that_player() {
+    cr!("303.4f", "701.23a");
+    assert_supported("Curse of Misfortunes");
+    let mut t = TestGame::new(2);
+    let com = t.battlefield(P0, "Curse of Misfortunes");
+    t.g.attach(com, Entity::Player(P1));
+    let ph = t.battlefield(P0, "Curse of the Pierced Heart");
+    t.g.attach(ph, Entity::Player(P1));
+    let same = t.library_top(P0, "Curse of the Pierced Heart");
+    let other = t.library_top(P0, "Curse of Stalked Prey");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(other)]);
+    t.advance_to(P0, mtg_engine::turn::Step::Draw);
+    let s = t.named_on_battlefield("Curse of Stalked Prey");
+    assert_eq!(s.len(), 1);
+    assert_eq!(t.obj_now(s[0]).attached_to, Some(Entity::Player(P1)));
+    // The Curse with a name already on that player wasn't offered.
+    let offered = t.asked().into_iter().find_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+        _ => None,
+    });
+    let offered = offered.expect("a choice of Curse cards");
+    assert!(!offered.contains(&Entity::Object(same)));
+}
