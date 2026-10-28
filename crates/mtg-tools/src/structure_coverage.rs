@@ -81,7 +81,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         if !c.is_playable_card() || !c.is_legal_somewhere() {
             continue;
         }
-        if c.games.iter().all(|g| g != "paper") && !c.games.is_empty() {
+        if !c.is_paper() {
             continue;
         }
         total_cards += 1;

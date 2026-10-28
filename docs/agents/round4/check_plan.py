@@ -26,7 +26,8 @@ the gap list (Memory Jar shares Magus of the Jar's text) may carry either card c
 
 With --live the paper set is computed twice: from `mtg-tools unsupported --paper --by-card`
 and from `mtg-tools unsupported --by-card` filtered here by the paper rule of paper-scope-1
-(games empty or with "paper", or legal, restricted or banned in a paper format). The rule's
+(`is_paper` in scripts/rulings_batches.py, the mirror of ScryfallCard::is_paper: games empty
+or with "paper", or legal, restricted or banned in a paper format, digital versions aside). The rule's
 list is the one checked, so the check means the same before and after paper-scope-1 lands; the
 script says whether the tools' `--paper` list already agrees with the rule.
 """
@@ -50,19 +51,16 @@ def read_tsv(path):
     return [dict(zip(head, l.split("\t"))) for l in lines[1:]]
 
 
-PAPER_FORMATS = ("standard", "pioneer", "modern", "legacy", "vintage", "pauper", "commander",
-                 "oathbreaker", "paupercommander", "duel", "oldschool", "premodern", "predh")
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from rulings_batches import is_paper  # noqa: E402  (paper-scope-1's rule, ScryfallCard::is_paper)
 
 
-def is_paper(card):
-    """paper-scope-1's rule (ScryfallCard::is_paper): a card is a paper card if its oracle
-    record's games is empty or includes paper, or it is legal, restricted or banned in a
-    format played with paper cards."""
-    games = card.get("games") or []
-    if not games or "paper" in games:
-        return True
-    leg = card.get("legalities") or {}
-    return any(leg.get(f) in ("legal", "restricted", "banned") for f in PAPER_FORMATS)
+def paper_names_of(text):
+    """The cards in the snapshot with this text (digital-version rows must have none)."""
+    return {r["card"] for r in SNAPSHOT if r["text"] == text}
+
+
+SNAPSHOT = []
 
 
 def run_tools(*args):
@@ -76,6 +74,7 @@ def main():
     problems = []
     base = read_tsv(os.path.join(HERE, "baseline.tsv"))
     gap = read_tsv(os.path.join(HERE, "paper-scope-gap.tsv"))
+    SNAPSHOT.extend(base + gap)
     cards_of = collections.defaultdict(set)
     for r in base:
         cards_of[r["text"]].add(r["card"])
@@ -92,6 +91,12 @@ def main():
     for src, rows in sources.items():
         for r in rows:
             t = r["text"]
+            if src == "round4/deferred.tsv" and r.get("category", "").startswith("digital version"):
+                # A digital version the paper rule leaves out (DIGITAL_VERSIONS in
+                # crates/mtg-data/src/scryfall.rs): recorded here, not a paper text.
+                if r["example_card"] in paper_names_of(t):
+                    problems.append(f"{src}: {r['example_card']} is a paper card: {t[:80]}")
+                continue
             seen[t].append(src)
             if t not in cards_of:
                 problems.append(f"{src}: text not in the snapshot: {t[:100]}")
