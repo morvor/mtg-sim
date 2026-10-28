@@ -408,9 +408,9 @@ impl Game {
     fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
-        if self.can_play_land_now(p) {
+        if self.land_play_available(p) {
             for c in self.playable_land_cards(p) {
-                if !self.can_pay_land_play_cost(p, c) {
+                if !self.land_play_timing_ok(p, c) || !self.can_pay_land_play_cost(p, c) {
                     continue;
                 }
                 out.push(Action::PlayLand { card: c });
@@ -448,12 +448,30 @@ impl Game {
     pub fn can_play_land_now(&self, p: PlayerId) -> bool {
         // CR 305.2, 505.6b: active player, main phase, empty stack, land play available.
         // With shared team turns each player on the active team may (CR 805.4c).
+        self.land_play_available(p) && self.turn.step.is_main() && self.stack.is_empty()
+    }
+
+    /// Whether `p` could play a land now but for the timing of land plays (a main phase,
+    /// the stack empty): it's their turn, they have priority and a land play left, and
+    /// nothing stops them from playing lands (CR 305.2, 305.2b).
+    fn land_play_available(&self, p: PlayerId) -> bool {
         self.is_active_player(p)
-            && self.turn.step.is_main()
-            && self.stack.is_empty()
             && self.has_priority(p)
             && self.player(p).lands_played_this_turn < self.player(p).land_plays
             && !self.player_restricted(p, |r| matches!(r, Restriction::CantPlayLands(_)))
+    }
+
+    /// Whether the timing of land plays lets `p` play `card` now: during a main phase
+    /// with the stack empty (CR 305.1), or any time they could cast an instant if the
+    /// card has flash or may be played as though it had flash (CR 702.8a: "you may play
+    /// this card any time you could cast an instant"). Only the timing changes.
+    fn land_play_timing_ok(&self, p: PlayerId, card: ObjectId) -> bool {
+        if self.turn.step.is_main() && self.stack.is_empty() {
+            return true;
+        }
+        let chars = self.land_face_characteristics(card);
+        (chars.has_keyword(KeywordKind::Flash) || self.flash_permitted(p, card, &chars))
+            && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
     }
 
     fn playable_land_cards(&self, p: PlayerId) -> Vec<ObjectId> {
@@ -1138,7 +1156,7 @@ impl Game {
 
     /// Plays a land (CR 305.1): a special action that doesn't use the stack.
     pub fn play_land(&mut self, p: PlayerId, card: ObjectId) -> Result<(), Illegal> {
-        if !self.can_play_land_now(p) {
+        if !self.land_play_available(p) || !self.land_play_timing_ok(p, card) {
             return Err(Illegal("can't play a land now".into()));
         }
         if !self.playable_land_cards(p).contains(&card) {
