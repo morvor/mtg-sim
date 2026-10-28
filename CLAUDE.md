@@ -173,6 +173,10 @@ cargo run --release -p mtg-sim -- --every-card --threads 3 --from 20200 --count 
 cat target/every-card-[012].tsv > target/every-card.tsv
 cargo run --release -p mtg-tools -- verified --logs target/structlog --report target/every-card.tsv --write
 cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
+# Incremental refresh: sweep only the cards a file names (one per line; indices stay the full
+# pool's) and merge those results over the ones carried over from the committed tier file:
+cargo run --release -p mtg-sim -- --every-card --threads 3 --names target/names.txt --report target/every-card-partial.tsv
+cargo run --release -p mtg-tools -- verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --report target/every-card-partial.tsv --write
 ```
 
 Build machines are small (4 cores, ~15 GB RAM) and running out of memory restarts the whole

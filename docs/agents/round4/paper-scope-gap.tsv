@@ -71,7 +71,6 @@ Seraph	Whenever a creature dealt damage by ~ this turn dies, put that card onto 
 Land Equilibrium	If an opponent who controls at least as many lands as you do would put a land onto the battlefield, that player instead puts that land onto the battlefield then sacrifices a land of their choice.	me3	vintage,legacy,commander,predh
 Juxtapose	You and target player exchange control of the creature you each control with the greatest mana value. Then exchange control of artifacts the same way. If two or more permanents a player controls are tied for greatest, their controller chooses one of them.	me1	vintage,legacy,premodern,commander,predh
 Bronze Horse	As long as you control another creature, prevent all damage that would be dealt to ~ by spells that target it.	me4	vintage,legacy,premodern,commander,predh
-"Name Sticker" Goblin	When ~ enters from anywhere other than a graveyard or exile, if it's on the battlefield and you control N or fewer creatures named ~, roll a N-sided die. N-N | Add {R}{R}{R}{R}. N-N | Add {R}{R}{R}{R}{R}. N-N | Add {R}{R}{R}{R}{R}{R}.	unf	commander
 Nature's Blessing	{G}{W}, Discard a card: Put a +N/+N counter on target creature or that creature gains banding, first strike, or trample.	me2	vintage,legacy,premodern,commander,predh
 Rock Hydra	For each N damage that would be dealt to ~, if it has a +N/+N counter on it, remove a +N/+N counter from it and prevent that N damage.	me4	vintage,legacy,commander,predh
 Blaze of Glory	Target creature defending player controls can block any number of creatures this turn. It blocks each attacking creature this turn if able.	me4	vintage,legacy,commander,predh
@@ -116,3 +115,4 @@ Harsh Justice	This turn, whenever an attacking creature deals combat damage to y
 Rasputin Dreamweaver	At the beginning of your upkeep, if ~ started the turn untapped, put a dream counter on it.	me3	vintage,legacy,commander,predh
 Farrel's Mantle	Whenever enchanted creature attacks and isn't blocked, its controller may have it deal damage equal to its power plus N to another target creature. If that player does, the attacking creature assigns no combat damage this turn.	me2	vintage,legacy,commander,predh
 Freyalise's Winds	If a permanent with a wind counter on it would untap during its controller's untap step, remove all wind counters from it instead.	me3	vintage,legacy,premodern,commander,predh
+Shapeshifter	~'s power is equal to the last chosen number and its toughness is equal to N minus that number.	me4	vintage,legacy,premodern,commander,predh

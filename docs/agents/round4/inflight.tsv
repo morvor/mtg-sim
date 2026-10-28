@@ -201,8 +201,6 @@ cards	text	example_card	item
 1	Choose target spell or ability with one or more targets. Roll a d20 and add the greatest power among creatures you control. N—N | You may choose new targets for that spell or ability. N+ | You may choose new targets for that spell or ability. Then copy it. You may choose new targets for the copy.	Wyll's Reversal	cards3-game-rules-dice
 1	{T}, Exile ~: Reverse the game's turn order.	Aeon Engine	cards3-manual-defs
 1	As long as you control a creature, if damage dealt to a planeswalker you control of the chosen type would result in all loyalty counters on it being removed, instead all but one of those counters are removed.	Deification	cards3-manual-defs
-1	{N}, {T}: Put a charge counter on ~. Note the type of mana spent to pay this activation cost. Activate only if there are no charge counters on ~.	Jeweled Amulet	cards3-manual-defs
-1	{T}, Remove a charge counter from ~: Add one mana of ~'s last noted type.	Jeweled Amulet	cards3-manual-defs
 1	Each opponent can't venture into the dungeon more than once each turn.	Keen-Eared Sentry	cards3-manual-defs
 1	Meet in Reverse — You draw cards from the bottom of your library rather than the top.	River Song	cards3-manual-defs
 1	~ deals N damage to the controller of the last red instant or sorcery spell that dealt damage to you this turn.	Suffocation	cards3-manual-defs

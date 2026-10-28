@@ -79,7 +79,7 @@ pub fn pool_names() -> &'static [String] {
             if !c.is_playable_card() {
                 continue;
             }
-            if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+            if !c.is_paper() {
                 continue;
             }
             if seen.insert(c.name.to_lowercase()) {

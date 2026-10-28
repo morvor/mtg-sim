@@ -64,12 +64,37 @@ def out_of_scope(c):
     return None
 
 
+# Formats played with paper cards; mirrors `PAPER_FORMATS` in crates/mtg-data/src/scryfall.rs.
+PAPER_FORMATS = ('standard', 'pioneer', 'modern', 'legacy', 'vintage', 'pauper', 'commander',
+                 'oathbreaker', 'paupercommander', 'duel', 'oldschool', 'premodern', 'predh')
+
+
+# Digital versions of paper cards that the legality rule would count as paper; mirrors
+# `DIGITAL_VERSIONS` in crates/mtg-data/src/scryfall.rs ("Name Sticker" Goblin is the MTGO
+# version of _____ Goblin, listed legal in Commander).
+DIGITAL_VERSIONS = ('"Name Sticker" Goblin',)
+
+
+def is_paper(c):
+    """A paper card: one with a paper printing (`ScryfallCard::is_paper` in mtg-data, the
+    same rule). The oracle record's `games` describes one printing, which for about a
+    thousand paper cards is an online-only reprint (Masters Edition, Tempest Remastered,
+    Vintage Masters, ...), so a card is also paper if it is legal, restricted or banned in a
+    paper format. Cards with no paper printing and the "A-" digital versions are not."""
+    if c.get('name') in DIGITAL_VERSIONS:
+        return False
+    games = c.get('games') or []
+    if not games or 'paper' in games:
+        return True
+    legal = c.get('legalities') or {}
+    return any(legal.get(f) in ('legal', 'restricted', 'banned') for f in PAPER_FORMATS)
+
+
 def deferred(c):
     """Cards the project has decided not to support for now (docs/DEFERRED.md):
     digital-only cards, sticker sheets, cards not legal in any format, the dexterity
     cards and the Conspiracy face-down draft cards."""
-    games = c.get('games') or []
-    if games and 'paper' not in games:
+    if not is_paper(c):
         return 'digital-only'
     if 'Stickers' in (c.get('type_line') or ''):
         return 'sticker sheet'
