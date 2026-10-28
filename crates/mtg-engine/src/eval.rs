@@ -893,7 +893,16 @@ impl Game {
                 .all(|a| crate::attach::can_attach(self, a, Entity::Object(id))),
             Filter::CouldAttachTo(sel) => {
                 let to = self.eval_sel(sel, ctx);
-                !to.is_empty() && to.iter().all(|e| crate::attach::can_attach(self, id, *e))
+                !to.is_empty()
+                    && to.iter().all(|e| match e {
+                        // An object that has left the battlefield: as it last existed there.
+                        Entity::Object(t)
+                            if !self.is_live(*t) && self.obj(*t).zone == Zone::Battlefield =>
+                        {
+                            crate::attach::could_have_enchanted(self, id, *t)
+                        }
+                        _ => crate::attach::can_attach(self, id, *e),
+                    })
             }
             Filter::Enchanted => self
                 .attachments_of(Entity::Object(id))
