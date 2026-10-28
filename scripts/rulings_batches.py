@@ -66,8 +66,8 @@ def out_of_scope(c):
 
 def deferred(c):
     """Cards the project has decided not to support for now (docs/DEFERRED.md):
-    digital-only cards, sticker sheets, cards not legal in any format and the dexterity
-    cards."""
+    digital-only cards, sticker sheets, cards not legal in any format, the dexterity
+    cards and the Conspiracy face-down draft cards."""
     games = c.get('games') or []
     if games and 'paper' not in games:
         return 'digital-only'
@@ -82,7 +82,17 @@ def deferred(c):
     if any('from a height of at least one foot' in (f.get('oracle_text') or '').lower()
            for f in faces(c)):
         return 'dexterity card'
+    if c.get('name') in FACE_DOWN_DRAFT_CARDS:
+        return 'Conspiracy face-down draft card'
     return None
+
+
+# Conspiracy cards whose draft abilities need a simulated draft table in which each player
+# sees different booster packs (docs/DEFERRED.md, "Conspiracy face-down draft cards").
+FACE_DOWN_DRAFT_CARDS = {
+    'Agent of Acquisitions', 'Archdemon of Paliano', 'Deal Broker',
+    'Illusionary Informant', 'Whispergear Sneak',
+}
 
 
 def load():

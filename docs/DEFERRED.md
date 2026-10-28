@@ -112,6 +112,31 @@ Decided 2026-10-21.
   DEFERRED in `scripts/rulings_batches.py`, which finds these cards by the words "from a
   height of at least one foot".
 
+### Conspiracy face-down draft cards
+
+Decided by the user, 2026-10-28.
+
+- **Scope:** five Conspiracy cards whose draft abilities need a simulation of the draft
+  table itself, in which each player sees different booster packs: Illusionary Informant
+  and Whispergear Sneak (turn the card face down during the draft to look at another
+  player's next pick or at an unopened or unwatched booster pack), Archdemon of Paliano
+  (draft cards at random without looking at booster packs, then turn it face down), Agent
+  of Acquisitions (draft a whole booster pack one card at a time, turn it face down and
+  draft nothing more that round) and Deal Broker (immediately after the draft, offer and
+  accept card-pool exchanges with the other players). Only a Conspiracy draft (CR 905)
+  uses these abilities, and they do nothing once a game starts (CR 905.2). The engine's
+  draft model (`draft.rs`) keeps its face-up drafting and "reveal as you draft it"
+  support; Conspiracy cards whose draft abilities leave notes that matter in the game
+  (Cogwork Tracker, Noble Banneret, Paliano, the High City, ...) stay in scope.
+- **Status:** they stay unsupported, and `card-coverage` counts them as unsupported paper
+  cards; their draft texts are in `docs/agents/round3/deferred.tsv` and
+  `docs/agents/round4/deferred.tsv`. Their other abilities (flying; Deal Broker's
+  "{T}: Draw a card, then discard a card.") compile. Rulings that apply only to these
+  cards (looking at packs, drafting at random, the exchange procedure) are DEFERRED in
+  `scripts/rulings_batches.py`, which finds the cards by name; Deal Broker's ruling on
+  drafts that break up into several games was already exempt in
+  `docs/rulings-exemptions/rulings-P145.tsv`.
+
 ## Deferred to later
 
 ### Agents that play well
