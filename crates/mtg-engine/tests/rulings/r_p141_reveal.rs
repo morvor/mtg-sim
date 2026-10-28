@@ -390,7 +390,7 @@ fn hans_eriksson_fight_needs_both_creatures() {
 
 #[test]
 fn fireflux_squad_creature_enters_attacking_without_being_declared() {
-    cr!("508.4", "508.3a", "506.4");
+    cr!("508.4", "508.3a");
     ruling!(
         "Fireflux Squad",
         "Although the new creature is an attacking creature, it was never declared as an attacking creature."

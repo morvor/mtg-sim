@@ -376,7 +376,7 @@ fn can_cast(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
 
 #[test]
 fn saheeli_emblem_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Saheeli, Filigree Master",
         "The cost reduction provided by Saheeli's emblem can never reduce the colored mana costs of an artifact spell."

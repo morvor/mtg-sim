@@ -303,7 +303,7 @@ fn ravos_leaving_makes_marked_damage_lethal() {
 
 #[test]
 fn fell_shepherd_returns_creatures_dying_with_its_combat_damage() {
-    cr!("510.2", "603.10a", "702.19c");
+    cr!("510.2", "603.10a", "702.19b");
     ruling!(
         "Fell Shepherd",
         "Creatures dealt lethal damage at the same time Fell Shepherd deals combat damage to a player will also be returned to your hand from your graveyard."
@@ -336,7 +336,7 @@ fn fell_shepherd_returns_creatures_dying_with_its_combat_damage() {
 
 #[test]
 fn charnelhoard_wurm_can_return_itself_after_dying_in_combat() {
-    cr!("510.2", "603.10a", "702.19c");
+    cr!("510.2", "603.10a", "702.19b");
     ruling!(
         "Charnelhoard Wurm",
         "If Charnelhoard Wurm is dealt lethal damage at the same time it deals damage to an opponent, Charnelhoard Wurm will be in your graveyard by the time you put its ability on the stack. In that case, you can target it with its own ability."

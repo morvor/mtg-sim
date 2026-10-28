@@ -433,7 +433,7 @@ fn gorex_cost_stops_at_bb() {
     supported("Gorex, the Tombshell");
     let mut t = TestGame::new(2);
     let cards: Vec<ObjectId> = (0..4).map(|_| t.graveyard(P0, "Grizzly Bears")).collect();
-    t.lands(P0, "Swamp", 2);
+    let swamps = t.lands(P0, "Swamp", 2);
     let g = t.hand(P0, "Gorex, the Tombshell");
     // Exile all four (the fourth reduces nothing).
     t.answer(P0, DecisionKind::OptionalCost, Answer::Number(4));
@@ -444,6 +444,8 @@ fn gorex_cost_stops_at_bb() {
     assert_eq!(t.named_on_battlefield("Gorex, the Tombshell").len(), 1);
     assert_eq!(t.g.player(P0).graveyard.len(), 0);
     assert!(cards.iter().all(|c| t.zone(*c) == Zone::Exile));
+    // {B}{B} was still paid.
+    assert!(swamps.iter().all(|l| t.obj_now(*l).tapped));
 }
 
 #[test]

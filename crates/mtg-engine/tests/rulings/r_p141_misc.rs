@@ -243,7 +243,7 @@ fn paleoloth_sees_a_big_creature_entering_with_it() {
 
 #[test]
 fn grand_master_of_flowers_becoming_a_creature_leaves_combat() {
-    cr!("506.4", "506.4c", "306.4");
+    cr!("506.4", "506.4c");
     ruling!(
         "Grand Master of Flowers",
         "If Grand Master of Flowers somehow gains enough loyalty to become a creature while it is being attacked, it is removed from combat. If blockers haven't been declared yet, it may then block."
@@ -370,7 +370,7 @@ fn gathering_stone(t: &mut TestGame, ty: &str) {
 
 #[test]
 fn gathering_stone_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Gathering Stone",
         "Gathering Stone's second ability applies only to generic mana in the total cost of spells you cast of the chosen type."
