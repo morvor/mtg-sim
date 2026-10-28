@@ -182,10 +182,8 @@ pub(crate) fn granted_abilities_to(
         toughness: None,
     };
     // Quotes nested in it ('...', Urza's Saga) are its own.
-    let v = super::tokens_copies_create::parse_with_nested_quotes(
-        orig.trim_end_matches(','),
-        &gctx,
-    )?;
+    let v =
+        super::tokens_copies_create::parse_with_nested_quotes(orig.trim_end_matches(','), &gctx)?;
     if v.is_empty()
         || v.iter()
             .any(|a| matches!(a.kind, AbilityKind::Unsupported(_)))
@@ -263,7 +261,11 @@ fn mixed_granted_abilities(normalized: &str, ctx: &CompileContext) -> Option<Vec
         .map(|a| {
             let a = crate::granted_by::refer_mixed_to_granter(a)?;
             let text = normalized.trim().trim_end_matches(',').to_string();
-            Some(not_a_cda(AbilityDef::with_link(a.kind.clone(), text, a.link)))
+            Some(not_a_cda(AbilityDef::with_link(
+                a.kind.clone(),
+                text,
+                a.link,
+            )))
         })
         .collect()
 }
@@ -780,7 +782,11 @@ fn group_subject(filter: Filter) -> Subject {
 }
 
 /// Parses a subject. `referent` is the object a pronoun refers to.
-pub(crate) fn parse_subject(s: &str, referent: Option<&Sel>, ctx: &CompileContext) -> Option<Subject> {
+pub(crate) fn parse_subject(
+    s: &str,
+    referent: Option<&Sel>,
+    ctx: &CompileContext,
+) -> Option<Subject> {
     let s = s.trim();
     let this_hint = || {
         if ctx.type_line.card_types.contains(CardType::Creature) {
@@ -986,9 +992,7 @@ fn subst_x(v: Value, x: &Value) -> Value {
 fn mentions_x(v: &Value) -> bool {
     match v {
         Value::X => true,
-        Value::Diff(a, b) | Value::Mul(a, b) | Value::DivBy(a, b) => {
-            mentions_x(a) || mentions_x(b)
-        }
+        Value::Diff(a, b) | Value::Mul(a, b) | Value::DivBy(a, b) => mentions_x(a) || mentions_x(b),
         Value::Sum(v) => v.iter().any(mentions_x),
         _ => false,
     }
@@ -1150,6 +1154,10 @@ fn parse_for_each_inner(s: &str, it: Option<&Sel>) -> Option<Value> {
             ])))
         }
         _ => {}
+    }
+    // Dungeons completed (`game_rules_4`).
+    if let Some(v) = super::game_rules_4::for_each(s) {
+        return Some(v);
     }
     // Chroma: "white mana symbol in the mana costs of permanents you control".
     if let Some((v, "")) = super::chroma::mana_symbols_among_your_permanents(s) {
@@ -1571,7 +1579,8 @@ fn grant_list(
             .and_then(|x| x.parse::<usize>().ok())
         {
             let q = quotes.get(k)?;
-            let to_source = matches!(subj.it, Some(Sel::This)) && matches!(subj.filter, Filter::Source);
+            let to_source =
+                matches!(subj.it, Some(Sel::This)) && matches!(subj.filter, Filter::Source);
             for a in granted_abilities_to(q, text, subj.hint, ctx, to_source)? {
                 out.push(Out::Mod(Modification::AddAbility(a)));
             }
@@ -1736,10 +1745,13 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
             // A name with a comma ("Mileva, the Stalwart", "Everflame, Heroes' Legacy"):
             // its words are capitalized but for "the" and "of", so it's one name rather than
             // a list.
-            let title = |w: &str| {
-                w.starts_with(|c: char| c.is_uppercase()) || matches!(w, "the" | "of")
-            };
-            if name.contains(',') && !original.split([' ', ',']).filter(|w| !w.is_empty()).all(title)
+            let title =
+                |w: &str| w.starts_with(|c: char| c.is_uppercase()) || matches!(w, "the" | "of");
+            if name.contains(',')
+                && !original
+                    .split([' ', ','])
+                    .filter(|w| !w.is_empty())
+                    .all(title)
             {
                 return None;
             }
@@ -1993,8 +2005,7 @@ fn type_predicate(r: &str, subj: &Subject) -> Option<Vec<Out>> {
 
 /// Restrictions and requirements on the affected objects (CR 613.11).
 pub(crate) fn restriction_predicate(p: &str, f: &Filter) -> Option<Vec<Restriction>> {
-    restriction_predicate_core(p, f)
-        .or_else(|| super::restriction_grammar::object_predicate(p, f))
+    restriction_predicate_core(p, f).or_else(|| super::restriction_grammar::object_predicate(p, f))
 }
 
 fn restriction_predicate_core(p: &str, f: &Filter) -> Option<Vec<Restriction>> {

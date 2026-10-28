@@ -37,9 +37,19 @@ fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
     // a dash after a single number.
     let (range, text) = line.trim().split_once(" | ").or_else(|| {
         let (n, text) = line.trim().split_once(" — ")?;
-        n.chars().all(|c| c.is_ascii_digit()).then_some((n, text))
+        // "1 or 2 — ..." (Comet, Stellar Pup): two results.
+        let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
+        (digits(n)
+            || n.split_once(" or ")
+                .is_some_and(|(a, b)| digits(a) && digits(b)))
+        .then_some((n, text))
     })?;
     let range = range.trim();
+    // "1 or 2": two consecutive results.
+    if let Some((a, b)) = range.split_once(" or ") {
+        let (a, b): (i64, i64) = (a.trim().parse().ok()?, b.trim().parse().ok()?);
+        return (b == a + 1).then_some((a, Some(b), text));
+    }
     // "9 or less | ..." (Druid of the Emerald Grove): every result up to N.
     if let Some(n) = range.strip_suffix(" or less") {
         return Some((i64::MIN, Some(n.trim().parse().ok()?), text));
@@ -147,6 +157,10 @@ fn parse_row_text(text: &str, b: &mut Builder, rows: &[ResultRow]) -> Option<Eff
             }
             return Some(e);
         }
+    }
+    // "[+2], then create ..." (Comet, Stellar Pup): loyalty symbols as instructions.
+    if let Some(r) = super::dice_coins_4::row_with_loyalty_symbols(t) {
+        return parse_effect_text(&r, b);
     }
     // Read as an effect text of its own (with its own referents).
     parse_effect_text(t, b)
@@ -265,8 +279,14 @@ fn p_equal_to_result(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = l.strip_prefix("you ").unwrap_or(l);
     let mut candidates: Vec<(String, Value)> = Vec::new();
     for (phrase, value) in [
-        (" equal to the result", Value::Custom(SmolStr::new(THE_RESULT))),
-        (" equal to that result", Value::Custom(SmolStr::new(THE_RESULT))),
+        (
+            " equal to the result",
+            Value::Custom(SmolStr::new(THE_RESULT)),
+        ),
+        (
+            " equal to that result",
+            Value::Custom(SmolStr::new(THE_RESULT)),
+        ),
         (" equal to the other result", Value::Var(OTHER)),
         (
             " equal to the total of those results",
@@ -556,9 +576,7 @@ pub(crate) fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
         } => last_flip(&mut body.effect),
         // "Flip a coin for each opponent you have", "for each blocking creature, flip a
         // coin" (`dice_coin_ext`): one flip for each.
-        Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => {
-            last_flip(effect)
-        }
+        Effect::ForEach { effect, .. } | Effect::ForEachPlayer { effect, .. } => last_flip(effect),
         _ => None,
     }
 }
