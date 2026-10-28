@@ -138,3 +138,28 @@ fn breeches_exiles_the_top_card_of_each_opponent_dealt_damage_only() {
     assert_eq!(t.zone(top1), Zone::Exile, "{}", t.dump_log());
     assert_ne!(t.zone(top2), Zone::Exile);
 }
+
+#[test]
+fn soundwave_exiles_a_card_with_mana_value_equal_to_the_damage_from_that_players_graveyard() {
+    cr!("603.2c", "707.12");
+    supported("Soundwave, Sonic Spy // Soundwave, Superior Captain");
+    let mut t = TestGame::new(2);
+    let sw = t.battlefield(P0, "Soundwave, Sonic Spy // Soundwave, Superior Captain");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.objects[giant.0 as usize].kind = mtg_engine::object::ObjKind::Token;
+    let div = t.graveyard(P1, "Divination");
+    let shock = t.graveyard(P1, "Shock");
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    t.answer_targets(P0, &[Entity::Object(div)]);
+    t.answer_yes(P0, true);
+    t.attack(&[(giant, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // 3 combat damage: Divination (mana value 3) is exiled and its copy cast.
+    assert_eq!(t.zone(div), Zone::Exile, "{}", t.dump_log());
+    assert_ne!(t.zone(shock), Zone::Exile);
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.obj_now(sw).face, mtg_engine::object::FaceState::Back);
+}

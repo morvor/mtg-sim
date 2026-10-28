@@ -207,3 +207,32 @@ fn search_destination_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 }
 
 inventory::submit! { FollowupPattern { name: "referents 5: you may put that card onto the battlefield instead of putting it into your hand if [condition]", priority: 100, apply: search_destination_instead } }
+
+/// "Whenever one or more creature tokens you control deal combat damage to a player,
+/// exile target instant or sorcery card ... from their graveyard." (Soundwave, Sonic
+/// Spy): "their" is the player dealt damage. The objects dealing it are yours, whose
+/// graveyard the text would call "your graveyard".
+fn from_their_graveyard_damaged_player(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !b.in_trigger
+        || !matches!(b.it_player, PlayerRef::TriggerPlayer)
+        || !l.contains(" from their graveyard")
+        || l.contains("that player")
+        || l.contains("target player")
+        || l.contains("target opponent")
+    {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !(raw.contains(" you control deal combat damage to a player,")
+        || raw.contains(" you control deal damage to a player,"))
+    {
+        return None;
+    }
+    parse_sentence(
+        &l.replace(" from their graveyard", " from that player's graveyard"),
+        b,
+    )
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: from their graveyard (the player your objects dealt damage to)", priority: 100, parse: from_their_graveyard_damaged_player } }
