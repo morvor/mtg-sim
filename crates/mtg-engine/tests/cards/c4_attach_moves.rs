@@ -227,3 +227,32 @@ fn cass_returns_the_auras_and_moves_the_equipment_that_were_attached_to_it() {
     });
     assert!(!offered.unwrap().contains(&Entity::Object(other)));
 }
+
+#[test]
+fn storm_herald_returns_auras_attached_to_creatures_you_control_then_exiles_them() {
+    cr!("303.4f", "614.1a", "603.7a");
+    assert_supported("Storm Herald");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.battlefield(P1, "Craw Wurm");
+    let hs = t.graveyard(P0, "Holy Strength");
+    let us = t.graveyard(P0, "Unholy Strength");
+    t.answer_choose(P0, &[Entity::Object(hs), Entity::Object(us)]);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "Storm Herald");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (3, 4));
+    assert_eq!(t.pt(giant), (5, 4));
+    // The host choices were only creatures P0 controls.
+    let offered = t.asked().into_iter().filter_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { candidates, max: 1, .. } => Some(candidates),
+        _ => None,
+    }).next().unwrap();
+    assert_eq!(offered.len(), 3);
+    // At the next end step they're exiled.
+    t.advance_to_step(mtg_engine::turn::Step::End);
+    t.resolve_all();
+    assert!(t.in_exile("Holy Strength") && t.in_exile("Unholy Strength"));
+}

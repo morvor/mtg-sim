@@ -469,3 +469,132 @@ fn return_auras_and_equipment_that_were_attached(block: &str, ctx: &CompileConte
 }
 
 inventory::submit! { AbilityPattern { name: "attach moves: return Aura cards and attach Equipment that were attached to it", priority: 40, parse: return_auras_and_equipment_that_were_attached } }
+
+const HERALD_AURAS: Var = vars::USER + 52025;
+const HERALD_EACH: Var = vars::USER + 52026;
+const HERALD_HOST: Var = vars::USER + 52027;
+const HERALD_RETURNED: Var = vars::USER + 52028;
+
+/// "When ~ enters, return any number of Aura cards from your graveyard to the battlefield
+/// attached to creatures you control. Exile those Auras at the beginning of your next end
+/// step. If those Auras would leave the battlefield, exile them instead of putting them
+/// anywhere else." (Storm Herald): for each Aura card chosen, a creature you control it
+/// could enchant is chosen (CR 303.4f, not targeted), and it's returned attached to it;
+/// an Aura with no such creature stays in the graveyard (CR 303.4g). The Auras return one
+/// at a time.
+fn return_auras_attached_to_creatures_you_control(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const BODY: &str = ", return any number of Aura cards from your graveyard to the battlefield attached to creatures you control. Exile those Auras at the beginning of your next end step. If those Auras would leave the battlefield, exile them instead of putting them anywhere else.";
+    let trigger = block.strip_suffix(BODY)?;
+    if block.contains('\n') {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(&format!("{trigger}, draw a card."), ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let AbilityKind::Triggered(t) = &mut a.kind else {
+        return None;
+    };
+    let yours = Filter::and(vec![
+        Filter::Type(crate::types::CardType::Creature),
+        Filter::InZone(ZoneKind::Battlefield),
+        Filter::ControlledBy(PlayerRel::You),
+    ]);
+    let auras = Filter::and(vec![
+        Filter::Subtype("Aura".into()),
+        Filter::Card,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::OwnedBy(PlayerRel::You),
+    ]);
+    let mut onto = Destination::battlefield();
+    onto.attached_to = Some(Sel::Var(HERALD_HOST));
+    let per_aura = Effect::If {
+        cond: Condition::Always,
+        then: Box::new(Effect::seq(vec![
+            Effect::Store {
+                var: HERALD_HOST,
+                sel: Sel::Choose {
+                    chooser: PlayerRef::You,
+                    filter: Filter::and(vec![
+                        yours.clone(),
+                        Filter::CanBeAttachedBy(Box::new(Sel::Var(HERALD_EACH))),
+                    ]),
+                    count: Value::c(1),
+                    up_to: false,
+                    store: None,
+                },
+            },
+            Effect::If {
+                cond: Condition::SelNonEmpty(Sel::Var(HERALD_HOST)),
+                then: Box::new(Effect::seq(vec![
+                    Effect::Move {
+                        what: Sel::Var(HERALD_EACH),
+                        to: onto,
+                    },
+                    Effect::Store {
+                        var: HERALD_RETURNED,
+                        sel: Sel::Union(vec![Sel::Var(HERALD_RETURNED), Sel::Var(vars::IT)]),
+                    },
+                ])),
+                otherwise: Box::new(Effect::Noop),
+            },
+        ])),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let returned = Filter::In(Box::new(Sel::Var(HERALD_RETURNED)));
+    t.body = Body::effect(Effect::seq(vec![
+        Effect::Store {
+            var: HERALD_RETURNED,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::Store {
+            var: HERALD_AURAS,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                count: Value::Count(auras.clone()),
+                filter: auras,
+                up_to: true,
+                store: None,
+            },
+        },
+        Effect::ForEach {
+            sel: Sel::Var(HERALD_AURAS),
+            var: HERALD_EACH,
+            effect: Box::new(per_aura),
+        },
+        Effect::DelayedTrigger {
+            trigger: TriggerCond::BeginningOf {
+                step: TriggerStep::End,
+                whose: PlayerRel::You,
+            },
+            body: Box::new(Body::effect(Effect::Exile {
+                what: Sel::All(Filter::and(vec![
+                    returned.clone(),
+                    Filter::InZone(ZoneKind::Battlefield),
+                ])),
+                face_down: false,
+                link: false,
+            })),
+            once: true,
+        },
+        Effect::AddReplacement {
+            def: ReplacementDef {
+                event: ReplacementEvent::ZoneChange {
+                    filter: returned,
+                    from: Some(ZoneKind::Battlefield),
+                    to: None,
+                },
+                action: ReplacementAction::MoveInstead(Destination::zone(ZoneKind::Exile)),
+                self_replacement: false,
+                optional: false,
+            },
+            duration: Duration::Permanent,
+            uses: None,
+        },
+    ]));
+    a.text = block.to_string();
+    Some(vec![Arc::new(a)])
+}
+
+inventory::submit! { AbilityPattern { name: "attach moves: return Aura cards attached to creatures you control", priority: 40, parse: return_auras_attached_to_creatures_you_control } }
