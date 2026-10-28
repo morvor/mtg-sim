@@ -1,5 +1,5 @@
 //! Rulings batch P064 — copies of permanents whose characteristics were chosen as they
-//! entered (Corrupted Shapeshifter, Primal Clay, Primal Plasma: CR 707.2, 707.9c, 614.12),
+//! entered (Corrupted Shapeshifter, Primal Clay, Primal Plasma: CR 707.2, 614.12),
 //! animated planeswalkers (Sarkhan, the Dragonspeaker), and Skinshifter's type and P/T
 //! changes (613.1d, 613.4b, 707.2).
 
@@ -50,7 +50,7 @@ fn clone_choosing(t: &mut TestGame, p: PlayerId, what: ObjectId, pick: usize) ->
 
 #[test]
 fn entering_as_a_copy_of_corrupted_shapeshifter_applies_both_choices() {
-    cr!("707.2", "707.9c", "614.12", "613.2a");
+    cr!("707.2", "614.12", "613.2a");
     ruling!(
         "Corrupted Shapeshifter",
         "If a permanent enters the battlefield as a copy of Corrupted Shapeshifter, there will be two copy effects to apply to it."
@@ -68,7 +68,7 @@ fn entering_as_a_copy_of_corrupted_shapeshifter_applies_both_choices() {
 
 #[test]
 fn entering_as_a_copy_of_primal_clay_uses_its_own_pt_choice() {
-    cr!("707.2", "707.9c", "614.12");
+    cr!("707.2", "614.12");
     ruling!(
         "Primal Clay",
         "If an object enters the battlefield as a copy of Primal Clay, it copies the values determined by its enters-the-battlefield replacement effect, but its power and toughness are determined by the copy's own enters-the-battlefield replacement effect."
@@ -85,7 +85,7 @@ fn entering_as_a_copy_of_primal_clay_uses_its_own_pt_choice() {
 
 #[test]
 fn becoming_a_copy_of_a_chosen_shapeshifter_copies_its_choice() {
-    cr!("707.2", "707.9c");
+    cr!("707.2");
     ruling!(
         "Corrupted Shapeshifter",
         "If an object on the battlefield becomes a copy of Corrupted Shapeshifter, it copies the values determined by its enters-the-battlefield replacement effect."

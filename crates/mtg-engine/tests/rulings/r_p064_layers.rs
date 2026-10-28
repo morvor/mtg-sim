@@ -68,7 +68,7 @@ fn synthesizer_labship_sets_base_pt_of_a_creature_counters_still_apply() {
 
 #[test]
 fn synthesizer_labship_animating_a_vehicle_doesnt_crew_it() {
-    cr!("702.122b", "702.122d");
+    cr!("702.122b", "702.122c");
     ruling!(
         "Synthesizer Labship",
         "it doesn’t count as “crewing” that Vehicle for any ability that would trigger due to a Vehicle becoming crewed."
@@ -299,7 +299,7 @@ fn sarcomite_myr_is_a_blue_artifact_creature() {
 
 #[test]
 fn spacecraft_is_a_type_with_no_intrinsic_abilities() {
-    cr!("205.3g", "702.184a");
+    cr!("205.3g");
     ruling!(
         "Atmospheric Greenhouse",
         "Spacecraft is an artifact type with no special meaning."
@@ -318,7 +318,7 @@ fn spacecraft_is_a_type_with_no_intrinsic_abilities() {
 
 #[test]
 fn multiple_instances_of_granted_keywords_are_redundant() {
-    cr!("702.2f", "702.9c", "702.20c", "702.15f");
+    cr!("702.9c", "702.15f");
     ruling!(
         "Triton Waverider",
         "Multiple instances of flying on the same creature are redundant."

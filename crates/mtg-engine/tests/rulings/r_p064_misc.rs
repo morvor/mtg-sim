@@ -119,7 +119,7 @@ fn alexios_cant_be_sacrificed() {
 
 #[test]
 fn escaped_shapeshifter_looks_at_every_opponent() {
-    cr!("102.2", "613.1f");
+    cr!("611.3a", "613.1f");
     ruling!(
         "Escaped Shapeshifter",
         "In a multiplayer game, it works if any opponent controls creatures with the appropriate abilities."
@@ -244,7 +244,7 @@ fn croakid_amphibonaut_counts_itself_or_another_stickered_permanent() {
 
 #[test]
 fn exploration_broodship_graveyard_casts_follow_timing_rules() {
-    cr!("601.3", "307.1", "117.1a");
+    cr!("601.3", "117.1a");
     ruling!(
         "Exploration Broodship",
         "You pay all costs and follow all timing rules for cards cast with the permission granted by Exploration Broodship’s last ability."

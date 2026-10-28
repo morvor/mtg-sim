@@ -84,7 +84,7 @@ fn essence_channeler_dealt_lethal_damage_as_you_gain_life_isnt_saved() {
 
 #[test]
 fn essence_channeler_triggers_once_for_life_gained_for_each() {
-    cr!("119.10", "603.2c");
+    cr!("119.9", "603.2c");
     ruling!(
         "Essence Channeler",
         "If you gain an amount of life “for each” of something, that life is gained as one event and Essence Channeler’s second ability triggers only once."
@@ -102,7 +102,7 @@ fn essence_channeler_triggers_once_for_life_gained_for_each() {
 
 #[test]
 fn essence_channeler_ignores_life_your_teammate_gains() {
-    cr!("810.9", "119.10");
+    cr!("810.9", "119.9");
     ruling!(
         "Essence Channeler",
         "In a Two-Headed Giant game, life gained by your teammate won’t cause Essence Channeler’s second ability to trigger"
@@ -353,7 +353,7 @@ fn crystalline_giant_puts_the_random_counter_as_its_ability_resolves() {
 
 #[test]
 fn crystalline_giant_can_get_a_flying_counter_while_it_already_flies() {
-    cr!("122.1b", "706.1");
+    cr!("122.1b");
     ruling!(
         "Crystalline Giant",
         "If Crystalline Giant has one of the listed keywords but not because of a counter of that kind, that kind of counter is still eligible to be chosen at random."
