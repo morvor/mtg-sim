@@ -90,6 +90,11 @@ fn object_predicate(pred: &str, window: &str, so_far: &Filter) -> Option<Conditi
         for who in ["their library", "your library", "its owner's library"] {
             p = p.replace(&format!("from {who}"), "from a library");
         }
+        // "put there" without a zone: from anywhere, not only from the battlefield
+        // (Storrev: "that wasn't put there this combat" includes discarded cards).
+        if p == "was put into a graveyard" || p == "were put into a graveyard" {
+            p.push_str(" from anywhere");
+        }
     }
     // "~" in the predicate is the card itself, not the object being tested: "each
     // creature that dealt damage to ~ this turn" (Giant Albatross).
