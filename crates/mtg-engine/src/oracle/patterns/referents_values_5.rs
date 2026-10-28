@@ -44,6 +44,33 @@ pub fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             return Some((Value::CountSel(Box::new(players)), r.to_string()));
         }
     }
+    // "When ~ enters, exile another creature you control until ~ leaves the battlefield.
+    // When you do, distribute X +1/+1 counters among any number of target creatures,
+    // where X is the exiled creature's power." (Yannik, Scavenging Sentinel): the
+    // creature the exile instruction just exiled, as it last existed on the battlefield
+    // (CR 608.2h; the reflexive ability knows what its instruction did, CR 603.12).
+    for (p, stat) in [
+        ("the exiled creature's power", "power"),
+        ("the exiled creature's toughness", "toughness"),
+    ] {
+        if let Some(r) = s.strip_prefix(p).filter(|r| phrase_end(r)) {
+            let raw = crate::oracle::raw_text().to_lowercase();
+            if !(raw.contains("exile another creature you control until ")
+                || raw.contains("exile target creature an opponent controls until ")
+                || raw.contains("exile up to one target creature an opponent controls until "))
+                || !raw.contains(". when you do, ")
+            {
+                return None;
+            }
+            let lki = Box::new(Sel::Before(Box::new(Sel::Var(vars::IT))));
+            let v = if stat == "power" {
+                Value::PowerOf(lki)
+            } else {
+                Value::ToughnessOf(lki)
+            };
+            return Some((v, r.to_string()));
+        }
+    }
     // "Whenever ~ deals combat damage to a creature, if that creature was dealt excess
     // damage this turn, you get X {E}, where X is that excess damage." (Overclocked
     // Electromancer): the excess damage the creature was dealt this turn (CR 120.10).
@@ -590,3 +617,184 @@ fn choose_instead_choose_then_act(block: &str, ctx: &crate::oracle::CompileConte
 }
 
 inventory::submit! { super::AbilityPattern { name: "referents 5: choose target X. If [condition], instead choose Y. [Verb] each chosen object", priority: 100, parse: choose_instead_choose_then_act } }
+
+/// "until end of turn, gain control of target ... with power less than or equal to the
+/// amassed Army's power" (Grishnákh, Brash Instigator): the leading duration of one
+/// instruction, read as "gain control of ... until end of turn".
+fn leading_until_end_of_turn_gain_control(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("until end of turn, gain control of ")?;
+    if r.contains(", ") || r.contains(" and ") || r.contains(" until ") {
+        return None;
+    }
+    parse_sentence(&format!("gain control of {r} until end of turn"), b)
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: until end of turn, gain control of [target]", priority: 100, parse: leading_until_end_of_turn_gain_control } }
+
+/// "If a creature card with flying was exiled with ~'s delve ability, ~ has flying. The
+/// same is true for first strike, double strike, ... and vigilance." (Soulflayer): each
+/// listed keyword, with its variants, that a creature card exiled to pay for its delve
+/// (CR 702.66; `CastInfo::delved`, which the permanent keeps) has in exile (Soulflayer
+/// rulings: abilities a card would grant itself don't count, and "hexproof from white"
+/// is gained as that variant).
+fn delve_exiled_keywords(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() {
+        return None;
+    }
+    let l = end(l);
+    let r = l.strip_prefix("if a creature card with ")?;
+    let (first, r) = r.split_once(" was exiled with ~'s delve ability, ~ has ")?;
+    let (again, list) = r.split_once(". the same is true for ")?;
+    if first != again {
+        return None;
+    }
+    let mut kinds = vec![crate::keywords::KeywordKind::from_name(first)?];
+    for part in list.split(", ") {
+        let part = part.strip_prefix("and ").unwrap_or(part).trim();
+        kinds.push(crate::keywords::KeywordKind::from_name(part)?);
+    }
+    let effect = StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::AddKeywordsOf {
+            kinds,
+            from: Filter::and(vec![
+                Filter::Card,
+                Filter::Type(crate::types::CardType::Creature),
+                Filter::InZone(ZoneKind::Exile),
+                Filter::Custom(crate::kw::delve::EXILED_WITH_IT.into()),
+            ]),
+        }],
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(effect)),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "referents 5: if a creature card with [keyword] was exiled with ~'s delve ability, ~ has it", priority: 100, parse: delve_exiled_keywords } }
+
+/// "Reveal the top X plus one cards of your library. Choose a creature card and/or a land
+/// card from among them. Put those cards into your hand and the rest on the bottom ....
+/// If X is 5 or more, instead put the chosen cards onto the battlefield or into your hand
+/// and the rest on the bottom of your library in a random order." (Green Sun's Twilight):
+/// if the condition holds, one choice for all the chosen cards, the battlefield or the
+/// hand (Green Sun's Twilight ruling: not one each).
+fn instead_chosen_cards_battlefield_or_hand(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if ") else {
+        return false;
+    };
+    let Some((c, rest)) = r.split_once(", instead put the chosen cards onto the battlefield or into your hand") else {
+        return false;
+    };
+    // The rest goes where it went before.
+    if !matches!(
+        rest,
+        "" | " and the rest on the bottom of your library in a random order"
+    ) {
+        return false;
+    }
+    let Some(cond) = super::conditions_referents::parse_condition_with(c, b) else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    // The move of the chosen cards ("it", after the choice) into your hand.
+    let Some(i) = v.iter().rposition(|e| {
+        matches!(e, Effect::Move { what: Sel::Var(vars::IT), to } if to.zone == ZoneKind::Hand)
+    }) else {
+        return false;
+    };
+    // The chosen cards' move of a dig ("put those cards into your hand and the rest on
+    // the bottom"): followed by the rest's.
+    if !matches!(v.get(i + 1), Some(Effect::DigStep(_))) {
+        return false;
+    }
+    let Effect::Move { what, to } = v[i].clone() else {
+        return false;
+    };
+    let mut bf = Destination::battlefield();
+    bf.controller = to.controller.clone();
+    let choose = Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![
+            (
+                "Put them onto the battlefield".into(),
+                Effect::Move {
+                    what: what.clone(),
+                    to: bf,
+                },
+            ),
+            (
+                "Put them into your hand".into(),
+                Effect::Move {
+                    what: what.clone(),
+                    to: to.clone(),
+                },
+            ),
+        ],
+    };
+    v[i] = Effect::If {
+        cond,
+        then: Box::new(choose),
+        otherwise: Box::new(Effect::Move { what, to }),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "referents 5: if [condition], instead put the chosen cards onto the battlefield or into your hand", priority: 100, apply: instead_chosen_cards_battlefield_or_hand } }
+
+/// "Each player chooses an artifact, a creature, ... from among the nonland permanents
+/// they control, then sacrifices the rest. If {B}{R} was spent to cast ~, you choose the
+/// permanents for each player instead." (Mythos of Snapdax): with the condition, you make
+/// each player's choices (Mythos of Snapdax rulings: they must still be legal; each player
+/// in turn order, knowing the choices before).
+fn you_choose_for_each_player_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if ") else {
+        return false;
+    };
+    let Some(c) = r.strip_suffix(", you choose the permanents for each player instead") else {
+        return false;
+    };
+    let Some(cond) = super::conditions_referents::parse_condition_with(c, b) else {
+        return false;
+    };
+    let last = last_mut(prev);
+    if !matches!(last, Effect::KeepAndSacrificeRest { who: PlayerRef::EachPlayer, .. }) {
+        return false;
+    }
+    let plain = last.clone();
+    let chooser = crate::apnap::KEEP_CHOOSER;
+    *last = Effect::If {
+        cond,
+        then: Box::new(Effect::seq(vec![
+            Effect::Store {
+                var: chooser,
+                sel: Sel::Players(PlayerRef::You),
+            },
+            plain.clone(),
+            Effect::Store {
+                var: chooser,
+                sel: Sel::None,
+            },
+        ])),
+        otherwise: Box::new(plain),
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "referents 5: if [condition], you choose the permanents for each player instead", priority: 100, apply: you_choose_for_each_player_instead } }
+
+/// "Then ~ deals damage to that player equal to its power." (River Song, after "put a
+/// +1/+1 counter on ~"): "its" is the subject's, ~'s.
+fn self_deals_damage_equal_to_its(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("~ deals damage to ")?;
+    let (to, stat) = r.split_once(" equal to its ")?;
+    if !matches!(stat, "power" | "toughness") || to.contains(" its ") || to.contains("it ") {
+        return None;
+    }
+    parse_sentence(&format!("~ deals damage to {to} equal to ~'s {stat}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: ~ deals damage to [x] equal to its power (~'s)", priority: 2000, parse: self_deals_damage_equal_to_its } }

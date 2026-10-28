@@ -16,6 +16,11 @@ use crate::types::*;
 /// Gambit).
 pub const SAME_MANA_VALUE_AS_ANOTHER_OF_IT: &str = "same mana value as another of those cards";
 
+/// `Filter::Custom`: an activated or triggered ability on the stack other than the one
+/// being resolved ("copy all other activated and triggered abilities you control", Ulalek,
+/// Fused Atrocity).
+pub const OTHER_ABILITY_ON_STACK: &str = "other activated or triggered ability on the stack";
+
 pub struct Referents5;
 
 impl KeywordRules for Referents5 {
@@ -28,6 +33,17 @@ impl KeywordRules for Referents5 {
             return Some(
                 g.is_live(id)
                     && crate::kwa::manifest::dread_graveyard_cards(g, ctx).contains(&id),
+            );
+        }
+        if name == OTHER_ABILITY_ON_STACK {
+            let o = g.obj(id);
+            return Some(
+                g.is_live(id)
+                    && o.zone == crate::object::Zone::Stack
+                    && Some(id) != ctx.stack_obj
+                    && o.stack.as_deref().is_some_and(|si| {
+                        !matches!(si.kind, crate::object::StackKind::Spell)
+                    }),
             );
         }
         if name == SAME_MANA_VALUE_AS_ANOTHER_OF_IT {

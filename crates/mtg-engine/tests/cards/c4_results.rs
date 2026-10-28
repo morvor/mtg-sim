@@ -180,3 +180,23 @@ fn vault_21_makes_treasure_for_each_revealed_card_sharing_a_mana_value() {
         .count();
     assert_eq!(treasures, 2, "{}", t.dump_log());
 }
+
+#[test]
+fn yannik_distributes_counters_equal_to_the_exiled_creatures_power() {
+    cr!("603.12", "608.2h", "601.2d");
+    supported("Yannik, Scavenging Sentinel");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    // Partner with's trigger targets a player first; then the reflexive ability.
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let y = t.enter(P0, "Yannik, Scavenging Sentinel");
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"), "{}", t.dump_log());
+    // Hill Giant's power: 3 counters, all on the Bears.
+    assert_eq!(t.counters(bears, "+1/+1"), 3, "{}", t.dump_log());
+    let _ = y;
+}

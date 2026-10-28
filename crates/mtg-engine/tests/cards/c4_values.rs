@@ -64,3 +64,26 @@ fn central_elevator_counts_names_not_doors() {
     );
     assert!(!t.has_lost(P1), "{}", t.dump_log());
 }
+
+#[test]
+fn soulflayer_has_the_keywords_of_creature_cards_exiled_with_delve() {
+    cr!("702.66a", "702.1c");
+    supported("Soulflayer");
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Serra Angel");
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Island");
+    t.graveyard(P0, "Island");
+    t.lands(P0, "Swamp", 2);
+    let s = t.hand(P0, "Soulflayer");
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let s = t.g.current(s);
+    assert!(t.on_battlefield(s), "{}", t.dump_log());
+    use mtg_engine::keywords::KeywordKind as K;
+    let o = t.obj_now(s);
+    assert!(o.has_keyword(K::Flying));
+    assert!(o.has_keyword(K::Vigilance));
+    assert!(!o.has_keyword(K::FirstStrike));
+    assert!(!o.has_keyword(K::Trample));
+}

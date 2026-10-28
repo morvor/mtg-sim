@@ -158,3 +158,58 @@ fn enter_as_copy_if_you_do(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
 }
 
 inventory::submit! { super::AbilityPattern { name: "copies 5: you may have ~ enter as a copy of [object]. If you do, it [effect]", priority: 40, parse: enter_as_copy_if_you_do } }
+
+/// "copy all spells you control" and "copy all other activated and triggered abilities
+/// you control" (Ulalek, Fused Atrocity): each of them, as the instruction is performed
+/// (CR 707.10; the second doesn't copy the resolving ability itself; mana abilities never
+/// use the stack, CR 605.3a).
+fn copy_all_you_control(l: &str, _b: &mut crate::oracle::effects::Builder) -> Option<Effect> {
+    let what = match end(l) {
+        "copy all spells you control" | "copy each spell you control" => Filter::and(vec![
+            Filter::Spell,
+            Filter::ControlledBy(PlayerRel::You),
+        ]),
+        "copy all other activated and triggered abilities you control"
+        | "copy each other activated and triggered ability you control" => Filter::and(vec![
+            Filter::InZone(ZoneKind::Stack),
+            Filter::ControlledBy(PlayerRel::You),
+            Filter::Custom(crate::kw::referents_5::OTHER_ABILITY_ON_STACK.into()),
+        ]),
+        _ => return None,
+    };
+    Some(Effect::CopySpell {
+        what: Sel::All(what),
+        count: Value::c(1),
+        new_targets: false,
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "copies 5: copy all spells / other abilities you control", priority: 100, parse: copy_all_you_control } }
+
+/// "You may choose new targets for the copies." after several copy instructions: for each
+/// of them (CR 707.10c).
+fn new_targets_for_all_copies(l: &str, prev: &mut Effect, _b: &mut crate::oracle::effects::Builder) -> bool {
+    if end(l) != "you may choose new targets for the copies" {
+        return false;
+    }
+    fn mark(e: &mut Effect) -> usize {
+        match e {
+            Effect::CopySpell { new_targets, .. } => {
+                *new_targets = true;
+                1
+            }
+            Effect::Seq(v) => v.iter_mut().map(mark).sum(),
+            Effect::If { then, .. } => mark(then),
+            Effect::May { effect, .. } => mark(effect),
+            _ => 0,
+        }
+    }
+    let mut copy = prev.clone();
+    if mark(&mut copy) < 2 {
+        return false;
+    }
+    *prev = copy;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "copies 5: you may choose new targets for the copies (several copy instructions)", priority: 90, apply: new_targets_for_all_copies } }

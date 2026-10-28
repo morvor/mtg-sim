@@ -82,6 +82,7 @@ pub mod game;
 pub mod game_end;
 pub mod game_terms;
 pub mod granted_by;
+pub mod granted_captures;
 pub mod history_query;
 pub mod keyword_actions;
 pub mod keyword_actions_impl;

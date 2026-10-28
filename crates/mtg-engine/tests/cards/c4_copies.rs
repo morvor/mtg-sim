@@ -143,3 +143,18 @@ fn the_fourteenth_doctor_gains_haste_only_if_it_entered_as_a_copy() {
     assert_eq!(t.obj_now(doc).chars.name.as_str(), "The Fourteenth Doctor");
     assert!(!t.obj_now(doc).has_keyword(haste));
 }
+
+#[test]
+fn ulalek_copies_all_spells_you_control() {
+    cr!("707.10", "603.2");
+    supported("Ulalek, Fused Atrocity");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ulalek, Fused Atrocity");
+    t.lands(P0, "Wastes", 10);
+    let dev = t.hand(P0, "Eldrazi Devastator");
+    t.answer_yes(P0, true);
+    t.cast(P0, dev).go();
+    t.resolve_all();
+    // The Eldrazi spell and its copy both resolve.
+    assert_eq!(t.named_on_battlefield("Eldrazi Devastator").len(), 2, "{}", t.dump_log());
+}
