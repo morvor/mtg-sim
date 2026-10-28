@@ -67,6 +67,10 @@ Decided 2026-10-01.
   `docs/agents/items/cards-digital-alchemy.md` (939 unsupported texts), which is not
   scheduled. Rulings that apply only to digital-only cards are DEFERRED in
   `scripts/rulings_batches.py`.
+- **Digital versions that a legality rule counts as paper** (cards4-paper-plan, Oct 28;
+  pending the user's decision, card-support-plan-4.md, "Paper-scope texts", decision 1):
+  "Name Sticker" Goblin is the MTGO version of _____ Goblin (an MTGO-only record that
+  Scryfall lists as legal in Commander). Its text is in `docs/agents/round4/deferred.tsv`.
 
 ### Cards not legal in any format
 
