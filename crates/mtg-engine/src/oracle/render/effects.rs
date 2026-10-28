@@ -8860,6 +8860,16 @@ impl Becomes {
         if only_pt {
             let has = if gains { "has" } else { "has" };
             let mut s = match self.pt.as_ref() {
+                // "~'s base power becomes equal to the number of Towns you control until
+                // end of turn": the same characteristic set (CR 613.4b).
+                Some((None, Some(t))) if gains && !matches!(t, Value::Const(_)) => {
+                    let v = r.value(t);
+                    format!("{{alt:{has} base toughness {v}|base toughness becomes equal to {v}}}")
+                }
+                Some((Some(p), None)) if gains && !matches!(p, Value::Const(_)) => {
+                    let v = r.value(p);
+                    format!("{{alt:{has} base power {v}|base power becomes equal to {v}}}")
+                }
                 Some((None, Some(t))) => format!("{has} base toughness {}", r.value(t)),
                 Some((Some(p), None)) => format!("{has} base power {}", r.value(p)),
                 _ => format!("{has} base power and toughness {}", pt.unwrap_or_default()),

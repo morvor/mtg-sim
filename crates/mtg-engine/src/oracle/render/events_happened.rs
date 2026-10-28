@@ -1467,12 +1467,11 @@ impl Renderer<'_> {
             TriggerCond::TappedForMana { who, filter } if matches!(q, Quant::Some | Quant::No) => {
                 let subj = self.past_player(*who, iter);
                 let n = self.noun_det(filter, Det::A);
-                Said::Def(Def::new(
-                    subj,
-                    format!("tapped {n} for mana"),
-                    "didn't",
-                    format!("tap {n} for mana"),
-                ))
+                if q == Quant::No {
+                    Said::Clause(format!("{subj} didn't tap {n} for mana"))
+                } else {
+                    Said::Clause(format!("{subj} tapped {n} for mana"))
+                }
             }
             // "an oil counter was removed from a permanent you controlled this turn".
             TriggerCond::CountersRemoved { filter, kind, .. } if q == Quant::Some => {

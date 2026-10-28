@@ -390,6 +390,15 @@ impl Renderer<'_> {
             }
             // CR 700.12: an outlaw is an object with the Assassin, Mercenary, Pirate,
             // Rogue, and/or Warlock creature types.
+            // "each creature blocking or blocked by ~".
+            Filter::Or(v)
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::BlockingSource))
+                    && v.iter().any(|x| matches!(x, Filter::BlockedBySource)) =>
+            {
+                let m = self.me();
+                np.post.push(format!("blocking or blocked by {m}"));
+            }
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
             // "a land card with a basic land type" (CR 305.6: the five basic land types).
             Filter::Or(v) if is_basic_land_types(v) && np.types.contains(&CardType::Land) => {

@@ -590,6 +590,8 @@ impl Renderer<'_> {
                 }
                 _ => None,
             },
+            // "Any player may activate this ability but only during any upkeep step."
+            (Some(Condition::Phase(PhaseCond::Upkeep)), true) => Some("any upkeep step"),
             _ => None,
         };
         match a.condition.as_ref().filter(|_| {
