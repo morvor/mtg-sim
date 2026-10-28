@@ -9,7 +9,7 @@
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
-use crate::oracle::effects::{parse_sentence, Builder};
+use crate::oracle::effects::{parse_clause, parse_sentence, Builder};
 use crate::oracle::phrases::end;
 
 /// [`Builder::named`] key for the players of a "one or more [objects] deal damage to
@@ -437,3 +437,78 @@ fn card_put_into_graveyard_by_dread(l: &str, b: &mut Builder) -> Option<Effect> 
 }
 
 inventory::submit! { EffectPattern { name: "referents 5: a card you put into your graveyard this way (manifest dread)", priority: 100, parse: card_put_into_graveyard_by_dread } }
+
+/// The objects the counter instructions of the previous sentence put counters on.
+const GOT_COUNTERS: Var = vars::USER + 51_102;
+
+/// "At the beginning of your upkeep, for each color, put a +1/+1 counter on a Dragon you
+/// control of that color. If you put +1/+1 counters on five Dragons this way, you win the
+/// game." (Call the Spirit Dragons): the different objects the previous sentence's counter
+/// instructions put counters of that kind on (one Dragon chosen for two colors counts
+/// once; one that got no counter doesn't count).
+fn if_you_put_counters_on_n(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("if you put ") else {
+        return false;
+    };
+    let Some((kind, r)) = r.split_once(" counters on ") else {
+        return false;
+    };
+    let Some((what, then)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let Some((n, noun)) = crate::oracle::phrases::parse_number(what) else {
+        return false;
+    };
+    let Some((f, true, tail)) = crate::oracle::phrases::parse_object_phrase(noun.trim()) else {
+        return false;
+    };
+    if !end(tail).is_empty() {
+        return false;
+    }
+    // The previous sentence: counter instructions (one, or one for each of a list).
+    let steps: Vec<Effect> = match &*prev {
+        Effect::Seq(v) => v.clone(),
+        e => vec![e.clone()],
+    };
+    let counter_kind = |e: &Effect| match e {
+        Effect::AddCounters { kind: k, .. } => Some(k.to_string()),
+        _ => None,
+    };
+    if steps.is_empty() || steps.iter().any(|e| counter_kind(e).as_deref() != Some(kind)) {
+        return false;
+    }
+    let Some(e) = parse_clause(then, b) else {
+        return false;
+    };
+    let mut out = vec![Effect::Store {
+        var: GOT_COUNTERS,
+        sel: Sel::None,
+    }];
+    for s in steps {
+        out.push(Effect::Store {
+            var: vars::IT,
+            sel: Sel::None,
+        });
+        out.push(s);
+        out.push(Effect::Store {
+            var: GOT_COUNTERS,
+            sel: Sel::Union(vec![Sel::Var(GOT_COUNTERS), Sel::Var(vars::IT)]),
+        });
+    }
+    out.push(Effect::If {
+        cond: Condition::Compare(
+            Value::Count(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(GOT_COUNTERS))),
+                f,
+            ])),
+            Cmp::Ge,
+            n,
+        ),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::Seq(out);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "referents 5: if you put [kind] counters on N [objects] this way", priority: 100, apply: if_you_put_counters_on_n } }

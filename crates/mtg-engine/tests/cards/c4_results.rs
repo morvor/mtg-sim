@@ -106,3 +106,49 @@ fn paranormal_analyst_returns_the_card_manifest_dread_put_into_the_graveyard() {
     assert!(t.in_hand(P0, "Mountain"), "{}", t.dump_log());
     assert_eq!(t.graveyard_size(P0), 0);
 }
+
+/// Call the Spirit Dragons' upkeep ability with these Dragons; whether P0 won.
+fn spirit_dragons(dragons: &[&str]) -> (TestGame, Vec<ObjectId>) {
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Call the Spirit Dragons");
+    let ids = dragons.iter().map(|d| t.battlefield(P0, d)).collect();
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+        t.library_top(P1, "Island");
+    }
+    let start = t.g.turn.number;
+    t.g.run_until(10_000, |g| {
+        g.player(P1).has_lost
+            || (g.turn.number > start
+                && g.turn.active == P0
+                && g.turn.step == mtg_engine::turn::Step::Draw)
+    });
+    (t, ids)
+}
+
+#[test]
+fn call_the_spirit_dragons_wins_with_counters_on_five_dragons() {
+    cr!("608.2c", "104.2b");
+    supported("Call the Spirit Dragons");
+    let (t, _) = spirit_dragons(&[
+        "Pearl Dragon",
+        "Cloud Dragon",
+        "Feral Deathgorger // Dusk Sight",
+        "Dragon Hatchling",
+        "Sagu Wildling // Roost Seek",
+    ]);
+    assert!(t.has_lost(P1), "{}", t.dump_log());
+}
+
+#[test]
+fn call_the_spirit_dragons_doesnt_win_with_four_dragons() {
+    cr!("608.2c");
+    let (t, ids) = spirit_dragons(&[
+        "Pearl Dragon",
+        "Cloud Dragon",
+        "Feral Deathgorger // Dusk Sight",
+        "Dragon Hatchling",
+    ]);
+    assert!(!t.has_lost(P1), "{}", t.dump_log());
+    assert_eq!(t.counters(ids[0], "+1/+1"), 1);
+}
