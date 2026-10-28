@@ -534,3 +534,51 @@ fn f_to_each_player_whose_coin(l: &str, prev: &mut Effect, b: &mut Builder) -> b
 }
 
 inventory::submit! { super::FollowupPattern { name: "dice coins 4: [effect] to each player whose coin comes up", priority: 10, apply: f_to_each_player_whose_coin } }
+
+/// "If you would roll one or more planar dice, instead roll that many planar dice plus one
+/// and ignore one." (Ichor Elixir).
+fn extra_planar_die(
+    l: &str,
+    text: &str,
+    _ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if end(l)
+        != "if you would roll one or more planar dice, instead roll that many planar dice plus one and ignore one"
+    {
+        return None;
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Dice(
+            crate::dice::DiceStatic::ExtraPlanarDie {
+                who: PlayerRel::You,
+            },
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { super::StaticPattern { name: "dice coins 4: extra planar die", priority: 100, parse: extra_planar_die } }
+
+/// "Roll a d20 and add the number of creature cards in your graveyard that were put there
+/// from the battlefield this turn. / 15+ | Return those cards from your graveyard to the
+/// battlefield." (Revivify): "those cards" are the cards the roll's modifier counted.
+pub fn row_about_counted(text: &str, bonus: Option<&Value>) -> Option<Effect> {
+    let Some(Value::Count(f)) = bonus else {
+        return None;
+    };
+    let t = end(text.trim()).to_lowercase();
+    let to = match t.as_str() {
+        "return those cards from your graveyard to the battlefield"
+        | "return those cards to the battlefield" => Destination::battlefield(),
+        "return those cards from your graveyard to your hand"
+        | "return those cards to your hand" => Destination::zone(ZoneKind::Hand),
+        _ => return None,
+    };
+    if f.zone() != Some(ZoneKind::Graveyard) {
+        return None;
+    }
+    Some(Effect::Move {
+        what: Sel::All(f.clone()),
+        to,
+    })
+}

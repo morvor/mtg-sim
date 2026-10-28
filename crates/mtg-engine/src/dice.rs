@@ -212,6 +212,9 @@ pub enum DiceStatic {
     ExtraDie { who: PlayerRel },
     /// "If you would flip a coin, instead flip two coins and ignore one."
     ExtraCoin { who: PlayerRel },
+    /// "If you would roll one or more planar dice, instead roll that many planar dice plus
+    /// one and ignore one." (Ichor Elixir): the roller chooses the roll to ignore (CR 706.6).
+    ExtraPlanarDie { who: PlayerRel },
     /// "The first time you flip one or more coins each turn, those coins come up heads and
     /// you win those flips." (CR 705.3)
     FirstFlipsWin { who: PlayerRel },
@@ -546,9 +549,28 @@ fn modifies(m: &DieModifier, d: &RolledDie) -> bool {
 /// (Monitor Monitor's reroll applies to any die roll, CR 706.2). Modifiers that refer to
 /// a numerical result or a number of sides ignore it (CR 706.7).
 pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
+    // "Instead roll that many planar dice plus one and ignore one", once for each such
+    // effect: the player keeps one of the rolls (the others never happened, CR 706.6).
+    let extra = statics(g)
+        .iter()
+        .filter(|(_, ctl, _, d)| {
+            matches!(d, DiceStatic::ExtraPlanarDie { who } if applies_to(g, *who, *ctl, p))
+        })
+        .count();
+    let rolls: Vec<i64> = (0..=extra).map(|_| natural(g, 6)).collect();
+    let kept = if rolls.len() > 1 {
+        let opts = rolls
+            .iter()
+            .map(|r| format!("Keep {:?}", crate::planechase::face_for(*r as u32)))
+            .collect();
+        let k = g.ask_option(p, None, "Choose the planar die roll to keep", opts);
+        rolls[k.min(rolls.len() - 1)]
+    } else {
+        rolls[0]
+    };
     let mut dice = [RolledDie {
         sides: 6,
-        natural: natural(g, 6),
+        natural: kept,
         adjust: 0,
     }];
     apply_modifiers(g, p, &mut dice, None, true);

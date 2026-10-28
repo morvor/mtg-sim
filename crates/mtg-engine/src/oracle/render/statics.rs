@@ -4164,6 +4164,10 @@ impl Renderer<'_> {
                 let w = self.rel_subject(*who);
                 format!("if {w} would flip a coin, instead flip two coins and ignore one")
             }
+            D::ExtraPlanarDie { who } => {
+                let w = self.rel_subject(*who);
+                format!("if {w} would roll one or more planar dice, instead roll that many planar dice plus one and ignore one")
+            }
             D::FirstFlipsWin { who } => {
                 let w = self.rel_subject(*who);
                 format!("the first time {w} flip one or more coins each turn, those coins come up heads and {w} win those flips")

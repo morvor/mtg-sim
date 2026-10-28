@@ -442,3 +442,48 @@ fn spikeshell_harrier_reduces_the_fastest_opponents_speed() {
     t.resolve_all();
     assert_eq!(t.g.players[1].speed, Some(1));
 }
+
+#[test]
+fn ichor_elixir_rolls_an_extra_planar_die_and_ignores_one() {
+    cr!("706.6", "901.9");
+    assert_supported(&["Ichor Elixir"]);
+    use mtg_engine::planechase::{roll_planar_die, PlanarFace};
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ichor Elixir");
+    // The Planeswalker symbol and a blank: P0 keeps the blank.
+    t.g.dice.loaded.extend([1, 4]);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    assert_eq!(roll_planar_die(&mut t.g, P0), PlanarFace::Blank);
+    assert!(t.g.dice.loaded.is_empty());
+    // Another player's rolls aren't affected.
+    t.g.dice.loaded.extend([4]);
+    assert_eq!(roll_planar_die(&mut t.g, P1), PlanarFace::Blank);
+    assert!(t.g.dice.loaded.is_empty());
+}
+
+#[test]
+fn revivify_returns_the_counted_cards_on_a_high_result() {
+    cr!("706.2", "706.3");
+    assert_supported(&["Revivify"]);
+    for (natural, to_battlefield) in [(3, false), (14, true)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.destroy(bears, None);
+        t.settle();
+        // A creature card that was already in the graveyard isn't counted or returned.
+        t.graveyard(P0, "Hill Giant");
+        t.lands(P0, "Plains", 4);
+        let r = t.hand(P0, "Revivify");
+        t.g.dice.loaded.push_back(natural);
+        t.cast(P0, r).go();
+        t.resolve_all();
+        assert_eq!(
+            !t.named_on_battlefield("Grizzly Bears").is_empty(),
+            to_battlefield
+        );
+        assert_eq!(t.in_hand(P0, "Grizzly Bears"), !to_battlefield);
+        assert!(t.in_graveyard(P0, "Hill Giant"));
+    }
+}

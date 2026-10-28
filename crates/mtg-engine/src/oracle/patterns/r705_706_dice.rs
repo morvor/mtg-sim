@@ -125,7 +125,10 @@ fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             Some(e) => e,
             // "Exile target spell, then roll a d20. / 1—14 | You may cast the exiled card
             // ...": a row that continues the instruction before the roll.
-            None => match super::dice_coins_4::row_after_header(text, prev, b) {
+            None => match super::dice_coins_4::row_after_header(text, prev, b).or_else(|| {
+                let bonus = last_roll(prev)?.bonus.clone();
+                super::dice_coins_4::row_about_counted(text, bonus.as_ref())
+            }) {
                 Some(e) => e,
                 None => return false,
             },
