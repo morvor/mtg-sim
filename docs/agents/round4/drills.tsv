@@ -911,3 +911,5 @@ P-R-enter-repl	Icy Manipulator	If ~ would enter, you may pay 2 life instead. If 
 P-R-soulx-para	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield.	OK
 P-R-soulx-para2	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield. Put a +2/+2 counter on that creature if the exiled creature was a Thrull.	FAIL
 P-R-soulx-para3	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield. If the exiled creature was a Thrull, put a +2/+2 counter on that creature.	FAIL
+P-R-pj-one	Primitive Justice	As an additional cost to cast this spell, you may pay {1}{R} any number of times.	OK
+P-R-amulet-add	Icy Manipulator	{T}: Add one mana of ~'s last noted type.	FAIL
