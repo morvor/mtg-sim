@@ -582,3 +582,27 @@ pub fn row_about_counted(text: &str, bonus: Option<&Value>) -> Option<Effect> {
         to,
     })
 }
+
+/// "creature card among those cards" (Journey to the Lost City: "put a +1/+1 counter on it
+/// for each creature card among those cards"), after an instruction that exiled, revealed
+/// or looked at cards from a library: those of the cards that match.
+pub fn among_dug_cards(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    if !super::dig_grammar::dug(b) {
+        return None;
+    }
+    let i = r.find(" among those cards")?;
+    let (phrase, rest) = (&r[..i], &r[i + " among those cards".len()..]);
+    let phrase = phrase.strip_prefix("the number of ").unwrap_or(phrase);
+    let (f, _, tail) = parse_object_phrase(phrase)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some((
+        Value::Count(Filter::and(vec![
+            f,
+            Filter::Card,
+            Filter::In(Box::new(Sel::Var(vars::DUG))),
+        ])),
+        rest.to_string(),
+    ))
+}

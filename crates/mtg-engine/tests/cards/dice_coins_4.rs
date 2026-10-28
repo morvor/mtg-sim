@@ -487,3 +487,31 @@ fn revivify_returns_the_counted_cards_on_a_high_result() {
         assert!(t.in_graveyard(P0, "Hill Giant"));
     }
 }
+
+#[test]
+fn journey_to_the_lost_city_counts_creature_cards_among_the_exiled_cards() {
+    cr!("706.3", "706.3a");
+    assert_supported(&["Journey to the Lost City"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Journey to the Lost City");
+    for n in [
+        "Grizzly Bears",
+        "Forest",
+        "Hill Giant",
+        "Island",
+        "Craw Wurm",
+    ] {
+        t.library_top(P0, n);
+    }
+    t.g.dice.loaded.push_back(12);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    // The top four: Craw Wurm, Island, Hill Giant, Forest — two creature cards.
+    let wolves: Vec<ObjectId> =
+        t.g.zone_objects(Zone::Battlefield)
+            .into_iter()
+            .filter(|o| t.obj_now(*o).chars.subtypes.iter().any(|s| s == "Wolf"))
+            .collect();
+    assert_eq!(wolves.len(), 1);
+    assert_eq!(t.pt(wolves[0]), (4, 4));
+}
