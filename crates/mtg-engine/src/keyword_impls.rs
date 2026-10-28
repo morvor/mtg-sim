@@ -256,6 +256,24 @@ pub fn choose_resolved_spell_destination(
     // A destination that isn't a replacement effect the player chooses among (flashback's
     // "exile it instead of putting it anywhere else") applies.
     if let Some((dest, _)) = dests.iter().find(|(_, l)| l.is_none()) {
+        // An effect applying to the spell that replaces its being put into its owner's
+        // graveyard (Feather, the Redeemed's "exile that card instead of putting it into
+        // your graveyard") may be applied first (CR 616.1): the card then isn't put
+        // anywhere else, so flashback's effect doesn't apply. Applying flashback's first,
+        // the other effect doesn't happen (nor its delayed return).
+        if let (Some((other, label)), Some((_, kw_label))) = (
+            crate::kw::global_resolved_destination(g, id),
+            crate::kw::anywhere_else_destination(g, id),
+        ) {
+            let options = vec![label, kw_label];
+            return match g.ask(
+                controller,
+                crate::decision::Decision::ChooseReplacement { options },
+            ) {
+                crate::decision::Answer::Index(1) => (*dest, true),
+                _ => (other, false),
+            };
+        }
         return (*dest, false);
     }
     let others = g.applicable_replacements(&crate::replacement::ReplEvent::Move(
