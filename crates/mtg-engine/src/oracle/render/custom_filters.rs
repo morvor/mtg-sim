@@ -36,6 +36,15 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::copy_rules::TRIGGER_SPELL_COULD_TARGET => rel("that spell could target"),
         // "each Equipment attached to it", "it" being each object the effect is about.
         "attached_to_affected" => rel("attached to it"),
+        // Noted during the draft (CR 905.2b; `draft.rs`).
+        crate::draft::NOTED_NAME => rel("with a name you noted for cards named ~"),
+        crate::draft::NOTED_TYPE => rel("of a type you noted for cards named ~"),
+        crate::draft::CHOSEN_COLOR => {
+            rel("that's one or more of the colors chosen as you drafted cards named ~")
+        }
+        crate::kw::game_rules_4::COLOR_OUTSIDE_COMMANDER_IDENTITY => {
+            rel("that's a color not in your commander's color identity")
+        }
         crate::kw::cast_history::USING_SOURCE_MANA => rel("using mana produced by ~"),
         crate::kw::damage_shares_a_color::SHARES_COLOR_WITH_PRODUCED_MANA => {
             rel("that shares a color with the mana that land produced")
