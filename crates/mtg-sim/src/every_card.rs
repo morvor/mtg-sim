@@ -7,12 +7,15 @@
 //! and triggered abilities were used.
 //!
 //! Usage: mtg-sim --every-card [--games-per-card K] [--from N] [--count M]
-//!                [--filter TEXT] [--kind KIND] [--game G] [--threads T] [--max-turns N]
+//!                [--filter TEXT] [--names FILE] [--kind KIND] [--game G] [--threads T] [--max-turns N]
 //!                [--check N] [--slow SECS] [--timeout SECS] [--report FILE] [--log]
 //!                [--list] [--cards TIER] [--tiers FILE]
 //!
 //! Card N is the Nth card of the pool (sorted by name); its games' seeds are derived from
-//! N, so `--from N --count 1 --game G --log` replays game G of card N.
+//! N, so `--from N --count 1 --game G --log` replays game G of card N. `--names FILE`
+//! sweeps only the cards the file names (one name per line, `#` comments; the indices stay
+//! the full pool's), e.g. the cards a scope change newly counts, whose results
+//! `mtg-tools verified --fuzz-from docs/verified-cards.tsv --report FILE` merges in.
 
 use crate::coverage::{tracked_abilities, Focus, Tracked, Usage, Use};
 use crate::decks::DeckList;
@@ -686,6 +689,8 @@ struct Options {
     from: usize,
     count: Option<usize>,
     filter: Option<String>,
+    /// `--names FILE`: only these cards (lowercased names).
+    names: Option<HashSet<String>>,
     kind: Option<String>,
     game: Option<u32>,
     threads: usize,
@@ -707,6 +712,7 @@ fn parse(args: &[String]) -> Options {
         from: 0,
         count: None,
         filter: None,
+        names: None,
         kind: None,
         game: None,
         threads: std::thread::available_parallelism().map_or(1, |n| n.get()),
@@ -746,6 +752,18 @@ fn parse(args: &[String]) -> Options {
             "--from" => o.from = value(i).parse().expect("--from N"),
             "--count" => o.count = Some(value(i).parse().expect("--count M")),
             "--filter" => o.filter = Some(value(i).to_lowercase()),
+            "--names" => {
+                let path = value(i);
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("--names {path}: {e}"));
+                o.names = Some(
+                    text.lines()
+                        .map(str::trim)
+                        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                        .map(str::to_lowercase)
+                        .collect(),
+                );
+            }
             "--kind" => o.kind = Some(value(i)),
             "--game" => o.game = Some(value(i).parse().expect("--game G")),
             "--threads" => o.threads = value(i).parse().expect("--threads T"),
@@ -1024,6 +1042,11 @@ pub fn run(args: &[String]) {
                 pool[i].def.name.to_lowercase().contains(f.as_str())
                     || pool[i].text.contains(f.as_str())
             })
+        })
+        .filter(|&i| {
+            o.names
+                .as_ref()
+                .is_none_or(|n| n.contains(&pool[i].def.name.to_lowercase()))
         })
         .filter(|&i| o.kind.as_ref().is_none_or(|k| game_kind(&pool[i]) == k))
         .collect();

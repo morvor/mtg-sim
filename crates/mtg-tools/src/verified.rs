@@ -15,7 +15,9 @@
 //! instead), `--card NAME` (print one card's tier and checks), `--fuzz-from TIERS` (take
 //! each card's sweep results from an earlier tier file instead of an every-card report:
 //! after adding tests, which can't change the sweep, this recomputes the tiers without
-//! re-running it), `--gain N` (print the N unexercised structures with the highest
+//! re-running it; with `--report FILE` as well, that report's results are merged over the
+//! carried-over ones, so a sweep of just some cards, `mtg-sim --every-card --names FILE`,
+//! updates those cards only), `--gain N` (print the N unexercised structures with the highest
 //! verified gain: the cards whose only failed check is that one structure).
 //!
 //! The regeneration recipe (about three hours, most of it the sweep, run in chunks):
@@ -263,6 +265,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     let mut card: Option<String> = None;
     let mut fuzz_from: Option<PathBuf> = None;
     let mut gain: Option<usize> = None;
+    let mut report_given = false;
     let mut i = 0;
     while i < args.len() {
         let value = |i: usize| -> String {
@@ -278,6 +281,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
             }
             "--report" => {
                 report = PathBuf::from(value(i));
+                report_given = true;
                 i += 1;
             }
             "--passing" => {
@@ -329,7 +333,7 @@ pub fn run(args: &[String], repo_root: PathBuf) {
         names.insert(key.clone(), key);
     }
     let fuzz_source = fuzz_from.as_ref().unwrap_or(&report);
-    let fuzz = match std::fs::read_to_string(fuzz_source) {
+    let mut fuzz = match std::fs::read_to_string(fuzz_source) {
         Ok(t) if fuzz_from.is_some() => fuzz_from_tiers(&t),
         Ok(t) => {
             let mut f = parse_report(&t);
@@ -350,6 +354,20 @@ pub fn run(args: &[String], repo_root: PathBuf) {
             fuzz_source.display()
         );
         std::process::exit(1);
+    }
+    // `--fuzz-from` and `--report`: the report's cards (a partial sweep) replace theirs.
+    let mut merged = 0;
+    if fuzz_from.is_some() && report_given {
+        let t = std::fs::read_to_string(&report).unwrap_or_else(|e| {
+            eprintln!("error: can't read {}: {e}", report.display());
+            std::process::exit(1)
+        });
+        let r = parse_report(&t);
+        merged = r.len();
+        fuzz.retain(|k, _| !r.contains_key(k));
+        fuzz.extend(r);
+        // The partial sweep's failed games also charge carried-over cards they name.
+        charge_named(&t, &names, &mut fuzz);
     }
     let passing: HashSet<String> = std::fs::read_to_string(&passing)
         .unwrap_or_default()
@@ -438,6 +456,11 @@ pub fn run(args: &[String], repo_root: PathBuf) {
     }
     if let Some(path) = out {
         let sweep = match &fuzz_from {
+            Some(_) if merged > 0 => format!(
+                "sweep results of {} cards carried over from the previous tier file (--fuzz-from) and of {merged} cards from the every-card report {}",
+                fuzz.len() - merged,
+                report.strip_prefix(&root).unwrap_or(&report).display()
+            ),
             Some(_) => format!(
                 "sweep results of {} cards carried over from the previous tier file (--fuzz-from)",
                 fuzz.len()
