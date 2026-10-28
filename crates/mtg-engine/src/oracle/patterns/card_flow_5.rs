@@ -519,3 +519,192 @@ fn for_each_target_reveal_damage(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 5: for each of them, reveal until, damage equal to that card's mana value, then put the revealed cards", priority: 90, parse: for_each_target_reveal_damage } }
+
+/// The cards each player exiled with an "each player exiles ..." instruction.
+pub const EACH_EXILED: Var = vars::USER + 52003;
+
+/// "Each player exiles all cards from their hand face down and draws seven cards. At the
+/// beginning of the next end step, each player discards their hand and returns to their
+/// hand each card they exiled this way." (Magus of the Jar): the cards all the players
+/// exiled are kept (each player's own: from their own hand), and the delayed instruction
+/// returns them to their owners' hands after the discard.
+pub(crate) fn returns_each_card_they_exiled(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    const TAIL: &str = " and returns to their hand each card they exiled this way.";
+    let head = block.strip_suffix(TAIL)?;
+    if block.contains('\n') || !head.contains("Each player exiles ") {
+        return None;
+    }
+    let v = crate::oracle::parse_ability(&format!("{head}."), ctx)?;
+    let [a] = v.as_slice() else {
+        return None;
+    };
+    let mut a = (**a).clone();
+    let body = match &mut a.kind {
+        AbilityKind::Activated(x) => &mut x.body.effect,
+        AbilityKind::Triggered(x) => &mut x.body.effect,
+        AbilityKind::Spell(x) => &mut x.body.effect,
+        _ => return None,
+    };
+    let Effect::Seq(steps) = body else {
+        return None;
+    };
+    // The players' exiles: collected.
+    let Some(Effect::ForEachPlayer { effect, .. }) = steps.first_mut() else {
+        return None;
+    };
+    let Effect::AsPlayer { effect: inner, .. } = effect.as_mut() else {
+        return None;
+    };
+    if !matches!(inner.as_ref(), Effect::Exile { .. }) {
+        return None;
+    }
+    let exile = std::mem::replace(inner.as_mut(), Effect::Noop);
+    **inner = Effect::seq(vec![
+        exile,
+        Effect::Store {
+            var: EACH_EXILED,
+            sel: Sel::Union(vec![Sel::Var(EACH_EXILED), Sel::Var(vars::IT)]),
+        },
+    ]);
+    steps.insert(
+        0,
+        Effect::Store {
+            var: EACH_EXILED,
+            sel: Sel::Union(vec![]),
+        },
+    );
+    // The delayed instruction: then each card returns to its owner's hand.
+    let Some(Effect::DelayedTrigger { body, .. }) = steps.last_mut() else {
+        return None;
+    };
+    if !matches!(body.effect, Effect::DiscardHand { .. }) {
+        return None;
+    }
+    let discard = std::mem::replace(&mut body.effect, Effect::Noop);
+    body.effect = Effect::seq(vec![
+        discard,
+        Effect::Move {
+            what: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Var(EACH_EXILED))),
+                Filter::InZone(ZoneKind::Exile),
+            ])),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+    ]);
+    a.text = block.to_string();
+    Some(vec![std::sync::Arc::new(a)])
+}
+
+inventory::submit! { super::AbilityPattern { name: "card flow 5: each player returns to their hand each card they exiled this way", priority: 40, parse: returns_each_card_they_exiled } }
+
+/// The two cards "both cards" names.
+const BOTH_FIRST: Var = vars::USER + 52004;
+const BOTH_SECOND: Var = vars::USER + 52005;
+
+/// "exile up to one target creature you own, then search your library for a basic land
+/// card. Put both cards onto the battlefield under your control, then shuffle." (Sword of
+/// Hearth and Home): the card the first instruction moved and the card the search found
+/// enter together (CR 608.2c, 614.12), then the library is shuffled.
+fn put_both_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix("put both cards ") else {
+        return false;
+    };
+    let Some(r) = r.strip_suffix(", then shuffle") else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let [first, Effect::SearchCards(s)] = v.as_slice() else {
+        return false;
+    };
+    if !s.dests.is_empty() || s.shuffle != SearchShuffle::No || !matches!(first, Effect::Exile { .. }) {
+        return false;
+    }
+    let saved = b.it.clone();
+    b.it = Sel::Union(vec![Sel::Var(BOTH_FIRST), Sel::Var(BOTH_SECOND)]);
+    let mv = parse_clause(&format!("put them {r}"), b);
+    b.it = saved;
+    let Some(Effect::Move { what, to }) = mv else {
+        return false;
+    };
+    if !matches!(what, Sel::Union(_)) || to.zone != ZoneKind::Battlefield {
+        return false;
+    }
+    let (first, search) = (v[0].clone(), v[1].clone());
+    *prev = Effect::seq(vec![
+        first,
+        Effect::Store {
+            var: BOTH_FIRST,
+            sel: Sel::Var(vars::IT),
+        },
+        search,
+        Effect::Store {
+            var: BOTH_SECOND,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::Move { what, to },
+        Effect::Shuffle {
+            who: PlayerRef::You,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "card flow 5: put both cards onto the battlefield, then shuffle", priority: 90, apply: put_both_cards } }
+
+/// "Each player looks at the top five cards of their library and may reveal a land card
+/// and/or an instant or sorcery card from among them. Each player puts the cards they
+/// revealed this way into their hand and the rest on the bottom of their library in a
+/// random order. [More instructions.]" (Explore the Vastlands): each player's own dig,
+/// read as the same instructions for "you" performed by each player (CR 101.4, 608.2e).
+fn each_player_digs(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() || block.contains('\n') {
+        return None;
+    }
+    let r = block.strip_prefix("Each player looks at the top ")?;
+    let (n, r) = r.split_once(" cards of their library and may reveal ")?;
+    let (what, r) = r.split_once(" from among them. Each player puts the cards they revealed this way into their hand and the rest on the bottom of their library in a random order.")?;
+    let mine = format!(
+        "Look at the top {n} cards of your library. You may reveal {what} from among them and put them into your hand. Put the rest on the bottom of your library in a random order."
+    );
+    let dig = crate::oracle::parse_ability(&mine, ctx)?;
+    let [dig] = dig.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Spell(s) = &dig.kind else {
+        return None;
+    };
+    if !s.body.targets.is_empty() {
+        return None;
+    }
+    let mut steps = vec![Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::AsPlayer {
+            who: PlayerRef::Iterated,
+            effect: Box::new(s.body.effect.clone()),
+        }),
+    }];
+    let rest = r.trim();
+    if !rest.is_empty() {
+        let more = crate::oracle::parse_ability(rest, ctx)?;
+        let [more] = more.as_slice() else {
+            return None;
+        };
+        let AbilityKind::Spell(m) = &more.kind else {
+            return None;
+        };
+        if !m.body.targets.is_empty() {
+            return None;
+        }
+        steps.push(m.body.effect.clone());
+    }
+    Some(vec![AbilityDef::new(
+        AbilityKind::Spell(SpellAbility {
+            body: Body::effect(Effect::seq(steps)),
+        }),
+        block,
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "card flow 5: each player looks at the top N cards and may reveal ...", priority: 40, parse: each_player_digs } }

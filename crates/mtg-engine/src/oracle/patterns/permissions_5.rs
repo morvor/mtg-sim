@@ -576,3 +576,23 @@ fn cast_up_to_instead(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
 }
 
 inventory::submit! { AbilityPattern { name: "permissions 5: if [condition], you may cast up to N ... instead of one", priority: 40, parse: cast_up_to_instead } }
+
+/// "Each opponent reveals their hand. For each opponent, exile a creature card they
+/// revealed this way until ~ leaves the battlefield." (Valki, God of Lies): the cards each
+/// opponent revealed are the cards in that player's hand (CR 701.20a), so the choice is a
+/// card from that player's hand.
+fn card_they_revealed_this_way(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const REVEAL: &str = "each opponent reveals their hand. For each opponent, ";
+    if block.contains('\n') || !block.contains(REVEAL) || !block.contains(" card they revealed this way") {
+        return None;
+    }
+    let (_, after) = block.split_once(REVEAL)?;
+    // Only one reference, in the sentence right after the reveal.
+    if after.matches(" they revealed this way").count() != 1 {
+        return None;
+    }
+    let rewritten = block.replacen(" card they revealed this way", " card from that player's hand", 1);
+    compile_as(&rewritten, block, ctx, |_| Some(()))
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: a card they revealed this way (their hand)", priority: 40, parse: card_they_revealed_this_way } }
