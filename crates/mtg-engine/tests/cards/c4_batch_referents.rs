@@ -163,3 +163,21 @@ fn soundwave_exiles_a_card_with_mana_value_equal_to_the_damage_from_that_players
     assert_eq!(t.hand_size(P0), hand + 2);
     assert_eq!(t.obj_now(sw).face, mtg_engine::object::FaceState::Back);
 }
+
+#[test]
+fn turf_war_the_attackers_controller_gains_one_of_the_contested_lands() {
+    cr!("603.4", "608.2c");
+    supported("Turf War");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Turf War");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let contested = t.battlefield(P1, "Forest");
+    let plain = t.battlefield(P1, "Forest");
+    t.g.add_counters(Entity::Object(contested), "contested", 1, None);
+    t.g.objects[contested.0 as usize].tapped = true;
+    t.attack(&[(bears, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(contested).controller, P0, "{}", t.dump_log());
+    assert!(!t.obj_now(contested).tapped);
+    assert_eq!(t.obj_now(plain).controller, P1);
+}

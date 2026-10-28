@@ -236,3 +236,33 @@ fn from_their_graveyard_damaged_player(l: &str, b: &mut Builder) -> Option<Effec
 }
 
 inventory::submit! { EffectPattern { name: "referents 5: from their graveyard (the player your objects dealt damage to)", priority: 100, parse: from_their_graveyard_damaged_player } }
+
+/// "Whenever a creature deals combat damage to a player, if that player controls one or
+/// more lands with contested counters on them, that creature's controller gains control
+/// of one of those lands of their choice and untaps it." (Turf War): "one of those lands"
+/// is one of the objects the intervening "if" clause names (CR 603.4), chosen as the
+/// instruction is performed by the player performing it.
+fn one_of_those_from_condition(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, rest) = l.split_once(" one of those ")?;
+    let (noun, after) = rest.split_once(' ').unwrap_or((rest, ""));
+    let after = after.strip_prefix("of their choice").unwrap_or(after).trim_start();
+    let raw = crate::oracle::raw_text().to_lowercase();
+    // The condition's phrase: "if that player controls one or more [nouns] [qualifier],".
+    let key = format!("if that player controls one or more {noun} ");
+    let i = raw.find(&key)?;
+    let qualifier = raw[i + key.len()..].split(',').next()?;
+    let singular = noun.strip_suffix('s')?;
+    // "with contested counters on them" -> "with a contested counter on it".
+    let q = match qualifier
+        .strip_prefix("with ")
+        .and_then(|q| q.strip_suffix(" counters on them"))
+    {
+        Some(kind) if !kind.contains(' ') => format!("with a {kind} counter on it"),
+        _ => return None,
+    };
+    let text = format!("{head} a {singular} {q} that player controls {after}");
+    parse_sentence(text.trim_end(), b)
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: one of those [objects] (named by the intervening if)", priority: 100, parse: one_of_those_from_condition } }
