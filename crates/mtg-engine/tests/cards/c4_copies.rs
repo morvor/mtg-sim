@@ -73,3 +73,35 @@ fn metamorphic_alteration_values_are_locked_in_as_the_effect_begins() {
     assert_eq!(t.g.obj(bears).chars.name.as_str(), "Serra Angel");
     assert_eq!(t.pt(bears), (4, 4));
 }
+
+#[test]
+fn spirit_of_resilience_may_become_a_copy_of_a_card_that_left_the_graveyard() {
+    cr!("603.2c", "603.10a", "707.2");
+    supported("Spirit of Resilience");
+    let mut t = TestGame::new(2);
+    let spirit = t.battlefield(P0, "Spirit of Resilience");
+    let angel = t.graveyard(P0, "Serra Angel");
+    let island = t.graveyard(P0, "Island");
+    let moved = t.g.move_objects(
+        [angel, island]
+            .iter()
+            .map(|o| mtg_engine::replacement::MoveEv {
+                obj: *o,
+                to: mtg_engine::object::Zone::Exile,
+                pos: mtg_engine::ability::LibraryPosition::Top,
+                cause: mtg_engine::events::MoveCause::Effect,
+                by: Some(P1),
+                etb: Default::default(),
+                source: None,
+            })
+            .collect(),
+    );
+    let angel_now = moved[0].expect("exiled");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(angel_now)]);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.counters(spirit, "+1/+1"), 1, "{}", t.dump_log());
+    assert_eq!(t.g.obj(spirit).chars.name.as_str(), "Serra Angel");
+    assert_eq!(t.pt(spirit), (5, 5));
+}
