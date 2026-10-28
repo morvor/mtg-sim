@@ -241,3 +241,90 @@ fn chooses_one_of_top_cards(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "card flow 5: [player] chooses one of the top two cards of your graveyard", priority: 90, parse: chooses_one_of_top_cards } }
+
+/// "The controller of target artifact sacrifices it, ..." (Shape Anew): read as "target
+/// artifact's controller sacrifices it, ...".
+fn the_controller_of_target(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("the controller of ")?;
+    if !r.starts_with("target ") {
+        return None;
+    }
+    let (_, rest) = crate::oracle::phrases::parse_target(r)?;
+    let phrase = &r[..r.len() - rest.len()];
+    if rest.is_empty() {
+        return None;
+    }
+    parse_clause(&format!("{}'s controller {rest}", phrase.trim_end()), b)
+}
+
+inventory::submit! { EffectPattern { name: "card flow 5: the controller of target X [does something]", priority: 990, parse: the_controller_of_target } }
+
+/// A third-person verb ("sacrifices", "reveals", "puts", "shuffles").
+fn third_person_verb(w: &str) -> bool {
+    w.len() > 3 && w.ends_with('s') && !matches!(w, "its" | "this" | "his" | "us")
+}
+
+/// "[player] sacrifices it, then reveals cards ..." (Shape Anew): the player does both;
+/// the second instruction is read as "that player reveals cards ...".
+fn player_then_verb(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (first, second) = l.split_once(", then ")?;
+    let verb = second.split(' ').next()?;
+    if !third_person_verb(verb) || first.starts_with("that player ") {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
+    };
+    let Some(e1) = parse_clause(first, b) else {
+        restore(b);
+        return None;
+    };
+    // The first instruction's subject is the player the second is about.
+    let subject_is_player = !matches!(b.it_player, PlayerRef::You)
+        && !super::oracle_hardening_referents::is_no_player_referent(&b.it_player);
+    if !subject_is_player {
+        restore(b);
+        return None;
+    }
+    let Some(e2) = parse_clause(&format!("that player {second}"), b) else {
+        restore(b);
+        return None;
+    };
+    Some(Effect::seq(vec![e1, e2]))
+}
+
+inventory::submit! { EffectPattern { name: "card flow 5: [player] does X, then does Y", priority: 990, parse: player_then_verb } }
+
+/// "they reveal cards from the top of their library until they reveal ..., put that card
+/// onto the battlefield, then shuffle" (Reweave, after "If the player does,"): the player
+/// "they" means performs the instructions, as "you" would (CR 608.2c).
+fn they_do(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("they ")?;
+    if !r.starts_with("reveal cards from the top of their library until they reveal ") {
+        return None;
+    }
+    let who = b.it_player.clone();
+    if matches!(who, PlayerRef::You)
+        || super::oracle_hardening_referents::is_no_player_referent(&who)
+    {
+        return None;
+    }
+    let mine = r
+        .replace(" their library", " your library")
+        .replace(" until they reveal ", " until you reveal ");
+    let saved = (b.targets.len(), b.it_player.clone());
+    let Some(e) = parse_clause(&mine, b) else {
+        b.targets.truncate(saved.0);
+        b.it_player = saved.1;
+        return None;
+    };
+    Some(Effect::AsPlayer {
+        who,
+        effect: Box::new(e),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "card flow 5: they reveal cards until they reveal ...", priority: 990, parse: they_do } }
