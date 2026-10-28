@@ -318,3 +318,67 @@ fn one_of_the_exiled_cards(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
 }
 
 inventory::submit! { AbilityPattern { name: "permissions 5: for as long as you control ~, you may play one of the exiled cards", priority: 40, parse: one_of_the_exiled_cards } }
+
+/// "During each player's turn, that player may play a land or cast a spell from among cards
+/// exiled with ~, ... When they do, exile the top card of their library." (Share the
+/// Spoils): a triggered ability of the source that triggers when any player plays a card
+/// with its permission (CR 603.2, 601.3); "they" is that player.
+fn when_they_do(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::oracle::effects::{parse_effect_text, Builder};
+    let (perm, then) = block.split_once(". When they do, ")?;
+    if block.contains('\n') || !perm.starts_with("During each player's turn, that player may ") {
+        return None;
+    }
+    let mut v = crate::oracle::parse_ability(&format!("{perm}."), ctx)?;
+    let (lands, spells) = match v.as_slice() {
+        [a] => match &a.kind {
+            AbilityKind::Static(s) => match &s.effect {
+                StaticEffect::PlayPermission(pp) if pp.who == PlayerRel::Active => {
+                    (pp.lands, pp.spells)
+                }
+                _ => return None,
+            },
+            _ => return None,
+        },
+        _ => return None,
+    };
+    let mut b = Builder::new(ctx);
+    b.in_trigger = true;
+    b.it = Sel::TriggerObject;
+    b.it_player = PlayerRef::TriggerPlayer;
+    let e = parse_effect_text(then, &mut b)?;
+    if !b.targets.is_empty() {
+        return None;
+    }
+    let this_way = Filter::Custom(crate::permissions::PLAYED_THIS_WAY.into());
+    let mut conds = Vec::new();
+    if spells {
+        conds.push(TriggerCond::CastSpell {
+            who: PlayerRel::Any,
+            filter: this_way.clone(),
+        });
+    }
+    if lands {
+        conds.push(TriggerCond::LandPlayed {
+            who: PlayerRel::Any,
+            filter: this_way,
+        });
+    }
+    let trigger = match conds.len() {
+        1 => conds.pop()?,
+        _ => TriggerCond::AnyOf(conds),
+    };
+    let tr = TriggeredAbility::new(trigger, Body::effect(e));
+    let mut out: Vec<Ability> = v
+        .drain(..)
+        .map(|a| {
+            let mut a = (*a).clone();
+            a.text = block.to_string();
+            Arc::new(a)
+        })
+        .collect();
+    out.push(AbilityDef::new(AbilityKind::Triggered(tr), block));
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: [each player's permission]. when they do, ...", priority: 40, parse: when_they_do } }

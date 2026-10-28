@@ -79,3 +79,27 @@ fn knowledge_pool_casts_another_card_not_the_one_just_exiled() {
     assert!(!offered.contains(&Entity::Object(shock_x)));
     assert_eq!(offered.len(), 6);
 }
+
+#[test]
+fn share_the_spoils_playing_a_card_exiles_the_players_top_card() {
+    cr!("601.3", "603.2", "607.2a");
+    ruling!("Share the Spoils", "it's one land or one spell, not one of each");
+    assert_supported("Share the Spoils");
+    let mut t = TestGame::new(2);
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    t.library_top(P0, "Forest");
+    t.enter(P0, "Share the Spoils");
+    t.resolve_all();
+    let bolt = t.g.current(bolt);
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    let next = t.library_top(P0, "Shock");
+    t.lands(P0, "Forest", 1);
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    // "When they do": the player who cast it exiles their top card.
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.zone(t.g.current(next)), Zone::Exile);
+    // One card a turn: the exiled Forest can't be played now.
+    let forest = t.g.find_in_zone(Zone::Exile, "Forest")[0];
+    assert!(t.play_land(P0, forest).is_err());
+}
