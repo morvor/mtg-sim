@@ -26,19 +26,23 @@ fn gorex_adds_cost_increases_before_its_reduction() {
         "Include any additional costs to cast Gorex before applying its own cost reduction. For example, if Gorex is your commander and an additional cost of {6} applies from the \"commander tax,\" you may cast Gorex by exiling four creature cards from your graveyard and paying {4}{B}{B}."
     );
     supported("Lodestone Golem");
-    // With Lodestone Golem ({1} more), exiling three cards: {6} + {1} − {6} = {1}{B}{B}.
-    for (generic, castable) in [(1, true), (0, false)] {
+    // With Lodestone Golem ({1} more): exiling four cards, {6} + {1} − {8} = {B}{B} (a
+    // reduction applied before the increase would leave {1}{B}{B}); exiling three,
+    // {6} + {1} − {6} = {1}{B}{B}.
+    for (exiled, generic, castable) in [(4, 0, true), (3, 0, false), (3, 1, true)] {
         let mut t = TestGame::new(2);
         t.battlefield(P1, "Lodestone Golem");
-        let cards: Vec<ObjectId> = (0..3).map(|_| t.graveyard(P0, "Grizzly Bears")).collect();
+        let cards: Vec<ObjectId> = (0..exiled)
+            .map(|_| t.graveyard(P0, "Grizzly Bears"))
+            .collect();
         let g = t.hand(P0, "Gorex, the Tombshell");
         lots_of(&mut t, B, 2);
         lots_of(&mut t, ManaType::C, generic);
-        t.answer(P0, DecisionKind::OptionalCost, Answer::Number(3));
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Number(exiled));
         let es: Vec<Entity> = cards.iter().map(|c| obj(*c)).collect();
         t.answer_choose(P0, &es);
         let ok = t.cast(P0, g).try_go().is_ok() && t.g.player(P0).mana_pool.total() == 0;
-        assert_eq!(ok, castable, "{generic}");
+        assert_eq!(ok, castable, "{exiled} {generic}");
     }
 }
 

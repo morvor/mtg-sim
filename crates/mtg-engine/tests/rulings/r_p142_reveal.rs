@@ -193,15 +193,17 @@ fn nissa_second_landfall_with_no_elf_or_elemental_puts_the_library_back() {
 }
 
 /// P0 controls The Prismatic Bridge (Esika's back face) with `top` on top of the library
-/// (filler cards below); the upkeep trigger resolves.
-fn prismatic_bridge(top: &[&str]) -> TestGame {
+/// (filler cards below); the upkeep trigger resolves. Returns the game, the library
+/// contents and the hand size before the trigger.
+fn prismatic_bridge(top: &[&str]) -> (TestGame, Vec<String>, usize) {
     let mut t = TestGame::new(2);
     back_face(&mut t, P0, "Esika, God of the Tree // The Prismatic Bridge");
     t.set_step(P1, Step::End);
-    library_with(&mut t, P0, top);
+    let before = library_with(&mut t, P0, top);
     t.advance_to(P0, Step::Upkeep);
+    let hand = t.hand_size(P0);
     t.resolve_all();
-    t
+    (t, before, hand)
 }
 
 #[test]
@@ -217,7 +219,7 @@ fn prismatic_bridge_finds_front_faces_and_otherwise_puts_the_library_back() {
     );
     supported("Esika, God of the Tree // The Prismatic Bridge");
     // A transforming DFC whose front face is a creature enters front face up.
-    let t = prismatic_bridge(&["Shock", "Delver of Secrets"]);
+    let (t, ..) = prismatic_bridge(&["Shock", "Delver of Secrets"]);
     let d = t
         .g
         .permanents()
@@ -229,13 +231,10 @@ fn prismatic_bridge_finds_front_faces_and_otherwise_puts_the_library_back() {
     // The revealed Shock went to the bottom.
     assert_eq!(library_names(&t, P0).last().unwrap(), "Shock");
     // No creature or planeswalker: the library is put back.
-    let mut t = prismatic_bridge(&["Shock", "Forest"]);
-    let before = library_contents(&t, P0);
+    let (t, before, hand) = prismatic_bridge(&["Shock", "Forest"]);
     assert_eq!(before.len(), 32);
-    assert_eq!(shuffles(&t), 0);
+    nothing_found(&t, P0, &before, hand);
     assert!(creatures(&t, P0).is_empty());
-    t.g.turn_events.clear();
-    assert_eq!(library_contents(&t, P0), before);
 }
 
 /// Sacrifices a creature through Descendants' Fury (or has it die with Heirloom Blade)
