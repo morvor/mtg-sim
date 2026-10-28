@@ -1034,6 +1034,18 @@ pub fn run(args: &[String]) {
         pool.len(),
         t0.elapsed()
     );
+    if let Some(names) = &o.names {
+        let in_pool: HashSet<String> = pool.iter().map(|c| c.def.name.to_lowercase()).collect();
+        let missing: Vec<&String> = names.iter().filter(|n| !in_pool.contains(*n)).collect();
+        if !missing.is_empty() {
+            eprintln!(
+                "--names: {} of {} names aren't in the pool (not fully supported, not counted, or misspelled), e.g. {:?}",
+                missing.len(),
+                names.len(),
+                &missing[..missing.len().min(5)]
+            );
+        }
+    }
     let picker = Picker::new(&pool);
     let end = o.count.map_or(pool.len(), |n| (o.from + n).min(pool.len()));
     let selected: Vec<usize> = (o.from.min(end)..end)

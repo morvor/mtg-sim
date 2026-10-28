@@ -708,6 +708,18 @@ fn card_coverage(args: &[String]) {
         full - n_manual,
         pct(supported_abilities, total_abilities)
     ));
+    let tiers_text = std::fs::read_to_string(repo_root().join(TIERS_FILE)).unwrap_or_default();
+    let swept: Vec<&str> = tiers_text
+        .lines()
+        .filter_map(|l| l.strip_prefix(crate::verified::SWEPT))
+        .collect();
+    if !swept.is_empty() {
+        md.push_str("## Sweep results\n\nThe tier file's every-card results come from these sweeps (a carried-over result is from a sweep of the code as it was then):\n\n");
+        for w in &swept {
+            md.push_str(&format!("- {w}\n"));
+        }
+        md.push('\n');
+    }
     md.push_str("## Regenerating\n\nRegenerate the tier file and this report before each milestone, and after a new card set or a CR update (other work changes round trips and structure coverage all the time, so the numbers drift between regenerations; a card newer than the tier file counts as at most compiled, and a card that stops compiling or round-tripping drops at once). Run nothing else heavy alongside the sweep:\n\n");
     md.push_str(TIER_RECIPE);
     md.push_str("\nEach chunk is a separate command because one run of the whole sweep takes longer than a command may run here (a pool larger than 30,300 cards needs a fourth chunk). `verified` reads the concatenated reports' `outcome` lines (whether each card was cast, and its failed games) and `failure` lines (a card a failed game's message names as an object, like a rules-check violation's, isn't fuzz-clean either).\n");
@@ -715,6 +727,7 @@ fn card_coverage(args: &[String]) {
         "\n`mtg-tools verified --card \"Name\"` prints one card's tier and failed checks.\n",
     );
     md.push_str("\nWhen only tests changed since the last sweep (tests can't change what the sweep finds), skip the sweep and carry each card's sweep results over from the committed tier file: regenerate the structure log, then run `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write` and `card-coverage`. A card the old file listed as unsupported has no recorded sweep result and counts as not swept. `verified --gain 60` lists the unexercised structures with the highest verified gain (the cards whose only failed check is that structure).\n");
+    md.push_str("\nTo sweep only some cards (say, the ones a change newly counts or newly compiles) and keep everyone else's results, sweep a list of names and merge it over the carried-over results; card indices (and repro commands) stay the full pool's, and a failed game in the new report also charges the carried-over cards it names:\n\n```sh\ncargo run --release -p mtg-sim -- --every-card --threads 3 --names target/names.txt --report target/every-card-partial.tsv\ncargo run --release -p mtg-tools -- verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --report target/every-card-partial.tsv --write\ncargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md\n```\n");
     md.push_str("\n## Cards with hand-written abilities\n\nGenuinely unique abilities written directly in the ability AST (`crates/mtg-engine/src/cards/`), each tested in `crates/mtg-engine/tests/cards/m_<card>.rs`; see the policy in `cards/mod.rs`.\n\n| Card | Ability | Why hand-written |\n|---|---|---|\n");
     let mut entries: Vec<&mtg_engine::cards::ManualAbility> = mtg_engine::cards::all().collect();
     entries.sort_by(|a, b| (a.card, a.face, a.text).cmp(&(b.card, b.face, b.text)));

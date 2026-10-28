@@ -60,7 +60,8 @@ Decided 2026-10-01.
   specialize, boons and similar. That is 854 cards on the 2026-09-24 data: MTG Arena and
   Alchemy cards (hbg, the y-sets, j21, Arena starter and box cards; 657 of them are legal in
   some format, all of them Arena formats: alchemy, historic, timeless, brawl,
-  standardbrawl, gladiator, competitivebrawl) and MTGO-only cards (the 74 MTGO vanguards);
+  standardbrawl, gladiator, competitivebrawl), MTGO-only cards (the 74 MTGO vanguards and one
+  promo) and the old Astral and Sega digital cards (18);
   and the "A-" rebalanced Alchemy versions of paper cards (the oracle data in `data/` has
   none as separate cards).
 - **What counts as paper** (fixed Oct 28, item `paper-scope-1`): every tool uses one rule,

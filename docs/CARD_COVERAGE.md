@@ -40,6 +40,13 @@ Checks failed by compiled cards (a card can fail several):
 - Abilities supported: 59681/60163 (99.2%)
 - Deferred, not counted: 48 sticker sheets (see `docs/DEFERRED.md`)
 
+## Sweep results
+
+The tier file's every-card results come from these sweeps (a carried-over result is from a sweep of the code as it was then):
+
+- 29643 cards, the full every-card sweep of 2026-10-21 (code as of commit ed2d02d3), carried over since
+- 2025 cards, every-card report target/every-card-partial.tsv written 2026-10-28 (a partial sweep, merged over the carried-over results)
+
 ## Regenerating
 
 Regenerate the tier file and this report before each milestone, and after a new card set or a CR update (other work changes round trips and structure coverage all the time, so the numbers drift between regenerations; a card newer than the tier file counts as at most compiled, and a card that stops compiling or round-tripping drops at once). Run nothing else heavy alongside the sweep:
@@ -63,6 +70,14 @@ Each chunk is a separate command because one run of the whole sweep takes longer
 `mtg-tools verified --card "Name"` prints one card's tier and failed checks.
 
 When only tests changed since the last sweep (tests can't change what the sweep finds), skip the sweep and carry each card's sweep results over from the committed tier file: regenerate the structure log, then run `verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --write` and `card-coverage`. A card the old file listed as unsupported has no recorded sweep result and counts as not swept. `verified --gain 60` lists the unexercised structures with the highest verified gain (the cards whose only failed check is that structure).
+
+To sweep only some cards (say, the ones a change newly counts or newly compiles) and keep everyone else's results, sweep a list of names and merge it over the carried-over results; card indices (and repro commands) stay the full pool's, and a failed game in the new report also charges the carried-over cards it names:
+
+```sh
+cargo run --release -p mtg-sim -- --every-card --threads 3 --names target/names.txt --report target/every-card-partial.tsv
+cargo run --release -p mtg-tools -- verified --logs target/structlog --fuzz-from docs/verified-cards.tsv --report target/every-card-partial.tsv --write
+cargo run --release -p mtg-tools -- card-coverage --write docs/CARD_COVERAGE.md
+```
 
 ## Cards with hand-written abilities
 

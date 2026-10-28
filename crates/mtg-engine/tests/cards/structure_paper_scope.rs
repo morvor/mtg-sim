@@ -16,7 +16,7 @@ fn pool(t: &TestGame, p: PlayerId) -> usize {
 
 #[test]
 fn prismite_and_llanowar_envoy_filter_mana_into_any_color() {
-    cr!("605.1a", "605.3a", "106.1b");
+    cr!("605.1a", "605.3a");
     // "{2}: Add one mana of any color." / "{1}{G}: Add one mana of any color."
     for (name, land) in [("Prismite", "Island"), ("Llanowar Envoy", "Forest")] {
         supported(name);
@@ -52,13 +52,23 @@ fn broken_fall_returns_itself_to_regenerate_a_creature() {
 
 #[test]
 fn hoodwink_bounces_a_land() {
-    cr!("608.2b");
+    cr!("601.2c", "115.1a");
     // "Return target artifact, enchantment, or land to its owner's hand."
     supported("Hoodwink");
     let mut t = TestGame::new(2);
     let forest = t.battlefield(P1, "Forest");
+    let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Island", 2);
     let h = t.hand(P0, "Hoodwink");
+    t.g.recompute();
+    let spec = t.g.spell_body(h).targets[0].clone();
+    let ctx = mtg_engine::eval::Ctx::new(Some(h), P0);
+    let legal = t.g.legal_target_candidates(&spec, &ctx, h);
+    assert!(legal.contains(&Entity::Object(forest)));
+    assert!(
+        !legal.contains(&Entity::Object(bears)),
+        "a creature isn't an artifact, enchantment or land"
+    );
     t.cast(P0, h).target(forest).go();
     t.resolve();
     assert!(t.in_hand(P1, "Forest"));
@@ -79,6 +89,15 @@ fn consign_to_dream_puts_a_green_permanent_on_top_of_its_library() {
     let top = *t.g.players[P1.idx()].library.last().unwrap();
     assert_eq!(&*t.obj_now(top).chars.name, "Grizzly Bears");
     assert!(!t.in_hand(P1, "Grizzly Bears"));
+
+    // A permanent that is neither red nor green just returns to its owner's hand.
+    let mut t = TestGame::new(2);
+    let sol = t.battlefield(P1, "Sol Ring");
+    t.lands(P0, "Island", 3);
+    let c = t.hand(P0, "Consign to Dream");
+    t.cast(P0, c).target(sol).go();
+    t.resolve();
+    assert!(t.in_hand(P1, "Sol Ring"));
 }
 
 #[test]
@@ -93,6 +112,16 @@ fn fated_intervention_scries_on_its_controllers_turn() {
     t.resolve();
     assert_eq!(count_subtype(&t, P0, "Centaur"), 2);
     assert_eq!(scries(&t), vec![2]);
+
+    // Cast on an opponent's turn (it's an instant): the tokens, but no scry.
+    let mut t = TestGame::new(2);
+    t.advance_to(P1, Step::Upkeep);
+    t.lands(P0, "Forest", 5);
+    let f = t.hand(P0, "Fated Intervention");
+    t.cast(P0, f).go();
+    t.resolve();
+    assert_eq!(count_subtype(&t, P0, "Centaur"), 2);
+    assert!(scries(&t).is_empty());
 }
 
 #[test]
