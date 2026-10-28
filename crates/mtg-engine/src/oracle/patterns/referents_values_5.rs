@@ -626,10 +626,36 @@ fn leading_until_end_of_turn_gain_control(l: &str, b: &mut Builder) -> Option<Ef
     if r.contains(", ") || r.contains(" and ") || r.contains(" until ") {
         return None;
     }
+    // "with power less than or equal to the amassed Army's power" (CR 701.47c): the Army
+    // the amass instruction just put counters on, as the target is chosen.
+    const ARMY: &str = " with power less than or equal to the amassed army's power";
+    if r.contains(ARMY) {
+        if r.split(' ').any(|w| w == "x") {
+            return None;
+        }
+        let first = b.targets.len();
+        let e = parse_sentence(
+            &format!(
+                "gain control of {} until end of turn",
+                r.replace(ARMY, " with power x or less")
+            ),
+            b,
+        )?;
+        let army = Value::PowerOf(Box::new(Sel::Var(crate::kwa::kvars::AMASSED)));
+        if b.targets.len() != first + 1 {
+            return None;
+        }
+        let t = super::r107_numbers::substitute_x_in_target(&b.targets[first], &army)?;
+        b.targets[first] = t;
+        return Some(e);
+    }
+    if r.contains("amassed") {
+        return None;
+    }
     parse_sentence(&format!("gain control of {r} until end of turn"), b)
 }
 
-inventory::submit! { EffectPattern { name: "referents 5: until end of turn, gain control of [target]", priority: 100, parse: leading_until_end_of_turn_gain_control } }
+inventory::submit! { EffectPattern { name: "referents 5: until end of turn, gain control of [target]", priority: 40, parse: leading_until_end_of_turn_gain_control } }
 
 /// "If a creature card with flying was exiled with ~'s delve ability, ~ has flying. The
 /// same is true for first strike, double strike, ... and vigilance." (Soulflayer): each

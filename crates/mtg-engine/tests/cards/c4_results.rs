@@ -200,3 +200,27 @@ fn yannik_distributes_counters_equal_to_the_exiled_creatures_power() {
     assert_eq!(t.counters(bears, "+1/+1"), 3, "{}", t.dump_log());
     let _ = y;
 }
+
+#[test]
+fn grishnakh_steals_a_creature_with_power_up_to_the_armys() {
+    cr!("701.47a", "603.12", "611.2a");
+    supported("Grishnákh, Brash Instigator");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.objects[bears.0 as usize].tapped = true;
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Grishnákh, Brash Instigator");
+    t.settle();
+    t.resolve_all();
+    // Amass Orcs 2: a 2-power Army; the Bears (power 2) is stolen, untapped, with haste.
+    assert_eq!(t.obj_now(bears).controller, P0, "{}", t.dump_log());
+    assert!(!t.obj_now(bears).tapped);
+    assert!(t
+        .obj_now(bears)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert_eq!(t.obj_now(giant).controller, P1);
+    // Until end of turn only.
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    assert_eq!(t.obj_now(bears).controller, P1);
+}

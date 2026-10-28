@@ -333,3 +333,117 @@ fn granting_spell_caster(block: &str, ctx: &crate::oracle::CompileContext) -> Op
 }
 
 inventory::submit! { super::AbilityPattern { name: "grants 5: the player who cast [this spell] in a granted ability", priority: 100, parse: granting_spell_caster } }
+
+/// "... exile a card from your hand and put a number of time counters on it equal to its
+/// mana value. It gains "...". Then remove a time counter from each other card you own in
+/// exile." (Alaundo the Seer): "other" is other than the card just exiled ("it"), not
+/// other than the source, which isn't a card in exile.
+fn each_other_card_in_exile(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if !l.contains("each other card you own in exile") {
+        return false;
+    }
+    let it = super::pronoun_groups::singular_it(b);
+    if !matches!(it, Sel::Var(_)) {
+        return false;
+    }
+    let Some(e) = parse_sentence(&l.replace("each other card", "each card"), b) else {
+        return false;
+    };
+    let Ok(mut json) = serde_json::to_value(&e) else {
+        return false;
+    };
+    // The card filter of the instruction: "card you own in exile", without the referent.
+    let card = serde_json::to_value(Filter::Card).unwrap_or_default();
+    let not_it = serde_json::to_value(Filter::not(Filter::In(Box::new(it)))).unwrap_or_default();
+    fn add_after(v: &mut serde_json::Value, card: &serde_json::Value, add: &serde_json::Value) -> usize {
+        match v {
+            serde_json::Value::Array(a) => {
+                let mut n = 0;
+                if let Some(i) = a.iter().position(|x| x == card) {
+                    a.insert(i + 1, add.clone());
+                    n += 1;
+                }
+                n + a.iter_mut().map(|x| add_after(x, card, add)).sum::<usize>()
+            }
+            serde_json::Value::Object(m) => m.values_mut().map(|x| add_after(x, card, add)).sum(),
+            _ => 0,
+        }
+    }
+    if add_after(&mut json, &card, &not_it) != 1 {
+        return false;
+    }
+    let Ok(e) = serde_json::from_value::<Effect>(json) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "grants 5: each other card you own in exile (other than it)", priority: 100, apply: each_other_card_in_exile } }
+
+std::thread_local! {
+    static EXILE_GRANT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether a triggered ability's effect only does something while its object is exiled
+/// ("When the last time counter is removed from this card, if it's exiled, you may cast
+/// it ...").
+fn only_while_exiled(t: &TriggeredAbility) -> bool {
+    let exiled = Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Exile));
+    let j = serde_json::to_string(&exiled).unwrap_or_default();
+    let is_exiled = |c: &Condition| serde_json::to_string(c).unwrap_or_default() == j;
+    t.intervening_if.as_ref().is_some_and(is_exiled)
+        || matches!(&t.body.effect, Effect::If { cond, otherwise, .. }
+            if is_exiled(cond) && matches!(**otherwise, Effect::Noop))
+}
+
+/// "It gains "When the last time counter is removed from this card, if it's exiled, you
+/// may cast it ..."" (Alaundo the Seer), "It gains "At the beginning of your upkeep, if
+/// this card is exiled, remove a refine counter from it" ..." (Uvilda, Dean of
+/// Perfection): an ability granted to a card in exile that does something only while the
+/// card is exiled functions in exile (CR 113.6b, 113.6m: it states where it works, and its
+/// effect moves the card out of exile).
+fn granted_to_exiled_card(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.starts_with("it gains \"") || EXILE_GRANT.with(|c| c.get()) {
+        return false;
+    }
+    if !(l.contains("if it's exiled") || l.contains("if ~ is exiled")) {
+        return false;
+    }
+    EXILE_GRANT.with(|c| c.set(true));
+    let e = parse_sentence(l, b);
+    EXILE_GRANT.with(|c| c.set(false));
+    let Some(mut e) = e else {
+        return false;
+    };
+    let mut changed = 0;
+    if let Effect::Modify { mods, .. } = &mut e {
+        for m in mods.iter_mut() {
+            let Modification::AddAbility(a) = m else {
+                continue;
+            };
+            let AbilityKind::Triggered(t) = &a.kind else {
+                continue;
+            };
+            if t.zone != FunctionZone::Battlefield || !only_while_exiled(t) {
+                continue;
+            }
+            let mut t = t.clone();
+            t.zone = FunctionZone::Exile;
+            *a = AbilityDef::with_link(AbilityKind::Triggered(t), a.text.clone(), a.link);
+            changed += 1;
+        }
+    }
+    if changed == 0 {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "grants 5: it gains [an ability that works in exile]", priority: 100, apply: granted_to_exiled_card } }

@@ -171,3 +171,42 @@ fn symbiote_spider_man_gives_its_other_abilities_to_the_new_host() {
     assert_eq!(t.hand_size(P0), hand + 1, "{}", t.dump_log());
     assert_eq!(t.graveyard_size(P0), gy + 2);
 }
+
+#[test]
+fn alaundo_exiled_card_is_cast_when_its_last_time_counter_is_removed() {
+    cr!("113.6", "122.1", "601.2");
+    supported("Alaundo the Seer");
+    let mut t = TestGame::new(2);
+    let alaundo = t.battlefield(P0, "Alaundo the Seer");
+    for _ in 0..6 {
+        t.library_top(P0, "Island");
+    }
+    let elves = t.hand(P0, "Llanowar Elves");
+    t.answer_choose(P0, &[Entity::Object(elves)]);
+    t.activate(P0, alaundo, 0, &[]).expect("activates");
+    t.resolve_all();
+    let exiled = t.g.current(elves);
+    assert_eq!(t.zone(exiled), mtg_engine::object::Zone::Exile, "{}", t.dump_log());
+    assert_eq!(t.counters(exiled, "time"), 1);
+    // Next turn: exile an Island (no counters); the Elves lose their last counter and
+    // may be cast without paying their mana cost, gaining haste.
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    let island = t
+        .g
+        .player(P0)
+        .hand
+        .iter()
+        .copied()
+        .find(|o| t.g.obj(*o).chars.name.as_str() == "Island")
+        .expect("island");
+    t.answer_choose(P0, &[Entity::Object(island)]);
+    t.answer_yes(P0, true);
+    t.activate(P0, alaundo, 0, &[]).expect("activates");
+    t.resolve_all();
+    let elves_now = t.named_on_battlefield("Llanowar Elves");
+    assert_eq!(elves_now.len(), 1, "{}", t.dump_log());
+    assert!(t
+        .obj_now(elves_now[0])
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+}
