@@ -1522,6 +1522,40 @@ impl Renderer<'_> {
                 let n = self.noun_det(&Filter::and(rest), det);
                 format!("{{alt:that player|they}} exiles {n} from their {zone}")
             }
+            // "When ~ deals combat damage to a player, that player exiles a card from their
+            // hand {face down}": the player chooses the card (CR 701.13a).
+            Effect::Exile {
+                what:
+                    Sel::Choose {
+                        chooser: PlayerRef::TriggerPlayer,
+                        filter: Filter::And(v),
+                        count,
+                        up_to: false,
+                        store: None,
+                    },
+                face_down,
+                ..
+            } if v
+                .iter()
+                .any(|f| matches!(f, Filter::InZone(ZoneKind::Hand | ZoneKind::Graveyard)))
+                && v.iter().any(|f| matches!(f, Filter::OwnedBy(PlayerRel::TriggerPlayer))) =>
+            {
+                self.it_done = Some("cards exiled this way".into());
+                let zone = if v.iter().any(|f| matches!(f, Filter::InZone(ZoneKind::Graveyard))) {
+                    "graveyard"
+                } else {
+                    "hand"
+                };
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|f| !matches!(f, Filter::InZone(_) | Filter::OwnedBy(_)))
+                    .cloned()
+                    .collect();
+                let det = self.det_for(count);
+                let n = self.noun_det(&Filter::and(rest), det);
+                let fd = if *face_down { " face down" } else { "" };
+                format!("{{alt:that player|they}} exiles {n} from their {zone}{fd}")
+            }
             Effect::Exile {
                 what, face_down, ..
             } => {

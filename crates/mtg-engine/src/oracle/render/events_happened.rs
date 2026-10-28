@@ -279,6 +279,9 @@ impl Renderer<'_> {
             let subj = r.past_player(who, iter);
             Said::Def(Def::new(subj, past, "didn't", neg_rest).counted())
         };
+        if let Some(s) = self.said_more(c, q, amount, iter) {
+            return Some(s);
+        }
         Some(match c {
             TriggerCond::Attacks(f) if !amount => {
                 if let Some(s) = self.definite(f) {
@@ -1357,4 +1360,154 @@ fn subject_key(c: &TriggerCond) -> Option<String> {
         | TriggerCond::CastSpell { who, .. } => format!("player {who:?}"),
         _ => return None,
     })
+}
+
+impl Renderer<'_> {
+    /// "a source you controlled": a noun whose controller is as the event happened.
+    fn past_noun(&mut self, f: &Filter, head: &'static str) -> String {
+        let saved = self.default_head.replace(head);
+        let past = std::mem::replace(&mut self.control_past, true);
+        let n = self.noun_det(f, Det::A);
+        self.default_head = saved;
+        self.control_past = past;
+        n
+    }
+
+    /// More past events for [`Self::said`]: attacks on a player, damage dealt to an
+    /// object by a kind of source, fights, taps, counters removed, blocks.
+    fn said_more(
+        &mut self,
+        c: &TriggerCond,
+        q: Quant,
+        amount: bool,
+        iter: Option<&str>,
+    ) -> Option<Said> {
+        if amount {
+            return None;
+        }
+        Some(match c {
+            // "that attacked you this turn", "if they were attacked this turn by an
+            // Assassin you controlled".
+            TriggerCond::AttacksRecipient {
+                attacker,
+                recipient: DamageRecipient::Player(r),
+            } if matches!(q, Quant::Some | Quant::No) => {
+                if let Some(s) = self.definite(attacker) {
+                    let o = self.rel_object(*r);
+                    return Some(Said::Def(Def::new(
+                        s,
+                        format!("attacked {o}"),
+                        "didn't",
+                        format!("attack {o}"),
+                    )));
+                }
+                if q != Quant::Some {
+                    return None;
+                }
+                let a = self.past_noun(attacker, "creature");
+                let who = match r {
+                    PlayerRel::TriggerPlayer => "{alt:they were|that player was}".to_string(),
+                    other => {
+                        let p = self.past_player(*other, iter);
+                        format!("{p} {}", Self::be_past(&p, false))
+                    }
+                };
+                Said::Full(format!("{who} attacked this turn by {a}"))
+            }
+            // "a creature dealt damage this turn by a source you controlled", "if a Giant,
+            // Wizard, or spell you controlled dealt damage to it this turn".
+            TriggerCond::DealsDamage {
+                source,
+                to: DamageRecipient::Object(to),
+                combat_only,
+            } if q == Quant::Some
+                && self.definite(source).is_none()
+                && !matches!(source, Filter::Any) =>
+            {
+                let combat = if *combat_only { "combat " } else { "" };
+                let by = self.past_noun(source, "source");
+                if matches!(to, Filter::Source) {
+                    let m = self.me();
+                    return Some(Said::Full(format!(
+                        "{m} was dealt {combat}damage this turn by {by}"
+                    )));
+                }
+                let o = self.definite(to)?;
+                let o = if o == "it" || o == "~it" {
+                    "it".to_string()
+                } else {
+                    o
+                };
+                Said::Full(format!("{by} dealt {combat}damage to {o} this turn"))
+            }
+            // "if it's the first time that creature has become tapped this turn".
+            TriggerCond::BecomesTapped(f) if q == Quant::First => {
+                let s = self.definite(f)?;
+                let s = if s == "it" || s == "~it" {
+                    "{alt:it|that creature|that permanent}".to_string()
+                } else {
+                    s
+                };
+                Said::Full(format!(
+                    "it's the first time {s} has become tapped this turn"
+                ))
+            }
+            // "a creature that fought this turn" (CR 701.14).
+            TriggerCond::Where { trigger, cond }
+                if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, who: PlayerRel::Any } if name == "fight")
+                    && matches!(cond, Condition::SelMatches(Sel::TriggerObject, _)) =>
+            {
+                let Condition::SelMatches(_, f) = cond else {
+                    return None;
+                };
+                let s = self.definite(f)?;
+                Said::Def(Def::new(s, "fought", "didn't", "fight"))
+            }
+            // "each player who tapped a land for mana this turn".
+            TriggerCond::TappedForMana { who, filter } if matches!(q, Quant::Some | Quant::No) => {
+                let subj = self.past_player(*who, iter);
+                let n = self.noun_det(filter, Det::A);
+                Said::Def(Def::new(
+                    subj,
+                    format!("tapped {n} for mana"),
+                    "didn't",
+                    format!("tap {n} for mana"),
+                ))
+            }
+            // "an oil counter was removed from a permanent you controlled this turn".
+            TriggerCond::CountersRemoved { filter, kind, .. } if q == Quant::Some => {
+                let k = match kind {
+                    Some(k) => with_article(&counter_name(k)),
+                    None => "a counter".into(),
+                };
+                let o = match self.definite(filter) {
+                    Some(s) => s,
+                    None => self.past_noun(filter, "permanent"),
+                };
+                Said::Clause(format!("{k} was removed from {o}"))
+            }
+            // "~ blocked or was blocked by a blue creature this turn".
+            TriggerCond::AnyOf(v) if v.len() == 2 && matches!(q, Quant::Some | Quant::No) => {
+                let [TriggerCond::BlocksCreature { blocker, attacker: a1 }, TriggerCond::BlockedByCreature { attacker, blocker: b2 }] =
+                    v.as_slice()
+                else {
+                    return None;
+                };
+                if format!("{blocker:?}") != format!("{attacker:?}")
+                    || format!("{a1:?}") != format!("{b2:?}")
+                {
+                    return None;
+                }
+                let s = self.definite(blocker)?;
+                let o = self.noun_det(a1, Det::A);
+                Said::Def(Def::new(
+                    s,
+                    format!("blocked or was blocked by {o}"),
+                    "didn't",
+                    format!("block or become blocked by {o}"),
+                ))
+            }
+            _ => return None,
+        })
+    }
 }

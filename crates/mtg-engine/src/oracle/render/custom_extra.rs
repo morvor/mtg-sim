@@ -185,6 +185,12 @@ impl Renderer<'_> {
         if name.starts_with(crate::kw::delayed_grammar_3::MANA_SPENT_ON_TARGET) {
             return Some("the amount of mana spent to cast that spell".into());
         }
+        if name == crate::kw::damage_history_4::GREATEST_DAMAGE_BY_A_SOURCE {
+            return Some(
+                "the greatest amount of damage dealt by a source to a permanent or player this turn"
+                    .into(),
+            );
+        }
         if name == crate::kw::trigger_modifiers::LIFE_PAID_AMOUNT {
             return Some("the life paid to activate it".into());
         }
@@ -463,6 +469,20 @@ impl Renderer<'_> {
             return Some(format!("unlock costs you pay cost {{{n}}} less"));
         }
         Some(match name {
+            // CR 702.28b: a creature with shadow can block only creatures with shadow and
+            // be blocked only by them; this one blocks them as though it had it.
+            crate::kw::shadow::BLOCKS_SHADOW_AS_THOUGH_IT_HAD_SHADOW => {
+                let m = self.me();
+                format!("{m} can block creatures with shadow as though {{alt:it|~}} had shadow")
+            }
+            crate::kw::shadow::BLOCKS_SHADOW_AS_THOUGH_THEY_DIDNT => {
+                let m = self.me();
+                format!("{m} can block creatures with shadow as though they didn't have shadow")
+            }
+            // "The first card you foretell each turn costs {0} to foretell" (CR 702.143a).
+            crate::kw::foretell::FIRST_EACH_TURN_FREE => {
+                "the first card you foretell each turn costs {0} to foretell".into()
+            }
             "facedown: may look at opponents' face-down creatures" => {
                 "you may look at face-down creatures your opponents control {opt:any time}".into()
             }
