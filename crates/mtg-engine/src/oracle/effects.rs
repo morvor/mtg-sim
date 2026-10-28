@@ -403,7 +403,8 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         }
         // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
         // creature put onto the battlefield with ~.\" Put target creature card ..."): the
-        // next sentence starts with a capital letter.
+        // next sentence starts with a capital letter, or it's a results-table row ("1—14 |
+        // ... \"At end of combat, exile this token.\" 15—20 | ...", CR 706.3a).
         let quote_ends_sentence = *ch == '"'
             && !in_quote
             && i > 0
@@ -411,7 +412,7 @@ pub fn split_sentences(t: &str) -> Vec<String> {
             && chars.get(i + 1) == Some(&' ')
             && chars
                 .get(i + 2)
-                .is_some_and(|c| c.is_uppercase() || *c == '~');
+                .is_some_and(|c| c.is_uppercase() || *c == '~' || c.is_ascii_digit());
         if quote_ends_sentence
             || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
         {

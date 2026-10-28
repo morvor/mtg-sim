@@ -47,8 +47,9 @@ pub(super) fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
     let range = range.trim();
     // "1 or 2": two consecutive results.
     if let Some((a, b)) = range.split_once(" or ") {
-        let (a, b): (i64, i64) = (a.trim().parse().ok()?, b.trim().parse().ok()?);
-        return (b == a + 1).then_some((a, Some(b), text));
+        if let (Ok(a), Ok(b)) = (a.trim().parse::<i64>(), b.trim().parse::<i64>()) {
+            return (b == a + 1).then_some((a, Some(b), text));
+        }
     }
     // "9 or less | ..." (Druid of the Emerald Grove): every result up to N.
     if let Some(n) = range.strip_suffix(" or less") {
@@ -76,8 +77,18 @@ fn group_table_rows(blocks: Vec<String>, _ctx: &CompileContext) -> Vec<String> {
                 if table_row(&b).is_some()
                     && (b.contains(" | ") || last.to_lowercase().contains("roll ")) =>
             {
-                last.push(' ');
-                last.push_str(b.trim());
+                // "{T}: Exile ... Roll a d20. Activate only as a sorcery. / 1—9 | ..."
+                // (Wizard's Spellbook): the rows belong to the effect, before the
+                // activation restriction.
+                match last.rfind(" Activate only ") {
+                    Some(i) if last[i..].trim_end().ends_with('.') => {
+                        last.insert_str(i, &format!(" {}", b.trim()));
+                    }
+                    _ => {
+                        last.push(' ');
+                        last.push_str(b.trim());
+                    }
+                }
             }
             _ => out.push(b),
         }
@@ -109,7 +120,17 @@ fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     if let Some((lo, hi, text)) = table_row(l) {
-        let Some(e) = parse_row_text(text, b, &roll.table) else {
+        let rows = roll.table.clone();
+        let e = match parse_row_text(text, b, &rows) {
+            Some(e) => e,
+            // "Exile target spell, then roll a d20. / 1—14 | You may cast the exiled card
+            // ...": a row that continues the instruction before the roll.
+            None => match super::dice_coins_4::row_after_header(text, prev, b) {
+                Some(e) => e,
+                None => return false,
+            },
+        };
+        let Some(roll) = last_roll(prev) else {
             return false;
         };
         roll.table.push(ResultRow { lo, hi, effect: e });
@@ -119,7 +140,10 @@ fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(row) = roll.table.last_mut() else {
         return false;
     };
-    if crate::oracle_ext::apply_followup_ext(l, &mut row.effect, b) {
+    // "(You may) roll again." (CR 706.3c) is an instruction of its own, never about the
+    // row's earlier instruction.
+    let again = matches!(end(l), "roll again" | "you may roll again");
+    if !again && crate::oracle_ext::apply_followup_ext(l, &mut row.effect, b) {
         return true;
     }
     let Some(e) = parse_sentence(l, b) else {
@@ -149,10 +173,14 @@ fn parse_row_text(text: &str, b: &mut Builder, rows: &[ResultRow]) -> Option<Eff
             .and_then(|n| parse_number(n).filter(|(_, rest)| rest.trim().is_empty()))
         {
             let mut e = rows.iter().rev().find_map(|row| match &row.effect {
-                e @ Effect::CreateToken { .. } => Some(e.clone()),
+                e @ (Effect::CreateToken { .. } | Effect::CreateTokenCopy { .. }) => {
+                    Some(e.clone())
+                }
                 _ => None,
             })?;
-            if let Effect::CreateToken { count, .. } = &mut e {
+            if let Effect::CreateToken { count, .. } | Effect::CreateTokenCopy { count, .. } =
+                &mut e
+            {
                 *count = n.0;
             }
             return Some(e);

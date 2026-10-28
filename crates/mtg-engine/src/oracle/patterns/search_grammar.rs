@@ -1315,7 +1315,10 @@ fn put_dests<'a>(
     let (n, r) = parse_number(x)?;
     n.as_const()?;
     let r = r.trim_start();
-    let r = r.strip_prefix("of them ").unwrap_or(r);
+    let r = r
+        .strip_prefix("of them ")
+        .or_else(|| r.strip_prefix("of those cards "))
+        .unwrap_or(r);
     let (first, r) = destination(r, sr, b)?;
     let r = r
         .strip_prefix(" and the other ")

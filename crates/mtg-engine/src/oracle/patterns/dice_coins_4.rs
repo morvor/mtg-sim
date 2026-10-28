@@ -192,7 +192,9 @@ fn result_at_most(e: &Effect) -> Option<i64> {
 
 /// "Roll a d20 and subtract the number of cards in your hand. If the result is 0 or less,
 /// discard your hand. / 1—9 | ..." (The Deck of Many Things): a results table after
-/// sentences about results it doesn't cover belongs to the roll before them. The table's
+/// sentences about results it doesn't cover belongs to the roll before them; and a table
+/// whose first row only reads as a continuation of the sentence before the roll (see
+/// [`row_after_header`]). The table's
 /// effects and those sentences' never both happen, so their order doesn't matter; they're
 /// joined into one instruction for the table's further rows and sentences.
 pub fn table_after_sentences(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
@@ -206,13 +208,21 @@ pub fn table_after_sentences(s: &str, effects: &mut Vec<Effect>, b: &mut Builder
     else {
         return false;
     };
-    if k + 1 >= effects.len()
-        || !effects[k + 1..]
+    // "{T}: Exile target instant or sorcery card from a graveyard. Roll a d20. / 1—9 | Copy
+    // that card. ..." (Wizard's Spellbook): a row about the instruction before the roll,
+    // in the sentence before it; the two sentences are joined.
+    let from = if k + 1 == effects.len() && k > 0 {
+        k - 1
+    } else if k + 1 < effects.len()
+        && effects[k + 1..]
             .iter()
             .all(|e| result_at_most(e).is_some_and(|n| n < lo))
     {
+        k
+    } else {
         return false;
-    }
+    };
+    let k = from;
     let mut joined = Effect::seq(effects[k..].to_vec());
     if !crate::oracle_ext::apply_followup_ext(s, &mut joined, b) {
         return false;
@@ -221,3 +231,168 @@ pub fn table_after_sentences(s: &str, effects: &mut Vec<Effect>, b: &mut Builder
     effects.push(joined);
     true
 }
+
+/// The card [`one_of_those_cards`] chose.
+const ONE_OF_THOSE: Var = vars::USER + 43001;
+
+/// "onto the battlefield tapped", "into your hand", "into your graveyard".
+fn simple_destination(s: &str) -> Option<Destination> {
+    Some(match s.trim() {
+        "onto the battlefield" => Destination::battlefield(),
+        "onto the battlefield tapped" => Destination::battlefield().tapped(),
+        "into your hand" => Destination::zone(ZoneKind::Hand),
+        "into your graveyard" => Destination::zone(ZoneKind::Graveyard),
+        _ => return None,
+    })
+}
+
+/// "Put one of those cards onto the battlefield tapped and the other into your hand, then
+/// shuffle." (Druid of the Emerald Grove's results-table row, after a search): you choose
+/// one of the cards the earlier instruction found; it goes to the first place and the
+/// rest to the second.
+fn one_of_those_cards(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("put one of those cards ")?;
+    let (r, shuffle) = match r.strip_suffix(", then shuffle") {
+        Some(r) => (r, true),
+        None => (r, false),
+    };
+    let (first, second) = r
+        .split_once(" and the other ")
+        .or_else(|| r.split_once(" and the rest "))?;
+    let (first, second) = (simple_destination(first)?, simple_destination(second)?);
+    let those = match &b.it {
+        Sel::Var(v) => Sel::Var(*v),
+        _ => return None,
+    };
+    let mut v = vec![
+        Effect::Store {
+            var: ONE_OF_THOSE,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: Filter::In(Box::new(those.clone())),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Move {
+            what: Sel::Matching(
+                Box::new(those),
+                Filter::not(Filter::In(Box::new(Sel::Var(ONE_OF_THOSE)))),
+            ),
+            to: second,
+        },
+        Effect::Move {
+            what: Sel::Var(ONE_OF_THOSE),
+            to: first,
+        },
+    ];
+    if shuffle {
+        v.push(Effect::Shuffle {
+            who: PlayerRef::You,
+        });
+    }
+    Some(Effect::seq(v))
+}
+
+inventory::submit! { EffectPattern { name: "dice coins 4: put one of those cards ... and the other ...", priority: 100, parse: one_of_those_cards } }
+
+/// The instruction just before the last die roll of `e` ("exile target spell" in "Exile
+/// target spell, then roll a d20").
+fn instruction_before_roll(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Seq(v) => {
+            let i = v.iter().rposition(|x| matches!(x, Effect::RollDice(_)))?;
+            if i > 0 {
+                Some(&mut v[i - 1])
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// `e` as JSON, with an exile's link to its source left out.
+fn unlinked_json(e: &Effect) -> Option<String> {
+    let mut e = e.clone();
+    if let Effect::Exile { link, .. } = &mut e {
+        *link = false;
+    }
+    serde_json::to_string(&e).ok()
+}
+
+/// A results-table row whose first sentence continues the instruction before the roll
+/// ("Exile target spell, then roll a d20 ... / 1—14 | You may cast the exiled card for as
+/// long as it remains exiled ..."): the sentence is read as a follow-up of that
+/// instruction, and the row's effect is what it adds. The follow-up may link that
+/// instruction's exile to the source ("Copy each card exiled with ~", CR 607.2a), which
+/// then applies to the instruction itself. The row's further sentences are read as usual.
+pub fn row_after_header(text: &str, whole: &mut Effect, b: &mut Builder) -> Option<Effect> {
+    let header = instruction_before_roll(whole)?.clone();
+    let sentences = crate::oracle::effects::split_sentences(text);
+    let (first, rest) = sentences.split_first()?;
+    let mut e = header.clone();
+    if !crate::oracle_ext::apply_followup_ext(first, &mut e, b) {
+        return None;
+    }
+    // The follow-up must have kept the header's instruction as it was and added others
+    // after it.
+    let Effect::Seq(mut v) = e else {
+        return None;
+    };
+    if v.len() < 2 || unlinked_json(&v[0])? != unlinked_json(&header)? {
+        return None;
+    }
+    let new_header = v.remove(0);
+    let mut row = Effect::seq(v);
+    for s in rest {
+        if crate::oracle_ext::apply_followup_ext(s, &mut row, b) {
+            continue;
+        }
+        let next = crate::oracle::effects::parse_sentence(s, b)?;
+        row = Effect::seq(vec![row, next]);
+    }
+    *instruction_before_roll(whole)? = new_header;
+    Some(row)
+}
+
+/// Whether "it" is a target spell or ability ("Choose target spell or ability with one or
+/// more targets.").
+fn it_is_target_stack_object(b: &Builder) -> Option<u8> {
+    let Sel::Target(i) = b.it else {
+        return None;
+    };
+    matches!(
+        b.targets.get(i as usize)?.what,
+        TargetKind::Spell(_) | TargetKind::Ability(_) | TargetKind::SpellOrAbility(_)
+    )
+    .then_some(i)
+}
+
+/// "You may choose new targets for that spell or ability. Then copy it." (Wyll's
+/// Reversal), after "Choose target spell or ability ...": that target.
+fn that_target_spell_or_ability(l: &str, b: &mut Builder) -> Option<Effect> {
+    let i = it_is_target_stack_object(b)?;
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    for that in ["that spell or ability", "that spell", "that ability"] {
+        if let Some(head) = l.strip_suffix(&format!(" for {that}") as &str) {
+            return parse_clause(&format!("{head} for it"), b);
+        }
+    }
+    if matches!(
+        l,
+        "copy it" | "copy that spell or ability" | "copy that spell"
+    ) {
+        return Some(Effect::CopySpell {
+            what: Sel::Target(i),
+            count: Value::c(1),
+            new_targets: false,
+        });
+    }
+    None
+}
+
+inventory::submit! { EffectPattern { name: "dice coins 4: that target spell or ability", priority: 100, parse: that_target_spell_or_ability } }
