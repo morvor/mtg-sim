@@ -90,7 +90,7 @@ pub fn pool(threads: usize) -> Vec<PoolCard> {
         if !c.is_playable_card() {
             continue;
         }
-        if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+        if !c.is_paper() {
             continue;
         }
         if seen.insert(c.name.to_lowercase()) {

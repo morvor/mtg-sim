@@ -113,7 +113,48 @@ pub struct ScryfallCard {
     pub attraction_lights: Option<Vec<u32>>,
 }
 
+/// The Scryfall formats played with paper cards. A card legal, restricted or banned in one
+/// of them has a paper printing ([`ScryfallCard::is_paper`]). The other formats Scryfall
+/// lists (alchemy, historic, timeless, brawl, standardbrawl, gladiator, competitivebrawl,
+/// penny, future, ...) are Arena or MTGO formats, or not formats a card's legality there
+/// says anything about paper printings for.
+pub const PAPER_FORMATS: &[&str] = &[
+    "standard",
+    "pioneer",
+    "modern",
+    "legacy",
+    "vintage",
+    "pauper",
+    "commander",
+    "oathbreaker",
+    "paupercommander",
+    "duel",
+    "oldschool",
+    "premodern",
+    "predh",
+];
+
 impl ScryfallCard {
+    /// True for a paper card: one with a paper printing. Every tool decides "paper" by this
+    /// one rule (and `deferred()` in `scripts/rulings_batches.py` mirrors it in Python).
+    ///
+    /// The oracle record's `games` describes one printing only. For about a thousand
+    /// cards that printing is an online-only reprint (Masters Edition I–IV, Tempest
+    /// Remastered, Vintage Masters, MTGO duel decks, Arena starter cards, promos), so
+    /// `games` lacks "paper" although the card has paper printings (City of Traitors,
+    /// Fastbond, Memnite, Raging Goblin). So a card is paper if its `games` is empty or
+    /// includes "paper", or if it is legal, restricted or banned in a format played with
+    /// paper cards ([`PAPER_FORMATS`]). What this leaves out is what `docs/DEFERRED.md`
+    /// defers: cards with no paper printing (Alchemy and Arena-only sets, legal only in
+    /// Arena formats) and digital versions of cards (the "A-" rebalanced cards).
+    pub fn is_paper(&self) -> bool {
+        self.games.is_empty()
+            || self.games.iter().any(|g| g == "paper")
+            || PAPER_FORMATS
+                .iter()
+                .any(|f| matches!(self.legality(f), Some("legal" | "restricted" | "banned")))
+    }
+
     /// True for layouts that represent real, playable Magic cards (as opposed to
     /// art cards, tokens, emblems, and oversized variant cards).
     pub fn is_playable_card(&self) -> bool {

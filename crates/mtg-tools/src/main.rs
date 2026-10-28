@@ -563,7 +563,7 @@ fn card_coverage(args: &[String]) {
         if !c.is_playable_card() || !c.is_legal_somewhere() {
             continue;
         }
-        if c.games.iter().all(|g| g != "paper") && !c.games.is_empty() {
+        if !c.is_paper() {
             continue;
         }
         if c.is_sticker_sheet() {
@@ -831,7 +831,7 @@ fn unsupported(args: &[String]) {
         if card.as_ref().is_some_and(|n| c.name.to_lowercase() != *n) {
             continue;
         }
-        if paper && c.games.iter().all(|g| g != "paper") && !c.games.is_empty() {
+        if paper && !c.is_paper() {
             continue;
         }
         let def = CardDef::from_scryfall(c);
