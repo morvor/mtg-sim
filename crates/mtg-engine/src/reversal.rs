@@ -54,8 +54,13 @@ pub fn is_library_move(from: Zone, to: Zone) -> bool {
 
 /// The events the attempt produced: those recorded this turn since the snapshot was taken,
 /// then the ones still waiting to be checked for triggers, without the snapshot's own
-/// waiting events (which the restored game still has).
+/// waiting events (which the restored game still has). Batch boundaries are left out:
+/// checking events for triggers doesn't record them this turn, so the snapshot's waiting
+/// events are counted without them whether or not the attempt checked them (a cost paid as
+/// a spell resolves is attempted with the events of the resolution so far still waiting).
 fn attempt_events(snapshot: &Game, attempted: &Game) -> Vec<Event> {
+    // An attempt doesn't end the turn or a subgame, nor remove objects: anything else is
+    // not a game this snapshot was taken from.
     if attempted.turn.number != snapshot.turn.number
         || attempted.subgames.depth != snapshot.subgames.depth
         || attempted.objects.len() < snapshot.objects.len()
@@ -63,9 +68,19 @@ fn attempt_events(snapshot: &Game, attempted: &Game) -> Vec<Event> {
     {
         return vec![];
     }
-    let mut all: Vec<Event> = attempted.turn_events[snapshot.turn_events.len()..].to_vec();
-    all.extend(attempted.events.iter().cloned());
-    let skip = snapshot.events.len().min(all.len());
+    let boundary = |e: &&Event| matches!(e, Event::BatchBoundary);
+    let mut all: Vec<Event> = attempted.turn_events[snapshot.turn_events.len()..]
+        .iter()
+        .chain(attempted.events.iter())
+        .filter(|e| !boundary(e))
+        .cloned()
+        .collect();
+    let skip = snapshot
+        .events
+        .iter()
+        .filter(|e| !boundary(e))
+        .count()
+        .min(all.len());
     all.drain(..skip);
     all
 }
@@ -308,4 +323,37 @@ fn reorder_library(g: &mut Game, r: &Replay, p: PlayerId) {
         order.insert(at, *id);
     }
     g.players[p.idx()].library = order;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The snapshot's waiting events are left out whether or not the attempt checked them
+    /// for triggers, batch boundaries (which checking doesn't record) included.
+    #[test]
+    fn the_snapshots_waiting_events_are_left_out_with_their_batch_boundaries() {
+        let t = crate::testing::TestGame::new(2);
+        let mut snapshot = t.g.clone();
+        let waiting = |p: PlayerId| Event::Shuffled { player: p };
+        snapshot.events = vec![
+            waiting(PlayerId(1)),
+            Event::BatchBoundary,
+            waiting(PlayerId(1)),
+        ];
+        let attempt = waiting(PlayerId(0));
+        // Not checked during the attempt: still waiting, the attempt's after them.
+        let mut attempted = snapshot.clone();
+        attempted.events.push(attempt.clone());
+        let got = attempt_events(&snapshot, &attempted);
+        assert_eq!(format!("{got:?}"), format!("{:?}", vec![attempt.clone()]));
+        // Checked during the attempt: recorded this turn without the boundary.
+        let mut attempted = snapshot.clone();
+        attempted.events.clear();
+        attempted.turn_events.push(waiting(PlayerId(1)));
+        attempted.turn_events.push(waiting(PlayerId(1)));
+        attempted.turn_events.push(attempt.clone());
+        let got = attempt_events(&snapshot, &attempted);
+        assert_eq!(format!("{got:?}"), format!("{:?}", vec![attempt]));
+    }
 }

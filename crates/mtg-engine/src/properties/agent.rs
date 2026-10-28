@@ -97,7 +97,8 @@ impl Recorder {
                         self.rollbacks_keeping_library_actions += 1;
                         if let Some(d) = undone_difference(&before, g) {
                             self.violations.push(format!(
-                                "turn {}: an action of player {} was reversed keeping its                                  library actions, but {d} (CR 733.1)",
+                                "turn {}: an action of player {} was reversed keeping its \
+                                 library actions, but {d} (CR 733.1)",
                                 g.turn.number, p.0
                             ));
                         }

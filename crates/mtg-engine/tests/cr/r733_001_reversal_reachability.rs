@@ -4289,10 +4289,6 @@ fn a_reversed_cast_keeps_a_card_shuffled_into_a_library_by_a_replacement_effect(
 fn a_reversed_cast_keeps_a_mill_a_replacement_effect_made_of_a_lands_damage() {
     cr!("733.1", "601.2g", "701.17a");
     interp!("illegal-action-reversal-restores-libraries");
-    ruling!(
-        "Angel of Suffering",
-        "Damage that would be dealt to you will be prevented even if you can't mill"
-    );
     let mut t = TestGame::new(2);
     // "If damage would be dealt to you, prevent that damage and mill twice that many
     // cards."
