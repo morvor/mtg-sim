@@ -40,6 +40,10 @@ fn lord_leaving_makes_marked_damage_lethal() {
         "Because damage remains marked on a creature until the damage is removed as the turn ends, nonlethal damage dealt to a Sliver may become lethal if Sinew Sliver leaves the battlefield during that turn."
     );
     ruling!(
+        "Muscle Sliver",
+        "Because damage remains marked on a creature until the damage is removed as the turn ends, nonlethal damage dealt to a Sliver may become lethal if Muscle Sliver leaves the battlefield during that turn."
+    );
+    ruling!(
         "Watcher Sliver",
         "Because damage remains marked on a creature until the damage is removed as the turn ends, nonlethal damage dealt to another Sliver may become lethal if Watcher Sliver leaves the battlefield during that turn."
     );
@@ -63,6 +67,7 @@ fn lord_leaving_makes_marked_damage_lethal() {
         ("Master of the Pearl Trident", "Maritime Guard", (2, 4)),
         ("Might Sliver", "Venser's Sliver", (5, 5)),
         ("Sinew Sliver", "Venser's Sliver", (4, 4)),
+        ("Muscle Sliver", "Venser's Sliver", (4, 4)),
         ("Watcher Sliver", "Venser's Sliver", (3, 5)),
         ("Supreme Phantom", "Gnarled Mass", (4, 4)),
         ("Legion Lieutenant", "Highborn Vampire", (5, 4)),
@@ -220,13 +225,50 @@ fn aven_brigadier_gives_a_bird_soldier_plus_two() {
 }
 
 #[test]
-fn sinew_sliver_pumps_itself() {
-    cr!("611.3a");
+fn lords_that_pump_their_own_type_pump_themselves() {
+    cr!("611.3a", "613.4c");
     ruling!("Sinew Sliver", "Sinew Sliver's ability does give itself +1/+1.");
-    supported("Sinew Sliver");
+    ruling!("Muscle Sliver", "Muscle Sliver's ability does give itself +1/+1.");
+    ruling!(
+        "Anaba Spirit Crafter",
+        "Anaba Spirit Crafter’s ability affects all Minotaurs, including Anaba Spirit Crafter itself."
+    );
+    for (name, pt) in [
+        ("Sinew Sliver", (2, 2)),
+        ("Muscle Sliver", (2, 2)),
+        ("Anaba Spirit Crafter", (2, 3)),
+    ] {
+        supported(name);
+        let mut t = TestGame::new(2);
+        let s = t.battlefield(P0, name);
+        assert_eq!(t.pt(s), pt, "{name}");
+    }
+    // Anaba pumps an opponent's Minotaur too.
     let mut t = TestGame::new(2);
-    let s = t.battlefield(P0, "Sinew Sliver");
-    assert_eq!(t.pt(s), (2, 2));
+    t.battlefield(P0, "Anaba Spirit Crafter");
+    let mino = vanilla(&mut t, P1, "Creature — Minotaur", (2, 2));
+    assert_eq!(t.pt(mino), (3, 2));
+}
+
+#[test]
+fn deranged_hermits_squirrels_are_bigger_per_hermit_until_it_leaves() {
+    cr!("611.3a", "613.4c");
+    ruling!(
+        "Deranged Hermit",
+        "The Squirrel tokens get the bonus, so they are effectively 2/2 creatures until the Hermit leaves the battlefield. And they get bigger if multiple Hermits are on the battlefield."
+    );
+    supported("Deranged Hermit");
+    let mut t = TestGame::new(2);
+    let hermit = crate::r_p185_common::enter_with(&mut t, P0, "Deranged Hermit", &[]);
+    t.resolve_all();
+    let squirrels = with_subtype(&t, P0, "Squirrel");
+    assert_eq!(squirrels.len(), 4);
+    assert!(squirrels.iter().all(|s| t.pt(*s) == (2, 2)));
+    let second = t.battlefield(P0, "Deranged Hermit");
+    assert_eq!(t.pt(squirrels[0]), (3, 3));
+    destroy(&mut t, hermit);
+    destroy(&mut t, second);
+    assert_eq!(t.pt(squirrels[0]), (1, 1));
 }
 
 #[test]
