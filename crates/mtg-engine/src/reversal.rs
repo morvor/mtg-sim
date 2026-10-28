@@ -220,6 +220,10 @@ pub fn keep_library_actions(g: &mut Game, attempted: &Game) {
         g.rng = attempted.rng.clone();
         g.player_rngs = attempted.player_rngs.clone();
     }
+    if r.kept == 0 {
+        // Nothing kept: the restored game is exactly the snapshot.
+        return;
+    }
     g.reversals.kept += r.kept;
     g.recompute();
     // CR 401.5: a library's new top card is revealed (unless a spell is still being cast).
