@@ -107,16 +107,30 @@ fn before_shuffle(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
             r = Some(x);
         }
     }
-    let r = r?.strip_suffix(" you drafted that isn't in your deck.")?;
-    let r = r
-        .strip_prefix("a ")
-        .or_else(|| r.strip_prefix("an "))
-        .unwrap_or(r);
+    let r = r?;
+    // "exile three or more creature cards you drafted that aren't in your deck" (Volatile
+    // Chimera): any number, at least that many.
+    let (r, at_least) = match r.strip_suffix(" you drafted that aren't in your deck.") {
+        Some(many) => {
+            let (n, rest) = crate::oracle::phrases::parse_number(many)?;
+            let n = n.as_const().filter(|n| *n > 0)?;
+            (rest.trim_start().strip_prefix("or more ")?, n as u32)
+        }
+        None => {
+            let r = r.strip_suffix(" you drafted that isn't in your deck.")?;
+            (
+                r.strip_prefix("a ")
+                    .or_else(|| r.strip_prefix("an "))
+                    .unwrap_or(r),
+                0,
+            )
+        }
+    };
     let (what, _, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
     if !crate::oracle::phrases::end(tail).is_empty() {
         return None;
     }
-    let mut s = StaticAbility::new(StaticEffect::BeforeShuffleExile { what });
+    let mut s = StaticAbility::new(StaticEffect::BeforeShuffleExile { what, at_least });
     s.zone = FunctionZone::Library;
     Some(vec![AbilityDef::new(AbilityKind::Static(s), t)])
 }

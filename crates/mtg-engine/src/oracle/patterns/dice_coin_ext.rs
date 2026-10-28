@@ -37,6 +37,10 @@ fn the_result() -> Value {
 /// grammar by `value_results::atom_ext`). "The result" is the result of the ability's own
 /// roll, or of the roll that triggered it (CR 706.4).
 pub fn value(s: &str) -> Option<(Value, String)> {
+    // Noted draft information (`draft_4`).
+    if let Some(v) = super::draft_4::value(s) {
+        return Some(v);
+    }
     for (p, v) in [
         ("the total of those results", the_result()),
         ("the other result", Value::Var(OTHER)),

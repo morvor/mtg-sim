@@ -285,3 +285,20 @@ fn cast_any_number_from_outside(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game rules 4: cast any number of spells from among cards you own outside the game", priority: 100, parse: cast_any_number_from_outside } }
+
+/// "... equal to the number of creatures that opponent or that planeswalker's controller
+/// controls" (Goblin Lyre), after "target opponent or planeswalker": the targeted player,
+/// or the planeswalker's controller — as "that player" reads there (the controller of a
+/// targeted player is that player).
+fn that_opponent_or_planeswalkers_controller(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let phrase = ["that opponent or that planeswalker's controller", "that player or that planeswalker's controller"]
+        .into_iter()
+        .find(|p| l.contains(p))?;
+    if !matches!(&b.it_player, PlayerRef::ControllerOf(s) if matches!(**s, Sel::Target(_))) {
+        return None;
+    }
+    parse_clause(&l.replace(phrase, "that player"), b)
+}
+
+inventory::submit! { EffectPattern { name: "game rules 4: that opponent or that planeswalker's controller", priority: 100, parse: that_opponent_or_planeswalkers_controller } }
