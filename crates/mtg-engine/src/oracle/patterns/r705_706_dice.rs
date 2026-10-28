@@ -32,7 +32,7 @@ use smol_str::SmolStr;
 
 /// "1—9 | text" → (1, Some(9), text); "20 | text" → (20, Some(20), text); "15+ | text" →
 /// (15, None, text).
-fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
+pub(super) fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
     // "1 — It has base toughness 1 until end of turn." (Six-Sided Die): a row printed with
     // a dash after a single number.
     let (range, text) = line.trim().split_once(" | ").or_else(|| {
@@ -88,7 +88,7 @@ fn group_table_rows(blocks: Vec<String>, _ctx: &CompileContext) -> Vec<String> {
 inventory::submit! { BlockGroupPattern { name: "r706 results table", priority: 80, group: group_table_rows } }
 
 /// The last die roll in an effect (the one a table row or "roll again" belongs to).
-fn last_roll(e: &mut Effect) -> Option<&mut DieRoll> {
+pub(super) fn last_roll(e: &mut Effect) -> Option<&mut DieRoll> {
     match e {
         Effect::RollDice(r) => Some(r),
         Effect::Seq(v) => v.iter_mut().rev().find_map(last_roll),
@@ -235,6 +235,12 @@ fn p_roll(l: &str, b: &mut Builder) -> Option<Effect> {
         } else if let Some(x) = r.strip_prefix("and choose one result") {
             spec.choose_one = true;
             x.to_string()
+        } else if let Some(x) = r.strip_prefix("and subtract ") {
+            // "Roll a d20 and subtract the number of cards in your hand." (The Deck of Many
+            // Things): a modifier that decreases the result (CR 706.2).
+            let (v, rest) = crate::oracle::statics::parse_value_phrase(x, b)?;
+            spec.bonus = Some(Value::Diff(Box::new(Value::c(0)), Box::new(v)));
+            rest
         } else if let Some(x) = r.strip_prefix("and add ") {
             let (v, rest) = crate::oracle::statics::parse_value_phrase(x, b)?;
             spec.bonus = Some(v);

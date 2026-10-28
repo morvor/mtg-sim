@@ -44,6 +44,16 @@ pub const ODDS: Var = vars::USER + 8502;
 /// `RESULT_COUNT + n`: how many results of the most recent roll were `n` (1..=20, "if you
 /// rolled 6 exactly seven times").
 pub const RESULT_COUNT: Var = vars::USER + 8530;
+/// The number of different results of the most recent roll ("for each different result").
+pub const DIFFERENT: Var = vars::USER + 8503;
+/// The greatest result of the most recent roll ("if any of those results was 10 or
+/// higher").
+pub const HIGHEST: Var = vars::USER + 8504;
+
+/// `Condition::Custom` prefix: "any of those results was N or higher"
+/// (`die:any result at least:N`): of the resolving ability's own roll, or else of the dice
+/// rolled together that triggered it.
+pub const ANY_RESULT_AT_LEAST: &str = "die:any result at least";
 
 /// `Value::Custom`: "the result" — of the resolving ability's own roll, or else of the
 /// roll that triggered the ability ("whenever you roll one or more dice, ... equal to
@@ -306,6 +316,13 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
             for n in 1..=20i64 {
                 let k = results.iter().filter(|r| **r == n).count() as i64;
                 ctx.nums.insert(RESULT_COUNT + n as Var, k);
+            }
+            let mut different = results.clone();
+            different.sort_unstable();
+            different.dedup();
+            ctx.nums.insert(DIFFERENT, different.len() as i64);
+            if let Some(m) = results.iter().max() {
+                ctx.nums.insert(HIGHEST, *m);
             }
             if let Some(sel) = &spec.store_on {
                 for o in g.resolve_objects(sel, ctx) {
@@ -749,7 +766,19 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
 pub fn custom_condition(name: &str, ctx: &Ctx) -> Option<bool> {
     match name {
         ROLLED_DOUBLES => Some(ctx.nums.get(&DOUBLES).copied() == Some(1)),
-        _ => None,
+        _ => {
+            let n: i64 = name
+                .strip_prefix(ANY_RESULT_AT_LEAST)?
+                .strip_prefix(':')?
+                .parse()
+                .ok()?;
+            let highest = ctx.nums.get(&HIGHEST).copied().or_else(|| {
+                let e = ctx.event.as_ref()?;
+                // A planar die roll has no numerical result (CR 706.7).
+                Some(e.amounts.iter().copied().max().unwrap_or(e.amount) as i64)
+            });
+            Some(highest.is_some_and(|h| h >= n))
+        }
     }
 }
 

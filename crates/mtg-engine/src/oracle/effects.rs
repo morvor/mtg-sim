@@ -504,7 +504,12 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 // gain 2 life if a Lesson card is milled this way.": a sentence about what
                 // an instruction before the previous sentence did (`referents_values_4`).
                 if x_defined.is_none()
-                    && super::patterns::referents_values_4::lookback(&s, &mut effects, b)
+                    && (super::patterns::referents_values_4::lookback(&s, &mut effects, b)
+                        || super::patterns::dice_coins_4::table_after_sentences(
+                            &s,
+                            &mut effects,
+                            b,
+                        ))
                 {
                     b.sentences += 1;
                     continue;
