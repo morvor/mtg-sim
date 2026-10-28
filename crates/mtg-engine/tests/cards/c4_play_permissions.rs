@@ -154,3 +154,62 @@ fn aminatous_augury_one_free_spell_of_each_nonland_card_type() {
     t.resolve();
     assert!(t.in_graveyard(P0, "Divination"));
 }
+
+fn talent_game(mastery: bool) -> (TestGame, Vec<ObjectId>) {
+    let mut t = TestGame::new(2);
+    if mastery {
+        t.graveyard(P0, "Lightning Bolt");
+        t.graveyard(P0, "Divination");
+    }
+    let mut ids = Vec::new();
+    for n in ["Island", "Island", "Island", "Island", "Island"] {
+        t.library_top(P1, n);
+    }
+    ids.push(t.library_top(P1, "Lightning Bolt"));
+    ids.push(t.library_top(P1, "Lightning Bolt"));
+    t.lands(P0, "Island", 4);
+    (t, ids)
+}
+
+#[test]
+fn talent_of_the_telepath_casts_two_with_spell_mastery() {
+    cr!("608.2c", "118.9");
+    ruling!("Talent of the Telepath", "you'll cast the two cards in order");
+    assert_supported("Talent of the Telepath");
+    let (mut t, ids) = talent_game(true);
+    let talent = t.hand(P0, "Talent of the Telepath");
+    t.answer_choose_moved(P0, &[Entity::Object(ids[0]), Entity::Object(ids[1])]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, talent).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    let max = t.asked().into_iter().find_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { max, candidates, .. } if candidates.len() == 2 => {
+            Some(max)
+        }
+        _ => None,
+    });
+    assert_eq!(max, Some(2));
+}
+
+#[test]
+fn talent_of_the_telepath_casts_one_without_spell_mastery() {
+    cr!("608.2c", "118.9");
+    let (mut t, ids) = talent_game(false);
+    let talent = t.hand(P0, "Talent of the Telepath");
+    t.answer_choose_moved(P0, &[Entity::Object(ids[0])]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, talent).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // Up to one card was offered.
+    let max = t.asked().into_iter().find_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { max, candidates, .. } if candidates.len() == 2 => {
+            Some(max)
+        }
+        _ => None,
+    });
+    assert_eq!(max, Some(1));
+}

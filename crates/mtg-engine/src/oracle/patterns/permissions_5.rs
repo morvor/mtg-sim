@@ -456,3 +456,123 @@ fn for_each_card_type(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
 }
 
 inventory::submit! { AbilityPattern { name: "permissions 5: for each nonland card type, a spell of that type", priority: 40, parse: for_each_card_type } }
+
+/// "Spell mastery — If there are two or more instant and/or sorcery cards in your
+/// graveyard, you may cast up to two instant and/or sorcery spells from among the revealed
+/// cards instead of one." (Talent of the Telepath): a paragraph that changes how many
+/// cards the earlier paragraph's permission casts (CR 113.3a, 207.2c: the spell's text is
+/// one set of instructions). Joined to the paragraph before it (see `cast_up_to_instead`).
+fn join_instead_of_one(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
+    if !ctx.is_spell() {
+        return blocks;
+    }
+    let mut out: Vec<String> = Vec::new();
+    for b in blocks {
+        let rest = crate::oracle::strip_ability_word(&b);
+        let joins = rest.len() < b.len()
+            && rest.starts_with("If ")
+            && rest.ends_with(" instead of one.")
+            && rest.contains(", you may cast up to ")
+            && out.last().is_some_and(|p| !p.contains('\n') && p.ends_with('.'));
+        if joins {
+            let prev = out.pop().unwrap_or_default();
+            out.push(format!("{prev} {rest}"));
+        } else {
+            out.push(b);
+        }
+    }
+    out
+}
+
+inventory::submit! { super::BlockGroupPattern { name: "permissions 5: ... cast up to N ... instead of one", priority: 85, group: join_instead_of_one } }
+
+/// How many resolution-time casts an effect has.
+fn count_casts(e: &Effect) -> usize {
+    match e {
+        Effect::CastCard { .. } => 1,
+        Effect::Seq(v) => v.iter().map(count_casts).sum(),
+        _ => 0,
+    }
+}
+
+/// The first resolution-time cast of an effect.
+fn first_cast(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::CastCard { .. } => Some(e),
+        Effect::Seq(v) => v.iter_mut().find_map(first_cast),
+        _ => None,
+    }
+}
+
+/// "[instructions with a cast]. If [condition], you may cast up to two [spells] from among
+/// the revealed cards instead of one.": the earlier "you may cast a [spell] from among
+/// them" casts up to that many if the condition holds as the spell resolves (Talent of the
+/// Telepath's ruling).
+fn cast_up_to_instead(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::oracle::phrases::parse_number;
+    if !ctx.is_spell() || block.contains('\n') {
+        return None;
+    }
+    let (first, last) = block.rsplit_once(". If ")?;
+    let (c, r) = last.split_once(", you may cast up to ")?;
+    let r = r.strip_suffix(" from among the revealed cards instead of one.")?;
+    let (n, what) = parse_number(r)?;
+    if n.as_const().is_none_or(|n| n < 2) {
+        return None;
+    }
+    let cond = crate::oracle::statics::parse_condition(&c.to_lowercase(), ctx)?;
+    compile_as(&format!("{first}."), block, ctx, |a| {
+        let AbilityKind::Spell(s) = &mut a.kind else {
+            return None;
+        };
+        let prev = &mut s.body.effect;
+        if count_casts(prev) != 1 {
+            return None;
+        }
+        let one = first_cast(prev)?;
+        let Effect::CastCard {
+            what:
+                Sel::Choose {
+                    filter,
+                    count: Value::Const(1),
+                    up_to: true,
+                    ..
+                },
+            ..
+        } = &*one
+        else {
+            return None;
+        };
+        // The spells are of the kind the earlier permission named ("instant and/or
+        // sorcery spells" for "an instant or sorcery spell").
+        let f = format!("{filter:?}");
+        let kinds_ok = what
+            .trim()
+            .trim_end_matches(" spells")
+            .split(" and/or ")
+            .all(|k| {
+                crate::types::CardType::from_word(k)
+                    .is_some_and(|t| f.contains(&format!("Type({t:?})")))
+            });
+        if !kinds_ok {
+            return None;
+        }
+        let mut more = one.clone();
+        if let Effect::CastCard {
+            what: Sel::Choose { count, .. },
+            ..
+        } = &mut more
+        {
+            *count = n.clone();
+        }
+        let orig = std::mem::replace(one, Effect::Noop);
+        *one = Effect::If {
+            cond: cond.clone(),
+            then: Box::new(more),
+            otherwise: Box::new(orig),
+        };
+        Some(())
+    })
+}
+
+inventory::submit! { AbilityPattern { name: "permissions 5: if [condition], you may cast up to N ... instead of one", priority: 40, parse: cast_up_to_instead } }
