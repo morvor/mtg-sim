@@ -25,7 +25,7 @@ fn has_sub(t: &TestGame, id: ObjectId, s: &str) -> bool {
 
 #[test]
 fn arcane_adaptation_and_maskwood_nexus_apply_before_metallic_mimics_replacement() {
-    cr!("614.12", "205.3d");
+    cr!("614.12", "613.1d");
     ruling!(
         "Arcane Adaptation",
         "If you control Arcane Adaptation and the Aether Revolt card Metallic Mimic, with the same creature type chosen for both, then any creature you control will enter the battlefield with an additional +1/+1 counter on it."
@@ -85,7 +85,7 @@ fn maskwood_nexus_changeling_tokens_keep_every_type_after_it_leaves() {
 
 #[test]
 fn conspiracy_gives_a_creature_type_to_an_animated_land() {
-    cr!("205.3d", "613.1d");
+    cr!("613.1d");
     ruling!(
         "Conspiracy",
         "This can grant a creature type to animated lands and artifacts that would otherwise have no creature type."
@@ -131,7 +131,7 @@ fn enchanted_evening_only_lets_permanents_interact_with_enchantment_effects() {
 
 #[test]
 fn standardize_affects_only_creatures_on_the_battlefield_as_it_resolves() {
-    cr!("611.2c", "205.3d");
+    cr!("611.2c", "613.1d");
     ruling!(
         "Standardize",
         "This spell only affects creatures on the battlefield when it resolves."

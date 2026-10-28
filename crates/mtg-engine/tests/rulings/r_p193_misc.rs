@@ -38,7 +38,7 @@ fn old(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
 
 #[test]
 fn alena_counts_creatures_that_entered_as_noncreatures_or_under_another_player() {
-    cr!("605.1a", "605.3a", "700.4");
+    cr!("605.1a", "605.3a");
     ruling!(
         "Alena, Kessig Trapper",
         "A creature you control that entered the battlefield as a noncreature permanent and/or under another player's control will be counted for Alena's mana ability."
@@ -79,7 +79,7 @@ fn alena_counts_creatures_that_entered_as_noncreatures_or_under_another_player()
 
 #[test]
 fn hobgoblin_bandit_lord_counts_goblins_that_entered_even_if_gone() {
-    cr!("700.4", "120.8");
+    cr!("120.8", "608.2h");
     ruling!(
         "Hobgoblin Bandit Lord",
         "Hobgoblin Bandit Lord's activated ability only counts the number of Goblins that entered the battlefield this turn. It doesn't matter if those Goblins are still on the battlefield as it resolves."
@@ -148,7 +148,7 @@ fn moraug_counts_attacks_made_before_it_arrived_and_applies_to_that_combats_dama
 
 #[test]
 fn moraug_doesnt_count_a_creature_that_entered_attacking() {
-    cr!("508.4", "506.3");
+    cr!("508.4", "508.1a");
     ruling!(
         "Moraug, Fury of Akoum",
         "A creature that enters the battlefield attacking hasn't attacked that combat. Moraug's ability won't count that combat. Unless that creature has haste, it won't be able to attack in additional combats this turn."
@@ -174,7 +174,10 @@ fn moraug_doesnt_count_a_creature_that_entered_attacking() {
         .insert(0, Step::BeginningOfCombat);
     t.g.turn.schedule.insert(1, Step::DeclareAttackers);
     crate::r_s21_common::go_to(&mut t, Step::BeginningOfCombat);
+    t.g.untap(copy);
+    t.g.untap(singer);
     assert!(!crate::r_s02_common::can_attack(&mut t, copy));
+    assert!(crate::r_s02_common::can_attack(&mut t, singer));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -255,7 +258,7 @@ fn neriv_doubles_damage_after_it_is_assigned() {
 
 #[test]
 fn whipkeeper_counts_damage_removed_by_regeneration() {
-    cr!("701.19c", "120.6");
+    cr!("701.19a", "120.6");
     ruling!(
         "Whipkeeper",
         "If the creature regenerated during the turn, and thereby had all damage on it removed, the damage before it regenerated was still dealt that turn and will be counted."
@@ -386,7 +389,7 @@ fn dargo_cant_cost_less_than_r_but_any_number_can_be_sacrificed() {
 
 #[test]
 fn sengir_dies_with_creatures_dealt_lethal_damage_at_the_same_time() {
-    cr!("704.3", "704.5g", "603.10a");
+    cr!("704.3", "704.5g", "704.5a");
     ruling!(
         "Sengir, the Dark Baron",
         "If Sengir, the Dark Baron is dealt lethal damage at the same time as other creatures, they die at the same time. The second ability won't resolve in time to save Sengir, the Dark Baron."
@@ -594,7 +597,7 @@ fn burn_together_with_one_illegal_target() {
 
 #[test]
 fn brought_back_auras_choose_a_legal_existing_object_to_enchant() {
-    cr!("303.4f", "303.4g", "702.16b");
+    cr!("303.4f", "702.16c");
     ruling!(
         "Brought Back",
         "If you return an Aura this way, you choose what the Aura will enchant just before it enters, but you can't choose any permanent cards that will enter at the same time as that Aura."

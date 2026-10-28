@@ -66,7 +66,7 @@ fn redoubled_stormsinger_tokens_enter_attacking_without_attack_triggers() {
 
 #[test]
 fn stormsinger_and_renewed_solidarity_copy_what_a_token_is_copying_and_its_enters_with() {
-    cr!("707.2", "707.4", "614.1c");
+    cr!("707.2", "707.3", "614.1c");
     ruling!(
         "Redoubled Stormsinger",
         "If a creature token you control that entered this turn is copying something else, then the token enters the battlefield as whatever that creature token copied."
@@ -139,7 +139,7 @@ fn renewed_solidarity_copies_trigger_their_enters_abilities() {
 
 #[test]
 fn ocelot_pride_gets_the_citys_blessing_from_its_own_cat_and_copies_original_values() {
-    cr!("702.131c", "707.2", "608.2c");
+    cr!("702.131b", "707.2", "608.2c");
     ruling!(
         "Ocelot Pride",
         "If the creature token created by Ocelot Pride's last ability is your tenth permanent, you'll get the city's blessing before the ability would check to see if you have the city's blessing."
@@ -183,7 +183,7 @@ fn ocelot_pride_gets_the_citys_blessing_from_its_own_cat_and_copies_original_val
 
 #[test]
 fn a_copy_of_a_permanent_spell_isnt_a_created_token() {
-    cr!("111.12", "707.10");
+    cr!("111.13", "707.10f", "608.3f");
     ruling!(
         "Ellyn Harbreeze, Busybody",
         "If an effect creates a copy of a permanent spell, that spell becomes a token on the battlefield under your control, but that token has not been \"created.\" It won't count for Ellyn's ability."

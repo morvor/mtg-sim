@@ -28,7 +28,7 @@ fn put_in_hand(t: &mut TestGame, p: PlayerId) {
 
 #[test]
 fn kydele_counts_every_draw_this_turn_and_only_draws() {
-    cr!("121.2", "605.1a");
+    cr!("121.1", "605.1a");
     ruling!(
         "Kydele, Chosen of Kruphix",
         "Cards put into your hand without using the word \"draw\" don't count as cards drawn for Kydele's ability."
@@ -63,7 +63,7 @@ fn kydele_counts_every_draw_this_turn_and_only_draws() {
 
 #[test]
 fn fists_of_flame_and_thundering_djinn_dont_count_cards_put_into_hand() {
-    cr!("121.2", "608.2h");
+    cr!("121.1", "608.2h");
     ruling!(
         "Fists of Flame",
         "If a spell or ability causes you to put cards into your hand without specifically using the word \"draw,\" Fists of Flame's effect doesn't count them."
@@ -142,7 +142,7 @@ fn dihadas_ploy_still_discards_and_counts_earlier_discards_when_draws_are_replac
 
 #[test]
 fn profts_eidetic_memory_doesnt_trigger_with_one_card_drawn() {
-    cr!("603.4", "507.1");
+    cr!("603.4");
     ruling!(
         "Proft's Eidetic Memory",
         "If you haven't drawn more than one card by the time a beginning of combat step begins on your turn, Proft's Eidetic Memory's last ability won't trigger at all."
@@ -199,7 +199,7 @@ fn impending_flux_and_surge_of_brilliance_count_themselves_cast_from_exile() {
 
 #[test]
 fn shadow_of_the_grave_finds_a_madness_card_only_if_it_wasnt_cast() {
-    cr!("702.35a", "400.7");
+    cr!("702.35a", "702.35c", "400.7k");
     ruling!(
         "Shadow of the Grave",
         "If you discard a card with madness but don’t cast it, Shadow of the Grave can find it in your graveyard. If you do cast that card, Shadow of the Grave can’t find it in your graveyard."
@@ -251,7 +251,7 @@ fn geralf_counts_spells_cast_before_it_was_on_the_battlefield() {
 
 #[test]
 fn geralf_zombies_entering_together_see_each_other() {
-    cr!("603.6a", "603.10a");
+    cr!("603.6a", "608.2h");
     ruling!(
         "Geralf, the Fleshwright",
         "If multiple Zombies enter the battlefield under your control at the same time, Geralf’s last ability will trigger for each of those Zombies. Each of those triggered abilities will see each of those other Zombies"
@@ -277,7 +277,7 @@ fn geralf_zombies_entering_together_see_each_other() {
 
 #[test]
 fn sawblade_skinripper_needs_a_sacrifice_before_the_end_step() {
-    cr!("603.4", "513.1a");
+    cr!("603.4", "608.2h");
     ruling!(
         "Sawblade Skinripper",
         "If you haven't sacrificed any permanents during your turn by the time your end step begins, Sawblade Skinripper's last ability won't trigger at all."
@@ -302,4 +302,18 @@ fn sawblade_skinripper_needs_a_sacrifice_before_the_end_step() {
     t.settle();
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
+}
+
+#[test]
+fn mana_abilities_counting_cards_drawn_are_mana_abilities() {
+    cr!("605.1a", "605.3b");
+    // "{T}: Add {U} for each card you've drawn this turn. Spend this mana only to cast
+    // noncreature spells." counts draws without drawing: it doesn't use the stack.
+    supported("Immortus, Master of Eternity");
+    let mut t = TestGame::new(2);
+    let immortus = t.battlefield(P0, "Immortus, Master of Eternity");
+    draw(&mut t, P0, 2);
+    assert!(tap_for_mana(&mut t, P0, immortus, "{U}"));
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2);
 }

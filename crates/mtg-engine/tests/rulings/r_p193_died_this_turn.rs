@@ -201,7 +201,7 @@ fn flesh_allergy_counts_every_creature_that_died_and_needs_its_target() {
 
 #[test]
 fn force_of_despair_destroys_what_entered_this_turn_and_is_a_creature_now() {
-    cr!("700.4", "603.10");
+    cr!("608.2h");
     ruling!(
         "Force of Despair",
         "Force of Despair destroys all permanents that entered the battlefield this turn and are currently creatures. It doesn’t matter whether they were creatures as they entered the battlefield."
@@ -226,7 +226,7 @@ fn force_of_despair_destroys_what_entered_this_turn_and_is_a_creature_now() {
 
 #[test]
 fn fresh_meat_counts_creatures_put_into_your_graveyard() {
-    cr!("700.4", "111.8", "400.3");
+    cr!("700.4", "400.3");
     ruling!(
         "Fresh Meat",
         "Fresh Meat counts all creatures you owned that went to the graveyard this turn, including creature tokens that entered under your control and nontoken creatures you owned but didn't control."
@@ -250,7 +250,7 @@ fn fresh_meat_counts_creatures_put_into_your_graveyard() {
 
 #[test]
 fn gadrak_counts_creatures_that_died_before_it_entered() {
-    cr!("700.4", "603.2");
+    cr!("700.4");
     ruling!(
         "Gadrak, the Crown-Scourge",
         "Gadrak's last ability counts creatures that died during the entire turn, even ones that died before Gadrak entered the battlefield."
@@ -345,7 +345,7 @@ fn gorma_doesnt_add_counters_to_creatures_entering_with_it() {
 
 #[test]
 fn gerrard_returns_cards_even_if_it_left_the_graveyard_or_they_died_first() {
-    cr!("603.10a", "608.2b", "700.4");
+    cr!("603.10a", "608.2c", "700.4");
     ruling!(
         "Gerrard, Weatherlight Hero",
         "Gerrard's triggered ability returns artifact and creature cards even if Gerrard leaves your graveyard before you can exile it."
@@ -442,7 +442,7 @@ fn faiths_reward_returns_each_kind_of_permanent_card_from_the_battlefield() {
 
 #[test]
 fn anzrags_rampage_counts_every_artifact_put_into_a_graveyard_this_turn() {
-    cr!("700.4", "111.8");
+    cr!("111.7", "603.10a");
     ruling!(
         "Anzrag's Rampage",
         "Anzrag's Rampage counts the number of artifacts that were put into graveyards from the battlefield this turn for any reason, not just ones that were destroyed by Anzrag's Rampage. This includes any artifact tokens"
@@ -462,7 +462,7 @@ fn anzrags_rampage_counts_every_artifact_put_into_a_graveyard_this_turn() {
 
 #[test]
 fn thrilling_encore_returns_only_creature_cards_that_were_on_the_battlefield() {
-    cr!("700.4", "603.10");
+    cr!("700.4", "400.7");
     ruling!(
         "Thrilling Encore",
         "Cards that aren't creature cards won't be returned to the battlefield, even if an effect made those cards creatures when they were last on the battlefield."
@@ -500,7 +500,7 @@ fn thrilling_encore_returns_only_creature_cards_that_were_on_the_battlefield() {
 
 #[test]
 fn grim_return_cant_target_a_countered_creature_card() {
-    cr!("700.4", "115.1");
+    cr!("700.4", "400.7");
     ruling!(
         "Grim Return",
         "Creature spells that are countered never entered the battlefield, so those cards can’t be chosen as the target of Grim Return."
@@ -572,4 +572,34 @@ fn structural_assault_removes_a_shield_counter_before_dealing_damage() {
     assert!(t.in_graveyard(P1, "Memnite"));
     assert!(t.on_battlefield(shielded_twice));
     assert_eq!(t.counters(shielded_twice, "shield"), 0);
+}
+
+#[test]
+fn thrilling_encore_creatures_leave_with_their_owner_or_are_exiled_when_you_leave() {
+    cr!("800.4a");
+    ruling!(
+        "Thrilling Encore",
+        "In a multiplayer game, if a player leaves the game, all cards that player owns leave as well. If you leave the game, all creatures put onto the battlefield with Thrilling Encore that you controlled but didn't own are exiled."
+    );
+    for owner_leaves in [true, false] {
+        let mut t = TestGame::new(3);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        destroy(&mut t, bears);
+        let mine = t.battlefield(P0, "Centaur Courser");
+        destroy(&mut t, mine);
+        cast_and_resolve(&mut t, P0, "Thrilling Encore", &[]);
+        let bears = t.named_on_battlefield("Grizzly Bears")[0];
+        let courser = t.named_on_battlefield("Centaur Courser")[0];
+        assert_eq!(t.obj(bears).controller, P0);
+        let leaver = if owner_leaves { P1 } else { P0 };
+        t.g.players[leaver.idx()].life = 0;
+        t.settle();
+        assert!(t.has_lost(leaver));
+        assert!(!t.on_battlefield(bears), "owner leaves: {owner_leaves}");
+        if owner_leaves {
+            assert!(t.on_battlefield(courser));
+        } else {
+            assert_eq!(t.zone(t.g.current(bears)), Zone::Exile);
+        }
+    }
 }

@@ -54,7 +54,7 @@ fn x_max_asked(t: &TestGame, from: usize) -> Vec<i64> {
 
 #[test]
 fn accomplished_alchemist_counts_life_gained_ignoring_life_lost() {
-    cr!("119.3", "106.1");
+    cr!("119.3", "605.1a");
     ruling!(
         "Accomplished Alchemist",
         "For example, if you lost 3 life and gained 3 life earlier in the turn, you'll add three mana."
@@ -131,7 +131,7 @@ fn gumdrop_poisoner_and_celestine_use_life_gained_ignoring_life_lost() {
 
 #[test]
 fn moseo_doesnt_trigger_without_life_gained_before_the_end_step() {
-    cr!("603.4", "513.1a");
+    cr!("603.4", "513.1");
     ruling!(
         "Moseo, Vein's New Dean",
         "It's not possible to gain life during your end step in time to have the ability trigger."
@@ -550,7 +550,7 @@ fn archfiend_of_despair_in_two_headed_giant_counts_each_player_separately() {
 
 #[test]
 fn discordant_spirit_triggers_once_per_end_step_in_two_headed_giant() {
-    cr!("810.9", "603.2");
+    cr!("805.4", "805.4d");
     ruling!(
         "Discordant Spirit",
         "In Two-Headed Giant, triggers only once per end of turn, not once for each player."
