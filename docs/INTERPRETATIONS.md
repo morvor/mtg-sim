@@ -8,21 +8,13 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 11 | 2 |
-| deviation | 5 | 1 |
+| interpretation | 13 | 0 |
+| deviation | 6 | 0 |
 | policy | 23 | 0 |
 
 ## Provisional entries
 
-- **trample-reassignment-counts-only-assigned-damage** (deviation, [combat](interpretations/combat.md)): After an illegal total assignment, damage is assigned again counting only damage already assigned
-  - Question: A trampler may assign damage beyond its blockers counting on damage the attackers assigning after it will assign to them (each attacker's damage is asked for in turn, so the engine offers the lower minimums `lethal_counting_later`). If the total assignment then doesn't assign lethal damage to those blockers, it's illegal and the player assigns again. May the player count on later attackers again the second time?
-  - Decision: No. The engine asks for every attacker's damage again, offering only the minimums counting damage already assigned (and marked), which can't produce an illegal total; an answer that doesn't meet them gets the default assignment. The whole assignment is redone (510.1e: the game returns to the moment before the player began to assign), including attackers whose first answers were legal on their own.
-- **copy-values-fixed-when-determined** (interpretation, [copy](interpretations/copy.md)): A copy takes the copiable values the original has when the copy is determined
-  - Question: A copy's own copied "as this enters" ability can change the object it copies before the copy is on the battlefield: a token copy of Ixidron, or a Clone entering as a copy of Ixidron, turns "all other nontoken creatures" face down as it enters, the original Ixidron included. Does the copy copy Ixidron, or the face-down 2/2 the original has become?
-  - Decision: Ixidron. A token "that's a copy of" an object takes the object's copiable values as the token is created; a permanent that enters as a copy of a chosen object takes them as the object is chosen (614.12a: before it enters). Effects applied as it enters don't change what it copies.
-- **venture-limit-looks-at-whole-turn** (interpretation, [players-multiplayer](interpretations/players-multiplayer.md)): "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn
-  - Question: Does an opponent's venture made this turn before Keen-Eared Sentry came under its controller's control count toward the limit? And does taking the initiative (whose triggered ability ventures into Undercity, CR 725.2) count as a venture?
-  - Decision: Every venture this turn counts (a venture marker moved into a room, CR 309.4c), including those before the Sentry arrived and those of the initiative; once an opponent has ventured this turn, any further venture by them does nothing (the initiative is still taken).
+None.
 
 ## All entries
 
@@ -30,9 +22,9 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 |---|---|---|---|---|
 | `changeling-cda-only` | Only changeling's characteristic-defining ability makes an object every creature type | interpretation | decided | [characteristics-layers](interpretations/characteristics-layers.md) |
 | `combat-tax-of-zero-is-a-cost` | A tax to attack or block that comes to {0} is still a cost | interpretation | decided | [combat](interpretations/combat.md) |
-| `trample-reassignment-counts-only-assigned-damage` | After an illegal total assignment, damage is assigned again counting only damage already assigned | deviation | provisional | [combat](interpretations/combat.md) |
+| `trample-reassignment-counts-only-assigned-damage` | After an illegal total assignment, damage is assigned again counting only damage already assigned | deviation | decided | [combat](interpretations/combat.md) |
 | `copy-exception-ability-stacks` | An ability a copy exception grants is added again even when the copied values already have it | interpretation | decided | [copy](interpretations/copy.md) |
-| `copy-values-fixed-when-determined` | A copy takes the copiable values the original has when the copy is determined | interpretation | provisional | [copy](interpretations/copy.md) |
+| `copy-values-fixed-when-determined` | A copy takes the copiable values the original has when the copy is determined | interpretation | decided | [copy](interpretations/copy.md) |
 | `ability-ids-depend-on-the-process` | Ability ids in requests come from a process-wide counter; answers name options by their place | policy | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `deck-order-ids-before-shuffle` | Until the decks are shuffled, cards' ids follow the order the decks were given in | policy | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `default-card-name` | A default or invalid card name names nothing | deviation | decided | [decisions-policies](interpretations/decisions-policies.md) |
@@ -60,7 +52,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `attacking-player-with-shared-team-turns` | "The attacking player" is one specific attacking player, fixed by a blocking creature (CR 805.10c) | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `conspiracy-draft-needs-three-players` | A Conspiracy Draft game (like every multiplayer variant) needs more than two players | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `range-combat-trigger-events` | The trigger event of "attacks", "blocks" and "blocks or becomes blocked" is the creature alone (CR 801.7) | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
-| `venture-limit-looks-at-whole-turn` | "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn | interpretation | provisional | [players-multiplayer](interpretations/players-multiplayer.md) |
+| `venture-limit-looks-at-whole-turn` | "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `automatic-mana-payment` | The engine chooses which mana abilities pay a cost | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `castability-is-optimistic` | The engine's list of castable spells assumes favorable choices | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `illegal-action-reversal-restores-libraries` | Reversing an illegal action restores libraries too, although 733.1 says library actions stay | deviation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |

@@ -83,6 +83,22 @@ Waiting:
 
 The scan test written for `illegal-action-reversal-restores-libraries` found that 16 supported cards do reach 733.1's library exceptions, through replacement effects. Its review and the newer card pool later raised the count to 22; the user's decision covers them all. When the user accepted the entry, the claim was that none could. The user chose to fix it: item `reversal-library-exceptions` (items/reversal-library-exceptions.md). It goes to the structure worker after `property-tests-2`, once the hold ends.
 
+### Resumed Oct 28 (user)
+
+The user's decisions:
+- The three provisional entries from the hold are accepted and marked decided: `trample-reassignment-counts-only-assigned-damage`, `copy-values-fixed-when-determined` and `venture-limit-looks-at-whole-turn`.
+- The five Conspiracy draft cards are deferred (recorded in items/cards3-game-rules-dice.md, which applies the deferral).
+- The tools' paper bug is to be fixed, and the 117 texts it hid are to be worked on. True digital-only cards and digital versions of cards stay out, but every paper card must be counted: items `paper-scope-1` and `cards4-paper-plan`.
+
+Queues (pace about 9 concurrent subagents; card workers at most 2 items, the others 1):
+- **compile:** `paper-scope-1`, then its round-trip items (items/roundtrip-followups.md).
+- **cards-1:** `cards3-game-rules-dice` (with the Conspiracy deferral) and `cards4-cast-zones`, then `cards4-triggers-durations` and `cards4-manual-defs`.
+- **cards-2:** `cards4-paper-plan` and `cards4-referents-statics`, then `cards4-costs-mana-replacements` and the `cards4-paper-*` items the plan creates.
+- **structure:** `reversal-library-exceptions`.
+- **mutation:** P064, P185.
+- **rulings-1:** P141, P142, P111. **rulings-2:** P193, P046.
+- Next in the rulings pool: P063 P147 P186 P089 P006 P052 P098 P151 P053 P031 ...
+
 ## The judge audit (E)
 
 **Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.
