@@ -105,6 +105,18 @@ fn mentions(f: &Filter, part: &Filter) -> bool {
     }
 }
 
+/// Whether a cast grant depends on the mana spent to cast the spell ("Each spell you cast
+/// has split second if mana from an artifact was spent to cast it"): that's known only once
+/// the total cost is paid, so the grant is applied then, as the spell becomes cast
+/// (CR 601.2h-i), rather than as it's put on the stack.
+fn depends_on_mana_spent(f: &Filter) -> bool {
+    match f {
+        Filter::Custom(n) => n.starts_with(crate::kw::cast_history::SPENT_SOME),
+        Filter::And(v) => v.iter().any(depends_on_mana_spent),
+        _ => false,
+    }
+}
+
 fn mentions_source(f: &Filter) -> bool {
     match f {
         Filter::Source => true,
@@ -193,6 +205,9 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
             let StaticEffect::Continuous { affected, mods } = &s.effect else {
                 continue;
             };
+            if depends_on_mana_spent(affected) {
+                continue;
+            }
             let ctx = Ctx::new(Some(id), o.controller);
             if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
                 continue;
@@ -212,6 +227,61 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
         g.effects.push(ContinuousEffect {
             id,
             source,
+            controller,
+            timestamp: ts,
+            duration: Duration::Permanent,
+            affected: Affected::Objects(vec![spell]),
+            mods,
+            layer1: None,
+            created_turn: turn,
+        });
+        if carry {
+            g.carried_effects.push(id);
+        }
+    }
+    g.dirty = true;
+}
+
+/// Once the spell's total cost is paid (CR 601.2h-i): static abilities whose grants depend
+/// on the mana spent to cast it make it gain their abilities (CR 610.5).
+pub fn grant_after_payment(g: &mut Game, spell: ObjectId) {
+    g.recompute();
+    let mut apply: Vec<(ObjectId, PlayerId, Vec<Modification>)> = Vec::new();
+    for id in g.live_objects() {
+        let o = g.obj(id);
+        for a in &o.chars.abilities {
+            let AbilityKind::Static(s) = &a.kind else {
+                continue;
+            };
+            if !is_cast_grant(s) || !g.ability_functions(o, s.zone, s.is_cda) {
+                continue;
+            }
+            let StaticEffect::Continuous { affected, mods } = &s.effect else {
+                continue;
+            };
+            if !depends_on_mana_spent(affected) {
+                continue;
+            }
+            let ctx = Ctx::new(Some(id), o.controller);
+            if s.condition.as_ref().is_some_and(|c| !g.eval_cond(c, &ctx)) {
+                continue;
+            }
+            if g.matches(spell, affected, &ctx) {
+                apply.push((id, o.controller, mods.clone()));
+            }
+        }
+    }
+    if apply.is_empty() {
+        return;
+    }
+    let turn = g.turn.number;
+    for (source, controller, mods) in apply {
+        let id = g.new_effect_id();
+        let ts = g.new_timestamp();
+        let carry = mods.iter().any(functions_on_battlefield);
+        g.effects.push(ContinuousEffect {
+            id,
+            source: Some(source),
             controller,
             timestamp: ts,
             duration: Duration::Permanent,

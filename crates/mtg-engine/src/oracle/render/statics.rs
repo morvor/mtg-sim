@@ -1481,6 +1481,26 @@ impl Renderer<'_> {
                 let n = self.noun(&f, Num::Many);
                 format!("spend only mana produced by {n} to cast ~")
             }
+            // "Spend only mana produced by Treasures to cast it this way."
+            CostChange::Rule(CostRule::CastThisWay { rule, .. })
+                if matches!(&**rule, CostRule::OnlyManaFrom(_)) =>
+            {
+                let f = match &**rule {
+                    CostRule::OnlyManaFrom(f) => &*f.0,
+                    _ => &Filter::Any,
+                };
+                let f = match f {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::InZone(ZoneKind::Battlefield)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let n = self.noun(&f, Num::Many);
+                format!("spend only mana produced by {n} to cast it this way")
+            }
             CostChange::Rule(CostRule::XAtMost(v)) => {
                 let v = self.value(v);
                 format!("X can't be greater than {v}")
@@ -4269,6 +4289,10 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
         CostRule::OnlyChosenColor => {
             "spend only mana of the chosen color to activate this ability".into()
         }
+        CostRule::CastThisWay { rule, .. } => match &**rule {
+            CostRule::XAtLeast(1) => "if you cast ~ this way, X can't be 0".into(),
+            r => format!("{} if you cast ~ this way", cost_rule_text(r)),
+        },
     }
 }
 

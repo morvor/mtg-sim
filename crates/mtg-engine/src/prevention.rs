@@ -126,6 +126,21 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
                 .collect();
             Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
         }
+        // "A source of your choice that shares a color with the exiled card / with the
+        // mana spent on this activation cost": the colors as the effect is created (the
+        // mana and the resolving ability are gone afterwards).
+        Filter::SharesColor(sel) if !matches!(**sel, Sel::This) => {
+            let mut colors = ColorSet::NONE;
+            for o in g.eval_sel_objects(sel, ctx) {
+                colors = colors.union(g.obj(o).chars.colors);
+            }
+            colors_filter(colors)
+        }
+        Filter::Custom(n) if n == crate::kw::cast_history::SHARES_COLOR_WITH_MANA_SPENT => {
+            colors_filter(crate::kw::cast_history::colors_spent_on_this_ability(
+                g, ctx,
+            ))
+        }
         // "Sources of the color of your choice": the color chosen as the effect was
         // created (CR 609.7b).
         Filter::ChosenColor => match g.source_choices(ctx).and_then(|c| c.color) {
@@ -134,6 +149,17 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
         },
         other => other.clone(),
     }
+}
+
+/// Objects of any of these colors (none for no colors).
+fn colors_filter(colors: ColorSet) -> Filter {
+    Filter::Or(
+        Color::ALL
+            .iter()
+            .filter(|c| colors.contains(**c))
+            .map(|c| Filter::Color(*c))
+            .collect(),
+    )
 }
 
 /// Locks a player filter naming chosen players ("target player", "that player") onto those

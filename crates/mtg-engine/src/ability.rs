@@ -3505,6 +3505,20 @@ pub enum CostRule {
     /// only mana of the color chosen for the source may pay the ability's (generic) mana
     /// cost; none may without a choice (CR 607.5a).
     OnlyChosenColor,
+    /// A rule that applies only when the spell is cast a particular way ("Spend only mana
+    /// produced by Treasures to cast it this way." after an alternative cost, Security
+    /// Rhox; "If you cast ~ this way, X can't be 0." after flashback, Light Up the Night).
+    CastThisWay { way: CastWay, rule: Box<CostRule> },
+}
+
+/// A way of casting a spell that a [`CostRule::CastThisWay`] names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CastWay {
+    /// With a keyword's alternative cost or permission (flashback, ...).
+    Keyword(crate::keywords::KeywordKind),
+    /// With an alternative cost the spell's own text offers ("You may pay {R}{G} rather
+    /// than pay this spell's mana cost").
+    OwnAlternativeCost,
 }
 
 impl PartialEq for CostRule {

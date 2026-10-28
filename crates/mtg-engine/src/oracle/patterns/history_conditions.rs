@@ -1471,6 +1471,19 @@ fn payment_whose(r: &str, b: &mut Option<&mut Builder>) -> Option<(&'static str,
     if r == "activate this ability" {
         return Some(("this ability", Whose::Own));
     }
+    // "Whenever an opponent casts a spell or activates an ability, if mana from a Treasure
+    // was spent to cast it or activate it" (Vazi): the triggering spell or ability.
+    if matches!(r, "cast it or activate it" | "activate it") {
+        let b = b.as_deref()?;
+        let activation = b.in_trigger
+            && trigger_texts()
+                .iter()
+                .any(|t| t.contains(" activates an ability") || t.contains(" activate an ability"));
+        if !activation || (r == "cast it or activate it" && !cast_trigger(b)) {
+            return None;
+        }
+        return Some((ch::SPELL_OR_ABILITY, Whose::TriggerSpell));
+    }
     let word = r.strip_prefix("cast ")?;
     if !OBJECTS.contains(&word) {
         return None;
@@ -1545,7 +1558,7 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
     .find_map(|(sep, neg)| c.split_once(sep).map(|(a, r)| (a, *neg, r)))?;
     let (key, w) = payment_whose(r, &mut b)?;
     // Mana symbols: the symbol grammar's, about the source's own spell.
-    if amount.starts_with('{') {
+    if amount.starts_with('{') && amount != "{s} of any of that spell's colors" {
         // The symbol grammar reads "[symbols] was spent to cast ~" itself.
         if !neg || !matches!(w, Whose::Own) || key != "self" {
             return None;
@@ -1563,6 +1576,14 @@ fn mana_spent(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
         "no mana" => cmp("total", Cmp::Eq, 0),
         "no colored mana" => cmp("colored", Cmp::Eq, 0),
         "mana from a treasure" => cmp("source subtype:Treasure", Cmp::Ge, 1),
+        // "{S} of any of that spell's colors" (Boreal Outrider, CR 106.3).
+        "{s} of any of that spell's colors" if key == "that spell" => {
+            cmp(ch::SNOW_OF_ITS_COLORS, Cmp::Ge, 1)
+        }
+        a if a.starts_with("mana from ") => {
+            let kind = super::mana_4::mana_from_kind(&a["mana from ".len()..])?;
+            cmp(&kind, Cmp::Ge, 1)
+        }
         _ => {
             let (q, n, _, rest) = quantity(amount)?;
             if q != Cmp::Ge && q != Cmp::Eq {

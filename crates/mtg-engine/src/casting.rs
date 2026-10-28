@@ -1653,7 +1653,7 @@ impl Game {
                 .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
         // What the spell's text says about its cost ("X can't be 0", "Spend only black
         // mana on X", "You can't spend mana to cast this spell").
-        let cost_rules = crate::payment_rules::spell_rules(&chars);
+        let cost_rules = crate::payment_rules::spell_rules_for(&chars, &opt.method);
         let x_min = crate::payment_rules::x_minimum(&cost_rules);
         // "X can't be greater than ..." (CR 107.3a): determined as X is announced.
         let x_cap = crate::payment_rules::x_maximum(self, &cost_rules, &Ctx::new(Some(id), p));
@@ -1934,6 +1934,8 @@ impl Game {
                 )));
             }
         }
+        // Abilities granted depending on the mana spent (CR 601.2i, 610.5).
+        crate::next_spell::grant_after_payment(self, id);
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             // With any mana another player already spent on it (assist, CR 702.132a).
             si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
