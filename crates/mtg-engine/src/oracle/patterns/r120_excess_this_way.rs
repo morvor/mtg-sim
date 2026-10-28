@@ -117,3 +117,87 @@ fn last_effect(e: &Effect) -> &Effect {
 }
 
 inventory::submit! { super::FollowupPattern { name: "if the second fighter is dealt excess damage this way, [effect with that much]", priority: 100, apply: if_fought_dealt_excess } }
+
+/// "~ deals damage equal to the sacrificed artifact's mana value to target creature. If
+/// excess damage would be dealt to that creature this way, instead that damage is dealt to
+/// that creature's controller and you convert ~." (Megatron, Tyrant): the excess is dealt
+/// to the creature's controller instead (CR 120.4a), and the rest of the instruction
+/// happens if there was excess damage.
+fn excess_instead_to_controller(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(r) = end(l).strip_prefix(
+        "if excess damage would be dealt to that creature this way, instead that damage is dealt to that creature's controller",
+    ) else {
+        return false;
+    };
+    let rest = match r.strip_prefix(" and ") {
+        Some(x) => Some(x),
+        None if r.is_empty() => None,
+        None => return false,
+    };
+    let then = match rest {
+        Some(x) => match parse_clause(x, b)
+            .or_else(|| parse_clause(x.strip_prefix("you ")?, b))
+        {
+            Some(e) => Some(e),
+            None => return false,
+        },
+        None => None,
+    };
+    let last = match prev {
+        Effect::Seq(v) => match v.last_mut() {
+            Some(x) => x,
+            None => return false,
+        },
+        other => other,
+    };
+    // After "When you do, ~ deals damage ... to target creature.": the reflexive
+    // ability's instruction, with its own targets (CR 603.12).
+    let (last, targets) = match last {
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then,
+            otherwise,
+        } if matches!(**otherwise, Effect::Noop) => match &mut **then {
+            Effect::Reflexive { body } => {
+                let targets = body.targets.clone();
+                let e = match &mut body.effect {
+                    Effect::Seq(v) => match v.last_mut() {
+                        Some(x) => x,
+                        None => return false,
+                    },
+                    e => e,
+                };
+                (e, targets)
+            }
+            _ => return false,
+        },
+        other => (other, b.targets.clone()),
+    };
+    let Effect::DealDamage { source, amount, to } = last.clone() else {
+        return false;
+    };
+    // "that creature": a single target creature.
+    let Sel::Target(k) = to else {
+        return false;
+    };
+    if !targets.get(k as usize).is_some_and(|t| t.text.contains("creature")) {
+        return false;
+    }
+    let mut steps = vec![Effect::DealDamageExcess {
+        excess_to: Sel::Players(PlayerRef::ControllerOf(Box::new(to.clone()))),
+        source,
+        amount,
+        to,
+    }];
+    if let Some(e) = then {
+        steps.push(Effect::If {
+            cond: Condition::Compare(Value::Prev, Cmp::Gt, Value::c(0)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        });
+    }
+    *last = Effect::seq(steps);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if excess damage would be dealt to that creature this way, instead that damage is dealt to its controller", priority: 100, apply: excess_instead_to_controller } }

@@ -105,3 +105,45 @@ fn overclocked_electromancer_gets_energy_equal_to_the_excess_damage() {
         t.dump_log()
     );
 }
+
+#[test]
+fn megatron_deals_the_excess_damage_to_the_creatures_controller_and_converts() {
+    cr!("120.4a", "701.28a");
+    supported("Megatron, Tyrant // Megatron, Destructive Force");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Megatron, Tyrant // Megatron, Destructive Force");
+    mtg_engine::dfc::transform(&mut t.g, m);
+    t.g.dirty = true;
+    let stone = t.battlefield(P0, "Mind Stone");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(stone)]);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    t.attack(&[(m, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    // 2 damage to a 1/1: 1 to it, the excess 1 to its controller; Megatron converts.
+    assert!(!t.on_battlefield(elves), "{}", t.dump_log());
+    assert!(!t.on_battlefield(stone));
+    assert_eq!(t.obj_now(m).face, mtg_engine::object::FaceState::Front);
+    let combat = t.pt(m).0;
+    assert_eq!(t.life(P1), 20 - 1 - combat);
+}
+
+#[test]
+fn megatron_without_excess_damage_doesnt_convert() {
+    cr!("120.4a");
+    let mut t = TestGame::new(2);
+    let m = t.battlefield(P0, "Megatron, Tyrant // Megatron, Destructive Force");
+    mtg_engine::dfc::transform(&mut t.g, m);
+    t.g.dirty = true;
+    let stone = t.battlefield(P0, "Mind Stone");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(stone)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.attack(&[(m, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears), "{}", t.dump_log());
+    assert_eq!(t.obj_now(m).face, mtg_engine::object::FaceState::Back);
+    assert_eq!(t.life(P1), 20 - t.pt(m).0);
+}
