@@ -330,17 +330,23 @@ fn sunder_shaman_with_menace_cant_be_blocked() {
     ruling!("Sunder Shaman", "If Sunder Shaman gains menace, it can’t be blocked at all.");
     supported("Sunder Shaman");
     supported("Madcap Skills");
-    let mut t = TestGame::new(2);
-    let shaman = t.battlefield(P0, "Sunder Shaman");
-    let skills = t.hand(P0, "Madcap Skills");
-    give_mana_for(&mut t, P0, "Madcap Skills");
-    t.cast(P0, skills).target(shaman).go();
-    t.resolve_all();
-    let blockers = bears(&mut t, P1, 2);
-    attack_with(&mut t, &[(shaman, Entity::Player(P1))]);
-    block_and_finish(&mut t, P1, &[(blockers[0], shaman), (blockers[1], shaman)]);
-    // Unblocked: 8 damage.
-    assert_eq!(t.life(P1), 12);
+    // One blocker isn't enough for menace (without menace, it could block alone), and two
+    // are too many for its own restriction.
+    for n in [1, 2] {
+        let mut t = TestGame::new(2);
+        let shaman = t.battlefield(P0, "Sunder Shaman");
+        let skills = t.hand(P0, "Madcap Skills");
+        give_mana_for(&mut t, P0, "Madcap Skills");
+        t.cast(P0, skills).target(shaman).go();
+        t.resolve_all();
+        let blockers = bears(&mut t, P1, 2);
+        attack_with(&mut t, &[(shaman, Entity::Player(P1))]);
+        let blocks: Vec<_> = blockers[..n].iter().map(|b| (*b, shaman)).collect();
+        block_and_finish(&mut t, P1, &blocks);
+        // Unblocked: 8 damage.
+        assert_eq!(t.life(P1), 12, "{n} blockers");
+        assert!(blockers.iter().all(|b| t.on_battlefield(*b)));
+    }
 }
 
 #[test]

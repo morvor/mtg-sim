@@ -180,7 +180,7 @@ fn opponents_cast_two_spells_each(t: &mut TestGame) -> Vec<Entity> {
 
 #[test]
 fn ertais_scorn_costs_u_less_only_once() {
-    cr!("601.2f", "118.7c");
+    cr!("601.2f", "118.7");
     ruling!(
         "Ertai's Scorn",
         "If multiple opponents have each cast two or more spells this turn, Ertai’s Scorn costs only {U} less to cast"

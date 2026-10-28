@@ -68,3 +68,48 @@ fn a_blocking_creature_planeswalker_needs_the_greater_of_lethal_damage_and_loyal
     t.attack(&[(thrasta, Entity::Object(chandra))], &[(chandra, thrasta)]);
     assert_eq!(t.life(P1), 19);
 }
+
+#[test]
+fn with_another_blocker_both_need_their_damage_before_the_controller() {
+    cr!("702.19b", "702.19c");
+    ruling!(
+        "Thrasta, Tempest's Roar",
+        "Thrasta's controller must assign at least as much damage to that creature planeswalker equal to its toughness or the number of loyalty counters it has, whichever is greater."
+    );
+    // Garruk (4/4, loyalty 3) and Grizzly Bears block: 4 to Garruk, 2 to the Bears, then 1
+    // to P1.
+    let (mut t, thrasta, garruk) = creature_planeswalker("Garruk Wildspeaker");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![4, 2, 1]));
+    t.attack(
+        &[(thrasta, Entity::Object(garruk))],
+        &[(garruk, thrasta), (bears, thrasta)],
+    );
+    assert_eq!(t.life(P1), 19);
+    assert!(t.in_graveyard(P1, "Garruk Wildspeaker"));
+    assert!(!t.on_battlefield(bears));
+    // Only 3 (its loyalty) to Garruk isn't allowed: 4 lethal to it is required first.
+    let (mut t, thrasta, garruk) = creature_planeswalker("Garruk Wildspeaker");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![3, 2, 2]));
+    t.attack(
+        &[(thrasta, Entity::Object(garruk))],
+        &[(garruk, thrasta), (bears, thrasta)],
+    );
+    assert_eq!(t.life(P1), 19);
+}
+
+#[test]
+fn plain_trample_against_a_blocking_creature_planeswalker_it_attacks() {
+    cr!("702.19b", "510.1c");
+    // Colossal Dreadmaw (6/6 trample) attacks Chandra Nalaar (5/5, loyalty 6), which blocks
+    // it: the excess beyond lethal can go only to the blockers and the planeswalker it's
+    // attacking, which are the same permanent, so all 6 go to Chandra and none to P1.
+    supported("Colossal Dreadmaw");
+    let (mut t, thrasta, chandra) = creature_planeswalker("Chandra Nalaar");
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let _ = thrasta;
+    t.attack(&[(maw, Entity::Object(chandra))], &[(chandra, maw)]);
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_graveyard(P1, "Chandra Nalaar"));
+}

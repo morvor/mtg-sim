@@ -112,6 +112,15 @@ fn creeping_dread_players_choose_in_turn_order_then_discard_at_once() {
         .into_iter()
         .map(|p| watch_discards(&mut t, p))
         .collect();
+    // Every player's hand size whenever a discard event is processed: all three cards are
+    // discarded at once, so even the first discard event sees every hand down to one card.
+    let at_discards: crate::r_s01_common::Seen<Vec<usize>> = Default::default();
+    let at = at_discards.clone();
+    t.g.observer = Some(mtg_engine::game::EventObserver::new(move |g, ev| {
+        if matches!(ev, mtg_engine::events::Event::Discarded { .. }) {
+            at.lock().unwrap().push(hand_sizes(g));
+        }
+    }));
     t.advance_to(P1, Step::Upkeep);
     // P1 (the active player) discards Shock, P2 a Bears, P0 a Shock.
     let card = |t: &TestGame, p: PlayerId, n: &str| Entity::Object(t.g.find_in_zone(mtg_engine::object::Zone::Hand(p), n)[0]);
@@ -126,6 +135,7 @@ fn creeping_dread_players_choose_in_turn_order_then_discard_at_once() {
     for s in &seen {
         assert_eq!(s.lock().unwrap().clone(), vec![hands.clone()], "a card left a hand early");
     }
+    assert_eq!(*at_discards.lock().unwrap(), vec![vec![1, 1, 1]; 3]);
     // P0 (instant, like P1's) loses 3; P2 (creature) doesn't.
     assert_eq!((t.life(P0), t.life(P2)), (17, 20));
 }
