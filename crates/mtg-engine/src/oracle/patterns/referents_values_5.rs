@@ -287,3 +287,50 @@ fn one_of_those_from_condition(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "referents 5: one of those [objects] (named by the intervening if)", priority: 100, parse: one_of_those_from_condition } }
+
+/// "there are eight or more different names among unlocked doors of Rooms you control"
+/// (Central Elevator // Promising Stairs, CR 709.5).
+fn different_door_names(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("there are ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let r = r
+        .trim_start()
+        .strip_prefix("or more different names among unlocked doors of rooms you control")?;
+    if !r.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::Compare(
+        Value::Custom(crate::kw::room_door_names::DIFFERENT_DOOR_NAMES.into()),
+        Cmp::Ge,
+        n,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "referents 5: there are N or more different names among unlocked doors", priority: 100, parse: different_door_names } }
+
+/// "{T}, Return a land you control to its owner's hand: Draw a card. Then discard a card
+/// unless that land had a nonbasic land type." (Wonderscape Sage): the land the cost
+/// returned, as it last existed on the battlefield (`zones::COST_RETURNED`, CR 608.2h),
+/// had one of the land types other than the basic ones (CR 205.3i).
+fn returned_land_had_nonbasic_type(c: &str) -> Option<Condition> {
+    if end(c) != "that land had a nonbasic land type" {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("return a land you control to its owner's hand:") {
+        return None;
+    }
+    let lists = crate::types::subtype_lists();
+    let types: Vec<Filter> = lists
+        .land
+        .iter()
+        .filter(|t| !lists.basic_land.contains(&t.as_str()))
+        .map(|t| Filter::Subtype(crate::types::Subtype::from(t.as_str())))
+        .collect();
+    Some(Condition::SelMatches(
+        Sel::Var(crate::zones::COST_RETURNED),
+        Filter::Or(types),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "referents 5: that land (returned by the cost) had a nonbasic land type", priority: 100, parse: returned_land_had_nonbasic_type } }
