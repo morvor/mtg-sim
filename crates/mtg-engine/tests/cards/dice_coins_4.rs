@@ -515,3 +515,40 @@ fn journey_to_the_lost_city_counts_creature_cards_among_the_exiled_cards() {
     assert_eq!(wolves.len(), 1);
     assert_eq!(t.pt(wolves[0]), (4, 4));
 }
+
+#[test]
+fn tunnel_of_love_exiles_both_chosen_creatures_or_they_fight() {
+    cr!("702.159a", "701.14a");
+    ruling!(
+        "Tunnel of Love",
+        "If either you or the chosen opponent controls no creatures, the other player still chooses a creature they control."
+    );
+    assert_supported(&["Tunnel of Love"]);
+    for exile in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.battlefield(P0, "Tunnel of Love");
+        let giant = t.battlefield(P0, "Hill Giant");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_choose(P1, &[Entity::Object(bears)]);
+        t.answer_choose(P0, &[Entity::Object(giant)]);
+        t.answer_yes(P0, exile);
+        t.g.dice.loaded.push_back(6);
+        mtg_engine::variants::roll_to_visit(&mut t.g, P0);
+        t.g.flush_events();
+        t.settle();
+        t.resolve_all();
+        if exile {
+            assert!(t.in_exile("Hill Giant") && t.in_exile("Grizzly Bears"));
+            t.advance_to(P0, Step::End);
+            t.resolve_all();
+            assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+            let b = t.named_on_battlefield("Grizzly Bears");
+            assert_eq!(b.len(), 1);
+            assert_eq!(t.obj_now(b[0]).controller, P1);
+        } else {
+            assert!(!t.on_battlefield(bears));
+            assert_eq!(t.obj_now(giant).damage, 2);
+        }
+    }
+}

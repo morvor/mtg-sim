@@ -606,3 +606,118 @@ pub fn among_dug_cards(r: &str, b: &mut Builder) -> Option<(Value, String)> {
         rest.to_string(),
     ))
 }
+
+/// The creatures chosen by "They choose a creature they control, then you choose a
+/// creature you control." — the chosen opponent's and yours.
+const THEIR_CHOSEN: Var = vars::USER + 43002;
+const YOUR_CHOSEN: Var = vars::USER + 43003;
+
+/// "Choose an opponent. They choose a creature they control, then you choose a creature
+/// you control." (Tunnel of Love): each chooses one; "the chosen creatures" are both.
+fn they_choose_then_you_choose(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "they choose a creature they control, then you choose a creature you control"
+        || !matches!(b.it_player, PlayerRef::ChosenOpponent)
+    {
+        return None;
+    }
+    let creature_of_chooser = || Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: Filter::and(vec![
+            Filter::Type(crate::types::CardType::Creature),
+            Filter::ControlledBy(PlayerRel::You),
+            Filter::InZone(ZoneKind::Battlefield),
+        ]),
+        count: Value::c(1),
+        up_to: false,
+        store: None,
+    };
+    let chosen = super::choice_grammar_objects::CHOSEN;
+    for name in ["the chosen creatures", "those creatures", "them"] {
+        b.named.push((name.into(), Sel::Var(chosen)));
+    }
+    b.it = Sel::Var(chosen);
+    Some(Effect::seq(vec![
+        Effect::AsPlayer {
+            who: PlayerRef::ChosenOpponent,
+            effect: Box::new(Effect::Store {
+                var: THEIR_CHOSEN,
+                sel: creature_of_chooser(),
+            }),
+        },
+        Effect::Store {
+            var: YOUR_CHOSEN,
+            sel: creature_of_chooser(),
+        },
+        Effect::Store {
+            var: chosen,
+            sel: Sel::Union(vec![Sel::Var(THEIR_CHOSEN), Sel::Var(YOUR_CHOSEN)]),
+        },
+    ]))
+}
+
+/// [`they_choose_then_you_choose`] after "Choose an opponent." (read before the core
+/// grammar, which would read the two choices as one replacing the other).
+fn f_they_choose_then_you_choose(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !matches!(
+        prev,
+        Effect::Choose {
+            kind: ChoiceKind::Opponent,
+            ..
+        }
+    ) {
+        return false;
+    }
+    let saved = std::mem::replace(&mut b.it_player, PlayerRef::ChosenOpponent);
+    let Some(e) = they_choose_then_you_choose(l, b) else {
+        b.it_player = saved;
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "dice coins 4: they choose a creature, then you choose a creature", priority: -50, apply: f_they_choose_then_you_choose } }
+
+/// "Otherwise, the chosen creatures fight each other." after "You may exile the chosen
+/// creatures. If you do, ..." (Tunnel of Love): if they weren't exiled, the two chosen
+/// creatures fight (CR 701.14); with only one chosen, nothing happens.
+fn f_otherwise_chosen_fight(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if end(l) != "otherwise, the chosen creatures fight each other" {
+        return false;
+    }
+    // Only after [`they_choose_then_you_choose`] (the only grammar naming "them" so).
+    let chosen = super::choice_grammar_objects::CHOSEN;
+    if !b
+        .named
+        .iter()
+        .any(|(n, s)| n == "them" && matches!(s, Sel::Var(v) if *v == chosen))
+    {
+        return false;
+    }
+    fn last_if(e: &mut Effect) -> Option<&mut Effect> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(last_if),
+            e @ Effect::If { .. } => Some(e),
+            _ => None,
+        }
+    }
+    let Some(Effect::If {
+        cond: Condition::PrevHappened,
+        otherwise,
+        ..
+    }) = last_if(prev)
+    else {
+        return false;
+    };
+    if !matches!(**otherwise, Effect::Noop) {
+        return false;
+    }
+    **otherwise = Effect::Fight {
+        a: Sel::Var(THEIR_CHOSEN),
+        b: Sel::Var(YOUR_CHOSEN),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "dice coins 4: otherwise, the chosen creatures fight each other", priority: 50, apply: f_otherwise_chosen_fight } }
