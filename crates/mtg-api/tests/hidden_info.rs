@@ -546,3 +546,37 @@ fn stalking_leonins_chosen_opponent_is_secret_until_revealed_to_exile() {
     t.resolve_all();
     assert_eq!(t.zone(bears), mtg_engine::object::Zone::Exile);
 }
+
+#[test]
+fn a_card_returned_at_random_from_a_graveyard_is_seen_by_everyone() {
+    cr!("400.2", "701.20a");
+    ruling!(
+        "Charmbreaker Devils",
+        "All players get to see which card you chose at random as it's returned to your hand."
+    );
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    t.battlefield(P0, "Charmbreaker Devils");
+    t.graveyard(P0, "Opt");
+    t.graveyard(P0, "Lightning Bolt");
+    t.set_step(P0, mtg_engine::turn::Step::Untap);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    let before = t.g.event_feed.len();
+    t.resolve_all();
+    t.g.flush_events();
+    let returned = t.g.players[0].hand[0];
+    let name = t.g.obj(returned).chars.name.to_string();
+    assert!(name == "Opt" || name == "Lightning Bolt");
+    // P1's event feed shows which card left the graveyard for the hand.
+    let events = t.g.event_feed.since(before);
+    let p1_events = describe_events(&t.g, Some(P1), &events);
+    let seen = p1_events.iter().any(|e| {
+        e.kind == "zone_change"
+            && e.text.contains(name.as_str())
+            && e.text.contains("graveyard to P0's hand")
+    });
+    assert!(seen, "P1 saw the returned card: {p1_events:?}");
+    // And P1's observation of the graveyard no longer shows it.
+    let p1 = observe(&t.g, Some(P1));
+    assert!(!json(&p1.players[0].graveyard).contains(name.as_str()));
+}
