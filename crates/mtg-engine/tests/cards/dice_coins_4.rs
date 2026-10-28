@@ -320,3 +320,125 @@ fn mirror_march_makes_a_hasty_copy_for_each_flip_won() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
 }
+
+#[test]
+fn goblin_lyre_on_a_lost_flip_counts_that_players_creatures() {
+    cr!("705.2");
+    assert_supported(&["Goblin Lyre"]);
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let lyre = t.battlefield(P0, "Goblin Lyre");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Craw Wurm");
+    // Calling heads, tails comes up: P0 is dealt 3 (P1's creatures).
+    t.g.dice.loaded_coins.push_back(false);
+    t.activate(P0, lyre, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn crooked_scales_repeats_the_flip_while_you_pay() {
+    cr!("705.2", "608.2c");
+    ruling!(
+        "Crooked Scales",
+        "If you pay the {3}, you do not choose a new pair of targets when it repeats."
+    );
+    assert_supported(&["Crooked Scales"]);
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let scales = t.battlefield(P0, "Crooked Scales");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 7);
+    // Lose (pay {3}), then win.
+    t.g.dice.loaded_coins.extend([false, true]);
+    t.activate(
+        P0,
+        scales,
+        0,
+        &[Entity::Object(theirs), Entity::Object(mine)],
+    )
+    .unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.on_battlefield(mine));
+    assert!(!t.on_battlefield(theirs));
+    // Lose and don't pay: your creature is destroyed.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let scales = t.battlefield(P0, "Crooked Scales");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 7);
+    t.g.dice.loaded_coins.push_back(false);
+    t.activate(
+        P0,
+        scales,
+        0,
+        &[Entity::Object(theirs), Entity::Object(mine)],
+    )
+    .unwrap();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert!(!t.on_battlefield(mine));
+    assert!(t.on_battlefield(theirs));
+}
+
+#[test]
+fn mana_clash_repeats_until_both_coins_come_up_heads() {
+    cr!("705.2", "608.2c");
+    ruling!(
+        "Mana Clash",
+        "This card’s coin flip has no winner or loser."
+    );
+    ruling!("Mana Clash", "Each point of damage is dealt separately");
+    assert_supported(&["Mana Clash"]);
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    let clash = t.hand(P0, "Mana Clash");
+    // Pass 1: P0 tails, P1 tails. Pass 2: heads, tails. Pass 3: heads, heads.
+    t.g.dice
+        .loaded_coins
+        .extend([false, false, true, false, true, true]);
+    t.cast(P0, clash).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.life(P1), 18);
+    // No calls were asked for.
+    assert!(t
+        .asked()
+        .iter()
+        .all(|(_, d)| !format!("{d:?}").contains("Call the coin flip")));
+}
+
+#[test]
+fn spikeshell_harrier_reduces_the_fastest_opponents_speed() {
+    cr!("702.179b", "702.179f");
+    assert_supported(&["Spikeshell Harrier"]);
+    for (theirs, mine, after) in [(3, 1, 2), (1, 1, 1), (2, 3, 2)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.g.players[1].speed = Some(theirs);
+        t.g.players[0].speed = Some(mine);
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.enter(P0, "Spikeshell Harrier");
+        t.resolve_all();
+        assert!(t.in_hand(P1, "Grizzly Bears"));
+        assert_eq!(t.g.players[1].speed, Some(after), "{theirs} vs {mine}");
+    }
+    // Speed 1 is the floor.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.players[1].speed = Some(1);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Spikeshell Harrier");
+    t.resolve_all();
+    assert_eq!(t.g.players[1].speed, Some(1));
+}

@@ -198,6 +198,9 @@ fn result_at_most(e: &Effect) -> Option<i64> {
 /// effects and those sentences' never both happen, so their order doesn't matter; they're
 /// joined into one instruction for the table's further rows and sentences.
 pub fn table_after_sentences(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
+    if repeat_until_all_heads(s, effects) {
+        return true;
+    }
     let lower = s.to_lowercase();
     let Some((lo, _, _)) = super::r705_706_dice::table_row(&lower) else {
         return false;
@@ -396,3 +399,138 @@ fn that_target_spell_or_ability(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "dice coins 4: that target spell or ability", priority: 100, parse: that_target_spell_or_ability } }
+
+/// "If you lose the flip, destroy target creature you control unless you pay {3} and
+/// repeat this process." (Crooked Scales): paying instead repeats the whole process —
+/// another flip, with the same targets (its rulings) — and the process repeats as long as
+/// the player keeps paying after losing (CR 608.2c).
+fn f_unless_pay_and_repeat(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(head) = end(l).strip_suffix(" and repeat this process") else {
+        return false;
+    };
+    if !head.starts_with("if you lose the flip, ") || !head.contains(" unless you pay ") {
+        return false;
+    }
+    let mut e = prev.clone();
+    if !crate::oracle_ext::apply_followup_ext(head, &mut e, b) {
+        return false;
+    }
+    let Some(flip) = super::r705_706_dice::last_flip(&mut e) else {
+        return false;
+    };
+    let Effect::PayOptional { then, .. } = &mut flip.on_lose else {
+        return false;
+    };
+    if !matches!(**then, Effect::Noop) {
+        return false;
+    }
+    **then = Effect::RepeatThisProcess;
+    *prev = Effect::RepeatProcess { body: Box::new(e) };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "dice coins 4: unless you pay and repeat this process", priority: 5, apply: f_unless_pay_and_repeat } }
+
+/// "Repeat this process until both players' coins come up heads on the same flip." (Mana
+/// Clash): the instructions so far are a process, performed again after each pass in
+/// which some flipper's coin came up tails (CR 608.2c).
+fn repeat_until_all_heads(s: &str, effects: &mut Vec<Effect>) -> bool {
+    let lower = s.to_lowercase();
+    if !matches!(
+        end(&lower),
+        "repeat this process until both players' coins come up heads on the same flip"
+            | "repeat this process until each player's coin comes up heads on the same flip"
+    ) {
+        return false;
+    }
+    let mut body = Effect::seq(std::mem::take(effects));
+    let Some(flip) = super::r705_706_dice::last_flip(&mut body) else {
+        *effects = vec![body];
+        return false;
+    };
+    if flip.call {
+        *effects = vec![body];
+        return false;
+    }
+    let again = Effect::If {
+        cond: Condition::Not(Box::new(Condition::Compare(
+            Value::Var(crate::dice::PLAYERS_ALL_HEADS),
+            Cmp::Eq,
+            Value::Var(crate::dice::PLAYERS_FLIPPED),
+        ))),
+        then: Box::new(Effect::RepeatThisProcess),
+        otherwise: Box::new(Effect::Noop),
+    };
+    *effects = vec![Effect::RepeatProcess {
+        body: Box::new(Effect::seq(vec![body, again])),
+    }];
+    true
+}
+
+/// "You and target opponent each flip a coin." (Mana Clash): both flip; the effect cares
+/// only about heads and tails (no call, CR 705.2).
+fn you_and_player_each_flip(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l)
+        .strip_prefix("you and ")?
+        .strip_suffix(" each flip a coin")?;
+    let saved = b.targets.len();
+    let (other, rest) = crate::oracle::effects::player_ref(r, b)?;
+    if !rest.trim().is_empty() || !matches!(other, PlayerRef::Target(_)) {
+        b.targets.truncate(saved);
+        return None;
+    }
+    let mut flip = crate::dice::CoinFlip::new();
+    flip.call = false;
+    flip.who = PlayerRef::Each(PlayerFilter::Or(vec![
+        PlayerFilter::You,
+        PlayerFilter::Ref(Box::new(other)),
+    ]));
+    Some(Effect::FlipCoins(Box::new(flip)))
+}
+
+inventory::submit! { EffectPattern { name: "dice coins 4: you and target opponent each flip a coin", priority: 100, parse: you_and_player_each_flip } }
+
+/// "~ deals 1 damage to each player whose coin comes up tails." after flips by several
+/// players: what happens to each flipper whose coin came up tails (heads).
+fn f_to_each_player_whose_coin(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let (heads, phrase) = if l.contains("each player whose coin comes up tails") {
+        (false, "each player whose coin comes up tails")
+    } else if l.contains("each player whose coin comes up heads") {
+        (true, "each player whose coin comes up heads")
+    } else {
+        return false;
+    };
+    if l.starts_with(phrase) {
+        return false;
+    }
+    {
+        let Some(f) = super::r705_706_dice::last_flip(prev) else {
+            return false;
+        };
+        if !matches!(f.who, PlayerRef::Each(_)) || f.call {
+            return false;
+        }
+    }
+    let old = std::mem::replace(&mut b.it_player, PlayerRef::Iterated);
+    let e = parse_clause(&l.replace(phrase, "that player"), b);
+    b.it_player = old;
+    let Some(e) = e else {
+        return false;
+    };
+    let Some(f) = super::r705_706_dice::last_flip(prev) else {
+        return false;
+    };
+    let branch = if heads {
+        &mut f.on_heads
+    } else {
+        &mut f.on_tails
+    };
+    if !matches!(branch, Effect::Noop) {
+        return false;
+    }
+    *branch = e;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "dice coins 4: [effect] to each player whose coin comes up", priority: 10, apply: f_to_each_player_whose_coin } }

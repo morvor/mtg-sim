@@ -49,6 +49,10 @@ pub const DIFFERENT: Var = vars::USER + 8503;
 /// The greatest result of the most recent roll ("if any of those results was 10 or
 /// higher").
 pub const HIGHEST: Var = vars::USER + 8504;
+/// After a flip by several players at once: how many flipped, and how many of them had
+/// every coin come up heads ("until both players' coins come up heads on the same flip").
+pub const PLAYERS_FLIPPED: Var = vars::USER + 8505;
+pub const PLAYERS_ALL_HEADS: Var = vars::USER + 8506;
 
 /// `Condition::Custom` prefix: "any of those results was N or higher"
 /// (`die:any result at least:N`): of the resolving ability's own roll, or else of the dice
@@ -598,6 +602,8 @@ fn call_and_flip(
 
 pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
     let players = g.eval_players(&spec.who, ctx);
+    ctx.nums.insert(PLAYERS_FLIPPED, players.len() as i64);
+    ctx.nums.insert(PLAYERS_ALL_HEADS, 0);
     // Coins flipped at once — by one player or by several ("each player flips a coin") —
     // are all called and flipped before any flip is ignored, so the results of all of
     // them are known then.
@@ -712,6 +718,9 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         ctx.nums.insert(LOSSES, losses);
         ctx.nums.insert(HEADS, heads);
         ctx.nums.insert(TAILS, tails);
+        if heads > 0 && tails == 0 {
+            *ctx.nums.entry(PLAYERS_ALL_HEADS).or_insert(0) += 1;
+        }
         // "Each player flips a coin. Each player whose coin comes up tails ...", "that
         // player flips a coin. If they lose the flip, ...": the results are the flipper's.
         let saved = ctx.iter_player;

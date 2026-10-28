@@ -292,9 +292,12 @@ inventory::submit! { EffectPattern { name: "game rules 4: cast any number of spe
 /// targeted player is that player).
 fn that_opponent_or_planeswalkers_controller(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
-    let phrase = ["that opponent or that planeswalker's controller", "that player or that planeswalker's controller"]
-        .into_iter()
-        .find(|p| l.contains(p))?;
+    let phrase = [
+        "that opponent or that planeswalker's controller",
+        "that player or that planeswalker's controller",
+    ]
+    .into_iter()
+    .find(|p| l.contains(p))?;
     if !matches!(&b.it_player, PlayerRef::ControllerOf(s) if matches!(**s, Sel::Target(_))) {
         return None;
     }
@@ -302,3 +305,71 @@ fn that_opponent_or_planeswalkers_controller(l: &str, b: &mut Builder) -> Option
 }
 
 inventory::submit! { EffectPattern { name: "game rules 4: that opponent or that planeswalker's controller", priority: 100, parse: that_opponent_or_planeswalkers_controller } }
+
+/// "If that opponent's speed is greater than each other player's speed, reduce that
+/// opponent's speed by 1." (Spikeshell Harrier, CR 702.179): that player performs the
+/// check and the reduction ([`crate::kw::game_rules_4::REDUCE_HIGHEST_SPEED`]).
+fn reduce_highest_speed(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (cond, act) = l.strip_prefix("if ")?.split_once(", ")?;
+    let who = cond.strip_suffix("'s speed is greater than each other player's speed")?;
+    let r = act.strip_prefix(&format!("reduce {who}'s speed by ") as &str)?;
+    let (n, rest) = parse_number(r)?;
+    let n = n.as_const().filter(|n| *n > 0)?;
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    let p = if matches!(who, "that opponent" | "that player") {
+        b.it_player.clone()
+    } else {
+        let saved = b.targets.len();
+        let (p, rest) = player_ref(who, b)?;
+        if !rest.trim().is_empty() || b.targets.len() != saved {
+            b.targets.truncate(saved);
+            return None;
+        }
+        p
+    };
+    if matches!(p, PlayerRef::You) {
+        return None;
+    }
+    Some(Effect::AsPlayer {
+        who: p,
+        effect: Box::new(crate::kw::game_rules_4::reduce_highest_speed(n as u32, 0)),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "game rules 4: reduce the highest speed", priority: 100, parse: reduce_highest_speed } }
+
+/// "This effect can't reduce their speed below 1." after [`reduce_highest_speed`].
+fn speed_floor(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let Some(r) = end(l)
+        .strip_prefix("this effect can't reduce their speed below ")
+        .or_else(|| end(l).strip_prefix("this effect can't reduce that player's speed below "))
+    else {
+        return false;
+    };
+    let Ok(floor) = r.parse::<u32>() else {
+        return false;
+    };
+    fn last(e: &mut Effect) -> Option<&mut Effect> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(last),
+            Effect::AsPlayer { effect, .. } => Some(&mut **effect),
+            _ => None,
+        }
+    }
+    let Some(e) = last(prev) else {
+        return false;
+    };
+    let Effect::Custom(name) = e else {
+        return false;
+    };
+    let Some((n, 0)) = crate::kw::game_rules_4::reduce_highest_speed_args(name) else {
+        return false;
+    };
+    *e = crate::kw::game_rules_4::reduce_highest_speed(n, floor);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "game rules 4: this effect can't reduce their speed below N", priority: 50, apply: speed_floor } }

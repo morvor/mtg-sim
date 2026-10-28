@@ -30,6 +30,21 @@ pub const MORE_LOYALTY: &str = "game rules:more loyalty activations:";
 /// (CR 309.7).
 pub const DIFFERENT_DUNGEONS_COMPLETED: &str = "game rules:differently named dungeons completed";
 
+/// `Effect::Custom` prefix: "if your speed is greater than each other player's speed,
+/// reduce your speed by N" for the effect's controller, never below a floor
+/// (`game rules:reduce highest speed:N:floor`; Spikeshell Harrier, CR 702.179).
+pub const REDUCE_HIGHEST_SPEED: &str = "game rules:reduce highest speed:";
+
+pub fn reduce_highest_speed(n: u32, floor: u32) -> crate::ability::Effect {
+    crate::ability::Effect::Custom(SmolStr::new(format!("{REDUCE_HIGHEST_SPEED}{n}:{floor}")))
+}
+
+/// The amount and floor of a [`REDUCE_HIGHEST_SPEED`] effect.
+pub fn reduce_highest_speed_args(name: &str) -> Option<(u32, u32)> {
+    let (n, f) = name.strip_prefix(REDUCE_HIGHEST_SPEED)?.split_once(':')?;
+    Some((n.parse().ok()?, f.parse().ok()?))
+}
+
 /// Records of [`MORE_LOYALTY`]: (turn, permanent, controller, how many more).
 const MORE_LOYALTY_ROWS: &str = "game rules:more loyalty activations";
 
@@ -61,6 +76,22 @@ impl KeywordRules for GameRules4 {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if let Some((n, floor)) = reduce_highest_speed_args(name) {
+            use crate::kw::start_your_engines::speed;
+            let p = ctx.controller;
+            let mine = speed(g, p);
+            let highest = g
+                .players_in_game()
+                .into_iter()
+                .filter(|q| *q != p)
+                .all(|q| speed(g, q) < mine);
+            if highest && g.player(p).speed.is_some() {
+                let new = mine.saturating_sub(n).max(floor.min(mine));
+                g.players[p.idx()].speed = Some(new);
+                g.dirty = true;
+            }
+            return true;
+        }
         let Some(n) = more_loyalty_count(name) else {
             return false;
         };
