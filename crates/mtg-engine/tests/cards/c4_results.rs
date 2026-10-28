@@ -87,3 +87,22 @@ fn zimone_turns_a_face_down_permanent_face_up_the_second_time() {
     assert!(!t.obj_now(down[0]).face_down, "{}", t.dump_log());
     assert_eq!(t.obj_now(down[0]).chars.name.as_str(), "Grizzly Bears");
 }
+
+#[test]
+fn paranormal_analyst_returns_the_card_manifest_dread_put_into_the_graveyard() {
+    cr!("701.62a", "701.62b", "603.2");
+    supported("Paranormal Analyst");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Paranormal Analyst");
+    t.battlefield(P0, "Zimone, Mystery Unraveler");
+    t.library_top(P0, "Island");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Mountain");
+    // Zimone's landfall: manifest dread (the Bears manifested, the Mountain put into the
+    // graveyard); Paranormal Analyst then returns the Mountain to your hand.
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Forest");
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Mountain"), "{}", t.dump_log());
+    assert_eq!(t.graveyard_size(P0), 0);
+}

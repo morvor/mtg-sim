@@ -397,3 +397,43 @@ fn the_spell_you_cast(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "referents 5: the spell you cast (the triggering spell)", priority: 100, parse: the_spell_you_cast } }
+
+/// The card "a card you put into your graveyard this way" chose.
+const DREAD_CARD: Var = vars::USER + 51_101;
+
+/// "Whenever you manifest dread, put a card you put into your graveyard this way into your
+/// hand." (Paranormal Analyst): one of the cards that manifest dread put into your
+/// graveyard (CR 701.62a), still there.
+fn card_put_into_graveyard_by_dread(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    const P: &str = "a card you put into your graveyard this way";
+    if !l.contains(P) || !b.in_trigger {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("whenever you manifest dread,") {
+        return None;
+    }
+    let choose = Effect::Store {
+        var: DREAD_CARD,
+        sel: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![
+                Filter::InZone(ZoneKind::Graveyard),
+                Filter::Custom(crate::kwa::manifest::PUT_IN_GRAVEYARD_BY_THAT_DREAD.into()),
+            ]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+    };
+    let saved = b.it.clone();
+    b.it = Sel::Var(DREAD_CARD);
+    let e = parse_sentence(&l.replace(P, "it"), b);
+    if matches!(b.it, Sel::Var(DREAD_CARD)) {
+        b.it = saved;
+    }
+    Some(Effect::seq(vec![choose, e?]))
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: a card you put into your graveyard this way (manifest dread)", priority: 100, parse: card_put_into_graveyard_by_dread } }
