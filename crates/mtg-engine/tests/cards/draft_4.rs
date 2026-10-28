@@ -271,6 +271,19 @@ fn paliano_vanguard_pumps_creatures_of_a_noted_type() {
 #[test]
 fn paliano_and_regicide_use_the_colors_chosen_as_they_were_drafted() {
     cr!("905.2", "905.2b");
+    interp!("draft-three-colors-default");
+    // Without preset colors: three different colors.
+    let mut d = Draft::new(
+        vec![vec![vec![card("Regicide")]]],
+        DraftStyle::Conspiracy,
+        7,
+    );
+    d.pick(P0, &[0]).unwrap();
+    let mut c = d.info.notes[0].colors.clone();
+    assert_eq!(c.len(), 3);
+    c.sort();
+    c.dedup();
+    assert_eq!(c.len(), 3);
     ruling!("Regicide", "Regicide can't target colorless creatures.");
     ruling!(
         "Regicide",

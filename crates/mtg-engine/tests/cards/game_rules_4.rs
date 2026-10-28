@@ -37,6 +37,7 @@ fn set_loyalty(t: &mut TestGame, id: ObjectId, n: u32) {
 #[test]
 fn commanders_plate_protects_from_colors_outside_the_commanders_identity() {
     cr!("903.4", "702.16a");
+    interp!("commander-identity-protection-player");
     ruling!(
         "Commander's Plate",
         "If you have no commander, Commander's Plate grants no protection abilities."
@@ -177,6 +178,7 @@ fn azra_bladeseeker_lets_only_players_on_your_team_rummage() {
 #[test]
 fn comet_rolls_a_six_and_activates_two_more_times() {
     cr!("706.3", "606.3");
+    interp!("more-loyalty-activations-add-up");
     ruling!(
         "Comet, Stellar Pup",
         "Each + loyalty symbol in Comet's abilities means to put the indicated number of loyalty counters on him."
