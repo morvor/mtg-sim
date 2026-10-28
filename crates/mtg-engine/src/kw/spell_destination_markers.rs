@@ -10,7 +10,8 @@
 //!   (Feather, the Redeemed): a delayed triggered ability returns the exiled card
 //!   (CR 603.7).
 //!
-//! A spell that's countered, or never resolves, isn't affected.
+//! A spell that's countered, or never resolves, isn't affected, nor is one its controller
+//! doesn't own (it would be put into another player's graveyard).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -53,6 +54,11 @@ impl KeywordRules for SpellDestinationMarkers {
         g: &Game,
         spell: ObjectId,
     ) -> Option<(Zone, LibraryPosition)> {
+        // "Instead of putting it into your graveyard": a spell its controller doesn't own
+        // would go to another player's graveyard, so these don't apply to it.
+        if g.obj(spell).owner != g.obj(spell).controller {
+            return None;
+        }
         if has_marker(g, spell, TO_HAND) {
             return Some((Zone::Hand(g.obj(spell).owner), LibraryPosition::Top));
         }
@@ -60,7 +66,10 @@ impl KeywordRules for SpellDestinationMarkers {
     }
 
     fn global_after_spell_resolved(&self, g: &mut Game, spell: ObjectId, new: ObjectId) {
-        if !has_marker(g, spell, EXILE_THEN_HAND) || g.obj(new).zone != Zone::Exile {
+        if !has_marker(g, spell, EXILE_THEN_HAND)
+            || g.obj(new).zone != Zone::Exile
+            || g.obj(spell).owner != g.obj(spell).controller
+        {
             return;
         }
         let controller = g.obj(spell).controller;

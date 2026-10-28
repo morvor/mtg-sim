@@ -96,9 +96,16 @@ impl KeywordRules for Flashback {
     }
 
     /// "Exile it instead of putting it anywhere else" applies wherever the card would go,
-    /// after any other replacement effect: its controller has nothing to choose.
+    /// after any other replacement effect: its controller has nothing to choose among the
+    /// keywords' destinations.
     fn resolved_destination_replaces(&self) -> bool {
         false
+    }
+
+    /// But an effect replacing the spell's being put into a graveyard may be applied
+    /// first, and then this one doesn't apply (CR 616.1).
+    fn resolved_destination_anywhere_else(&self) -> bool {
+        true
     }
 
     fn resolved_destination(

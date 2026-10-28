@@ -56,7 +56,16 @@ fn x_defined_by_text(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         if !rest.trim().is_empty() || !b.targets.is_empty() {
             return None;
         }
-        Condition::Compare(Value::X, Cmp::Eq, v)
+        // "X is the mana value of that card" with no such card (nothing was exiled): X
+        // is undefined and can't be paid, so the ability can't be activated (Prototype
+        // Portal ruling).
+        match &v {
+            Value::ManaValueOf(sel) => Condition::And(vec![
+                Condition::SelNonEmpty((**sel).clone()),
+                Condition::Compare(Value::X, Cmp::Eq, v),
+            ]),
+            _ => Condition::Compare(Value::X, Cmp::Eq, v),
+        }
     };
     act.condition = Some(match act.condition.take() {
         Some(c) => Condition::And(vec![c, only]),

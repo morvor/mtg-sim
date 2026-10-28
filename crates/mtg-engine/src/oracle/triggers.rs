@@ -268,6 +268,12 @@ fn parse_triggered_at(
     let named = super::patterns::trigger_grammar_combat_cast::name_referents(&trigger);
     let mut body = parse_trigger_body(eff, ctx, it, it_player)?;
     drop(named);
+    super::patterns::that_much_of_condition::that_much_of_condition(
+        &mut body,
+        &trigger,
+        intervening.as_ref(),
+        eff,
+    );
     // "look at that many cards from the top of your library": only a trigger with an
     // amount (damage dealt, creatures attacking) gives "that many" a meaning.
     super::patterns::dig_grammar::check_that_many(&body.effect, &trigger)?;
