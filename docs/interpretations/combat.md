@@ -26,3 +26,15 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 - Affects: two or more attackers with trample (or trample over planeswalkers) whose blockers or attacked planeswalker are shared, e.g. through banding or several attackers on one planeswalker; count not measured.
 - Code: `crates/mtg-engine/src/combat.rs` (`combat_damage_step`, `later_capacity`, `lethal_assigned`, `assign_trample_damage`); `crates/mtg-api/src/request.rs` (`check_damage`).
 - Tests: `tests/keywords/k702_019_trample_counts_damage_assigned_after_it.rs` (`a_total_assignment_without_lethal_damage_is_illegal_and_assigned_again`).
+
+## that-excess-damage-this-turn: "that excess damage" after "was dealt excess damage this turn" is the turn's total
+- Kind: interpretation
+- Status: provisional
+- Rules: 120.10 "Excess damage has been dealt to a creature if the damage dealt to it is greater than lethal damage. ..." / 608.2c "The controller of the spell or ability follows its instructions in the order written. ..."
+- Question: Overclocked Electromancer: "Whenever this creature deals combat damage to a creature, if that creature was dealt excess damage this turn, you get X {E}, where X is that excess damage." Is X the excess damage of this combat damage, or all the excess damage the creature was dealt this turn?
+- Decision: All the excess damage that creature was dealt this turn (the excess damage the condition asks about), counted as the ability resolves.
+- Alternatives: Only the excess of the combat damage event that triggered the ability: the same number unless the creature was also dealt excess damage earlier in the turn (by another source, or in a first-strike damage step).
+- Why: "that excess damage" refers back to the phrase "was dealt excess damage this turn", which isn't limited to this event.
+- Affects: Overclocked Electromancer.
+- Code: `crates/mtg-engine/src/oracle/patterns/referents_values_5.rs` (`atom`).
+- Tests: `tests/cards/c4_instead_excess.rs` (`overclocked_electromancer_gets_energy_equal_to_the_excess_damage`).

@@ -44,6 +44,27 @@ pub fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             return Some((Value::CountSel(Box::new(players)), r.to_string()));
         }
     }
+    // "Whenever ~ deals combat damage to a creature, if that creature was dealt excess
+    // damage this turn, you get X {E}, where X is that excess damage." (Overclocked
+    // Electromancer): the excess damage the creature was dealt this turn (CR 120.10).
+    if let Some(r) = s.strip_prefix("that excess damage").filter(|r| phrase_end(r)) {
+        let raw = crate::oracle::raw_text().to_lowercase();
+        if b.in_trigger
+            && matches!(b.it, Sel::TriggerObject)
+            && raw.contains(", if that creature was dealt excess damage this turn, ")
+        {
+            return Some((
+                Value::EventsThisTurn(
+                    Box::new(TriggerCond::DealtExcessDamage {
+                        filter: Filter::In(Box::new(Sel::TriggerObject)),
+                        noncombat_only: false,
+                    }),
+                    Tally::Amount,
+                ),
+                r.to_string(),
+            ));
+        }
+    }
     None
 }
 

@@ -86,3 +86,22 @@ fn the_last_agni_kai_adds_red_mana_equal_to_the_excess_fight_damage() {
     let t = agni_kai("Wall of Wood");
     assert_eq!(t.g.player(P0).mana_pool.total(), 0);
 }
+
+#[test]
+fn overclocked_electromancer_gets_energy_equal_to_the_excess_damage() {
+    cr!("120.10", "122.1");
+    interp!("that-excess-damage-this-turn");
+    supported("Overclocked Electromancer");
+    let mut t = TestGame::new(2);
+    let em = t.battlefield(P0, "Overclocked Electromancer");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    // It attacks (power doubled to 4) and is blocked by a 1/1: 3 excess damage.
+    t.attack(&[(em, Entity::Player(P1))], &[(elves, em)]);
+    t.resolve_all();
+    assert_eq!(
+        t.g.player(P0).counters.get("energy").copied().unwrap_or(0),
+        3,
+        "{}",
+        t.dump_log()
+    );
+}
