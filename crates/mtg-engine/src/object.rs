@@ -516,6 +516,11 @@ pub struct GameObject {
     /// 305.1): "When you cast a spell this way" finds it (CR 400.7h, 400.7i).
     #[serde(default)]
     pub played_with: Option<crate::permissions::PermissionUse>,
+    /// The player who put it into its current zone, if the move had one (the controller
+    /// of the effect that exiled it, who sacrificed or discarded it, ...): "cards you
+    /// exiled", "cards they exiled with ~" (see `kw/exile_provenance.rs`).
+    #[serde(default)]
+    pub moved_by: Option<PlayerId>,
     /// Previous incarnation of this card (before its last zone change).
     pub prev: Option<ObjectId>,
     /// Next incarnation (after it changed zones).
@@ -679,6 +684,7 @@ impl GameObject {
             linked: BTreeMap::new(),
             created_by: None,
             played_with: None,
+            moved_by: None,
             prev: None,
             next: None,
             entered_turn: 0,
