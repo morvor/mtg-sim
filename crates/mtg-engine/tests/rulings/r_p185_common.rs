@@ -63,3 +63,47 @@ pub fn lethal_when_it_leaves(t: &mut TestGame, member: ObjectId, leaver: ObjectI
     crate::r_s02_common::destroy(t, leaver);
     assert!(!t.on_battlefield(member), "{what}: the marked damage is now lethal");
 }
+
+/// Wraps `p`'s agent so that the first "choose an option" decision with an option
+/// starting with `needle` (ignoring case) is answered with that option; every other
+/// decision gets the scripted answer. Returns the options of every such decision seen.
+pub fn pick_option_containing(
+    t: &mut TestGame,
+    p: PlayerId,
+    needle: &str,
+) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> {
+    use mtg_engine::decision::{Agent, Answer, Decision};
+    type Seen = std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>;
+    struct Pick {
+        inner: Box<dyn Agent>,
+        needle: Option<String>,
+        seen: Seen,
+    }
+    impl Agent for Pick {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            let scripted = self.inner.decide(g, p, d);
+            if let Decision::ChooseOption { options, .. } = d {
+                self.seen.lock().unwrap().push(options.clone());
+                if let Some(n) = &self.needle {
+                    if let Some(i) = options.iter().position(|o| o.to_lowercase().starts_with(n.as_str())) {
+                        self.needle = None;
+                        return Answer::Index(i);
+                    }
+                }
+            }
+            scripted
+        }
+    }
+    let seen: Seen = Default::default();
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(
+        &mut agents[p.idx()],
+        Box::new(mtg_engine::decision::PassiveAgent),
+    );
+    agents[p.idx()] = Box::new(Pick {
+        inner,
+        needle: Some(needle.to_lowercase()),
+        seen: seen.clone(),
+    });
+    seen
+}
