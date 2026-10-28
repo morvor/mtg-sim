@@ -355,6 +355,10 @@ pub struct EventInfo {
     /// a card").
     #[serde(default)]
     pub caused_by: Option<PlayerId>,
+    /// For a "one or more" trigger (CR 603.2c), the players of its batch of events, each
+    /// once ("the number of opponents dealt damage this way", "each of those opponents").
+    #[serde(default)]
+    pub players: Vec<PlayerId>,
 }
 
 /// The kind of object on the stack.

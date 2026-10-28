@@ -1185,6 +1185,10 @@ pub enum PlayerRef {
     OwnerOf(Box<Sel>),
     /// The player from the triggering event.
     TriggerPlayer,
+    /// The players of the batch of events that triggered a "one or more" ability, each
+    /// once (CR 603.2c): "the number of opponents dealt damage this way", "each of those
+    /// opponents".
+    TriggerPlayers,
     /// The active player.
     ActivePlayer,
     /// "The attacking player": the active player (CR 506.2). With shared team turns, one

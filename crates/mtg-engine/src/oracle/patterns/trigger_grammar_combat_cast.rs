@@ -2381,6 +2381,20 @@ pub(crate) fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
         if matches!(**inner, TriggerCond::Dies(_)) {
             push(super::referents_batches::DIED_BATCH, Sel::TriggerObjects);
         }
+        // "... deal damage to one or more of your opponents, ... the number of opponents
+        // dealt damage this way": the players of the batch.
+        if matches!(
+            **inner,
+            TriggerCond::DealsDamage {
+                to: DamageRecipient::Player(_),
+                ..
+            }
+        ) {
+            push(
+                super::referents_values_5::BATCH_PLAYERS,
+                Sel::Players(PlayerRef::TriggerPlayers),
+            );
+        }
     }
     match trigger {
         TriggerCond::Where { trigger, .. }

@@ -91,3 +91,50 @@ fn twilight_diviner_copies_a_creature_that_entered_from_a_graveyard() {
     // From the hand: no copy.
     assert_eq!(diviner_sees(false), 1);
 }
+
+#[test]
+fn hordewing_skaab_draws_and_discards_for_each_opponent_dealt_damage() {
+    cr!("603.2c", "510.2");
+    ruling!(
+        "Hordewing Skaab",
+        "The number of cards you discard is equal to the number of opponents that were dealt combat damage by your Zombies"
+    );
+    supported("Hordewing Skaab");
+    let mut t = TestGame::new(3);
+    let skaab = t.battlefield(P0, "Hordewing Skaab");
+    let corpse = t.battlefield(P0, "Walking Corpse");
+    let corpse2 = t.battlefield(P0, "Walking Corpse");
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
+    let library = t.library_size(P0);
+    t.answer_yes(P0, true);
+    // Three Zombies, two opponents dealt damage: draw two, discard two.
+    t.attack(
+        &[
+            (skaab, Entity::Player(P1)),
+            (corpse, Entity::Player(P2)),
+            (corpse2, Entity::Player(P2)),
+        ],
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), library - 2, "{}", t.dump_log());
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(t.graveyard_size(P0), 2);
+}
+
+#[test]
+fn breeches_exiles_the_top_card_of_each_opponent_dealt_damage_only() {
+    cr!("603.2c");
+    supported("Breeches, Brazen Plunderer");
+    let mut t = TestGame::new(3);
+    let breeches = t.battlefield(P0, "Breeches, Brazen Plunderer");
+    let top1 = t.library_top(P1, "Forest");
+    let top2 = t.library_top(P2, "Forest");
+    t.attack(&[(breeches, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.zone(top1), Zone::Exile, "{}", t.dump_log());
+    assert_ne!(t.zone(top2), Zone::Exile);
+}

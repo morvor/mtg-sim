@@ -7,10 +7,88 @@
 //!   searcher may put the found card onto the battlefield instead, chosen as it's put
 //!   ([`SearchDest::or`], CR 608.2c).
 
-use super::FollowupPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
-use crate::oracle::effects::Builder;
+use crate::oracle::effects::{parse_sentence, Builder};
 use crate::oracle::phrases::end;
+
+/// [`Builder::named`] key for the players of a "one or more [objects] deal damage to
+/// [players]" trigger's batch (`PlayerRef::TriggerPlayers`, CR 603.2c).
+pub const BATCH_PLAYERS: &str = "\u{1}batch players";
+
+fn named(b: &Builder, key: &str) -> Option<Sel> {
+    b.named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == key)
+        .map(|(_, s)| s.clone())
+}
+
+/// Whether `r` ends a phrase.
+fn phrase_end(r: &str) -> bool {
+    r.is_empty() || r.starts_with([' ', ',', '.'])
+}
+
+/// The value grammar's atoms of this file:
+/// - "the number of opponents dealt damage this way" (Hordewing Skaab): the players of
+///   the triggering batch of damage events, each once.
+pub fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    for p in [
+        "the number of opponents dealt damage this way",
+        "the number of players dealt damage this way",
+        "the number of opponents dealt combat damage this way",
+        "the number of players dealt combat damage this way",
+    ] {
+        if let Some(r) = s.strip_prefix(p).filter(|r| phrase_end(r)) {
+            let players = named(b, BATCH_PLAYERS)?;
+            return Some((Value::CountSel(Box::new(players)), r.to_string()));
+        }
+    }
+    None
+}
+
+/// Replaces each JSON value equal to `from` by `to`; the number replaced.
+fn replace_json(v: &mut serde_json::Value, from: &serde_json::Value, to: &serde_json::Value) -> usize {
+    if v == from {
+        *v = to.clone();
+        return 1;
+    }
+    match v {
+        serde_json::Value::Array(a) => a.iter_mut().map(|x| replace_json(x, from, to)).sum(),
+        serde_json::Value::Object(m) => m.values_mut().map(|x| replace_json(x, from, to)).sum(),
+        _ => 0,
+    }
+}
+
+/// "exile the top card of each of those opponents' libraries" (Breeches, Brazen
+/// Plunderer): the players of the triggering batch, read as "each opponent" is.
+fn each_of_those_opponents(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains("each of those opponents") || l.contains("each opponent") {
+        return None;
+    }
+    named(b, BATCH_PLAYERS)?;
+    let plain = l
+        .replace("each of those opponents' libraries", "each opponent's library")
+        .replace("each of those opponents' hands", "each opponent's hand")
+        .replace("each of those opponents' graveyards", "each opponent's graveyard")
+        .replace("each of those opponents", "each opponent");
+    let e = parse_sentence(&plain, b)?;
+    let mut json = serde_json::to_value(&e).ok()?;
+    let from = serde_json::to_value(PlayerRef::EachOpponent).ok()?;
+    let to = serde_json::to_value(PlayerRef::TriggerPlayers).ok()?;
+    if replace_json(&mut json, &from, &to) == 0 {
+        return None;
+    }
+    // Only "each opponent" as a player reference: a filter's opponents
+    // (`PlayerFilter::Opponent`) would stay all opponents.
+    if serde_json::to_string(&json).ok()?.contains("Opponent") {
+        return None;
+    }
+    serde_json::from_value(json).ok()
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: each of those opponents (the players of the batch)", priority: 100, parse: each_of_those_opponents } }
 
 /// The last instruction of an effect, mutably, past the bookkeeping that records its
 /// referents ([`Effect::Store`]).

@@ -148,6 +148,10 @@ fn term(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn atom(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // Results of earlier steps and group referents (`referents_values_5`).
+    if let Some(v) = super::referents_values_5::atom(s, b) {
+        return Some(v);
+    }
     // Each player's own number, read for each player in turn (`followups_4`).
     if let Some(v) = super::followups_4::own_count_atom(s, b) {
         return Some(v);

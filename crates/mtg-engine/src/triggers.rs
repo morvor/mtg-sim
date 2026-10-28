@@ -431,6 +431,12 @@ impl Game {
                         info.amount = g.len() as i32;
                     }
                     info.objects = Vec::new();
+                    info.players = Vec::new();
+                    for p in g.iter().filter_map(|i| i.player) {
+                        if !info.players.contains(&p) {
+                            info.players.push(p);
+                        }
+                    }
                     for i in &g {
                         // An event about several objects at once (the creatures attacking a
                         // player) contributes all of them.
