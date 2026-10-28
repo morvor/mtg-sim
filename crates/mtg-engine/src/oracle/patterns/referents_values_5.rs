@@ -536,3 +536,57 @@ fn for_each_sharing_mana_value(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "referents 5: for each of those cards that has the same mana value as another card revealed this way", priority: 100, parse: for_each_sharing_mana_value } }
+
+std::thread_local! {
+    static REWRITING_CHOOSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "Choose target creature you own. If this spell was kicked, instead choose any number of
+/// target creatures you own. Return each chosen creature to your hand. ..." (The Eagles
+/// Are Coming!): the targets the instruction acts on are the ones chosen, the first set or
+/// (if the condition holds) the alternative set (CR 601.2c, 608.2c); read as "[Verb] target
+/// creature you own [rest]. If this spell was kicked, instead [verb] any number of target
+/// creatures you own [rest]."
+fn choose_instead_choose_then_act(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+    if !ctx.is_spell() || REWRITING_CHOOSE.with(|r| r.get()) {
+        return None;
+    }
+    let lines: Vec<&str> = block.lines().collect();
+    let (last, before) = lines.split_last()?;
+    let t = last.trim();
+    let r = t.strip_prefix("Choose ")?;
+    let (first, r) = r.split_once(". If ")?;
+    let (cond, r) = r.split_once(", instead choose ")?;
+    let (second, r) = r.split_once(". ")?;
+    let (verb, r) = r.split_once(" each chosen ")?;
+    let (noun, r) = r.split_once(' ').unwrap_or((r, ""));
+    if !matches!(noun, "creature" | "permanent" | "card" | "creature." | "permanent.")
+        || verb.contains(' ')
+        || !first.starts_with("target ")
+        || !second.contains("target ")
+    {
+        return None;
+    }
+    let (rest, tail) = match r.split_once(". ") {
+        Some((x, tail)) => (x.to_string(), format!(" {tail}")),
+        None => (r.trim_end_matches('.').to_string(), String::new()),
+    };
+    let rest = if rest.is_empty() { String::new() } else { format!(" {rest}") };
+    let lower_verb = verb.to_lowercase();
+    let rewritten = format!(
+        "{verb} {first}{rest}. If {cond}, instead {lower_verb} {second}{rest}.{tail}"
+    );
+    let mut text: Vec<String> = before.iter().map(|s| s.to_string()).collect();
+    text.push(rewritten);
+    REWRITING_CHOOSE.with(|r| r.set(true));
+    let out = crate::oracle::parse_ability(&text.join("\n"), ctx);
+    REWRITING_CHOOSE.with(|r| r.set(false));
+    let out = out?;
+    Some(
+        out.into_iter()
+            .map(|a| AbilityDef::with_link(a.kind.clone(), t, a.link))
+            .collect(),
+    )
+}
+
+inventory::submit! { super::AbilityPattern { name: "referents 5: choose target X. If [condition], instead choose Y. [Verb] each chosen object", priority: 100, parse: choose_instead_choose_then_act } }
