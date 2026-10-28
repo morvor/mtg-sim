@@ -198,7 +198,10 @@ pub fn keep_library_actions(g: &mut Game, attempted: &Game) {
                 obj: Some(o),
                 ..
             } if name == crate::reveal::REVEALED
-                && matches!(attempted.try_obj(*o).map(|x| x.zone), Some(Zone::Library(_))) =>
+                && matches!(
+                    attempted.try_obj(*o).map(|x| x.zone),
+                    Some(Zone::Library(_))
+                ) =>
             {
                 if let Some(c) = r.map(g, *o).filter(|c| g.is_live(*c)) {
                     r.kept += 1;

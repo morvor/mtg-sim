@@ -270,7 +270,10 @@ pub fn rollback_view(g: &Game) -> String {
 pub fn undone_difference(before: &Game, after: &Game) -> Option<String> {
     for (a, b) in before.players.iter().zip(&after.players) {
         if a.life != b.life {
-            return Some(format!("{}'s life went from {} to {}", a.id, a.life, b.life));
+            return Some(format!(
+                "{}'s life went from {} to {}",
+                a.id, a.life, b.life
+            ));
         }
         if a.counters != b.counters {
             return Some(format!("{}'s counters changed", a.id));

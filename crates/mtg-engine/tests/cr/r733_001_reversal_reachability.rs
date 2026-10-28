@@ -4,9 +4,10 @@
 //! CR 733.1 ends: "Players may not reverse actions that moved cards to a library, moved
 //! cards from a library to any zone other than the stack, caused a library to be shuffled,
 //! or caused cards from a library to be revealed." The engine reverses an illegal action by
-//! restoring a copy of the whole game taken before it began (`Game::roll_back`), libraries
-//! included: the deviation `illegal-action-reversal-restores-libraries`. The difference
-//! shows only when one of those library actions happens while an action is attempted
+//! restoring a copy of the whole game taken before it began (`Game::roll_back`), then
+//! performing those library actions again (`reversal::keep_library_actions`; register entry
+//! `illegal-action-reversal-restores-libraries`). They matter only when one of those
+//! library actions happens while an action is attempted
 //! (casting a spell, activating an ability, paying a cost as an ability resolves, taking a
 //! special action, declaring attackers or blockers that have costs) and the action still
 //! turns out illegal afterwards.
@@ -75,8 +76,8 @@
 //!   library action isn't followed further: that library action is already reported. The
 //!   ways found are [`KNOWN_REACHABLE`], by card and ability, and the events the pool can
 //!   cause in the middle of a payment are [`KNOWN_EVENTS`]; the register entry lists both,
-//!   and a new one, or one no longer found, fails the scan. The `a_reversed_cast_reverses_`
-//!   tests show each kind in a game. An event the scan doesn't follow ([`Ev::Unfollowed`]:
+//!   and a new one, or one no longer found, fails the scan. The `a_reversed_cast_keeps_`
+//!   tests show each kind in a game, kept by the reversal. An event the scan doesn't follow ([`Ev::Unfollowed`]:
 //!   a card cast, the game restarted, an unclassified keyword action) that can happen there
 //!   is reported as "(e-assumption)" and can't be listed. A permanent that enters there
 //!   wasn't cast there, so "if it was kicked" doesn't hold for it ([`not_cast`]). Two
@@ -2693,8 +2694,9 @@ fn all_findings(t: &Scan) -> Vec<Finding> {
 /// The ways fully supported cards reach CR 733.1's exceptions (e): (card, a fragment of the
 /// ability's text). A replacement effect (or a rule implemented in code) that makes
 /// something that can happen in the middle of a payment a library action; a cast or
-/// activation in which it applies and that then turns out illegal is reversed with that
-/// library action. The register entry lists them; an "(e)" finding no entry matches, or an
+/// activation in which it applies and that then turns out illegal is reversed, and the
+/// reversal keeps that library action (`reversal::keep_library_actions`; the
+/// `a_reversed_cast_keeps_` tests). The register entry lists them; an "(e)" finding no entry matches, or an
 /// entry no finding matches, fails the scan.
 pub const KNOWN_REACHABLE: &[(&str, &str)] = &[
     // A permanent or card a payment moves goes to a library instead: sacrificed for a
@@ -3037,7 +3039,7 @@ fn every_fully_supported_card_is_scanned_for_ways_to_reach_the_exceptions() {
     );
     assert!(
         unexpected.is_empty(),
-        "fully supported cards that can reach CR 733.1's exceptions: the engine would reverse these library actions with an illegal action (register entry `illegal-action-reversal-restores-libraries`). Make the engine keep them out of reach; or, for a replacement effect or rule (e), list the card and ability in KNOWN_REACHABLE and in the entry; or, if the scan misreads the card, correct its classification (this file's module docs):\n{}",
+        "fully supported cards that reach CR 733.1's exceptions in a way not known: a reversal keeps these library actions (register entry `illegal-action-reversal-restores-libraries`), and each way should be known and tested. For a cost, mana ability or other path (a)-(d), make the engine keep it out of reach (a cost's library part paid last); for a replacement effect or rule (e), list the card and ability in KNOWN_REACHABLE and in the entry, with a game test where the reversal keeps it; or, if the scan misreads the card, correct its classification (this file's module docs):\n{}",
         unexpected.join("\n")
     );
     let stale: Vec<&(&str, &str)> = KNOWN_REACHABLE
@@ -4252,12 +4254,9 @@ fn a_reversed_cast_keeps_a_card_shuffled_into_a_library_by_a_replacement_effect(
         .try_go();
     assert!(r.is_err());
     let m = moves.lock().unwrap();
-    assert!(m
-        .attempt
-        .iter()
-        .any(|(o, from, to)| *o == colossus
-            && *from == Zone::Battlefield
-            && *to == Zone::Library(P0)));
+    assert!(m.attempt.iter().any(|(o, from, to)| *o == colossus
+        && *from == Zone::Battlefield
+        && *to == Zone::Library(P0)));
     // CR 733.1: moving a card to a library and shuffling it can't be reversed. The
     // Colossus leaves the battlefield for the library again, a new object (CR 400.7), in
     // the shuffled library; the shuffle's randomness stays used.
@@ -4322,11 +4321,9 @@ fn a_reversed_cast_keeps_a_mill_a_replacement_effect_made_of_a_lands_damage() {
     assert_eq!(m.kept.len(), 2);
     assert_eq!(t.g.player(P0).library, library[..library.len() - 2]);
     assert_eq!(t.graveyard_size(P0), 2);
-    assert!(t
-        .g
-        .turn_events
-        .iter()
-        .any(|e| matches!(e, Event::Milled { player, cards } if *player == P0 && cards.len() == 2)));
+    assert!(t.g.turn_events.iter().any(
+        |e| matches!(e, Event::Milled { player, cards } if *player == P0 && cards.len() == 2)
+    ));
     // The damage, its prevention and the mana ability are undone.
     assert_eq!(t.g.player(P0).life, 20);
     assert!(!t.g.obj(reef).tapped);
@@ -4478,7 +4475,10 @@ fn a_reversed_cast_keeps_what_lichs_mirror_does_with_a_loss_in_the_middle_of_a_p
     assert_eq!(m.kept.len(), 10);
     for o in [lich, mirror, reef] {
         assert!(!t.on_battlefield(o));
-        assert!(matches!(t.zone(t.g.current(o)), Zone::Library(_) | Zone::Hand(_)));
+        assert!(matches!(
+            t.zone(t.g.current(o)),
+            Zone::Library(_) | Zone::Hand(_)
+        ));
     }
     assert_eq!(t.g.player(P0).library.len(), library + 3 - 7);
     // The spell was on the stack, not in the hand, as the hand was shuffled away: it
@@ -4546,6 +4546,7 @@ fn a_reversed_cast_keeps_a_creature_shuffled_into_a_library_as_an_exile_ends() {
     // CR 733.1: moving the card to a library stays, though the Priest's leaving, which
     // made it return, is undone.
     assert_eq!(m.kept, vec![(exiled, Zone::Exile, Zone::Library(P1))]);
+    drop(m);
     let now = t.g.current(exiled);
     assert_eq!(t.zone(now), Zone::Library(P1));
     assert_eq!(t.g.player(P1).library.len(), library.len() + 1);

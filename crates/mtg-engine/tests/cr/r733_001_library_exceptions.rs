@@ -87,7 +87,10 @@ fn a_reversed_action_keeps_a_draw_made_while_attempting_it() {
     // abilities (the Pilgrim's tap, both mana) and the cast are reversed.
     let drawn = t.g.current(top);
     assert_eq!(t.g.obj(drawn).zone, Zone::Hand(P0));
-    assert_eq!((t.hand_size(P0), t.library_size(P0)), (hand + 1, library - 1));
+    assert_eq!(
+        (t.hand_size(P0), t.library_size(P0)),
+        (hand + 1, library - 1)
+    );
     assert!(!t.g.obj(pilgrim).tapped);
     assert!(t.g.player(P0).mana_pool.mana.is_empty());
     assert_eq!(t.g.obj(spell).zone, Zone::Hand(P0));

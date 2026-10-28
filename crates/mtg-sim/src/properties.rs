@@ -43,18 +43,38 @@ fn check(property: &'static str, setup: GameSetup, slow: Duration) -> Outcome {
             let r = panic::catch_unwind(AssertUnwindSafe(|| match property {
                 "seat" => {
                     let rotation = 1 + (setup.seed as usize % (n - 1).max(1));
-                    properties::seat_symmetry(&setup, rotation).map(|s| (s.decisions, s.rollbacks, s.rollbacks_keeping_library_actions))
+                    properties::seat_symmetry(&setup, rotation).map(|s| {
+                        (
+                            s.decisions,
+                            s.rollbacks,
+                            s.rollbacks_keeping_library_actions,
+                        )
+                    })
                 }
                 "snapshot" => {
                     let at = setup.seed % 1200;
-                    properties::snapshot_equivalence(&setup, at).map(|s| (s.decisions, s.rollbacks, s.rollbacks_keeping_library_actions))
+                    properties::snapshot_equivalence(&setup, at).map(|s| {
+                        (
+                            s.decisions,
+                            s.rollbacks,
+                            s.rollbacks_keeping_library_actions,
+                        )
+                    })
                 }
-                "rollback" => {
-                    properties::rollback_identity(&setup).map(|s| (s.decisions, s.rollbacks, s.rollbacks_keeping_library_actions))
-                }
-                "determinism" => {
-                    properties::determinism(&setup).map(|s| (s.decisions, s.rollbacks, s.rollbacks_keeping_library_actions))
-                }
+                "rollback" => properties::rollback_identity(&setup).map(|s| {
+                    (
+                        s.decisions,
+                        s.rollbacks,
+                        s.rollbacks_keeping_library_actions,
+                    )
+                }),
+                "determinism" => properties::determinism(&setup).map(|s| {
+                    (
+                        s.decisions,
+                        s.rollbacks,
+                        s.rollbacks_keeping_library_actions,
+                    )
+                }),
                 _ => {
                     // Requests carry whole observations, so replayed games are kept
                     // shorter.

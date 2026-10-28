@@ -51,7 +51,10 @@ fn a_draw_a_replacement_effect_makes_of_life_gained_for_mana_stays() {
     // The draw stays (and is a draw: it counts, and "whenever you draw" abilities see it).
     let card = t.g.current(top);
     assert_eq!(t.zone(card), Zone::Hand(P0));
-    assert_eq!((t.hand_size(P0), t.library_size(P0)), (hand + 1, library - 1));
+    assert_eq!(
+        (t.hand_size(P0), t.library_size(P0)),
+        (hand + 1, library - 1)
+    );
     assert_eq!(t.g.history.cards_drawn.get(&P0).copied(), Some(drawn + 1));
     assert!(t
         .g
@@ -105,7 +108,11 @@ fn colossus_shuffled() -> (Vec<String>, Vec<String>, TestGame) {
         .method(CastMethod::Normal)
         .try_go();
     assert!(r.is_err());
-    let during = shuffled.lock().unwrap().clone().expect("the attempt shuffled");
+    let during = shuffled
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the attempt shuffled");
     let after = library_keys(&t.g, P0, known);
     (during, after, t)
 }
@@ -199,34 +206,32 @@ fn a_library_card_revealed_while_attempting_an_action_stays_known() {
     let spell = t.custom(P0, def, Zone::Hand(P0));
     let top = t.g.library_top(P0).unwrap();
     let library = t.g.player(P0).library.clone();
-    // Where a reader of the event feed was during the attempt.
-    let seen: Arc<Mutex<usize>> = Arc::default();
+    // Where a reader of the event feed was during the attempt (just after its reveal).
+    let seen: Arc<Mutex<Option<usize>>> = Arc::default();
     let s2 = seen.clone();
     t.g.observer = Some(EventObserver::new(move |g, ev| {
         if matches!(ev, Event::Custom { name, .. } if name == reveal::REVEALED) {
-            *s2.lock().unwrap() = g.event_feed.len();
+            s2.lock().unwrap().get_or_insert(g.event_feed.len());
         }
     }));
     let r = t.cast(P0, spell).method(CastMethod::Normal).try_go();
     assert!(r.is_err());
-    let cursor = *seen.lock().unwrap();
-    assert!(cursor > 0, "the attempt revealed the card");
+    let cursor = seen.lock().unwrap().expect("the attempt revealed the card");
     // The card is revealed again on the restored game: the players know it, and a reader
     // of the event feed that read the attempt's events reads that reveal next (the feed's
     // positions don't go back).
     assert!(t.g.event_feed.len() > cursor);
-    let revealed: Vec<ObjectId> = t
-        .g
-        .event_feed
-        .since(cursor)
-        .iter()
-        .filter_map(|e| match e {
-            Event::Custom {
-                name, obj: Some(o), ..
-            } if name == reveal::REVEALED => Some(*o),
-            _ => None,
-        })
-        .collect();
+    let revealed: Vec<ObjectId> =
+        t.g.event_feed
+            .since(cursor)
+            .iter()
+            .filter_map(|e| match e {
+                Event::Custom {
+                    name, obj: Some(o), ..
+                } if name == reveal::REVEALED => Some(*o),
+                _ => None,
+            })
+            .collect();
     assert_eq!(revealed, vec![top]);
     // Revealing doesn't move it; the rest is undone.
     assert_eq!(t.g.player(P0).library, library);
