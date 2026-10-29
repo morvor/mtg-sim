@@ -423,7 +423,7 @@ fn graven_dominator_with_night_of_souls_betrayal() {
 
 #[test]
 fn characteristic_defining_pt_becomes_zero_when_abilities_are_lost() {
-    cr!("604.3", "613.1f", "613.4a", "208.2b");
+    cr!("604.3", "613.1f", "613.4a");
     ruling!(
         "Mystic Subdual",
         "Mystic Subdual then makes it a -2/0. If its power and toughness are written as */*+1, it’s -2/1, and so on."
@@ -470,7 +470,7 @@ fn characteristic_defining_pt_becomes_zero_when_abilities_are_lost() {
 
 #[test]
 fn merfolk_trickster_becomes_tapped_trigger_still_triggers() {
-    cr!("603.2", "603.10");
+    cr!("603.2", "608.2c");
     ruling!(
         "Merfolk Trickster",
         "If the target creature has an ability that triggers when it becomes tapped, that ability triggers before it loses all abilities."
@@ -491,7 +491,7 @@ fn merfolk_trickster_becomes_tapped_trigger_still_triggers() {
 
 #[test]
 fn activated_ability_resolves_after_its_source_loses_it() {
-    cr!("113.7a", "602.2");
+    cr!("113.7a");
     ruling!(
         "Merfolk Trickster",
         "Once activated, the ability on the stack will resolve even if the creature loses the ability."
@@ -656,7 +656,7 @@ fn awakened_awareness_with_x_zero() {
 
 #[test]
 fn overwhelming_splendor_restricts_activated_abilities() {
-    cr!("602.5", "605.1a", "606.3");
+    cr!("602.5", "605.1a", "606.3", "603.2");
     ruling!(
         "Overwhelming Splendor",
         "Triggered abilities (starting with \"when,\" \"whenever,\" or \"at\") of noncreature permanents are unaffected by the last ability of Overwhelming Splendor."

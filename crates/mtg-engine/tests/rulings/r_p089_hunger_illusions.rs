@@ -76,7 +76,7 @@ fn blood_cultist_counts_combat_damage() {
 
 #[test]
 fn dying_at_the_same_time_triggers_but_does_nothing() {
-    cr!("603.10a", "608.2h");
+    cr!("603.10a", "400.7");
     ruling!(
         "Blood Cultist",
         "If Blood Cultist and a creature it dealt damage to are both put into a graveyard at the same time, Blood Cultist's ability will trigger, but it will do nothing when it resolves."
@@ -225,7 +225,7 @@ fn illusion_trigger_resolves_even_if_the_spell_is_countered() {
 
 #[test]
 fn eternal_scourge_triggers_only_on_the_battlefield() {
-    cr!("603.6d", "113.6");
+    cr!("113.6");
     ruling!(
         "Eternal Scourge",
         "Eternal Scourge's triggered ability only triggers while it's on the battlefield. For example, Convolute cast targeting Eternal Scourge won't cause its ability to trigger."
@@ -245,7 +245,7 @@ fn eternal_scourge_triggers_only_on_the_battlefield() {
 
 #[test]
 fn eternal_scourge_is_exiled_even_if_the_spell_is_countered() {
-    cr!("603.3");
+    cr!("113.7a");
     ruling!(
         "Eternal Scourge",
         "You'll exile Eternal Scourge even if the spell or ability that targets it is countered."
@@ -269,7 +269,7 @@ fn eternal_scourge_is_exiled_even_if_the_spell_is_countered() {
 
 #[test]
 fn eternal_scourge_cast_from_exile_follows_normal_rules() {
-    cr!("601.3", "307.1", "601.2f");
+    cr!("302.1", "601.2f");
     ruling!(
         "Eternal Scourge",
         "You must follow the normal timing permissions and restrictions and pay its cost to cast Eternal Scourge from exile."
