@@ -43,3 +43,43 @@ fn eriette_steals_what_an_aura_of_greater_or_equal_mana_value_enchants() {
     let (t, bears, _) = eriette("Rancor", "Forest", 1);
     assert_eq!(t.obj_now(bears).controller, P1);
 }
+
+/// P0 casts Finale of Promise for X targeting Lightning Bolt and Divination in their
+/// graveyard; the Bolt (and its copies) at P1.
+fn finale(x: i64) -> TestGame {
+    use mtg_engine::decision::Answer;
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    let div = t.graveyard(P0, "Divination");
+    for _ in 0..10 {
+        t.library_top(P0, "Island");
+    }
+    t.lands(P0, "Mountain", x as usize + 2);
+    let f = t.hand(P0, "Finale of Promise");
+    t.answer(P0, DecisionKind::X, Answer::Number(x));
+    t.cast(P0, f)
+        .target(Entity::Object(bolt))
+        .target(Entity::Object(div))
+        .go();
+    t.answer_yes(P0, true);
+    for _ in 0..3 {
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    }
+    t.resolve_all();
+    t
+}
+
+#[test]
+fn finale_of_promise_casts_both_and_exiles_them_and_copies_for_ten() {
+    cr!("608.2g", "707.10", "614.1a");
+    supported("Finale of Promise");
+    let t = finale(3);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.hand_size(P0), 2);
+    assert!(t.in_exile("Lightning Bolt") && t.in_exile("Divination"));
+    // X = 10: each is copied twice.
+    let t = finale(10);
+    assert_eq!(t.life(P1), 20 - 9);
+    assert_eq!(t.hand_size(P0), 6);
+}
