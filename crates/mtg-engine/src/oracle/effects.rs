@@ -985,6 +985,13 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                 // source, which oracle text calls "~" (except "that card" for what the
                 // source became in its own trigger: "When ~ dies, return that card ..."):
                 // not understood.
+                // "if a creature dealt damage by ~ this turn died, put that card ...": the
+                // card that died (`patterns::history_5`).
+                if p == "that card" && b.in_trigger {
+                    if let Some(sel) = super::patterns::history_5::died_that_card() {
+                        return Some((sel, rest.to_string()));
+                    }
+                }
                 let own_card = p == "that card" && b.in_trigger && b.sentences == 0;
                 if super::patterns::oracle_hardening_referents::is_no_referent(&it)
                     || (p != "it" && !personal && !own_card && matches!(it, Sel::This))
