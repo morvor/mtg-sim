@@ -1,6 +1,7 @@
 //! roundtrip-pairs-3 (docs/agents/items/roundtrip-pairs-3.md): untriaged round-trip
 //! mismatches from the long tail (the two-card clusters).
 
+use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::types::CardType;
@@ -249,4 +250,70 @@ fn tap_enchanted_land_taps_the_land_this_aura_enchants() {
     t.resolve_all();
     assert!(t.obj_now(own).tapped, "{}", t.dump_log());
     assert!(!t.obj_now(other).tapped);
+}
+
+/// Where in `t`'s turn events the first discard and the first shuffle by `p` are.
+fn discard_and_shuffle(t: &TestGame, p: PlayerId) -> (usize, usize) {
+    let ev = &t.g.turn_events;
+    let d = ev
+        .iter()
+        .position(|e| matches!(e, Event::Discarded { player, .. } if *player == p));
+    let s = ev
+        .iter()
+        .position(|e| matches!(e, Event::Shuffled { player } if *player == p));
+    (d.expect("a discard"), s.expect("a shuffle"))
+}
+
+#[test]
+fn gamble_shuffles_after_the_random_discard() {
+    cr!("608.2c", "701.24a");
+    ruling!("Gamble", "You might end up discarding the card you searched for.");
+    ruling!(
+        "Library of Leng",
+        "The discard triggers anything else that triggers on discards."
+    );
+    // "..., discard a card at random, then shuffle": the found card, discarded and put
+    // on top of the library by Library of Leng, is shuffled into it afterwards (it was
+    // shuffled before the discard, leaving the card on top).
+    crate::combat2_common::supported("Gamble");
+    crate::combat2_common::supported("Library of Leng");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Library of Leng");
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let spell = t.hand(P0, "Gamble");
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.answer_yes(P0, true);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 0);
+    assert!(!t.in_graveyard(P0, "Lightning Bolt"));
+    let (d, s) = discard_and_shuffle(&t, P0);
+    assert!(d < s, "the shuffle came before the discard");
+}
+
+#[test]
+fn wild_research_shuffles_after_the_random_discard() {
+    cr!("608.2c", "701.24a");
+    ruling!(
+        "Wild Research",
+        "You do not have to find an enchantment or instant card if you do not want to."
+    );
+    // "Put it into your hand, then discard a card at random. Then shuffle."
+    crate::combat2_common::supported("Wild Research");
+    crate::combat2_common::supported("Library of Leng");
+    let mut t = TestGame::new(2);
+    let research = t.battlefield(P0, "Wild Research");
+    t.battlefield(P0, "Library of Leng");
+    t.lands(P0, "Plains", 2);
+    let pacifism = t.library_top(P0, "Pacifism");
+    t.answer_choose(P0, &[Entity::Object(pacifism)]);
+    t.answer_yes(P0, true);
+    let r = t.activate(P0, research, 0, &[]);
+    assert!(r.is_ok(), "{r:?}");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 0);
+    assert!(!t.in_graveyard(P0, "Pacifism"));
+    let (d, s) = discard_and_shuffle(&t, P0);
+    assert!(d < s, "the shuffle came before the discard");
 }

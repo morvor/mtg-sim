@@ -114,10 +114,10 @@ cards and then the two-card clusters in the tool's order up to the 80th (152 car
 ## Result
 
 28,046 of 31,866 fully supported cards passed at the start (711b6545); 28,165 of 31,866 pass on the branch before the merge, and 28,186 of 31,951 after
-merging the later landings (origin's passing list at the merge has 28,046 cards). 87 of the
-152 taken cards pass.
+merging the later landings (origin's passing list at the merge has 28,046 cards); 28,188
+after review (Gamble, Wild Research). 89 of the 152 taken cards pass.
 
-Parser (one fix, one fidelity change):
+Parser (two fixes, one fidelity change; see "Parser bugs found" for the shuffle order):
 
 - `oracle/costs.rs`: "Tap enchanted land: ..." / "Tap enchanted creature: ..." is the
   permanent the Aura enchants (`Filter::AttachedToSource`), not any enchanted land or
@@ -182,6 +182,15 @@ covers "other land types" (CR 305.7).
   `tap_enchanted_land_taps_the_land_this_aura_enchants` in
   `crates/mtg-engine/tests/cards/roundtrip_pairs_3.rs` (fails on the old code: checked by
   restoring the old `costs.rs`).
+- Gamble, Wild Research (found in review): "..., discard a card at random, then shuffle" /
+  "Put it into your hand, then discard a card at random. Then shuffle." compiled the
+  shuffle as part of the search, before the discard. That is observable: a discard
+  replaced by Library of Leng puts the card on top of the library, and the shuffle must
+  then move it (CR 608.2c). The shuffle is now its own instruction after the ones that
+  follow an unconditional search of your library (`oracle/patterns/search_grammar.rs`,
+  `shuffle_after_later_instructions` and the one-sentence form); tests
+  `gamble_shuffles_after_the_random_discard`, `wild_research_shuffles_after_the_random_discard`
+  (fail on the old code).
 
 Checked in play (same file, passing on the old code too): Ydwen Efreet's lost flip
 unblocks the creature it blocked; Abdel Adrian makes a Soldier for an exiled token (its
@@ -216,9 +225,7 @@ the text says (wording only) unless noted:
   subject repeated), Nuka-Nuke Launcher ("that player gets two rad counters whenever they
   cast a spell": the trigger after the effect).
 - "Choose target ..." first: Kitesail Larcenist, Galion, Surgical Extraction, Extirpate.
-- Order only: Gamble, Wild Research (the shuffle compiled as part of the search, before the
-  random discard: no replacement can put your own discarded card into your library at a
-  position the shuffle would change), Katara, Water Tribe's Hope ("X can't be 0" before
+- Order only: Katara, Water Tribe's Hope ("X can't be 0" before
   the timing), Bohn ("in your hand without foretell"), Lazav, Likeness Looter ("in your
   graveyard with mana value X"), Dragon-Kami's Egg ("from among cards you own in exile
   with hatching counters"), Kjeldoran Royal Guard, The Sea Devils, Harsh Justice ("this
@@ -227,7 +234,10 @@ the text says (wording only) unless noted:
   libraries": `any owner` term), Candlekeep Inspiration (X), Truce, Temporary Truce ("for
   each card less than two a player draws this way"), Boros Strike-Captain, Goblin
   Researcher ("During any turn you attacked with ...": tested), Carpet of Flowers ("if you
-  haven't added mana with this ability this turn", compiled as once each turn), Discover
+  haven't added mana with this ability this turn", compiled as "do this only once each
+  turn": the turn is counted only when you added the mana, so declining in the first main
+  phase leaves the second, checked at trigger and resolution, CR 603.2h; tested in
+  `tests/cards/td_phase_triggers.rs`), Discover
   the Impossible, Abdel Adrian ("for each permanent exiled this way"), Suspend Aggression
   ("For each of those cards"), Aurelia's Vindicator, Angel of Serenity ("from the
   battlefield and/or creature cards from graveyards"), Huatli, Nissa, Katara, Seeking

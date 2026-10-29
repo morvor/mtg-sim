@@ -9163,6 +9163,7 @@ Galvanic Juggernaut
 Galvanic Key
 Galvanize
 Galvanizing Sawship
+Gamble
 Game Plan
 Game Trail
 Game-Trail Changeling
@@ -27472,6 +27473,7 @@ Wild Onslaught
 Wild Ox
 Wild Pack Squad
 Wild Pair
+Wild Research
 Wild Ricochet
 Wild Ride
 Wild Roads

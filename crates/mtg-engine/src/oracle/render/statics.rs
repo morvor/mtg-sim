@@ -476,8 +476,11 @@ impl Renderer<'_> {
         }
         if attached_creature(f) {
             // "Enchanted creature gets -4/-0" on an Aura that can enchant a Vehicle: the
-            // enchanted permanent while it's a creature.
-            return "enchanted creature".into();
+            // enchanted permanent while it's a creature ("enchanted"/"equipped" as the
+            // attachment is named).
+            let n = self.attached_noun();
+            let head = n.split(' ').next().unwrap_or("enchanted");
+            return format!("{head} creature");
         }
         match f {
             Filter::Source => self.me(),
