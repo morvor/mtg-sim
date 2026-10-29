@@ -658,6 +658,30 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         return Some(e);
     }
     if let Some(r) = l.strip_prefix("you may ") {
+        // "You may have Allies you control gain lifelink until end of turn, and you may
+        // put a +1/+1 counter on ~" (Talus Paladin): two choices made separately, not one
+        // choice covering both. (Permissions joined this way, "..., and you may spend
+        // mana as though ...", are read as permissions elsewhere.)
+        if let Some((first, second)) = r.split_once(", and you may ") {
+            const PERMISSIONS: [&str; 4] = ["spend mana", "play ", "cast ", "look at "];
+            if !PERMISSIONS
+                .iter()
+                .any(|p| second.starts_with(p) || first.starts_with(p))
+            {
+                let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+                if let Some(ea) = parse_clause(first, b) {
+                    if let Some(ec) = parse_clause(second, b) {
+                        let may = |e| Effect::May {
+                            who: PlayerRef::You,
+                            effect: Box::new(e),
+                        };
+                        return Some(Effect::seq(vec![may(ea), may(ec)]));
+                    }
+                }
+                b.targets.truncate(saved.0);
+                (b.it, b.it_player) = (saved.1, saved.2);
+            }
+        }
         let e = parse_clause(r, b)?;
         return Some(Effect::May {
             who: PlayerRef::You,

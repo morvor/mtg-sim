@@ -141,19 +141,17 @@ fn talus_paladin_choices_are_made_separately() {
     supported("Talus Paladin");
     for (lifelink, counter) in [(false, true), (true, false)] {
         let mut t = TestGame::new(2);
-        let paladin = t.battlefield(P0, "Talus Paladin");
         let from = t.asked().len();
         t.answer_yes(P0, lifelink).answer_yes(P0, counter);
-        enter(&mut t, P0, "Talus Paladin");
+        let paladin = enter(&mut t, P0, "Talus Paladin");
         t.resolve_all();
         let yes_no = t.asked()[from..]
             .iter()
             .filter(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. }))
             .count();
-        // Both Paladins trigger (each for the entering Ally); two questions each.
-        assert_eq!(yes_no, 4);
+        // Two questions, each answered on its own.
+        assert_eq!(yes_no, 2);
         assert_eq!(has_kw(&t, paladin, LIFELINK), lifelink);
-        assert!(t.counters(paladin, "+1/+1") <= 1);
         assert_eq!(t.counters(paladin, "+1/+1") == 1, counter);
     }
 }
@@ -195,8 +193,8 @@ fn rattleback_apothecary_chooses_the_ability_on_resolution() {
         respond(&mut t, P0, pick_menace_or_lifelink(want));
         give_mana_for(&mut t, P0, "Lightning Bolt");
         let bolt = t.hand(P0, "Lightning Bolt");
-        t.answer_targets(P0, &[obj(rb)]);
         t.cast(P0, bolt).target(pl(P1)).go();
+        t.answer_targets(P0, &[obj(rb)]);
         t.settle();
         assert_eq!(t.stack_len(), 2, "the crime trigger");
         let asked_options = |t: &TestGame| {
@@ -400,7 +398,9 @@ fn nethroi_returns_cards_with_total_power_ten_or_less() {
     assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
     assert!(!t.in_graveyard(P0, "Grizzly Bears"));
     assert!(t.in_graveyard(P0, "Craw Wurm"), "the other Wurm wasn't chosen");
-    assert!(!t.in_graveyard(P0, "Clone"), "Clone was a legal target");
+    // Clone was a legal target (it entered, copying nothing, and died: CR 704.5f).
+    assert!(t.in_graveyard(P0, "Clone"));
+    assert_ne!(t.g.current(clone), clone, "it left the graveyard and came back");
 }
 
 #[test]

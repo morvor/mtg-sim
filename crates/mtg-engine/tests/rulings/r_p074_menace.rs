@@ -130,7 +130,7 @@ fn inquisitorial_rosette_token_enters_attacking_without_attack_triggers() {
     attack_with(&mut t, &[(bears, pl(P1))]);
     assert_eq!(triggers_on_stack(&t, "deals 1 damage"), 1);
     t.resolve_all();
-    let astartes = t.named_on_battlefield("Astartes Warrior");
+    let astartes = crate::r_s05_common::tokens_with_subtype(&t, P0, "Astartes");
     assert_eq!(astartes.len(), 1);
     assert!(t.g.is_attacking(astartes[0]));
     assert!(has_kw(&t, astartes[0], MENACE) && has_kw(&t, bears, MENACE));

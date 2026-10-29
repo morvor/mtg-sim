@@ -30,7 +30,11 @@ fn obj(id: ObjectId) -> Entity {
 fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) {
     give_mana_for(t, p, name);
     let c = t.hand(p, name);
-    t.cast(p, c).targets(targets).go();
+    let mut cb = t.cast(p, c);
+    for e in targets {
+        cb = cb.target(*e);
+    }
+    cb.go();
     t.resolve_all();
 }
 
@@ -69,7 +73,9 @@ fn mandatory_triggers_must_target_your_own_creature() {
     assert_eq!(t.counters(tyrant, MM), 4);
     destroy(&mut t, tyrant);
     t.resolve_all();
-    assert_eq!(t.counters(wurm, MM), 4);
+    // A 6/4 with four -1/-1 counters dies.
+    assert!(!t.on_battlefield(wurm));
+    assert!(t.in_graveyard(P0, "Craw Wurm"));
     // Blowfly Infestation: a creature with a -1/-1 counter dies.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Blowfly Infestation");
@@ -207,7 +213,7 @@ fn splendid_agony_lost_counter_and_dust_partial_targets() {
     let gd = t.graveyard(P0, "Grind // Dust");
     t.lands(P0, "Plains", 4);
     t.cast(P0, gd)
-        .method(CastMethod::Half(1))
+        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Aftermath))
         .targets(&[obj(wurm), obj(giant), obj(bears)])
         .go();
     t.g.remove_counters(obj(wurm), MM, 1);
@@ -220,10 +226,7 @@ fn splendid_agony_lost_counter_and_dust_partial_targets() {
 
 fn sacrifice_the_aura(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
     match d {
-        Decision::ChooseOption { options, .. } => options
-            .iter()
-            .position(|o| o.to_lowercase().contains("sacrifice"))
-            .map(Answer::Index),
+        Decision::YesNo { prompt, .. } if prompt.contains("Sacrifice") => Some(Answer::Bool(true)),
         Decision::ChooseEntities { candidates, .. } => candidates
             .iter()
             .find(|e| matches!(e, Entity::Object(o) if g.obj(*o).chars.name == "Holy Strength"))
@@ -346,7 +349,11 @@ fn pyrrhic_revival_zero_toughness_creatures_still_trigger_on_entering() {
     t.graveyard(P0, "Elvish Visionary");
     t.graveyard(P1, "Grizzly Bears");
     let hand = t.hand_size(P0);
-    cast_resolve(&mut t, P0, "Pyrrhic Revival", &[]);
+    let pr = t.hand(P0, "Pyrrhic Revival");
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::B, 3);
+    crate::r_s04_common::add_mana(&mut t, P0, mtg_engine::mana::ManaType::C, 3);
+    t.cast(P0, pr).go();
+    t.resolve_all();
     assert!(t.in_graveyard(P0, "Elvish Visionary"));
     assert_eq!(t.hand_size(P0), hand + 1, "its enters trigger resolved");
     let bears = t.named_on_battlefield("Grizzly Bears");

@@ -25,7 +25,11 @@ fn obj(id: ObjectId) -> Entity {
 fn cast_resolve(t: &mut TestGame, name: &str, targets: &[Entity]) {
     give_mana_for(t, P0, name);
     let c = t.hand(P0, name);
-    t.cast(P0, c).targets(targets).go();
+    let mut cb = t.cast(P0, c);
+    for e in targets {
+        cb = cb.target(*e);
+    }
+    cb.go();
     t.resolve_all();
 }
 
@@ -52,7 +56,7 @@ fn lifelink_spell_dealing_damage_to_you_leaves_life_unchanged() {
         .target(pl(P0))
         .go();
     t.resolve_all();
-    assert!(t.in_exile("Heartflame Duelist // Heartflame Slash"));
+    assert_eq!(t.zone(slash), Zone::Exile);
     assert_eq!(t.life(P0), 20);
     // The same spell aimed at an opponent gains life (positive control).
     let mut t = TestGame::new(2);
@@ -136,9 +140,9 @@ fn judith_trigger_resolves_first_even_if_the_spell_is_countered() {
     t.cast(P1, cs).target(obj(spell)).go();
     t.resolve();
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
-    assert_eq!(t.named_on_battlefield("Imp").len(), 0);
+    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Imp").len(), 0);
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Imp").len(), 1);
+    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Imp").len(), 1);
     assert_eq!(t.life(P1), 20);
 }
 
@@ -170,10 +174,10 @@ fn for_each_life_gain_is_one_event() {
     give_mana_for(&mut t, P0, "Festival of Trokin");
     let f = t.hand(P0, "Festival of Trokin");
     t.cast(P0, f).go();
+    t.answer_targets(P0, &[pl(P1)]);
     t.resolve();
     assert_eq!(t.life(P0), 24);
     assert_eq!(t.stack_len(), 1, "Firesong triggered once");
-    t.answer_targets(P0, &[pl(P1)]);
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
@@ -332,5 +336,4 @@ fn nectar_faerie_lifelink_on_an_opponents_creature_gains_them_life() {
     t.resolve_all();
     damage(&mut t, sprite, 1, bears);
     assert_eq!((t.life(P0), t.life(P1)), (20, 21));
-    let _ = Zone::Battlefield;
 }

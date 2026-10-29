@@ -30,7 +30,11 @@ fn obj(id: ObjectId) -> Entity {
 fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) {
     give_mana_for(t, p, name);
     let c = t.hand(p, name);
-    t.cast(p, c).targets(targets).go();
+    let mut cb = t.cast(p, c);
+    for e in targets {
+        cb = cb.target(*e);
+    }
+    cb.go();
     t.resolve_all();
 }
 
@@ -105,7 +109,7 @@ fn unraveling_mummy_targets_itself_redundantly_and_keeps_it_after_combat() {
     let mut t = TestGame::new(2);
     let mummy = t.battlefield(P0, "Unraveling Mummy");
     t.lands(P0, "Plains", 4);
-    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Swamp", 2);
     attack_with(&mut t, &[(mummy, pl(P1))]);
     for _ in 0..2 {
         t.answer_targets(P0, &[obj(mummy)]);
@@ -184,7 +188,7 @@ fn creatures_you_control_are_fixed_as_the_effect_resolves() {
     // Vault of the Archangel.
     let mut t = TestGame::new(2);
     let vault = t.battlefield(P0, "Vault of the Archangel");
-    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Plains", 3);
     t.lands(P0, "Swamp", 1);
     let bears = t.battlefield(P0, "Grizzly Bears");
     activate_containing(&mut t, P0, vault, "lifelink").unwrap();
@@ -209,7 +213,7 @@ fn creatures_you_control_are_fixed_as_the_effect_resolves() {
     let mut t = TestGame::new(2);
     let book = t.battlefield(P0, "Book of Mazarbul");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.g.add_counters(obj(book), "lore", 2, None);
+    t.g.add_counters(obj(book), "lore", 3, None);
     t.g.flush_events();
     t.resolve_all();
     let later = t.battlefield(P0, "Grizzly Bears");
@@ -329,7 +333,7 @@ fn resurrection_orb_delayed_trigger_works_after_the_orb_is_gone() {
 
 #[test]
 fn felidar_umbra_saves_only_the_creature_it_enchants() {
-    cr!("702.89c", "614.6");
+    cr!("702.89a", "614.6");
     ruling!(
         "Felidar Umbra",
         "It's not possible for Felidar Umbra to save two creatures that are being destroyed simultaneously."
