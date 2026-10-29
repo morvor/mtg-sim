@@ -65,6 +65,18 @@ impl Renderer<'_> {
             }
         };
         match k.kind {
+            // "has escape. The escape cost is equal to its mana cost plus exile three other
+            // cards from your graveyard" (`kw/escape.rs`: the keyword's cost is the added
+            // part).
+            KeywordKind::Escape
+                if k.text.as_deref() == Some(crate::kw::escape::MANA_COST_PLUS) =>
+            {
+                let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let c = super::effects::lower_first(&c);
+                format!(
+                    "escape. The escape cost is equal to {{alt:its|the card's}} mana cost plus {c}"
+                )
+            }
             KeywordKind::Enchant => match &k.filter {
                 // "enchant creature put onto the battlefield with ~" (CR 607.2c).
                 Some(Filter::And(v))

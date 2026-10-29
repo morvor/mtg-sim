@@ -36,6 +36,9 @@ pub(crate) fn custom_rel_nodes(name: &str) -> Option<CustomQuality> {
         crate::kw::referents_5::SAME_MANA_VALUE_AS_ANOTHER_OF_IT => {
             rel("that has the same mana value as another card revealed this way")
         }
+        // A spell cast or land played that was a card exiled with the source (CR 607.2a,
+        // `kw/trigger_events.rs`).
+        crate::kw::trigger_events::WAS_EXILED_WITH_SOURCE => rel("exiled with ~"),
         // The power's quality (odd or even) the linked choice chose (`kw/choices_4.rs`).
         crate::kw::choices_4::POWER_OF_CHOSEN_QUALITY => rel("with power of the chosen quality"),
         _ => None,
@@ -143,6 +146,11 @@ impl Renderer<'_> {
             crate::game_end::DRAW_EFFECT => "the game is a draw".into(),
             // CR 706.3c.
             crate::dice::ROLL_AGAIN => "roll again".into(),
+            // The entering permanent goes to the graveyard instead (CR 614.12).
+            crate::kw::enters_attached::ENTER_GRAVEYARD_INSTEAD => format!(
+                "put {} into its owner's graveyard instead of onto the battlefield",
+                self.me()
+            ),
             _ => return None,
         })
     }
@@ -322,6 +330,134 @@ impl Renderer<'_> {
     pub(crate) fn seq_nodes(&mut self, v: &[Effect]) -> Option<(String, usize)> {
         self.paid_up_to_times(v)
             .or_else(|| self.whenever_drawn_this_way(v))
+            .or_else(|| self.cast_copies(v))
+            .or_else(|| self.keep_chosen_by_you(v))
+            .or_else(|| self.auras_to_hosts(v))
+            .or_else(|| self.enters_attached_to_chosen(v))
+    }
+
+    /// "Choose a creature you control it could be attached to. If you do, it enters
+    /// attached to that creature." (`kw/enters_attached.rs`, CR 301.5b).
+    fn enters_attached_to_chosen(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        use crate::kw::enters_attached as ea;
+        let [choose @ Effect::Store {
+            sel: Sel::Choose { filter, .. },
+            ..
+        }, Effect::Custom(n), ..] = v
+        else {
+            return None;
+        };
+        if n != ea::ENTER_ATTACHED_TO_CHOSEN {
+            return None;
+        }
+        let c = self.effect(choose);
+        let kind = match filter {
+            Filter::And(p) if p.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))) => {
+                "creature"
+            }
+            Filter::Type(CardType::Creature) => "creature",
+            _ => "permanent",
+        };
+        Some((
+            format!("{c}. If you do, it enters attached to that {kind}"),
+            2,
+        ))
+    }
+
+    /// "Return any number of Aura cards from your graveyard to the battlefield attached to
+    /// creatures you control": the chosen Aura cards, each attached to one of the hosts
+    /// (`kw/auras_to_chosen_hosts.rs`, CR 303.4f).
+    fn auras_to_hosts(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        use crate::kw::auras_to_chosen_hosts as a;
+        let [Effect::Store {
+            var: x,
+            sel: auras @ Sel::Choose { .. },
+        }, Effect::Store {
+            var: y,
+            sel: Sel::All(hosts),
+        }, Effect::Custom(n), ..] = v
+        else {
+            return None;
+        };
+        if *x != a::AURAS || *y != a::HOSTS || n != a::PUT_AURAS_ONTO_CHOSEN_HOSTS {
+            return None;
+        }
+        let what = self.sel(&effects::strip_chooser(auras), Case::Obj);
+        let hosts = Filter::and(
+            match hosts {
+                Filter::And(p) => p.clone(),
+                other => vec![other.clone()],
+            }
+            .into_iter()
+            .filter(|f| !matches!(f, Filter::InZone(ZoneKind::Battlefield)))
+            .collect(),
+        );
+        let h = self.noun(&hosts, Num::Many);
+        Some((
+            format!("return {what} to the battlefield attached to {h}"),
+            3,
+        ))
+    }
+
+    /// "you choose the permanents for each player": each player's kept permanents of a
+    /// "chooses ..., then sacrifices the rest" chosen by you (`apnap.rs`, KEEP_CHOOSER),
+    /// as cards say it after the instruction it changes ("... instead").
+    fn keep_chosen_by_you(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::Store {
+            var: a,
+            sel: Sel::Players(PlayerRef::You),
+        }, keep @ Effect::KeepAndSacrificeRest {
+            who: PlayerRef::EachPlayer,
+            ..
+        }, Effect::Store {
+            var: b,
+            sel: Sel::None,
+        }, ..] = v
+        else {
+            return None;
+        };
+        if *a != crate::apnap::KEEP_CHOOSER || *b != crate::apnap::KEEP_CHOOSER {
+            return None;
+        }
+        let _ = keep;
+        Some(("you choose the permanents for each player".into(), 3))
+    }
+
+    /// "Copy them. You may cast any number of the copies [without paying their mana
+    /// costs].": the copies made, each cast or not (one choice to cast, then each copy).
+    fn cast_copies(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [copy @ Effect::CopyCard { .. }, Effect::May {
+            who: PlayerRef::You,
+            effect,
+        }, ..] = v
+        else {
+            return None;
+        };
+        let Effect::CastCard {
+            who: PlayerRef::You,
+            what: Sel::Var(c),
+            free,
+            optional: true,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        if *c != vars::CREATED {
+            return None;
+        }
+        let s = self.effect(copy);
+        let free = if *free {
+            " without paying their mana costs"
+        } else {
+            ""
+        };
+        Some((
+            format!(
+                "{}. You may cast any number of the copies{free}",
+                s.trim_end_matches('.')
+            ),
+            2,
+        ))
     }
 
     /// "Draw a card, then each other player may draw a card. Whenever a card is drawn

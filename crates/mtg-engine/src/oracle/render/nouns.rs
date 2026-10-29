@@ -1164,19 +1164,7 @@ impl Renderer<'_> {
             Filter::In(s)
                 if matches!(s.as_ref(), Sel::Var(v) if self.chosen_one.contains(v)) =>
             {
-                // "creatures other than ~ and the chosen creature": other than both.
-                if np.other && !np.is_self {
-                    np.other = false;
-                    let m = self.me();
-                    let kind = if np.types.contains(&CardType::Creature) {
-                        "creature"
-                    } else {
-                        "permanent"
-                    };
-                    np.post.push(format!("other than {m} and the chosen {kind}"));
-                } else {
-                    np.other = true
-                }
+                np.other = true
             }
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),
@@ -1306,6 +1294,14 @@ impl Renderer<'_> {
             Filter::Custom(n) if n == crate::granted_by::GRANTER => {
                 let s = self.noun(inner, Num::One);
                 np.rel.push(format!("other than {s}"));
+            }
+            // "creatures other than ~ and the chosen creature": other than the source
+            // (said before) and that object.
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(_)) && np.other && !np.is_self => {
+                np.other = false;
+                let m = self.me();
+                let x = self.noun(inner, Num::One);
+                np.post.push(format!("other than {m} and {x}"));
             }
             other => {
                 let s = self.noun(other, Num::One);

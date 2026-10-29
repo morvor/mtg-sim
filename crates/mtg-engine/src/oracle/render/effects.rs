@@ -4974,7 +4974,12 @@ impl Renderer<'_> {
                 // The cards in graveyards before an instruction, named by the later
                 // "that weren't put there this way" it's remembered for.
                 let put_there = var_n == crate::oracle::patterns::referents_values_4::PUT_THERE;
-                if !next.is_some_and(names) && !named_later && !put_there {
+                // ("Put that card on the bottom of your library and return the other to
+                // the battlefield": the rest, named by the instruction after the next.)
+                let named_after = v.get(i + 2).is_some_and(|n| {
+                    names(n) && matches!(next, Some(Effect::Move { .. }))
+                });
+                if !next.is_some_and(names) && !named_later && !put_there && !named_after {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
@@ -9167,7 +9172,7 @@ fn unreachable_text() -> String {
     String::new()
 }
 
-fn strip_chooser(s: &Sel) -> Sel {
+pub(crate) fn strip_chooser(s: &Sel) -> Sel {
     match s {
         Sel::Choose {
             filter,

@@ -114,9 +114,9 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kwa::vote::GOT_VOTES => rel("with one or more votes"),
         crate::battle::PROTECTED_BY_OPPONENT => rel("an opponent protects"),
         // An object the source can legally be attached to (CR 301.5c, 303.4k, 701.3b).
-        crate::attach::SOURCE_CAN_ATTACH | crate::kw::attach_each::CAN_ATTACH_IT => {
-            Some(Implied)
-        }
+        // "a creature you control it could be attached to": said or not.
+        crate::attach::SOURCE_CAN_ATTACH => rel("{opt:it could be attached to}"),
+        crate::kw::attach_each::CAN_ATTACH_IT => Some(Implied),
         n if n.starts_with(hga::PUT_THERE_THIS_TURN) => {
             match &n[hga::PUT_THERE_THIS_TURN.len()..] {
                 "" => rel("{alt:that was put there this turn|that were put there this turn|that was put there from anywhere this turn|that were put there from anywhere this turn}"),
