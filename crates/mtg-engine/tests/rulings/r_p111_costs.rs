@@ -394,6 +394,10 @@ fn activate_only_once_each_turn_follows_the_permanent_across_controllers() {
     mana(&mut t, P1, "GG2");
     t.set_step(P0, Step::PrecombatMain);
     assert!(activate_containing(&mut t, P1, griffin, "+2/+2").is_err());
+    // Control: at the same moment P1 can activate another Griffin's ability.
+    let other = t.battlefield(P1, "Setessan Griffin");
+    activate_containing(&mut t, P1, other, "+2/+2").expect("a Griffin not yet activated");
+    t.resolve_all();
     // Control: next turn it can.
     t.clear_answers();
     t.advance_to(P1, Step::PrecombatMain);

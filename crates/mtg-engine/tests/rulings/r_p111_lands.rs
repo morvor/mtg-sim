@@ -8,7 +8,7 @@ use crate::r_s01_common::supported;
 use crate::r_s02_common::{can_play_land, target_candidates};
 use crate::r_s20_common::tap_for_mana;
 use crate::r_s24_common::pool;
-use crate::r_s25_common::cast_new;
+use crate::r_s25_common::{cast_new, lands_for_cost};
 use crate::r_s32_common::{basic_now, subtypes_now};
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::mana::ManaType;
@@ -317,6 +317,7 @@ fn dryad_arbor_with_flash_ignores_only_the_timing_of_land_plays() {
     assert!(can_play_land(&mut t, P0, arbor));
     t.play_land(P0, arbor).expect("Dryad Arbor with flash in combat");
     assert!(t.on_battlefield(arbor));
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 1, "it uses a land play");
     // With a spell on the stack in the main phase.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Teferi, Mage of Zhalfir");
@@ -340,6 +341,69 @@ fn dryad_arbor_with_flash_ignores_only_the_timing_of_land_plays() {
     t.battlefield(P0, "Teferi, Mage of Zhalfir");
     let arbor = t.hand(P0, "Dryad Arbor");
     t.set_step(P1, Step::PrecombatMain);
+    t.g.turn.priority = Some(P0);
+    assert!(!can_play_land(&mut t, P0, arbor));
+    assert!(t.play_land(P0, arbor).is_err());
+}
+
+#[test]
+fn permissions_to_cast_spells_as_though_they_had_flash_dont_apply_to_land_plays() {
+    cr!("305.1", "305.9", "702.8a");
+    supported("Vedalken Orrery");
+    // "You may cast spells as though they had flash": a land is played, never cast.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vedalken Orrery");
+    let arbor = t.hand(P0, "Dryad Arbor");
+    let forest = t.hand(P0, "Forest");
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!can_play_land(&mut t, P0, arbor));
+    assert!(!can_play_land(&mut t, P0, forest));
+    assert!(t.play_land(P0, arbor).is_err());
+    // Control: the Orrery does let a creature spell be cast then.
+    lands_for_cost(&mut t, P0, "Grizzly Bears");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).try_go().expect("Orrery lets a creature be cast in combat");
+}
+
+#[test]
+fn scouts_warning_lets_dryad_arbor_be_played_in_combat_and_is_used_up() {
+    cr!("305.1", "305.3", "702.8a");
+    ruling!(
+        "Scout's Warning",
+        "You cannot use this effect to play Dryad Arbor during an opponent's turn."
+    );
+    supported("Scout's Warning");
+    // "The next creature card you play this turn can be played as though it had flash."
+    let mut t = TestGame::new(2);
+    let arbor = t.hand(P0, "Dryad Arbor");
+    cast_new(&mut t, P0, "Scout's Warning", &[]);
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(can_play_land(&mut t, P0, arbor));
+    t.play_land(P0, arbor).expect("Dryad Arbor under Scout's Warning in combat");
+    assert!(t.on_battlefield(arbor));
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 1);
+    // Playing Dryad Arbor used the effect up: the next creature card can't be cast now.
+    lands_for_cost(&mut t, P0, "Grizzly Bears");
+    let bears = t.hand(P0, "Grizzly Bears");
+    assert!(t.cast(P0, bears).try_go().is_err(), "the effect is used up");
+    // Control: without the land play, the effect lets the creature be cast in combat.
+    let mut t = TestGame::new(2);
+    cast_new(&mut t, P0, "Scout's Warning", &[]);
+    t.resolve_all();
+    t.set_step(P0, Step::BeginningOfCombat);
+    lands_for_cost(&mut t, P0, "Grizzly Bears");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).try_go().expect("Scout's Warning gives the creature flash");
+    // Not during an opponent's turn.
+    let mut t = TestGame::new(2);
+    let arbor = t.hand(P0, "Dryad Arbor");
+    t.set_step(P1, Step::PrecombatMain);
+    t.g.turn.priority = Some(P0);
+    lands_for_cost(&mut t, P0, "Scout's Warning");
+    let sw = t.hand(P0, "Scout's Warning");
+    t.cast(P0, sw).try_go().expect("Scout's Warning is an instant");
+    t.resolve_all();
     t.g.turn.priority = Some(P0);
     assert!(!can_play_land(&mut t, P0, arbor));
     assert!(t.play_land(P0, arbor).is_err());

@@ -469,9 +469,15 @@ impl Game {
         if self.turn.step.is_main() && self.stack.is_empty() {
             return true;
         }
+        // Permissions to *cast* spells as though they had flash (Vedalken Orrery, "the
+        // next creature spell you cast") don't apply: a land is played, never cast
+        // (CR 305.9, 601.3b). "The next creature card you play ... as though it had
+        // flash" does (Scout's Warning).
         let chars = self.land_face_characteristics(card);
-        (chars.has_keyword(KeywordKind::Flash) || self.flash_permitted(p, card, &chars))
-            && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
+        // Likewise "[players] can cast spells only any time they could cast a sorcery"
+        // restricts casting only.
+        chars.has_keyword(KeywordKind::Flash)
+            || crate::next_spell::lets_land_be_played_with_flash(self, p, card)
     }
 
     fn playable_land_cards(&self, p: PlayerId) -> Vec<ObjectId> {
@@ -1266,6 +1272,8 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
+        // "The next creature card you play this turn ...": playing it uses that up.
+        crate::next_spell::land_played(self, p, card);
         // "Each land played this way enters tapped" (CR 614.1d).
         let tapped = permission.is_some_and(|c| c.terms.lands_enter_tapped);
         crate::permissions::record_use(self, permission);
