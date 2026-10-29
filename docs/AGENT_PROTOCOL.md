@@ -335,7 +335,8 @@ name for one's own.
   the viewer may see, `library_count` and `library_known` (pairs of position from the
   top and card: a revealed top card, or the top card the viewer may look at),
   `graveyard` (top first), `exile` and `command` (objects the player owns),
-  `lands_played_this_turn`, `land_plays`, `max_hand_size`, `team`, designations
+  `lands_played_this_turn`, `land_plays` (4294967295 when the number is unbounded:
+  Fastbond's "any number of lands"), `max_hand_size`, `team`, designations
   (`monarch`, `initiative`, `citys_blessing`, `speed`, `ring_tempted`, `ring_bearer`,
   `dungeons_completed`, `venture`), `commander_damage`, `has_lost`, `has_won`.
 * `battlefield`: every permanent with its **current** characteristics (after all

@@ -29,6 +29,10 @@ pub struct PlayerAtTurnStart {
 #[derive(Clone, Debug, Default)]
 pub struct TurnStart {
     pub players: Vec<PlayerAtTurnStart>,
+    /// The permanents that were untapped as the turn began ("if ~ started the turn
+    /// untapped", Rasputin Dreamweaver): the same objects while they stay on the
+    /// battlefield (CR 400.7).
+    pub untapped: Vec<ObjectId>,
 }
 
 /// Records each player's state as a turn begins.
@@ -54,7 +58,13 @@ pub fn record(g: &mut Game) {
             }
         })
         .collect();
-    g.turn_start = TurnStart { players };
+    let untapped = g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|o| !g.obj(*o).tapped)
+        .collect();
+    g.turn_start = TurnStart { players, untapped };
 }
 
 /// A player's state as the turn began (the current state if none was recorded: the

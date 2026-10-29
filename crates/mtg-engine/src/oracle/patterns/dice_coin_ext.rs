@@ -392,6 +392,10 @@ inventory::submit! { FollowupPattern { name: "a706 instead create that token and
 /// (capitalized).
 fn named_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     let r = s.strip_prefix("named ")?;
+    // "named Guan Yu, Sainted Warrior": a name with a comma.
+    if let Some((name, rest)) = super::value_grammar::comma_card_name(r) {
+        return Some((Filter::Named(name.into()), rest));
+    }
     let n = r.find([',', '.', ';']).unwrap_or(r.len());
     let (name, rest) = (&r[..n], &r[n..]);
     if name.is_empty() || name.contains('~') || name.contains(" and ") || name.contains(" or ") {

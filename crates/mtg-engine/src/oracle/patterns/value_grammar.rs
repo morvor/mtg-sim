@@ -797,6 +797,9 @@ fn suffix<'a>(t: &'a str, b: &mut Builder) -> Option<(Filter, &'a str)> {
 /// The card name at the start of `r` (lowercase): the longest run of words before a comma
 /// or period that names a card ("food fight you control": "Food Fight"), and the rest.
 pub(crate) fn literal_card_name(r: &str) -> Option<(String, &str)> {
+    if let Some(found) = comma_card_name(r) {
+        return Some(found);
+    }
     let (name, rest) = match r.find([',', '.']) {
         Some(i) => (&r[..i], &r[i..]),
         None => (r, ""),
@@ -830,6 +833,28 @@ pub(crate) fn literal_card_name(r: &str) -> Option<(String, &str)> {
                 .unwrap_or(&title)
                 .to_string();
             return Some((name, rest));
+        }
+    }
+    None
+}
+
+/// A card name with a comma at the start of `r` ("guan yu, sainted warrior or ..."): the
+/// longest run of words through a comma that is a card's whole name (CR 201.2), and the
+/// rest of the text.
+pub(crate) fn comma_card_name(r: &str) -> Option<(String, &str)> {
+    let i = r.find(", ")?;
+    let words: Vec<&str> = r.split(' ').collect();
+    let first = r[..i].split(' ').count();
+    for k in (first + 1..=words.len().min(first + 4)).rev() {
+        let cand = words[..k].join(" ");
+        let cand = cand.trim_end_matches([',', '.']);
+        if !cand.contains(", ") {
+            continue;
+        }
+        if let Some(c) = mtg_data::cards().by_name(cand) {
+            if c.name.eq_ignore_ascii_case(cand) {
+                return Some((c.name.to_string(), &r[cand.len()..]));
+            }
         }
     }
     None

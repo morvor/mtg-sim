@@ -473,6 +473,7 @@ impl Renderer<'_> {
             if matches!(a.timing, ActivationTiming::Sorcery)
                 && matches!(&a.condition, Some(Condition::Compare(Value::ClassLevel, Cmp::Eq, Value::Const(n))) if *n as i64 + 1 == *level as i64)
                 && a.max_per_turn.is_none()
+                && a.max_per_turn_value.is_none()
                 && a.max_total.is_none()
                 && a.own_cost_changes.is_empty()
             {
@@ -675,6 +676,11 @@ impl Renderer<'_> {
                 }
                 _ => s = join_words(&[s, restriction]),
             }
+        }
+        // "Activate no more times each turn than the number of snow Swamps you control."
+        if let Some(v) = &a.max_per_turn_value {
+            let n = self.value(v);
+            s = join_words(&[s, format!("Activate no more times each turn than {n}.")]);
         }
         // "Any player may activate this ability but only as a sorcery."
         let sorcery_only = " Activate only as a sorcery.";

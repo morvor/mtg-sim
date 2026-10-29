@@ -942,6 +942,8 @@ fn obeyed_attack_requirements(
 /// Restrictions that apply to the declaration as a whole (CR 508.1c).
 struct AttackRules {
     cant_alone: BTreeSet<ObjectId>,
+    /// "can't attack unless at least N other creatures attack": the greatest N for each.
+    min_others: BTreeMap<ObjectId, u32>,
     max: Option<usize>,
 }
 
@@ -955,6 +957,7 @@ fn attack_rules(g: &Game, options: &[(ObjectId, Vec<Entity>)]) -> AttackRules {
             cant_alone.insert(*c);
         }
     }
+    let min_others = min_others(g, options.iter().map(|(c, _)| *c), true);
     let max = g
         .all_restrictions()
         .iter()
@@ -963,7 +966,11 @@ fn attack_rules(g: &Game, options: &[(ObjectId, Vec<Entity>)]) -> AttackRules {
             _ => None,
         })
         .min();
-    AttackRules { cant_alone, max }
+    AttackRules {
+        cant_alone,
+        min_others,
+        max,
+    }
 }
 
 fn attack_restrictions_ok(
@@ -985,10 +992,44 @@ fn attack_restrictions_ok(
     if decl.len() == 1 && rules.cant_alone.contains(&decl[0].0) {
         return false;
     }
+    // "can't attack unless at least N other creatures attack" (CR 508.1c).
+    if decl.iter().any(|(a, _)| {
+        rules
+            .min_others
+            .get(a)
+            .is_some_and(|n| decl.len() < 1 + *n as usize)
+    }) {
+        return false;
+    }
     if rules.max.is_some_and(|m| decl.len() > m) {
         return false;
     }
     crate::keyword_impls::attack_declaration_extra_checks(g, decl)
+}
+
+/// "[creature] can't attack (block) unless at least N other creatures attack (block)"
+/// (CR 508.1c, 509.1b): for each of these creatures, the greatest such N that applies.
+fn min_others(
+    g: &Game,
+    creatures: impl Iterator<Item = ObjectId>,
+    attack: bool,
+) -> BTreeMap<ObjectId, u32> {
+    let rs = g.all_restrictions();
+    let mut out = BTreeMap::new();
+    for c in creatures {
+        for (s, ctl, r, locked) in &rs {
+            let (what, n) = match r {
+                Restriction::CantAttackUnlessOthersAttack { what, n } if attack => (what, *n),
+                Restriction::CantBlockUnlessOthersBlock { what, n } if !attack => (what, *n),
+                _ => continue,
+            };
+            if g.restriction_applies(c, what, &Ctx::new(*s, *ctl), locked) {
+                let e = out.entry(c).or_insert(0);
+                *e = (*e).max(n);
+            }
+        }
+    }
+    out
 }
 
 /// The cost required to attack with `creature` attacking `target` (CR 508.1d, 508.1h),
@@ -1614,6 +1655,8 @@ pub fn block_requirements(
 
 struct BlockRules {
     cant_alone: BTreeSet<ObjectId>,
+    /// "can't block unless at least N other creatures block": the greatest N for each.
+    min_others: BTreeMap<ObjectId, u32>,
     max: Option<usize>,
     max_blocks: BTreeMap<ObjectId, Option<u32>>,
     min_blockers: BTreeMap<ObjectId, u32>,
@@ -1651,6 +1694,7 @@ fn block_rules(g: &Game, options: &[(ObjectId, Vec<ObjectId>)]) -> BlockRules {
         .min();
     BlockRules {
         cant_alone,
+        min_others: min_others(g, options.iter().map(|(b, _)| *b), false),
         max,
         max_blocks,
         min_blockers,
@@ -1702,6 +1746,15 @@ fn block_restrictions_ok(
             .cant_alone
             .contains(per_blocker.keys().next().unwrap())
     {
+        return false;
+    }
+    // "can't block unless at least N other creatures block" (CR 509.1b).
+    if per_blocker.keys().any(|b| {
+        rules
+            .min_others
+            .get(b)
+            .is_some_and(|n| per_blocker.len() < 1 + *n as usize)
+    }) {
         return false;
     }
     if rules.max.is_some_and(|m| per_blocker.len() > m) {
