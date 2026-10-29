@@ -154,6 +154,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         // CR 700.2.
         crate::kw::modal_spells::MODAL_SPELL => Some(Adj("modal")),
         crate::kw::choices_5_filters::NOT_RESOLVING => Some(Adj("other")),
+        crate::kw::choices_5_filters::STILL_ON_BATTLEFIELD => rel("still on the battlefield"),
         crate::kw::choice_grammar::DEALT_COMBAT_DAMAGE_TO_YOU => {
             rel("that dealt combat damage to you this turn")
         }

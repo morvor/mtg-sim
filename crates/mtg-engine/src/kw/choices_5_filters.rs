@@ -14,6 +14,10 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::types::ObjectId;
 
+/// `Filter::Custom` name: the same object, still on the battlefield ("the chosen
+/// permanents are still on the battlefield": not one that left, CR 400.7).
+pub const STILL_ON_BATTLEFIELD: &str = "choices5:still on the battlefield";
+
 /// `Filter::Custom` name: not the resolving spell or ability itself.
 pub const NOT_RESOLVING: &str = "choices5:not the resolving spell or ability";
 
@@ -66,8 +70,14 @@ impl KeywordRules for Choices5Filters {
         true
     }
 
-    fn custom_filter(&self, _g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
-        (name == NOT_RESOLVING).then(|| ctx.stack_obj != Some(id))
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        match name {
+            NOT_RESOLVING => Some(ctx.stack_obj != Some(id)),
+            STILL_ON_BATTLEFIELD => Some(
+                g.is_live(id) && g.obj(id).zone == crate::object::Zone::Battlefield,
+            ),
+            _ => None,
+        }
     }
 }
 

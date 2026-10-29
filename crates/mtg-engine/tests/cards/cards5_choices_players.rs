@@ -675,3 +675,37 @@ fn eumidian_wastewaker_draws_for_each_land_card_put_into_a_graveyard() {
     assert_eq!(run(true), 2);
     assert_eq!(run(false), 1);
 }
+
+#[test]
+fn disorienting_choice_searches_for_each_chosen_permanent_still_on_the_battlefield() {
+    cr!("608.2c", "701.23a");
+    compiles("Disorienting Choice");
+    let run = |exile: bool| {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Forest", 4);
+        t.library_top(P0, "Forest");
+        t.library_top(P0, "Island");
+        let rock = t.battlefield(P1, "Mind Stone");
+        let spell = t.hand(P0, "Disorienting Choice");
+        t.set_step(P0, Step::PrecombatMain);
+        t.answer(P1, DecisionKind::YesNo, Answer::Bool(exile));
+        let lib = t.library_size(P0);
+        t.cast(P0, spell).target(rock).go();
+        t.resolve_all();
+        assert_eq!(t.on_battlefield(rock), !exile);
+        let lands = t
+            .g
+            .battlefield
+            .iter()
+            .filter(|id| {
+                t.g.obj(**id).controller == P0
+                    && t.g.obj(**id).chars.is(mtg_engine::types::CardType::Land)
+            })
+            .count();
+        (lands, lib - t.library_size(P0))
+    };
+    // Kept: one land card searched for and put onto the battlefield.
+    assert_eq!(run(false), (5, 1));
+    // Exiled: none of the chosen permanents remain, so no search.
+    assert_eq!(run(true), (4, 0));
+}

@@ -421,3 +421,37 @@ fn choose_in_excess(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "for each [permanent] target player controls in excess of the number you control, choose a [permanent] that player controls", priority: 90, parse: choose_in_excess } }
+
+/// "Then if one or more of the chosen permanents are still on the battlefield, you search
+/// your library for up to that many land cards, ..." (Disorienting Choice): the chosen
+/// objects still on the battlefield (the same objects, CR 400.7), counted as the
+/// instruction begins; with none, nothing happens (no search, no shuffle).
+fn if_chosen_still_on_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let rest = l.strip_prefix("if one or more of the chosen permanents are still on the battlefield, ")?;
+    if !rest.contains("that many") {
+        return None;
+    }
+    let chosen = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == "the chosen permanents")
+        .map(|(_, s)| s.clone())?;
+    let count = Value::CountSel(Box::new(Sel::Matching(
+        Box::new(chosen),
+        Filter::Custom(crate::kw::choices_5_filters::STILL_ON_BATTLEFIELD.into()),
+    )));
+    let then = parse_sentence(&rest.replacen("that many", "x", 1), b)?;
+    if !serde_json::to_string(&then).is_ok_and(|j| j.contains("\"X\"")) {
+        return None;
+    }
+    Some(Effect::If {
+        cond: Condition::Compare(count.clone(), Cmp::Ge, Value::c(1)),
+        then: Box::new(Effect::seq(vec![Effect::SetX { value: count }, then])),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "if one or more of the chosen permanents are still on the battlefield, [do something that many times]", priority: 90, parse: if_chosen_still_on_battlefield } }
