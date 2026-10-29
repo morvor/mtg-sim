@@ -136,7 +136,8 @@ fn generic_colored_and_excess_colored_reductions() {
 
 #[test]
 fn generic_mana_reduces_only_generic_mana_and_not_below_zero() {
-    cr!("702.48c");
+    cr!("702.48c", "733.1");
+    interp!("illegal-action-reversal-restores-libraries");
     ruling!(
         "Blast-Furnace Hellkite",
         "The total cost of the spell can’t be reduced to less than {0}."
@@ -148,7 +149,11 @@ fn generic_mana_reduces_only_generic_mana_and_not_below_zero() {
     let hk = t.hand(P0, "Blast-Furnace Hellkite");
     offer(&mut t, P0, colossus);
     assert!(t.cast(P0, hk).method(OFFERING).try_go().is_err());
+    // The cast is reversed, but the Colossus, sacrificed for offering and shuffled into
+    // its owner's library by its own ability, stays there (CR 733.1).
+    assert_eq!(t.zone(t.g.current(colossus)), object::Zone::Library(P0));
     t.clear_answers();
+    let colossus = t.battlefield(P0, "Blightsteel Colossus");
     t.lands(P0, "Mountain", 1);
     offer(&mut t, P0, colossus);
     t.cast(P0, hk).method(OFFERING).go();
