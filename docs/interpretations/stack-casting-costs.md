@@ -135,3 +135,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Spoils of War.
 - Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_is_in_an_opponents_graveyard`); `crates/mtg-engine/src/payment_rules.rs` (`x_allowed`); `crates/mtg-engine/src/casting.rs` (the announced X).
 - Tests: `tests/cards/c5_values.rs` (`spoils_of_war_x_is_the_number_in_an_opponents_graveyard`).
+
+## any-player-may-after-a-payment: Once a player has paid an "any [other] player may [cost]", the remaining players are still offered it
+- Kind: interpretation
+- Status: provisional
+- Rules: 118.12 "... “[A player] may [do something]. If [that player] [does, doesn’t, or can’t], [effect].” The action [do something] is a cost, paid when the spell or ability resolves. ..." / 101.4 "If multiple players would make choices and/or take actions at the same time, the active player (the player whose turn it is) makes any choices required, then the next player in turn order ..." / Shivan Wumpus ruling: "If a player elects to sacrifice a land, Shivan Wumpus is put on top of its owner's library, but then all remaining players still get the option."
+- Question: Zur's Weirding ("If a player would draw a card, they reveal it instead. Then any other player may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, that player draws a card.") has no ruling on what happens after one player pays. Are the remaining players still offered the payment (which then changes nothing but costs them 2 life), or does the offer stop?
+- Decision: As for every "any player may [cost]" (Shivan Wumpus's ruling): each player, in turn order starting with the active player, is offered the payment; the effect happens once, as soon as the first player pays, and the remaining players are still offered the cost and may pay it to no further effect.
+- Alternatives: (A) Stop offering after the first payment: no rule or ruling says so, and Shivan Wumpus's ruling says the opposite for the same template.
+- Why: The template and its official ruling are the same; Zur's Weirding's "any other player" only excludes the drawing player.
+- Affects: Zur's Weirding, Shivan Wumpus, and every "any player may [cost]. If a player does" card.
+- Code: `crates/mtg-engine/src/oracle/patterns/r118_any_player_may.rs`.
+- Tests: `tests/cards/c5_mana_replacements.rs` (`zurs_weirding_every_other_player_is_offered_the_payment`).

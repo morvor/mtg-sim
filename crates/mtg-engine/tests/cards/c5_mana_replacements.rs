@@ -287,6 +287,19 @@ fn words_of_war_target_gone_still_replaces_the_draw_without_damage() {
     assert_eq!(t.g.obj(giant).damage, 0);
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.life(P0), 20);
+    // Gone before the ability resolves: it doesn't resolve (608.2b), no shield, the draw
+    // happens.
+    let mut t = TestGame::new(2);
+    let words = t.battlefield(P0, "Words of War");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 1);
+    t.activate(P0, words, 0, &[Entity::Object(bears)]).unwrap();
+    t.g.destroy(bears, None);
+    t.resolve_all();
+    let hand = t.hand_size(P0);
+    t.g.draw_cards(P0, 1);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
 }
 
 #[test]
@@ -706,4 +719,56 @@ fn a_cycling_draw_replacement_applies_to_any_cycled_card_when_unqualified() {
     t.resolve_all();
     assert_eq!(t.life(P0), 22);
     assert_eq!(t.hand_size(P0), hand - 1);
+}
+
+#[test]
+fn land_equilibrium_applies_to_land_tokens_an_opponent_creates() {
+    // Creating a token puts it onto the battlefield (CR 701.7a) under its creator's
+    // control (CR 111.2): the creator "would put a land onto the battlefield".
+    cr!("701.7a", "111.2", "614.1a");
+    ruling!("Land Equilibrium", "This effect applies no matter how the land would enter");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Land Equilibrium");
+    t.lands(P0, "Island", 1);
+    t.lands(P1, "Forest", 3);
+    let spell = t.hand(P1, "Awaken the Woods");
+    t.set_step(P1, Step::PrecombatMain);
+    t.cast(P1, spell).x(1).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Awaken the Woods"));
+    // Three Forests and a Forest Dryad token, less the land sacrificed.
+    let lands = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P1 && o.is(types::CardType::Land))
+        .count();
+    assert_eq!(lands, 3);
+}
+
+#[test]
+fn zurs_weirding_every_other_player_is_offered_the_payment() {
+    cr!("118.12", "101.4");
+    interp!("any-player-may-after-a-payment");
+    // P1 draws during P0's turn: P0 then P2 are offered the payment (turn order from
+    // the active player, the drawing player excluded); both pay, the card is milled once.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Zur's Weirding");
+    t.library_top(P1, "Grizzly Bears");
+    t.library_top(P1, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_yes(P2, true);
+    let from = t.asked().len();
+    let library = t.library_size(P1);
+    t.g.draw_cards(P1, 1);
+    t.resolve_all();
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, vec![P0, P2]);
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.library_size(P1), library - 1);
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(t.life(P2), 18);
 }
