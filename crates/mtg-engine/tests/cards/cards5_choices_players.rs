@@ -874,3 +874,42 @@ fn paleontologists_pick_axe_copies_the_chosen_craft_material() {
     assert_eq!(o.chars.name.as_str(), "Craw Wurm");
     assert_eq!(t.pt(bears), (6, 4));
 }
+
+#[test]
+fn eye_of_ojer_taq_chooses_a_card_type_its_craft_materials_share() {
+    cr!("702.167c", "614.12a", "607.2d");
+    compiles("Eye of Ojer Taq // Apex Observatory");
+    // "Craft with two that share a card type {6}" / back face: "This artifact enters
+    // tapped. As it enters, choose a card type shared among two exiled cards used to craft
+    // it."
+    let mut t = TestGame::new(2);
+    let eye = t.battlefield(P0, "Eye of Ojer Taq // Apex Observatory");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let golem = t.graveyard(P0, "Phyrexian Walker");
+    t.lands(P0, "Plains", 6);
+    t.set_step(P0, Step::PrecombatMain);
+    let craft = activated_index(&mut t, eye, "Craft");
+    t.answer_choose(P0, &[Entity::Object(thopter), Entity::Object(golem)]);
+    // Both are artifact creatures: P0 chooses creature.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    let from = t.asked().len();
+    t.activate(P0, eye, craft, &[]).expect("craft");
+    t.resolve_all();
+    let apex = t.g.current(eye);
+    assert!(t.on_battlefield(apex));
+    assert!(t.obj_now(apex).tapped);
+    let offered = t.asked()[from..].iter().find_map(|(_, d)| match d {
+        Decision::ChooseOption { options, prompt, .. } if prompt == "Choose a card type" => {
+            Some(options.clone())
+        }
+        _ => None,
+    });
+    assert_eq!(
+        offered,
+        Some(vec!["artifact".to_string(), "creature".to_string()])
+    );
+    assert_eq!(
+        t.obj_now(apex).choices.card_type,
+        Some(mtg_engine::types::CardType::Creature)
+    );
+}

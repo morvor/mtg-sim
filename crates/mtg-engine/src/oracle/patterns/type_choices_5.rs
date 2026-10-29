@@ -169,3 +169,65 @@ fn as_attached_choose_craft_material(
 }
 
 inventory::submit! { StaticPattern { name: "as ~ becomes attached to a creature, choose an exiled card used to craft ~", priority: 60, parse: as_attached_choose_craft_material } }
+
+/// "As it enters, choose a card type shared among two exiled cards used to craft it."
+/// (Eye of Ojer Taq // Apex Observatory): the choice is made as it enters (CR 614.12a)
+/// among the card types its craft materials share.
+fn as_enters_choose_type_shared_by_materials(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    // "~ enters tapped. As it enters, ...": the sentence before is its own ability.
+    let mut out = Vec::new();
+    let l = end(l);
+    let l = match l.split_once(". as it enters, ") {
+        Some((first, rest)) => {
+            let orig_first = text.split_once(". As it enters, ")?.0;
+            if orig_first.to_lowercase() != first {
+                return None;
+            }
+            out.extend(crate::oracle::parse_ability(&format!("{orig_first}."), ctx)?);
+            format!("as it enters, {rest}")
+        }
+        None => l.to_string(),
+    };
+    let l = l.as_str();
+    let r = end(l)
+        .strip_prefix("as it enters, ")
+        .or_else(|| end(l).strip_prefix("as ~ enters, "))?;
+    let n = r
+        .strip_prefix("choose a card type shared among ")?
+        .strip_suffix(" exiled cards used to craft it")
+        .or_else(|| {
+            r.strip_prefix("choose a card type shared among ")?
+                .strip_suffix(" exiled cards used to craft ~")
+        })?;
+    if !matches!(n, "two" | "the") {
+        return None;
+    }
+    let e = Effect::Custom(
+        crate::kw::choices_5_filters::CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS.into(),
+    );
+    let out_first: Vec<Ability> = out
+        .into_iter()
+        .map(|a| {
+            let mut a = (*a).clone();
+            a.text = text.to_string();
+            std::sync::Arc::new(a)
+        })
+        .collect();
+    Some(out_first.into_iter().chain([AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(
+            ReplacementDef {
+                event: ReplacementEvent::EntersBattlefield(Filter::Source),
+                action: ReplacementAction::AsEnters(Box::new(e)),
+                self_replacement: false,
+                optional: false,
+            },
+        ))),
+        text,
+    )]).collect())
+}
+
+inventory::submit! { StaticPattern { name: "as it enters, choose a card type shared among the exiled cards used to craft it", priority: 60, parse: as_enters_choose_type_shared_by_materials } }
