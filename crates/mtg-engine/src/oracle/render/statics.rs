@@ -2131,6 +2131,11 @@ impl Renderer<'_> {
                         PlayerRef::DefendingPlayer,
                         defender.clone(),
                     ));
+                    // (Said with the condition, as a static ability's condition, in the
+                    // face's other rendering, `RenderedFace::static_if`.)
+                    if self.static_if {
+                        return format!("{a} can't attack if {c}");
+                    }
                     return format!("{{alt:{s}|{a} can't attack if {c}}}");
                 }
                 s

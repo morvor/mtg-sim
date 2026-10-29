@@ -1608,6 +1608,12 @@ impl Renderer<'_> {
                 let e = self.trigger_event(trigger, det);
                 let p = self.is_predicate(f, false);
                 let p = p.strip_prefix("is ").map(|x| x.to_string()).unwrap_or(p);
+                // "Whenever a creature you control dies while ~ is in your graveyard": the
+                // zone the ability functions from (CR 113.6k), said of the object.
+                if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+                    let me = self.me();
+                    return Ev::new(e.subj, format!("{} while {me} is {p}", e.vp));
+                }
                 Ev::new(e.subj, format!("{} while {p}", e.vp))
             }
             // "Whenever you cast your first spell during each opponent's turn": the first
