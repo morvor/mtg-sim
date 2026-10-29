@@ -375,3 +375,37 @@ pub fn turn_face_up_by(g: &mut Game, id: ObjectId, by: PlayerId) -> bool {
     });
     true
 }
+
+/// The filter of a "whenever a [face-down] permanent ... is turned face up" trigger as
+/// it's checked against the permanent just turned face up. Turning face up doesn't look
+/// back in time (CR 603.10), so the filter is checked against the face-up permanent
+/// ("another creature you control", "a Detective you control": the face-up
+/// characteristics, CR 708.8). The one exception is "face-down" itself, which can only
+/// describe the permanent as it was just before the event (Sumala Sentry): every
+/// permanent turned face up was face down then, so `FaceDown` is satisfied by the event
+/// wherever it occurs in the filter (`Not(FaceDown)` by none).
+pub fn turned_face_up_filter(f: &Filter) -> std::borrow::Cow<'_, Filter> {
+    use std::borrow::Cow;
+    fn has(f: &Filter) -> bool {
+        match f {
+            Filter::FaceDown => true,
+            Filter::And(fs) | Filter::Or(fs) => fs.iter().any(has),
+            Filter::Not(f) => has(f),
+            _ => false,
+        }
+    }
+    fn map(f: &Filter) -> Filter {
+        match f {
+            Filter::FaceDown => Filter::Any,
+            Filter::And(fs) => Filter::And(fs.iter().map(map).collect()),
+            Filter::Or(fs) => Filter::Or(fs.iter().map(map).collect()),
+            Filter::Not(f) => Filter::Not(Box::new(map(f))),
+            f => f.clone(),
+        }
+    }
+    if has(f) {
+        Cow::Owned(map(f))
+    } else {
+        Cow::Borrowed(f)
+    }
+}

@@ -100,3 +100,15 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: Curse of Leeches // Leeching Lurker (the only card).
 - Code: `crates/mtg-engine/src/cards/curse_of_leeches.rs` (`custom_effect`, `ATTACH`).
 - Tests: `tests/cards/m_curse_of_leeches.rs` (`the_choice_is_among_players_it_can_enchant`).
+
+## self-shuffle-gone-library-still-shuffled: "Its owner shuffles it into their library" shuffles that library even when it has left
+- Kind: interpretation
+- Status: provisional
+- Rules: 701.24c "If an effect would cause a player to shuffle one or more specific objects into a library, that library is shuffled even if none of those objects are in the zone they’re expected to be in or an effect causes all of those objects to be moved to another zone or remain in their current zone." (with the Guile example) / Blitz Hellion's ruling (2009): "If it’s not on the battlefield by the time this ability resolves, nothing happens. Blitz Hellion stays wherever it is, and its owner doesn’t shuffle their library."
+- Question: Blitz Hellion ("At the beginning of the end step, this creature's owner shuffles it into their library.") has left the battlefield when its ability resolves. It stays where it is; is its owner's library shuffled?
+- Decision: Yes. The engine follows CR 701.24c, which is newer than the ruling and has an example of the same shape (Guile exiled in response to "shuffle it into its owner's library"): the object stays where it is and the library is shuffled. Shuffle triggers trigger.
+- Alternatives: Follow the 2009 ruling: no shuffle when the object isn't where the ability expects it.
+- Why: The current CR is the more recent and more general statement (the ruling dates from 2009), and the two readings differ only in whether a library is randomized and shuffle triggers fire. The test cites only the ruling's "Blitz Hellion stays wherever it is", which both readings share.
+- Affects: Blitz Hellion, Lightning Shrieker, Inferno Hellion and every "shuffle [this/it] into its owner's library" ability.
+- Code: `crates/mtg-engine/src/shuffle_rules.rs` (`shuffle_into`).
+- Tests: `tests/rulings/r_p180_tuck.rs` (`end_step_self_shuffles_leave_a_creature_that_left_where_it_is`).
