@@ -156,3 +156,40 @@ fn give_each_player_counters(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "prevention 5: give each player N rad counters", priority: 100, parse: give_each_player_counters } }
+
+/// "If [damage event], prevent that damage. [Instruction]." with the instruction as a
+/// separate sentence ("~'s controller and that player each draw half that many cards,
+/// rounded down.", Sokrates, Athenian Teacher's granted ability): the same as "prevent that
+/// damage and [instruction]" (CR 615.5). "~'s controller" in it is "you".
+fn prevent_then_sentence(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let (head, rest) = l.split_once(", prevent that damage. ")?;
+    if !head.starts_with("if ") || rest.contains(". ") {
+        return None;
+    }
+    let rest = rest
+        .strip_prefix("~'s controller and that player each ")
+        .map(|r| format!("you and that player each {r}"))
+        .unwrap_or_else(|| rest.to_string());
+    let joined = format!("{head}, prevent that damage and {rest}");
+    let mut out = crate::oracle::statics::parse_static(&joined, ctx)?;
+    for a in out.iter_mut() {
+        let a = std::sync::Arc::make_mut(a);
+        if !matches!(
+            &a.kind,
+            AbilityKind::Static(StaticAbility {
+                effect: StaticEffect::Replacement(ReplacementDef {
+                    action: ReplacementAction::PreventAndThen(..),
+                    ..
+                }),
+                ..
+            })
+        ) {
+            return None;
+        }
+        a.text = text.into();
+    }
+    Some(out)
+}
+
+inventory::submit! { StaticPattern { name: "prevention 5: if ..., prevent that damage. [instruction].", priority: 100, parse: prevent_then_sentence } }

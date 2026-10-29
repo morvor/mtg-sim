@@ -307,3 +307,47 @@ fn rift_elemental_removes_a_time_counter_from_a_suspended_card() {
     t.exile(P0, "Lotus Bloom");
     assert!(t.activate(P0, rift, 0, &[]).is_err());
 }
+
+#[test]
+fn cemetery_prowler_reduces_spells_by_card_types_shared_with_its_exiled_cards() {
+    cr!("601.2f", "205.2a", "607.2a");
+    ruling!(
+        "Cemetery Prowler",
+        "checks the number of card types among cards exiled with it"
+    );
+    assert_supported(&["Cemetery Prowler"]);
+    let mut t = TestGame::new(2);
+    let dead = t.graveyard(P1, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(dead)]);
+    t.enter(P0, "Cemetery Prowler");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    // A creature spell shares one card type: {1}{G} costs {G}.
+    t.battlefield(P0, "Forest");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(bears)));
+    // A sorcery shares none: {1}{G} with one Forest can't be cast.
+    t.battlefield(P0, "Forest");
+    let growth = t.hand(P0, "Rampant Growth");
+    t.set_step(P0, Step::PrecombatMain);
+    assert!(t.cast(P0, growth).try_go().is_err());
+}
+
+#[test]
+fn sokrates_prevents_combat_damage_and_both_players_draw_half_of_it() {
+    cr!("615.5", "107.1a");
+    assert_supported(&["Sokrates, Athenian Teacher"]);
+    let mut t = TestGame::new(2);
+    let sok = t.battlefield(P0, "Sokrates, Athenian Teacher");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.activate(P0, sok, 0, &[Entity::Object(giant)]).unwrap();
+    t.resolve();
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    t.attack(&[(giant, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 20);
+    // 3 damage: each draws one (half, rounded down).
+    assert_eq!(t.hand_size(P0), h0 + 1);
+    assert_eq!(t.hand_size(P1), h1 + 1);
+}

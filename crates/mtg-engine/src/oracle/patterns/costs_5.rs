@@ -332,3 +332,38 @@ fn remove_counter_from_permanent_or_suspended(p: &str) -> Option<CostPart> {
 }
 
 inventory::submit! { super::CostPattern { name: "costs 5: remove a counter from a permanent you control or suspended card you own", priority: 60, parse: remove_counter_from_permanent_or_suspended } }
+
+/// "Spells you cast cost {1} less to cast for each card type they share with cards exiled
+/// with ~." (Cemetery Prowler; `kw/shared_card_types.rs`).
+fn cost_less_per_shared_card_type(
+    l: &str,
+    text: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let head = end(l).strip_suffix(" for each card type they share with cards exiled with ~")?;
+    if !head.ends_with(" cost {1} less to cast") {
+        return None;
+    }
+    let mut out =
+        crate::oracle::statics::parse_static(&format!("{head} for each card exiled with ~"), ctx)?;
+    let [a] = out.as_mut_slice() else {
+        return None;
+    };
+    let a = std::sync::Arc::make_mut(a);
+    let AbilityKind::Static(s) = &mut a.kind else {
+        return None;
+    };
+    let StaticEffect::CostModifier(CostModifier {
+        change: CostChange::ReduceGeneric(v),
+        applies_to: CostTarget::Spells(_),
+        ..
+    }) = &mut s.effect
+    else {
+        return None;
+    };
+    *v = Value::Custom(crate::kw::shared_card_types::SHARED_WITH_LINKED_EXILE.into());
+    a.text = text.into();
+    Some(out)
+}
+
+inventory::submit! { super::StaticPattern { name: "costs 5: spells cost {1} less for each card type they share with cards exiled with ~", priority: 100, parse: cost_less_per_shared_card_type } }
