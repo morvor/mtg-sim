@@ -97,6 +97,13 @@ fn spell_delayed_line(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
 /// First variable used to capture values for a delayed trigger.
 const CAPTURE_BASE: Var = 200;
 
+/// Whether `sel` is the triggering ability's source as a delayed instruction captured it
+/// ("When ~ attacks or blocks, at end of combat, sacrifice it", Time Elemental): the
+/// delayed ability's controller sacrifices it only if they still control it (CR 701.21a).
+pub fn is_captured_source(sel: &Sel) -> bool {
+    matches!(sel, Sel::Var(v) if *v == CAPTURE_BASE)
+}
+
 /// The delay phrases: (text, trigger).
 fn delays() -> Vec<(&'static str, TriggerCond)> {
     let at = |step, whose| TriggerCond::BeginningOf { step, whose };

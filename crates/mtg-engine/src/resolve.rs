@@ -394,10 +394,10 @@ impl Game {
                 // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
                 // Also "sacrifice it" naming the source in a delayed ability that captured
                 // it ("At end of combat, sacrifice it", Time Elemental).
-                let objs = self.resolve_objects(what, ctx);
                 let own_source = matches!(what, Sel::This)
                     || crate::granted_by::is_bound_granter(what)
-                    || (!objs.is_empty() && objs.iter().all(|o| Some(*o) == ctx.source));
+                    || crate::oracle::patterns::triggers_delayed::is_captured_source(what);
+                let objs = self.resolve_objects(what, ctx);
                 let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
                 let what: Vec<(ObjectId, PlayerId)> = objs
