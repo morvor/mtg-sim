@@ -206,6 +206,9 @@ pub(crate) fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     // "Until your next turn, whenever ...": it lasts until its controller's next turn.
     let mut until_next_turn = false;
+    // "Until the end of your next turn, whenever ..." (Season of the Bold): through the
+    // rest of this turn and the controller's next turn (`kw::until_end_of_players_next_turn`).
+    let mut until_end_of_next_turn = false;
     // "This turn, whenever an attacking creature deals combat damage to you, ..." (Harsh
     // Justice): the same as "until end of turn, whenever".
     let (cond_s, eff) = if let Some(r) = l
@@ -217,6 +220,10 @@ pub(crate) fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     } else if let Some(r) = l.strip_prefix("until your next turn, whenever ") {
         let (c, e) = split_condition(r)?;
         until_next_turn = true;
+        (c.to_string(), e)
+    } else if let Some(r) = l.strip_prefix("until the end of your next turn, whenever ") {
+        let (c, e) = split_condition(r)?;
+        until_end_of_next_turn = true;
         (c.to_string(), e)
     } else {
         let r = l.strip_prefix("whenever ")?;
@@ -272,7 +279,17 @@ pub(crate) fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         stores.extend(s);
         body.effect = effect;
     }
-    let trigger = if until_next_turn {
+    let trigger = if until_end_of_next_turn {
+        use crate::kw::until_end_of_players_next_turn as u;
+        stores.push(Effect::StoreValue {
+            var: u::YOUR_TURNS_VAR,
+            value: Value::Custom(u::TURNS_TAKEN_BY_YOU.into()),
+        });
+        TriggerCond::ForAsLongAs(
+            Box::new(trigger),
+            Condition::Custom(format!("{}{}", u::UNTIL_END_OF_YOUR_NEXT_TURN, u::YOUR_TURNS_VAR).into()),
+        )
+    } else if until_next_turn {
         TriggerCond::UntilYourNextTurn(Box::new(trigger))
     } else {
         TriggerCond::ThisTurn(Box::new(trigger))
