@@ -665,6 +665,83 @@ fn with_outer_x(e: Effect, wrap: impl FnOnce(Effect) -> Effect) -> Option<Effect
     ]))
 }
 
+/// "Its controller sacrifices it at the beginning of the next end step" (Goblin Ski
+/// Patrol, Celestial Sword): the instruction waits, and the player who performs it is
+/// that object's controller as the delayed ability resolves, not as it's created (the
+/// Goblin Ski Patrol ruling: a new controller sacrifices it). `e` is the instruction as
+/// "you" perform it: a delayed instruction whose captured objects `who` names
+/// (`[Store*, DelayedTrigger | AtNext]`). Returns it with the player moved inside the
+/// delayed instruction and naming the captured objects, or `None` when `who` isn't an
+/// object's controller the delayed ability can find.
+pub(crate) fn delay_subject_inside(who: &PlayerRef, e: &Effect) -> Option<Effect> {
+    use serde_json::Value as J;
+    let (stores, delayed) = match e {
+        Effect::Seq(v) if !v.is_empty() => (&v[..v.len() - 1], &v[v.len() - 1]),
+        e => (&[][..], e),
+    };
+    if !stores.iter().all(|x| matches!(x, Effect::Store { .. }))
+        || super::r107_numbers::uses_x(e)
+    {
+        return None;
+    }
+    // `who`, naming the stored variables instead of the objects stored in them.
+    fn walk(v: J, map: &[(J, J)]) -> J {
+        if let Some((_, to)) = map.iter().find(|(from, _)| *from == v) {
+            return to.clone();
+        }
+        match v {
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v, map))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, map)).collect()),
+            other => other,
+        }
+    }
+    let map: Vec<(J, J)> = stores
+        .iter()
+        .filter_map(|x| match x {
+            Effect::Store { var, sel } => Some((
+                serde_json::to_value(sel).ok()?,
+                serde_json::to_value(Sel::Var(*var)).ok()?,
+            )),
+            _ => None,
+        })
+        .collect();
+    let after = walk(serde_json::to_value(who).ok()?, &map);
+    // Only a player found from objects the delayed ability still knows (captured, or
+    // "that creature" the instruction put onto the battlefield, Cauldron Dance); nothing
+    // else of the creating ability's context may remain (it isn't there as the delayed
+    // ability resolves).
+    let text = after.to_string();
+    if !text.contains("ControllerOf")
+        || ["\"This\"", "Target", "Trigger"].iter().any(|p| text.contains(p))
+    {
+        return None;
+    }
+    let who: PlayerRef = serde_json::from_value(after).ok()?;
+    let as_player = |inner: &Effect| Effect::AsPlayer {
+        who: who.clone(),
+        effect: Box::new(inner.clone()),
+    };
+    let moved = match delayed {
+        Effect::DelayedTrigger {
+            trigger,
+            body,
+            once,
+        } if body.modal.is_none() && body.targets.is_empty() => Effect::DelayedTrigger {
+            trigger: trigger.clone(),
+            body: Box::new(Body::effect(as_player(&body.effect))),
+            once: *once,
+        },
+        Effect::AtNext { step, effect } => Effect::AtNext {
+            step: *step,
+            effect: Box::new(as_player(effect)),
+        },
+        _ => return None,
+    };
+    let mut v = stores.to_vec();
+    v.push(moved);
+    Some(Effect::seq(v))
+}
+
 /// The players' choices of "each [player] may [instruction]", in APNAP order (CR 101.4),
 /// stored in [`ACCEPTED`].
 fn opt_in(who: PlayerRef, guard: &dyn Fn(Effect) -> Effect) -> Vec<Effect> {
@@ -766,10 +843,13 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                 });
             }
             let (_, e, hoisted) = predicate(pred, true, b)?;
-            let e = with_outer_x(e, |e| Effect::AsPlayer {
-                who,
-                effect: Box::new(e),
-            })?;
+            let e = match delay_subject_inside(&who, &e) {
+                Some(e) => e,
+                None => with_outer_x(e, |e| Effect::AsPlayer {
+                    who,
+                    effect: Box::new(e),
+                })?,
+            };
             Some(with_hoisted(e, hoisted))
         }
         Subject::YouAnd(other) => {
