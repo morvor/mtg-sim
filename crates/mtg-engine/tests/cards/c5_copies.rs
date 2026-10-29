@@ -194,3 +194,69 @@ fn ludevic_transforms_into_a_copy_with_a_counter_per_exiled_creature_card() {
     assert_eq!(t.counters(ludevic, "+1/+1"), 2);
     assert_eq!(t.pt(ludevic), (6, 6));
 }
+
+#[test]
+fn spellweaver_helix_makes_one_copy_when_both_cards_have_the_name() {
+    cr!("707.12", "607.2a");
+    ruling!(
+        "Spellweaver Helix",
+        "If the two imprinted sorcery cards have the same name and a card with that name is cast, only one copy is created"
+    );
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let a = t.graveyard(P1, "Lava Spike");
+    let b = t.graveyard(P1, "Lava Spike");
+    t.answer_targets(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.answer_yes(P0, true);
+    t.enter(P0, "Spellweaver Helix");
+    t.resolve_all();
+    t.lands(P0, "Mountain", 1);
+    let mine = t.hand(P0, "Lava Spike");
+    for _ in 0..4 {
+        t.answer_yes(P0, true);
+    }
+    for _ in 0..3 {
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+    }
+    t.cast(P0, mine).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    // The spell and one copy.
+    assert_eq!(t.life(P1), 14);
+}
+
+#[test]
+fn spellweaver_helix_does_nothing_with_one_imprinted_card_left() {
+    cr!("607.2a");
+    ruling!(
+        "Spellweaver Helix",
+        "If there’s only one imprinted sorcery card, nothing happens"
+    );
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let div = t.graveyard(P1, "Divination");
+    let spike = t.graveyard(P1, "Lava Spike");
+    t.answer_targets(P0, &[Entity::Object(div), Entity::Object(spike)]);
+    t.answer_yes(P0, true);
+    t.enter(P0, "Spellweaver Helix");
+    t.resolve_all();
+    // The Lava Spike leaves exile: only the Divination is still exiled with it.
+    let spike = t.g.current(spike);
+    t.g.move_object(spike, mtg_engine::object::Zone::Graveyard(P1), events::MoveCause::Effect, None);
+    t.settle();
+    t.lands(P0, "Island", 3);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let mine = t.hand(P0, "Divination");
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+    }
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    let hand = t.hand_size(P0);
+    t.cast(P0, mine).go();
+    t.resolve_all();
+    // Divination resolved (two cards, one of them replacing the Divination itself); no
+    // copy of anything, and nothing of the Divination in exile was copied.
+    assert_eq!(t.hand_size(P0), hand - 1 + 2);
+    assert_eq!(t.life(P1), 20);
+}

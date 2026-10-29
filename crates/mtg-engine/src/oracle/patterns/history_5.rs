@@ -13,8 +13,7 @@
 //! * "choose an opponent at random that ~ didn't attack during your last combat" and "If
 //!   you can't choose an opponent this way, [effect]" (Territorial Hellkite): the
 //!   opponents ~ (this object, CR 400.7) didn't attack (the player, not a planeswalker
-//!   they control, CR 508.1b) during the combats of your last turn (see the interpretation
-//!   `your-last-combat`).
+//!   they control, CR 508.1b) during your last combat (`HistoryWindow::PlayersLastCombat`).
 
 use super::{ConditionPattern, EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -142,7 +141,7 @@ fn choose_opponent_not_attacked(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let attacked = Condition::Compare(
         Value::EventsDuring(
-            HistoryWindow::PlayersLastTurn(PlayerRef::You),
+            HistoryWindow::PlayersLastCombat(PlayerRef::You),
             Box::new(TriggerCond::AttacksRecipient {
                 attacker: Filter::Source,
                 recipient: DamageRecipient::Player(PlayerRel::Iterated),

@@ -92,7 +92,7 @@ impl Renderer<'_> {
                     if matches!(v.as_slice(), [PlayerFilter::Opponent, PlayerFilter::Not(n)]
                     if matches!(n.as_ref(), PlayerFilter::History(c)
                         if matches!(c.as_ref(), Condition::Compare(Value::EventsDuring(
-                            HistoryWindow::PlayersLastTurn(PlayerRef::You),
+                            HistoryWindow::PlayersLastCombat(PlayerRef::You),
                             t,
                             Tally::Events,
                         ), Cmp::Ge, _) if matches!(t.as_ref(), TriggerCond::AttacksRecipient {

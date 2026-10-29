@@ -91,7 +91,6 @@ fn hellkite_combat(t: &mut TestGame, hk: ObjectId) -> (Option<Entity>, bool) {
 #[test]
 fn territorial_hellkite_attacks_an_opponent_it_didnt_attack_last_combat() {
     cr!("508.1b", "508.1d");
-    interp!("your-last-combat");
     ruling!(
         "Territorial Hellkite",
         "then any opponent can be chosen at random"
@@ -115,7 +114,6 @@ fn territorial_hellkite_attacks_an_opponent_it_didnt_attack_last_combat() {
 #[test]
 fn territorial_hellkite_taps_if_no_opponent_can_be_chosen() {
     cr!("508.1b", "508.1d");
-    interp!("your-last-combat");
     supported("Territorial Hellkite");
     let mut t = TestGame::new(2);
     let hk = t.battlefield(P0, "Territorial Hellkite");
@@ -127,4 +125,26 @@ fn territorial_hellkite_taps_if_no_opponent_can_be_chosen() {
     // It didn't attack during the last combat: P1 can be chosen again.
     let (at, tapped) = hellkite_combat(&mut t, hk);
     assert_eq!((at, tapped), (Some(Entity::Player(P1)), false));
+}
+
+#[test]
+fn territorial_hellkite_last_combat_is_an_earlier_combat_of_this_turn() {
+    cr!("500.8", "508.1d");
+    supported("Territorial Hellkite");
+    let mut t = TestGame::new(2);
+    let hk = t.battlefield(P0, "Territorial Hellkite");
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!((at, tapped), (Some(Entity::Player(P1)), false));
+    let turn = t.g.turn.number;
+    // An additional combat phase this turn: its last combat is the one just fought, in
+    // which it attacked the only opponent.
+    t.advance_to(P0, Step::PostcombatMain);
+    t.lands(P0, "Mountain", 4);
+    let ra = t.hand(P0, "Relentless Assault");
+    t.cast(P0, ra).go();
+    t.resolve_all();
+    assert!(!t.obj_now(hk).tapped);
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!(t.g.turn.number, turn);
+    assert_eq!((at, tapped), (None, true));
 }

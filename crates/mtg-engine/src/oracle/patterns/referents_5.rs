@@ -332,7 +332,12 @@ fn cast_target_groups(l: &str, b: &mut Builder) -> Option<Effect> {
                 other => vec![other.clone()],
             };
             v.into_iter()
-                .filter(|x| matches!(x, Filter::InZone(_) | Filter::ManaValue(..)))
+                .filter(|x| {
+                    matches!(
+                        x,
+                        Filter::InZone(_) | Filter::OwnedBy(_) | Filter::ManaValue(..)
+                    )
+                })
                 .collect()
         };
         let Some(TargetKind::Object(last)) = b.targets.last().map(|t| t.what.clone()) else {

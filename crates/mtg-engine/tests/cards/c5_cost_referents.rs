@@ -15,7 +15,7 @@ fn supported(name: &str) {
 
 #[test]
 fn synthesis_pod_reveals_a_card_with_one_more_than_the_exiled_spells_mana_value() {
-    cr!("400.7j", "608.2h");
+    cr!("608.2h");
     ruling!(
         "Synthesis Pod",
         "you must exile a spell you control on the stack"
@@ -69,7 +69,7 @@ fn shuriken(holder: &str) -> (TestGame, ObjectId) {
 
 #[test]
 fn shuriken_goes_to_the_damaged_creatures_controller_unless_unattached_from_a_ninja() {
-    cr!("400.7j", "608.2h");
+    cr!("608.2h");
     supported("Shuriken");
     let (t, s) = shuriken("Grizzly Bears");
     assert_eq!(t.obj_now(s).controller, P1);
@@ -79,7 +79,7 @@ fn shuriken_goes_to_the_damaged_creatures_controller_unless_unattached_from_a_ni
 
 #[test]
 fn captain_americas_throw_reads_the_unattached_equipments_mana_value() {
-    cr!("400.7j");
+    cr!("608.2h");
     // "{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana
     // value to any target." (the single-target form of Captain America's ability): the
     // Equipment's mana value, not the creature's.

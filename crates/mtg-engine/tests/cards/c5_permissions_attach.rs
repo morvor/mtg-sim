@@ -83,3 +83,40 @@ fn finale_of_promise_casts_both_and_exiles_them_and_copies_for_ten() {
     assert_eq!(t.life(P1), 20 - 9);
     assert_eq!(t.hand_size(P0), 6);
 }
+
+#[test]
+fn finale_of_promise_both_groups_are_from_your_graveyard_with_mana_value_x_or_less() {
+    cr!("601.2c", "115.1a");
+    use mtg_engine::decision::Answer;
+    // (Your Lightning Bolt, with mana value 1, is a legal target: the check isn't vacuous.)
+    for (who, instant, legal) in [
+        (P0, "Lightning Bolt", true),
+        (P1, "Lightning Bolt", false),
+        (P0, "Fact or Fiction", false),
+    ] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        let i = t.graveyard(who, instant);
+        let div = t.graveyard(P0, "Divination");
+        t.lands(P0, "Mountain", 5);
+        let f = t.hand(P0, "Finale of Promise");
+        t.answer(P0, DecisionKind::X, Answer::Number(3));
+        let r = t
+            .cast(P0, f)
+            .target(Entity::Object(i))
+            .target(Entity::Object(div))
+            .try_go();
+        // An illegal answer isn't taken: the instant isn't among the spell's targets.
+        let targeted = r.ok().is_some_and(|spell| {
+            t.g.obj(spell).stack.as_ref().is_some_and(|s| {
+                s.chosen.iter().any(|c| {
+                    c.targets
+                        .iter()
+                        .flatten()
+                        .any(|e| *e == Entity::Object(i))
+                })
+            })
+        });
+        assert_eq!(targeted, legal, "{instant} in {who:?}'s graveyard");
+    }
+}

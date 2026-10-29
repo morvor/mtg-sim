@@ -945,6 +945,7 @@ fn window_suffix(w: &Option<HistoryWindow>) -> &'static str {
         Some(HistoryWindow::PlayersLastTurn(_)) => " during your last turn",
         Some(HistoryWindow::SinceLastTurn(_)) => " since your last turn",
         Some(HistoryWindow::SinceLastUpkeep(_)) => " since your last upkeep",
+        Some(HistoryWindow::PlayersLastCombat(_)) => " during your last combat",
         Some(HistoryWindow::ThisGame) => " this game",
     }
 }
@@ -960,6 +961,7 @@ fn split_window(c: &str) -> Option<(String, Option<HistoryWindow>)> {
         Some(HistoryWindow::PlayersLastTurn(you())),
         Some(HistoryWindow::SinceLastTurn(you())),
         Some(HistoryWindow::SinceLastUpkeep(you())),
+        Some(HistoryWindow::PlayersLastCombat(you())),
         Some(HistoryWindow::LastTurn),
         Some(HistoryWindow::ThisGame),
     ] {

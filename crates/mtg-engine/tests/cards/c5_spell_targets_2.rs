@@ -6,7 +6,7 @@ use mtg_engine::*;
 
 #[test]
 fn goblin_artisans_cant_target_a_spell_another_artisans_targets() {
-    cr!("115.9b", "113.7a");
+    cr!("115.9b");
     let def = card("Goblin Artisans");
     assert!(def.unsupported_text().is_empty());
     let mut t = TestGame::new(2);
