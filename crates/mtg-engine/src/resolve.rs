@@ -392,11 +392,10 @@ impl Game {
                 // "Sacrifice ~": the ability's controller sacrifices its source, which they
                 // can't do if another player controls it now (CR 701.21a). The same for
                 // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
-                // Also "sacrifice it" naming the source in a delayed ability that captured
-                // it ("At end of combat, sacrifice it", Time Elemental).
-                let own_source = matches!(what, Sel::This)
-                    || crate::granted_by::is_bound_granter(what)
-                    || crate::oracle::patterns::triggers_delayed::is_captured_source(what);
+                // A delayed ability's "sacrifice ~" checks it explicitly, as its source is
+                // a captured variable there (`triggers_delayed::guard_own_sacrifices`).
+                let own_source =
+                    matches!(what, Sel::This) || crate::granted_by::is_bound_granter(what);
                 let objs = self.resolve_objects(what, ctx);
                 let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
                 // Sacrificed at the same time (CR 101.4).
