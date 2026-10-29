@@ -118,7 +118,9 @@ impl Renderer<'_> {
                 let (f, yours) = without(f, &Filter::ControlledBy(PlayerRel::You));
                 let n = self.many(&f, "permanents");
                 if yours {
-                    format!("the number of {n} that left the battlefield under your control this turn")
+                    format!(
+                        "the number of {n} that left the battlefield under your control this turn"
+                    )
                 } else {
                     format!("the number of {n} that left the battlefield this turn")
                 }

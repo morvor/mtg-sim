@@ -2119,7 +2119,16 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
                 },
                 // "put a +1/+1 counter on each of those creatures": the sources.
                 Sel::TriggerObjects,
-                PlayerRef::TriggerPlayer,
+                // "Whenever one or more creatures an opponent controls deal combat damage to
+                // you, that opponent gets a poison counter": the creatures' controller, not
+                // the player dealt damage.
+                if matches!(to, DamageRecipient::Player(PlayerRel::You))
+                    && controlled_by_opponent(&subj.filter)
+                {
+                    PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects))
+                } else {
+                    PlayerRef::TriggerPlayer
+                },
             ),
             rest,
         ));
@@ -2234,5 +2243,13 @@ mod tests {
                 ..
             }
         ));
+    }
+}
+
+/// Whether a subject's filter says its objects are controlled by an opponent.
+fn controlled_by_opponent(f: &Filter) -> bool {
+    match f {
+        Filter::And(v) => v.iter().any(controlled_by_opponent),
+        f => matches!(f, Filter::ControlledBy(PlayerRel::Opponent)),
     }
 }

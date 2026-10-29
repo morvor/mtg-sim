@@ -1487,8 +1487,13 @@ impl Renderer<'_> {
             }
             // "~ blocked or was blocked by a blue creature this turn".
             TriggerCond::AnyOf(v) if v.len() == 2 && matches!(q, Quant::Some | Quant::No) => {
-                let [TriggerCond::BlocksCreature { blocker, attacker: a1 }, TriggerCond::BlockedByCreature { attacker, blocker: b2 }] =
-                    v.as_slice()
+                let [TriggerCond::BlocksCreature {
+                    blocker,
+                    attacker: a1,
+                }, TriggerCond::BlockedByCreature {
+                    attacker,
+                    blocker: b2,
+                }] = v.as_slice()
                 else {
                     return None;
                 };

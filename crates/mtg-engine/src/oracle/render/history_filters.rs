@@ -51,7 +51,12 @@ impl Renderer<'_> {
             return self.gap("history player filter");
         };
         // "each player ~ attacked this turn".
-        if let Condition::Compare(Value::EventsThisTurn(t, Tally::Events), Cmp::Ge, Value::Const(1)) = c {
+        if let Condition::Compare(
+            Value::EventsThisTurn(t, Tally::Events),
+            Cmp::Ge,
+            Value::Const(1),
+        ) = c
+        {
             if let TriggerCond::AttacksRecipient {
                 attacker: Filter::Source,
                 recipient: DamageRecipient::Player(PlayerRel::Iterated),
