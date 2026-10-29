@@ -177,3 +177,34 @@ fn convergence_of_dominion_reduces_graveyard_abilities_with_your_commander() {
     let cohort = t.graveyard(P0, "Scrapwork Cohort");
     assert!(t.activate(P0, cohort, 0, &[]).is_err());
 }
+
+#[test]
+fn vault_112_exiles_as_many_cards_as_the_energy_paid() {
+    cr!("107.14", "714.2b");
+    assert_supported(&["Vault 112: Sadistic Simulation"]);
+    for paid in [2i64, 0] {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, mtg_engine::turn::Step::PrecombatMain);
+        t.g.add_counters(Entity::Player(P0), "energy", 3, None);
+        let saga = t.battlefield(P0, "Vault 112: Sadistic Simulation");
+        t.g.add_counters(Entity::Object(saga), "lore", 2, None);
+        t.resolve_all();
+        let energy = t.g.player(P0).counter("energy");
+        let lib = t.library_size(P0);
+        let exiled = |t: &TestGame| {
+            t.g.objects
+                .iter()
+                .filter(|o| o.zone == Zone::Exile && o.owner == P0)
+                .count()
+        };
+        let before = exiled(&t);
+        t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(paid));
+        t.g.add_counters(Entity::Object(t.g.current(saga)), "lore", 1, None);
+        t.g.flush_events();
+        t.settle();
+        t.resolve_all();
+        assert_eq!(t.g.player(P0).counter("energy"), energy - paid as u32);
+        assert_eq!(t.library_size(P0), lib - paid as usize);
+        assert_eq!(exiled(&t) - before, paid as usize);
+    }
+}

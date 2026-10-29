@@ -189,3 +189,54 @@ fn unless_you_pay_its_mana_cost(
 }
 
 inventory::submit! { super::EffectPattern { name: "costs 5: [effect] unless you pay its mana cost reduced by {N}", priority: 100, parse: unless_you_pay_its_mana_cost } }
+
+/// The energy paid by "Pay any amount of {E}" / "you may pay any amount of {E}" (CR
+/// 107.14): that instruction defines X as the amount paid, so "if you paid one or more
+/// {E} this way" is "if X is 1 or more", "the amount of {E} paid this way" is X, and "if
+/// seven or more {E} was paid this way" is "if X is 7 or more" (Vault 112: Sadistic
+/// Simulation, Wheel of Potential). Only on a card whose text pays any amount of energy.
+fn energy_paid_this_way(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("pay any amount of {e}")
+        || !block.contains("{E} this way")
+            && !block.contains("{E} paid this way")
+            && !block.contains("{E} was paid this way")
+    {
+        return None;
+    }
+    let mut t = block.to_string();
+    for (from, to) in [
+        (
+            "If you paid one or more {E} this way, ",
+            "If X is 1 or more, ",
+        ),
+        ("the amount of {E} paid this way", "X"),
+        (
+            "If seven or more {E} was paid this way, ",
+            "If X is 7 or more, ",
+        ),
+        (
+            "exile that many cards from the top.",
+            "exile the top X cards of your library.",
+        ),
+    ] {
+        t = t.replace(from, to);
+    }
+    if t == block || t.contains("{E} this way") || t.contains("paid this way") {
+        return None;
+    }
+    let out = crate::oracle::parse_ability(&t, ctx)?;
+    if out
+        .iter()
+        .any(|a| matches!(a.kind, AbilityKind::Unsupported(_)))
+    {
+        return None;
+    }
+    Some(
+        out.into_iter()
+            .map(|a| AbilityDef::with_link(a.kind.clone(), block.trim(), a.link))
+            .collect(),
+    )
+}
+
+inventory::submit! { AbilityPattern { name: "costs 5: the {E} paid this way (pay any amount of energy)", priority: 80, parse: energy_paid_this_way } }
