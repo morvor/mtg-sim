@@ -88,7 +88,10 @@ fn the_granted_ability_can_pay_for_casting_the_card_from_exile() {
     // (for {R}). Shattered Seraph {4}{W}{U}{B}: Plains, Swamp, four Wastes and the
     // granted Wastes (for {U}).
     for (name, lands) in [
-        ("Rakish Revelers", &["Forest", "Plains", "Wastes", "Wastes"][..]),
+        (
+            "Rakish Revelers",
+            &["Forest", "Plains", "Wastes", "Wastes"][..],
+        ),
         (
             "Shattered Seraph",
             &["Plains", "Swamp", "Wastes", "Wastes", "Wastes", "Wastes"][..],

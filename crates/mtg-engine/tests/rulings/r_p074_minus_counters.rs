@@ -213,7 +213,9 @@ fn splendid_agony_lost_counter_and_dust_partial_targets() {
     let gd = t.graveyard(P0, "Grind // Dust");
     t.lands(P0, "Plains", 4);
     t.cast(P0, gd)
-        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Aftermath))
+        .method(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Aftermath,
+        ))
         .targets(&[obj(wurm), obj(giant), obj(bears)])
         .go();
     t.g.remove_counters(obj(wurm), MM, 1);

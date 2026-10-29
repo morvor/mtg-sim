@@ -83,7 +83,11 @@ fn redundant_menace_still_allows_two_blockers() {
             .map(|_| t.battlefield(P1, "Llanowar Elves"))
             .collect();
         assert_eq!(menace_count(&t, bears), 2);
-        assert_eq!(blocked_by(&mut t, bears, &bs), blocked, "{blockers} blockers");
+        assert_eq!(
+            blocked_by(&mut t, bears, &bs),
+            blocked,
+            "{blockers} blockers"
+        );
     }
     // Caterwauling Boggart: a Goblin Elemental (a changeling) has menace once.
     let mut t = TestGame::new(2);
@@ -108,7 +112,9 @@ fn menace_and_cant_be_blocked_by_more_than_one_means_unblockable() {
         t.battlefield(P0, "Goblin War Drums");
         t.battlefield(P0, "Familiar Ground");
         let bears = t.battlefield(P0, "Grizzly Bears");
-        let bs: Vec<_> = (0..n).map(|_| t.battlefield(P1, "Llanowar Elves")).collect();
+        let bs: Vec<_> = (0..n)
+            .map(|_| t.battlefield(P1, "Llanowar Elves"))
+            .collect();
         assert!(!blocked_by(&mut t, bears, &bs), "{n} blockers");
         assert_eq!(t.life(P1), 18);
     }
@@ -157,8 +163,7 @@ fn attacks_on_your_opponents_by_other_players_trigger() {
     supported("Frenzied Gorespawn");
     supported("Frontier Warmonger");
     // (card, whether an attack on P2's planeswalker triggers it)
-    for (card, walker_triggers) in [("Frenzied Gorespawn", false), ("Frontier Warmonger", true)]
-    {
+    for (card, walker_triggers) in [("Frenzied Gorespawn", false), ("Frontier Warmonger", true)] {
         let mut t = TestGame::new(3);
         t.battlefield(P0, card);
         let a = t.battlefield(P1, "Grizzly Bears");
@@ -380,7 +385,9 @@ fn melee_counts_opponents_attacked_not_creatures() {
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Adriana, Captain of the Guard");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    let others: Vec<_> = (0..3).map(|_| t.battlefield(P0, "Llanowar Elves")).collect();
+    let others: Vec<_> = (0..3)
+        .map(|_| t.battlefield(P0, "Llanowar Elves"))
+        .collect();
     let mut attacks = vec![(bears, pl(P1))];
     attacks.extend(others.iter().map(|o| (*o, pl(P2))));
     attack_with(&mut t, &attacks);

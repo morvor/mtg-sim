@@ -104,6 +104,24 @@ fn an_artifact_enchantment_is_both_the_artifact_and_the_enchantment() {
     t.resolve_all();
     assert!(t.in_exile("Llanowar Elves"));
     assert!(t.in_hand(P0, "Grizzly Bears"));
+    // Negative control: with only an artifact (Ornithopter), both modes can't be chosen.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ornithopter");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let dead = t.graveyard(P0, "Grizzly Bears");
+    give_mana_for(&mut t, P0, "Soul Transfer");
+    let st = t.hand(P0, "Soul Transfer");
+    // (The invalid answer falls back to one mode.)
+    let _ = t
+        .cast(P0, st)
+        .modes(&[0, 1])
+        .targets(&[obj(elves)])
+        .targets(&[obj(dead)])
+        .try_go();
+    t.resolve_all();
+    let exiled = t.in_exile("Llanowar Elves");
+    let returned = t.in_hand(P0, "Grizzly Bears");
+    assert!(!(exiled && returned), "both modes without an enchantment");
 }
 
 #[test]
@@ -127,7 +145,10 @@ fn when_we_were_young_checks_on_resolution_and_affects_only_its_targets() {
     t.battlefield(P0, "Glorious Anthem");
     t.resolve_all();
     assert!(has_kw(&t, bears, LIFELINK));
-    assert!(!has_kw(&t, thopter, LIFELINK), "the artifact isn't one of those creatures");
+    assert!(
+        !has_kw(&t, thopter, LIFELINK),
+        "the artifact isn't one of those creatures"
+    );
     assert_eq!(t.pt(bears), (5, 5));
 }
 
@@ -156,7 +177,9 @@ fn talus_paladin_choices_are_made_separately() {
     }
 }
 
-fn pick_menace_or_lifelink(want: &'static str) -> fn(&mtg_engine::game::Game, &Decision) -> Option<Answer> {
+fn pick_menace_or_lifelink(
+    want: &'static str,
+) -> fn(&mtg_engine::game::Game, &Decision) -> Option<Answer> {
     fn lifelink(_: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
         pick(d, "lifelink")
     }
@@ -297,7 +320,10 @@ fn radiant_scrollwielder_card_still_needs_its_mana_cost_and_timing() {
     let card = t.g.current(card);
     assert_eq!(t.zone(card), Zone::Exile);
     add_mana(&mut t, P0, ManaType::R, 1);
-    assert!(!can_cast(&mut t, P0, card, CastMethod::Normal), "a sorcery in upkeep");
+    assert!(
+        !can_cast(&mut t, P0, card, CastMethod::Normal),
+        "a sorcery in upkeep"
+    );
     t.g.players[P0.idx()].mana_pool.empty();
     t.advance_to(P0, Step::PrecombatMain);
     assert!(!can_cast(&mut t, P0, card, CastMethod::Normal), "no mana");
@@ -324,7 +350,10 @@ fn the_wind_crystal_reduces_only_generic_mana() {
     assert!(!can_cast(&mut t, P0, stp, CastMethod::Normal));
     let raise = t.hand(P0, "Raise the Alarm");
     t.lands(P0, "Plains", 1);
-    assert!(can_cast(&mut t, P0, raise, CastMethod::Normal), "{{1}}{{W}} for {{W}}");
+    assert!(
+        can_cast(&mut t, P0, raise, CastMethod::Normal),
+        "{{1}}{{W}} for {{W}}"
+    );
     t.cast(P0, raise).go();
     t.resolve_all();
     assert_eq!(tokens_with_subtype(&t, P0, "Soldier").len(), 2);
@@ -397,10 +426,17 @@ fn nethroi_returns_cards_with_total_power_ten_or_less() {
     assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
     assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
     assert!(!t.in_graveyard(P0, "Grizzly Bears"));
-    assert!(t.in_graveyard(P0, "Craw Wurm"), "the other Wurm wasn't chosen");
+    assert!(
+        t.in_graveyard(P0, "Craw Wurm"),
+        "the other Wurm wasn't chosen"
+    );
     // Clone was a legal target (it entered, copying nothing, and died: CR 704.5f).
     assert!(t.in_graveyard(P0, "Clone"));
-    assert_ne!(t.g.current(clone), clone, "it left the graveyard and came back");
+    assert_ne!(
+        t.g.current(clone),
+        clone,
+        "it left the graveyard and came back"
+    );
 }
 
 #[test]

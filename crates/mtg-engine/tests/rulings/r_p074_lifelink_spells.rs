@@ -110,7 +110,11 @@ fn lifelink_spell_that_makes_creatures_fight_gains_no_life() {
         cast_resolve(&mut t, "Prey Upon", &[obj(bears), obj(elves)]);
         assert!(t.in_graveyard(P1, "Llanowar Elves"), "{source}");
         assert_eq!(t.obj_now(bears).damage, 1, "{source}");
-        assert_eq!(t.life(P0), 20, "{source}: the fight's damage isn't the spell's");
+        assert_eq!(
+            t.life(P0),
+            20,
+            "{source}: the fight's damage isn't the spell's"
+        );
         // Positive control: a spell that deals the damage itself gains life.
         t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
         cast_resolve(&mut t, "Lightning Bolt", &[pl(P1)]);
@@ -140,9 +144,15 @@ fn judith_trigger_resolves_first_even_if_the_spell_is_countered() {
     t.cast(P1, cs).target(obj(spell)).go();
     t.resolve();
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
-    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Imp").len(), 0);
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Imp").len(),
+        0
+    );
     t.resolve_all();
-    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Imp").len(), 1);
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Imp").len(),
+        1
+    );
     assert_eq!(t.life(P1), 20);
 }
 
@@ -320,7 +330,7 @@ fn vizkopa_guildmage_in_two_headed_giant_drains_twice() {
 
 #[test]
 fn nectar_faerie_lifelink_on_an_opponents_creature_gains_them_life() {
-    cr!("702.15b", "702.15e");
+    cr!("702.15b");
     ruling!(
         "Nectar Faerie",
         "If you grant lifelink to a creature controlled by another player, that other player will gain life when the creature deals damage."

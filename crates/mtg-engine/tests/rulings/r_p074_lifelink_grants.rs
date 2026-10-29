@@ -235,7 +235,6 @@ fn creatures_you_control_are_fixed_as_the_effect_resolves() {
     }
     let later = create_token(&mut t, P0, "Gremlin");
     assert!(!has_kw(&t, later, LIFELINK) && !has_kw(&t, later, KeywordKind::Menace));
-
 }
 
 #[test]

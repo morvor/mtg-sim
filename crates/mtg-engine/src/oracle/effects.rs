@@ -663,7 +663,7 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         // choice covering both. (Permissions joined this way, "..., and you may spend
         // mana as though ...", are read as permissions elsewhere.)
         if let Some((first, second)) = r.split_once(", and you may ") {
-            const PERMISSIONS: [&str; 4] = ["spend mana", "play ", "cast ", "look at "];
+            const PERMISSIONS: [&str; 4] = ["spend ", "play ", "cast ", "look at "];
             if !PERMISSIONS
                 .iter()
                 .any(|p| second.starts_with(p) || first.starts_with(p))
