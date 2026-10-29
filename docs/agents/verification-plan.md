@@ -99,6 +99,19 @@ Queues (pace about 9 concurrent subagents; card workers at most 2 items, the oth
 - **rulings-1:** P141, P142, P111. **rulings-2:** P193, P046.
 - Next in the rulings pool: P063 P147 P186 P089 P006 P052 P098 P151 P053 P031 ...
 
+### Round 5 (Oct 29)
+
+`cards5-plan` landed (ccfd9945): docs/agents/card-support-plan-5.md, 4 items, 112 texts, no decisions needed. cards4-triggers-durations and cards4-manual-defs have landed; cards4-paper-effects and cards4-costs-mana-replacements are still in flight with cards-2.
+
+Queues from the 06:42 check-in:
+- **cards-1:** `cards5-choices-players` and `cards5-referents-statics`, together because they share the Builder's referent tracking and the optional as-enters choice.
+- **structure:** re-place cards4-manual-defs' leftover texts (an update section in plan 5), then `cards5-game-rules-dice`. It also re-places the leftovers of cards-2's round-4 items when they land, and re-probes Mr. House after costs-mana.
+- **cards-2:** its two round-4 items, then `cards5-manual-defs` (Celebr-8000, Curse of Leeches and the hooks first).
+- **compile:** `roundtrip-gaps-5`.
+- **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
+- Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
+- When round 4 has fully landed: a verified regeneration (CLAUDE.md, incremental or full sweep), when the user wants the verified count raised.
+
 ## The judge audit (E)
 
 **Result (Oct 14).** The judge agreed with all 225 questions from 58 tests. See reports/judge-audit-1.md: method, limits, and two calls for the interpretation register.

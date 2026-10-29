@@ -139,7 +139,8 @@ pub fn events_during(
                 Tally::Events => n += 1,
                 Tally::Amount => n += info.amount.max(0) as i64,
                 Tally::Players => {
-                    if let Some(p) = info.player.filter(|p| g.players_in_game().contains(p)) {
+                    // Players who have since left the game included (CR 800.4i).
+                    if let Some(p) = info.player {
                         players.insert(p);
                     }
                 }

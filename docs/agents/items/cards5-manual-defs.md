@@ -6,7 +6,7 @@ GOAL: Write hand-written definitions (src/cards/, `ManualAbility`, a test per ca
 
 READ FIRST:
 - crates/mtg-engine/src/cards/mod.rs (policy), an existing manual card for the shape (`ls crates/mtg-engine/src/cards/`), custom.rs (named custom behaviours), keyword_impls.rs (registry-wide hooks).
-- items/cards4-manual-defs.md (in flight while this was planned: reuse the hooks it adds; merge origin first) and items/cards3-manual-defs.md (where River Song and Deification were first planned).
+- items/cards4-manual-defs.md (in flight while this was planned, landed since at e5df74af with all 17 of its texts: reuse the hooks it added) and items/cards3-manual-defs.md (where River Song and Deification were first planned).
 - Engine: draw_rules.rs and library.rs (CR 121), replacement.rs and actions.rs (damage to planeswalkers, CR 120.3c, 306.8), dice.rs (CR 706), dfc.rs and attach.rs (transforming, CR 712; attaching, CR 303.4, 701.3).
 
 PHRASE FAMILIES (texts in family; the construct and why it is a one-off; the engine need):
