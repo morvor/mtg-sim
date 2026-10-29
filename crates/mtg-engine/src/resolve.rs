@@ -3734,6 +3734,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::MustBeBlockedBy { attacker, .. }
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
+        Restriction::TargetableAsThoughNo { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::MustAttackObject { attackers, .. }
         | Restriction::CantAttackPermanentsOf { attackers, .. }
@@ -3758,6 +3759,7 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } | Restriction::CantActivate { who, .. } => Some(who),
+        Restriction::TargetableAsThoughNo { by, .. } => Some(by),
         Restriction::MustAttackPlayer { defender, .. }
         | Restriction::CantAttackPlayer { defender, .. }
         | Restriction::AttackCost { defender, .. }

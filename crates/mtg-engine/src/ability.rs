@@ -2950,6 +2950,15 @@ pub enum Restriction {
     /// "~ can't attack unless at least two other creatures attack" / "... can't block
     /// unless at least two other creatures block" (Orcish Conscripts): the numeric form of
     /// "alone", checked on the whole declaration (CR 508.1c, 509.1b). `n` is at least 1.
+    /// "Until end of turn, ~ can be the target of spells and abilities controlled by
+    /// target player as though it didn't have shroud." (Autumn Willow; CR 702.18, 609.4):
+    /// spells and abilities controlled by the `by` players may target the objects as though
+    /// they didn't have `keyword` (shroud or hexproof).
+    TargetableAsThoughNo {
+        what: Filter,
+        by: PlayerFilter,
+        keyword: crate::keywords::KeywordKind,
+    },
     CantAttackUnlessOthersAttack {
         what: Filter,
         n: u32,
@@ -3267,6 +3276,10 @@ pub enum BlockWhen {
     ThisTurn,
 }
 
+/// The land plays of "You may play any number of lands on each of your turns." (Fastbond;
+/// CR 305.2): unbounded, as [`StaticEffect::AdditionalLandPlays`]' count.
+pub const ANY_NUMBER_OF_LANDS: u32 = u32::MAX;
+
 /// Something that can't happen to an object ([`Restriction::CantBe`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectAction {
@@ -3282,6 +3295,16 @@ pub enum ObjectAction {
     EnchantedByOtherAuras,
     /// "can't become suspected" (CR 701.60).
     Suspected,
+    /// "can't be enchanted" (CR 303.4): no Aura can become attached to it, and an Aura
+    /// attached to it is attached illegally (CR 303.4c).
+    Enchanted,
+    /// "can't be enchanted. This effect doesn't remove Auras already attached to [them]"
+    /// (Guardian Beast): no Aura can become attached to it; Auras already attached stay.
+    NewlyEnchanted,
+    /// "other players can't gain control of [them]" (Guardian Beast): effects that would
+    /// give a player other than the restriction's controller control of it don't (its
+    /// rulings: sacrificing it isn't stopped).
+    ControlGainedByOthers,
 }
 
 /// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
@@ -3621,7 +3644,8 @@ pub enum StaticEffect {
     LookAtTopCard(PlayerRel),
     /// "Play with the top card of your library revealed."
     RevealTopCard(PlayerRel),
-    /// Additional land plays per turn.
+    /// Additional land plays per turn ([`ANY_NUMBER_OF_LANDS`]: "You may play any number
+    /// of lands on each of your turns.").
     AdditionalLandPlays(PlayerRel, u32),
     /// How coins are flipped and dice are rolled, and die-roll modifiers (CR 705, 706).
     Dice(crate::dice::DiceStatic),

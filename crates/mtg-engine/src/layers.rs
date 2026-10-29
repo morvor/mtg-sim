@@ -174,6 +174,12 @@ fn fixed_self_type_cda(e: &LayerEff, st: &LayerState) -> bool {
         })
 }
 
+std::thread_local! {
+    /// The controllers of permanents before the characteristics computation in progress.
+    static CONTROL_BEFORE: std::cell::RefCell<Option<std::collections::BTreeMap<ObjectId, PlayerId>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 impl Game {
     /// Objects whose characteristics are computed: every current object outside libraries
     /// (library cards keep their printed characteristics).
@@ -278,6 +284,10 @@ impl Game {
             .iter()
             .map(|id| (*id, self.obj(*id).controller))
             .collect();
+        // The controllers before this computation, for "other players can't gain control
+        // of [it]" (see `apply_mod_to`).
+        let outer_controllers =
+            CONTROL_BEFORE.with(|c| c.replace(Some(prev_controllers.iter().copied().collect())));
 
         // Layer 0: printed values.
         for id in &live {
@@ -503,6 +513,7 @@ impl Game {
             }
         }
 
+        CONTROL_BEFORE.with(|c| c.replace(outer_controllers));
         // Post-processing.
         let turn = self.turn.number;
         let prev_controllers = if side_effects {
@@ -1234,7 +1245,16 @@ impl Game {
                 .eval_player(r, ctx)
                 .filter(|p| self.player(*p).in_game())
             {
-                self.objects[target.0 as usize].controller = p;
+                // "Other players can't gain control of [it]" (Guardian Beast): a player
+                // other than the one who controlled it before doesn't gain control of it.
+                let now = self.objects[target.0 as usize].controller;
+                let before = CONTROL_BEFORE
+                    .with(|c| c.borrow().as_ref().and_then(|m| m.get(&target).copied()))
+                    .unwrap_or(now);
+                self.objects[target.0 as usize].controller = before;
+                let prohibited =
+                    crate::prohibitions::control_gain_prohibited(self, target, before, p);
+                self.objects[target.0 as usize].controller = if prohibited { now } else { p };
             }
             return;
         }
@@ -1556,7 +1576,9 @@ impl Game {
                         max_hand = v.as_ref().map(|v| self.eval_value(v, ctx) as i32)
                     }
                     PlayerModification::HandSizeDelta(d) => max_hand = max_hand.map(|h| h + d),
-                    PlayerModification::AdditionalLandPlays(k) => land_plays += k,
+                    PlayerModification::AdditionalLandPlays(k) => {
+                        land_plays = land_plays.saturating_add(*k)
+                    }
                     _ => {}
                 }
             }

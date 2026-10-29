@@ -178,6 +178,16 @@ pub fn can_attach_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> 
     if Entity::Object(obj) == to {
         return false; // an object can't be attached to itself
     }
+    // "can't be enchanted. This effect doesn't remove Auras already attached": only
+    // new attachments (Guardian Beast).
+    if let Entity::Object(t) = to {
+        if g.obj(obj).chars.has_subtype("Aura")
+            && g.obj(obj).attached_to != Some(Entity::Object(t))
+            && crate::prohibitions::cant_become_enchanted(g, t)
+        {
+            return false;
+        }
+    }
     legal_attachment_as(g, obj, to, as_creature)
 }
 
@@ -238,8 +248,10 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 if !g.matches(t, &f, &Ctx::new(Some(obj), o.controller)) {
                     return false;
                 }
-                // "can't be enchanted by other Auras".
-                if crate::prohibitions::aura_prohibited(g, obj, t) {
+                // "can't be enchanted by other Auras", "can't be enchanted" (CR 303.4c).
+                if crate::prohibitions::aura_prohibited(g, obj, t)
+                    || crate::prohibitions::object_cant(g, t, ObjectAction::Enchanted)
+                {
                     return false;
                 }
                 // CR 702.16c: can't be enchanted by Auras with the protected quality —

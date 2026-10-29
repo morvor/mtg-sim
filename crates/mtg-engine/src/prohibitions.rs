@@ -41,3 +41,62 @@ pub fn aura_prohibited(g: &Game, aura: ObjectId, target: ObjectId) -> bool {
         .iter()
         .any(|s| *s != Some(aura))
 }
+
+/// Whether `aura` can't become attached to `target` because of "can't be enchanted"
+/// (CR 303.4; with "This effect doesn't remove Auras already attached", only new
+/// attachments are stopped, see [`ObjectAction::NewlyEnchanted`]).
+pub fn cant_become_enchanted(g: &Game, target: ObjectId) -> bool {
+    object_cant(g, target, ObjectAction::Enchanted)
+        || object_cant(g, target, ObjectAction::NewlyEnchanted)
+}
+
+/// Whether "other players can't gain control of [it]" stops `player` from gaining
+/// control of `id` from `from`, its controller so far: a restriction controlled by `from`
+/// applies to it (evaluated as `from` controls it).
+pub fn control_gain_prohibited(
+    g: &Game,
+    id: ObjectId,
+    from: crate::types::PlayerId,
+    player: crate::types::PlayerId,
+) -> bool {
+    if player == from || !g.is_live(id) {
+        return false;
+    }
+    g.all_restrictions()
+        .into_iter()
+        .any(|(s, c, r, locked)| match r {
+            Restriction::CantBe {
+                what,
+                action: ObjectAction::ControlGainedByOthers,
+            } => {
+                c == from
+                    && c != player
+                    && g.restriction_applies(id, &what, &Ctx::new(s, c), &locked)
+            }
+            _ => false,
+        })
+}
+
+/// Whether spells and abilities `by` controls may target `id` as though it didn't have
+/// `keyword` ([`Restriction::TargetableAsThoughNo`]).
+pub fn targetable_as_though_no(
+    g: &Game,
+    id: ObjectId,
+    by: crate::types::PlayerId,
+    keyword: crate::keywords::KeywordKind,
+) -> bool {
+    g.all_restrictions()
+        .into_iter()
+        .any(|(s, c, r, locked)| match r {
+            Restriction::TargetableAsThoughNo {
+                what,
+                by: who,
+                keyword: k,
+            } if k == keyword => {
+                let ctx = Ctx::new(s, c);
+                g.player_filter_matches(&who, by, &ctx)
+                    && g.restriction_applies(id, &what, &ctx, &locked)
+            }
+            _ => false,
+        })
+}
