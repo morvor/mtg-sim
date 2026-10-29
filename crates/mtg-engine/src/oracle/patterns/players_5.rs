@@ -349,3 +349,65 @@ fn draw_for_each_manifested(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "for each card manifested this way, you draw a card", priority: 90, parse: draw_for_each_manifested } }
+
+/// The spells a "you may cast any number of spells from among ..." instruction cast.
+const CAST_THIS_WAY: Var = vars::USER + 9533;
+
+/// Whether `e` (or the last instruction of a sequence) casts cards.
+fn ends_with_cast(e: &Effect) -> bool {
+    match e {
+        Effect::CastCard { .. } => true,
+        Effect::Seq(v) => v.last().is_some_and(ends_with_cast),
+        _ => false,
+    }
+}
+
+/// "Then each player who owns a spell you cast this way loses life equal to its mana
+/// value." (Kefka, Dancing Mad, after "You may cast any number of spells from among cards
+/// exiled this way ..."): for each player, the spells of theirs you cast this way.
+fn owners_of_spells_cast_lose_life(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if l != "each player who owns a spell you cast this way loses life equal to its mana value" {
+        return false;
+    }
+    if !ends_with_cast(prev) {
+        return false;
+    }
+    let theirs = || {
+        Sel::Matching(
+            Box::new(Sel::Var(CAST_THIS_WAY)),
+            Filter::OwnedBy(PlayerRel::Iterated),
+        )
+    };
+    let cast = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        cast,
+        // The spells cast, if any were (otherwise "it" is still the cards).
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then: Box::new(Effect::Store {
+                var: CAST_THIS_WAY,
+                sel: Sel::Var(vars::IT),
+            }),
+            otherwise: Box::new(Effect::Store {
+                var: CAST_THIS_WAY,
+                sel: Sel::Union(vec![]),
+            }),
+        },
+        Effect::ForEachPlayer {
+            who: PlayerRef::Each(PlayerFilter::History(Box::new(Condition::Compare(
+                Value::CountSel(Box::new(theirs())),
+                Cmp::Ge,
+                Value::c(1),
+            )))),
+            effect: Box::new(Effect::LoseLife {
+                who: PlayerRef::Iterated,
+                n: Value::ManaValueOf(Box::new(theirs())),
+            }),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "each player who owns a spell you cast this way loses life equal to its mana value", priority: 60, apply: owners_of_spells_cast_lose_life } }

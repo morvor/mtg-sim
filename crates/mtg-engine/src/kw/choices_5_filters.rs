@@ -33,6 +33,15 @@ pub const SAME_NAME_AS_ANOTHER_EXILED: &str = "choices5:has the same name as ano
 /// `oracle::patterns::loops_5::EXILED_BY_PASSES` have the same name.
 pub const TWO_EXILED_SHARE_A_NAME: &str = "choices5:two cards exiled this way have the same name";
 
+/// `Effect::Custom` name prefix: adds what the previous instruction affected (as it is now,
+/// e.g. the cards it exiled) to the variable whose number follows.
+pub const KEEP_AFFECTED: &str = "choices5:keep what was just affected:";
+
+/// The instruction keeping what the previous one affected in `var`.
+pub fn keep_affected(var: crate::ability::Var) -> crate::ability::Effect {
+    crate::ability::Effect::Custom(format!("{KEEP_AFFECTED}{var}").into())
+}
+
 /// `Condition::Custom` name: the player being iterated over is a defending player (CR
 /// 506.2, 802.2: with several, each of them).
 pub const IS_DEFENDING_PLAYER: &str = "choices5:is a defending player";
@@ -65,6 +74,19 @@ impl KeywordRules for Choices5Filters {
     }
 
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        if let Some(var) = name
+            .strip_prefix(KEEP_AFFECTED)
+            .and_then(|v| v.parse::<crate::ability::Var>().ok())
+        {
+            let mut kept = ctx.vars.get(&var).cloned().unwrap_or_default();
+            for e in ctx.prev_affected.clone() {
+                if !kept.contains(&e) {
+                    kept.push(e);
+                }
+            }
+            ctx.set_var(var, kept);
+            return true;
+        }
         if name == CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS {
             choose_type_shared_by_materials(g, ctx);
             return true;

@@ -1145,3 +1145,60 @@ fn tainted_pact_stops_at_a_card_put_into_hand_or_two_with_the_same_name() {
         .count();
     assert_eq!(asked, 3);
 }
+
+#[test]
+fn struggle_for_sanity_alternates_exiles_until_the_hand_is_empty() {
+    cr!("608.2c", "701.20a");
+    compiles("Struggle for Sanity");
+    // "Target opponent reveals their hand. That player exiles a card from it, then you
+    // exile a card from it. Repeat this process until all cards in that hand have been
+    // exiled. That player returns the cards they exiled this way to their hand and puts
+    // the rest into their graveyard."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 4);
+    let a = t.hand(P1, "Lightning Bolt");
+    let b = t.hand(P1, "Grizzly Bears");
+    let c = t.hand(P1, "Shock");
+    let spell = t.hand(P0, "Struggle for Sanity");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(P1, &[Entity::Object(a)]);
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    t.answer_choose(P1, &[Entity::Object(c)]);
+    t.cast(P0, spell).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    assert!(t.in_hand(P1, "Shock"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.hand_size(P1), 2);
+    assert!(!t.in_exile("Grizzly Bears"));
+}
+
+#[test]
+fn kefka_each_player_who_owns_a_spell_you_cast_loses_life_equal_to_its_mana_value() {
+    cr!("601.2", "608.2c");
+    ruling!(
+        "Kefka, Dancing Mad",
+        "You choose which spells to cast (if any) as Kefka's last ability resolves."
+    );
+    compiles("Kefka, Dancing Mad");
+    let run = |cast: bool| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Kefka, Dancing Mad");
+        let bolt = t.graveyard(P1, "Lightning Bolt");
+        if cast {
+            t.answer_choose_moved(P0, &[Entity::Object(bolt)]);
+        } else {
+            t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![]));
+        }
+        t.answer_yes(P0, cast);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.set_step(P0, Step::PostcombatMain);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        t.life(P1)
+    };
+    // Cast: 3 damage and 1 life lost (its mana value).
+    assert_eq!(run(true), 16);
+    // Not cast: nothing.
+    assert_eq!(run(false), 20);
+}

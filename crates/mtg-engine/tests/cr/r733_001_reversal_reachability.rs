@@ -409,6 +409,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // Choices made as a permanent enters: a name among revealed cards, a card type
         // its craft materials share (`kw/choices_5_filters.rs`): no library.
         mtg_engine::kw::choices_5_filters::NAME_AMONG,
+        mtg_engine::kw::choices_5_filters::KEEP_AFFECTED,
+        // Manifesting cards from a hand (`kw/manifest_from_hand_5.rs`): no library.
+        mtg_engine::kw::manifest_from_hand_5::MANIFEST_FROM_HAND,
         mtg_engine::kw::choices_5_filters::CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS,
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {

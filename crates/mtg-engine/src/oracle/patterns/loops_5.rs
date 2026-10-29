@@ -210,3 +210,150 @@ fn repeat_until_put_or_same_name(l: &str, prev: &mut Effect, _b: &mut Builder) -
 }
 
 inventory::submit! { super::FollowupPattern { name: "repeat this process until you put a card into your hand or you exile two cards with the same name", priority: 60, apply: repeat_until_put_or_same_name } }
+
+/// The cards "that player" and you exiled from the revealed hand (Struggle for Sanity),
+/// over all the passes, and each pass's pick.
+const THEY_EXILED: Var = vars::USER + 9553;
+const YOU_EXILED: Var = vars::USER + 9554;
+const THEIR_PICK: Var = vars::USER + 9555;
+const YOUR_PICK: Var = vars::USER + 9556;
+
+/// The player target an earlier sentence named ("Target opponent reveals their hand.").
+fn last_player_target(b: &Builder) -> Option<u8> {
+    b.targets
+        .iter()
+        .rposition(|t| matches!(t.what, TargetKind::Player(_)))
+        .map(|i| i as u8)
+}
+
+/// The cards in the target player's hand.
+fn hand_of(slot: u8) -> Filter {
+    Filter::and(vec![
+        Filter::Card,
+        Filter::InZone(ZoneKind::Hand),
+        Filter::OwnedByPlayer(Box::new(PlayerRef::Target(slot))),
+    ])
+}
+
+/// "That player exiles a card from it, then you exile a card from it." (Struggle for
+/// Sanity, after "Target opponent reveals their hand."): each chooses a card from that
+/// hand in turn and exiles it.
+fn they_then_you_exile_from_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "that player exiles a card from it, then you exile a card from it" {
+        return None;
+    }
+    let slot = last_player_target(b)?;
+    let pick = |var: Var, chooser: PlayerRef, kept: Var| {
+        vec![
+            Effect::Store {
+                var,
+                sel: Sel::Choose {
+                    chooser,
+                    filter: hand_of(slot),
+                    count: Value::c(1),
+                    up_to: false,
+                    store: None,
+                },
+            },
+            Effect::Exile {
+                what: Sel::Var(var),
+                face_down: false,
+                link: false,
+            },
+            crate::kw::choices_5_filters::keep_affected(kept),
+        ]
+    };
+    let mut v = pick(THEIR_PICK, PlayerRef::Target(slot), THEY_EXILED);
+    v.extend(pick(YOUR_PICK, PlayerRef::You, YOU_EXILED));
+    b.named
+        .push(("the cards they exiled this way".into(), Sel::Var(THEY_EXILED)));
+    b.named.push(("the rest".into(), Sel::Var(YOU_EXILED)));
+    Some(Effect::seq(v))
+}
+
+inventory::submit! { EffectPattern { name: "that player exiles a card from it, then you exile a card from it", priority: 90, parse: they_then_you_exile_from_hand } }
+
+/// "Repeat this process until all cards in that hand have been exiled." after the
+/// alternating exiles: the exiles again while the hand has a card.
+fn repeat_until_hand_exiled(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if end(l) != "repeat this process until all cards in that hand have been exiled" {
+        return false;
+    }
+    let Some(slot) = last_player_target(b) else {
+        return false;
+    };
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    // The pass: from the first pick to what you exiled being kept (the sequence the
+    // sentence compiled to, flattened into the ability's).
+    let store_of = |e: &Effect, var: Var| matches!(e, Effect::Store { var: x, .. } if *x == var);
+    let keep_of = |e: &Effect, var: Var| {
+        matches!(e, Effect::Custom(n) if *n == format!("{}{var}", crate::kw::choices_5_filters::KEEP_AFFECTED))
+    };
+    let Some(i) = v.iter().position(|e| store_of(e, THEIR_PICK)) else {
+        return false;
+    };
+    let Some(j) = v.iter().skip(i).position(|e| keep_of(e, YOU_EXILED)).map(|k| i + k) else {
+        return false;
+    };
+    let pass = Effect::Seq(v.drain(i..=j).collect());
+    v.insert(i, Effect::Noop);
+    v[i] = Effect::seq(vec![
+        Effect::Store {
+            var: THEY_EXILED,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::Store {
+            var: YOU_EXILED,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::RepeatProcess {
+            body: Box::new(Effect::seq(vec![
+                pass,
+                Effect::If {
+                    cond: Condition::Compare(Value::Count(hand_of(slot)), Cmp::Ge, Value::c(1)),
+                    then: Box::new(Effect::RepeatThisProcess),
+                    otherwise: Box::new(Effect::Noop),
+                },
+            ])),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "repeat this process until all cards in that hand have been exiled", priority: 60, apply: repeat_until_hand_exiled } }
+
+/// "That player returns the cards they exiled this way to their hand and puts the rest
+/// into their graveyard." (Struggle for Sanity).
+fn return_theirs_rest_to_graveyard(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l)
+        != "that player returns the cards they exiled this way to their hand and puts the rest into their graveyard"
+    {
+        return None;
+    }
+    let find = |k: &str| {
+        b.named
+            .iter()
+            .rev()
+            .find(|(n, _)| n == k)
+            .map(|(_, s)| s.clone())
+    };
+    let theirs = find("the cards they exiled this way")?;
+    let rest = find("the rest")?;
+    if !matches!(rest, Sel::Var(YOU_EXILED)) {
+        return None;
+    }
+    Some(Effect::seq(vec![
+        Effect::Move {
+            what: theirs,
+            to: Destination::zone(ZoneKind::Hand),
+        },
+        Effect::Move {
+            what: rest,
+            to: Destination::zone(ZoneKind::Graveyard),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "that player returns the cards they exiled this way to their hand and puts the rest into their graveyard", priority: 90, parse: return_theirs_rest_to_graveyard } }
