@@ -999,6 +999,10 @@ fn part_now(part: &CostPart, now: &mut Now) {
         CostPart::OneOf(costs) => costs
             .iter()
             .for_each(|c| c.parts.iter().for_each(|p| part_now(p, now))),
+        // An exile or sacrifice part over a set, or exiling a card and paying its mana cost
+        // (`cost_sets.rs`).
+        CostPart::AnyNumberOf { part, .. } => part_now(part, now),
+        CostPart::AndPayItsManaCost(part) => part_now(part, now),
         CostPart::PayManaCostOf(s) | CostPart::PayManaCostOfLess(s, _) => {
             if sel_in_library(s) {
                 now.lib(LibKind::Other, "pays the mana cost of a library card");
@@ -1069,6 +1073,8 @@ fn part_can_fail(part: &CostPart) -> bool {
         | CostPart::DiscardSelf
         | CostPart::Discard { .. }
         | CostPart::Exile { .. }
+        | CostPart::AnyNumberOf { .. }
+        | CostPart::AndPayItsManaCost(_)
         | CostPart::RemoveCounters { .. }
         | CostPart::RemoveCountersFromAmong { .. }
         | CostPart::TapUntapped { .. }
