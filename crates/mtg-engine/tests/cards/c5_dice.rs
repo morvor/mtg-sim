@@ -399,3 +399,60 @@ fn two_bamboozling_beebles_both_apply_to_the_next_roll() {
     t.g.dice.loaded.extend([5]);
     assert_eq!(p1_rolls(&mut t), 5);
 }
+
+// ---------------------------------------------------------------------------
+// Mr. House, President and CEO
+// ---------------------------------------------------------------------------
+
+fn treasure(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    let spec = mtg_engine::tokens::predefined("Treasure").expect("Treasure token");
+    let tc = mtg_engine::replacement::TokenCreate {
+        chars: mtg_engine::tokens::token_characteristics(&spec),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    t.g.create_tokens(p, tc, 1, None)[0]
+}
+
+fn subtype_count(t: &TestGame, p: PlayerId, st: &str) -> usize {
+    t.g.permanents()
+        .filter(|o| o.controller == p && o.chars.has_subtype(st))
+        .count()
+}
+
+/// Mr. House activated with `treasures` Treasures and 4 − `treasures` Mountains (all used
+/// to pay {4}); the dice show `dice`.
+fn mr_house(treasures: usize, dice: &[u32]) -> TestGame {
+    let mut t = TestGame::new(2);
+    let house = t.battlefield(P0, "Mr. House, President and CEO");
+    t.lands(P0, "Mountain", 4 - treasures);
+    for _ in 0..treasures {
+        treasure(&mut t, P0);
+    }
+    t.g.dice.loaded.extend(dice.iter().copied());
+    t.activate(P0, house, 0, &[]).unwrap();
+    t.resolve_all();
+    t
+}
+
+#[test]
+fn mr_house_rolls_an_extra_die_for_each_mana_from_treasures() {
+    cr!("706.1", "106.3", "602.2b");
+    supported("Mr. House, President and CEO");
+    ruling!(
+        "Mr. House, President and CEO",
+        "Abilities that trigger whenever you roll dice or whenever you roll a certain result, such as Mr. House's first ability, will trigger as appropriate."
+    );
+    // Two Treasures: three dice. A 4 makes a Robot; a 6 a Robot and a Treasure.
+    let t = mr_house(2, &[4, 6, 2]);
+    assert_eq!(die_rolls(&t), vec![(P0, 4), (P0, 6), (P0, 2)]);
+    assert_eq!(subtype_count(&t, P0, "Robot"), 2);
+    assert_eq!(subtype_count(&t, P0, "Treasure"), 1, "the two spent were sacrificed");
+    // No Treasure: one die.
+    let t = mr_house(0, &[5, 6]);
+    assert_eq!(die_rolls(&t), vec![(P0, 5)]);
+    assert_eq!(subtype_count(&t, P0, "Robot"), 1);
+}

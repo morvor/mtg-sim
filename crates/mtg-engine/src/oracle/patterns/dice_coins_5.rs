@@ -720,6 +720,32 @@ fn not_phased_out_with_this<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a 
 
 inventory::submit! { super::FilterSuffixPattern { name: "dice coins 5: that hasn't been phased out with this Attraction", priority: 100, parse: not_phased_out_with_this } }
 
+/// "Roll a six-sided die plus an additional six-sided die for each mana from Treasures
+/// spent to activate this ability." (Mr. House, President and CEO): one die, and one more
+/// for each mana of that kind spent on the ability (`kw::cast_history`'s mana provenance).
+fn roll_plus_one_for_each_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("roll a ")?;
+    let (die, r) = r.split_once(" plus an additional ")?;
+    let (die2, r) = r.split_once(" for each mana from ")?;
+    if die != die2 {
+        return None;
+    }
+    let (sides, times) = as_enters_roll(&format!("roll a {die}"))?;
+    if times != 1 {
+        return None;
+    }
+    let kind = r.strip_suffix(" spent to activate this ability")?;
+    let what = super::mana_4::mana_from_kind(kind)?;
+    let mut spec = DieRoll::new(sides);
+    spec.count = Value::Sum(vec![
+        Value::c(1),
+        super::history_conditions::spent_value("this ability", &what),
+    ]);
+    Some(Effect::RollDice(Box::new(spec)))
+}
+
+inventory::submit! { EffectPattern { name: "dice coins 5: roll a die plus an additional die for each mana from [kind] spent to activate this ability", priority: 100, parse: roll_plus_one_for_each_mana } }
+
 #[cfg(test)]
 mod tests {
     use super::super::followup_grammar::tests::compiled;
