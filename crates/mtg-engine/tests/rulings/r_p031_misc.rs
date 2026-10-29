@@ -436,3 +436,306 @@ fn joo_dee_sacrifices_as_part_of_the_resolution() {
     t.resolve_all();
     assert_eq!(t.life(P0), 21);
 }
+
+// --- Angel of Indemnity ----------------------------------------------------------------------
+
+#[test]
+fn angel_of_indemnity_returns_an_aura_without_targeting() {
+    cr!("303.4f", "303.4g", "702.16c");
+    ruling!(
+        "Angel of Indemnity",
+        "If you return an Aura this way, you choose what the Aura will enchant just before it enters the battlefield. An Aura returning to the battlefield this way doesn't target the player or permanent it will enchant, so permanents or players with hexproof may be chosen; however, the chosen recipient must be able to legally be enchanted by the Aura"
+    );
+    supported("Angel of Indemnity");
+    // Pacifism: the hexproof Gladecover Scout may be chosen; Black Knight (protection from
+    // white) may not.
+    let mut t = TestGame::new(2);
+    let pac = t.graveyard(P0, "Pacifism");
+    let scout = t.battlefield(P1, "Gladecover Scout");
+    let knight = t.battlefield(P1, "Black Knight");
+    t.answer_targets(P0, &[obj(pac)]);
+    t.answer_choose(P0, &[obj(scout)]);
+    let from = t.asked().len();
+    let angel = enter(&mut t, P0, "Angel of Indemnity");
+    t.resolve_all();
+    let offered: Vec<Entity> = crate::r_s03_common::choice_candidates(&t, from, "")
+        .into_iter()
+        .filter(|c| c.contains(&obj(scout)))
+        .flatten()
+        .collect();
+    assert!(offered.contains(&obj(angel)));
+    assert!(!offered.contains(&obj(knight)));
+    let pac = t.named_on_battlefield("Pacifism");
+    assert_eq!(pac.len(), 1);
+    assert_eq!(attached_to(&t, pac[0]), Some(obj(scout)));
+    // Utopia Sprawl ("Enchant Forest") with no Forest: it stays in the graveyard.
+    let mut t = TestGame::new(2);
+    let sprawl = t.graveyard(P0, "Utopia Sprawl");
+    t.answer_targets(P0, &[obj(sprawl)]);
+    enter(&mut t, P0, "Angel of Indemnity");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Utopia Sprawl"));
+}
+
+// --- The Master, Multiplied -----------------------------------------------------------------
+
+#[test]
+fn the_master_multiplied_keeps_a_token_and_a_nontoken_legend() {
+    cr!("704.5j");
+    ruling!(
+        "The Master, Multiplied",
+        "If, while you control The Master, Multiplied, you also control a token legendary permanent and a single nontoken legendary permanent with the same name, the legend rule will not cause you to put either one into your graveyard."
+    );
+    supported("The Master, Multiplied");
+    for master in [true, false] {
+        let mut t = TestGame::new(2);
+        if master {
+            t.battlefield(P0, "The Master, Multiplied");
+        }
+        let i = t.battlefield(P0, "Isamaru, Hound of Konda");
+        token_copy(&mut t, P0, i);
+        t.settle();
+        let want = if master { 2 } else { 1 };
+        assert_eq!(named(&t, P0, "Isamaru, Hound of Konda").len(), want);
+    }
+}
+
+// --- Angel of Sanctions -----------------------------------------------------------------------
+
+/// P0's Angel of Sanctions enters and exiles P1's Grizzly Bears. Returns (Angel, Bears).
+fn sanction(t: &mut TestGame) -> (ObjectId, ObjectId) {
+    supported("Angel of Sanctions");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(bears)]);
+    t.answer_yes(P0, true);
+    let angel = enter(t, P0, "Angel of Sanctions");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    (angel, bears)
+}
+
+#[test]
+fn angel_of_sanctions_returns_the_card_immediately() {
+    cr!("610.3");
+    ruling!(
+        "Angel of Sanctions",
+        "The exiled card returns to the battlefield immediately after Angel of Sanctions leaves the battlefield. Nothing happens between the two events, including state-based actions."
+    );
+    let mut t = TestGame::new(2);
+    let (angel, _) = sanction(&mut t);
+    // No triggered ability, no state-based action check: the Bears are back as soon as
+    // the Angel has left.
+    t.g.destroy(angel, None);
+    t.g.flush_events();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.g.stack.is_empty());
+}
+
+#[test]
+fn angel_of_sanctions_s_card_returns_when_its_owner_leaves_the_game() {
+    cr!("800.4a", "610.3c");
+    ruling!(
+        "Angel of Sanctions",
+        "In a multiplayer game, if Angel of Sanctions's owner leaves the game, the exiled card will return to the battlefield."
+    );
+    let mut t = TestGame::new(3);
+    sanction(&mut t);
+    t.g.lose_game(P0);
+    t.settle();
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1);
+    assert_eq!(t.obj_now(b[0]).controller, P1);
+}
+
+// --- Characteristic-defining abilities in every zone ------------------------------------
+
+#[test]
+fn power_toughness_defining_abilities_work_in_every_zone() {
+    cr!("604.3", "604.3a");
+    ruling!(
+        "Pack Rat",
+        "Pack Rat's first ability counts any creature you control with the creature type Rat, not just Pack Rats. That ability works in all zones, not only the battlefield."
+    );
+    ruling!(
+        "Polygoyf",
+        "The ability that defines Polygoyf's power and toughness works in all zones, not just the battlefield."
+    );
+    ruling!(
+        "Polygoyf",
+        "The ability that defines Polygoyf's power and toughness counts card types, not cards."
+    );
+    ruling!(
+        "Soul of Eternity",
+        "The ability that defines Soul of Eternity's power and toughness functions in all zones, not just the battlefield."
+    );
+    ruling!(
+        "Sumala Rumblers",
+        "The ability that defines Sumala Rumblers's power works in all zones, not just the battlefield."
+    );
+    // Pack Rat: Typhoid Rats count, in hand and on the battlefield.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Typhoid Rats");
+    let h = t.hand(P0, "Pack Rat");
+    t.g.recompute();
+    assert_eq!(t.pt(h), (1, 1));
+    let b = t.battlefield(P0, "Pack Rat");
+    t.g.recompute();
+    assert_eq!(t.pt(b), (2, 2));
+    // Polygoyf in the library: one artifact creature card → 2/3; then ten artifacts and
+    // ten creatures → still 2/3.
+    let mut t = TestGame::new(2);
+    let p = t.library_top(P0, "Polygoyf");
+    t.graveyard(P1, "Ornithopter");
+    t.g.recompute();
+    assert_eq!(t.pt(p), (2, 3));
+    for _ in 0..10 {
+        t.graveyard(P0, "Sol Ring");
+        t.graveyard(P1, "Grizzly Bears");
+    }
+    t.g.recompute();
+    assert_eq!(t.pt(p), (2, 3));
+    // Soul of Eternity in the graveyard: P0's life total.
+    let mut t = TestGame::new(2);
+    let s = t.graveyard(P0, "Soul of Eternity");
+    t.g.players[0].life = 7;
+    t.g.recompute();
+    assert_eq!(t.pt(s), (7, 7));
+    // Sumala Rumblers in hand: the creatures P0 controls.
+    let mut t = TestGame::new(2);
+    let r = t.hand(P0, "Sumala Rumblers");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.g.recompute();
+    assert_eq!(t.pt(r), (2, 4));
+}
+
+// --- Scouring Swarm, Thrill-Kill Disciple ---------------------------------------------------
+
+#[test]
+fn scouring_swarm_counts_the_sacrificed_land() {
+    cr!("608.2h");
+    ruling!(
+        "Scouring Swarm",
+        "Scouring Swarm’s last ability counts the number of land cards in your graveyard as it resolves. This will usually include the land you sacrificed."
+    );
+    let mut t = TestGame::new(2);
+    for _ in 0..6 {
+        t.graveyard(P0, "Forest");
+    }
+    t.battlefield(P0, "Scouring Swarm");
+    let land = t.battlefield(P0, "Forest");
+    t.g.sacrifice(land, P0);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert_eq!(named(&t, P0, "Scouring Swarm").len(), 2);
+    assert!(named(&t, P0, "Insect Token").is_empty());
+}
+
+#[test]
+fn a_junk_maker_with_an_illegal_target_makes_no_junk() {
+    cr!("608.2b");
+    ruling!(
+        "Thrill-Kill Disciple",
+        "Some spells and abilities that create Junk tokens may require targets. If each target chosen is illegal as that spell or ability tries to resolve, it won’t resolve and none of its effects happen. You won’t create any Junk tokens."
+    );
+    supported("Thrill-Kill Disciple");
+    supported("Break Down");
+    // Thrill-Kill Disciple's own Junk ability has no target: it makes a Junk.
+    let mut t = TestGame::new(2);
+    let d = t.battlefield(P0, "Thrill-Kill Disciple");
+    kill(&mut t, d);
+    t.resolve_all();
+    assert_eq!(named(&t, P0, "Junk Token").len(), 1);
+    // Break Down ("Destroy target artifact or enchantment. Create a Junk token.") whose
+    // target is gone: no Junk.
+    let ring = t.battlefield(P1, "Sol Ring");
+    cast_new(&mut t, P0, "Break Down", &[obj(ring)]);
+    kill(&mut t, ring);
+    t.resolve_all();
+    assert_eq!(named(&t, P0, "Junk Token").len(), 1);
+}
+
+// --- Champion of Wits, Jace, Mirror Mage -----------------------------------------------------
+
+#[test]
+fn champion_of_wits_eternalized_token_triggers_its_enters_ability() {
+    cr!("702.129a", "707.2");
+    ruling!(
+        "Champion of Wits",
+        "If the card copied by the token had any “when [this permanent] enters the battlefield” abilities, then the token also has those abilities and will trigger them when it's created."
+    );
+    supported("Champion of Wits");
+    let mut t = TestGame::new(2);
+    let c = t.graveyard(P0, "Champion of Wits");
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Wastes", 5);
+    let hand = t.hand_size(P0);
+    activate_containing(&mut t, P0, c, "Eternalize").unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    let tok = named(&t, P0, "Champion of Wits");
+    assert_eq!(tok.len(), 1);
+    assert_eq!(t.pt(tok[0]), (4, 4));
+    assert_eq!(t.hand_size(P0), hand + 4 - 2);
+}
+
+#[test]
+fn jace_mirror_mage_s_token_is_a_nonlegendary_jace_with_one_loyalty() {
+    cr!("707.9b", "306.5b", "606.3");
+    ruling!(
+        "Jace, Mirror Mage",
+        "The token from Jace's triggered ability copies exactly what is printed on Jace and nothing else. It doesn't copy how many counters are on him, or any non-copy effects that have changed his color or types, and so on. It enters the battlefield with one loyalty counter. You can activate one loyalty ability of each of the Jaces this turn."
+    );
+    supported("Jace, Mirror Mage");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Wastes", 3);
+    let j = t.hand(P0, "Jace, Mirror Mage");
+    let before = t.g.battlefield.clone();
+    t.cast(P0, j).kicked(true).go();
+    t.resolve_all();
+    let jace = named(&t, P0, "Jace, Mirror Mage");
+    assert_eq!(jace.len(), 2);
+    let tok = tokens_since(&t, P0, &before)[0];
+    let orig = *jace.iter().find(|id| **id != tok).unwrap();
+    assert_eq!(t.counters(orig, counters::LOYALTY), 4);
+    assert_eq!(t.counters(tok, counters::LOYALTY), 1);
+    assert!(!t.obj_now(tok).chars.supertypes.contains(Supertype::Legendary));
+    for id in [orig, tok] {
+        activate_containing(&mut t, P0, id, "Scry").unwrap();
+        t.resolve_all();
+    }
+    assert_eq!(t.counters(orig, counters::LOYALTY), 5);
+    assert_eq!(t.counters(tok, counters::LOYALTY), 2);
+}
+
+#[test]
+fn jace_mirror_mage_s_replaced_draw_reveals_nothing() {
+    cr!("614.6", "121.6");
+    ruling!(
+        "Jace, Mirror Mage",
+        "If the card draw from Jace's last ability is modified by a replacement effect, you don't reveal any card, even if the draw was replaced by one or more card draws. No loyalty counters will be removed from Jace in that case."
+    );
+    supported("Thought Reflection");
+    for replaced in [false, true] {
+        let mut t = TestGame::new(2);
+        if replaced {
+            t.battlefield(P0, "Thought Reflection");
+        }
+        let jace = t.battlefield(P0, "Jace, Mirror Mage");
+        t.g.objects[jace.0 as usize].counters.insert(counters::LOYALTY.into(), 4);
+        t.library_top(P0, "Grizzly Bears");
+        let hand = t.hand_size(P0);
+        activate_containing(&mut t, P0, jace, "reveal").unwrap();
+        t.resolve_all();
+        if replaced {
+            assert_eq!(t.hand_size(P0), hand + 2);
+            assert_eq!(t.counters(jace, counters::LOYALTY), 4);
+        } else {
+            assert_eq!(t.hand_size(P0), hand + 1);
+            assert_eq!(t.counters(jace, counters::LOYALTY), 2);
+        }
+    }
+}
