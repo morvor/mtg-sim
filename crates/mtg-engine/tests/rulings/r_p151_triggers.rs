@@ -146,7 +146,7 @@ fn porphyry_nodes_triggers_when_every_creature_blinks() {
 
 #[test]
 fn dragon_whelp_activated_in_the_end_step_is_sacrificed_next_end_step() {
-    cr!("603.7b");
+    cr!("513.2");
     ruling!(
         "Dragon Whelp",
         "If the fourth (or more) time Dragon Whelp's ability is activated during the same turn happens to be during that turn's end step, the delayed triggered ability won't trigger until the beginning of the next turn's end step. You'll have to sacrifice Dragon Whelp at that time."
