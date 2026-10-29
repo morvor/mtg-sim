@@ -1390,7 +1390,12 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
     // count).
     {
         let (w, x) = split_word(r);
-        if let Some(color) = crate::types::Color::from_word(w) {
+        // "colored mana symbols in its mana cost": symbols of any color.
+        let stat = match w {
+            "colored" => Some(Stat::ColoredManaSymbols),
+            _ => crate::types::Color::from_word(w).map(Stat::ManaSymbols),
+        };
+        if let Some(stat) = stat {
             let x = x.trim_start();
             if let Some(y) = x
                 .strip_prefix("mana symbols in ")
@@ -1416,10 +1421,7 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                     }
                     (sel, rest.to_string())
                 };
-                return Some((
-                    Value::Aggregate(AggOp::Sum, Stat::ManaSymbols(color), Box::new(sel)),
-                    rest,
-                ));
+                return Some((Value::Aggregate(AggOp::Sum, stat, Box::new(sel)), rest));
             }
         }
     }

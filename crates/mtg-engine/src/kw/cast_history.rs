@@ -62,6 +62,10 @@ pub const ENTERING: &str = "entering";
 /// mana was spent to cast it": the spell about to enter).
 pub const EVENT_OBJECT: &str = "event object";
 
+/// The `what` of [`SPENT`]: snow mana of one of the spell's colors ("if {S} of any of that
+/// spell's colors was spent to cast it").
+pub const SNOW_OF_ITS_COLORS: &str = "snow of its colors";
+
 /// The `Value::Custom` name for an amount of mana spent.
 pub fn spent(whose: &str, what: &str) -> String {
     format!("{SPENT}{whose}:{what}")
@@ -70,7 +74,13 @@ pub fn spent(whose: &str, what: &str) -> String {
 /// Records where the mana that paid a cost came from: on the spell being cast, or on the
 /// ability being activated (with the types of that mana, which a spell records as its
 /// total cost is paid).
-pub fn record_payment(g: &mut Game, spend: &SpendContext, types: &[ManaType], sources: Vec<ObjectId>) {
+pub fn record_payment(
+    g: &mut Game,
+    spend: &SpendContext,
+    types: &[ManaType],
+    sources: Vec<ObjectId>,
+    snow_types: &[ManaType],
+) {
     let (target, ability) = match (spend.is_spell, spend.source, spend.ability_on_stack) {
         (true, Some(spell), _) => (spell, false),
         (false, _, Some(ability)) => (ability, true),
@@ -84,6 +94,7 @@ pub fn record_payment(g: &mut Game, spend: &SpendContext, types: &[ManaType], so
     }
     if let Some(si) = o.stack.as_mut() {
         si.cast.mana_sources.extend(sources);
+        si.cast.mana_spent_snow_types.extend(snow_types.iter().copied());
         if ability {
             si.cast.mana_spent.extend(types.iter().copied());
         }
@@ -127,12 +138,62 @@ fn payment<'a>(g: &'a Game, whose: &str, ctx: &'a Ctx) -> Option<&'a CastInfo> {
             let a = ctx.stack_obj?;
             g.try_obj(a)?.stack.as_deref().map(|si| &si.cast)
         }
+        // The spell or ability that caused an "activates an ability" / "casts a spell or
+        // activates an ability" trigger ("if mana from a Treasure was spent to cast it or
+        // activate it"): an ability on the stack was never cast but had mana spent on it.
+        SPELL_OR_ABILITY => {
+            let s = ctx.event.as_ref().and_then(|e| e.spell)?;
+            let o = g.try_obj(s)?;
+            if o.kind == crate::object::ObjKind::StackAbility {
+                o.stack.as_deref().map(|si| &si.cast)
+            } else {
+                object_cast(g, s).filter(|c| c.was_cast)
+            }
+        }
         _ => None,
     }
 }
 
-fn amount(g: &Game, c: &CastInfo, what: &str) -> Option<i64> {
+/// `Filter::Custom`: the object shares a color with the mana spent on the activation cost
+/// of the ability being resolved ("a source of your choice that shares a color with the
+/// mana spent on this activation cost", Protective Sphere). Colorless mana shares no color.
+pub const SHARES_COLOR_WITH_MANA_SPENT: &str = "cast history:shares a color with the mana spent on this ability";
+
+/// The colors of the mana spent on the ability being resolved.
+pub fn colors_spent_on_this_ability(g: &Game, ctx: &Ctx) -> ColorSet {
+    let mut s = ColorSet::NONE;
+    if let Some(c) = payment(g, "this ability", ctx) {
+        for m in &c.mana_spent {
+            if let Some(col) = m.color() {
+                s.insert(col);
+            }
+        }
+    }
+    s
+}
+
+/// The `whose` of [`SPENT`] for the spell or activated ability that caused the trigger.
+pub const SPELL_OR_ABILITY: &str = "that spell or ability";
+
+/// `Filter::Custom` prefix: one or more of the mana spent to cast the object (a spell, or
+/// the spell a permanent was) is of this [`SPENT`] `what` ("Each spell you cast has split
+/// second if mana from an artifact was spent to cast it": `spent some:source
+/// type:Artifact`).
+pub const SPENT_SOME: &str = "cast history:spent some:";
+
+fn amount(g: &Game, c: &CastInfo, what: &str, colors: Option<ColorSet>) -> Option<i64> {
     let n = |f: &dyn Fn(&ManaType) -> bool| c.mana_spent.iter().filter(|m| f(m)).count() as i64;
+    // "{S} of any of that spell's colors" (Boreal Outrider): snow mana of one of the
+    // colors the spell has (as it is, or as it last existed).
+    if what == SNOW_OF_ITS_COLORS {
+        let colors = colors?;
+        return Some(
+            c.mana_spent_snow_types
+                .iter()
+                .filter(|m| m.color().is_some_and(|col| colors.contains(col)))
+                .count() as i64,
+        );
+    }
     if what == "total" {
         return Some(c.mana_spent.len() as i64);
     }
@@ -187,7 +248,17 @@ impl KeywordRules for CastHistory {
         }
         let r = name.strip_prefix(SPENT)?;
         let (whose, what) = r.split_once(':')?;
-        Some(payment(g, whose, ctx).map_or(0, |c| amount(g, c, what).unwrap_or(0)))
+        // The colors of the spell the payment is about ("that spell's colors").
+        let colors = (what == SNOW_OF_ITS_COLORS)
+            .then(|| {
+                let id = match whose {
+                    "self" => ctx.source,
+                    _ => ctx.event.as_ref().and_then(|e| e.spell),
+                }?;
+                g.try_obj(id).map(|o| o.chars.colors)
+            })
+            .flatten();
+        Some(payment(g, whose, ctx).map_or(0, |c| amount(g, c, what, colors).unwrap_or(0)))
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
@@ -207,7 +278,15 @@ impl KeywordRules for CastHistory {
                 _ => false,
             });
         }
+        if name == SHARES_COLOR_WITH_MANA_SPENT {
+            let spent = colors_spent_on_this_ability(g, ctx);
+            return Some(g.obj(id).chars.colors.intersects(spent));
+        }
         let cast = object_cast(g, id).filter(|c| c.was_cast);
+        if let Some(what) = name.strip_prefix(SPENT_SOME) {
+            let colors = g.try_obj(id).map(|o| o.chars.colors);
+            return Some(cast.is_some_and(|c| amount(g, c, what, colors).unwrap_or(0) > 0));
+        }
         if name == USING_SOURCE_MANA {
             return Some(cast.is_some_and(|c| {
                 ctx.source.is_some_and(|s| c.mana_sources.contains(&s))
