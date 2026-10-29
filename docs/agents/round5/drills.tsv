@@ -416,3 +416,226 @@ C5-V-eri-1	Eriette, the Beguiler	Whenever an Aura you control becomes attached t
 C5-V-dc-1	Disorienting Choice	For each opponent, choose up to one target artifact or enchantment that player controls. For each permanent chosen this way, its controller may exile it.	OK
 C5-V-dc-2	Disorienting Choice	For each opponent, choose up to one target artifact or enchantment that player controls. For each permanent chosen this way, its controller may exile it. Then you search your library for up to two land cards, put them onto the battlefield tapped, then shuffle.	OK
 C5-V-dc-3	Disorienting Choice	For each opponent, choose up to one target artifact or enchantment that player controls. For each permanent chosen this way, its controller may exile it. Then if one or more of the chosen permanents are still on the battlefield, draw a card.	FAIL
+C5-W-tet-1	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, create that many 1/1 colorless Tetravite artifact creature tokens.	FAIL
+C5-W-tet-2	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, draw that many cards.	FAIL
+C5-W-tet-3	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, create a 1/1 colorless Tetravite artifact creature token.	OK
+C5-W-tet-4	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. Create a 1/1 colorless Tetravite artifact creature token for each counter removed this way.	OK
+C5-W-tet-5	Divination	Create two 1/1 colorless Tetravite artifact creature tokens. They each have flying and "This token can't be enchanted."	FAIL
+C5-W-tet-6	Divination	Create two 1/1 colorless Tetravite artifact creature tokens with flying and "This token can't be enchanted."	OK
+C5-W-tet-7	Divination	Create two 1/1 colorless Thopter artifact creature tokens with flying.	OK
+C5-W-tet-8	Tetravus	At the beginning of your upkeep, remove all +1/+1 counters from this creature. Create a 1/1 colorless Tetravite artifact creature token for each counter removed this way.	OK
+C5-W-tet-9	Tetravus	At the beginning of your upkeep, you may remove a +1/+1 counter from this creature. If you do, create a 1/1 colorless Tetravite artifact creature token.	OK
+C5-W-tet-10	Grizzly Bears	This creature can't be enchanted.	OK
+C5-W-tet-11	Divination	Create a 1/1 colorless Tetravite artifact creature token. It has flying and "This token can't be enchanted."	OK
+C5-W-lod-1	Lodestone Bauble	{1}, {T}, Sacrifice this artifact: Put up to four target basic land cards from target player's graveyard on top of their library in any order. That player draws a card at the beginning of the next turn's upkeep.	OK
+C5-W-lod-2	Lodestone Bauble	{1}, {T}, Sacrifice this artifact: Put up to four target basic land cards from a single graveyard on top of their owner's library in any order.	OK
+C5-W-lod-3	Lodestone Bauble	{1}, {T}, Sacrifice this artifact: Put up to four target basic land cards from target player's graveyard on top of their library in any order.	OK
+C5-W-lod-4	Lodestone Bauble	{1}, {T}, Sacrifice this artifact: Choose a player. Put up to four target basic land cards from that player's graveyard on top of their library in any order. That player draws a card at the beginning of the next turn's upkeep.	FAIL
+C5-W-lod-5	Lodestone Bauble	{1}, {T}, Sacrifice this artifact: Target player draws a card at the beginning of the next turn's upkeep.	OK
+C5-W-lod-6	Lodestone Bauble	{1}, {T}, Sacrifice this artifact: Put up to four target basic land cards from a player's graveyard on top of their library in any order.	FAIL
+C5-W-tet-12	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from among creatures you control. If you do, draw that many cards.	OK
+C5-W-tet-13	Tetravus	When this creature enters, you may remove any number of +1/+1 counters from this creature. If you do, draw that many cards.	FAIL
+C5-W-tet-14	Tetravus	At the beginning of your upkeep, you may sacrifice any number of creatures. If you do, draw that many cards.	OK
+C5-W-tet-15	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, put that many +1/+1 counters on target creature.	FAIL
+C5-W-tet-16	Grizzly Bears	When this creature enters, you may remove any number of +1/+1 counters from this creature. If you do, you gain that much life.	OK
+C5-W-tet-17	Galloping Lizrog	When this creature enters, you may remove any number of +1/+1 counters from among creatures you control. If you do, put twice that many +1/+1 counters on this creature.	OK
+C5-W-tet-18	Galloping Lizrog	When this creature enters, you may remove any number of +1/+1 counters from among creatures you control. If you do, create that many 1/1 colorless Thopter artifact creature tokens with flying.	OK
+C5-W-tet-19	Grizzly Bears	When this creature enters, create two 1/1 colorless Thopter artifact creature tokens. They each have flying.	FAIL
+C5-W-tet-20	Grizzly Bears	When this creature enters, create two 1/1 colorless Thopter artifact creature tokens. They gain flying until end of turn.	OK
+C5-W-tet-21	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, create that many 1/1 colorless Tetravite artifact creature tokens with flying and "This token can't be enchanted."	FAIL
+C5-W-tet-22	Grizzly Bears	When this creature enters, create two 1/1 colorless Thopter artifact creature tokens. They have flying.	OK
+C5-W-tet-23	Grizzly Bears	When this creature enters, create two 1/1 colorless Thopter artifact creature tokens. They have flying and "This token can't be enchanted."	OK
+C5-W-tet-24	Grizzly Bears	When this creature enters, create two 1/1 colorless Thopter artifact creature tokens. They each have "This token can't be enchanted."	FAIL
+C5-W-tet-25	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, create that many 1/1 colorless Tetravite artifact creature tokens for each counter removed this way.	FAIL
+C5-W-tet-26	Tetravus	At the beginning of your upkeep, you may remove any number of +1/+1 counters from this creature. If you do, create X 1/1 colorless Tetravite artifact creature tokens, where X is the number of counters removed this way.	OK
+C5-W-ben-1	Benthic Explorers	{T}, Untap a tapped land you control: Add {C}.	OK
+C5-W-ben-2	Benthic Explorers	{T}, Untap a tapped land an opponent controls: Add {C}.	FAIL
+C5-W-ben-3	Benthic Explorers	{T}: Untap target tapped land an opponent controls. Add one mana of any type that land could produce.	OK
+C5-W-ben-4	Benthic Explorers	{T}, Untap a tapped land an opponent controls: Add one mana of any color.	FAIL
+C5-W-ben-5	Benthic Explorers	{T}, Untap a tapped land an opponent controls: Add one mana of any type a land an opponent controls could produce.	FAIL
+C5-W-ben-6	Benthic Explorers	{T}, Sacrifice a land: Add one mana of any type that land could produce.	OK
+C5-W-ben-7	Benthic Explorers	{T}, Tap an untapped land an opponent controls: Add {C}.	OK
+C5-W-leq-1	Land Equilibrium	If an opponent would put a land onto the battlefield, that player instead puts that land onto the battlefield then sacrifices a land of their choice.	FAIL
+C5-W-leq-2	Land Equilibrium	If an opponent who controls at least as many lands as you do would put a land onto the battlefield, that player instead puts that land onto the battlefield then sacrifices a land.	FAIL
+C5-W-leq-3	Land Equilibrium	Whenever a land enters under an opponent's control, if that player controls more lands than you, that player sacrifices a land of their choice.	OK
+C5-W-leq-4	Land Equilibrium	If a land would enter under the control of an opponent who controls at least as many lands as you do, that player sacrifices a land of their choice as that land enters.	FAIL
+C5-W-leq-5	Land Equilibrium	If an opponent would put a land onto the battlefield, that player instead puts that land onto the battlefield, then that player sacrifices a land.	FAIL
+C5-W-ns-1	North Star	{4}, {T}: Until end of turn, you may spend mana as though it were mana of any type to cast spells.	FAIL
+C5-W-ns-2	North Star	{4}, {T}: You may spend mana as though it were mana of any type to cast the next spell you cast this turn.	FAIL
+C5-W-ns-3	North Star	{4}, {T}: For one spell this turn, you may spend mana as though it were mana of any color to pay that spell's mana cost.	FAIL
+C5-W-ns-4	North Star	{4}, {T}: Until end of turn, you may spend mana as though it were mana of any color to pay the mana costs of spells.	FAIL
+C5-W-ns-5	North Star	{4}, {T}: The next spell you cast this turn costs {1} less to cast.	OK
+C5-W-wop-1	Wheel of Potential	You get {E}{E}{E} (three energy counters), then you may pay any amount of {E}. / Each player may exile their hand and draw a number of cards equal to the amount of {E} paid this way.	OK
+C5-W-wop-2	Wheel of Potential	You get {E}{E}{E} (three energy counters), then you may pay any amount of {E}. / Each player may exile their hand and draw a number of cards equal to the amount of {E} paid this way. If seven or more {E} was paid this way, you draw a card.	OK
+C5-W-wop-3	Wheel of Potential	You get {E}{E}{E} (three energy counters), then you may pay any amount of {E}. / Each player may exile their hand and draw a number of cards equal to the amount of {E} paid this way. If seven or more {E} was paid this way, you may play cards exiled this way until the end of your next turn.	FAIL
+C5-W-wop-4	Wheel of Potential	You get {E}{E}{E} (three energy counters), then you may pay any amount of {E}. / Each player may exile their hand and draw a number of cards equal to the amount of {E} paid this way. You may play cards you own exiled this way until the end of your next turn.	FAIL
+C5-W-wop-5	Wheel of Potential	Each player exiles their hand. You may play cards you own exiled this way until the end of your next turn.	FAIL
+C5-W-wop-6	Wheel of Potential	Exile your hand. You may play cards exiled this way until the end of your next turn.	OK
+C5-W-wop-7	Wheel of Potential	Each player exiles their hand. You may play lands and cast spells from among cards you own exiled this way until the end of your next turn.	FAIL
+C5-W-wow-1	Words of War	{1}: The next time you would draw a card this turn, this enchantment deals 2 damage to target player instead.	FAIL
+C5-W-wow-2	Words of War	{1}: The next time you would draw a card this turn, you gain 2 life instead.	OK
+C5-W-wow-3	Words of War	{1}: The next time you would draw a card this turn, instead this enchantment deals 2 damage to any target.	FAIL
+C5-W-wow-4	Words of War	{1}: The next time you would draw a card this turn, each opponent loses 2 life instead.	OK
+C5-W-wow-5	Words of War	{1}: The next time you would draw a card this turn, this enchantment deals 2 damage to each opponent instead.	OK
+C5-W-zur-1	Zur's Weirding	If a player would draw a card, they reveal it instead.	FAIL
+C5-W-zur-2	Zur's Weirding	If a player would draw a card, they reveal the top card of their library instead. Then any other player may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, that player draws a card.	FAIL
+C5-W-zur-3	Zur's Weirding	If a player would draw a card, instead they reveal the top card of their library. Any other player may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, that player draws a card.	FAIL
+C5-W-zur-4	Zur's Weirding	If a player would draw a card, instead they reveal the top card of their library and put it into their graveyard.	OK
+C5-W-zur-5	Divination	Reveal the top card of your library. Any opponent may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, draw a card.	FAIL
+C5-W-zur-6	Divination	Reveal the top card of your library. Each opponent may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, draw a card.	FAIL
+C5-W-cyc-1	Unpredictable Cyclone	If a cycling ability of another nonland card would cause you to draw a card, instead exile cards from the top of your library until you exile a nonland card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.	FAIL
+C5-W-cyc-2	Unpredictable Cyclone	If you would draw a card, instead exile cards from the top of your library until you exile a nonland card. You may cast that card without paying its mana cost. Then put the exiled cards that weren't cast this way on the bottom of your library in a random order.	OK
+C5-W-cyc-3	Unpredictable Cyclone	If a cycling ability would cause you to draw a card, instead you gain 2 life.	FAIL
+C5-W-cyc-4	Unpredictable Cyclone	If a cycling ability of another card would cause you to draw a card, instead you gain 2 life.	FAIL
+C5-W-cyc-5	Unpredictable Cyclone	Whenever you cycle another nonland card, exile cards from the top of your library until you exile a card that shares a card type with the cycled card.	FAIL
+C5-W-cyc-6	Unpredictable Cyclone	Whenever you cycle another nonland card, exile cards from the top of your library until you exile a card that shares a card type with it.	FAIL
+C5-W-cyc-7	Unpredictable Cyclone	If you would draw a card, instead exile cards from the top of your library until you exile a card that shares a card type with the cycled card.	FAIL
+C5-W-cyc-8	Unpredictable Cyclone	If a spell or ability would cause you to draw a card, instead you gain 2 life.	FAIL
+C5-W-snw-1	Snowfall	Whenever an Island is tapped for mana, its controller adds an additional {U}.	OK
+C5-W-snw-2	Snowfall	Whenever an Island is tapped for mana, its controller may add an additional {U}.	FAIL
+C5-W-snw-3	Snowfall	Whenever an Island is tapped for mana, its controller adds an additional {U}. Spend this mana only to pay cumulative upkeep costs.	OK
+C5-W-snw-4	Snowfall	Whenever an Island is tapped for mana, its controller adds an additional {U}. If that Island is snow, its controller adds an additional {U}{U} instead.	FAIL
+C5-W-snw-5	Snowfall	{T}: Add {U}. Spend this mana only to pay cumulative upkeep costs.	OK
+C5-W-snw-6	Snowfall	Whenever a land is tapped for mana, its controller may add an additional {U}.	FAIL
+C5-W-snw-7	Snowfall	Whenever you tap an Island for mana, you may add an additional {U}.	OK
+C5-W-bal-1	Balduvian Fallen	Whenever this creature's cumulative upkeep is paid, it gets +1/+0 until end of turn.	OK
+C5-W-bal-2	Balduvian Fallen	Whenever this creature's cumulative upkeep is paid, it gets +1/+0 until end of turn for each {B} spent this way.	FAIL
+C5-W-bal-3	Balduvian Fallen	Whenever this creature's cumulative upkeep is paid, it gets +1/+0 until end of turn for each age counter on it.	OK
+C5-W-bal-4	Grizzly Bears	{1}: This creature gets +1/+0 until end of turn for each {B} or {R} spent to activate this ability.	FAIL
+C5-W-bal-5	Grizzly Bears	{X}: This creature gets +1/+0 until end of turn for each {R} spent to activate this ability.	FAIL
+C5-W-pj-1	Primitive Justice	As an additional cost to cast this spell, you may pay {1}{R} any number of times. / Destroy target artifact. For each additional {1}{R} you paid, destroy another target artifact.	FAIL
+C5-W-pj-2	Primitive Justice	As an additional cost to cast this spell, you may pay {1}{R} any number of times. / Destroy target artifact.	OK
+C5-W-pj-3	Primitive Justice	Multikicker {1}{R} / Destroy target artifact and X other target artifacts, where X is the number of times this spell was kicked.	OK
+C5-W-pj-4	Primitive Justice	As an additional cost to cast this spell, you may pay {1}{R} and/or {1}{G}. / Destroy target artifact.	FAIL
+C5-W-pj-5	Primitive Justice	Multikicker {1}{R} / Multikicker {1}{G} / Destroy target artifact and X other target artifacts, where X is the number of times this spell was kicked.	OK
+C5-W-pj-6	Primitive Justice	Multikicker {1}{R} / Destroy target artifact. For each time this spell was kicked, destroy another target artifact.	FAIL
+C5-W-cr-1	Celestial Reunion	As an additional cost to cast this spell, you may behold two creatures. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle.	OK
+C5-W-cr-2	Celestial Reunion	As an additional cost to cast this spell, you may choose a creature type and behold a creature of that type. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle.	FAIL
+C5-W-cr-3	Celestial Reunion	As an additional cost to cast this spell, choose a creature type and behold two creatures of that type. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle.	FAIL
+C5-W-cr-4	Celestial Reunion	As an additional cost to cast this spell, you may behold a Dragon. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If this spell's additional cost was paid, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-cr-5	Celestial Reunion	As an additional cost to cast this spell, you may behold a Dragon. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If this spell's additional cost was paid and the revealed card is a Dragon, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-cr-6	Celestial Reunion	As this spell is cast, choose a creature type. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If the revealed card is the chosen type, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-cr-7	Celestial Reunion	As an additional cost to cast this spell, you may behold two Dragons. / Draw a card.	OK
+C5-W-ff-1	Fabrication Foundry	{2}{W}, {T}, Exile one or more other artifacts you control: Return target artifact card with mana value X or less from your graveyard to the battlefield. Activate only as a sorcery.	OK
+C5-W-ff-2	Fabrication Foundry	{2}{W}, {T}, Exile another artifact you control: Return target artifact card with mana value less than or equal to the exiled artifact's mana value from your graveyard to the battlefield.	FAIL
+C5-W-ff-3	Fabrication Foundry	{2}{W}, {T}, Sacrifice one or more other artifacts you control with total mana value X: Return target artifact card with mana value X or less from your graveyard to the battlefield.	FAIL
+C5-W-ff-4	Fabrication Foundry	{2}{W}, {T}, Exile X other artifacts you control: Return target artifact card with mana value X or less from your graveyard to the battlefield.	OK
+C5-W-ff-5	Fabrication Foundry	{2}{W}, {T}, Sacrifice any number of artifacts with total mana value X or greater: Draw a card.	FAIL
+C5-W-sw-1	Sword of the Ages	{T}, Sacrifice this artifact and any number of creatures you control: Draw a card.	FAIL
+C5-W-sw-2	Sword of the Ages	{T}, Sacrifice any number of creatures you control: This artifact deals X damage to any target, where X is the total power of the creatures sacrificed this way.	OK
+C5-W-sw-3	Sword of the Ages	{T}, Sacrifice this artifact and a creature: Draw a card.	OK
+C5-W-sw-4	Sword of the Ages	{T}, Sacrifice this artifact, Sacrifice any number of creatures: This artifact deals X damage to any target, where X is the total power of the creatures sacrificed this way, then exile this artifact and those creature cards.	FAIL
+C5-W-sw-5	Sword of the Ages	{T}, Sacrifice any number of creatures you control: This artifact deals X damage to any target, where X is the total power of the creatures sacrificed this way, then exile this artifact and those creature cards.	FAIL
+C5-W-sw-6	Sword of the Ages	{T}, Sacrifice any number of creatures you control: This artifact deals X damage to any target, where X is the total power of the creatures sacrificed this way, then exile those creature cards.	FAIL
+C5-W-bfb-1	Back from the Brink	Exile a creature card from your graveyard: Create a token that's a copy of that card. Activate only as a sorcery.	OK
+C5-W-bfb-2	Back from the Brink	{2}, Exile a creature card from your graveyard: Create a token that's a copy of that card. Activate only as a sorcery.	OK
+C5-W-bfb-3	Back from the Brink	Exile a creature card from your graveyard, Pay its mana cost: Create a token that's a copy of that card.	FAIL
+C5-W-bfb-4	Back from the Brink	Exile a creature card from your graveyard and pay {2}: Create a token that's a copy of that card.	FAIL
+C5-W-bz-1	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy those exiled cards. You may cast up to three of the copies without paying their mana costs.	FAIL
+C5-W-bz-2	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard with fifteen or more black mana symbols among their mana costs: Draw a card.	FAIL
+C5-W-bz-3	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard with total mana value 15 or greater: Draw a card.	OK
+C5-W-bz-4	Baron Helmut Zemo	Boast — Exile five black cards from your graveyard: Copy those exiled cards. You may cast up to three of the copies without paying their mana costs.	FAIL
+C5-W-bz-5	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Draw a card.	OK
+C5-W-win-1	Winter, Cynical Opportunist	Delirium — At the beginning of your end step, you may exile any number of cards from your graveyard. If you do, put a permanent card from among them onto the battlefield with a finality counter on it.	FAIL
+C5-W-win-2	Winter, Cynical Opportunist	At the beginning of your end step, you may exile any number of cards from your graveyard with four or more card types among them. If you do, draw a card.	FAIL
+C5-W-win-3	Winter, Cynical Opportunist	Delirium — At the beginning of your end step, if there are four or more card types among cards in your graveyard, you may exile any number of cards from your graveyard with four or more card types among them. If you do, put a permanent card from among them onto the battlefield with a finality counter on it.	FAIL
+C5-W-ja-1	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control.	OK
+C5-W-ja-2	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage from a creature is prevented this way, you gain 1 life.	FAIL
+C5-W-ja-3	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage from a creature is prevented this way, each creature you control deals damage equal to its power to that creature.	FAIL
+C5-W-ja-4	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage from a creature is prevented this way, target creature you control deals damage equal to its power to that creature.	FAIL
+C5-W-ja-5	Grizzly Bears	Each commander creature you control gets +1/+1.	OK
+C5-W-ja-6	Judgment of Alexander	Each commander creature you control deals damage equal to its power to target creature.	OK
+C5-W-ja-7	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage is prevented this way, you gain 1 life.	FAIL
+C5-W-om-1	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card if it has three or more colored mana symbols in its mana cost. If you do, add three mana in any combination of its colors and put it into your hand. If you don't reveal it, put it into your hand.	FAIL
+C5-W-om-2	Omnath, Locus of All	At the beginning of your first main phase, draw a card.	OK
+C5-W-om-3	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, add three mana in any combination of its colors and put it into your hand. If you don't reveal it, put it into your hand.	FAIL
+C5-W-om-4	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, add {B}{B}{B} and put it into your hand. If you don't reveal it, put it into your hand.	FAIL
+C5-W-om-5	Omnath, Locus of All	At the beginning of your precombat main phase, reveal the top card of your library. If it has three or more colored mana symbols in its mana cost, draw a card.	FAIL
+C5-W-om-6	Omnath, Locus of All	At the beginning of your precombat main phase, add three mana in any combination of colors.	OK
+C5-W-om-7	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card if it's a creature card. If you do, put it into your hand.	OK
+C5-W-rs-1	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. When that creature leaves the battlefield this turn, sacrifice this artifact.	OK
+C5-W-rs-2	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. When that creature leaves the battlefield this turn, sacrifice this artifact. If a creature dealt damage by the targeted creature would die this turn, exile that creature instead.	FAIL
+C5-W-rs-3	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. When that creature leaves the battlefield this turn, sacrifice this artifact. Creatures dealt damage by the targeted creature this turn can't be regenerated this turn.	FAIL
+C5-W-rs-4	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. If the creature deals damage to a creature this turn, the creature dealt damage can't be regenerated this turn.	FAIL
+C5-W-rs-5	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. Whenever that creature deals damage to a creature this turn, that creature can't be regenerated this turn.	OK
+C5-W-rs-6	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. If a creature dealt damage by the targeted creature would die this turn, exile that creature instead.	FAIL
+C5-W-mh-1	Mr. House, President and CEO	{4}, {T}: Roll a six-sided die for each mana from Treasures spent to activate this ability.	FAIL
+C5-W-mh-2	Mr. House, President and CEO	{4}, {T}: Roll a six-sided die. Create a Treasure token for each mana from Treasures spent to activate this ability.	FAIL
+C5-W-mh-3	Mr. House, President and CEO	{4}, {T}: Roll X six-sided dice, where X is one plus the amount of mana from Treasures spent to activate this ability.	FAIL
+C5-W-mh-4	Mr. House, President and CEO	{4}, {T}: Roll a six-sided die plus an additional six-sided die for each artifact you control.	FAIL
+C5-W-mh-5	Mr. House, President and CEO	{4}, {T}: Roll a six-sided die. If mana from a Treasure was spent to activate this ability, roll a six-sided die.	OK
+C5-W-om-8	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, put it into your hand.	OK
+C5-W-om-9	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, add {B}{B}{B}.	OK
+C5-W-om-10	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, add {B}{B}{B} and put it into your hand.	OK
+C5-W-om-11	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, add three mana in any combination of its colors.	FAIL
+C5-W-om-12	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, put it into your hand. If you don't reveal it, put it into your hand.	FAIL
+C5-W-om-13	Omnath, Locus of All	At the beginning of your precombat main phase, look at the top card of your library. You may reveal that card. If you do, put it into your hand. If you don't, put it into your hand.	OK
+C5-W-om-14	Divination	Reveal the top card of your library. If it has three or more colored mana symbols in its mana cost, draw a card.	FAIL
+C5-W-om-15	Divination	Reveal the top card of your library. If that card's mana cost has three or more colored mana symbols, draw a card.	FAIL
+C5-W-om-16	Divination	Reveal the top card of your library. Add one mana of any of that card's colors.	FAIL
+C5-W-om-17	Divination	Add three mana in any combination of colors.	OK
+C5-W-cr-8	Celestial Reunion	As an additional cost to cast this spell, you may behold a Dragon. / Draw a card. If this spell's additional cost was paid, draw a card.	OK
+C5-W-cr-9	Celestial Reunion	As an additional cost to cast this spell, you may behold a Dragon. / Draw a card. If the additional cost was paid, draw a card.	FAIL
+C5-W-cr-10	Celestial Reunion	As an additional cost to cast this spell, you may behold a Dragon. / Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If the additional cost was paid, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-cr-11	Celestial Reunion	Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If it's a Dragon, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-cr-12	Celestial Reunion	Search your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If you control a Dragon, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-cr-13	Celestial Reunion	As an additional cost to cast this spell, you may behold a Dragon. / Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle.	OK
+C5-W-ce-1b	Close Encounter	As an additional cost to cast this spell, choose a creature you control. / ~ deals damage equal to the power of the chosen creature to target creature.	FAIL
+C5-W-ce-2b	Close Encounter	As an additional cost to cast this spell, choose a creature card you own in exile. / ~ deals damage equal to the power of the chosen card to target creature.	FAIL
+C5-W-ce-3b	Close Encounter	As an additional cost to cast this spell, choose a creature you control or a creature card you own in exile. / ~ deals damage equal to the power of the chosen creature or card to target creature.	FAIL
+C5-W-ce-4b	Close Encounter	As an additional cost to cast this spell, choose a creature you control or a warped creature card you own in exile. / ~ deals damage equal to the power of the chosen creature to target creature.	FAIL
+C5-W-ce-5b	Close Encounter	As an additional cost to cast this spell, reveal a creature card from your hand. / ~ deals damage equal to the power of the revealed card to target creature.	OK
+C5-W-ce-6b	Close Encounter	Choose a creature you control. ~ deals damage equal to the power of the chosen creature to target creature.	OK
+C5-W-ce-7b	Close Encounter	As an additional cost to cast this spell, tap an untapped creature you control. / ~ deals damage equal to the tapped creature's power to target creature.	OK
+C5-W-ce-8b	Close Encounter	Choose a creature you control. ~ deals damage equal to that creature's power to target creature.	OK
+C5-W-ce-9b	Close Encounter	As an additional cost to cast this spell, choose a creature you control. / Draw a card.	FAIL
+C5-W-ce-10b	Close Encounter	~ deals damage equal to the power of target creature you control to target creature.	OK
+C5-W-ce-11b	Close Encounter	~ deals 3 damage to target creature.	OK
+C5-W-ce-12b	Close Encounter	Target creature you control deals damage equal to its power to target creature.	OK
+C5-W-ce-13b	Close Encounter	~ deals damage to target creature equal to the power of target creature you control.	OK
+C5-W-ce-14b	Close Encounter	Choose a creature you control. ~ deals damage to target creature equal to the chosen creature's power.	OK
+C5-W-ce-15b	Close Encounter	As an additional cost to cast this spell, sacrifice a creature. / ~ deals damage equal to the sacrificed creature's power to target creature.	OK
+C5-W-ce-16b	Close Encounter	As an additional cost to cast this spell, sacrifice a creature. / ~ deals damage to target creature equal to the sacrificed creature's power.	OK
+C5-W-ce-17b	Close Encounter	As an additional cost to cast this spell, choose a creature you control. / ~ deals damage to target creature equal to the chosen creature's power.	FAIL
+C5-W-ce-18b	Close Encounter	~ deals damage equal to the number of cards in your hand to target creature.	OK
+C5-W-mh-6	Mr. House, President and CEO	{4}, {T}: Draw a card for each mana from Treasures spent to activate this ability.	FAIL
+C5-W-mh-7	Mr. House, President and CEO	{4}, {T}: Draw a card for each mana from a Treasure spent to activate this ability.	FAIL
+C5-W-mh-8	Mr. House, President and CEO	{4}, {T}: Roll two six-sided dice.	OK
+C5-W-mh-9	Mr. House, President and CEO	{4}, {T}: Roll X six-sided dice, where X is the number of artifacts you control.	OK
+C5-W-mh-10	Mr. House, President and CEO	{4}, {T}: Roll a six-sided die for each artifact you control.	FAIL
+C5-W-bal-6	Balduvian Fallen	Whenever this creature's cumulative upkeep is paid, it gets +1/+0 until end of turn for each {B} spent to pay it.	FAIL
+C5-W-bal-7	Grizzly Bears	When this creature enters, it gets +1/+0 until end of turn for each {B} spent to cast it.	FAIL
+C5-W-bal-8	Grizzly Bears	When this creature enters, draw a card for each {B} spent to cast it.	FAIL
+C5-W-leq-6	Land Equilibrium	If a land would enter the battlefield under an opponent's control, it enters tapped.	FAIL
+C5-W-leq-7	Land Equilibrium	If an opponent would put a land onto the battlefield, they put it onto the battlefield tapped instead.	FAIL
+C5-W-leq-8	Land Equilibrium	Lands your opponents control enter tapped.	OK
+C5-W-leq-9	Land Equilibrium	As a land enters under an opponent's control, if that player controls at least as many lands as you do, that player sacrifices a land of their choice.	FAIL
+C5-W-leq-10	Land Equilibrium	Whenever a land enters under an opponent's control, if that player controls more lands than you do, that player sacrifices a land.	FAIL
+C5-W-zur-7	Zur's Weirding	If a player would draw a card, they reveal the top card of their library instead.	OK
+C5-W-zur-8	Divination	Reveal the top card of your library. Any player may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, draw a card.	FAIL
+C5-W-zur-9	Divination	Reveal the top card of your library. Any other player may pay 2 life. If a player does, put that card into its owner's graveyard.	FAIL
+C5-W-zur-10	Divination	Draw a card. Any player may pay 5 life. If a player does, you lose 2 life.	OK
+C5-W-zur-11	Zur's Weirding	If a player would draw a card, instead they reveal the top card of their library. Any player may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, that player draws a card.	FAIL
+C5-W-zur-12	Zur's Weirding	If a player would draw a card, instead they reveal the top card of their library. Then that player draws a card.	OK
+C5-W-wop-8	Wheel of Potential	Each player exiles their hand. You may play cards exiled this way until the end of your next turn.	FAIL
+C5-W-wop-9	Wheel of Potential	Each player exiles their hand. Until the end of your next turn, you may play cards you own exiled this way.	FAIL
+C5-W-wop-10	Wheel of Potential	Each player exiles their hand. Until the end of your next turn, you may play cards you own from among cards exiled this way.	FAIL
+C5-W-wop-11	Wheel of Potential	Each player exiles the top card of their library. You may play cards exiled this way until the end of your next turn.	OK
+C5-W-sw-7	Sword of the Ages	{T}, Sacrifice any number of creatures you control: This artifact deals X damage to any target, where X is the total power of the creatures sacrificed this way. Exile those creature cards.	FAIL
+C5-W-sw-8	Sword of the Ages	{T}, Sacrifice a creature: Exile the sacrificed creature card.	FAIL
+C5-W-sw-9	Sword of the Ages	{T}, Sacrifice a creature: This artifact deals 2 damage to any target, then exile this artifact.	OK
+C5-W-sw-10	Sword of the Ages	{T}, Sacrifice any number of creatures: Exile the sacrificed creature cards.	FAIL
+C5-W-win-4	Winter, Cynical Opportunist	At the beginning of your end step, you may exile any number of cards from your graveyard. If you do, put a permanent card from among them onto the battlefield.	FAIL
+C5-W-win-5	Winter, Cynical Opportunist	At the beginning of your end step, you may exile any number of cards from your graveyard. If you do, return a permanent card from among them to the battlefield.	FAIL
+C5-W-win-6	Winter, Cynical Opportunist	At the beginning of your end step, exile up to three cards from your graveyard. Put a permanent card from among them onto the battlefield.	FAIL
+C5-W-win-7	Winter, Cynical Opportunist	At the beginning of your end step, exile up to three cards from your graveyard. Put a permanent card exiled this way onto the battlefield with a finality counter on it.	OK
+C5-W-win-8	Winter, Cynical Opportunist	At the beginning of your end step, you may exile any number of cards from your graveyard with total mana value 4 or greater. If you do, draw a card.	FAIL
+C5-W-ben-8	Benthic Explorers	{T}, Untap a tapped land you control: Add one mana of any type that land could produce.	OK
+C5-W-bz-6	Divination	Exile two target cards from your graveyard. Copy those exiled cards. You may cast up to one of the copies without paying its mana cost.	FAIL
+C5-W-pj-7	Primitive Justice	As an additional cost to cast this spell, you may pay {1}{R} any number of times. / Destroy target artifact. For each additional {1}{R} you paid, you gain 1 life.	FAIL
+C5-W-pj-8	Primitive Justice	Kicker {1}{R} / Destroy target artifact. If this spell was kicked, destroy another target artifact.	OK
+C5-W-bz-7	Divination	Exile two target cards from your graveyard. Copy those cards. You may cast the copies without paying their mana costs.	OK
+C5-W-bz-8	Divination	Exile two target cards from your graveyard. Copy those exiled cards. You may cast the copies without paying their mana costs.	FAIL
+C5-W-bz-9	Divination	Exile two target cards from your graveyard. Copy those cards. You may cast up to one of the copies without paying its mana cost.	FAIL
+C5-W-bz-10	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy those cards. You may cast the copies without paying their mana costs.	FAIL
+C5-W-bz-11	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy the exiled cards. You may cast up to three of the copies without paying their mana costs.	FAIL
