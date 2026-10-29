@@ -271,3 +271,38 @@ fn rain_of_gore_turns_life_a_spell_gives_its_controller_into_life_loss() {
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.life(P0), 22);
 }
+
+#[test]
+fn island_sanctuary_skips_a_draw_step_draw_and_keeps_out_ground_attackers() {
+    cr!("614.1a", "504.1", "508.1c");
+    ruling!("Island Sanctuary", "Since the draw is replaced");
+    assert_supported(&["Island Sanctuary"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Island Sanctuary");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let crow = t.battlefield(P1, "Storm Crow");
+    t.advance_to(P1, Step::Upkeep);
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.hand_size(P0), hand, "the draw was skipped");
+    // On P1's turn: the Bears can't attack P0.
+    t.advance_to(P1, Step::PrecombatMain);
+    t.attack(&[(bears, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 20);
+    // Declined on P0's next draw step: the restriction is over by P1's next turn, and the
+    // flying Crow could always attack.
+    t.answer_yes(P0, false);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.attack(&[(bears, Entity::Player(P0)), (crow, Entity::Player(P0))], &[]);
+    assert_eq!(t.life(P0), 17);
+    // A draw outside the draw step isn't replaced.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Island Sanctuary");
+    let hand = t.hand_size(P0);
+    t.g.draw_cards(P0, 1);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}

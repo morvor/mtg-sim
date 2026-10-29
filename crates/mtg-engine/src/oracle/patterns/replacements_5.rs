@@ -138,3 +138,58 @@ fn caused_life_gain(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abi
 }
 
 inventory::submit! { StaticPattern { name: "replacements 5: if a spell or ability would cause its controller to gain life, ...", priority: 100, parse: caused_life_gain } }
+
+/// "If you would draw a card during your draw step, instead you may skip that draw. If you
+/// do, until your next turn, you can't be attacked except by creatures with flying and/or
+/// islandwalk." (Island Sanctuary): an optional replacement of a draw during your draw step
+/// (CR 614.1a, 504) whose instruction is the "if you do" one; "you can't be attacked except
+/// by creatures with [keywords]" is "creatures without [keywords] can't attack you".
+fn skip_draw_in_draw_step(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if block.contains('\n') {
+        return None;
+    }
+    let l = block.trim().to_lowercase();
+    let r = end(&l).strip_prefix(
+        "if you would draw a card during your draw step, instead you may skip that draw. if you do, until your next turn, you can't be attacked except by creatures with ",
+    )?;
+    let kws: Vec<&str> = r.split(" and/or ").collect();
+    if kws.len() < 2 || kws.iter().any(|k| k.contains(' ')) {
+        return None;
+    }
+    let rule = crate::oracle::statics::parse_static(
+        &format!("creatures without {} can't attack you", kws.join(" or ")),
+        ctx,
+    )?;
+    let [a] = rule.as_slice() else {
+        return None;
+    };
+    let AbilityKind::Static(StaticAbility {
+        effect: StaticEffect::Restriction(restriction),
+        condition: None,
+        ..
+    }) = &a.kind
+    else {
+        return None;
+    };
+    let def = ReplacementDef {
+        event: ReplacementEvent::Where {
+            event: Box::new(ReplacementEvent::Draw(PlayerFilter::You)),
+            cond: Condition::And(vec![
+                Condition::YourTurn,
+                Condition::Phase(PhaseCond::DrawStep),
+            ]),
+        },
+        action: ReplacementAction::Instead(Box::new(Effect::AddRestriction {
+            restriction: restriction.clone(),
+            duration: Duration::UntilYourNextTurn,
+        })),
+        self_replacement: false,
+        optional: true,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        block.trim(),
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "replacements 5: if you would draw a card during your draw step, instead you may skip that draw. If you do, ...", priority: 80, parse: skip_draw_in_draw_step } }

@@ -1869,6 +1869,7 @@ impl Game {
                     self.turn.step == crate::turn::Step::DeclareAttackers
                 }
                 PhaseCond::EndStep => self.turn.step == crate::turn::Step::End,
+                PhaseCond::DrawStep => self.turn.step == crate::turn::Step::Draw,
             },
             Condition::ChosenWord(w) => self
                 .linked_choice(ctx)

@@ -2146,6 +2146,8 @@ pub enum PhaseCond {
     Upkeep,
     DeclareAttackers,
     EndStep,
+    /// The draw step (CR 504).
+    DrawStep,
 }
 
 // ---------------------------------------------------------------------------

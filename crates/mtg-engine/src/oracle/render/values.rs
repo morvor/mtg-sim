@@ -1128,6 +1128,7 @@ impl Renderer<'_> {
                 PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
+                PhaseCond::DrawStep => "it's the draw step".into(),
             },
             Condition::CitysBlessing => "you have the city's blessing".into(),
             Condition::IsMonarch => "you're the monarch".into(),

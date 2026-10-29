@@ -749,6 +749,7 @@ impl Renderer<'_> {
                 "during the declare attackers step".into()
             }
             Condition::Phase(PhaseCond::EndStep) => "during the end step".into(),
+            Condition::Phase(PhaseCond::DrawStep) => "during the draw step".into(),
             Condition::Custom(n) if n == "restrictions:declare_blockers_step" => {
                 "during the declare blockers step".into()
             }
