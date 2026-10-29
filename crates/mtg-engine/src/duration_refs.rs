@@ -17,7 +17,7 @@ use crate::game::Game;
 /// Whether `s` is a reference to objects the resolution names (and so needs fixing).
 fn is_referent(s: &Sel) -> bool {
     match s {
-        Sel::Target(_) | Sel::TriggerObject => true,
+        Sel::Target(_) | Sel::TriggerObject | Sel::TriggerOtherObject | Sel::TriggerObjects => true,
         Sel::Var(v) => *v != vars::AFFECTED,
         _ => false,
     }
@@ -40,12 +40,23 @@ fn bind_value(g: &mut Game, v: &Value, ctx: &mut Ctx) -> Value {
     }
 }
 
+/// A filter naming such objects ("attached to that creature").
+fn bind_filter(g: &mut Game, f: &Filter, ctx: &mut Ctx) -> Filter {
+    match f {
+        Filter::AttachedTo(s) => Filter::AttachedTo(Box::new(bind_sel(g, s, ctx))),
+        Filter::And(v) => Filter::And(v.iter().map(|f| bind_filter(g, f, ctx)).collect()),
+        f => f.clone(),
+    }
+}
+
 fn bind_cond(g: &mut Game, c: &Condition, ctx: &mut Ctx) -> Condition {
     match c {
         Condition::And(v) => Condition::And(v.iter().map(|c| bind_cond(g, c, ctx)).collect()),
         Condition::Or(v) => Condition::Or(v.iter().map(|c| bind_cond(g, c, ctx)).collect()),
         Condition::Not(c) => Condition::Not(Box::new(bind_cond(g, c, ctx))),
-        Condition::SelMatches(s, f) => Condition::SelMatches(bind_sel(g, s, ctx), f.clone()),
+        Condition::SelMatches(s, f) => {
+            Condition::SelMatches(bind_sel(g, s, ctx), bind_filter(g, f, ctx))
+        }
         Condition::SelNonEmpty(s) => Condition::SelNonEmpty(bind_sel(g, s, ctx)),
         Condition::Compare(a, cmp, b) => {
             Condition::Compare(bind_value(g, a, ctx), *cmp, bind_value(g, b, ctx))

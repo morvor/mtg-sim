@@ -24,6 +24,8 @@ use crate::oracle::phrases::end;
 fn swap_duration(e: &mut Effect, d: &Duration, allow: fn(&Effect) -> bool) -> usize {
     match e {
         Effect::Seq(v) => v.iter_mut().map(|x| swap_duration(x, d, allow)).sum(),
+        // "you may have that creature become a copy of ..." (Blade of Shared Souls).
+        Effect::May { effect, .. } => swap_duration(effect, d, allow),
         _ if !allow(e) => 0,
         Effect::Modify { duration, .. }
         | Effect::BecomeCopy { duration, .. }
@@ -103,6 +105,13 @@ fn remains(c: &str, it: &Sel) -> Option<Condition> {
             _ => None,
         }
     };
+    // "~ remains attached to it" (Assimilation Aegis).
+    if let Some((s, o)) = c.split_once(" remains attached to ") {
+        return Some(Condition::SelMatches(
+            named(s)?,
+            Filter::AttachedTo(Box::new(named(o)?)),
+        ));
+    }
     if let Some(s) = c.strip_suffix(" remains tapped") {
         return Some(match named(s)? {
             Sel::This => match crate::untap_choice::remains_tapped(false) {
@@ -137,15 +146,26 @@ fn remains(c: &str, it: &Sel) -> Option<Condition> {
 /// condition about the objects the instruction names, fixed as the effect begins
 /// (`duration_refs`).
 fn for_as_long_as_it_remains(l: &str, b: &mut Builder) -> Option<Effect> {
+    // "For as long as ~ remains attached to it, that creature becomes a copy of ..."
+    // (Assimilation Aegis): the duration written first.
+    let moved;
+    let l = match end(l).strip_prefix("for as long as ") {
+        Some(r) => {
+            let (cond, rest) = r.split_once(", ")?;
+            moved = format!("{rest} for as long as {cond}");
+            moved.as_str()
+        }
+        None => l,
+    };
     let (head, cond) = end(l).rsplit_once(" for as long as ")?;
     if cond.contains(", ") {
         return None;
     }
     // Durations the core grammar reads alone go there.
     let parts: Vec<&str> = cond.split(" and ").collect();
-    let names_it = parts
-        .iter()
-        .any(|p| p.starts_with("that ") || p.starts_with("it "));
+    let names_it = parts.iter().any(|p| {
+        p.starts_with("that ") || p.starts_with("it ") || p.ends_with(" attached to it")
+    });
     if !names_it {
         return None;
     }

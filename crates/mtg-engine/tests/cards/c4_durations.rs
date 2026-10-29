@@ -206,3 +206,62 @@ fn old_man_of_the_sea_control_ends_when_it_untaps() {
     t.resolve_all();
     assert_eq!(t.obj_now(bears).controller, P1);
 }
+
+#[test]
+fn assimilation_aegis_copy_lasts_while_it_remains_attached() {
+    cr!("611.2b", "707.2", "607.2a");
+    ruling!(
+        "Assimilation Aegis",
+        "copies exactly what was printed on the original creature card"
+    );
+    supported("Assimilation Aegis");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let aegis = t.enter(P0, "Assimilation Aegis");
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P0, "Wall of Stone");
+    t.g.attach(aegis, Entity::Object(bears));
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Hill Giant");
+    assert_eq!(t.pt(bears), (3, 3));
+    // Moved to another creature: the first one is itself again.
+    t.g.attach(aegis, Entity::Object(wall));
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Grizzly Bears");
+    assert_eq!(t.obj_now(wall).chars.name.as_str(), "Hill Giant");
+    // Reattaching starts a new effect.
+    t.g.attach(aegis, Entity::Object(bears));
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Hill Giant");
+    assert_eq!(t.obj_now(wall).chars.name.as_str(), "Wall of Stone");
+}
+
+#[test]
+fn blade_of_shared_souls_copy_ends_when_it_becomes_unattached() {
+    cr!("611.2b", "707.2");
+    ruling!(
+        "Blade of Shared Souls",
+        "The copiable values granted by Blade of Shared Souls are locked in as its effect begins to apply"
+    );
+    supported("Blade of Shared Souls");
+    let mut t = TestGame::new(2);
+    let blade = t.battlefield(P0, "Blade of Shared Souls");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    t.g.attach(blade, Entity::Object(bears));
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Hill Giant");
+    // Locked in: the copied creature leaving doesn't matter.
+    t.g.destroy(giant, None);
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Hill Giant");
+    t.g.unattach(blade);
+    t.g.recompute();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Grizzly Bears");
+}
