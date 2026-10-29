@@ -18,6 +18,9 @@ impl Renderer<'_> {
         if let Some(s) = self.value_extra(v) {
             return s;
         }
+        if let Some(s) = self.cast_before_count(v) {
+            return s;
+        }
         match v {
             Value::Const(n) => n.to_string(),
             Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),

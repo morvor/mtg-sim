@@ -29,6 +29,8 @@ mod custom_effects;
 mod custom_extra;
 mod custom_filters;
 mod custom_more;
+mod custom_nodes;
+mod draft_terms;
 mod dig;
 mod each_player;
 mod effect_terms;
@@ -196,7 +198,10 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             skip = n - 1;
             continue;
         }
-        if let Some((n, line)) = r.same_is_true_group(&abilities[i..]) {
+        if let Some((n, line)) = r
+            .same_is_true_group(&abilities[i..])
+            .or_else(|| draft_terms::removed_keywords_group(&abilities[i..]))
+        {
             out.lines.push(line);
             skip = n - 1;
             continue;

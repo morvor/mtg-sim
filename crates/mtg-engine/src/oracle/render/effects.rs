@@ -876,6 +876,19 @@ impl Renderer<'_> {
                     format!("for {w}, {inner}")
                 }
             }
+            // A custom effect worded about the player who performs it.
+            Effect::AsPlayer { who, effect }
+                if matches!(effect.as_ref(), Effect::Custom(n)
+                    if crate::kw::game_rules_4::reduce_highest_speed_args(n).is_some()) =>
+            {
+                let Effect::Custom(n) = effect.as_ref() else {
+                    return self.gap("AsPlayer custom");
+                };
+                match self.custom_effect_as_player(who, n) {
+                    Some(s) => s,
+                    None => self.gap(format!("Effect::Custom({n})")),
+                }
+            }
             Effect::AsPlayer { who, effect } if self.choose_and_pay_each(effect).is_some() => {
                 let w = self.player(who, Case::Subj);
                 let s = self.choose_and_pay_each(effect).unwrap_or_default();

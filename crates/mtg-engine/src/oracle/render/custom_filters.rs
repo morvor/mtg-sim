@@ -314,6 +314,9 @@ impl Renderer<'_> {
     /// target player's graveyard", "the top creature card of defending player's
     /// graveyard", "~" (the source, or the object it became).
     pub(crate) fn custom_whole_noun(&mut self, f: &Filter) -> Option<String> {
+        if let Some(s) = self.top_cards_of_graveyard(f) {
+            return Some(s);
+        }
         let atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],

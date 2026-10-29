@@ -1127,6 +1127,11 @@ impl Renderer<'_> {
             Filter::Colorless => np.colors.push("colored".into()),
             Filter::FaceDown => np.status.push("face-up".into()),
             Filter::Source => np.other = true,
+            // The source, or the object it became (CR 400.7): "another creature card from
+            // your graveyard" after ~ died.
+            Filter::Custom(n) if n == crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT => {
+                np.other = true
+            }
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
             // "it gets +1/+1 for each other creature you control": other than "it".

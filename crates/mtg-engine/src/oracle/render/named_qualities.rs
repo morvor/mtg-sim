@@ -40,7 +40,7 @@ pub(crate) fn custom_rel_named(name: &str) -> Option<CustomQuality> {
         crate::choices::ONLY_COLOR_ITS_CONTROLLER_CHOSE => {
             rel("that's only the color its controller chose")
         }
-        _ => None,
+        _ => super::custom_nodes::custom_rel_nodes(name),
     }
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn custom_clause_named(name: &str, subj: &str, negated: bool) -> Opti
             format!("{subj} has the name they chose"),
             format!("{subj} doesn't have the name they chose"),
         ),
-        _ => return None,
+        _ => return super::custom_nodes::custom_clause_nodes(name, subj, negated),
     };
     Some(if negated { no } else { yes })
 }
