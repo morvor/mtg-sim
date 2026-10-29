@@ -594,7 +594,9 @@ fn modes_cant_repeat_and_x_is_fixed_as_the_mode_is_performed() {
     let from = t.asked().len();
     let _ = t.cast(P0, card).kicked(true).modes(&[1, 1]).try_go();
     t.resolve_all();
-    assert!(modes_asked(&t, from).iter().all(|(_, rep)| !rep));
+    let asked = modes_asked(&t, from);
+    assert!(!asked.is_empty());
+    assert!(asked.iter().all(|(_, rep)| !rep), "{asked:?}");
     assert!(t.hand_size(P0) <= hand - 1 + 2);
     // Kicked, modes II and III for P0: the token is X/X for the hand after drawing.
     let mut t = TestGame::new(2);
