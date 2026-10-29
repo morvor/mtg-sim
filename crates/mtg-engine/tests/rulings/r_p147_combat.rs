@@ -550,7 +550,7 @@ fn master_of_cruelties_unaffected_by_a_creature_entering_attacking() {
     // The trigger set P1's life total to 1 in the declare blockers step; the Bears then
     // assigned their 2 combat damage normally (the Master assigned none).
     assert!(t.has_lost(P1), "life {}", t.life(P1));
-    assert!(t.life(P1) <= -1);
+    assert_eq!(t.life(P1), -1);
 }
 
 #[test]
@@ -609,11 +609,17 @@ fn medomai_cant_attack_during_any_extra_turn_whoevers_it_is() {
         "Medomai the Ageless",
         "It doesn't matter whose turn it is. In very rare cases, an opponent may be taking an extra turn and gain control of Medomai. Medomai can't attack during that turn."
     );
+    // P0's Medomai, controlled by P1 during P1's (extra or normal) turn.
     for extra in [false, true] {
         let mut t = TestGame::new(2);
-        let m = t.battlefield(P1, "Medomai the Ageless");
+        let m = t.battlefield(P0, "Medomai the Ageless");
+        take_control(&mut t, P1, m);
+        // (P1 has controlled it since P1's turn began: `to_combat` skips the untap step.)
+        let m = t.g.current(m);
+        t.g.obj_mut(m).summoning_sick = false;
         to_combat(&mut t, P1);
         t.g.turn.extra = extra;
+        assert_eq!(t.obj_now(m).controller, P1);
         assert_eq!(legal_attack(&mut t, &at(P0, &[m])), !extra, "extra: {extra}");
     }
 }

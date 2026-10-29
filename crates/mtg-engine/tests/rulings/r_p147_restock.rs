@@ -140,6 +140,34 @@ fn misinformation_targets_cards_not_the_opponent() {
     assert!(top2.contains(&"Grizzly Bears".to_string()) && top2.contains(&"Hill Giant".to_string()));
 }
 
+#[test]
+fn misinformation_the_cards_owner_arranges_them() {
+    cr!("401.4");
+    interp!("library-arranged-by-owner-not-instructing-player");
+    // Current behavior (provisional): the owner of the cards (P1) orders them, not the
+    // caster, although Misinformation's ruling says the caster puts them in any order.
+    let cards = ["Grizzly Bears", "Hill Giant"];
+    let mut tops = vec![];
+    for order in [[0usize, 1], [1, 0]] {
+        let mut t = TestGame::new(2);
+        let a = t.graveyard(P1, cards[0]);
+        let b = t.graveyard(P1, cards[1]);
+        let from = n_asked(&t);
+        t.answer(P1, DecisionKind::Order, Answer::Indices(order.to_vec()));
+        let spell = cast_multi(&mut t, P0, "Misinformation", &[obj(a), obj(b)]);
+        t.resolve_all();
+        assert!(resolved(&t, spell));
+        let orders: Vec<PlayerId> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::Order { .. }))
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(orders, vec![P1]);
+        tops.push(top_name(&t, P1));
+    }
+    assert_ne!(tops[0], tops[1]);
+}
+
 // --- Dead Reckoning ------------------------------------------------------------------------
 
 #[test]
