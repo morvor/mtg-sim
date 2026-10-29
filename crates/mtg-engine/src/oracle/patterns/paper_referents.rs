@@ -218,3 +218,63 @@ fn the_token_leaves(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { super::TriggerPattern { name: "the token leaves the battlefield (created by another ability)", priority: 300, parse: the_token_leaves } }
+
+/// "[verb] one of those creatures and [instruction on] the other" (Cannibalize: "Exile one
+/// of those creatures and put two +1/+1 counters on the other."): the chosen one, then the
+/// rest of the group (chosen as the spell resolves, its ruling).
+fn one_and_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (a, c) = l.split_once(" and ")?;
+    if !a.contains(" one of ") || !(c.ends_with(" the other") || c.contains(" the other ")) {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let first = parse_clause(a, b)?;
+    // The group the one was chosen from.
+    let group = match &first {
+        Effect::Seq(v) => v.iter().find_map(|e| match e {
+            Effect::Store {
+                var,
+                sel: Sel::Choose { filter: Filter::In(g), count: Value::Const(1), .. },
+            } if *var == super::referents_batches::ONE_OF_THEM => Some((**g).clone()),
+            _ => None,
+        }),
+        _ => None,
+    };
+    let Some(group) = group else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    // Exactly two: "the other" is one object.
+    let two = match &group {
+        Sel::Target(k) => b
+            .targets
+            .get(*k as usize)
+            .is_some_and(|t| matches!((&t.min, &t.max), (Value::Const(2), Value::Const(2)))),
+        _ => false,
+    };
+    if !two {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    let other = Sel::Matching(
+        Box::new(group),
+        Filter::not(Filter::In(Box::new(Sel::Var(
+            super::referents_batches::ONE_OF_THEM,
+        )))),
+    );
+    let text = c.replacen(" the other", " it", 1);
+    b.it = other;
+    let second = parse_clause(&text, b);
+    let Some(second) = second else {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    };
+    b.it = saved.1;
+    Some(Effect::seq(vec![first, second]))
+}
+
+inventory::submit! { EffectPattern { name: "[verb] one of those creatures and [instruction on] the other", priority: 300, parse: one_and_the_other } }

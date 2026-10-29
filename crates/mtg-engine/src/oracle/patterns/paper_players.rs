@@ -176,3 +176,127 @@ fn lose_unspent_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { super::EffectPattern { name: "lose all unspent mana", priority: 300, parse: lose_unspent_mana } }
+
+/// "the [type] [player] controls with the greatest mana value", chosen by that player
+/// among those tied (Juxtapose: "their controller chooses one of them").
+fn greatest_of(noun: &str, who: &PlayerRef, b: &mut Builder) -> Option<Sel> {
+    let (sel, rest) =
+        crate::oracle::effects::object_ref(&format!("the {noun} you control with the greatest mana value"), b)?;
+    if !end(&rest).is_empty() {
+        return None;
+    }
+    let Sel::Choose { .. } = &sel else {
+        return None;
+    };
+    if matches!(who, PlayerRef::You) {
+        return Some(sel);
+    }
+    // The same selection for the other player: their permanents, their choice.
+    let PlayerRef::Target(n) = who else {
+        return None;
+    };
+    let mut j = serde_json::to_value(&sel).ok()?;
+    fn swap(v: &mut serde_json::Value, n: u8) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if (k == "ControlledBy" || k == "chooser") && *x == serde_json::json!("You") {
+                        *x = if k == "ControlledBy" {
+                            serde_json::json!({ "Target": n })
+                        } else {
+                            serde_json::json!({ "Target": n })
+                        };
+                    } else {
+                        swap(x, n);
+                    }
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| swap(x, n)),
+            _ => {}
+        }
+    }
+    swap(&mut j, *n);
+    serde_json::from_value(j).ok()
+}
+
+/// The exchange of the greatest-mana-value [noun] each of two players controls.
+fn exchange_greatest(noun: &str, other: &PlayerRef, b: &mut Builder) -> Option<Effect> {
+    Some(Effect::ExchangeControl {
+        a: greatest_of(noun, &PlayerRef::You, b)?,
+        b: greatest_of(noun, other, b)?,
+    })
+}
+
+/// "You and target player exchange control of the creature you each control with the
+/// greatest mana value." (Juxtapose): each player's own greatest (ties chosen by that
+/// player); nothing is exchanged if either controls none (its rulings).
+fn you_and_player_exchange(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("you and ")?;
+    let (subj, r) = r.split_once(" exchange control of the ")?;
+    let noun = r.strip_suffix(" you each control with the greatest mana value")?;
+    let first = b.targets.len();
+    let (who, rest) = player_ref(subj, b)?;
+    if !rest.trim().is_empty() || !matches!(who, PlayerRef::Target(_)) {
+        b.targets.truncate(first);
+        return None;
+    }
+    let e = exchange_greatest(noun, &who, b);
+    if e.is_none() {
+        b.targets.truncate(first);
+    }
+    e
+}
+
+inventory::submit! { super::EffectPattern { name: "you and target player exchange control of the [type] you each control with the greatest mana value", priority: 300, parse: you_and_player_exchange } }
+
+/// The other player of the last "you and [player] exchange ... greatest" in an effect.
+fn last_greatest_exchange(e: &Effect) -> Option<PlayerRef> {
+    match e {
+        Effect::Seq(v) => v.last().and_then(last_greatest_exchange),
+        Effect::ExchangeControl {
+            a: Sel::Choose { chooser: PlayerRef::You, .. },
+            b: Sel::Choose { chooser: other @ PlayerRef::Target(_), .. },
+        } => Some(other.clone()),
+        _ => None,
+    }
+}
+
+/// "Then exchange control of artifacts the same way." after the above.
+fn exchange_the_same_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let Some(plural) = l
+        .strip_prefix("exchange control of ")
+        .and_then(|r| r.strip_suffix(" the same way"))
+    else {
+        return false;
+    };
+    let Some(other) = last_greatest_exchange(prev) else {
+        return false;
+    };
+    let noun = match plural {
+        "artifacts" => "artifact",
+        "creatures" => "creature",
+        "lands" => "land",
+        "enchantments" => "enchantment",
+        _ => return false,
+    };
+    let Some(e) = exchange_greatest(noun, &other, b) else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "then exchange control of [type] the same way", priority: 60, apply: exchange_the_same_way } }
+
+/// "If two or more permanents a player controls are tied for greatest, their controller
+/// chooses one of them." after those exchanges: how they're already chosen.
+fn tied_for_greatest(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    end(l) == "if two or more permanents a player controls are tied for greatest, their controller chooses one of them"
+        && last_greatest_exchange(prev).is_some()
+}
+
+inventory::submit! { FollowupPattern { name: "if two or more permanents a player controls are tied for greatest", priority: 60, apply: tied_for_greatest } }
