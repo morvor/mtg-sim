@@ -48,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "the greatest number noted for it this turn" (`notes_5`).
+    if let Some(v) = super::notes_5::value(s) {
+        return Some(v);
+    }
     // A player's state as the turn began (`history_conditions_4`).
     if let Some(v) = super::history_conditions_4::value_atom(s, b) {
         return Some(v);

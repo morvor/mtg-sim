@@ -48,3 +48,16 @@ impl Renderer<'_> {
         None
     }
 }
+
+impl Renderer<'_> {
+    /// Values about noted information (`kw/noted_info.rs`).
+    pub(crate) fn noted_value(&mut self, name: &str) -> Option<String> {
+        use crate::kw::noted_info as n;
+        if name == n::GREATEST_NOTED_THIS_TURN {
+            return Some("the greatest number noted for it this turn".into());
+        }
+        let slot: u8 = name.strip_prefix(n::NOTED_TYPES_OF_TARGET)?.parse().ok()?;
+        let t = self.target_mention(slot, players::Case::Obj);
+        Some(format!("the number of creature types noted for {t}"))
+    }
+}
