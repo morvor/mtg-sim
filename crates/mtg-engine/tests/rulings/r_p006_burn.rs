@@ -159,11 +159,12 @@ fn lukka_mana_value_is_five_even_paying_life() {
     t.resolve_all();
     assert!(t.on_battlefield(lukka));
     assert_eq!(crate::r_s08_common::mana_value(&t, lukka), 5);
+    assert_eq!(t.counters(lukka, counters::LOYALTY), 3, "compleated: two fewer");
 }
 
 #[test]
 fn bonfire_of_the_damned_x_is_paid_twice() {
-    cr!("107.3a", "107.3f");
+    cr!("107.3a", "601.2f");
     ruling!(
         "Bonfire of the Damned",
         "A mana cost of {X}{X} means that you pay twice X. If you want X to be 3, you pay {6}{R} to cast Bonfire of the Damned."
@@ -184,7 +185,7 @@ fn bonfire_of_the_damned_x_is_paid_twice() {
 
 #[test]
 fn five_alarm_fire_once_per_damage_step() {
-    cr!("510.2", "510.4", "702.19c", "702.4b");
+    cr!("510.2", "510.4", "702.19b", "702.4b");
     ruling!(
         "Five-Alarm Fire",
         "Five-Alarm Fire’s first ability triggers once for each time a creature you control deals combat damage, even if it deals combat damage to more than one creature, planeswalker, or player."
@@ -333,7 +334,7 @@ fn torch_the_witness_excess_counts_earlier_damage() {
 
 #[test]
 fn torch_the_witness_with_deathtouch() {
-    cr!("120.10", "702.2c");
+    cr!("120.10", "702.2b");
     ruling!(
         "Torch the Witness",
         "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage."
@@ -396,7 +397,7 @@ fn flame_blessed_bolt_exiles_if_it_dies_later_this_turn() {
 
 #[test]
 fn zero_power_creatures_can_attack_and_trigger() {
-    cr!("508.1a", "302.6");
+    cr!("508.1a");
     ruling!(
         "Raid Bombardment",
         "A creature with 0 power can attack, as long as it doesn't also have defender."

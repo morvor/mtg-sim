@@ -76,7 +76,7 @@ fn archwing_dragon_and_mark_of_fury_return_only_from_the_battlefield() {
 
 #[test]
 fn viashino_sandstalker_returns_at_the_end_of_any_turn() {
-    cr!("513.1a", "603.2");
+    cr!("513.1", "603.2");
     ruling!(
         "Viashino Sandstalker",
         "It is returned to its owner’s hand at the end of any turn in which it is on the battlefield."

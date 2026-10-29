@@ -42,7 +42,7 @@ fn return_abilities_work_only_on_the_battlefield() {
 
 #[test]
 fn skywing_aven_can_respond_to_itself() {
-    cr!("602.2b", "608.2b");
+    cr!("117.1b", "608.2b");
     ruling!(
         "Skywing Aven",
         "You can activate Skywing Aven’s ability, then activate it again before that ability resolves. You may do this as many times as you’d like before resolving any of those abilities."
@@ -141,7 +141,7 @@ fn brightling_chooses_on_resolution() {
 
 #[test]
 fn metathran_aerostat_can_respond_to_itself() {
-    cr!("602.2b", "608.2c");
+    cr!("117.1b", "608.2c");
     ruling!(
         "Metathran Aerostat",
         "You can activate the ability in response to itself and get more than one creature card onto the battlefield before this returns to its owner’s hand."
@@ -170,7 +170,7 @@ fn metathran_aerostat_can_respond_to_itself() {
 
 #[test]
 fn palinchron_untaps_zero_to_seven_lands() {
-    cr!("608.2d", "107.1c");
+    cr!("608.2d");
     ruling!("Palinchron", "You can untap 0 to 7 lands.");
     for n in [0usize, 4, 7] {
         let mut t = TestGame::new(2);
@@ -212,7 +212,7 @@ fn wingspan_stride_isnt_returned_after_its_creature_leaves() {
 
 #[test]
 fn conviction_must_be_returned_before_combat_damage() {
-    cr!("510.2", "510.3", "117.3c");
+    cr!("510.2", "510.3");
     ruling!(
         "Conviction",
         "Players don't have priority to cast spells and activate abilities between combat damage being assigned and being dealt."
@@ -307,7 +307,7 @@ fn anthroplasm_survives_its_own_ability() {
 
 #[test]
 fn cryptic_coat_has_no_equip_ability() {
-    cr!("301.5c", "701.58a");
+    cr!("301.5", "702.6a", "701.58a");
     ruling!(
         "Cryptic Coat",
         "Cryptic Coat has no equip ability. Without assistance from other cards, there's no way to attach it to a creature other than with its first triggered ability."
@@ -337,7 +337,7 @@ fn cryptic_coat_has_no_equip_ability() {
 
 #[test]
 fn a_face_down_instant_stays_face_down_when_turned_up() {
-    cr!("701.58g", "708.9");
+    cr!("701.58g");
     ruling!(
         "Arno Dorian",
         "If something tries to turn a face-down instant or sorcery card on the battlefield face up, reveal that card to show all players it’s an instant or sorcery card. The permanent remains on the battlefield face down. Abilities that trigger when a permanent turns face up won’t trigger, because even though you revealed the card, it never turned face up."
@@ -443,7 +443,7 @@ fn aetherplasm_returned_alone_leaves_the_attacker_blocked() {
 
 #[test]
 fn aetherplasm_puts_in_a_creature_that_couldnt_block() {
-    cr!("509.1b", "509.1c");
+    cr!("509.4b");
     ruling!(
         "Aetherplasm",
         "The creature you put onto the battlefield from your hand is blocking the attacking creature, even if the block couldn't legally be declared"
@@ -638,7 +638,7 @@ fn jadzi_puts_a_land_onto_the_battlefield_without_playing_it() {
 
 #[test]
 fn jadzi_with_a_modal_double_faced_card() {
-    cr!("712.12", "712.14", "608.2g");
+    cr!("712.11", "712.14", "608.2g");
     ruling!(
         "Jadzi, Oracle of Arcavios // Journey to the Oracle",
         "If you reveal a modal double-faced card with Jadzi’s triggered ability, and both faces are nonland, you may cast either face by paying {1} rather than its mana cost. If only the back face is a land, you may cast the front face. If both faces are lands, you will put onto the battlefield front face up."

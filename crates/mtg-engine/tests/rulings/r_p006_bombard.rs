@@ -200,7 +200,7 @@ fn abilities_with_an_illegal_single_target_do_nothing() {
 
 #[test]
 fn mogg_fanatic_is_destroyed_before_anyone_gets_priority() {
-    cr!("510.2", "704.3", "117.3c");
+    cr!("510.2", "704.3");
     ruling!(
         "Mogg Fanatic",
         "Once Mogg Fanatic has dealt and been dealt combat damage, it’s too late to activate its ability before it’s destroyed."
