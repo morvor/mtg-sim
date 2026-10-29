@@ -56,6 +56,51 @@ fn eye_of_doom_choices_in_turn_order_then_counters_at_once() {
 }
 
 #[test]
+fn orzhov_advokist_creatures_chosen_in_turn_order_then_counters_at_once() {
+    // The same rule when the choice is part of the counter instruction ("each player may
+    // put two +1/+1 counters on a creature they control").
+    cr!("101.4", "101.4b", "608.2e");
+    ruling!(
+        "Orzhov Advokist",
+        "Then simultaneously each player who chose a creature puts two +1/+1 counters on the creature they chose."
+    );
+    supported("Orzhov Advokist");
+    let mut t = TestGame::new(2);
+    let advokist = t.battlefield(P0, "Orzhov Advokist");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    let other = t.battlefield(P1, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.answer_choose(P0, &[obj(bears)]);
+    t.answer_choose(P1, &[obj(ogre)]);
+    fn plus1_anywhere(g: &mtg_engine::game::Game) -> u32 {
+        g.permanents().map(|o| o.counter(counters::PLUS1)).sum()
+    }
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P1,
+        |d| matches!(d, Decision::ChooseEntities { .. }),
+        plus1_anywhere,
+    );
+    let from = t.asked().len();
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let choosers: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(choosers, vec![P0, P1]);
+    // P0's counters weren't on the Bears yet when P1 chose.
+    assert_eq!(*seen.lock().unwrap(), vec![0]);
+    assert_eq!(t.counters(bears, counters::PLUS1), 2);
+    assert_eq!(t.counters(ogre, counters::PLUS1), 2);
+    assert_eq!(t.counters(advokist, counters::PLUS1), 0);
+    assert_eq!(t.counters(other, counters::PLUS1), 0);
+}
+
+#[test]
 fn checks_made_as_the_ability_resolves() {
     cr!("608.2h");
     ruling!(

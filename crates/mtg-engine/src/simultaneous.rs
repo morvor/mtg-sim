@@ -675,13 +675,10 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
         }
         Effect::DealDamage { source, to, .. } => chosen_by(g, &[source, to], ctx, p),
         // "Each player chooses a nonland permanent and puts a doom counter on it" (Eye of
-        // Doom): the players choose in turn, then the counters are put on all the chosen
-        // objects at once (CR 101.4, 608.2f). (Only for objects chosen beforehand: "may
-        // put a counter on each creature they control" is done by each player in turn,
-        // recording who did.)
-        Effect::AddCounters { what, .. } => {
-            matches!(what, Sel::Var(_)) && chosen_by(g, &[what], ctx, p)
-        }
+        // Doom), "each player may put two +1/+1 counters on a creature they control"
+        // (Orzhov Advokist): the players choose in turn, then the counters are put on all
+        // the chosen objects (CR 101.4, 608.2e, 608.2f).
+        Effect::AddCounters { what, .. } => chosen_by(g, &[what], ctx, p),
         // Whoever makes the choices: no control changes until all are made.
         Effect::GainControl { .. } => true,
         // "For each creature, its controller sacrifices it unless they pay X life" (Killing
@@ -795,6 +792,9 @@ fn plan_choice_cost(
     }
 }
 
+/// The objects a player chose to put counters on, until the counters are put on them.
+const PLANNED_COUNTERS: Var = vars::USER + 10_141;
+
 /// Makes `p`'s choices for `e` (CR 101.4) and returns what they'll do.
 fn plan(
     g: &mut Game,
@@ -831,7 +831,15 @@ fn plan(
             let plan = plan(g, effect, ctx, p, earlier);
             ctx.controller = saved;
             ctx.resolving_controller = saved_resolving;
-            plan
+            match plan {
+                // Performed later, still as that player ("put a +1/+1 counter on each
+                // creature they control": theirs, not the resolving player's).
+                Plan::Exec(inner) => Plan::Exec(Effect::AsPlayer {
+                    who: who.clone(),
+                    effect: Box::new(inner),
+                }),
+                plan => plan,
+            }
         }
         Effect::If {
             cond,
@@ -1114,6 +1122,28 @@ fn plan(
         // "Each player loses a third of their life": every amount is determined before
         // anyone's life changes (CR 608.2f) — in Two-Headed Giant the teammates look at
         // the shared total (CR 810.9).
+        // "Each player may put two +1/+1 counters on a creature they control": the
+        // creature is chosen now, the counters are put on once every player has chosen
+        // (CR 101.4; Orzhov Advokist). ("Put a counter on either of them" keeps "them",
+        // as `Game::exec` does: chosen in turn.)
+        Effect::AddCounters { what, kind, n } if plannable(g, e, ctx, p) && has_choice(what) => {
+            let among_them = matches!(what, Sel::Choose { filter: Filter::In(s), .. }
+                if matches!(**s, Sel::Var(v) if v == vars::IT));
+            if among_them {
+                return Plan::Exec(e.clone());
+            }
+            let chosen = g.resolve_sel(what, ctx);
+            if let Some(p) = p {
+                let objs = chosen.iter().filter_map(|e| e.object()).collect();
+                g.record_apnap_choice(p, objs);
+            }
+            ctx.vars.insert(PLANNED_COUNTERS, chosen);
+            Plan::Exec(Effect::AddCounters {
+                what: Sel::Var(PLANNED_COUNTERS),
+                kind: kind.clone(),
+                n: Value::Const(g.eval_value(n, ctx) as i32),
+            })
+        }
         Effect::LoseLife { who, n } => Plan::Exec(Effect::LoseLife {
             who: who.clone(),
             n: Value::Const(g.eval_value(n, ctx) as i32),
