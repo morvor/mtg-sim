@@ -4,11 +4,16 @@
 //!   Treasure token for each opponent dealt damage." (Malcolm, Keen-Eyed Navigator): one
 //!   token for each player of the triggering batch of damage events, each counted once
 //!   (CR 603.2c; `PlayerRef::TriggerPlayers`).
+//! - "Each player shuffles all creatures they own into their library. Each player who
+//!   shuffled a nontoken creature into their library this way reveals cards ..."
+//!   (Collision of Realms): the players whose own instruction moved such an object (the
+//!   objects each player's instruction moved are kept, CR 608.2c), each performing the
+//!   rest as themselves, in APNAP order (CR 101.4).
 
-use super::EffectPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_sentence, Builder};
-use crate::oracle::phrases::end;
+use crate::oracle::phrases::{end, parse_object_phrase};
 
 /// "[you] create [tokens] for each opponent dealt damage" in a "one or more [objects] deal
 /// damage to [players]" trigger: read as "create X [tokens], where X is the number of
@@ -41,3 +46,122 @@ fn create_for_each_opponent_dealt_damage(l: &str, b: &mut Builder) -> Option<Eff
 }
 
 inventory::submit! { EffectPattern { name: "create [token] for each opponent dealt damage (batch trigger)", priority: 90, parse: create_for_each_opponent_dealt_damage } }
+
+/// The objects moved by each player's instruction of an "each player [instruction]", for
+/// "each player who [did it to an object] this way".
+const MOVED_BY_EACH: Var = vars::USER + 9531;
+
+/// Records the objects each player's instruction in `e` (the last "each player ..."
+/// instruction) moved, if it's one that keeps them (`vars::IT`). Returns whether it did.
+fn record_each_players_results(e: &mut Effect, verb: &str) -> bool {
+    match e {
+        Effect::Seq(v) => v
+            .last_mut()
+            .is_some_and(|x| record_each_players_results(x, verb)),
+        Effect::ForEachPlayer { effect, .. } => {
+            let Effect::AsPlayer { effect: inner, .. } = effect.as_mut() else {
+                return false;
+            };
+            let ok = match (verb, inner.as_ref()) {
+                ("shuffled", Effect::ShuffleIntoLibrary { .. }) => true,
+                ("exiled", Effect::Exile { .. }) => true,
+                _ => false,
+            };
+            if !ok {
+                return false;
+            }
+            let body = std::mem::replace(inner.as_mut(), Effect::Noop);
+            **inner = Effect::seq(vec![
+                body,
+                Effect::Store {
+                    var: MOVED_BY_EACH,
+                    sel: Sel::Union(vec![Sel::Var(MOVED_BY_EACH), Sel::Var(vars::IT)]),
+                },
+            ]);
+            let each = std::mem::replace(e, Effect::Noop);
+            *e = Effect::seq(vec![
+                Effect::Store {
+                    var: MOVED_BY_EACH,
+                    sel: Sel::Union(vec![]),
+                },
+                each,
+            ]);
+            true
+        }
+        _ => false,
+    }
+}
+
+/// "Each player who shuffled a nontoken creature into their library this way [does
+/// something]" after "Each player shuffles ...".
+fn each_player_who_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("each player who ") else {
+        return false;
+    };
+    let Some((did, pred)) = r.split_once(" this way ") else {
+        return false;
+    };
+    // "shuffled a nontoken creature into their library".
+    let Some((verb, obj)) = did.split_once(' ') else {
+        return false;
+    };
+    let obj = match verb {
+        "shuffled" => obj.strip_suffix(" into their library"),
+        "exiled" => Some(obj),
+        _ => None,
+    };
+    let Some(obj) = obj
+        .and_then(|o| o.strip_prefix("a ").or_else(|| o.strip_prefix("an ")))
+    else {
+        return false;
+    };
+    let Some((f, false, tail)) = parse_object_phrase(obj) else {
+        return false;
+    };
+    if !end(tail).is_empty() {
+        return false;
+    }
+    // The object's qualities, wherever it is now.
+    let f = match f {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::Permanent | Filter::InZone(_)))
+                .collect(),
+        ),
+        Filter::Permanent => Filter::Any,
+        f => f,
+    };
+    let mut prev2 = prev.clone();
+    if !record_each_players_results(&mut prev2, verb) {
+        return false;
+    }
+    let Some(e) = parse_sentence(&format!("each player {pred}"), b) else {
+        return false;
+    };
+    let Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect,
+    } = e
+    else {
+        return false;
+    };
+    let did_it = Condition::Compare(
+        Value::CountSel(Box::new(Sel::Matching(
+            Box::new(Sel::Var(MOVED_BY_EACH)),
+            Filter::and(vec![f, Filter::OwnedBy(PlayerRel::Iterated)]),
+        ))),
+        Cmp::Ge,
+        Value::c(1),
+    );
+    *prev = Effect::seq(vec![
+        prev2,
+        Effect::ForEachPlayer {
+            who: PlayerRef::Each(PlayerFilter::History(Box::new(did_it))),
+            effect,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "each player who [did it to an object] this way [does something]", priority: 60, apply: each_player_who_did_this_way } }

@@ -591,3 +591,54 @@ fn equipoise_phases_out_what_the_target_player_controls_in_excess() {
     assert!(out(&t, bears));
     assert!(!out(&t, elves));
 }
+
+/// A creature token for `p` with the characteristics of `like`.
+fn token_like(t: &mut TestGame, p: PlayerId, like: ObjectId) -> ObjectId {
+    let tc = mtg_engine::replacement::TokenCreate {
+        chars: t.obj_now(like).chars.clone(),
+        card: None,
+        tapped: false,
+        attacking: None,
+        copy_of: None,
+        copy_exceptions: vec![],
+    };
+    t.g.create_tokens(p, tc, 1, None)[0]
+}
+
+#[test]
+fn collision_of_realms_only_players_who_shuffled_a_nontoken_creature_reveal() {
+    cr!("101.4", "608.2c", "701.20a");
+    compiles("Collision of Realms");
+    // "Each player shuffles all creatures they own into their library. Each player who
+    // shuffled a nontoken creature into their library this way reveals cards from the top
+    // of their library until they reveal a creature card, then puts that card onto the
+    // battlefield and the rest on the bottom of their library in a random order."
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Grizzly Bears");
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    // P1 has only a token creature; P2 has no creature. Both have creature cards in their
+    // libraries.
+    let model = t.battlefield(P2, "Grizzly Bears");
+    token_like(&mut t, P1, model);
+    t.g.destroy(model, None);
+    for p in [P1, P2] {
+        t.library_top(p, "Llanowar Elves");
+    }
+    t.lands(P0, "Mountain", 7);
+    let spell = t.hand(P0, "Collision of Realms");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let creatures = |t: &TestGame, p: PlayerId| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).controller == p && t.g.obj(**id).chars.is(mtg_engine::types::CardType::Creature))
+            .count()
+    };
+    assert_eq!(creatures(&t, P0), 1);
+    assert_eq!(creatures(&t, P1), 0);
+    assert_eq!(creatures(&t, P2), 0);
+    assert!(t.in_graveyard(P2, "Grizzly Bears"));
+}
