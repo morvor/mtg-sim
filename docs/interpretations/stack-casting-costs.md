@@ -100,6 +100,18 @@ index: `docs/INTERPRETATIONS.md`.
 - Code: `crates/mtg-engine/src/noted_mana.rs` (`note`).
 - Tests: `tests/cards/noted_mana.rs` (`with_several_types_spent_its_controller_chooses_the_one_noted`).
 
+## cost-paid-reflexive-trigger: "When you do" after an optional additional cost is a cast trigger
+- Kind: interpretation
+- Status: decided
+- Rules: 603.12 "A resolving spell or ability may allow or instruct a player to take an action and create a triggered ability that triggers “when [a player] [does or doesn’t]” take that action ..." / 702.153a "... “When you cast this spell, if a casualty cost was paid for it, copy it. ...”" / 601.2i "... Any abilities that trigger when a spell is cast or put onto the stack trigger at this time. ..."
+- Question: Plumb the Forbidden: "As an additional cost to cast this spell, you may sacrifice one or more creatures. When you do, copy this spell for each creature sacrificed this way." 603.12 covers reflexive triggers created by a resolving spell or ability, not by a cost paid while casting. When does "When you do" trigger, and what does it see?
+- Decision: As casualty's own definition reads: "When you cast this spell, if you sacrificed one or more creatures to cast it, copy it for each one." It triggers once, when the spell has become cast (601.2i), and goes on the stack above it; a creature sacrificed for the cost has left the battlefield by then, so its "whenever you cast" abilities don't trigger (the Plumb the Forbidden ruling).
+- Alternatives: Trigger at the moment the cost is paid (601.2h): nothing observable differs, since triggered abilities wait until a player would receive priority (603.3) and the spell is cast by then.
+- Why: The same template as casualty, whose CR text spells it out.
+- Affects: Plumb the Forbidden.
+- Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`); rendered back as one line by `crates/mtg-engine/src/oracle/render/cost_paid_copies.rs`.
+- Tests: `tests/rulings/r_p031_spell_copies.rs` (`plumb_the_forbidden_copies_for_each_creature_sacrificed`).
+
 ## x-defined-by-target: An {X} in an activation cost that the text defines by the ability's target must be announced as that value
 - Kind: interpretation
 - Status: provisional

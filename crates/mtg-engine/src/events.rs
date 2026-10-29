@@ -382,6 +382,13 @@ pub enum Event {
         spell: ObjectId,
         player: PlayerId,
     },
+    /// An activated mana ability of `obj` resolved and added `mana` to `player`'s mana pool
+    /// (CR 605.1b: "Whenever a land's ability causes you to add one or more mana ...").
+    ManaAbilityAdded {
+        obj: ObjectId,
+        player: PlayerId,
+        mana: Vec<crate::mana::ManaType>,
+    },
     /// `player` tapped `obj` for mana (CR 106.12): a mana ability of it with {T} in its
     /// cost resolved and produced `mana` (CR 106.12a).
     TappedForMana {

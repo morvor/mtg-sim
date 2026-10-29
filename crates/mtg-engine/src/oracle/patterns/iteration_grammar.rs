@@ -1048,8 +1048,7 @@ fn for_each_object(l: &str, b: &mut Builder) -> Option<Effect> {
         // creatures, planeswalkers, and/or players. For each of them, ... to that
         // permanent or player"): each of them, whichever it is.
         if let Sel::Target(i) = &sel {
-            if b
-                .targets
+            if b.targets
                 .get(*i as usize)
                 .is_some_and(|t| matches!(t.what, TargetKind::ObjectOrPlayer(..)))
             {
@@ -1169,7 +1168,11 @@ fn each_color_mana(l: &str, _b: &mut Builder) -> Option<Effect> {
     let (f, true, tail) = parse_object_phrase(noun)? else {
         return None;
     };
-    if !end(tail).trim().is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+    // Permanents, or the exiled cards used to craft the source (CR 702.167c).
+    let crafted = format!("{f:?}").contains(crate::kw::craft::USED_TO_CRAFT);
+    if !end(tail).trim().is_empty()
+        || (!crafted && f.zone().is_some_and(|z| z != ZoneKind::Battlefield))
+    {
         return None;
     }
     Some(Effect::AddMana {

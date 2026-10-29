@@ -60,6 +60,14 @@ fn destination(s: &str, c: &Clause, t: &mut Targets) -> Option<Sel> {
         "~" | "this creature" => Sel::This,
         "enchanted creature" | "equipped creature" => Sel::AttachedTo,
         "you" => Sel::Players(PlayerRef::You),
+        // "is dealt to its owner instead" (Personal Incarnation).
+        "its owner" | "~'s owner"
+            if c.to.as_ref().is_some_and(|p| {
+                p.players.is_none() && matches!(p.objects, Some(Filter::Source))
+            }) =>
+        {
+            Sel::Players(PlayerRef::OwnerOf(Box::new(Sel::This)))
+        }
         "its controller" | "that spell's controller" | "that creature's controller" => {
             Sel::Players(PlayerRef::ControllerOf(Box::new(its(c, t)?)))
         }

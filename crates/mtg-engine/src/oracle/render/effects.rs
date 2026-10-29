@@ -8610,6 +8610,10 @@ impl Renderer<'_> {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any color that {n} could produce")
             }
+            ManaProduction::CouldProduceAmount(_, n) => {
+                let (a, _) = self.amount(n);
+                format!("{a} mana of that type")
+            }
             ManaProduction::ChosenColor(n) => match n {
                 Value::Const(1) => "one mana of {alt:the chosen color|that color}".into(),
                 Value::Const(k) => format!("{} mana of the chosen color", number_word(*k)),
@@ -8684,6 +8688,10 @@ impl Renderer<'_> {
             ManaProduction::ManaCostOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("mana equal to {s} mana cost")
+            }
+            ManaProduction::ColoredSymbolsOf(s) => {
+                let s = self.sel(s, Case::Poss);
+                format!("one mana of that color for each colored mana symbol in {s} mana cost")
             }
             ManaProduction::DoubleUnspent => {
                 "mana equal to the amount of each type of unspent mana you have".into()

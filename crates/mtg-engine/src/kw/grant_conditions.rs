@@ -71,8 +71,19 @@ impl KeywordRules for GrantConditions {
             let from_exile = |c: &crate::object::CastInfo| {
                 c.was_cast && c.from == Some(crate::ability::ZoneKind::Exile)
             };
+            // A spell still being cast isn't cast yet: it becomes cast once the steps of
+            // CR 601.2 are done (601.2i), so mana abilities activated while paying for it
+            // (601.2g) still see the effect (Rakish Revelers's ruling). A spell on the
+            // stack was cast this turn.
+            let cast_done = |id: crate::types::ObjectId| {
+                g.turn_events
+                    .iter()
+                    .any(|e| matches!(e, Event::SpellCast { spell, .. } if *spell == id))
+            };
             return Some(
-                o.stack.as_deref().is_some_and(|si| from_exile(&si.cast))
+                o.stack
+                    .as_deref()
+                    .is_some_and(|si| from_exile(&si.cast) && cast_done(o.id))
                     || o.cast.as_deref().is_some_and(from_exile),
             );
         }

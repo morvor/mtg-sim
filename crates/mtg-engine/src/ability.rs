@@ -350,6 +350,11 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
     fn from_mana_ability(t: &TriggerCond) -> bool {
         match t {
             TriggerCond::TappedForMana { .. } | TriggerCond::TappedForManaOfType { .. } => true,
+            // "Whenever a land's ability causes you to add one or more mana of the chosen
+            // color" (Caged Sun): triggers from resolving an activated mana ability.
+            TriggerCond::Custom(n) if crate::kw::mana_ability_added::is_mana_ability_trigger(n) => {
+                true
+            }
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
             | TriggerCond::ThisCombat(t)
@@ -364,6 +369,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
         match e {
             Effect::AddMana { .. } => true,
             Effect::Seq(v) => v.iter().any(could_add_mana),
+            Effect::Repeat { effect, .. } => could_add_mana(effect),
             Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| could_add_mana(e)),
             _ => false,
         }
@@ -552,6 +558,10 @@ pub enum CostPart {
     ExertSelf,
     /// "Collect evidence N" (CR 701.59).
     CollectEvidence(u32),
+    /// "collect evidence X, where X is the total mana value of the permanents ~ targets"
+    /// (Urgent Necropsy): N determined after targets are chosen, before costs are paid
+    /// (CR 601.2c, 601.2f; its ruling).
+    CollectEvidenceOf(Value),
     /// Forage (CR 701.61): exile three cards from your graveyard or sacrifice a Food.
     Forage,
     /// Put a card from hand on top/bottom of library etc.
@@ -565,6 +575,10 @@ pub enum CostPart {
     /// "pay its mana cost": the mana cost of the selected object, with X as 0 unless the
     /// object is a spell on the stack (CR 107.3h).
     PayManaCostOf(Box<Sel>),
+    /// "pay its mana cost reduced by {2}" (Flash): that mana cost with its generic mana
+    /// reduced by the amount (CR 118.7d: a reduction of generic mana reduces only the
+    /// generic part).
+    PayManaCostOfLess(Box<Sel>, u32),
     /// "[cost] for each [thing]": the cost repeated a number of times determined as it's
     /// paid, with any choices made separately for each repetition, paid all at once or not
     /// at all (cumulative upkeep, CR 702.24a).
@@ -2007,6 +2021,9 @@ pub enum Stat {
     /// Mana symbols of a color in its mana cost (hybrid symbols of the color count, CR
     /// 107.4e).
     ManaSymbols(crate::types::Color),
+    /// Colored mana symbols in its mana cost, of any color (each hybrid symbol once, CR
+    /// 107.4e; Phyrexian symbols are colored).
+    ColoredManaSymbols,
 }
 
 /// What [`Value::DistinctAmong`] counts the different values of.
@@ -2149,6 +2166,8 @@ pub enum PhaseCond {
     Upkeep,
     DeclareAttackers,
     EndStep,
+    /// The draw step (CR 504).
+    DrawStep,
 }
 
 // ---------------------------------------------------------------------------
@@ -2548,6 +2567,10 @@ pub enum ManaProduction {
     /// One mana of any *color* that a permanent matching the filter could produce
     /// (CR 106.7), e.g. "any color that a land an opponent controls could produce".
     CouldProduceColor(Filter),
+    /// N mana of one type that a permanent matching the filter could produce (CR 106.7):
+    /// "Add one mana of any type that a land you control could produce. If ~ has a +1/+1
+    /// counter on it, add three mana of that type instead." (Incubation Druid).
+    CouldProduceAmount(Filter, Value),
     /// N mana of the chosen color (stored on the source, e.g. "the chosen color").
     ChosenColor(Value),
     /// One mana of one of the listed types or of the color chosen for the source
@@ -2566,6 +2589,10 @@ pub enum ManaProduction {
     /// Mana represented by the symbols of the selected object's mana cost ("add mana equal
     /// to enchanted permanent's mana cost", CR 106.8–106.11).
     ManaCostOf(Sel),
+    /// One mana for each colored mana symbol in the selected object's mana cost, of that
+    /// symbol's color ("For each colored mana symbol in the milled card's mana cost, add one
+    /// mana of that color", Charmed Pendant): one of either color for a hybrid symbol.
+    ColoredSymbolsOf(Sel),
     /// Doubles the amount of each type of unspent mana the player has (CR 701.10f;
     /// Doubling Cube). The new mana has no restrictions (CR 106.6 example).
     DoubleUnspent,
@@ -2773,6 +2800,10 @@ pub enum ManaChangeTo {
     /// "mana of a color of your choice": the player tapping the permanent chooses a color
     /// each time it applies.
     ColorOfChoice,
+    /// "mana of the chosen color" (Hall of Gemstone): the color chosen for the source,
+    /// locked in as the effect is created (`prevention::lock_def`); no change without one
+    /// (CR 607.5a).
+    ChosenColor,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2812,6 +2843,11 @@ pub enum ReplacementAction {
     Prevent,
     /// Prevent N damage (a shield that is used up).
     PreventAmount(Value),
+    /// "prevent X of that damage" for damage a source would deal to several recipients at
+    /// once (Cover of Winter: "If a creature would deal combat damage to you and/or one or
+    /// more creatures you control"): X of all the damage each source deals at the same time,
+    /// shared among its recipients (Cover of Winter's rulings), rather than X for each.
+    PreventPerSource(Value),
     /// Multiply the amount (double damage, double tokens, double counters) ×N.
     Multiply(i32),
     /// Add N to the amount.
@@ -3147,6 +3183,17 @@ pub enum Restriction {
     DamageCantBePrevented,
     /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
     SourceDamageCantBePrevented(Filter),
+    /// "Damage that would be dealt to that creature this turn can't be prevented or dealt
+    /// instead to another permanent or player." (Whippoorwill): damage to objects matching
+    /// the filter can't be prevented (CR 615.12) nor redirected (CR 614.9).
+    DamageToCantBePreventedOrRedirected(Filter),
+    /// "If ~ would deal damage to a creature, that damage can't be prevented or dealt
+    /// instead to another permanent or player." (Lava Burst): damage from `source` to
+    /// objects matching `to` can't be prevented nor redirected.
+    SourceDamageToCantBePreventedOrRedirected {
+        source: Filter,
+        to: Filter,
+    },
     /// "Combat damage [that would be dealt by sources matching the filter] can't be
     /// prevented" (CR 615.12): only combat damage (CR 120.2a).
     CombatDamageCantBePrevented(Filter),
@@ -3597,6 +3644,20 @@ pub enum CostRule {
     /// only mana of the color chosen for the source may pay the ability's (generic) mana
     /// cost; none may without a choice (CR 607.5a).
     OnlyChosenColor,
+    /// A rule that applies only when the spell is cast a particular way ("Spend only mana
+    /// produced by Treasures to cast it this way." after an alternative cost, Security
+    /// Rhox; "If you cast ~ this way, X can't be 0." after flashback, Light Up the Night).
+    CastThisWay { way: CastWay, rule: Box<CostRule> },
+}
+
+/// A way of casting a spell that a [`CostRule::CastThisWay`] names.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CastWay {
+    /// With a keyword's alternative cost or permission (flashback, ...).
+    Keyword(crate::keywords::KeywordKind),
+    /// With an alternative cost the spell's own text offers ("You may pay {R}{G} rather
+    /// than pay this spell's mana cost").
+    OwnAlternativeCost,
 }
 
 impl PartialEq for CostRule {

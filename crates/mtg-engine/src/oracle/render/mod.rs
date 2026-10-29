@@ -22,6 +22,7 @@ pub mod compare;
 mod condition_terms;
 mod copy_exceptions;
 mod cost_amounts;
+mod cost_paid_copies;
 mod costs;
 mod counter_replacements;
 mod custom;
@@ -274,6 +275,7 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
         if let Some(line) = abilities.get(i + 1).and_then(|next| {
             r.keyword_with_own_cost(a, next)
                 .or_else(|| r.flashback_with_reduction(a, next))
+                .or_else(|| r.sacrifice_cost_with_copies(a, next))
         }) {
             out.lines.push(line);
             skip = 1;
