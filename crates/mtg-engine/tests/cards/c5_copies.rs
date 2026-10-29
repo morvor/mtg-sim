@@ -142,3 +142,31 @@ fn spellweaver_helix_copies_the_other_imprinted_card() {
     assert_eq!(t.life(P1), 17);
     assert!(t.in_exile("Lava Spike"));
 }
+
+#[test]
+fn hofri_ghostforge_token_returns_the_exiled_card_when_it_leaves() {
+    cr!("707.9", "607.2a", "400.7");
+    supported("Hofri Ghostforge");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Hofri Ghostforge");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.settle();
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    let token: Vec<ObjectId> = t
+        .named_on_battlefield("Grizzly Bears")
+        .into_iter()
+        .filter(|o| t.obj_now(*o).is_token())
+        .collect();
+    assert_eq!(token.len(), 1);
+    assert!(t.obj_now(token[0]).chars.has_subtype("Spirit"));
+    // Hofri's Spirits get +1/+1.
+    assert_eq!(t.pt(token[0]), (3, 3));
+    t.g.destroy(token[0], None);
+    t.settle();
+    t.resolve_all();
+    assert!(!t.in_exile("Grizzly Bears"));
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
