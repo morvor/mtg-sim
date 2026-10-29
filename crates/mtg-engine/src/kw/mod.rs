@@ -71,6 +71,21 @@ pub trait KeywordRules: Sync + Send {
     ) -> bool {
         false
     }
+    /// Whether player `p` draws cards from the bottom of their library rather than the
+    /// top ("You draw cards from the bottom of your library rather than the top"): each
+    /// draw takes the bottom card, and is still a draw (CR 121.1, 121.2). Called for
+    /// every registered implementation.
+    fn draws_from_bottom(&self, g: &Game, p: PlayerId) -> bool {
+        false
+    }
+    /// The number of loyalty counters damage dealt to the planeswalker `pw` removes, if a
+    /// rule this implementation defines replaces that result of the damage (CR 120.3c,
+    /// 614.1): `n` is the number it would remove. The damage is still dealt with all its
+    /// other results. Called for every registered implementation, each seeing the
+    /// previous ones' result.
+    fn loyalty_removed_by_damage(&self, g: &Game, pw: ObjectId, n: u32) -> Option<u32> {
+        None
+    }
     /// Cards `searcher` found searching `owner`'s library, before the searching effect
     /// puts them anywhere: returns true if this implementation's rule dealt with them
     /// instead (e.g. "they exile each card they find"), so the effect doesn't move them.
@@ -864,6 +879,18 @@ pub fn before_combat_damage_assignment(g: &mut Game, creatures: &[ObjectId]) {
 /// See [`KeywordRules::replace_turn_begin`].
 pub fn replace_turn_begin(g: &mut Game, p: PlayerId) -> bool {
     registry().iter().any(|r| r.replace_turn_begin(g, p))
+}
+
+/// See [`KeywordRules::loyalty_removed_by_damage`].
+pub fn loyalty_removed_by_damage(g: &Game, pw: ObjectId, n: u32) -> u32 {
+    registry()
+        .iter()
+        .fold(n, |n, r| r.loyalty_removed_by_damage(g, pw, n).unwrap_or(n))
+}
+
+/// See [`KeywordRules::draws_from_bottom`].
+pub fn draws_from_bottom(g: &Game, p: PlayerId) -> bool {
+    registry().iter().any(|r| r.draws_from_bottom(g, p))
 }
 
 /// See [`KeywordRules::cast_prohibited`].
