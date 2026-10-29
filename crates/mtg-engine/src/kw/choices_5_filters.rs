@@ -12,7 +12,7 @@ use crate::ability::Sel;
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::keywords::KeywordKind;
-use crate::types::ObjectId;
+use crate::types::*;
 
 /// `Filter::Custom` name: the same object, still on the battlefield ("the chosen
 /// permanents are still on the battlefield": not one that left, CR 400.7).
@@ -45,6 +45,11 @@ pub fn keep_affected(var: crate::ability::Var) -> crate::ability::Effect {
 /// `Condition::Custom` name: the player being iterated over is a defending player (CR
 /// 506.2, 802.2: with several, each of them).
 pub const IS_DEFENDING_PLAYER: &str = "choices5:is a defending player";
+
+/// `Filter::Custom` name: an object the spell that caused the ability to trigger ("that
+/// spell") could target (CR 115.1, 707.10c): a legal target for each of its instances of
+/// the word "target".
+pub const THAT_SPELL_COULD_TARGET: &str = "choices5:that spell could target";
 
 /// `Filter::Custom` name: not the resolving spell or ability itself.
 pub const NOT_RESOLVING: &str = "choices5:not the resolving spell or ability";
@@ -164,6 +169,15 @@ impl KeywordRules for Choices5Filters {
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
         match name {
             NOT_RESOLVING => Some(ctx.stack_obj != Some(id)),
+            THAT_SPELL_COULD_TARGET => Some(
+                ctx.event
+                    .as_ref()
+                    .and_then(|e| e.spell.or(e.object))
+                    .is_some_and(|s| {
+                        g.is_live(s)
+                            && crate::copy_rules::legal_for_each_target(g, s, Entity::Object(id))
+                    }),
+            ),
             STILL_ON_BATTLEFIELD => Some(
                 g.is_live(id) && g.obj(id).zone == crate::object::Zone::Battlefield,
             ),

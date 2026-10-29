@@ -777,3 +777,118 @@ fn exile_this_or_the_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "you may exile [a card] or the chosen [object] until ...", priority: 90, parse: exile_this_or_the_chosen } }
+
+/// The objects chosen by "choose any number of other creatures that spell could target",
+/// and the one each copy targets.
+const COULD_TARGET_CHOSEN: Var = vars::USER + 9542;
+const COPY_FOR: Var = vars::USER + 9543;
+
+/// "you may choose any number of other creatures that spell could target and pay {2} for
+/// each of those creatures" (Feather, Radiant Arbiter): chosen as the ability resolves
+/// among the objects the triggering spell could target (not the one it targets), then
+/// the cost once for each (all or none, CR 118.12); "if you do" is whether it was paid.
+fn choose_could_target_and_pay(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l
+        .strip_prefix("you may choose any number of other ")
+        .or_else(|| l.strip_prefix("choose any number of other "))?;
+    let (noun, r) = r.split_once(" that spell could target and pay ")?;
+    let (cost_s, each) = r.split_once(" for each ")?;
+    if each != format!("of those {noun}") {
+        return None;
+    }
+    if !b.in_trigger || !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    let (f, true, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let (cost, false) = crate::oracle::costs::parse_cost(cost_s)? else {
+        return None;
+    };
+    let filter = Filter::and(vec![
+        f,
+        Filter::Other,
+        Filter::Custom(crate::kw::choices_5_filters::THAT_SPELL_COULD_TARGET.into()),
+    ]);
+    b.named.push((
+        format!("those {noun}"),
+        Sel::Var(COULD_TARGET_CHOSEN),
+    ));
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: COULD_TARGET_CHOSEN,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter: filter.clone(),
+                count: Value::CountSel(Box::new(Sel::All(filter))),
+                up_to: true,
+                store: None,
+            },
+        },
+        Effect::PayOptional {
+            who: PlayerRef::You,
+            cost: Cost::free().with(CostPart::Repeated {
+                cost: Box::new(cost),
+                times: Value::CountSel(Box::new(Sel::Var(COULD_TARGET_CHOSEN))),
+            }),
+            then: Box::new(Effect::Noop),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "choose any number of other [objects] that spell could target and pay [cost] for each", priority: 90, parse: choose_could_target_and_pay } }
+
+/// The pay instruction of [`choose_could_target_and_pay`] at the end of `e`.
+fn could_target_payment(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(could_target_payment),
+        Effect::May { effect, .. } => could_target_payment(effect),
+        Effect::PayOptional { cost, .. }
+            if cost.parts.iter().any(|p| matches!(p, CostPart::Repeated { times: Value::CountSel(s), .. } if matches!(**s, Sel::Var(COULD_TARGET_CHOSEN)))) =>
+        {
+            Some(e)
+        }
+        _ => None,
+    }
+}
+
+/// "If you do, for each of those creatures, copy that spell." / "The copy targets that
+/// creature." after it: a copy of the triggering spell for each chosen object, each
+/// targeting that object (CR 707.10c).
+fn copy_for_each_of_those(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    if l.strip_prefix("the copy targets that ").is_some_and(|n| !n.contains(' ')) {
+        // Each copy already targets its object.
+        return serde_json::to_string(&*prev)
+            .is_ok_and(|j| j.contains(&format!("\"target\":{{\"Var\":{COPY_FOR}}}")));
+    }
+    let Some(r) = l.strip_prefix("if you do, for each of those ") else {
+        return false;
+    };
+    let Some((_, rest)) = r.split_once(", ") else {
+        return false;
+    };
+    if rest != "copy that spell" {
+        return false;
+    }
+    let Some(Effect::PayOptional { then, .. }) = could_target_payment(prev) else {
+        return false;
+    };
+    **then = Effect::ForEach {
+        sel: Sel::Var(COULD_TARGET_CHOSEN),
+        var: COPY_FOR,
+        effect: Box::new(Effect::CopySpellRetargeted {
+            what: Sel::TriggerSpell,
+            target: Some(Sel::Var(COPY_FOR)),
+            among: None,
+        }),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if you do, for each of those creatures, copy that spell; the copy targets that creature", priority: 60, apply: copy_for_each_of_those } }

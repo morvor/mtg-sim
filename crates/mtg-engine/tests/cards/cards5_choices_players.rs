@@ -1202,3 +1202,31 @@ fn kefka_each_player_who_owns_a_spell_you_cast_loses_life_equal_to_its_mana_valu
     // Not cast: nothing.
     assert_eq!(run(false), 20);
 }
+
+#[test]
+fn feather_copies_the_spell_for_each_other_creature_chosen_and_paid_for() {
+    cr!("707.10c", "118.12", "115.1");
+    compiles("Feather, Radiant Arbiter");
+    // "Whenever you cast a noncreature spell that targets only Feather, you may choose any
+    // number of other creatures that spell could target and pay {2} for each of those
+    // creatures. If you do, for each of those creatures, copy that spell. The copy targets
+    // that creature."
+    let mut t = TestGame::new(2);
+    let feather = t.battlefield(P0, "Feather, Radiant Arbiter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Forest", 5);
+    let gg = t.hand(P0, "Giant Growth");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    let (fp, ft) = t.pt(feather);
+    t.cast(P0, gg).target(feather).go();
+    t.resolve_all();
+    assert_eq!(t.pt(feather), (fp + 3, ft + 3));
+    assert_eq!(t.pt(bears), (5, 5));
+    assert_eq!(t.pt(giant), (6, 6));
+    assert_eq!(t.pt(elves), (1, 1));
+}
