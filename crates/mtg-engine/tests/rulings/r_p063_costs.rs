@@ -329,7 +329,7 @@ fn rewind_untaps_up_to_four_lands_anyone_controls_once_each() {
     // Each land is chosen at most once: naming one land four times isn't a legal choice
     // (the default, untapping P0's own lands, is used instead).
     let mut t = TestGame::new(2);
-    let (_, _, lands) = rewind_a_shock(&mut t);
+    let (_, _, _lands) = rewind_a_shock(&mut t);
     let theirs = t.battlefield(P1, "Mountain");
     tap(&mut t, theirs);
     t.answer_choose(P0, &[obj(theirs); 4]);
