@@ -108,6 +108,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `shared-color-source-locked` | "A source of your choice that shares a color with X" compares with X's colors as the effect is created | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `automatic-mana-payment` | The engine chooses which mana abilities pay a cost | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `castability-is-optimistic` | The engine's list of castable spells assumes favorable choices | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
+| `cost-paid-reflexive-trigger` | "When you do" after an optional additional cost is a cast trigger | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `illegal-action-reversal-restores-libraries` | Reversing an illegal action keeps the library actions 733.1 names, and undoes the rest | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `jeweled-amulet-several-types` | When mana of several types was spent on Jeweled Amulet's activation, its controller chooses the type noted | interpretation | provisional | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `more-loyalty-activations-add-up` | "You may activate ~'s loyalty ability two more times this turn" adds to the once of CR 606.3 | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
