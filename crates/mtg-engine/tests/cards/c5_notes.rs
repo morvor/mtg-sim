@@ -140,3 +140,32 @@ fn bell_borca_power_is_the_greatest_mana_value_noted_this_turn() {
     assert!(t.in_exile("Grizzly Bears"));
     assert_eq!(t.pt(bell).0, 2);
 }
+
+#[test]
+fn long_list_of_the_ents_each_chapter_remembers_its_own_type() {
+    cr!("607.2e");
+    let all: Vec<String> = subtype_lists().creature.clone();
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    // Chapter I notes Elf; chapter II, the same turn, notes Human.
+    t.answer(P0, DecisionKind::Option, Answer::Index(index_of(&all, "Elf")));
+    let saga = t.enter(P0, "Long List of the Ents");
+    t.resolve_all();
+    let left: Vec<String> = all.iter().filter(|x| *x != "Elf").cloned().collect();
+    t.answer(P0, DecisionKind::Option, Answer::Index(index_of(&left, "Human")));
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.resolve_all();
+    // The Elf trigger from chapter I still waits for an Elf spell.
+    t.lands(P0, "Forest", 1);
+    let elves = t.hand(P0, "Llanowar Elves");
+    t.cast(P0, elves).go();
+    t.resolve_all();
+    let elves = t.named_on_battlefield("Llanowar Elves")[0];
+    assert_eq!(t.counters(elves, "+1/+1"), 1);
+    t.lands(P0, "Plains", 1);
+    let v = t.hand(P0, "Elite Vanguard");
+    t.cast(P0, v).go();
+    t.resolve_all();
+    let v = t.named_on_battlefield("Elite Vanguard")[0];
+    assert_eq!(t.counters(v, "+1/+1"), 1);
+}

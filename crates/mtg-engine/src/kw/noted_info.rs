@@ -83,11 +83,17 @@ pub fn noted_numbers(g: &Game, obj: ObjectId, turn: u32) -> Vec<i64> {
 }
 
 /// Asks `p` to choose one of `options` and notes it for `src`; it's also the creature
-/// type chosen for `src`'s ability with `link` ("that type", CR 607.2d).
-fn choose_and_note(g: &mut Game, p: PlayerId, src: ObjectId, link: u16, options: Vec<String>) {
+/// type the rest of the resolving ability calls "that type" (CR 607.2d). Each resolution
+/// keeps its type under a fresh link, which becomes the resolution's link: a delayed
+/// trigger it creates ("When you next cast a creature spell of that type this turn")
+/// keeps looking for that type when a later resolution of the same ability notes
+/// another one.
+fn choose_and_note(g: &mut Game, p: PlayerId, src: ObjectId, ctx: &mut Ctx, options: Vec<String>) {
     if options.is_empty() || !g.is_live(src) {
         return;
     }
+    let link = crate::ability_grants::one_fresh_link(g);
+    ctx.link = link;
     let i = g.ask_option(p, Some(src), "Note a creature type", options.clone());
     let t = SmolStr::new(&options[i.min(options.len() - 1)]);
     g.log(|g| format!("{} notes {t}", g.describe(src)));
@@ -118,7 +124,7 @@ impl KeywordRules for NotedInfo {
                     .filter(|t| !done.iter().any(|d| d.as_str() == t.as_str()))
                     .cloned()
                     .collect();
-                choose_and_note(g, ctx.controller, src, ctx.link, options);
+                choose_and_note(g, ctx.controller, src, ctx, options);
                 true
             }
             NOTE_ITS_CREATURE_TYPE => {
@@ -138,7 +144,7 @@ impl KeywordRules for NotedInfo {
                     .filter(|t| !done.iter().any(|d| d.as_str() == t.as_str()))
                     .cloned()
                     .collect();
-                choose_and_note(g, ctx.controller, src, ctx.link, types);
+                choose_and_note(g, ctx.controller, src, ctx, types);
                 true
             }
             _ => false,
