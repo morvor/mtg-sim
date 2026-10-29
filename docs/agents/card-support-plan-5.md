@@ -89,7 +89,7 @@ cards4-manual-defs landed on the integration branch after the plan (its last com
 
 ## Manual (hand-written) definitions
 
-cards5-manual-defs: **5 texts on 5 cards** — River Song (draws from the bottom of the library), Deification (damage to a planeswalker of the chosen type can't remove its last loyalty counter), Vedalken Squirrel-Whacker (exchanging a die result with its base power or toughness), Celebr-8000 (per-result bonuses and keyword grants for two dice), Curse of Leeches (attached to a player as it transforms). Each brief entry gives the search that makes it a one-off and the shared parts that must stay compiled. cards4-manual-defs (17 texts, in flight when planned) has landed with all of them.
+cards5-manual-defs: **5 texts on 5 cards** — River Song (draws from the bottom of the library), Deification (damage to a planeswalker of the chosen type can't remove its last loyalty counter), Vedalken Squirrel-Whacker (exchanging a die result with its base power or toughness), Celebr-8000 (per-result bonuses and keyword grants for two dice), Curse of Leeches (attached to a player as it transforms). Each brief entry gives the search that makes it a one-off and the shared parts that must stay compiled. cards4-manual-defs (17 texts, in flight when planned) has landed with all of them. First part landed: Celebr-8000 and Curse of Leeches are supported; River Song's and Deification's rules are landed as inert hooks (`draws_from_bottom`, `loyalty_removed_by_damage`; `src/cards/river_song.rs`, `deification.rs`) whose `ManualAbility` registration waits for cards5-referents-statics and cards5-choices-players; Vedalken Squirrel-Whacker waits for cards5-game-rules-dice (see the brief's STATUS).
 
 ## Decisions needed
 
