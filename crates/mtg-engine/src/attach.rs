@@ -183,7 +183,7 @@ pub fn can_attach_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> 
     if let Entity::Object(t) = to {
         if g.obj(obj).chars.has_subtype("Aura")
             && g.obj(obj).attached_to != Some(Entity::Object(t))
-            && crate::prohibitions::cant_become_enchanted(g, t)
+            && crate::prohibitions::cant_be_enchanted(g, t, true)
         {
             return false;
         }
@@ -250,7 +250,7 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 }
                 // "can't be enchanted by other Auras", "can't be enchanted" (CR 303.4c).
                 if crate::prohibitions::aura_prohibited(g, obj, t)
-                    || crate::prohibitions::object_cant(g, t, ObjectAction::Enchanted)
+                    || crate::prohibitions::cant_be_enchanted(g, t, false)
                 {
                     return false;
                 }
@@ -417,6 +417,14 @@ pub(crate) fn entry_attachment(g: &mut Game, mv: &mut MoveEv) -> bool {
         && o.chars.has_subtype("Aura")
         && !o.face_down;
     if aura_spell {
+        // CR 303.4i: an Aura spell whose target "can't be enchanted" (CR 303.4) can't be
+        // attached to it; its target is still legal (CR 702.5a), so it resolves and is
+        // put into its owner's graveyard instead.
+        if let Some(Entity::Object(t)) = mv.etb.attach_to {
+            if crate::prohibitions::cant_be_enchanted(g, t, true) {
+                return false;
+            }
+        }
         return true;
     }
     let id = mv.obj;

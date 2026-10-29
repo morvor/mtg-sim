@@ -42,12 +42,12 @@ pub fn aura_prohibited(g: &Game, aura: ObjectId, target: ObjectId) -> bool {
         .any(|s| *s != Some(aura))
 }
 
-/// Whether `aura` can't become attached to `target` because of "can't be enchanted"
-/// (CR 303.4; with "This effect doesn't remove Auras already attached", only new
-/// attachments are stopped, see [`ObjectAction::NewlyEnchanted`]).
-pub fn cant_become_enchanted(g: &Game, target: ObjectId) -> bool {
+/// Whether "can't be enchanted" (CR 303.4) stops an Aura from being attached to `target`
+/// ([`ObjectAction::Enchanted`]; `newly`: also [`ObjectAction::NewlyEnchanted`], "This
+/// effect doesn't remove Auras already attached", which stops only new attachments).
+pub fn cant_be_enchanted(g: &Game, target: ObjectId, newly: bool) -> bool {
     object_cant(g, target, ObjectAction::Enchanted)
-        || object_cant(g, target, ObjectAction::NewlyEnchanted)
+        || (newly && object_cant(g, target, ObjectAction::NewlyEnchanted))
 }
 
 /// Whether "other players can't gain control of [it]" stops `player` from gaining

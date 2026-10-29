@@ -306,7 +306,7 @@ fn as_enters_sacrifice_for_cda(block: &str, ctx: &CompileContext) -> Option<Vec<
     as_enters_sacrifice_noted(block, ctx)
 }
 
-inventory::submit! { AbilityPattern { name: "paper statics: as ~ enters, sacrifice any number of [permanents] (noted)", priority: 100, parse: as_enters_sacrifice_for_cda } }
+inventory::submit! { AbilityPattern { name: "paper statics: as ~ enters, sacrifice any number of [permanents] (noted)", priority: 5, parse: as_enters_sacrifice_for_cda } }
 
 /// "~'s power and toughness are each equal to the number of Forests sacrificed as it
 /// entered." (Wood Elemental): a characteristic-defining ability (CR 604.3) counting the
