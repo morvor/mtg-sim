@@ -245,3 +245,15 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: decisions during the game's setup (choosing the starting player, conspiracies, companions) in games with Attraction, planar or scheme decks.
 - Code: `crates/mtg-engine/src/game.rs` (`Game::new`); `crates/mtg-engine/src/zones.rs` (`renumber_shuffled_deck`); `crates/mtg-engine/src/start.rs` (`conspiracies_to_command_zone`); `crates/mtg-api/src/hidden.rs` (`check_start`).
 - Tests: `crates/mtg-api/tests/hidden_information.rs` (`object_ids_dont_tell_hidden_cards_apart`, `the_ids_of_face_down_decks_in_the_command_zone_dont_tell_their_cards`).
+
+## draft-three-colors-default: Colors chosen as a card is drafted default to three different colors at random
+- Kind: policy
+- Status: decided
+- Rules: 905.2 "Some cards have abilities that function during the draft. ..." / 905.2b "... Players may also be instructed to note information. ..."
+- Question: "Reveal [this card] as you draft it. The player to your right chooses a color, you choose another color, then the player to your left chooses a third color." (Paliano, the High City; Regicide): the draft has no agents asking the three players; which colors are noted?
+- Decision: The program running the draft sets them in advance with `Draft::preset_colors(player, [right, own, left])` (three different colors); otherwise the three colors are different colors picked at random with the draft's seeded random generator.
+- Alternatives: Ask agents during the draft (the draft API has no agents); pick a fixed order (WUB), which would make every such draft the same.
+- Why: The rulings require three different colors; random choices keep simulated drafts varied and reproducible from the seed.
+- Affects: Paliano, the High City and Regicide (and any card with the same draft ability).
+- Code: `crates/mtg-engine/src/draft.rs` (`Draft::three_colors`, `Draft::preset_colors`).
+- Tests: `tests/cards/draft_4.rs` (`paliano_and_regicide_use_the_colors_chosen_as_they_were_drafted`).

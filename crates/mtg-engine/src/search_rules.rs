@@ -286,6 +286,15 @@ fn search_one(
             }
             ZoneKind::Graveyard => cands.extend(g.player(owner).graveyard.iter().copied()),
             ZoneKind::Hand => cands.extend(g.player(owner).hand.iter().copied()),
+            // The cards the owner has outside the game (CR 400.11b), in a game in which a
+            // rule lets them be brought in (CR 903.11c).
+            ZoneKind::Outside => cands.extend(
+                g.player(owner)
+                    .sideboard
+                    .iter()
+                    .copied()
+                    .filter(|c| crate::commander_rules::may_bring_in(g, *c, Zone::Hand(owner))),
+            ),
             _ => {}
         }
     }

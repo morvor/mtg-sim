@@ -44,6 +44,20 @@ pub const ODDS: Var = vars::USER + 8502;
 /// `RESULT_COUNT + n`: how many results of the most recent roll were `n` (1..=20, "if you
 /// rolled 6 exactly seven times").
 pub const RESULT_COUNT: Var = vars::USER + 8530;
+/// The number of different results of the most recent roll ("for each different result").
+pub const DIFFERENT: Var = vars::USER + 8503;
+/// The greatest result of the most recent roll ("if any of those results was 10 or
+/// higher").
+pub const HIGHEST: Var = vars::USER + 8504;
+/// After a flip by several players at once: how many flipped, and how many of them had
+/// every coin come up heads ("until both players' coins come up heads on the same flip").
+pub const PLAYERS_FLIPPED: Var = vars::USER + 8505;
+pub const PLAYERS_ALL_HEADS: Var = vars::USER + 8506;
+
+/// `Condition::Custom` prefix: "any of those results was N or higher"
+/// (`die:any result at least:N`): of the resolving ability's own roll, or else of the dice
+/// rolled together that triggered it.
+pub const ANY_RESULT_AT_LEAST: &str = "die:any result at least";
 
 /// `Value::Custom`: "the result" — of the resolving ability's own roll, or else of the
 /// roll that triggered the ability ("whenever you roll one or more dice, ... equal to
@@ -198,6 +212,9 @@ pub enum DiceStatic {
     ExtraDie { who: PlayerRel },
     /// "If you would flip a coin, instead flip two coins and ignore one."
     ExtraCoin { who: PlayerRel },
+    /// "If you would roll one or more planar dice, instead roll that many planar dice plus
+    /// one and ignore one." (Ichor Elixir): the roller chooses the roll to ignore (CR 706.6).
+    ExtraPlanarDie { who: PlayerRel },
     /// "The first time you flip one or more coins each turn, those coins come up heads and
     /// you win those flips." (CR 705.3)
     FirstFlipsWin { who: PlayerRel },
@@ -306,6 +323,13 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
             for n in 1..=20i64 {
                 let k = results.iter().filter(|r| **r == n).count() as i64;
                 ctx.nums.insert(RESULT_COUNT + n as Var, k);
+            }
+            let mut different = results.clone();
+            different.sort_unstable();
+            different.dedup();
+            ctx.nums.insert(DIFFERENT, different.len() as i64);
+            if let Some(m) = results.iter().max() {
+                ctx.nums.insert(HIGHEST, *m);
             }
             if let Some(sel) = &spec.store_on {
                 for o in g.resolve_objects(sel, ctx) {
@@ -525,9 +549,28 @@ fn modifies(m: &DieModifier, d: &RolledDie) -> bool {
 /// (Monitor Monitor's reroll applies to any die roll, CR 706.2). Modifiers that refer to
 /// a numerical result or a number of sides ignore it (CR 706.7).
 pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
+    // "Instead roll that many planar dice plus one and ignore one", once for each such
+    // effect: the player keeps one of the rolls (the others never happened, CR 706.6).
+    let extra = statics(g)
+        .iter()
+        .filter(|(_, ctl, _, d)| {
+            matches!(d, DiceStatic::ExtraPlanarDie { who } if applies_to(g, *who, *ctl, p))
+        })
+        .count();
+    let rolls: Vec<i64> = (0..=extra).map(|_| natural(g, 6)).collect();
+    let kept = if rolls.len() > 1 {
+        let opts = rolls
+            .iter()
+            .map(|r| format!("Keep {:?}", crate::planechase::face_for(*r as u32)))
+            .collect();
+        let k = g.ask_option(p, None, "Choose the planar die roll to keep", opts);
+        rolls[k.min(rolls.len() - 1)]
+    } else {
+        rolls[0]
+    };
     let mut dice = [RolledDie {
         sides: 6,
-        natural: natural(g, 6),
+        natural: kept,
         adjust: 0,
     }];
     apply_modifiers(g, p, &mut dice, None, true);
@@ -581,6 +624,8 @@ fn call_and_flip(
 
 pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
     let players = g.eval_players(&spec.who, ctx);
+    ctx.nums.insert(PLAYERS_FLIPPED, players.len() as i64);
+    ctx.nums.insert(PLAYERS_ALL_HEADS, 0);
     // Coins flipped at once — by one player or by several ("each player flips a coin") —
     // are all called and flipped before any flip is ignored, so the results of all of
     // them are known then.
@@ -695,6 +740,9 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         ctx.nums.insert(LOSSES, losses);
         ctx.nums.insert(HEADS, heads);
         ctx.nums.insert(TAILS, tails);
+        if heads > 0 && tails == 0 {
+            *ctx.nums.entry(PLAYERS_ALL_HEADS).or_insert(0) += 1;
+        }
         // "Each player flips a coin. Each player whose coin comes up tails ...", "that
         // player flips a coin. If they lose the flip, ...": the results are the flipper's.
         let saved = ctx.iter_player;
@@ -749,7 +797,19 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
 pub fn custom_condition(name: &str, ctx: &Ctx) -> Option<bool> {
     match name {
         ROLLED_DOUBLES => Some(ctx.nums.get(&DOUBLES).copied() == Some(1)),
-        _ => None,
+        _ => {
+            let n: i64 = name
+                .strip_prefix(ANY_RESULT_AT_LEAST)?
+                .strip_prefix(':')?
+                .parse()
+                .ok()?;
+            let highest = ctx.nums.get(&HIGHEST).copied().or_else(|| {
+                let e = ctx.event.as_ref()?;
+                // A planar die roll has no numerical result (CR 706.7).
+                Some(e.amounts.iter().copied().max().unwrap_or(e.amount) as i64)
+            });
+            Some(highest.is_some_and(|h| h >= n))
+        }
     }
 }
 
