@@ -517,6 +517,14 @@ fn lightning_runner_untaps_creatures_that_arent_attacking() {
     assert_eq!(energy(&t, P0), 0);
     assert!(!t.obj_now(bears).tapped);
     assert!(!t.obj_now(runner).tapped);
+    // And after this combat phase there's another one: the untapped Bears can attack.
+    block_and_finish(&mut t, P1, &[]);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer_yes(P0, false);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    block_and_finish(&mut t, P1, &[]);
+    assert_eq!(t.g.turn.active, P0);
+    assert_eq!(t.life(P1), 20 - 2 * 2 - 2);
 }
 
 #[test]

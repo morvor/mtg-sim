@@ -223,6 +223,17 @@ fn delifs_cone_and_cube_create_triggers_that_watch_the_target() {
     block_and_finish(&mut t, P1, &[]);
     assert_eq!(t.life(P0), 22);
     assert_eq!(t.life(P1), 20);
+    // Declining the life: it deals its damage as usual.
+    let mut t = TestGame::new(2);
+    let cone = t.battlefield(P0, "Delif's Cone");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.activate(P0, cone, 0, &[obj(bears)]).unwrap();
+    t.resolve_all();
+    t.answer_yes(P0, false);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    block_and_finish(&mut t, P1, &[]);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 18);
     let mut t = TestGame::new(2);
     let cube = t.battlefield(P0, "Delif's Cube");
     let bears = t.battlefield(P0, "Grizzly Bears");
