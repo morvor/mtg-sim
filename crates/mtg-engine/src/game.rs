@@ -700,6 +700,10 @@ pub struct Game {
     /// the prevention effects applied to them, one per prevention effect (keyed as in
     /// `prevention::damage_prevented`), for all the damage it prevented (CR 615.5, 615.13).
     pub prevention_followups: Option<Vec<(u64, crate::eval::Ctx, Effect)>>,
+    /// While simultaneous damage events are being replaced: how much damage each
+    /// [`ReplacementAction::PreventPerSource`] effect (keyed as in
+    /// `prevention::damage_prevented`) has prevented from each source so far.
+    pub prevented_per_source: Vec<(u64, ObjectId, u32)>,
     /// While the results of simultaneous damage events are being applied: the life each
     /// player gains as part of that damage event and hasn't gained yet (lifelink, and
     /// prevention effects' "you gain life equal to the damage prevented"). A replacement
@@ -910,6 +914,7 @@ impl Game {
             repl_context: vec![],
             post_replacement_effects: vec![],
             prevention_followups: None,
+            prevented_per_source: Vec::new(),
             damage_event_gains: vec![],
             current_link: 0,
             state_triggers_active: BTreeSet::new(),

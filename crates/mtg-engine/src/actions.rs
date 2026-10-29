@@ -1830,6 +1830,7 @@ impl Game {
         crate::prevention::order_for_shields(self, &mut events, combat);
         let first_event = self.events.len();
         let outer = self.prevention_followups.replace(vec![]);
+        let outer_shared = std::mem::take(&mut self.prevented_per_source);
         for (s, t, a) in events {
             finals.extend(self.replace(ReplEvent::Damage {
                 source: s,
@@ -1839,6 +1840,7 @@ impl Game {
             }));
         }
         let followups = std::mem::replace(&mut self.prevention_followups, outer);
+        self.prevented_per_source = outer_shared;
         let followups: Vec<(crate::eval::Ctx, Effect)> = followups
             .into_iter()
             .flatten()

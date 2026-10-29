@@ -602,6 +602,7 @@ pub fn is_prevention(a: &ReplacementAction) -> bool {
         a,
         ReplacementAction::Prevent
             | ReplacementAction::PreventAmount(_)
+            | ReplacementAction::PreventPerSource(_)
             | ReplacementAction::PreventPortion(_)
             | ReplacementAction::PreventAndThen(..)
     )

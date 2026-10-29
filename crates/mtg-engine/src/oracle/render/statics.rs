@@ -2910,6 +2910,7 @@ impl Renderer<'_> {
                     }
                     A::Prevent => format!("{subj} can't enter the battlefield"),
                     other @ (A::PreventAmount(_)
+                    | A::PreventPerSource(_)
                     | A::PreventPortion(_)
                     | A::Multiply(_)
                     | A::Add(_)
@@ -3799,7 +3800,7 @@ impl Renderer<'_> {
                 format!("{first}. {then}")
             }
             A::Prevent => "prevent that event".into(),
-            A::PreventAmount(v) | A::PreventPortion(v) => {
+            A::PreventAmount(v) | A::PreventPortion(v) | A::PreventPerSource(v) => {
                 let v = self.value(v);
                 format!("prevent {v} of that damage")
             }

@@ -357,3 +357,31 @@ fn eye_for_an_eye_deals_as_much_damage_to_the_sources_controller() {
     assert_eq!(t.life(P0), 14);
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn cover_of_winter_prevents_x_of_each_creatures_combat_damage() {
+    cr!("615.7", "510.2");
+    interp!("per-source-prevention-division");
+    ruling!("Cover of Winter", "This prevention is applied creature by creature");
+    assert_supported(&["Cover of Winter"]);
+    let mut t = TestGame::new(2);
+    let cover = t.battlefield(P0, "Cover of Winter");
+    t.g.add_counters(Entity::Object(cover), "age", 2, None);
+    let small = t.battlefield(P1, "Memnite");
+    let big = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P1, Step::PrecombatMain);
+    // Keep Cover of Winter: pay its cumulative upkeep if asked.
+    t.attack(&[(small, Entity::Player(P0)), (big, Entity::Player(P0))], &[]);
+    // Memnite's 1 is all prevented, 2 of the Giant's 3: P0 is dealt 1.
+    assert_eq!(t.life(P0), 19);
+    // One creature's damage to several recipients: X in all, divided among them.
+    let mut t = TestGame::new(2);
+    let cover = t.battlefield(P0, "Cover of Winter");
+    t.g.add_counters(Entity::Object(cover), "age", 2, None);
+    let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+    let wall = t.battlefield(P0, "Wall of Wood");
+    t.advance_to(P1, Step::PrecombatMain);
+    t.attack(&[(wurm, Entity::Player(P0))], &[(wall, wurm)]);
+    let dealt = (20 - t.life(P0)) + t.obj_now(wall).damage as i32;
+    assert_eq!(dealt, 4, "6 damage, 2 of it prevented");
+}

@@ -284,6 +284,16 @@ fn jotun_grunt_cumulative_upkeep_puts_cards_from_a_single_graveyard_on_the_botto
     assert!(t.on_battlefield(grunt), "{}", t.dump_log());
     assert_eq!(t.graveyard_size(P1), 0);
     assert_eq!(t.graveyard_size(P0), 1);
+    // One card in each graveyard: two from a single graveyard can't be chosen, so the cost
+    // can't be paid and the Grunt is sacrificed.
+    let mut t = TestGame::new(2);
+    let grunt = t.battlefield(P0, "Jötun Grunt");
+    t.graveyard(P1, "Lightning Bolt");
+    t.graveyard(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Draw);
+    assert!(!t.on_battlefield(grunt), "{}", t.dump_log());
 }
 
 #[test]

@@ -193,3 +193,50 @@ fn prevent_then_sentence(l: &str, text: &str, ctx: &CompileContext) -> Option<Ve
 }
 
 inventory::submit! { StaticPattern { name: "prevention 5: if ..., prevent that damage. [instruction].", priority: 100, parse: prevent_then_sentence } }
+
+/// "If a creature would deal combat damage to you and/or one or more creatures you control,
+/// prevent X of that damage, where X is [value]." (Cover of Winter): X of the damage each
+/// such source deals at once, shared among its recipients ([`ReplacementAction::
+/// PreventPerSource`]; Cover of Winter's rulings).
+fn prevent_x_per_source(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let (head, x) = end(l).split_once(", prevent x of that damage, where x is ")?;
+    if !head.contains(" and/or ") {
+        return None;
+    }
+    let mut b = Builder::new(ctx);
+    let (v, rest) = crate::oracle::statics::parse_value_phrase(x, &mut b)?;
+    if !rest.trim().is_empty() || !b.targets.is_empty() {
+        return None;
+    }
+    let mut out =
+        crate::oracle::statics::parse_static(&format!("{head}, prevent 1 of that damage"), ctx)?;
+    let [a] = out.as_mut_slice() else {
+        return None;
+    };
+    let a = std::sync::Arc::make_mut(a);
+    let AbilityKind::Static(s) = &mut a.kind else {
+        return None;
+    };
+    let StaticEffect::Replacement(def) = &mut s.effect else {
+        return None;
+    };
+    let ReplacementEvent::Damage {
+        to_players: Some(_),
+        to_objects: Some(_),
+        ..
+    } = &def.event
+    else {
+        return None;
+    };
+    if !matches!(
+        def.action,
+        ReplacementAction::PreventAmount(Value::Const(1))
+    ) {
+        return None;
+    }
+    def.action = ReplacementAction::PreventPerSource(v);
+    a.text = text.into();
+    Some(out)
+}
+
+inventory::submit! { StaticPattern { name: "prevention 5: if a creature would deal combat damage to you and/or creatures you control, prevent X of that damage", priority: 60, parse: prevent_x_per_source } }

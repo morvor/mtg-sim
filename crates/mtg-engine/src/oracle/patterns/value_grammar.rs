@@ -1376,10 +1376,7 @@ fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
                 .strip_prefix("mana symbols in ")
                 .or_else(|| x.strip_prefix("mana symbol in "))
             {
-                let (sel, rest) = if let Some(z) = y
-                    .strip_prefix("the mana cost of ")
-                    .or_else(|| y.strip_prefix("the mana costs of "))
-                {
+                let (sel, rest) = if let Some(z) = y.strip_prefix("the mana cost of ") {
                     referent(z, b)?
                 } else if let Some((who, z)) = y.split_once("' mana costs") {
                     // "green mana symbols in those cards' mana costs" (Phosphorescent

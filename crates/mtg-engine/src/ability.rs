@@ -2805,6 +2805,11 @@ pub enum ReplacementAction {
     Prevent,
     /// Prevent N damage (a shield that is used up).
     PreventAmount(Value),
+    /// "prevent X of that damage" for damage a source would deal to several recipients at
+    /// once (Cover of Winter: "If a creature would deal combat damage to you and/or one or
+    /// more creatures you control"): X of all the damage each source deals at the same time,
+    /// shared among its recipients (Cover of Winter's rulings), rather than X for each.
+    PreventPerSource(Value),
     /// Multiply the amount (double damage, double tokens, double counters) ×N.
     Multiply(i32),
     /// Add N to the amount.

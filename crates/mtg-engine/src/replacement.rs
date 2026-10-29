@@ -1394,6 +1394,7 @@ impl Game {
             (
                 ReplacementAction::Prevent
                 | ReplacementAction::PreventAmount(_)
+                | ReplacementAction::PreventPerSource(_)
                 | ReplacementAction::PreventPortion(_)
                 | ReplacementAction::PreventAndThen(..),
                 ReplEvent::Damage {
@@ -1406,17 +1407,29 @@ impl Game {
                 // Prevention (CR 615): all of the damage, or a shield of N.
                 let (limit, then) = match &cand.def.action {
                     ReplacementAction::Prevent => (None, None),
-                    ReplacementAction::PreventAmount(v) => (Some(v.clone()), None),
+                    ReplacementAction::PreventAmount(v)
+                    | ReplacementAction::PreventPerSource(v) => (Some(v.clone()), None),
                     ReplacementAction::PreventAndThen(v, e) => (v.clone(), Some((**e).clone())),
                     _ => (None, None),
                 };
                 let inst = cand
                     .instance
                     .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                let per_source = matches!(cand.def.action, ReplacementAction::PreventPerSource(_));
+                let used_by_source = |g: &Self| -> u32 {
+                    g.prevented_per_source
+                        .iter()
+                        .filter(|(k, s, _)| *k == key && *s == source)
+                        .map(|(_, _, n)| *n)
+                        .sum()
+                };
                 let shield = match &limit {
                     None => None,
                     Some(v) => Some(match inst.and_then(|i| self.replacements[i].remaining) {
                         Some(r) => r,
+                        // What's left of X for this source's simultaneous damage.
+                        None if per_source => (self.eval_value(v, &ctx).max(0) as u32)
+                            .saturating_sub(used_by_source(self)),
                         None => self.eval_value(v, &ctx).max(0) as u32,
                     }),
                 };
@@ -1449,6 +1462,9 @@ impl Game {
                             self.replacements.remove(i);
                         }
                     }
+                }
+                if per_source && prevented > 0 {
+                    self.prevented_per_source.push((key, source, prevented));
                 }
                 crate::prevention::damage_prevented(
                     self,
