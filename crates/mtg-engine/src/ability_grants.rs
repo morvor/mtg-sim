@@ -178,6 +178,12 @@ fn links_in_use(g: &Game) -> std::collections::HashSet<u16> {
 /// of what other abilities the object may currently have or may have had in the past").
 /// Links are handed out in order; once all of them have been, the ones still in use are
 /// skipped (`taken`: those handed out for the effect being created).
+/// One fresh link (see [`fresh_link`]): for data an effect keeps apart from earlier
+/// data kept by the same ability (a choice each resolution makes for itself).
+pub(crate) fn one_fresh_link(g: &mut Game) -> u16 {
+    fresh_link(g, &mut Vec::new())
+}
+
 fn fresh_link(g: &mut Game, taken: &mut Vec<u16>) -> u16 {
     let mut used = None;
     let mut tries = 0;

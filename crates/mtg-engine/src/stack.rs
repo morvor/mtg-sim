@@ -238,6 +238,15 @@ impl Game {
                                 v.pop();
                             }
                         }
+                        // "You may choose the same mode more than once": the available
+                        // modes again, in order, up to the minimum.
+                        if modal.allow_repeat && !modal.different_players && !v.is_empty() {
+                            let mut i = 0;
+                            while (v.len() as u32) < min {
+                                v.push(available[i % available.len()]);
+                                i += 1;
+                            }
+                        }
                         if modal.optional && (v.len() as u32) < min {
                             v.clear();
                         }

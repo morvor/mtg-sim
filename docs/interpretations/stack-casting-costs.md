@@ -136,6 +136,18 @@ index: `docs/INTERPRETATIONS.md`.
 - Code: `crates/mtg-engine/src/cards/north_star.rs`; `crates/mtg-engine/src/casting.rs` (the `spend_permission` and `use_spend_permission` hooks).
 - Tests: `tests/cards/m_north_star.rs` (`any_type_includes_colorless_and_the_player_chooses_the_spell`, `additional_costs_are_still_paid_normally`, `not_for_a_spell_cast_for_an_alternative_cost`, `x_in_the_mana_cost_is_generic_and_colored_symbols_are_covered`).
 
+## cast-order-as-chosen: Several spells cast from among cards during a resolution are cast in the order the player's answer lists them
+- Kind: policy
+- Status: decided
+- Rules: 608.2g "... If an effect specifically instructs or allows a player to cast a spell during resolution, they do so by following the steps in rules 601.2a–i, except no player receives priority after it’s cast. That spell becomes the topmost object on the stack, and the currently resolving spell or ability continues to resolve, which may include casting other spells this way. ..."
+- Question: That the player chooses the order isn't a judgment call: 608.2g has the spells cast one at a time, and the rulings say so (Etali, Primal Storm: "If you cast more than one of the exiled cards, you choose the order in which to cast them."; Plargg and Nassari: "You can cast them in any order."). What this entry records is only how the agent interface expresses that order, and the default: the engine asks for the cards to cast with one `ChooseEntities` decision.
+- Decision: The cards are cast in the order the player's answer lists them; the default answer (and an invalid one) takes the cards in the order the candidates were offered (as `default-first-listed-choice`).
+- Alternatives: Ask for the next card to cast after each cast (one decision per spell): exact, more decisions; cast in the order the engine lists the cards (what the engine did before): contradicts the rulings, since the player couldn't put Twincast after Lightning Strike when Twincast is listed first.
+- Why: The answer is already an ordered list, so the player gets every order the rules allow without a new decision. Uncontroversial (an interface encoding, not a reading of the rules), so not provisional.
+- Affects: every "cast [any number / up to N] spells from among [cards]" effect compiled to `Effect::CastCard` with a choice (Plargg and Nassari, Etali, Primal Storm, Villainous Wealth and the like).
+- Code: `crates/mtg-engine/src/spell_choice.rs` (`choose_cards_to_cast`).
+- Tests: `tests/rulings/r_p066_exile.rs` (`plargg_spells_cast_this_way_can_target_earlier_ones`).
+
 ## x-defined-by-target: An {X} in an activation cost that the text defines by the ability's target must be announced as that value
 - Kind: interpretation
 - Status: provisional
@@ -144,9 +156,9 @@ index: `docs/INTERPRETATIONS.md`.
 - Decision: The player announces X, and the target must be a spell whose mana value makes the definition true (twice its mana value is X); an X no target can satisfy (an odd X here) can't be announced. The result is that X is exactly the defined value for the chosen target, as 107.3c requires.
 - Alternatives: (A) Determine X after targets are chosen (out of the 601.2 order). (B) Let the player announce any X and pay it, ignoring the definition: contradicts 107.3c.
 - Why: The engine follows 601.2's order (as for Soul Foundry's "X is the mana value of that card", `r107_x_defined_by_text`); restricting the target to the announced X gives the same legal activations and the same payment as determining X from the target.
-- Affects: Reflecting Mirror.
-- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`).
-- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`).
+- Affects: Reflecting Mirror; Caller of the Untamed ("{X}, {T}: Create a token that's a copy of a card you exiled with cards named ~. X is the mana value of that card.": the card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card chosen is one with that mana value).
+- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`); `crates/mtg-engine/src/oracle/patterns/copies_6.rs` (`x_is_mana_value_of_chosen`).
+- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`); `tests/cards/c5_copies.rs` (`caller_of_the_untamed_x_is_the_mana_value_of_the_copied_card`).
 
 ## x-defined-for-a-player: "X is the number of ... in an opponent's graveyard as you cast this spell" is that number for one opponent, announced by the caster
 - Kind: interpretation

@@ -944,8 +944,27 @@ impl Game {
             })
             .collect();
         for b in bodies {
-            if b.modal.is_none() && !self.targets_possible(&b.targets, &ctx, card) {
-                return false;
+            match &b.modal {
+                None => {
+                    if !self.targets_possible(&b.targets, &ctx, card) {
+                        return false;
+                    }
+                }
+                // A modal spell needs as many modes that can be chosen as it must have:
+                // modes with legal targets (CR 700.2a), as `choose_modes_and_targets`
+                // requires when it's cast.
+                Some(modal) => {
+                    let min = self.eval_value(&modal.min, &ctx).max(0) as usize;
+                    let available = modal
+                        .modes
+                        .iter()
+                        .filter(|m| self.targets_possible(&m.targets, &ctx, card))
+                        .count();
+                    let needed = if modal.allow_repeat { min.min(1) } else { min };
+                    if !modal.optional && available < needed {
+                        return false;
+                    }
+                }
             }
         }
         // Aura spells need a legal object to enchant (CR 303.4a).
@@ -978,7 +997,7 @@ impl Game {
             .flatten();
         crate::kw::spend_permission(self, p, card, mana_cost, &mut cost);
         crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
-        self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
+        self.can_pay_spell_cost_with_terms(p, &cost, card, &chars, opt.permission.as_ref())
     }
 
     /// Whether `p` may cast `card` while a spell or ability resolves (CR 608.2g): the
@@ -2253,11 +2272,20 @@ impl Game {
         }
         // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
         // permission it's cast with.
-        if let Some(n) = opt
-            .permission
-            .as_ref()
-            .map(|c| c.terms.cost_reduction)
-            .filter(|n| *n > 0)
+        // So does one an effect casting the spell as it resolves gives ("That copy costs
+        // {2} less to cast").
+        let during_resolution = if opt.any_time {
+            self.resolution_cost_reduction
+        } else {
+            0
+        };
+        if let Some(n) = Some(
+            opt.permission
+                .as_ref()
+                .map_or(0, |c| c.terms.cost_reduction)
+                + during_resolution,
+        )
+        .filter(|n| *n > 0)
         {
             changes
                 .reductions
@@ -3167,6 +3195,28 @@ impl Game {
         self.can_pay_cost_optimistic_in(p, cost, src, chars, &ctx)
     }
 
+    /// [`Self::can_pay_cost_optimistic`] for a spell cast with a permission whose terms let
+    /// mana of a type, or mana from snow sources, be spent as though it were mana of any
+    /// color (CR 609.4b), as paying the spell's cost allows.
+    fn can_pay_spell_cost_with_terms(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        card: ObjectId,
+        chars: &Characteristics,
+        perm: Option<&crate::permissions::CastPermission>,
+    ) -> bool {
+        let mut ctx = Ctx::new(Some(card), p);
+        ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
+        let terms = perm.map(|c| &c.terms);
+        let any_color: Vec<ManaType> = terms
+            .and_then(|t| t.spend_type_as_any_color)
+            .into_iter()
+            .collect();
+        let snow = terms.is_some_and(|t| t.snow_as_any_color);
+        self.can_pay_cost_optimistic_spending(p, cost, Some(card), chars, &ctx, &any_color, snow)
+    }
+
     /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
     /// the value announced for X: "Remove X +1/+1 counters from ~").
     pub fn can_pay_cost_optimistic_in(
@@ -3176,6 +3226,23 @@ impl Game {
         src: Option<ObjectId>,
         chars: &Characteristics,
         ctx: &Ctx,
+    ) -> bool {
+        self.can_pay_cost_optimistic_spending(p, cost, src, chars, ctx, &[], false)
+    }
+
+    /// [`Self::can_pay_cost_optimistic_in`], where mana of the types `any_color` (and, with
+    /// `snow_any_color`, mana from snow sources) may also be spent as though it were mana
+    /// of any color (CR 609.4b).
+    #[allow(clippy::too_many_arguments)]
+    fn can_pay_cost_optimistic_spending(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        chars: &Characteristics,
+        ctx: &Ctx,
+        any_color: &[ManaType],
+        snow_any_color: bool,
     ) -> bool {
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         // CR 107.3a: parts that use an object described with X can be paid if they could
@@ -3206,6 +3273,7 @@ impl Game {
                     .map(|s| {
                         let mut v = self.any_color_mana(p, s, true);
                         v.extend(self.any_color_mana(p, s, false));
+                        v.extend_from_slice(any_color);
                         // The activation instructions of the ability being checked.
                         if ctx.ability_uid != 0 {
                             if let Some(AbilityKind::Activated(act)) = self
@@ -3229,6 +3297,10 @@ impl Game {
                 // "You can't spend mana to cast this spell" (see `payment_rules`).
                 no_mana: ctx.cost_of == Some(crate::rule_statics::payment::CostOf::Spell)
                     && crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars)),
+                rules: crate::mana::SpendRules {
+                    snow_any_color,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             // As when paying: only a cost that uses the source itself keeps the source's own
@@ -4285,6 +4357,15 @@ impl Game {
                 // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
                 c.paying_cost = true;
                 self.exec(e, &mut c);
+                // "Unattach an Equipment from ~": the Equipment ("that Equipment's mana
+                // value") and what it was attached to.
+                if let Some(v) = c.vars.get(&crate::zones::UNATTACHED) {
+                    let from = c.vars.get(&crate::zones::UNATTACHED_FROM);
+                    for (i, o) in v.iter().filter_map(|x| x.object()).enumerate() {
+                        let h = from.and_then(|f| f.get(i)).copied();
+                        paid.unattached.push((o, h));
+                    }
+                }
                 crate::dice::note_cost_roll(e, &c, paid);
                 // CR 607.2q: cards the action exiled ("behold a Goblin and exile it") were
                 // exiled to pay the cost.
@@ -4474,6 +4555,9 @@ pub struct PaidCost {
     pub life: u32,
     /// The loyalty counters a loyalty cost removed (CR 606.4).
     pub loyalty_removed: u32,
+    /// The permanents an "Unattach [an Equipment] from ~" cost unattached ("that
+    /// Equipment", CR 400.7j), with what each was attached to.
+    pub unattached: Vec<(ObjectId, Option<Entity>)>,
     /// Values a cost's action noted for the ability's effect (a die rolled to pay the
     /// cost: "the result", see `dice::note_cost_roll`).
     pub nums: Vec<(Var, i64)>,

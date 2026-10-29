@@ -1969,6 +1969,10 @@ pub enum HistoryWindow {
     /// "since [player's] last upkeep": from the latest upkeep of the player's before this
     /// one, including this turn so far.
     SinceLastUpkeep(PlayerRef),
+    /// "during [player's] last combat": the latest combat phase of the player's turns
+    /// before the current one (an earlier combat phase of this turn, or the last combat
+    /// phase of the latest of their earlier turns that had one, CR 500.8, 506.1).
+    PlayersLastCombat(PlayerRef),
     /// "this game": the events of the whole game kept for such queries (spells cast,
     /// cards cycled, damage dealt; `turn_start::kept_for_game`).
     ThisGame,
