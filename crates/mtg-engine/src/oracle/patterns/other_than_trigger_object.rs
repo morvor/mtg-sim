@@ -3,8 +3,9 @@
 //! about another object, "other creatures" can't mean creatures other than the source
 //! when the source is no creature at all (an artifact counting creatures). The only
 //! object the "other" can set apart is the one the ability triggered for: "two or more
-//! creatures besides that creature" (Portcullis's rulings: the creature isn't exiled if
-//! the count of creatures on the battlefield, that one included, is 2 or less).
+//! creatures besides that creature". Whether the source can have the type is read from
+//! its printed type line, so an animated Portcullis still counts itself (interpretation
+//! `other-than-trigger-object`, `docs/interpretations/triggers-durations.md`).
 
 use crate::ability::{Condition, Filter, Sel, TriggerCond, TriggeredAbility, Value};
 use crate::oracle::CompileContext;

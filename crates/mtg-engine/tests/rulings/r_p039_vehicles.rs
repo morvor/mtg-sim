@@ -408,10 +408,10 @@ fn foreboding_steamboat_leaving_first_exiles_nothing() {
 
 #[test]
 fn foreboding_steamboat_choices_in_turn_order_then_exiled_at_once() {
-    cr!("101.4", "610.3");
+    cr!("101.4", "101.4b", "610.3");
     ruling!(
         "Foreboding Steamboat",
-        "Starting with the player whose turn it is, each player in turn order chooses two nontoken, non-Vehicle creatures they control, then all the creatures chosen by all players are exiled at the same time."
+        "Starting with the player whose turn it is, each player in turn order chooses two nontoken, non-Vehicle creatures they control, then all the creatures chosen by all players are exiled at the same time. Players get to know the choices made by players who chose before them."
     );
     let mut t = TestGame::new(3);
     t.set_step(P1, Step::PrecombatMain);
@@ -438,6 +438,20 @@ fn foreboding_steamboat_choices_in_turn_order_then_exiled_at_once() {
                 .push(g.permanents().filter(|o| o.is_creature()).count());
         }
     }));
+    // What each chooser knew of the earlier choices as it chose.
+    fn known(g: &mtg_engine::game::Game) -> Vec<(PlayerId, usize)> {
+        g.known_apnap_choices(PlayerId(0))
+            .into_iter()
+            .filter_map(|(p, c)| c.map(|c| (p, c.len())))
+            .collect()
+    }
+    fn is_choose(d: &Decision) -> bool {
+        matches!(d, Decision::ChooseEntities { .. })
+    }
+    let knew: Vec<_> = [P0, P1, P2]
+        .into_iter()
+        .map(|p| crate::r_s01_common::watch(&mut t, p, is_choose, known))
+        .collect();
     let from = mark(&t);
     // P1 (the active player) controls the Steamboat.
     let id = new_card(&mut t, P1, "Foreboding Steamboat");
@@ -454,6 +468,13 @@ fn foreboding_steamboat_choices_in_turn_order_then_exiled_at_once() {
         })
         .collect();
     assert_eq!(order, vec![P1, P2, P0]);
+    // Each player knew the choices of the players who chose before them.
+    assert_eq!(knew[1].lock().unwrap().clone(), vec![vec![]]);
+    assert_eq!(knew[2].lock().unwrap().clone(), vec![vec![(P1, 2)]]);
+    assert_eq!(
+        knew[0].lock().unwrap().clone(),
+        vec![vec![(P1, 2), (P2, 2)]]
+    );
     for (_, a, b) in &mine {
         assert_eq!(t.zone(*a), Zone::Exile);
         assert_eq!(t.zone(*b), Zone::Exile);
@@ -948,4 +969,61 @@ fn tardis_planeswalks_as_its_ability_resolves() {
     t.resolve_all();
     // No spell cast yet: already on Krosa.
     assert_eq!(face_up(&t), vec!["Krosa"]);
+}
+
+#[test]
+fn esikas_chariot_aura_token_copy_with_nothing_to_enchant_isnt_created() {
+    cr!("303.4g", "707.2", "702.16c");
+    ruling!(
+        "Esika's Chariot",
+        "If an Aura token can't legally be attached to anything, it isn't created."
+    );
+    supported("Prismatic Lace");
+    supported("Absolute Law");
+    for law in [false, true] {
+        let mut t = TestGame::new(2);
+        let ch = old(&mut t, P0, "Esika's Chariot");
+        let b = old(&mut t, P0, "Grizzly Bears");
+        let giant = old(&mut t, P0, "Hill Giant");
+        let elf = old(&mut t, P0, "Llanowar Elves");
+        old(&mut t, P1, "Grizzly Bears");
+        // Smoke Spirits' Aid: a red Aura token "Smoke Blessing" (enchant creature).
+        mana_all(&mut t, P0, 1);
+        let c = t.hand(P0, "Smoke Spirits' Aid");
+        t.cast(P0, c).x(1).targets(&[o(b)]).go();
+        t.resolve_all();
+        let aura = named(&t, P0, "Smoke Blessing");
+        assert_eq!(aura.len(), 1);
+        // Prismatic Lace makes the token blue (not a copiable value).
+        mana_all(&mut t, P0, 1);
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+        cast_named(&mut t, P0, "Prismatic Lace", &[o(aura[0])]);
+        t.resolve_all();
+        t.g.recompute();
+        assert!(t.obj_now(aura[0]).chars.colors.contains(Color::Blue));
+        assert!(!t.obj_now(aura[0]).chars.colors.contains(Color::Red));
+        if law {
+            // Absolute Law: "All creatures have protection from red." The blue
+            // original stays on the Bears; a red copy could enchant no creature.
+            t.battlefield(P1, "Absolute Law");
+            t.settle();
+            assert!(t.on_battlefield(aura[0]));
+        }
+        t.set_step(P0, Step::BeginningOfCombat);
+        crewed(&mut t, ch, &[giant, elf]);
+        t.answer_targets(P0, &[o(aura[0])]);
+        attack_with(&mut t, &[(ch, pl(P1))]);
+        t.resolve_all();
+        let copies: Vec<ObjectId> = named(&t, P0, "Smoke Blessing")
+            .into_iter()
+            .filter(|a| *a != aura[0])
+            .collect();
+        assert_eq!(copies.len(), !law as usize, "law={law}");
+        if let Some(copy) = copies.first() {
+            // The copy is red: Prismatic Lace's effect wasn't copied.
+            assert!(t.obj_now(*copy).chars.colors.contains(Color::Red));
+        }
+        assert!(t.on_battlefield(aura[0]));
+        assert!(t.g.stack.is_empty());
+    }
 }

@@ -20,6 +20,7 @@ use mtg_engine::*;
 #[test]
 fn portcullis_checks_the_creature_count_again_on_resolution() {
     cr!("603.4");
+    interp!("other-than-trigger-object");
     ruling!(
         "Portcullis",
         "You check the count of the number of creatures on the battlefield again during resolution."
@@ -38,6 +39,30 @@ fn portcullis_checks_the_creature_count_again_on_resolution() {
         }
         t.resolve_all();
         assert_eq!(t.on_battlefield(giant), kill_one, "kill_one={kill_one}");
+    }
+}
+
+#[test]
+fn animated_portcullis_counts_itself_among_the_other_creatures() {
+    cr!("603.4");
+    interp!("other-than-trigger-object");
+    supported("March of the Machines");
+    // March of the Machines makes Portcullis a 4/4 artifact creature. With one Bears,
+    // a Hill Giant entering sees two creatures other than itself: Portcullis and the
+    // Bears ("other" still means other than the entering creature).
+    for march in [false, true] {
+        let mut t = TestGame::new(2);
+        let p = t.battlefield(P0, "Portcullis");
+        if march {
+            t.battlefield(P0, "March of the Machines");
+        }
+        t.battlefield(P1, "Grizzly Bears");
+        t.g.recompute();
+        assert_eq!(creature_now(&t, p), march);
+        let giant = enter(&mut t, P1, "Hill Giant");
+        assert_eq!(triggers_on_stack(&t, "exile that creature"), march as usize);
+        t.resolve_all();
+        assert_eq!(t.on_battlefield(giant), !march, "march={march}");
     }
 }
 
