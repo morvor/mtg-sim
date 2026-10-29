@@ -235,7 +235,9 @@ fn exile(p: &str) -> Option<CostPart> {
     // card from a graveyard", CR 404.1), or any one player's ("from a single graveyard").
     let graveyard = match (end(tail), f.zone()) {
         ("from your graveyard", _) => Some(f.clone()),
-        ("", Some(ZoneKind::Graveyard)) => Some(crate::oracle::costs::from_any_graveyard(f.clone())),
+        ("", Some(ZoneKind::Graveyard)) => {
+            Some(crate::oracle::costs::from_any_graveyard(f.clone()))
+        }
         ("from a single graveyard", None) => Some(crate::oracle::costs::from_a_single_graveyard(
             Filter::and(vec![f.clone(), Filter::InZone(ZoneKind::Graveyard)]),
         )),
@@ -296,7 +298,20 @@ fn put(p: &str) -> Option<CostPart> {
     let tail = format!(" {}", end(tail));
     let (from, to) = [
         (" on top of your library", Destination::library_top()),
-        (" on the bottom of your library", Destination::library_bottom()),
+        (
+            " on the bottom of your library",
+            Destination::library_bottom(),
+        ),
+        // "Put two cards from a single graveyard on the bottom of their owner's
+        // library" (Jötun Grunt).
+        (
+            " on the bottom of their owner's library",
+            Destination::library_bottom(),
+        ),
+        (
+            " on the bottom of its owner's library",
+            Destination::library_bottom(),
+        ),
         (
             " into its owner's graveyard",
             Destination::zone(ZoneKind::Graveyard),
@@ -333,6 +348,10 @@ fn put(p: &str) -> Option<CostPart> {
             Filter::InZone(ZoneKind::Exile),
             Filter::In(Box::new(Sel::Linked)),
         ]),
+        // Any one player's graveyard, all the cards from the same one.
+        "from a single graveyard" if to.zone == ZoneKind::Library => {
+            crate::oracle::costs::from_a_single_graveyard(Filter::InZone(ZoneKind::Graveyard))
+        }
         _ => return None,
     };
     // A card put into a library or graveyard goes to its owner's (CR 400.3); "your
@@ -381,7 +400,9 @@ fn unattach(p: &str) -> Option<CostPart> {
         "~" => Sel::This,
         r => {
             let what = r.strip_suffix(" from ~")?;
-            let what = what.strip_prefix("a ").or_else(|| what.strip_prefix("an "))?;
+            let what = what
+                .strip_prefix("a ")
+                .or_else(|| what.strip_prefix("an "))?;
             let (f, plural) = object(what)?;
             if plural {
                 return None;
@@ -610,7 +631,9 @@ pub fn paid_this_way(s: &str) -> Option<Value> {
         .strip_suffix(" removed this way")
         .or_else(|| s.strip_suffix(" removed"))
     {
-        let r = r.strip_suffix("counters").or_else(|| r.strip_suffix("counter"))?;
+        let r = r
+            .strip_suffix("counters")
+            .or_else(|| r.strip_suffix("counter"))?;
         let r = r.trim();
         if !r.is_empty() {
             let (_k, rest): (CounterKind, &str) = counter_kind(r)?;
@@ -633,7 +656,11 @@ pub fn paid_this_way_prefix(r: &str) -> Option<(Value, String)> {
     if !AMOUNT_X.with(|c| c.get()) {
         return None;
     }
-    for w in [" removed this way", " exiled this way", " sacrificed this way"] {
+    for w in [
+        " removed this way",
+        " exiled this way",
+        " sacrificed this way",
+    ] {
         if let Some(i) = r.find(w) {
             let (head, rest) = r.split_at(i + w.len());
             let v = paid_this_way(head)?;
@@ -679,19 +706,19 @@ fn compared_with_amount(eff: &str) -> Option<String> {
             continue;
         };
         let rest = &eff[i + pat.len()..];
-        let j = [" removed this way", " exiled this way", " sacrificed this way"]
-            .iter()
-            .filter_map(|w| rest.find(w).map(|j| j + w.len()))
-            .min()?;
+        let j = [
+            " removed this way",
+            " exiled this way",
+            " sacrificed this way",
+        ]
+        .iter()
+        .filter_map(|w| rest.find(w).map(|j| j + w.len()))
+        .min()?;
         // The counted things are one object phrase ("+1/+1 counters", "cards").
         if rest[..j].contains(['.', ',']) {
             return None;
         }
-        return Some(format!(
-            "{}with {stat} X or less{}",
-            &eff[..i],
-            &rest[j..]
-        ));
+        return Some(format!("{}with {stat} X or less{}", &eff[..i], &rest[j..]));
     }
     None
 }
@@ -714,21 +741,37 @@ mod tests {
         ));
         assert!(matches!(
             parts("{T}, Remove a counter from another permanent you control").as_slice(),
-            [CostPart::Tap, CostPart::RemoveCountersFromAmong { kind: None, .. }]
+            [
+                CostPart::Tap,
+                CostPart::RemoveCountersFromAmong { kind: None, .. }
+            ]
         ));
         assert!(matches!(
             parts("Remove two counters from ~").as_slice(),
-            [CostPart::RemoveCountersFromAmong { kind: None, filter: Filter::Source, count: Value::Const(2) }]
+            [CostPart::RemoveCountersFromAmong {
+                kind: None,
+                filter: Filter::Source,
+                count: Value::Const(2)
+            }]
         ));
         // "... from ~ and sacrifice it": two parts.
         assert!(matches!(
             parts("Remove four quest counters from ~ and sacrifice it").as_slice(),
-            [CostPart::RemoveCounters { count: Value::Const(4), .. }, CostPart::SacrificeSelf]
+            [
+                CostPart::RemoveCounters {
+                    count: Value::Const(4),
+                    ..
+                },
+                CostPart::SacrificeSelf
+            ]
         ));
         // Sacrifices: alternatives, several objects, ~ first.
         assert!(matches!(
             parts("{1}, Sacrifice another creature or an artifact").as_slice(),
-            [CostPart::Sacrifice { filter: Filter::And(_), count: Value::Const(1) }]
+            [CostPart::Sacrifice {
+                filter: Filter::And(_),
+                count: Value::Const(1)
+            }]
         ));
         assert_eq!(
             parts("{3}{B}, {T}, Sacrifice a blue creature, a black creature, and a red creature")
@@ -739,7 +782,14 @@ mod tests {
         );
         assert!(matches!(
             parts("{T}, Sacrifice two lands and ~").as_slice(),
-            [CostPart::Tap, CostPart::SacrificeSelf, CostPart::Sacrifice { count: Value::Const(2), .. }]
+            [
+                CostPart::Tap,
+                CostPart::SacrificeSelf,
+                CostPart::Sacrifice {
+                    count: Value::Const(2),
+                    ..
+                }
+            ]
         ));
         // Exile from the top of a library, from a graveyard, a spell from the stack.
         assert!(matches!(
@@ -748,16 +798,25 @@ mod tests {
         ));
         assert!(matches!(
             parts("{4}{B}, Exile another creature card from your graveyard").as_slice(),
-            [CostPart::Exile { zone: ZoneKind::Graveyard, .. }]
+            [CostPart::Exile {
+                zone: ZoneKind::Graveyard,
+                ..
+            }]
         ));
         assert!(matches!(
             parts("Exile an instant or sorcery spell you control").as_slice(),
-            [CostPart::Exile { zone: ZoneKind::Stack, .. }]
+            [CostPart::Exile {
+                zone: ZoneKind::Stack,
+                ..
+            }]
         ));
         // Tapping several untapped creatures; putting a card from hand on top.
         assert!(matches!(
             parts("Tap three untapped Advisors, Artificers, and/or Monks you control").as_slice(),
-            [CostPart::TapUntapped { count: Value::Const(3), .. }]
+            [CostPart::TapUntapped {
+                count: Value::Const(3),
+                ..
+            }]
         ));
         assert!(matches!(
             parts("Put a card from your hand on top of your library").as_slice(),
@@ -769,10 +828,16 @@ mod tests {
     fn chosen_amounts_become_x() {
         let (c, cond) = amount_as_x("{T}, Remove one or more +1/+1 counters from ~").unwrap();
         assert_eq!(c, "{t}, remove x +1/+1 counters from ~");
-        assert!(matches!(cond, Some(Condition::Compare(Value::X, Cmp::Ge, _))));
+        assert!(matches!(
+            cond,
+            Some(Condition::Compare(Value::X, Cmp::Ge, _))
+        ));
         let (c, cond) = amount_as_x("Remove all charge counters from ~").unwrap();
         assert_eq!(c, "remove x charge counters from ~");
-        assert!(matches!(cond, Some(Condition::Compare(Value::X, Cmp::Eq, _))));
+        assert!(matches!(
+            cond,
+            Some(Condition::Compare(Value::X, Cmp::Eq, _))
+        ));
         assert!(amount_as_x("{T}, Sacrifice one or more artifacts").is_some());
         assert!(amount_as_x("{X}, Remove X +1/+1 counters from ~").is_none());
         assert_eq!(

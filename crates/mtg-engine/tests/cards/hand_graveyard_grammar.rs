@@ -2349,13 +2349,21 @@ fn necrotic_ooze_abilities_naming_their_card_refer_to_the_ooze() {
 
 #[test]
 fn reviewed_wordings_are_read_faithfully_or_not_at_all() {
-    // "Discard ... at random" with a number nobody chose isn't read.
-    assert!(!card("Rites of Initiation").unsupported_text().is_empty());
-    // "From a single graveyard": all the cards from one graveyard.
-    assert!(card("Jötun Grunt")
+    // "Discard any number of cards at random": the controller chooses the number as it
+    // resolves (CR 608.2d; `tests/cards/paper_random_hand.rs`); another player's
+    // "discards any number of cards at random" isn't read (the grammar unit tests).
+    assert!(card("Rites of Initiation").unsupported_text().is_empty());
+    // "From a single graveyard": all the cards from one graveyard (chosen together with
+    // the same owner, `TargetGroup::SameOwner`), or not read at all.
+    let grunt = card("Jötun Grunt");
+    if grunt
         .unsupported_text()
         .iter()
-        .any(|u| u.contains("single graveyard")));
+        .all(|u| !u.contains("single graveyard"))
+    {
+        let dbg = format!("{:?}", grunt.faces[0].chars.abilities);
+        assert!(dbg.contains("SameOwner"), "{dbg}");
+    }
     // The fateful hour sentence has more instructions than the text up to the comma:
     // read as all three of them, or not at all (see `courageous_resolve_fateful_hour`).
     let def = card("Courageous Resolve");

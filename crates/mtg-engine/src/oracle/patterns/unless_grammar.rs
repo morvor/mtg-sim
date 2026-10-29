@@ -44,8 +44,18 @@ struct Payment {
 
 /// Verbs an action may start with (base form).
 const VERBS: &[&str] = &[
-    "pay", "sacrifice", "discard", "exile", "return", "remove", "put", "have", "tap",
-    "waterbend", "reveal", "mill",
+    "pay",
+    "sacrifice",
+    "discard",
+    "exile",
+    "return",
+    "remove",
+    "put",
+    "have",
+    "tap",
+    "waterbend",
+    "reveal",
+    "mill",
 ];
 
 /// The base form of an action verb, third-person ("pays", "has") or base ("pay").
@@ -115,7 +125,9 @@ fn split_alternatives(s: &str) -> Vec<String> {
 /// Whether a value is read the same from any player's point of view (it doesn't mention
 /// "you", which in a cost paid by another player would mean that player).
 fn impersonal(v: &Value) -> bool {
-    !serde_json::to_string(v).unwrap_or_default().contains("\"You\"")
+    !serde_json::to_string(v)
+        .unwrap_or_default()
+        .contains("\"You\"")
 }
 
 /// "{2}", "3 life", "{1} or 1 life", "{2} and 2 life", "{x}", "life equal to [value]",
@@ -224,8 +236,14 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
     // "have ~ deal 6 damage to you" (to the player who chooses it).
     if let Some(r) = a.strip_prefix("have ~ deal ") {
         let e = parse_clause(&format!("~ deals {r}"), b)?;
-        if !matches!(&e, Effect::DealDamage { source: Sel::This, to: Sel::Players(PlayerRef::You), .. })
-        {
+        if !matches!(
+            &e,
+            Effect::DealDamage {
+                source: Sel::This,
+                to: Sel::Players(PlayerRef::You),
+                ..
+            }
+        ) {
             return None;
         }
         return single(Cost::default().with(CostPart::Effect(Box::new(e))));
@@ -238,7 +256,16 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
         let new_targets = b.targets.len() != saved.0;
         (b.it, b.it_player) = (saved.1, saved.2);
         b.targets.truncate(saved.0);
-        let e = e.filter(|e| !new_targets && matches!(e, Effect::Draw { who: PlayerRef::You, .. }))?;
+        let e = e.filter(|e| {
+            !new_targets
+                && matches!(
+                    e,
+                    Effect::Draw {
+                        who: PlayerRef::You,
+                        ..
+                    }
+                )
+        })?;
         let Effect::Draw { n, .. } = e else {
             return None;
         };
@@ -253,8 +280,7 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
         if parse_number(r).is_none() && !r.starts_with("another ") {
             let saved = (b.targets.len(), b.it.clone());
             if let Some((what, rest)) = object_ref(r, b) {
-                if end(&rest).is_empty() && b.targets.len() == saved.0 && !is_no_referent(&what)
-                {
+                if end(&rest).is_empty() && b.targets.len() == saved.0 && !is_no_referent(&what) {
                     if matches!(what, Sel::This) {
                         return single(Cost::default().with(CostPart::SacrificeSelf));
                     }
@@ -283,7 +309,10 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
     }
     // "return an enchantment to its owner's hand": any one on the battlefield, not only
     // one the player controls (it isn't targeted).
-    if let Some(r) = a.strip_prefix("return ").filter(|r| !r.contains(" you control")) {
+    if let Some(r) = a
+        .strip_prefix("return ")
+        .filter(|r| !r.contains(" you control"))
+    {
         if let Some(what) = r
             .strip_suffix(" to its owner's hand")
             .or_else(|| r.strip_suffix(" to their owner's hand"))
@@ -306,7 +335,15 @@ fn action_payment(a: &str, b: &mut Builder) -> Option<Vec<Payment>> {
             return single(Cost::default().with(CostPart::Effect(Box::new(e))));
         }
     }
-    if let Some((cost, loyalty)) = crate::oracle::costs::parse_cost(&a) {
+    // "sacrifice any number of creatures with total power 12 or greater" (Phyrexian
+    // Dreadnought): the number chosen as X as the cost is paid (CR 107.3).
+    let parsed = crate::oracle::costs::parse_cost(&a).or_else(|| {
+        let (rewritten, None) = super::cost_parts::amount_as_x(&a)? else {
+            return None;
+        };
+        crate::oracle::costs::parse_cost(&rewritten)
+    });
+    if let Some((cost, loyalty)) = parsed {
         let ok = !loyalty
             && cost.mana.is_none()
             && !cost.parts.is_empty()
@@ -455,7 +492,12 @@ fn payer_phrase(r: &str) -> Option<PayerPhrase<'_>> {
             return Some(PayerPhrase::Any(who, rest));
         }
     }
-    for p in ["you ", "target opponent ", "target player ", "defending player "] {
+    for p in [
+        "you ",
+        "target opponent ",
+        "target player ",
+        "defending player ",
+    ] {
         if let Some(rest) = r.strip_prefix(p) {
             return Some(PayerPhrase::Phrase(&p[..p.len() - 1], rest));
         }
@@ -526,9 +568,10 @@ fn split_unless(eff: &str, rest: &str, b: &mut Builder) -> Option<Effect> {
     // each targeted object's controller decides for that object.
     if let PlayerRef::ControllerOf(sel) = &who {
         if let Sel::Target(n) = **sel {
-            let several = b.targets.get(n as usize).is_some_and(|t| {
-                t.per_player.is_some() || !matches!(t.max, Value::Const(1))
-            });
+            let several = b
+                .targets
+                .get(n as usize)
+                .is_some_and(|t| t.per_player.is_some() || !matches!(t.max, Value::Const(1)));
             if several {
                 return per_target(n, pays, effect);
             }
@@ -828,8 +871,7 @@ fn unless_state(l: &str, b: &mut Builder) -> Option<Effect> {
             .or_else(|| {
                 // "Then discard a card unless five or more mana was spent to cast that
                 // spell" (opus): "that spell" is the spell that caused the trigger.
-                if !b.in_trigger
-                    || !crate::oracle::patterns::opus::refers_to_the_trigger_spell(&c)
+                if !b.in_trigger || !crate::oracle::patterns::opus::refers_to_the_trigger_spell(&c)
                 {
                     return None;
                 }
@@ -872,9 +914,13 @@ fn static_unless(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Op
     // One object: a group's condition would be about each of its objects.
     let it = if body.starts_with("~ ") || body.starts_with("~'s ") {
         Sel::This
-    } else if ["enchanted creature ", "equipped creature ", "enchanted permanent "]
-        .iter()
-        .any(|p| body.starts_with(p))
+    } else if [
+        "enchanted creature ",
+        "equipped creature ",
+        "enchanted permanent ",
+    ]
+    .iter()
+    .any(|p| body.starts_with(p))
     {
         Sel::AttachedTo
     } else {
@@ -902,7 +948,9 @@ fn static_unless(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Op
     let c = c.as_str();
     // "enchanted creature doesn't untap during its controller's untap step unless that
     // player is the monarch": that player is its controller.
-    let that_player = c.strip_prefix("that player ").filter(|_| body.contains(" its controller"));
+    let that_player = c
+        .strip_prefix("that player ")
+        .filter(|_| body.contains(" its controller"));
     let cond = match that_player {
         Some(pred) => Condition::PlayerMatches(
             PlayerRef::ControllerOf(Box::new(it.clone())),
@@ -954,7 +1002,10 @@ inventory::submit! { super::StaticPattern { name: "unless grammar: [static of on
 /// those creatures"), already removed. Amounts are counted as the cost is determined
 /// (from the point of view of the ability's controller).
 fn tax_cost(action: &str, where_x: Option<&str>, it: &Sel, b: &mut Builder) -> Option<Cost> {
-    if let Some(r) = action.strip_prefix("pays ").or_else(|| action.strip_prefix("pay ")) {
+    if let Some(r) = action
+        .strip_prefix("pays ")
+        .or_else(|| action.strip_prefix("pay "))
+    {
         if let Some(w) = where_x {
             if r != "{x}" {
                 return None;
@@ -993,7 +1044,11 @@ fn tax_cost(action: &str, where_x: Option<&str>, it: &Sel, b: &mut Builder) -> O
 /// unless its controller pays {3}", "~ can't attack unless you sacrifice two Islands",
 /// "black creatures can't attack unless their controller sacrifices a land of their choice
 /// for each black creature they control that's attacking".
-fn attack_block_tax(l: &str, text: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
+fn attack_block_tax(
+    l: &str,
+    text: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
     let l = end(l);
     let (head, rest) = l.split_once(" unless ")?;
     let i = head.find(" can't ")?;

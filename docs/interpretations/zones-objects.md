@@ -17,6 +17,30 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/start.rs` (`Game::add_to_sideboard`); `crates/mtg-engine/src/object.rs` (`Zone::Outside`).
 - Tests: `tests/cards/game_rules_outside.rs` (`coax_takes_an_eldrazi_from_outside_the_game_or_face_up_exile`).
 
+## looked-at-hand-card-stays-seen: A card looked at in another player's hand stays visible to the looker while it remains there
+- Kind: interpretation
+- Status: provisional
+- Rules: 402.3 "A player may arrange their hand in any convenient fashion and look at it at any time. A player can’t look at the cards in another player’s hand but may count those cards at any time." / 701.20e "Some effects instruct a player to look at one or more cards. Looking at a card follows the same rules as revealing a card, except that the card is shown only to the specified player." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of or relation to its previous existence. ..."
+- Question: Urza's Bauble: "Look at a card at random in target player's hand." By 701.20e/701.20a the card is shown only for as long as the effect needs it, but the player remembers what they saw. Should the looker's view keep showing it?
+- Decision: The ability's controller looks at one card chosen at random (only they see it, it isn't revealed) and may see that card for as long as it remains in that hand; once it changes zones it's a new object and the permission ends. In mtg-api observations the card shows in the looker's view.
+- Alternatives: (A) Only a log line, as `Effect::LookAtHand` does: the looker learns the card but no view shows it. (B) Visible until the end of the resolution: the player "forgets" it, which a real player wouldn't.
+- Why: The information was legitimately obtained and the card is the same object until it moves (400.7); keeping it visible models a player who remembers the card (a presentation choice: no game rule reads it). Only the looking player gains the permission; other players' views are unchanged.
+- Affects: Urza's Bauble.
+- Code: `crates/mtg-engine/src/kw/look_at_random.rs`; `crates/mtg-engine/src/zones.rs` (`allow_look`, `may_look`); `crates/mtg-engine/src/facedown.rs` (`can_look_at`).
+- Tests: `tests/cards/paper_random_hand.rs` (`urzas_bauble_looks_privately_at_a_random_card`).
+
+## the-token-another-ability-created: "The token" in another ability is the one token the card's token-making ability created
+- Kind: interpretation
+- Status: decided
+- Rules: 607.1d "Abilities printed on two objects can be linked if one object is a token, emblem, or nontoken permanent and the second object was the source of the ability that either created the token or emblem or put that nontoken permanent onto the battlefield. ..." / Dance of Many's rulings: "Each Dance of Many is associated only with its token creature. If one Dance leaves the battlefield, only the corresponding token is affected, not all tokens from all instances of Dance of Many." and "If Dance of Many leaves the battlefield before its first ability has resolved, ... That token won't have any connection to a Dance of Many permanent".
+- Question: Dance of Many's "exile the token" and "When the token leaves the battlefield" are in abilities other than the one that creates it. Which token do they mean?
+- Decision: Only on a card with exactly one instruction that creates exactly one token ("create a token ..."), "the token" in its other abilities is the token that permanent's ability created (`Game::link_to_creator`): "exile the token" acts on it while it's on the battlefield, and "when the token leaves the battlefield" triggers for it, judged by its creator record as it left (look-back, CR 603.10a). A token created by the ability after the source left has no creator and isn't "the token".
+- Alternatives: Any token with the same name, or every token the card's abilities ever created: both contradict the rulings.
+- Why: The rulings; 607.1d's link between a token and the source of the ability that created it.
+- Affects: Dance of Many.
+- Code: `crates/mtg-engine/src/oracle/patterns/paper_referents.rs` (`act_on_the_token`, `the_token_leaves`); `crates/mtg-engine/src/kw/created_by_source.rs`.
+- Tests: `tests/cards/paper_cost_token_referents.rs` (`dance_of_many_exiles_its_token_when_it_leaves`, `dance_of_many_is_sacrificed_when_its_token_leaves`).
+
 ## alteration-host-of-two-types: "Another permanent of that type" for a host with both named types
 - Kind: interpretation
 - Status: provisional
@@ -64,3 +88,15 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories (about 4 cards).
 - Code: `crates/mtg-engine/src/zones.rs` (`order_simultaneous`); `crates/mtg-engine/src/oracle/patterns/hand_graveyard_grammar.rs` (" in any order").
 - Tests: `tests/rulings/r_p147_restock.rs` (`misinformation_the_cards_owner_arranges_them`).
+
+## attach-as-it-transforms-to-a-legal-player: Curse of Leeches is attached as it transforms to a player its controller chooses among the players it can enchant
+- Kind: interpretation
+- Status: decided
+- Rules: Curse of Leeches: "As this permanent transforms into Curse of Leeches, attach it to a player." / 712.20 "If a double-faced card would have an “As [this permanent] transforms . . .” ability after it transforms or converts, that ability is applied while that permanent is transforming or converting, not afterward." / 701.3a "... An Aura, Equipment, or Fortification can’t be attached to an object or player it couldn’t enchant, equip, or fortify, respectively." / 701.3b "If an effect tries to attach an Aura ... to an object or player it can’t be attached to, the Aura ... doesn’t move." / 303.4f "If an Aura is entering the battlefield ... and the effect putting it onto the battlefield doesn’t specify the object or player the Aura will enchant, that player chooses what it will enchant as the Aura enters the battlefield. The player must choose a legal object or player according to the Aura’s enchant ability and any other applicable effects." / ruling: "Attaching Curse of Leeches as it transforms doesn't target a player, so it can be attached to a player with hexproof this way."
+- Question: Who chooses "a player", and may the chooser pick a player it can't be attached to (one with protection from black), leaving it unattached so it's put into the graveyard (CR 704.5m)?
+- Decision: Its controller chooses, among the players in range of influence it can legally enchant (hexproof doesn't matter: no targeting). With no such player it stays unattached, and the state-based action puts it into its owner's graveyard.
+- Alternatives: Any player may be chosen, and choosing one it can't enchant leaves it unattached (701.3b), so the controller could choose to lose it.
+- Why: 303.4f, the rule for an Aura attached without an Aura spell's target, requires a legal choice; transforming into an Aura in place is the same situation, and "attach it to a player" reads as an instruction to attach it, not an option to fail.
+- Affects: Curse of Leeches // Leeching Lurker (the only card).
+- Code: `crates/mtg-engine/src/cards/curse_of_leeches.rs` (`custom_effect`, `ATTACH`).
+- Tests: `tests/cards/m_curse_of_leeches.rs` (`the_choice_is_among_players_it_can_enchant`).

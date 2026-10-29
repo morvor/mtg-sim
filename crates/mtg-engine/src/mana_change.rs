@@ -32,6 +32,7 @@ pub fn targets(c: &ManaChange) -> Vec<ManaType> {
     match c.to {
         ManaChangeTo::Type(t) => vec![t],
         ManaChangeTo::ColorOfChoice => COLORS.to_vec(),
+        ManaChangeTo::ChosenColor => vec![],
     }
 }
 
@@ -55,6 +56,7 @@ fn apply_with(c: &ManaChange, types: &[ManaType], to: ManaType) -> Vec<ManaType>
 pub fn apply_any(c: &ManaChange, types: &[ManaType]) -> Vec<ManaType> {
     match c.to {
         ManaChangeTo::Type(t) => apply_with(c, types, t),
+        ManaChangeTo::ChosenColor => types.to_vec(),
         ManaChangeTo::ColorOfChoice => {
             if apply_with(c, types, ManaType::W) == types {
                 return types.to_vec();
@@ -75,6 +77,7 @@ pub fn apply(
 ) -> Vec<ManaType> {
     let to = match c.to {
         ManaChangeTo::Type(t) => t,
+        ManaChangeTo::ChosenColor => return types.to_vec(),
         ManaChangeTo::ColorOfChoice => {
             if apply_with(c, types, ManaType::W) == types
                 && apply_with(c, types, ManaType::U) == types
@@ -95,6 +98,9 @@ pub fn apply_units(c: &ManaChange, units: Vec<Vec<ManaType>>) -> Vec<Vec<ManaTyp
         return units;
     }
     let to = targets(c);
+    if to.is_empty() {
+        return units;
+    }
     match c.amount {
         Some(n) => vec![to; n as usize],
         None => units

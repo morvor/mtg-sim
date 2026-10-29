@@ -1088,7 +1088,14 @@ impl Game {
     }
 
     fn perform_draw(&mut self, p: PlayerId) -> Option<ObjectId> {
-        let Some(top) = self.players[p.idx()].library.last().copied() else {
+        // The top card, or the bottom card for a player who draws from the bottom.
+        let lib = &self.players[p.idx()].library;
+        let next = if crate::kw::draws_from_bottom(self, p) {
+            lib.first()
+        } else {
+            lib.last()
+        };
+        let Some(top) = next.copied() else {
             // CR 121.4 / 704.5b
             self.players[p.idx()].drew_from_empty_library = true;
             return None;
@@ -1839,6 +1846,9 @@ impl Game {
         crate::prevention::order_for_shields(self, &mut events, combat);
         let first_event = self.events.len();
         let outer = self.prevention_followups.replace(vec![]);
+        let outer_shared = std::mem::take(&mut self.prevented_per_source);
+        let outer_division = std::mem::take(&mut self.per_source_division);
+        self.divide_per_source_prevention(&events, combat);
         let recipients: Vec<ObjectId> = events.iter().filter_map(|(_, t, _)| t.object()).collect();
         for (s, t, a) in events {
             finals.extend(self.replace(ReplEvent::Damage {
@@ -1849,6 +1859,8 @@ impl Game {
             }));
         }
         let followups = std::mem::replace(&mut self.prevention_followups, outer);
+        self.prevented_per_source = outer_shared;
+        self.per_source_division = outer_division;
         let followups: Vec<(crate::eval::Ctx, Effect)> = followups
             .into_iter()
             .flatten()
@@ -1958,8 +1970,9 @@ impl Game {
             Entity::Object(o) => {
                 let obj = self.obj(o).clone();
                 if obj.is(CardType::Planeswalker) {
-                    // CR 120.3c
-                    self.remove_counters(Entity::Object(o), counters::LOYALTY, amount);
+                    // CR 120.3c (unless a replacement effect changes how many).
+                    let n = crate::kw::loyalty_removed_by_damage(self, o, amount);
+                    self.remove_counters(Entity::Object(o), counters::LOYALTY, n);
                 }
                 if obj.is(CardType::Battle) {
                     // CR 120.3h

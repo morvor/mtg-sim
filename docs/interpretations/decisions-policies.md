@@ -257,3 +257,39 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: Paliano, the High City and Regicide (and any card with the same draft ability).
 - Code: `crates/mtg-engine/src/draft.rs` (`Draft::three_colors`, `Draft::preset_colors`).
 - Tests: `tests/cards/draft_4.rs` (`paliano_and_regicide_use_the_colors_chosen_as_they_were_drafted`).
+
+## opponents-choice-untargeted: "A land of an opponent's choice" is chosen by an opponent the controller picks
+- Kind: interpretation
+- Status: decided
+- Rules: 601.7a "If there is more than one opponent who could make such a choice, the spell’s controller decides which of those opponents will make the choice." / 701.21a "To sacrifice a permanent, its controller moves it from the battlefield directly to its owner’s graveyard. ..."
+- Question: Demonic Hordes: "tap ~ and sacrifice a land of an opponent's choice." 601.7a is about targets chosen by an opponent; this choice is made on resolution and isn't a target. Which opponent chooses in multiplayer?
+- Decision: As the ability resolves, its controller chooses an opponent (`ChoiceKind::Opponent`), who then chooses which land the controller sacrifices among the lands the controller controls.
+- Alternatives: (A) Each opponent in turn order picks one (more lands than the card says). (B) The next opponent in turn order chooses automatically.
+- Why: 601.7a gives the controller that decision for the same wording about targets; nothing suggests a different procedure on resolution.
+- Affects: Demonic Hordes.
+- Code: `crates/mtg-engine/src/oracle/patterns/paper_choices.rs` (`sacrifice_of_an_opponents_choice`).
+- Tests: `tests/cards/paper_choosers.rs` (`demonic_hordes_an_opponent_chooses_the_land_you_sacrifice`).
+
+## player-destroys-chosen-permanents: "[Player] destroys N lands they control": chosen by that player among those that can be destroyed
+- Kind: interpretation
+- Status: decided
+- Rules: 701.8a "To destroy a permanent, move it from the battlefield to its owner’s graveyard." / 702.12b "A permanent with indestructible can’t be destroyed. ..." / Burning of Xinye's rulings: "That player chooses which of their lands to destroy. Neither of you can choose to destroy a land with indestructible." and "A land with a regeneration shield on it will regenerate from Burning of Xinye’s destruction effect."
+- Question: With a player as the subject of "destroy", how are the permanents chosen?
+- Decision: As the instruction is performed, that player chooses that many permanents of the kind they control, excluding ones with indestructible (as the ruling says), and they're destroyed at once; a regeneration shield replaces the destruction. With fewer such permanents, all of them.
+- Alternatives: Let the player choose indestructible permanents (which then survive): contradicts the ruling.
+- Why: The ruling, generalized to the same grammar on any card.
+- Affects: Burning of Xinye.
+- Code: `crates/mtg-engine/src/oracle/patterns/paper_players.rs` (`player_destroys`).
+- Tests: `tests/cards/paper_players.rs` (`burning_of_xinye_each_player_chooses_their_own_lands_to_destroy`).
+
+## mill-until-stops-when-nothing-moves: A "mill until" process ends when the library is empty or milling moves nothing
+- Kind: policy
+- Status: decided
+- Rules: 701.17a "For a player to mill a number of cards, that player puts that many cards from the top of their library into their graveyard." / 104.4b (loops) / Helm of Obedience's ruling: "If an effect like that of Leyline of the Void prevents cards from being put into your opponent’s graveyard, the process described in the first sentence of Helm of Obedience’s effect will never stop. Your opponent’s entire library will be exiled, even if X is 1."
+- Question: Helm of Obedience's process counts only cards put into the graveyard. If milled cards go elsewhere, when does it stop; and what if a replacement keeps cards from leaving the library at all?
+- Decision: One card at a time; only cards put into that graveyard count toward X and only a creature card put there stops it. The process also ends when the library is empty or a mill moved no card (nothing would ever change: a loop the rules leave open).
+- Alternatives: Count every milled card toward X (contradicts the ruling).
+- Why: The ruling; ending a process that can't change anything follows the loop rules' intent.
+- Affects: Helm of Obedience.
+- Code: `crates/mtg-engine/src/kw/mill_until.rs`.
+- Tests: `tests/cards/paper_loops.rs` (`helm_of_obedience_mills_the_whole_library_against_leyline_of_the_void`, `helm_of_obedience_stops_after_x_cards`).

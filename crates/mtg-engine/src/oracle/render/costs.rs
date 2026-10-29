@@ -331,6 +331,10 @@ impl Renderer<'_> {
             }
             CostPart::ExertSelf => "exert ~".into(),
             CostPart::CollectEvidence(n) => format!("collect evidence {n}"),
+            CostPart::CollectEvidenceOf(v) => {
+                let v = self.value(v);
+                format!("collect evidence X, where X is {v}")
+            }
             CostPart::Forage => "forage".into(),
             CostPart::PutFromHandOnLibrary { filter, count, top } => {
                 let noun = {
@@ -375,6 +379,10 @@ impl Renderer<'_> {
             CostPart::PayManaCostOf(s) => {
                 let s = self.sel(s, players::Case::Poss);
                 format!("pay {s} mana cost")
+            }
+            CostPart::PayManaCostOfLess(s, n) => {
+                let s = self.sel(s, players::Case::Poss);
+                format!("pay {s} mana cost reduced by {{{n}}}")
             }
             CostPart::Repeated { cost, times } => {
                 if let Some(s) = self.repeated_any_number(cost, times) {

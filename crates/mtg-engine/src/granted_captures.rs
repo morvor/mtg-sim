@@ -21,15 +21,18 @@ use crate::types::*;
 pub const CAPTURED_CASTER: Var = vars::USER + 51_300;
 /// "the exiled card": what the granting effect stored here before granting.
 pub const CAPTURED_EXILED: Var = vars::USER + 51_301;
+/// "you" of the granting effect ("Only you may activate this ability.", Martyrdom): its
+/// controller as the effect is created.
+pub const CAPTURED_YOU: Var = vars::USER + 51_302;
 
 fn is_captured(v: Var) -> bool {
-    v == CAPTURED_CASTER || v == CAPTURED_EXILED
+    v == CAPTURED_CASTER || v == CAPTURED_EXILED || v == CAPTURED_YOU
 }
 
 /// Whether the ability refers to a captured referent.
 pub fn mentions(a: &Ability) -> bool {
     let s = serde_json::to_string(&a.kind).unwrap_or_default();
-    [CAPTURED_CASTER, CAPTURED_EXILED]
+    [CAPTURED_CASTER, CAPTURED_EXILED, CAPTURED_YOU]
         .iter()
         .any(|v| s.contains(&format!("{{\"Var\":{v}}}")))
 }
@@ -53,7 +56,10 @@ fn substitute(v: &mut serde_json::Value, g: &Game, ctx: &Ctx) {
                     // A player reference ("PlayerRef::Var") or an object selection
                     // ("Sel::Var"): both serialize the same way; which one it is follows
                     // from the variable.
-                    if var == CAPTURED_CASTER {
+                    if var == CAPTURED_YOU {
+                        *v = serde_json::to_value(PlayerRef::Player(ctx.controller))
+                            .unwrap_or(J::Null);
+                    } else if var == CAPTURED_CASTER {
                         if let Some(p) = caster(g, ctx) {
                             *v = serde_json::to_value(PlayerRef::Player(p)).unwrap_or(J::Null);
                         }

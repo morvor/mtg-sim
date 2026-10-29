@@ -30,8 +30,11 @@ impl Renderer<'_> {
         }
         if let Some(r) = name.strip_prefix("reveal cards at random from hand:") {
             let (n, who) = r.split_once(':')?;
-            let n: i32 = n.parse().ok()?;
-            let cards = if n == 1 {
+            // "reveals X cards at random" (Nebuchadnezzar): the ability's X.
+            let n: i32 = if n == "x" { -1 } else { n.parse().ok()? };
+            let cards = if n == -1 {
+                "X cards".to_string()
+            } else if n == 1 {
                 "a card".to_string()
             } else {
                 format!("{} cards", number_word(n))

@@ -154,6 +154,30 @@ fn object_group<'a>(s: &'a str, t: &mut Targets) -> Option<(Filter, &'a str)> {
         return None;
     }
     let rest = rest.trim_start();
+    // "spells that target it" / "... that target ~" (Bronze Horse: damage to ~ by spells
+    // that target ~; "it" only when the damage is to ~): spells whose targets include the
+    // source (CR 115.9b), checked as the damage would be dealt.
+    for (p, ok) in [
+        ("that target ~", true),
+        ("that target it", {
+            let raw = crate::oracle::raw_text().to_lowercase();
+            raw.contains("would be dealt to ~ by spells that target it")
+                || raw.contains("would be dealt to this creature by spells that target it")
+        }),
+    ] {
+        if let Some(r) = word(rest, p).filter(|_| ok) {
+            return Some((
+                Filter::and(vec![
+                    f,
+                    Filter::StackTargets(Box::new(TargetsFilter::Targets {
+                        objects: Some(Filter::Source),
+                        players: None,
+                    })),
+                ]),
+                r,
+            ));
+        }
+    }
     // "creatures target opponent controls" (Encircling Fissure): the player is locked in
     // as the effect is created (`prevention::lock_filter`).
     for who in ["target opponent", "target player"] {
@@ -443,7 +467,10 @@ fn s_prevent_groups(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
     if c.to.is_none() && c.by.is_none() {
         return None;
     }
-    let mut s = StaticAbility::new(StaticEffect::Replacement(def(&c, ReplacementAction::Prevent)));
+    let mut s = StaticAbility::new(StaticEffect::Replacement(def(
+        &c,
+        ReplacementAction::Prevent,
+    )));
     if lead || c.during_your_turn {
         s.condition = Some(Condition::YourTurn);
     }

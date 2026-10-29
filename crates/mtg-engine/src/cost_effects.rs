@@ -121,7 +121,8 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
             Some(!objs.is_empty() && objs.iter().all(|o| g.is_live(*o)))
         }
         // "Return a basic land card from your graveyard to your hand", "exile a creature
-        // card from your graveyard": as many objects as it names must be there.
+        // card from your graveyard": as many objects as it names must be there, and
+        // together if they must be ("two cards from a single graveyard", Jötun Grunt).
         Effect::Move {
             what:
                 Sel::Choose {
@@ -141,7 +142,13 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                     ..
                 },
             ..
-        } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
+        } => {
+            let n = g.eval_value(count, ctx).max(0) as usize;
+            let cands = g.objects_matching(filter, ctx);
+            Some(crate::target_groups::can_choose_together(
+                g, filter, &cands, n, ctx,
+            ))
+        }
         _ => None,
     }
 }

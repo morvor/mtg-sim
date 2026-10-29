@@ -146,6 +146,12 @@ impl Renderer<'_> {
                     _ => return self.gap(format!("Effect::Custom({n})")),
                 }
             }
+            // "Look at a card at random in target player's hand." (Urza's Bauble)
+            n if crate::kw::look_at_random::slot_of(n).is_some() => {
+                let i = crate::kw::look_at_random::slot_of(n).unwrap_or(0);
+                let t = self.target_mention(i, Case::Obj);
+                format!("look at a card at random in {t}'s hand")
+            }
             // "Target opponent reveals a card at random from their hand."
             n if n.starts_with("reveal a card at random from hand:target ") => {
                 match n["reveal a card at random from hand:target ".len()..].parse::<u8>() {

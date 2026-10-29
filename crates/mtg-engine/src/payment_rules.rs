@@ -42,6 +42,40 @@ pub fn spell_rules(chars: &Characteristics) -> Vec<CostRule> {
         .collect()
 }
 
+/// [`spell_rules`] for a spell cast with `method`: the rules that apply only when it's cast
+/// a particular way ([`CostRule::CastThisWay`]) are included when it's cast that way.
+pub fn spell_rules_for(
+    chars: &Characteristics,
+    method: &crate::object::CastMethod,
+) -> Vec<CostRule> {
+    use crate::object::CastMethod;
+    let own_alt = |uid: u64| {
+        chars.abilities.iter().any(|a| {
+            a.uid == uid
+                && matches!(&a.kind, AbilityKind::Static(s) if matches!(&s.effect,
+                    StaticEffect::CostModifier(CostModifier {
+                        applies_to: CostTarget::ThisSpell,
+                        change: CostChange::AlternativeCost(_) | CostChange::AlternativeCostWithFlash(_),
+                        ..
+                    })))
+        })
+    };
+    spell_rules(chars)
+        .into_iter()
+        .filter_map(|r| match r {
+            CostRule::CastThisWay { way, rule } => {
+                let applies = match (&way, method) {
+                    (CastWay::Keyword(k), CastMethod::Keyword(m)) => k == m,
+                    (CastWay::OwnAlternativeCost, CastMethod::Alternative(uid)) => own_alt(*uid),
+                    _ => false,
+                };
+                applies.then_some(*rule)
+            }
+            r => Some(r),
+        })
+        .collect()
+}
+
 /// The rules an activated ability's text makes about its own cost.
 pub fn ability_rules(act: &ActivatedAbility) -> Vec<CostRule> {
     act.own_cost_changes

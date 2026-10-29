@@ -654,6 +654,16 @@ fn parse_activated(cost_s: &str, eff_s: &str, full: &str, ctx: &CompileContext) 
                 Some(text) => {
                     effects::parse_body_with_it(&text, ctx, Sel::Var(crate::zones::COST_EXILED))
                 }
+                // "{U}, Exile the top card of your library: If it's a snow land card, ...":
+                // "it" would be the exiled card, but the effect has no referent for it
+                // (it would read as the source): not read.
+                None if crate::zones::cost_exiles_a_card(&cost)
+                    && ["if it ", "if it's ", "if it’s "]
+                        .iter()
+                        .any(|p| eff_text.to_lowercase().starts_with(p)) =>
+                {
+                    None
+                }
                 None => effects::parse_body(eff_text, ctx),
             }
         })

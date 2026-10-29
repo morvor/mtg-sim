@@ -1180,7 +1180,7 @@ impl Renderer<'_> {
                     })
                     .collect();
                 let vp = if keywords {
-                    format!("gains your choice of {}", join_list(&items, "or"))
+                    format!("gains {{opt:your choice of}} {}", join_list(&items, "or"))
                 } else {
                     format!("gets {}", join_list(&items, "or"))
                 };
@@ -1232,14 +1232,47 @@ impl Renderer<'_> {
                 };
                 let mut s = head;
                 let mut texts = Vec::new();
+                let before = self.introduced.clone();
                 for (_, eff) in options {
                     let t = self.effect_sentences(eff);
                     s.push_str(&format!("\n• {t}"));
                     texts.push(t);
                 }
+                // "Put a +1/+1 counter on target creature or that creature gains ...":
+                // in the "or" form each option names the target as the first one does.
+                let fresh = if w == "you"
+                    && options
+                        .iter()
+                        .all(|(_, e)| matches!(e, Effect::Modify { .. } | Effect::AddCounters { .. }))
+                {
+                    let after = self.introduced.clone();
+                    let mut v = Vec::new();
+                    for (_, eff) in options {
+                        self.introduced = before.clone();
+                        v.push(self.effect_sentences(eff));
+                    }
+                    self.introduced = after;
+                    let plain: Vec<&str> = v.iter().map(|t| t.trim_end_matches('.')).collect();
+                    let at_verb = tail_parts::or_form_at_verb(&v);
+                    tail_parts::or_form(&v)
+                        .map(|o| match &at_verb {
+                            Some(a) if *a != o => format!("{o}|{a}"),
+                            _ => o,
+                        })
+                        .or_else(|| {
+                        plain
+                            .iter()
+                            .all(|t| !t.is_empty() && !t.contains(['\n', '|', '.']))
+                            .then(|| plain.join(" or "))
+                    })
+                } else {
+                    None
+                };
                 // A choice made as the effect happens (CR 608.2d): "X or Y".
-                match tail_parts::or_form(&texts) {
-                    Some(o) if w == "you" => format!("{{alt:{s}|{o}}}"),
+                match (tail_parts::or_form(&texts), fresh) {
+                    (Some(o), Some(f)) if w == "you" => format!("{{alt:{s}|{o}|{f}}}"),
+                    (Some(o), None) if w == "you" => format!("{{alt:{s}|{o}}}"),
+                    (None, Some(f)) => format!("{{alt:{s}|{f}}}"),
                     _ => s,
                 }
             }
@@ -8724,6 +8757,10 @@ impl Renderer<'_> {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any color that {n} could produce")
             }
+            ManaProduction::CouldProduceAmount(_, n) => {
+                let (a, _) = self.amount(n);
+                format!("{a} mana of that type")
+            }
             ManaProduction::ChosenColor(n) => match n {
                 Value::Const(1) => "one mana of {alt:the chosen color|that color}".into(),
                 Value::Const(k) => format!("{} mana of the chosen color", number_word(*k)),
@@ -8798,6 +8835,10 @@ impl Renderer<'_> {
             ManaProduction::ManaCostOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("mana equal to {s} mana cost")
+            }
+            ManaProduction::ColoredSymbolsOf(s) => {
+                let s = self.sel(s, Case::Poss);
+                format!("one mana of that color for each colored mana symbol in {s} mana cost")
             }
             ManaProduction::DoubleUnspent => {
                 "mana equal to the amount of each type of unspent mana you have".into()
