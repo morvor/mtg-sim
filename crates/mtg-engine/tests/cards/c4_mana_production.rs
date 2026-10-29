@@ -307,3 +307,34 @@ fn hall_of_gemstone_makes_lands_produce_the_upkeep_players_color() {
     activate_uid(&mut t, P0, mine, iu);
     assert_eq!(pool(&t, P0), vec![ManaType::R]);
 }
+
+#[test]
+fn false_dawn_turns_colored_mana_white_and_white_spends_as_any_color() {
+    cr!("614.1a", "609.4b", "106.1");
+    ruling!("False Dawn", "does not change any lands into Plains");
+    assert_supported(&["False Dawn"]);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    let dawn = t.hand(P0, "False Dawn");
+    t.cast(P0, dawn).go();
+    t.resolve_all();
+    let forest = t.battlefield(P0, "Forest");
+    let fu = uid_of(&mut t, forest, "{T}");
+    activate_uid(&mut t, P0, forest, fu);
+    assert_eq!(pool(&t, P0), vec![ManaType::W]);
+    // The white mana pays a green cost.
+    t.battlefield(P0, "Forest");
+    let bears = t.hand(P0, "Grizzly Bears");
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(bears)));
+    // Colorless mana isn't changed; an opponent's mana isn't either.
+    let wastes = t.battlefield(P0, "Wastes");
+    let wu = uid_of(&mut t, wastes, "{T}");
+    activate_uid(&mut t, P0, wastes, wu);
+    assert_eq!(pool(&t, P0), vec![ManaType::C]);
+    let theirs = t.battlefield(P1, "Forest");
+    let tu = uid_of(&mut t, theirs, "{T}");
+    activate_uid(&mut t, P1, theirs, tu);
+    assert_eq!(pool(&t, P1), vec![ManaType::G]);
+}

@@ -446,6 +446,50 @@ fn produce_chosen_color_instead(l: &str, _b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "mana 5: until end of turn, [permanents] tapped for mana produce mana of the chosen color instead", priority: 100, parse: produce_chosen_color_instead } }
 
+/// "Until end of turn, spells and abilities you control that would add colored mana
+/// instead add that much white mana." (False Dawn, CR 614.1a) and "Until end of turn, you may
+/// spend white mana as though it were mana of any color." (CR 609.4b): effects on you for
+/// the turn (`mana_abilities::COLORED_ADDED_BECOMES`, `kw/spend_rules.rs`).
+fn mana_rules_until_end_of_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("until end of turn, ")?;
+    let name = if let Some(c) = r
+        .strip_prefix(
+            "spells and abilities you control that would add colored mana instead add that much ",
+        )
+        .and_then(|c| c.strip_suffix(" mana"))
+    {
+        let color = crate::types::Color::from_word(c)?;
+        format!(
+            "{}{:?}",
+            crate::mana_abilities::COLORED_ADDED_BECOMES,
+            crate::mana::ManaType::from_color(color)
+        )
+    } else {
+        let c = r
+            .strip_prefix("you may spend ")?
+            .strip_suffix(" mana as though it were mana of any color")?;
+        let color = crate::types::Color::from_word(c)?;
+        use crate::mana::ManaType;
+        crate::kw::spend_rules::as_though(
+            ManaType::from_color(color),
+            &[
+                ManaType::W,
+                ManaType::U,
+                ManaType::B,
+                ManaType::R,
+                ManaType::G,
+            ],
+        )
+    };
+    Some(Effect::AddPlayerEffect {
+        who: PlayerRef::You,
+        effect: PlayerModification::Custom(name.into()),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "mana 5: until end of turn, colored mana you add is white / you may spend white mana as though any color", priority: 100, parse: mana_rules_until_end_of_turn } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

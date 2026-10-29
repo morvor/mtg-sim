@@ -71,6 +71,25 @@ fn self_damage(g: &Game, p: PlayerId, e: &Effect, ctx: &Ctx) -> u32 {
 
 /// Mana types an AddMana effect could produce, per unit.
 fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>>> {
+    let units = production_units_raw(g, e, ctx)?;
+    // Colored mana added as another type (False Dawn).
+    Some(match colored_added_becomes(g, ctx.controller) {
+        Some(to) => units
+            .into_iter()
+            .map(|u| {
+                let mut v: Vec<ManaType> = u
+                    .into_iter()
+                    .map(|t| if t.color().is_some() { to } else { t })
+                    .collect();
+                v.dedup();
+                v
+            })
+            .collect(),
+        None => units,
+    })
+}
+
+fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>>> {
     match e {
         Effect::AddMana { mana, .. } => Some(match mana {
             ManaProduction::Fixed(v) => v.iter().map(|t| vec![*t]).collect(),
@@ -902,6 +921,19 @@ pub const KEEP_UNSPENT_MANA: &str = "keep unspent mana";
 /// Player modification: "If you would lose unspent mana, that mana becomes colorless
 /// instead." with the new type as suffix (`"unspent mana becomes C"`).
 pub const UNSPENT_MANA_BECOMES: &str = "unspent mana becomes";
+/// Player modification: the colored mana the player's spells and abilities would add is
+/// mana of this type instead, with the type as suffix (`"colored mana added becomes W"`,
+/// False Dawn, CR 614.1a).
+pub const COLORED_ADDED_BECOMES: &str = "colored mana added becomes ";
+
+/// The type colored mana `p`'s spells and abilities add becomes, if an effect says so.
+pub fn colored_added_becomes(g: &Game, p: PlayerId) -> Option<ManaType> {
+    custom_mods(g, p)
+        .iter()
+        .filter_map(|m| m.strip_prefix(COLORED_ADDED_BECOMES))
+        .filter_map(|t| ManaType::from_letter(t.trim().chars().next()?))
+        .last()
+}
 
 fn custom_mods(g: &Game, p: PlayerId) -> Vec<smol_str::SmolStr> {
     g.player(p)
@@ -1014,6 +1046,15 @@ fn add_mana_with(
 ) -> Vec<ManaType> {
     let p = g.eval_player(who, ctx).unwrap_or(ctx.controller);
     let mut produced = g.produce_mana(p, mana, ctx);
+    // "Spells and abilities you control that would add colored mana instead add that much
+    // white mana." (False Dawn): the controller of the spell or ability adding it.
+    if let Some(to) = colored_added_becomes(g, ctx.controller) {
+        for t in produced.iter_mut() {
+            if t.color().is_some() {
+                *t = to;
+            }
+        }
+    }
     // Tapped for mana: a mana ability of this permanent with {T} in its cost is resolving.
     let tapped = g
         .mana_ability_resolving
