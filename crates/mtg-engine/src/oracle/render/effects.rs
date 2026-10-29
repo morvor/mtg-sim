@@ -2021,6 +2021,17 @@ impl Renderer<'_> {
                     (_, Some(2)) => "one or two",
                     _ => "any number of",
                 };
+                // "among it and any number of commanders" (Stumpsquall Hydra).
+                if let Sel::All(Filter::Or(v)) = among {
+                    if let [Filter::Source, f] = v.as_slice() {
+                        let g = self.noun(f, Num::Many);
+                        let m = self.me();
+                        return format!(
+                            "distribute {c} among {m} and {q} {g}{}",
+                            w.unwrap_or_default()
+                        );
+                    }
+                }
                 format!("distribute {c} among {q} {g}{}", w.unwrap_or_default())
             }
             Effect::PutEventCounters { to, one_each } => {

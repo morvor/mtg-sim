@@ -733,3 +733,60 @@ fn stand_or_fall_only_creatures_in_the_chosen_piles_can_block() {
     assert!(!t.g.can_block_at_all(bears));
     let _ = mine;
 }
+
+#[test]
+fn stumpsquall_hydra_distributes_among_itself_and_commanders() {
+    cr!("608.2d", "903.3");
+    ruling!(
+        "Stumpsquall Hydra",
+        "Because Stumpsquall Hydra's ability doesn't target, you choose how to distribute X +1/+1 counters as its ability resolves."
+    );
+    round_trips("Stumpsquall Hydra");
+    let mut t = TestGame::with_config(
+        2,
+        GameConfig {
+            variant: mtg_engine::game::Variant::Commander,
+            ..Default::default()
+        },
+    );
+    let cmdr = t.battlefield(P1, "Grizzly Bears");
+    t.g.objects[cmdr.0 as usize].is_commander = true;
+    let name = t.g.obj(cmdr).chars.name.clone();
+    t.g.players[P1.idx()].commander_names.push(name);
+    let other = t.battlefield(P0, "Llanowar Elves");
+    t.g.recompute();
+    t.lands(P0, "Forest", 6);
+    let card = t.hand(P0, "Stumpsquall Hydra");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, card).x(3).go();
+    t.resolve();
+    let hydra = t.g.current(card);
+    // Two on the Hydra, one on the opponent's commander; a creature that isn't a
+    // commander can't be chosen.
+    t.answer_choose(P0, &[Entity::Object(hydra), Entity::Object(cmdr)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 1]));
+    t.resolve_all();
+    assert_eq!(t.counters(hydra, "+1/+1"), 2);
+    assert_eq!(t.counters(cmdr, "+1/+1"), 1);
+    assert_eq!(t.counters(other, "+1/+1"), 0);
+}
+
+#[test]
+fn jhoiras_timebug_adds_or_removes_a_time_counter_on_the_target() {
+    cr!("702.62a", "115.1");
+    compiles("Jhoira's Timebug");
+    // "{T}: Choose target permanent you control or suspended card you own. If that
+    // permanent or card has a time counter on it, you may remove a time counter from it
+    // or put another time counter on it."
+    let mut t = TestGame::new(2);
+    let bug = t.battlefield(P0, "Jhoira's Timebug");
+    let card = t.exile(P0, "Rift Bolt");
+    t.g.add_counters(Entity::Object(card), "time", 2, None);
+    t.g.recompute();
+    t.answer_yes(P0, true);
+    // Remove one.
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.activate(P0, bug, 0, &[Entity::Object(card)]).expect("activate");
+    t.resolve_all();
+    assert_eq!(t.counters(card, "time"), 1);
+}

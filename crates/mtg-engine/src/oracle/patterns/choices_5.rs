@@ -549,3 +549,57 @@ fn only_chosen_piles_can_block(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "only [objects] in the chosen piles can block this turn", priority: 90, parse: only_chosen_piles_can_block } }
+
+/// "distribute X +1/+1 counters among it and any number of commanders" (Stumpsquall
+/// Hydra): the source and any number of the other objects, chosen as the ability resolves
+/// (not targeted); the source only while it's still on the battlefield (its ruling).
+fn distribute_among_it_and_others(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (head, tail) = [" among it and any number of ", " among ~ and any number of "]
+        .iter()
+        .find_map(|p| l.split_once(p))?;
+    if !head.starts_with("distribute ") {
+        return None;
+    }
+    let e = parse_sentence(&format!("{head} among any number of {tail}"), b)?;
+    let Effect::DistributeCounters {
+        n,
+        kind,
+        among: Sel::All(f),
+        min_objects,
+        max_objects,
+        up_to,
+    } = e
+    else {
+        return None;
+    };
+    Some(Effect::DistributeCounters {
+        n,
+        kind,
+        among: Sel::All(Filter::Or(vec![Filter::Source, f])),
+        min_objects,
+        max_objects,
+        up_to,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "distribute counters among it and any number of [objects]", priority: 90, parse: distribute_among_it_and_others } }
+
+/// "If that permanent or card has a time counter on it, ..." (Jhoira's Timebug, after
+/// "Choose target permanent you control or suspended card you own"): the one target,
+/// whichever it is.
+fn that_permanent_or_card(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains("that permanent or card") {
+        return None;
+    }
+    let [t] = b.targets.as_slice() else {
+        return None;
+    };
+    if t.max.as_const() != Some(1) || !(t.text.contains("permanent") && t.text.contains(" or ") && t.text.contains("card")) {
+        return None;
+    }
+    parse_sentence(&l.replace("that permanent or card", "it"), b)
+}
+
+inventory::submit! { EffectPattern { name: "that permanent or card (the target that's one or the other)", priority: 200, parse: that_permanent_or_card } }
