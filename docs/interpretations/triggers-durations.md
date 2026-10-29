@@ -99,3 +99,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Portcullis; Lifeline ("if another creature is on the battlefield": the dying creature is no longer on the battlefield either way, so the outcome is the same).
 - Code: `crates/mtg-engine/src/oracle/patterns/other_than_trigger_object.rs` (`rebind_other`), called from `crates/mtg-engine/src/oracle/triggers.rs`.
 - Tests: `tests/rulings/r_p039_creature_count.rs` (`portcullis_checks_the_creature_count_again_on_resolution`, `animated_portcullis_counts_itself_among_the_other_creatures`).
+
+## intervening-if-over-ruling-example: An intervening "if" is rechecked on resolution even where a ruling's example assumes otherwise
+- Kind: interpretation
+- Status: provisional
+- Rules: 603.4 "A triggered ability may read “When/Whenever/At [trigger event], if [condition], [effect].” When the trigger event occurs, the ability checks whether the stated condition is true. The ability triggers only if it is, otherwise it does nothing. If the ability triggers, it checks the stated condition again as it resolves. If it’s not, the ability is removed from the stack and does nothing. ..." / Brink of Madness ruling: "You must sacrifice Brink of Madness if possible, but the opponent discards their hand even if you can’t sacrifice it for some reason (for example, if it were returned to its owner’s hand before the ability resolved)." / Brink of Madness: "At the beginning of your upkeep, if you have no cards in hand, sacrifice this enchantment and target opponent discards their hand."
+- Question: The ruling's example returns Brink of Madness to your hand in response, after which you have a card in hand. Does the opponent still discard (the ruling's example) or does the ability do nothing because its intervening "if" is false on resolution (CR 603.4)?
+- Decision: The CR wins: with Brink of Madness (or any card) in your hand as the ability resolves, the ability does nothing. The ruling's point, that the discard doesn't depend on the sacrifice, holds whenever Brink of Madness left the battlefield some other way (exiled, stolen), and is tested so.
+- Alternatives: Follow the example: the opponent discards although the condition is false. That would need the engine to skip the resolution check for this card only.
+- Why: The ruling predates or overlooks the intervening-"if" recheck; its stated principle is about the sacrifice, and its example's outcome follows only if the condition isn't rechecked, which CR 603.4 requires.
+- Affects: Brink of Madness.
+- Code: `crates/mtg-engine/src/stack.rs` (`resolve_ability`: the intervening "if" rechecked on resolution).
+- Tests: `tests/rulings/r_p152_triggers.rs` (`brink_of_madness_returned_to_hand_fails_its_intervening_if`).

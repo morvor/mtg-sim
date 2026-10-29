@@ -588,3 +588,23 @@ fn aura_flux_gives_other_enchantments_an_upkeep_cost() {
         assert_eq!(t.on_battlefield(seal), pay, "{pay}");
     }
 }
+
+#[test]
+fn brink_of_madness_returned_to_hand_fails_its_intervening_if() {
+    cr!("603.4");
+    interp!("intervening-if-over-ruling-example");
+    supported("Brink of Madness");
+    let mut t = TestGame::new(2);
+    let brink = t.battlefield(P0, "Brink of Madness");
+    for _ in 0..3 {
+        t.hand(P1, "Grizzly Bears");
+    }
+    next_upkeep(&mut t);
+    assert_eq!(triggers_on_stack(&t, "discards their hand"), 1);
+    // Returned to your hand: you now have a card in hand.
+    bounce(&mut t, brink);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    assert!(t.hand_size(P1) >= 3, "the ability did nothing");
+    assert!(t.in_hand(P0, "Brink of Madness"));
+}
