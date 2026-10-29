@@ -647,6 +647,7 @@ impl Game {
                     if self.player(p).in_game() {
                         if crate::skip::consume_turn_skip(self, p)
                             || crate::skip::extra_turn_skipped(self, p)
+                            || crate::kw::replace_turn_begin(self, p)
                         {
                             continue;
                         }
@@ -658,7 +659,9 @@ impl Game {
                     }
                 }
                 let next = self.next_turn_player(after);
-                if crate::skip::consume_turn_skip(self, next) {
+                if crate::skip::consume_turn_skip(self, next)
+                    || crate::kw::replace_turn_begin(self, next)
+                {
                     after = next;
                     continue;
                 }

@@ -88,6 +88,25 @@ pub trait KeywordRules: Sync + Send {
     fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
         false
     }
+    /// A replacement of countering (CR 701.6, 614.1a): the spell `spell` would be countered
+    /// by `cause` (the spell or ability countering it and its controller). Returns true if
+    /// this implementation's rule replaced the event (the spell was then not countered,
+    /// and the countering effect continues). Called for every registered implementation
+    /// until one replaces it.
+    fn replace_counter(
+        &self,
+        g: &mut Game,
+        spell: ObjectId,
+        cause: crate::event_causes::Cause,
+    ) -> bool {
+        false
+    }
+    /// A replacement of beginning a turn (CR 614.10): `p` would begin a turn. Returns true
+    /// if this implementation's rule skips that turn instead. Called for every registered
+    /// implementation until one skips it.
+    fn replace_turn_begin(&self, g: &mut Game, p: PlayerId) -> bool {
+        false
+    }
     /// Whether a rule this implementation defines prohibits `p` from venturing into the
     /// dungeon now (CR 101.2, 701.49). Called for every registered implementation.
     fn venture_prohibited(&self, g: &Game, p: PlayerId) -> bool {
@@ -789,6 +808,18 @@ pub fn cast_options_with_any_cost(g: &Game, p: PlayerId, card: ObjectId) -> Vec<
         }
     }
     out
+}
+
+/// See [`KeywordRules::replace_counter`].
+pub fn replace_counter(g: &mut Game, spell: ObjectId, cause: crate::event_causes::Cause) -> bool {
+    registry()
+        .iter()
+        .any(|r| r.replace_counter(g, spell, cause))
+}
+
+/// See [`KeywordRules::replace_turn_begin`].
+pub fn replace_turn_begin(g: &mut Game, p: PlayerId) -> bool {
+    registry().iter().any(|r| r.replace_turn_begin(g, p))
 }
 
 /// See [`KeywordRules::cast_prohibited`].

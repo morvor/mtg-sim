@@ -1344,6 +1344,10 @@ impl Renderer<'_> {
                 let v = self.value(value);
                 format!("note {v}")
             }
+            Effect::NoteManaSpent { amount } => {
+                let what = if *amount { "type and amount" } else { "type" };
+                format!("note the {what} of mana spent to pay this activation cost")
+            }
             Effect::SetX { .. } => String::new(),
             // Bookkeeping for "... they paid this way" (named by the value that reads it).
             Effect::AddToPlayerTally { .. } => String::new(),
@@ -8235,6 +8239,10 @@ impl Renderer<'_> {
             }
             ManaProduction::DevotionToChosenColor => {
                 "an amount of mana of that color equal to your devotion to that color".into()
+            }
+            ManaProduction::Noted { amount: false } => "one mana of ~'s last noted type".into(),
+            ManaProduction::Noted { amount: true } => {
+                "~'s last noted type and amount of mana".into()
             }
         }
     }
