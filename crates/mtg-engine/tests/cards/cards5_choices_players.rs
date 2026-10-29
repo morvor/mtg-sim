@@ -1258,3 +1258,31 @@ fn zevlor_copies_the_spell_for_each_other_opponent() {
     assert_eq!(t.life(P3), 20);
     assert_eq!(t.life(P0), 20);
 }
+
+#[test]
+fn elrond_gains_control_of_every_creature_chosen_for_a_fellowship_vote() {
+    cr!("701.38a", "101.4");
+    ruling!(
+        "Elrond of the White Council",
+        "each player who voted fellowship chooses a creature they control for each of their fellowship votes"
+    );
+    compiles("Elrond of the White Council");
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P2, "Llanowar Elves");
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer(P1, DecisionKind::Option, Answer::Index(0));
+    t.answer(P2, DecisionKind::Option, Answer::Index(0));
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_choose(P2, &[Entity::Object(elves)]);
+    let elrond = t.enter(P0, "Elrond of the White Council");
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    // Both fellowship voters' creatures, not only the last one's.
+    assert_eq!(t.obj_now(bears).controller, P0);
+    assert_eq!(t.obj_now(elves).controller, P0);
+    // One aid vote: a +1/+1 counter on each creature P0 controls.
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.counters(elrond, "+1/+1"), 1);
+}

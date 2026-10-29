@@ -920,3 +920,56 @@ fn copy_for_each_other_opponent(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "for each other opponent, choose that player or a permanent they control, copy that spell targeting it", priority: 90, parse: copy_for_each_other_opponent } }
+
+/// Moves the "nothing chosen yet" of a choice made in each pass of a "for each ..." loop
+/// before the loop, so the chosen objects are those of every pass ("For each fellowship
+/// vote, the voter chooses a creature they control. You gain control of each creature
+/// chosen this way, ...", Elrond of the White Council). Returns whether it did.
+fn accumulate_choices_over_loop(e: &mut Effect) -> bool {
+    let chosen = super::choice_grammar_objects::CHOSEN;
+    let is_reset = |x: &Effect| {
+        matches!(x, Effect::Store { var, sel: Sel::Union(v) } if *var == chosen && v.is_empty())
+    };
+    if matches!(e, Effect::ForEach { .. }) {
+        let one = std::mem::take(e);
+        *e = Effect::Seq(vec![one]);
+    }
+    let Effect::Seq(v) = e else {
+        return false;
+    };
+    let Some(i) = v.iter().rposition(|x| matches!(x, Effect::ForEach { .. })) else {
+        return false;
+    };
+    let Effect::ForEach { effect, .. } = &mut v[i] else {
+        return false;
+    };
+    let Effect::Seq(body) = effect.as_mut() else {
+        return false;
+    };
+    if !body.first().is_some_and(is_reset) {
+        return false;
+    }
+    let reset = body.remove(0);
+    v.insert(i, reset);
+    true
+}
+
+/// "You gain control of each creature chosen this way, and they gain "..."" after choices
+/// made in each pass of a "for each [vote]" loop: every creature chosen in any pass.
+fn each_chosen_over_loop(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.contains(" each creature chosen this way") {
+        return false;
+    }
+    let mut p2 = prev.clone();
+    if !accumulate_choices_over_loop(&mut p2) {
+        return false;
+    }
+    let Some(e) = parse_sentence(&l.replacen(" each creature chosen this way", " the chosen creatures", 1), b) else {
+        return false;
+    };
+    *prev = Effect::seq(vec![p2, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "[instruction] each creature chosen this way (over a for-each loop)", priority: 60, apply: each_chosen_over_loop } }
