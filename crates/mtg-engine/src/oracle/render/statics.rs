@@ -3278,7 +3278,28 @@ impl Renderer<'_> {
                 },
                 action,
             ) => {
-                self.damage_replacement(source, to_players, to_objects, *combat_only, false, action)
+                let s = self.damage_replacement(
+                    source,
+                    to_players,
+                    to_objects,
+                    *combat_only,
+                    false,
+                    action,
+                );
+                // "All combat damage that would be dealt to you by unblocked creatures is
+                // dealt to ~ instead": the same redirection of each such damage event.
+                if let (A::Redirect(sel), true, Some(PlayerFilter::You), None) =
+                    (action, *combat_only, to_players, to_objects)
+                {
+                    let unblocked = matches!(source, Filter::And(v) if v.len() == 2
+                        && v.iter().any(|x| matches!(x, Filter::Unblocked))
+                        && v.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))));
+                    if unblocked {
+                        let t = self.sel(sel, Case::Obj);
+                        return format!("{{alt:{s}|all combat damage that would be dealt to you by unblocked creatures is dealt to {t} instead}}");
+                    }
+                }
+                s
             }
             (
                 E::NoncombatDamage {

@@ -1094,6 +1094,15 @@ impl Renderer<'_> {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} attacked this turn")
             }
+            // "as long as ~ is enchanted or equipped".
+            Condition::SelMatches(s, Filter::Or(v))
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::Enchanted))
+                    && v.iter().any(|x| matches!(x, Filter::Equipped)) =>
+            {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} is enchanted or equipped")
+            }
             // "if that spell was kicked" (CR 702.33d).
             Condition::SelMatches(s, Filter::CastWithCost(name)) if name == "kicked" => {
                 let subj = self.sel(s, Case::Subj);
@@ -1814,6 +1823,35 @@ impl Renderer<'_> {
     fn compare_condition(&mut self, a: &Value, cmp: Cmp, b: &Value) -> String {
         if let Some(s) = self.guessed(a, cmp, b) {
             return s;
+        }
+        // "if that spell has mana value 5 or greater", "if that creature has power 7 or
+        // greater": one object's number against a constant, said either way.
+        if let (
+            Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s),
+            Value::Const(n),
+            Cmp::Ge | Cmp::Le,
+        ) = (a, b, cmp)
+        {
+            if matches!(
+                s.as_ref(),
+                Sel::Target(_)
+                    | Sel::TriggerObject
+                    | Sel::TriggerSpell
+                    | Sel::TriggerLki
+                    | Sel::Var(_)
+            ) {
+                let stat = match a {
+                    Value::ManaValueOf(_) => "mana value",
+                    Value::PowerOf(_) => "power",
+                    _ => "toughness",
+                };
+                let subj = self.sel(s, Case::Subj);
+                if !subj.contains(['{', '}']) && subj != "their" {
+                    let poss = super::players::decline(subj.clone(), Case::Poss);
+                    let c = cmp_phrase(cmp, &n.to_string());
+                    return format!("{{alt:{poss} {stat} is {c}|{subj} has {stat} {c}}}");
+                }
+            }
         }
         // Pack tactics: "if you attacked with creatures with total power 6 or greater
         // this combat" (the attackers' power as they were declared).

@@ -216,7 +216,7 @@ impl Renderer<'_> {
                         .collect(),
                 );
                 let what = self.spell_noun(&kind, Det::A);
-                let (s, vp) = self.qualified_trigger_event(trigger, det)?;
+                let (s, vp) = self.trigger_event_parts(trigger);
                 if !vp.contains("a spell or ability")
                     || f.zone().is_some_and(|z| z != ZoneKind::Stack)
                 {

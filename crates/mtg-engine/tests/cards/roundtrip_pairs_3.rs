@@ -2,6 +2,8 @@
 //! mismatches from the long tail (the two-card clusters).
 
 use mtg_engine::testing::*;
+use mtg_engine::keywords::KeywordKind;
+use mtg_engine::types::CardType;
 use mtg_engine::*;
 
 /// Puts the real Aura `name` onto the battlefield under `p`'s control attached to `to`.
@@ -61,7 +63,7 @@ fn ydwen_efreet_losing_the_flip_unblocks_the_creature_it_blocked() {
         let mut t = TestGame::new(2);
         let efreet = t.battlefield(P0, "Ydwen Efreet");
         let bears = t.battlefield(P1, "Grizzly Bears");
-        t.g.dice.loaded_coins.push(won);
+        t.g.dice.loaded_coins.push_back(won);
         t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
         t.attack(&[(bears, Entity::Player(P0))], &[(efreet, bears)]);
         assert_eq!(t.life(P0), life, "won: {won}");
@@ -226,4 +228,25 @@ fn weathered_bodyguards_takes_only_unblocked_creatures_damage() {
     // Bodyguards.
     assert_eq!(t.life(P0), 20 - 4, "{}", t.dump_log());
     assert_eq!(t.obj_now(guards).damage, 2);
+}
+
+#[test]
+fn tap_enchanted_land_taps_the_land_this_aura_enchants() {
+    cr!("303.4m", "602.2b");
+    // Tourach's Gate: "Tap enchanted land: Attacking creatures you control get +2/-1 until
+    // end of turn. Activate only if enchanted land is untapped." The cost is the land it
+    // enchants, not another land with an Aura on it (here Wild Growth's).
+    let mut t = TestGame::new(2);
+    let own = t.battlefield(P0, "Forest");
+    let other = t.battlefield(P0, "Forest");
+    let gate = attach_new(&mut t, P0, "Tourach's Gate", own);
+    attach_new(&mut t, P0, "Wild Growth", other);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    // Offered the other enchanted land as the cost, if it could be chosen.
+    t.answer_choose(P0, &[Entity::Object(other)]);
+    let r = t.activate(P0, gate, 1, &[]);
+    assert!(r.is_ok(), "{r:?}");
+    t.resolve_all();
+    assert!(t.obj_now(own).tapped, "{}", t.dump_log());
+    assert!(!t.obj_now(other).tapped);
 }

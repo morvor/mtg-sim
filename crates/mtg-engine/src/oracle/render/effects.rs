@@ -436,7 +436,29 @@ impl Renderer<'_> {
         if let Some(x) = actor_other {
             self.last_actor_other = x;
         }
+        // What "it" got from the last instruction ("each creature that had a +1/+1
+        // counter put on it this way").
+        match e {
+            Effect::AddCounters { kind, .. } => self.counters_put = Some(kind.clone()),
+            Effect::Seq(_) | Effect::Store { .. } | Effect::StoreValue { .. } => {}
+            _ => self.counters_put = None,
+        }
         s
+    }
+
+    /// "each creature that had a +1/+1 counter put on it this way": the objects of `sel`
+    /// (the ones the last instruction put counters on, of a kind) if it is that.
+    fn had_counters_put(&mut self, sel: &Sel) -> Option<String> {
+        let Sel::Matching(inner, f) = sel else {
+            return None;
+        };
+        if !matches!(inner.as_ref(), Sel::Var(v) if *v == vars::IT) {
+            return None;
+        }
+        let k = self.counters_put.clone()?;
+        let n = self.noun(f, Num::One);
+        let c = with_article(&counter_name(&k));
+        Some(format!("each {n} that had {c} put on it this way"))
     }
 
     /// The instructions of a reflexive triggered ability (CR 603.12).
@@ -582,7 +604,10 @@ impl Renderer<'_> {
                     Some(k) => format!("{k} counters"),
                     None => "each kind of counter".into(),
                 };
-                let s = self.sel(sel, Case::Obj);
+                let s = match self.had_counters_put(sel) {
+                    Some(s) => s,
+                    None => self.sel(sel, Case::Obj),
+                };
                 format!("double the number of {k} on {s}")
             }
             // "Double the power of each creature you control until end of turn" (CR
@@ -3704,6 +3729,16 @@ impl Renderer<'_> {
                 let t = self.target_mention(*slot, Case::Obj);
                 format!("prevent the next {a} damage that would be dealt {d} to {t}, divided as you choose")
             }
+            // "goad each creature that had a double strike counter put on it this way".
+            Effect::KeywordAction {
+                action: KeywordAction::Goad,
+                who: PlayerRef::You,
+                what,
+                ..
+            } if self.had_counters_put(what).is_some() => {
+                let s = self.had_counters_put(what).unwrap_or_default();
+                format!("goad {s}")
+            }
             Effect::KeywordAction {
                 action,
                 who,
@@ -6662,7 +6697,7 @@ impl Renderer<'_> {
         }
         // "Put the cards in your hand on the bottom of your library": all of a hand.
         if to.zone == ZoneKind::Library
-            && matches!(what, Sel::All(Filter::And(f)) if matches!(f.as_slice(), [Filter::InZone(ZoneKind::Hand), Filter::OwnedBy(_)]))
+            && matches!(what, Sel::All(Filter::And(f)) if f.iter().all(|x| matches!(x, Filter::Card | Filter::InZone(ZoneKind::Hand) | Filter::OwnedBy(_))))
             && w.ends_with(" hand")
             && !w.contains('{')
         {
@@ -9538,7 +9573,8 @@ pub(crate) fn is_plural_sel(s: &Sel) -> bool {
 
 fn until_event(u: &UntilEvent) -> String {
     match u {
-        UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
+        // The object itself, by name or as "it" ("until it leaves the battlefield").
+        UntilEvent::SourceLeavesBattlefield => "~it leaves the battlefield".into(),
         UntilEvent::OpponentBecomesMonarch => "an opponent becomes the monarch".into(),
         UntilEvent::TargetLeavesBattlefield(_) => "that permanent leaves the battlefield".into(),
     }

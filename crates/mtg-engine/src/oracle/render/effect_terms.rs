@@ -119,6 +119,29 @@ impl Renderer<'_> {
                 let w = self.player(who, Case::Subj);
                 Some(self.sacrifice_one_of_each(&w, &kinds))
             }
+            // "Each player's life total becomes the number of creatures they control."
+            Effect::ForEachPlayer {
+                who: PlayerRef::EachPlayer,
+                effect: inner,
+            } if matches!(
+                inner.as_ref(),
+                Effect::SetLife {
+                    who: PlayerRef::Iterated,
+                    n: Value::Count(_)
+                }
+            ) =>
+            {
+                let Effect::SetLife {
+                    n: Value::Count(f), ..
+                } = inner.as_ref()
+                else {
+                    return None;
+                };
+                let n = self.noun(f, Num::Many);
+                Some(format!(
+                    "each player's life total becomes the number of {n}"
+                ))
+            }
             // "Each player sacrifices an artifact, a creature, ... of their choice."
             Effect::ForEachPlayer { who, effect } => {
                 let kinds = one_of_each_sacrifice(effect)?;

@@ -651,7 +651,7 @@ impl Renderer<'_> {
                     }
                     (Some(fz), Some(tz)) => {
                         let tz_s = self.zone_into(*tz, filter);
-                        let mut fz_s = self.zone_from(*fz, filter);
+                        let fz_s = self.zone_from(*fz, filter);
                         // "into an opponent's graveyard from their library": both zones
                         // are the owner's (CR 400.3), the same player's.
                         let opponents = matches!(filter, Filter::And(v)
@@ -660,7 +660,11 @@ impl Renderer<'_> {
                             matches!(z, ZoneKind::Library | ZoneKind::Graveyard | ZoneKind::Hand)
                         };
                         if opponents && owned(fz) && owned(tz) {
-                            fz_s = format!("{{alt:{fz_s}|their {}}}", zone_word(*fz));
+                            let z = zone_word(*fz);
+                            return Ev::new(
+                                o,
+                                format!("is put into {tz_s} {{alt:from {fz_s}|from their {z}}}"),
+                            );
                         }
                         format!("is put into {tz_s} from {fz_s}")
                     }

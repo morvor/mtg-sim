@@ -432,7 +432,10 @@ impl Renderer<'_> {
                     && v.iter().any(|x| matches!(x, Filter::BlockingSource))
                     && v.iter().any(|x| matches!(x, Filter::BlockedBySource)) =>
             {
+                // The object itself, by name or as "it" ("target creature blocking or
+                // blocked by it").
                 let m = self.me();
+                let m = if m == "~" { "~it".to_string() } else { m };
                 np.post.push(format!("blocking or blocked by {m}"));
             }
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),

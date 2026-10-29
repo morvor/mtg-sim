@@ -887,6 +887,8 @@ pub struct Renderer<'a> {
     /// What the last instruction did to a group of objects ("permanents destroyed this
     /// way"), for counting them.
     pub(crate) it_done: Option<String>,
+    /// The kind of counter the last instruction put on "it" (see `Effect::AddCounters`).
+    pub(crate) counters_put: Option<CounterKind>,
     /// Rendering a value about an earlier moment ("the number of Mountains you control
     /// as you cast ~", "damage dealt by sources they controlled"): "you control" may be
     /// "you controlled".
@@ -1089,6 +1091,7 @@ impl<'a> Renderer<'a> {
             outer_vars: Vec::new(),
             player_vars: Vec::new(),
             it_done: None,
+            counters_put: None,
             control_past: false,
             excess_trigger: false,
             trigger_actions: Vec::new(),
