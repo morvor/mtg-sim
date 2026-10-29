@@ -21,7 +21,13 @@ fn above(f: &Filter) -> Option<(Filter, &'static str)> {
     })?;
     let rest: Vec<Filter> = v
         .iter()
-        .filter(|x| !matches!(x, Filter::Custom(_) | Filter::InZone(ZoneKind::Graveyard)))
+        .filter(|x| match x {
+            Filter::Custom(n) => {
+                n != crate::zones::ABOVE_SOURCE_IN_GRAVEYARD
+                    && n != crate::zones::DIRECTLY_ABOVE_SOURCE_IN_GRAVEYARD
+            }
+            x => !matches!(x, Filter::InZone(ZoneKind::Graveyard)),
+        })
         .cloned()
         .collect();
     Some((Filter::and(rest), which))

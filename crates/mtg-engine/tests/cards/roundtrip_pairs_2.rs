@@ -24,7 +24,7 @@ fn hellfire_deals_three_plus_the_creatures_that_died() {
 
 #[test]
 fn norns_decree_poisons_the_opponent_whose_creatures_dealt_the_damage() {
-    cr!("603.2c", "122.1f");
+    cr!("603.2c", "122.1");
     // "Whenever one or more creatures an opponent controls deal combat damage to you,
     // that opponent gets a poison counter."
     let mut t = TestGame::new(2);
@@ -78,7 +78,7 @@ fn thief_of_blood_counts_the_counters_it_removed() {
 
 #[test]
 fn desolation_damages_the_player_who_sacrificed_a_stolen_plains() {
-    cr!("701.21a", "603.10a");
+    cr!("701.21a");
     // "At the beginning of each end step, each player who tapped a land for mana this turn
     // sacrifices a land of their choice. This enchantment deals 2 damage to each player
     // who sacrificed a Plains this way." A player sacrifices a land they control, which
