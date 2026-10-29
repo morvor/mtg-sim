@@ -23,7 +23,8 @@ exclusions, which the table states separately). Exit status 1 on any problem.
   check_plan.py --live    # also compare the snapshot with the current release mtg-tools
                           # (target/release/mtg-tools of this checkout): texts supported since are
                           # reported, a live text that no list places is a problem; and say which
-                          # in-flight items have landed since (their rows then need re-planning)
+                          # in-flight items have landed since, in this checkout or on the
+                          # fetched integration branch (their rows then need re-planning)
 """
 import collections
 import glob
@@ -35,6 +36,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 AGENTS = os.path.dirname(HERE)
 ROOT = os.path.dirname(os.path.dirname(AGENTS))
+INTEGRATION = "origin/claude/mtg-rules-engine-lkr27h"
 
 
 def read_tsv(path):
@@ -151,8 +153,13 @@ def main():
         items = sorted({r["item"] for r in sources["round5/inflight.tsv"]} |
                        {r["pending_item"] for r in sources["round5/pending-recheck.tsv"]})
         for it in items:
-            log = subprocess.run(["git", "-C", ROOT, "log", "--oneline", "--grep", f"^{it}:"],
-                                 capture_output=True, text=True).stdout.strip()
+            # Look at this checkout and at the integration branch as last fetched: an item can
+            # land there before this checkout merges it.
+            refs = ["HEAD"] + [r for r in (INTEGRATION,) if subprocess.run(
+                ["git", "-C", ROOT, "rev-parse", "--verify", "-q", r],
+                capture_output=True).returncode == 0]
+            log = subprocess.run(["git", "-C", ROOT, "log", "--oneline", "--grep", f"^{it}:",
+                                  *refs], capture_output=True, text=True).stdout.strip()
             state = f"has landed ({len(log.splitlines())} commits): re-plan its rows" if log \
                 else "still in flight"
             print(f"  {it}: {state}")
