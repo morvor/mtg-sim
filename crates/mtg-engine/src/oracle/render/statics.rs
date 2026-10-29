@@ -594,8 +594,33 @@ impl Renderer<'_> {
                 };
                 format!("you may spend {t} as though it were mana of any color to pay {what}")
             }
-            StaticEffect::OpeningHand { delayed } => match delayed {
-                None => "if ~ is in your opening hand, you may begin the game with it on the battlefield".into(),
+            StaticEffect::OpeningHand {
+                delayed,
+                not_starting_player,
+                counters,
+                then,
+            } => match delayed {
+                None => {
+                    let mut s = String::from("if ~ is in your opening hand");
+                    if *not_starting_player {
+                        s.push_str(" and you're not the starting player");
+                    }
+                    s.push_str(", you may begin the game with it on the battlefield");
+                    for (k, n) in counters {
+                        let c = super::counter_name(k);
+                        let c = match n {
+                            1 if c.starts_with(['a', 'e', 'i', 'o', 'u']) => format!("an {c}"),
+                            1 => format!("a {c}"),
+                            n => format!("{} {c}s", super::number_word(*n as i32)),
+                        };
+                        s.push_str(&format!(" with {c} on it"));
+                    }
+                    if let Some(e) = then {
+                        let e = self.effect(e);
+                        s.push_str(&format!(". If you do, {}", lower_first(&e)));
+                    }
+                    s
+                }
                 Some(d) => {
                     let (t, b) = d.as_ref();
                     // CR 103.? leylines and chancellors: the first upkeep of the game.
@@ -604,6 +629,12 @@ impl Renderer<'_> {
                             step: TriggerStep::Upkeep,
                             whose: PlayerRel::Any,
                         } => "at the beginning of the first upkeep".to_string(),
+                        TriggerCond::Custom(n)
+                            if n
+                                == crate::kw::first_spell_of_game::OPPONENT_FIRST_SPELL_OF_GAME =>
+                        {
+                            "when each opponent casts their first spell of the game".to_string()
+                        }
                         t => self.trigger_text(t),
                     };
                     let b = self.body(b);
@@ -631,7 +662,10 @@ impl Renderer<'_> {
                 )
             }
             StaticEffect::BeforeShuffleExile { what, at_least } => {
-                let n = self.noun_det(what, Det::Count(format!("{} or more", number_word(*at_least as i32))));
+                let n = self.noun_det(
+                    what,
+                    Det::Count(format!("{} or more", number_word(*at_least as i32))),
+                );
                 format!(
                     "before you shuffle your deck to start the game, you may reveal ~ from your deck and exile {n} you drafted that aren't in your deck"
                 )
@@ -667,7 +701,9 @@ impl Renderer<'_> {
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "that player ignores this effect until end of turn".into()
                     }
-                    SpecialActionEffect::StopDelayedTrigger => "that ability doesn't trigger".into(),
+                    SpecialActionEffect::StopDelayedTrigger => {
+                        "that ability doesn't trigger".into()
+                    }
                 };
                 format!("{who} may {c} any time they could cast an instant. If they do, {what}")
             }

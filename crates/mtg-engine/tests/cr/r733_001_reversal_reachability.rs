@@ -582,6 +582,9 @@ fn custom_rule(name: &str) -> CustomRule {
         "card:Guile:countering a spell exiles it instead",
         "card:Time Vault:skip a turn you would begin while it's tapped",
         "card:Titania's Song:the effect continues until end of turn after it leaves",
+        // Bamboozling Beeble: the player's next die roll has one more die, its controller
+        // ignoring one (`dice::roll_dice`): dice, no library.
+        mtg_engine::dice::NEXT_ROLL_EXTRA,
     ];
     // Prefixes of families of names (a name's parameters follow its prefix): landwalk,
     // targeting and activation restrictions, cost reductions, crewing and saddling, how
@@ -2447,6 +2450,10 @@ fn until_can_end(u: &UntilEvent, has: &dyn Fn(Ev) -> bool) -> bool {
         // sacrificed for mana (Ashnod's Altar).
         UntilEvent::SourceLeavesBattlefield | UntilEvent::TargetLeavesBattlefield(_) => true,
         UntilEvent::OpponentBecomesMonarch => has(Ev::BecomesMonarch),
+        // Rolling to visit Attractions is a turn-based action or an instruction of a
+        // triggered ability ("When this creature enters, roll to visit your Attractions"),
+        // never part of a cost or a mana ability.
+        UntilEvent::YouRollToVisitAtMost(_) => false,
     }
 }
 

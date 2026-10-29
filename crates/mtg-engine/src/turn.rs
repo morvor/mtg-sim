@@ -1017,7 +1017,12 @@ impl Game {
         // In Grand Melee, only the effects of this turn among those taken at the same time
         // (CR 807.4, 514.2).
         let this_turn = crate::multiplayer::grand_melee::current_turn_key(self);
-        let end_of_turn = |d: &Duration| matches!(d, Duration::EndOfTurn | Duration::ThisTurn);
+        let end_of_turn = |d: &Duration| {
+            matches!(
+                d,
+                Duration::EndOfTurn | Duration::ThisTurn | Duration::UntilEndOfTurnOrRoll(_)
+            )
+        };
         if !crate::multiplayer::grand_melee::expire_this_turns(self, end_of_turn) {
             self.expire_effects(end_of_turn);
         }

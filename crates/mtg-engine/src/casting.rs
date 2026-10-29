@@ -2953,6 +2953,11 @@ impl Game {
         ctx.cost_of = None;
         ctx.stack_obj = before;
         let paid = paid?;
+        // "{6}, Roll a d8: Monstrosity X, where X is the result.": the results of a die
+        // rolled to pay the cost (CR 118.1, 602.2b).
+        for (k, v) in &paid.nums {
+            ctx.nums.insert(*k, *v);
+        }
         ctx.nums.insert(vars::USER + 90, paid.objects.len() as i64);
         if !paid.objects.is_empty() {
             ctx.vars.insert(
@@ -4249,6 +4254,7 @@ impl Game {
                 // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
                 c.paying_cost = true;
                 self.exec(e, &mut c);
+                crate::dice::note_cost_roll(e, &c, paid);
                 // CR 607.2q: cards the action exiled ("behold a Goblin and exile it") were
                 // exiled to pay the cost.
                 if let Some(v) = c.vars.get(&vars::IT) {
@@ -4437,6 +4443,9 @@ pub struct PaidCost {
     pub life: u32,
     /// The loyalty counters a loyalty cost removed (CR 606.4).
     pub loyalty_removed: u32,
+    /// Values a cost's action noted for the ability's effect (a die rolled to pay the
+    /// cost: "the result", see `dice::note_cost_roll`).
+    pub nums: Vec<(Var, i64)>,
 }
 
 /// Adds one cost to another.
@@ -4462,7 +4471,7 @@ pub fn cost_part_pays_last(c: &CostPart) -> bool {
                 zone: ZoneKind::Library,
                 ..
             }
-    ) || matches!(c, CostPart::Effect(e) if matches!(&**e, Effect::Move { what: Sel::TopOfLibrary(..), .. }))
+    ) || matches!(c, CostPart::Effect(e) if matches!(&**e, Effect::Move { what: Sel::TopOfLibrary(..), .. } | Effect::RollDice(_)))
 }
 
 pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
