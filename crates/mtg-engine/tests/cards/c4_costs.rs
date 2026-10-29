@@ -107,3 +107,73 @@ fn personal_incarnation_only_its_owner_activates_and_damage_goes_to_its_owner() 
     assert_eq!(t.life(P0), 19, "1 damage dealt to its owner");
     assert_eq!(t.g.obj(inc).damage, 2);
 }
+
+#[test]
+fn flash_keeps_the_creature_for_its_mana_cost_reduced_by_two() {
+    cr!("118.7d", "118.12a");
+    ruling!("Flash", "Only the generic mana in that creature's mana cost is reduced");
+    assert_supported(&["Flash"]);
+    // Hill Giant {3}{R}: {1}{R} keeps it.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Mountain", 2);
+    let giant = t.hand(P0, "Hill Giant");
+    let flash = t.hand(P0, "Flash");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    t.cast(P0, flash).go();
+    t.resolve();
+    assert!(t.on_battlefield(t.g.current(giant)));
+    assert!(t
+        .g
+        .permanents_controlled_by(P0)
+        .into_iter()
+        .all(|o| !t.g.obj(o).chars.is(mtg_engine::types::CardType::Land) || t.g.obj(o).tapped));
+    // Without the mana for {1}{R}: sacrificed.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Mountain", 1);
+    let giant = t.hand(P0, "Hill Giant");
+    let flash = t.hand(P0, "Flash");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    t.cast(P0, flash).go();
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+}
+
+#[test]
+fn convergence_of_dominion_reduces_graveyard_abilities_with_your_commander() {
+    cr!("602.2b", "601.2f", "903.3");
+    assert_supported(&["Convergence of Dominion"]);
+    let commander_game = || {
+        TestGame::with_config(
+            2,
+            mtg_engine::GameConfig {
+                variant: mtg_engine::game::Variant::Commander,
+                ..Default::default()
+            },
+        )
+    };
+    // Scrapwork Cohort's unearth {2}{W} costs {W}.
+    let mut t = commander_game();
+    t.battlefield(P0, "Convergence of Dominion");
+    let cmd = t.battlefield(P0, "Grizzly Bears");
+    t.g.objects[cmd.0 as usize].is_commander = true;
+    let name = t.g.obj(cmd).chars.name.clone();
+    t.g.players[0].commander_names.push(name);
+    t.g.recompute();
+    t.battlefield(P0, "Plains");
+    let cohort = t.graveyard(P0, "Scrapwork Cohort");
+    t.activate(P0, cohort, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(cohort)));
+    // Without your commander: full cost, can't pay with one Plains.
+    let mut t = commander_game();
+    t.battlefield(P0, "Convergence of Dominion");
+    t.battlefield(P0, "Plains");
+    let cohort = t.graveyard(P0, "Scrapwork Cohort");
+    assert!(t.activate(P0, cohort, 0, &[]).is_err());
+}

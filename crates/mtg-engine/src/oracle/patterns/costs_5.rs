@@ -145,3 +145,47 @@ fn set_granted_activator(v: &mut serde_json::Value) -> usize {
 }
 
 inventory::submit! { AbilityPattern { name: "costs 5: [grant of an activated ability]. Only you may activate this ability.", priority: 80, parse: granted_only_you_may_activate } }
+
+/// "[effect] unless you pay its mana cost [reduced by {N}]" (Flash: "sacrifice it unless
+/// you pay its mana cost reduced by {2}"): the controller may pay that object's mana cost,
+/// less N generic mana (CR 118.7d, 118.12a); if they don't, the effect happens.
+fn unless_you_pay_its_mana_cost(
+    l: &str,
+    b: &mut crate::oracle::effects::Builder,
+) -> Option<Effect> {
+    let (eff, cost) = end(l).rsplit_once(" unless you pay ")?;
+    let (who, rest) = cost.split_once(" mana cost")?;
+    let sel = match who {
+        "its" => {
+            if super::oracle_hardening_referents::is_no_referent(&b.it) {
+                return None;
+            }
+            b.it.clone()
+        }
+        "~'s" => Sel::This,
+        _ => return None,
+    };
+    let part = match rest.trim() {
+        "" => CostPart::PayManaCostOf(Box::new(sel)),
+        r => {
+            let n = r.strip_prefix("reduced by {")?.strip_suffix('}')?;
+            CostPart::PayManaCostOfLess(Box::new(sel), n.parse().ok()?)
+        }
+    };
+    let saved = b.targets.len();
+    let Some(effect) = crate::oracle::effects::parse_clause(eff, b) else {
+        b.targets.truncate(saved);
+        return None;
+    };
+    Some(Effect::PayOptional {
+        who: PlayerRef::You,
+        cost: Cost {
+            mana: None,
+            parts: vec![part],
+        },
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(effect),
+    })
+}
+
+inventory::submit! { super::EffectPattern { name: "costs 5: [effect] unless you pay its mana cost reduced by {N}", priority: 100, parse: unless_you_pay_its_mana_cost } }

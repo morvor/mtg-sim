@@ -352,6 +352,10 @@ impl Renderer<'_> {
                 let s = self.sel(s, players::Case::Poss);
                 format!("pay {s} mana cost")
             }
+            CostPart::PayManaCostOfLess(s, n) => {
+                let s = self.sel(s, players::Case::Poss);
+                format!("pay {s} mana cost reduced by {{{n}}}")
+            }
             CostPart::Repeated { cost, times } => {
                 if let Some(s) = self.repeated_any_number(cost, times) {
                     return s;

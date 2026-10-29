@@ -560,6 +560,10 @@ pub enum CostPart {
     /// "pay its mana cost": the mana cost of the selected object, with X as 0 unless the
     /// object is a spell on the stack (CR 107.3h).
     PayManaCostOf(Box<Sel>),
+    /// "pay its mana cost reduced by {2}" (Flash): that mana cost with its generic mana
+    /// reduced by the amount (CR 118.7d: a reduction of generic mana reduces only the
+    /// generic part).
+    PayManaCostOfLess(Box<Sel>, u32),
     /// "[cost] for each [thing]": the cost repeated a number of times determined as it's
     /// paid, with any choices made separately for each repetition, paid all at once or not
     /// at all (cumulative upkeep, CR 702.24a).

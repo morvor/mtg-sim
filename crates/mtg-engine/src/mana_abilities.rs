@@ -649,6 +649,13 @@ pub fn mana_cost_to_pay(g: &Game, sel: &Sel, ctx: &Ctx) -> Option<ManaCost> {
     Some(mc.with_x(crate::object::x_value_of(obj) as u32))
 }
 
+/// [`mana_cost_to_pay`] with its generic mana reduced by `less` (CR 118.7d).
+fn mana_cost_to_pay_less(g: &Game, sel: &Sel, less: u32, ctx: &Ctx) -> Option<ManaCost> {
+    let mut m = mana_cost_to_pay(g, sel, ctx)?;
+    m.reduce_generic(less);
+    Some(m)
+}
+
 pub fn can_pay_mana_cost_of(
     g: &Game,
     p: PlayerId,
@@ -656,7 +663,19 @@ pub fn can_pay_mana_cost_of(
     src: Option<ObjectId>,
     ctx: &Ctx,
 ) -> bool {
-    match mana_cost_to_pay(g, sel, ctx) {
+    can_pay_mana_cost_of_less(g, p, sel, 0, src, ctx)
+}
+
+/// [`can_pay_mana_cost_of`] for the mana cost reduced by `less` generic mana.
+pub fn can_pay_mana_cost_of_less(
+    g: &Game,
+    p: PlayerId,
+    sel: &Sel,
+    less: u32,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    match mana_cost_to_pay_less(g, sel, less, ctx) {
         None => false,
         Some(m) if m.mana_value() == 0 && m.symbols.is_empty() => true,
         Some(m) => {
@@ -690,7 +709,19 @@ pub fn pay_mana_cost_of(
     src: Option<ObjectId>,
     ctx: &Ctx,
 ) -> bool {
-    let Some(m) = mana_cost_to_pay(g, sel, ctx) else {
+    pay_mana_cost_of_less(g, p, sel, 0, src, ctx)
+}
+
+/// [`pay_mana_cost_of`] for the mana cost reduced by `less` generic mana.
+pub fn pay_mana_cost_of_less(
+    g: &mut Game,
+    p: PlayerId,
+    sel: &Sel,
+    less: u32,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    let Some(m) = mana_cost_to_pay_less(g, sel, less, ctx) else {
         return false;
     };
     let spend = SpendContext {

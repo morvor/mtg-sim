@@ -3434,6 +3434,9 @@ impl Game {
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
             }
+            CostPart::PayManaCostOfLess(s, n) => {
+                crate::mana_abilities::can_pay_mana_cost_of_less(self, p, s, *n, src, ctx)
+            }
             CostPart::Repeated { .. } => {
                 let one = Cost {
                     mana: None,
@@ -4152,6 +4155,11 @@ impl Game {
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
+                    return bad("can't pay mana cost");
+                }
+            }
+            CostPart::PayManaCostOfLess(s, n) => {
+                if !crate::mana_abilities::pay_mana_cost_of_less(self, p, s, *n, src, ctx) {
                     return bad("can't pay mana cost");
                 }
             }
