@@ -12,6 +12,7 @@ impl Game {
     /// every limit at once (CR 502.3); the rest untap as usual, and as many as the limits
     /// allow do untap.
     pub(crate) fn limit_untaps(&mut self, active: PlayerId, to_untap: &mut Vec<ObjectId>) {
+        self.untap_only_chosen_types(active, to_untap);
         let limits: Vec<(Ctx, Filter, u32)> = self
             .statics
             .restrictions
@@ -78,4 +79,47 @@ impl Game {
         }
         to_untap.retain(|id| !limited.contains(id) || chosen.contains(id));
     }
+
+    /// "Each player chooses artifact, creature, or land during their untap step. That
+    /// player can untap only permanents of the chosen type this step." (Storage Matrix,
+    /// [`UNTAP_ONLY_CHOSEN_TYPE`]): for each such effect the active player chooses one of
+    /// the card types as the untap step's untap action begins (CR 502.3); only permanents
+    /// with a chosen type untap, a permanent with several card types if any of them was
+    /// chosen. The choice is made before other limits on untapping apply, which then
+    /// combine with it.
+    fn untap_only_chosen_types(&mut self, active: PlayerId, to_untap: &mut Vec<ObjectId>) {
+        let effects: Vec<(Option<ObjectId>, Vec<CardType>)> = self
+            .statics
+            .restrictions
+            .iter()
+            .map(|(s, _, r)| (Some(*s), r))
+            .chain(self.rule_effects.iter().map(|e| (e.source, &e.restriction)))
+            .filter_map(|(s, r)| match r {
+                Restriction::Custom(n) => Some((s, untap_only_types(n)?)),
+                _ => None,
+            })
+            .collect();
+        for (source, types) in effects {
+            let opts: Vec<String> = types.iter().map(|t| t.word().to_string()).collect();
+            let i = self.ask_option(active, source, "Choose a type to untap", opts);
+            let Some(t) = types.get(i).or(types.first()).copied() else {
+                continue;
+            };
+            self.log(|_| format!("{active:?} chooses {} to untap", t.word()));
+            to_untap.retain(|id| self.obj(*id).chars.card_types.contains(t));
+        }
+    }
+}
+
+/// `Restriction::Custom` name prefix: each player chooses one of the card types listed
+/// after it (comma-separated words) during their untap step and can untap only
+/// permanents of that type that step.
+pub const UNTAP_ONLY_CHOSEN_TYPE: &str = "untap:only chosen type:";
+
+/// The card types an [`UNTAP_ONLY_CHOSEN_TYPE`] restriction lets the player choose from.
+pub fn untap_only_types(name: &str) -> Option<Vec<CardType>> {
+    name.strip_prefix(UNTAP_ONLY_CHOSEN_TYPE)?
+        .split(',')
+        .map(CardType::from_word)
+        .collect()
 }

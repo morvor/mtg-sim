@@ -1390,7 +1390,7 @@ impl<'a> Renderer<'a> {
         let mut head = match &m.chooser {
             ModeChooser::Controller => "choose".to_string(),
             ModeChooser::Opponent => "an opponent chooses".to_string(),
-            ModeChooser::Random => "choose".to_string(),
+            ModeChooser::Random | ModeChooser::RandomUnless(_) => "choose".to_string(),
             ModeChooser::Pawprints(n) => format!("choose up to {n} {{P}} worth of modes"),
             ModeChooser::Unchosen { .. } => "choose".to_string(),
         };
@@ -1476,6 +1476,10 @@ impl<'a> Renderer<'a> {
             }
             match &m.chooser {
                 ModeChooser::Random => head.push_str(" at random"),
+                ModeChooser::RandomUnless(c) => {
+                    let c = self.condition(c);
+                    head.push_str(&format!(" at random. If {c}, you choose one instead"));
+                }
                 ModeChooser::Unchosen { this_turn } => {
                     head.push_str(" that hasn't been chosen");
                     if *this_turn {

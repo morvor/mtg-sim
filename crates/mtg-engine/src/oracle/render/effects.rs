@@ -8187,6 +8187,9 @@ impl Renderer<'_> {
             }
             // CR 205.3i: every land type.
             ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
+            ChoiceKind::OneOf(v) if *v == crate::types::planeswalker_types() => {
+                "a planeswalker type".into()
+            }
             // "a card type other than creature or land": the card types of cards (CR
             // 300.1) but those.
             ChoiceKind::OneOf(v) if card_types_but(v).is_some() => {
