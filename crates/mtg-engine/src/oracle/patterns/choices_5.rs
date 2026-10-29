@@ -128,3 +128,26 @@ fn reveal_their_chosen_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "each player reveals their chosen card", priority: 90, parse: reveal_their_chosen_card } }
+
+/// "Whenever an artifact, creature, or enchantment enters, its controller chooses target
+/// permanent another player controls that shares a card type with it. Exchange control of
+/// those permanents." (Confusion in the Ranks): the target and the permanent that entered
+/// (CR 701.12a).
+fn exchange_those_permanents(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "exchange control of those permanents" || !b.in_trigger {
+        return None;
+    }
+    let (slot, t) = b.targets.iter().enumerate().next_back()?;
+    let trigger_controller = PlayerRef::ControllerOf(Box::new(Sel::TriggerObject));
+    if !matches!(&t.chosen_by, Some(c) if format!("{c:?}") == format!("{trigger_controller:?}"))
+        || !matches!(t.what, TargetKind::Object(_))
+    {
+        return None;
+    }
+    Some(Effect::ExchangeControl {
+        a: Sel::Target(slot as u8),
+        b: Sel::TriggerObject,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "exchange control of those permanents (the target and the triggering permanent)", priority: 90, parse: exchange_those_permanents } }

@@ -84,6 +84,14 @@ impl Renderer<'_> {
                 let v = self.search_verb.unwrap_or("put");
                 format!("the number of cards {v} from their hand this way")
             }
+            // "the number of opponents dealt damage this way": the players of a "one or
+            // more [objects] deal damage to [players]" trigger's batch (CR 603.2c).
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Players(PlayerRef::TriggerPlayers)) =>
+            {
+                "the number of {alt:opponents|players} dealt {opt:combat} damage {opt:this way}"
+                    .into()
+            }
             Value::CountSel(s) => {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")

@@ -209,7 +209,7 @@ fn typhoid_mary(discarded: bool) -> (bool, TestGame) {
 #[test]
 fn typhoid_mary_chooses_at_random_unless_you_discarded_a_card() {
     cr!("700.2b");
-    compiles("Typhoid Mary, Fractured");
+    round_trips("Typhoid Mary, Fractured");
     // No card discarded this turn: the mode is chosen at random, nobody is asked.
     let (asked, _) = typhoid_mary(false);
     assert!(!asked);
@@ -394,4 +394,58 @@ fn mogg_assassin_the_opponent_chooses_the_second_target() {
     let (t, mine, theirs) = mogg_assassin(false);
     assert!(t.on_battlefield(mine));
     assert!(!t.on_battlefield(theirs));
+}
+
+#[test]
+fn confusion_in_the_ranks_the_entering_permanents_controller_chooses_and_exchanges() {
+    cr!("701.12a", "601.2c", "603.3d");
+    compiles("Confusion in the Ranks");
+    // "Whenever an artifact, creature, or enchantment enters, its controller chooses
+    // target permanent another player controls that shares a card type with it. Exchange
+    // control of those permanents."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Confusion in the Ranks");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let rock = t.battlefield(P0, "Mind Stone");
+    let from = t.asked().len();
+    t.answer_targets(P1, &[Entity::Object(elves)]);
+    let bears = t.enter(P1, "Grizzly Bears");
+    t.g.flush_events();
+    t.settle();
+    // P1, the entering creature's controller, chose the target, among P0's creatures
+    // only (Mind Stone shares no card type with the Bears).
+    let chosen_by = t.asked()[from..].iter().find_map(|(p, d)| match d {
+        Decision::ChooseTargets { .. } => Some(*p),
+        _ => None,
+    });
+    assert_eq!(chosen_by, Some(P1));
+    t.resolve_all();
+    assert_eq!(t.obj_now(elves).controller, P1);
+    assert_eq!(t.obj_now(bears).controller, P0);
+    assert_eq!(t.obj_now(rock).controller, P0);
+}
+
+#[test]
+fn malcolm_creates_a_treasure_for_each_opponent_dealt_damage() {
+    cr!("603.2c", "510.2");
+    round_trips("Malcolm, Keen-Eyed Navigator");
+    // "Whenever one or more Pirates you control deal damage to your opponents, you create
+    // a Treasure token for each opponent dealt damage."
+    let mut t = TestGame::new(3);
+    let malcolm = t.battlefield(P0, "Malcolm, Keen-Eyed Navigator");
+    let a = t.battlefield(P0, "Talas Merchant");
+    let b = t.battlefield(P0, "Swab Goblin");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(
+        &[
+            (malcolm, Entity::Player(P1)),
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P2)),
+        ],
+        &[],
+    );
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    // One batch of damage to two opponents: two Treasures (not three).
+    assert_eq!(t.named_on_battlefield("Treasure Token").len(), 2);
 }
