@@ -235,3 +235,205 @@ fn any_number_of_lands(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "paper statics: you may play any number of lands on each of your turns", priority: 100, parse: any_number_of_lands } }
+
+// ---------------------------------------------------------------------------------------
+// Characteristics from what was sacrificed as the permanent entered
+// ---------------------------------------------------------------------------------------
+
+std::thread_local! {
+    static NOTING_SACRIFICE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "As ~ enters, sacrifice any number of [permanents].", parsed by the core, with the
+/// sacrificed permanents noted for the linked ability that refers to them (CR 607.2a; the
+/// notes move to the permanent as it enters, see `linked_notes::carry`).
+fn as_enters_sacrifice_noted(sentence: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = sentence.trim().to_lowercase();
+    if NOTING_SACRIFICE.with(|n| n.get())
+        || !lower.starts_with("as ~ enters, sacrifice any number of ")
+        || end(&lower).contains(". ")
+    {
+        return None;
+    }
+    NOTING_SACRIFICE.with(|n| n.set(true));
+    let parsed = crate::oracle::parse_ability(sentence, ctx);
+    NOTING_SACRIFICE.with(|n| n.set(false));
+    let mut parsed = parsed?;
+    let [a] = parsed.as_mut_slice() else {
+        return None;
+    };
+    let AbilityKind::Static(s) = &mut std::sync::Arc::make_mut(a).kind else {
+        return None;
+    };
+    let StaticEffect::Replacement(def) = &mut s.effect else {
+        return None;
+    };
+    let ReplacementAction::AsEnters(e) = &mut def.action else {
+        return None;
+    };
+    let old = std::mem::take(&mut **e);
+    **e = Effect::seq(vec![
+        old,
+        Effect::NoteLinked {
+            what: Sel::Var(vars::SACRIFICED),
+            replace: true,
+        },
+    ]);
+    Some(parsed)
+}
+
+/// Whether the card has an ability that sacrifices permanents as it enters.
+fn sacrifices_as_it_enters() -> bool {
+    crate::oracle::raw_text()
+        .to_lowercase()
+        .lines()
+        .any(|l| {
+            l.contains(" enters, sacrifice any number of ")
+                && l.starts_with("as ")
+        })
+}
+
+/// "As ~ enters, sacrifice any number of untapped Forests." on a card whose
+/// characteristic-defining ability counts them ("~'s power and toughness are each equal
+/// to the number of Forests sacrificed as it entered", Wood Elemental).
+fn as_enters_sacrifice_for_cda(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !crate::oracle::raw_text()
+        .to_lowercase()
+        .contains(" sacrificed as it entered")
+    {
+        return None;
+    }
+    as_enters_sacrifice_noted(block, ctx)
+}
+
+inventory::submit! { AbilityPattern { name: "paper statics: as ~ enters, sacrifice any number of [permanents] (noted)", priority: 100, parse: as_enters_sacrifice_for_cda } }
+
+/// "~'s power and toughness are each equal to the number of Forests sacrificed as it
+/// entered." (Wood Elemental): a characteristic-defining ability (CR 604.3) counting the
+/// permanents its as-enters ability sacrificed (none, outside the battlefield).
+fn pt_sacrificed_as_it_entered(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let noun = end(l.trim())
+        .strip_prefix("~'s power and toughness are each equal to the number of ")?
+        .strip_suffix(" sacrificed as it entered")?;
+    if !ctx.power.is_some_and(|p| p.contains('*'))
+        || !ctx.toughness.is_some_and(|t| t.contains('*'))
+        || !sacrifices_as_it_enters()
+    {
+        return None;
+    }
+    let (f, plural) = whole_object_phrase(noun)?;
+    if !plural {
+        return None;
+    }
+    let n = Value::CountSel(Box::new(Sel::Matching(Box::new(Sel::LinkedNotedLastKnown), f)));
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::CdaPT(Some(n.clone()), Some(n))],
+    });
+    s.is_cda = true;
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "paper statics: P/T equal to the number of [permanents] sacrificed as it entered", priority: 100, parse: pt_sacrificed_as_it_entered } }
+
+/// "As ~ enters, sacrifice any number of creatures. ~'s power becomes the total power of
+/// those creatures and its toughness becomes their total toughness." (Dracoplasm): the
+/// power and toughness it has on the battlefield, set as it enters (CR 614.1c, layer 7b,
+/// CR 613.4b), from the creatures as they last existed on the battlefield.
+fn as_enters_sacrifice_pt_becomes(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let lower = block.trim().to_lowercase();
+    let i = lower.find(". ~'s power becomes the total power of those creatures and its toughness becomes their total toughness")?;
+    if !end(&lower[i..]).ends_with("their total toughness") {
+        return None;
+    }
+    let first = &block.trim()[..i + 1];
+    if !lower.starts_with("as ~ enters, sacrifice any number of ") || !lower[..i].contains("creatures") {
+        return None;
+    }
+    let mut out = as_enters_sacrifice_noted(first, ctx)?;
+    let total = |s: Stat| Value::Aggregate(AggOp::Sum, s, Box::new(Sel::LinkedNotedLastKnown));
+    out = out
+        .into_iter()
+        .map(|a| AbilityDef::with_link(a.kind.clone(), block, a.link))
+        .collect();
+    out.push(AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![Modification::SetPT(
+                Some(total(Stat::Power)),
+                Some(total(Stat::Toughness)),
+            )],
+        })),
+        block,
+    ));
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "paper statics: as ~ enters, sacrifice creatures; its P/T becomes their total", priority: 100, parse: as_enters_sacrifice_pt_becomes } }
+
+/// "During your turn, ~'s power and toughness are each equal to 2 plus the number of
+/// Swamps your opponents control. During turns other than yours, ~'s power and toughness
+/// are each 2." (Angry Mob): together, one characteristic-defining ability whose value
+/// depends on whose turn it is (CR 604.3; it defines them on every turn, so it isn't a
+/// conditional effect, CR 604.3a(5)). "Your" is its controller (its owner outside the
+/// battlefield).
+fn pt_during_your_turn(block: &str, _ctx_: &CompileContext) -> Option<Vec<Ability>> {
+    let ctx = _ctx_;
+    let lower = block.trim().to_lowercase();
+    let l = end(&lower);
+    let r = l.strip_prefix("during your turn, ~'s power and toughness are each equal to ")?;
+    let (yours, others) = r.split_once(
+        ". during turns other than yours, ~'s power and toughness are each ",
+    )?;
+    if !ctx.power.is_some_and(|p| p.contains('*')) || !ctx.toughness.is_some_and(|t| t.contains('*')) {
+        return None;
+    }
+    let a = super::statics::parse_amount(yours, Some(&Sel::This))?;
+    let (b, rest) = crate::oracle::phrases::parse_number(others)?;
+    if !rest.trim().is_empty() || b.as_const().is_none() {
+        return None;
+    }
+    let v = Value::If(Box::new(Condition::YourTurn), Box::new(a), Box::new(b));
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::CdaPT(Some(v.clone()), Some(v))],
+    });
+    s.is_cda = true;
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), block)])
+}
+
+inventory::submit! { AbilityPattern { name: "paper statics: during your turn, ~'s P/T are each equal to ...; during turns other than yours, ...", priority: 100, parse: pt_during_your_turn } }
+
+std::thread_local! {
+    static NAME_AS_TYPE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// "for each other attacking ~" on a card whose name is also one of its creature types
+/// (Aurochs: "Whenever ~ attacks, it gets +1/+0 until end of turn for each other attacking
+/// Aurochs."): the name is the creature type there (Aurochs' ruling: it counts attacking
+/// creatures with the creature type Aurochs, not just those named Aurochs).
+fn name_as_creature_type(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if NAME_AS_TYPE.with(|n| n.get()) || !block.contains(" other attacking ~") {
+        return None;
+    }
+    let name = ctx.card_name;
+    if crate::types::subtype_kind(name) != Some(crate::types::SubtypeKind::Creature)
+        || !ctx.type_line.subtypes.iter().any(|s| s.as_str() == name)
+    {
+        return None;
+    }
+    let rewritten = block.replace(" other attacking ~", &format!(" other attacking {name}"));
+    NAME_AS_TYPE.with(|n| n.set(true));
+    let parsed = crate::oracle::parse_ability(&rewritten, ctx);
+    NAME_AS_TYPE.with(|n| n.set(false));
+    Some(
+        parsed?
+            .into_iter()
+            .map(|a| AbilityDef::with_link(a.kind.clone(), block, a.link))
+            .collect(),
+    )
+}
+
+inventory::submit! { AbilityPattern { name: "paper statics: other attacking ~ (the card's name as its creature type)", priority: 100, parse: name_as_creature_type } }

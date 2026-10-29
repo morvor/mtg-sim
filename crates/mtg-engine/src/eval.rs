@@ -1366,6 +1366,10 @@ impl Game {
                 .collect(),
             // CR 607.1, 607.2e (see `linked_notes.rs`).
             Sel::LinkedNoted => crate::linked_notes::entities(self, ctx),
+            Sel::LinkedNotedLastKnown => crate::linked_notes::noted(self, ctx)
+                .into_iter()
+                .filter(|e| matches!(e, Entity::Object(_)))
+                .collect(),
             Sel::TopOfLibrary(r, n) => {
                 let k = self.eval_value(n, ctx).max(0) as usize;
                 self.eval_players(r, ctx)
