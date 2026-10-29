@@ -1355,6 +1355,10 @@ impl Renderer<'_> {
                 let v = self.value(value);
                 format!("note {v}")
             }
+            Effect::NoteManaSpent { amount } => {
+                let what = if *amount { "type and amount" } else { "type" };
+                format!("note the {what} of mana spent to pay this activation cost")
+            }
             Effect::SetX { .. } => String::new(),
             // Bookkeeping for "... they paid this way" (named by the value that reads it).
             Effect::AddToPlayerTally { .. } => String::new(),
@@ -2121,6 +2125,28 @@ impl Renderer<'_> {
                 };
                 join_words(&[s, d])
             }
+            // "Prevent the next 1 damage that would be dealt to this creature by ~ this
+            // turn." in an ability granted by ~ (Torrent of Lava): a shield against the
+            // granting object's damage (CR 615.7).
+            Effect::AddReplacement {
+                def:
+                    ReplacementDef {
+                        event:
+                            ReplacementEvent::Damage {
+                                source: Filter::Custom(granter),
+                                to_players: None,
+                                to_objects: Some(Filter::In(to)),
+                                combat_only: false,
+                            },
+                        action: ReplacementAction::PreventAmount(v),
+                        ..
+                    },
+                duration: Duration::EndOfTurn,
+                uses: None,
+            } if granter == crate::granted_by::GRANTER && matches!(**to, Sel::This) => {
+                let (a, _) = self.amount(v);
+                format!("prevent the next {a} damage that would be dealt to ~ by ~ this turn")
+            }
             Effect::AddReplacement {
                 def,
                 duration,
@@ -2597,6 +2623,10 @@ impl Renderer<'_> {
             Effect::PhaseOut { what } => {
                 let w = self.sel(what, Case::Subj);
                 format!("{w} phases out")
+            }
+            Effect::PhaseIn { what } => {
+                let w = self.sel(what, Case::Subj);
+                format!("{w} phases in")
             }
             Effect::TurnFaceUp { what } => {
                 let w = self.sel(what, Case::Obj);
@@ -4690,6 +4720,36 @@ impl Renderer<'_> {
                     continue;
                 }
             }
+            // The same with the dig's steps (`dig_steps.rs`): "You may reveal a creature card
+            // from among them and put it into your hand. Put the rest on the bottom ... If you
+            // didn't put a card into your hand this way, draw a card."
+            if let (
+                Some(take @ Effect::DigStep(t)),
+                Some(rest @ Effect::DigStep(r)),
+                Some(Effect::If {
+                    cond: Condition::Not(c),
+                    then,
+                    otherwise,
+                }),
+            ) = (v.get(i), v.get(i + 1), v.get(i + 2))
+            {
+                if matches!(t.as_ref(), DigStep::Take { to, .. } if to.zone == ZoneKind::Hand)
+                    && matches!(r.as_ref(), DigStep::Rest { .. })
+                    && matches!(c.as_ref(), Condition::PrevHappened)
+                    && matches!(otherwise.as_ref(), Effect::Noop)
+                {
+                    let tk = self.effect(take);
+                    let rs = self.effect(rest);
+                    let th = self.effect(then);
+                    parts.push(tk);
+                    parts.push(rs);
+                    parts.push(format!(
+                        "{{alt:if you don't|if you didn't put a card into your hand this way}}, {th}"
+                    ));
+                    i += 3;
+                    continue;
+                }
+            }
             // "secretly choose an opponent" (`choices.rs`).
             if let (Some(Effect::Custom(n)), Some(next)) = (v.get(i), v.get(i + 1)) {
                 if n == crate::choices::SECRET_NEXT {
@@ -6154,6 +6214,7 @@ impl Renderer<'_> {
                 | Effect::BecomeCopyExcept { .. }
                 | Effect::Modify { .. }
                 | Effect::PhaseOut { .. }
+                | Effect::PhaseIn { .. }
                 | Effect::AddRestriction { .. }
         ) || matches!(main, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))
@@ -8402,6 +8463,10 @@ impl Renderer<'_> {
             }
             ManaProduction::DevotionToChosenColor => {
                 "an amount of mana of that color equal to your devotion to that color".into()
+            }
+            ManaProduction::Noted { amount: false } => "one mana of ~'s last noted type".into(),
+            ManaProduction::Noted { amount: true } => {
+                "~'s last noted type and amount of mana".into()
             }
         }
     }

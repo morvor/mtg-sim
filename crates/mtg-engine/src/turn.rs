@@ -431,6 +431,7 @@ impl Game {
             return;
         }
         self.expire_effects_at_step_begin(step);
+        crate::step_durations::step_began(self, step.trigger_step());
         self.turn.step_log.push(step);
         crate::player_control::step_began(self, step);
         self.emit(Event::StepBegan { step, active });
@@ -626,6 +627,7 @@ impl Game {
             self.turn.stage = Stage::Begin;
             return;
         }
+        crate::step_durations::step_ended(self);
         let active = self.turn.active;
         self.emit(Event::StepEnded { step, active });
         self.flush_events();
@@ -647,6 +649,7 @@ impl Game {
                     if self.player(p).in_game() {
                         if crate::skip::consume_turn_skip(self, p)
                             || crate::skip::extra_turn_skipped(self, p)
+                            || crate::kw::replace_turn_begin(self, p)
                         {
                             continue;
                         }
@@ -658,7 +661,9 @@ impl Game {
                     }
                 }
                 let next = self.next_turn_player(after);
-                if crate::skip::consume_turn_skip(self, next) {
+                if crate::skip::consume_turn_skip(self, next)
+                    || crate::kw::replace_turn_begin(self, next)
+                {
                     after = next;
                     continue;
                 }
@@ -1025,6 +1030,13 @@ impl Game {
                 }
             }
         }
+        // A "this turn" delayed trigger sees the events of the "until end of turn" effects
+        // ending with it ("When you lose control of that Equipment this turn", Stolen
+        // Uniform ruling: also when the control effect ends).
+        if self.dirty {
+            self.recompute();
+        }
+        self.flush_events();
         // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
         self.delayed_triggers.retain(|d| {
             !(matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_))

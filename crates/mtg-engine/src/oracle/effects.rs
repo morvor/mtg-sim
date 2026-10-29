@@ -630,6 +630,9 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         // "You may play a card you own from outside the game this turn" (Wish): a
         // permission (see `patterns::game_rules_4`), not a choice made on resolution.
         || (l.starts_with("you may ") && l.ends_with(" from outside the game this turn"))
+        // "You may play lands and cast spells from that player's hand this turn" (Sen
+        // Triplets, `patterns::durations_5`).
+        || (l.starts_with("you may ") && l.ends_with(" from that player's hand this turn"))
         // "You may return that card ... at the beginning of the next end step if ~ is
         // still on the battlefield": the choice is the delayed ability's (see
         // `patterns::delayed_grammar_2`).

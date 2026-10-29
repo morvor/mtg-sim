@@ -349,6 +349,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
             | TriggerCond::ThisCombat(t)
+            | TriggerCond::ForAsLongAs(t, _)
             | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
             _ => false,
         }
@@ -2201,6 +2202,16 @@ pub enum Duration {
     UntilEndOfCombatOnYourNextTurn,
     /// "until the next end step": until the next end step (of any turn) begins (CR 500.4).
     UntilNextStep(TriggerStep),
+    /// "until its controller's next untap step": for each affected object, until that
+    /// step of the turn of the player controlling it next begins (see
+    /// `step_durations`).
+    UntilItsControllersNextStep(TriggerStep),
+    /// "until the end of your next upkeep": until that step of a later turn of the
+    /// controller ends (see `step_durations`).
+    UntilEndOfYourNextStep(TriggerStep),
+    /// An [`Duration::UntilEndOfYourNextStep`] effect whose step has begun: it ends as the
+    /// current step ends.
+    UntilEndOfThisStep,
     /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
     /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
     /// end it).
@@ -2511,6 +2522,10 @@ pub struct TokenSpec {
 pub enum ManaProduction {
     /// Fixed mana, e.g. {G} or {C}{C}.
     Fixed(Vec<ManaType>),
+    /// The mana the source's linked ability last noted ([`Effect::NoteManaSpent`],
+    /// CR 607.2e): "one mana of ~'s last noted type" (`amount` false), "~'s last noted
+    /// type and amount of mana" (`amount` true). No note: no mana (CR 607.5a).
+    Noted { amount: bool },
     /// N mana of any one color (chosen).
     AnyOneColor(Value),
     /// N mana in any combination of colors.
@@ -4339,6 +4354,11 @@ pub enum TriggerCond {
     /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
     /// step is skipped.
     UntilYourNextTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts for as long as the condition holds ("For as
+    /// long as ~ remains tapped, ... at the beginning of each of your draw steps, ...",
+    /// Giant Oyster; CR 603.7b, 611.2b): it's removed for good once the condition is false
+    /// (checked with the context it was created with; see `layers.rs`).
+    ForAsLongAs(Box<TriggerCond>, Condition),
     /// A delayed triggered ability that lasts for the rest of the combat phase it was
     /// created in ("whenever that creature deals combat damage to a player this combat",
     /// CR 603.7b, 506.1): removed as that combat phase ends (CR 500.5a).
@@ -4510,6 +4530,14 @@ pub enum Effect {
     /// to ("the noted number", CR 607.2e). Read with `Value::Chosen`.
     Note {
         value: Value,
+    },
+    /// "Note the type [and amount] of mana spent to pay this activation cost": records the
+    /// mana spent on the resolving ability's cost for the abilities linked to this one
+    /// (CR 607.2e), read with [`ManaProduction::Noted`]. With `amount`, every mana spent
+    /// is noted; otherwise one type (its controller chooses if several types were spent).
+    /// Noting again replaces the note; with no mana spent nothing is noted.
+    NoteManaSpent {
+        amount: bool,
     },
     /// Sets the value of X for the rest of the resolution, and for reflexive triggers it
     /// creates ("that many" after paying a cost any number of times, CR 603.12a).
@@ -4853,6 +4881,11 @@ pub enum Effect {
         what: Sel,
     },
     PhaseOut {
+        what: Sel,
+    },
+    /// "That permanent phases in" (CR 702.26c): phased-out permanents phase in, with what
+    /// phased out indirectly with them (unless they can't phase in).
+    PhaseIn {
         what: Sel,
     },
     /// Turn face down / face up.

@@ -1,0 +1,2 @@
+Goblin Cratermaker	This card preview was provided to Scryfall courtesy of Wizards of the Coast	preview credit, no rules content
+Aetherplasm	This allows it to dodge abilities like Deathgazer's.	Superseded: under the current CR 509.3d a creature put onto the battlefield blocking triggers "becomes blocked by a creature" abilities, so the new Aetherplasm triggers Deathgazer again (interpretation put-onto-battlefield-blocking-retriggers-becomes-blocked-by, provisional); the first sentence (it may put itself back) is tested in tests/rulings/r_p006_activated_bounce.rs

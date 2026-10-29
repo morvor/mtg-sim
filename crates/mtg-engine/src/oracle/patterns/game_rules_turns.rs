@@ -24,7 +24,9 @@ fn take_n_extra_turns(l: &str, _b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "game rules: take N extra turns after this one", priority: 100, parse: take_n_extra_turns } }
 
 /// "Until your next upkeep, ~ can't phase out.", "Until the end of your next turn, they
-/// can't phase in.": the same instruction with its duration written after it (read by
+/// can't phase in.", "Until your next upkeep, target noncreature artifact becomes an
+/// artifact creature with power and toughness each equal to its mana value." (Xenic
+/// Poltergeist): the same instruction with its duration written after it (read by
 /// the duration suffixes).
 fn leading_duration_moved(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
@@ -34,7 +36,9 @@ fn leading_duration_moved(l: &str, b: &mut Builder) -> Option<Effect> {
     ]
     .into_iter()
     .find_map(|(p, s)| l.strip_prefix(p).map(|r| (r, s)))?;
-    if rest.contains(", ") || rest.contains(" and ") {
+    // "power and toughness" isn't a list of clauses (Xenic Poltergeist).
+    let masked = rest.replace("power and toughness", "");
+    if masked.contains(", ") || masked.contains(" and ") {
         return None;
     }
     crate::oracle::effects::parse_simple(&format!("{rest}{suffix}"), b)

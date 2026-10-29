@@ -403,6 +403,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // instead (`kw/enters_attached.rs`): no library.
         "enter attached to the chosen object",
         "put the entering permanent into its owner's graveyard instead",
+        // Firestorm Phoenix only records the card it returned to a hand
+        // (`cards/firestorm_phoenix.rs`).
+        "card:Firestorm Phoenix:the returned card is revealed and can't be played",
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {
         return None;
@@ -569,6 +572,13 @@ fn custom_rule(name: &str) -> CustomRule {
         "draft:reveal and note cards drafted this round",
         // Foretelling exiles a card from a hand (CR 702.143a).
         mtg_engine::kw::foretell::FIRST_EACH_TURN_FREE,
+        // Countering a spell (on resolution, never in a payment) exiles it and may cast it
+        // (`cards/guile.rs`); skipping a turn as it would begin (`cards/time_vault.rs`);
+        // a static ability's effect lingering after its source leaves
+        // (`cards/titanias_song.rs`): no library.
+        "card:Guile:countering a spell exiles it instead",
+        "card:Time Vault:skip a turn you would begin while it's tapped",
+        "card:Titania's Song:the effect continues until end of turn after it leaves",
     ];
     // Prefixes of families of names (a name's parameters follow its prefix): landwalk,
     // targeting and activation restrictions, cost reductions, crewing and saddling, how
@@ -858,6 +868,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::RepeatThisProcess
         | Effect::StoreValue { .. }
         | Effect::Note { .. }
+        | Effect::NoteManaSpent { .. }
         | Effect::SetX { .. }
         | Effect::Sacrifice { .. }
         | Effect::SacrificeObjects { .. }
@@ -888,6 +899,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::AttachAsCreature { .. }
         | Effect::Unattach { .. }
         | Effect::PhaseOut { .. }
+        | Effect::PhaseIn { .. }
         | Effect::TurnFaceDown { .. }
         | Effect::RemoveFromCombat { .. }
         | Effect::BecomeUnblocked { .. }
