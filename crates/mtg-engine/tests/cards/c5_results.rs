@@ -214,3 +214,47 @@ fn saruman_of_many_colors_reflexive_trigger_needs_a_card_milled() {
     let t = run(&[]);
     assert_eq!(t.hand_size(P0), 0);
 }
+
+#[test]
+fn gilgamesh_attaches_one_of_the_equipment_put_onto_the_battlefield_this_way() {
+    cr!("603.12", "301.5");
+    supported("Gilgamesh, Master-at-Arms");
+    let run = |equipment: bool| {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        for _ in 0..4 {
+            t.library_top(P0, "Island");
+        }
+        let top: Vec<Entity> = if equipment {
+            ["Bonesplitter", "Short Sword"]
+                .iter()
+                .map(|n| Entity::Object(t.library_top(P0, n)))
+                .collect()
+        } else {
+            t.library_top(P0, "Island");
+            t.library_top(P0, "Island");
+            vec![]
+        };
+        t.answer_choose_moved(P0, &top);
+        t.answer_yes(P0, true);
+        let gil = t.enter(P0, "Gilgamesh, Master-at-Arms");
+        t.resolve_all();
+        (t, gil)
+    };
+    let (t, gil) = run(true);
+    let attached: Vec<ObjectId> = t
+        .g
+        .permanents()
+        .filter(|o| o.attached_to == Some(Entity::Object(gil)))
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(t.named_on_battlefield("Bonesplitter").len(), 1);
+    assert_eq!(t.named_on_battlefield("Short Sword").len(), 1);
+    assert_eq!(attached.len(), 1);
+    // No Equipment put onto the battlefield: nothing triggers.
+    let (t, _) = run(false);
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::YesNo { .. })));
+}

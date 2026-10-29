@@ -17,6 +17,9 @@
 //! * "Each opponent mills two cards. When one or more cards are milled this way, exile
 //!   target ..." (Saruman of Many Colors): a reflexive triggered ability (CR 603.12) that
 //!   triggers if the mill instruction milled at least one such card (CR 701.17).
+//!   Likewise "When you put one or more Equipment onto the battlefield this way, you may
+//!   attach one of them to a Samurai you control." (Gilgamesh, Master-at-Arms) after an
+//!   instruction putting cards onto the battlefield: "them" are those permanents.
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -287,3 +290,51 @@ fn continues_milled_reflexive(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 }
 
 inventory::submit! { FollowupPattern { name: "results 5: the rest of a reflexive ability for cards milled this way", priority: 0, apply: continues_milled_reflexive } }
+
+/// Whether the last instruction of `e` puts cards onto the battlefield (a dig's selection
+/// or a move).
+fn puts_onto_battlefield(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.last().is_some_and(puts_onto_battlefield),
+        Effect::Dig { take_to, .. } => take_to.zone == ZoneKind::Battlefield,
+        Effect::Move { to, .. } => to.zone == ZoneKind::Battlefield,
+        Effect::May { effect, .. } => puts_onto_battlefield(effect),
+        _ => false,
+    }
+}
+
+/// "When you put one or more [permanents] onto the battlefield this way, [effect]".
+fn when_put_onto_battlefield_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("when you put one or more ") else {
+        return false;
+    };
+    let Some((what, effect)) = r.split_once(" onto the battlefield this way, ") else {
+        return false;
+    };
+    if !puts_onto_battlefield(prev) {
+        return false;
+    }
+    let Some((f, _, tail)) = crate::oracle::phrases::parse_object_phrase(what) else {
+        return false;
+    };
+    if !tail.trim().is_empty() {
+        return false;
+    }
+    let Some(mut e) = crate::oracle::effects::parse_sentence(&format!("when you do, {effect}"), b)
+    else {
+        return false;
+    };
+    let Effect::If { cond, .. } = &mut e else {
+        return false;
+    };
+    let put = Sel::Matching(
+        Box::new(Sel::Var(vars::IT)),
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+    );
+    *cond = Condition::Compare(Value::CountSel(Box::new(put)), Cmp::Ge, Value::c(1));
+    append(prev, e);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "results 5: when you put one or more [permanents] onto the battlefield this way", priority: 0, apply: when_put_onto_battlefield_this_way } }

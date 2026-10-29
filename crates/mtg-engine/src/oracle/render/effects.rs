@@ -5803,6 +5803,17 @@ impl Renderer<'_> {
                 Sel::Matching(i, f) => (i.as_ref(), Some(f.clone())),
                 other => (other, None),
             };
+            // "When you put one or more Equipment onto the battlefield this way, ...".
+            if let (Sel::Var(vars::IT), Some(Filter::And(fs))) = (inner, &f) {
+                if fs.len() == 2 && matches!(fs[1], Filter::InZone(ZoneKind::Battlefield)) {
+                    let n = self.noun(&fs[0], Num::Many);
+                    let b = self.in_event_scope(|r| r.body(body));
+                    return format!(
+                        "when you put one or more {n} onto the battlefield this way, {}",
+                        lower_first(&b)
+                    );
+                }
+            }
             if let Some(("milled", _, _)) = self.this_way_of(inner) {
                 let n = match f {
                     Some(f) => self.noun(&f, Num::Many),
