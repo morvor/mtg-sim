@@ -2073,6 +2073,28 @@ impl Renderer<'_> {
                 };
                 join_words(&[s, d])
             }
+            // "Prevent the next 1 damage that would be dealt to this creature by ~ this
+            // turn." in an ability granted by ~ (Torrent of Lava): a shield against the
+            // granting object's damage (CR 615.7).
+            Effect::AddReplacement {
+                def:
+                    ReplacementDef {
+                        event:
+                            ReplacementEvent::Damage {
+                                source: Filter::Custom(granter),
+                                to_players: None,
+                                to_objects: Some(Filter::In(to)),
+                                combat_only: false,
+                            },
+                        action: ReplacementAction::PreventAmount(v),
+                        ..
+                    },
+                duration: Duration::EndOfTurn,
+                uses: None,
+            } if granter == crate::granted_by::GRANTER && matches!(**to, Sel::This) => {
+                let (a, _) = self.amount(v);
+                format!("prevent the next {a} damage that would be dealt to ~ by ~ this turn")
+            }
             Effect::AddReplacement {
                 def,
                 duration,

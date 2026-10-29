@@ -854,6 +854,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::RepeatThisProcess
         | Effect::StoreValue { .. }
         | Effect::Note { .. }
+        | Effect::NoteManaSpent { .. }
         | Effect::SetX { .. }
         | Effect::Sacrifice { .. }
         | Effect::SacrificeObjects { .. }
