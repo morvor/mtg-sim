@@ -3145,6 +3145,9 @@ impl Game {
         c.vars = ctx.vars.clone();
         c.event = ctx.event.clone();
         c.iter_player = ctx.iter_player;
+        // An X chosen for the payment ("sacrifice any number of creatures ...").
+        c.x = ctx.x;
+        c.x_defined = ctx.x_defined;
         self.can_pay_cost_optimistic_in(p, cost, src, &chars, &c)
     }
 

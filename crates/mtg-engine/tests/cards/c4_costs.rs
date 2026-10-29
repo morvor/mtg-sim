@@ -208,3 +208,28 @@ fn vault_112_exiles_as_many_cards_as_the_energy_paid() {
         assert_eq!(exiled(&t) - before, paid as usize);
     }
 }
+
+#[test]
+fn phyrexian_dreadnought_stays_if_creatures_with_total_power_12_are_sacrificed() {
+    cr!("118.12a", "107.3");
+    ruling!("Phyrexian Dreadnought", "The sacrifices are simultaneous");
+    assert_supported(&["Phyrexian Dreadnought"]);
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Colossal Dreadmaw");
+    let b = t.battlefield(P0, "Colossal Dreadmaw");
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    let dn = t.enter(P0, "Phyrexian Dreadnought");
+    t.resolve_all();
+    assert!(t.on_battlefield(dn));
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+    // Not paying: it's sacrificed.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.answer_yes(P0, false);
+    t.enter(P0, "Phyrexian Dreadnought");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Phyrexian Dreadnought"));
+    assert!(t.named_on_battlefield("Grizzly Bears").len() == 1);
+}
