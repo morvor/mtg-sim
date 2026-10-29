@@ -131,8 +131,35 @@ impl Renderer<'_> {
         })
     }
 
+    /// Word of Command's instructions (`player_control.rs`, CR 723.7), each about the
+    /// player in its target slot.
+    fn word_of_command(&mut self, name: &str) -> Option<String> {
+        let (step, slot) = name
+            .strip_prefix(crate::player_control::WORD_OF_COMMAND)?
+            .split_once(':')?;
+        let slot: u8 = slot.parse().ok()?;
+        Some(match step {
+            "choose" => {
+                let t = self.target_mention(slot, Case::Poss);
+                format!("look at {t} hand and choose a card from it")
+            }
+            "control" => {
+                let m = self.me();
+                format!("you control that player until {m} finishes resolving")
+            }
+            "play" => "the player plays that card if able".into(),
+            // Only mana abilities of lands that player controls can be activated.
+            "play-lands" => "the player plays that card if able. While doing so, the player can activate mana abilities only if they're from lands that player controls".into(),
+            "spell" => "if the chosen card is cast as a spell, you control the player while that spell is resolving".into(),
+            _ => return None,
+        })
+    }
+
     /// Effects implemented in code that this module words.
     pub(crate) fn custom_effect_nodes(&mut self, name: &str) -> Option<String> {
+        if let Some(s) = self.word_of_command(name) {
+            return Some(s);
+        }
         // "you may activate ~'s loyalty abilities two more times this turn".
         if let Some(n) = crate::kw::game_rules_4::more_loyalty_count(name) {
             let m = self.me();
@@ -140,6 +167,41 @@ impl Renderer<'_> {
                 "you may activate {m}'s loyalty ability {} more times this turn",
                 number_word(n as i32)
             ));
+        }
+        // "Then attach ~ to another one of your opponents chosen at random": a player
+        // chosen at random among some, named where the next instruction mentions them
+        // (`kw/choice_grammar.rs`).
+        if let Some(j) = name.strip_prefix(crate::kw::choice_grammar::RANDOM_PLAYER) {
+            let (var, from): (Var, PlayerRef) = serde_json::from_str(j).ok()?;
+            let who = match &from {
+                PlayerRef::Each(PlayerFilter::And(v))
+                    if matches!(v.as_slice(), [PlayerFilter::Opponent, PlayerFilter::Not(n)]
+                        if matches!(n.as_ref(), PlayerFilter::Ref(r)
+                            if matches!(r.as_ref(), PlayerRef::ControllerOf(s)
+                                if matches!(s.as_ref(), Sel::AttachedTo)))) =>
+                {
+                    // Other than the enchanted player.
+                    "another one of your opponents".to_string()
+                }
+                PlayerRef::Each(PlayerFilter::Opponent) | PlayerRef::EachOpponent => {
+                    "an opponent".to_string()
+                }
+                _ => return None,
+            };
+            self.target_vars
+                .push((var, format!("{who} chosen at random"), false));
+            return Some(String::new());
+        }
+        // "~ deals damage ... to a creature or player": chosen as the instruction is
+        // carried out (not targeted), named where the next instruction mentions it
+        // (`kw/dice_coins_4.rs`).
+        if name == crate::kw::dice_coins_4::CHOOSE_CREATURE_OR_PLAYER {
+            self.target_vars.push((
+                crate::kw::dice_coins_4::CHOSEN_CREATURE_OR_PLAYER,
+                "a creature or player".into(),
+                false,
+            ));
+            return Some(String::new());
         }
         Some(match name {
             // CR 104.4a.
@@ -334,6 +396,47 @@ impl Renderer<'_> {
             .or_else(|| self.keep_chosen_by_you(v))
             .or_else(|| self.auras_to_hosts(v))
             .or_else(|| self.enters_attached_to_chosen(v))
+            .or_else(|| self.random_missing_counter(v))
+    }
+
+    /// "Choose a kind of counter at random that ~ doesn't have on it from among flying,
+    /// ..., and +1/+1. Put a counter of that kind on ~." (`kw/counter_groups.rs`): the
+    /// kind's place in the list, then a counter of the kind at that place.
+    fn random_missing_counter(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::Custom(n), chain, ..] = v else {
+            return None;
+        };
+        let j = n.strip_prefix(crate::kw::counter_groups::RANDOM_MISSING_KIND)?;
+        let (var, kinds): (Var, Vec<String>) = serde_json::from_str(j).ok()?;
+        // The chain puts the kind at place i for the value i.
+        let mut e = chain;
+        for (i, k) in kinds.iter().enumerate() {
+            let Effect::If {
+                cond: Condition::Compare(Value::Var(x), Cmp::Eq, Value::Const(c)),
+                then,
+                otherwise,
+            } = e
+            else {
+                return None;
+            };
+            let puts = matches!(then.as_ref(), Effect::AddCounters { what: Sel::This, kind, n: Value::Const(1) }
+                if kind.as_str() == k.as_str());
+            if *x != var || *c != i as i32 + 1 || !puts {
+                return None;
+            }
+            e = otherwise;
+        }
+        if !matches!(e, Effect::Noop) {
+            return None;
+        }
+        let m = self.me();
+        Some((
+            format!(
+                "choose a kind of counter at random that {m} doesn't have on it from among {}. Put a counter of that kind on {m}",
+                join_list(&kinds, "and")
+            ),
+            2,
+        ))
     }
 
     /// "Choose a creature you control it could be attached to. If you do, it enters

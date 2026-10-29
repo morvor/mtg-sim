@@ -52,3 +52,59 @@ fn bloodthirsty_adversary_casts_the_copies_its_reflexive_ability_made() {
     assert!(t.in_exile("Lightning Bolt"));
     assert_eq!(t.life(P1), 17, "{}", t.dump_log());
 }
+
+/// Gives `p` control of `id` (its base controller, as a control-changing effect that ended
+/// would leave it).
+fn steal(t: &mut TestGame, id: ObjectId, p: PlayerId) {
+    t.g.objects[id.0 as usize].controller = p;
+    t.g.objects[id.0 as usize].base_controller = p;
+}
+
+#[test]
+fn faerie_slumber_party_counts_the_opponents_who_controlled_the_creatures() {
+    cr!("608.2h", "400.7");
+    // "For each opponent who controlled a creature returned this way, you create two 1/1
+    // blue Faerie creature tokens": who controlled it, not who owns it.
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Island", 6);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    steal(&mut t, bears, P2);
+    let spell = t.hand(P0, "Faerie Slumber Party");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    let faeries = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|o| t.obj_now(**o).chars.name.starts_with("Faerie"))
+        .count();
+    assert_eq!(faeries, 2, "{}", t.dump_log());
+}
+
+#[test]
+fn oversimplify_counts_the_power_of_creatures_each_player_controlled() {
+    cr!("608.2h", "400.7");
+    // "Each player creates a 0/0 green and blue Fractal creature token and puts a number of
+    // +1/+1 counters on it equal to the total power of creatures they controlled that were
+    // exiled this way."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    t.lands(P0, "Forest", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    steal(&mut t, giant, P0);
+    t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Oversimplify");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    let fractal = |p: PlayerId| {
+        t.g.battlefield
+            .iter()
+            .copied()
+            .find(|o| t.obj_now(*o).controller == p && t.obj_now(*o).chars.name.contains("Fractal"))
+    };
+    let mine = fractal(P0).expect("P0's Fractal");
+    let theirs = fractal(P1).expect("P1's Fractal");
+    assert_eq!(t.counters(mine, "+1/+1"), 3, "{}", t.dump_log());
+    assert_eq!(t.counters(theirs, "+1/+1"), 2);
+}
