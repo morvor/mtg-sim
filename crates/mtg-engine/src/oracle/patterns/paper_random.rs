@@ -96,7 +96,13 @@ inventory::submit! { EffectPattern { name: "discards all cards with that name re
 /// "discard any number of cards at random": a number chosen as it resolves, then that
 /// many cards at random.
 fn discard_any_number_at_random(l: &str, _b: &mut Builder) -> Option<Effect> {
-    if end(l) != "discard any number of cards at random" {
+    // Only the controller's own instruction: "Target player discards any number of
+    // cards at random" (reworded for "you") doesn't say who chooses the number.
+    if end(l) != "discard any number of cards at random"
+        || !crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("discard any number of cards at random")
+    {
         return None;
     }
     Some(Effect::Seq(vec![
