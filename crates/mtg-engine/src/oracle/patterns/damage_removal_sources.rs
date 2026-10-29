@@ -67,7 +67,9 @@ fn chosen_source(s: &str) -> Option<(Filter, &str)> {
     // Sphere), "that shares a color with the exiled card" (Mourner's Shield): the colors
     // are those as the effect is created (`prevention::lock_filter`).
     let t = rest.trim_start();
-    if let Some(r) = t.strip_prefix("that shares a color with the mana spent on this activation cost") {
+    if let Some(r) =
+        t.strip_prefix("that shares a color with the mana spent on this activation cost")
+    {
         parts.push(Filter::Custom(
             crate::kw::cast_history::SHARES_COLOR_WITH_MANA_SPENT.into(),
         ));
@@ -167,6 +169,17 @@ fn action(s: &str, b: &mut Builder) -> Option<ReplacementAction> {
         "prevent that damage" => return Some(ReplacementAction::Prevent),
         "that damage is dealt to ~ instead" | "that damage is dealt to this creature instead" => {
             return Some(ReplacementAction::Redirect(Sel::This))
+        }
+        // "instead that source deals that much damage to you and ~ deals that much damage
+        // to that source's controller" (Eye for an Eye): the damage to you is still dealt
+        // by the original source (its rulings), and the effect's source deals as much to
+        // that source's controller (CR 614.1a).
+        "instead that source deals that much damage to you and ~ deals that much damage to that source's controller" => {
+            return Some(ReplacementAction::Also(Box::new(Effect::DealDamage {
+                source: Sel::This,
+                amount: Value::EventAmount,
+                to: Sel::Players(PlayerRef::ControllerOf(Box::new(Sel::TriggerOtherObject))),
+            })))
         }
         _ => {}
     }

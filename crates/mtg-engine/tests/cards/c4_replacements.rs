@@ -331,3 +331,29 @@ fn mox_diamond_enters_only_if_a_land_card_is_discarded() {
     assert!(t.in_graveyard(P0, "Mox Diamond"));
     assert!(t.in_hand(P0, "Forest"));
 }
+
+#[test]
+fn eye_for_an_eye_deals_as_much_damage_to_the_sources_controller() {
+    cr!("609.7a", "614.1a");
+    ruling!("Eye for an Eye", "The damage dealt to you is still being dealt by the original source");
+    assert_supported(&["Eye for an Eye"]);
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let bolt = t.cast(P1, bolt).target(P0).go();
+    t.lands(P0, "Plains", 2);
+    let eye = t.hand(P0, "Eye for an Eye");
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.cast(P0, eye).go();
+    t.resolve();
+    t.resolve();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.life(P1), 17);
+    // Used up: the next damage isn't answered.
+    t.lands(P1, "Mountain", 1);
+    let bolt2 = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt2).target(P0).go();
+    t.resolve();
+    assert_eq!(t.life(P0), 14);
+    assert_eq!(t.life(P1), 17);
+}
