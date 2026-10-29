@@ -403,7 +403,8 @@ pub fn split_sentences(t: &str) -> Vec<String> {
         }
         // A quoted ability that ends a sentence ("it becomes an Aura with \"enchant
         // creature put onto the battlefield with ~.\" Put target creature card ..."): the
-        // next sentence starts with a capital letter.
+        // next sentence starts with a capital letter, or it's a results-table row ("1—14 |
+        // ... \"At end of combat, exile this token.\" 15—20 | ...", CR 706.3a).
         let quote_ends_sentence = *ch == '"'
             && !in_quote
             && i > 0
@@ -411,7 +412,7 @@ pub fn split_sentences(t: &str) -> Vec<String> {
             && chars.get(i + 1) == Some(&' ')
             && chars
                 .get(i + 2)
-                .is_some_and(|c| c.is_uppercase() || *c == '~');
+                .is_some_and(|c| c.is_uppercase() || *c == '~' || c.is_ascii_digit());
         if quote_ends_sentence
             || *ch == '.' && !in_quote && (i + 1 == chars.len() || chars[i + 1] == ' ')
         {
@@ -504,7 +505,12 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                 // gain 2 life if a Lesson card is milled this way.": a sentence about what
                 // an instruction before the previous sentence did (`referents_values_4`).
                 if x_defined.is_none()
-                    && super::patterns::referents_values_4::lookback(&s, &mut effects, b)
+                    && (super::patterns::referents_values_4::lookback(&s, &mut effects, b)
+                        || super::patterns::dice_coins_4::table_after_sentences(
+                            &s,
+                            &mut effects,
+                            b,
+                        ))
                 {
                     b.sentences += 1;
                     continue;
@@ -621,6 +627,9 @@ pub fn parse_sentence(s: &str, b: &mut Builder) -> Option<Effect> {
         || l.starts_with("you may activate ")
         // A permission to play cards (see `patterns::permission_grammar`).
         || (l.starts_with("you may ") && super::patterns::permission_grammar::parse(l).is_some())
+        // "You may play a card you own from outside the game this turn" (Wish): a
+        // permission (see `patterns::game_rules_4`), not a choice made on resolution.
+        || (l.starts_with("you may ") && l.ends_with(" from outside the game this turn"))
         // "You may return that card ... at the beginning of the next end step if ~ is
         // still on the battlefield": the choice is the delayed ability's (see
         // `patterns::delayed_grammar_2`).

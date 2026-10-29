@@ -179,6 +179,17 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     .expect("five colors");
                 vec![vec![best]; n.max(0) as usize]
             }
+            ManaProduction::DraftChosenColors => {
+                let t: Vec<ManaType> = crate::draft::chosen_colors(g, ctx)
+                    .into_iter()
+                    .map(ManaType::from_color)
+                    .collect();
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t]
+                }
+            }
             ManaProduction::CommanderIdentity => {
                 let t = commander_identity_types(g, ctx.controller);
                 if t.is_empty() {

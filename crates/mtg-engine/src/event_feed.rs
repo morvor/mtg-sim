@@ -44,6 +44,15 @@ impl EventFeed {
         self.chunks.push(Arc::from(events));
     }
 
+    /// Moves the end of the feed forward to `n` without events, so that positions given
+    /// out before (by a game an illegal action was reversed from, CR 733.1) don't come
+    /// back: the next events recorded are found after them.
+    pub fn skip_to(&mut self, n: usize) {
+        if self.enabled && n > self.total {
+            self.total = n;
+        }
+    }
+
     /// The number of events recorded so far: a cursor for [`EventFeed::since`].
     pub fn len(&self) -> usize {
         self.total
