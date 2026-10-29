@@ -301,3 +301,72 @@ fn priority_boarding_does_nothing_more_if_it_left_the_battlefield_before_the_rev
     t.resolve_all();
     assert!(!t.in_exile("Hill Giant"));
 }
+
+#[test]
+fn ferris_wheel_can_target_a_creature_again_once_it_is_a_new_object() {
+    cr!("400.7", "115.1");
+    ruling!(
+        "Ferris Wheel",
+        "it will be a new object with no memory of being phased out by the Ferris Wheel. It is again a legal target."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ferris Wheel");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    roll_to_visit(&mut t, P0, 6);
+    t.resolve_all();
+    roll_to_visit(&mut t, P0, 1);
+    assert!(!t.obj_now(bears).phased_out);
+    // It leaves and returns: a new object.
+    t.g.move_object(bears, mtg_engine::object::Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    let back = t.g.current(bears);
+    t.g.move_object(back, mtg_engine::object::Zone::Battlefield, mtg_engine::events::MoveCause::Effect, Some(P1));
+    let back = t.g.current(back);
+    assert_ne!(back, bears);
+    t.answer_targets(P0, &[Entity::Object(back)]);
+    roll_to_visit(&mut t, P0, 6);
+    t.resolve_all();
+    assert!(t.obj_now(back).phased_out);
+}
+
+#[test]
+fn myra_stops_copying_once_the_exiled_card_leaves_exile() {
+    cr!("611.2b", "603.7a");
+    ruling!(
+        "Myra the Magnificent",
+        "This ability will continue to trigger as long as the Attraction is on the battlefield and the exiled card remains exiled"
+    );
+    let (mut t, _myra, _tower) = myra();
+    let div = t.g.find_in_zone(mtg_engine::object::Zone::Exile, "Divination")[0];
+    t.g.move_object(div, mtg_engine::object::Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    roll_to_visit(&mut t, P0, 2);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand, "no copy");
+}
+
+#[test]
+fn priority_boarding_triggers_again_if_you_didnt_reveal() {
+    cr!("603.2h");
+    ruling!(
+        "Priority Boarding",
+        "Once you choose to reveal the top card of your library during the resolution of Priority Boarding"
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Priority Boarding");
+    t.library_top(P0, "Hill Giant");
+    // The first time: declined.
+    t.answer_yes(P0, false);
+    roll_d20(&mut t, P0, 12);
+    t.resolve_all();
+    assert!(!t.in_exile("Hill Giant"));
+    // The second roll triggers it again.
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+    }
+    roll_d20(&mut t, P0, 12);
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+}

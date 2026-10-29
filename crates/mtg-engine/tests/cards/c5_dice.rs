@@ -456,3 +456,43 @@ fn mr_house_rolls_an_extra_die_for_each_mana_from_treasures() {
     assert_eq!(die_rolls(&t), vec![(P0, 5)]);
     assert_eq!(subtype_count(&t, P0, "Robot"), 1);
 }
+
+#[test]
+fn wand_of_wonder_shuffles_the_rest_back_and_casts_from_the_cards_left_in_exile() {
+    cr!("706.3a", "701.24a");
+    // P1 exiles a Mountain, then Divination; P2 exiles Opt. X is one: P0 casts
+    // Divination; the Mountain was shuffled back, and Opt stays in exile.
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let wand = t.battlefield(P0, "Wand of Wonder");
+    let div = t.library_top(P1, "Divination");
+    let mountain = t.library_top(P1, "Mountain");
+    let opt = t.library_top(P2, "Opt");
+    mana(&mut t, P0);
+    t.g.dice.loaded.push_back(4);
+    t.answer_choose_moved(P0, &[Entity::Object(div)]);
+    let hand = t.hand_size(P0);
+    t.activate(P0, wand, 0, &[]).unwrap();
+    t.resolve_all();
+    // Offered: the two instant and sorcery cards that were still in exile, at most one.
+    let (names, max) = t
+        .asked()
+        .into_iter()
+        .find_map(|(p, d)| match d {
+            Decision::ChooseEntities {
+                candidates, max, ..
+            } if p == P0 => Some((candidates, max)),
+            _ => None,
+        })
+        .expect("P0 chose spells to cast");
+    let mut names: Vec<String> = names
+        .iter()
+        .map(|e| t.g.obj(e.object().unwrap()).chars.name.to_string())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["Divination", "Opt"]);
+    assert_eq!(max, 1);
+    assert_eq!(t.hand_size(P0), hand + 2, "Divination was cast");
+    assert!(matches!(t.zone(mountain), mtg_engine::object::Zone::Library(p) if p == P1));
+    assert_eq!(t.zone(opt), mtg_engine::object::Zone::Exile);
+}

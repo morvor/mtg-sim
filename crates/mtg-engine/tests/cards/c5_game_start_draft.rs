@@ -406,3 +406,27 @@ fn canal_dredger_default_recipient_is_the_next_drafter_in_the_passing_direction(
     // P1's last card: the next drafter to its left is P3.
     assert!(names(&d.pool(P3)).contains(&"Shock".to_string()));
 }
+
+#[test]
+fn two_gemstone_caverns_both_begin_the_game_and_the_legend_rule_applies_later() {
+    cr!("103.6a", "704.5j");
+    ruling!(
+        "Gemstone Caverns",
+        "the \"legend rule\" won't put the extras into that player's graveyard until just before the starting player gets priority"
+    );
+    let mut t = TestGame::new(2);
+    let a = t.hand(P1, "Gemstone Caverns");
+    let b = t.hand(P1, "Gemstone Caverns");
+    let opt = t.hand(P1, "Opt");
+    let shock = t.hand(P1, "Shock");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(opt)]);
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(shock)]);
+    mtg_engine::opening_hand::opening_hand_actions(&mut t.g);
+    assert!(t.on_battlefield(t.g.current(a)) && t.on_battlefield(t.g.current(b)));
+    assert!(t.in_exile("Opt") && t.in_exile("Shock"));
+    t.settle();
+    assert_eq!(t.named_on_battlefield("Gemstone Caverns").len(), 1);
+    assert!(t.in_graveyard(P1, "Gemstone Caverns"));
+}

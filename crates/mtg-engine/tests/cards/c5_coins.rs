@@ -310,3 +310,34 @@ fn desperate_gambit_loss_prevents_the_next_damage_of_the_source() {
     );
     assert_eq!(t.life(P1), 17);
 }
+
+#[test]
+fn a_creature_becoming_a_copy_of_molten_sentry_copies_what_it_entered_as() {
+    cr!("707.2", "614.1c");
+    ruling!(
+        "Molten Sentry",
+        "If a creature that's already on the battlefield copies Molten Sentry, it becomes a copy of whatever Molten Sentry already is"
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let s = t.hand(P0, "Molten Sentry");
+    mana(&mut t, P0);
+    t.g.dice.loaded_coins.push_back(false);
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let sentry = t.named_on_battlefield("Molten Sentry")[0];
+    assert_eq!(t.pt(sentry), (2, 5));
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let cyto = t.hand(P0, "Cytoshape");
+    mana(&mut t, P0);
+    // A coin that would make it 5/2 if one were flipped.
+    t.g.dice.loaded_coins.push_back(true);
+    t.answer_choose(P0, &[Entity::Object(sentry)]);
+    t.cast(P0, cyto).target(bears).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name, "Molten Sentry");
+    assert_eq!(t.pt(bears), (2, 5));
+    assert!(t.obj_now(bears).chars.has_keyword(KeywordKind::Defender));
+    assert!(!t.obj_now(bears).chars.has_keyword(KeywordKind::Haste));
+    assert_eq!(t.g.dice.loaded_coins.len(), 1, "no coin was flipped");
+}
