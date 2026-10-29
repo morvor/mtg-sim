@@ -99,3 +99,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Jeweled Amulet (with an activation cost increase in play).
 - Code: `crates/mtg-engine/src/noted_mana.rs` (`note`).
 - Tests: `tests/cards/noted_mana.rs` (`with_several_types_spent_its_controller_chooses_the_one_noted`).
+
+## x-defined-by-target: An {X} in an activation cost that the text defines by the ability's target must be announced as that value
+- Kind: interpretation
+- Status: provisional
+- Rules: 107.3c "If a spell or activated ability has an {X}, [-X], or X in its cost and/or its text, and the value of X is defined by the text of that spell or ability, then that's the value of X while that spell or ability is on the stack. The controller of that spell or ability doesn't get to choose the value. ..." / 601.2b "... If the spell has a variable cost that will be paid as it's being cast (such as an {X} in its mana cost; see rule 107.3), the player announces the value of that variable. ..." / 601.2c "The player announces their choice of an appropriate object or player for each target the spell requires. ..."
+- Question: Reflecting Mirror: "{X}, {T}: Change the target of target spell with a single target if that target is you. The new target must be a player. X is twice the mana value of that spell." X is defined by the target, but the cost's X is announced (601.2b) before targets are chosen (601.2c). How is X determined?
+- Decision: The player announces X, and the target must be a spell whose mana value makes the definition true (twice its mana value is X); an X no target can satisfy (an odd X here) can't be announced. The result is that X is exactly the defined value for the chosen target, as 107.3c requires.
+- Alternatives: (A) Determine X after targets are chosen (out of the 601.2 order). (B) Let the player announce any X and pay it, ignoring the definition: contradicts 107.3c.
+- Why: The engine follows 601.2's order (as for Soul Foundry's "X is the mana value of that card", `r107_x_defined_by_text`); restricting the target to the announced X gives the same legal activations and the same payment as determining X from the target.
+- Affects: Reflecting Mirror.
+- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`).
+- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`).

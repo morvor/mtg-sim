@@ -5607,6 +5607,43 @@ impl Renderer<'_> {
                 return t.replace("after this phase", "after this main phase");
             }
         }
+        // "When one or more counters are removed from ~ this way, it deals that much damage
+        // to any target." (Magma Pummeler, `patterns::results_5`).
+        if let (true, Condition::Compare(Value::Prev, Cmp::Ge, Value::Const(1)), Effect::Seq(v)) =
+            (else_empty, cond, then)
+        {
+            if let [Effect::SetX { .. }, Effect::Reflexive { body }] = v.as_slice() {
+                let b = self.in_event_scope(|r| r.body(body));
+                return format!(
+                    "when one or more counters are removed from ~ this way, {}",
+                    lower_first(&b)
+                );
+            }
+        }
+        // "When one or more cards are milled this way, ...": a reflexive trigger for the
+        // cards the instruction milled (CR 603.12, `patterns::results_5`).
+        if let (
+            true,
+            Condition::Compare(Value::CountSel(x), Cmp::Ge, Value::Const(1)),
+            Effect::Reflexive { body },
+        ) = (else_empty, cond, then)
+        {
+            let (inner, f) = match x.as_ref() {
+                Sel::Matching(i, f) => (i.as_ref(), Some(f.clone())),
+                other => (other, None),
+            };
+            if let Some(("milled", _, _)) = self.this_way_of(inner) {
+                let n = match f {
+                    Some(f) => self.noun(&f, Num::Many),
+                    None => "cards".into(),
+                };
+                let b = self.in_event_scope(|r| r.body(body));
+                return format!(
+                    "when one or more {n} are milled this way, {}",
+                    lower_first(&b)
+                );
+            }
+        }
         // "When a creature is put onto the battlefield this way, it deals damage ...": a
         // reflexive trigger for the card the instruction put there (CR 603.12).
         if let (

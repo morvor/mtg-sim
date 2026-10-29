@@ -1900,6 +1900,19 @@ fn stat_extras(s: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// this way".
 fn result_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     use super::value_grammar::{of_referent, stat_word};
+    // "the total mana value of those exiled cards" (Ensnared by the Mara): the cards the
+    // previous instruction exiled, as "the exiled cards".
+    for (p, q) in [
+        (" of those exiled cards", " of the exiled cards"),
+        (" among those exiled cards", " among the exiled cards"),
+    ] {
+        if let Some(i) = s.find(p) {
+            if !s[..i].contains(',') && s.starts_with("the ") {
+                let rewritten = format!("{}{q}{}", &s[..i], &s[i + p.len()..]);
+                return super::value_grammar::parse_value(&rewritten, b);
+            }
+        }
+    }
     // "the greatest number of cards a player discarded this way" (Windfall): the most
     // any one player discarded.
     for (p, pf) in [

@@ -14,6 +14,9 @@
 //!   (Semester's End): replacement effects of the returning instruction on how those
 //!   objects enter (CR 614.1c, 122.6), each kind of counter for each object that would
 //!   enter as a permanent of that type (CR 614.12); the objects return together.
+//! * "Each opponent mills two cards. When one or more cards are milled this way, exile
+//!   target ..." (Saruman of Many Colors): a reflexive triggered ability (CR 603.12) that
+//!   triggers if the mill instruction milled at least one such card (CR 701.17).
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -184,3 +187,103 @@ fn each_enters_with_if(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "results 5: each of them enters with an additional counter if it's a [type]", priority: 0, apply: each_enters_with_if } }
+
+/// Whether the last instruction of `e` mills cards.
+fn mills(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.last().is_some_and(mills),
+        Effect::Mill { .. } => true,
+        _ => false,
+    }
+}
+
+/// "When one or more [cards] are milled this way, [effect]" after a mill instruction.
+fn when_milled_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("when one or more ") else {
+        return false;
+    };
+    let Some((what, effect)) = r.split_once(" are milled this way, ") else {
+        return false;
+    };
+    if !mills(prev) {
+        return false;
+    }
+    let q = match what {
+        "cards" => None,
+        w => {
+            let Some(q) = super::card_flow_search::card_filter(w, b) else {
+                return false;
+            };
+            Some(q)
+        }
+    };
+    // The reflexive ability as "When you do, [effect]" reads it, with its own targets.
+    let Some(mut e) = crate::oracle::effects::parse_sentence(&format!("when you do, {effect}"), b)
+    else {
+        return false;
+    };
+    let Effect::If { cond, .. } = &mut e else {
+        return false;
+    };
+    let milled = match q {
+        None => Sel::Var(vars::IT),
+        Some(f) => Sel::Matching(Box::new(Sel::Var(vars::IT)), f),
+    };
+    *cond = Condition::Compare(Value::CountSel(Box::new(milled)), Cmp::Ge, Value::c(1));
+    append(prev, e);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "results 5: when one or more cards are milled this way", priority: 0, apply: when_milled_this_way } }
+
+/// The reflexive ability `e` ends with, if it's a [`when_milled_this_way`] one.
+fn milled_reflexive(e: &mut Effect) -> Option<&mut Body> {
+    match e {
+        Effect::Seq(v) => v.last_mut().and_then(milled_reflexive),
+        Effect::If {
+            cond: Condition::Compare(Value::CountSel(x), Cmp::Ge, Value::Const(1)),
+            then,
+            otherwise,
+        } if matches!(**otherwise, Effect::Noop)
+            && matches!(x.as_ref(), Sel::Var(vars::IT) | Sel::Matching(..)) =>
+        {
+            match &mut **then {
+                Effect::Reflexive { body } => Some(body),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// "Copy the exiled card. You may cast the copy without paying its mana cost." after
+/// "When one or more cards are milled this way, exile target ...": the rest of the
+/// reflexive ability (as after "When you do, ...").
+fn continues_milled_reflexive(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(body) = milled_reflexive(prev) else {
+        return false;
+    };
+    if body.modal.is_some() {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(vars::IT);
+    sub.it_player = b.it_player.clone();
+    sub.sentences = 1;
+    sub.targets = body.targets.clone();
+    if crate::oracle_ext::apply_followup_ext(l, &mut body.effect, &mut sub) {
+        body.targets = sub.targets;
+        return true;
+    }
+    let Some(e) = crate::oracle::effects::parse_sentence(l, &mut sub) else {
+        return false;
+    };
+    body.targets = sub.targets;
+    let old = std::mem::take(&mut body.effect);
+    body.effect = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "results 5: the rest of a reflexive ability for cards milled this way", priority: 0, apply: continues_milled_reflexive } }

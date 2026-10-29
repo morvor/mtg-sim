@@ -157,3 +157,60 @@ fn semesters_end_returns_each_with_the_counter_for_its_type() {
     assert_eq!(t.counters(ajani, "loyalty"), 5);
     assert_eq!(t.counters(ajani, "+1/+1"), 0);
 }
+
+#[test]
+fn ensnared_by_the_mara_deals_the_total_mana_value_of_the_exiled_cards() {
+    cr!("701.55a", "608.2c");
+    supported("Ensnared by the Mara");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    for c in ["Island", "Lightning Bolt", "Island", "Grizzly Bears", "Hill Giant"] {
+        t.library_top(P1, c);
+    }
+    t.lands(P0, "Mountain", 4);
+    let spell = t.hand(P0, "Ensnared by the Mara");
+    // The second option: exile the top four (4 + 2 + 0 + 1).
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20 - 7);
+    assert!(t.in_exile("Hill Giant") && t.in_exile("Grizzly Bears"));
+}
+
+#[test]
+fn saruman_of_many_colors_reflexive_trigger_needs_a_card_milled() {
+    cr!("603.12", "701.17a", "707.12");
+    ruling!(
+        "Saruman of Many Colors",
+        "ability triggers when one or more cards are milled this way"
+    );
+    supported("Saruman of Many Colors");
+    let run = |library: &[&str]| {
+        let mut t = TestGame::new(2);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.battlefield(P0, "Saruman of Many Colors");
+        for c in library {
+            t.library_top(P1, c);
+        }
+        t.lands(P0, "Forest", 1);
+        t.lands(P0, "Mountain", 4);
+        for _ in 0..3 {
+            t.library_top(P0, "Island");
+        }
+        let elves = t.hand(P0, "Llanowar Elves");
+        t.cast(P0, elves).go();
+        t.resolve_all();
+        let giant = t.hand(P0, "Hill Giant");
+        t.answer_yes(P0, true);
+        t.cast(P0, giant).go();
+        t.resolve_all();
+        t
+    };
+    // Divination (3) milled by the second spell, Hill Giant (4): exiled, copied and cast.
+    let t = run(&["Divination", "Island"]);
+    assert!(t.in_exile("Divination"));
+    assert_eq!(t.hand_size(P0), 2);
+    // Nothing to mill: no reflexive trigger, nothing exiled.
+    let t = run(&[]);
+    assert_eq!(t.hand_size(P0), 0);
+}

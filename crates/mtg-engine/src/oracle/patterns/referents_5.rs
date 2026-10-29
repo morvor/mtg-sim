@@ -4,9 +4,18 @@
 //!   the permanent chosen as ~ entered (CR 607.2d, see `choice_grammar_etb`) is the
 //!   static ability's object. A new object after it changes zones is no longer the chosen
 //!   one (CR 400.7), and with nothing chosen the ability does nothing.
+//! * "Change the target of target spell with a single target if that target is you."
+//!   (Reflecting Mirror), "Counter target spell if its target is you": the instruction
+//!   happens only if, as the ability resolves, the spell's target is you (CR 115.9b).
+//! * "{X}, {T}: ... target spell ... X is twice the mana value of that spell." (Reflecting
+//!   Mirror): X is defined by the target (CR 107.3c). The value of X is announced before
+//!   targets are chosen (CR 601.2b, 602.2b), so the target must be a spell with that mana
+//!   value; an X that no such spell gives (an odd X here) can't be announced
+//!   (interpretation `x-defined-by-target`).
 
-use super::StaticPattern;
+use super::{AbilityPattern, EffectPattern, StaticPattern};
 use crate::ability::*;
+use crate::oracle::effects::{parse_sentence, Builder};
 use crate::oracle::phrases::end;
 use crate::oracle::CompileContext;
 
@@ -32,3 +41,103 @@ fn chosen_cant_activate(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { StaticPattern { name: "referents 5: activated abilities of the chosen permanent can't be activated", priority: 40, parse: chosen_cant_activate } }
+
+/// "[instruction about target spell] if that target is you".
+fn if_that_target_is_you(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let head = l
+        .strip_suffix(" if that target is you")
+        .or_else(|| l.strip_suffix(" if its target is you"))?;
+    if !head.contains("target spell") {
+        return None;
+    }
+    let before = b.targets.len();
+    let e = parse_sentence(head, b)?;
+    // The one new target: the spell.
+    let slot = before as u8;
+    let spell = b.targets.len() == before + 1
+        && matches!(&b.targets[before].what, TargetKind::Object(f) | TargetKind::Spell(f) if is_spell_filter(f));
+    if !spell {
+        b.targets.truncate(before);
+        return None;
+    }
+    Some(Effect::If {
+        cond: Condition::SelMatches(
+            Sel::Target(slot),
+            Filter::StackTargets(Box::new(TargetsFilter::Targets {
+                objects: None,
+                players: Some(PlayerFilter::You),
+            })),
+        ),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+fn is_spell_filter(f: &Filter) -> bool {
+    match f {
+        Filter::Spell => true,
+        Filter::And(v) => v.iter().any(is_spell_filter),
+        _ => false,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: [instruction about target spell] if that target is you", priority: 100, parse: if_that_target_is_you } }
+
+/// "{X}, {T}: [instruction about target spell]. X is twice the mana value of that spell."
+fn x_defined_by_target(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = block.trim();
+    let (cost, _) = text.split_once(": ")?;
+    if !cost.contains("{X}") || cost.contains('"') {
+        return None;
+    }
+    let (before, def) = text.rsplit_once(". X is ")?;
+    let def = end(def).to_lowercase();
+    let (k, rest) = match def.strip_prefix("twice ") {
+        Some(r) => (2, r),
+        None => (1, def.as_str()),
+    };
+    let noun = rest.strip_prefix("the mana value of that ")?;
+    if !matches!(noun, "spell" | "creature" | "card" | "permanent") || before.contains(" X ") {
+        return None;
+    }
+    let mut abilities = crate::oracle::parse_ability(&format!("{before}."), ctx)?;
+    let [a] = abilities.as_mut_slice() else {
+        return None;
+    };
+    let a = std::sync::Arc::make_mut(a);
+    let AbilityKind::Activated(act) = &mut a.kind else {
+        return None;
+    };
+    let [t] = act.body.targets.as_mut_slice() else {
+        return None;
+    };
+    let (TargetKind::Object(f) | TargetKind::Spell(f)) = &mut t.what else {
+        return None;
+    };
+    let x = if k == 1 {
+        Value::X
+    } else {
+        Value::Div(Box::new(Value::X), k, false)
+    };
+    *f = Filter::and(vec![
+        f.clone(),
+        Filter::ManaValue(Cmp::Eq, Box::new(x.clone())),
+    ]);
+    if k > 1 {
+        // Only an X that is k times a mana value.
+        let only = Condition::Compare(
+            Value::Mul(Box::new(x), Box::new(Value::c(k))),
+            Cmp::Eq,
+            Value::X,
+        );
+        act.condition = Some(match act.condition.take() {
+            Some(c) => Condition::And(vec![c, only]),
+            None => only,
+        });
+    }
+    a.text = text.to_string();
+    Some(abilities)
+}
+
+inventory::submit! { AbilityPattern { name: "referents 5: {X} in an activation cost defined by the target", priority: 1090, parse: x_defined_by_target } }
