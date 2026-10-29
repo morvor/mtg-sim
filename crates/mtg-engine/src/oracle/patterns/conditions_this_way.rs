@@ -488,7 +488,7 @@ fn quantified(s: &str) -> Option<(Filter, &str)> {
         .find_map(|q| s.strip_prefix(q))?;
     // "a card named ~"
     if let Some(rest) = r.strip_prefix("card named ~") {
-        let f = Filter::and(vec![Filter::Card, Filter::SameNameAs(Box::new(Sel::This))]);
+        let f = Filter::and(vec![Filter::Card, crate::oracle::phrases::named_this_card()]);
         return Some((f, rest.trim_start()));
     }
     // "a permanent you controlled or a token": either kind (as it last existed).

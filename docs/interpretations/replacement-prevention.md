@@ -51,3 +51,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Runesword.
 - Code: `crates/mtg-engine/src/oracle/patterns/prevention_6.rs`; `crates/mtg-engine/src/prevention.rs` (`lock_damage_history`); `crates/mtg-engine/src/kw/damage_history_by.rs`.
 - Tests: `tests/cards/c5_mana_replacements.rs` (`runesword_creatures_dealt_damage_by_the_target_cant_regenerate_and_are_exiled`, `runesword_doesnt_affect_creatures_damaged_by_other_creatures`).
+
+## enter-sacrifice-instead-partial: "Sacrifice two untapped lands instead. If you do, ..." with fewer than two sacrifices those it can, and ~ doesn't enter
+- Kind: interpretation
+- Status: provisional
+- Rules: 609.3 "If an effect attempts to do something impossible, it does only as much as possible." / 614.12 "Some replacement effects modify how a permanent enters the battlefield. ..."
+- Question: Lotus Vale and Scorched Ruins say "If ~ would enter, sacrifice two untapped lands instead. If you do, put ~ onto the battlefield. If you don't, put it into its owner's graveyard." The sacrifice is an instruction, not an offer (Mox Diamond's "you may discard a land card instead" is one), so with two untapped lands they're sacrificed. With only one untapped land, is it sacrificed, and does ~ enter?
+- Decision: The one land is sacrificed (as much as possible, 609.3), and "if you do" is true only if two were sacrificed, so ~ goes to its owner's graveyard. With no untapped land nothing is sacrificed.
+- Alternatives: Treat the instruction like a cost that can't be paid in part (nothing sacrificed with one land); treat it as optional like Mox Diamond (the previous reading, which let a player keep both lands and put ~ into the graveyard).
+- Why: The card's text gives no choice and no cost; 609.3 is the general rule for an instruction that can't be done in full, and Lake of the Dead's and Heart of Yavimaya's rulings ("You have to sacrifice a swamp before this card is put onto the battlefield") settle that the sacrifice isn't optional; Lotus Vale's and Scorched Ruins' rulings ("If you don't sacrifice the lands, Lotus Vale never enters") say only that it doesn't enter, not what happens to the one land.
+- Affects: Lotus Vale, Scorched Ruins (the one-land versions, Lake of the Dead and the others, have no partial case).
+- Code: `crates/mtg-engine/src/oracle/patterns/replacement_bodies.rs` (`enter_only_if_sacrificed`).
+- Tests: `tests/cards/roundtrip_pairs_4.rs` (`lotus_vale_with_one_untapped_land_sacrifices_it_and_never_enters`, `lake_of_the_dead_sacrifices_a_swamp_without_asking`); `tests/cards/replacement_bodies_misc.rs` (`lotus_vale_enters_only_if_two_untapped_lands_are_sacrificed`).

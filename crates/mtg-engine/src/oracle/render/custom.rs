@@ -345,7 +345,11 @@ impl Renderer<'_> {
             }
             "turn:creatures attacked" => "the number of creatures that attacked this turn".into(),
             "snow mana spent to cast it" => {
-                format!("the amount of {{S}} spent to cast {}", self.me())
+                // "for each {S} spent to cast ~": the number of them.
+                format!(
+                    "the {{alt:number|amount}} of {{S}} spent to cast {}",
+                    self.me()
+                )
             }
             "web-slinging:mana value of the returned creature" => {
                 "the mana value of the returned creature".into()

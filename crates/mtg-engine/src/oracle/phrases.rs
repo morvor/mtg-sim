@@ -358,6 +358,21 @@ pub fn adjective(w: &str) -> Option<Filter> {
 /// Parses an object description like "nontoken creature you control with flying".
 /// Returns (filter, plural?, rest).
 /// Whether a filter is about cards (has a `Filter::Card` part).
+/// "named ~": the card's name, as a name (CR 201.2), not "with the same name as ~". Text
+/// that refers to the object it's on by name means only that object (CR 201.5), but "a
+/// creature named ~" names other objects by that name: an object with that name, whatever
+/// names this object has now (Spy Kit's "all names of nonlegendary creature cards", a
+/// copy effect). Falls back to the same name as this object when the card's name isn't
+/// known.
+pub(crate) fn named_this_card() -> Filter {
+    let n = super::card_name();
+    if n.is_empty() {
+        Filter::SameNameAs(Box::new(Sel::This))
+    } else {
+        Filter::Named(n.into())
+    }
+}
+
 fn names_cards(f: &Filter) -> bool {
     match f {
         Filter::Card => true,
@@ -927,14 +942,14 @@ pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
             (Filter::ControlledBy(PlayerRel::You), r)
         } else if let Some(r) = t.strip_prefix("not named ~") {
             // "a legendary permanent card not named ~" (Staff of Eden, Vault's Key).
-            (Filter::not(Filter::SameNameAs(Box::new(Sel::This))), r)
+            (Filter::not(named_this_card()), r)
         } else if let Some(r) = t
             .strip_prefix("named ~")
             .filter(|_| !parts.iter().any(names_cards))
         {
             // "each creature you control named ~" (Gary Clone). ("card named ~" is the
             // card's printed name, see `card_flow_search`.)
-            (Filter::SameNameAs(Box::new(Sel::This)), r)
+            (named_this_card(), r)
         } else if let Some(r) = t.strip_prefix("with the same name as ~") {
             // "target creature with the same name as this creature" (Evil Twin, CR 201.2a).
             (Filter::SameNameAs(Box::new(Sel::This)), r)

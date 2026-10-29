@@ -15,6 +15,10 @@ pub(super) fn event_amount_words(t: &TriggerCond) -> Option<&'static str> {
             to: DamageRecipient::Player(_),
             ..
         } => Some("{alt:the amount of damage it dealt to that player|the amount of damage dealt}"),
+        // "Whenever you gain life, ... where X is the amount of life you gained."
+        TriggerCond::GainsLife {
+            who: PlayerRel::You,
+        } => Some("the amount of life you gained"),
         TriggerCond::Batched {
             trigger,
             per: BatchPer::Player,

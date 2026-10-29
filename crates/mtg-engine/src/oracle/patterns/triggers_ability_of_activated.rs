@@ -23,6 +23,13 @@ fn ability_of_activated(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         if plural || !end(tail).is_empty() {
             return None;
         }
+        // "an ability of an artifact or creature": of a permanent (CR 109.2), not of a
+        // card in a hand (cycling) or another zone, unless the phrase names one.
+        let f = if f.zone().is_some() {
+            f
+        } else {
+            Filter::and(vec![Filter::Permanent, f])
+        };
         (PlayerRel::You, f)
     } else {
         let x = r

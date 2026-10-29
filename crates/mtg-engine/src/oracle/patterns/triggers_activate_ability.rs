@@ -53,7 +53,10 @@ fn activate_an_ability_if_not_mana(r: &str) -> Option<(TriggerCond, Sel, PlayerR
     let (who, source) = if let Some(rest) = r.strip_prefix("you activate an ability") {
         let source = match rest {
             "" => Filter::Any,
-            " of an artifact" => Filter::Type(CardType::Artifact),
+            // Of an artifact permanent (CR 109.2), not an artifact card's cycling.
+            " of an artifact" => {
+                Filter::and(vec![Filter::Permanent, Filter::Type(CardType::Artifact)])
+            }
             _ => return None,
         };
         (PlayerRel::You, source)

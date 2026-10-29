@@ -1647,29 +1647,34 @@ fn sentence_rewrites(s: &str) -> String {
     let Some(trailing) = trailing else {
         return s;
     };
-    s = trailing
-        .replace_all(&s, |c: &regex::Captures| {
-            let (lead, body, cond) = (&c[1], &c[2], &c[3]);
-            let keep = body.starts_with("if ")
-                || body.ends_with(" only")
-                || body.ends_with(" as though")
-                || cond == "able"
-                || cond.starts_with("able ")
-                || body.contains(" unless ")
-                || body.contains("\"");
-            // After a trigger condition, "When ~ enters, draw a card if C" is checked only
-            // as the ability resolves; "When ~ enters, if C, draw a card" is an
-            // intervening "if" clause (CR 603.4), checked when it triggers too: the two
-            // aren't the same, so the sentence stays as it is.
-            let trigger = body.starts_with("when ")
-                || body.starts_with("whenever ")
-                || body.starts_with("at the beginning ");
-            if keep || trigger {
-                return c[0].to_string();
-            }
-            format!("{lead}if {cond}, {body}.")
-        })
-        .to_string();
+    // Two rounds: a match takes the period the next sentence's match starts after ("Put a
+    // +1/+1 counter on it if it's a creature. Put a loyalty counter on it if it's a
+    // planeswalker.").
+    for _ in 0..2 {
+        s = trailing
+            .replace_all(&s, |c: &regex::Captures| {
+                let (lead, body, cond) = (&c[1], &c[2], &c[3]);
+                let keep = body.starts_with("if ")
+                    || body.ends_with(" only")
+                    || body.ends_with(" as though")
+                    || cond == "able"
+                    || cond.starts_with("able ")
+                    || body.contains(" unless ")
+                    || body.contains("\"");
+                // After a trigger condition, "When ~ enters, draw a card if C" is checked only
+                // as the ability resolves; "When ~ enters, if C, draw a card" is an
+                // intervening "if" clause (CR 603.4), checked when it triggers too: the two
+                // aren't the same, so the sentence stays as it is.
+                let trigger = body.starts_with("when ")
+                    || body.starts_with("whenever ")
+                    || body.starts_with("at the beginning ");
+                if keep || trigger {
+                    return c[0].to_string();
+                }
+                format!("{lead}if {cond}, {body}.")
+            })
+            .to_string();
+    }
     s = leading_for_each(&s);
     for (re, rep) in where_x_rewrites() {
         s = re.replace_all(&s, *rep).to_string();
