@@ -832,6 +832,11 @@ fn parse_player_trigger(r: &str) -> Option<Parsed> {
             who,
             filter: Filter::Any,
         },
+        // "When you play another land" (City of Traitors).
+        "play another land" | "plays another land" => TriggerCond::LandPlayed {
+            who,
+            filter: Filter::Other,
+        },
         // "Whenever you play a land or cast a spell" (The Endstone, Cemetery Protector):
         // either event; "it" is the land or the spell.
         "play a land or cast a spell" | "plays a land or casts a spell" => {

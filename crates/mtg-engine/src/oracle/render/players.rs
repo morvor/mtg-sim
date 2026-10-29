@@ -918,6 +918,7 @@ impl Renderer<'_> {
                 Some(n) => decline(n, case),
                 None => decline("the last chosen card".into(), case),
             },
+            Sel::LinkedNotedLastKnown => decline("those sacrificed as ~it entered".into(), case),
             Sel::Before(inner) => self.sel(inner, case),
             Sel::ThisTurn(c) => {
                 let s = match self.this_turn_objects(c) {

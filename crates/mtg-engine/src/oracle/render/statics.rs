@@ -652,6 +652,11 @@ impl Renderer<'_> {
                 let p = self.rel_possessive(*r, Num::One);
                 format!("play with the top card of {p} library revealed")
             }
+            StaticEffect::AdditionalLandPlays(r, n) if *n == ANY_NUMBER_OF_LANDS => {
+                let w = self.rel_subject(*r);
+                let p = if w == "you" { "your" } else { "their" };
+                format!("{w} may play any number of lands on each of {p} turns")
+            }
             StaticEffect::AdditionalLandPlays(r, n) => {
                 let w = self.rel_subject(*r);
                 // "Each player may play an additional land on each of their turns."
@@ -2210,6 +2215,26 @@ impl Renderer<'_> {
             }
             Restriction::CantAttackAlone(f) => format!("{} can't attack alone", subj(self, f)),
             Restriction::CantBlockAlone(f) => format!("{} can't block alone", subj(self, f)),
+            Restriction::TargetableAsThoughNo { what, by, keyword } => {
+                let w = subj(self, what);
+                let p = self.player_filter_object(by);
+                let k = keyword.name().to_lowercase();
+                format!(
+                    "{w} can be the target of spells and abilities controlled by {p} as though it didn't have {k}"
+                )
+            }
+            Restriction::CantAttackUnlessOthersAttack { what, n } => format!(
+                "{} can't attack unless at least {} other {} attack",
+                subj(self, what),
+                number_word(*n as i32),
+                if *n == 1 { "creature" } else { "creatures" }
+            ),
+            Restriction::CantBlockUnlessOthersBlock { what, n } => format!(
+                "{} can't block unless at least {} other {} block",
+                subj(self, what),
+                number_word(*n as i32),
+                if *n == 1 { "creature" } else { "creatures" }
+            ),
             Restriction::MaxAttackers(n) => format!(
                 "no more than {} creatures can attack each combat",
                 number_word(*n as i32)
@@ -2229,6 +2254,12 @@ impl Renderer<'_> {
                 // (that would be "itself"), so "it" is ~ when ~ was named before.
                 let a = if named && matches!(attacker, Filter::Source) {
                     "~it".to_string()
+                } else if matches!(attacker, Filter::And(v) if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::Attacking))
+                    && v.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))))
+                {
+                    // "blocks each attacking creature" (a requirement for each).
+                    "each attacking creature".to_string()
                 } else {
                     self.noun_det(attacker, Det::A)
                 };
@@ -2692,6 +2723,16 @@ impl Renderer<'_> {
                     ObjectAction::Equipped => "can't be equipped",
                     ObjectAction::EnchantedByOtherAuras => "can't be enchanted by other Auras",
                     ObjectAction::Suspected => "can't become suspected",
+                    ObjectAction::Enchanted => "can't be enchanted",
+                    ObjectAction::NewlyEnchanted => {
+                        "can't be enchanted. This effect doesn't remove Auras already attached to {alt:it|them|those permanents}"
+                    }
+                    ObjectAction::ControlGainedByOthers => {
+                        return format!(
+                            "other players can't gain control of {}",
+                            self.noun(what, Num::Many)
+                        );
+                    }
                 };
                 format!("{w} {a}")
             }

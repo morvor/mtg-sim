@@ -200,9 +200,12 @@ fn showstopper_affects_only_creatures_you_control_on_resolution() {
     assert_eq!(t.obj_now(bears).controller, P1);
     t.answer_targets(P1, &[Entity::Object(giant)]);
     kill(&mut t, bears);
-    assert_eq!(t.stack_len(), 1);
-    let ab = t.g.stack[0];
-    assert_eq!(t.g.obj(ab).controller, P1);
+    // The granted ability, and Ray of Command's "When you lose control of the creature,
+    // tap it" (leaving the battlefield is losing control of it): both P1's.
+    assert_eq!(t.stack_len(), 2);
+    for ab in t.g.stack.clone() {
+        assert_eq!(t.g.obj(ab).controller, P1);
+    }
     t.resolve_all();
     assert_eq!(t.obj_now(giant).damage, 2);
 }

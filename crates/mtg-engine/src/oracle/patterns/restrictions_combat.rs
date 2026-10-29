@@ -105,6 +105,15 @@ fn predicate_with_it(
             "attacks" | "attack" => Restriction::MustAttack(f.clone()),
             "blocks" | "block" => Restriction::MustBlock(f.clone()),
             "must be blocked" => Restriction::MustBeBlocked(f.clone()),
+            // "It blocks each attacking creature this turn if able." (Blaze of Glory): a
+            // requirement for each attacking creature it could block (CR 509.1c: as many
+            // as can be obeyed).
+            "blocks each attacking creature" | "block each attacking creature" => {
+                Restriction::MustBlockAttacker {
+                    blocker: f.clone(),
+                    attacker: Filter::and(vec![Filter::creature(), Filter::Attacking]),
+                }
+            }
             // CR 509.1c: a requirement that the creature block this one.
             "blocks ~" | "block ~" => Restriction::MustBlockAttacker {
                 blocker: f.clone(),

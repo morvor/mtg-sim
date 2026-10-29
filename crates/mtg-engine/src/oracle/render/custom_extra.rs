@@ -182,6 +182,12 @@ impl Renderer<'_> {
 
     /// `Value::Custom` names put into words here.
     pub(crate) fn custom_value_extra(&mut self, name: &str) -> Option<String> {
+        if name == crate::kw::paper_history::REGENERATIONS_THIS_TURN {
+            return Some(format!(
+                "the number of times {} regenerated this turn",
+                self.me()
+            ));
+        }
         if name.starts_with(crate::kw::delayed_grammar_3::MANA_SPENT_ON_TARGET) {
             return Some("the amount of mana spent to cast that spell".into());
         }

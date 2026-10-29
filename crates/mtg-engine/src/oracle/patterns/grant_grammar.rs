@@ -166,6 +166,9 @@ fn becomes_with_quotes(l: &str, b: &mut Builder) -> Option<Effect> {
         (", and it loses all other card types", true, false),
         (" and loses all other abilities", false, true),
         (", and it loses all other abilities", false, true),
+        // "the chosen permanents become Treasure artifacts with \"...\" and lose all
+        // other abilities" (Kitesail Larcenist).
+        (" and lose all other abilities", false, true),
     ] {
         if let Some(r) = masked.strip_suffix(tail) {
             masked = r;

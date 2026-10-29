@@ -28,6 +28,11 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
     use CustomQuality::*;
     let rel = |s: &str| Some(Rel(s.to_string()));
     match name {
+        crate::kw::paper_history::DAMAGED_BY_SOURCE => rel("~it has dealt damage to this game"),
+        crate::kw::paper_history::NOT_SACRIFICED => rel("that wasn't sacrificed"),
+        crate::kw::paper_history::NOT_FIRST_LAND_PLAYED => {
+            rel("that wasn't the first land you played this turn")
+        }
         crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE => {
             rel("{alt:attached to a creature|that's attached to a creature|that are attached to a creature}")
         }
