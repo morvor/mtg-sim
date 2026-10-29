@@ -68,13 +68,20 @@ fn player_chooses_target(l: &str, b: &mut Builder) -> Option<Effect> {
         }
         (Some(who), false)
     };
-    // Whose objects, relative to the chooser.
-    let (noun, owner) = if let Some(n) = r.strip_suffix(" one of their opponents controls") {
-        (n, Some(true))
+    // Whose objects, relative to the chooser; qualifiers may follow ("target permanent
+    // another player controls that shares a card type with it", Confusion in the Ranks).
+    let split = |r: &str, p: &str| -> Option<String> {
+        let (head, tail) = r.split_once(p)?;
+        (tail.is_empty() || tail.starts_with(" that ")).then(|| format!("{head}{tail}"))
+    };
+    let (noun, owner) = if let Some(n) = split(r, " one of their opponents controls") {
+        (n, Some(1))
+    } else if let Some(n) = split(r, " another player controls") {
+        (n, Some(2))
     } else if let Some(n) = r.strip_suffix(" they control") {
-        (n, Some(false))
+        (n.to_string(), Some(0))
     } else {
-        (r, None)
+        (r.to_string(), None)
     };
     let target_text = format!("target {noun}");
     let (mut spec, tail) = parse_target(&target_text)?;
@@ -91,14 +98,21 @@ fn player_chooses_target(l: &str, b: &mut Builder) -> Option<Effect> {
         _ => None,
     };
     let f = match (owner, &chooser_ref) {
-        (Some(true), Some(c)) => Filter::and(vec![
+        (Some(1), Some(c)) => Filter::and(vec![
             f.clone(),
             Filter::ControllerMatches(Box::new(PlayerFilter::OpponentOf(Box::new(c.clone())))),
         ]),
-        (Some(false), Some(PlayerRef::ChosenOpponent)) => {
+        // "another player controls": any player but the chooser.
+        (Some(2), Some(c)) if !matches!(c, PlayerRef::ChosenOpponent) => Filter::and(vec![
+            f.clone(),
+            Filter::ControllerMatches(Box::new(PlayerFilter::Not(Box::new(
+                PlayerFilter::Ref(Box::new(c.clone())),
+            )))),
+        ]),
+        (Some(0), Some(PlayerRef::ChosenOpponent)) => {
             Filter::and(vec![f.clone(), Filter::ControlledBy(PlayerRel::Chosen)])
         }
-        (Some(false), Some(c)) => {
+        (Some(0), Some(c)) => {
             Filter::and(vec![f.clone(), Filter::ControlledByPlayer(Box::new(c.clone()))])
         }
         (None, _) => f.clone(),

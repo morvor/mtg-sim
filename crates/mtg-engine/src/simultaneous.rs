@@ -219,6 +219,10 @@ fn adds_to_collected(e: &Effect) -> bool {
         Effect::Piles(a) => a.collects(),
         Effect::Store { var, sel } => mentions(sel, *var),
         Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => adds_to_collected(effect),
+        // A choice each of several players makes, added to what was chosen before, in
+        // each pass of a loop ("For each fellowship vote, the voter chooses a creature they
+        // control."): collected over the passes too.
+        Effect::ForEachPlayer { effect, .. } => adds_to_collected(effect),
         Effect::If {
             then, otherwise, ..
         }

@@ -50,3 +50,16 @@ Judgment calls about how characteristics are determined (CR 604.3, 613). Format 
 - Affects: Guardian Beast.
 - Code: `crates/mtg-engine/src/layers.rs` (`apply_mod_to`, `CONTROL_BEFORE`); `crates/mtg-engine/src/prohibitions.rs` (`control_gain_prohibited`).
 - Tests: `tests/cards/paper_statics.rs` (`guardian_beast_stops_other_players_gaining_control_but_not_sacrifices`, `guardian_beast_does_nothing_while_tapped_and_leaves_auras_attached`).
+
+## name-setting-in-layer-3: An effect that sets a permanent's name applies in layer 3
+- Kind: interpretation
+- Status: provisional
+- Rules: 613.1c "Layer 3: Text-changing effects are applied. See rule 612, “Text-Changing Effects.”" / 612.8 "Some cards create a continuous effect that sets the name of an object. This changes the text that represents the object’s name. ..." / 613.1d "Layer 4: Type-changing effects are applied. These include effects that change an object’s card type, subtype, and/or supertype."
+- Question: Psychic Paper says the equipped creature's "name and creature type are the last chosen name and creature type". No layer in 613.1 names an object's name; in which layer does a name-setting effect apply?
+- Decision: With the text-changing effects, in layer 3 (612.8 lists name changes in the text-changing rules), in timestamp order with them; the creature type part is a type-changing effect in layer 4 that replaces the creature's creature types with the chosen one. Each applies only once its choice was made (607.5a).
+- Alternatives: Layer 1 (as a copiable value): would wrongly make the name copiable by copy effects, which copy only the copiable values the Equipment's effect doesn't set (707.2).
+- Why: 612.8 puts name changes among the text-changing effects, which apply in layer 3; the engine's existing `Modification::SetName` already applies there.
+- Affects: Psychic Paper.
+- Code: `crates/mtg-engine/src/kw/attach_choices_5.rs` (`LAST_CHOSEN_NAME`, `LAST_CHOSEN_CREATURE_TYPE`).
+- Tests: `tests/cards/cards5_choices_players.rs` (`psychic_paper_sets_the_equipped_creatures_name_and_creature_type`).
+

@@ -375,7 +375,7 @@ pub fn divided_counters_effect(slot: u8, kind: &str) -> SmolStr {
 /// target gets the number of counters assigned to it as the spell or ability was put on
 /// the stack. Counters assigned to a target that became illegal aren't put on anything
 /// (CR 608.2b).
-pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
+pub fn custom_effect(g: &mut Game, name: &str, ctx: &mut crate::eval::Ctx) -> bool {
     let Some(spec) = name.strip_prefix(DIVIDED_COUNTERS) else {
         return false;
     };
@@ -390,7 +390,9 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
     for (i, t) in targets.into_iter().enumerate() {
         let n = div.get(i).copied().unwrap_or(0);
         if n > 0 {
-            g.put_counters(t, kind, n, crate::event_causes::CounterPut::of(ctx));
+            let put = g.put_counters(t, kind, n, crate::event_causes::CounterPut::of(ctx));
+            // "For each +1/+1 counter you put on a creature this way" (Bounty of the Hunt).
+            crate::kw::counters_put_this_way::record(ctx, t, put);
         }
     }
     true

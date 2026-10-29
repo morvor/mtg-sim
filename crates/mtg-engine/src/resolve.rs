@@ -2237,10 +2237,22 @@ impl Game {
                 // CR 601.3e: a choice of "a spell with [characteristics]" considers the
                 // spell each card could become, and it's cast as such.
                 let chosen = crate::spell_choice::choose_cards_to_cast(self, what, ctx);
-                let objs = match &chosen {
+                let mut objs: Vec<ObjectId> = match &chosen {
                     Some(v) => v.iter().map(|(o, _)| *o).collect(),
                     None => self.resolve_objects(what, ctx),
                 };
+                // Casting several of them: the player chooses the order in which they're
+                // cast (rulings of Dance with Calamity, Mizzix's Mastery, ...), then
+                // whether to cast each in turn.
+                if objs.len() > 1 {
+                    let names = objs
+                        .iter()
+                        .map(|o| self.obj(*o).chars.name.to_string())
+                        .collect();
+                    let order =
+                        self.ask_order(p, "Order the spells to cast (first cast first)", names);
+                    objs = order.into_iter().map(|i| objs[i]).collect();
+                }
                 for o in objs {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;

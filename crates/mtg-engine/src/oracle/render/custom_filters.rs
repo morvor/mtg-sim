@@ -151,6 +151,10 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kwa::harness::HARNESSED => Some(Adj("harnessed")),
         // CR 712.1.
         crate::kw::dig_filters::DOUBLE_FACED => Some(Adj("double-faced")),
+        // CR 700.2.
+        crate::kw::modal_spells::MODAL_SPELL => Some(Adj("modal")),
+        crate::kw::choices_5_filters::NOT_RESOLVING => Some(Adj("other")),
+        crate::kw::choices_5_filters::STILL_ON_BATTLEFIELD => rel("still on the battlefield"),
         crate::kw::choice_grammar::DEALT_COMBAT_DAMAGE_TO_YOU => {
             rel("that dealt combat damage to you this turn")
         }
@@ -242,6 +246,16 @@ fn custom_clause(name: &str, subj: &str, negated: bool) -> Option<String> {
         crate::kw::dealt_damage_to_you::DEALT_DAMAGE_TO_YOU_THIS_TURN => (
             format!("{subj} dealt damage to you this turn"),
             format!("{subj} didn't deal damage to you this turn"),
+        ),
+        // "if it wasn't sacrificed" (Urza's Miter), "if it wasn't the first land you
+        // played this turn" (Fastbond): see `kw/paper_history.rs`.
+        crate::kw::paper_history::NOT_SACRIFICED => (
+            format!("{subj} wasn't sacrificed"),
+            format!("{subj} was sacrificed"),
+        ),
+        crate::kw::paper_history::NOT_FIRST_LAND_PLAYED => (
+            format!("{subj} wasn't the first land you played this turn"),
+            format!("{subj} was the first land you played this turn"),
         ),
         _ => return super::named_qualities::custom_clause_named(name, subj, negated),
     };

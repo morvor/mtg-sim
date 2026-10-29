@@ -201,10 +201,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               player\".",
     },
     Equivalence {
-        pattern: r"\bin addition to (its|their) other creature types\b",
+        pattern: r"\bin addition to (its|their) other (?:creature|land) types\b",
         replacement: "in addition to $1 other types",
-        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b): \
-              \"in addition to its other creature types\" and \"in addition to its other \
+        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b), and \
+              adding a land type only land types (CR 305.7: the land keeps its other land \
+              types when the type is added \"in addition\"): \"in addition to its other \
+              creature types\", \"... other land types\" and \"in addition to its other \
               types\" keep the same types.",
     },
     Equivalence {
@@ -411,6 +413,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "one or more opponents",
         why: "\"One or more of your opponents\" is one or more opponents (CR 102.2, \
               102.3).",
+    },
+    Equivalence {
+        pattern: r"\b(deals?) (combat )?damage to your opponents\b",
+        replacement: "${1} ${2}damage to one or more opponents",
+        why: "\"Whenever one or more Pirates you control deal damage to your opponents\" \
+              triggers once for the damage dealt to one or more of them (CR 603.2c).",
     },
     Equivalence {
         pattern: r"\b(opponents?) you have\b",
@@ -716,7 +724,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (`thatit` matches \"it\", see [`token_eq`]).",
     },
     Equivalence {
-        pattern: r"\bthe (?:exiled|discarded|revealed) (card|creature|permanent|artifact)s?\b",
+        pattern: r"\b(?:the|that|those) (?:exiled|discarded|revealed) (card|creature|permanent|artifact|spell)s?\b",
         replacement: "thatit",
         why: "Anaphora: \"Exile target creature. Return the exiled card ...\": \"the exiled \
               card\" and \"it\" refer back to the object the exile instruction just moved \
@@ -2139,6 +2147,9 @@ pub fn oracle_units(text: &str, names: &[String]) -> Vec<String> {
                 match l.strip_prefix("• ") {
                     Some(m) => {
                         last.push_str("• ");
+                        // A mode's flavor word may be the card's name ("• Typhoid Mary —
+                        // Draw a card." on Typhoid Mary, Fractured).
+                        let m = m.strip_prefix("~ — ").unwrap_or(m);
                         last.push_str(&strip_ability_word(m));
                     }
                     None => last.push_str(l),
