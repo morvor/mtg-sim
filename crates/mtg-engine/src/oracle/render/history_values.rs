@@ -112,6 +112,19 @@ impl Renderer<'_> {
                 let p = self.rel_perfect(*who);
                 format!("the number of {n} {p} {{alt:discarded|cycled or discarded}} this turn")
             }
+            // "the number of creatures that left the battlefield under your control this
+            // turn".
+            (TriggerCond::LeavesBattlefield(f), Tally::Events) => {
+                let (f, yours) = without(f, &Filter::ControlledBy(PlayerRel::You));
+                let n = self.many(&f, "permanents");
+                if yours {
+                    format!(
+                        "the number of {n} that left the battlefield under your control this turn"
+                    )
+                } else {
+                    format!("the number of {n} that left the battlefield this turn")
+                }
+            }
             (TriggerCond::YouSacrifice(f), Tally::Events) => {
                 let n = self.many(f, "permanents");
                 format!("the number of {n} you've sacrificed this turn")
