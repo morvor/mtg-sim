@@ -87,14 +87,33 @@ fn historic_cast_triggers_ignore_lands_and_resolve_before_the_spell() {
         "Glóin, Dwarf Emissary",
         "Some abilities trigger \"whenever you cast a historic spell.\" Such an ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
     );
+    ruling!(
+        "Lingering Phantom",
+        "Some abilities trigger \"whenever you cast a historic spell.\" Such an ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
+    );
+    ruling!(
+        "Teshar, Ancestor's Apostle",
+        "Some abilities trigger \"whenever you cast a historic spell.\" Such an ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
+    );
+    ruling!(
+        "Traxos, Scourge of Kroog",
+        "Some abilities trigger \"whenever you cast a historic spell.\" Such an ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
+    );
     for name in [
         "Teshar, Ancestor's Apostle",
         "Traxos, Scourge of Kroog",
         "Elena, Turk Recruit",
+        "Lingering Phantom",
     ] {
         supported(name);
         let mut t = TestGame::new(2);
-        t.battlefield(P0, name);
+        // Lingering Phantom's ability works from the graveyard.
+        if name == "Lingering Phantom" {
+            t.graveyard(P0, name);
+            t.lands(P0, "Swamp", 1);
+        } else {
+            t.battlefield(P0, name);
+        }
         t.graveyard(P0, "Grizzly Bears");
         let haven = t.hand(P0, "Kor Haven");
         t.play_land(P0, haven).unwrap();
@@ -125,6 +144,34 @@ fn historic_cast_triggers_ignore_lands_and_resolve_before_the_spell() {
     assert!(t.in_graveyard(P0, "Sol Ring"));
     assert_eq!(t.counters(elena, counters::PLUS1), 1);
     assert_eq!(tokens(&t, P0).len(), 1);
+    // Lingering Phantom ("you may pay {B}. If you do, return this card from your graveyard
+    // to your hand"), Teshar ("return target creature card with mana value 3 or less from
+    // your graveyard to the battlefield") and Traxos ("untap Traxos") resolve too.
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Lingering Phantom");
+    t.battlefield(P0, "Teshar, Ancestor's Apostle");
+    let traxos = t.battlefield(P0, "Traxos, Scourge of Kroog");
+    t.g.tap(traxos);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let ring = t.hand(P0, "Sol Ring");
+    t.lands(P0, "Wastes", 1);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(bears)]);
+    let spell = t.cast(P0, ring).go();
+    t.settle();
+    // {B} for Lingering Phantom.
+    t.g.players[P0.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::B, 1);
+    assert_eq!(t.stack_len(), 4);
+    let counter = t.hand(P1, "Counterspell");
+    t.lands(P1, "Island", 2);
+    t.cast(P1, counter).target(spell).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Sol Ring"));
+    assert!(t.in_hand(P0, "Lingering Phantom"));
+    assert!(t.on_battlefield(t.g.current(bears)));
+    assert!(!t.obj_now(traxos).tapped);
 }
 
 #[test]
@@ -238,7 +285,19 @@ fn battle_of_hoover_dam_copied_without_a_choice_has_neither_ability() {
     supported("Battle of Hoover Dam");
     supported("Mirage Mirror");
     let mut t = TestGame::new(2);
-    let battle = t.battlefield(P1, "Battle of Hoover Dam");
+    // P1's Battle of Hoover Dam enters with Legion chosen ("Whenever a creature you
+    // control dies, put two +1/+1 counters on target creature you control").
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    let battle = t.enter(P1, "Battle of Hoover Dam");
+    t.settle();
+    let legion = t.g.current(battle);
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    t.answer_targets(P1, &[obj(ogre)]);
+    destroy(&mut t, elves);
+    t.resolve_all();
+    assert_eq!(t.counters(ogre, counters::PLUS1), 2, "{}", t.dump_log());
+    let battle = legion;
     let mirror = t.battlefield(P0, "Mirage Mirror");
     t.lands(P0, "Wastes", 2);
     t.activate(P0, mirror, 0, &[obj(battle)]).expect("activate");
@@ -424,6 +483,8 @@ fn starting_town_counts_the_turns_you_have_taken() {
         "Squall, SeeD Mercenary",
         "Starting Town's first ability cares about how many turns you have taken, not necessarily how many turns the game has had, in case you take an extra turn."
     );
+    // Scryfall files this Starting Town ruling under Squall, SeeD Mercenary (whose
+    // Commander precon reprinted Starting Town); the behavior is Starting Town's.
     supported("Starting Town");
     // "This land enters tapped unless it's your first, second, or third turn of the game."
     // P1's third turn is the game's sixth turn.

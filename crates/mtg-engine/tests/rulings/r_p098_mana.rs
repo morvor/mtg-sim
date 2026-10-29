@@ -471,6 +471,10 @@ fn selvala_uses_the_entering_creatures_last_known_power() {
 /// not against the total of their powers, nor excluding Selvala.
 #[test]
 fn selvala_compares_the_power_with_each_other_creature() {
+    ruling!(
+        "Selvala, Heart of the Wilds",
+        "The new creature's power is compared to the power of each other creature on the battlefield as the first ability resolves. If another creature has the same or higher power than the new creature's power, no one may draw a card."
+    );
     // (creature entering, other creatures, draws)
     let cases: [(&str, &[&str], bool); 4] = [
         ("Hill Giant", &[], true),
