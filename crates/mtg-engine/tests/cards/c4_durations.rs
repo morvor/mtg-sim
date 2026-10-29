@@ -17,7 +17,10 @@ fn untapped(t: &mut TestGame, id: ObjectId) {
 #[test]
 fn orcish_farmer_swamp_lasts_until_the_lands_controllers_next_untap_step() {
     cr!("611.2a", "500.4", "305.7");
-    ruling!("Orcish Farmer", "This ability changes the targeted land’s land types.");
+    ruling!(
+        "Orcish Farmer",
+        "This ability changes the targeted land’s land types."
+    );
     interp!("until-its-controllers-next-step");
     supported("Orcish Farmer");
     let mut t = TestGame::new(2);
@@ -26,7 +29,8 @@ fn orcish_farmer_swamp_lasts_until_the_lands_controllers_next_untap_step() {
     let forest = t.battlefield(P1, "Forest");
     let mine = t.battlefield(P0, "Forest");
     t.advance_to(P0, Step::PrecombatMain);
-    t.activate(P0, farmer, 0, &[Entity::Object(forest)]).unwrap();
+    t.activate(P0, farmer, 0, &[Entity::Object(forest)])
+        .unwrap();
     t.resolve_all();
     assert!(t.obj_now(forest).chars.has_subtype("Swamp"));
     assert!(!t.obj_now(forest).chars.has_subtype("Forest"));
@@ -50,7 +54,10 @@ fn orcish_farmer_swamp_lasts_until_the_lands_controllers_next_untap_step() {
 #[test]
 fn xenic_poltergeist_animation_wears_off_as_your_next_upkeep_begins() {
     cr!("611.2a", "500.4");
-    ruling!("Xenic Poltergeist", "Wears off at the beginning of the upkeep");
+    ruling!(
+        "Xenic Poltergeist",
+        "Wears off at the beginning of the upkeep"
+    );
     supported("Xenic Poltergeist");
     let mut t = TestGame::new(2);
     let ghost = t.battlefield(P0, "Xenic Poltergeist");
@@ -60,12 +67,24 @@ fn xenic_poltergeist_animation_wears_off_as_your_next_upkeep_begins() {
     t.activate(P0, ghost, 0, &[Entity::Object(ring)]).unwrap();
     t.resolve_all();
     // An artifact creature with power and toughness equal to its mana value.
-    assert!(t.obj_now(ring).chars.card_types.contains(CardType::Creature));
+    assert!(t
+        .obj_now(ring)
+        .chars
+        .card_types
+        .contains(CardType::Creature));
     assert_eq!(t.pt(ring), (1, 1));
     t.advance_to(P1, Step::End);
-    assert!(t.obj_now(ring).chars.card_types.contains(CardType::Creature));
+    assert!(t
+        .obj_now(ring)
+        .chars
+        .card_types
+        .contains(CardType::Creature));
     t.advance_to(P0, Step::Upkeep);
-    assert!(!t.obj_now(ring).chars.card_types.contains(CardType::Creature));
+    assert!(!t
+        .obj_now(ring)
+        .chars
+        .card_types
+        .contains(CardType::Creature));
 }
 
 #[test]
@@ -110,7 +129,7 @@ fn zygon_infiltrator_is_a_copy_for_as_long_as_that_creature_remains_tapped() {
     cr!("611.2b", "707.2");
     ruling!(
         "Zygon Infiltrator",
-        "When Zygon Infiltrator becomes a copy of a creature, it's neither entering nor leaving"
+        "Zygon Infiltrator won't copy any counters on the creature"
     );
     supported("Zygon Infiltrator");
     let mut t = TestGame::new(2);
@@ -124,6 +143,7 @@ fn zygon_infiltrator_is_a_copy_for_as_long_as_that_creature_remains_tapped() {
     assert_eq!(t.counters(giant, "stun"), 1);
     assert_eq!(t.obj_now(zygon).chars.name.as_str(), "Hill Giant");
     assert_eq!(t.pt(zygon), (3, 3));
+    assert_eq!(t.counters(zygon, "stun"), 0, "counters aren't copied");
     // Untapping the creature ends the effect for good, even if it's tapped again.
     t.g.objects[giant.0 as usize].tapped = false;
     t.g.recompute();
@@ -164,6 +184,15 @@ fn old_man_of_the_sea_keeps_control_while_tapped_and_bigger() {
     t.advance_to(P0, Step::PrecombatMain);
     t.activate(P0, old, 0, &[Entity::Object(bears)]).unwrap();
     t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P0);
+    // P1 takes the (still tapped) Old Man: P0 keeps the Bears.
+    t.advance_to(P1, Step::PrecombatMain);
+    let magic = t.hand(P1, "Control Magic");
+    mana(&mut t, P1);
+    t.cast_with(P1, magic, &[Entity::Object(old)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(old).controller, P1);
+    assert!(t.obj_now(old).tapped);
     assert_eq!(t.obj_now(bears).controller, P0);
     // The Bears' power grows past the Old Man's (2): control returns, for good.
     t.g.objects[bears.0 as usize]
@@ -290,7 +319,11 @@ fn kitesail_larcenist_makes_treasures_while_it_remains_on_the_battlefield() {
     }
     t.g.destroy(kite, None);
     t.resolve_all();
-    assert!(t.obj_now(bears).chars.card_types.contains(CardType::Creature));
+    assert!(t
+        .obj_now(bears)
+        .chars
+        .card_types
+        .contains(CardType::Creature));
     assert!(!t.obj_now(giant).chars.has_subtype("Treasure"));
 }
 
@@ -310,7 +343,11 @@ fn kitesail_larcenist_gone_before_its_ability_resolves_does_nothing() {
     t.g.destroy(kite, None);
     t.resolve_all();
     assert!(!t.obj_now(giant).chars.has_subtype("Treasure"));
-    assert!(t.obj_now(giant).chars.card_types.contains(CardType::Creature));
+    assert!(t
+        .obj_now(giant)
+        .chars
+        .card_types
+        .contains(CardType::Creature));
 }
 
 #[test]
@@ -319,6 +356,10 @@ fn sen_triplets_locks_the_opponent_and_lets_you_play_from_their_hand() {
     ruling!(
         "Sen Triplets",
         "Sen Triplets doesn't allow you to play more than one land during your turn"
+    );
+    ruling!(
+        "Sen Triplets",
+        "The target opponent can't activate any abilities, including mana abilities."
     );
     supported("Sen Triplets");
     let mut t = TestGame::new(2);
@@ -339,12 +380,19 @@ fn sen_triplets_locks_the_opponent_and_lets_you_play_from_their_hand() {
     t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
-    assert!(t.in_graveyard(P1, "Lightning Bolt"), "its owner's graveyard");
+    assert!(
+        t.in_graveyard(P1, "Lightning Bolt"),
+        "its owner's graveyard"
+    );
     t.play_land(P0, forest).unwrap();
     let f = t.g.current(forest);
     assert!(t.on_battlefield(f));
     assert_eq!(t.obj_now(f).controller, P0);
     assert!(t.play_land(P0, mountain).is_err(), "one land a turn");
+    // Nor activate abilities, mana abilities included.
+    let land = t.battlefield(P1, "Mountain");
+    t.g.objects[land.0 as usize].tapped = false;
+    assert!(t.activate(P1, land, 0, &[]).is_err());
     // Only this turn.
     let shock = t.hand(P1, "Shock");
     t.advance_to(P1, Step::PrecombatMain);
@@ -391,7 +439,7 @@ fn oracle_en_vec_chosen_creatures_must_attack_and_the_others_cant() {
     // The Giant (chosen, tapped, didn't attack) is destroyed; the Bears attacked; the Wurm
     // wasn't chosen.
     assert!(!t.on_battlefield(giant));
-    assert!(t.on_battlefield(bears) || t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(bears));
     assert!(t.on_battlefield(wurm));
 }
 

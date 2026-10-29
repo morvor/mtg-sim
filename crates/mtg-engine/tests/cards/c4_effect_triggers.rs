@@ -32,7 +32,11 @@ fn harsh_justice_reflects_combat_damage_dealt_to_you_this_turn() {
     to_end_of_combat(&mut t);
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
-    assert_eq!(t.life(P0), 18, "the Bears dealt 2 damage to their controller");
+    assert_eq!(
+        t.life(P0),
+        18,
+        "the Bears dealt 2 damage to their controller"
+    );
 }
 
 #[test]
@@ -82,10 +86,6 @@ fn dagger_combat(blocker: &str) -> (TestGame, ObjectId, ObjectId, ObjectId) {
 #[test]
 fn acidic_dagger_destroys_the_non_wall_creature_it_damages_and_is_sacrificed() {
     cr!("603.7b", "603.7c");
-    ruling!(
-        "Acidic Dagger",
-        "does not affect the creature if all damage is prevented or redirected"
-    );
     supported("Acidic Dagger");
     // The Wurm (6/4) takes 3 damage and is destroyed; the Giant dies to the Wurm's damage,
     // so the Dagger is sacrificed.
@@ -94,6 +94,38 @@ fn acidic_dagger_destroys_the_non_wall_creature_it_damages_and_is_sacrificed() {
     assert!(!t.on_battlefield(giant));
     assert!(!t.on_battlefield(dagger));
     assert!(t.in_graveyard(P0, "Acidic Dagger"));
+}
+
+#[test]
+fn acidic_dagger_does_nothing_if_the_damage_is_prevented() {
+    cr!("603.7b", "615.1a");
+    ruling!(
+        "Acidic Dagger",
+        "does not affect the creature if all damage is prevented or redirected"
+    );
+    let mut t = TestGame::new(2);
+    let dagger = t.battlefield(P0, "Acidic Dagger");
+    let giant = t.battlefield(P0, "Hill Giant");
+    ready(&mut t, giant);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    ready(&mut t, wurm);
+    t.advance_to(P0, Step::PrecombatMain);
+    mana(&mut t, P0);
+    t.activate(P0, dagger, 0, &[Entity::Object(giant)]).unwrap();
+    t.resolve_all();
+    declare(&mut t, P0, &[(giant, Entity::Player(P1))]);
+    declare_blocks(&mut t, P1, &[(wurm, giant)]);
+    // Prevent all combat damage the Giant would deal this turn (and the Wurm's too).
+    let fog = t.hand(P0, "Holy Day");
+    mana(&mut t, P0);
+    t.cast_with(P0, fog, &[]).unwrap();
+    t.resolve_all();
+    to_end_of_combat(&mut t);
+    t.resolve_all();
+    assert!(t.on_battlefield(wurm));
+    assert_eq!(t.obj_now(wurm).damage, 0);
+    assert!(t.on_battlefield(giant));
+    assert!(t.on_battlefield(dagger));
 }
 
 #[test]
@@ -236,7 +268,6 @@ fn dread_wight_paralyzes_its_blocker_until_the_counter_is_removed() {
     assert!(!t.obj_now(wall).tapped);
 }
 
-
 #[test]
 fn scars_of_the_veteran_counts_the_damage_prevented_at_the_next_end_step() {
     cr!("615.5", "603.7a", "603.7c");
@@ -285,9 +316,12 @@ fn pandorica_phases_out_giant() -> (TestGame, ObjectId, ObjectId) {
     let pandorica = t.battlefield(P0, "The Pandorica");
     ready(&mut t, pandorica);
     let giant = t.battlefield(P1, "Hill Giant");
+    let split = t.battlefield(P1, "Bonesplitter");
+    t.g.attach(split, Entity::Object(giant));
     t.advance_to(P0, Step::PrecombatMain);
     mana(&mut t, P0);
-    t.activate(P0, pandorica, 0, &[Entity::Object(giant)]).unwrap();
+    t.activate(P0, pandorica, 0, &[Entity::Object(giant)])
+        .unwrap();
     t.resolve_all();
     assert!(t.obj_now(giant).phased_out);
     (t, pandorica, giant)
@@ -298,10 +332,12 @@ fn the_pandorica_holds_the_permanent_until_it_untaps() {
     cr!("603.7a", "603.7c", "702.26c", "611.2b");
     ruling!(
         "The Pandorica",
-        "Any continuous effects with a \"for as long as\" duration ignore phased-out objects"
+        "Each Aura and Equipment attached to a permanent that's phasing out also phases out"
     );
     supported("The Pandorica");
     let (mut t, pandorica, giant) = pandorica_phases_out_giant();
+    let split = t.named_on_battlefield("Bonesplitter")[0];
+    assert!(t.obj_now(split).phased_out, "phased out with the Giant");
     // P1's untap step: it can't phase in while The Pandorica is tapped.
     t.advance_to(P1, Step::Upkeep);
     assert!(t.obj_now(giant).phased_out);
@@ -313,6 +349,8 @@ fn the_pandorica_holds_the_permanent_until_it_untaps() {
     assert!(!t.obj_now(pandorica).tapped);
     assert!(!t.obj_now(giant).phased_out);
     assert_eq!(t.g.current(giant), giant, "the same object (CR 702.26d)");
+    assert!(!t.obj_now(split).phased_out);
+    assert_eq!(t.obj_now(split).attached_to, Some(Entity::Object(giant)));
 }
 
 #[test]
@@ -345,13 +383,12 @@ fn elemental_expressionist_grants_exile_instead_and_a_trigger_on_being_exiled() 
     t.g.destroy(bears, None);
     t.resolve_all();
     assert!(t.in_exile("Grizzly Bears"));
-    let elementals: Vec<ObjectId> = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .filter(|o| t.g.obj(*o).chars.has_subtype("Elemental") && t.g.obj(*o).is_token())
-        .collect();
+    let elementals: Vec<ObjectId> =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .filter(|o| t.g.obj(*o).chars.has_subtype("Elemental") && t.g.obj(*o).is_token())
+            .collect();
     assert_eq!(elementals.len(), 1);
     assert_eq!(t.pt(elementals[0]), (4, 4));
 }
@@ -412,6 +449,19 @@ fn seraph_returned_creature_is_sacrificed_when_you_lose_control_of_seraph() {
 }
 
 #[test]
+fn seraph_leaving_the_battlefield_after_the_return_costs_the_creature() {
+    cr!("603.10a", "603.10d");
+    // Leaving the battlefield is losing control of it (see the Khârn the Betrayer ruling
+    // in `r600_look_back.rs`).
+    let mut t = TestGame::new(2);
+    let (seraph, bears) = seraph_returns_bears(&mut t);
+    t.g.destroy(seraph, None);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
 fn seraph_gone_before_the_return_never_costs_the_creature() {
     cr!("603.7c", "400.7");
     ruling!(
@@ -458,7 +508,10 @@ fn jailbreak_returns_a_card_with_equal_or_lesser_mana_value_once_the_permanent_e
     let b = t.named_on_battlefield("Grizzly Bears");
     assert_eq!(b.len(), 1);
     assert_eq!(t.obj_now(b[0]).controller, P0);
-    assert!(t.in_graveyard(P0, "Craw Wurm"), "mana value 6 is greater than 4");
+    assert!(
+        t.in_graveyard(P0, "Craw Wurm"),
+        "mana value 6 is greater than 4"
+    );
 }
 
 #[test]

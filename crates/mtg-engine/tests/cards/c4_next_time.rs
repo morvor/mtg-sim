@@ -96,9 +96,11 @@ fn jayas_phoenix_copies_the_next_loyalty_ability_after_combat_damage() {
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
     t.advance_to(P0, Step::PostcombatMain);
+    let loyalty = t.counters(ajani, "loyalty");
     t.activate(P0, ajani, 0, &[]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P0), 24, "+1: gain 2 life, and a copy");
+    assert_eq!(t.counters(ajani, "loyalty"), loyalty + 1);
 }
 
 #[test]

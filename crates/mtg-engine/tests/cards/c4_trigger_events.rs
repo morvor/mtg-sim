@@ -78,7 +78,9 @@ fn kaya_copies_a_creature_card_exiled_from_the_battlefield_or_graveyard() {
     t.resolve_all();
     let tok = t.obj_now(tokens[0]);
     assert_eq!(tok.chars.name.as_str(), "Craw Wurm");
-    assert!(tok.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(tok
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
     assert_eq!(t.pt(tokens[0]), (6, 4));
     // A creature P0 controls exiled from the battlefield.
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -145,7 +147,11 @@ fn search_the_city_returns_an_exiled_card_named_like_the_card_played() {
     t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
     t.answer_yes(P0, true);
     t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand, "the Bolt cast, an exiled Bolt returned");
+    assert_eq!(
+        t.hand_size(P0),
+        hand,
+        "the Bolt cast, an exiled Bolt returned"
+    );
     assert_eq!(t.g.exile.len(), 4);
     // A card no exiled card shares a name with doesn't trigger it.
     let giant = t.hand(P0, "Hill Giant");
@@ -175,4 +181,24 @@ fn search_the_city_is_sacrificed_for_an_extra_turn_once_empty() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Search the City"));
     assert_eq!(t.g.extra_turns, vec![P0]);
+}
+
+#[test]
+fn search_the_city_destroyed_in_response_gives_no_extra_turn() {
+    cr!("607.2a", "701.21a");
+    ruling!(
+        "Search the City",
+        "If you don’t sacrifice Search the City, perhaps because it was destroyed in response to its ability triggering, you won’t take an extra turn."
+    );
+    let mut t = search_the_city(&["Shock"]);
+    let city = t.named_on_battlefield("Search the City")[0];
+    let shock = t.hand(P0, "Shock");
+    mana(&mut t, P0);
+    t.cast_with(P0, shock, &[Entity::Player(P1)]).unwrap();
+    t.g.settle();
+    assert_eq!(t.stack_len(), 2, "the Shock and the trigger");
+    t.g.destroy(city, None);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.g.extra_turns.is_empty());
 }

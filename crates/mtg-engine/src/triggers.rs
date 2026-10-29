@@ -43,9 +43,10 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
             | TriggerCond::Noncombat(c),
             ev,
         ) => looks_back(c, ev),
-        // CR 603.10a: leaves-the-battlefield abilities.
+        // CR 603.10a: leaves-the-battlefield abilities (also losing control of a
+        // permanent by its leaving the battlefield).
         (
-            TriggerCond::LeavesBattlefield(_) | TriggerCond::Dies(_),
+            TriggerCond::LeavesBattlefield(_) | TriggerCond::Dies(_) | TriggerCond::LoseControl(_),
             Event::ZoneChange {
                 from: Zone::Battlefield,
                 ..
@@ -1992,6 +1993,28 @@ impl Game {
                         object: from.object(),
                         other: Some(*obj),
                         player: from.player(),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
+            // A permanent leaving the battlefield is no longer controlled by anyone: its
+            // controller loses control of it (Khârn the Betrayer, Seraph rulings),
+            // looking back in time (CR 603.10a, 603.10d).
+            (
+                TriggerCond::LoseControl(f),
+                Event::ZoneChange {
+                    old,
+                    from: Zone::Battlefield,
+                    to,
+                    ..
+                },
+            ) if *to != Zone::Battlefield => {
+                if self.obj(*old).controller == ctl && self.matches(*old, f, &ctx) {
+                    one(EventInfo {
+                        object: Some(*old),
+                        lki: Some(*old),
                         ..Default::default()
                     })
                 } else {
