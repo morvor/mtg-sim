@@ -194,8 +194,15 @@ pub fn distinct_among(g: &Game, what: Among, sel: &Sel, ctx: &Ctx) -> i64 {
 
 /// [`Value::OverPlayers`].
 pub fn over_players(g: &Game, op: AggOp, f: &PlayerFilter, v: &Value, ctx: &Ctx) -> i64 {
-    let players: Vec<PlayerId> = g
-        .players_in_game()
+    // A tally of what players did this turn ("the greatest number of cards an opponent has
+    // drawn this turn") still counts a player who has since left the game (Thought
+    // Sponge's rulings); anything else looks only at players still in the game (CR 800.4a).
+    let players: Vec<PlayerId> = if matches!(v, Value::EventsThisTurn(..)) {
+        g.players.iter().map(|p| p.id).collect()
+    } else {
+        g.players_in_game()
+    };
+    let players: Vec<PlayerId> = players
         .into_iter()
         .filter(|p| g.player_filter_matches(f, *p, ctx))
         .collect();
