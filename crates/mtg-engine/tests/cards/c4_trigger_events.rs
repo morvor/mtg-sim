@@ -43,3 +43,64 @@ fn eye_of_the_storm_exiles_cast_cards_and_the_caster_casts_copies_of_all_of_them
     assert_eq!(t.life(P1), 15);
     assert!(t.in_exile("Shock"));
 }
+
+fn soldier_tokens(t: &TestGame) -> Vec<ObjectId> {
+    t.g.battlefield
+        .iter()
+        .copied()
+        .filter(|o| t.g.obj(*o).chars.has_subtype("Soldier"))
+        .collect()
+}
+
+#[test]
+fn kaya_copies_a_creature_card_exiled_from_the_battlefield_or_graveyard() {
+    cr!("603.2c", "707.2", "611.2a");
+    ruling!(
+        "Kaya, Spirits' Justice",
+        "The target token copies the printed values of the card in exile"
+    );
+    supported("Kaya, Spirits' Justice");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kaya, Spirits' Justice");
+    t.advance_to(P0, Step::PrecombatMain);
+    let alarm = t.hand(P0, "Raise the Alarm");
+    mana(&mut t, P0);
+    t.cast_with(P0, alarm, &[]).unwrap();
+    t.resolve_all();
+    let tokens = soldier_tokens(&t);
+    assert_eq!(tokens.len(), 2);
+    // A creature card exiled from P0's graveyard.
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    t.answer_targets(P0, &[Entity::Object(tokens[0])]);
+    t.answer_yes(P0, true);
+    let exiled = t.g.exile_object(wurm, None).unwrap();
+    t.answer_choose(P0, &[Entity::Object(exiled)]);
+    t.resolve_all();
+    let tok = t.obj_now(tokens[0]);
+    assert_eq!(tok.chars.name.as_str(), "Craw Wurm");
+    assert!(tok.chars.has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert_eq!(t.pt(tokens[0]), (6, 4));
+    // A creature P0 controls exiled from the battlefield.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(tokens[1])]);
+    t.answer_yes(P0, true);
+    let exiled = t.g.exile_object(bears, None).unwrap();
+    t.answer_choose(P0, &[Entity::Object(exiled)]);
+    t.resolve_all();
+    assert_eq!(t.obj_now(tokens[1]).chars.name.as_str(), "Grizzly Bears");
+    // Until end of turn.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(tokens[0]).chars.has_subtype("Soldier"));
+    assert!(t.obj_now(tokens[1]).chars.has_subtype("Soldier"));
+}
+
+#[test]
+fn kaya_ignores_cards_exiled_from_an_opponents_graveyard() {
+    cr!("603.2c");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kaya, Spirits' Justice");
+    let wurm = t.graveyard(P1, "Craw Wurm");
+    t.g.exile_object(wurm, None);
+    t.g.settle();
+    assert_eq!(t.stack_len(), 0);
+}

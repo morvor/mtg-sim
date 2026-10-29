@@ -306,3 +306,93 @@ fn the_player_may_cast_each_copy(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "triggers 5: for each copy, the player may cast the copy", priority: 100, parse: the_player_may_cast_each_copy } }
+
+/// "Whenever one or more creatures you control and/or creature cards in your graveyard
+/// are put into exile" (Kaya, Spirits' Justice): one trigger event for a batch of either
+/// kind of zone change, or both (CR 603.2c).
+fn exiled_and_or(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let l = end(l);
+    let r = l.strip_prefix("one or more ")?;
+    let (subjects, verb) = r.split_once(" are put into exile")?;
+    if !verb.is_empty() {
+        return None;
+    }
+    let (a, b) = subjects.split_once(" and/or ")?;
+    let mut inner = Vec::new();
+    let mut player = PlayerRef::You;
+    for part in [a, b] {
+        let phrase = match part.strip_suffix(" in your graveyard") {
+            Some(cards) => format!("whenever one or more {cards} are put into exile from your graveyard"),
+            None => format!("whenever one or more {part} are put into exile"),
+        };
+        let (t, _, p) = crate::oracle::triggers::parse_trigger_condition(&phrase)?;
+        let TriggerCond::Batched {
+            trigger,
+            per: BatchPer::Batch,
+        } = t
+        else {
+            return None;
+        };
+        if !matches!(*trigger, TriggerCond::ZoneChange { .. }) {
+            return None;
+        }
+        inner.push(*trigger);
+        player = p;
+    }
+    // "them": the objects of the batch.
+    Some((
+        TriggerCond::Batched {
+            trigger: Box::new(TriggerCond::AnyOf(inner)),
+            per: BatchPer::Batch,
+        },
+        Sel::TriggerObjects,
+        player,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "triggers 5: one or more [objects] and/or [cards in your graveyard] are put into exile", priority: 100, parse: exiled_and_or } }
+
+/// The card chosen by "choose a creature card from among them".
+const CHOSEN_AMONG: Var = vars::USER + 43101;
+
+/// "You may choose a creature card from among them." (Kaya, Spirits' Justice): one of the
+/// objects the instruction or trigger event before named, of that kind, chosen as the
+/// ability resolves; "it" is then that card.
+fn choose_a_card_from_among_them(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (up_to, r) = match l.strip_prefix("you may choose ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("choose ")?),
+    };
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let noun = r.strip_suffix(" from among them")?;
+    // The objects of the batch of events that triggered the ability.
+    let them = match super::pronoun_groups::plural_object_ref("them", b) {
+        Some(Some((sel, _))) => sel,
+        _ if matches!(b.it, Sel::TriggerObjects) => Sel::TriggerObjects,
+        _ => return None,
+    };
+    if !matches!(them, Sel::TriggerObjects) {
+        return None;
+    }
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return None;
+    }
+    let choose = Sel::Choose {
+        chooser: PlayerRef::You,
+        filter: Filter::and(vec![Filter::In(Box::new(them)), f]),
+        count: Value::c(1),
+        up_to,
+        store: None,
+    };
+    b.it = Sel::Var(CHOSEN_AMONG);
+    Some(Effect::Store {
+        var: CHOSEN_AMONG,
+        sel: choose,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "triggers 5: choose a [card] from among them", priority: 100, parse: choose_a_card_from_among_them } }
