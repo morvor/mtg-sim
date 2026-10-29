@@ -759,7 +759,13 @@ impl Renderer<'_> {
                 "{alt:its controller has controlled continuously since the beginning of the turn|that player has controlled continuously since the beginning of the turn}".into(),
             ),
             Filter::BlockRelation { rel, other, when } => {
-                let s = self.sel(other, Case::Obj);
+                // "target creature blocking or blocked by it": the object itself, named
+                // either way.
+                let s = if matches!(other.as_ref(), Sel::This) {
+                    "~it".to_string()
+                } else {
+                    self.sel(other, Case::Obj)
+                };
                 let w = match when {
                     BlockWhen::Now => "",
                     BlockWhen::ThisCombat => " this combat",

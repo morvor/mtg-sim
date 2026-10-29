@@ -202,6 +202,29 @@ impl Renderer<'_> {
             }
             return Some((s, vp.replacen("a spell or ability", what, 1)));
         }
+        // "Whenever a creature you control becomes the target of an instant or sorcery
+        // spell": a spell of those kinds.
+        if let Condition::SelMatches(Sel::TriggerSpell, f @ Filter::And(parts)) = cond {
+            if parts.iter().any(|x| matches!(x, Filter::Spell))
+                && matches!(trigger, TriggerCond::BecomesTarget { .. })
+            {
+                let kind = Filter::and(
+                    parts
+                        .iter()
+                        .filter(|x| !matches!(x, Filter::Spell))
+                        .cloned()
+                        .collect(),
+                );
+                let what = self.spell_noun(&kind, Det::A);
+                let (s, vp) = self.qualified_trigger_event(trigger, det)?;
+                if !vp.contains("a spell or ability")
+                    || f.zone().is_some_and(|z| z != ZoneKind::Stack)
+                {
+                    return None;
+                }
+                return Some((s, vp.replacen("a spell or ability", &what, 1)));
+            }
+        }
         match (trigger, cond) {
             (
                 TriggerCond::AbilityActivated {
@@ -432,5 +455,43 @@ impl Renderer<'_> {
         }
         let o = self.noun_det(f, Det::A);
         Some((format!("{o} {verb}"), kind))
+    }
+}
+
+impl Renderer<'_> {
+    /// "When you next activate an ability that isn't a mana ability this turn by spending
+    /// four or more mana to activate it" (a one-shot delayed trigger, CR 603.7b): the mana
+    /// spent on the activation's costs (`kw/activation_mana_spent.rs`).
+    pub(crate) fn next_activation_by_spending(&mut self, t: &TriggerCond) -> Option<String> {
+        let TriggerCond::ThisTurn(inner) = t else {
+            return None;
+        };
+        let TriggerCond::Where { trigger, cond } = inner.as_ref() else {
+            return None;
+        };
+        let TriggerCond::AbilityActivated {
+            who: PlayerRel::You,
+            source: Filter::Any,
+            include_mana,
+        } = trigger.as_ref()
+        else {
+            return None;
+        };
+        let Condition::Custom(c) = cond else {
+            return None;
+        };
+        let n: i32 = c
+            .strip_prefix(crate::kw::activation_mana_spent::MANA_SPENT_TO_ACTIVATE)?
+            .parse()
+            .ok()?;
+        let kind = if *include_mana {
+            "an ability"
+        } else {
+            "an ability that isn't a mana ability"
+        };
+        Some(format!(
+            "when you next activate {kind} this turn by spending {} or more mana to activate it",
+            number_word(n)
+        ))
     }
 }

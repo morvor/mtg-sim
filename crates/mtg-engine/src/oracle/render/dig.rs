@@ -48,16 +48,24 @@ impl Renderer<'_> {
                     d.push_str(" {opt:under your control}");
                 }
             }
-            for (k, n) in &to.with_counters {
-                let name = counter_name(&format!("{k:?}").to_lowercase());
-                let n = match n {
-                    Value::Const(1) => with_article(&format!("{name} counter")),
-                    Value::Const(k) => format!("{} {name} counters", number_word(*k)),
-                    other => format!("{} {name} counters", self.value(other)),
-                };
-                let it = if many { "them" } else { "it" };
-                d.push_str(&format!(" with {n} on {it}"));
-            }
+            let c = self.with_counters_text(&to.with_counters, many);
+            d.push_str(&c);
+        }
+        d
+    }
+
+    /// " with a hatching counter on it": the counters a card is put somewhere with.
+    fn with_counters_text(&mut self, counters: &[(CounterKind, Value)], many: bool) -> String {
+        let mut d = String::new();
+        for (k, n) in counters {
+            let name = counter_name(&k.to_lowercase());
+            let n = match n {
+                Value::Const(1) => with_article(&name),
+                Value::Const(k) => format!("{} {}", number_word(*k), plural(&name)),
+                other => format!("{} {}", self.value(other), plural(&name)),
+            };
+            let it = if many { "them" } else { "it" };
+            d.push_str(&format!(" with {n} on {it}"));
         }
         d
     }
@@ -177,8 +185,22 @@ impl Renderer<'_> {
                     } else {
                         what.clone()
                     };
+                    // "Exile one of them face down with a hatching counter on it."
+                    let mut tail = String::new();
+                    if to.face_down {
+                        tail.push_str(" face down");
+                    }
+                    tail.push_str(&self.with_counters_text(&to.with_counters, many));
+                    if !*up_to
+                        && matches!(count, Some(Value::Const(1)))
+                        && matches!(filter, Filter::Any)
+                    {
+                        return format!(
+                            "{{alt:{may}put {what} from among them {d}{tail}|exile {exiled} from among them{tail}|exile one of them{tail}|exile one{tail}}}"
+                        );
+                    }
                     return format!(
-                        "{{alt:{may}put {what} from among them {d}|exile {exiled} from among them}}"
+                        "{{alt:{may}put {what} from among them {d}{tail}|exile {exiled} from among them{tail}}}"
                     );
                 }
                 if *reveal && !d.is_empty() {

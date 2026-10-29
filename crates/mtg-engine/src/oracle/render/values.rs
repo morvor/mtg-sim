@@ -91,6 +91,13 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")
             }
+            // "for each graveyard with seven or more cards in it": each player has one
+            // graveyard (CR 404.1).
+            Value::CountPlayers(pf @ PlayerFilter::GraveyardSize(Cmp::Ge, k)) => {
+                let n = self.player_filter_noun(pf, Num::Many);
+                let k = self.value(k);
+                format!("the number of {{alt:{n}|graveyards with {k} or more cards in them}}")
+            }
             Value::CountPlayers(pf) => {
                 let n = self.player_filter_noun(pf, Num::Many);
                 format!("the number of {n}")
@@ -1037,10 +1044,13 @@ impl Renderer<'_> {
             }
             // "If its mana value was 3 or less" (judged by last known information if
             // it has left its zone, CR 608.2h).
+            // "If that spell has mana value 5 or greater" says the same.
             Condition::SelMatches(s, Filter::ManaValue(c, v)) => {
-                let poss = self.sel(s, Case::Poss);
+                let subj = self.sel(s, Case::Subj);
+                let poss = super::players::decline(subj.clone(), Case::Poss);
                 let v = self.value(v);
-                format!("{poss} mana value is {}", cmp_phrase(*c, &v))
+                let cmp = cmp_phrase(*c, &v);
+                format!("{{alt:{poss} mana value is {cmp}|{subj} has mana value {cmp}}}")
             }
             // "if ~ entered this turn".
             // "If you controlled that permanent" (after it left the battlefield; its last
@@ -1083,6 +1093,11 @@ impl Renderer<'_> {
             Condition::SelMatches(s, Filter::AttackedThisTurn) => {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} attacked this turn")
+            }
+            // "if that spell was kicked" (CR 702.33d).
+            Condition::SelMatches(s, Filter::CastWithCost(name)) if name == "kicked" => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} was kicked")
             }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
@@ -1926,6 +1941,26 @@ impl Renderer<'_> {
                 } else {
                     format!("a player has more {stat} than each other player")
                 };
+            }
+        }
+        // "creatures you control have total toughness 10 or greater" (the sum of their
+        // toughness).
+        if let (
+            Value::Aggregate(AggOp::Sum, stat @ (Stat::Power | Stat::Toughness), s),
+            Value::Const(n),
+        ) = (a, b)
+        {
+            if let Sel::All(f) = s.as_ref() {
+                let st = if matches!(stat, Stat::Power) {
+                    "power"
+                } else {
+                    "toughness"
+                };
+                let noun = self.noun_det(f, Det::Plural);
+                let c = cmp_phrase(cmp, &n.to_string());
+                return format!(
+                    "{{alt:{noun} have total {st} {c}|the total {st} of {noun} is {c}}}"
+                );
             }
         }
         // "creatures you control have total power 8 or greater".

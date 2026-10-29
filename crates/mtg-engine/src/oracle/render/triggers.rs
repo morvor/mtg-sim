@@ -355,6 +355,22 @@ impl Renderer<'_> {
                 let e = self.trigger_event(t, Det::A);
                 format!("at {}", e.text())
             }
+            // "At the beginning of each of your main phases": each main phase is the
+            // precombat main phase or a postcombat main phase (CR 505.1, 505.1a).
+            TriggerCond::AnyOf(v)
+                if matches!(v.as_slice(), [
+                    TriggerCond::BeginningOf { step: TriggerStep::PrecombatMain, whose: a },
+                    TriggerCond::BeginningOf { step: TriggerStep::PostcombatMain, whose: b },
+                ] if a == b && matches!(a, PlayerRel::You | PlayerRel::Any)) =>
+            {
+                match v.first() {
+                    Some(TriggerCond::BeginningOf {
+                        whose: PlayerRel::You,
+                        ..
+                    }) => "at the beginning of each of your main phases".into(),
+                    _ => "at the beginning of each main phase".into(),
+                }
+            }
             // "At the beginning of your upkeep or whenever ...": the first event's word.
             TriggerCond::AnyOf(v)
                 if v.first()
@@ -374,6 +390,15 @@ impl Renderer<'_> {
             TriggerCond::ThisCombat(inner) => {
                 let s = self.trigger_text(inner);
                 format!("{s} this combat")
+            }
+            // "Until the end of defending player's next turn, whenever ..." (see
+            // `kw/until_end_of_players_next_turn.rs`).
+            TriggerCond::ForAsLongAs(inner, Condition::Custom(n))
+                if self.until_next_turn_of(n).is_some() =>
+            {
+                let p = self.until_next_turn_of(n).unwrap_or_default();
+                let s = self.trigger_text(inner);
+                format!("until the end of {p} next turn, {}", lower_first(&s))
             }
             TriggerCond::ForAsLongAs(inner, cond) => {
                 let s = self.trigger_text(inner);
@@ -626,7 +651,17 @@ impl Renderer<'_> {
                     }
                     (Some(fz), Some(tz)) => {
                         let tz_s = self.zone_into(*tz, filter);
-                        let fz_s = self.zone_from(*fz, filter);
+                        let mut fz_s = self.zone_from(*fz, filter);
+                        // "into an opponent's graveyard from their library": both zones
+                        // are the owner's (CR 400.3), the same player's.
+                        let opponents = matches!(filter, Filter::And(v)
+                            if v.iter().any(|x| matches!(x, Filter::OwnedBy(PlayerRel::Opponent))));
+                        let owned = |z: &ZoneKind| {
+                            matches!(z, ZoneKind::Library | ZoneKind::Graveyard | ZoneKind::Hand)
+                        };
+                        if opponents && owned(fz) && owned(tz) {
+                            fz_s = format!("{{alt:{fz_s}|their {}}}", zone_word(*fz));
+                        }
                         format!("is put into {tz_s} from {fz_s}")
                     }
                     // "Whenever ~ is put into a graveyard from anywhere": its owner's (CR
@@ -655,7 +690,14 @@ impl Renderer<'_> {
             TriggerCond::NthSpellCast { who, n } => {
                 let w = self.rel_subject(*who);
                 let p = if w == "you" { "your" } else { "their" };
-                Ev::new(w, format!("cast {p} {} spell each turn", ordinal_word(*n)))
+                // "your third spell each turn" / "in a turn": the same count of this
+                // turn's spells (the first spell's wording is reworded below).
+                let turn = if *n >= 2 {
+                    "{alt:each turn|in a turn}"
+                } else {
+                    "each turn"
+                };
+                Ev::new(w, format!("cast {p} {} spell {turn}", ordinal_word(*n)))
             }
             TriggerCond::AbilityActivated {
                 who,
@@ -1291,7 +1333,7 @@ impl Renderer<'_> {
                 let p = if w == "you" { "your" } else { "their" };
                 Ev::new(
                     w,
-                    format!("draw {p} {} card each turn", ordinal_word(*n as u32)),
+                    format!("draw {p} {} card {{alt:each turn|in a turn}}", ordinal_word(*n as u32)),
                 )
             }
             // "Whenever ~ and at least two Zombies attack": the others attacking with it
@@ -1339,6 +1381,36 @@ impl Renderer<'_> {
                 };
                 let o = self.noun_det(f, det.clone());
                 Ev::new(o, name.to_string())
+            }
+            // "When a player doesn't pay ~'s cumulative upkeep" (CR 702.24a; see
+            // `kw/cumulative_upkeep.rs`).
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. }
+                if name == crate::kw::cumulative_upkeep::CUMULATIVE_UPKEEP_NOT_PAID) =>
+            {
+                let TriggerCond::PlayerAction { who, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("cumulative upkeep not paid"));
+                };
+                let w = self.rel_subject(*who);
+                let me = self.me();
+                let verb = if w == "you" { "don't" } else { "doesn't" };
+                Ev::new(w, format!("{verb} pay {me}'s cumulative upkeep"))
+            }
+            // "Whenever you exert a creature" (CR 701.43): the exerted permanent.
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, f),
+            } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. }
+                if name == crate::kwa::exert::EXERTED_EVENT) =>
+            {
+                let TriggerCond::PlayerAction { who, .. } = trigger.as_ref() else {
+                    return Ev::new("", self.gap("exerted"));
+                };
+                let w = self.rel_subject(*who);
+                let o = self.noun_det(f, det.clone());
+                Ev::new(w, format!("exert {o}"))
             }
             // "Whenever ~ becomes crewed", "When ~ becomes plotted": an event about the
             // object itself (`kw/crew.rs`, `kw/plot.rs`).
@@ -1627,6 +1699,20 @@ impl Renderer<'_> {
                 let c = self.condition(cond);
                 Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp))
             }
+            // "Whenever you gain life for the first time during each of your turns": the
+            // first time each turn, during your turn.
+            TriggerCond::FirstTimeEachTurn(inner)
+                if matches!(inner.as_ref(), TriggerCond::Where { cond: Condition::YourTurn, .. }) =>
+            {
+                let TriggerCond::Where { trigger, .. } = inner.as_ref() else {
+                    return Ev::new("", self.gap("first time during your turn"));
+                };
+                let e = self.trigger_event(trigger, det);
+                Ev::new(
+                    e.subj,
+                    format!("{} for the first time during each of your turns", e.vp),
+                )
+            }
             TriggerCond::FirstTimeEachTurn(inner) => {
                 let e = self.trigger_event(inner, det);
                 // "Whenever you cast your first instant or sorcery spell each turn".
@@ -1873,7 +1959,7 @@ impl Renderer<'_> {
             DamageRecipient::Object(f) => self.noun_det(f, Det::A),
             DamageRecipient::PlayerOrPlaneswalker(r) => match r {
                 PlayerRel::You => "you or a planeswalker you control".into(),
-                PlayerRel::Opponent => "an opponent or a planeswalker an opponent controls".into(),
+                PlayerRel::Opponent => "{alt:an opponent or a planeswalker an opponent controls|one of your opponents or a planeswalker they control}".into(),
                 PlayerRel::Any => "a player or planeswalker".into(),
                 other => {
                     let p = self.rel_object(*other);
@@ -2043,5 +2129,23 @@ fn on_battlefield_noun(f: &Filter) -> bool {
                     .any(|x| matches!(x, Filter::Spell | Filter::Card | Filter::InZone(_)))
         }
         _ => false,
+    }
+}
+
+impl Renderer<'_> {
+    /// The player (possessive) whose next turn a "until end of next turn of" condition
+    /// waits for, from the variable the ability stored that player in.
+    fn until_next_turn_of(&mut self, name: &str) -> Option<String> {
+        let rest = name
+            .strip_prefix(crate::kw::until_end_of_players_next_turn::UNTIL_END_OF_NEXT_TURN_OF)?;
+        let (pv, _) = rest.split_once(':')?;
+        let pv: Var = pv.parse().ok()?;
+        let p = self
+            .player_vars
+            .iter()
+            .rev()
+            .find(|(v, _)| *v == pv)
+            .map(|(_, p)| p.clone())?;
+        Some(self.player(&p, super::players::Case::Poss))
     }
 }

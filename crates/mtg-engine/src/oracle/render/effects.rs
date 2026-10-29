@@ -427,6 +427,8 @@ impl Renderer<'_> {
             | Effect::AsPlayer { who, .. }
             | Effect::Sacrifice { who, .. }
             | Effect::Discard { who, .. } => Some(!matches!(who, PlayerRef::You)),
+            // "Target opponent gains control of ~. When they do, ..."
+            Effect::GainControl { who, .. } => Some(!matches!(who, PlayerRef::You)),
             Effect::Seq(_) | Effect::If { .. } | Effect::Noop => None,
             _ => Some(false),
         };
@@ -435,6 +437,17 @@ impl Renderer<'_> {
             self.last_actor_other = x;
         }
         s
+    }
+
+    /// The instructions of a reflexive triggered ability (CR 603.12).
+    fn reflexive_body(&mut self, body: &Body) -> String {
+        // A reflexive trigger without targets of its own refers to the targets of the
+        // ability that created it ("destroy that permanent").
+        if body.targets.is_empty() && body.modal.is_none() && !self.targets.is_empty() {
+            self.in_event_scope(|r| r.effect_sentences(&body.effect))
+        } else {
+            self.in_event_scope(|r| r.body(body))
+        }
     }
 
     fn effect_inner(&mut self, e: &Effect) -> String {
@@ -895,6 +908,17 @@ impl Renderer<'_> {
                     None => self.gap(format!("Effect::Custom({n})")),
                 }
             }
+            // "Each of that player's opponents may draw a card": an instruction for the
+            // opponents of another player, which names them.
+            Effect::AsPlayer { who, effect }
+                if !matches!(who, PlayerRef::You) && for_each_opponent(effect) =>
+            {
+                let p = self.player(who, Case::Poss);
+                let saved = self.opponents_of.replace(p);
+                let s = self.effect(effect);
+                self.opponents_of = saved;
+                s
+            }
             Effect::AsPlayer { who, effect } if self.choose_and_pay_each(effect).is_some() => {
                 let w = self.player(who, Case::Subj);
                 let s = self.choose_and_pay_each(effect).unwrap_or_default();
@@ -1221,10 +1245,13 @@ impl Renderer<'_> {
                 self.var_defs.push((*var, Sel::This, false));
                 String::new()
             }
-            Effect::Store { sel, .. } => match sel {
+            Effect::Store { sel, var } => match sel {
                 // The player a delayed trigger waits for ("at the beginning of that
                 // player's next end step"): named there.
-                Sel::Players(_) => String::new(),
+                Sel::Players(p) => {
+                    self.player_vars.push((*var, p.clone()));
+                    String::new()
+                }
                 Sel::Choose { chooser, count, .. } => {
                     if let (Value::Const(1), Effect::Store { var, .. }) = (count, e) {
                         self.chosen_one.push(*var);
@@ -2494,6 +2521,14 @@ impl Renderer<'_> {
                 } else {
                     " Do this only once"
                 };
+                // "Until end of turn, any time you could activate a mana ability, you may
+                // pay 1 life. If you do, add {C}." (CR 605.3a's timing, `mana_timing`).
+                if def.mana_timing {
+                    let pay = self.cost_as_payment(&def.cost);
+                    return format!(
+                        "{d}, any time you could activate a mana ability, you may {pay}. If you do, {what}.{once}"
+                    );
+                }
                 format!(
                     "{d}, you may pay {c} any time you could cast an instant. If you do, {what}.{once}"
                 )
@@ -2683,6 +2718,16 @@ impl Renderer<'_> {
             Effect::RemoveFromCombat { what } => {
                 let w = self.sel(what, Case::Obj);
                 format!("remove {w} from combat")
+            }
+            // "Creatures it was blocking that had become blocked by only ~ this combat
+            // become unblocked": an attacking creature blocked only by ~ is one ~ was
+            // blocking.
+            Effect::BecomeUnblocked {
+                what: Sel::All(Filter::And(v)),
+            } if matches!(v.as_slice(), [Filter::Type(CardType::Creature), Filter::Attacking, Filter::BlockRelation { rel: BlockRel::BlockedOnlyBy, other, when: BlockWhen::ThisCombat }] if matches!(other.as_ref(), Sel::This)) =>
+            {
+                let me = self.me();
+                format!("{{alt:creatures it was blocking|each attacking creature}} that had become blocked by only {me} this combat become unblocked")
             }
             Effect::BecomeUnblocked { what } => {
                 let w = self.sel(what, Case::Subj);
@@ -2981,6 +3026,11 @@ impl Renderer<'_> {
                 if w == "~it" || w == "it" {
                     return format!("{{alt:the owner of {w}|its owner}} shuffles {it} into their library");
                 }
+                // "Choose target artifact or enchantment. Its owner shuffles it into their
+                // library." (the target named first, then its owner, CR 115.1).
+                if matches!(what, Sel::Target(_)) && !is_plural_sel(what) {
+                    return format!("{{alt:the owner of {w} shuffles {it} into their library|choose {w}. its owner shuffles {it} into their library}}");
+                }
                 format!("the owner of {w} shuffles {it} into their library")
             }
             // "Each player shuffles their hand and graveyard into their library": each
@@ -3007,6 +3057,18 @@ impl Renderer<'_> {
                     "each player shuffles their {} into their library",
                     join_list(&zones, "and")
                 )
+            }
+            // "Each player shuffles their graveyard into their library": each card goes
+            // into its owner's library (CR 400.3), so every card in a graveyard.
+            Effect::ShuffleIntoLibrary {
+                what: Sel::All(Filter::And(f)),
+                library: PlayerRef::EachPlayer,
+            } if matches!(f.as_slice(), [Filter::InZone(_), Filter::OwnedBy(PlayerRel::Any)]) => {
+                let z = match f.first() {
+                    Some(Filter::InZone(z)) => zone_word(*z),
+                    _ => "",
+                };
+                format!("each player shuffles their {z} into their library")
             }
             // "Target player shuffles up to three target cards from their graveyard into
             // their library": the player is named first.
@@ -3210,8 +3272,14 @@ impl Renderer<'_> {
                 // A one-shot delayed trigger at a step: "at the beginning of the next end
                 // step" (CR 603.7).
                 let delay = if *once { self.delay_text(trigger) } else { None };
+                let next_activation = if *once {
+                    self.next_activation_by_spending(trigger)
+                } else {
+                    None
+                };
                 let t = match trigger {
                     _ if delay.is_some() => delay.clone().unwrap_or_default(),
+                    _ if next_activation.is_some() => next_activation.clone().unwrap_or_default(),
                     // "When you next cast an instant spell this turn, ..."
                     other if *once => {
                         let t = self.trigger_text(other);
@@ -3290,13 +3358,7 @@ impl Renderer<'_> {
             // ability says "that player" (CR 607.1).
             Effect::NoteLinked { .. } => String::new(),
             Effect::Reflexive { body } => {
-                // A reflexive trigger without targets of its own refers to the targets of
-                // the ability that created it ("destroy that permanent").
-                let b = if body.targets.is_empty() && body.modal.is_none() && !self.targets.is_empty() {
-                    self.in_event_scope(|r| r.effect_sentences(&body.effect))
-                } else {
-                    self.in_event_scope(|r| r.body(body))
-                };
+                let b = self.reflexive_body(body);
                 format!("when you do, {}", lower_first(&b))
             }
             // "At the beginning of that combat, untap all creatures you control": a
@@ -3500,7 +3562,16 @@ impl Renderer<'_> {
                         _ => w.push_str(&self.gap("permission term: cast face")),
                     }
                 }
-                let d = self.duration(duration);
+                let mut d = self.duration(duration);
+                // "Its owner may play it until the end of their next turn": a permission's
+                // "your next turn" is the turn of the player who gets it, unless it's said
+                // of the effect's controller (`PlayGrant::duration_player`).
+                if matches!(duration, Duration::UntilEndOfYourNextTurn)
+                    && !matches!(who, PlayerRef::You)
+                    && !self.play_terms.as_ref().is_some_and(|t| t.controller_duration)
+                {
+                    d = "until the end of their next turn".into();
+                }
                 let f = if *free {
                     " without paying its mana cost"
                 } else {
@@ -4577,6 +4648,61 @@ impl Renderer<'_> {
                 parts.push(s);
                 i += used;
                 continue;
+            }
+            // "Exile a land you control", "exile any number of other nonland permanents you
+            // control until ~ leaves the battlefield": the permanents are chosen as the
+            // instruction is followed (CR 608.2c), then exiled.
+            if let (
+                Effect::Store {
+                    var,
+                    sel:
+                        sel @ Sel::Choose {
+                            chooser: PlayerRef::You,
+                            store: None,
+                            ..
+                        },
+                },
+                Some(next),
+            ) = (&v[i], v.get(i + 1))
+            {
+                let chosen = strip_chooser(sel);
+                // Permanents only: a card chosen from a revealed hand is "chosen", then
+                // exiled ("You choose a nonland card from it. Exile that card.").
+                fn off_battlefield(f: &Filter) -> bool {
+                    match f {
+                        Filter::InZone(z) => *z != ZoneKind::Battlefield,
+                        Filter::Card => true,
+                        Filter::And(v) | Filter::Or(v) => v.iter().any(off_battlefield),
+                        _ => false,
+                    }
+                }
+                let permanents = matches!(sel, Sel::Choose { filter, .. } if !off_battlefield(filter))
+                    && !self.revealed_hand;
+                let exile = match next {
+                    _ if !permanents => None,
+                    Effect::Exile {
+                        what: Sel::Var(w),
+                        face_down: false,
+                        link,
+                    } if w == var => Some(Effect::Exile {
+                        what: chosen.clone(),
+                        face_down: false,
+                        link: *link,
+                    }),
+                    Effect::ExileUntil {
+                        what: Sel::Var(w),
+                        until,
+                    } if w == var => Some(Effect::ExileUntil {
+                        what: chosen.clone(),
+                        until: until.clone(),
+                    }),
+                    _ => None,
+                };
+                if let Some(e) = exile {
+                    parts.push(self.effect(&e));
+                    i += 2;
+                    continue;
+                }
             }
             if let Some((s, used)) = self
                 .seq_per_owner(&v[i..])
@@ -5760,7 +5886,14 @@ impl Renderer<'_> {
         }
         match cond {
             Condition::PrevHappened if else_empty && matches!(then, Effect::Reflexive { .. }) => {
-                // "When you do, ..." already means "if you do" (CR 603.12).
+                // "When you do, ..." already means "if you do" (CR 603.12); "When they
+                // do, ..." after an instruction another player follows.
+                if self.last_actor_other {
+                    if let Effect::Reflexive { body } = then {
+                        let b = self.reflexive_body(body);
+                        return format!("when {{alt:they|that player}} do, {}", lower_first(&b));
+                    }
+                }
                 self.effect(then)
             }
             // "Clash with an opponent. If you win, ..." (CR 701.30).
@@ -6527,6 +6660,27 @@ impl Renderer<'_> {
                 w.push_str(" from your hand");
             }
         }
+        // "Put the cards in your hand on the bottom of your library": all of a hand.
+        if to.zone == ZoneKind::Library
+            && matches!(what, Sel::All(Filter::And(f)) if matches!(f.as_slice(), [Filter::InZone(ZoneKind::Hand), Filter::OwnedBy(_)]))
+            && w.ends_with(" hand")
+            && !w.contains('{')
+        {
+            w = format!("{{alt:{w}|the cards in {w}|the cards from {w}}}");
+        }
+        // "Return target commander you own from the battlefield to your hand": permanents
+        // (an object described without a zone or "card" is a permanent, CR 109.2) may be
+        // said to come from the battlefield.
+        if matches!(to.zone, ZoneKind::Hand | ZoneKind::Command)
+            && matches!(what, Sel::Target(_) | Sel::All(_))
+            && matches!(self.sel_zone(what), None | Some(ZoneKind::Battlefield))
+            && !w.contains(" card")
+            && !w.contains(['{', '}'])
+            && !matches!(what, Sel::Target(i)
+                if self.targets.get(*i as usize).is_some_and(|t| !matches!(t.max, Value::Const(1))))
+        {
+            w.push_str(" {opt:from the battlefield}");
+        }
         // "any number of target artifact cards ... on top of their library in any order".
         let plural = is_plural_sel(what)
             || matches!(what, Sel::Target(i)
@@ -7086,6 +7240,23 @@ impl Renderer<'_> {
         } else {
             self.with_subject(who, &format!("{look} {top}"), false)
         };
+        // "Reveal the top card of your library. If it's a creature card, put it onto the
+        // battlefield. Otherwise, put it into your graveyard.": one card, taken if it's of
+        // that kind, put elsewhere if not.
+        if reveal
+            && matches!(n, Value::Const(1))
+            && matches!(take, Value::Const(1))
+            && !take_up_to
+            && !matches!(filter, Filter::Any)
+            && matches!(rest_to.zone, ZoneKind::Hand | ZoneKind::Graveyard)
+            && matches!(take_to.zone, ZoneKind::Hand | ZoneKind::Battlefield)
+            && take_to.zone != rest_to.zone
+        {
+            let noun = with_article(&self.card_noun(filter));
+            let a = self.dig_destination(take_to, false);
+            let b = self.dig_destination(rest_to, false);
+            return format!("{s}. If it's {noun}, put it {a}. Otherwise, put it {b}");
+        }
         // Only looking ("Look at the top card of your library."), or looking and
         // putting them back ("then put them back in any order").
         if matches!(take, Value::Const(0)) {
@@ -7999,7 +8170,7 @@ impl Renderer<'_> {
                         .extend(subtypes.iter().map(|x| x.to_string()));
                 }
                 Modification::AllCreatureTypes => parts.push(
-                    "{alt:is every creature type|gains all creature types|all creature types}".into(),
+                    "{alt:is every creature type|is all creature types|gains all creature types|all creature types}".into(),
                 ),
                 // "becomes a 4/4 Dragon artifact creature": the new creature types replace
                 // the old ones (CR 205.1b), which the effect records as removing them.
@@ -8057,6 +8228,13 @@ impl Renderer<'_> {
                         "is {} in addition to its other colors",
                         join_list(&w, "and")
                     ));
+                }
+                // In a static ability, the color chosen as the source entered ("As ~
+                // enters, choose a color. ~ is the chosen color.").
+                Modification::SetChosenColor
+                    if self.in_static && self.static_quote_depth == Some(self.quote_depth) =>
+                {
+                    parts.push("is the chosen color".into())
                 }
                 Modification::SetChosenColor => {
                     parts.push("becomes the color of your choice".into())
@@ -8117,8 +8295,30 @@ impl Renderer<'_> {
                 if let Some(i) = ps.iter().position(|p| p == BECOMES) {
                     ps[i] = b;
                 }
-                let mut grants = keywords.clone();
-                grants.extend(abilities.iter().cloned());
+                // The granted keywords and quoted abilities in the order they're listed
+                // ("have "Equipped creature gets +2/+0" and equip {2}").
+                let n_kw = mods
+                    .iter()
+                    .filter(|m| matches!(m, Modification::AddKeyword(_)))
+                    .count();
+                let n_ab = mods
+                    .iter()
+                    .filter(|m| matches!(m, Modification::AddAbility(_)))
+                    .count();
+                let grants: Vec<String> = if n_kw == keywords.len() && n_ab == abilities.len() {
+                    let (mut ki, mut ai) = (keywords.iter(), abilities.iter());
+                    mods.iter()
+                        .filter_map(|m| match m {
+                            Modification::AddKeyword(_) => ki.next().cloned(),
+                            Modification::AddAbility(_) => ai.next().cloned(),
+                            _ => None,
+                        })
+                        .collect()
+                } else {
+                    let mut g = keywords.clone();
+                    g.extend(abilities.iter().cloned());
+                    g
+                };
                 if !grants.is_empty() {
                     // "becomes a Bird with base power and toughness 1/1 and flying": the
                     // abilities may join the "with" list.
@@ -8242,6 +8442,16 @@ impl Renderer<'_> {
             }
         }
         let parts = merged;
+        // "gets -5/-0 and loses all abilities": two changes of one effect, each applied in
+        // its own layer (CR 613.1f, 613.4c), printed in either order.
+        if let [a, b] = parts.as_slice() {
+            if a == "loses all abilities" && b.starts_with("gets ") && !b.contains(['{', '"']) {
+                return (
+                    format!("{{alt:{a} and {b}|{b} and {a}}}"),
+                    where_clauses.concat(),
+                );
+            }
+        }
         let s = join_list(&parts, "and");
         (s, where_clauses.concat())
     }
@@ -9636,4 +9846,37 @@ fn card_types_but(v: &[String]) -> Option<Vec<String>> {
         .map(|t| t.to_string())
         .collect();
     (1..=2).contains(&missing.len()).then_some(missing)
+}
+
+/// An instruction for each opponent of the player it's performed as: `ForEachPlayer`
+/// over each opponent (after the variables an opt-in stores), and nothing else.
+fn for_each_opponent(e: &Effect) -> bool {
+    let each = |x: &Effect| {
+        matches!(
+            x,
+            Effect::ForEachPlayer {
+                who: PlayerRef::EachOpponent,
+                ..
+            } | Effect::Draw {
+                who: PlayerRef::EachOpponent,
+                ..
+            }
+        )
+    };
+    match e {
+        Effect::Seq(v) => {
+            let mut rest = v.iter().filter(|x| !matches!(x, Effect::Store { .. }));
+            rest.next().is_some_and(each)
+                && rest.all(|x| {
+                    matches!(
+                        x,
+                        Effect::ForEachPlayer {
+                            who: PlayerRef::Var(_),
+                            ..
+                        }
+                    )
+                })
+        }
+        other => each(other),
+    }
 }

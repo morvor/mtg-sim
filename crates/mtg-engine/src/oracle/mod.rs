@@ -153,6 +153,7 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
             }
         }
     }
+    statics::restrict_enchanted_creature(&mut out.abilities);
     // Characteristic-defining abilities implied by the type line/P/T.
     if let Some(cda) = statics::star_pt_cda(&norm, ctx) {
         // Replace an unsupported CDA line if the star P/T was handled.
