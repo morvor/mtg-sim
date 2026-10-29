@@ -281,8 +281,35 @@ fn angry_mob_counts_opposing_swamps_only_during_your_turn() {
     t.lands(P1, "Swamp", 3);
     t.lands(P0, "Swamp", 1);
     assert_eq!(t.pt(mob), (5, 5));
+    // Not a characteristic-defining ability (CR 604.3a(5)): outside the battlefield,
+    // during your turn too, it's 2/2.
+    let in_hand = t.hand(P0, "Angry Mob");
+    assert_eq!(t.pt(in_hand), (2, 2));
     t.advance_to(P1, Step::PrecombatMain);
     assert_eq!(t.pt(mob), (2, 2));
+}
+
+#[test]
+fn fastbond_with_another_additional_land_play_doesnt_overflow() {
+    cr!("305.2");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fastbond");
+    t.battlefield(P0, "Exploration");
+    t.g.recompute();
+    assert_eq!(t.g.player(P0).land_plays, u32::MAX);
+    let lands: Vec<ObjectId> = (0..3).map(|_| t.hand(P0, "Forest")).collect();
+    for l in &lands {
+        t.play_land(P0, *l).unwrap();
+        t.resolve_all();
+    }
+    assert_eq!(t.life(P0), 18);
+    // Without Fastbond: one land plus Exploration's one.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Exploration");
+    let lands: Vec<ObjectId> = (0..3).map(|_| t.hand(P0, "Forest")).collect();
+    t.play_land(P0, lands[0]).unwrap();
+    t.play_land(P0, lands[1]).unwrap();
+    assert!(t.play_land(P0, lands[2]).is_err());
 }
 
 #[test]

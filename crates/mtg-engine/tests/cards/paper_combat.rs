@@ -151,6 +151,38 @@ fn ydwen_efreet_unblocks_its_attacker_only_when_it_loses_the_flip() {
 }
 
 #[test]
+fn ydwen_efreet_leaves_an_attacker_another_creature_also_blocks_blocked() {
+    cr!("509.1h", "506.4");
+    // Only creatures blocked by Ydwen Efreet alone become unblocked; the efreet can't
+    // block again this turn either way once it's removed.
+    for seed in 0..40u64 {
+        let mut t = TestGame::with_config(
+            2,
+            GameConfig {
+                seed,
+                ..Default::default()
+            },
+        );
+        let giant = t.battlefield(P0, "Hill Giant");
+        let efreet = t.battlefield(P1, "Ydwen Efreet");
+        let wall = t.battlefield(P1, "Wall of Wood");
+        declare(&mut t, P0, &[(giant, Entity::Player(P1))]);
+        declare_blocks(&mut t, P1, &[(efreet, giant), (wall, giant)]);
+        t.resolve_all();
+        let combat = t.g.combat.as_ref().expect("in combat");
+        if combat.blockers_of(giant).contains(&efreet) {
+            continue;
+        }
+        // Lost the flip: removed from combat, but the wall still blocks the giant.
+        assert!(combat.blockers_of(giant).contains(&wall));
+        to_end_of_combat(&mut t);
+        assert_eq!(t.life(P1), 20, "still blocked");
+        return;
+    }
+    panic!("no lost flip seen");
+}
+
+#[test]
 fn blaze_of_glory_makes_the_creature_block_each_attacker_it_can() {
     cr!("509.1c");
     supported("Blaze of Glory");

@@ -2972,9 +2972,6 @@ pub enum Restriction {
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
-    /// "~ can't attack unless at least two other creatures attack" / "... can't block
-    /// unless at least two other creatures block" (Orcish Conscripts): the numeric form of
-    /// "alone", checked on the whole declaration (CR 508.1c, 509.1b). `n` is at least 1.
     /// "Until end of turn, ~ can be the target of spells and abilities controlled by
     /// target player as though it didn't have shroud." (Autumn Willow; CR 702.18, 609.4):
     /// spells and abilities controlled by the `by` players may target the objects as though
@@ -2984,10 +2981,14 @@ pub enum Restriction {
         by: PlayerFilter,
         keyword: crate::keywords::KeywordKind,
     },
+    /// "~ can't attack unless at least two other creatures attack" (Orcish Conscripts):
+    /// the numeric form of "alone", checked on the whole declaration (CR 508.1c). `n` is
+    /// at least 1.
     CantAttackUnlessOthersAttack {
         what: Filter,
         n: u32,
     },
+    /// "~ can't block unless at least two other creatures block" (CR 509.1b).
     CantBlockUnlessOthersBlock {
         what: Filter,
         n: u32,
