@@ -1181,8 +1181,9 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
             continue;
         }
         for e in &ins.pre {
+            let prior = stored_objects(e, ctx);
             frames.run(g, i, e, ctx);
-            record_choice(g, e, p, ctx);
+            record_choice(g, e, p, ctx, &prior);
         }
         let plan = match &ins.action {
             Some(a) => {
@@ -1272,13 +1273,28 @@ fn process_steps(e: &Effect) -> usize {
 /// Records the objects a player chose for an instruction ("choose a card in your hand",
 /// stored for the move afterwards): the players choosing after them know the choice
 /// (CR 101.4b), except a card chosen in a hidden zone, which stays face down (CR 101.4a).
-fn record_choice(g: &mut Game, e: &Effect, p: Option<PlayerId>, ctx: &Ctx) {
+/// Only what this player added is theirs: a variable shared by every player's choice
+/// ("each player chooses two creatures they control. Exile them") already holds the
+/// earlier players' choices (`prior`).
+fn record_choice(g: &mut Game, e: &Effect, p: Option<PlayerId>, ctx: &Ctx, prior: &[ObjectId]) {
     let (Some(p), Effect::Store { var, sel }) = (p, e) else {
         return;
     };
     if has_choice(sel) && chosen_by(g, &[sel], ctx, Some(p)) {
-        let chosen = ctx.var_objects(*var);
+        let chosen = ctx
+            .var_objects(*var)
+            .into_iter()
+            .filter(|o| !prior.contains(o))
+            .collect();
         g.record_apnap_choice(p, chosen);
+    }
+}
+
+/// The objects the variable an instruction stores into holds before it runs.
+fn stored_objects(e: &Effect, ctx: &Ctx) -> Vec<ObjectId> {
+    match e {
+        Effect::Store { var, .. } => ctx.var_objects(*var),
+        _ => Vec::new(),
     }
 }
 
