@@ -319,3 +319,32 @@ fn bounty_of_the_hunt_removes_each_counter_it_put_at_the_next_cleanup_step() {
     assert_eq!(t.counters(giant, "+1/+1"), 0);
     assert_eq!(t.counters(other, "+1/+1"), before);
 }
+
+/// Grizzly Bears enchanted with Infinite Authority attacks and `blocker` (P1's) blocks.
+fn authority(blocker: &str) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, blocker);
+    t.lands(P0, "Plains", 3);
+    let aura = t.hand(P0, "Infinite Authority");
+    t.cast(P0, aura).target(Entity::Object(bears)).go();
+    t.resolve_all();
+    t.attack(&[(bears, Entity::Player(P1))], &[(b, bears)]);
+    t.advance_to(P1, Step::Upkeep);
+    (t, bears)
+}
+
+#[test]
+fn infinite_authority_counter_only_if_the_other_creature_was_destroyed_this_way() {
+    cr!("603.7c", "603.7a");
+    supported("Infinite Authority");
+    // Wall of Wood (0/3) survives the damage and is destroyed at end of combat.
+    let (t, bears) = authority("Wall of Wood");
+    assert!(t.named_on_battlefield("Wall of Wood").is_empty());
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    // Llanowar Elves die to combat damage first: not destroyed this way.
+    let (t, bears) = authority("Llanowar Elves");
+    assert!(t.named_on_battlefield("Llanowar Elves").is_empty());
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+}

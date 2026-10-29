@@ -28,6 +28,13 @@
 //!   that creature at the beginning of the next cleanup step." (Bounty of the Hunt) after a
 //!   distribution of counters: a delayed triggered ability (CR 603.7) for the counters the
 //!   distribution put on each object (`kw/counters_put_this_way.rs`).
+//! * "Whenever enchanted creature blocks or becomes blocked by a creature with toughness 3
+//!   or less, destroy the other creature at end of combat. At the beginning of the next end
+//!   step, if that creature was destroyed this way, put a +1/+1 counter on the first
+//!   creature." (Infinite Authority): the first creature is the enchanted creature as the
+//!   ability triggered (its ruling: moving the Aura afterward doesn't matter); the second
+//!   delayed triggered ability exists only if the first one destroyed the other creature
+//!   (CR 603.7c), so it's created as that one resolves, for the same end step.
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -461,3 +468,72 @@ fn for_each_counter_put_this_way(l: &str, prev: &mut Effect, _b: &mut Builder) -
 }
 
 inventory::submit! { FollowupPattern { name: "results 5: for each counter you put on a creature this way, remove one at the next cleanup", priority: 0, apply: for_each_counter_put_this_way } }
+
+/// The creature the trigger event named besides the trigger object ("the first creature").
+const FIRST: Var = vars::USER + 14_540;
+
+/// "At the beginning of the next end step, if that creature was destroyed this way, put a
+/// +1/+1 counter on the first creature." after "destroy the other creature at end of
+/// combat".
+fn if_destroyed_this_way_later(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(instr) = l.strip_prefix(
+        "at the beginning of the next end step, if that creature was destroyed this way, ",
+    ) else {
+        return false;
+    };
+    if !b.in_trigger || !instr.contains("the first creature") {
+        return false;
+    }
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let [Effect::Store {
+        var,
+        sel: Sel::TriggerObject,
+    }, Effect::DelayedTrigger { body, .. }] = v.as_mut_slice()
+    else {
+        return false;
+    };
+    if !matches!(&body.effect, Effect::Destroy { what: Sel::Var(x), .. } if x == var) {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.named.push(("the first creature".into(), Sel::Var(FIRST)));
+    let Some(e) = crate::oracle::effects::parse_sentence(instr, &mut sub) else {
+        return false;
+    };
+    if !sub.targets.is_empty() {
+        return false;
+    }
+    let destroyed = crate::kw::value_results::DESTROYED;
+    let later = Effect::If {
+        cond: Condition::SelNonEmpty(Sel::Var(destroyed)),
+        then: Box::new(Effect::DelayedTrigger {
+            trigger: TriggerCond::BeginningOf {
+                step: TriggerStep::End,
+                whose: PlayerRel::Any,
+            },
+            body: Box::new(Body {
+                targets: vec![],
+                effect: e,
+                modal: None,
+            }),
+            once: true,
+        }),
+        otherwise: Box::new(Effect::Noop),
+    };
+    let old = std::mem::take(&mut body.effect);
+    body.effect = Effect::seq(vec![old, later]);
+    v.insert(
+        0,
+        Effect::Store {
+            var: FIRST,
+            sel: Sel::TriggerOtherObject,
+        },
+    );
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "results 5: at the next end step, if that creature was destroyed this way", priority: 0, apply: if_destroyed_this_way_later } }
