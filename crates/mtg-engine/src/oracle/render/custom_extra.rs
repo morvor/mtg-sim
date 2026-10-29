@@ -674,7 +674,11 @@ impl Renderer<'_> {
         }
         if !matches!(
             c,
-            TriggerCond::CastSpell { .. } | TriggerCond::YouSacrifice(_)
+            TriggerCond::CastSpell { .. }
+                | TriggerCond::YouSacrifice(_)
+                // "Daleks that died this turn" (Genesis of the Daleks).
+                | TriggerCond::Dies(_)
+                | TriggerCond::LeavesBattlefield(_)
         ) {
             return None;
         }
@@ -688,6 +692,9 @@ impl Renderer<'_> {
     /// pay {1}{G} any number of times. When you pay this cost one or more times, ..."
     /// (the payments counted in a number, then a reflexive trigger, CR 603.12).
     pub(crate) fn seq_extra(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        if let Some(r) = self.enters_with_if(v) {
+            return Some(r);
+        }
         if let Some(r) = self.seq_more(v) {
             return Some(r);
         }
@@ -1310,7 +1317,7 @@ impl Renderer<'_> {
                 };
                 let _ = chosen;
                 Some(super::players::decline(
-                    "{alt:the rest|the other|the other one|the others}".into(),
+                    "{alt:the rest|the other|the other one|the others|the other cards}".into(),
                     case,
                 ))
             }

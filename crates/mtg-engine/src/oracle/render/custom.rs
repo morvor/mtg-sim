@@ -85,6 +85,17 @@ impl Renderer<'_> {
                     format!("create {} {tname} tokens", number_word(count))
                 }
             }
+            // "remove a +1/+1 counter from that creature" for each counter a distribution
+            // put on it (`kw/counters_put_this_way.rs`).
+            n if n.starts_with(crate::kw::counters_put_this_way::REMOVE_PER_PUT) => {
+                let kind = crate::kw::counters_put_this_way::parse_name(n)
+                    .map_or("+1/+1", |(_, k)| k);
+                format!("for each {kind} counter you put on a creature this way, remove a {kind} counter from that creature")
+            }
+            // "It's attacking that player" (`kw/attacking_this_way.rs`).
+            n if n.starts_with(crate::kw::attacking_this_way::ATTACKING) => {
+                "{alt:it's|they're} attacking that player".into()
+            }
             n if n.starts_with("divided-counters:") => {
                 let mut it = n.split(':').skip(1);
                 let slot: u8 = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);
@@ -940,7 +951,16 @@ impl Renderer<'_> {
             crate::block_choice::ATTACKING_PLAYER_CHOOSES_BLOCKS => {
                 "the attacking player chooses how each creature blocks each combat".into()
             }
-            other => self.gap(format!("Restriction::Custom({other})")),
+            other => match crate::untap_limits::untap_only_types(other) {
+                Some(types) => {
+                    let words: Vec<String> = types.iter().map(|t| t.word().to_string()).collect();
+                    format!(
+                        "each player chooses {} during their untap step. That player can untap only permanents of the chosen type this step",
+                        super::join_list(&words, "or")
+                    )
+                }
+                None => self.gap(format!("Restriction::Custom({other})")),
+            },
         }
     }
 

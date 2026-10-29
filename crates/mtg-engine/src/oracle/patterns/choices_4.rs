@@ -19,7 +19,7 @@ use crate::oracle::phrases::{end, parse_number};
 const MOST: Var = vars::USER + 41010;
 /// The objects chosen by "gain control of a [creature] of your choice ...", over all its
 /// performances in the resolution.
-const GAINED: Var = vars::USER + 41012;
+pub(crate) const GAINED: Var = vars::USER + 41012;
 /// The player chosen among those tied for a superlative.
 const TIED_CHOSEN: Var = vars::USER + 41011;
 

@@ -32,12 +32,12 @@ fn chapter_abilities_with_flavor_words_compile_without_them() {
         let def = mtg_engine::card::card(c);
         assert!(def.unsupported_text().is_empty(), "{c}: {:?}", def.unsupported_text());
     }
-    // A clause before a dash that isn't a flavor word stays part of the effect.
+    // A clause before a dash that isn't a flavor word stays part of the effect: chapter
+    // IV of Genesis of the Daleks is a villainous choice.
     let def = mtg_engine::card::card("Genesis of the Daleks");
-    assert!(def
-        .unsupported_text()
-        .iter()
-        .any(|u| u.contains("villainous choice")));
+    assert!(def.unsupported_text().is_empty());
+    let abilities = format!("{:?}", def.faces[0].chars.abilities);
+    assert!(abilities.contains("VillainousChoice"));
 }
 
 #[test]

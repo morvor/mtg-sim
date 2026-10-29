@@ -99,3 +99,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Portcullis; Lifeline ("if another creature is on the battlefield": the dying creature is no longer on the battlefield either way, so the outcome is the same).
 - Code: `crates/mtg-engine/src/oracle/patterns/other_than_trigger_object.rs` (`rebind_other`), called from `crates/mtg-engine/src/oracle/triggers.rs`.
 - Tests: `tests/rulings/r_p039_creature_count.rs` (`portcullis_checks_the_creature_count_again_on_resolution`, `animated_portcullis_counts_itself_among_the_other_creatures`).
+
+## nihiloor-taps-one-opponent-at-a-time: Nihiloor's "for each opponent, tap up to one untapped creature you control" taps for each opponent in turn
+- Kind: deviation
+- Status: provisional
+- Rules: 603.12 "A resolving spell or ability may allow or instruct a player to take an action and create a triggered ability that triggers “when [a player] [does or doesn’t]” take that action ... These reflexive triggered abilities ... trigger based on whether the trigger event or events occurred earlier during the resolution of the spell or ability that created them." / Nihiloor ruling: "As Nihiloor's first triggered ability resolves, you choose up to one creature for each opponent, and tap them all at the same time. Then, a separate triggered ability is put on the stack for each creature you tapped this way."
+- Question: Nihiloor: "When Nihiloor enters, for each opponent, tap up to one untapped creature you control. When you do, gain control of target creature that player controls with power less than or equal to the tapped creature's power ..." The ruling taps the chosen creatures at the same time. How does the engine perform it?
+- Decision: For each opponent in turn order (starting after you), you choose up to one untapped creature you control and tap it, and that tap's reflexive ability (about that opponent and that tapped creature) is created; the next opponent's choice follows. The reflexive abilities go on the stack together afterwards, in the order you choose (603.3b), as the ruling says.
+- Alternatives: Choose all the creatures first, tap them in one event, then create one reflexive ability per tapped creature, each tied to its opponent: what the ruling describes, but the compiled "for each opponent" loop keeps each tap and its reflexive ability together.
+- Why: The outcomes differ only in that the taps are separate events (an ability that triggers once whenever one or more creatures become tapped would trigger once per tap) and that each choice is made after the earlier taps (which changes nothing about which creatures can be chosen: a creature tapped for one opponent is no longer untapped either way).
+- Affects: Nihiloor.
+- Code: `crates/mtg-engine/src/oracle/patterns/players_5.rs` (`for_each_opponent_tap_up_to_one`, `when_you_do_for_each_opponent`).
+- Tests: `tests/cards/cards5_choices_players.rs` (`nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs`).

@@ -330,6 +330,8 @@ pub fn adjective(w: &str) -> Option<Filter> {
         "face-up" => Filter::not(Filter::FaceDown),
         // CR 712.1.
         "double-faced" => Filter::Custom(crate::kw::dig_filters::DOUBLE_FACED.into()),
+        // CR 700.2: "a modal spell".
+        "modal" => Filter::Custom(crate::kw::modal_spells::MODAL_SPELL.into()),
         "enchanted" => Filter::Enchanted,
         "equipped" => Filter::Equipped,
         "modified" => Filter::Modified,

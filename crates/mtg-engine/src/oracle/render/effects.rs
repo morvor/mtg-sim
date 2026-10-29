@@ -2099,6 +2099,17 @@ impl Renderer<'_> {
                     (_, Some(2)) => "one or two",
                     _ => "any number of",
                 };
+                // "among it and any number of commanders" (Stumpsquall Hydra).
+                if let Sel::All(Filter::Or(v)) = among {
+                    if let [Filter::Source, f] = v.as_slice() {
+                        let g = self.noun(f, Num::Many);
+                        let m = self.me();
+                        return format!(
+                            "distribute {c} among {m} and {q} {g}{}",
+                            w.unwrap_or_default()
+                        );
+                    }
+                }
                 format!("distribute {c} among {q} {g}{}", w.unwrap_or_default())
             }
             Effect::PutEventCounters { to, one_each } => {
@@ -2675,7 +2686,16 @@ impl Renderer<'_> {
                 ])
             }
             Effect::ChangeTargets { what, who, how, to } => {
-                let w = self.sel(what, Case::Obj);
+                // "any number of other spells and/or abilities": chosen among everything
+                // else on the stack (Boltbender).
+                let other_stack_objects = matches!(what, Sel::Choose { filter: Filter::And(v), up_to: true, .. }
+                    if v.iter().any(|f| matches!(f, Filter::Custom(n) if n == crate::kw::choices_5_filters::NOT_RESOLVING))
+                        && v.iter().any(|f| matches!(f, Filter::InZone(ZoneKind::Stack))));
+                let w = if other_stack_objects {
+                    "any number of other spells and/or abilities".to_string()
+                } else {
+                    self.sel(what, Case::Obj)
+                };
                 let vp = match (how, to) {
                     // "Change a target of target spell or ability to ~": one of its targets
                     // (CR 115.7c).
@@ -3476,7 +3496,19 @@ impl Renderer<'_> {
             } => {
                 let c = self.player(chooser, Case::Subj);
                 let s = self.sel(&strip_chooser(what), Case::Obj);
-                if c == "you" {
+                // "you may choose a nonland permanent" (Scheming Fence): up to one.
+                let one_optional = matches!(
+                    what,
+                    Sel::Choose {
+                        up_to: true,
+                        count: Value::Const(1),
+                        ..
+                    }
+                );
+                if c == "you" && one_optional {
+                    let s = s.strip_prefix("up to one ").unwrap_or(&s);
+                    format!("{{alt:choose up to one {s}|you may choose a {s}|you may choose an {s}}}")
+                } else if c == "you" {
                     format!("choose {s}")
                 } else {
                     format!("{c} chooses {s}")
@@ -6002,6 +6034,69 @@ impl Renderer<'_> {
             let t = self.effect(then);
             if t.contains("after this phase") {
                 return t.replace("after this phase", "after this main phase");
+            }
+        }
+        // "If you gain control of a creature this way, tap it, and it's attacking that
+        // player." (Midnight Crusader Shuttle, `patterns::results_5`).
+        if let (true, Condition::SelNonEmpty(sel @ Sel::Matching(x, Filter::And(fs)))) =
+            (else_empty, cond)
+        {
+            let gained = crate::oracle::patterns::choices_4::GAINED;
+            let yours = |f: &Filter| matches!(f, Filter::ControlledBy(PlayerRel::You));
+            if matches!(x.as_ref(), Sel::Var(v) if *v == gained) && fs.len() == 2 && yours(&fs[1]) {
+                let n = self.noun_det(&fs[0], Det::A);
+                let it = self.sel(sel, Case::Obj);
+                let t = self.effect(then).replace(&it, "it");
+                let t = t.replace(". {alt:it's|they're} attacking", ", and it's attacking");
+                return format!("if you gain control of {n} this way, {t}");
+            }
+        }
+        // "When one or more counters are removed from ~ this way, it deals that much damage
+        // to any target." (Magma Pummeler, `patterns::results_5`).
+        if let (true, Condition::Compare(Value::Prev, Cmp::Ge, Value::Const(1)), Effect::Seq(v)) =
+            (else_empty, cond, then)
+        {
+            if let [Effect::SetX { .. }, Effect::Reflexive { body }] = v.as_slice() {
+                let b = self.in_event_scope(|r| r.body(body));
+                return format!(
+                    "when one or more counters are removed from ~ this way, {}",
+                    lower_first(&b)
+                );
+            }
+        }
+        // "When one or more cards are milled this way, ...": a reflexive trigger for the
+        // cards the instruction milled (CR 603.12, `patterns::results_5`).
+        if let (
+            true,
+            Condition::Compare(Value::CountSel(x), Cmp::Ge, Value::Const(1)),
+            Effect::Reflexive { body },
+        ) = (else_empty, cond, then)
+        {
+            let (inner, f) = match x.as_ref() {
+                Sel::Matching(i, f) => (i.as_ref(), Some(f.clone())),
+                other => (other, None),
+            };
+            // "When you put one or more Equipment onto the battlefield this way, ...".
+            if let (Sel::Var(vars::IT), Some(Filter::And(fs))) = (inner, &f) {
+                if fs.len() == 2 && matches!(fs[1], Filter::InZone(ZoneKind::Battlefield)) {
+                    let n = self.noun(&fs[0], Num::Many);
+                    let b = self.in_event_scope(|r| r.body(body));
+                    return format!(
+                        "when you put one or more {n} onto the battlefield this way, {}",
+                        lower_first(&b)
+                    );
+                }
+            }
+            if let Some(("milled", _, _)) = self.this_way_of(inner) {
+                let n = match f {
+                    Some(f) => self.noun(&f, Num::Many),
+                    None => "cards".into(),
+                };
+                let b = self.in_event_scope(|r| r.body(body));
+                return format!(
+                    "when one or more {n} are milled this way, {}",
+                    lower_first(&b)
+                );
             }
         }
         // "When a creature is put onto the battlefield this way, it deals damage ...": a
@@ -8692,6 +8787,9 @@ impl Renderer<'_> {
             }
             // CR 205.3i: every land type.
             ChoiceKind::OneOf(v) if *v == crate::types::land_types() => "a land type".into(),
+            ChoiceKind::OneOf(v) if *v == crate::types::planeswalker_types() => {
+                "a planeswalker type".into()
+            }
             // "a card type other than creature or land": the card types of cards (CR
             // 300.1) but those.
             ChoiceKind::OneOf(v) if card_types_but(v).is_some() => {
@@ -9089,7 +9187,7 @@ impl Renderer<'_> {
             }
             Some(b) => {
                 let b = self.value(b);
-                s.push_str(&format!(" and add {b} to the result"));
+                s.push_str(&format!(" and add {b} {{opt:to the result}}"));
             }
             None => {}
         }

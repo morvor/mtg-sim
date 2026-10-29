@@ -95,6 +95,26 @@ fn at_random(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
 
 inventory::submit! { ModalHeaderPattern { name: "choose one at random", priority: 100, parse: at_random } }
 
+/// "choose one at random. if [condition], you choose one instead" (Typhoid Mary,
+/// Fractured): the condition is checked as the modes are chosen (CR 700.2b).
+fn at_random_unless(h: &str, ctx: &CompileContext) -> Option<ModalHeader> {
+    let cond = h
+        .strip_prefix("choose one at random. if ")?
+        .strip_suffix(", you choose one instead")?;
+    // "it" in the condition would have no referent in the header.
+    if cond.split_whitespace().any(|w| w == "it" || w == "it's") {
+        return None;
+    }
+    let cond = crate::oracle::statics::parse_condition(cond, ctx)?;
+    Some(header(
+        Value::c(1),
+        Value::c(1),
+        ModeChooser::RandomUnless(Box::new(cond)),
+    ))
+}
+
+inventory::submit! { ModalHeaderPattern { name: "choose one at random unless condition", priority: 100, parse: at_random_unless } }
+
 /// "choose one that hasn't been chosen", "choose one that hasn't been chosen this turn"
 fn unchosen(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
     let this_turn = match h {
@@ -153,3 +173,21 @@ fn conditional_count(h: &str, ctx: &CompileContext) -> Option<ModalHeader> {
 }
 
 inventory::submit! { ModalHeaderPattern { name: "choose one, if condition choose more", priority: 100, parse: conditional_count } }
+
+/// "choose up to x, where x is the number of times you chose a mode for that spell" (in a
+/// "whenever you cast a modal spell" trigger): counted as the trigger is put on the stack,
+/// when its modes are chosen (CR 700.2b); a mode chosen more than once counts each time
+/// (CR 700.2d).
+fn up_to_modes_chosen(h: &str, _ctx: &CompileContext) -> Option<ModalHeader> {
+    (h == "choose up to x, where x is the number of times you chose a mode for that spell").then(
+        || {
+            header(
+                Value::c(0),
+                Value::Custom(crate::kw::modal_spells::MODES_CHOSEN_FOR_THAT_SPELL.into()),
+                ModeChooser::Controller,
+            )
+        },
+    )
+}
+
+inventory::submit! { ModalHeaderPattern { name: "choose up to x, x = modes chosen for that spell", priority: 100, parse: up_to_modes_chosen } }
