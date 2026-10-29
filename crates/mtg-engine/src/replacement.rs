@@ -357,6 +357,18 @@ impl Game {
                 &ev,
             )
         });
+        // "... can't be dealt instead to another permanent or player": redirections don't
+        // apply to that damage (Whippoorwill, Lava Burst; CR 614.9).
+        if let ReplEvent::Damage { source, target, .. } = &ev {
+            if crate::prevention::damage_cant_be_prevented_or_redirected(self, *source, *target) {
+                cands.retain(|c| {
+                    !matches!(
+                        c.def.action,
+                        ReplacementAction::Redirect(_) | ReplacementAction::RedirectNext(..)
+                    )
+                });
+            }
+        }
         if cands.is_empty() {
             return vec![ev];
         }
@@ -1309,9 +1321,17 @@ impl Game {
         // nothing (their other effects still happen), and a shield that prevents nothing
         // isn't used up (CR 609.7b).
         let unpreventable = match &ev {
-            ReplEvent::Damage { source, combat, .. } => {
+            ReplEvent::Damage {
+                source,
+                combat,
+                target,
+                ..
+            } => {
                 crate::prevention::is_prevention(&cand.def.action)
-                    && crate::prevention::damage_event_cant_be_prevented(self, *source, *combat)
+                    && (crate::prevention::damage_event_cant_be_prevented(self, *source, *combat)
+                        || crate::prevention::damage_cant_be_prevented_or_redirected(
+                            self, *source, *target,
+                        ))
             }
             _ => false,
         };

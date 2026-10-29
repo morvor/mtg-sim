@@ -137,6 +137,21 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::ColoredSymbolsOf(sel) => {
+                let mut units = Vec::new();
+                if let Some(o) = g.eval_sel_objects(sel, ctx).first() {
+                    if let Some(mc) = &g.obj(*o).chars.mana_cost {
+                        for s in &mc.symbols {
+                            let u: Vec<ManaType> =
+                                s.colors().iter().map(ManaType::from_color).collect();
+                            if !u.is_empty() {
+                                units.push(u);
+                            }
+                        }
+                    }
+                }
+                units
+            }
             ManaProduction::ManaCostOf(sel) => {
                 let mut units = Vec::new();
                 if let Some(o) = g.eval_sel_objects(sel, ctx).first() {

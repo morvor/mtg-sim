@@ -304,6 +304,107 @@ fn next_spell_they_cast(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "mana 5: the next spell they cast this turn has [ability]", priority: 100, parse: next_spell_they_cast } }
 
+/// "For each colored mana symbol in [object]'s mana cost, add one mana of that color."
+/// (Charmed Pendant): one mana for each colored symbol, of its color (one of either color
+/// for a hybrid symbol: Charmed Pendant's ruling).
+fn add_for_each_colored_symbol(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each colored mana symbol in ")?;
+    let who = r.strip_suffix(" mana cost, add one mana of that color")?;
+    let who = who
+        .strip_suffix("'s")
+        .map(str::to_string)
+        .or_else(|| (who == "its").then(|| "it".to_string()))?;
+    // The card a "Mill a card" cost milled (CR 701.17c).
+    let sel = if who == "the milled card" {
+        if !crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("mill a card:")
+        {
+            return None;
+        }
+        Sel::Var(crate::zones::COST_MOVED)
+    } else {
+        let saved = b.targets.len();
+        let (sel, rest) = crate::oracle::effects::object_ref(&who, b)?;
+        if !rest.trim().is_empty() || b.targets.len() != saved {
+            b.targets.truncate(saved);
+            return None;
+        }
+        sel
+    };
+    Some(Effect::AddMana {
+        who: PlayerRef::You,
+        mana: ManaProduction::ColoredSymbolsOf(sel),
+        restriction: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "mana 5: for each colored mana symbol in [object]'s mana cost, add one mana of that color", priority: 100, parse: add_for_each_colored_symbol } }
+
+/// "Then put the cards you revealed this way on the bottom of your library in any order."
+/// as "put the revealed cards ...".
+fn cards_revealed_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let r = l.strip_prefix("put the cards you revealed this way ")?;
+    // The cards the ability revealed (an instruction in between may have dug others:
+    // "target opponent mills a card" for each symbol, Sanity Grinding).
+    match crate::oracle::effects::parse_clause(&format!("put the revealed cards {r}"), b)? {
+        Effect::DigStep(step) => match *step {
+            DigStep::Take {
+                from: Sel::Var(v),
+                chooser,
+                filter,
+                each_of,
+                count,
+                up_to,
+                random,
+                reveal,
+                to,
+            } if v == vars::DUG => Some(Effect::DigStep(Box::new(DigStep::Take {
+                from: Sel::Var(vars::REVEALED),
+                chooser,
+                filter,
+                each_of,
+                count,
+                up_to,
+                random,
+                reveal,
+                to,
+            }))),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+inventory::submit! { EffectPattern { name: "mana 5: put the cards you revealed this way [somewhere]", priority: 100, parse: cards_revealed_this_way } }
+
+/// "For each blue mana symbol in the mana costs of the revealed cards, [instruction]"
+/// (Sanity Grinding): the instruction scaled by the number of those symbols among the
+/// cards dug (hybrid symbols of the color count, CR 107.4e).
+fn for_each_symbol_among_dug(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for each ")?;
+    let (color, r) = r.split_once(' ')?;
+    let stat = match color {
+        "colored" => Stat::ColoredManaSymbols,
+        c => Stat::ManaSymbols(crate::types::Color::from_word(c)?),
+    };
+    let r = r.strip_prefix("mana symbol in the mana costs of ")?;
+    let (f, r) = super::dig_grammar::dug_objects(r, b)?;
+    let instr = r.strip_prefix(", ")?;
+    // The dug cards themselves, wherever they are.
+    let sel = match f {
+        Filter::In(s) => *s,
+        f => Sel::All(f),
+    };
+    let v = Value::Aggregate(AggOp::Sum, stat, Box::new(sel));
+    let e = crate::oracle::effects::parse_clause(instr, b)?;
+    Some(super::iteration_grammar::times_over(e, v))
+}
+
+inventory::submit! { EffectPattern { name: "mana 5: for each [color] mana symbol in the mana costs of the revealed cards, [instruction]", priority: 100, parse: for_each_symbol_among_dug } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

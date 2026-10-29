@@ -2572,6 +2572,14 @@ impl Renderer<'_> {
                     format!("damage that would be dealt by {n} can't be prevented")
                 }
             }
+            Restriction::DamageToCantBePreventedOrRedirected(f) => {
+                let n = self.noun(f, Num::One);
+                format!("damage that would be dealt to {n} this turn can't be prevented or dealt instead to another permanent or player")
+            }
+            Restriction::SourceDamageToCantBePreventedOrRedirected { to, .. } => {
+                let n = self.noun_det(to, Det::A);
+                format!("if ~ would deal damage to {n}, that damage can't be prevented or dealt instead to another permanent or player")
+            }
             Restriction::CantTransform(f) => format!("{} can't transform", subj(self, f)),
             // "As long as enchanted creature is face down, it can't be turned face up."
             Restriction::CantTurnFaceUp(Filter::And(v))

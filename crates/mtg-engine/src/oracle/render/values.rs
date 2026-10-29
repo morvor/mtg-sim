@@ -307,6 +307,13 @@ impl Renderer<'_> {
                         };
                         return format!("the number of {} mana symbols in {p} mana cost", c.word());
                     }
+                    Stat::ColoredManaSymbols if *op == AggOp::Sum => {
+                        let p = match s.as_str() {
+                            "it" => "its".to_string(),
+                            other => super::nouns::possessive(other),
+                        };
+                        return format!("the number of colored mana symbols in {p} mana cost");
+                    }
                     other => return self.gap(format!("Value::Aggregate {other:?}")),
                 };
                 let o = match op {

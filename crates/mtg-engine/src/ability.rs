@@ -1990,6 +1990,9 @@ pub enum Stat {
     /// Mana symbols of a color in its mana cost (hybrid symbols of the color count, CR
     /// 107.4e).
     ManaSymbols(crate::types::Color),
+    /// Colored mana symbols in its mana cost, of any color (each hybrid symbol once, CR
+    /// 107.4e; Phyrexian symbols are colored).
+    ColoredManaSymbols,
 }
 
 /// What [`Value::DistinctAmong`] counts the different values of.
@@ -2528,6 +2531,10 @@ pub enum ManaProduction {
     /// Mana represented by the symbols of the selected object's mana cost ("add mana equal
     /// to enchanted permanent's mana cost", CR 106.8–106.11).
     ManaCostOf(Sel),
+    /// One mana for each colored mana symbol in the selected object's mana cost, of that
+    /// symbol's color ("For each colored mana symbol in the milled card's mana cost, add one
+    /// mana of that color", Charmed Pendant): one of either color for a hybrid symbol.
+    ColoredSymbolsOf(Sel),
     /// Doubles the amount of each type of unspent mana the player has (CR 701.10f;
     /// Doubling Cube). The new mana has no restrictions (CR 106.6 example).
     DoubleUnspent,
@@ -3084,6 +3091,17 @@ pub enum Restriction {
     DamageCantBePrevented,
     /// "Damage [sources matching the filter] would deal can't be prevented" (CR 615.12).
     SourceDamageCantBePrevented(Filter),
+    /// "Damage that would be dealt to that creature this turn can't be prevented or dealt
+    /// instead to another permanent or player." (Whippoorwill): damage to objects matching
+    /// the filter can't be prevented (CR 615.12) nor redirected (CR 614.9).
+    DamageToCantBePreventedOrRedirected(Filter),
+    /// "If ~ would deal damage to a creature, that damage can't be prevented or dealt
+    /// instead to another permanent or player." (Lava Burst): damage from `source` to
+    /// objects matching `to` can't be prevented nor redirected.
+    SourceDamageToCantBePreventedOrRedirected {
+        source: Filter,
+        to: Filter,
+    },
     /// "Combat damage [that would be dealt by sources matching the filter] can't be
     /// prevented" (CR 615.12): only combat damage (CR 120.2a).
     CombatDamageCantBePrevented(Filter),

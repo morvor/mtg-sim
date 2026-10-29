@@ -8219,6 +8219,10 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Poss);
                 format!("mana equal to {s} mana cost")
             }
+            ManaProduction::ColoredSymbolsOf(s) => {
+                let s = self.sel(s, Case::Poss);
+                format!("one mana of that color for each colored mana symbol in {s} mana cost")
+            }
             ManaProduction::DoubleUnspent => {
                 "mana equal to the amount of each type of unspent mana you have".into()
             }

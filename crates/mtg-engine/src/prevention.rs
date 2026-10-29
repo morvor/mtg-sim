@@ -162,6 +162,43 @@ fn colors_filter(colors: ColorSet) -> Filter {
     )
 }
 
+/// A replacement effect's instructions with the X of the spell or ability that created it
+/// as a number (the instructions run later, when that X is gone).
+pub fn lock_x(d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
+    use serde_json::Value as J;
+    fn walk(v: J, x: i32) -> J {
+        match v {
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, v)| {
+                        let numeric = matches!(k.as_str(), "n" | "count" | "amount" | "times");
+                        if numeric && v == J::String("X".into()) {
+                            (k, serde_json::json!({ "Const": x }))
+                        } else {
+                            (k, walk(v, x))
+                        }
+                    })
+                    .collect(),
+            ),
+            J::Array(a) => J::Array(a.into_iter().map(|v| walk(v, x)).collect()),
+            other => other,
+        }
+    }
+    let ReplacementAction::Instead(e) = &d.action else {
+        return d.clone();
+    };
+    let locked = serde_json::to_value(&**e)
+        .ok()
+        .and_then(|v| serde_json::from_value(walk(v, ctx.x)).ok());
+    match locked {
+        Some(e) => ReplacementDef {
+            action: ReplacementAction::Instead(Box::new(e)),
+            ..d.clone()
+        },
+        None => d.clone(),
+    }
+}
+
 /// Locks a player filter naming chosen players ("target player", "that player") onto those
 /// players (see [`lock_filter`]). Only players among the chosen entities count: "any
 /// target" that is a creature names no player.
@@ -523,6 +560,29 @@ pub fn damage_event_cant_be_prevented(g: &Game, source: ObjectId, combat: bool) 
                 Restriction::CombatDamageCantBePrevented(f) => Some(f),
                 _ => None,
             }))
+}
+
+/// Whether damage from `source` to `target` can't be prevented or redirected because of an
+/// effect naming the recipient ("Damage that would be dealt to that creature this turn
+/// can't be prevented or dealt instead to another permanent or player", Whippoorwill; "If
+/// ~ would deal damage to a creature, that damage can't be ...", Lava Burst).
+pub fn damage_cant_be_prevented_or_redirected(g: &Game, source: ObjectId, target: Entity) -> bool {
+    let Entity::Object(t) = target else {
+        return false;
+    };
+    g.restricted_obj(t, |r| match r {
+        Restriction::DamageToCantBePreventedOrRedirected(f) => Some(f),
+        _ => None,
+    }) || g
+        .all_restrictions()
+        .iter()
+        .any(|(s, c, r, locked)| match r {
+            Restriction::SourceDamageToCantBePreventedOrRedirected { source: f, to } => {
+                let ctx = Ctx::new(*s, *c);
+                g.restriction_applies(source, f, &ctx, locked) && g.matches(t, to, &ctx)
+            }
+            _ => false,
+        })
 }
 
 /// Whether a replacement action is a prevention effect (CR 615.1a).

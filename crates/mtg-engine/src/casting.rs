@@ -3977,7 +3977,10 @@ impl Game {
             }
             CostPart::Mill(v) => {
                 let n = self.eval_value(v, ctx).max(0) as u32;
-                self.mill(p, n);
+                // "the milled card" (Charmed Pendant): what the cost moved.
+                let milled = self.mill(p, n);
+                paid.objects
+                    .extend(milled.iter().filter_map(|o| self.obj(*o).prev));
             }
             CostPart::RevealFromHand { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;

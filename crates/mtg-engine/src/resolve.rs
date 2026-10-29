@@ -995,6 +995,9 @@ impl Game {
                 };
                 // Chosen objects the effect refers to are locked in (CR 609.7b, 611.2c).
                 let def = &crate::prevention::lock_def(self, def, ctx);
+                // "instead look at the top X cards of your library" (Aladdin's Lamp): the
+                // value of X of the ability that created it (CR 107.3).
+                let def = &crate::prevention::lock_x(def, ctx);
                 self.replacements.push(ReplacementInstance {
                     id,
                     source: ctx.source,
@@ -3473,6 +3476,22 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::ColoredSymbolsOf(sel) => {
+                let symbols: Vec<crate::mana::ManaSymbol> = self
+                    .eval_sel_objects(sel, ctx)
+                    .first()
+                    .and_then(|o| self.obj(*o).chars.mana_cost.clone())
+                    .map(|m| m.symbols.to_vec())
+                    .unwrap_or_default();
+                let mut out = Vec::new();
+                for s in symbols {
+                    let opts: Vec<ManaType> = s.colors().iter().map(ManaType::from_color).collect();
+                    if !opts.is_empty() {
+                        out.push(self.choose_mana_color(p, ctx, &opts));
+                    }
+                }
+                out
+            }
             ManaProduction::ManaCostOf(sel) => {
                 // CR 106.8–106.11: hybrid symbols let the player choose a half; Phyrexian
                 // symbols add one mana of their color; generic and snow symbols add
@@ -3717,6 +3736,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantTurnFaceUp(f)
         | Restriction::CantBeCopied(f)
         | Restriction::SourceDamageCantBePrevented(f)
+        | Restriction::DamageToCantBePreventedOrRedirected(f)
+        | Restriction::SourceDamageToCantBePreventedOrRedirected { source: f, .. }
         | Restriction::AttackDespiteDefender(f)
         | Restriction::AttackPlayersDespiteDefender { attackers: f, .. }
         | Restriction::BlockAsThoughUntapped(f)
