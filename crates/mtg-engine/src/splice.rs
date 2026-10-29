@@ -16,15 +16,18 @@ use smol_str::SmolStr;
 pub const SPLICED: &str = "spliced";
 
 /// CR 601.2b, 702.47a–b: offers `p` to splice cards from their hand onto `spell`, which
-/// they're casting with the additional costs `extra` so far. Returns the splice costs to
-/// add to the spell's total cost.
-pub fn offer_splices(g: &mut Game, p: PlayerId, spell: ObjectId, extra: &Cost) -> Vec<Cost> {
+/// they're casting as `opt` with the additional costs `extra` announced so far. Returns
+/// the splice costs to add to the spell's total cost.
+pub fn offer_splices(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    opt: &crate::casting::CastOption,
+    extra: &Cost,
+) -> Vec<Cost> {
     let spell_chars = g.obj(spell).chars.clone();
-    // What will be paid so far: the mana cost plus the additional costs.
+    // The additional costs announced so far (the splice costs chosen included).
     let mut committed = extra.clone();
-    if let Some(m) = &spell_chars.mana_cost {
-        add_cost(&mut committed, &Cost::mana(m.clone()));
-    }
     let spell_ctx = Ctx::new(Some(spell), p);
     let mut chosen: Vec<(ObjectId, Cost)> = Vec::new();
     for card in g.player(p).hand.clone() {
@@ -50,7 +53,10 @@ pub fn offer_splices(g: &mut Game, p: PlayerId, spell: ObjectId, extra: &Cost) -
         let cost = kw.cost.clone().unwrap_or_else(Cost::free);
         let mut with = committed.clone();
         add_cost(&mut with, &cost);
-        if !targets_ok || !g.can_pay_cost_optimistic(p, &with, Some(spell), &spell_chars) {
+        // CR 601.2f: what the total cost would be, with the cost increases and reductions
+        // (which apply to the splice costs too).
+        let total = g.total_cost_with(p, spell, &spell_chars, opt, 0, &with);
+        if !targets_ok || !g.can_pay_cost_optimistic(p, &total, Some(spell), &spell_chars) {
             continue;
         }
         let yes = matches!(

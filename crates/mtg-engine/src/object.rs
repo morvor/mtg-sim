@@ -359,6 +359,10 @@ pub struct EventInfo {
     /// once ("the number of opponents dealt damage this way", "each of those opponents").
     #[serde(default)]
     pub players: Vec<PlayerId>,
+    /// For a batch of events that triggered one ability ("whenever you roll one or more
+    /// dice"), each event's amount (the results of those dice), in order.
+    #[serde(default)]
+    pub amounts: Vec<i32>,
 }
 
 /// The kind of object on the stack.

@@ -1261,6 +1261,10 @@ fn count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 }
 
 fn count_core(r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "creature cards among those cards" after cards were dug (`dice_coins_4`).
+    if let Some(v) = super::dice_coins_4::among_dug_cards(r, b) {
+        return Some(v);
+    }
     // "mana from a Treasure spent to cast ~" (see `mana_4`).
     if let Some(v) = super::mana_4::count_phrase(r, b) {
         return Some(v);
