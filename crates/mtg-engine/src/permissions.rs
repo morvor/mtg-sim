@@ -408,7 +408,15 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             ZoneKind::Exile => g.exile.clone(),
             ZoneKind::Hand => g.player(p).hand.clone(),
             ZoneKind::Command => g.command.clone(),
-            ZoneKind::Outside => g.player(p).sideboard.clone(),
+            // The cards the player has outside the game (CR 400.11b) that a Commander
+            // game lets in (CR 903.11a).
+            ZoneKind::Outside => g
+                .player(p)
+                .sideboard
+                .iter()
+                .copied()
+                .filter(|c| crate::commander_rules::may_bring_in(g, *c, Zone::Stack))
+                .collect(),
             _ => vec![],
         };
         for c in cards {

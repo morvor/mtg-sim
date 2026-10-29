@@ -36,7 +36,9 @@ fn wish_lets_you_play_one_card_from_outside_the_game_this_turn() {
         t.g.add_to_sideboard(P0, vec![card("Lightning Bolt"), card("Shock")]);
     t.lands(P0, "Mountain", 5);
     let wish = t.hand(P0, "Wish");
-    t.answer_yes(P0, true);
+    // The "may" is the permission itself: nothing is asked as Wish resolves (declining
+    // would lose it).
+    t.answer_yes(P0, false);
     t.cast(P0, wish).go();
     t.resolve_all();
     // One of them, with its costs paid.
@@ -51,12 +53,28 @@ fn wish_lets_you_play_one_card_from_outside_the_game_this_turn() {
     t.lands(P0, "Mountain", 3);
     t.lands(P0, "Forest", 2);
     let wish = t.hand(P0, "Wish");
-    t.answer_yes(P0, true);
     t.cast(P0, wish).go();
     t.resolve_all();
     t.advance_to(P1, Step::PrecombatMain);
     t.advance_to(P0, Step::PrecombatMain);
     assert!(t.cast(P0, side[0]).try_go().is_err());
+}
+
+#[test]
+fn wish_lets_you_play_a_land_from_outside_the_game() {
+    cr!("400.11b", "305.2");
+    interp!("outside-the-game-is-the-sideboard");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let side = t.g.add_to_sideboard(P0, vec![card("Forest"), card("Island")]);
+    t.lands(P0, "Mountain", 3);
+    let wish = t.hand(P0, "Wish");
+    t.cast(P0, wish).go();
+    t.resolve_all();
+    t.play_land(P0, side[0]).unwrap();
+    assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    // Only one card, and the land play is used up anyway.
+    assert!(t.play_land(P0, side[1]).is_err());
 }
 
 #[test]

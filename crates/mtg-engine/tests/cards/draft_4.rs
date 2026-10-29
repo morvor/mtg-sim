@@ -399,7 +399,9 @@ fn cogwork_librarian_drafts_two_cards_and_goes_back_into_the_pack() {
     .unwrap();
     assert_eq!(d.drafted(P0).len(), 2);
     assert!(d.drafted(P0).iter().all(|c| c.card.name == "Grizzly Bears"));
-    let _ = before;
+    // Cogwork Librarian went into that pack in place of the two cards.
+    assert_eq!(d.pack(P0).len(), before - 1);
+    assert!(d.pack(P0).iter().any(|c| c.name == "Cogwork Librarian"));
 }
 
 #[test]
@@ -471,6 +473,45 @@ fn cogwork_spy_looks_at_the_next_card_drafted_from_the_pack() {
     d.pick(P1, &[0]).unwrap();
     assert!(d.can_see(P0, "Lightning Bolt"));
     assert!(!d.can_see(P2, "Lightning Bolt"));
+    // With Cogwork Librarian, P0 drafts Cogwork Spy and then the next card from the same
+    // pack: P0 is the next to draft from it, so the look adds nothing (P0 sees the card
+    // only as their own drafted card).
+    let mut d = Draft::new(
+        vec![
+            vec![vec![
+                card("Cogwork Librarian"),
+                card("Grizzly Bears"),
+                card("Grizzly Bears"),
+                card("Grizzly Bears"),
+            ]],
+            vec![(0..4).map(|_| card("Grizzly Bears")).collect()],
+            vec![vec![
+                card("Cogwork Spy"),
+                card("Lightning Bolt"),
+                card("Grizzly Bears"),
+                card("Grizzly Bears"),
+            ]],
+        ],
+        DraftStyle::Conspiracy,
+        1,
+    );
+    d.pick(P0, &[0]).unwrap();
+    d.pick(P1, &[0]).unwrap();
+    d.pick(P2, &[2]).unwrap();
+    // P0 now drafts from P2's pack.
+    let spy = index_of(&d, P0, "Cogwork Spy");
+    let bolt = index_of(&d, P0, "Lightning Bolt");
+    d.pick_with(
+        P0,
+        &[spy],
+        Some(DraftOption::Additional {
+            with: "Cogwork Librarian".into(),
+            extra: bolt,
+        }),
+    )
+    .unwrap();
+    let seen = d.visible(P0);
+    assert_eq!(seen.iter().filter(|c| c.name == "Lightning Bolt").count(), 1);
 }
 
 #[test]
