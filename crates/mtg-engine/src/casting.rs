@@ -1892,7 +1892,18 @@ impl Game {
         // pay part of it other than with mana (the X part first, as for reductions).
         let generic = |c: &Cost| c.mana.as_ref().map_or(0, |m| m.generic_amount());
         let before = generic(&total);
+        let untapped: Vec<ObjectId> = self
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|o| !self.obj(*o).tapped)
+            .collect();
         let relied_on = crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
+        // What convoke, improvise and the like tapped (CR 702.51a, 702.126a).
+        let paid_otherwise: Vec<ObjectId> = untapped
+            .into_iter()
+            .filter(|o| self.is_in_zone(*o, Zone::Battlefield) && self.obj(*o).tapped)
+            .collect();
         x_left = x_left.saturating_sub(before.saturating_sub(generic(&total)));
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
@@ -1937,21 +1948,23 @@ impl Game {
             ..Default::default()
         };
         ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
-        let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
-        ctx.cost_of = None;
-        let paid = paid?;
         // CR 601.2g–h: mana abilities are activated before the total cost is paid, so a
         // creature sacrificed for mana (Wild Cantor) isn't there to be tapped for convoke:
-        // a payment that convoked it and then used its mana can't be made.
-        let convoked_gone = self.obj(id).stack.as_ref().is_some_and(|si| {
-            si.cast
-                .convoked
-                .iter()
-                .any(|c| !self.is_in_zone(*c, Zone::Battlefield) && !paid.objects.contains(c))
-        });
-        if convoked_gone {
+        // the automatic payment doesn't plan those mana abilities (`Game::paid_otherwise`),
+        // and a payment that removed such a permanent anyway (sacrificing it to another
+        // permanent's mana ability) can't be made. The spell's own costs may still
+        // sacrifice it: those are paid together with the tapping (CR 601.2h).
+        let prev_otherwise = std::mem::replace(&mut self.paid_otherwise, paid_otherwise.clone());
+        let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
+        self.paid_otherwise = prev_otherwise;
+        ctx.cost_of = None;
+        let paid = paid?;
+        if paid_otherwise
+            .iter()
+            .any(|c| !self.is_in_zone(*c, Zone::Battlefield) && !paid.objects.contains(c))
+        {
             return Err(Illegal(
-                "a creature that convoked the spell was sacrificed for mana".into(),
+                "a permanent tapped to pay the spell's cost was removed for mana".into(),
             ));
         }
         // CR 601.2g–h: mana abilities are activated before the total cost is paid. If one
@@ -3718,6 +3731,12 @@ impl Game {
                     // A mana ability activated to pay another cost doesn't sacrifice the
                     // object that cost is for (see `Game::mana_reserve`).
                     .filter(|o| Some(*o) != self.mana_reserve)
+                    // Nor what convoke or improvise tapped for the spell being cast: that's
+                    // tapped after mana abilities are activated (CR 601.2g–h).
+                    .filter(|o| {
+                        !(self.paid_otherwise.contains(o)
+                            && src.is_some_and(|s| self.is_in_zone(s, Zone::Battlefield)))
+                    })
                     .collect();
                 if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
                 {

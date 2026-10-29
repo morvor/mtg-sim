@@ -389,3 +389,65 @@ fn wild_cantor_sacrificed_for_mana_cant_also_convoke() {
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
 }
+
+/// An artifact with the given Oracle text, compiled as the card database would.
+fn artifact(name: &str, text: &str) -> mtg_engine::card::CardDef {
+    let tl = mtg_engine::types::TypeLine::parse("Artifact");
+    let ctx = mtg_engine::oracle::CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = mtg_engine::oracle::compile(text, &ctx);
+    assert!(compiled
+        .abilities
+        .iter()
+        .all(|a| !matches!(a.kind, mtg_engine::ability::AbilityKind::Unsupported(_))));
+    mtg_engine::card::CardDef::custom(mtg_engine::object::Characteristics {
+        name: smol_str::SmolStr::new(name),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{1}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: std::sync::Arc::from(text),
+        ..Default::default()
+    })
+}
+
+#[test]
+fn an_artifact_sacrificed_for_mana_cant_also_improvise() {
+    // The same holds for improvise: the artifacts are tapped after mana abilities are
+    // activated, so one sacrificed for mana isn't there to be tapped.
+    cr!("702.126a", "601.2g", "601.2h");
+    // Reverse Engineer ({3}{U}{U}, improvise) with two Islands and two artifacts that
+    // sacrifice themselves for {C}: four payments at most.
+    let setup = |n: usize| {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let arts: Vec<ObjectId> = (0..n)
+            .map(|_| {
+                t.custom(
+                    P0,
+                    artifact("Mana Shard", "Sacrifice this artifact: Add {C}."),
+                    Zone::Battlefield,
+                )
+            })
+            .collect();
+        t.lands(P0, "Island", 2);
+        let spell = t.hand(P0, "Reverse Engineer");
+        (t, arts, spell)
+    };
+    let (mut t, arts, spell) = setup(2);
+    assert!(t.cast(P0, spell).try_go().is_err());
+    assert!(arts.iter().all(|a| t.on_battlefield(*a)), "the failed cast was undone");
+    // Control: a third artifact is enough.
+    let (mut t, _, spell) = setup(3);
+    let hand = t.hand_size(P0);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand - 1 + 3);
+}
