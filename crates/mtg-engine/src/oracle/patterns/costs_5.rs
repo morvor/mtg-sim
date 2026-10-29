@@ -389,3 +389,70 @@ fn collect_evidence_of_targets(block: &str, _ctx: &CompileContext) -> Option<Vec
 }
 
 inventory::submit! { AbilityPattern { name: "costs 5: collect evidence X, where X is the total mana value of the permanents ~ targets", priority: 80, parse: collect_evidence_of_targets } }
+
+/// "Exile cards from your graveyard equal to the number of opponents you have" (Araumi of
+/// the Dead Tide): that many cards, the number determined as the cost is paid (CR 601.2f).
+fn exile_cards_equal_to_opponents(p: &str) -> Option<CostPart> {
+    let r = end(p).strip_prefix("exile cards from your graveyard equal to ")?;
+    let n = match r {
+        "the number of opponents you have" => Value::CountPlayers(PlayerFilter::Opponent),
+        _ => return None,
+    };
+    match crate::oracle::costs::parse_cost_part("exile two cards from your graveyard")? {
+        CostPart::Exile { filter, zone, .. } => Some(CostPart::Exile {
+            filter,
+            zone,
+            count: n,
+        }),
+        _ => None,
+    }
+}
+
+inventory::submit! { super::CostPattern { name: "costs 5: exile cards from your graveyard equal to the number of opponents you have", priority: 60, parse: exile_cards_equal_to_opponents } }
+
+/// "[target card] gains encore until end of turn. The encore cost is equal to its mana
+/// cost." (Araumi of the Dead Tide): encore (CR 702.141a) whose cost is paying the card's
+/// own mana cost (`CostPart::PayManaCostOf`).
+fn granted_encore_for_its_mana_cost(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    const TAIL: &str =
+        " gains encore until end of turn. The encore cost is equal to its mana cost.";
+    if block.contains('\n') || !block.trim_end().ends_with(TAIL) {
+        return None;
+    }
+    let t = block
+        .trim_end()
+        .replace(TAIL, " gains encore {0} until end of turn.");
+    let out = crate::oracle::parse_ability(&t, ctx)?;
+    let mut fixed = Vec::new();
+    let mut n = 0;
+    for a in out {
+        let mut v = serde_json::to_value(&a.kind).ok()?;
+        n += set_encore_cost(&mut v);
+        let kind: AbilityKind = serde_json::from_value(v).ok()?;
+        fixed.push(AbilityDef::with_link(kind, block.trim(), a.link));
+    }
+    (n == 1).then_some(fixed)
+}
+
+/// Sets the cost of each encore keyword granted in `v` (written as {0}) to paying the
+/// card's mana cost; returns how many.
+fn set_encore_cost(v: &mut serde_json::Value) -> usize {
+    use serde_json::Value as J;
+    match v {
+        J::Object(m) => {
+            if m.get("kind") == Some(&J::String("Encore".into())) {
+                let cost = Cost {
+                    mana: None,
+                    parts: vec![CostPart::PayManaCostOf(Box::new(Sel::This))],
+                };
+                m.insert("cost".into(), serde_json::to_value(cost).unwrap_or(J::Null));
+                return 1;
+            }
+            m.values_mut().map(set_encore_cost).sum()
+        }
+        J::Array(a) => a.iter_mut().map(set_encore_cost).sum(),
+        _ => 0,
+    }
+}
+
+inventory::submit! { AbilityPattern { name: "costs 5: gains encore; the encore cost is equal to its mana cost", priority: 80, parse: granted_encore_for_its_mana_cost } }

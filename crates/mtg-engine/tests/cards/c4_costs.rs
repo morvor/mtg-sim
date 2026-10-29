@@ -397,3 +397,38 @@ fn urgent_necropsy_collects_evidence_equal_to_its_targets_total_mana_value() {
     assert!(r.is_err());
     assert!(t.on_battlefield(giant));
 }
+
+#[test]
+fn araumi_exiles_a_card_per_opponent_and_grants_encore_for_the_cards_mana_cost() {
+    cr!("702.141a", "601.2f");
+    ruling!("Araumi of the Dead Tide", "Exiling the card with encore is a cost");
+    assert_supported(&["Araumi of the Dead Tide"]);
+    let mut t = TestGame::new(2);
+    let araumi = t.battlefield(P0, "Araumi of the Dead Tide");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let fodder = t.graveyard(P0, "Shock");
+    t.answer_choose(P0, &[Entity::Object(fodder)]);
+    t.activate(P0, araumi, 0, &[Entity::Object(bears)]).unwrap();
+    // One opponent: one card exiled.
+    assert!(t.in_exile("Shock"));
+    t.resolve();
+    // Encore {1}{G}: the card's mana cost.
+    t.lands(P0, "Forest", 2);
+    t.g.recompute();
+    let uid = t
+        .g
+        .obj(bears)
+        .chars
+        .abilities
+        .iter()
+        .find(|a| {
+            a.text == "Encore" && matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_))
+        })
+        .map(|a| a.uid)
+        .expect("encore");
+    t.g.turn.priority = Some(P0);
+    t.g.activate_ability(P0, bears, uid).expect("encore");
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "a token copy");
+}
