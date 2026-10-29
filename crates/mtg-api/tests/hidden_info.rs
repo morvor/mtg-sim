@@ -641,3 +641,53 @@ fn a_card_returned_from_a_graveyard_to_a_hand_is_seen_by_everyone() {
         "{for_p1}"
     );
 }
+
+#[test]
+fn expert_level_safe_cards_stay_hidden_and_choices_secret_until_revealed() {
+    cr!("406.3", "607.2d");
+    ruling!(
+        "Expert-Level Safe",
+        "You don’t get to look at the cards exiled by Expert-Level Safe’s abilities."
+    );
+    ruling!(
+        "Expert-Level Safe",
+        "Keep those choices secret until they’re simultaneously revealed."
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    for _ in 0..3 {
+        t.library_top(P0, "Mox Sapphire");
+    }
+    let safe = t.enter(P0, "Expert-Level Safe");
+    t.resolve_all();
+    let hidden = |t: &TestGame| {
+        let o = observe(&t.g, Some(P0));
+        let exiled: Vec<_> = o.players[0].exile.iter().collect();
+        assert!(!exiled.is_empty());
+        assert!(exiled.iter().all(|c| c.face_down && c.card.name.is_none()));
+        exiled.len()
+    };
+    assert_eq!(hidden(&t), 2, "not even its controller sees them");
+    assert!(!json(&observe(&t.g, Some(P0))).contains("Mox Sapphire"));
+    // The choices: P1 doesn't see P0's number while choosing.
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.set_agent(P1, Box::new(Peeker(seen.clone())));
+    t.answer(
+        P0,
+        DecisionKind::Number,
+        mtg_engine::decision::Answer::Number(2),
+    );
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, safe, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 1, "P1 chose a number");
+    assert!(!seen[0].contains("chose 2"), "{}", seen[0]);
+    let after = json(&observe(&t.g, Some(P1)));
+    assert!(
+        after.contains("P0 chose 2") && after.contains("P1 chose 3"),
+        "{after}"
+    );
+    // No match (2 and 3): a third card exiled face down, still hidden.
+    assert_eq!(hidden(&t), 3);
+}

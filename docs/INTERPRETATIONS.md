@@ -8,7 +8,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 25 | 14 |
+| interpretation | 25 | 15 |
 | deviation | 5 | 2 |
 | policy | 28 | 1 |
 
@@ -65,6 +65,9 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 - **library-arranged-by-owner-not-instructing-player** (deviation, [zones-objects](interpretations/zones-objects.md)): Cards an effect puts into another player's library "in any order" are arranged by their owner
   - Question: When a spell's controller puts cards owned by another player into that player's library "in any order" (Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories), who arranges them: the cards' owner (401.4) or the player the text instructs to put them (the card's "in any order", read as overriding 401.4, as the Misinformation and Sealed Fate rulings imply)?
   - Decision: For cards moved from another zone (graveyard, hand) into a library, the owner arranges them (`zones::order_simultaneous`), whatever the text says. Cards rearranged within a library by a dig ("look at the top N cards of target opponent's library ... put the rest back in any order") are arranged by the player the text instructs, as Sealed Fate's ruling says (`dig_steps::rearrange`).
+- **self-shuffle-gone-library-still-shuffled** (interpretation, [zones-objects](interpretations/zones-objects.md)): "Its owner shuffles it into their library" shuffles that library even when it has left
+  - Question: Blitz Hellion ("At the beginning of the end step, this creature's owner shuffles it into their library.") has left the battlefield when its ability resolves. It stays where it is; is its owner's library shuffled?
+  - Decision: Yes. The engine follows CR 701.24c, which is newer than the ruling and has an example of the same shape (Guile exiled in response to "shuffle it into its owner's library"): the object stays where it is and the library is shuffled. Shuffle triggers trigger.
 
 ## All entries
 
@@ -144,4 +147,5 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `library-arranged-by-owner-not-instructing-player` | Cards an effect puts into another player's library "in any order" are arranged by their owner | deviation | provisional | [zones-objects](interpretations/zones-objects.md) |
 | `looked-at-hand-card-stays-seen` | A card looked at in another player's hand stays visible to the looker while it remains there | interpretation | provisional | [zones-objects](interpretations/zones-objects.md) |
 | `outside-the-game-is-the-sideboard` | Cards a player brings in "from outside the game" come from their sideboard | policy | decided | [zones-objects](interpretations/zones-objects.md) |
+| `self-shuffle-gone-library-still-shuffled` | "Its owner shuffles it into their library" shuffles that library even when it has left | interpretation | provisional | [zones-objects](interpretations/zones-objects.md) |
 | `the-token-another-ability-created` | "The token" in another ability is the one token the card's token-making ability created | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |

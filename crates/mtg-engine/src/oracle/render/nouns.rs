@@ -432,7 +432,10 @@ impl Renderer<'_> {
                     && v.iter().any(|x| matches!(x, Filter::BlockingSource))
                     && v.iter().any(|x| matches!(x, Filter::BlockedBySource)) =>
             {
+                // The object itself, by name or as "it" ("target creature blocking or
+                // blocked by it").
                 let m = self.me();
+                let m = if m == "~" { "~it".to_string() } else { m };
                 np.post.push(format!("blocking or blocked by {m}"));
             }
             Filter::Or(v) if is_outlaw(v) => np.subtypes.push("outlaw".into()),
@@ -759,7 +762,13 @@ impl Renderer<'_> {
                 "{alt:its controller has controlled continuously since the beginning of the turn|that player has controlled continuously since the beginning of the turn}".into(),
             ),
             Filter::BlockRelation { rel, other, when } => {
-                let s = self.sel(other, Case::Obj);
+                // "target creature blocking or blocked by it": the object itself, named
+                // either way.
+                let s = if matches!(other.as_ref(), Sel::This) {
+                    "~it".to_string()
+                } else {
+                    self.sel(other, Case::Obj)
+                };
                 let w = match when {
                     BlockWhen::Now => "",
                     BlockWhen::ThisCombat => " this combat",

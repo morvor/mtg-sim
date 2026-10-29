@@ -1554,10 +1554,22 @@ fn search_clause_inner(l: &str, b: &mut Builder) -> Option<Effect> {
         if !library_free(&e) {
             return None;
         }
-        if shuffle {
-            spec.shuffle = SearchShuffle::After;
-        }
-        then = Some(e);
+        // The shuffle comes after that instruction: a card discarded at random may be
+        // put into the library instead of the graveyard (Library of Leng), and the
+        // shuffle then moves it (CR 608.2c: instructions are followed in order).
+        then = Some(if shuffle {
+            if !own_library(&spec) {
+                return None;
+            }
+            Effect::seq(vec![
+                e,
+                Effect::Shuffle {
+                    who: spec.who.clone(),
+                },
+            ])
+        } else {
+            e
+        });
     }
     // Third-person verbs go with a subject other than you, and only then.
     let third_verbs = [
@@ -1710,6 +1722,33 @@ fn library_free(e: &Effect) -> bool {
     .any(|w| j.contains(w))
 }
 
+/// "Then shuffle." when instructions follow a search of your own library that hasn't
+/// shuffled: a shuffle after those instructions. False (and `prev` unchanged) otherwise.
+fn shuffle_after_later_instructions(prev: &mut Effect) -> bool {
+    let Effect::Seq(v) = prev else {
+        return false;
+    };
+    let Some(i) = v.iter().rposition(|e| matches!(e, Effect::SearchCards(_))) else {
+        return false;
+    };
+    let Effect::SearchCards(s) = &v[i] else {
+        return false;
+    };
+    let ok = i + 1 < v.len()
+        && matches!((&s.who, &s.whose), (PlayerRef::You, PlayerRef::You))
+        && s.shuffle == SearchShuffle::No
+        && !s.optional
+        && !s.dests.is_empty()
+        && s.zones.contains(&ZoneKind::Library)
+        && v[i + 1..].iter().all(library_free);
+    if ok {
+        v.push(Effect::Shuffle {
+            who: PlayerRef::You,
+        });
+    }
+    ok
+}
+
 /// "Then each player who searched their library this way shuffles." after "each opponent
 /// may search their library ...": each opponent who accepted shuffles after searching.
 fn opponents_who_searched_shuffle(prev: &mut Effect) -> bool {
@@ -1756,13 +1795,20 @@ fn complete_search(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
     // "If you search your library this way, shuffle." / "If they search their library
     // this way, they shuffle." / "Then shuffle." after instructions that use the found
-    // cards: only a searched library is shuffled (the found cards are the same objects
-    // whether it's shuffled before or after those instructions, which don't look at the
-    // library).
+    // cards (inside an optional or conditional search): only a searched library is
+    // shuffled. (After instructions that follow an unconditional search, the shuffle is
+    // its own instruction, `shuffle_after_later_instructions`.)
     let you = matches!(
         l,
         "if you search your library this way, shuffle" | "then shuffle" | "shuffle"
     );
+    // "Then shuffle." after an instruction that follows the search ("Put it into your
+    // hand, then discard a card at random. Then shuffle.", Wild Research): the shuffle
+    // comes after that instruction, which may put a card into the library (a discard
+    // replaced by Library of Leng, CR 608.2c).
+    if matches!(l, "then shuffle" | "shuffle") && shuffle_after_later_instructions(prev) {
+        return true;
+    }
     if you || l == "if they search their library this way, they shuffle" {
         let done = update_deep(prev, &mut |s| {
             let ok = s.shuffle == SearchShuffle::No
