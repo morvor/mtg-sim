@@ -266,6 +266,35 @@ impl Game {
         self.dirty = false;
         self.expire_dependent_effects();
         self.compute_characteristics(true);
+        // A "for as long as" condition about characteristics just computed ("for as long
+        // as that creature's power remains less than or equal to ~'s power", CR 611.2b)
+        // ends the effect now, not at the next recomputation.
+        let before = self.dependent_effects_shape();
+        self.expire_dependent_effects();
+        if self.dependent_effects_shape() != before {
+            self.compute_characteristics(true);
+        }
+    }
+
+    /// How many effects from resolved spells and abilities exist, and how many objects
+    /// they're locked to: what `expire_dependent_effects` can change.
+    fn dependent_effects_shape(&self) -> (usize, usize, usize, usize, usize, usize) {
+        let locked: usize = self
+            .effects
+            .iter()
+            .map(|e| match &e.affected {
+                crate::game::Affected::Objects(v) => v.len(),
+                _ => 0,
+            })
+            .sum();
+        (
+            self.effects.len(),
+            locked,
+            self.rule_effects.len(),
+            self.player_effects.len(),
+            self.replacements.len(),
+            self.play_grants.len(),
+        )
     }
 
     /// Computes every object's characteristics, then the rule-modifying effects. With

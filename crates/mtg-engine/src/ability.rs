@@ -2179,6 +2179,16 @@ pub enum Duration {
     UntilEndOfCombatOnYourNextTurn,
     /// "until the next end step": until the next end step (of any turn) begins (CR 500.4).
     UntilNextStep(TriggerStep),
+    /// "until its controller's next untap step": for each affected object, until that
+    /// step of the turn of the player controlling it next begins (see
+    /// `step_durations`).
+    UntilItsControllersNextStep(TriggerStep),
+    /// "until the end of your next upkeep": until that step of a later turn of the
+    /// controller ends (see `step_durations`).
+    UntilEndOfYourNextStep(TriggerStep),
+    /// An [`Duration::UntilEndOfYourNextStep`] effect whose step has begun: it ends as the
+    /// current step ends.
+    UntilEndOfThisStep,
     /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
     /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
     /// end it).

@@ -875,6 +875,7 @@ impl Game {
                     }
                 };
                 let first = self.effects.len();
+                let duration = crate::duration_refs::bind_duration_objects(self, duration, ctx);
                 for (o, part) in parts {
                     let id = self.new_effect_id();
                     self.effects.push(ContinuousEffect {

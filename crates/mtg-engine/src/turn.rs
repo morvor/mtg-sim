@@ -431,6 +431,7 @@ impl Game {
             return;
         }
         self.expire_effects_at_step_begin(step);
+        crate::step_durations::step_began(self, step.trigger_step());
         self.turn.step_log.push(step);
         crate::player_control::step_began(self, step);
         self.emit(Event::StepBegan { step, active });
@@ -626,6 +627,7 @@ impl Game {
             self.turn.stage = Stage::Begin;
             return;
         }
+        crate::step_durations::step_ended(self);
         let active = self.turn.active;
         self.emit(Event::StepEnded { step, active });
         self.flush_events();
