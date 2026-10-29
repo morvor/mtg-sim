@@ -639,3 +639,14 @@ C5-W-bz-8	Divination	Exile two target cards from your graveyard. Copy those exil
 C5-W-bz-9	Divination	Exile two target cards from your graveyard. Copy those cards. You may cast up to one of the copies without paying its mana cost.	FAIL
 C5-W-bz-10	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy those cards. You may cast the copies without paying their mana costs.	FAIL
 C5-W-bz-11	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy the exiled cards. You may cast up to three of the copies without paying their mana costs.	FAIL
+C5-W-sw-11	Sword of the Ages	{T}, Sacrifice this artifact and any number of other creatures: Draw a card.	OK
+C5-W-sw-12	Sword of the Ages	{T}, Sacrifice this artifact and any number of creatures: Draw a card.	FAIL
+C5-W-sw-13	Emrakul's Evangel	{T}, Sacrifice this creature and any number of other creatures you control: Draw a card.	OK
+C5-W-zur-13	Divination	Reveal the top card of your library. Any player may pay 2 life. If a player does, put that card into your graveyard.	OK
+C5-W-zur-14	Divination	Reveal the top card of your library. You may pay 2 life. If you do, put that card into your graveyard. Otherwise, draw a card.	OK
+C5-W-cm-1	Chaos Moon	At the beginning of each upkeep, until end of turn, if a player taps a Mountain for mana, that Mountain produces colorless mana instead of any other type.	FAIL
+C5-W-cm-2	Chaos Moon	If a player taps a Mountain for mana, that Mountain produces colorless mana instead of any other type.	FAIL
+C5-W-cm-3	Chaos Moon	At the beginning of each upkeep, if the number of permanents is even, until end of turn, red creatures get -1/-1 and if a player taps a Mountain for mana, that Mountain produces colorless mana instead of any other type.	FAIL
+C5-W-cm-4	Chaos Moon	If a Mountain is tapped for mana, it produces colorless mana instead of any other type.	OK
+C5-W-cm-5	Chaos Moon	At the beginning of each upkeep, until end of turn, if a Mountain is tapped for mana, it produces colorless mana instead of any other type.	OK
+C5-W-cm-6	Chaos Moon	At the beginning of each upkeep, until end of turn, if a player taps a Mountain for mana, it produces colorless mana instead of any other type.	OK
