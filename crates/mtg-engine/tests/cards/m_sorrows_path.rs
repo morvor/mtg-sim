@@ -109,12 +109,20 @@ fn the_two_blockers_must_be_controlled_by_the_same_opponent() {
     );
     t.advance_to(P0, Step::DeclareBlockers);
     assert!(t.g.is_blocking(wall) && t.g.is_blocking(bears));
-    // Blockers of two different opponents aren't a legal pair of targets: whether the
-    // activation is refused or other targets are chosen, the Wall and the Bears don't
-    // swap (each could block the other's attacker).
+    // Blockers of two different opponents aren't a legal pair of targets (the answer is
+    // refused and a legal pair is chosen instead). In this variant neither could block
+    // the other's attacker anyway (CR 802.4a), so only the targets tell.
     t.answer_targets(P0, &[Entity::Object(wall), Entity::Object(bears)]);
-    let _ = t.activate(P0, path, 0, &[]);
-    t.resolve_all();
-    assert_eq!(blocking(&t, wall), vec![wurm]);
-    assert_eq!(blocking(&t, bears), vec![giant]);
+    t.activate(P0, path, 0, &[]).unwrap();
+    let ability = t
+        .g
+        .stack
+        .iter()
+        .copied()
+        .find(|s| t.obj(*s).stack.as_ref().is_some_and(|x| !x.chosen.is_empty()))
+        .expect("the ability on the stack");
+    let targets = t.obj(ability).stack.as_ref().unwrap().chosen[0].targets[0].clone();
+    assert_eq!(targets.len(), 2);
+    assert!(targets.contains(&Entity::Object(bears)) || targets.contains(&Entity::Object(bears2)));
+    assert!(!targets.contains(&Entity::Object(wall)));
 }
