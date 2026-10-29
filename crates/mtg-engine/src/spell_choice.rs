@@ -86,6 +86,9 @@ pub fn choose_cards_to_cast(
         ctx.vars
             .insert(*v, picked.iter().map(|o| Entity::Object(*o)).collect());
     }
+    // The spells are cast one after another in the order the player chose them (CR
+    // 608.2g; interpretation casting.cast-order-as-chosen).
     faces.retain(|(o, _)| picked.contains(o));
+    faces.sort_by_key(|(o, _)| picked.iter().position(|x| x == o));
     Some(faces)
 }

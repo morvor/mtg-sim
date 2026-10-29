@@ -48,3 +48,34 @@ impl Renderer<'_> {
         None
     }
 }
+
+impl Renderer<'_> {
+    /// Values about noted information (`kw/noted_info.rs`).
+    pub(crate) fn noted_value(&mut self, name: &str) -> Option<String> {
+        use crate::kw::noted_info as n;
+        if name == n::GREATEST_NOTED_THIS_TURN {
+            return Some("the greatest number noted for it this turn".into());
+        }
+        let slot: u8 = name.strip_prefix(n::NOTED_TYPES_OF_TARGET)?.parse().ok()?;
+        let t = self.target_mention(slot, players::Case::Obj);
+        Some(format!("the number of creature types noted for {t}"))
+    }
+}
+
+impl Renderer<'_> {
+    /// `TargetOf(all abilities on the stack from [objects])`: "the target of an ability
+    /// from [an object]".
+    pub(crate) fn target_of_ability_from(&mut self, f: &Filter) -> Option<String> {
+        let Filter::TargetOf(s) = f else {
+            return None;
+        };
+        let Sel::All(Filter::And(v)) = s.as_ref() else {
+            return None;
+        };
+        let [Filter::InZone(ZoneKind::Stack), Filter::AbilityFrom(src)] = v.as_slice() else {
+            return None;
+        };
+        let n = self.noun_det(src, nouns::Det::A);
+        Some(format!("the target of an ability from {n}"))
+    }
+}

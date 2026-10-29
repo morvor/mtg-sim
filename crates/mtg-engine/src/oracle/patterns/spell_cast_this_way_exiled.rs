@@ -25,6 +25,8 @@ fn spell_cast_this_way_exiled(l: &str, prev: &mut Effect, _b: &mut Builder) -> b
         end(l),
         "if a spell cast this way would be put into a graveyard, exile it instead"
             | "if a spell cast this way would be put into a graveyard, exile that card instead"
+            // (Finale of Promise: the spells are cast from your graveyard and are yours.)
+            | "if a spell cast this way would be put into your graveyard, exile it instead"
     ) || !ends_with_casting(prev)
     {
         return false;

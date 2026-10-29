@@ -89,6 +89,9 @@ pub fn window_events<'a>(g: &'a Game, w: &HistoryWindow, ctx: &Ctx) -> Vec<&'a E
                 .chain(this_turn(g))
                 .collect()
         }
+        HistoryWindow::PlayersLastCombat(r) => player(r)
+            .map(|p| players_last_combat(g, p))
+            .unwrap_or_default(),
         HistoryWindow::SinceLastUpkeep(r) => {
             let Some(p) = player(r) else {
                 return vec![];
@@ -121,6 +124,54 @@ pub fn window_events<'a>(g: &'a Game, w: &HistoryWindow, ctx: &Ctx) -> Vec<&'a E
                 .collect()
         }
     }
+}
+
+/// The combat phases among `events` (one turn's), in order: each from its beginning of
+/// combat step until the next step that isn't a combat step (CR 506.1).
+fn combat_phases<'a>(events: &[&'a Event]) -> Vec<Vec<&'a Event>> {
+    let mut phases: Vec<Vec<&Event>> = Vec::new();
+    let mut open = false;
+    for e in events {
+        if let Event::StepBegan { step, .. } = e {
+            if *step == Step::BeginningOfCombat {
+                phases.push(Vec::new());
+                open = true;
+            } else if !step.is_combat() {
+                open = false;
+            }
+        }
+        if open {
+            if let Some(p) = phases.last_mut() {
+                p.push(*e);
+            }
+        }
+    }
+    phases
+}
+
+/// [`HistoryWindow::PlayersLastCombat`]: the events of the latest combat phase of `p`'s
+/// turns before the current combat phase. During a combat phase of `p`'s turn, that's an
+/// earlier combat phase of this turn if there's one (CR 500.8); otherwise the last combat
+/// phase of the latest earlier turn of theirs that had one (a turn whose combat phase was
+/// skipped had no combat, CR 500.11). Nothing with no such combat.
+fn players_last_combat(g: &Game, p: PlayerId) -> Vec<&Event> {
+    if g.is_active_player(p) {
+        let now: Vec<&Event> = this_turn(g).collect();
+        let mut phases = combat_phases(&now);
+        if g.turn.step.is_combat() {
+            phases.pop();
+        }
+        if let Some(last) = phases.pop() {
+            return last;
+        }
+    }
+    for t in g.past_turns.iter().rev().filter(|t| t.active.contains(&p)) {
+        let events: Vec<&Event> = t.events.iter().collect();
+        if let Some(last) = combat_phases(&events).pop() {
+            return last;
+        }
+    }
+    vec![]
 }
 
 /// [`crate::ability::Value::EventsDuring`].
