@@ -6,27 +6,16 @@
 //! in [`crate::kw::keyword_state::KeywordState::payments`] and the payment's number (its
 //! index plus one) is kept in the resolution's [`PAID_MANA`] number. An event reporting
 //! that payment ("cumulative upkeep paid", `kw/cumulative_upkeep.rs`) carries the number
-//! as its amount, so a trigger on it counts the mana of that payment, not of a later one.
+//! as its amount, so a trigger on it counts the mana of that payment, not of a later one
+//! (`cast history:spent:this way:<what>`, `kw/cast_history.rs`).
 
-use super::{KeywordRegistration, KeywordRules};
 use crate::ability::{vars, Var};
 use crate::eval::Ctx;
 use crate::game::Game;
-use crate::keywords::KeywordKind;
 use crate::mana::ManaType;
 
 /// `Ctx::nums` entry: the number of the payment the resolving effect just made.
 pub const PAID_MANA: Var = vars::USER + 47391;
-
-/// `Value::Custom` prefix: how much mana of the listed types (`B,R`) was spent on the
-/// payment the triggering event reports ("for each {B} or {R} spent this way").
-pub const SPENT_THIS_WAY: &str = "payment mana:spent this way:";
-
-/// The `Value::Custom` name for mana of `types` spent on the triggering payment.
-pub fn spent_this_way(types: &[ManaType]) -> String {
-    let t: Vec<String> = types.iter().map(|t| format!("{t:?}")).collect();
-    format!("{SPENT_THIS_WAY}{}", t.join(","))
-}
 
 /// The mana types a `B,R` list names.
 pub fn parse_types(s: &str) -> Option<Vec<ManaType>> {
@@ -52,24 +41,12 @@ pub fn last_payment(ctx: &Ctx) -> i32 {
     ctx.nums.get(&PAID_MANA).copied().unwrap_or(0) as i32
 }
 
-struct PaymentMana;
-
-impl KeywordRules for PaymentMana {
-    fn kinds(&self) -> &'static [KeywordKind] {
-        &[]
-    }
-
-    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
-        let types = parse_types(name.strip_prefix(SPENT_THIS_WAY)?)?;
-        let n = ctx.event.as_ref().map_or(0, |e| e.amount);
-        let Some(mana) = usize::try_from(n - 1)
-            .ok()
-            .and_then(|i| g.kw_state.payments.get(i))
-        else {
-            return Some(0);
-        };
-        Some(mana.iter().filter(|m| types.contains(m)).count() as i64)
-    }
+/// The mana spent on the payment the triggering event reports (none if it reports none).
+pub fn paid_this_way(g: &Game, ctx: &Ctx) -> Vec<ManaType> {
+    let n = ctx.event.as_ref().map_or(0, |e| e.amount);
+    usize::try_from(n - 1)
+        .ok()
+        .and_then(|i| g.kw_state.payments.get(i))
+        .cloned()
+        .unwrap_or_default()
 }
-
-inventory::submit! { KeywordRegistration(&PaymentMana) }

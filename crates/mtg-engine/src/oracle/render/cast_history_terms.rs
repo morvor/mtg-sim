@@ -211,6 +211,15 @@ impl Renderer<'_> {
                     } else {
                         format!("mana from {t}s")
                     }
+                } else if let Some(ts) =
+                    w.strip_prefix("types:").or_else(|| w.strip_prefix("type:"))
+                {
+                    // "{B} or {R}" (`mana_6`).
+                    let syms: Vec<String> = crate::kw::payment_mana::parse_types(ts)?
+                        .iter()
+                        .map(|t| format!("{{{t:?}}}"))
+                        .collect();
+                    syms.join(" or ")
                 } else {
                     return None;
                 }
@@ -230,6 +239,10 @@ impl Renderer<'_> {
         } else {
             Self::spent_what(what, true)?
         };
+        // "the number of {B} or {R} spent this way" (`kw/payment_mana.rs`).
+        if whose == ch::THIS_WAY {
+            return Some(format!("the number of {m} spent this way"));
+        }
         let on = self.spent_on(whose)?;
         // "for each mana from a Treasure that was spent to cast ~" (Spoils of the Hunt).
         let that_was = if what.starts_with("source ") {

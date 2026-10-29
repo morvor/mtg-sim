@@ -646,3 +646,64 @@ fn runesword_doesnt_affect_creatures_damaged_by_other_creatures() {
     assert!(t.on_battlefield(skel));
     assert!(t.g.obj(skel).tapped);
 }
+
+// ---------------------------------------------------------------------------
+// The grammar on other wordings
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_grammar_reads_other_wordings_of_these_constructs() {
+    cr!("601.2h", "614.1a", "615.5", "702.29a");
+    for (ty, text) in [
+        (
+            "Artifact",
+            "{X}: Target player loses 1 life for each {R} spent to activate this ability.",
+        ),
+        (
+            "Artifact",
+            "{4}, {T}: Draw a card for each mana from a Treasure spent to activate this ability.",
+        ),
+        (
+            "Enchantment",
+            "If a player who controls more lands than you would put a land onto the battlefield, that player instead puts that land onto the battlefield, then sacrifices a land.",
+        ),
+        (
+            "Enchantment",
+            "If a cycling ability would cause you to draw a card, instead you gain 2 life.",
+        ),
+        (
+            "Instant",
+            "Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage is prevented this way, you gain 1 life.",
+        ),
+        (
+            "Enchantment",
+            "Whenever a land is tapped for mana, that player may add an additional {G}.",
+        ),
+        (
+            "Sorcery",
+            "Reveal the top card of your library. If it has two or more red mana symbols in its mana cost, draw a card.",
+        ),
+    ] {
+        oracle_card("Probe", ty, text);
+    }
+}
+
+#[test]
+fn a_cycling_draw_replacement_applies_to_any_cycled_card_when_unqualified() {
+    cr!("702.29a", "614.1a");
+    let def = oracle_card(
+        "Cycle Bloom",
+        "Enchantment",
+        "If a cycling ability would cause you to draw a card, instead you gain 2 life.",
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, def, Zone::Battlefield);
+    t.set_step(P0, Step::PrecombatMain);
+    let land = t.hand(P0, "Secluded Steppe");
+    t.lands(P0, "Plains", 1);
+    let hand = t.hand_size(P0);
+    t.activate(P0, land, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(t.hand_size(P0), hand - 1);
+}

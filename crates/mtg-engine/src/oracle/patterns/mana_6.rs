@@ -8,6 +8,19 @@
 //!   mana of those types spent on the spell or the activation (`kw/cast_history.rs`).
 //! - "for each mana from Treasures spent to activate this ability": the mana from that
 //!   kind of source spent on the activation (the Value Mr. House's dice count uses).
+//!
+//! Mana production (CR 106, 605):
+//!
+//! - "Whenever an Island is tapped for mana, its controller may add an additional {U}. If
+//!   that Island is snow, its controller may add an additional {U}{U} instead." (Snowfall):
+//!   a triggered mana ability (CR 605.1b) whose optional addition is chosen by the tapped
+//!   land's controller (CR 106.12a), with a condition on the tapped land choosing the
+//!   amount.
+//! - "add three mana in any combination of its colors", "add one mana of any of that
+//!   card's colors" (Omnath, Locus of All; CR 106.1, 106.5), after "You may reveal that
+//!   card if it has three or more colored mana symbols in its mana cost" (a count of the
+//!   symbols as a condition, CR 107.4e) and with "If you don't reveal it, ..." after "If
+//!   you do, ...".
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -106,7 +119,7 @@ pub(crate) fn count_phrase(r: &str, b: &mut Builder) -> Option<(Value, String)> 
             return None;
         }
         return Some((
-            Value::Custom(crate::kw::payment_mana::spent_this_way(&types).into()),
+            super::history_conditions::spent_value(crate::kw::cast_history::THIS_WAY, &types_what(&types)),
             tail.to_string(),
         ));
     }
