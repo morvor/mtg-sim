@@ -645,3 +645,130 @@ fn sakashimas_protege_copy_gets_enters_abilities() {
         assert_eq!(t.counters(p, "+1/+1"), plus, "{what}");
     }
 }
+
+#[test]
+fn ashioks_ultimate_casts_cards_exiled_face_up_by_default() {
+    cr!("406.3", "608.2g");
+    ruling!(
+        "Ashiok, Nightmare Muse",
+        "Any effect that exiles a card exiles it face up unless that effect specifies otherwise."
+    );
+    supported("Ashiok, Nightmare Muse");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Ashiok, Nightmare Muse");
+    t.g.objects[a.0 as usize]
+        .counters
+        .insert("loyalty".into(), 7);
+    // Swords to Plowshares exiles P1's Craw Wurm: face up.
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    cast_new(&mut t, P0, "Swords to Plowshares", &[o(wurm)]);
+    t.resolve_all();
+    let wurm = t.g.current(wurm);
+    assert!(in_exile(&t, wurm));
+    assert!(!t.obj(wurm).face_down);
+    // Hideaway exiles face down ("exile one face down"): not a candidate.
+    let giant = t.library_top(P1, "Hill Giant");
+    let giant = exile_by(&mut t, giant, P0, "", 0);
+    t.g.obj_mut(giant).face_down = true;
+    let from = t.asked().len();
+    t.answer_choose(P0, &[o(wurm)]);
+    t.activate(P0, a, 2, &[]).unwrap();
+    t.resolve_all();
+    let offered = crate::r_s03_common::choice_candidates(&t, from, "");
+    assert!(offered.iter().any(|c| c.contains(&o(wurm))));
+    assert!(offered.iter().all(|c| !c.contains(&o(giant))));
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+    assert!(in_exile(&t, giant));
+}
+
+/// Whether P0 can cast Crabomination for its emerge cost, sacrificing `artifact`, with
+/// `swamps` Swamps.
+fn crab_emerges(t: &mut TestGame, artifact: ObjectId, swamps: usize) -> bool {
+    t.lands(P0, "Swamp", swamps);
+    let crab = t.hand(P0, "Crabomination");
+    t.answer_choose(P0, &[o(artifact)]);
+    t.cast(P0, crab)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Emerge,
+        ))
+        .try_go()
+        .is_ok()
+}
+
+#[test]
+fn crabomination_emerge_uses_the_artifacts_mana_value() {
+    cr!("202.3", "202.3a", "702.119a", "707.2");
+    ruling!(
+        "Crabomination",
+        "An artifact's mana value is determined solely by the mana symbols printed in its upper right corner (unless that artifact is the back face of a double-faced card, is a melded permanent, or is copying something else; see below). If the mana cost includes {X}, X is 0. If it's a single-faced card with no mana symbols in its upper right corner (because it's an animated land, for example), its mana value is 0. Ignore any alternative costs or additional costs (such as kicker) that were paid as the artifact was cast."
+    );
+    supported("Crabomination");
+    // Emerge from artifact {5}{B}{B}, reduced by the sacrificed artifact's mana value.
+    // (setup, mana value)
+    type Setup = fn(&mut TestGame) -> ObjectId;
+    let cases: &[(&str, Setup, usize)] = &[
+        ("Bonesplitter", |t| t.battlefield(P0, "Bonesplitter"), 1),
+        // {X}{X}{X}: X is 0 on the battlefield.
+        ("Astral Cornucopia", |t| t.battlefield(P0, "Astral Cornucopia"), 0),
+        // An artifact land: no mana cost. (Tapped, so it can't add mana for the spell.)
+        (
+            "Darksteel Citadel",
+            |t| {
+                let c = t.battlefield(P0, "Darksteel Citadel");
+                t.g.tap(c);
+                c
+            },
+            0,
+        ),
+        // The back face of a transforming double-faced card: its front face's mana value.
+        (
+            "Edgar Markov's Coffin",
+            |t| {
+                crate::r_s17_common::enter_transformed(
+                    t,
+                    P0,
+                    "Edgar, Charmed Groom // Edgar Markov's Coffin",
+                )
+            },
+            4,
+        ),
+        // Copying something else: the copied mana value (a Sol Ring copying Darksteel Myr).
+        (
+            "a copy",
+            |t| {
+                let ring = t.battlefield(P0, "Sol Ring");
+                let myr = t.battlefield(P1, "Darksteel Myr");
+                crate::r_s17_common::become_copy(t, ring, myr);
+                ring
+            },
+            3,
+        ),
+        // Kicked Skyclave Relic (creating two token copies): kicker isn't part of its
+        // mana value.
+        (
+            "kicked Skyclave Relic",
+            |t| {
+                mana(t, P0, ManaType::C, 6);
+                let r = t.hand(P0, "Skyclave Relic");
+                t.cast(P0, r).kicked(true).go();
+                t.resolve_all();
+                assert_eq!(t.named_on_battlefield("Skyclave Relic").len(), 3, "not kicked");
+                // Tapped, so its mana ability can't help pay (the copies enter tapped).
+                let r = t.g.current(r);
+                t.g.tap(r);
+                r
+            },
+            3,
+        ),
+    ];
+    for (what, setup, mv) in cases {
+        let mut t = TestGame::new(2);
+        let a = setup(&mut t);
+        assert_eq!(t.g.mana_value_of(t.g.current(a)) as usize, *mv, "{what}");
+        // Exactly enough mana: castable; one fewer: not.
+        assert!(crab_emerges(&mut t, a, 7 - mv), "{what}");
+        let mut t = TestGame::new(2);
+        let a = setup(&mut t);
+        assert!(!crab_emerges(&mut t, a, 6 - mv), "{what}: one mana fewer");
+    }
+}
