@@ -89,6 +89,18 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/zones.rs` (`order_simultaneous`); `crates/mtg-engine/src/oracle/patterns/hand_graveyard_grammar.rs` (" in any order").
 - Tests: `tests/rulings/r_p147_restock.rs` (`misinformation_the_cards_owner_arranges_them`).
 
+## attach-as-it-transforms-to-a-legal-player: Curse of Leeches is attached as it transforms to a player its controller chooses among the players it can enchant
+- Kind: interpretation
+- Status: decided
+- Rules: Curse of Leeches: "As this permanent transforms into Curse of Leeches, attach it to a player." / 712.20 "If a double-faced card would have an “As [this permanent] transforms . . .” ability after it transforms or converts, that ability is applied while that permanent is transforming or converting, not afterward." / 701.3a "... An Aura, Equipment, or Fortification can’t be attached to an object or player it couldn’t enchant, equip, or fortify, respectively." / 701.3b "If an effect tries to attach an Aura ... to an object or player it can’t be attached to, the Aura ... doesn’t move." / 303.4f "If an Aura is entering the battlefield ... and the effect putting it onto the battlefield doesn’t specify the object or player the Aura will enchant, that player chooses what it will enchant as the Aura enters the battlefield. The player must choose a legal object or player according to the Aura’s enchant ability and any other applicable effects." / ruling: "Attaching Curse of Leeches as it transforms doesn't target a player, so it can be attached to a player with hexproof this way."
+- Question: Who chooses "a player", and may the chooser pick a player it can't be attached to (one with protection from black), leaving it unattached so it's put into the graveyard (CR 704.5m)?
+- Decision: Its controller chooses, among the players in range of influence it can legally enchant (hexproof doesn't matter: no targeting). With no such player it stays unattached, and the state-based action puts it into its owner's graveyard.
+- Alternatives: Any player may be chosen, and choosing one it can't enchant leaves it unattached (701.3b), so the controller could choose to lose it.
+- Why: 303.4f, the rule for an Aura attached without an Aura spell's target, requires a legal choice; transforming into an Aura in place is the same situation, and "attach it to a player" reads as an instruction to attach it, not an option to fail.
+- Affects: Curse of Leeches // Leeching Lurker (the only card).
+- Code: `crates/mtg-engine/src/cards/curse_of_leeches.rs` (`custom_effect`, `ATTACH`).
+- Tests: `tests/cards/m_curse_of_leeches.rs` (`the_choice_is_among_players_it_can_enchant`).
+
 ## self-shuffle-gone-library-still-shuffled: "Its owner shuffles it into their library" shuffles that library even when it has left
 - Kind: interpretation
 - Status: provisional

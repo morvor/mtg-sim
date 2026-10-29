@@ -1308,6 +1308,11 @@ impl Game {
         card: ObjectId,
         method: CastMethod,
     ) -> Result<ObjectId, Illegal> {
+        // An object that changed zones is gone; the card is a new object (CR 400.7), which
+        // must be named by its current id.
+        if !self.is_live(card) {
+            return Err(Illegal(format!("{card:?} no longer exists (CR 400.7)")));
+        }
         // The ways of casting it with this method, each with the permissions it could be
         // cast with (CR 601.2, 601.3).
         let mut ways: Vec<Vec<CastOption>> = Vec::new();

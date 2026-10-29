@@ -87,3 +87,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Norn's Decree.
 - Code: `crates/mtg-engine/src/oracle/patterns/triggers.rs` (`parse_damage_verb`, `controlled_by_opponent`); `BatchPer::OtherController` in `crates/mtg-engine/src/triggers.rs` and `crates/mtg-engine/src/delayed_batches.rs`.
 - Tests: `tests/cr/interp_multiplayer.rs` (`norns_decree_triggers_once_for_each_opponent_whose_creatures_dealt_damage`).
+
+## other-than-trigger-object: "Other [type]s" in the intervening "if" of a trigger about "a [type]" on a source without that type means other than the triggering object
+- Kind: interpretation
+- Status: provisional
+- Rules: 603.4 "A triggered ability may read “When/Whenever/At [trigger event], if [condition], [effect].” When the trigger event occurs, the ability checks whether the stated condition is true. ... If the ability triggers, it checks the stated condition again as it resolves. ..." / Portcullis ruling: "You check the count of the number of creatures on the battlefield again during resolution."
+- Question: Portcullis (an artifact) reads "Whenever a creature enters, if there are two or more other creatures on the battlefield, exile that creature." "Other" usually means other than the object with the ability, which can't be what an artifact counting creatures means. Other than what? And what if Portcullis is itself a creature (March of the Machines)?
+- Decision: In the intervening "if" of an enters, leaves-the-battlefield or dies trigger about "a [type]" (not about the source), "other [type]s" means other than the triggering object when the source's printed type line lacks that type. The reading is fixed when the text is compiled: an animated Portcullis is one of the "other creatures" (it isn't the entering creature), so it counts.
+- Alternatives: Read the source's current types: an animated Portcullis would then exclude itself (and, on the usual reading of "other", not the entering creature, so the entering creature would count). Exclude both the source and the triggering object while the source is a creature. Each changes only games where the source has become a creature.
+- Why: The words "other creatures" are set against "a creature" (the one that entered); that meaning comes from the printed card and shouldn't flip when an effect changes the source's types.
+- Affects: Portcullis; Lifeline ("if another creature is on the battlefield": the dying creature is no longer on the battlefield either way, so the outcome is the same).
+- Code: `crates/mtg-engine/src/oracle/patterns/other_than_trigger_object.rs` (`rebind_other`), called from `crates/mtg-engine/src/oracle/triggers.rs`.
+- Tests: `tests/rulings/r_p039_creature_count.rs` (`portcullis_checks_the_creature_count_again_on_resolution`, `animated_portcullis_counts_itself_among_the_other_creatures`).
