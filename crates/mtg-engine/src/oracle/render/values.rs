@@ -116,6 +116,14 @@ impl Renderer<'_> {
                 }
                 format!("{s} power")
             }
+            // "the toughness of the creature you sacrificed this way".
+            Value::ToughnessOf(s)
+                if matches!(s.as_ref(), Sel::Matching(x, _) if matches!(x.as_ref(), Sel::Var(vars::SACRIFICED))) =>
+            {
+                let o = self.sel(s, Case::Obj);
+                let p = self.sel(s, Case::Poss);
+                format!("{{alt:{p} toughness|the toughness of {o}}}")
+            }
             Value::ToughnessOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("{s} toughness")

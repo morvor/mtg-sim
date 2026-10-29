@@ -722,7 +722,7 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               (`thatit` matches \"it\", see [`token_eq`]).",
     },
     Equivalence {
-        pattern: r"\bthe (?:exiled|discarded|revealed) (card|creature|permanent|artifact)s?\b",
+        pattern: r"\b(?:the|that|those) (?:exiled|discarded|revealed) (card|creature|permanent|artifact|spell)s?\b",
         replacement: "thatit",
         why: "Anaphora: \"Exile target creature. Return the exiled card ...\": \"the exiled \
               card\" and \"it\" refer back to the object the exile instruction just moved \
