@@ -669,7 +669,7 @@ fn inspire_awe_checks_for_enchanted_creatures_as_damage_is_dealt() {
 
 #[test]
 fn choices_made_as_the_ability_resolves_dont_target() {
-    cr!("603.7c", "608.2b", "702.171a");
+    cr!("608.2d", "603.7", "702.171a");
     ruling!(
         "Fortune, Loyal Steed",
         "The delayed triggered ability doesn't target any creature. You choose which other creature to exile, if any, as that ability is resolving. At that point, it's too late for any player to respond."
@@ -764,7 +764,7 @@ fn inga_counts_every_creature_that_died_this_turn_as_it_resolves() {
 
 #[test]
 fn littjara_kinseekers_three_creatures_share_a_type() {
-    cr!("700.15", "702.73a", "603.4");
+    cr!("205.3m", "702.73a", "603.4");
     ruling!(
         "Littjara Kinseekers",
         "Three creatures share a creature type if there’s at least one creature type all three have, no matter what other creature types they have. For example, Littjara Kinseekers (which has all creature types), an Elf Warrior, and an Elf Wizard share a creature type because they’re all Elves."
@@ -881,7 +881,7 @@ fn gods_willing_chooses_a_color_as_it_resolves() {
 
 #[test]
 fn biolume_egg_and_serpent() {
-    cr!("701.21a", "712.14", "205.3i");
+    cr!("701.21a", "712.14a", "205.3i");
     ruling!(
         "Biolume Egg // Biolume Serpent",
         "You can't sacrifice Biolume Egg unless another effect allows you to."
@@ -916,7 +916,7 @@ fn biolume_egg_and_serpent() {
 
 #[test]
 fn petals_of_insight_returns_from_the_stack_directly() {
-    cr!("608.2n", "400.7");
+    cr!("608.2n");
     ruling!(
         "Petals of Insight",
         "If you choose to put the three cards on the bottom of your library, Petals of Insight will return to your hand directly from the stack. It never goes to a graveyard."

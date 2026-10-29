@@ -32,7 +32,7 @@ fn attach(t: &mut TestGame, what: ObjectId, to: ObjectId) {
 
 #[test]
 fn wrong_turn_and_sky_swallower_dont_move_attachments() {
-    cr!("701.3a", "303.4e", "301.5c", "613.1b");
+    cr!("701.3a", "303.4e", "301.5d", "613.1b");
     ruling!(
         "Wrong Turn",
         "A player gaining control of a creature doesn't cause that player to gain control of any Auras or Equipment attached to that creature."
@@ -162,7 +162,7 @@ fn witch_engines_targeted_mana_ability_uses_the_stack() {
 
 #[test]
 fn eon_frolicker_opponents_creatures_can_attack_but_deal_no_damage() {
-    cr!("702.16b", "702.16e", "508.1");
+    cr!("702.16e", "508.1");
     ruling!(
         "Eon Frolicker",
         "Creatures that player controls can still attack you or planeswalkers you control, but the damage they would deal will be prevented."

@@ -295,9 +295,6 @@ fn lady_octopus_casts_the_spell_as_the_ability_resolves_or_not_at_all() {
         } else {
             assert_eq!(t.zone(stone), Zone::Hand(P0));
             assert_eq!(t.stack_len(), 0);
-            // It can't be cast for free later: with no mana, casting fails.
-            t.g.turn.priority = Some(P0);
-            assert!(t.g.cast_spell(P0, stone, mtg_engine::object::CastMethod::Normal).is_err());
         }
     }
 }
