@@ -53,6 +53,9 @@ fn object_action(x: &str) -> Option<ObjectAction> {
         "phase out" => ObjectAction::PhasedOut,
         "be equipped" => ObjectAction::Equipped,
         "be enchanted by other auras" => ObjectAction::EnchantedByOtherAuras,
+        // CR 303.4: no Aura can be attached to it (Tetravus' tokens: "~ can't be
+        // enchanted").
+        "be enchanted" => ObjectAction::Enchanted,
         "become suspected" => ObjectAction::Suspected,
         _ => return None,
     })

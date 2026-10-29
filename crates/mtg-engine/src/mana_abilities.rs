@@ -1271,6 +1271,18 @@ fn sources_inner(
             {
                 continue;
             }
+            // CR 601.2g–h: what convoke or improvise tapped is tapped as the total cost is
+            // paid, after mana abilities: it can't also have been sacrificed for mana.
+            if g.paid_otherwise.contains(&o.id)
+                && act.cost.parts.iter().any(|c| {
+                    matches!(
+                        c,
+                        CostPart::SacrificeSelf | CostPart::ExileSelf | CostPart::ReturnSelfToHand
+                    )
+                })
+            {
+                continue;
+            }
             // CR 602.5e: "Activate only as an instant" — never in the middle of a payment.
             if act.timing == ActivationTiming::AsInstant {
                 continue;
@@ -1401,6 +1413,12 @@ fn sources_inner(
             }
             if let Some(max) = act.max_per_turn {
                 if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
+                    ok = false;
+                }
+            }
+            if let Some(v) = &act.max_per_turn_value {
+                let max = g.eval_value(v, &Ctx::new(Some(o.id), p));
+                if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) as i64 >= max {
                     ok = false;
                 }
             }
