@@ -104,7 +104,7 @@ fn kozileks_return_from_the_graveyard_resolves_first_and_isnt_a_spell() {
     supported("Ulamog's Crusher");
     let mut t = TestGame::new(2);
     let ret = t.graveyard(P0, "Kozilek's Return");
-    let bears = t.battlefield(P1, "Grizzly Bears");
+    let _bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P1, "Craw Wurm");
     let crusher = cast_targeting(&mut t, P0, "Ulamog's Crusher", &[]);
     t.settle();
