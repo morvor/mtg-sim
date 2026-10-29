@@ -87,3 +87,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Comet, Stellar Pup (and any "N more times" effect).
 - Code: `crates/mtg-engine/src/kw/game_rules_4.rs` (`MORE_LOYALTY`, `extra_loyalty_activations`); `crates/mtg-engine/src/activation_costs.rs` (`loyalty_activations_per_turn`).
 - Tests: `tests/cards/game_rules_4.rs` (`comet_rolls_a_six_and_activates_two_more_times`).
+
+## jeweled-amulet-several-types: When mana of several types was spent on Jeweled Amulet's activation, its controller chooses the type noted
+- Kind: interpretation
+- Status: provisional
+- Rules: Jeweled Amulet: "{1}, {T}: Put a charge counter on this artifact. Note the type of mana spent to pay this activation cost. ..." / 607.2e "If an object has an ability printed on it that allows some information to be noted and another ability which refers to information noted for that object, those abilities are linked. The second ability refers only to information noted as a result of the first ability."
+- Question: The printed cost is {1}, so one type of mana is spent. A cost increase ("Activated abilities cost {2} more to activate unless they're mana abilities", Suppression Field) can make the controller spend mana of several types: which one is "the type of mana spent"?
+- Decision: As the ability resolves, its controller chooses one of the types spent, and that type is noted (with one type spent, that one).
+- Alternatives: (A) Note every type spent, in the order paid, and treat the last as "the last noted type": depends on the engine's payment order, which the player doesn't see. (B) Note nothing when more than one type was spent: the instruction would do nothing in a case the card plainly expects to note something.
+- Why: The singular "the type" reads as one type; when the payment leaves it open, the player who paid decides, like other choices an instruction leaves to its controller (CR 608.2d).
+- Affects: Jeweled Amulet (with an activation cost increase in play).
+- Code: `crates/mtg-engine/src/noted_mana.rs` (`note`).
+- Tests: `tests/cards/noted_mana.rs` (`with_several_types_spent_its_controller_chooses_the_one_noted`).
