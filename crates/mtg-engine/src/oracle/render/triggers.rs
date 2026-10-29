@@ -180,9 +180,23 @@ impl Renderer<'_> {
         if player_targeted(&t.trigger) {
             self.trigger_player = Some("{alt:that spell's controller|that player}");
         } else if targeted(&t.trigger) {
-            // The event's player controls the spell or ability that targeted (CR 115.1).
-            self.trigger_player =
-                Some("{alt:that spell's controller|that spell or ability's controller}");
+            // The event's player controls the spell or ability that targeted (CR 115.1):
+            // "... a spell or ability an opponent controls, that player loses 4 life" (the
+            // opponent named).
+            fn by_opponent(t: &TriggerCond) -> bool {
+                match t {
+                    TriggerCond::BecomesTarget { by, .. } => matches!(by, PlayerRel::Opponent),
+                    TriggerCond::Where { trigger, .. } | TriggerCond::Batched { trigger, .. } => {
+                        by_opponent(trigger)
+                    }
+                    _ => false,
+                }
+            }
+            self.trigger_player = Some(if by_opponent(&t.trigger) {
+                "{alt:that spell's controller|that spell or ability's controller|that player}"
+            } else {
+                "{alt:that spell's controller|that spell or ability's controller}"
+            });
         } else if opponent_event(&t.trigger) {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
@@ -272,6 +286,23 @@ impl Renderer<'_> {
 
     /// "When ~ enters", "At the beginning of your upkeep", "Whenever you cast a spell".
     pub(crate) fn trigger_text(&mut self, t: &TriggerCond) -> String {
+        // "When the last time counter is removed from ~ while it's exiled" (CR 702.62a's
+        // own wording): a time counter removed, none left, the ability working in exile.
+        if let TriggerCond::Where { trigger, cond } = t {
+            let last_time_counter = matches!(trigger.as_ref(), TriggerCond::CountersRemoved {
+                    filter: Filter::Source,
+                    kind: Some(k),
+                    each: false,
+                } if k.as_str() == "time")
+                && matches!(cond, Condition::Compare(Value::CountersOn(s, Some(k)), Cmp::Eq, Value::Const(0))
+                    if matches!(s.as_ref(), Sel::This) && k.as_str() == "time");
+            if last_time_counter && self.zone == FunctionZone::Exile {
+                let m = self.me();
+                return format!(
+                    "whenever the last time counter is removed from {m} while it's exiled"
+                );
+            }
+        }
         // "Whenever you tap an untapped creature an opponent controls"
         // (`trigger_grammar_causes.rs`).
         let you_tapped = |c: &TriggerCond| match c {
@@ -567,7 +598,10 @@ impl Renderer<'_> {
             // controls" (CR 701.6).
             TriggerCond::CounteredBy { filter, by } => {
                 let s = self.spell_or_ability_of(*by);
-                Ev::new(obj(self, filter), format!("is countered by {s}"))
+                let o = obj(self, filter);
+                // "Whenever a spell or ability you control counters a spell": the same
+                // event said from the other side.
+                Ev::new("", format!("{{alt:{o} is countered by {s}|{s} counters {o}}}"))
             }
             // "Whenever you get one or more {E}" (energy counters, CR 107.14), from anyone.
             TriggerCond::CountersPutBy {
@@ -725,6 +759,15 @@ impl Renderer<'_> {
                 };
                 let vp = if matches!(source, Filter::Source) {
                     format!("activate {kind} of ~")
+                } else if *include_mana && matches!(source, Filter::Any) {
+                    // "Whenever an opponent activates an ability": of any object, in any
+                    // zone.
+                    "activate an ability".to_string()
+                } else if !*include_mana {
+                    // "an ability of an artifact or creature that isn't a mana ability".
+                    format!(
+                        "{{alt:activate {kind} of {s}|activate an ability of {s} that isn't a mana ability|activate an ability of {s}, if it isn't a mana ability}}"
+                    )
                 } else {
                     format!("activate {kind} of {s}")
                 };

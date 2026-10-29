@@ -51,6 +51,11 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             rel("that's a color not in your commander's color identity")
         }
         crate::kw::cast_history::USING_SOURCE_MANA => rel("using mana produced by ~"),
+        // "a source of your choice that shares a color with the mana spent on this
+        // activation cost" (Protective Sphere).
+        crate::kw::cast_history::SHARES_COLOR_WITH_MANA_SPENT => {
+            rel("that shares a color with the mana spent on this activation cost")
+        }
         crate::kw::damage_shares_a_color::SHARES_COLOR_WITH_PRODUCED_MANA => {
             rel("that shares a color with the mana that land produced")
         }
@@ -84,7 +89,9 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::oracle::patterns::zone_move_grammar::DISCARDED_BY_YOU_THIS_TURN => {
             rel("{alt:that you discarded this turn|that you cycled or discarded this turn}")
         }
-        crate::oracle::patterns::zone_move_grammar::MILLED_THIS_TURN => rel("milled this turn"),
+        crate::oracle::patterns::zone_move_grammar::MILLED_THIS_TURN => {
+            rel("{alt:milled this turn|that was milled this turn|that were milled this turn}")
+        }
         crate::kw::graveyard_history::PUT_THERE_FROM_LIBRARY => rel(
             "{alt:that were put there from your library this turn|that were put there from libraries this turn}",
         ),

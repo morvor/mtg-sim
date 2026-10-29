@@ -92,7 +92,8 @@ impl Renderer<'_> {
         }
         // "with flying not named ~": the keyword, then the name.
         let not_named = objs.iter().position(|f| {
-            matches!(f, Filter::Not(x) if matches!(x.as_ref(), Filter::SameNameAs(s) if matches!(s.as_ref(), Sel::This)))
+            matches!(f, Filter::Not(x) if matches!(x.as_ref(), Filter::SameNameAs(s) if matches!(s.as_ref(), Sel::This))
+                || matches!(x.as_ref(), Filter::Named(n) if n.as_str() == self.info.name))
         });
         let k0 = self.keyword_kind_word(kinds[0]);
         let n = match not_named {

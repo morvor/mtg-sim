@@ -60,6 +60,7 @@ mod off_battlefield;
 mod once_each_turn;
 mod opt_in;
 mod outcomes;
+mod pairs_terms;
 mod play_terms;
 mod players;
 mod remembered_groups;
@@ -209,6 +210,8 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
         if let Some((n, line)) = r
             .same_is_true_group(&abilities[i..])
             .or_else(|| draft_terms::removed_keywords_group(&abilities[i..]))
+            .or_else(|| r.otherwise_group(&abilities[i..]))
+            .or_else(|| r.exactly_one_static(&abilities[i..]))
         {
             out.lines.push(line);
             skip = n - 1;
@@ -870,6 +873,9 @@ pub struct Renderer<'a> {
     pub(crate) plural_alts: bool,
     /// The noun for a filter that names no type: "source" for damage sources.
     pub(crate) default_head: Option<&'static str>,
+    /// Naming the source of a damage replacement: a type may say "source" too ("an
+    /// instant or sorcery source you control").
+    pub(crate) damage_source_noun: bool,
     /// The previous instruction was a clash ("If you win, ...", CR 701.30).
     pub(crate) after_clash: bool,
     /// The body of a triggered ability without an intervening "if" is a conditional
@@ -1084,6 +1090,7 @@ impl<'a> Renderer<'a> {
             alt_and: false,
             plural_alts: false,
             default_head: None,
+            damage_source_noun: false,
             after_clash: false,
             trigger_body_if: false,
             sacrificed: None,
@@ -1812,18 +1819,31 @@ pub fn capitalize(s: &str) -> String {
     }
 }
 
-/// Color words in the order cards print them: WUBRG, except that a pair of colors two
-/// steps or more apart around the color wheel starts from the later one ("green and
-/// white", "red and white").
+/// Color words in the order cards print them: clockwise around the color wheel (white,
+/// blue, black, red, green), starting after the widest gap ("green and white", "red and
+/// white", "red, green, and white", "blue, black, red, and green"); three colors two
+/// steps apart each start where both steps are two ("white, black, and green", "red,
+/// white, and black").
 pub fn color_words(cs: ColorSet) -> Vec<String> {
-    let mut v: Vec<Color> = cs.iter().collect();
-    if v.len() == 2 {
-        let i = |c: Color| Color::ALL.iter().position(|x| *x == c).unwrap_or(0);
-        if i(v[1]) - i(v[0]) > 2 {
-            v.swap(0, 1);
-        }
-    }
-    v.iter().map(|c| c.word().to_string()).collect()
+    let v: Vec<Color> = cs.iter().collect();
+    let n = v.len();
+    let i = |c: Color| Color::ALL.iter().position(|x| *x == c).unwrap_or(0);
+    // The step from each color to the next one clockwise.
+    let step = |k: usize| (i(v[(k + 1) % n]) + 5 - i(v[k])) % 5;
+    let start = if n < 2 || n == 5 {
+        0
+    } else if n == 3 && (0..n).filter(|k| step(*k) == 2).count() == 2 {
+        // A wedge: the color after the one-step gap.
+        (0..n).find(|k| step((k + n - 1) % n) == 1).unwrap_or(0)
+    } else {
+        // After the widest gap.
+        (0..n)
+            .max_by_key(|k| (step((k + n - 1) % n), n - k))
+            .unwrap_or(0)
+    };
+    (0..n)
+        .map(|k| v[(start + k) % n].word().to_string())
+        .collect()
 }
 
 /// Mana type symbol.

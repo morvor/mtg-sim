@@ -1634,6 +1634,15 @@ impl Renderer<'_> {
             {
                 "who received no votes".into()
             }
+            // "each player other than its controller", "each player other than target
+            // player".
+            PlayerFilter::Not(x) if matches!(x.as_ref(), PlayerFilter::Ref(_)) => {
+                let PlayerFilter::Ref(r) = x.as_ref() else {
+                    return String::new();
+                };
+                let p = self.player(r, Case::Obj);
+                format!("other than {p}")
+            }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);
                 format!("not {q}")

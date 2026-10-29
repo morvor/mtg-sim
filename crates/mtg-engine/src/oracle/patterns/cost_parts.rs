@@ -62,7 +62,7 @@ fn qualified(f: Filter, tail: &str) -> Option<Filter> {
     let q = match t {
         "" => return Some(f),
         "attached to ~" => Filter::AttachedToAnyOf(Box::new(Sel::This)),
-        "named ~" => Filter::SameNameAs(Box::new(Sel::This)),
+        "named ~" => crate::oracle::phrases::named_this_card(),
         "exiled with ~" => Filter::And(vec![
             Filter::InZone(ZoneKind::Exile),
             Filter::In(Box::new(Sel::Linked)),

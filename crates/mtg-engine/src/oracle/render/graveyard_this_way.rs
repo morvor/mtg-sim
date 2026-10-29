@@ -43,13 +43,13 @@ impl Renderer<'_> {
             _ => true,
         })
         .collect();
-        let zone = match owner {
-            None => "{alt:a graveyard|graveyards}".to_string(),
-            Some(PlayerRel::You) => "your graveyard".to_string(),
-            Some(_) => "{alt:their|that player's} graveyard".to_string(),
+        let into = match owner {
+            None => "into {alt:a graveyard|graveyards}".to_string(),
+            Some(PlayerRel::You) => "into your graveyard".to_string(),
+            Some(_) => "{alt:into their graveyard|into that player's graveyard}".to_string(),
         };
         let n = self.noun(&Filter::and(rest), Num::Many);
-        Some(decline(format!("{n} put into {zone} this way"), case))
+        Some(decline(format!("{n} put {into} this way"), case))
     }
 }
 

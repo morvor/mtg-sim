@@ -274,6 +274,20 @@ impl Renderer<'_> {
                 };
                 super::tail_parts::first_ability_alt_cost(self, cm, true).unwrap_or_default()
             }
+            // "During turns other than yours, spells you cast cost {1} less to cast."
+            Some(c @ (Condition::NotYourTurn | Condition::YourTurn))
+                if matches!(&s.effect, StaticEffect::CostModifier(cm) if matches!(cm.change, CostChange::ReduceGeneric(_) | CostChange::IncreaseGeneric(_)))
+                    && !self.static_if =>
+            {
+                let e = self.static_effect(&s.effect);
+                let e = e.trim_end_matches('.').to_string();
+                let (cond, during) = if matches!(c, Condition::YourTurn) {
+                    ("it's your turn", "during your turn")
+                } else {
+                    ("it's not your turn", "during turns other than yours")
+                };
+                format!("{{alt:{e} if {cond}|{e} {during}}}")
+            }
             // Cost modifiers state their condition with "if" ("This spell costs {2} less
             // to cast if ...").
             Some(c) if matches!(s.effect, StaticEffect::CostModifier(_)) => {
@@ -468,6 +482,11 @@ impl Renderer<'_> {
         self.affected_subject(f)
     }
 
+    /// The subject of a static effect on `f` ("enchanted creature", "~").
+    pub(crate) fn static_subject(&mut self, f: &Filter) -> String {
+        self.affected_subject(f)
+    }
+
     fn affected_subject(&mut self, f: &Filter) -> String {
         if let Some(base) = Self::first_each_turn(f) {
             // "The first historic spell you cast each turn has convoke."
@@ -552,7 +571,18 @@ impl Renderer<'_> {
             }
             StaticEffect::AdditionalTrigger { sources, cause } => {
                 let s = self.noun_det(sources, Det::A);
+                // "Room abilities of dungeons you own trigger an additional time": a
+                // dungeon's triggered abilities are its room abilities (CR 309.4c), and a
+                // dungeon is only ever in the command zone (CR 309.2a).
+                let dungeons_you_own = matches!(sources, Filter::And(v)
+                    if v.len() == 3
+                        && v.iter().any(|x| matches!(x, Filter::Type(CardType::Dungeon)))
+                        && v.iter().any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                        && v.iter().any(|x| matches!(x, Filter::InZone(ZoneKind::Command))));
                 match cause {
+                    None if dungeons_you_own => format!(
+                        "{{alt:if a triggered ability of {s} triggers, that ability triggers an additional time|room abilities of dungeons you own trigger an additional time}}"
+                    ),
                     None => format!(
                         "if a triggered ability of {s} triggers, that ability triggers an additional time"
                     ),
@@ -1899,7 +1929,9 @@ impl Renderer<'_> {
             }
             CostChange::AlternativeCost(c) => {
                 let c = self.cost_as_payment(c);
-                format!("you may {c} rather than pay ~'s mana cost")
+                format!(
+                    "{{alt:you may {c} rather than pay ~'s mana cost|rather than pay ~'s mana cost, you may {c}}}"
+                )
             }
             CostChange::FlashForAdditionalCost(c) if c.is_free() => {
                 format!("you may cast {} as though it had flash", self.me())
@@ -3041,6 +3073,9 @@ impl Renderer<'_> {
         if let Some(s) = self.qualified_replacement(def) {
             return s;
         }
+        if let Some(s) = self.enter_only_if_done(def) {
+            return s;
+        }
         if let Some(s) = self.first_tokens_as_copies(def) {
             return s;
         }
@@ -3715,7 +3750,12 @@ impl Renderer<'_> {
                     StepKind::Turn => "turn",
                 };
                 let p = self.rel_possessive(*whose, Num::One);
-                format!("skip {p} {s}")
+                if matches!(whose, PlayerRel::Any) {
+                    // "Players skip their upkeep steps": each player skips their own.
+                    format!("{{alt:skip {p} {s}|players skip their {s}s}}")
+                } else {
+                    format!("skip {p} {s}")
+                }
             }
             (E::ProduceMana(f), action) => {
                 // "If you tap a permanent for mana": only its controller can (CR 602.2).
@@ -4356,7 +4396,9 @@ impl Renderer<'_> {
             other => {
                 let saved = self.default_head;
                 self.default_head = Some("source");
+                let saved_noun = std::mem::replace(&mut self.damage_source_noun, true);
                 let s = self.noun_det(other, Det::A);
+                self.damage_source_noun = saved_noun;
                 self.default_head = saved;
                 Some(s)
             }
@@ -4467,9 +4509,10 @@ impl Renderer<'_> {
                         };
                         format!("it deals that much damage minus {v}{to_that} instead")
                     }
+                    // The same source deals the damage to another recipient (CR 614.9).
                     A::Redirect(sel) => {
                         let t = self.sel(sel, Case::Obj);
-                        format!("that damage is dealt to {t} instead")
+                        format!("{{alt:that damage is dealt to {t}|that source deals that damage to {t}}} instead")
                     }
                     A::RedirectNext(sel, v) => {
                         let t = self.sel(sel, Case::Obj);

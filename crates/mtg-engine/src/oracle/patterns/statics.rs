@@ -441,11 +441,14 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
             return Some((f, ""));
         }
     }
-    // "named ~", "with the same name as ~": the same name as this object (CR 201.2a).
-    if let Some(r) = t
-        .strip_prefix("named ~")
-        .or_else(|| t.strip_prefix("with the same name as ~"))
-    {
+    // "named ~": the card's name (CR 201.2, `phrases::named_this_card`); "with the same
+    // name as ~": the same name as this object (CR 201.2a).
+    if let Some(r) = t.strip_prefix("named ~") {
+        if r.is_empty() || r.starts_with([' ', ',']) {
+            return Some((crate::oracle::phrases::named_this_card(), r));
+        }
+    }
+    if let Some(r) = t.strip_prefix("with the same name as ~") {
         if r.is_empty() || r.starts_with([' ', ',']) {
             return Some((Filter::SameNameAs(Box::new(Sel::This)), r));
         }

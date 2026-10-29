@@ -27,3 +27,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Cover of Winter.
 - Code: `crates/mtg-engine/src/replacement.rs` (`divide_per_source_prevention`, `PreventPerSource`); `crates/mtg-engine/src/actions.rs` (`deal_damage_batch`).
 - Tests: `tests/cards/c4_replacements.rs` (`cover_of_winter_prevents_x_of_each_creatures_combat_damage`, `cover_of_winter_controller_divides_x_among_one_creatures_recipients`).
+
+## enter-sacrifice-instead-partial: "Sacrifice two untapped lands instead. If you do, ..." with fewer than two sacrifices those it can, and ~ doesn't enter
+- Kind: interpretation
+- Status: provisional
+- Rules: 609.3 "If an effect attempts to do something impossible, it does only as much as possible." / 614.12 "Some replacement effects modify how a permanent enters the battlefield. ..."
+- Question: Lotus Vale and Scorched Ruins say "If ~ would enter, sacrifice two untapped lands instead. If you do, put ~ onto the battlefield. If you don't, put it into its owner's graveyard." The sacrifice is an instruction, not an offer (Mox Diamond's "you may discard a land card instead" is one), so with two untapped lands they're sacrificed. With only one untapped land, is it sacrificed, and does ~ enter?
+- Decision: The one land is sacrificed (as much as possible, 609.3), and "if you do" is true only if two were sacrificed, so ~ goes to its owner's graveyard. With no untapped land nothing is sacrificed.
+- Alternatives: Treat the instruction like a cost that can't be paid in part (nothing sacrificed with one land); treat it as optional like Mox Diamond (the previous reading, which let a player keep both lands and put ~ into the graveyard).
+- Why: The card's text gives no choice and no cost; 609.3 is the general rule for an instruction that can't be done in full, and the rulings ("If you don't sacrifice the lands, Lotus Vale never enters") say only that it doesn't enter.
+- Affects: Lotus Vale, Scorched Ruins (the one-land versions, Lake of the Dead and the others, have no partial case).
+- Code: `crates/mtg-engine/src/oracle/patterns/replacement_bodies.rs` (`enter_only_if_sacrificed`).
+- Tests: `tests/cards/roundtrip_pairs_4.rs` (`lotus_vale_with_one_untapped_land_sacrifices_it_and_never_enters`, `lake_of_the_dead_sacrifices_a_swamp_without_asking`).

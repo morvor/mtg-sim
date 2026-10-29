@@ -799,6 +799,9 @@ impl Renderer<'_> {
         if let Some(s) = self.all_actions_done(c) {
             return s;
         }
+        if let Some(s) = self.pairs_condition(c) {
+            return s;
+        }
         // "If you win two or more flips" after a flip whose loss voids the rest (Fiery
         // Gambit, `dice_coins_5`).
         if let Condition::And(v) = c {
@@ -1037,6 +1040,9 @@ impl Renderer<'_> {
                     return s;
                 }
                 if let Some(s) = self.attempt(|r| r.own_entered_or_cast(v)) {
+                    return s;
+                }
+                if let Some(s) = self.attempt(|r| r.gained_or_lost_life(v)) {
                     return s;
                 }
                 let parts: Vec<String> = v.iter().map(|x| self.condition(x)).collect();
@@ -1439,7 +1445,8 @@ impl Renderer<'_> {
                 if negated =>
             {
                 let n = self.noun(&rest, Num::Many);
-                format!("your opponents control no {n}")
+                let a = self.noun_det(&rest, Det::A);
+                format!("{{alt:your opponents control no {n}|no opponent controls {a}}}")
             }
             (Some(r), None) | (Some(r), Some(ZoneKind::Battlefield)) => {
                 let subj = self.rel_subject(r);
@@ -1489,6 +1496,20 @@ impl Renderer<'_> {
                 let is = if negated { "isn't" } else { "is" };
                 return format!("{is} {p}");
             }
+        }
+        // "if it shares a card type with the exiled card": a quality of any object, a
+        // spell or a card as well as a permanent.
+        if let Filter::SharesCardType(x) | Filter::SharesColor(x) | Filter::SharesCreatureType(x) =
+            f
+        {
+            let what = match f {
+                Filter::SharesCardType(_) => "a card type",
+                Filter::SharesColor(_) => "a color",
+                _ => "a creature type",
+            };
+            let w = self.shared_with(x);
+            let verb = if negated { "doesn't share" } else { "shares" };
+            return format!("{verb} {what} with {w}");
         }
         let mut atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
