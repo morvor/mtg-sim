@@ -58,7 +58,12 @@ impl KeywordRules for ZoneMoves {
             MILLED_THIS_TURN => Some(g.history.milled.contains(&id)),
             ODD_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 1),
             EVEN_MANA_VALUE => Some(g.mana_value_of(id) % 2 == 0),
-            DISCARDED_BY_YOU_THIS_TURN => Some(g.history.discarded.contains(&(ctx.controller, id))),
+            // A card discarded into exile for madness and then put into a public zone
+            // without being cast is still found (CR 702.35c, 400.7k).
+            DISCARDED_BY_YOU_THIS_TURN => Some(g.history.discarded.iter().any(|(p, d)| {
+                *p == ctx.controller
+                    && (*d == id || crate::kw::madness::found_after_madness(g, *d) == Some(id))
+            })),
             _ => None,
         }
     }

@@ -1025,7 +1025,10 @@ fn for_each_object(l: &str, b: &mut Builder) -> Option<Effect> {
             };
             for w in y.split("that ").skip(1) {
                 let w = w.split([' ', '\'', ',', '.']).next().unwrap_or("");
-                if head_noun(w).is_some() && !nouns.iter().any(|n| same(w, n)) {
+                // ("that card" is a card the instruction itself finds or reveals: "...
+                // reveals cards ... until they reveal a creature card, puts that card onto
+                // the battlefield".)
+                if head_noun(w).is_some() && w != "card" && !nouns.iter().any(|n| same(w, n)) {
                     b.named.push((format!("that {w}"), b.it.clone()));
                 }
             }

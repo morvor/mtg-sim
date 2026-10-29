@@ -191,6 +191,7 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
         ZoneKind::Exile => o.zone == Zone::Exile,
         ZoneKind::Hand => o.zone == Zone::Hand(p),
         ZoneKind::Command => o.zone == Zone::Command,
+        ZoneKind::Outside => o.zone == Zone::Outside(p),
         _ => false,
     }
 }
@@ -264,10 +265,13 @@ pub fn allowing(
         if hidden || (land && !perm.lands) || (!land && !perm.spells) {
             continue;
         }
-        let ctx = Ctx::new(Some(*src), *ctl);
+        let mut ctx = Ctx::new(Some(*src), *ctl);
         if !g.player_rel_matches(perm.who, p, &ctx) || !in_permission_zone(g, p, card, perm) {
             continue;
         }
+        // "Each player may play ... from among cards they exiled with ~": the cards are
+        // judged for the player the permission is for (`PlayerRel::Iterated`).
+        ctx.iter_player = Some(p);
         // A single-use permission already used ("You may cast a creature spell from your
         // graveyard this turn"), or one that applies only while a condition holds.
         if once.as_ref().is_some_and(|slot| {
@@ -353,6 +357,8 @@ fn free_option(
 fn spell_qualities(f: &Filter) -> Filter {
     match f {
         Filter::In(_) | Filter::InZone(_) => Filter::Any,
+        // Who put the card into exile (`kw/exile_provenance.rs`): also judged as it began.
+        Filter::Custom(n) if crate::kw::exile_provenance::is_provenance(n) => Filter::Any,
         Filter::And(v) => Filter::And(v.iter().map(spell_qualities).collect()),
         other => other.clone(),
     }
@@ -407,6 +413,15 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             ZoneKind::Exile => g.exile.clone(),
             ZoneKind::Hand => g.player(p).hand.clone(),
             ZoneKind::Command => g.command.clone(),
+            // The cards the player has outside the game (CR 400.11b) that a Commander
+            // game lets in (CR 903.11a).
+            ZoneKind::Outside => g
+                .player(p)
+                .sideboard
+                .iter()
+                .copied()
+                .filter(|c| crate::commander_rules::may_bring_in(g, *c, Zone::Stack))
+                .collect(),
             _ => vec![],
         };
         for c in cards {

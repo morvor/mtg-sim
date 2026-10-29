@@ -78,6 +78,15 @@ pub fn raw_text() -> String {
     RAW_TEXT.with(|r| r.borrow().clone())
 }
 
+/// Runs `f` with [`raw_text`] reading `text` (a rewording of the face's text that a
+/// pattern compiles instead of it), then restores it.
+pub(crate) fn with_raw_text<R>(text: &str, f: impl FnOnce() -> R) -> R {
+    let prev = RAW_TEXT.with(|r| r.replace(text.to_string()));
+    let out = f();
+    RAW_TEXT.with(|r| *r.borrow_mut() = prev);
+    out
+}
+
 /// Runs `f` with hand-written definitions ([`crate::cards`]) disabled on this thread, so
 /// that what the compiler parses on its own can be checked (`manual-check`).
 pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
@@ -764,17 +773,54 @@ fn touches_library(cost: &Cost, effect: &Effect) -> bool {
             other => other,
         }
     }
+    /// Whether the JSON names (as an enum variant: an object key or a unit-variant
+    /// string) a library zone or an action that moves cards to or from a library. Exact
+    /// names, so values that merely count such events ("for each card you've drawn this
+    /// turn": `Draws`) don't count.
+    fn names_library_move(v: &serde_json::Value) -> bool {
+        use serde_json::Value as J;
+        const NAMES: &[&str] = &[
+            "Library",
+            "Draw",
+            "Mill",
+            "Search",
+            "SearchCards",
+            "Surveil",
+            "Explore",
+            "ShuffleIntoLibrary",
+            "TopOfLibrary",
+            "BottomOfLibrary",
+            "PutFromHandOnLibrary",
+            // Effects that take cards from the top of a library (looking at, revealing,
+            // or exiling them) or put cards into one.
+            "Dig",
+            "DigStep",
+            "RevealUntil",
+            "ShuffleInto",
+            "PutOnLibrary",
+            "SearchPile",
+            // Keyword actions that move cards to or from a library (CR 701).
+            "Manifest",
+            "ManifestDread",
+            "Cloak",
+            "Connive",
+            "Discover",
+            "Learn",
+        ];
+        match v {
+            J::String(s) => NAMES.contains(&s.as_str()),
+            J::Object(m) => m
+                .iter()
+                .any(|(k, v)| NAMES.contains(&k.as_str()) || names_library_move(v)),
+            J::Array(a) => a.iter().any(names_library_move),
+            _ => false,
+        }
+    }
     let effect = serde_json::to_value(effect)
         .map(own_part)
         .unwrap_or_default();
-    let text = format!(
-        "{} {}",
-        serde_json::to_string(cost).unwrap_or_default(),
-        effect
-    );
-    ["Library", "Draw", "Mill", "Search", "Surveil", "Explore"]
-        .iter()
-        .any(|w| text.contains(w))
+    let cost = serde_json::to_value(cost).unwrap_or_default();
+    names_library_move(&cost) || names_library_move(&effect)
 }
 
 /// Shifts `Sel::Target(i)` references by `offset` (used when combining spell bodies).

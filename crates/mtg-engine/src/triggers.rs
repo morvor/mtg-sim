@@ -418,6 +418,7 @@ impl Game {
                     // "That much"/"that many": the total amount (damage, life, ...), or the
                     // number of events for events without an amount (objects entering, ...).
                     info.amount = g.iter().map(|i| i.amount).sum();
+                    info.amounts = g.iter().map(|i| i.amount).collect();
                     // Die rolls always have an amount: their result, which a planar die roll
                     // doesn't have (CR 706.7).
                     let die_roll = matches!(trigger, TriggerCond::RollDie(_));
@@ -431,6 +432,12 @@ impl Game {
                         info.amount = g.len() as i32;
                     }
                     info.objects = Vec::new();
+                    info.players = Vec::new();
+                    for p in g.iter().filter_map(|i| i.player) {
+                        if !info.players.contains(&p) {
+                            info.players.push(p);
+                        }
+                    }
                     for i in &g {
                         // An event about several objects at once (the creatures attacking a
                         // player) contributes all of them.

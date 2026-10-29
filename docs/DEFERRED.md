@@ -55,9 +55,30 @@ Decided 2026-10-01.
 
 Decided 2026-10-01.
 
-- **Scope:** the 1,916 cards with no paper printing (MTG Arena/Alchemy and other
-  digital-only cards) and their mechanics: perpetual, seek, conjure, spellbooks, draft from
-  a spellbook, intensity, specialize, boons and similar.
+- **Scope:** cards with no paper printing and digital versions of cards, and their
+  mechanics: perpetual, seek, conjure, spellbooks, draft from a spellbook, intensity,
+  specialize, boons and similar. That is 855 cards on the 2026-09-24 data: MTG Arena and
+  Alchemy cards (hbg, the y-sets, j21, Arena starter and box cards; 657 of them are legal in
+  some format, all of them Arena formats: alchemy, historic, timeless, brawl,
+  standardbrawl, gladiator, competitivebrawl), MTGO-only cards (the 74 MTGO vanguards and one
+  promo) and the old Astral and Sega digital cards (18);
+  and digital versions of paper cards: the "A-" rebalanced Alchemy versions (the oracle
+  data in `data/` has none as separate cards) and "Name Sticker" Goblin, the MTGO version of
+  the Unfinity card _____ Goblin (an MTGO-only record that rolls a d20 instead of using a
+  name sticker, yet Scryfall lists it legal in Commander; excluded Oct 28 under the user's
+  "ignore ... digital versions of cards", card-support-plan-4.md, "Paper-scope texts",
+  decision 1). Its text is in `docs/agents/round4/deferred.tsv`.
+- **What counts as paper** (fixed Oct 28, item `paper-scope-1`): every tool uses one rule,
+  `ScryfallCard::is_paper()` (`crates/mtg-data/src/scryfall.rs`; `deferred()` in
+  `scripts/rulings_batches.py` mirrors it): a card is paper if its oracle record's `games`
+  is empty or includes "paper", or it is legal, restricted or banned in a format played
+  with paper cards (standard, pioneer, modern, legacy, vintage, pauper, commander,
+  oathbreaker, paupercommander, duel, oldschool, premodern, predh), except the digital
+  versions in `DIGITAL_VERSIONS` ("Name Sticker" Goblin). The oracle record is
+  one printing, and for 1,061 paper cards (City of Traitors, Fastbond, Memnite, Raging
+  Goblin, ...) it is an online-only reprint (Masters Edition I-IV, Tempest Remastered,
+  Vintage Masters, MTGO duel decks, Arena starter cards, promos). Until then the tools
+  looked at `games` only and counted 1,916 digital-only cards, leaving those 1,061 out (and "Name Sticker" Goblin, which the legality rule alone would add).
 - **Paper cards with these mechanics** (round-2 card plan, Oct 14): Pearl Collector
   (perpetual) and Tenacious Pup (a boon) are paper cards whose abilities use these
   digital-only mechanics; they stay unsupported with the mechanics
@@ -84,9 +105,10 @@ Decided 2026-10-02.
   stay supported. Only covering these individual cards is deferred.
 - **Status:** `card-coverage` and `unsupported` already skip them. Rulings that apply only
   to such cards are DEFERRED in `scripts/rulings_batches.py`. Together with digital-only
-  cards, sticker sheets and the dexterity cards (below), that is 2,520 ruling texts on
-  Oct 21 (2,636 on Oct 2: a text that a test has cited or an exemption has listed since
-  then counts as CITED or EXEMPT instead).
+  cards, sticker sheets and the dexterity cards (below), that is 1,817 ruling texts on
+  Oct 28, after the paper-scope fix counted the 1,061 paper cards with an online-only
+  oracle printing as paper (2,520 on Oct 21; 2,636 on Oct 2: a text that a test has cited
+  or an exemption has listed since then counts as CITED or EXEMPT instead).
 
 ### Dexterity cards
 
@@ -111,6 +133,31 @@ Decided 2026-10-21.
   `docs/rulings-exemptions/rulings-P136.tsv` and `rulings-P045.tsv`; the others are
   DEFERRED in `scripts/rulings_batches.py`, which finds these cards by the words "from a
   height of at least one foot".
+
+### Conspiracy face-down draft cards
+
+Decided by the user, 2026-10-28.
+
+- **Scope:** five Conspiracy cards whose draft abilities need a simulation of the draft
+  table itself, in which each player sees different booster packs: Illusionary Informant
+  and Whispergear Sneak (turn the card face down during the draft to look at another
+  player's next pick or at an unopened or unwatched booster pack), Archdemon of Paliano
+  (draft cards at random without looking at booster packs, then turn it face down), Agent
+  of Acquisitions (draft a whole booster pack one card at a time, turn it face down and
+  draft nothing more that round) and Deal Broker (immediately after the draft, offer and
+  accept card-pool exchanges with the other players). Only a Conspiracy draft (CR 905)
+  uses these abilities, and they do nothing once a game starts (CR 905.2). The engine's
+  draft model (`draft.rs`) keeps its face-up drafting and "reveal as you draft it"
+  support; Conspiracy cards whose draft abilities leave notes that matter in the game
+  (Cogwork Tracker, Noble Banneret, Paliano, the High City, ...) stay in scope.
+- **Status:** they stay unsupported, and `card-coverage` counts them as unsupported paper
+  cards; their draft texts are in `docs/agents/round3/deferred.tsv` and
+  `docs/agents/round4/deferred.tsv`. Their other abilities (flying; Deal Broker's
+  "{T}: Draw a card, then discard a card.") compile. Rulings that apply only to these
+  cards (looking at packs, drafting at random, the exchange procedure) are DEFERRED in
+  `scripts/rulings_batches.py`, which finds the cards by name; Deal Broker's ruling on
+  drafts that break up into several games was already exempt in
+  `docs/rulings-exemptions/rulings-P145.tsv`.
 
 ## Deferred to later
 

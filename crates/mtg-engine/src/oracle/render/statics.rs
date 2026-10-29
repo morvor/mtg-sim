@@ -588,10 +588,16 @@ impl Renderer<'_> {
                     format!("choose {c} before the game begins")
                 }
             }
-            StaticEffect::BeforeShuffleExile { what } => {
+            StaticEffect::BeforeShuffleExile { what, at_least: 0 } => {
                 let n = self.noun_det(what, Det::A);
                 format!(
                     "before you shuffle your deck to start the game, you may reveal ~ from your deck and exile {n} you drafted that isn't in your deck"
+                )
+            }
+            StaticEffect::BeforeShuffleExile { what, at_least } => {
+                let n = self.noun_det(what, Det::Count(format!("{} or more", number_word(*at_least as i32))));
+                format!(
+                    "before you shuffle your deck to start the game, you may reveal ~ from your deck and exile {n} you drafted that aren't in your deck"
                 )
             }
             StaticEffect::Companion(dc) => {
@@ -4185,6 +4191,10 @@ impl Renderer<'_> {
             D::ExtraCoin { who } => {
                 let w = self.rel_subject(*who);
                 format!("if {w} would flip a coin, instead flip two coins and ignore one")
+            }
+            D::ExtraPlanarDie { who } => {
+                let w = self.rel_subject(*who);
+                format!("if {w} would roll one or more planar dice, instead roll that many planar dice plus one and ignore one")
             }
             D::FirstFlipsWin { who } => {
                 let w = self.rel_subject(*who);

@@ -1613,13 +1613,9 @@ impl Game {
         // (Additional costs required by the casting method itself are part of
         // `base_total_cost`.)
         // CR 702.47a: splice (the spell gains text, CR 612.10). Splice affordability
-        // accounts for every additional cost chosen so far, including the casting
-        // method's own.
-        let mut committed = extra.clone();
-        if let Some(c) = &opt.extra_cost {
-            add_cost(&mut committed, c);
-        }
-        for c in crate::splice::offer_splices(self, p, id, &committed) {
+        // accounts for the total cost with every additional cost chosen so far, including
+        // the casting method's own, and the cost increases and reductions.
+        for c in crate::splice::offer_splices(self, p, id, &opt, &extra) {
             add_cost(&mut extra, &c);
         }
         let base_cost_has_x = match &opt.alt_cost {

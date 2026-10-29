@@ -827,6 +827,8 @@ pub struct Game {
     /// instant or sorcery card from your graveyard by paying {R}{R} in addition to its
     /// other costs", CR 601.2b, 601.2f).
     pub resolution_extra_cost: Option<Cost>,
+    /// Bookkeeping about reversed illegal actions (CR 733.1, `reversal.rs`).
+    pub reversals: crate::reversal::ReversalState,
 }
 
 impl Game {
@@ -958,6 +960,7 @@ impl Game {
             timing: Default::default(),
             resolution_alt_cost: None,
             resolution_extra_cost: None,
+            reversals: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
             for (i, t) in teams.iter().enumerate() {
@@ -997,11 +1000,15 @@ impl Game {
 
     /// Replaces the agents (e.g. on a cloned game used for search).
     /// Returns to `snapshot`, a copy of the game taken before an action that turned out
-    /// to be illegal (CR 733.1), keeping the agents.
+    /// to be illegal (CR 733.1), keeping the agents and the library actions the attempt
+    /// took, which can't be reversed (`reversal::keep_library_actions`).
     pub fn roll_back(&mut self, snapshot: Game) {
-        let agents = self.agents.clone();
-        *self = snapshot;
-        self.agents = agents;
+        let attempted = std::mem::replace(self, snapshot);
+        self.agents = attempted.agents.clone();
+        // Positions in the event feed don't go back: readers that saw the attempt's events
+        // see what follows the reversal.
+        self.event_feed.skip_to(attempted.event_feed.len());
+        crate::reversal::keep_library_actions(self, &attempted);
         if let Some(f) = self.observer.as_ref().and_then(|o| o.on_rollback.clone()) {
             f(self);
         }

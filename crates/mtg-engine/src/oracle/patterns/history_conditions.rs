@@ -1456,6 +1456,18 @@ fn cast_status(c: &str, mut b: Option<&mut Builder>) -> Option<Condition> {
         return Some(cond);
     }
     let (x, y) = c.split_once(" or ")?;
+    // "they entered or were cast from a graveyard": the zone shared by both clauses.
+    let shared;
+    let x = match ["were cast from ", "was cast from "]
+        .iter()
+        .find_map(|p| y.strip_prefix(p))
+    {
+        Some(z) if x.ends_with(" entered") => {
+            shared = format!("{x} from {z}");
+            shared.as_str()
+        }
+        _ => x,
+    };
     let cx = cast_status_clause(x, &mut b)?;
     let cy = cast_status_clause(y, &mut b).or_else(|| {
         // The same subject, elided: "... or was cast from your library".

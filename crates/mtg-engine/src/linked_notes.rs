@@ -28,6 +28,11 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Default)]
 pub struct LinkedNotes {
     notes: BTreeMap<(ObjectId, u16), Vec<Entity>>,
+    /// The copiable values a static copy effect of a source locked in for an object it
+    /// copies ("Enchanted creature is a copy of the chosen creature", CR 707.2; see
+    /// `static_copy.rs`), by source and copied object.
+    pub(crate) copy_values:
+        BTreeMap<(ObjectId, ObjectId), std::sync::Arc<crate::object::Characteristics>>,
 }
 
 impl LinkedNotes {
@@ -144,6 +149,16 @@ pub fn noted(g: &Game, ctx: &Ctx) -> Vec<Entity> {
         }
     }
     out
+}
+
+/// The objects noted for `src`'s abilities with link `link`, including those that have
+/// since changed zones (their last known information).
+pub fn noted_objects(g: &Game, src: ObjectId, link: u16) -> Vec<ObjectId> {
+    g.linked_notes
+        .notes
+        .get(&(src, link))
+        .map(|v| v.iter().filter_map(|e| e.object()).collect())
+        .unwrap_or_default()
 }
 
 /// [`PlayerRef::LinkedNoted`]: the noted players.

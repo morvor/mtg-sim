@@ -290,6 +290,9 @@ pub enum FunctionZone {
     Command,
     /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
     Anywhere,
+    /// Functions in its owner's graveyard and in exile ("Return ~ from your graveyard or
+    /// from exile to the battlefield", CR 113.6m).
+    GraveyardOrExile,
     /// Functions everywhere except the given zone, even outside the game (an ability that
     /// states which zones it doesn't function in, CR 113.6c).
     AnywhereExcept(ZoneKind),
@@ -1191,6 +1194,10 @@ pub enum PlayerRef {
     OwnerOf(Box<Sel>),
     /// The player from the triggering event.
     TriggerPlayer,
+    /// The players of the batch of events that triggered a "one or more" ability, each
+    /// once (CR 603.2c): "the number of opponents dealt damage this way", "each of those
+    /// opponents".
+    TriggerPlayers,
     /// The active player.
     ActivePlayer,
     /// "The attacking player": the active player (CR 506.2). With shared team turns, one
@@ -2382,6 +2389,12 @@ pub enum Modification {
         name: SmolStr,
         layer: Layer,
     },
+    /// A static ability's copy effect: "Enchanted creature is a copy of the chosen
+    /// creature" (CR 707.2, 613.2a): the affected objects have the copiable values of the
+    /// selected object, locked in as the effect first begins to apply (later changes to
+    /// that object's copiable values, or its leaving the battlefield, don't change them).
+    /// Applied in layer 1 with the copy effects (see `static_copy.rs`).
+    CopyOf(Box<Sel>),
 }
 
 impl Modification {
@@ -2430,6 +2443,7 @@ impl Modification {
             ModifyPT(..) => Layer::L7cModify,
             SwitchPT => Layer::L7dSwitch,
             Custom { layer, .. } => *layer,
+            CopyOf(_) => Layer::L1aCopy,
         }
     }
 }
@@ -2545,6 +2559,10 @@ pub enum ManaProduction {
     /// 702.124c: the combined identities of their commanders). Undefined without a
     /// commander, so no mana is added (CR 903.4f).
     CommanderIdentity,
+    /// One mana of any color chosen as the controller drafted cards with the source's name
+    /// ("one mana of any color chosen as you drafted cards named Paliano, the High City",
+    /// CR 905.2b). No mana if no colors were chosen (its rulings).
+    DraftChosenColors,
     /// "Choose a color. Add an amount of mana of that color equal to your devotion to that
     /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
     /// resolves, then the amount is the controller's devotion to it.
@@ -3616,6 +3634,10 @@ pub enum StaticEffect {
     /// (CR 607.2n). Functions in the library before the game begins.
     BeforeShuffleExile {
         what: Filter,
+        /// "exile three or more creature cards you drafted that aren't in your deck"
+        /// (Volatile Chimera): any number, at least this many; 0 for exactly one.
+        #[serde(default)]
+        at_least: u32,
     },
     /// Companion (CR 702.139a): the condition the owner's starting deck must fulfill for
     /// this card to be revealed as their companion before the game (CR 103.2b).

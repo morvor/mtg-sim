@@ -65,6 +65,19 @@ pub(crate) fn split_targets_qualifier(s: &str) -> (&str, Option<TargetsFilter>) 
         }
         return (s, None);
     }
+    // "with one or more targets" (Wyll's Reversal): some object or player was chosen as
+    // a target (CR 115.9a).
+    if let Some(head) = end(s).strip_suffix(" with one or more targets") {
+        if !head.contains(" with ") {
+            return (
+                &s[..head.len()],
+                Some(TargetsFilter::Targets {
+                    objects: Some(Filter::Any),
+                    players: Some(PlayerFilter::Any),
+                }),
+            );
+        }
+    }
     if let Some((head, what)) = s.split_once(" that targets only ") {
         if let Some((objects, players)) = targeted_thing(what) {
             return (head, Some(TargetsFilter::Only { objects, players }));
@@ -153,7 +166,9 @@ fn change_targets(l: &str, b: &mut Builder) -> Option<Effect> {
         ("it" | "~", _)
             if b.ctx.is_spell()
                 && !b.in_trigger
-                && crate::oracle::raw_text().to_lowercase().contains(" is on the stack") =>
+                && crate::oracle::raw_text()
+                    .to_lowercase()
+                    .contains(" is on the stack") =>
         {
             Sel::This
         }

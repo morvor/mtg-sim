@@ -2161,7 +2161,10 @@ impl Game {
             }
             Effect::CreateEmblem { who, abilities } => {
                 for p in self.eval_players(who, ctx) {
-                    crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    let e = crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    // "You may play cards exiled with ~" on an emblem: the cards exiled
+                    // with the object that created it (see `Sel::Linked`).
+                    self.objects[e.0 as usize].created_by = ctx.source.map(|s| (s, ctx.link));
                 }
             }
             Effect::RestartGame { keep } => {
@@ -2775,6 +2778,11 @@ impl Game {
                 // the abilities it has as the effect is created (CR 608.2h).
                 Modification::AddAbilitiesOf { from, which, terms } => fixed.extend(
                     crate::ability_grants::snapshot(self, from, which, terms, ctx, &mut links),
+                ),
+                // Referents of the granted ability fixed as the effect is created
+                // (`granted_captures.rs`).
+                Modification::AddAbility(a) if crate::granted_captures::mentions(a) => fixed.push(
+                    Modification::AddAbility(crate::granted_captures::bind(self, a, ctx)),
                 ),
                 other => fixed.push(other.clone()),
             }
@@ -3567,6 +3575,17 @@ impl Game {
                     self.eval_value(&Value::Devotion(ColorSet::single(col)), ctx)
                 });
                 vec![c; k.max(0) as usize]
+            }
+            ManaProduction::DraftChosenColors => {
+                let types: Vec<ManaType> = crate::draft::chosen_colors(self, ctx)
+                    .into_iter()
+                    .map(ManaType::from_color)
+                    .collect();
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
             }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.

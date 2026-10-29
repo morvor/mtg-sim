@@ -1652,6 +1652,9 @@ pub fn reads_this_way(s: &str, b: &Builder) -> bool {
 /// destroyed this way"), as this grammar reads it.
 pub fn reads_result_value(s: &str, b: &mut Builder) -> bool {
     let s = end(s);
+    if super::referents_values_5::atom(s, b).is_some_and(|(_, rest)| rest.trim().is_empty()) {
+        return true;
+    }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let v = match s.strip_prefix("the number of ") {
         Some(r) => this_way_count(r, b),

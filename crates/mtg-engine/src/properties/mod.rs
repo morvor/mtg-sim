@@ -80,6 +80,8 @@ pub struct Summary {
     pub result: String,
     /// Reversed actions checked (for [`rollback_identity`]).
     pub rollbacks: u64,
+    /// Of those, the reversals that kept library actions (CR 733.1).
+    pub rollbacks_keeping_library_actions: u64,
 }
 
 /// One game being played for a check, with its agents' states and recorder.
@@ -215,6 +217,7 @@ impl Run {
             turns: self.game.turn.number,
             result: r.canon.result(&self.game),
             rollbacks: r.rollbacks_checked,
+            rollbacks_keeping_library_actions: r.rollbacks_keeping_library_actions,
         }
     }
 
@@ -418,7 +421,7 @@ fn pool() -> &'static [(String, u8)] {
             if !c.is_playable_card() || !c.is_legal_somewhere() {
                 continue;
             }
-            if !c.games.is_empty() && c.games.iter().all(|g| g != "paper") {
+            if !c.is_paper() {
                 continue;
             }
             let front = c.type_line.as_deref().unwrap_or("");
