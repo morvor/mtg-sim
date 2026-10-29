@@ -296,6 +296,7 @@ fn parse_triggered_at(
     let mut tr = TriggeredAbility::new(trigger, body);
     tr.is_mana_ability = is_mana_ability;
     tr.intervening_if = intervening;
+    super::patterns::other_than_trigger_object::rebind_other(&mut tr, ctx);
     tr.once_per_turn = once_per_turn;
     tr.limit = limit;
     tr.zone = trigger_zone(&tr.trigger, &eff.to_lowercase());

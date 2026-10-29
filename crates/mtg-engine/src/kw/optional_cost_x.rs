@@ -23,8 +23,12 @@ pub fn choose_x_for_optional_cost(g: &mut Game, cost: &Cost, ctx: &mut Ctx) {
     let p = ctx.controller;
     let mut max: Option<i64> = None;
     for part in &cost.parts {
-        let CostPart::TapUntapped { filter, count } = part else {
-            continue;
+        // "sacrifice any number of creatures with total power 12 or greater" (Phyrexian
+        // Dreadnought): as many as the player controls.
+        let (filter, count, untapped) = match part {
+            CostPart::TapUntapped { filter, count } => (filter, count, true),
+            CostPart::Sacrifice { filter, count } => (filter, count, false),
+            _ => continue,
         };
         if !matches!(count, Value::X) || crate::casting::filter_mentions_x(filter) {
             continue;
@@ -35,7 +39,7 @@ pub fn choose_x_for_optional_cost(g: &mut Game, cost: &Cost, ctx: &mut Ctx) {
             .into_iter()
             .filter(|o| {
                 let ob = g.obj(*o);
-                ob.controller == p && !ob.tapped
+                ob.controller == p && (!untapped || !ob.tapped)
             })
             .count() as i64;
         max = Some(max.map_or(n, |m| m.min(n)));

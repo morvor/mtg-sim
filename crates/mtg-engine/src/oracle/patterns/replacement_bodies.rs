@@ -184,8 +184,10 @@ fn draw_reveal_discard_unless(block: &str, ctx: &CompileContext) -> Option<Vec<A
     if !crate::oracle::phrases::end(tail).is_empty() {
         return None;
     }
-    let mut abilities =
-        crate::oracle::parse_ability(&format!("{head} instead they draw a card and reveal it."), ctx)?;
+    let mut abilities = crate::oracle::parse_ability(
+        &format!("{head} instead they draw a card and reveal it."),
+        ctx,
+    )?;
     let e = draw_instead(&mut abilities)?;
     // Performed by the player drawing (`AsPlayer`): "you" in it is that player.
     let Effect::AsPlayer { effect, .. } = e else {
@@ -361,17 +363,25 @@ fn enter_only_if_paid(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>
     let lower = text.to_lowercase();
     let r = lower.strip_prefix("if ~ would enter, ")?;
     let (cost_s, rest) = r.split_once(" instead. ")?;
-    if rest != "if you do, put ~ onto the battlefield. if you don't, put it into its owner's graveyard." {
+    if rest
+        != "if you do, put ~ onto the battlefield. if you don't, put it into its owner's graveyard."
+    {
         return None;
     }
+    // "you may discard a land card instead" (Mox Diamond): the same choice, worded as one.
+    let cost_s = cost_s.strip_prefix("you may ").unwrap_or(cost_s);
     let (cost, false) = crate::oracle::costs::parse_cost(cost_s)? else {
         return None;
     };
     if cost.mana.is_some()
-        || !cost
-            .parts
-            .iter()
-            .all(|p| matches!(p, CostPart::Sacrifice { .. } | CostPart::TapUntapped { .. }))
+        || !cost.parts.iter().all(|p| {
+            matches!(
+                p,
+                CostPart::Sacrifice { .. }
+                    | CostPart::TapUntapped { .. }
+                    | CostPart::Discard { .. }
+            )
+        })
     {
         return None;
     }

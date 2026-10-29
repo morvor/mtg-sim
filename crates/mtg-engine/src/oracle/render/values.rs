@@ -318,6 +318,13 @@ impl Renderer<'_> {
                         };
                         return format!("the number of {} mana symbols in {p} mana cost", c.word());
                     }
+                    Stat::ColoredManaSymbols if *op == AggOp::Sum => {
+                        let p = match s.as_str() {
+                            "it" => "its".to_string(),
+                            other => super::nouns::possessive(other),
+                        };
+                        return format!("the number of colored mana symbols in {p} mana cost");
+                    }
                     other => return self.gap(format!("Value::Aggregate {other:?}")),
                 };
                 let o = match op {
@@ -1147,6 +1154,7 @@ impl Renderer<'_> {
                 PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
+                PhaseCond::DrawStep => "it's the draw step".into(),
             },
             Condition::CitysBlessing => "you have the city's blessing".into(),
             Condition::IsMonarch => "you're the monarch".into(),

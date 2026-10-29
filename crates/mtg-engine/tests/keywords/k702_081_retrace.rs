@@ -177,6 +177,8 @@ fn the_active_player_can_cast_a_retrace_card_again_right_after_it_resolves() {
     // P0 receives priority first and may cast it again at once.
     t.g.settle();
     assert_eq!(t.g.turn.priority, Some(P0));
+    // The card in the graveyard is a new object (CR 400.7).
+    let jab = t.g.current(jab);
     assert!(can_cast(&mut t, P0, jab, RETRACE));
     t.cast(P0, jab).method(RETRACE).target(P1).go();
     t.resolve_all();
