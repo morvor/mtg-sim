@@ -193,7 +193,14 @@ Tests in `crates/mtg-engine/tests/cards/roundtrip_pairs_4.rs`; each fails on the
   [permanent]" pattern next to it already had it (`patterns/triggers_ability_of_activated.rs`,
   `patterns/triggers_activate_ability.rs`); tests
   `crackdown_construct_ignores_abilities_of_cards_in_hand`,
-  `kurkesh_ignores_an_artifact_cards_cycling`.
+  `kurkesh_ignores_an_artifact_cards_cycling` (which also checks Kurkesh still copies Mind
+  Stone's ability on the battlefield).
+
+Review: the sacrifice being mandatory is settled by Lake of the Dead's and Heart of
+Yavimaya's rulings ("You have to sacrifice a swamp before this card is put onto the
+battlefield"), now cited; only the one-untapped-land case for Lotus Vale and Scorched Ruins
+stays provisional (the rulings say only that it never enters), and the changed existing
+test cites the register entry.
 
 Checked in play (same file, passing on the old code too): Rivalry needs more lands than
 each other player in a three-player game (the AST says "no other player controls at least

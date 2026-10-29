@@ -84,6 +84,7 @@ fn lotus_vale_enters_only_if_two_untapped_lands_are_sacrificed() {
     t.settle();
     assert_eq!(t.named_on_battlefield("Lotus Vale").len(), 1);
     assert_eq!(t.named_on_battlefield("Forest").len(), 0);
+    interp!("enter-sacrifice-instead-partial");
     // "Sacrifice two untapped lands instead" isn't an offer: with two untapped lands, they
     // are sacrificed whatever the player would answer (roundtrip-pairs-4; see
     // `tests/cards/roundtrip_pairs_4.rs`).

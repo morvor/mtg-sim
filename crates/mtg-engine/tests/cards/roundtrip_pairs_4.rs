@@ -35,6 +35,7 @@ fn seven_dwarves_counts_creatures_named_seven_dwarves_not_ones_sharing_another_n
 #[test]
 fn lake_of_the_dead_sacrifices_a_swamp_without_asking() {
     cr!("614.1c", "614.12", "608.2c");
+    ruling!("Lake of the Dead", "You have to sacrifice a swamp");
     ruling!(
         "Scorched Ruins",
         "If you don't sacrifice the lands, Scorched Ruins never enters"
@@ -229,4 +230,17 @@ fn kurkesh_ignores_an_artifact_cards_cycling() {
     assert!(t.in_graveyard(P0, "Raugrin Crystal"), "cycled");
     // One card drawn: the cycling wasn't copied.
     assert_eq!(t.hand_size(P0), hand);
+    // An artifact's ability on the battlefield is still copied.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kurkesh, Onakke Ancient");
+    let stone = t.battlefield(P0, "Mind Stone");
+    t.lands(P0, "Mountain", 2);
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.activate(P0, stone, 1, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Mind Stone"));
+    assert_eq!(t.hand_size(P0), hand + 2, "the ability and its copy");
 }
