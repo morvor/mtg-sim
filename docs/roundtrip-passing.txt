@@ -1702,6 +1702,7 @@ Balthor the Stout
 Balustrade Wurm
 Bamboo Grove Archer
 Bamboozle
+Bamboozling Beeble
 Bandage
 Bandit's Haul
 Bane Alley Blackguard
@@ -2965,6 +2966,7 @@ Breathless Knight
 Breathstealer
 Bred for the Hunt
 Breeches, Eager Pillager
+Breeches, the Blastmaker
 Breeding Pit
 Breeding Pool
 Breezekeeper
@@ -3378,6 +3380,7 @@ Campus Crier
 Campus Guide
 Campus Renovation
 Can't Stay Away
+Canal Dredger
 Canal Monitor
 Cancel
 Candelabra of Tawnos
@@ -4140,6 +4143,7 @@ Claws Out
 Claws of Gix
 Claws of Valakut
 Claws of Wirewood
+Clay Golem
 Clay Revenant
 Clay Statue
 Clay-Fired Bricks // Cosmium Kiln
@@ -5860,6 +5864,7 @@ Desperate Castaways
 Desperate Charge
 Desperate Farmer // Depraved Harvester
 Desperate Futurescribe
+Desperate Gambit
 Desperate Lunge
 Desperate Plea
 Desperate Ravings
@@ -6589,6 +6594,7 @@ Dromosaur
 Droning Bureaucrats
 Drooling Groodion
 Drooling Ogre
+Drop Tower
 Dropkick Bomber
 Dross Crocodile
 Dross Golem
@@ -8171,6 +8177,7 @@ Ferocity of the Hunt
 Ferocity of the Wilds
 Feroz's Ban
 Ferrafor, Young Yew
+Ferris Wheel
 Ferropede
 Ferrous Lake
 Ferrovore
@@ -8248,6 +8255,7 @@ Fiery Emancipation
 Fiery Encore
 Fiery Fall
 Fiery Finish
+Fiery Gambit
 Fiery Hellhound
 Fiery Impulse
 Fiery Inscription
@@ -14066,6 +14074,7 @@ Lord of the Unreal
 Lord of the Void
 Lore Broker
 Lore Drakkis
+Lore Seeker
 Lore Weaver
 Lorehold Archivist // Restore Relic
 Lorehold Campus
@@ -20803,6 +20812,7 @@ Season of Growth
 Season of Loss
 Season of Renewal
 Season of Weaving
+Season of the Bold
 Season of the Burrow
 Seasoned Buttoneer
 Seasoned Consultant

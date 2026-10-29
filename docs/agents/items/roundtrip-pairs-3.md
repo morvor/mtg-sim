@@ -115,7 +115,7 @@ cards and then the two-card clusters in the tool's order up to the 80th (152 car
 
 28,046 of 31,866 fully supported cards passed at the start (711b6545); 28,165 of 31,866 pass on the branch before the merge, and 28,186 of 31,951 after
 merging the later landings (origin's passing list at the merge has 28,046 cards); 28,188
-after review (Gamble, Wild Research). 89 of the 152 taken cards pass.
+after review (Gamble, Wild Research); 28,198 of 31,972 after merging again. 89 of the 152 taken cards pass.
 
 Parser (two fixes, one fidelity change; see "Parser bugs found" for the shuffle order):
 
