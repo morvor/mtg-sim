@@ -50,6 +50,23 @@ fn power_word_kill_cant_target_a_creature_with_any_of_the_four_types() {
 }
 
 #[test]
+fn shoot_the_sheriff_cant_target_a_mercenary() {
+    cr!("115.1a", "700.12");
+    ruling!(
+        "Shoot the Sheriff",
+        "The only deputy in the Outlaws of Thunder Junction release is a Mercenary, so no, you cannot shoot the deputy."
+    );
+    supported("Shoot the Sheriff");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let merc = t.battlefield(P1, "Misshapen Fiend");
+    let from = t.asked().len();
+    cast_new(&mut t, P0, "Shoot the Sheriff", &[obj(bears)]);
+    let c = &target_candidates(&t, P0, from)[0];
+    assert!(c.contains(&obj(bears)) && !c.contains(&obj(merc)));
+}
+
+#[test]
 fn kalitas_exiles_nontoken_creatures_so_dies_triggers_see_only_tokens() {
     cr!("614.1a", "603.6c", "700.4");
     ruling!(
@@ -430,6 +447,9 @@ fn celestial_gatekeeper_can_target_itself_but_is_exiled_first() {
     let mut t = TestGame::new(2);
     let gk = t.battlefield(P0, "Celestial Gatekeeper");
     let cleric = t.graveyard(P0, "Bishop of Wings");
+    // Crib Swap (a kindred instant with changeling) is a Bird card but not a permanent
+    // card.
+    let swap = t.graveyard(P0, "Crib Swap");
     t.g.destroy(gk, None);
     // Its trigger isn't on the stack yet; it targets the card in the graveyard and the
     // Bishop.
@@ -441,6 +461,7 @@ fn celestial_gatekeeper_can_target_itself_but_is_exiled_first() {
     t.settle();
     let c = &target_candidates(&t, P0, from);
     assert!(c.iter().any(|v| v.contains(&obj(gk_card))));
+    assert!(c.iter().all(|v| !v.contains(&obj(swap))));
     t.resolve_all();
     assert_eq!(t.zone(gk), Zone::Exile);
     assert!(t.on_battlefield(cleric));
