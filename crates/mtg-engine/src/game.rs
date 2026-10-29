@@ -501,6 +501,11 @@ pub struct TurnHistory {
     /// triggers only for them. Recorded by `kw/reveal_first_draw.rs`.
     #[serde(default)]
     pub first_draws_revealed: Vec<ObjectId>,
+    /// Permanents that regenerated this turn, once for each time (CR 701.19a: a
+    /// regeneration shield was used to replace its destruction). Recorded by
+    /// `replacement.rs`; read by `kw/paper_history.rs`.
+    #[serde(default)]
+    pub regenerated: Vec<ObjectId>,
     /// Named actions players performed this turn, from [`Event::Custom`] events with a
     /// player ("surveil", "scry"): "as long as you've surveilled this turn". Recorded by
     /// `kw/grant_conditions.rs`.
