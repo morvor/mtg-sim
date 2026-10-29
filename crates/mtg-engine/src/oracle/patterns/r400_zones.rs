@@ -266,6 +266,20 @@ fn cast_without_paying(l: &str, b: &mut Builder) -> Option<Effect> {
                 optional,
             });
         }
+        // "When the last refine counter is removed from ~, if it's exiled, you may cast it.
+        // It costs {4} less to cast this way." (the ability Uvilda, Dean of Perfection
+        // grants): cast while the ability resolves, paying its costs (CR 608.2g).
+        let costs_less_follows = crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("you may cast it. it costs {");
+        if rest.is_empty() && optional && matches!(what, Sel::This) && costs_less_follows {
+            return Some(Effect::CastCard {
+                who: PlayerRef::You,
+                what,
+                free: false,
+                optional,
+            });
+        }
     }
     b.targets.truncate(saved_targets);
     b.it = saved_it;

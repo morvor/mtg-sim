@@ -125,9 +125,11 @@ pub fn with_resolution_terms<R>(
 ) -> R {
     let prev = std::mem::replace(&mut g.resolution_alt_cost, terms.alt_cost.clone());
     let prev_extra = std::mem::replace(&mut g.resolution_extra_cost, terms.extra_cost.clone());
+    let prev_reduction = std::mem::replace(&mut g.resolution_cost_reduction, terms.cost_reduction);
     let r = f(g);
     g.resolution_alt_cost = prev;
     g.resolution_extra_cost = prev_extra;
+    g.resolution_cost_reduction = prev_reduction;
     r
 }
 

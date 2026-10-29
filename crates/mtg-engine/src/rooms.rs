@@ -38,6 +38,9 @@ pub const UNLOCK_THIS_DOOR: &str = "door unlocked:";
 #[derive(Clone, Debug, Default)]
 pub struct RoomState {
     pub unlocked: BTreeMap<ObjectId, [bool; 2]>,
+    /// When each door of a Room permanent was last unlocked after it entered: that
+    /// half's static abilities begin to apply then (`interp!("room-door-unlock-timestamp")`).
+    pub unlocked_at: BTreeMap<ObjectId, [Timestamp; 2]>,
 }
 
 /// The split card with a shared type line whose halves the characteristics `c` represent
@@ -186,6 +189,8 @@ pub fn unlock(g: &mut Game, id: ObjectId, half: usize, by: PlayerId) -> bool {
     let entry = g.special.rooms.unlocked.entry(id).or_default();
     entry[half] = true;
     let fully = entry[0] && entry[1];
+    let ts = g.new_timestamp();
+    g.special.rooms.unlocked_at.entry(id).or_default()[half] = ts;
     g.dirty = true;
     g.log(|g| format!("{} unlocks a door of {}", by, g.describe(id)));
     g.emit(Event::Custom {
@@ -203,6 +208,21 @@ pub fn unlock(g: &mut Game, id: ObjectId, half: usize, by: PlayerId) -> bool {
         });
     }
     true
+}
+
+/// The timestamp of a static ability `uid` of a Room permanent's half that was unlocked
+/// after the permanent entered: the half's abilities begin to apply as it's unlocked, so
+/// their effects are ordered from then (Roaring Furnace // Steaming Sauna's ruling;
+/// `interp!("room-door-unlock-timestamp")`). `None` for other abilities.
+pub fn door_timestamp(g: &Game, id: ObjectId, uid: u64) -> Option<Timestamp> {
+    let at = g.special.rooms.unlocked_at.get(&id)?;
+    let card = room_card(g, id)?;
+    let half = card
+        .faces
+        .iter()
+        .take(2)
+        .position(|f| f.chars.abilities.iter().any(|a| a.uid == uid))?;
+    Some(at[half]).filter(|ts| *ts > 0)
 }
 
 /// Removes the unlocked designation of `half` (CR 709.5g). Returns false if that half

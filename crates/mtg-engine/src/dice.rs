@@ -495,6 +495,8 @@ pub fn roll_dice(
         dice.remove(k.min(dice.len() - 1));
     }
     apply_modifiers(g, p, &mut dice, source, false);
+    // Rules that change the results once they're known (after the modifiers).
+    crate::kw::dice_rolled(g, p, &mut dice, bonus, source);
     for d in &dice {
         g.emit(Event::DieRolled {
             player: p,

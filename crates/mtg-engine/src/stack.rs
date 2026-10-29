@@ -131,6 +131,10 @@ impl Game {
     /// false if a required choice can't be made (e.g. no legal targets).
     pub fn choose_modes_and_targets(&mut self, id: ObjectId, body: &Body, ctx: &mut Ctx) -> bool {
         let controller = ctx.controller;
+        // Choices made with the targets that their legality depends on (CR 601.2c).
+        if !crate::kw::choose_with_targets(self, id, body, ctx) {
+            return false;
+        }
         let mut chosen: Vec<ChosenMode> = Vec::new();
         if let Some(modal) = &body.modal {
             let min = self.eval_value(&modal.min, ctx).max(0) as u32;
@@ -232,6 +236,15 @@ impl Game {
                                 )
                             {
                                 v.pop();
+                            }
+                        }
+                        // "You may choose the same mode more than once": the available
+                        // modes again, in order, up to the minimum.
+                        if modal.allow_repeat && !modal.different_players && !v.is_empty() {
+                            let mut i = 0;
+                            while (v.len() as u32) < min {
+                                v.push(available[i % available.len()]);
+                                i += 1;
                             }
                         }
                         if modal.optional && (v.len() as u32) < min {

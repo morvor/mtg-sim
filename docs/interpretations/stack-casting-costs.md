@@ -112,6 +112,42 @@ index: `docs/INTERPRETATIONS.md`.
 - Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`); rendered back as one line by `crates/mtg-engine/src/oracle/render/cost_paid_copies.rs`.
 - Tests: `tests/rulings/r_p031_spell_copies.rs` (`plumb_the_forbidden_copies_for_each_creature_sacrificed`).
 
+## player-chosen-before-targets: Lodestone Bauble's "a player" is chosen as its targets are chosen, before them, among the players in range
+- Kind: interpretation
+- Status: decided
+- Rules: Lodestone Bauble: "Put up to four target basic land cards from a player's graveyard on top of their library in any order. That player draws a card at the beginning of the next turn's upkeep." / 601.2c "The player announces their choice of an appropriate object or player for each target the spell requires. ..." / 602.2b "The remainder of the process for activating an ability is identical to the process for casting a spell listed in rules 601.2b–i. ..." / 115.10a "... Unless that object or player is identified by the word “target” in the text of that spell or ability, ... it’s not a target." / ruling: "If you choose zero targets, you still choose a player. That player will draw a card at the beginning of the next turn’s upkeep."
+- Question: When and among whom is "a player" chosen, and how does it constrain the targets?
+- Decision: As the ability is activated, immediately before its targets are chosen: its controller chooses any player in their range of influence (not targeted, so a player with hexproof can be chosen), and every target must be a basic land card in that player's graveyard, both as targets are chosen and as it resolves. The choice is kept on the ability on the stack; "That player" is that player. By default the player with the most basic land cards in their graveyard is chosen.
+- Alternatives: Choosing the player after the targets (as their owner) works only with one or more targets; the ruling requires a choice with zero targets too.
+- Why: The targets' legality depends on the player, so it's chosen first, as with modes before targets.
+- Affects: Lodestone Bauble.
+- Code: `crates/mtg-engine/src/cards/lodestone_bauble.rs`; `crates/mtg-engine/src/stack.rs` (`choose_modes_and_targets`, the `choose_with_targets` hook).
+- Tests: `tests/cards/m_lodestone_bauble.rs` (`the_chosen_players_basic_lands_go_on_top_and_they_draw_next_upkeep`, `the_player_is_chosen_not_targeted`).
+
+## one-spell-spend-permission: North Star's permission applies to the symbols of the chosen spell's mana cost, and the player chooses the spell as they pay
+- Kind: interpretation
+- Status: decided
+- Rules: North Star: "For one spell this turn, you may spend mana as though it were mana of any type to pay that spell's mana cost. (Additional costs are still paid normally.)" / 609.4b "If an effect allows a player to spend mana “as though it were mana of any [type or color],” this affects only how the player may pay a cost. It doesn’t change that cost, and it doesn’t change what mana was actually spent to pay that cost. ..." / 601.2f "The player determines the total cost of the spell. Usually this is just the mana cost. Some spells have additional or alternative costs. ..." The total cost is the mana cost or alternative cost (as determined in rule 601.2b), plus all additional costs and cost increases, and minus all cost reductions. ..." / 118.9 "... An alternative cost is a cost listed in a spell’s text, or applied to it from another effect, that its controller may pay rather than paying the spell’s mana cost. ..."
+- Question: Which spell uses the permission, which part of the total cost does it cover, and what about a spell cast for an alternative cost?
+- Decision: As each spell its controller casts this turn has its total cost determined (601.2f), they're asked whether to use the permission for it when it would change anything; using it uses it up. It covers, symbol for symbol, the mana symbols of the spell's mana cost (colored, hybrid and colorless: "any type") within the total cost; symbols that additional costs or cost increases add are paid normally. A spell cast for an alternative cost isn't paying its mana cost, so the permission doesn't apply to it (and isn't used up). {X} in the mana cost becomes generic mana, which any type pays anyway; Phyrexian symbols aren't covered (the engine has no symbol for "one mana of any type or 2 life"). By default it's used only for a spell that couldn't be paid for without it.
+- Alternatives: Applying it automatically to the next spell (the "next spell" effects) ignores "for one spell" (the player's choice); applying it to the whole total cost ignores the reminder text.
+- Why: The text lets the player pick the spell; the reminder text limits it to the mana cost.
+- Affects: North Star.
+- Code: `crates/mtg-engine/src/cards/north_star.rs`; `crates/mtg-engine/src/casting.rs` (the `spend_permission` and `use_spend_permission` hooks).
+- Tests: `tests/cards/m_north_star.rs` (`any_type_includes_colorless_and_the_player_chooses_the_spell`, `additional_costs_are_still_paid_normally`, `not_for_a_spell_cast_for_an_alternative_cost`, `x_in_the_mana_cost_is_generic_and_colored_symbols_are_covered`).
+
+## cast-order-as-chosen: Several spells cast from among cards during a resolution are cast in the order the player's answer lists them
+- Kind: policy
+- Status: decided
+- Rules: 608.2g "... If an effect specifically instructs or allows a player to cast a spell during resolution, they do so by following the steps in rules 601.2a–i, except no player receives priority after it’s cast. That spell becomes the topmost object on the stack, and the currently resolving spell or ability continues to resolve, which may include casting other spells this way. ..."
+- Question: That the player chooses the order isn't a judgment call: 608.2g has the spells cast one at a time, and the rulings say so (Etali, Primal Storm: "If you cast more than one of the exiled cards, you choose the order in which to cast them."; Plargg and Nassari: "You can cast them in any order."). What this entry records is only how the agent interface expresses that order, and the default: the engine asks for the cards to cast with one `ChooseEntities` decision.
+- Decision: The cards are cast in the order the player's answer lists them; the default answer (and an invalid one) takes the cards in the order the candidates were offered (as `default-first-listed-choice`).
+- Alternatives: Ask for the next card to cast after each cast (one decision per spell): exact, more decisions; cast in the order the engine lists the cards (what the engine did before): contradicts the rulings, since the player couldn't put Twincast after Lightning Strike when Twincast is listed first.
+- Why: The answer is already an ordered list, so the player gets every order the rules allow without a new decision. Uncontroversial (an interface encoding, not a reading of the rules), so not provisional.
+- Affects: every "cast [any number / up to N] spells from among [cards]" effect compiled to `Effect::CastCard` with a choice (Plargg and Nassari, Etali, Primal Storm, Villainous Wealth and the like).
+- Code: `crates/mtg-engine/src/spell_choice.rs` (`choose_cards_to_cast`).
+- Tests: `tests/rulings/r_p066_exile.rs` (`plargg_spells_cast_this_way_can_target_earlier_ones`).
+
 ## x-defined-by-target: An {X} in an activation cost that the text defines by the ability's target must be announced as that value
 - Kind: interpretation
 - Status: provisional
@@ -120,9 +156,9 @@ index: `docs/INTERPRETATIONS.md`.
 - Decision: The player announces X, and the target must be a spell whose mana value makes the definition true (twice its mana value is X); an X no target can satisfy (an odd X here) can't be announced. The result is that X is exactly the defined value for the chosen target, as 107.3c requires.
 - Alternatives: (A) Determine X after targets are chosen (out of the 601.2 order). (B) Let the player announce any X and pay it, ignoring the definition: contradicts 107.3c.
 - Why: The engine follows 601.2's order (as for Soul Foundry's "X is the mana value of that card", `r107_x_defined_by_text`); restricting the target to the announced X gives the same legal activations and the same payment as determining X from the target.
-- Affects: Reflecting Mirror.
-- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`).
-- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`).
+- Affects: Reflecting Mirror; Caller of the Untamed ("{X}, {T}: Create a token that's a copy of a card you exiled with cards named ~. X is the mana value of that card.": the card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card chosen is one with that mana value).
+- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`); `crates/mtg-engine/src/oracle/patterns/copies_6.rs` (`x_is_mana_value_of_chosen`).
+- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`); `tests/cards/c5_copies.rs` (`caller_of_the_untamed_x_is_the_mana_value_of_the_copied_card`).
 
 ## x-defined-for-a-player: "X is the number of ... in an opponent's graveyard as you cast this spell" is that number for one opponent, announced by the caster
 - Kind: interpretation
