@@ -51,3 +51,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Twilight Diviner.
 - Code: `crates/mtg-engine/src/oracle/patterns/history_conditions.rs` (`cast_status`), `crates/mtg-engine/src/oracle/patterns/referents_batches.rs` (`verb_one_of_them`).
 - Tests: `tests/cards/c4_batch_referents.rs` (`twilight_diviner_copies_a_creature_that_entered_from_a_graveyard`).
+
+## one-or-more-an-opponent-controls-per-opponent: "One or more creatures an opponent controls deal combat damage to you" triggers once for each opponent
+- Kind: interpretation
+- Status: provisional
+- Rules: 603.2c "An ability triggers only once each time its trigger event occurs. However, it can trigger repeatedly if one event contains multiple occurrences." / Stronghold Arena ruling: "Normally, combat damage is dealt all at the same time. In that case, Stronghold Arena's last ability triggers once for each opponent that creatures you control dealt combat damage to, regardless of how many creatures were dealing that damage." (its trigger: "Whenever one or more creatures you control deal combat damage to a player") / 810.10 "Effects that cause players to get poison counters happen to each player individually."
+- Question: Norn's Decree: "Whenever one or more creatures an opponent controls deal combat damage to you, that opponent gets a poison counter." When creatures of several opponents deal combat damage to you at once (shared team turns, CR 805.10a: both players of the attacking team attack), does it trigger once, or once for each of those opponents? And who is "that opponent"?
+- Decision: Once for each opponent whose creatures dealt you combat damage, and "that opponent" is the controller of that trigger's creatures. Without shared team turns only the active player's creatures deal combat damage, so it triggers once and that player gets the counter.
+- Alternatives: Trigger once per combat damage step, with each of those opponents getting a poison counter as it resolves: the same poison counters, but one trigger instead of several (it differs for abilities that copy, counter or count triggers).
+- Why: The singular "an opponent" picks out one opponent per occurrence, as the singular "a player" of Stronghold Arena's trigger does, whose ruling makes it trigger once for each player dealt damage; and "that opponent" names one player.
+- Affects: Norn's Decree.
+- Code: `crates/mtg-engine/src/oracle/patterns/triggers.rs` (`parse_damage_verb`, `controlled_by_opponent`); `BatchPer::OtherController` in `crates/mtg-engine/src/triggers.rs` and `crates/mtg-engine/src/delayed_batches.rs`.
+- Tests: `tests/cr/interp_multiplayer.rs` (`norns_decree_triggers_once_for_each_opponent_whose_creatures_dealt_damage`).

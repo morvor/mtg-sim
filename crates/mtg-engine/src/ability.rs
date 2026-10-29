@@ -221,6 +221,11 @@ pub struct ActivatedAbility {
     /// ability (CR 113.10a, 609.4b; see [`GainedTerms`]).
     #[serde(default)]
     pub spend_as_any_color: Option<Vec<crate::mana::ManaType>>,
+    /// "Activate no more times each turn than the number of snow Swamps you control."
+    /// (Withering Wisps; CR 602.5b): a limit per turn given by a value, evaluated each time
+    /// a player attempts to activate the ability (its rulings).
+    #[serde(default)]
+    pub max_per_turn_value: Option<Value>,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -250,6 +255,7 @@ impl ActivatedAbility {
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
             spend_as_any_color: None,
+            max_per_turn_value: None,
         }
     }
 }
@@ -290,6 +296,9 @@ pub enum FunctionZone {
     Command,
     /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
     Anywhere,
+    /// Functions in its owner's graveyard and in exile ("Return ~ from your graveyard or
+    /// from exile to the battlefield", CR 113.6m).
+    GraveyardOrExile,
     /// Functions everywhere except the given zone, even outside the game (an ability that
     /// states which zones it doesn't function in, CR 113.6c).
     AnywhereExcept(ZoneKind),
@@ -1114,6 +1123,11 @@ pub enum Sel {
     /// CR 607.1, 607.2e): "the last chosen card" (Koh, the Face Stealer). An object that
     /// has since changed zones is a new object the note doesn't find (CR 400.7).
     LinkedNoted,
+    /// The objects the linked abilities of the source noted, as they last existed, even if
+    /// they have since changed zones (last known information, CR 608.2h): "~'s power and
+    /// toughness are each equal to the number of Forests sacrificed as it entered" (Wood
+    /// Elemental; see `oracle::patterns::paper_statics`).
+    LinkedNotedLastKnown,
     /// The selected objects that match the filter, each judged as it is now or, if it has
     /// left the zone it was in, as it last existed there (CR 608.2h): "the creatures you
     /// controlled that were destroyed this way", "the creature cards sacrificed this
@@ -2169,6 +2183,10 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during its controller's next two untap steps" (Telekinesis): like
+    /// [`Duration::ThroughNextUntapStep`], for this many of each affected object's
+    /// controllers' untap steps (whoever controls it at each one, CR 502.3). Always 2 or more.
+    ThroughNextUntapSteps(u32),
     /// "[doesn't untap] during your next untap step": until the next untap step of the
     /// effect's controller has passed; it applies only during that player's untap steps,
     /// so an affected permanent another player gains control of untaps as usual during
@@ -2954,6 +2972,27 @@ pub enum Restriction {
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
+    /// "Until end of turn, ~ can be the target of spells and abilities controlled by
+    /// target player as though it didn't have shroud." (Autumn Willow; CR 702.18, 609.4):
+    /// spells and abilities controlled by the `by` players may target the objects as though
+    /// they didn't have `keyword` (shroud or hexproof).
+    TargetableAsThoughNo {
+        what: Filter,
+        by: PlayerFilter,
+        keyword: crate::keywords::KeywordKind,
+    },
+    /// "~ can't attack unless at least two other creatures attack" (Orcish Conscripts):
+    /// the numeric form of "alone", checked on the whole declaration (CR 508.1c). `n` is
+    /// at least 1.
+    CantAttackUnlessOthersAttack {
+        what: Filter,
+        n: u32,
+    },
+    /// "~ can't block unless at least two other creatures block" (CR 509.1b).
+    CantBlockUnlessOthersBlock {
+        what: Filter,
+        n: u32,
+    },
     /// "No more than N creatures can attack/block each combat" (CR 508.1c, 509.1b).
     MaxAttackers(u32),
     MaxBlockers(u32),
@@ -3263,6 +3302,10 @@ pub enum BlockWhen {
     ThisTurn,
 }
 
+/// The land plays of "You may play any number of lands on each of your turns." (Fastbond;
+/// CR 305.2): unbounded, as [`StaticEffect::AdditionalLandPlays`]' count.
+pub const ANY_NUMBER_OF_LANDS: u32 = u32::MAX;
+
 /// Something that can't happen to an object ([`Restriction::CantBe`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectAction {
@@ -3278,6 +3321,16 @@ pub enum ObjectAction {
     EnchantedByOtherAuras,
     /// "can't become suspected" (CR 701.60).
     Suspected,
+    /// "can't be enchanted" (CR 303.4): no Aura can become attached to it, and an Aura
+    /// attached to it is attached illegally (CR 303.4c).
+    Enchanted,
+    /// "can't be enchanted. This effect doesn't remove Auras already attached to [them]"
+    /// (Guardian Beast): no Aura can become attached to it; Auras already attached stay.
+    NewlyEnchanted,
+    /// "other players can't gain control of [them]" (Guardian Beast): effects that would
+    /// give a player other than the restriction's controller control of it don't (its
+    /// rulings: sacrificing it isn't stopped).
+    ControlGainedByOthers,
 }
 
 /// The spells and abilities a [`Restriction::CantCauseSacrifice`] is about, relative to
@@ -3617,7 +3670,8 @@ pub enum StaticEffect {
     LookAtTopCard(PlayerRel),
     /// "Play with the top card of your library revealed."
     RevealTopCard(PlayerRel),
-    /// Additional land plays per turn.
+    /// Additional land plays per turn ([`ANY_NUMBER_OF_LANDS`]: "You may play any number
+    /// of lands on each of your turns.").
     AdditionalLandPlays(PlayerRel, u32),
     /// How coins are flipped and dice are rolled, and die-roll modifiers (CR 705, 706).
     Dice(crate::dice::DiceStatic),
@@ -4324,6 +4378,10 @@ pub enum BatchPer {
     /// battle": once for each player or battle dealt damage). The batch's objects are the
     /// sources (`EventInfo::other`).
     Recipient,
+    /// Once per controller of the other objects (`EventInfo::other`, e.g. the sources of
+    /// damage): "Whenever one or more creatures an opponent controls deal combat damage to
+    /// you" triggers once for each opponent whose creatures dealt it.
+    OtherController,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

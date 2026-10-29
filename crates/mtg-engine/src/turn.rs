@@ -878,6 +878,49 @@ impl Game {
                     }
                 }
         });
+        // "During its controller's next two untap steps": one of them has now passed for
+        // the objects the active player controls; they continue with one step fewer.
+        let mut counted = Vec::new();
+        let objects = &self.objects;
+        let battlefield = &self.battlefield;
+        for e in self.rule_effects.iter_mut() {
+            let Duration::ThroughNextUntapSteps(n) = e.duration else {
+                continue;
+            };
+            let less = if n > 2 {
+                Duration::ThroughNextUntapSteps(n - 1)
+            } else {
+                Duration::ThroughNextUntapStep
+            };
+            match e.objects.as_mut() {
+                Some(v) => {
+                    v.retain(|o| battlefield.contains(o));
+                    let (now, later): (Vec<ObjectId>, Vec<ObjectId>) = v
+                        .iter()
+                        .partition(|o| objects[o.0 as usize].controller == active);
+                    *v = later;
+                    if !now.is_empty() {
+                        let mut c = e.clone();
+                        c.duration = less;
+                        c.objects = Some(now);
+                        counted.push(c);
+                    }
+                }
+                None => {
+                    if untap_restricted_player(&e.restriction).unwrap_or(e.controller) == active {
+                        e.duration = less;
+                    }
+                }
+            }
+        }
+        for mut c in counted {
+            c.id = self.new_effect_id();
+            self.rule_effects.push(c);
+        }
+        self.rule_effects.retain(|e| {
+            !matches!(e.duration, Duration::ThroughNextUntapSteps(_))
+                || e.objects.as_ref().is_none_or(|v| !v.is_empty())
+        });
         self.dirty = true;
     }
 

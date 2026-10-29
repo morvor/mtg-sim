@@ -105,6 +105,25 @@ impl Renderer<'_> {
                 "defending player controls {{alt:{w} or more|at least {w}}} creatures that share a creature type"
             ));
         }
+        // "you rolled a 6 this turn" (CR 706.2: the result of the roll).
+        if let Some(k) = name
+            .strip_prefix(crate::dice::RESULT_THIS_TURN)
+            .and_then(|r| r.strip_prefix(':'))
+        {
+            let k: i32 = k.parse().ok()?;
+            let a = if matches!(k, 8 | 11 | 18) || (80..90).contains(&k) {
+                "an"
+            } else {
+                "a"
+            };
+            return Some(format!("you {{alt:rolled|'ve rolled}} {a} {k} this turn"));
+        }
+        // "you control a prime number of lands".
+        if let Some(t) = name.strip_prefix(crate::kw::damage_history_4::PRIME_NUMBER_YOU_CONTROL) {
+            let t = crate::types::CardType::from_word(t)?;
+            let w = plural(&t.word().to_lowercase());
+            return Some(format!("you control a prime number of {w}"));
+        }
         Some(match name {
             // CR 701.43a.
             crate::kw::exert::NOT_EXERTED_THIS_TURN => {
@@ -125,6 +144,12 @@ impl Renderer<'_> {
                 format!("{} has another activated ability", self.me())
             }
             "upkeep:1" => "it's the first upkeep step of the turn".into(),
+            crate::kw::paper_history::STARTED_TURN_UNTAPPED => {
+                format!("{} started the turn untapped", self.me())
+            }
+            crate::kw::paper_history::DAMAGED_BY_SOURCE => {
+                format!("{} has dealt damage to that player this game", self.me())
+            }
             crate::search_rules::YOU_SEARCHED_THIS_WAY => "you search your library this way".into(),
             "you_were_the_starting_player" => "you were the starting player".into(),
             "restrictions:declare_blockers_step" => "it's the declare blockers step".into(),

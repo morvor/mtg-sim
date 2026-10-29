@@ -1110,12 +1110,14 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
                 // "~ from your hand", "~ from exile", "~ from your graveyard or from exile":
                 // only from there.
                 if let Some((f, _, r)) = from_zone(&rest, b, subject) {
-                    // An ability functions in one zone (CR 113.6m): "~ from your
-                    // graveyard or from exile" would need two.
+                    // An ability functions where its card is moved from (CR 113.6m):
+                    // of two zones, only "from your graveyard or from exile"
+                    // (`FunctionZone::GraveyardOrExile`, see `self_move_zone`).
                     if matches!(sel, Sel::This)
                         && matches!(f.zone(), None)
                         && matches!(f, Filter::Or(_) | Filter::And(_))
                         && format!("{f:?}").matches("InZone").count() > 1
+                        && !rest.trim_start().starts_with("from your graveyard or from exile")
                     {
                         return None;
                     }
@@ -2125,6 +2127,9 @@ pub fn self_move_zone(effect: &str) -> Option<FunctionZone> {
     for verb in ["return ~", "put ~", "return this card", "put this card"] {
         for (i, _) in effect.match_indices(verb) {
             let after = &effect[i + verb.len()..];
+            if after.starts_with(" from your graveyard or from exile") {
+                return Some(FunctionZone::GraveyardOrExile);
+            }
             if after.starts_with(" from exile") {
                 return Some(FunctionZone::Exile);
             }
@@ -2567,6 +2572,8 @@ mod tests {
             ("Creature", "When ~ enters, return target creature card of an opponent's choice from your graveyard to your hand."),
             ("Creature", "Whenever one or more creature cards are put into your graveyard from your library, put one of them onto the battlefield."),
             ("Creature", "Whenever one or more land cards are put into your graveyard from your library, put them onto the battlefield tapped."),
+            // It functions in both zones (`FunctionZone::GraveyardOrExile`, CR 113.6m).
+            ("Creature", "{2}: Return ~ from your graveyard or from exile to the battlefield tapped."),
         ] {
             assert!(compiled(ty, text).is_some(), "{text}");
         }
@@ -2583,8 +2590,9 @@ mod tests {
             ("Sorcery", "Return the exiled cards to their owner's hand."),
             // "Another" relative to something the grammar doesn't track.
             ("Sorcery", "Return another creature card from your graveyard to your hand."),
-            // An ability functions in one zone (CR 113.6m).
-            ("Creature", "{2}: Return ~ from your graveyard or from exile to the battlefield tapped."),
+            // An ability functions where its card is moved from (CR 113.6m): not in two
+            // zones other than the graveyard and exile.
+            ("Creature", "{2}: Return ~ from your hand or from exile to the battlefield tapped."),
             // All the cards must come from one graveyard.
             ("Sorcery", "Put two creature cards from a single graveyard onto the battlefield under your control."),
             // Unknown modifier.

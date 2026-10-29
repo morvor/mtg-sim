@@ -1580,6 +1580,17 @@ impl Game {
                     m.etb.own_copy_exceptions.extend(em.copy_exceptions);
                     m.etb.own_copy_extras.extend(em.copy_extras);
                     m.etb.copiable_mods.extend(em.copiable);
+                    if let Some(a) = em.attach_to {
+                        m.etb.attach_to = Some(a);
+                        m.etb.attach_specified = true;
+                    }
+                    if em.graveyard_instead {
+                        // CR 614.1c: it goes to its owner's graveyard instead, as it is.
+                        let owner = self.obj(m.obj).owner;
+                        m.to = Zone::Graveyard(owner);
+                        m.etb = EtbInfo::default();
+                        return vec![ReplEvent::Move(m)];
+                    }
                     // "It enters as a copy of one of those cards" (CR 707.9).
                     if let Some(o) = em.copy_of {
                         // CR 707.9e, 707.9g: as for `EnterAsCopy`.
@@ -1744,6 +1755,7 @@ impl Game {
             (ReplacementAction::Prevent, _) => vec![],
             (ReplacementAction::Regenerate, ReplEvent::Destroy { obj, .. }) => {
                 // CR 701.19a: remove all damage, tap it, remove it from combat.
+                self.history.regenerated.push(obj);
                 let o = &mut self.objects[obj.0 as usize];
                 o.damage = 0;
                 o.deathtouch_damage = false;
