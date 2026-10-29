@@ -32,9 +32,10 @@ pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -
                 Tally::Events => n += 1,
                 Tally::Amount => n += info.amount.max(0) as i64,
                 Tally::Players => {
-                    // A player who has left the game isn't counted (Gnoll War Band's
-                    // ruling; CR 800.4a).
-                    if let Some(p) = info.player.filter(|p| g.players_in_game().contains(p)) {
+                    // A player who has since left the game is still counted: the effect
+                    // looks at actions taken this turn (CR 800.4i; interpretation
+                    // `history-counts-players-who-left`).
+                    if let Some(p) = info.player {
                         players.insert(p);
                     }
                 }

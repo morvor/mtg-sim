@@ -18,6 +18,9 @@ impl Renderer<'_> {
         if let Some(s) = self.value_extra(v) {
             return s;
         }
+        if let Some(s) = self.cast_before_count(v) {
+            return s;
+        }
         match v {
             Value::Const(n) => n.to_string(),
             Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),
@@ -786,6 +789,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.all_actions_done(c) {
+            return s;
+        }
         if let Some(s) = self.graveyard_order_condition(c) {
             return s;
         }
@@ -2087,7 +2093,7 @@ impl Renderer<'_> {
             if let Some(q) = q {
                 // "there are three or more oil counters on ~" / "it has three or more oil
                 // counters on it".
-                if let (Value::CountersOn(sel, Some(_)), Some((counters, _))) =
+                if let (Value::CountersOn(sel, _), Some((counters, _))) =
                     (a_value, rest.split_once(" on "))
                 {
                     let subj = self.sel(sel, Case::Subj);

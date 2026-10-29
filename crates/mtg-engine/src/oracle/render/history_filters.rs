@@ -47,6 +47,10 @@ impl Renderer<'_> {
 
     /// "who lost life this turn" for [`PlayerFilter::History`].
     pub(crate) fn history_player_clause(&mut self, c: &Condition) -> String {
+        // "a player you noted for cards named ~" (CR 905.2b).
+        if matches!(c, Condition::Custom(n) if n == crate::kw::draft_4::NOTED_PLAYER) {
+            return "you noted for cards named ~".into();
+        }
         let Some(c2) = reworded(c, false, true) else {
             return self.gap("history player filter");
         };

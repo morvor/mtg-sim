@@ -452,6 +452,10 @@ pub struct Choices {
     /// you control or reveal a creature card from your hand"), as they were then.
     #[serde(default)]
     pub objects: Vec<ObjectId>,
+    /// The mana noted ("note the type and amount of mana spent to pay this activation
+    /// cost", CR 607.2e): one mana per element (a single element for "the type").
+    #[serde(default)]
+    pub mana: Vec<ManaType>,
 }
 
 /// A game object. Objects in zones are referenced by id; when an object changes zones

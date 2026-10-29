@@ -30,8 +30,11 @@ impl Renderer<'_> {
         }
         if let Some(r) = name.strip_prefix("reveal cards at random from hand:") {
             let (n, who) = r.split_once(':')?;
-            let n: i32 = n.parse().ok()?;
-            let cards = if n == 1 {
+            // "reveals X cards at random" (Nebuchadnezzar): the ability's X.
+            let n: i32 = if n == "x" { -1 } else { n.parse().ok()? };
+            let cards = if n == -1 {
+                "X cards".to_string()
+            } else if n == 1 {
                 "a card".to_string()
             } else {
                 format!("{} cards", number_word(n))
@@ -96,6 +99,7 @@ impl Renderer<'_> {
             .or_else(|| self.reveal_hand_or_top(&v[i..]))
             .or_else(|| self.repeat_until_no_one(&v[i..]))
             .or_else(|| self.delayed_unless_paid(&v[i..]))
+            .or_else(|| self.seq_nodes(&v[i..]))
     }
 
     /// "Target player reveals two cards at random from their hand, then discards each

@@ -145,6 +145,10 @@ fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaT
                     vec![t; g.eval_value(n, ctx).max(0) as usize]
                 }
             }
+            ManaProduction::Noted { amount } => crate::noted_mana::produced(g, *amount, ctx)
+                .into_iter()
+                .map(|t| vec![t])
+                .collect(),
             ManaProduction::CouldProduceColor(f) => {
                 let t: Vec<ManaType> = types_could_produce(g, f, ctx)
                     .into_iter()

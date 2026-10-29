@@ -2541,6 +2541,10 @@ pub struct TokenSpec {
 pub enum ManaProduction {
     /// Fixed mana, e.g. {G} or {C}{C}.
     Fixed(Vec<ManaType>),
+    /// The mana the source's linked ability last noted ([`Effect::NoteManaSpent`],
+    /// CR 607.2e): "one mana of ~'s last noted type" (`amount` false), "~'s last noted
+    /// type and amount of mana" (`amount` true). No note: no mana (CR 607.5a).
+    Noted { amount: bool },
     /// N mana of any one color (chosen).
     AnyOneColor(Value),
     /// N mana in any combination of colors.
@@ -4587,6 +4591,14 @@ pub enum Effect {
     /// to ("the noted number", CR 607.2e). Read with `Value::Chosen`.
     Note {
         value: Value,
+    },
+    /// "Note the type [and amount] of mana spent to pay this activation cost": records the
+    /// mana spent on the resolving ability's cost for the abilities linked to this one
+    /// (CR 607.2e), read with [`ManaProduction::Noted`]. With `amount`, every mana spent
+    /// is noted; otherwise one type (its controller chooses if several types were spent).
+    /// Noting again replaces the note; with no mana spent nothing is noted.
+    NoteManaSpent {
+        amount: bool,
     },
     /// Sets the value of X for the rest of the resolution, and for reflexive triggers it
     /// creates ("that many" after paying a cost any number of times, CR 603.12a).

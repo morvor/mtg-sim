@@ -2,7 +2,8 @@
 //! reflexive triggered ability (CR 603.12): "When you do, Bolg deals damage equal to that
 //! creature's power to another target creature. If excess damage was dealt this way, amass
 //! Goblins X, ...", "When you do, Minsc & Boo deals X damage to any target, .... If the
-//! sacrificed creature was a Hamster, draw X cards." It happens only if the reflexive
+//! sacrificed creature was a Hamster, draw X cards.", "When you pay this cost one or more
+//! times, ... copy them. You may cast any number of the copies ..." It happens only if the reflexive
 //! ability resolves (and not if it's removed for having illegal targets), after the rest
 //! of its effect. (Sentences that more specific followups handle are left to them; this
 //! is tried last.)
@@ -24,6 +25,10 @@ fn is_when_you_do(e: &Effect) -> bool {
                 && match cond {
                     Condition::PrevHappened => true,
                     Condition::Not(c) => matches!(**c, Condition::PrevHappened),
+                    // "When you pay this cost one or more times, ... copy them. You may
+                    // cast any number of the copies ..." (Bloodthirsty Adversary): the
+                    // payments counted as X (`r600_triggers.rs`).
+                    Condition::Compare(Value::X, Cmp::Ge, Value::Const(1)) => true,
                     _ => false,
                 }
                 && matches!(&**then, Effect::Reflexive { body } if body.modal.is_none())

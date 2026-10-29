@@ -239,6 +239,7 @@ impl Game {
                         .number = Some(n);
                 }
             }
+            Effect::NoteManaSpent { amount } => crate::noted_mana::note(self, *amount, ctx),
             Effect::SetX { value } => {
                 ctx.x = self.eval_value(value, ctx) as i32;
                 ctx.x_defined = true;
@@ -3520,6 +3521,7 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types); k]
                 }
             }
+            ManaProduction::Noted { amount } => crate::noted_mana::produced(self, *amount, ctx),
             ManaProduction::CouldProduceColor(f) => {
                 // CR 106.7: colorless isn't a color.
                 let types: Vec<ManaType> = crate::mana_abilities::types_could_produce(self, f, ctx)
