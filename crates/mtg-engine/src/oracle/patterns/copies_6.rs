@@ -3,7 +3,9 @@
 //! * "Whenever you reveal an instant or sorcery card this way, copy that card and you may
 //!   cast the copy. That copy costs {2} less to cast." (God-Eternal Kefnet): a copy of the
 //!   card the trigger names, wherever it is (here the hand it was drawn into), cast while
-//!   the ability resolves (CR 608.2g), with its cost reduced (CR 601.2f).
+//!   the ability resolves (CR 608.2g), with its cost reduced (CR 601.2f). Likewise "you
+//!   may cast it. It costs {4} less to cast this way." in the abilities a card exiled by
+//!   Uvilda, Dean of Perfection gains.
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -34,28 +36,39 @@ inventory::submit! { EffectPattern { name: "copies 6: copy that card (the card a
 /// "That copy costs {2} less to cast." after "you may cast the copy".
 fn that_copy_costs_less(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     let l = end(l);
-    let Some(r) = l
+    let (r, copy) = match l
         .strip_prefix("that copy costs {")
         .and_then(|r| r.strip_suffix("} less to cast"))
-    else {
-        return false;
+    {
+        Some(r) => (r, true),
+        None => match l
+            .strip_prefix("it costs {")
+            .and_then(|r| r.strip_suffix("} less to cast this way"))
+        {
+            Some(r) => (r, false),
+            None => return false,
+        },
     };
     let Ok(n) = r.parse::<u32>() else {
         return false;
     };
-    fn last_cast(e: &mut Effect) -> Option<&mut Effect> {
+    fn last_cast(e: &mut Effect, copy: bool) -> Option<&mut Effect> {
         match e {
             Effect::CastCard {
                 what: Sel::Var(v),
                 free: false,
                 ..
             } if *v == vars::CREATED => Some(e),
-            Effect::Seq(v) => v.last_mut().and_then(last_cast),
-            Effect::May { effect, .. } => last_cast(effect),
+            Effect::CastCard { free: false, .. } if !copy => Some(e),
+            Effect::Seq(v) => v.last_mut().and_then(|x| last_cast(x, copy)),
+            Effect::May { effect, .. } => last_cast(effect, copy),
+            Effect::If {
+                then, otherwise, ..
+            } if matches!(**otherwise, Effect::Noop) => last_cast(then, copy),
             _ => None,
         }
     }
-    let Some(cast) = last_cast(prev) else {
+    let Some(cast) = last_cast(prev, copy) else {
         return false;
     };
     let inner = std::mem::take(cast);
@@ -69,4 +82,4 @@ fn that_copy_costs_less(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     true
 }
 
-inventory::submit! { FollowupPattern { name: "copies 6: that copy costs {N} less to cast", priority: 50, apply: that_copy_costs_less } }
+inventory::submit! { FollowupPattern { name: "copies 6: that copy costs {N} less to cast, it costs {N} less to cast this way", priority: 50, apply: that_copy_costs_less } }
