@@ -2111,20 +2111,22 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
         if !to_player {
             return None;
         }
+        // "Whenever one or more creatures an opponent controls deal combat damage to you,
+        // that opponent gets a poison counter": once for each opponent whose creatures dealt
+        // it (as "one or more creatures you control deal combat damage to a player" is once
+        // for each player), and "that opponent" is their controller, not the player dealt
+        // damage.
+        let by_opponent = matches!(to, DamageRecipient::Player(PlayerRel::You))
+            && controlled_by_opponent(&subj.filter);
         return Some((
             (
                 TriggerCond::Batched {
                     trigger: Box::new(cond),
-                    per: BatchPer::Player,
+                    per: if by_opponent { BatchPer::OtherController } else { BatchPer::Player },
                 },
                 // "put a +1/+1 counter on each of those creatures": the sources.
                 Sel::TriggerObjects,
-                // "Whenever one or more creatures an opponent controls deal combat damage to
-                // you, that opponent gets a poison counter": the creatures' controller, not
-                // the player dealt damage.
-                if matches!(to, DamageRecipient::Player(PlayerRel::You))
-                    && controlled_by_opponent(&subj.filter)
-                {
+                if by_opponent {
                     PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects))
                 } else {
                     PlayerRef::TriggerPlayer
