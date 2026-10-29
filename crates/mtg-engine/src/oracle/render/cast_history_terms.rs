@@ -181,6 +181,8 @@ impl Renderer<'_> {
                 format!("cast {m}")
             }
             "that spell" => "cast {alt:it|that spell}".into(),
+            // "if mana from a Treasure was spent to cast it or activate it".
+            ch::SPELL_OR_ABILITY => "cast it or activate it".into(),
             "this ability" => "activate this ability".into(),
             ch::ENTERING => "cast {alt:it|them}".into(),
             w => {
@@ -197,6 +199,8 @@ impl Renderer<'_> {
         Some(match what {
             "total" => "mana".into(),
             "colored" => "colored mana".into(),
+            // "if {S} of any of that spell's colors was spent to cast it".
+            ch::SNOW_OF_ITS_COLORS => "{S} of any of that spell's colors".into(),
             w => {
                 if let Some(st) = w.strip_prefix("source subtype:") {
                     if one {
@@ -211,6 +215,15 @@ impl Renderer<'_> {
                     } else {
                         format!("mana from {t}s")
                     }
+                } else if let Some(ts) =
+                    w.strip_prefix("types:").or_else(|| w.strip_prefix("type:"))
+                {
+                    // "{B} or {R}" (`mana_6`).
+                    let syms: Vec<String> = crate::kw::payment_mana::parse_types(ts)?
+                        .iter()
+                        .map(|t| format!("{{{t:?}}}"))
+                        .collect();
+                    syms.join(" or ")
                 } else {
                     return None;
                 }
@@ -230,6 +243,10 @@ impl Renderer<'_> {
         } else {
             Self::spent_what(what, true)?
         };
+        // "the number of {B} or {R} spent this way" (`kw/payment_mana.rs`).
+        if whose == ch::THIS_WAY {
+            return Some(format!("the number of {m} spent this way"));
+        }
         let on = self.spent_on(whose)?;
         // "for each mana from a Treasure that was spent to cast ~" (Spoils of the Hunt).
         let that_was = if what.starts_with("source ") {
@@ -368,5 +385,15 @@ impl Renderer<'_> {
             "that spell" => format!("it's the {nth} {noun} {who} cast this turn"),
             _ => return None,
         })
+    }
+}
+
+impl Renderer<'_> {
+    /// "if mana from an artifact was spent to cast it": the quality of a spell some of
+    /// whose mana was of that kind ([`ch::SPENT_SOME`]), as a clause about "it".
+    pub(crate) fn spent_some_clause(&mut self, name: &str) -> Option<String> {
+        let what = name.strip_prefix(ch::SPENT_SOME)?;
+        let m = Self::spent_what(what, true)?;
+        Some(format!("{m} was spent to cast it"))
     }
 }

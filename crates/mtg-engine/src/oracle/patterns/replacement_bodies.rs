@@ -368,11 +368,18 @@ fn enter_only_if_paid(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>
     {
         return None;
     }
-    // "you may discard a land card instead" (Mox Diamond): the same choice, worded as one.
-    let cost_s = cost_s.strip_prefix("you may ").unwrap_or(cost_s);
+    // "you may discard a land card instead" (Mox Diamond): a choice; "sacrifice two
+    // untapped lands instead" (Lotus Vale) isn't one: it's done if it can be.
+    let (cost_s, optional) = match cost_s.strip_prefix("you may ") {
+        Some(c) => (c, true),
+        None => (cost_s, false),
+    };
     let (cost, false) = crate::oracle::costs::parse_cost(cost_s)? else {
         return None;
     };
+    if !optional {
+        return enter_only_if_sacrificed(text, &cost);
+    }
     if cost.mana.is_some()
         || !cost.parts.iter().all(|p| {
             matches!(
@@ -394,6 +401,48 @@ fn enter_only_if_paid(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>
         },
         Effect::If {
             cond: Condition::PrevHappened,
+            then: Box::new(Effect::Move {
+                what: Sel::This,
+                to: Destination::battlefield(),
+            }),
+            otherwise: Box::new(Effect::Move {
+                what: Sel::This,
+                to: Destination::zone(ZoneKind::Graveyard),
+            }),
+        },
+    ]);
+    let def = ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(Filter::Source),
+        action: ReplacementAction::Instead(Box::new(effect)),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
+    )])
+}
+
+/// "If ~ would enter, sacrifice a Forest instead. If you do, put ~ onto the battlefield. If
+/// you don't, put it into its owner's graveyard." (Lake of the Dead, Lotus Vale): an
+/// instruction, not an offer: with a Forest, it's sacrificed and ~ enters. It sacrifices
+/// as many as it can (CR 609.3); "if you do" is true only if it sacrificed all of them
+/// (Lotus Vale with one untapped land loses it and goes to the graveyard).
+fn enter_only_if_sacrificed(text: &str, cost: &Cost) -> Option<Vec<Ability>> {
+    let [CostPart::Sacrifice { filter, count }] = cost.parts.as_slice() else {
+        return None;
+    };
+    if cost.mana.is_some() {
+        return None;
+    }
+    let effect = Effect::seq(vec![
+        Effect::Sacrifice {
+            who: PlayerRef::You,
+            filter: filter.clone(),
+            count: count.clone(),
+        },
+        Effect::If {
+            cond: Condition::Compare(Value::Prev, Cmp::Ge, count.clone()),
             then: Box::new(Effect::Move {
                 what: Sel::This,
                 to: Destination::battlefield(),

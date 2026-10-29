@@ -134,9 +134,11 @@ impl Renderer<'_> {
                 let t = self.prevented_this_way(e)?;
                 format!("prevent that damage. {t}")
             }
+            // The same source deals the damage to another recipient (CR 614.9): "that
+            // source deals that damage to you instead".
             ReplacementAction::Redirect(t) => {
                 let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
-                format!("that damage is dealt to {t} instead")
+                format!("{{alt:that damage is dealt to {t}|that source deals that damage to {t}}} instead")
             }
             _ => return None,
         })

@@ -48,6 +48,10 @@ pub fn count_ext(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// A whole value phrase ("the amount of damage dealt to you this turn"). Tried before the
 /// value grammar's own readings.
 pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
+    // "the greatest number noted for it this turn" (`notes_5`).
+    if let Some(v) = super::notes_5::value(s) {
+        return Some(v);
+    }
     // A player's state as the turn began (`history_conditions_4`).
     if let Some(v) = super::history_conditions_4::value_atom(s, b) {
         return Some(v);
@@ -1708,6 +1712,17 @@ fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// An object (or objects) a result phrase names: "the sacrificed creature(s)", "the
 /// discarded card(s)", "[the] [objects] [verb] this way".
 fn result_ref(s: &str, b: &Builder) -> Option<(Sel, String)> {
+    // "{3}, Unattach an Equipment from ~: ... that Equipment's mana value" (Captain
+    // America, First Avenger): the Equipment the cost unattached (CR 400.7j).
+    if let Some(rest) = s.strip_prefix("that equipment") {
+        if (word_end(rest) || rest.starts_with('\''))
+            && crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("unattach an equipment from ")
+        {
+            return Some((Sel::Var(crate::zones::COST_UNATTACHED), rest.to_string()));
+        }
+    }
     for (p, var) in [
         ("the sacrificed creatures", vars::SACRIFICED),
         ("the sacrificed creature", vars::SACRIFICED),

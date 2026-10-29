@@ -495,6 +495,12 @@ fn custom_rule(name: &str) -> CustomRule {
         "card:Sanctum Lurker:planeswalkers you control survive 0 loyalty",
         // Deification: damage removes one loyalty counter fewer (`loyalty_removed_by_damage`).
         "card:Deification:damage can't remove the last loyalty counter",
+        // Vedalken Squirrel-Whacker: a die result exchanged with a base power or toughness
+        // (`dice_rolled`): no library.
+        "card:Vedalken Squirrel-Whacker:exchange a six-sided die result with base power or toughness",
+        // North Star: how a spell's mana cost may be paid (`use_spend_permission`), the
+        // permission used up as the cost is paid: no library.
+        "card:North Star:for one spell this turn, spend mana as though any type for its mana cost",
         "untap all permanents you control during each opponent's untap step",
         "legend rule doesn't apply to permanents you control",
         "can't get poison counters",
@@ -506,6 +512,9 @@ fn custom_rule(name: &str) -> CustomRule {
         // (`kw::venture_prohibited`); venturing moves a marker, no library card.
         "card:Keen-Eared Sentry:opponents venture at most once each turn",
         "opponents skip extra turns",
+        // Bell Borca, Spectral Sergeant: notes a number for itself as a card is put into
+        // exile (`kw/noted_info.rs`, on the zone-change event); it moves no card.
+        "note:the mana value of each card put into exile",
         // Targets, hexproof and ward; what may be cast, activated or played, from where, when
         // and how often; what casting and activating cost (life paid instead of mana is
         // Ashiok's case above). Damping Engine's special action sacrifices a permanent, and

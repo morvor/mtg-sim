@@ -371,6 +371,12 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             Effect::Seq(v) => v.iter().any(could_add_mana),
             Effect::Repeat { effect, .. } => could_add_mana(effect),
             Effect::ChooseOne { options, .. } => options.iter().all(|(_, e)| could_add_mana(e)),
+            // "its controller may add an additional {U}" (Snowfall): optional mana, or
+            // mana depending on a condition ("If that Island is snow, ... instead").
+            Effect::May { effect, .. } => could_add_mana(effect),
+            Effect::If {
+                then, otherwise, ..
+            } => could_add_mana(then) || could_add_mana(otherwise),
             _ => false,
         }
     }
@@ -1990,6 +1996,10 @@ pub enum HistoryWindow {
     /// "since [player's] last upkeep": from the latest upkeep of the player's before this
     /// one, including this turn so far.
     SinceLastUpkeep(PlayerRef),
+    /// "during [player's] last combat": the latest combat phase of the player's turns
+    /// before the current one (an earlier combat phase of this turn, or the last combat
+    /// phase of the latest of their earlier turns that had one, CR 500.8, 506.1).
+    PlayersLastCombat(PlayerRef),
     /// "this game": the events of the whole game kept for such queries (spells cast,
     /// cards cycled, damage dealt; `turn_start::kept_for_game`).
     ThisGame,
@@ -2618,6 +2628,10 @@ pub enum ManaProduction {
     /// symbol's color ("For each colored mana symbol in the milled card's mana cost, add one
     /// mana of that color", Charmed Pendant): one of either color for a hybrid symbol.
     ColoredSymbolsOf(Sel),
+    /// N mana in any combination of the selected object's colors, each chosen separately
+    /// ("add three mana in any combination of its colors", Omnath, Locus of All; CR 105.2,
+    /// 106.1). No mana if it's colorless (CR 106.5).
+    CombinationOfColorsOf(Sel, Value),
     /// Doubles the amount of each type of unspent mana the player has (CR 701.10f;
     /// Doubling Cube). The new mana has no restrictions (CR 106.6 example).
     DoubleUnspent,

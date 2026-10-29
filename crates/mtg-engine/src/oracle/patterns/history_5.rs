@@ -10,8 +10,12 @@
 //!   the battlefield: a delayed triggered ability (CR 603.7a, 603.10d) created as they're
 //!   put there, sacrificing those you still control (CR 701.21a); see
 //!   `triggers_5::sacrifice_when_you_lose_control` for the form after a delayed return.
+//! * "choose an opponent at random that ~ didn't attack during your last combat" and "If
+//!   you can't choose an opponent this way, [effect]" (Territorial Hellkite): the
+//!   opponents ~ (this object, CR 400.7) didn't attack (the player, not a planeswalker
+//!   they control, CR 508.1b) during your last combat (`HistoryWindow::PlayersLastCombat`).
 
-use super::{ConditionPattern, FollowupPattern};
+use super::{ConditionPattern, EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_object_phrase};
@@ -129,3 +133,72 @@ fn sacrifice_it_when_you_lose_control(l: &str, prev: &mut Effect, _b: &mut Build
 }
 
 inventory::submit! { FollowupPattern { name: "history 5: sacrifice it when you lose control of ~", priority: 40, apply: sacrifice_it_when_you_lose_control } }
+
+/// "choose an opponent at random that ~ didn't attack during your last combat".
+fn choose_opponent_not_attacked(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "choose an opponent at random that ~ didn't attack during your last combat" {
+        return None;
+    }
+    let attacked = Condition::Compare(
+        Value::EventsDuring(
+            HistoryWindow::PlayersLastCombat(PlayerRef::You),
+            Box::new(TriggerCond::AttacksRecipient {
+                attacker: Filter::Source,
+                recipient: DamageRecipient::Player(PlayerRel::Iterated),
+            }),
+            Tally::Events,
+        ),
+        Cmp::Ge,
+        Value::c(1),
+    );
+    let from = PlayerRef::Each(PlayerFilter::And(vec![
+        PlayerFilter::Opponent,
+        PlayerFilter::Not(Box::new(PlayerFilter::History(Box::new(attacked)))),
+    ]));
+    let var = super::choice_grammar_random::RANDOM_PLAYER;
+    b.it_player = PlayerRef::Var(var);
+    b.named.push((
+        "the chosen player".into(),
+        Sel::Players(PlayerRef::Var(var)),
+    ));
+    crate::kw::choice_grammar::random_player_effect(var, from)
+}
+
+inventory::submit! { EffectPattern { name: "history 5: choose an opponent at random that ~ didn't attack during your last combat", priority: 70, parse: choose_opponent_not_attacked } }
+
+/// Whether `e` chooses a player at random.
+fn chooses_at_random(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => v.iter().any(chooses_at_random),
+        Effect::Custom(n) => n.starts_with(crate::kw::choice_grammar::RANDOM_PLAYER),
+        _ => false,
+    }
+}
+
+/// "If you can't choose an opponent this way, [effect]." after choosing one at random.
+fn if_you_cant_choose(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(rest) = end(l).strip_prefix("if you can't choose an opponent this way, ") else {
+        return false;
+    };
+    // The player chosen at random earlier in the ability is still "that player".
+    let var = super::choice_grammar_random::RANDOM_PLAYER;
+    if !chooses_at_random(prev) && !matches!(b.it_player, PlayerRef::Var(v) if v == var) {
+        return false;
+    }
+    let Some(e) = crate::oracle::effects::parse_sentence(rest, b) else {
+        return false;
+    };
+    let chosen = Condition::SelNonEmpty(Sel::Players(PlayerRef::Var(var)));
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: Condition::Not(Box::new(chosen)),
+            then: Box::new(e),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "history 5: if you can't choose an opponent this way", priority: 40, apply: if_you_cant_choose } }

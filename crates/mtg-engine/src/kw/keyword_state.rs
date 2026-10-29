@@ -18,4 +18,7 @@ pub struct KeywordState {
     /// How many times each power-up ability (the permanent, the ability's uid) has been
     /// activated (CR 702.193a: "Activate this ability only once").
     pub power_up_activations: BTreeMap<(ObjectId, u64), u32>,
+    /// The mana spent on each cost paid by a resolving "you may pay [cost]", in order
+    /// (see `kw/payment_mana.rs`: "for each {B} or {R} spent this way").
+    pub payments: Vec<Vec<crate::mana::ManaType>>,
 }

@@ -148,30 +148,59 @@ pub(crate) fn token_quote_abilities(
     let mut orig = orig.trim().trim_end_matches(',').to_string();
     // A nested quote was checked as part of the quote it's in.
     let nested = NESTED_QUOTES.with(|n| n.borrow().iter().any(|q| q.trim() == orig));
+    // The token's own name means the token (CR 201.5), even when it contains the card's
+    // name ("Volo's Journal").
+    let before_names = orig.clone();
+    if let Some(name) = TOKEN_NAME.with(|t| t.borrow().clone()) {
+        // As printed, and as the card's text normalizes it ("~'s Journal" for "Volo's
+        // Journal" on Volo, Itinerant Scholar).
+        let lower_name = name.to_lowercase();
+        let full = ctx.card_name.to_lowercase();
+        let short = full.split(',').next().unwrap_or(&full).trim().to_string();
+        let normalized = [full.as_str(), short.as_str()]
+            .iter()
+            .filter(|c| !c.is_empty())
+            .find_map(|c| lower_name.strip_prefix(*c).map(|r| format!("~{r}")))
+            .unwrap_or_default();
+        for n in [lower_name, normalized] {
+            let lower = orig.to_lowercase();
+            // Byte offsets agree only for ASCII text.
+            if !n.is_empty() && n != "~" && orig.is_ascii() && lower.contains(n.as_str()) {
+                let mut out = String::new();
+                let mut i = 0;
+                while let Some(j) = lower[i..].find(n.as_str()) {
+                    out.push_str(&orig[i..i + j]);
+                    out.push('~');
+                    i += j + n.len();
+                }
+                out.push_str(&orig[i..]);
+                orig = out;
+            }
+        }
+    }
     // "... a card named Rekindling Phoenix ...": a name, not a reference to the card.
     let mut names_creator = false;
-    if !nested && super::statics::quote_names_card(&orig, ctx) {
+    // With the token's name read as the token, a quote that no longer names the card
+    // doesn't (only the token's name contained it).
+    let renamed_only = orig != before_names && {
+        let tl = TypeLine::default();
+        let anonymous = CompileContext {
+            card_name: "\u{1}",
+            full_name: "\u{1}",
+            type_line: &tl,
+            layout: crate::card::Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        crate::oracle::normalize(&orig, ctx) == crate::oracle::normalize(&orig, &anonymous)
+    };
+    if !nested && !renamed_only && super::statics::quote_names_card(&orig, ctx) {
         match crate::granted_by::token_quote_naming(&orig, ctx) {
             Some(crate::granted_by::TokenQuote::Named(text)) => orig = text,
             Some(crate::granted_by::TokenQuote::Creator) => names_creator = true,
             None => return None,
-        }
-    }
-    // The token's own name means the token (CR 201.5).
-    if let Some(name) = TOKEN_NAME.with(|t| t.borrow().clone()) {
-        let lower = orig.to_lowercase();
-        let n = name.to_lowercase();
-        // Byte offsets agree only for ASCII text.
-        if !n.is_empty() && orig.is_ascii() && lower.contains(n.as_str()) {
-            let mut out = String::new();
-            let mut i = 0;
-            while let Some(j) = lower[i..].find(n.as_str()) {
-                out.push_str(&orig[i..i + j]);
-                out.push('~');
-                i += j + n.len();
-            }
-            out.push_str(&orig[i..]);
-            orig = out;
         }
     }
     let mut tl = TypeLine::default();

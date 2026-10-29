@@ -92,6 +92,14 @@ impl Renderer<'_> {
                     .map_or("+1/+1", |(_, k)| k);
                 format!("for each {kind} counter you put on a creature this way, remove a {kind} counter from that creature")
             }
+            crate::kw::copy_the_other::COPY_THE_OTHER => "copy the other".into(),
+            crate::kw::noted_info::NOTE_CREATURE_TYPE => {
+                format!("note a creature type that hasn't been noted for {}", me(self))
+            }
+            crate::kw::noted_info::NOTE_ITS_CREATURE_TYPE => format!(
+                "note one of its creature types that hasn't been noted for {}",
+                me(self)
+            ),
             // "It's attacking that player" (`kw/attacking_this_way.rs`).
             n if n.starts_with(crate::kw::attacking_this_way::ATTACKING) => {
                 "{alt:it's|they're} attacking that player".into()
@@ -305,6 +313,10 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_value(&mut self, name: &str) -> String {
+        // Noted information (`kw/noted_info.rs`).
+        if let Some(s) = self.noted_value(name) {
+            return s;
+        }
         // "the amount of {B} spent on X" (see `payment_rules`).
         if let Some(t) = name.strip_prefix(crate::payment_rules::MANA_SPENT_ON_X) {
             return format!("the amount of {{{t}}} spent on X");
@@ -333,7 +345,11 @@ impl Renderer<'_> {
             }
             "turn:creatures attacked" => "the number of creatures that attacked this turn".into(),
             "snow mana spent to cast it" => {
-                format!("the amount of {{S}} spent to cast {}", self.me())
+                // "for each {S} spent to cast ~": the number of them.
+                format!(
+                    "the {{alt:number|amount}} of {{S}} spent to cast {}",
+                    self.me()
+                )
             }
             "web-slinging:mana value of the returned creature" => {
                 "the mana value of the returned creature".into()
@@ -901,6 +917,9 @@ impl Renderer<'_> {
                 "{} stations permanents using its toughness rather than its power",
                 me(self)
             ),
+            crate::kw::noted_info::NOTE_EXILED_MANA_VALUES => {
+                "note the mana value of each card as it's put into exile".into()
+            }
             other => match self.custom_static_more(other) {
                 Some(s) => s,
                 None => match self

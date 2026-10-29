@@ -1336,9 +1336,19 @@ impl Renderer<'_> {
             PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
                 self.trigger_player.unwrap_or("that player").into()
             }
+            // "At the beginning of each player's upkeep, that player reveals the top card
+            // of their library. If it's ..., the player may put it onto the battlefield."
+            // (older cards call the event's player "the player").
+            PlayerRef::TriggerPlayer => {
+                return match case {
+                    Case::Subj => "{alt:that player|they|the player}".into(),
+                    Case::Obj => "{alt:that player|them|the player}".into(),
+                    Case::Poss => "{alt:that player's|their|the player's}".into(),
+                }
+            }
             // "Whenever an opponent draws a card, they lose 2 life" / "... that player
             // loses 2 life".
-            PlayerRef::TriggerPlayer | PlayerRef::Iterated => {
+            PlayerRef::Iterated => {
                 return match case {
                     Case::Subj => "{alt:that player|they}".into(),
                     Case::Obj => "{alt:that player|them}".into(),
@@ -1663,6 +1673,15 @@ impl Renderer<'_> {
                     if matches!(r.as_ref(), PlayerRef::Var(crate::kwa::vote::VOTES_CAST))) =>
             {
                 "who received no votes".into()
+            }
+            // "each player other than its controller", "each player other than target
+            // player".
+            PlayerFilter::Not(x) if matches!(x.as_ref(), PlayerFilter::Ref(_)) => {
+                let PlayerFilter::Ref(r) = x.as_ref() else {
+                    return String::new();
+                };
+                let p = self.player(r, Case::Obj);
+                format!("other than {p}")
             }
             PlayerFilter::Not(x) => {
                 let q = self.player_quality(x);

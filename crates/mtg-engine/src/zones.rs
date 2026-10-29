@@ -282,7 +282,31 @@ pub fn record_cost_moved(
     if !returned.is_empty() {
         vars.insert(COST_RETURNED, returned);
     }
+    if !paid.unattached.is_empty() {
+        vars.insert(
+            COST_UNATTACHED,
+            paid.unattached
+                .iter()
+                .filter(|(o, _)| g.is_live(*o))
+                .map(|(o, _)| Entity::Object(*o))
+                .collect(),
+        );
+        vars.insert(
+            COST_UNATTACHED_FROM,
+            paid.unattached.iter().filter_map(|(_, h)| *h).collect(),
+        );
+    }
 }
+
+/// The permanents an unattach instruction unattached, and what each was attached to.
+pub const UNATTACHED: Var = vars::USER + 14_560;
+pub const UNATTACHED_FROM: Var = vars::USER + 14_563;
+/// The permanents a cost of the ability being resolved unattached ("Unattach an Equipment
+/// from ~: ... that Equipment's mana value", CR 400.7j), if they're still the same objects.
+pub const COST_UNATTACHED: Var = vars::USER + 14_561;
+/// What those permanents were attached to as the cost was paid ("unless it was unattached
+/// from a Ninja"), as they last existed.
+pub const COST_UNATTACHED_FROM: Var = vars::USER + 14_562;
 
 /// The permanents a cost of the spell or ability being resolved returned to a hand, as
 /// they last existed on the battlefield ("that land", CR 608.2h).

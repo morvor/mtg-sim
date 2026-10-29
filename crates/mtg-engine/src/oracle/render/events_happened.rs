@@ -183,6 +183,10 @@ impl Renderer<'_> {
                 let poss = self.player(p, Case::Poss);
                 format!("since {poss} last upkeep")
             }
+            HistoryWindow::PlayersLastCombat(p) => {
+                let poss = self.player(p, Case::Poss);
+                format!("during {poss} last combat")
+            }
             HistoryWindow::ThisGame => "this game".into(),
         }
     }

@@ -349,6 +349,46 @@ impl Renderer<'_> {
                 return;
             }
         }
+        // "suspended card": a card in exile with suspend and a time counter on it (CR
+        // 702.62b).
+        if let Filter::And(v) = f {
+            let suspended = |x: &Filter| {
+                matches!(
+                    x,
+                    Filter::Card
+                        | Filter::InZone(ZoneKind::Exile)
+                        | Filter::HasKeyword(crate::keywords::KeywordKind::Suspend)
+                ) || matches!(x, Filter::HasCounter(Some(k)) if k.as_str() == "time")
+            };
+            if v.len() == 4 && v.iter().all(suspended) {
+                np.status.push("suspended".into());
+                np.kind = Some("card");
+                np.zone = Some(ZoneKind::Exile);
+                np.zone_said = true;
+                return;
+            }
+            // "target non-Wall creature the active player has controlled continuously
+            // since the beginning of the turn": the one player said once.
+            let active = |x: &Filter| matches!(x, Filter::ControlledByPlayer(p) if matches!(p.as_ref(), PlayerRef::ActivePlayer));
+            if v.iter().any(active)
+                && v.iter()
+                    .any(|x| matches!(x, Filter::ControlledSinceTurnBegan))
+            {
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|x| !active(x) && !matches!(x, Filter::ControlledSinceTurnBegan))
+                    .cloned()
+                    .collect();
+                for x in &rest {
+                    self.collect(x, np);
+                }
+                np.rel.push(
+                    "the active player has controlled continuously since the beginning of the turn"
+                        .into(),
+                );
+                return;
+            }
+        }
         match f {
             Filter::Any => {}
             Filter::And(v) => {
@@ -789,6 +829,10 @@ impl Renderer<'_> {
                     }
                 });
             }
+            Filter::TargetOf(_) if self.target_of_ability_from(f).is_some() => {
+                let s = self.target_of_ability_from(f).unwrap_or_default();
+                np.rel.push(format!("that's {s}"));
+            }
             Filter::TargetOf(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("targeted by {s}"));
@@ -1168,6 +1212,12 @@ impl Renderer<'_> {
                 return;
             }
         }
+        // "that isn't the target of an ability from another creature named ~" (Goblin
+        // Artisans, `patterns::referents_5`).
+        if let Some(s) = self.target_of_ability_from(inner) {
+            np.rel.push(format!("that isn't {s}"));
+            return;
+        }
         match inner {
             Filter::Type(t) => np.nons.push(format!("non{}", t.word())),
             Filter::Subtype(s) => np.nons.push(format!("non-{s}")),
@@ -1213,6 +1263,10 @@ impl Renderer<'_> {
                 Some(k) => format!("{} on it", with_article(&counter_name(k))),
                 None => "counters on it".into(),
             }),
+            // "target permanent not named ~": this card's name (`phrases::named_this_card`).
+            Filter::Named(n) if n.as_str() == self.info.name => {
+                np.post.push(format!("not named {}", self.me()))
+            }
             Filter::Named(n) => np.rel.push(format!("not named {n}")),
             Filter::ControlledBy(PlayerRel::You) => np.controller = Some(PlayerRel::NotYou),
             Filter::OwnedBy(PlayerRel::You) => np.owner = Some(PlayerRel::NotYou),
@@ -1625,7 +1679,22 @@ impl Renderer<'_> {
             Num::One => self.head(&np),
             Num::Many => self.plural_head(&np),
         };
+        // "an instant or sorcery source you control", "a Giant source": a source of
+        // damage named by its type may say "source" too.
+        let source_word = self.damage_source_noun
+            && !head.ends_with("source")
+            && !head.ends_with("sources")
+            && !head.contains('{');
         words.push(head);
+        if source_word {
+            words.push(
+                match num {
+                    Num::One => "{opt:source}",
+                    Num::Many => "{opt:sources}",
+                }
+                .into(),
+            );
+        }
         let mut s = words.join(" ");
         // "permanents of the chosen color that player controls" or "permanents that
         // player controls of the chosen color": a chosen quality said either side.
@@ -1650,7 +1719,20 @@ impl Renderer<'_> {
                 ctrl.push_str(&self.owns_phrase(o));
             }
         }
-        if chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control" {
+        // "other creatures named ~ you control" or "other creatures you control named
+        // ~": the name said either side of the controller.
+        let named_only = chosen.is_empty()
+            && !ctrl.is_empty()
+            && np.post.len() == 1
+            && np.post[0].starts_with("named ")
+            && np.with.is_empty()
+            && np.with_on.is_empty()
+            && np.without.is_empty();
+        if named_only {
+            let c = ctrl.trim_start();
+            let n = &np.post[0];
+            s.push_str(&format!(" {{alt:{c} {n}|{n} {c}}}"));
+        } else if chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control" {
             let ch = chosen[0];
             let c = ctrl.trim_start();
             s.push_str(&format!(" {{alt:{c} {ch}|{ch} {c}}}"));
@@ -1676,6 +1758,7 @@ impl Renderer<'_> {
                 && np.post[0].starts_with("attacking ");
         if !(chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control")
             && !attacking_after_without
+            && !named_only
         {
             for p in &np.post {
                 s.push(' ');
@@ -1701,8 +1784,18 @@ impl Renderer<'_> {
             };
             s.push_str(&format!(" {{alt:{a} without {w}|without {w} {that} {a}}}"));
         } else if !np.without.is_empty() {
-            s.push_str(" without ");
-            s.push_str(&join_list(&np.without, "or"));
+            let w = join_list(&np.without, "or");
+            // "target creature you control that doesn't have a +1/+1 counter on it".
+            if np.without.len() == 1 && !w.contains('{') && np.controller.is_some() {
+                let have = match num {
+                    Num::One => "doesn't have",
+                    Num::Many => "don't have",
+                };
+                s.push_str(&format!(" {{alt:without {w}|that {have} {w}}}"));
+            } else {
+                s.push_str(" without ");
+                s.push_str(&w);
+            }
         }
         // "a spell from your graveyard": a card in your graveyard is yours (CR 400.3).
         if let Some(z) = np.cast_from {
@@ -2426,17 +2519,26 @@ fn merged_alternatives(parts: &[String]) -> Option<String> {
     if all.iter().skip(1).any(|w| w.len() != n) {
         return None;
     }
+    // "a noncreature spell or an Otter spell": the articles agree with the next word.
+    let article = |w: &str| w == "a" || w == "an";
     let differ: Vec<usize> = (0..n)
-        .filter(|i| words.iter().any(|w| w[*i] != words[0][*i]))
+        .filter(|i| {
+            words
+                .iter()
+                .any(|w| w[*i] != words[0][*i] && !(article(w[*i]) && article(words[0][*i])))
+        })
         .collect();
     let [i] = differ.as_slice() else { return None };
     let alts: Vec<String> = words.iter().map(|w| w[*i].to_string()).collect();
-    let ok = alts.iter().all(|a| {
-        matches!(
-            a.as_str(),
-            "hand" | "graveyard" | "library" | "power" | "toughness"
-        ) || is_combat_keyword(a)
-    });
+    // "a noncreature or Dragon spell": the word before "spell" (a quality of the spell).
+    let before_spell = *i + 2 == n && words[0][n - 1] == "spell";
+    let ok = before_spell
+        || alts.iter().all(|a| {
+            matches!(
+                a.as_str(),
+                "hand" | "graveyard" | "library" | "power" | "toughness"
+            ) || is_combat_keyword(a)
+        });
     if !ok || all[0].iter().any(|w| w.contains('{')) {
         return None;
     }

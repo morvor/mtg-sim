@@ -114,7 +114,7 @@ fn parse_etb(l: &str, ctx: &CompileContext) -> Option<Vec<StaticEffect>> {
                 what: Sel::All(Filter::and(vec![
                     Filter::Other,
                     Filter::Permanent,
-                    Filter::SameNameAs(Box::new(Sel::This)),
+                    crate::oracle::phrases::named_this_card(),
                     Filter::ControlledBy(PlayerRel::You),
                 ])),
             }),

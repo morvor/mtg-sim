@@ -152,7 +152,7 @@ fn opponents_creatures_with(holder: &str, kw: &str) -> Option<Filter> {
         Filter::InZone(ZoneKind::Battlefield),
     ];
     if not_named {
-        parts.push(Filter::not(Filter::SameNameAs(Box::new(Sel::This))));
+        parts.push(Filter::not(crate::oracle::phrases::named_this_card()));
     }
     Some(Filter::and(parts))
 }

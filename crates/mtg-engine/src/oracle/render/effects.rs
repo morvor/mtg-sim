@@ -165,16 +165,18 @@ impl Renderer<'_> {
                     true,
                 )
             }
-            // "That player loses half their life, rounded up."
+            // "That player loses half their life, rounded up.", "Each player loses a third
+            // of their life, rounded up."
             Effect::LoseLife {
                 who,
-                n: Value::Div(v, 2, up),
+                n: Value::Div(v, d @ (2 | 3), up),
             } if matches!(v.as_ref(), Value::LifeTotal(p) if same_player(p, who)) => {
                 let p = self.possessive_for(who);
                 let r = if *up { "up" } else { "down" };
+                let part = if *d == 2 { "half" } else { "a third of" };
                 (
                     who.clone(),
-                    format!("lose half {p} life, rounded {r}"),
+                    format!("lose {part} {p} life, rounded {r}"),
                     true,
                 )
             }
@@ -520,6 +522,22 @@ impl Renderer<'_> {
                 }
             }
         }
+        // "Target player searches their library for a basic land card, puts it onto the
+        // battlefield tapped, then shuffles": the target is introduced by the subject,
+        // before the instruction names it again.
+        if let Effect::SearchCards(spec) = e {
+            if let who @ PlayerRef::Target(i) = &spec.who {
+                if !self.introduced.get(*i as usize).copied().unwrap_or(true) {
+                    let subj = self.player(who, Case::Subj);
+                    let saved = self.they_target.replace(*i);
+                    let r = self.actor_vp(e);
+                    self.they_target = saved;
+                    if let Some((_, vp, _)) = r {
+                        return format!("{subj} {}", third_person(&vp));
+                    }
+                }
+            }
+        }
         if let Some((who, vp, keep)) = self.actor_vp(e) {
             return self.with_subject(&who, &vp, keep);
         }
@@ -532,6 +550,18 @@ impl Renderer<'_> {
                 then,
                 otherwise,
             } if matches!(otherwise.as_ref(), Effect::Noop) => self.effect(then),
+            // "If you can't choose an opponent this way, [effect]" after choosing one at
+            // random (`history_5.rs`).
+            Effect::If {
+                cond: Condition::Not(c),
+                then,
+                otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop)
+                && matches!(c.as_ref(), Condition::SelNonEmpty(Sel::Players(PlayerRef::Var(v)))
+                    if *v == crate::oracle::patterns::choice_grammar_random::RANDOM_PLAYER) =>
+            {
+                format!("if you can't choose an opponent this way, {}", self.effect(then))
+            }
             Effect::If {
                 cond,
                 then,
@@ -1791,8 +1821,16 @@ impl Renderer<'_> {
                 // The recipient is named before "where X is ...", which may refer back to
                 // it ("deals X damage to target player, where X is the number of cards in
                 // that player's hand").
+                // Also a recipient that names the target ("deals damage to target spell's
+                // controller equal to that spell's mana value").
+                let (to_s, amount_s) = (format!("{to:?}"), format!("{amount:?}"));
                 let refers = matches!(to, Sel::Target(i)
-                    if format!("{amount:?}").contains(&format!("Target({i})")));
+                    if amount_s.contains(&format!("Target({i})")))
+                    || (to_s.starts_with("Players(ControllerOf(")
+                        && (0..8u8).any(|i| {
+                            let t = format!("Target({i})");
+                            to_s.contains(&t) && amount_s.contains(&t)
+                        }));
                 let (mut t, (a, w)) = if refers {
                     let t = self.sel(to, Case::Obj);
                     (t, self.amount(amount))
@@ -2457,6 +2495,17 @@ impl Renderer<'_> {
                         );
                     }
                 }
+                // "Whenever one or more tokens ... enter, for each of them, create a tapped
+                // token that's a copy of it": one copy of each of the objects.
+                if matches!((of, count), (Sel::TriggerObjects, Value::Const(1)))
+                    && mods.is_empty()
+                    && !vp.contains('{')
+                    && matches!(controller, PlayerRef::You)
+                {
+                    vp = format!(
+                        "{{alt:{vp}|for each of them, create a{st} token that's a copy of it}}"
+                    );
+                }
                 self.with_subject(controller, &vp, false)
             }
             Effect::CounterSpell { what } => {
@@ -2996,6 +3045,15 @@ impl Renderer<'_> {
                         }
                     }
                 }
+                // "Choose a color. Add an amount of mana of that color equal to your
+                // devotion to that color." (Nykthos): the color is chosen as the mana is
+                // added (CR 700.5).
+                if let (ManaProduction::DevotionToChosenColor, PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let m = self.mana_production(mana);
+                    return format!("choose a color. add {m}");
+                }
                 let m = self.mana_production(mana);
                 // "Choose a color. Add an amount of mana of that color equal to the number
                 // of ..." (Three Tree City): X mana of any one color.
@@ -3117,6 +3175,11 @@ impl Renderer<'_> {
                 if matches!(what, Sel::Target(_)) && !is_plural_sel(what) {
                     return format!("{{alt:the owner of {w} shuffles {it} into their library|choose {w}. its owner shuffles {it} into their library}}");
                 }
+                // "Shuffle enchanted creature into its owner's library": the card ends up
+                // in its owner's library, which is shuffled, either way.
+                if !is_plural_sel(what) && !w.contains('{') {
+                    return format!("{{alt:the owner of {w} shuffles {it} into their library|shuffle {w} into its owner's library}}");
+                }
                 format!("the owner of {w} shuffles {it} into their library")
             }
             // "Each player shuffles their hand and graveyard into their library": each
@@ -3224,6 +3287,17 @@ impl Renderer<'_> {
                 };
                 if in_place(found_to) && in_place(rest_to) {
                     return self.with_subject(who, &until, false);
+                }
+                // "..., then puts those cards into their graveyard": every card revealed,
+                // the one found too, goes to its owner's graveyard.
+                let to_graveyard = |d: &Destination| {
+                    format!("{d:?}") == format!("{:?}", Destination::zone(ZoneKind::Graveyard))
+                };
+                if to_graveyard(found_to) && to_graveyard(rest_to) {
+                    let you = matches!(who, PlayerRef::You) && !self.in_as_player;
+                    let put = if you { "put" } else { "puts" };
+                    let vp = format!("{until}, then {put} {{alt:those cards|all cards revealed this way}} into {p} graveyard");
+                    return self.with_subject(who, &vp, false);
                 }
                 let found = self.destination_phrase(found_to, false, true);
                 // "Put that card onto the battlefield and shuffle the rest into your
@@ -4585,9 +4659,15 @@ impl Renderer<'_> {
                 "prevent that damage. Exile cards from the top of your library equal to the damage prevented this way".to_string()
             }
             // "that source's controller": the damage event's source (CR 614.1a).
+            // The same source deals it (CR 614.9): "that source deals that damage to
+            // you instead".
             ReplacementAction::Redirect(t) => {
                 let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
-                format!("that damage is dealt to {t} instead")
+                if uses.is_some() {
+                    format!("{{alt:that damage is dealt to {t}|that source deals that damage to {t}}} instead")
+                } else {
+                    format!("that damage is dealt to {t} instead")
+                }
             }
             a => self.damage_then(a)?,
         };
@@ -4824,6 +4904,7 @@ impl Renderer<'_> {
                 .or_else(|| self.rest_after_cast(v, i))
                 .or_else(|| self.same_name_search(v, i))
                 .or_else(|| self.named_seq(v, i))
+                .or_else(|| self.pairs_seq(v, i))
             {
                 parts.push(s);
                 i += used;
@@ -5835,13 +5916,7 @@ impl Renderer<'_> {
                 i > 0
                     && matches!(
                         v[i - 1],
-                        Effect::Sacrifice {
-                            who: PlayerRef::You,
-                            ..
-                        } | Effect::Discard {
-                            who: PlayerRef::You,
-                            ..
-                        }
+                        Effect::Sacrifice { .. } | Effect::Discard { .. }
                     )
                     // "Pay {E}{E}. If you can't, ..." (see `kw/game_rules.rs`).
                     || i > 0
@@ -6087,7 +6162,10 @@ impl Renderer<'_> {
             Condition::PrevHappened => {
                 // "Counter target spell unless its controller pays {2}. If they do, ..."
                 // "If they don't" / "If that player doesn't".
-                let who = if self.last_actor_other {
+                let who = if self.last_actor_other && self.prev_mandatory && !else_empty {
+                    // "That player sacrifices a creature. If the player can't, ..."
+                    "{alt:they|that player|the player}"
+                } else if self.last_actor_other {
                     "{alt:they|that player}"
                 } else {
                     "you"
@@ -6101,7 +6179,7 @@ impl Renderer<'_> {
                     let o = self.effect(otherwise);
                     // "Sacrifice a creature. If you can't, ...": a mandatory instruction
                     // isn't followed only when it can't be.
-                    let dont = if self.prev_mandatory && who == "you" {
+                    let dont = if self.prev_mandatory {
                         "{alt:don't|can't}"
                     } else {
                         "don't"
@@ -7266,6 +7344,17 @@ impl Renderer<'_> {
         let own = same_player(&spec.who, &spec.whose);
         let two =
             matches!(spec.parts.as_slice(), [p] if matches!(p.count, Value::Const(2)) && !p.all);
+        // "Put two of them onto the battlefield tapped and the other into your hand" (of
+        // three): one card left for the last destination.
+        let one_left = match (
+            spec.parts.as_slice(),
+            spec.dests.first().and_then(|d| d.count.as_ref()),
+        ) {
+            ([p], Some(Value::Const(k))) if !p.all => {
+                matches!(p.count, Value::Const(n) if n == k + 1)
+            }
+            _ => false,
+        };
         let dests: Vec<String> = spec
             .dests
             .iter()
@@ -7301,10 +7390,16 @@ impl Renderer<'_> {
                     "put"
                 };
                 let what = match &d.count {
+                    // "put two of them onto the battlefield".
+                    Some(n) if spec.dests.len() > 1 => {
+                        format!("{} {{opt:of them}}", self.amount(n).0)
+                    }
                     Some(n) => self.amount(n).0,
                     // "put one onto the battlefield and the other into your hand": of
                     // two cards, the rest is the other one.
-                    None if spec.dests.len() > 1 && two => "{alt:the rest|the other}".to_string(),
+                    None if spec.dests.len() > 1 && (two || one_left) => {
+                        "{alt:the rest|the other}".to_string()
+                    }
                     None if spec.dests.len() > 1 => "the rest".to_string(),
                     None => pron.to_string(),
                 };
@@ -8048,6 +8143,15 @@ impl Renderer<'_> {
                         {
                             ts = "Y".into();
                             let y = b.trim_start_matches(", where X is ");
+                            // "X is the exiled creature card's power and Y is its
+                            // toughness": the same object's.
+                            let same_object = matches!((p, t), (Value::PowerOf(x), Value::ToughnessOf(z))
+                                if format!("{x:?}") == format!("{z:?}"));
+                            let y = if same_object {
+                                format!("{{alt:{y}|its toughness}}")
+                            } else {
+                                y.to_string()
+                            };
                             where_clauses.push(format!("{a}, and Y is {y}"));
                         }
                         (pw, tw) => {
@@ -8929,7 +9033,7 @@ impl Renderer<'_> {
                 if v.iter()
                     .any(|f| matches!(f, Filter::In(s) if matches!(**s, Sel::Linked))) =>
             {
-                "one mana of any of the exiled {alt:card's|cards'} colors".into()
+                "one mana of any of {alt:the exiled card's|the exiled cards'} colors".into()
             }
             ManaProduction::AnyColorAmong(f) => {
                 let n = self.noun(f, Num::Many);
@@ -8950,6 +9054,17 @@ impl Renderer<'_> {
             ManaProduction::ManaCostOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("mana equal to {s} mana cost")
+            }
+            ManaProduction::CombinationOfColorsOf(s, n) => {
+                let (a, w) = match n {
+                    Value::Const(k) => (number_word(*k), None),
+                    other => self.amount(other),
+                };
+                let s = self.sel(s, Case::Poss);
+                format!(
+                    "{a} mana in any combination of {s} colors{}",
+                    w.unwrap_or_default()
+                )
             }
             ManaProduction::ColoredSymbolsOf(s) => {
                 let s = self.sel(s, Case::Poss);

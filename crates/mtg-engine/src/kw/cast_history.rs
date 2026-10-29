@@ -44,8 +44,9 @@ pub const TIMES_ACTIVATED: &str = "cast history:times this ability was activated
 pub const CAST_BY_THEN: &str = "cast history:cast no later than:";
 /// `Value::Custom` prefix: an amount of the mana spent on a spell or ability:
 /// `cast history:spent:<whose>:<what>`, `whose` being `self`, `that spell` or `this
-/// ability`, `what` being `total`, `colored`, `colors` (how many colors), `type:<C>` (one
-/// type of mana), `source subtype:<Treasure>` or `source type:<Creature>`.
+/// ability` or `this way` (the payment the triggering event reports), `what` being
+/// `total`, `colored`, `colors` (how many colors), `type:<C>` (one
+/// type of mana), `types:<B>,<R>` (any of several), `source subtype:<Treasure>` or `source type:<Creature>`.
 pub const SPENT: &str = "cast history:spent:";
 
 /// `Filter::Custom`: the spell (or the permanent it became) was cast using mana produced by
@@ -172,6 +173,11 @@ pub fn colors_spent_on_this_ability(g: &Game, ctx: &Ctx) -> ColorSet {
     s
 }
 
+/// The `whose` of [`SPENT`] for the payment a triggering event reports ("for each {B} or
+/// {R} spent this way" in "Whenever ~'s cumulative upkeep is paid", Balduvian Fallen; see
+/// `kw/payment_mana.rs`).
+pub const THIS_WAY: &str = "this way";
+
 /// The `whose` of [`SPENT`] for the spell or activated ability that caused the trigger.
 pub const SPELL_OR_ABILITY: &str = "that spell or ability";
 
@@ -208,6 +214,11 @@ fn amount(g: &Game, c: &CastInfo, what: &str, colors: Option<ColorSet>) -> Optio
             }
         }
         return Some(s.count() as i64);
+    }
+    // Mana of any of several types ("for each {B} or {R} spent to cast it").
+    if let Some(ts) = what.strip_prefix("types:") {
+        let ts = crate::kw::payment_mana::parse_types(ts)?;
+        return Some(n(&|m| ts.contains(m)));
     }
     if let Some(t) = what.strip_prefix("type:") {
         let t = ManaType::ALL.iter().find(|m| format!("{m:?}") == t)?;
@@ -258,6 +269,13 @@ impl KeywordRules for CastHistory {
                 g.try_obj(id).map(|o| o.chars.colors)
             })
             .flatten();
+        if whose == THIS_WAY {
+            let paid = CastInfo {
+                mana_spent: crate::kw::payment_mana::paid_this_way(g, ctx),
+                ..Default::default()
+            };
+            return Some(amount(g, &paid, what, colors).unwrap_or(0));
+        }
         Some(payment(g, whose, ctx).map_or(0, |c| amount(g, c, what, colors).unwrap_or(0)))
     }
 

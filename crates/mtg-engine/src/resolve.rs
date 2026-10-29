@@ -149,6 +149,7 @@ impl Game {
                     self.last_paid = None;
                     if pays && crate::entry_costs::pay(self, p, cost, ctx) {
                         paid = true;
+                        crate::kw::payment_mana::note(self, ctx);
                         crate::cost_effects::note_paid(self, cost, ctx);
                         break;
                     }
@@ -1413,9 +1414,18 @@ impl Game {
                 }
             }
             Effect::Unattach { what } => {
+                let mut done = Vec::new();
+                let mut from = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    self.unattach(o);
+                    if let Some(h) = self.obj(o).attached_to {
+                        self.unattach(o);
+                        done.push(Entity::Object(o));
+                        from.push(h);
+                    }
                 }
+                // What a cost unattached, and from what (`zones::COST_UNATTACHED`).
+                ctx.set_var(crate::zones::UNATTACHED, done);
+                ctx.set_var(crate::zones::UNATTACHED_FROM, from);
             }
             Effect::PhaseIn { what } => {
                 // A phased-out permanent is still the same object (CR 702.26d).
@@ -3020,6 +3030,9 @@ impl Game {
                 // "Creatures target player controls don't untap ...": the objects that
                 // player controls, whichever they are later.
                 *f = self.bind_target_players(f, ctx);
+                // "the creature dealt damage [by the targeted creature] can't be
+                // regenerated this turn": that creature, as the effect begins.
+                *f = crate::prevention::lock_damage_history(self, f, ctx);
                 // "Creatures of the creature type of your choice attack this turn if
                 // able": the type chosen as the effect began (CR 608.2h).
                 self.lock_chosen_type(f, ctx);
@@ -3496,6 +3509,15 @@ impl Game {
             ManaProduction::CombinationOf(opts, n) => {
                 let k = self.eval_value(n, ctx).max(0) as usize;
                 self.choose_mana_combination(p, ctx, opts, k)
+            }
+            ManaProduction::CombinationOfColorsOf(sel, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                let opts = crate::mana_abilities::colors_of_sel(self, sel, ctx);
+                if opts.is_empty() {
+                    vec![]
+                } else {
+                    self.choose_mana_combination(p, ctx, &opts, k)
+                }
             }
             ManaProduction::OneOf(opts) => vec![self.choose_mana_color(p, ctx, opts)],
             ManaProduction::DistinctColors(colors, each) => {

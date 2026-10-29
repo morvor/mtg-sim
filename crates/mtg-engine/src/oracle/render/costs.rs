@@ -636,6 +636,21 @@ impl Renderer<'_> {
             (Some(Condition::Phase(PhaseCond::Upkeep)), true) => Some("any upkeep step"),
             _ => None,
         };
+        // "{X}, {T}: Create a token that's a copy of the exiled card. X is the mana value
+        // of that card.": X is defined by the card, so there's no X to pay without one
+        // (Prototype Portal's ruling: it can't be activated then).
+        let x_is = match &a.condition {
+            Some(Condition::And(v)) => match v.as_slice() {
+                [Condition::SelNonEmpty(s), Condition::Compare(Value::X, Cmp::Eq, Value::ManaValueOf(s2))]
+                    if format!("{s:?}") == format!("{:?}", s2.as_ref()) =>
+                {
+                    let o = self.sel(s, players::Case::Poss);
+                    Some(format!("X is {o} mana value."))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
         match a.condition.as_ref().filter(|_| {
             !solved
                 && !boast
@@ -643,6 +658,7 @@ impl Renderer<'_> {
                 && remove_all.is_none()
                 && !by_defender
                 && their.is_none()
+                && x_is.is_none()
         }) {
             // "Activate only during your turn before attackers are declared."
             Some(Condition::YourTurn) => {
@@ -684,6 +700,9 @@ impl Renderer<'_> {
             None => {}
         }
         let mut s = format!("{cost}: {body}");
+        if let Some(x) = x_is {
+            s = join_words(&[s, x]);
+        }
         if matches!(a.condition, Some(Condition::MaxSpeed)) && !solved && !boast {
             s = format!("Max speed — {s}");
         }
@@ -746,6 +765,11 @@ impl Renderer<'_> {
                 // "Only the player ~ is attacking may activate this ability" (CR 506.2).
                 PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::DefendingPlayer) => {
                     format!("the player {} is attacking", self.me())
+                }
+                // "Only ~'s owner may activate this ability."
+                PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::OwnerOf(s) if matches!(s.as_ref(), Sel::This)) =>
+                {
+                    format!("{}'s owner", self.me())
                 }
                 other => self.gap(format!("who may activate: {other:?}")),
             };
