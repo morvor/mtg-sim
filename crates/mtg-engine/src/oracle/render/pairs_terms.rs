@@ -180,6 +180,144 @@ impl Renderer<'_> {
         ))
     }
 
+    /// "Each spell you cast has split second if mana from an artifact was spent to cast
+    /// it": the spells some of whose mana was of that kind
+    /// (`kw::cast_history::SPENT_SOME`).
+    pub(crate) fn spent_some_static(
+        &mut self,
+        affected: &Filter,
+        mods: &[Modification],
+    ) -> Option<String> {
+        let Filter::And(v) = affected else {
+            return None;
+        };
+        let [Filter::Spell, Filter::ControlledBy(PlayerRel::You), Filter::Custom(n)] = v.as_slice()
+        else {
+            return None;
+        };
+        let clause = self.spent_some_clause(n)?;
+        let vp = self.mods_vp(mods, false);
+        Some(format!("each spell you cast {vp} if {clause}"))
+    }
+
+    /// "If a spell or ability would cause its controller to gain life, that player loses
+    /// that much life instead." (Rain of Gore, `kw::life_gain_cause`).
+    pub(crate) fn caused_life_gain(&mut self, def: &ReplacementDef) -> Option<String> {
+        let ReplacementEvent::Where { event, cond } = &def.event else {
+            return None;
+        };
+        let (ReplacementEvent::GainLife(PlayerFilter::Any), Condition::Custom(c)) =
+            (event.as_ref(), cond)
+        else {
+            return None;
+        };
+        if c != crate::kw::life_gain_cause::RESOLVING_CONTROLLER {
+            return None;
+        }
+        let then = match &def.action {
+            ReplacementAction::Instead(e)
+                if matches!(
+                    e.as_ref(),
+                    Effect::LoseLife {
+                        who: PlayerRef::TriggerPlayer,
+                        n: Value::EventAmount
+                    }
+                ) =>
+            {
+                "that player loses that much life instead".to_string()
+            }
+            _ => return None,
+        };
+        Some(format!(
+            "if a spell or ability would cause its controller to gain life, {then}"
+        ))
+    }
+
+    /// "Whenever another artifact is put into your graveyard from the battlefield or an
+    /// artifact card is put into your graveyard from anywhere other than the battlefield"
+    /// (Ultron): one trigger condition for each zone a card can be put into a graveyard
+    /// from (CR 400.1).
+    pub(crate) fn into_graveyard_from_anywhere(&mut self, t: &TriggerCond) -> Option<String> {
+        let TriggerCond::AnyOf(v) = t else {
+            return None;
+        };
+        let (TriggerCond::Dies(Filter::And(d)), rest) = v.split_first()? else {
+            return None;
+        };
+        let [Filter::Other, kind, Filter::OwnedBy(PlayerRel::You)] = d.as_slice() else {
+            return None;
+        };
+        let card = Filter::And(vec![
+            kind.clone(),
+            Filter::Card,
+            Filter::OwnedBy(PlayerRel::You),
+        ]);
+        let mut zones: Vec<ZoneKind> = Vec::new();
+        for x in rest {
+            let TriggerCond::ZoneChange {
+                filter,
+                from: Some(z),
+                to: Some(ZoneKind::Graveyard),
+            } = x
+            else {
+                return None;
+            };
+            if format!("{filter:?}") != format!("{card:?}") {
+                return None;
+            }
+            zones.push(*z);
+        }
+        use ZoneKind::*;
+        let all = [Library, Hand, Stack, Exile, Command];
+        if zones.len() != all.len() || !all.iter().all(|z| zones.contains(z)) {
+            return None;
+        }
+        let one = self.noun(kind, Num::One);
+        let a = with_article(&one);
+        Some(format!(
+            "whenever another {one} is put into your graveyard from the battlefield or {a} card is put into your graveyard from anywhere other than the battlefield"
+        ))
+    }
+
+    /// "During your turn, your opponents can't cast spells or activate abilities of
+    /// artifacts, creatures, or enchantments." (Grand Abolisher): two restrictions on the
+    /// same players with the same condition, printed as one sentence. (How many
+    /// abilities, the line.)
+    pub(crate) fn cast_or_activate_group(&mut self, abs: &[Ability]) -> Option<(usize, String)> {
+        let [a, b, ..] = abs else { return None };
+        let (AbilityKind::Static(x), AbilityKind::Static(y)) = (&a.kind, &b.kind) else {
+            return None;
+        };
+        let (
+            StaticEffect::Restriction(Restriction::CantCast {
+                who,
+                what: Filter::Any,
+            }),
+            StaticEffect::Restriction(Restriction::CantActivate {
+                who: who2,
+                sources,
+                include_mana: true,
+            }),
+        ) = (&x.effect, &y.effect)
+        else {
+            return None;
+        };
+        if format!("{who:?}") != format!("{who2:?}")
+            || !matches!(x.condition, Some(Condition::YourTurn))
+            || !matches!(y.condition, Some(Condition::YourTurn))
+            || x.zone != FunctionZone::Battlefield
+            || y.zone != FunctionZone::Battlefield
+        {
+            return None;
+        }
+        let w = self.player_filter_subject(who);
+        let n = self.noun(sources, Num::Many);
+        Some((
+            2,
+            format!("During your turn, {w} can't cast spells or activate abilities of {n}."),
+        ))
+    }
+
     /// Instructions printed as one ("Target creature gains protection from the color of
     /// its controller's choice until end of turn"): (the text, how many instructions).
     pub(crate) fn pairs_seq(&mut self, v: &[Effect], i: usize) -> Option<(String, usize)> {

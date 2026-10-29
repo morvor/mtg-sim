@@ -286,6 +286,9 @@ impl Renderer<'_> {
 
     /// "When ~ enters", "At the beginning of your upkeep", "Whenever you cast a spell".
     pub(crate) fn trigger_text(&mut self, t: &TriggerCond) -> String {
+        if let Some(s) = self.into_graveyard_from_anywhere(t) {
+            return s;
+        }
         // "When the last time counter is removed from ~ while it's exiled" (CR 702.62a's
         // own wording): a time counter removed, none left, the ability working in exile.
         if let TriggerCond::Where { trigger, cond } = t {

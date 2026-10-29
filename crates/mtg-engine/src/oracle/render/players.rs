@@ -1321,9 +1321,19 @@ impl Renderer<'_> {
             PlayerRef::TriggerPlayer if self.trigger_player.is_some() => {
                 self.trigger_player.unwrap_or("that player").into()
             }
+            // "At the beginning of each player's upkeep, that player reveals the top card
+            // of their library. If it's ..., the player may put it onto the battlefield."
+            // (older cards call the event's player "the player").
+            PlayerRef::TriggerPlayer => {
+                return match case {
+                    Case::Subj => "{alt:that player|they|the player}".into(),
+                    Case::Obj => "{alt:that player|them|the player}".into(),
+                    Case::Poss => "{alt:that player's|their|the player's}".into(),
+                }
+            }
             // "Whenever an opponent draws a card, they lose 2 life" / "... that player
             // loses 2 life".
-            PlayerRef::TriggerPlayer | PlayerRef::Iterated => {
+            PlayerRef::Iterated => {
                 return match case {
                     Case::Subj => "{alt:that player|they}".into(),
                     Case::Obj => "{alt:that player|them}".into(),

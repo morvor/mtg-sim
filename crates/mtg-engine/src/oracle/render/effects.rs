@@ -7332,6 +7332,17 @@ impl Renderer<'_> {
         let own = same_player(&spec.who, &spec.whose);
         let two =
             matches!(spec.parts.as_slice(), [p] if matches!(p.count, Value::Const(2)) && !p.all);
+        // "Put two of them onto the battlefield tapped and the other into your hand" (of
+        // three): one card left for the last destination.
+        let one_left = match (
+            spec.parts.as_slice(),
+            spec.dests.first().and_then(|d| d.count.as_ref()),
+        ) {
+            ([p], Some(Value::Const(k))) if !p.all => {
+                matches!(p.count, Value::Const(n) if n == k + 1)
+            }
+            _ => false,
+        };
         let dests: Vec<String> = spec
             .dests
             .iter()
@@ -7367,10 +7378,16 @@ impl Renderer<'_> {
                     "put"
                 };
                 let what = match &d.count {
+                    // "put two of them onto the battlefield".
+                    Some(n) if spec.dests.len() > 1 => {
+                        format!("{} {{opt:of them}}", self.amount(n).0)
+                    }
                     Some(n) => self.amount(n).0,
                     // "put one onto the battlefield and the other into your hand": of
                     // two cards, the rest is the other one.
-                    None if spec.dests.len() > 1 && two => "{alt:the rest|the other}".to_string(),
+                    None if spec.dests.len() > 1 && (two || one_left) => {
+                        "{alt:the rest|the other}".to_string()
+                    }
                     None if spec.dests.len() > 1 => "the rest".to_string(),
                     None => pron.to_string(),
                 };

@@ -523,6 +523,9 @@ impl Renderer<'_> {
     pub(crate) fn static_effect(&mut self, e: &StaticEffect) -> String {
         match e {
             StaticEffect::Continuous { affected, mods } => {
+                if let Some(s) = self.spent_some_static(affected, mods) {
+                    return s;
+                }
                 if mods.len() == 1 {
                     if let Modification::CdaPT(p, t) = &mods[0] {
                         return self.cda_pt(affected, p, t);
@@ -667,7 +670,9 @@ impl Renderer<'_> {
                         }
                         t => self.trigger_text(t),
                     };
-                    let b = self.body(b);
+                    // The delayed triggered ability's event ("counter that spell"): its
+                    // body is about the triggering spell.
+                    let b = self.in_event_scope(|r| r.body(b));
                     format!(
                         "you may reveal ~ from your opening hand. If you do, {t}, {}",
                         lower_first(&b)
@@ -3004,7 +3009,7 @@ impl Renderer<'_> {
     }
 
     /// "you", "your opponents", "each player" as the subject of a restriction.
-    fn player_filter_subject(&mut self, pf: &PlayerFilter) -> String {
+    pub(crate) fn player_filter_subject(&mut self, pf: &PlayerFilter) -> String {
         match pf {
             PlayerFilter::You | PlayerFilter::Controller => "you".into(),
             PlayerFilter::Opponent => "your opponents".into(),
@@ -3086,6 +3091,9 @@ impl Renderer<'_> {
             return s;
         }
         if let Some(s) = self.enter_only_if_done(def) {
+            return s;
+        }
+        if let Some(s) = self.caused_life_gain(def) {
             return s;
         }
         if let Some(s) = self.first_tokens_as_copies(def) {

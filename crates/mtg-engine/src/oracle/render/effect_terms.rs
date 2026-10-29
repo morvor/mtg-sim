@@ -332,8 +332,8 @@ impl Renderer<'_> {
             // chooser is the first of the two players named.
             if matches!(chooser, Some(PlayerRef::TriggerPlayer)) {
                 s = s.replacen(
-                    "{alt:that player|they}",
-                    "{alt:that player|they|the first player}",
+                    "{alt:that player|they|the player}",
+                    "{alt:that player|they|the player|the first player}",
                     1,
                 );
             }

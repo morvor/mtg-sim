@@ -81,6 +81,10 @@ fn lotus_vale_with_one_untapped_land_sacrifices_it_and_never_enters() {
 #[test]
 fn crackdown_construct_ignores_abilities_of_cards_in_hand() {
     cr!("109.2", "602.1", "702.29a");
+    ruling!(
+        "Crackdown Construct",
+        "doesn't trigger if you activate an ability of an artifact or creature card not on the battlefield"
+    );
     // "Whenever you activate an ability of an artifact or creature that isn't a mana
     // ability, ~ gets +1/+1 until end of turn": of an artifact or creature permanent
     // (CR 109.2), not a creature card's cycling from a hand.
@@ -204,4 +208,25 @@ fn tanazir_quandrix_sets_base_power_and_toughness_once() {
     t.g.recompute();
     assert_eq!(t.pt(tanazir), (6, 6));
     assert_eq!(t.pt(bears), (4, 4));
+}
+
+#[test]
+fn kurkesh_ignores_an_artifact_cards_cycling() {
+    cr!("109.2", "602.1", "702.29a");
+    // "Whenever you activate an ability of an artifact, if it isn't a mana ability, you
+    // may pay {R}. If you do, copy that ability.": of an artifact permanent, not an
+    // artifact card's cycling from a hand.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kurkesh, Onakke Ancient");
+    t.lands(P0, "Mountain", 3);
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    let crystal = t.hand(P0, "Raugrin Crystal");
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.activate(P0, crystal, 1, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Raugrin Crystal"), "cycled");
+    // One card drawn: the cycling wasn't copied.
+    assert_eq!(t.hand_size(P0), hand);
 }

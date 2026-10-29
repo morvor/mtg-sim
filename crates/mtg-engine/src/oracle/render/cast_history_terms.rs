@@ -181,6 +181,8 @@ impl Renderer<'_> {
                 format!("cast {m}")
             }
             "that spell" => "cast {alt:it|that spell}".into(),
+            // "if mana from a Treasure was spent to cast it or activate it".
+            ch::SPELL_OR_ABILITY => "cast it or activate it".into(),
             "this ability" => "activate this ability".into(),
             ch::ENTERING => "cast {alt:it|them}".into(),
             w => {
@@ -197,6 +199,8 @@ impl Renderer<'_> {
         Some(match what {
             "total" => "mana".into(),
             "colored" => "colored mana".into(),
+            // "if {S} of any of that spell's colors was spent to cast it".
+            ch::SNOW_OF_ITS_COLORS => "{S} of any of that spell's colors".into(),
             w => {
                 if let Some(st) = w.strip_prefix("source subtype:") {
                     if one {
@@ -368,5 +372,15 @@ impl Renderer<'_> {
             "that spell" => format!("it's the {nth} {noun} {who} cast this turn"),
             _ => return None,
         })
+    }
+}
+
+impl Renderer<'_> {
+    /// "if mana from an artifact was spent to cast it": the quality of a spell some of
+    /// whose mana was of that kind ([`ch::SPENT_SOME`]), as a clause about "it".
+    pub(crate) fn spent_some_clause(&mut self, name: &str) -> Option<String> {
+        let what = name.strip_prefix(ch::SPENT_SOME)?;
+        let m = Self::spent_what(what, true)?;
+        Some(format!("{m} was spent to cast it"))
     }
 }

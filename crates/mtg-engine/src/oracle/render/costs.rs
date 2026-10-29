@@ -741,6 +741,11 @@ impl Renderer<'_> {
                 PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::DefendingPlayer) => {
                     format!("the player {} is attacking", self.me())
                 }
+                // "Only ~'s owner may activate this ability."
+                PlayerFilter::Ref(r) if matches!(r.as_ref(), PlayerRef::OwnerOf(s) if matches!(s.as_ref(), Sel::This)) =>
+                {
+                    format!("{}'s owner", self.me())
+                }
                 other => self.gap(format!("who may activate: {other:?}")),
             };
             if by_defender {
