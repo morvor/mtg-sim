@@ -192,12 +192,30 @@ pub fn distinct_among(g: &Game, what: Among, sel: &Sel, ctx: &Ctx) -> i64 {
     }
 }
 
+/// Whether `v` is a tally of events that happened (this turn or during another window),
+/// or a threshold on one ("1 if that player drew two or more cards this turn").
+fn tallies_history(v: &Value) -> bool {
+    match v {
+        Value::EventsThisTurn(..) | Value::EventsDuring(..) => true,
+        Value::If(c, a, b) => match c.as_ref() {
+            Condition::Compare(x, _, y) => {
+                (tallies_history(x) || tallies_history(y))
+                    && matches!(a.as_ref(), Value::Const(_))
+                    && matches!(b.as_ref(), Value::Const(_))
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 /// [`Value::OverPlayers`].
 pub fn over_players(g: &Game, op: AggOp, f: &PlayerFilter, v: &Value, ctx: &Ctx) -> i64 {
-    // A tally of what players did this turn ("the greatest number of cards an opponent has
-    // drawn this turn") still counts a player who has since left the game (Thought
-    // Sponge's rulings); anything else looks only at players still in the game (CR 800.4a).
-    let players: Vec<PlayerId> = if matches!(v, Value::EventsThisTurn(..)) {
+    // A tally of what players did ("the greatest number of cards an opponent has drawn
+    // this turn", "each opponent who drew two or more cards this turn") still counts a
+    // player who has since left the game (CR 800.4i; Thought Sponge's rulings); anything
+    // else looks only at players still in the game (CR 800.4a).
+    let players: Vec<PlayerId> = if tallies_history(v) {
         g.players.iter().map(|p| p.id).collect()
     } else {
         g.players_in_game()

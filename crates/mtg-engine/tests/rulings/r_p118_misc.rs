@@ -559,6 +559,31 @@ fn thought_sponge_counts_the_greatest_total_drawn_by_one_opponent() {
 }
 
 #[test]
+fn smugglers_share_counts_an_opponent_who_drew_two_cards_then_left() {
+    // The same reading for a count of opponents an amount reached ("for each opponent who
+    // drew two or more cards this turn").
+    cr!("800.4i");
+    interp!("history-counts-players-who-left");
+    supported("Smuggler's Share");
+    for leaves in [false, true] {
+        let mut t = TestGame::new(3);
+        t.battlefield(P0, "Smuggler's Share");
+        draw(&mut t, P1, 2);
+        draw(&mut t, P2, 1);
+        if leaves {
+            crate::r_p053_common::concede(&mut t, P1);
+            assert!(t.has_lost(P1));
+        }
+        t.library_top(P0, "Island");
+        t.library_top(P0, "Island");
+        let hand = t.hand_size(P0);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + 1, "leaves {leaves}");
+    }
+}
+
+#[test]
 fn thought_sponge_enters_with_its_counters() {
     cr!("614.1c", "614.12");
     ruling!(

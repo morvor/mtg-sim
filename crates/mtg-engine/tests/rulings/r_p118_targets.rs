@@ -134,7 +134,6 @@ fn dreadhorde_arcanist_target_is_chosen_before_other_attack_triggers_resolve() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Fervent Charge");
     let arc = t.battlefield(P0, "Dreadhorde Arcanist");
-    let shock = t.graveyard(P0, "Shock");
     let strike = t.graveyard(P0, "Lightning Strike");
     t.answer_targets(P0, &[obj(strike)]);
     attack_with(&mut t, &at(P1, &[arc]));
@@ -159,7 +158,6 @@ fn dreadhorde_arcanist_target_is_chosen_before_other_attack_triggers_resolve() {
         .flat_map(|id| crate::r_s25_common::targets_of(&t, *id))
         .collect();
     assert!(targeted.contains(&obj(shock2)));
-    let _ = shock;
 }
 
 #[test]
