@@ -38,3 +38,15 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 - Affects: Overclocked Electromancer.
 - Code: `crates/mtg-engine/src/oracle/patterns/referents_values_5.rs` (`atom`).
 - Tests: `tests/cards/c4_instead_excess.rs` (`overclocked_electromancer_gets_energy_equal_to_the_excess_damage`).
+
+## put-onto-battlefield-blocking-retriggers-becomes-blocked-by: A creature put onto the battlefield blocking triggers "becomes blocked by a creature" again
+- Kind: interpretation
+- Status: provisional
+- Rules: 509.3d "An ability that reads “Whenever [a creature] becomes blocked by a creature, . . .” triggers once for each creature that blocks the specified creature. ... In addition, it will trigger if a creature is put onto the battlefield blocking that creature. ..." / 509.4 "... A creature put onto the battlefield this way is “blocking” but, for the purposes of trigger events and effects, it never “blocked.”" / Aetherplasm ruling (2005): "The creature you put onto the battlefield may be the Aetherplasm you just returned to your hand. This allows it to dodge abilities like Deathgazer's."
+- Question: Deathgazer: "Whenever this creature blocks or becomes blocked by a nonblack creature, destroy that creature at end of combat." Aetherplasm (blue) blocks it, returns itself to hand and is put back onto the battlefield blocking Deathgazer. The old trigger's "that creature" is the old object (CR 400.7), but does the new Aetherplasm trigger Deathgazer again?
+- Decision: Yes. The engine follows CR 509.3d: Deathgazer becomes blocked by the new Aetherplasm, its ability triggers again, and the new Aetherplasm is destroyed at end of combat. Aetherplasm dodges only the abilities that already triggered for the old object.
+- Alternatives: Follow the ruling literally (the new blocker doesn't trigger "becomes blocked by", so Aetherplasm survives): what the 2005 ruling says, but it contradicts the current text of 509.3d, which names this case. The ruling is listed as superseded in `docs/rulings-exemptions/rulings-P006.tsv` rather than cited, since the engine contradicts its second sentence.
+- Why: The CR is newer than the ruling and explicit; 509.4's "never blocked" is about the blocking creature's own "blocks" triggers, which don't trigger (tested with Wall of Junk).
+- Affects: Aetherplasm with Deathgazer and other "becomes blocked by a creature" abilities; any effect putting a creature onto the battlefield blocking.
+- Code: `crates/mtg-engine/src/combat.rs` (`combat_trigger_matches`, `TriggerCond::BlockedByCreature`).
+- Tests: `tests/rulings/r_p006_activated_bounce.rs` (`aetherplasm_can_put_itself_back_but_deathgazer_sees_the_new_blocker`).
