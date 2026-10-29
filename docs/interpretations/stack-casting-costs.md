@@ -111,3 +111,27 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Plumb the Forbidden.
 - Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`); rendered back as one line by `crates/mtg-engine/src/oracle/render/cost_paid_copies.rs`.
 - Tests: `tests/rulings/r_p031_spell_copies.rs` (`plumb_the_forbidden_copies_for_each_creature_sacrificed`).
+
+## player-chosen-before-targets: Lodestone Bauble's "a player" is chosen as its targets are chosen, before them, among the players in range
+- Kind: interpretation
+- Status: decided
+- Rules: Lodestone Bauble: "Put up to four target basic land cards from a player's graveyard on top of their library in any order. That player draws a card at the beginning of the next turn's upkeep." / 601.2c "The player announces their choice of an appropriate object or player for each target the spell requires. ..." / 602.2b "The remainder of the process for activating an ability is identical to the process for casting a spell listed in rules 601.2b–i. ..." / 115.10a "... Unless that object or player is identified by the word “target” in the text of that spell or ability, ... it’s not a target." / ruling: "If you choose zero targets, you still choose a player. That player will draw a card at the beginning of the next turn’s upkeep."
+- Question: When and among whom is "a player" chosen, and how does it constrain the targets?
+- Decision: As the ability is activated, immediately before its targets are chosen: its controller chooses any player in their range of influence (not targeted, so a player with hexproof can be chosen), and every target must be a basic land card in that player's graveyard, both as targets are chosen and as it resolves. The choice is kept on the ability on the stack; "That player" is that player. By default the player with the most basic land cards in their graveyard is chosen.
+- Alternatives: Choosing the player after the targets (as their owner) works only with one or more targets; the ruling requires a choice with zero targets too.
+- Why: The targets' legality depends on the player, so it's chosen first, as with modes before targets.
+- Affects: Lodestone Bauble.
+- Code: `crates/mtg-engine/src/cards/lodestone_bauble.rs`; `crates/mtg-engine/src/stack.rs` (`choose_modes_and_targets`, the `choose_with_targets` hook).
+- Tests: `tests/cards/m_lodestone_bauble.rs` (`the_chosen_players_basic_lands_go_on_top_and_they_draw_next_upkeep`, `the_player_is_chosen_not_targeted`).
+
+## one-spell-spend-permission: North Star's permission applies to the symbols of the chosen spell's mana cost, and the player chooses the spell as they pay
+- Kind: interpretation
+- Status: decided
+- Rules: North Star: "For one spell this turn, you may spend mana as though it were mana of any type to pay that spell's mana cost. (Additional costs are still paid normally.)" / 609.4b "If an effect allows a player to spend mana “as though it were mana of any [type or color],” this affects only how the player may pay a cost. It doesn’t change that cost, and it doesn’t change what mana was actually spent to pay that cost. ..." / 601.2f "The player determines the total cost of the spell. Usually this is just the mana cost. Some spells have additional or alternative costs. ..." / 118.9 (alternative costs).
+- Question: Which spell uses the permission, which part of the total cost does it cover, and what about a spell cast for an alternative cost?
+- Decision: As each spell its controller casts this turn has its total cost determined (601.2f), they're asked whether to use the permission for it when it would change anything; using it uses it up. It covers, symbol for symbol, the mana symbols of the spell's mana cost (colored, hybrid and colorless: "any type") within the total cost; symbols that additional costs or cost increases add are paid normally. A spell cast for an alternative cost isn't paying its mana cost, so the permission doesn't apply to it. By default it's used only for a spell that couldn't be paid for without it.
+- Alternatives: Applying it automatically to the next spell (the "next spell" effects) ignores "for one spell" (the player's choice); applying it to the whole total cost ignores the reminder text.
+- Why: The text lets the player pick the spell; the reminder text limits it to the mana cost.
+- Affects: North Star.
+- Code: `crates/mtg-engine/src/cards/north_star.rs`; `crates/mtg-engine/src/casting.rs` (the `spend_permission` and `use_spend_permission` hooks).
+- Tests: `tests/cards/m_north_star.rs` (`any_type_includes_colorless_and_the_player_chooses_the_spell`, `additional_costs_are_still_paid_normally`).

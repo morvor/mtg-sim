@@ -52,3 +52,15 @@ Format and kinds: `docs/agents/items/interpretation-register.md`; index:
 - Affects: Canal Dredger.
 - Code: `crates/mtg-engine/src/draft.rs` (`Draft::last_card_recipient`).
 - Tests: `tests/cards/c5_game_start_draft.rs` (`canal_dredger_default_recipient_is_the_next_drafter_in_the_passing_direction`).
+
+## die-result-exchange-after-modifiers: Vedalken Squirrel-Whacker's exchange happens after the roll's modifiers, and the exchanged number is the roll's result
+- Kind: interpretation
+- Status: decided
+- Rules: Vedalken Squirrel-Whacker: "If you would roll one or more six-sided dice, instead roll them and you may exchange one result with this creature's base power or base toughness." / 706.2 "After the roll, the number indicated on the top face of the die before any modifiers is the natural result. ... After considering all applicable modifiers, the final number is the result of the die roll." / 613.4b "Layer 7b: Effects that set power and/or toughness to a specific number or value are applied. Effects that refer to the base power and/or toughness of a creature apply in this layer." / rulings: "After rolling one or more six-sided dice and seeing the results, you decide whether you want to make the exchange." and "Anything that references the \"result\" of a die roll is looking for the result after these modifications."
+- Question: When is the exchange made relative to optional modifiers (rerolls, +1), what does the die's result become for the roll's triggers and for "the result", and how long does the new base power or toughness last?
+- Decision: Once the modifiers have applied (the results are final), before the results are used and before the roll triggers anything: the die's result becomes the creature's old base value (its natural result is unchanged, so "a natural 6" triggers still see the top face), and the creature's base power or toughness is set to the old result by a layer-7b effect with a new timestamp that lasts as long as the permanent stays on the battlefield (later setting effects such as Square Up's apply over it; modifying effects and counters still apply to it). Each Squirrel-Whacker its controller controls offers one exchange, one after another.
+- Alternatives: Exchanging before modifiers would let a modifier change the exchanged number, against "seeing the results"; treating the exchange as changing the result only for the replacement's own purposes would leave roll triggers seeing the original number, but the exchanged number is what the roll's result is.
+- Why: The rulings put the decision after the results are seen, and a result "after these modifications" is the final one; the base value is a 7b characteristic (CR 208.4b).
+- Affects: Vedalken Squirrel-Whacker.
+- Code: `crates/mtg-engine/src/cards/vedalken_squirrel_whacker.rs`; `crates/mtg-engine/src/dice.rs` (`roll_dice`, the `dice_rolled` hook).
+- Tests: `tests/cards/m_vedalken_squirrel_whacker.rs` (`modifiers_apply_first_and_results_can_be_impossible_numbers`, `the_new_base_power_is_a_base_value_modifications_still_apply`).

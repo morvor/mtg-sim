@@ -971,6 +971,12 @@ impl Game {
         let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
         crate::permissions::spend_terms(opt.permission.as_ref(), &mut cost);
+        let mana_cost = opt
+            .alt_cost
+            .is_none()
+            .then_some(chars.mana_cost.as_ref())
+            .flatten();
+        crate::kw::spend_permission(self, p, card, mana_cost, &mut cost);
         crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
         self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
     }
@@ -1891,6 +1897,13 @@ impl Game {
         // mana of any color, as the permission it's cast with allows (CR 609.4b).
         crate::cost_rules::spend_any_type(self, p, id, &mut total);
         crate::permissions::spend_terms(opt.permission.as_ref(), &mut total);
+        // Permissions the player may choose to use for this spell (CR 609.4b).
+        let mana_cost = opt
+            .alt_cost
+            .is_none()
+            .then_some(chars.mana_cost.clone())
+            .flatten();
+        crate::kw::use_spend_permission(self, p, id, mana_cost.as_ref(), &mut total);
         // CR 118.13a: how symbols that can be paid in more than one way will be paid.
         crate::cost_rules::choose_payment_ways_for(self, p, Some(id), Some(id), &mut total);
         // CR 702.51a–b: once the total cost is determined, keywords such as convoke may

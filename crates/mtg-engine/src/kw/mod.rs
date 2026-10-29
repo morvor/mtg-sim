@@ -92,6 +92,62 @@ pub trait KeywordRules: Sync + Send {
     fn loyalty_removed_by_damage(&self, g: &Game, pw: ObjectId, n: u32) -> Option<u32> {
         None
     }
+    /// Called as player `p` rolls the dice `dice` (N-sided, not the planar die), after
+    /// the modifiers have applied (CR 706.2) and before the results are used or the
+    /// rolls trigger anything: a rule that changes the results it sees ("instead roll them
+    /// and you may exchange one result with ...") changes `dice` here. `bonus` is the roll
+    /// instruction's own modifier, already part of each die's result as it's used
+    /// (`RolledDie::result() + bonus`). Called for every registered implementation.
+    fn dice_rolled(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        dice: &mut [crate::dice::RolledDie],
+        bonus: i64,
+        source: Option<ObjectId>,
+    ) {
+    }
+    /// Choices made for the spell or ability `stack_obj` with its targets, before them
+    /// (CR 601.2c, 602.2b), that the targets' legality depends on: e.g. a player chosen
+    /// (not targeted) whose graveyard the targets must come from, kept in `ctx` and the
+    /// stack object for "that player". Returns false if a required choice can't be made.
+    /// Called for every registered implementation; one acts only on a `body` its own
+    /// rule marks.
+    fn choose_with_targets(
+        &self,
+        g: &mut Game,
+        stack_obj: ObjectId,
+        body: &Body,
+        ctx: &mut Ctx,
+    ) -> bool {
+        true
+    }
+    /// A permission to spend mana in another way to pay part of the total cost `cost` of
+    /// `card` cast by `p` (CR 609.4b: how the cost is paid, not what it is), for the
+    /// check whether it could be cast: changes `cost` as though the permission were
+    /// used. `mana_cost` is the spell's mana cost when it's cast paying it (not an
+    /// alternative cost). Called for every registered implementation.
+    fn spend_permission(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        card: ObjectId,
+        mana_cost: Option<&crate::mana::ManaCost>,
+        cost: &mut Cost,
+    ) {
+    }
+    /// As [`Self::spend_permission`], as `spell` is cast and its total cost is about to
+    /// be paid (CR 601.2g-h): the player may choose to use the permission (a use-once
+    /// permission is then used up). Called for every registered implementation.
+    fn use_spend_permission(
+        &self,
+        g: &mut Game,
+        p: PlayerId,
+        spell: ObjectId,
+        mana_cost: Option<&crate::mana::ManaCost>,
+        cost: &mut Cost,
+    ) {
+    }
     /// Cards `searcher` found searching `owner`'s library, before the searching effect
     /// puts them anywhere: returns true if this implementation's rule dealt with them
     /// instead (e.g. "they exile each card they find"), so the effect doesn't move them.
@@ -892,6 +948,52 @@ pub fn loyalty_removed_by_damage(g: &Game, pw: ObjectId, n: u32) -> u32 {
     registry()
         .iter()
         .fold(n, |n, r| r.loyalty_removed_by_damage(g, pw, n).unwrap_or(n))
+}
+
+/// See [`KeywordRules::dice_rolled`].
+pub fn dice_rolled(
+    g: &mut Game,
+    p: PlayerId,
+    dice: &mut [crate::dice::RolledDie],
+    bonus: i64,
+    source: Option<ObjectId>,
+) {
+    for r in registry() {
+        r.dice_rolled(g, p, dice, bonus, source);
+    }
+}
+
+/// See [`KeywordRules::choose_with_targets`].
+pub fn choose_with_targets(g: &mut Game, stack_obj: ObjectId, body: &Body, ctx: &mut Ctx) -> bool {
+    registry()
+        .iter()
+        .all(|r| r.choose_with_targets(g, stack_obj, body, ctx))
+}
+
+/// See [`KeywordRules::spend_permission`].
+pub fn spend_permission(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    mana_cost: Option<&crate::mana::ManaCost>,
+    cost: &mut Cost,
+) {
+    for r in registry() {
+        r.spend_permission(g, p, card, mana_cost, cost);
+    }
+}
+
+/// See [`KeywordRules::use_spend_permission`].
+pub fn use_spend_permission(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    mana_cost: Option<&crate::mana::ManaCost>,
+    cost: &mut Cost,
+) {
+    for r in registry() {
+        r.use_spend_permission(g, p, spell, mana_cost, cost);
+    }
 }
 
 /// See [`KeywordRules::draws_from_bottom`].
