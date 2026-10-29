@@ -359,7 +359,7 @@ fn bag_of_holding_and_conch_horn_finish_before_draw_triggers() {
 
 #[test]
 fn activating_sacrifice_abilities_in_response_to_themselves() {
-    cr!("602.2", "608.2", "701.21a");
+    cr!("602.2", "608.2", "701.21a", "406.3");
     ruling!(
         "Goblin Cannon",
         "You can activate Goblin Cannon's ability multiple times in response to the first activation. Goblin Cannon will be sacrificed the first time the ability resolves, but each activation still deals damage when it resolves."
@@ -394,6 +394,8 @@ fn activating_sacrifice_abilities_in_response_to_themselves() {
     t.resolve_all();
     assert_eq!(t.zone(card), Zone::Exile);
     assert!(t.obj_now(card).face_down);
+    // Not even its controller may look at it (CR 406.3).
+    assert!(!mtg_engine::player_control::can_see(&t.g, P0, t.g.current(card)));
     t.hand(P0, "Gray Ogre");
     activate_containing(&mut t, P0, vault, "Sacrifice ~.").unwrap();
     activate_containing(&mut t, P0, vault, "Sacrifice ~.").unwrap();

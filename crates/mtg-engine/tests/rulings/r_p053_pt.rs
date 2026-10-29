@@ -17,7 +17,7 @@ fn has_kw(t: &TestGame, id: ObjectId, kw: KeywordKind) -> bool {
 
 #[test]
 fn embiggen_counts_every_type_and_cant_target_a_brushwagg() {
-    cr!("205.3", "115.1");
+    cr!("205.3", "205.4", "115.1");
     ruling!(
         "Embiggen",
         "All subtypes count, including those that aren’t creature types."

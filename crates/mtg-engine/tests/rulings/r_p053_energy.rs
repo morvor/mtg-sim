@@ -501,6 +501,7 @@ fn razorfield_ripper_x_is_locked_in_as_the_trigger_resolves() {
 
 #[test]
 fn lightning_runner_untaps_creatures_that_arent_attacking() {
+    cr!("500.8");
     ruling!(
         "Lightning Runner",
         "You untap all creatures you control, including ones that aren't attacking."
