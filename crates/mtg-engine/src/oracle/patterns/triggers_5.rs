@@ -5,7 +5,7 @@
 //!   where X is the number of lands you control at that time" (Hazezon Tamar): a value
 //!   the delayed ability determines as it resolves (CR 603.7c, 608.2h).
 
-use super::{EffectPattern, FollowupPattern};
+use super::{EffectPattern, FollowupPattern, TriggerPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_effect_text, Builder};
 use crate::oracle::phrases::end;
@@ -198,3 +198,111 @@ fn copy_the_next_ability(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "triggers 5: copy the next [ability] you activate this turn when you activate it", priority: 105, parse: copy_the_next_ability } }
+
+/// "Whenever a player casts an instant or sorcery card" (Eye of the Storm): a spell cast
+/// from a card, so not a copy of a card (CR 601.2a, 707.12; a copy cast doesn't trigger
+/// it).
+fn casts_a_card(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let l = end(l);
+    let head = l.strip_suffix(" card")?;
+    if !(head.contains(" cast a ") || head.contains(" casts a ") || head.contains(" cast an ") || head.contains(" casts an ")) {
+        return None;
+    }
+    let (t, it, p) = crate::oracle::triggers::parse_trigger_condition(&format!("whenever {head} spell"))?;
+    let TriggerCond::CastSpell { who, filter } = t else {
+        return None;
+    };
+    Some((
+        TriggerCond::CastSpell {
+            who,
+            filter: Filter::and(vec![filter, Filter::Card]),
+        },
+        it,
+        p,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "triggers 5: [player] casts [a quality] card", priority: 100, parse: casts_a_card } }
+
+/// "Then that player copies each instant or sorcery card exiled with ~." (Eye of the
+/// Storm) after "exile it": the exile is linked to the ability (CR 607.2a), and the player
+/// the trigger event names makes a copy of each card of that kind exiled with it that's
+/// still in exile, so they own and control the copies (CR 707.12).
+fn that_player_copies_each(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let l = end(&lower);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    let Some(r) = l
+        .strip_prefix("that player copies each ")
+        .and_then(|r| r.strip_suffix(" exiled with ~"))
+    else {
+        return false;
+    };
+    if !matches!(b.it_player, PlayerRef::TriggerPlayer) {
+        return false;
+    }
+    let Some((f, false, tail)) = crate::oracle::phrases::parse_object_phrase(r) else {
+        return false;
+    };
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return false;
+    }
+    fn link_last_exile(e: &mut Effect) -> bool {
+        match e {
+            Effect::Exile {
+                face_down: false,
+                link,
+                ..
+            } => {
+                *link = true;
+                true
+            }
+            Effect::Seq(v) => v.last_mut().is_some_and(link_last_exile),
+            _ => false,
+        }
+    }
+    if !link_last_exile(prev) {
+        return false;
+    }
+    let copy = Effect::AsPlayer {
+        who: PlayerRef::TriggerPlayer,
+        effect: Box::new(Effect::CopyCard {
+            what: Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Linked)),
+                Filter::InZone(ZoneKind::Exile),
+                f,
+            ])),
+            named: None,
+        }),
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, copy]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "triggers 5: then that player copies each [card] exiled with ~", priority: 44, apply: that_player_copies_each } }
+
+/// "For each copy, the player may cast the copy without paying its mana cost." (Eye of
+/// the Storm): the player who made the copies casts any of them, in the order they choose.
+fn the_player_may_cast_each_copy(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !matches!(b.it_player, PlayerRef::TriggerPlayer)
+        || !matches!(
+            l,
+            "for each copy, the player may cast the copy without paying its mana cost"
+                | "for each copy, that player may cast the copy without paying its mana cost"
+        )
+    {
+        return None;
+    }
+    let effect = crate::oracle::effects::parse_sentence(
+        "you may cast any number of the copies without paying their mana costs",
+        b,
+    )?;
+    Some(Effect::AsPlayer {
+        who: PlayerRef::TriggerPlayer,
+        effect: Box::new(effect),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "triggers 5: for each copy, the player may cast the copy", priority: 100, parse: the_player_may_cast_each_copy } }
