@@ -237,7 +237,85 @@ enum CandScope {
     NotEntry,
 }
 
+/// A replacement effect's key as a number (as `prevention::damage_prevented` keys them).
+fn numeric_key(k: ReplKey) -> u64 {
+    match k {
+        ReplKey::Static(o, u) => (o.0 as u64) << 32 ^ u,
+        ReplKey::Instance(i) => (1u64 << 63) | i as u64,
+        ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
+    }
+}
+
 impl Game {
+    /// Before simultaneous damage events are replaced: for each
+    /// [`ReplacementAction::PreventPerSource`] effect ("prevent X of that damage", Cover of
+    /// Winter) that would apply to a source's damage to two or more recipients, more than X
+    /// in all, its controller divides X among those recipients (Cover of Winter's ruling:
+    /// "you decide how to divide the prevention effect"). Recorded in
+    /// `per_source_division`; an invalid answer prevents in the order the events are
+    /// replaced.
+    pub(crate) fn divide_per_source_prevention(
+        &mut self,
+        events: &[(ObjectId, Entity, u32)],
+        combat: bool,
+    ) {
+        // (effect key, damage source, chooser, effect source, X, event indices)
+        type Group = (u64, ObjectId, PlayerId, Option<ObjectId>, u32, Vec<usize>);
+        let mut groups: Vec<Group> = Vec::new();
+        for (i, (s, t, a)) in events.iter().enumerate() {
+            let ev = ReplEvent::Damage {
+                source: *s,
+                target: *t,
+                amount: *a,
+                combat,
+            };
+            for c in self.replacement_candidates(&ev, &[], CandScope::All) {
+                let ReplacementAction::PreventPerSource(v) = &c.def.action else {
+                    continue;
+                };
+                let key = numeric_key(c.key);
+                if let Some(g) = groups.iter_mut().find(|g| g.0 == key && g.1 == *s) {
+                    g.5.push(i);
+                    continue;
+                }
+                let mut ctx = Ctx::new(c.source, c.controller);
+                ctx.link = c.link;
+                let x = self.eval_value(v, &ctx).max(0) as u32;
+                groups.push((key, *s, c.controller, c.source, x, vec![i]));
+            }
+        }
+        for (key, source, chooser, effect_source, x, idx) in groups {
+            let total: u32 = idx.iter().map(|i| events[*i].2).sum();
+            if idx.len() < 2 || x == 0 || total <= x {
+                continue;
+            }
+            let recipients: Vec<Entity> = idx.iter().map(|i| events[*i].1).collect();
+            let ans = self.ask(
+                chooser,
+                Decision::Divide {
+                    source: effect_source.unwrap_or(source),
+                    total: x,
+                    recipients: recipients.clone(),
+                    min_each: 0,
+                },
+            );
+            let div: Vec<u32> = match ans {
+                Answer::Numbers(v)
+                    if v.len() == idx.len()
+                        && v.iter().all(|n| *n >= 0)
+                        && v.iter().sum::<i64>() == x as i64
+                        && v.iter().zip(&idx).all(|(n, i)| *n <= events[*i].2 as i64) =>
+                {
+                    v.into_iter().map(|n| n as u32).collect()
+                }
+                _ => continue,
+            };
+            for (t, n) in recipients.into_iter().zip(div) {
+                self.per_source_division.push((key, source, t, n));
+            }
+        }
+    }
+
     /// Runs the replacement pipeline on a proposed event and returns the event(s) that
     /// actually happen.
     pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
@@ -1356,11 +1434,7 @@ impl Game {
                 }
             }
         }
-        let key = match cand.key {
-            ReplKey::Static(o, u) => (o.0 as u64) << 32 ^ u,
-            ReplKey::Instance(i) => (1u64 << 63) | i as u64,
-            ReplKey::Player(p, u) => (3u64 << 62) ^ ((p.0 as u64) << 48) ^ u,
-        };
+        let key = numeric_key(cand.key);
         let mut action = cand.def.action.clone();
         // "... instead. When you do, ...": the instruction after the modified event (the
         // innermost one's first).
@@ -1415,20 +1489,42 @@ impl Game {
                 let inst = cand
                     .instance
                     .and_then(|id| self.replacements.iter().position(|r| r.id == id));
+                // A budget shared by simultaneous damage events: X of each source's damage
+                // (`PreventPerSource`, Cover of Winter), or a static "prevent [up to N] and
+                // then ..." whose N counts down as it prevents each 1 damage to its
+                // recipient (Rock Hydra's +1/+1 counters, removed right after; CR 615.5,
+                // 615.7). Keyed by the source or the recipient.
                 let per_source = matches!(cand.def.action, ReplacementAction::PreventPerSource(_));
+                let per_recipient = inst.is_none()
+                    && matches!(
+                        cand.def.action,
+                        ReplacementAction::PreventAndThen(Some(_), _)
+                    );
+                let budget_key = match (per_source, target) {
+                    (true, _) => Some(source),
+                    (false, Entity::Object(o)) if per_recipient => Some(o),
+                    _ => None,
+                };
                 let used_by_source = |g: &Self| -> u32 {
                     g.prevented_per_source
                         .iter()
-                        .filter(|(k, s, _)| *k == key && *s == source)
+                        .filter(|(k, s, _)| *k == key && Some(*s) == budget_key)
                         .map(|(_, _, n)| *n)
                         .sum()
                 };
+                let division = self
+                    .per_source_division
+                    .iter()
+                    .find(|d| d.0 == key && d.1 == source && d.2 == target)
+                    .copied();
                 let shield = match &limit {
                     None => None,
                     Some(v) => Some(match inst.and_then(|i| self.replacements[i].remaining) {
                         Some(r) => r,
                         // What's left of X for this source's simultaneous damage.
-                        None if per_source => (self.eval_value(v, &ctx).max(0) as u32)
+                        // The part of X its controller put on this recipient.
+                        None if per_source && division.is_some() => division.map_or(0, |d| d.3),
+                        None if budget_key.is_some() => (self.eval_value(v, &ctx).max(0) as u32)
                             .saturating_sub(used_by_source(self)),
                         None => self.eval_value(v, &ctx).max(0) as u32,
                     }),
@@ -1463,8 +1559,17 @@ impl Game {
                         }
                     }
                 }
-                if per_source && prevented > 0 {
-                    self.prevented_per_source.push((key, source, prevented));
+                if let (true, Some(i)) = (
+                    per_source && !unpreventable,
+                    self.per_source_division
+                        .iter()
+                        .position(|d| d.0 == key && d.1 == source && d.2 == target),
+                ) {
+                    let d = &mut self.per_source_division[i].3;
+                    *d = d.saturating_sub(prevented);
+                }
+                if let (Some(b), true) = (budget_key, prevented > 0) {
+                    self.prevented_per_source.push((key, b, prevented));
                 }
                 crate::prevention::damage_prevented(
                     self,

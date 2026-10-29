@@ -297,6 +297,30 @@ fn jotun_grunt_cumulative_upkeep_puts_cards_from_a_single_graveyard_on_the_botto
 }
 
 #[test]
+fn jotun_grunt_chooses_a_graveyard_for_each_age_counter() {
+    cr!("702.24a");
+    ruling!(
+        "Jötun Grunt",
+        "you may choose a different graveyard for each age counter"
+    );
+    let mut t = TestGame::new(2);
+    let grunt = t.battlefield(P0, "Jötun Grunt");
+    t.g.add_counters(Entity::Object(grunt), "age", 1, None);
+    let a = t.graveyard(P1, "Lightning Bolt");
+    let b = t.graveyard(P1, "Shock");
+    let c = t.graveyard(P0, "Grizzly Bears");
+    let d = t.graveyard(P0, "Memnite");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    t.answer_choose(P0, &[Entity::Object(c), Entity::Object(d)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Draw);
+    assert!(t.on_battlefield(grunt), "{}", t.dump_log());
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.graveyard_size(P0), 0);
+}
+
+#[test]
 fn rift_elemental_removes_a_time_counter_from_a_suspended_card() {
     cr!("702.62b", "118.3");
     assert_supported(&["Rift Elemental"]);

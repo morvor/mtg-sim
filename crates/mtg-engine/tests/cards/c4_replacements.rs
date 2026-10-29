@@ -170,7 +170,6 @@ fn lava_burst_damage_to_a_creature_cant_be_prevented_but_to_a_player_can() {
 #[test]
 fn rock_hydra_prevents_damage_up_to_its_counters_removing_one_for_each() {
     cr!("615.7", "615.1a");
-    interp!("per-point-prevention-batch");
     assert_supported(&["Rock Hydra"]);
     let mut t = TestGame::new(2);
     let hydra = t.battlefield(P0, "Rock Hydra");
@@ -182,7 +181,7 @@ fn rock_hydra_prevents_damage_up_to_its_counters_removing_one_for_each() {
     // 3 damage, 2 counters: 2 prevented and both counters removed, 1 dealt.
     assert_eq!(t.counters(hydra, "+1/+1"), 0);
     assert_eq!(t.g.obj(hydra).damage, 1);
-    // No counters: nothing is prevented.
+    // More counters than damage: all of it is prevented, one counter per 1 damage.
     let mut t = TestGame::new(2);
     let hydra = t.battlefield(P0, "Rock Hydra");
     t.g.add_counters(Entity::Object(hydra), "+1/+1", 5, None);
@@ -192,6 +191,25 @@ fn rock_hydra_prevents_damage_up_to_its_counters_removing_one_for_each() {
     t.resolve();
     assert_eq!(t.counters(hydra, "+1/+1"), 3);
     assert_eq!(t.g.obj(hydra).damage, 0);
+}
+
+#[test]
+fn rock_hydra_counts_its_counters_down_across_simultaneous_damage() {
+    // Each 1 damage is prevented only while a counter is left for it: two blockers' 2 damage
+    // each against 3 counters prevents 3 and deals 1 (CR 615.7: the number of events or
+    // sources doesn't matter).
+    cr!("615.7");
+    let mut t = TestGame::new(2);
+    let hydra = t.battlefield(P0, "Rock Hydra");
+    t.g.add_counters(Entity::Object(hydra), "+1/+1", 3, None);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.g.deal_damage_batch(
+        vec![(a, Entity::Object(hydra), 2), (b, Entity::Object(hydra), 2)],
+        true,
+    );
+    assert_eq!(t.counters(hydra, "+1/+1"), 0);
+    assert_eq!(t.g.obj(hydra).damage, 1);
 }
 
 #[test]
@@ -384,4 +402,24 @@ fn cover_of_winter_prevents_x_of_each_creatures_combat_damage() {
     t.attack(&[(wurm, Entity::Player(P0))], &[(wall, wurm)]);
     let dealt = (20 - t.life(P0)) + t.obj_now(wall).damage as i32;
     assert_eq!(dealt, 4, "6 damage, 2 of it prevented");
+}
+
+#[test]
+fn cover_of_winter_controller_divides_x_among_one_creatures_recipients() {
+    cr!("615.7");
+    ruling!("Cover of Winter", "you decide how to divide the prevention effect");
+    for (division, wall_damage, life) in [(vec![0, 2], 3, 19), (vec![2, 0], 1, 17), (vec![1, 1], 2, 18)] {
+        let mut t = TestGame::new(2);
+        let cover = t.battlefield(P0, "Cover of Winter");
+        t.g.add_counters(Entity::Object(cover), "age", 2, None);
+        let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+        let wall = t.battlefield(P0, "Wall of Wood");
+        t.answer(P0, DecisionKind::Divide, Answer::Numbers(division));
+        t.g.deal_damage_batch(
+            vec![(wurm, Entity::Object(wall), 3), (wurm, Entity::Player(P0), 3)],
+            true,
+        );
+        assert_eq!(t.g.obj(wall).damage, wall_damage);
+        assert_eq!(t.life(P0), life);
+    }
 }
