@@ -80,3 +80,28 @@ pub fn next_upkeep(t: &mut TestGame) {
     t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
     t.settle();
 }
+
+/// The index (among its activated abilities, as `TestGame::activate` counts them) of the
+/// activated ability of `src` whose text contains `text`.
+pub fn ability_index(t: &mut TestGame, src: ObjectId, text: &str) -> usize {
+    t.g.recompute();
+    t.g.obj(t.g.current(src))
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+        .position(|a| a.text.contains(text))
+        .unwrap_or_else(|| panic!("no activated ability with {text:?}"))
+}
+
+/// `p` activates the ability of `src` whose text contains `text`.
+pub fn act(
+    t: &mut TestGame,
+    p: PlayerId,
+    src: ObjectId,
+    text: &str,
+    targets: &[Entity],
+) -> Result<Option<ObjectId>, mtg_engine::casting::Illegal> {
+    let i = ability_index(t, src, text);
+    t.activate(p, src, i, targets)
+}
