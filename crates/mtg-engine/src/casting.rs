@@ -944,8 +944,25 @@ impl Game {
             })
             .collect();
         for b in bodies {
-            if b.modal.is_none() && !self.targets_possible(&b.targets, &ctx, card) {
-                return false;
+            match &b.modal {
+                None => {
+                    if !self.targets_possible(&b.targets, &ctx, card) {
+                        return false;
+                    }
+                }
+                // A modal spell needs a mode that can be chosen: one with legal targets
+                // (CR 700.2a), as `choose_modes_and_targets` requires when it's cast.
+                Some(modal) => {
+                    let min = self.eval_value(&modal.min, &ctx).max(0);
+                    if min > 0
+                        && !modal
+                            .modes
+                            .iter()
+                            .any(|m| self.targets_possible(&m.targets, &ctx, card))
+                    {
+                        return false;
+                    }
+                }
             }
         }
         // Aura spells need a legal object to enchant (CR 303.4a).
