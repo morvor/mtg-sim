@@ -236,3 +236,46 @@ fn dread_wight_paralyzes_its_blocker_until_the_counter_is_removed() {
     assert!(!t.obj_now(wall).tapped);
 }
 
+
+#[test]
+fn scars_of_the_veteran_counts_the_damage_prevented_at_the_next_end_step() {
+    cr!("615.5", "603.7a", "603.7c");
+    supported("Scars of the Veteran");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let pyro = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    let scars = t.hand(P0, "Scars of the Veteran");
+    mana(&mut t, P0);
+    t.cast_with(P0, scars, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    t.g.deal_damage(pyro, Entity::Object(bears), 3, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.obj_now(bears).damage, 0);
+    assert_eq!(t.counters(bears, "+0/+1"), 0, "not before the end step");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+0/+1"), 3);
+    assert_eq!(t.pt(bears), (2, 5));
+}
+
+#[test]
+fn scars_of_the_veteran_on_a_player_puts_no_counters() {
+    cr!("615.5");
+    let mut t = TestGame::new(2);
+    let pyro = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    let scars = t.hand(P0, "Scars of the Veteran");
+    mana(&mut t, P0);
+    t.cast_with(P0, scars, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+    t.g.deal_damage(pyro, Entity::Player(P0), 9, false);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18, "7 of the 9 damage prevented");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.g.delayed_triggers.is_empty());
+}
