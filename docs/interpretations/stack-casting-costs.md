@@ -109,5 +109,5 @@ index: `docs/INTERPRETATIONS.md`.
 - Alternatives: Trigger at the moment the cost is paid (601.2h): nothing observable differs, since triggered abilities wait until a player would receive priority (603.3) and the spell is cast by then.
 - Why: The same template as casualty, whose CR text spells it out.
 - Affects: Plumb the Forbidden.
-- Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`).
+- Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`); rendered back as one line by `crates/mtg-engine/src/oracle/render/cost_paid_copies.rs`.
 - Tests: `tests/rulings/r_p031_spell_copies.rs` (`plumb_the_forbidden_copies_for_each_creature_sacrificed`).
