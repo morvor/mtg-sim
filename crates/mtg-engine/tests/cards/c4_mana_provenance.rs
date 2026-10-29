@@ -86,6 +86,7 @@ fn rain_of_riches_gives_cascade_to_the_first_spell_cast_with_treasure_mana() {
     let s2 = t.cast(P0, b2).go();
     assert!(has(&mut t, s2, KeywordKind::Cascade));
     // Granted as the spell becomes cast, so its cascade triggers (CR 702.85a).
+    t.settle();
     assert_eq!(t.stack_len(), 2, "the spell and its cascade trigger");
     t.resolve_all();
     // The second one this turn: none.
