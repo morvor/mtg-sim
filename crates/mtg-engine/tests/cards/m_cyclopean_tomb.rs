@@ -13,6 +13,7 @@ fn is_swamp(t: &TestGame, id: ObjectId) -> bool {
 #[test]
 fn after_it_dies_each_upkeep_one_of_its_lands_loses_its_mire_counters() {
     cr!("603.7", "603.7a");
+    interp!("cyclopean-tomb-land-choice");
     ruling!("Cyclopean Tomb", "triggers during each of your upkeeps for the rest of the game");
     ruling!("Cyclopean Tomb", "This effect is not tied to the Tomb remaining on the battlefield.");
     let mut t = TestGame::new(2);

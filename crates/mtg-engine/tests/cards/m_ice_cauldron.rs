@@ -74,6 +74,7 @@ fn x_of_zero_charges_it_with_no_mana() {
 #[test]
 fn only_the_last_exiled_card_can_be_cast_with_the_mana() {
     cr!("106.6", "607.2e");
+    interp!("ice-cauldron-last-exiled");
     ruling!("Ice Cauldron", "the mana can only be used for the card that was exiled by the Cauldron when the most recent charge counter was put there");
     let mut t = TestGame::new(2);
     let cauldron = t.battlefield(P0, "Ice Cauldron");

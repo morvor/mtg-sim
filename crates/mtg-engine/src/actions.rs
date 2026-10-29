@@ -1244,6 +1244,7 @@ impl Game {
         if !self.is_in_zone(obj, Zone::Battlefield) || o.tapped {
             return false;
         }
+        crate::kw::before_tap(self, obj);
         self.objects[obj.0 as usize].tapped = true;
         self.dirty = true;
         self.emit(Event::Tapped {
@@ -1816,6 +1817,14 @@ impl Game {
             .into_iter()
             .filter(|(_, t, a)| *a > 0 && self.valid_damage_recipient(*t))
             .collect();
+        // Replacement effects that change the source or recipient first ("if it would deal
+        // damage or be dealt damage, instead it's turned face up and ...").
+        if !events.is_empty() {
+            crate::kw::before_damage(self, &events);
+            if self.dirty {
+                self.recompute();
+            }
+        }
         // CR 616.1: players choose among replacement effects for simultaneous events in
         // APNAP order.
         let apnap = self.apnap();

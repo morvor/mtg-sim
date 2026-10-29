@@ -28,3 +28,27 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: Enchantment Alteration.
 - Code: `crates/mtg-engine/src/oracle/patterns/attach_moves.rs` (`to_another_permanent_of_that_type`).
 - Tests: `tests/cards/c4_attach_moves.rs` (`enchantment_alteration_moves_an_aura_to_a_permanent_of_its_hosts_type`, `enchantment_alteration_treats_a_land_creature_host_as_a_creature`).
+
+## ice-cauldron-last-exiled: Ice Cauldron's "last card exiled with ~" is the last card its first ability exiled with a permission to cast it
+- Kind: interpretation
+- Status: provisional
+- Rules: Ice Cauldron: "{X}, {T}: You may exile a nonland card from your hand. You may cast that card for as long as it remains exiled. ... / {T}, Remove a charge counter from this artifact: Add this artifact's last noted type and amount of mana. Spend this mana only to cast the last card exiled with this artifact." / 607.2a "If an object has an activated or triggered ability printed on it that instructs a player to exile one or more cards and an ability printed on it that refers either to “the exiled cards” or to cards “exiled with [this object],” these abilities are linked. ..."
+- Question: Which card is "the last card exiled with" the Cauldron, and is it still that card once it's cast from exile?
+- Decision: The card its first ability most recently exiled (and gave the permission to cast); the mana can be spent only to cast a spell that was that card in exile as it was cast (the spell is a new object, CR 400.7, whose previous object was the exiled card). If an activation exiled nothing, the card exiled before stays the last one.
+- Alternatives: Track only the card exiled by the activation that put the most recent charge counter (the ruling's wording "the card that was exiled ... when the most recent charge counter was put there"), so that a charge without an exile allows no spell: the card's text says "the last card exiled", which an activation exiling nothing doesn't change.
+- Why: The text names the most recent card the Cauldron exiled; the ruling describes the usual case, where each charge exiles a card.
+- Affects: Ice Cauldron.
+- Code: `crates/mtg-engine/src/cards/ice_cauldron.rs` (`on_event`, `custom_filter`).
+- Tests: `tests/cards/m_ice_cauldron.rs` (`only_the_last_exiled_card_can_be_cast_with_the_mana`).
+
+## cyclopean-tomb-land-choice: Cyclopean Tomb's controller chooses which of its lands loses its mire counters, among those with mire counters
+- Kind: policy
+- Status: provisional
+- Rules: Cyclopean Tomb: "... at the beginning of each of your upkeeps for the rest of the game, remove all mire counters from a land that a mire counter was put onto with this artifact but that a mire counter has not been removed from with this artifact." / ruling: "As it resolves, you must remove a mire counter from a land that had a mire counter put on it by that instance of Cyclopean Tomb ..."
+- Question: Several lands qualify: which one? And does a qualifying land that no longer has mire counters (they were removed some other way) use up an upkeep?
+- Decision: The Tomb's controller chooses among the qualifying lands that still have mire counters (all qualifying lands if none has any). A land stops qualifying once mire counters have been removed from it this way; removing none (it had none) doesn't count as removing one "with ~".
+- Alternatives: Choose among every qualifying land, including those with no mire counters, which lets the controller waste each upkeep's removal.
+- Why: "Remove all mire counters from a land" leaves the choice of land to the player instructed; the ruling's "you must remove a mire counter" reads as the removal actually happening when it can.
+- Affects: Cyclopean Tomb.
+- Code: `crates/mtg-engine/src/cards/cyclopean_tomb.rs` (`custom_effect`, `REMOVE`).
+- Tests: `tests/cards/m_cyclopean_tomb.rs` (`after_it_dies_each_upkeep_one_of_its_lands_loses_its_mire_counters`).

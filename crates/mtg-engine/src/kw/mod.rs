@@ -107,6 +107,18 @@ pub trait KeywordRules: Sync + Send {
     fn card_revealed(&self, g: &Game, card: ObjectId) -> bool {
         false
     }
+    /// Replacement effects that act on a permanent that would become tapped, before it
+    /// does ("if it would become tapped, instead it's turned face up and becomes tapped").
+    /// Called for every registered implementation.
+    fn before_tap(&self, g: &mut Game, obj: ObjectId) {}
+    /// Replacement effects that act on the sources and recipients of damage about to be
+    /// dealt (`events`: source, recipient, amount), before it's dealt. Called for every
+    /// registered implementation.
+    fn before_damage(&self, g: &mut Game, events: &[(ObjectId, Entity, u32)]) {}
+    /// Replacement effects that act on the creatures that would assign combat damage in
+    /// this combat damage step (`creatures`), before damage is assigned (CR 510.1).
+    /// Called for every registered implementation.
+    fn before_combat_damage_assignment(&self, g: &mut Game, creatures: &[ObjectId]) {}
     /// A replacement of beginning a turn (CR 614.10): `p` would begin a turn. Returns true
     /// if this implementation's rule skips that turn instead. Called for every registered
     /// implementation until one skips it.
@@ -826,6 +838,27 @@ pub fn replace_counter(g: &mut Game, spell: ObjectId, cause: crate::event_causes
 /// See [`KeywordRules::card_revealed`].
 pub fn card_revealed(g: &Game, card: ObjectId) -> bool {
     registry().iter().any(|r| r.card_revealed(g, card))
+}
+
+/// See [`KeywordRules::before_tap`].
+pub fn before_tap(g: &mut Game, obj: ObjectId) {
+    for r in registry() {
+        r.before_tap(g, obj);
+    }
+}
+
+/// See [`KeywordRules::before_damage`].
+pub fn before_damage(g: &mut Game, events: &[(ObjectId, Entity, u32)]) {
+    for r in registry() {
+        r.before_damage(g, events);
+    }
+}
+
+/// See [`KeywordRules::before_combat_damage_assignment`].
+pub fn before_combat_damage_assignment(g: &mut Game, creatures: &[ObjectId]) {
+    for r in registry() {
+        r.before_combat_damage_assignment(g, creatures);
+    }
 }
 
 /// See [`KeywordRules::replace_turn_begin`].

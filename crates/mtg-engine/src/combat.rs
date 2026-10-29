@@ -2191,6 +2191,11 @@ pub fn combat_damage_step(g: &mut Game, first_strike_step: bool) {
     } else {
         participants.clone()
     };
+    // Replacement effects on creatures that would assign combat damage (CR 510.1).
+    crate::kw::before_combat_damage_assignment(g, &deals);
+    if g.dirty {
+        g.recompute();
+    }
     let mut assignments: Vec<(ObjectId, Entity, u32)> = Vec::new();
     // Attacking player assigns first, then defending players (CR 510.1).
     let attackers: Vec<&AttackerInfo> = combat
