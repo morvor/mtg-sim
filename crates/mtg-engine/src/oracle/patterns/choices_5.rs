@@ -348,3 +348,76 @@ fn anywhere_discarded(v: &mut serde_json::Value) {
 }
 
 inventory::submit! { EffectPattern { name: "[cards] you discarded this way (your own discard)", priority: 200, parse: you_discarded_this_way } }
+
+/// "for each land target player controls in excess of the number you control, choose a
+/// land that player controls" (Equipoise): as many of that player's lands as they control
+/// beyond the number you control (none if they don't control more), chosen by you; "the
+/// chosen permanents" afterward. With "Repeat this process for artifacts and creatures",
+/// each pass counts again (Equipoise's ruling).
+fn choose_in_excess(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (clause, then) = match l.split_once(", then ") {
+        Some((c, t)) => (c, Some(t)),
+        None => (l, None),
+    };
+    let r = clause.strip_prefix("for each ")?;
+    let (noun, r) = r.split_once(" target player controls in excess of the number you control, choose a ")?;
+    let noun2 = r
+        .strip_suffix(" that player controls")
+        .or_else(|| r.strip_suffix(" they control"))?;
+    if noun != noun2 || noun.contains(' ') {
+        return None;
+    }
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let first = b.targets.len();
+    let slot = b.add_target(
+        TargetSpec::player(PlayerFilter::Any, "target player"),
+        "target player",
+    );
+    let theirs = Filter::and(vec![
+        f.clone(),
+        Filter::Permanent,
+        Filter::ControlledByPlayer(Box::new(PlayerRef::Target(slot))),
+    ]);
+    let yours = Filter::and(vec![f, Filter::Permanent, Filter::ControlledBy(PlayerRel::You)]);
+    let excess = Value::Max(
+        Box::new(Value::c(0)),
+        Box::new(Value::Diff(
+            Box::new(Value::Count(theirs.clone())),
+            Box::new(Value::Count(yours)),
+        )),
+    );
+    let chosen = super::choice_grammar_objects::CHOSEN;
+    let choose = Effect::Store {
+        var: chosen,
+        sel: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: theirs,
+            count: excess,
+            up_to: false,
+            store: None,
+        },
+    };
+    for name in [
+        "the chosen permanents".to_string(),
+        format!("the chosen {noun}s"),
+        format!("those {noun}s"),
+    ] {
+        b.named.push((name, Sel::Var(chosen)));
+    }
+    let Some(then) = then else {
+        return Some(choose);
+    };
+    let Some(rest) = crate::oracle::effects::parse_clause(then, b) else {
+        b.targets.truncate(first);
+        return None;
+    };
+    Some(Effect::seq(vec![choose, rest]))
+}
+
+inventory::submit! { EffectPattern { name: "for each [permanent] target player controls in excess of the number you control, choose a [permanent] that player controls", priority: 90, parse: choose_in_excess } }

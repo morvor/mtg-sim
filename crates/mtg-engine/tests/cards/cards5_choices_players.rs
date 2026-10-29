@@ -562,3 +562,32 @@ fn queen_kayla_may_choose_each_mana_value_and_returns_them_together() {
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert_eq!(t.hand_size(P0), 3);
 }
+
+#[test]
+fn equipoise_phases_out_what_the_target_player_controls_in_excess() {
+    cr!("702.26a", "608.2c");
+    ruling!("Equipoise", "You perform the selection and phasing out on lands first");
+    compiles("Equipoise");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Equipoise");
+    t.lands(P0, "Plains", 1);
+    t.battlefield(P0, "Grizzly Bears");
+    let lands = t.lands(P1, "Forest", 3);
+    let golem = t.battlefield(P1, "Ornithopter");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    // Lands: two in excess. Artifacts: one (Ornithopter). Creatures: after the artifact
+    // creature phased out, P1 controls two creatures to P0's one: one in excess.
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P0, &[Entity::Object(lands[0]), Entity::Object(lands[1])]);
+    t.answer_choose(P0, &[Entity::Object(golem)]);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let out = |t: &TestGame, id: ObjectId| t.g.obj(id).phased_out;
+    assert!(out(&t, lands[0]) && out(&t, lands[1]) && !out(&t, lands[2]));
+    assert!(out(&t, golem));
+    assert!(out(&t, bears));
+    assert!(!out(&t, elves));
+}
