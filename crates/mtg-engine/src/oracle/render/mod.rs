@@ -29,7 +29,9 @@ mod custom_effects;
 mod custom_extra;
 mod custom_filters;
 mod custom_more;
+mod custom_nodes;
 mod dig;
+mod draft_terms;
 mod each_player;
 mod effect_terms;
 mod effects;
@@ -44,6 +46,7 @@ mod history_values;
 mod joined_lines;
 mod keywords;
 mod library_top;
+mod linked_terms;
 mod more_terms;
 mod named_effects;
 mod named_qualities;
@@ -101,6 +104,10 @@ pub struct FaceInfo {
     /// The face has tiered (CR 702.183): its modes are written "• [cost] — [effect]"
     /// after the keyword.
     pub tiered: bool,
+    /// What the face's ability that notes an object for its linked abilities noted: "the
+    /// chosen creature", "the creature put onto the battlefield with ~" (CR 607.2c,
+    /// 607.2d).
+    pub noted: Option<String>,
 }
 
 impl FaceInfo {
@@ -121,10 +128,12 @@ impl FaceInfo {
                 matches!(&a.kind, AbilityKind::Keyword(k)
                     if k.kind == crate::keywords::KeywordKind::Tiered)
             }),
+            noted: None,
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info.reveal_card = reveal_card(&face.chars.abilities);
         info.behold = behold_terms::beheld(&face.chars.abilities);
+        info.noted = linked_terms::noted_noun(&face.chars.abilities);
         info
     }
     fn has_subtype(&self, s: &str) -> bool {
@@ -196,7 +205,10 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             skip = n - 1;
             continue;
         }
-        if let Some((n, line)) = r.same_is_true_group(&abilities[i..]) {
+        if let Some((n, line)) = r
+            .same_is_true_group(&abilities[i..])
+            .or_else(|| draft_terms::removed_keywords_group(&abilities[i..]))
+        {
             out.lines.push(line);
             skip = n - 1;
             continue;
@@ -876,6 +888,9 @@ pub struct Renderer<'a> {
     /// Rendering a triggered ability whose event is excess damage dealt: its amount is
     /// "that excess damage" (CR 120.10).
     pub(crate) excess_trigger: bool,
+    /// The player actions a triggered ability's event is one of ("Whenever you waterbend,
+    /// earthbend, firebend, or airbend"), for "if you've done all four this turn".
+    pub(crate) trigger_actions: Vec<smol_str::SmolStr>,
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
@@ -1065,6 +1080,7 @@ impl<'a> Renderer<'a> {
             it_done: None,
             control_past: false,
             excess_trigger: false,
+            trigger_actions: Vec::new(),
             batch_once: false,
             batch_per_source: false,
             prev_mandatory: false,
@@ -1279,12 +1295,29 @@ impl<'a> Renderer<'a> {
         // (targets chosen once for each such player).
         let per_player = b.targets.iter().find_map(|t| t.per_player.clone());
         let self_named = self.self_salient;
+        let before = self.clone();
         let s = self.with_targets(&b.targets, |r| {
             let s = r.effect_sentences(&b.effect);
             let s = r.choose_unmentioned_targets(s);
             r.define_stored_x(s)
         });
         let s = where_x_self_pronoun(&s, self_named);
+        // "Choose any number of target creatures. Each of those creatures gains persist
+        // until end of turn.": several targets of one instruction named first (as they're
+        // chosen, CR 601.2c), then referred to. (Only for wordings without markup: the
+        // comparison doesn't look inside alternatives nested in alternatives.)
+        let s = match self.targets_named_first(before, b) {
+            Some(first)
+                if !s.contains('{')
+                    && !first.contains('{')
+                    && !s.contains('X')
+                    && !first.contains('X') =>
+            {
+                format!("{{alt:{s}|{first}}}")
+            }
+            _ => s,
+        };
+
         match per_player {
             Some(pf) => {
                 let n = self.player_filter_noun(&pf, Num::One);
@@ -1292,6 +1325,37 @@ impl<'a> Renderer<'a> {
             }
             None => s,
         }
+    }
+
+    /// The body worded with its one target slot, of several objects, named first ("Choose
+    /// any number of target creatures. ..."), from the state `before` the body was
+    /// rendered; the state stays as the usual wording left it. None if that wording has
+    /// gaps the usual one doesn't, or the body isn't one instruction about such targets.
+    fn targets_named_first(&mut self, before: Self, b: &Body) -> Option<String> {
+        let [t] = b.targets.as_slice() else {
+            return None;
+        };
+        let many = t.max.as_const().is_some_and(|m| m > 1);
+        if !many
+            || b.modal.is_some()
+            || matches!(b.effect, Effect::Seq(_))
+            || t.chosen_by.is_some()
+            || t.chosen_by_opponent
+            || t.per_player.is_some()
+            || t.divide.is_some()
+        {
+            return None;
+        }
+        let after = std::mem::replace(self, before);
+        let gaps = self.gaps.len();
+        let first = self.with_targets(&b.targets, |r| {
+            let t = r.target_mention(0, players::Case::Obj);
+            let s = r.effect_sentences(&b.effect);
+            format!("choose {t}. {s}")
+        });
+        let ok = self.gaps.len() == gaps;
+        *self = after;
+        ok.then_some(first)
     }
 
     /// "You draw X cards and you lose X life, where X is ...": the number the
@@ -1464,6 +1528,9 @@ impl<'a> Renderer<'a> {
                     let v = self.value(&m.max);
                     format!("up to X, where X is {v}")
                 }
+                // "When you pay this cost one or more times, choose up to that many":
+                // the times it was paid.
+                _ if matches!(m.max, Value::X) && self.extra.x_paid => "up to that many".into(),
                 _ => {
                     let v = self.value(&m.max);
                     format!("up to {v}")

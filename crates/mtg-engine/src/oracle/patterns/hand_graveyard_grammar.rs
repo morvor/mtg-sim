@@ -3351,8 +3351,14 @@ mod grammar {
                 "Sorcery",
                 "Put two cards from a single graveyard on the bottom of their owner's library.",
             ),
-            // A number of cards discarded at random that nobody chose.
-            ("Sorcery", "Discard any number of cards at random."),
+            // A number of cards another player discards at random: nothing says who
+            // chooses the number. ("Discard any number of cards at random." is the
+            // controller's choice as it resolves, CR 608.2d: Rites of Initiation,
+            // `paper_random.rs`.)
+            (
+                "Sorcery",
+                "Target player discards any number of cards at random.",
+            ),
         ] {
             assert!(compiled(ty, text).is_none(), "{text}");
         }
