@@ -403,6 +403,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // instead (`kw/enters_attached.rs`): no library.
         "enter attached to the chosen object",
         "put the entering permanent into its owner's graveyard instead",
+        // Curse of Leeches is attached to a chosen player as it transforms
+        // (`cards/curse_of_leeches.rs`): no library.
+        "card:Curse of Leeches // Leeching Lurker:attach it to a player",
         // Firestorm Phoenix only records the card it returned to a hand
         // (`cards/firestorm_phoenix.rs`).
         "card:Firestorm Phoenix:the returned card is revealed and can't be played",
