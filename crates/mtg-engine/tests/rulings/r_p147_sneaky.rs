@@ -229,3 +229,40 @@ fn shark_shredders_creature_entering_in_the_regular_step_deals_no_combat_damage(
     }
     assert_eq!(t.life(P1), 20 - 4 - 4 - 3);
 }
+
+#[test]
+fn zareth_stays_revealed_until_its_ability_resolves() {
+    cr!("602.2a", "701.20a");
+    ruling!(
+        "Zareth San, the Trickster",
+        "To activate Zareth San's second ability, you reveal it in your hand. It remains revealed until the ability has resolved."
+    );
+    let mut t = TestGame::new(2);
+    let (rogue, z) = zareth_setup(&mut t);
+    to_blockers(&mut t, &[(rogue, Entity::Player(P1))], &[]);
+    assert!(!mtg_engine::reveal::is_revealed(&t.g, z));
+    zareth(&mut t, z, rogue);
+    // Still revealed after the activation, while the ability waits on the stack (and
+    // after other actions in the meantime).
+    assert_eq!(t.stack_len(), 1);
+    assert!(t.in_hand(P0, ZARETH));
+    assert!(mtg_engine::reveal::is_revealed(&t.g, z));
+    t.lands(P1, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, shock).target(P0).go();
+    t.resolve();
+    assert!(mtg_engine::reveal::is_revealed(&t.g, z));
+    t.resolve_all();
+    assert!(t.on_battlefield(now(&t, z)));
+    // A card whose ability is countered stops being revealed once the ability is gone.
+    let mut t = TestGame::new(2);
+    let (rogue, z) = zareth_setup(&mut t);
+    to_blockers(&mut t, &[(rogue, Entity::Player(P1))], &[]);
+    zareth(&mut t, z, rogue);
+    let ab = t.g.stack[0];
+    t.g.counter(ab, None);
+    t.settle();
+    assert!(t.in_hand(P0, ZARETH));
+    assert!(!mtg_engine::reveal::is_revealed(&t.g, z));
+}
