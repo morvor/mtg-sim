@@ -1008,6 +1008,12 @@ impl Renderer<'_> {
     /// [`Self::play_permission`], saying where the cards are with `from` if given.
     fn play_permission_from(&mut self, pp: &PlayPermission, from: Option<String>) -> String {
         let who = self.rel_subject(pp.who);
+        // A permission for any player is for each player.
+        let who = if matches!(pp.who, PlayerRel::Any) && who == "a player" {
+            "{alt:a player|each player}".to_string()
+        } else {
+            who
+        };
         let p = if who == "you" { "your" } else { "their" };
         // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
         // "card" in what may be cast say nothing more.

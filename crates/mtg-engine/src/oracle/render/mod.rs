@@ -1295,12 +1295,25 @@ impl<'a> Renderer<'a> {
         // (targets chosen once for each such player).
         let per_player = b.targets.iter().find_map(|t| t.per_player.clone());
         let self_named = self.self_salient;
+        let before = self.clone();
         let s = self.with_targets(&b.targets, |r| {
             let s = r.effect_sentences(&b.effect);
             let s = r.choose_unmentioned_targets(s);
             r.define_stored_x(s)
         });
         let s = where_x_self_pronoun(&s, self_named);
+        // "Choose any number of target creatures. Each of those creatures gains persist
+        // until end of turn.": several targets of one instruction named first (as they're
+        // chosen, CR 601.2c), then referred to. (Only for wordings without markup: the
+        // comparison doesn't look inside alternatives nested in alternatives.)
+        let s = match self.targets_named_first(before, b) {
+            Some(first)
+                if !s.contains('{') && !first.contains('{') && !s.contains('X') && !first.contains('X') =>
+            {
+                format!("{{alt:{s}|{first}}}")
+            }
+            _ => s,
+        };
 
 
         match per_player {
@@ -1310,6 +1323,37 @@ impl<'a> Renderer<'a> {
             }
             None => s,
         }
+    }
+
+    /// The body worded with its one target slot, of several objects, named first ("Choose
+    /// any number of target creatures. ..."), from the state `before` the body was
+    /// rendered; the state stays as the usual wording left it. None if that wording has
+    /// gaps the usual one doesn't, or the body isn't one instruction about such targets.
+    fn targets_named_first(&mut self, before: Self, b: &Body) -> Option<String> {
+        let [t] = b.targets.as_slice() else {
+            return None;
+        };
+        let many = t.max.as_const().is_some_and(|m| m > 1);
+        if !many
+            || b.modal.is_some()
+            || matches!(b.effect, Effect::Seq(_))
+            || t.chosen_by.is_some()
+            || t.chosen_by_opponent
+            || t.per_player.is_some()
+            || t.divide.is_some()
+        {
+            return None;
+        }
+        let after = std::mem::replace(self, before);
+        let gaps = self.gaps.len();
+        let first = self.with_targets(&b.targets, |r| {
+            let t = r.target_mention(0, players::Case::Obj);
+            let s = r.effect_sentences(&b.effect);
+            format!("choose {t}. {s}")
+        });
+        let ok = self.gaps.len() == gaps;
+        *self = after;
+        ok.then_some(first)
     }
 
     /// "You draw X cards and you lose X life, where X is ...": the number the

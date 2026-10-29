@@ -1244,6 +1244,18 @@ impl Renderer<'_> {
                 let n = self.noun_det(f, Det::A);
                 format!("each player who sacrificed {n} this way")
             }
+            // "target creature an opponent controls deals damage equal to its power to that
+            // player": the opponent the target's description named.
+            PlayerRef::ControllerOf(sel)
+                if matches!(case, Case::Obj)
+                    && matches!(sel.as_ref(), Sel::Target(i)
+                        if matches!(self.targets.get(*i as usize).map(|t| &t.what),
+                            Some(TargetKind::Object(Filter::And(v)))
+                                if v.iter().any(|x| matches!(x, Filter::ControlledBy(PlayerRel::Opponent))))) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:{s} controller|that player}}")
+            }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
                 format!("{s} controller")

@@ -371,14 +371,38 @@ impl Renderer<'_> {
                     && !v.iter().any(|x| matches!(x, Filter::InZone(ZoneKind::Exile)))
                     && v.iter()
                         .any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked)));
+                // "cards they exiled with ~": cards exiled with the source by the player
+                // the permission is for (`kw/exile_provenance.rs`).
+                let linked = |x: &Filter| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked));
+                let exiled_by = v.iter().find_map(|x| match x {
+                    Filter::Custom(n) if n == crate::kw::exile_provenance::EXILED_BY_THEM => {
+                        Some("they")
+                    }
+                    Filter::Custom(n) if n == crate::kw::exile_provenance::EXILED_BY_YOU => {
+                        Some("you")
+                    }
+                    _ => None,
+                });
+                let exiled_by = exiled_by.filter(|_| v.iter().any(linked));
                 // The same quality twice says it once.
                 let mut seen: Vec<String> = Vec::new();
                 for x in v {
-                    if created && matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
-                    {
+                    if created && linked(x) {
                         np.post.push("created with ~it".into());
                         self.self_salient = true;
                         continue;
+                    }
+                    if let Some(w) = exiled_by {
+                        if linked(x) {
+                            np.post.push(format!("{w} exiled with ~it"));
+                            np.zone_said = true;
+                            self.self_salient = true;
+                            continue;
+                        }
+                        if matches!(x, Filter::Custom(n) if crate::kw::exile_provenance::is_provenance(n) && n != crate::kw::exile_provenance::EXILED_THIS_TURN)
+                        {
+                            continue;
+                        }
                     }
                     if both
                         && matches!(x, Filter::Power(Cmp::Eq, _) | Filter::Toughness(Cmp::Eq, _))
@@ -1295,6 +1319,11 @@ impl Renderer<'_> {
                 let s = self.noun(inner, Num::One);
                 np.rel.push(format!("other than {s}"));
             }
+            // "all creatures except those that share a creature type with a creature that
+            // convoked ~" (CR 702.51c).
+            Filter::Custom(n) if n == crate::kw::damage_history_4::SHARES_TYPE_WITH_CONVOKER => np
+                .rel
+                .push("except those that share a creature type with a creature that convoked ~".into()),
             // "creatures other than ~ and the chosen creature": other than the source
             // (said before) and that object.
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(_)) && np.other && !np.is_self => {

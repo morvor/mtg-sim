@@ -581,13 +581,23 @@ pub(crate) fn or_form(options: &[String]) -> Option<String> {
     // "gains your choice of flying or vigilance": a choice among objects of a verb.
     let choice = if pre > 0 { "{opt:your choice of} " } else { "" };
     let list = super::join_list(&middles, "or");
-    Some(
-        [head, format!("{choice}{list}"), tail]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
+    let joined = [head, format!("{choice}{list}"), tail]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    // "create a Food token or a Treasure token": each object said whole after the verb.
+    if let ([a, b], 2, 1, true) = (
+        options,
+        pre,
+        suf,
+        matches!(words[0][1], "a" | "an"),
+    ) {
+        let rest: Vec<&str> = b.trim_end_matches('.').split(' ').skip(1).collect();
+        let a = a.trim_end_matches('.');
+        return Some(format!("{{alt:{joined}|{a} or {}}}", rest.join(" ")));
+    }
+    Some(joined)
 }
 
 impl Renderer<'_> {

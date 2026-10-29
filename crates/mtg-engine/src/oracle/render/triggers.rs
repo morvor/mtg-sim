@@ -405,17 +405,41 @@ impl Renderer<'_> {
     /// "you play a card with two or more card types": casting a spell and playing a
     /// land of the same kind (CR glossary, "Play": to play a card is either).
     fn play_a_card(&mut self, a: &TriggerCond, b: &TriggerCond, det: Det) -> Option<Ev> {
-        let (TriggerCond::CastSpell { who: wa, filter: fa }, TriggerCond::LandPlayed { who: wb, filter: fb }) =
-            (a, b)
-        else {
-            return None;
+        let (cast, wa, fa, wb, fb) = match (a, b) {
+            (
+                TriggerCond::CastSpell { who: wa, filter: fa },
+                TriggerCond::LandPlayed { who: wb, filter: fb },
+            ) => (a, wa, fa, wb, fb),
+            (
+                TriggerCond::LandPlayed { who: wb, filter: fb },
+                TriggerCond::CastSpell { who: wa, filter: fa },
+            ) => (b, wa, fa, wb, fb),
+            _ => return None,
         };
+        // The same quality of the card either way: a spell is a card cast, a land
+        // played is a land card (the kinds the events imply aren't qualities).
+        let quality = |f: &Filter, implied: &dyn Fn(&Filter) -> bool| -> Filter {
+            match f {
+                Filter::And(v) => Filter::and(v.iter().filter(|x| !implied(x)).cloned().collect()),
+                other if implied(other) => Filter::Any,
+                other => other.clone(),
+            }
+        };
+        let qa = quality(fa, &|x| matches!(x, Filter::Card | Filter::Spell));
+        let qb = quality(fb, &|x| matches!(x, Filter::Card | Filter::Type(CardType::Land)));
+        // (Only for a quality implemented in code that cards say of the card played.)
+        let same = format!("{qa:?}").contains("Custom(") && format!("{qa:?}") == format!("{qb:?}");
         let card = Filter::and(vec![Filter::Card, fb.clone()]);
-        if wa != wb || format!("{fa:?}") != format!("{card:?}") {
+        let old_same = format!("{fa:?}") == format!("{card:?}");
+        if wa != wb || !(same || old_same) {
             return None;
         }
-        let subj = self.trigger_event(a, det.clone()).subj;
-        let n = self.noun_det(&card, det);
+        let subj = self.trigger_event(cast, det.clone()).subj;
+        let n = if old_same {
+            self.noun_det(&card, det)
+        } else {
+            self.noun_det(&Filter::and(vec![Filter::Card, qa]), det)
+        };
         Some(Ev::new(subj, format!("play {n}")))
     }
 

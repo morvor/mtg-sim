@@ -39,6 +39,10 @@ pub(crate) fn custom_rel_nodes(name: &str) -> Option<CustomQuality> {
         // A spell cast or land played that was a card exiled with the source (CR 607.2a,
         // `kw/trigger_events.rs`).
         crate::kw::trigger_events::WAS_EXILED_WITH_SOURCE => rel("exiled with ~"),
+        // CR 702.51c: a creature that convoked the spell, as it was tapped for it.
+        crate::kw::damage_history_4::SHARES_TYPE_WITH_CONVOKER => {
+            rel("that shares a creature type with a creature that convoked ~")
+        }
         // The power's quality (odd or even) the linked choice chose (`kw/choices_4.rs`).
         crate::kw::choices_4::POWER_OF_CHOSEN_QUALITY => rel("with power of the chosen quality"),
         _ => None,
@@ -48,6 +52,15 @@ pub(crate) fn custom_rel_nodes(name: &str) -> Option<CustomQuality> {
 /// A clause saying the subject has a custom quality, for a condition ("if that creature
 /// shares a color with the mana that land produced").
 pub(crate) fn custom_clause_nodes(name: &str, subj: &str, negated: bool) -> Option<String> {
+    // "if that creature was cast for its warp cost" (`kw/cast_history.rs`).
+    if let Some(k) = name.strip_prefix(crate::kw::cast_history::CAST_FOR) {
+        let k = crate::keywords::KeywordKind::from_name(k)?.name().to_lowercase();
+        return Some(if negated {
+            format!("{subj} wasn't cast for its {k} cost")
+        } else {
+            format!("{subj} was cast for its {k} cost")
+        });
+    }
     let (yes, no) = match name {
         crate::kw::damage_shares_a_color::SHARES_COLOR_WITH_PRODUCED_MANA => (
             format!("{subj} shares a color with the mana that land produced"),
