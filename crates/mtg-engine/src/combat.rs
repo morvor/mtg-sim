@@ -2468,10 +2468,26 @@ fn assign_attacker_damage(
             _ => (vec![], false),
         };
     }
-    let lethal: Vec<u32> = blockers
+    let mut lethal: Vec<u32> = blockers
         .iter()
         .map(|b| crate::kw::trample::lethal_damage(g, id, *b, pending))
         .collect();
+    // The planeswalker it's attacking is a creature blocking it: that's one recipient, and
+    // the damage assigned to it counts both as lethal damage and toward its loyalty, so the
+    // greater of the two goes to it before any goes to its controller (CR 702.19b–c).
+    let merged = match target {
+        Some(Entity::Object(pw)) => blockers.iter().position(|b| *b == pw),
+        _ => None,
+    };
+    let (target, spill, spill_at_least) = match merged {
+        Some(i) => {
+            if let Some((_, need)) = spill {
+                lethal[i] = lethal[i].max(need);
+            }
+            (spill.map(|(p, _)| p), None, None)
+        }
+        None => (target, spill, spill_at_least),
+    };
     // What it must assign to each blocker before assigning beyond them, if the attackers
     // assigning after it assign what they can to them too (CR 702.19b).
     let at_least: Vec<u32> = blockers
