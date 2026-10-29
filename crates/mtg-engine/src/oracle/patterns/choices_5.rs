@@ -12,7 +12,7 @@
 
 use super::EffectPattern;
 use crate::ability::*;
-use crate::oracle::effects::Builder;
+use crate::oracle::effects::{parse_sentence, Builder};
 use crate::oracle::phrases::*;
 
 /// "you choose target [object], and that opponent chooses target [object]".
@@ -271,3 +271,80 @@ fn as_enters_name_of_revealed(
 }
 
 inventory::submit! { super::AbilityPattern { name: "as ~ enters, [reveal]; you choose the name of a card revealed this way", priority: 40, parse: as_enters_name_of_revealed } }
+
+/// "[cards] you discarded this way" when you are the one who discarded (Queen Kayla
+/// bin-Kroog: "Discard all the cards in your hand, then draw that many cards. You may
+/// choose an artifact or creature card with mana value 1 you discarded this way, ..."):
+/// the cards discarded this way.
+fn you_discarded_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !l.contains(" you discarded this way") {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    // Only your own discard: an imperative "discard ..." instruction, and no other
+    // player's.
+    let yours = raw.starts_with("discard ")
+        || [": discard ", ". discard ", ", discard ", "you discard "]
+            .iter()
+            .any(|p| raw.contains(p));
+    if !yours || raw.contains(" discards ") {
+        return None;
+    }
+    let e = parse_sentence(&l.replace(" you discarded this way", " discarded this way"), b)?;
+    let mut j = serde_json::to_value(&e).ok()?;
+    // "You may choose ..., then do the same for ...": each choice is optional on its own
+    // (Queen Kayla bin-Kroog's ruling), within the "may" around them all.
+    if raw.contains(&format!("you may {l}")) {
+        let mut n = 0;
+        optional_choices(&mut j, &mut n);
+        if n == 0 {
+            return None;
+        }
+    }
+    // A card discarded this way may have gone to exile instead (a replacement effect):
+    // it's found wherever it is.
+    anywhere_discarded(&mut j);
+    serde_json::from_value(j).ok()
+}
+
+/// Makes each single choice of objects (`Sel::Choose`) in `v` "up to one".
+fn optional_choices(v: &mut serde_json::Value, n: &mut usize) {
+    match v {
+        serde_json::Value::Object(m) => {
+            if let Some(c) = m.get_mut("Choose") {
+                if c.get("chooser").is_some() && c.get("count") == Some(&serde_json::json!({"Const": 1})) {
+                    c["up_to"] = serde_json::Value::Bool(true);
+                    *n += 1;
+                }
+            }
+            for x in m.values_mut() {
+                optional_choices(x, n);
+            }
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(|x| optional_choices(x, n)),
+        _ => {}
+    }
+}
+
+/// Drops the graveyard from filters of cards discarded this way.
+fn anywhere_discarded(v: &mut serde_json::Value) {
+    let discarded = serde_json::json!({"In": {"Var": crate::discard_rules::DISCARDED}});
+    let graveyard = serde_json::json!({"InZone": "Graveyard"});
+    match v {
+        serde_json::Value::Object(m) => {
+            if let Some(serde_json::Value::Array(parts)) = m.get_mut("And") {
+                if parts.contains(&discarded) {
+                    parts.retain(|p| *p != graveyard);
+                }
+            }
+            for x in m.values_mut() {
+                anywhere_discarded(x);
+            }
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(anywhere_discarded),
+        _ => {}
+    }
+}
+
+inventory::submit! { EffectPattern { name: "[cards] you discarded this way (your own discard)", priority: 200, parse: you_discarded_this_way } }

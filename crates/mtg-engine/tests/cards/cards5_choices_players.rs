@@ -528,3 +528,37 @@ fn alhammarret_chooses_one_name_among_the_revealed_nonland_cards() {
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseOption { .. })));
 }
+
+#[test]
+fn queen_kayla_may_choose_each_mana_value_and_returns_them_together() {
+    cr!("608.2c", "701.9a");
+    ruling!(
+        "Queen Kayla bin-Kroog",
+        "you may choose an artifact or creature card with mana value 1, you may choose an artifact or creature card with mana value 2"
+    );
+    compiles("Queen Kayla bin-Kroog");
+    let mut t = TestGame::new(2);
+    let kayla = t.battlefield(P0, "Queen Kayla bin-Kroog");
+    t.lands(P0, "Forest", 4);
+    let elves = t.hand(P0, "Llanowar Elves");
+    let bears = t.hand(P0, "Grizzly Bears");
+    let courser = t.hand(P0, "Centaur Courser");
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    t.set_step(P0, Step::PrecombatMain);
+    // Mana value 1: the Elves; 2: none (the Bears stay); 3: the Courser. The discarded
+    // cards are new objects (CR 400.7), named here as they were in hand.
+    t.answer_yes(P0, true);
+    t.answer_choose_moved(P0, &[Entity::Object(elves)]);
+    t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![]));
+    t.answer_choose_moved(P0, &[Entity::Object(courser)]);
+    t.activate(P0, kayla, 0, &[]).expect("activate");
+    t.resolve_all();
+    let _ = bears;
+    assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
+    assert_eq!(t.named_on_battlefield("Centaur Courser").len(), 1);
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(t.hand_size(P0), 3);
+}

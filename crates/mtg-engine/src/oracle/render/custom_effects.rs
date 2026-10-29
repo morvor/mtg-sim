@@ -52,7 +52,8 @@ impl Renderer<'_> {
                         .filter(|x| {
                             !matches!(
                                 x,
-                                Filter::InZone(ZoneKind::Hand) | Filter::OwnedBy(PlayerRel::Opponent)
+                                Filter::InZone(ZoneKind::Hand)
+                                    | Filter::OwnedBy(PlayerRel::Opponent)
                             )
                         })
                         .collect(),
@@ -60,7 +61,10 @@ impl Renderer<'_> {
                 f => f,
             };
             let n = self.noun(&rest, Num::One);
-            return Some(format!("{{opt:you}} choose the name of {} revealed this way", with_article(&n)));
+            return Some(format!(
+                "{{opt:you}} choose the name of {} revealed this way",
+                with_article(&n)
+            ));
         }
         // "Pay {E}{E}." as an instruction (see `kw/game_rules.rs`).
         if let Some(n) = crate::kw::game_rules::pay_energy_amount(name) {
