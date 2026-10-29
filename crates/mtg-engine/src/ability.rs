@@ -221,6 +221,11 @@ pub struct ActivatedAbility {
     /// ability (CR 113.10a, 609.4b; see [`GainedTerms`]).
     #[serde(default)]
     pub spend_as_any_color: Option<Vec<crate::mana::ManaType>>,
+    /// "Activate no more times each turn than the number of snow Swamps you control."
+    /// (Withering Wisps; CR 602.5b): a limit per turn given by a value, evaluated each time
+    /// a player attempts to activate the ability (its rulings).
+    #[serde(default)]
+    pub max_per_turn_value: Option<Value>,
 }
 
 /// A change an activated ability makes to its own total cost, applying while its condition
@@ -250,6 +255,7 @@ impl ActivatedAbility {
             own_cost_changes: Vec::new(),
             cant_be_copied: false,
             spend_as_any_color: None,
+            max_per_turn_value: None,
         }
     }
 }

@@ -1404,6 +1404,12 @@ fn sources_inner(
                     ok = false;
                 }
             }
+            if let Some(v) = &act.max_per_turn_value {
+                let max = g.eval_value(v, &Ctx::new(Some(o.id), p));
+                if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) as i64 >= max {
+                    ok = false;
+                }
+            }
             if let Some(max) = act.max_total {
                 if o.activations.get(&a.uid).copied().unwrap_or(0) >= max {
                     ok = false;

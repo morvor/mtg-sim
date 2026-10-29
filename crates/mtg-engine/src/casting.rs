@@ -2310,6 +2310,13 @@ impl Game {
                 return false;
             }
         }
+        // "Activate no more times each turn than [value]" (CR 602.5b).
+        if let Some(v) = &act.max_per_turn_value {
+            let max = self.eval_value(v, &Ctx::new(Some(src), p));
+            if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) as i64 >= max {
+                return false;
+            }
+        }
         // "Activate only once": over the object's existence (CR 400.7).
         if let Some(max) = act.max_total {
             if o.activations.get(&a.uid).copied().unwrap_or(0) >= max {
