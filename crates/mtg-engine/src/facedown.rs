@@ -115,7 +115,9 @@ pub fn can_look_at(g: &Game, p: PlayerId, id: ObjectId) -> bool {
             || crate::zones::can_see_in_library(g, p, id)
             // CR 808.5, 809.7, 810.5, 811.5: teammates reviewing each other's hands.
             || matches!(o.zone, Zone::Hand(q)
-                if crate::multiplayer::setup::may_review_hand(g, p, q));
+                if crate::multiplayer::setup::may_review_hand(g, p, q))
+            // A card in a hand the player looked at (CR 701.16a).
+            || (matches!(o.zone, Zone::Hand(_)) && crate::zones::may_look(g, p, id));
     }
     // CR 406.3: face-down cards in exile, once a player is allowed to look at them.
     if o.zone == Zone::Exile {

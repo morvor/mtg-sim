@@ -739,7 +739,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bo
 /// at target face-down creature").
 pub fn may_look(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     g.is_live(id)
-        && matches!(g.obj(id).zone, Zone::Exile | Zone::Battlefield)
+        && matches!(
+            g.obj(id).zone,
+            Zone::Exile | Zone::Battlefield | Zone::Hand(_)
+        )
         && (g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
             || crate::kw::look_face_down::may_look(g, p, id))
 }
@@ -754,8 +757,10 @@ pub fn looked_then_exiled(g: &mut Game, p: PlayerId, objs: &[ObjectId]) {
     }
 }
 
-/// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3), or at a
-/// face-down permanent while it remains on the battlefield.
+/// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3), at a
+/// face-down permanent while it remains on the battlefield, or at a card in another
+/// player's hand they looked at while it remains there ("Look at a card at random in
+/// target player's hand", `kw/look_at_random.rs`).
 pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
     if !g.zones.may_look.contains(&(id, p)) {
         g.zones.may_look.push((id, p));
@@ -766,7 +771,13 @@ pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
         .may_look
         .iter()
         .copied()
-        .filter(|(o, _)| g.is_live(*o) && matches!(g.obj(*o).zone, Zone::Exile | Zone::Battlefield))
+        .filter(|(o, _)| {
+            g.is_live(*o)
+                && matches!(
+                    g.obj(*o).zone,
+                    Zone::Exile | Zone::Battlefield | Zone::Hand(_)
+                )
+        })
         .collect();
     g.zones.may_look = live;
 }
