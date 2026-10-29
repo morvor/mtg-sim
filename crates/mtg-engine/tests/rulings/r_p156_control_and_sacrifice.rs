@@ -174,9 +174,10 @@ fn eon_frolicker_opponents_creatures_can_attack_but_deal_no_damage() {
     cast_new(&mut t, P0, "Eon Frolicker", &[]);
     t.resolve_all();
     // P1's (extra) turn: the Bears attack P0; the damage is prevented.
-    t.set_step(P1, Step::PrecombatMain);
-    t.attack(&[(bears, Entity::Player(P0))], &[]);
-    assert!(crate::r_s10_common::attacking(&t, bears) || t.g.combat.is_none());
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+    assert!(crate::r_s10_common::attacking(&t, bears));
+    t.advance_to(P1, Step::EndOfCombat);
     assert_eq!(t.life(P0), 20);
     // Positive control: without Eon Frolicker, the attack deals 2.
     let mut t = TestGame::new(2);

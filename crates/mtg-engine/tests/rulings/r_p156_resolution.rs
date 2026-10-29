@@ -934,3 +934,116 @@ fn petals_of_insight_returns_from_the_stack_directly() {
     });
     assert!(gy);
 }
+
+#[test]
+fn threefold_signal_adds_a_second_replicate_ability() {
+    cr!("702.56a", "702.56b");
+    ruling!(
+        "Threefold Signal",
+        "If you cast a spell that already has replicate while you have this permanent on the battlefield, the spell will have two replicate abilities: one with a replicate cost as printed on it, and one with a replicate cost of {3}. You may use either ability, or both abilities, to replicate the spell."
+    );
+    supported("Threefold Signal");
+    // A three-color spell with replicate (no real card has both).
+    let bolt = || {
+        let mut def = custom_card(
+            "Tricolor Echo",
+            "Sorcery",
+            "{U}{B}{R}",
+            None,
+            "Replicate {1}\n~ deals 1 damage to any target.",
+        );
+        let chars = &mut def.faces[0].chars;
+        chars.colors = chars.mana_cost.as_ref().unwrap().colors();
+        assert_eq!(chars.colors.count(), 3);
+        def
+    };
+    // (printed paid, {3} paid) -> copies.
+    for (printed, granted) in [(1, 1), (0, 1), (1, 0)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Threefold Signal");
+        t.lands(P0, "Island", 1);
+        t.lands(P0, "Swamp", 1);
+        t.lands(P0, "Mountain", 1);
+        t.lands(P0, "Wastes", 4);
+        let spell = t.custom(P0, bolt(), Zone::Hand(P0));
+        t.answer(
+            P0,
+            DecisionKind::OptionalCost,
+            mtg_engine::decision::Answer::Number(printed),
+        );
+        t.answer(
+            P0,
+            DecisionKind::OptionalCost,
+            mtg_engine::decision::Answer::Number(granted),
+        );
+        for _ in 0..(printed + granted) {
+            t.answer_yes(P0, false);
+        }
+        t.cast(P0, spell).target(Entity::Player(P1)).go();
+        t.settle();
+        t.resolve_all();
+        assert_eq!(
+            t.life(P1),
+            20 - 1 - (printed + granted) as i32,
+            "{printed} {granted}"
+        );
+        let spent = 3 + printed * 1 + granted * 3;
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0) as i64, spent);
+    }
+}
+
+#[test]
+fn vault_13_owner_orders_their_cards_put_on_the_bottom() {
+    cr!("401.4", "714.2b");
+    ruling!(
+        "Vault 13: Dweller's Journey",
+        "In the unusual case where one player owns multiple cards exiled with Vault 13 that are being put on the bottom of their library with its third chapter ability, the owner of those cards chooses the order in which they are put on the bottom of their library."
+    );
+    supported("Vault 13: Dweller's Journey");
+    // Four players; P1 owns a creature controlled by each player.
+    let mut t = TestGame::new(4);
+    let mut owned = vec![];
+    for (p, name) in [
+        (P0, "Grizzly Bears"),
+        (P1, "Hill Giant"),
+        (P2, "Craw Wurm"),
+        (P3, "Llanowar Elves"),
+    ] {
+        let id = t.battlefield(P1, name);
+        if p != P1 {
+            crate::r_p147_common::take_control(&mut t, p, id);
+        }
+        owned.push(id);
+    }
+    t.g.recompute();
+    let saga = t.battlefield(P0, "Vault 13: Dweller's Journey");
+    let targets: Vec<Entity> = owned.iter().map(|id| obj(*id)).collect();
+    for e in &targets {
+        t.answer_targets(P0, &[*e]);
+    }
+    put_counters(&mut t, saga, "lore", 1);
+    t.resolve_all();
+    for id in &owned {
+        assert_eq!(t.zone(*id), Zone::Exile);
+    }
+    put_counters(&mut t, saga, "lore", 1);
+    t.resolve_all();
+    let from = t.asked().len();
+    put_counters(&mut t, saga, "lore", 1);
+    t.resolve_all();
+    // Two returned, two on the bottom of P1's library; P1 ordered them.
+    let back = owned.iter().filter(|id| t.on_battlefield(**id)).count();
+    assert_eq!(back, 2);
+    let lib = &t.g.player(P1).library;
+    let bottom: Vec<String> = lib[..2]
+        .iter()
+        .map(|id| t.g.obj(*id).chars.name.to_string())
+        .collect();
+    assert!(bottom.iter().all(|n| n != "Filler"), "{bottom:?}");
+    let orderers: Vec<PlayerId> = asked_since(&t, from)
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::Order { prompt, .. } if prompt.contains("library")))
+        .map(|(p, _)| p)
+        .collect();
+    assert_eq!(orderers, vec![P1], "{:?}", asked_since(&t, from));
+}

@@ -12,7 +12,7 @@ use crate::r_s06_common::activate_containing;
 use crate::r_s25_common::{cast_new, lands_for_cost, x_of};
 use crate::r_s29_common::{choose_modes, put_counters};
 use mtg_engine::ability::Modification;
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
@@ -481,4 +481,36 @@ fn condescend_needs_another_spell_to_target() {
     let card = t.hand(P0, "Condescend");
     let spell = t.cast(P0, card).x(0).target(ritual).go();
     assert_eq!(crate::r_s25_common::targets_of(&t, spell), vec![obj(ritual)]);
+}
+
+fn choose_creature_type(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    match d {
+        Decision::ChooseOption { options, .. } => options
+            .iter()
+            .position(|o| o.eq_ignore_ascii_case("creature"))
+            .map(Answer::Index),
+        _ => None,
+    }
+}
+
+#[test]
+fn alrund_takes_only_cards_revealed_this_way() {
+    cr!("701.20a", "608.2c");
+    ruling!(
+        "Alrund, God of the Cosmos // Hakka, Whispering Raven",
+        "Alrund recieved day 1 eratta to clarify that you select from the cards \"revealed this way\"."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Alrund, God of the Cosmos // Hakka, Whispering Raven");
+    // Library top: Grizzly Bears, Island, then another Grizzly Bears (not revealed).
+    let lib = stack_library(&mut t, P0, &["Grizzly Bears", "Island", "Grizzly Bears"]);
+    crate::r_s03_common::respond(&mut t, P0, choose_creature_type);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.zone(lib[0]), Zone::Hand(P0));
+    assert_eq!(t.zone(lib[1]), Zone::Library(P0));
+    assert_eq!(t.zone(lib[2]), Zone::Library(P0));
+    // The unrevealed Bears is now on top; the Island went to the bottom.
+    assert_eq!(t.g.player(P0).library.last(), Some(&t.g.current(lib[2])));
+    assert_eq!(t.g.player(P0).library.first(), Some(&t.g.current(lib[1])));
 }
