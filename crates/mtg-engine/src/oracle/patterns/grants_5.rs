@@ -201,13 +201,19 @@ fn the_exiled_card_in_granted(l: &str, b: &mut Builder) -> Option<Effect> {
     if !l.contains(P) || l.contains('"') || b.named.iter().any(|(n, _)| n == P) || !inside_quotes(l) {
         return None;
     }
-    b.named.push((
-        P.into(),
-        Sel::All(Filter::and(vec![
-            Filter::In(Box::new(Sel::Var(crate::granted_captures::CAPTURED_EXILED))),
-            Filter::InZone(ZoneKind::Exile),
-        ])),
-    ));
+    let exiled = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(crate::granted_captures::CAPTURED_EXILED))),
+        Filter::InZone(ZoneKind::Exile),
+    ]));
+    // "return the exiled card to its owner's graveyard" (Hofri Ghostforge): a card goes
+    // to its owner's graveyard (CR 404.2).
+    if l == "return the exiled card to its owner's graveyard" {
+        return Some(Effect::Move {
+            what: exiled,
+            to: Destination::zone(ZoneKind::Graveyard),
+        });
+    }
+    b.named.push((P.into(), exiled));
     let e = parse_sentence(l, b);
     b.named.retain(|(n, _)| n != P);
     e

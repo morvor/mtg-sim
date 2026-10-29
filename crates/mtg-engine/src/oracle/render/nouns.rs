@@ -829,6 +829,10 @@ impl Renderer<'_> {
                     }
                 });
             }
+            Filter::TargetOf(_) if self.target_of_ability_from(f).is_some() => {
+                let s = self.target_of_ability_from(f).unwrap_or_default();
+                np.rel.push(format!("that's {s}"));
+            }
             Filter::TargetOf(s) => {
                 let s = self.sel(s, Case::Obj);
                 np.rel.push(format!("targeted by {s}"));
@@ -1207,6 +1211,12 @@ impl Renderer<'_> {
                 np.rel.push(s);
                 return;
             }
+        }
+        // "that isn't the target of an ability from another creature named ~" (Goblin
+        // Artisans, `patterns::referents_5`).
+        if let Some(s) = self.target_of_ability_from(inner) {
+            np.rel.push(format!("that isn't {s}"));
+            return;
         }
         match inner {
             Filter::Type(t) => np.nons.push(format!("non{}", t.word())),
