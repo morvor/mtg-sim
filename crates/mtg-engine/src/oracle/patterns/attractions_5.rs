@@ -9,10 +9,8 @@
 //! - Drop Tower's and Ferris Wheel's durations ending on a die roll and the "phased out
 //!   with this Attraction" history are in `dice_coins_5`.
 
-use super::FollowupPattern;
 use crate::ability::*;
 use crate::oracle::effects::{parse_effect_text, Builder};
-use crate::oracle::phrases::end;
 
 /// Where the created visit trigger keeps the exiled card and the chosen Attraction.
 const MYRA_EXILED: Var = vars::USER + 43401;
@@ -64,47 +62,57 @@ fn visit_body(text: &str, b: &Builder) -> Option<Body> {
     let mut sub = Builder::new(b.ctx);
     sub.in_trigger = true;
     sub.it = Sel::TriggerObject;
-    let effect = parse_effect_text(text, &mut sub)?;
+    let mut effect = parse_effect_text(text, &mut sub)?;
     if !sub.targets.is_empty() {
         return None;
     }
     // "copy the exiled card": the card exiled by the creating ability.
-    let json = serde_json::to_string(&effect).ok()?;
-    let copy = "{\"CopyCard\":{\"what\":{\"Var\":0}";
-    if !json.contains(copy) {
+    let first = match &mut effect {
+        Effect::Seq(v) => v.first_mut()?,
+        e => e,
+    };
+    let Effect::CopyCard { what, named: None } = first else {
         return None;
-    }
-    let json = json.replace(copy, &format!("{{\"CopyCard\":{{\"what\":{{\"Var\":{MYRA_EXILED}}}"));
+    };
+    *what = Sel::Var(MYRA_EXILED);
     Some(Body {
         targets: vec![],
-        effect: serde_json::from_str(&json).ok()?,
+        effect,
         modal: None,
     })
 }
 
-/// The created trigger's text so far (see [`for_as_long_as_visit_it`]).
-const COPY_SENTENCE: &str = "copy the exiled card.";
-
-fn for_as_long_as_visit_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let l = end(l);
-    let Some(r) = l.strip_prefix("for as long as that attraction is on the battlefield, whenever you visit it, ") else {
-        return continue_visit_trigger(l, prev, b);
+/// "[...choose an Attraction you control ... Put a midway counter on it.] For as long as
+/// that Attraction is on the battlefield, whenever you visit it, [effect]" (Myra the
+/// Magnificent): the ability, with the created trigger added to its effect.
+fn for_as_long_as_visit_it(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    let (head, text) =
+        t.split_once(" For as long as that Attraction is on the battlefield, whenever you visit it, ")?;
+    let mut abilities = crate::oracle::parse_ability(head, ctx)?;
+    let [a] = abilities.as_mut_slice() else {
+        return None;
     };
-    if format!("{r}.") != COPY_SENTENCE {
-        return false;
+    let def = std::sync::Arc::make_mut(a);
+    let body = match &mut def.kind {
+        AbilityKind::Activated(x) => &mut x.body,
+        AbilityKind::Spell(x) => &mut x.body,
+        AbilityKind::Triggered(x) => &mut x.body,
+        _ => return None,
+    };
+    if body.modal.is_some() {
+        return None;
     }
-    let Some(attraction) = chosen_attraction(prev) else {
-        return false;
-    };
-    let Some(body) = visit_body(COPY_SENTENCE, b) else {
-        return false;
-    };
-    if !keep_exiled(prev, MYRA_EXILED) {
-        return false;
+    let attraction = chosen_attraction(&body.effect)?;
+    let b = Builder::new(ctx);
+    let visit = visit_body(&text.to_lowercase(), &b)?;
+    if !keep_exiled(&mut body.effect, MYRA_EXILED) {
+        return None;
     }
-    let on_battlefield = |v: Var, z: ZoneKind| {
-        Condition::SelMatches(Sel::Var(v), Filter::InZone(z))
-    };
+    let on = |v: Var, z: ZoneKind| Condition::SelMatches(Sel::Var(v), Filter::InZone(z));
     let trigger = TriggerCond::ForAsLongAs(
         Box::new(TriggerCond::Where {
             trigger: Box::new(TriggerCond::Custom(crate::kw::visit::YOU_VISIT.into())),
@@ -113,13 +121,15 @@ fn for_as_long_as_visit_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool 
                 Filter::In(Box::new(Sel::Var(MYRA_ATTRACTION))),
             ),
         }),
+        // (The card's rulings: while the Attraction is on the battlefield and the card
+        // remains exiled.)
         Condition::And(vec![
-            on_battlefield(MYRA_ATTRACTION, ZoneKind::Battlefield),
-            on_battlefield(MYRA_EXILED, ZoneKind::Exile),
+            on(MYRA_ATTRACTION, ZoneKind::Battlefield),
+            on(MYRA_EXILED, ZoneKind::Exile),
         ]),
     );
-    let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![
+    let old = std::mem::take(&mut body.effect);
+    body.effect = Effect::seq(vec![
         old,
         Effect::Store {
             var: MYRA_ATTRACTION,
@@ -127,39 +137,15 @@ fn for_as_long_as_visit_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool 
         },
         Effect::DelayedTrigger {
             trigger,
-            body: Box::new(body),
+            body: Box::new(visit),
             once: false,
         },
     ]);
-    true
+    def.text = block.to_string();
+    Some(abilities)
 }
 
-/// "You may cast the copy without paying its mana cost." after the copy: part of the
-/// created trigger.
-fn continue_visit_trigger(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    if l != "you may cast the copy without paying its mana cost" {
-        return false;
-    }
-    let Effect::Seq(v) = prev else {
-        return false;
-    };
-    let Some(Effect::DelayedTrigger { trigger, body, .. }) = v.last_mut() else {
-        return false;
-    };
-    let ours = matches!(trigger, TriggerCond::ForAsLongAs(t, _)
-        if matches!(t.as_ref(), TriggerCond::Where { trigger, .. }
-            if matches!(trigger.as_ref(), TriggerCond::Custom(n) if n == crate::kw::visit::YOU_VISIT)));
-    if !ours || !matches!(body.effect, Effect::CopyCard { .. }) {
-        return false;
-    }
-    let Some(new) = visit_body(&format!("{COPY_SENTENCE} {l}."), b) else {
-        return false;
-    };
-    **body = new;
-    true
-}
-
-inventory::submit! { FollowupPattern { name: "attractions 5: for as long as that Attraction is on the battlefield, whenever you visit it, ...", priority: 50, apply: for_as_long_as_visit_it } }
+inventory::submit! { super::AbilityPattern { name: "attractions 5: for as long as that Attraction is on the battlefield, whenever you visit it, ...", priority: 104, parse: for_as_long_as_visit_it } }
 
 /// "Whenever you roll a die, you may reveal the top card of your library. Do this only
 /// once each turn. Whenever you reveal a card with mana value less than the result this

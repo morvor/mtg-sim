@@ -599,46 +599,64 @@ inventory::submit! { EffectPattern { name: "dice coins 5: the next time [player]
 /// previous instruction acted on, which are the new objects it put onto the battlefield
 /// (CR 400.7).
 fn exile_them_again(l: &str, b: &mut Builder) -> Option<Effect> {
-    let l = end(l);
-    if matches!(l, "exile them again" | "exile it again") {
-        let Sel::Var(v) = b.it else {
-            return None;
-        };
-        return Some(Effect::Exile {
-            what: Sel::Var(v),
-            face_down: false,
-            link: false,
-        });
-    }
-    // "[return those cards to the battlefield ...], then exile them again": the return is
-    // read as a sentence of its own.
-    let head = l
-        .strip_suffix(", then exile them again")
-        .or_else(|| l.strip_suffix(", then exile it again"))?;
-    if !head.starts_with("return ") || !head.contains(" to the battlefield") {
+    if !matches!(end(l), "exile them again" | "exile it again") {
         return None;
     }
-    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
-    let first = parse_sentence(head, b);
-    let returned = match (&first, &b.it) {
-        (Some(Effect::Move { to, .. }), Sel::Var(v)) if to.zone == ZoneKind::Battlefield => *v,
-        _ => {
-            b.targets.truncate(saved.0);
-            (b.it, b.it_player) = (saved.1, saved.2);
-            return None;
-        }
-    };
-    Some(Effect::seq(vec![
-        first?,
-        Effect::Exile {
-            what: Sel::Var(returned),
-            face_down: false,
-            link: false,
-        },
-    ]))
+    // Only right after the return, which leaves "it" naming the new permanents.
+    if !matches!(b.it, Sel::Var(vars::IT)) {
+        return None;
+    }
+    Some(Effect::Exile {
+        what: Sel::Var(vars::IT),
+        face_down: false,
+        link: false,
+    })
 }
 
 inventory::submit! { EffectPattern { name: "dice coins 5: exile them again", priority: 100, parse: exile_them_again } }
+
+/// "Return those cards to the battlefield under their owner's control, then exile them
+/// again." after an instruction that exiled them: the return (read as the follow-up it is
+/// on its own), then the exile of the new permanents.
+fn then_exile_them_again(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(head) = l
+        .strip_suffix(", then exile them again")
+        .or_else(|| l.strip_suffix(", then exile it again"))
+    else {
+        return false;
+    };
+    if !head.starts_with("return ") || !head.contains(" to the battlefield") {
+        return false;
+    }
+    fn last(e: &Effect) -> &Effect {
+        match e {
+            Effect::Seq(v) => v.last().map_or(e, last),
+            e => e,
+        }
+    }
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let mut e = prev.clone();
+    if !crate::oracle_ext::apply_followup_ext(head, &mut e, b)
+        || !matches!(last(&e), Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield)
+    {
+        b.targets.truncate(saved.0);
+        (b.it, b.it_player) = (saved.1, saved.2);
+        return false;
+    }
+    b.it = Sel::Var(vars::IT);
+    *prev = Effect::seq(vec![
+        e,
+        Effect::Exile {
+            what: Sel::Var(vars::IT),
+            face_down: false,
+            link: false,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "dice coins 5: return those cards ..., then exile them again", priority: 9, apply: then_exile_them_again } }
 
 /// "... until end of turn, or until any player rolls a 1, whichever comes first" (Drop
 /// Tower): the duration and the text before it.
