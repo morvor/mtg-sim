@@ -61,3 +61,32 @@ pub fn to_first_strike_damage(
 pub fn finish_combat(t: &mut TestGame) {
     t.advance_to(P0, Step::EndOfCombat);
 }
+
+/// A custom card with the given type line and Oracle text, compiled as the card database
+/// would (every ability must compile).
+pub fn compiled_card(name: &str, type_line: &str, text: &str) -> mtg_engine::card::CardDef {
+    let tl = mtg_engine::types::TypeLine::parse(type_line);
+    let ctx = mtg_engine::oracle::CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = mtg_engine::oracle::compile(text, &ctx);
+    assert!(compiled
+        .abilities
+        .iter()
+        .all(|a| !matches!(a.kind, mtg_engine::ability::AbilityKind::Unsupported(_))));
+    mtg_engine::card::CardDef::custom(mtg_engine::object::Characteristics {
+        name: smol_str::SmolStr::new(name),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{1}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: std::sync::Arc::from(text),
+        ..Default::default()
+    })
+}

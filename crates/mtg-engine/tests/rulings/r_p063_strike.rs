@@ -507,3 +507,32 @@ fn mutual_destruction_may_sacrifice_the_creature_that_gave_it_flash() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
+
+#[test]
+fn mutual_destruction_without_flash_doesnt_trigger_spell_with_flash_abilities() {
+    cr!("601.3", "601.2i", "603.2");
+    ruling!(
+        "Mutual Destruction",
+        "In this case, abilities that trigger whenever you cast a spell with flash won’t trigger."
+    );
+    let watcher = || {
+        compiled_card(
+            "Flash Watcher",
+            "Enchantment",
+            "Whenever you cast a spell with flash, you gain 3 life.",
+        )
+    };
+    // Sacrificing the Ambush Viper (the only permanent with flash): the spell has no
+    // flash once it's cast, so the ability doesn't trigger.
+    let mut t = TestGame::new(2);
+    t.custom(P0, watcher(), Zone::Battlefield);
+    mutual_destruction(&mut t, "Ambush Viper");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    // Control: sacrificing another creature, it still has flash when it becomes cast.
+    let mut t = TestGame::new(2);
+    t.custom(P0, watcher(), Zone::Battlefield);
+    mutual_destruction(&mut t, "Hill Giant");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+}

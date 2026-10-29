@@ -390,34 +390,6 @@ fn wild_cantor_sacrificed_for_mana_cant_also_convoke() {
     assert_eq!(t.life(P1), 16);
 }
 
-/// An artifact with the given Oracle text, compiled as the card database would.
-fn artifact(name: &str, text: &str) -> mtg_engine::card::CardDef {
-    let tl = mtg_engine::types::TypeLine::parse("Artifact");
-    let ctx = mtg_engine::oracle::CompileContext {
-        card_name: name,
-        full_name: name,
-        type_line: &tl,
-        layout: mtg_engine::card::Layout::Normal,
-        face_index: 0,
-        keywords: &[],
-        power: None,
-        toughness: None,
-    };
-    let compiled = mtg_engine::oracle::compile(text, &ctx);
-    assert!(compiled
-        .abilities
-        .iter()
-        .all(|a| !matches!(a.kind, mtg_engine::ability::AbilityKind::Unsupported(_))));
-    mtg_engine::card::CardDef::custom(mtg_engine::object::Characteristics {
-        name: smol_str::SmolStr::new(name),
-        mana_cost: mtg_engine::mana::ManaCost::parse("{1}"),
-        card_types: tl.card_types,
-        abilities: compiled.abilities,
-        rules_text: std::sync::Arc::from(text),
-        ..Default::default()
-    })
-}
-
 #[test]
 fn an_artifact_sacrificed_for_mana_cant_also_improvise() {
     // The same holds for improvise: the artifacts are tapped after mana abilities are
@@ -432,7 +404,7 @@ fn an_artifact_sacrificed_for_mana_cant_also_improvise() {
             .map(|_| {
                 t.custom(
                     P0,
-                    artifact("Mana Shard", "Sacrifice this artifact: Add {C}."),
+                    compiled_card("Mana Shard", "Artifact", "Sacrifice this artifact: Add {C}."),
                     Zone::Battlefield,
                 )
             })
