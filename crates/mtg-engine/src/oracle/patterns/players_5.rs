@@ -165,3 +165,100 @@ fn each_player_who_did_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> 
 }
 
 inventory::submit! { FollowupPattern { name: "each player who [did it to an object] this way [does something]", priority: 60, apply: each_player_who_did_this_way } }
+
+/// The cards the instructions of a "you and defending player each discard a card or
+/// sacrifice a permanent" put into graveyards, for "for each land card put into a
+/// graveyard this way".
+const PUT_INTO_GRAVEYARDS: Var = vars::USER + 9532;
+
+/// Adds "and keep what it moved" after each discard and sacrifice instruction in `v` (a
+/// compiled effect as JSON). Returns how many there were.
+fn keep_discarded_and_sacrificed(v: &mut serde_json::Value) -> usize {
+    use serde_json::Value as J;
+    let mut n = 0;
+    match v {
+        J::Object(m) => {
+            for x in m.values_mut() {
+                n += keep_discarded_and_sacrificed(x);
+            }
+            let is_action = m.len() == 1
+                && (m.get("Discard").is_some_and(|d| d.get("who").is_some() && d.get("n").is_some())
+                    || m.get("Sacrifice").is_some_and(|d| {
+                        d.get("who").is_some() && d.get("filter").is_some() && d.get("count").is_some()
+                    }));
+            if is_action {
+                let keep = serde_json::to_value(Effect::Store {
+                    var: PUT_INTO_GRAVEYARDS,
+                    sel: Sel::Union(vec![Sel::Var(PUT_INTO_GRAVEYARDS), Sel::Var(vars::IT)]),
+                })
+                .unwrap_or(J::Null);
+                let action = J::Object(std::mem::take(m));
+                m.insert("Seq".into(), J::Array(vec![action, keep]));
+                n += 1;
+            }
+        }
+        J::Array(a) => {
+            for x in a {
+                n += keep_discarded_and_sacrificed(x);
+            }
+        }
+        _ => {}
+    }
+    n
+}
+
+/// "You draw a card for each land card put into a graveyard this way." after "you and
+/// defending player each discard a card or sacrifice a permanent" (Eumidian Wastewaker):
+/// the cards those instructions put into graveyards (a discarded or sacrificed card that
+/// went elsewhere instead, or a token, isn't one).
+fn draw_for_each_card_put_into_graveyards(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(noun) = l
+        .strip_prefix("you draw a card for each ")
+        .or_else(|| l.strip_prefix("draw a card for each "))
+        .and_then(|r| r.strip_suffix(" put into a graveyard this way"))
+    else {
+        return false;
+    };
+    let Some((f, false, tail)) = parse_object_phrase(noun) else {
+        return false;
+    };
+    if !end(tail).is_empty() {
+        return false;
+    }
+    let Ok(mut j) = serde_json::to_value(&*prev) else {
+        return false;
+    };
+    if keep_discarded_and_sacrificed(&mut j) == 0 {
+        return false;
+    }
+    let Ok(kept) = serde_json::from_value::<Effect>(j) else {
+        return false;
+    };
+    let f = match f {
+        Filter::And(v) => Filter::and(
+            v.into_iter()
+                .filter(|x| !matches!(x, Filter::InZone(_)))
+                .collect(),
+        ),
+        f => f,
+    };
+    let n = Value::CountSel(Box::new(Sel::Matching(
+        Box::new(Sel::Var(PUT_INTO_GRAVEYARDS)),
+        Filter::and(vec![f, Filter::Card, Filter::InZone(ZoneKind::Graveyard)]),
+    )));
+    *prev = Effect::seq(vec![
+        Effect::Store {
+            var: PUT_INTO_GRAVEYARDS,
+            sel: Sel::Union(vec![]),
+        },
+        kept,
+        Effect::Draw {
+            who: PlayerRef::You,
+            n,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "you draw a card for each [card] put into a graveyard this way (after discards and sacrifices)", priority: 60, apply: draw_for_each_card_put_into_graveyards } }

@@ -642,3 +642,36 @@ fn collision_of_realms_only_players_who_shuffled_a_nontoken_creature_reveal() {
     assert_eq!(creatures(&t, P2), 0);
     assert!(t.in_graveyard(P2, "Grizzly Bears"));
 }
+
+#[test]
+fn eumidian_wastewaker_draws_for_each_land_card_put_into_a_graveyard() {
+    cr!("608.2c", "701.9a", "701.21a");
+    compiles("Eumidian Wastewaker");
+    // "Whenever this creature attacks, you and defending player each discard a card or
+    // sacrifice a permanent. You draw a card for each land card put into a graveyard this
+    // way."
+    let run = |p1_land: bool| {
+        let mut t = TestGame::new(2);
+        let ww = t.battlefield(P0, "Eumidian Wastewaker");
+        t.hand(P0, "Forest");
+        for _ in 0..3 {
+            t.library_top(P0, "Island");
+        }
+        if p1_land {
+            t.battlefield(P1, "Forest");
+        } else {
+            t.battlefield(P1, "Grizzly Bears");
+        }
+        // P0 discards (the Forest); P1 sacrifices (its only permanent).
+        t.answer(P0, DecisionKind::Option, Answer::Index(0));
+        t.answer(P1, DecisionKind::Option, Answer::Index(1));
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.attack(&[(ww, Entity::Player(P1))], &[]);
+        t.resolve_all();
+        assert!(t.in_graveyard(P0, "Forest"));
+        t.hand_size(P0)
+    };
+    // Two land cards: two cards drawn. A land and a creature: one.
+    assert_eq!(run(true), 2);
+    assert_eq!(run(false), 1);
+}
