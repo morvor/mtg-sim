@@ -55,8 +55,10 @@ pub fn is_no_player_referent(p: &PlayerRef) -> bool {
 /// Before a sentence of a spell's text is parsed: if nothing gave "it" an antecedent yet
 /// and the spell itself is the sentence's subject ("~ deals 1 damage to each creature"),
 /// "it" in later sentences refers to the spell ("If it was kicked, it deals 2 damage to
-/// each creature instead.").
+/// each creature instead."). So does "Then ~ deals damage to that player equal to its
+/// power." (River Song).
 pub fn note_subject(sentence: &str, b: &mut Builder) {
+    let sentence = sentence.strip_prefix("Then ").unwrap_or(sentence);
     if is_no_referent(&b.it) && sentence.starts_with("~ ") {
         b.it = Sel::This;
     }

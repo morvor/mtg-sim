@@ -988,7 +988,15 @@ impl Game {
             Filter::ChosenType => match self.source_choices(ctx) {
                 Some(ch) => match ch.creature_type.clone().or(ch.basic_land_type.clone()) {
                     Some(t) => self.matches_view(view, id, &Filter::Subtype(t), ctx),
-                    None => ch.card_type.is_some_and(|t| c.card_types.contains(t)),
+                    // "choose a planeswalker type" (CR 205.3j): kept as the chosen word.
+                    None => match ch
+                        .text
+                        .clone()
+                        .filter(|w| crate::types::is_planeswalker_type(w))
+                    {
+                        Some(t) => self.matches_view(view, id, &Filter::Subtype(t), ctx),
+                        None => ch.card_type.is_some_and(|t| c.card_types.contains(t)),
+                    },
                 },
                 None => false,
             },
