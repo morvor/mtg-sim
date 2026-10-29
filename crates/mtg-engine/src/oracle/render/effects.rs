@@ -1355,6 +1355,10 @@ impl Renderer<'_> {
                 let v = self.value(value);
                 format!("note {v}")
             }
+            Effect::NoteManaSpent { amount } => {
+                let what = if *amount { "type and amount" } else { "type" };
+                format!("note the {what} of mana spent to pay this activation cost")
+            }
             Effect::SetX { .. } => String::new(),
             // Bookkeeping for "... they paid this way" (named by the value that reads it).
             Effect::AddToPlayerTally { .. } => String::new(),
@@ -2120,6 +2124,28 @@ impl Renderer<'_> {
                     d => self.duration(d),
                 };
                 join_words(&[s, d])
+            }
+            // "Prevent the next 1 damage that would be dealt to this creature by ~ this
+            // turn." in an ability granted by ~ (Torrent of Lava): a shield against the
+            // granting object's damage (CR 615.7).
+            Effect::AddReplacement {
+                def:
+                    ReplacementDef {
+                        event:
+                            ReplacementEvent::Damage {
+                                source: Filter::Custom(granter),
+                                to_players: None,
+                                to_objects: Some(Filter::In(to)),
+                                combat_only: false,
+                            },
+                        action: ReplacementAction::PreventAmount(v),
+                        ..
+                    },
+                duration: Duration::EndOfTurn,
+                uses: None,
+            } if granter == crate::granted_by::GRANTER && matches!(**to, Sel::This) => {
+                let (a, _) = self.amount(v);
+                format!("prevent the next {a} damage that would be dealt to ~ by ~ this turn")
             }
             Effect::AddReplacement {
                 def,
@@ -8404,6 +8430,10 @@ impl Renderer<'_> {
             }
             ManaProduction::DevotionToChosenColor => {
                 "an amount of mana of that color equal to your devotion to that color".into()
+            }
+            ManaProduction::Noted { amount: false } => "one mana of ~'s last noted type".into(),
+            ManaProduction::Noted { amount: true } => {
+                "~'s last noted type and amount of mana".into()
             }
         }
     }
