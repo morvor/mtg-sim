@@ -100,3 +100,147 @@ fn may_pay_for_each(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "you may pay [cost] for each [counted thing]", priority: 300, parse: may_pay_for_each } }
+
+/// "if [object]'s mana value is less than or equal to [value], [instruction]" (Transmute
+/// Artifact: "If that card's mana value is less than or equal to the sacrificed
+/// artifact's mana value, put it onto the battlefield."): a comparison of two values.
+fn mana_value_compares(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("if ")?;
+    let (c, x) = r.split_once(", ")?;
+    let (obj, rhs) = c.split_once("'s mana value is ")?;
+    let (cmp, v) = [
+        ("less than or equal to ", Cmp::Le),
+        ("greater than or equal to ", Cmp::Ge),
+        ("less than ", Cmp::Lt),
+        ("greater than ", Cmp::Gt),
+        ("equal to ", Cmp::Eq),
+    ]
+    .iter()
+    .find_map(|(p, cmp)| rhs.strip_prefix(p).map(|v| (*cmp, v)))?;
+    // Only a value phrase (a number is the core grammar's).
+    if parse_number(v).is_some() {
+        return None;
+    }
+    let first = b.targets.len();
+    let (sel, tail) = crate::oracle::effects::object_ref(obj, b)?;
+    if !tail.trim().is_empty() || b.targets.len() != first || matches!(sel, Sel::This) {
+        b.targets.truncate(first);
+        return None;
+    }
+    let (rv, tail) = crate::oracle::statics::parse_value_phrase(v, b)?;
+    if !end(&tail).is_empty() {
+        return None;
+    }
+    // "it" in the instruction is the object compared.
+    b.it = sel.clone();
+    let e = parse_clause(x, b)?;
+    Some(Effect::If {
+        cond: Condition::Compare(Value::ManaValueOf(Box::new(sel)), cmp, rv),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+/// As a sentence after the instruction that found the object (read before the leading-if
+/// grammar, which has no referent for "that card" after a search inside "If you do").
+fn if_mana_value_compares(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(e) = mana_value_compares(l, b) else {
+        return false;
+    };
+    let old = std::mem::replace(prev, Effect::Noop);
+    *prev = Effect::seq(vec![old, e]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if [object]'s mana value is less than or equal to [value]", priority: 50, apply: if_mana_value_compares } }
+
+/// The last instruction of an effect.
+fn last_mut(e: &mut Effect) -> Option<&mut Effect> {
+    match e {
+        Effect::Seq(v) => v.last_mut(),
+        e => Some(e),
+    }
+}
+
+/// "If it's greater, you may pay {X}, where X is the difference." after "If [a] is less
+/// than or equal to [b], ...": otherwise, a payment of the difference (Transmute
+/// Artifact's ruling: you pay as the spell resolves).
+fn if_greater_pay_difference(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    if end(l) != "if it's greater, you may pay {x}, where x is the difference" {
+        return false;
+    }
+    let Some(Effect::If {
+        cond: Condition::Compare(a, Cmp::Le, c),
+        otherwise,
+        ..
+    }) = last_mut(prev)
+    else {
+        return false;
+    };
+    if !matches!(**otherwise, Effect::Noop) || !matches!(a, Value::ManaValueOf(_)) {
+        return false;
+    }
+    let Some(one) = crate::mana::ManaCost::parse("{1}") else {
+        return false;
+    };
+    // {X} where X is the difference: that much generic mana (CR 107.1b: a negative
+    // difference is 0).
+    let diff = Value::Max(
+        Box::new(Value::Diff(Box::new(a.clone()), Box::new(c.clone()))),
+        Box::new(Value::c(0)),
+    );
+    **otherwise = Effect::PayOptional {
+        who: PlayerRef::You,
+        cost: Cost::free().with(CostPart::Repeated {
+            cost: Box::new(Cost::mana(one)),
+            times: diff,
+        }),
+        then: Box::new(Effect::Noop),
+        otherwise: Box::new(Effect::Noop),
+    };
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if it's greater, you may pay {X}, where X is the difference", priority: 50, apply: if_greater_pay_difference } }
+
+/// The payment of the difference above, if `e` is that "if ... less than or equal to"
+/// instruction.
+fn difference_payment(e: &mut Effect) -> Option<&mut Effect> {
+    let Effect::If { otherwise, .. } = e else {
+        return None;
+    };
+    match &mut **otherwise {
+        p @ Effect::PayOptional { .. } => Some(p),
+        _ => None,
+    }
+}
+
+/// "If you do, [instruction]." / "If you don't, [instruction]." after that payment.
+fn if_paid_difference(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    let (did, r) = if let Some(r) = l.strip_prefix("if you do, ") {
+        (true, r)
+    } else if let Some(r) = l.strip_prefix("if you don't, ") {
+        (false, r)
+    } else {
+        return false;
+    };
+    let Some(Effect::PayOptional {
+        then, otherwise, ..
+    }) = last_mut(prev).and_then(difference_payment)
+    else {
+        return false;
+    };
+    let slot = if did { then } else { otherwise };
+    if !matches!(**slot, Effect::Noop) {
+        return false;
+    }
+    let Some(e) = parse_clause(r, b) else {
+        return false;
+    };
+    **slot = e;
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "if you do / don't, after paying the difference", priority: 50, apply: if_paid_difference } }
