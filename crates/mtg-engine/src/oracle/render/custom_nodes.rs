@@ -92,7 +92,8 @@ impl Renderer<'_> {
         for a in &atoms {
             match a {
                 Filter::OwnedBy(r) => owner = Some(*r),
-                Filter::Custom(_) | Filter::InZone(ZoneKind::Graveyard) | Filter::Card => {}
+                Filter::Custom(n) if n.starts_with(g::AMONG_TOP_OF_GRAVEYARD) => {}
+                Filter::InZone(ZoneKind::Graveyard) | Filter::Card => {}
                 x if format!("{x:?}") == format!("{q:?}") => {}
                 _ => return None,
             }
@@ -116,7 +117,7 @@ impl Renderer<'_> {
     pub(crate) fn custom_condition_nodes(&mut self, name: &str) -> Option<String> {
         Some(match name {
             // CR 503.2: any time after the first upkeep step of the turn has ended.
-            crate::turn_structure::AFTER_UPKEEP => "after their upkeep step".into(),
+            crate::turn_structure::AFTER_UPKEEP => "after the first upkeep step of the turn".into(),
             crate::kw::trigger_events::CAUSED_BY_YOURS => {
                 "a spell or ability you control caused it".into()
             }

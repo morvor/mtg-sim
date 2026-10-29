@@ -10982,6 +10982,7 @@ Henge Walker
 Henge of Ramos
 Hengegate Pathway // Mistgate Pathway
 Henrika Domnathi // Henrika, Infernal Seer
+Henzie "Toolbox" Torre
 Herald of Amity
 Herald of Anafenza
 Herald of Anguish
@@ -27647,6 +27648,7 @@ Woolly Mammoths
 Woolly Spider
 Woolly Thoctar
 Word of Binding
+Word of Command
 Word of Seizing
 Words of Waste
 Words of Wilding

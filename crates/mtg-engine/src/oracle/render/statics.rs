@@ -771,12 +771,17 @@ impl Renderer<'_> {
             Condition::Custom(n) if n == "restrictions:declare_blockers_step" => {
                 "during the declare blockers step".into()
             }
-            // CR 503.2: after the first upkeep step of an opponent's turn.
+            // CR 503.2: after the first upkeep step of the turn, on an opponent's turn or
+            // on yours.
             Condition::And(v)
-                if matches!(v.as_slice(), [Condition::NotYourTurn, Condition::Custom(n)]
+                if matches!(v.as_slice(), [Condition::NotYourTurn | Condition::YourTurn, Condition::Custom(n)]
                     if n == crate::turn_structure::AFTER_UPKEEP) =>
             {
-                "during an opponent's turn after their upkeep step".into()
+                if matches!(v[0], Condition::YourTurn) {
+                    "during your turn after your upkeep step".into()
+                } else {
+                    "during an opponent's turn after their upkeep step".into()
+                }
             }
             // "Cast ~ only during combat on your turn [before blockers are declared]": the
             // combat of that turn.

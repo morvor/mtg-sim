@@ -77,7 +77,17 @@ must pass.
 27,925 of 31,789 fully supported cards passed at the start (6026924c); 28,016 of 31,789 pass
 on the branch before the first merge, and 28,043 of 31,866 after merging the later landings
 (origin's passing list at the last merge has 27,924 cards). 73 of the 148 cards in the taken
-clusters pass.
+clusters pass. After the review: 28,045 of 31,866 (75 of the 148: Word of Command, whose mana
+restriction now follows the text, and Henzie "Toolbox" Torre).
+
+Review fixes: Word of Command's mana may pay only for that card or for mana abilities of the
+player's lands (`ManaRestriction::ActivateManaAbilityOf`, applied through the
+`added_mana_restriction` hook instead of an edit to `Game::add_mana`; the provisional register
+entry is dropped). The comparison's normalization wasn't idempotent: "you've cast" became
+"you cast" only after the rule dropping the subject "you" ran, so an alternative of a
+rendering (normalized once more) lost a "you" the Oracle side kept; the "you've" rule now runs
+first (`compare.rs`; Henzie). `top_cards_of_graveyard` ignored every custom quality among the
+atoms, not only its own. "after their upkeep step" is worded for either player's turn.
 
 Renderer (new modules `render/draft_terms.rs`, `render/custom_nodes.rs`,
 `render/linked_terms.rs`; small hooks in the existing dispatch chains): the Conspiracy draft
@@ -186,8 +196,7 @@ AST and plays as the text says (wording only) unless noted:
   up"), Shared Fate ("one of their opponents' libraries"; two abilities in one sentence),
   Michelangelo, Batroc ("a +1/+1 counter on him for each"), The Enigma Jewel (the craft
   materials), Cass ("Equipment that were attached to it"), Desdemona (the duration's place
-  and the alternative list), Soldevi Adnate (`qualities of an alternative list`), Henzie
-  (the comparison of "Blitz costs you pay cost {1} less" inside an alternative).
+  and the alternative list), Soldevi Adnate (`qualities of an alternative list`).
 - Other wordings: Frankenstein's Monster ("If you can't, ..."), Comet (the loyalty symbols
   in the die table), Zenos ("creatures other than ~ and the chosen creature" after
   "Until end of turn"), Alania ("the first Otter spell other than ~"), Satoru ("none of
