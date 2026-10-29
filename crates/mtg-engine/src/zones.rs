@@ -248,11 +248,21 @@ pub fn record_cost_moved(
             paid.tapped.iter().map(|o| Entity::Object(*o)).collect(),
         );
     }
-    let exiled: Vec<Entity> = paid
+    let mut exiled: Vec<Entity> = paid
         .exiled
         .iter()
         .filter_map(|o| now_in(o, &|z| z == Zone::Exile))
         .collect();
+    // Cards an action in the cost exiled ("Exile the top card of your library", Storm
+    // Elemental): recorded as they are in exile.
+    let by_action: Vec<Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| g.is_live(**o) && g.obj(**o).zone == Zone::Exile)
+        .map(|o| Entity::Object(*o))
+        .filter(|e| !exiled.contains(e))
+        .collect();
+    exiled.extend(by_action);
     if !exiled.is_empty() {
         vars.insert(COST_EXILED, exiled);
     }
@@ -282,11 +292,15 @@ pub const COST_RETURNED: Var = vars::USER + 132;
 /// exiled card" turned into "that card", which then refers to [`COST_EXILED`] (CR 400.7j).
 /// `None` if the cost exiles no such card or the text doesn't refer to it.
 pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
-    if !cost
-        .parts
-        .iter()
-        .any(|p| matches!(p, CostPart::Exile { .. }))
-    {
+    let exiles = |p: &CostPart| match p {
+        CostPart::Exile { .. } => true,
+        // "Exile the top card of your library" (an action as a cost).
+        CostPart::Effect(e) => {
+            matches!(&**e, Effect::Move { to, .. } if to.zone == ZoneKind::Exile)
+        }
+        _ => false,
+    };
+    if !cost.parts.iter().any(exiles) {
         return None;
     }
     // (Plural "the exiled cards" is kept as written, see below.)

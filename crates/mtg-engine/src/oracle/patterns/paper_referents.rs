@@ -118,3 +118,103 @@ fn group_with_qualifier(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "each of those [objects] with [qualifier]", priority: 300, parse: group_with_qualifier } }
+
+/// Whether the spell's additional cost exiles a permanent ("As an additional cost to cast
+/// this spell, exile a creature you control.").
+fn additional_cost_exiles() -> bool {
+    crate::oracle::raw_text()
+        .to_lowercase()
+        .contains("as an additional cost to cast this spell, exile a ")
+}
+
+/// "[instruction] if the exiled creature was a Thrull" / "If the exiled creature was a
+/// Thrull, [instruction]" (Soul Exchange): the creature the additional cost exiled, as it
+/// last existed on the battlefield (CR 400.7j, 608.2h).
+fn if_the_exiled_creature_was(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !b.ctx.is_spell() || !additional_cost_exiles() {
+        return None;
+    }
+    let (x, q) = if let Some(r) = l.strip_prefix("if the exiled creature was ") {
+        let (q, x) = r.split_once(", ")?;
+        (x, q)
+    } else {
+        let (x, q) = l.split_once(" if the exiled creature was ")?;
+        (x, q)
+    };
+    let q = q.strip_prefix("a ").or_else(|| q.strip_prefix("an "))?;
+    let (f, false, tail) = parse_object_phrase(q)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let e = parse_clause(x, b)?;
+    Some(Effect::If {
+        cond: Condition::SelMatches(
+            Sel::Before(Box::new(Sel::Var(crate::zones::COST_EXILED))),
+            f,
+        ),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "if the exiled creature was a [quality] (additional cost)", priority: 300, parse: if_the_exiled_creature_was } }
+
+/// Whether the card creates exactly one token, with one instruction: "the token" in its
+/// other abilities is that token (CR 607.1d: the objects an ability creates are linked to
+/// its source, `Game::link_to_creator`; Dance of Many's ruling: "Each Dance of Many is
+/// associated only with its token creature").
+fn single_token_card() -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.matches("create ").count() == 1 && raw.contains("create a token") && !raw.contains(" tokens")
+}
+
+/// The token the card's other ability created, while it's on the battlefield.
+fn the_token() -> Filter {
+    Filter::and(vec![Filter::Token, Filter::In(Box::new(Sel::Linked))])
+}
+
+/// "When ~ leaves the battlefield, exile the token." (Dance of Many).
+fn act_on_the_token(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let verb = l.strip_suffix(" the token")?;
+    if !b.in_trigger || !single_token_card() {
+        return None;
+    }
+    let what = Sel::All(the_token());
+    Some(match verb {
+        "exile" => Effect::Exile {
+            what,
+            face_down: false,
+            link: false,
+        },
+        "sacrifice" => Effect::SacrificeObjects { what },
+        "destroy" => Effect::Destroy {
+            what,
+            no_regen: false,
+        },
+        _ => return None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "exile the token (created by another ability)", priority: 300, parse: act_on_the_token } }
+
+/// "When the token leaves the battlefield, ..." (Dance of Many): the token the card's
+/// other ability created.
+fn the_token_leaves(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(r) != "the token leaves the battlefield" || !single_token_card() {
+        return None;
+    }
+    Some((
+        TriggerCond::LeavesBattlefield(Filter::and(vec![
+            Filter::Token,
+            Filter::Custom(crate::kw::created_by_source::CREATED_BY_SOURCE.into()),
+        ])),
+        Sel::TriggerObject,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { super::TriggerPattern { name: "the token leaves the battlefield (created by another ability)", priority: 300, parse: the_token_leaves } }
