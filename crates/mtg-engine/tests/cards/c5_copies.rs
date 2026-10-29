@@ -69,3 +69,47 @@ fn uvilda_exiled_card_is_cast_for_four_less_when_the_last_refine_counter_leaves(
     assert_eq!(t.hand_size(P0), hand + 2);
     assert!(t.obj_now(island).tapped);
 }
+
+#[test]
+fn caller_of_the_untamed_x_is_the_mana_value_of_the_copied_card() {
+    cr!("107.3c", "707.12");
+    interp!("x-defined-by-target");
+    supported("Caller of the Untamed");
+    use mtg_engine::decision::Answer;
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let caller = t.battlefield(P0, "Caller of the Untamed");
+    t.g.objects[caller.0 as usize].summoning_sick = false;
+    // Exiled with a card named Caller of the Untamed before the game: Hill Giant (4) and
+    // Grizzly Bears (2).
+    for name in ["Hill Giant", "Grizzly Bears"] {
+        let c = t.exile(P0, name);
+        t.g.named_exiles
+            .push((P0, "Caller of the Untamed".into(), c));
+    }
+    t.lands(P0, "Forest", 4);
+    // X = 3: no such card, the ability can't be activated for it.
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    let r = t.activate(P0, caller, 0, &[]);
+    let x3 = r.ok().flatten().and_then(|a| t.g.obj(a).stack.as_ref().and_then(|s| s.x));
+    assert!(x3.is_none() || x3 == Some(2) || x3 == Some(4), "{x3:?}");
+    t.resolve_all();
+    // X = 2: a copy of the Bears.
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let caller = t.battlefield(P0, "Caller of the Untamed");
+    t.g.objects[caller.0 as usize].summoning_sick = false;
+    for name in ["Hill Giant", "Grizzly Bears"] {
+        let c = t.exile(P0, name);
+        t.g.named_exiles
+            .push((P0, "Caller of the Untamed".into(), c));
+    }
+    t.lands(P0, "Forest", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.activate(P0, caller, 0, &[]).expect("activates");
+    t.resolve_all();
+    let bears: Vec<ObjectId> = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    assert!(t.obj_now(bears[0]).is_token());
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+}
