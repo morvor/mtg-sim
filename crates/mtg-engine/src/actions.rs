@@ -1830,6 +1830,7 @@ impl Game {
         crate::prevention::order_for_shields(self, &mut events, combat);
         let first_event = self.events.len();
         let outer = self.prevention_followups.replace(vec![]);
+        let recipients: Vec<ObjectId> = events.iter().filter_map(|(_, t, _)| t.object()).collect();
         for (s, t, a) in events {
             finals.extend(self.replace(ReplEvent::Damage {
                 source: s,
@@ -1851,6 +1852,14 @@ impl Game {
         // Damage a source would deal to one recipient that redirection effects split
         // (CR 614.9) and brought back together is still dealt at once, as one event.
         let finals = merge_damage_events(finals);
+        // Recipients that left the battlefield as other damage of this event was replaced
+        // ("If damage would be dealt to Dralnu, sacrifice that many permanents instead")
+        // left at the same time the damage is dealt: they're still dealt it (rulings on
+        // Dralnu, Lich Lord), though their own abilities won't trigger on it.
+        let left_meanwhile: Vec<ObjectId> = recipients
+            .into_iter()
+            .filter(|o| !self.is_live(*o))
+            .collect();
         // CR 120.10: what would be excess damage, as the damage is about to be dealt.
         let excess_before = crate::excess_damage::thresholds_before(
             self,
@@ -1868,7 +1877,8 @@ impl Game {
                     amount,
                     combat,
                 } => {
-                    if self.valid_damage_recipient(target) && amount > 0 {
+                    let left = matches!(target, Entity::Object(o) if left_meanwhile.contains(&o));
+                    if (self.valid_damage_recipient(target) || left) && amount > 0 {
                         self.perform_damage(source, target, amount, combat);
                         dealt.push((source, target, amount));
                         // CR 120.3f, 702.15b: lifelink — damage causes the source's
