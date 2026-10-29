@@ -871,7 +871,11 @@ fn plan(
             let objs: Vec<ObjectId> = g
                 .resolve_objects(what, ctx)
                 .into_iter()
-                .filter_map(|o| g.found_after_move(Entity::Object(o), ctx).object())
+                .filter_map(|o| {
+                    let e = Entity::Object(o);
+                    let found = g.found_after_move(e, ctx);
+                    crate::zones::target_not_source_moved(ctx, what, e, found).object()
+                })
                 .collect();
             if has_choice(what) {
                 if let Some(p) = p {

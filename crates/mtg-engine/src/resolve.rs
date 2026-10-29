@@ -321,6 +321,7 @@ impl Game {
                     crate::zones::looked_then_exiled(self, ctx.controller, &seen);
                 }
                 self.current_link = prev_link;
+                crate::zones::note_source_moved(ctx, what, &res);
                 ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();
                 // "Exile a creature card from your graveyard. If you do, ...": whether
                 // anything was exiled (as for moving it, CR 608.2c).
@@ -424,9 +425,14 @@ impl Game {
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
-                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
+                    .filter_map(|o| {
+                        let e = Entity::Object(o);
+                        let found = self.found_after_move(e, ctx);
+                        crate::zones::target_not_source_moved(ctx, what, e, found).object()
+                    })
                     .collect();
                 let res = self.move_to_destination(objs, to, ctx);
+                crate::zones::note_source_moved(ctx, what, &res);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let mut res = crate::merge::found_all(self, res);
                 if to.zone == ZoneKind::Battlefield {
