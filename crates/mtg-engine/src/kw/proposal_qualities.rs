@@ -43,7 +43,9 @@ impl KeywordRules for ProposalQualities {
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
-        if name == crate::next_spell::EACH_SPELL_THIS_TURN {
+        if name == crate::next_spell::EACH_SPELL_THIS_TURN
+            || name == crate::next_spell::CARD_YOU_PLAY
+        {
             return Some(true);
         }
         if name == CASTER_IS_ACTIVE {
