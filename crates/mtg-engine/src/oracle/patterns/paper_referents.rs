@@ -16,6 +16,15 @@ use crate::ability::*;
 use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::*;
 
+/// Whether the card's trigger is about "a [w]" as its subject.
+fn trigger_subject_is(w: &str) -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let named = ["whenever a ", "whenever an ", "whenever another ", "when a ", "when an "]
+        .iter()
+        .any(|p| raw.contains(&format!("{p}{w} ")));
+    named && !raw.contains(&format!("by a {w}")) && !raw.contains(&format!("by an {w}"))
+}
+
 /// "that [subtype]" in a triggered ability whose "it" is the trigger's object: "that
 /// creature".
 fn that_subtype(l: &str, b: &mut Builder) -> Option<Effect> {
@@ -35,12 +44,15 @@ fn that_subtype(l: &str, b: &mut Builder) -> Option<Effect> {
         let w = &after[..w_len];
         let tail = &after[w_len..];
         let word_ends = tail.is_empty() || tail.starts_with(' ') || tail.starts_with('\'');
-        // A creature type noun only ("that Sliver"), not "that creature" or a card type.
+        // A creature type noun only ("that Sliver"), not "that creature" or a card type,
+        // that the trigger's subject names ("Whenever a Sliver becomes blocked"; not
+        // "Whenever a creature becomes blocked by a Sliver").
         if at_word
             && word_ends
             && !w.is_empty()
             && subtype_word(w).is_some()
             && !w.ends_with('s')
+            && trigger_subject_is(w)
         {
             out.push_str(&rest[..i]);
             out.push_str("that creature");
@@ -122,9 +134,9 @@ inventory::submit! { EffectPattern { name: "each of those [objects] with [qualif
 /// Whether the spell's additional cost exiles a permanent ("As an additional cost to cast
 /// this spell, exile a creature you control.").
 fn additional_cost_exiles() -> bool {
-    crate::oracle::raw_text()
-        .to_lowercase()
-        .contains("as an additional cost to cast this spell, exile a ")
+    let raw = crate::oracle::raw_text().to_lowercase();
+    raw.contains("as an additional cost to cast this spell, exile a ")
+        || raw.contains("as an additional cost to cast ~, exile a ")
 }
 
 /// "[instruction] if the exiled creature was a Thrull" / "If the exiled creature was a

@@ -69,6 +69,10 @@ fn leading_if_target(l: &str, b: &mut Builder) -> Option<Effect> {
     let (noun, verb, quality) = [" has ", " is "]
         .iter()
         .find_map(|v| cond.split_once(v).map(|(n, q)| (n, *v, q)))?;
+    // An object ("it"), not a player.
+    if matches!(noun, "player" | "opponent") {
+        return None;
+    }
     // One noun ("creature", "artifact creature"), not a phrase with its own verb.
     if noun.contains(' ') && parse_object_phrase(noun).is_none_or(|(_, _, t)| !end(t).is_empty()) {
         return None;
