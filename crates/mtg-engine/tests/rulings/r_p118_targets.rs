@@ -274,10 +274,11 @@ fn unliving_psychopath_checks_power_on_activation_and_resolution() {
         let elves = t.battlefield(P1, "Llanowar Elves");
         let bears = t.battlefield(P1, "Grizzly Bears");
         t.lands(P0, "Swamp", 1);
-        // The 2-power Bears can't be targeted by a 2-power Psychopath.
-        assert!(t.activate(P0, u, 1, &[obj(bears)]).is_err());
-        t.g.objects[u.0 as usize].tapped = false;
+        let from = n_asked(&t);
         t.activate(P0, u, 1, &[obj(elves)]).unwrap();
+        // The 2-power Bears can't be targeted by a 2-power Psychopath.
+        let offered = target_candidates(&t, P0, from).concat();
+        assert!(offered.contains(&obj(elves)) && !offered.contains(&obj(bears)));
         if pump {
             giant_growth(&mut t, elves);
         }

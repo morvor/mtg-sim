@@ -196,6 +196,7 @@ fn attendant_of_vraska_needs_a_vraska_as_it_resolves() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Vraska, Golgari Queen");
     t.battlefield(P0, "Attendant of Vraska");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
     cast_new(&mut t, P1, "Planar Cleansing", &[]);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Attendant of Vraska"));

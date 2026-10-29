@@ -19,7 +19,9 @@ fn compared_at_blocks(watcher: &str, back: bool, n: u32, other: bool, blocker: &
     supported(watcher);
     let setup = |t: &mut TestGame| {
         let w = if back {
-            enter_with(t, P0, watcher, n, true)
+            let w = enter_with(t, P0, watcher, n, true);
+            t.g.objects[w.0 as usize].summoning_sick = false;
+            w
         } else {
             with_counters(t, P0, watcher, n)
         };
@@ -30,6 +32,7 @@ fn compared_at_blocks(watcher: &str, back: bool, n: u32, other: bool, blocker: &
         };
         let b = t.battlefield(P1, blocker);
         attack_with(t, &[(a, Entity::Player(P1))]);
+        assert!(attacking(t, a), "{watcher}");
         (w, a, b)
     };
     let mut t = TestGame::new(2);
@@ -38,7 +41,12 @@ fn compared_at_blocks(watcher: &str, back: bool, n: u32, other: bool, blocker: &
     let mut t = TestGame::new(2);
     let (w, a, b) = setup(&mut t);
     giant_growth(&mut t, b);
-    assert!(legal_blocks(&mut t, P1, &[(b, a)]), "{watcher}");
+    assert!(
+        legal_blocks(&mut t, P1, &[(b, a)]),
+        "{watcher} (back {back}): {:?} blocked by {:?}",
+        t.pt(a),
+        t.pt(b)
+    );
     declare_blocks(&mut t, P1, &[(b, a)]);
     assert!(is_blocked(&t, a), "{watcher}");
     give_plus1(&mut t, w, 5);
@@ -446,6 +454,7 @@ fn truefire_captain_controller_loses_before_the_trigger_is_put_on_the_stack() {
     // Earthquake X=3: 3 damage to each creature without flying and each player.
     for (life, p1_lost) in [(3, 3), (20, 6)] {
         let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
         t.battlefield(P0, "Truefire Captain");
         set_life(&mut t, P0, life);
         t.answer_targets(P0, &[Entity::Player(P1)]);

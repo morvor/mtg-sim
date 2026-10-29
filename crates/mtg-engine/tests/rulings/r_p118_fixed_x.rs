@@ -216,15 +216,14 @@ fn famished_worldsire_x_is_its_power_as_it_resolves() {
             .filter(|o| o.controller == P0 && o.chars.name == "Forest")
             .count()
     };
-    // It enters with no counters (nothing devoured): its trigger would look at 0 cards.
-    let w = t.enter(P0, "Famished Worldsire");
-    t.g.flush_events();
-    t.settle();
+    // It enters with one counter (as if it had devoured a land and a third): 1/1 as its
+    // trigger is put on the stack, 3/3 as it resolves.
+    let w = enter_with(&mut t, P0, "Famished Worldsire", 1, false);
     assert_eq!(stack(&t), 1);
-    give_plus1(&mut t, w, 3);
+    give_plus1(&mut t, w, 2);
     t.answer_choose(P0, &top.iter().map(|i| obj(*i)).collect::<Vec<_>>());
     t.resolve_all();
-    assert_eq!(lands(&t), 3);
+    assert_eq!(lands(&t), 3, "{:?}", t.asked().iter().rev().take(4).collect::<Vec<_>>());
 }
 
 #[test]
