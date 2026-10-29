@@ -941,3 +941,35 @@ fn mirror_of_fate_puts_the_chosen_face_up_exiled_cards_on_top_of_an_empty_librar
     assert!(t.in_exile("Island"));
     let _ = theirs;
 }
+
+#[test]
+fn emergent_ultimatum_casts_the_cards_the_opponent_didnt_choose() {
+    cr!("608.2c", "601.2");
+    ruling!(
+        "Emergent Ultimatum",
+        "If you wish to cast any exiled cards, you do so as part of the resolution of Emergent Ultimatum."
+    );
+    compiles("Emergent Ultimatum");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Island", 2);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let elves = t.library_top(P0, "Llanowar Elves");
+    let div = t.library_top(P0, "Divination");
+    let spell = t.hand(P0, "Emergent Ultimatum");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_choose(
+        P0,
+        &[Entity::Object(bears), Entity::Object(elves), Entity::Object(div)],
+    );
+    t.answer_choose_moved(P1, &[Entity::Object(div)]);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
+    assert!(!t.in_exile("Divination"));
+    assert!(t.in_exile("Emergent Ultimatum"));
+}

@@ -652,3 +652,34 @@ fn choose_exiled_cards(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choose [up to N] [face-up] exiled cards you own", priority: 90, parse: choose_exiled_cards } }
+
+/// "You may cast the other cards without paying their mana costs." (Emergent Ultimatum,
+/// after "An opponent chooses one of those cards. Shuffle that card into your library."):
+/// the cards the opponent didn't choose.
+fn cast_the_other_cards(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (optional, r) = match l.strip_prefix("you may cast ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("cast ")?),
+    };
+    let what = r.strip_suffix(" without paying their mana costs")?;
+    let key = match what {
+        "the other cards" | "the other card" => "the other",
+        "the rest" => "the rest",
+        _ => return None,
+    };
+    let sel = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == key)
+        .map(|(_, s)| s.clone())?;
+    Some(Effect::CastCard {
+        who: PlayerRef::You,
+        what: sel,
+        free: true,
+        optional,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "you may cast the other cards without paying their mana costs", priority: 90, parse: cast_the_other_cards } }
