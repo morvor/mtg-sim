@@ -12439,6 +12439,7 @@ Jetmir, Nexus of Revels
 Jetting Glasskite
 Jewel Thief
 Jewel-Eyed Cobra
+Jeweled Amulet
 Jeweled Torque
 Jhessian Balmgiver
 Jhessian Infiltrator
@@ -12605,6 +12606,7 @@ Kabuto Moth
 Kadena, Slinking Sorcerer
 Kaervek the Merciless
 Kaervek's Spite
+Kaervek's Torch
 Kaervek, the Punisher
 Kaervek, the Spiteful
 Kagemaro's Clutch
@@ -25137,6 +25139,7 @@ Torpor Dust
 Torpor Orb
 Torrent Sculptor // Flamethrower Sonata
 Torrent of Fire
+Torrent of Lava
 Torrent of Stone
 Torrential Gearhulk
 Torsten Von Ursus
