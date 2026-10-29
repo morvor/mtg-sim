@@ -86,3 +86,62 @@ fn cast_this_way_rule(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
 }
 
 inventory::submit! { AbilityPattern { name: "costs 5: [alternative cost]. [rule] to cast it this way", priority: 80, parse: cast_this_way_rule } }
+
+/// "[instruction granting "[cost]: [effect]."] Only you may activate this ability."
+/// (Martyrdom): the granted activated ability may be activated only by the player who
+/// controlled the granting effect (CR 602.2), fixed as the effect is created
+/// (`granted_captures::CAPTURED_YOU`), whoever controls the creature later.
+fn granted_only_you_may_activate(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if block.contains('\n') {
+        return None;
+    }
+    let head = block
+        .trim_end()
+        .strip_suffix(" Only you may activate this ability.")?;
+    if !head.ends_with("\"") {
+        return None;
+    }
+    let out = crate::oracle::parse_ability(head, ctx)?;
+    let mut granted = 0;
+    let mut fixed = Vec::new();
+    for a in out {
+        let mut v = serde_json::to_value(&a.kind).ok()?;
+        granted += set_granted_activator(&mut v);
+        let kind: AbilityKind = serde_json::from_value(v).ok()?;
+        fixed.push(AbilityDef::with_link(kind, block.trim(), a.link));
+    }
+    (granted == 1).then_some(fixed)
+}
+
+/// Sets the activator of each activated ability granted by an `AddAbility` modification in
+/// `v`; returns how many.
+fn set_granted_activator(v: &mut serde_json::Value) -> usize {
+    use serde_json::Value as J;
+    match v {
+        J::Object(m) => {
+            if let Some(J::Object(def)) = m.get_mut("AddAbility") {
+                if let Some(J::Object(kind)) = def.get_mut("kind") {
+                    if let Some(J::Object(act)) = kind.get_mut("Activated") {
+                        if act.get("activator").is_some_and(|x| x.is_null())
+                            && act.get("any_player") == Some(&J::Bool(false))
+                        {
+                            let you = PlayerFilter::Ref(Box::new(PlayerRef::Var(
+                                crate::granted_captures::CAPTURED_YOU,
+                            )));
+                            act.insert(
+                                "activator".into(),
+                                serde_json::to_value(you).unwrap_or(J::Null),
+                            );
+                            return 1;
+                        }
+                    }
+                }
+            }
+            m.values_mut().map(set_granted_activator).sum()
+        }
+        J::Array(a) => a.iter_mut().map(set_granted_activator).sum(),
+        _ => 0,
+    }
+}
+
+inventory::submit! { AbilityPattern { name: "costs 5: [grant of an activated ability]. Only you may activate this ability.", priority: 80, parse: granted_only_you_may_activate } }
