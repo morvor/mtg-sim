@@ -31,14 +31,14 @@ pub(crate) fn link_effect_id(src: ObjectId) -> u32 {
     1_000_000 + (src.0 % 1_000_000)
 }
 
-/// The objects a static copy effect copies: the objects noted for the source's linked
-/// abilities (as they last existed if they've left their zone), or what the selection
-/// selects.
+/// The object a static copy effect copies: the last object noted for the source's linked
+/// abilities ("the chosen creature", "the last chosen card"; as it last existed if it has
+/// left its zone), or what the selection selects.
 fn copied(g: &Game, of: &Sel, ctx: &Ctx) -> Option<ObjectId> {
     match of {
         Sel::LinkedNoted => crate::linked_notes::noted_objects(g, ctx.source?, ctx.link)
             .into_iter()
-            .next(),
+            .last(),
         _ => g.eval_sel(of, ctx).into_iter().find_map(|e| e.object()),
     }
 }

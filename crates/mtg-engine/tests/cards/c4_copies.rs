@@ -158,3 +158,82 @@ fn ulalek_copies_all_spells_you_control() {
     // The Eldrazi spell and its copy both resolve.
     assert_eq!(t.named_on_battlefield("Eldrazi Devastator").len(), 2, "{}", t.dump_log());
 }
+
+#[test]
+fn metamorphic_alteration_ignores_later_changes_to_the_chosen_creatures_copiable_values() {
+    cr!("707.2", "613.2a");
+    ruling!(
+        "Metamorphic Alteration",
+        "The enchanted creature won't change if the chosen creature's copiable values change."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let giant = t.battlefield(P1, "Hill Giant");
+    alter(&mut t, bears, angel);
+    assert_eq!(t.g.obj(bears).chars.name.as_str(), "Serra Angel");
+    // A second Alteration makes the Angel a copy of the Hill Giant: its copiable values
+    // change, the Bears' don't.
+    alter(&mut t, angel, giant);
+    assert_eq!(t.g.obj(angel).chars.name.as_str(), "Hill Giant", "{}", t.dump_log());
+    assert_eq!(t.g.obj(bears).chars.name.as_str(), "Serra Angel");
+    assert_eq!(t.pt(bears), (4, 4));
+}
+
+#[test]
+fn metamorphic_alteration_copying_a_copy_copies_what_it_copies() {
+    cr!("707.2", "707.3", "613.2a");
+    ruling!(
+        "Metamorphic Alteration",
+        "then the enchanted creature becomes a copy of whatever the chosen creature copied"
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let giant = t.battlefield(P1, "Hill Giant");
+    alter(&mut t, angel, giant);
+    assert_eq!(t.g.obj(angel).chars.name.as_str(), "Hill Giant");
+    alter(&mut t, bears, angel);
+    assert_eq!(t.g.obj(bears).chars.name.as_str(), "Hill Giant", "{}", t.dump_log());
+    assert_eq!(t.pt(bears), (3, 3));
+    assert!(!t.g.obj(bears).has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+}
+
+/// Cytoshape: "Choose a nonlegendary creature on the battlefield. Target creature becomes
+/// a copy of that creature until end of turn."
+fn cytoshape(t: &mut TestGame, host: ObjectId, chosen: ObjectId) {
+    t.lands(P0, "Tropical Island", 4);
+    t.answer_choose(P0, &[Entity::Object(chosen)]);
+    let cyto = t.hand(P0, "Cytoshape");
+    t.cast(P0, cyto).target(host).go();
+    t.resolve_all();
+}
+
+#[test]
+fn metamorphic_alteration_and_other_copy_effects_apply_in_timestamp_order() {
+    cr!("613.2a", "613.7a", "613.7b");
+    // The Alteration (a static ability with its Aura's timestamp) after Cytoshape: the
+    // Alteration's copy effect is applied last.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let giant = t.battlefield(P1, "Hill Giant");
+    cytoshape(&mut t, bears, giant);
+    assert_eq!(t.g.obj(bears).chars.name.as_str(), "Hill Giant");
+    alter(&mut t, bears, angel);
+    assert_eq!(t.g.obj(bears).chars.name.as_str(), "Serra Angel", "{}", t.dump_log());
+    // Cytoshape after the Alteration: Cytoshape's copy effect is applied last.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let angel = t.battlefield(P1, "Serra Angel");
+    let giant = t.battlefield(P1, "Hill Giant");
+    alter(&mut t, bears, angel);
+    cytoshape(&mut t, bears, giant);
+    assert_eq!(t.g.obj(bears).chars.name.as_str(), "Hill Giant", "{}", t.dump_log());
+    // Cytoshape ends: the Alteration's copy effect is all that's left.
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.g.recompute();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Serra Angel");
+}

@@ -210,9 +210,20 @@ fn grishnakh_steals_a_creature_with_power_up_to_the_armys() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.g.objects[bears.0 as usize].tapped = true;
     t.answer_targets(P0, &[Entity::Object(bears)]);
+    let from = t.asked().len();
     t.enter(P0, "Grishnákh, Brash Instigator");
     t.settle();
     t.resolve_all();
+    // Only creatures with power 2 or less could be targeted: the Bears, not the Giant.
+    let candidates: Vec<Entity> = t.asked()[from..]
+        .iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .expect("asked for a target");
+    assert!(candidates.contains(&Entity::Object(bears)), "{candidates:?}");
+    assert!(!candidates.contains(&Entity::Object(giant)), "{candidates:?}");
     // Amass Orcs 2: a 2-power Army; the Bears (power 2) is stolen, untapped, with haste.
     assert_eq!(t.obj_now(bears).controller, P0, "{}", t.dump_log());
     assert!(!t.obj_now(bears).tapped);
