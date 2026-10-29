@@ -790,3 +790,48 @@ fn jhoiras_timebug_adds_or_removes_a_time_counter_on_the_target() {
     t.resolve_all();
     assert_eq!(t.counters(card, "time"), 1);
 }
+
+#[test]
+fn psychic_paper_sets_the_equipped_creatures_name_and_creature_type() {
+    cr!("613.1c", "613.1d", "607.2d", "301.5c");
+    ruling!("Psychic Paper", "You must choose an existing creature type");
+    interp!("name-setting-in-layer-3");
+    compiles("Psychic Paper");
+    let mut t = TestGame::new(2);
+    let paper = t.battlefield(P0, "Psychic Paper");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.lands(P0, "Plains", 4);
+    t.set_step(P0, Step::PrecombatMain);
+    let elf = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == "Elf")
+        .expect("Elf");
+    t.answer(P0, DecisionKind::Name, Answer::Text("Llanowar Elves".into()));
+    t.answer(P0, DecisionKind::Option, Answer::Index(elf));
+    t.activate(P0, paper, 0, &[Entity::Object(bears)]).expect("equip");
+    t.resolve_all();
+    t.g.recompute();
+    let o = t.obj_now(bears);
+    assert_eq!(o.chars.name.as_str(), "Llanowar Elves");
+    assert!(o.chars.has_subtype("Elf"));
+    assert!(!o.chars.has_subtype("Bear"));
+    assert!(o.has_keyword(KeywordKind::Ward));
+    // Moved to another creature: new choices; the Bears are themselves again.
+    let warrior = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == "Warrior")
+        .expect("Warrior");
+    t.answer(P0, DecisionKind::Name, Answer::Text("Grizzly Bears".into()));
+    t.answer(P0, DecisionKind::Option, Answer::Index(warrior));
+    t.activate(P0, paper, 0, &[Entity::Object(wurm)]).expect("equip");
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Grizzly Bears");
+    assert!(t.obj_now(bears).chars.has_subtype("Bear"));
+    let w = t.obj_now(wurm);
+    assert_eq!(w.chars.name.as_str(), "Grizzly Bears");
+    assert!(w.chars.has_subtype("Warrior") && !w.chars.has_subtype("Wurm"));
+}
