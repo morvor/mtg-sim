@@ -1388,6 +1388,10 @@ impl Renderer<'_> {
                 let v = self.value(value);
                 format!("note {v}")
             }
+            Effect::NoteManaSpent { amount } => {
+                let what = if *amount { "type and amount" } else { "type" };
+                format!("note the {what} of mana spent to pay this activation cost")
+            }
             Effect::SetX { .. } => String::new(),
             // Bookkeeping for "... they paid this way" (named by the value that reads it).
             Effect::AddToPlayerTally { .. } => String::new(),
@@ -2153,6 +2157,28 @@ impl Renderer<'_> {
                     d => self.duration(d),
                 };
                 join_words(&[s, d])
+            }
+            // "Prevent the next 1 damage that would be dealt to this creature by ~ this
+            // turn." in an ability granted by ~ (Torrent of Lava): a shield against the
+            // granting object's damage (CR 615.7).
+            Effect::AddReplacement {
+                def:
+                    ReplacementDef {
+                        event:
+                            ReplacementEvent::Damage {
+                                source: Filter::Custom(granter),
+                                to_players: None,
+                                to_objects: Some(Filter::In(to)),
+                                combat_only: false,
+                            },
+                        action: ReplacementAction::PreventAmount(v),
+                        ..
+                    },
+                duration: Duration::EndOfTurn,
+                uses: None,
+            } if granter == crate::granted_by::GRANTER && matches!(**to, Sel::This) => {
+                let (a, _) = self.amount(v);
+                format!("prevent the next {a} damage that would be dealt to ~ by ~ this turn")
             }
             Effect::AddReplacement {
                 def,
@@ -4396,6 +4422,39 @@ impl Renderer<'_> {
                 return format!("for each {each}, add {sym} and you gain 1 life");
             }
         }
+        // "Zombies you control get +2/+1 until end of turn. Other creatures you control get
+        // +1/+1 until end of turn." (`patterns/other_than_previous_group.rs`): the second
+        // group is "other" than the first.
+        if let [first @ Effect::Modify {
+            what: Sel::All(group),
+            ..
+        }, Effect::Modify {
+            what: Sel::All(Filter::And(fs)),
+            mods,
+            duration,
+        }] = v
+        {
+            let not_group = format!("{:?}", Filter::Not(Box::new(group.clone())));
+            let is_not_group = |f: &Filter| format!("{f:?}") == not_group;
+            if fs.iter().filter(|f| is_not_group(f)).count() == 1 {
+                let other = Effect::Modify {
+                    what: Sel::All(Filter::And(
+                        fs.iter()
+                            .map(|f| {
+                                if is_not_group(f) {
+                                    Filter::Other
+                                } else {
+                                    f.clone()
+                                }
+                            })
+                            .collect(),
+                    )),
+                    mods: mods.clone(),
+                    duration: duration.clone(),
+                };
+                return format!("{}. {}", self.effect(first), self.effect(&other));
+            }
+        }
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
@@ -5358,12 +5417,28 @@ impl Renderer<'_> {
                     let s = self.sel(source, Case::Subj);
                     let mut items = Vec::new();
                     let mut wheres = String::new();
+                    // The previous part's amount and how it was rendered.
+                    let mut prev: Option<(&Value, String)> = None;
                     for e in &v[i..j] {
                         if let Effect::DealDamage { amount, to, .. } = e {
+                            // "... to target player and that much damage to up to one
+                            // target creature" (or "X damage to any target and X damage
+                            // to itself"): the previous part's computed amount again.
+                            if let Some((_, pa)) = prev.as_ref().filter(|(p, pa)| {
+                                !matches!(p, Value::Const(_))
+                                    && !pa.contains('{')
+                                    && format!("{p:?}") == format!("{amount:?}")
+                            }) {
+                                let pa = pa.clone();
+                                let t = self.sel(to, Case::Obj);
+                                items.push(format!("{{alt:{pa}|that much}} damage to {t}"));
+                                continue;
+                            }
                             let (a, w) = self.amount(amount);
                             let t = self.sel(to, Case::Obj);
                             items.push(format!("{a} damage to {t}"));
                             wheres.push_str(&w.unwrap_or_default());
+                            prev = Some((amount, a));
                         }
                     }
                     parts.push(format!("{s} deals {}{wheres}", join_list(&items, "and")));
@@ -8437,6 +8512,10 @@ impl Renderer<'_> {
             }
             ManaProduction::DevotionToChosenColor => {
                 "an amount of mana of that color equal to your devotion to that color".into()
+            }
+            ManaProduction::Noted { amount: false } => "one mana of ~'s last noted type".into(),
+            ManaProduction::Noted { amount: true } => {
+                "~'s last noted type and amount of mana".into()
             }
         }
     }

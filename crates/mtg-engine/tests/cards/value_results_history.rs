@@ -254,13 +254,10 @@ fn chandras_incinerator_costs_less_by_noncombat_damage_to_opponents() {
 }
 
 #[test]
-fn gnoll_war_band_ignores_opponents_who_left_the_game() {
-    cr!("601.2f", "800.4a");
+fn gnoll_war_band_counts_opponents_who_were_dealt_damage() {
+    cr!("601.2f", "800.4i");
+    interp!("history-counts-players-who-left");
     assert_supported("Gnoll War Band");
-    ruling!(
-        "Gnoll War Band",
-        "Opponents who have left the game will not be counted"
-    );
     // {5}{R}, {1} less for each opponent who was dealt damage this turn.
     let setup = |lands: usize| {
         let mut t = TestGame::new(3);
@@ -279,13 +276,15 @@ fn gnoll_war_band_ignores_opponents_who_left_the_game() {
     assert!(t.cast(P0, gwb).try_go().is_ok());
     let (mut t, gwb) = setup(3);
     assert!(t.cast(P0, gwb).try_go().is_err());
-    // One of them has left the game: {4}{R}.
+    // One of them has since left the game: the damage dealt to them this turn still
+    // counts (CR 800.4i; Gnoll War Band's ruling saying otherwise is exempt as
+    // conflicting with it, see the interpretation).
     let (mut t, gwb) = setup(4);
     t.g.player_mut(P2).has_lost = true;
     t.g.player_mut(P2).left_game = true;
-    assert!(t.cast(P0, gwb).try_go().is_err());
-    let (mut t, gwb) = setup(5);
+    assert!(t.cast(P0, gwb).try_go().is_ok());
+    let (mut t, gwb) = setup(3);
     t.g.player_mut(P2).has_lost = true;
     t.g.player_mut(P2).left_game = true;
-    assert!(t.cast(P0, gwb).try_go().is_ok());
+    assert!(t.cast(P0, gwb).try_go().is_err());
 }
