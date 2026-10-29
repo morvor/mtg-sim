@@ -28,7 +28,7 @@ fn exiled(t: &TestGame) -> usize {
 
 #[test]
 fn case_of_the_burning_masks_counts_sources_not_damage_events() {
-    cr!("120.3", "113.7");
+    cr!("113.7");
     ruling!(
         "Case of the Burning Masks",
         "A permanent that deals damage multiple times without changing zones still counts as only one source."
@@ -60,7 +60,6 @@ fn case_of_the_burning_masks_counts_sources_not_damage_events() {
 
 #[test]
 fn time_elemental_targets_permanents_with_no_auras() {
-    cr!("115.1");
     ruling!(
         "Time Elemental",
         "A “permanent that isn’t enchanted” is a permanent with no Auras on it."
@@ -222,7 +221,6 @@ fn angelic_shield_bonus_ends_as_it_is_sacrificed() {
 
 #[test]
 fn assemble_the_entmoot_counts_life_gained_ignoring_life_lost() {
-    cr!("119.3");
     ruling!(
         "Assemble the Entmoot",
         "Assemble the Entmoot's activated ability counts the total amount of life you gained without taking into account any life you lost during that turn."
@@ -285,7 +283,7 @@ fn aura_of_silence_taxes_every_opponent() {
 
 #[test]
 fn quest_for_pure_flame_sources() {
-    cr!("120.3", "609.7");
+    cr!("609.7");
     supported("Quest for Pure Flame");
     ruling!(
         "Quest for Pure Flame",
@@ -623,7 +621,6 @@ fn a_killer_among_us_copies_have_their_own_choices() {
 
 #[test]
 fn no_rest_for_the_wicked_returns_creatures_that_died_before_it_entered() {
-    cr!("400.7");
     ruling!(
         "No Rest for the Wicked",
         "If you sacrifice No Rest for the Wicked on the same turn you cast it, all creature cards that were put into your graveyard from the battlefield that turn will be returned to your hand, including any that were put into your graveyard before No Rest for the Wicked entered the battlefield."

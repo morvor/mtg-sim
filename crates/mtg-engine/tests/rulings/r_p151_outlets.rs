@@ -24,7 +24,6 @@ fn choices_since(t: &TestGame, p: PlayerId, from: usize) -> Vec<Vec<Entity>> {
 
 #[test]
 fn infernal_denizen_must_sacrifice_the_swamps() {
-    cr!("701.21a");
     ruling!(
         "Infernal Denizen",
         "You must sacrifice the Swamps if you can. You can’t choose not to pay if you have them."
@@ -136,7 +135,7 @@ fn overlaid_terrain_sacrifices_the_lands_before_it_enters() {
 
 #[test]
 fn yuma_must_be_on_the_battlefield() {
-    cr!("603.10a");
+    cr!("603.10");
     ruling!(
         "Yuma, Proud Protector",
         "Yuma must be on the battlefield for its last ability to trigger. If it is put into your graveyard at the same time as a Desert card you own, its ability won't trigger."

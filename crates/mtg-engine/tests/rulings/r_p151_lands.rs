@@ -86,7 +86,6 @@ fn blast_zone_x_x_costs_twice_x() {
 
 #[test]
 fn tectonic_edge_can_target_any_nonbasic_land() {
-    cr!("602.5b");
     ruling!(
         "Tectonic Edge",
         "Assuming you can activate Tectonic Edge’s second ability, you can target any nonbasic land with it (not just one controlled by an opponent that controls four or more lands)."
@@ -171,7 +170,6 @@ fn land_abilities_that_dont_resolve_do_nothing() {
 
 #[test]
 fn cryptic_caves_counts_itself_and_only_one_of_two_can_be_activated() {
-    cr!("602.5b");
     ruling!(
         "Cryptic Caves",
         "Cryptic Caves can be one of the five lands you control. You don't need to control five other lands."
@@ -203,7 +201,6 @@ fn cryptic_caves_counts_itself_and_only_one_of_two_can_be_activated() {
 
 #[test]
 fn haunted_fengraf_can_return_a_card_put_there_in_response() {
-    cr!("608.2b");
     ruling!(
         "Haunted Fengraf",
         "Because Haunted Fengraf's ability doesn't target any creature card, any creature card put into the graveyard in response to that ability may be returned to your hand."
@@ -339,7 +336,7 @@ fn ally_encampment_mana_only_for_ally_spells() {
 
 #[test]
 fn lazotep_quarry_tokens() {
-    cr!("707.2", "707.9b", "107.3b");
+    cr!("707.2", "707.9b");
     ruling!(
         "Lazotep Quarry",
         "If a card copied by the token had any \"when [this creature] enters the battlefield\" abilities, the token also has those abilities and will trigger them when it's created."
@@ -424,7 +421,7 @@ fn mirrorpool_creature_copies() {
 
 #[test]
 fn mirrorpool_spell_copies_keep_x_and_modes() {
-    cr!("707.10");
+    cr!("707.10", "700.2g");
     ruling!(
         "Mirrorpool",
         "If the copied spell has an X whose value was determined as it was cast (like Fall of the Titans does), the copy has the same value of X."
@@ -461,7 +458,7 @@ fn mirrorpool_spell_copies_keep_x_and_modes() {
 
 #[test]
 fn littjara_mirrorlake_copies_copiable_values() {
-    cr!("707.2", "707.3", "111.4");
+    cr!("707.2", "707.3");
     ruling!(
         "Littjara Mirrorlake",
         "If the target creature is copying something else, the token you create will use the copiable values of the target creature. In most cases, it will be a copy of whatever the target creature is copying."
@@ -751,7 +748,7 @@ fn tyrite_sanctum_indestructible_counter() {
 
 #[test]
 fn a_token_without_a_mana_cost_has_mana_value_0() {
-    cr!("202.3", "111.4");
+    cr!("202.3a");
     ruling!(
         "HELIOS One",
         "A token that’s not a copy of something else normally won’t have a mana cost. Anything without a mana cost normally has a mana value of 0."

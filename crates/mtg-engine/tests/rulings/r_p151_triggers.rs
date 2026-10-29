@@ -88,7 +88,6 @@ fn blood_spatter_analysis_returns_a_card_only_when_its_own_ability_sacrifices_it
 
 #[test]
 fn evolved_spinoderm_isnt_sacrificed_until_its_upkeep_ability_resolves() {
-    cr!("603.8");
     ruling!(
         "Evolved Spinoderm",
         "If Evolved Spinoderm somehow loses all of its oil counters due to an effect other than its upkeep triggered ability, this won't cause its controller to sacrifice it until the next time its upkeep triggered ability resolves."
@@ -147,7 +146,7 @@ fn porphyry_nodes_triggers_when_every_creature_blinks() {
 
 #[test]
 fn dragon_whelp_activated_in_the_end_step_is_sacrificed_next_end_step() {
-    cr!("603.7c");
+    cr!("603.7b");
     ruling!(
         "Dragon Whelp",
         "If the fourth (or more) time Dragon Whelp's ability is activated during the same turn happens to be during that turn's end step, the delayed triggered ability won't trigger until the beginning of the next turn's end step. You'll have to sacrifice Dragon Whelp at that time."

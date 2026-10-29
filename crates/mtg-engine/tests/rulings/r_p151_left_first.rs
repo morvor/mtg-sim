@@ -16,7 +16,7 @@ fn snow_lands(t: &mut TestGame, p: PlayerId, n: usize) -> Vec<ObjectId> {
 
 #[test]
 fn aangs_iceberg_sacrificed_by_its_own_ability_exiles_nothing() {
-    cr!("113.7a");
+    cr!("610.3b");
     ruling!(
         "Aang's Iceberg",
         "If Aang's Iceberg leaves the battlefield before its triggered ability resolves, including if it is sacrificed by its activated ability, the target permanent won't be exiled."
@@ -414,7 +414,7 @@ fn marit_lages_slumber_cases() {
 
 #[test]
 fn deadly_designs_not_sacrificed_by_a_new_controller_or_with_illegal_targets() {
-    cr!("608.2b");
+    cr!("608.2b", "701.21a", "603.8");
     ruling!(
         "Deadly Designs",
         "If the player who controlled Deadly Designs as its last ability triggered doesn't control it as that ability resolves, Deadly Designs won't be sacrificed. The same is true if each of the ability's targets are all illegal by the time the ability resolves. However, if it's still on the battlefield and has five or more plot counters on it, its last ability will immediately trigger again."

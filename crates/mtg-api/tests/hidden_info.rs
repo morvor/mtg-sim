@@ -583,7 +583,7 @@ fn a_card_returned_at_random_from_a_graveyard_is_seen_by_everyone() {
 
 #[test]
 fn a_card_returned_from_a_graveyard_to_a_hand_is_seen_by_everyone() {
-    cr!("400.2", "402.3");
+    cr!("400.2");
     ruling!(
         "Haunted Fengraf",
         "All players get to see which card you return to your hand."
