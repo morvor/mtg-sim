@@ -105,3 +105,21 @@ pub fn act(
     let i = ability_index(t, src, text);
     t.activate(p, src, i, targets)
 }
+
+/// `p` gains control of the permanent indefinitely, then the game settles.
+pub fn steal_for_good(t: &mut TestGame, p: PlayerId, id: ObjectId) {
+    use mtg_engine::ability::{Duration, Effect, PlayerRef, Sel};
+    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
+    ctx.targets = vec![vec![Entity::Object(t.g.current(id))]];
+    t.g.exec(
+        &Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::Permanent,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    t.g.flush_events();
+    t.settle();
+}
