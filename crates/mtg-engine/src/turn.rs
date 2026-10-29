@@ -984,6 +984,13 @@ impl Game {
                 }
             }
         }
+        // A "this turn" delayed trigger sees the events of the "until end of turn" effects
+        // ending with it ("When you lose control of that Equipment this turn", Stolen
+        // Uniform ruling: also when the control effect ends).
+        if self.dirty {
+            self.recompute();
+        }
+        self.flush_events();
         // "Until end of turn, whenever …" delayed triggered abilities (CR 603.7b).
         self.delayed_triggers.retain(|d| {
             !(matches!(d.trigger, crate::ability::TriggerCond::ThisTurn(_))

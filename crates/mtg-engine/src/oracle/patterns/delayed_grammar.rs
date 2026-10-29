@@ -1221,6 +1221,25 @@ pub(crate) fn referent_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
         (false, l.strip_prefix("whenever ")?)
     };
     let (cond, eff) = split_at_comma(r)?;
+    // "Whenever target creature deals combat damage to a non-Wall creature this turn,
+    // destroy that non-Wall creature." (Acidic Dagger): the creature the event names.
+    let renamed;
+    let eff = match eff.split_once("that non-") {
+        Some((_, r)) => {
+            let qualifier = r.split(' ').next().unwrap_or("");
+            let phrase = format!("non-{qualifier} creature");
+            if r.starts_with(&format!("{qualifier} creature"))
+                && cond.contains(&format!(" a {phrase}"))
+                && cond.matches("creature").count() == 2
+            {
+                renamed = eff.replace(&format!("that {phrase}"), "that creature");
+                renamed.as_str()
+            } else {
+                eff
+            }
+        }
+        None => eff,
+    };
     // "a creature card from its owner's graveyard" (another object's owner, which the zone
     // grammar reads as any graveyard); "return ~ from exile" (the card the source became,
     // which isn't tracked into the delayed ability).
@@ -1387,10 +1406,58 @@ fn lose_control_trigger(
     when: bool,
     b: &mut Builder,
 ) -> Option<Effect> {
-    if !matches!(subject, "the creature" | "that creature" | "it") || !when || this_turn {
+    // "When you lose control of the artifact, tap it." (Magus of the Unseen), "When you
+    // lose control of that Equipment this turn, if it's attached to a creature you
+    // control, unattach it." (Stolen Uniform).
+    if !matches!(
+        subject,
+        "the creature"
+            | "that creature"
+            | "it"
+            | "the artifact"
+            | "that artifact"
+            | "the permanent"
+            | "that permanent"
+            | "that equipment"
+    ) || !when
+    {
         return None;
     }
-    let it = super::pronoun_groups::singular_it(b);
+    let mut it = super::pronoun_groups::singular_it(b);
+    // "that Equipment" when "it" is now another object ("Choose target creature you
+    // control and target Equipment. ... Attach it to the chosen creature."): the one
+    // target of that kind.
+    if let Some(noun) = subject
+        .strip_prefix("that ")
+        .or_else(|| subject.strip_prefix("the "))
+    {
+        let (f, false, tail) = parse_object_phrase(noun)? else {
+            return None;
+        };
+        if !end(tail).is_empty() {
+            return None;
+        }
+        let names = |t: &Filter| format!("{t:?}").contains(&format!("{f:?}"));
+        let of_kind = |s: &Sel| match s {
+            Sel::Target(slot) => b
+                .targets
+                .get(*slot as usize)
+                .is_some_and(|t| matches!(&t.what, TargetKind::Object(x) if names(x))),
+            _ => false,
+        };
+        if !of_kind(&it) {
+            let slots: Vec<u8> = (0..b.targets.len() as u8)
+                .filter(|s| of_kind(&Sel::Target(*s)))
+                .collect();
+            match slots.as_slice() {
+                [s] => it = Sel::Target(*s),
+                // Not a target: the object "it" names ("the creature" it gained control
+                // of), when it isn't of another kind.
+                [] if !matches!(it, Sel::Target(_)) => {}
+                _ => return None,
+            }
+        }
+    }
     if !matches!(it, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject) {
         return None;
     }
@@ -1402,10 +1469,29 @@ fn lose_control_trigger(
     b.chosen_creature = None;
     b.group = None;
     b.in_trigger = true;
+    // An intervening "if" (CR 603.4): checked as the event occurs and as it resolves.
+    let (cond, eff) = match eff.strip_prefix("if ").and_then(|r| r.split_once(", ")) {
+        Some((c, e)) => match super::conditions_referents::parse_condition_with(c, b) {
+            Some(c) => (Some(c), e),
+            None => {
+                restore(b, saved);
+                return None;
+            }
+        },
+        None => (None, eff),
+    };
     let effect = parse_effect_text(eff, b);
     let targets = own_targets(b, n0);
     restore(b, saved);
     let (effect, targets) = (effect?, targets?);
+    let effect = match &cond {
+        Some(c) => Effect::If {
+            cond: c.clone(),
+            then: Box::new(effect),
+            otherwise: Box::new(Effect::Noop),
+        },
+        None => effect,
+    };
     let (mut stores, effect) = capture_refs(&effect, n0 as u8, Capture::SourceAndTargets)?;
     stores.insert(
         0,
@@ -1414,8 +1500,19 @@ fn lose_control_trigger(
             sel: it,
         },
     );
+    let mut trigger = TriggerCond::LoseControl(Filter::In(Box::new(Sel::Var(REFERENT))));
+    if let Some(c) = cond {
+        trigger = TriggerCond::Where {
+            trigger: Box::new(trigger),
+            cond: c,
+        };
+    }
+    // "this turn": it's removed in the cleanup step (CR 603.7b, 514.2).
+    if this_turn {
+        trigger = TriggerCond::ThisTurn(Box::new(trigger));
+    }
     stores.push(Effect::DelayedTrigger {
-        trigger: TriggerCond::LoseControl(Filter::In(Box::new(Sel::Var(REFERENT)))),
+        trigger,
         body: Box::new(Body {
             targets,
             effect,

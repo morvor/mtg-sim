@@ -613,6 +613,25 @@ impl Game {
                 self.effects[i].affected = Affected::Objects(keep);
             }
         }
+        // The same for a rule effect locked to objects ("Each of those creatures doesn't
+        // untap during its controller's untap step for as long as it has a paralyzation
+        // counter on it").
+        for i in 0..self.rule_effects.len() {
+            let (Duration::WhileAffectedHasCounter(kind), Some(v)) = (
+                &self.rule_effects[i].duration,
+                &self.rule_effects[i].objects,
+            ) else {
+                continue;
+            };
+            let keep: Vec<ObjectId> = v
+                .iter()
+                .copied()
+                .filter(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0)
+                .collect();
+            if keep.len() != v.len() {
+                self.rule_effects[i].objects = Some(keep);
+            }
+        }
         // Characteristics listed for a permanent turned face down (CR 708.2a): one that's
         // turned face up stops being affected for good.
         for i in 0..self.effects.len() {
@@ -765,6 +784,10 @@ impl Game {
                 );
                 !self.eval_cond(c, &ctx)
             }
+            // CR 611.2b: none of them has such a counter (any more).
+            (Duration::WhileAffectedHasCounter(kind), Some(v)) => !v
+                .iter()
+                .any(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0),
             _ => self.effect_expired(d, source, controller),
         }
     }
