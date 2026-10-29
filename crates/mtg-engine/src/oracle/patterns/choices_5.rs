@@ -188,3 +188,86 @@ fn new_targets_for_any_number(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "choose new targets for any number of other spells and/or abilities", priority: 90, parse: new_targets_for_any_number } }
+
+/// "You choose the name of a nonland card revealed this way." after "each opponent
+/// reveals their hand" (Alhammarret, High Arbiter): a name among those cards.
+fn name_of_revealed_card(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(noun) = l
+        .strip_prefix("you choose the name of a ")
+        .or_else(|| l.strip_prefix("choose the name of a "))
+        .and_then(|r| r.strip_suffix(" revealed this way"))
+    else {
+        return false;
+    };
+    // The hands the previous instruction revealed: each opponent's.
+    let revealed_hands = |e: &Effect| match e {
+        Effect::ForEachPlayer { who, effect } => {
+            matches!(who, PlayerRef::EachOpponent)
+                && matches!(effect.as_ref(), Effect::AsPlayer { effect, .. }
+                    if matches!(effect.as_ref(), Effect::RevealHand { who: PlayerRef::You }))
+        }
+        _ => false,
+    };
+    let last = match &*prev {
+        Effect::Seq(v) => v.last(),
+        e => Some(e),
+    };
+    if !last.is_some_and(revealed_hands) {
+        return false;
+    }
+    let Some((f, false, tail)) = parse_object_phrase(noun) else {
+        return false;
+    };
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return false;
+    }
+    let cards = Sel::All(Filter::and(vec![
+        f,
+        Filter::InZone(ZoneKind::Hand),
+        Filter::OwnedBy(PlayerRel::Opponent),
+    ]));
+    let Some(choose) = crate::kw::choices_5_filters::name_among(&cards) else {
+        return false;
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, choose]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "you choose the name of a [card] revealed this way (each opponent's hand)", priority: 60, apply: name_of_revealed_card } }
+
+/// "As ~ enters, each opponent reveals their hand. You choose the name of a nonland card
+/// revealed this way." (Alhammarret, High Arbiter): the reveal and the choice happen as
+/// the permanent enters (CR 614.1c, 614.12a).
+fn as_enters_name_of_revealed(
+    block: &str,
+    ctx: &crate::oracle::CompileContext,
+) -> Option<Vec<Ability>> {
+    if !ctx.is_permanent() || block.contains('\n') {
+        return None;
+    }
+    let lower = block.to_lowercase();
+    let body = end(&lower).strip_prefix("as ~ enters, ")?;
+    if !body.contains(" revealed this way") {
+        return None;
+    }
+    let mut b = Builder::new(ctx);
+    let e = crate::oracle::effects::parse_effect_text(body, &mut b)?;
+    let names = serde_json::to_string(&e).ok()?;
+    if !b.targets.is_empty() || !names.contains(crate::kw::choices_5_filters::NAME_AMONG) {
+        return None;
+    }
+    let effect = StaticEffect::Replacement(ReplacementDef {
+        event: ReplacementEvent::EntersBattlefield(Filter::Source),
+        action: ReplacementAction::AsEnters(Box::new(e)),
+        self_replacement: false,
+        optional: false,
+    });
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(effect)),
+        block,
+    )])
+}
+
+inventory::submit! { super::AbilityPattern { name: "as ~ enters, [reveal]; you choose the name of a card revealed this way", priority: 40, parse: as_enters_name_of_revealed } }

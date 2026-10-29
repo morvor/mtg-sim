@@ -486,3 +486,45 @@ fn boltbender_chooses_new_targets_for_any_number_of_other_spells() {
     assert!(t.on_battlefield(elves));
     assert!(!t.on_battlefield(bears));
 }
+
+#[test]
+fn alhammarret_chooses_one_name_among_the_revealed_nonland_cards() {
+    cr!("614.12a", "607.2d");
+    ruling!("Alhammarret, High Arbiter", "You choose one card name, not one name per opponent.");
+    ruling!(
+        "Alhammarret, High Arbiter",
+        "If your opponents have no nonland cards in their hands, you can't choose a card name."
+    );
+    round_trips("Alhammarret, High Arbiter");
+    let mut t = TestGame::new(3);
+    t.lands(P1, "Mountain", 1);
+    t.lands(P2, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let shock = t.hand(P2, "Shock");
+    t.hand(P2, "Forest");
+    let from = t.asked().len();
+    // Offered: the nonland cards' names, once each (no land).
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.enter(P0, "Alhammarret, High Arbiter");
+    let offered = t.asked()[from..].iter().find_map(|(p, d)| match d {
+        Decision::ChooseOption { options, .. } if *p == P0 => Some(options.clone()),
+        _ => None,
+    });
+    assert_eq!(
+        offered,
+        Some(vec!["Lightning Bolt".to_string(), "Shock".to_string()])
+    );
+    // Lightning Bolt was chosen: P1 can't cast it; Shock can be cast.
+    t.set_step(P1, Step::Upkeep);
+    assert!(t.cast(P1, bolt).target(Entity::Player(P0)).try_go().is_err());
+    t.clear_answers();
+    assert!(t.cast(P2, shock).target(Entity::Player(P0)).try_go().is_ok());
+    // No nonland card revealed: no name is chosen, nobody is asked.
+    let mut t = TestGame::new(2);
+    t.hand(P1, "Forest");
+    let from = t.asked().len();
+    t.enter(P0, "Alhammarret, High Arbiter");
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseOption { .. })));
+}
