@@ -990,3 +990,53 @@ fn sacrificed_value(r: &str) -> Option<(Value, String)> {
 pub fn star_pt_cda(_norm: &str, _ctx: &CompileContext) -> Option<Ability> {
     None
 }
+
+/// "Enchant creature or Vehicle ... Enchanted creature gets -4/-0." (Aether Meltdown,
+/// Aerial Modification): an Aura that can enchant a permanent that isn't a creature
+/// affects "enchanted creature" only while the permanent it enchants is a creature (the
+/// noun is what the text describes; "enchanted" names the attachment, CR 303.4m). The
+/// statics parser reads "enchanted creature" as the attached object, which an Aura that
+/// can enchant only creatures needs no more than (CR 303.4c).
+pub(crate) fn restrict_enchanted_creature(abilities: &mut [Ability]) {
+    fn requires_creature(f: &Filter) -> bool {
+        match f {
+            Filter::Type(CardType::Creature) => true,
+            Filter::And(v) => v.iter().any(requires_creature),
+            Filter::Or(v) => !v.is_empty() && v.iter().all(requires_creature),
+            _ => false,
+        }
+    }
+    let wider = abilities.iter().any(|a| {
+        a.keyword().is_some_and(|k| {
+            k.kind == KeywordKind::Enchant
+                && k.filter.as_ref().is_some_and(|f| !requires_creature(f))
+        })
+    });
+    if !wider {
+        return;
+    }
+    for a in abilities.iter_mut() {
+        let AbilityKind::Static(s) = &a.kind else {
+            continue;
+        };
+        let StaticEffect::Continuous {
+            affected: Filter::AttachedToSource,
+            mods,
+        } = &s.effect
+        else {
+            continue;
+        };
+        if !a.text.to_lowercase().starts_with("enchanted creature ") {
+            continue;
+        }
+        let mut s = s.clone();
+        s.effect = StaticEffect::Continuous {
+            affected: Filter::and(vec![
+                Filter::AttachedToSource,
+                Filter::Type(CardType::Creature),
+            ]),
+            mods: mods.clone(),
+        };
+        *a = AbilityDef::with_link(AbilityKind::Static(s), a.text.clone(), a.link);
+    }
+}

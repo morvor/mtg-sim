@@ -1332,7 +1332,7 @@ impl Renderer<'_> {
                 };
                 let _ = chosen;
                 Some(super::players::decline(
-                    "{alt:the rest|the other|the other one|the others}".into(),
+                    "{alt:the rest|the other|the other one|the others|the other cards}".into(),
                     case,
                 ))
             }

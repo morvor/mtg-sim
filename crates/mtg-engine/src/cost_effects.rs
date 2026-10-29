@@ -170,6 +170,16 @@ pub fn note_paid(g: &mut Game, cost: &crate::ability::Cost, ctx: &mut Ctx) {
             .collect();
         ctx.set_var(crate::ability::vars::SACRIFICED, sacrificed);
     }
+    // "You may tap an untapped creature you control. When you do, ... the tapped
+    // creature's power" (Nihiloor): the permanents it tapped.
+    if !paid.tapped.is_empty() {
+        let tapped = paid
+            .tapped
+            .iter()
+            .map(|o| crate::types::Entity::Object(*o))
+            .collect();
+        ctx.set_var(crate::ability::vars::TAPPED, tapped);
+    }
     let discards = cost
         .parts
         .iter()

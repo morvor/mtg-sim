@@ -1167,7 +1167,10 @@ impl Renderer<'_> {
                     _ => "you".into(),
                 }
             }
-            PlayerRef::EachOpponent => "each opponent".into(),
+            PlayerRef::EachOpponent => match &self.opponents_of {
+                Some(p) => format!("each of {p} opponents"),
+                None => "each opponent".into(),
+            },
             PlayerRef::EachPlayer => "each player".into(),
             PlayerRef::EachOtherPlayer => "each other player".into(),
             PlayerRef::TriggerPlayers => "each of those players".into(),

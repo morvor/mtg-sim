@@ -138,12 +138,16 @@ pub struct Modal {
     pub optional: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub enum ModeChooser {
     #[default]
     Controller,
     Opponent,
     Random,
+    /// "choose one at random. If [condition], you choose one instead." (Typhoid Mary,
+    /// Fractured): at random unless the condition holds as the modes are chosen (CR
+    /// 700.2b), in which case the controller chooses.
+    RandomUnless(Box<Condition>),
     /// The controller chooses modes whose total number of pawprint symbols is at most this
     /// many ("Choose up to five {P} worth of modes", CR 107.18, 700.2i).
     Pawprints(u32),

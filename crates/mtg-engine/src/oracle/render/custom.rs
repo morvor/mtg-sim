@@ -962,7 +962,16 @@ impl Renderer<'_> {
             crate::block_choice::ATTACKING_PLAYER_CHOOSES_BLOCKS => {
                 "the attacking player chooses how each creature blocks each combat".into()
             }
-            other => self.gap(format!("Restriction::Custom({other})")),
+            other => match crate::untap_limits::untap_only_types(other) {
+                Some(types) => {
+                    let words: Vec<String> = types.iter().map(|t| t.word().to_string()).collect();
+                    format!(
+                        "each player chooses {} during their untap step. That player can untap only permanents of the chosen type this step",
+                        super::join_list(&words, "or")
+                    )
+                }
+                None => self.gap(format!("Restriction::Custom({other})")),
+            },
         }
     }
 

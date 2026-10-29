@@ -226,7 +226,7 @@ fn target_slots(g: &Game, id: ObjectId) -> Vec<(usize, usize, TargetSpec)> {
 
 /// Whether `e` would be a legal target for each instance of the word "target" of the
 /// spell or ability `id` (CR 707.10d, 707.10e).
-fn legal_for_each_target(g: &Game, id: ObjectId, e: Entity) -> bool {
+pub(crate) fn legal_for_each_target(g: &Game, id: ObjectId, e: Entity) -> bool {
     let slots = target_slots(g, id);
     if slots.is_empty() || e == Entity::Object(id) {
         return false;
