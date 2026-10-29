@@ -71,3 +71,134 @@ renderer wording (independently of the parser), or a CR-justified equivalence. J
 calls go in the interpretation register (CLAUDE.md). Add "Parser bugs found" and "Remaining"
 sections. Regenerate docs/ROUNDTRIP.md and docs/roundtrip-passing.txt; `roundtrip --check`
 must pass.
+
+## Result
+
+27,925 of 31,789 fully supported cards passed at the start (6026924c); 28,016 of 31,789 pass
+on the branch before the merge, and 28,040 of 31,851 after merging the later landings
+(origin's passing list at that merge has 27,924 cards). 73 of the 148 cards in the taken
+clusters pass.
+
+Renderer (new modules `render/draft_terms.rs`, `render/custom_nodes.rs`,
+`render/linked_terms.rs`; small hooks in the existing dispatch chains): the Conspiracy draft
+abilities, each from what `draft.rs` does ("Draft ~ face up", "As you draft a creature
+card, you may reveal it, note its name, then turn ~ face down", "you guessed correctly for
+a card named ~", "the number of cards you removed from the draft with cards named ~",
+Animus of Predation's per-keyword statics as one "If you removed a creature card with
+flying ... The same is true for ..." line, "a player you noted for cards named ~"); the
+object a linked ability noted, named by what that ability did ("the chosen creature", "the
+last chosen card" for an activated choice, "the creature put onto the battlefield with ~",
+CR 607.2c/d; `FaceInfo::noted`); "tokens created with ~" (a linked token was created by
+the source, CR 607.2c); "the top two cards of your graveyard" / "one of the top two
+cards"; "another creature card" for the source-or-what-it-became quality (CR 400.7);
+"creatures other than ~ and the chosen creature"; "with two or more card types"; "that
+were cast this turn"; "you exiled" / "cards they exiled with ~"; "that shares a creature
+type with a creature that convoked ~" and "except those that ..."; "if that creature was
+cast for its warp cost"; "that shares a color with the mana that land produced" as a
+condition; "Whenever ... play a card exiled with ~" and "play a card with two or more card
+types" (cast or land played, also in a list of events); "When you remove the last
+intervention counter from ~", "the game is a draw" (CR 104.4a); "a spell or ability you
+control exiles one or more permanents from the battlefield"; "When the chosen player loses
+the game"; "Whenever an instant or sorcery spell is cast during your turn"; "the number of
+instant and sorcery spells cast before that spell this turn"; "Cast ~ only during an
+opponent's turn after their upkeep step" (CR 503.2) and "only during combat on your turn";
+"any of those results was 10 or higher"; "different names among unlocked doors of Rooms
+you control"; "differently named dungeons you've completed"; "that excess damage"; "if
+you've done all four this turn"; "If that opponent's speed is greater than each other
+player's speed, reduce that opponent's speed by 1. This effect can't reduce their speed
+below 1."; "you may pay {G} up to three times. When you pay this cost one or more times,
+choose up to that many"; "Whenever a card is drawn this way"; "target opponent chosen at
+random from among your opponents"; "Copy them. You may cast any number of the copies";
+"you choose the permanents for each player instead" (`apnap::KEEP_CHOOSER`); "Return any
+number of Aura cards ... attached to creatures you control"; "choose a creature you control
+it could be attached to. If you do, it enters attached to that creature"; "put ~ into its
+owner's graveyard instead of onto the battlefield"; Word of Command's four steps; "attach
+~ to another one of your opponents chosen at random"; "a creature or player" chosen on
+resolution; Crystalline Giant's "choose a kind of counter at random that ~ doesn't have on
+it from among ...", "copy all spells you control, then copy all other activated and
+triggered abilities you control"; "The escape cost is equal to its mana cost plus ..."
+(the renderer used to drop the mana cost: "escape—Exile three other cards"); "Commander
+spells", "Commander ninjutsu", "Madness—Pay six {C}", "Dash costs you pay cost {2} less",
+"Choose a color of a permanent you control. Add one mana of that color.", "colorless mana"
+(CR 107.4c), "Choose an opponent. That player ...", "a creature card or Garruk planeswalker
+card", "chooses an artifact, ... from among the nonland permanents they control", "Until
+end of turn, whenever you cast a spell, copy it", "~ has five or more counters on it",
+"Choose any number of target creatures. Each of those creatures ...", "Create a Food token
+or a Treasure token", "each player may play lands and cast spells from among ...", "to
+that player" for the controller of a target an opponent controls.
+
+## Parser bugs found
+
+Tests in `crates/mtg-engine/tests/cards/roundtrip_gaps_5.rs`; both fail on the old code
+(checked by restoring the old engine file and running the test):
+
+- Bloodthirsty Adversary: "When you pay this cost one or more times, ... exile up to that
+  many target instant and/or sorcery cards ... and copy them. You may cast any number of the
+  copies without paying their mana costs." The last sentence was left in the triggered
+  ability, which offered the casting before the reflexive ability made the copies, so they
+  were never cast (CR 603.12). `patterns/reflexive_continues.rs`: a sentence after "When
+  you pay this cost one or more times" continues that reflexive ability, as after "When you
+  do".
+- Word of Command: "only if mana they produce is spent to activate other mana abilities of
+  lands the player controls and/or to play that card" wasn't implemented: mana left in the
+  pool after the card was played could pay for anything. `player_control.rs`
+  (`restrict_lands_only_mana`, called from `Game::add_mana`): a spending restriction on that
+  mana (CR 106.6); provisional register entry `word-of-command-mana` (the restriction
+  allows any ability of a land, not only mana abilities).
+
+Checked in play (tests in the same file, passing on the old code too): Spikeshell Harrier
+slows the opponent who controlled the creature when another player owns it (the
+controller as it last existed, CR 608.2h); Faerie Slumber Party counts the opponents who
+controlled the returned creatures, not their owners; Oversimplify gives each player's
+Fractal the power of the creatures they controlled. Also checked by reading the AST or the
+existing tests: Mythos of Snapdax's "you choose the permanents for each player" (the
+chooser variable), Kaboom!, Explosion of Riches, Cass, Alpha Brawl, Grim Contest, Keen
+Duelist and Parker Luck (each loses life for the other's card), Vexing Arcanix, Desdemona
+(escape's mana cost is added, `kw/escape.rs`), Satoru, the Infiltrator.
+
+## Remaining
+
+Of the 148 cards in the taken clusters, these still mismatch; each was checked against the
+AST and plays as the text says (wording only) unless noted:
+
+- Word of Command: the restriction allows abilities of lands the player controls, not only
+  their mana abilities (see the register entry), so it's worded that way.
+- "Choose target ..." first, then the instructions about the chosen targets (the general
+  form isn't rendered; it's offered only for one instruction about several targets):
+  Blizzard Brawl, Duel for Dominance, Grim Contest ("each of those creatures deals damage
+  ... to the other"), Nibelheim Aflame, Power of Persuasion, Scion of Stygia, Delina,
+  Explosive Revelation, Erratic Explosion ("that permanent or player"), Mega Flare,
+  Shellshock ("each of the chosen creatures"), Kaboom!, Turncoat Kunoichi ("the chosen
+  creature").
+- "Remove one or more +1/+1 counters" compiled as X counters with "X can't be 0", and the
+  number as X: Jetfire, Ooze Flux, Simic Manipulator, Arcee; Pia Nalaar, Localized
+  Destruction ("the amount of {E} paid this way"); Loamcrafter Faun, Specter of Mortality
+  ("one or more" compiled as any number: none chosen does nothing either way).
+- Remembered groups and numbers: Oversimplify, Faerie Slumber Party, Luminate Primordial
+  (`remembering Before`), Parker Luck, Keen Duelist (`remembering TopOfLibrary`), Dazzling
+  Sphinx and Gríma ("the exiled cards that weren't cast this way"), Storm Herald ("those
+  Auras"), Vault 21 ("for each of those cards").
+- Statics and replacements in one sentence or another order: Bound in Gold, Intercessor's
+  Arrest (three restrictions), Noble Banneret ("~ and those creatures"), Ravenloft
+  Adventurer, Ravenous Slime ("instead exile it and put ..."), Library of Leng ("discard
+  it, but you may put it on top of your library instead"), Uba Mask ("exiles that card face
+  up"), Shared Fate ("one of their opponents' libraries"; two abilities in one sentence),
+  Michelangelo, Batroc ("a +1/+1 counter on him for each"), The Enigma Jewel (the craft
+  materials), Cass ("Equipment that were attached to it"), Desdemona (the duration's place
+  and the alternative list), Soldevi Adnate (`qualities of an alternative list`), Henzie
+  (the comparison of "Blitz costs you pay cost {1} less" inside an alternative).
+- Other wordings: Frankenstein's Monster ("If you can't, ..."), Comet (the loyalty symbols
+  in the die table), Zenos ("creatures other than ~ and the chosen creature" after
+  "Until end of turn"), Alania ("the first Otter spell other than ~"), Satoru ("none of
+  them were cast"), Oblivious Bookworm ("a permanent entered the battlefield face down
+  under your control"), Evelyn, Haldan ("cards you exiled that have fetch counters on
+  them"), Aether Searcher ("a name noted as you drafted cards named ~"), Central Elevator
+  ("a Room you control" for a library card), Havengul Laboratory ("if you sacrificed three
+  or more Clues this turn"), Resplendent Marshal, Mechtitan Core ("other than ~" / "except
+  ~"), Memory Theft, Check for Traps, Vexing Arcanix, Petra Sphinx, Coax, Karn ("or choose
+  a face-up ... card"), Nelly Borca, Norn's Decree, Dong Zhou's cluster partner Alpha Brawl
+  ("each of those creatures deals damage equal to its power"), False Orders, Balduvian
+  Warlord, Driftgloom Coyote ("If that creature had power 2 or less"), Black Widow ("the
+  exiled nonland card"), Mutated Cultist, Elminster ("{1} less ... for each"), Taste of
+  Paradise ("an additional 3 life for each additional {1}{G} you paid"), Hero-like word
+  orders.
