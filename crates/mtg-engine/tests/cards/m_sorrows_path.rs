@@ -31,6 +31,7 @@ fn blocks(t: &mut TestGame, a1: ObjectId, b1: ObjectId, a2: ObjectId, b2: Object
 fn the_blockers_swap_what_they_block() {
     cr!("506.4", "509.1");
     ruling!("Sorrow's Path", "Whether those creatures could block all creatures the other is blocking isn’t determined until the ability resolves.");
+    ruling!("Sorrow's Path", "The second ability triggers any time it becomes tapped, whether to pay for its ability or not.");
     let mut t = TestGame::new(2);
     let path = t.battlefield(P0, "Sorrow's Path");
     let wurm = t.battlefield(P0, "Craw Wurm");
@@ -62,5 +63,58 @@ fn nothing_happens_if_one_couldnt_block_the_others_attacker() {
     t.activate(P0, path, 0, &[]).unwrap();
     t.resolve_all();
     assert_eq!(blocking(&t, spider), vec![angel]);
+    assert_eq!(blocking(&t, bears), vec![giant]);
+}
+
+#[test]
+fn a_blocker_whose_attackers_left_combat_takes_over_and_the_other_blocks_nothing() {
+    cr!("506.4", "509.1");
+    ruling!("Sorrow's Path", "if all the creatures that one of the targeted creatures was blocking have left combat");
+    let mut t = TestGame::new(2);
+    let path = t.battlefield(P0, "Sorrow's Path");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let wall = t.battlefield(P1, "Wall of Wood");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    blocks(&mut t, wurm, wall, giant, bears);
+    mtg_engine::combat::remove_from_combat(&mut t.g, giant);
+    t.answer_targets(P0, &[Entity::Object(wall), Entity::Object(bears)]);
+    t.activate(P0, path, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(blocking(&t, bears), vec![wurm]);
+    assert!(!t.g.is_blocking(wall));
+}
+
+#[test]
+fn the_two_blockers_must_be_controlled_by_the_same_opponent() {
+    cr!("115.1");
+    let mut t = TestGame::new(3);
+    let path = t.battlefield(P0, "Sorrow's Path");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let wall = t.battlefield(P1, "Wall of Wood");
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    let bears2 = t.battlefield(P2, "Grizzly Bears");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(wurm, Entity::Player(P1)), (giant, Entity::Player(P2))]),
+    );
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(wall, wurm)]));
+    t.answer(
+        P2,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(bears, giant), (bears2, giant)]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    assert!(t.g.is_blocking(wall) && t.g.is_blocking(bears));
+    // Blockers of two different opponents aren't a legal pair of targets: whether the
+    // activation is refused or other targets are chosen, the Wall and the Bears don't
+    // swap (each could block the other's attacker).
+    t.answer_targets(P0, &[Entity::Object(wall), Entity::Object(bears)]);
+    let _ = t.activate(P0, path, 0, &[]);
+    t.resolve_all();
+    assert_eq!(blocking(&t, wall), vec![wurm]);
     assert_eq!(blocking(&t, bears), vec![giant]);
 }

@@ -61,3 +61,25 @@ fn tap_for_an_extra_turn_then_skip_the_next_turn_to_untap_it() {
     assert_eq!(t.g.player(P0).turns_taken, turns);
     assert!(!t.obj_now(vault).tapped);
 }
+
+#[test]
+fn skipping_skips_one_turn_however_many_extra_turns_it_made() {
+    cr!("614.10", "500.7");
+    ruling!("Time Vault", "This wording means that you no longer end up skipping multiple turns if you find a way to activate the ability multiple times.");
+    let mut t = TestGame::new(2);
+    let vault = t.battlefield(P0, "Time Vault");
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, vault, 0, &[]).unwrap();
+    t.resolve_all();
+    t.g.untap(vault);
+    t.activate(P0, vault, 0, &[]).unwrap();
+    t.resolve_all();
+    let (p0, p1) = (t.g.player(P0).turns_taken, t.g.player(P1).turns_taken);
+    // The first extra turn is skipped (untapping the vault); the second begins with it
+    // untapped and is taken.
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(t.g.player(P0).turns_taken, p0 + 1);
+    assert_eq!(t.g.player(P1).turns_taken, p1);
+    assert!(!t.obj_now(vault).tapped);
+}

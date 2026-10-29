@@ -4,6 +4,7 @@
 
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::object::Zone;
 use mtg_engine::*;
 
 fn takk_now(t: &TestGame) -> ObjectId {
@@ -27,6 +28,8 @@ fn it_returns_attached_to_a_creature_its_controller_chooses() {
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let bears = t.battlefield(P1, "Grizzly Bears");
+    // Listed first, so a default (or the wrong player's) choice would pick it.
+    let elves = t.battlefield(P0, "Llanowar Elves");
     let giant = t.battlefield(P1, "Hill Giant");
     let takk = t.battlefield(P0, "Takklemaggot");
     t.g.attach(takk, Entity::Object(bears));
@@ -35,6 +38,7 @@ fn it_returns_attached_to_a_creature_its_controller_chooses() {
     let now = takk_now(&t);
     assert_eq!(t.obj_now(now).controller, P0);
     assert_eq!(t.obj_now(now).attached_to, Some(Entity::Object(giant)));
+    assert!(t.on_battlefield(elves));
 }
 
 #[test]
@@ -60,4 +64,47 @@ fn with_no_creature_it_returns_as_a_non_aura_enchantment_that_damages_that_playe
     assert_eq!(t.life(P0), 20);
     assert_eq!(t.life(P1), 19);
     assert!(t.on_battlefield(now));
+}
+
+#[test]
+fn if_the_creature_is_exiled_it_just_goes_to_the_graveyard() {
+    cr!("303.4c", "704.5m");
+    ruling!("Takklemaggot", "If the creature leaves the battlefield without going to the graveyard, Takklemaggot is simply put into its owner's graveyard.");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let takk = t.battlefield(P0, "Takklemaggot");
+    t.g.attach(takk, Entity::Object(bears));
+    t.lands(P0, "Plains", 1);
+    let path = t.hand(P0, "Swords to Plowshares");
+    t.cast(P0, path).target(bears).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Takklemaggot").is_empty());
+    assert!(t.in_graveyard(P0, "Takklemaggot"));
+}
+
+#[test]
+fn it_returns_only_if_still_in_the_graveyard() {
+    cr!("603.10a", "400.7");
+    ruling!("Takklemaggot", "When the ability resolves, if Takklemaggot is still in that graveyard, it's returned to the battlefield.");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let takk = t.battlefield(P0, "Takklemaggot");
+    t.g.attach(takk, Entity::Object(bears));
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(bears).go();
+    t.resolve();
+    t.settle();
+    // The trigger is on the stack and Takklemaggot is in the graveyard: exile it first.
+    assert_eq!(t.stack_len(), 1);
+    let in_gy = t.g.current(takk);
+    assert!(matches!(t.zone(in_gy), Zone::Graveyard(_)));
+    t.g.exile_object(in_gy, None);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Takklemaggot").is_empty());
+    assert!(t.in_exile("Takklemaggot"));
 }

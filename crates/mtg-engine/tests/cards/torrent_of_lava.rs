@@ -70,3 +70,20 @@ fn the_ability_is_gone_once_the_torrent_has_resolved() {
     assert_eq!(t.obj_now(giant).damage, 1);
     assert_eq!(activated(&t, giant), 0);
 }
+
+#[test]
+fn with_x_of_zero_it_deals_no_damage() {
+    cr!("107.3", "113.6");
+    ruling!("Torrent of Lava", "If X is zero, it deals no damage");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    let torrent = t.hand(P0, "Torrent of Lava");
+    t.cast(P0, torrent).x(0).go();
+    // Its shield used anyway: nothing to prevent, and no damage either way.
+    t.g.turn.priority = Some(P1);
+    t.activate(P1, bears, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.obj_now(bears).damage, 0);
+}

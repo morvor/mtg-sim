@@ -6,7 +6,7 @@
 //! CR 613.6). Hand-written: when Titania's Song leaves the battlefield, the effect goes on
 //! until end of turn for the artifacts it was affecting then (a continuous effect whose
 //! objects are fixed as it begins, CR 611.2c), each with its P/T equal to its mana value
-//! as it ends (CR 608.2h).
+//! as it ends (CR 608.2h), keeping the static ability's timestamp (CR 613.7a).
 
 use super::{has_marker, marker, parse, ManualAbility};
 use crate::ability::*;
@@ -82,7 +82,9 @@ impl KeywordRules for Rules {
         // Without the static ability, the objects it affected are those it describes.
         g.recompute();
         let controller = g.obj(*old).controller;
+        let timestamp = g.obj(*old).timestamp;
         let mut ctx = crate::eval::Ctx::new(Some(*old), controller);
+        let before = g.effects.len();
         g.exec(
             &Effect::Modify {
                 what: Sel::All(affected),
@@ -91,6 +93,13 @@ impl KeywordRules for Rules {
             },
             &mut ctx,
         );
+        // It's the same effect continuing: it keeps the timestamp of the static ability
+        // that generated it, the Song's (CR 613.7a), so effects that began after it still
+        // apply after it.
+        for e in &mut g.effects[before..] {
+            e.timestamp = timestamp;
+        }
+        g.dirty = true;
     }
 }
 

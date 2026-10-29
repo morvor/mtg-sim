@@ -46,3 +46,27 @@ fn the_effect_continues_until_end_of_turn_after_it_leaves() {
     assert!(!is_creature(&t, stone));
     assert!(!t.obj_now(stone).chars.abilities.is_empty());
 }
+
+#[test]
+fn the_continuing_effect_keeps_its_timestamp() {
+    cr!("613.7a", "613.1f");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let song = t.battlefield(P0, "Titania's Song");
+    let stone = t.battlefield(P0, "Mind Stone");
+    t.g.recompute();
+    // A later effect gives the artifact creature flying: it has it despite the Song.
+    t.lands(P0, "Island", 1);
+    let jump = t.hand(P0, "Jump");
+    t.cast(P0, jump).target(stone).go();
+    t.resolve();
+    t.g.recompute();
+    assert!(t.obj_now(stone).has_keyword(keywords::KeywordKind::Flying));
+    // The Song leaves: its effect goes on with its own (earlier) timestamp, so the flying
+    // from the later effect stays.
+    t.g.destroy(song, None);
+    t.settle();
+    t.g.recompute();
+    assert!(is_creature(&t, stone));
+    assert!(t.obj_now(stone).has_keyword(keywords::KeywordKind::Flying));
+}

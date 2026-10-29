@@ -23,16 +23,18 @@ fn kaerveks_torch_makes_spells_that_target_it_cost_more() {
 }
 
 #[test]
-fn kaerveks_torch_in_hand_doesnt_raise_costs() {
-    cr!("113.6");
+fn kaerveks_torch_doesnt_raise_the_cost_of_spells_targeting_something_else() {
+    cr!("113.6", "601.2f");
     let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    t.hand(P0, "Kaervek's Torch");
-    // Not on the stack: a spell that targets something else costs what it costs, and
-    // the static doesn't function from the hand.
-    t.lands(P1, "Mountain", 1);
-    let bolt = t.hand(P1, "Lightning Bolt");
-    t.cast(P1, bolt).target(bears).go();
-    t.resolve();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 2);
+    let torch = t.hand(P0, "Kaervek's Torch");
+    t.cast(P0, torch).x(1).target(Entity::Player(P1)).go();
+    // With the Torch on the stack, a Lightning Bolt aimed at the Bears costs just {R}.
+    t.lands(P0, "Mountain", 1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(bears).go();
+    t.resolve_all();
     assert!(!t.on_battlefield(bears));
+    assert_eq!(t.life(P1), 19);
 }
