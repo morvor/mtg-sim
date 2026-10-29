@@ -525,6 +525,14 @@ fn each_player_rolls(l: &str, _b: &mut Builder) -> Option<Effect> {
     if sides < 2 {
         return None;
     }
+    // Only with the comparison that reads each player's result next: "the result" and a
+    // results table would be one player's.
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains(&format!(
+        "each player rolls a d{sides}. if one or more opponents had the highest result, "
+    )) {
+        return None;
+    }
     let mut spec = DieRoll::new(sides);
     spec.who = PlayerRef::EachPlayer;
     Some(Effect::RollDice(Box::new(spec)))
@@ -711,3 +719,51 @@ fn not_phased_out_with_this<'a>(r: &'a str, _f: &Filter) -> Option<(Filter, &'a 
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "dice coins 5: that hasn't been phased out with this Attraction", priority: 100, parse: not_phased_out_with_this } }
+
+#[cfg(test)]
+mod tests {
+    use super::super::followup_grammar::tests::compiled;
+
+    #[test]
+    fn wordings_compile() {
+        for (ty, text) in [
+            // A roll as a cost, with a d6 or "a six-sided die".
+            ("Artifact", "{2}, Roll a d6: You gain life equal to the result."),
+            ("Artifact", "{1}, Roll a six-sided die: Scry X, where X is the result."),
+            // A table defining X, with a cost or as a spell.
+            ("Sorcery", "Roll a d20. Draw X cards.\n1—9 | X is one.\n10—20 | X is two."),
+            // One roll as it enters.
+            ("Creature", "As ~ enters, roll a d6. Its base power becomes the result."),
+            ("Creature", "As ~ enters, roll a six-sided die twice. Its base toughness becomes the first result and its base power becomes the second result."),
+            // Coin flips as it enters, won or lost.
+            ("Creature", "As ~ enters, flip a coin. If the coin comes up heads, ~ enters as a 4/4 creature with trample. If the coin comes up tails, ~ enters as a 1/1 creature with flying."),
+            // Results of a flip as triggered abilities.
+            ("Instant", "Flip a coin. When you win the flip, draw two cards. When you lose the flip, ~ deals 2 damage to any target."),
+            ("Sorcery", "Flip a coin until you lose a flip or choose to stop flipping. If you lose a flip, ~ has no effect. If you win one or more flips, draw a card. If you win two or more flips, draw a card."),
+            ("Instant", "Choose a source you control and flip a coin. If you lose the flip, the next time that source would deal damage this turn, prevent that damage."),
+            ("Instant", "The next time target player would roll one or more dice this turn, instead they roll that many dice plus one and you choose one of those rolls to ignore."),
+            ("Artifact — Attraction", "Visit — Target creature gets +2/+0 until end of turn, or until any player rolls a 6, whichever comes first."),
+            ("Artifact — Attraction", "Visit — Target creature an opponent controls phases out until you roll a 2 or less while rolling to visit your Attractions."),
+        ] {
+            assert!(compiled(ty, text).is_some(), "{text}");
+        }
+    }
+
+    #[test]
+    fn wordings_not_accepted() {
+        for (ty, text) in [
+            // A table row defining X with nothing before it that uses X.
+            ("Sorcery", "Roll a d20.\n1—9 | X is one.\n10—20 | X is two."),
+            // Each player's roll without the comparison of their results.
+            ("Creature", "At the beginning of your upkeep, each player rolls a d20. If the result is 10 or less, draw a card."),
+            // A result the rolls don't give.
+            ("Creature", "As ~ enters, roll a d6. Its base power becomes the second result."),
+            // "Has no effect" with an instruction after it that isn't about flips won.
+            ("Sorcery", "Flip a coin until you lose a flip or choose to stop flipping. If you lose a flip, ~ has no effect. Draw a card."),
+            // Two coins: "When you win the flip" is about one flip.
+            ("Instant", "Flip two coins. When you win the flip, draw a card."),
+        ] {
+            assert!(compiled(ty, text).is_none(), "{text}");
+        }
+    }
+}

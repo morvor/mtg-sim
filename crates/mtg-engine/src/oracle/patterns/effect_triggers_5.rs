@@ -113,3 +113,26 @@ fn if_you_do_it_is_the_dealer(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 }
 
 inventory::submit! { FollowupPattern { name: "effect triggers 5: if you do, it [instruction] (it = the creature that dealt damage)", priority: 50, apply: if_you_do_it_is_the_dealer } }
+
+#[cfg(test)]
+mod tests {
+    use super::super::followup_grammar::tests::compiled;
+
+    #[test]
+    fn wordings() {
+        for text in [
+            "Until the end of your next turn, whenever you cast a spell, you gain 1 life.",
+            "Until the end of your next turn, whenever a creature you control dies, draw a card.",
+            "Until end of turn, whenever a creature you control attacks, you may have it deal 1 damage to target player. If you do, it gets +1/+1 until end of turn.",
+            "Until end of turn, whenever a creature you control attacks and isn't blocked, you may choose to have it deal damage equal to its power to target creature.",
+        ] {
+            assert!(compiled("Sorcery", text).is_some(), "{text}");
+        }
+        // "That source" names nothing here.
+        assert!(compiled(
+            "Instant",
+            "The next time that source would deal damage this turn, prevent that damage."
+        )
+        .is_none());
+    }
+}

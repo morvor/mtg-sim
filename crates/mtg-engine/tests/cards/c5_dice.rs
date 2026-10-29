@@ -142,7 +142,7 @@ fn laezels_acrobatics_high_roll_returns_them_then_exiles_them_again() {
 
 #[test]
 fn clay_golem_rolls_as_it_activates_and_becomes_monstrous_with_the_result() {
-    cr!("118.1", "602.2b", "601.2h", "701.37a");
+    cr!("118.1", "602.2b", "701.37a");
     supported("Clay Golem");
     let mut t = TestGame::new(2);
     let golem = t.battlefield(P0, "Clay Golem");

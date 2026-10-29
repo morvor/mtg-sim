@@ -173,3 +173,22 @@ fn you_put_that_card_into_hand(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "game start 5: you put that card into your hand (the opponent's choice)", priority: 100, parse: you_put_that_card_into_hand } }
+
+#[cfg(test)]
+mod tests {
+    use super::super::followup_grammar::tests::compiled;
+
+    #[test]
+    fn wordings() {
+        for (ty, text) in [
+            ("Land", "If ~ is in your opening hand and you're not the starting player, you may begin the game with ~ on the battlefield."),
+            ("Artifact", "If ~ is in your opening hand, you may begin the game with it on the battlefield with two charge counters on it."),
+            ("Enchantment", "If ~ is in your opening hand, you may begin the game with it on the battlefield. If you do, discard a card."),
+            ("Sorcery", "You may reveal exactly three cards you own with different names from outside the game. An opponent chooses one of them. You put that card into your hand."),
+        ] {
+            assert!(compiled(ty, text).is_some(), "{text}");
+        }
+        // "One of them" without the reveal before it.
+        assert!(compiled("Sorcery", "An opponent chooses one of them. You put that card into your hand.").is_none());
+    }
+}
