@@ -87,6 +87,12 @@ fn from_objects(s: &str, top_card: bool) -> Option<Sel> {
         "the last chosen card" => return Some(Sel::LinkedNoted),
         // "Each other planeswalker you control has the loyalty abilities of ~" (Kasmina).
         "~" => return Some(Sel::This),
+        // The permanent chosen as ~ entered (Scheming Fence; see `choice_grammar_etb`).
+        "the chosen permanent" | "the chosen creature"
+            if super::choice_grammar_etb::card_chooses_object() =>
+        {
+            return Some(Sel::LinkedNoted)
+        }
         _ => {}
     }
     let s = s

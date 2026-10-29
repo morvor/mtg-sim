@@ -3211,7 +3211,19 @@ impl Renderer<'_> {
             } => {
                 let c = self.player(chooser, Case::Subj);
                 let s = self.sel(&strip_chooser(what), Case::Obj);
-                if c == "you" {
+                // "you may choose a nonland permanent" (Scheming Fence): up to one.
+                let one_optional = matches!(
+                    what,
+                    Sel::Choose {
+                        up_to: true,
+                        count: Value::Const(1),
+                        ..
+                    }
+                );
+                if c == "you" && one_optional {
+                    let s = s.strip_prefix("up to one ").unwrap_or(&s);
+                    format!("{{alt:choose up to one {s}|you may choose a {s}|you may choose an {s}}}")
+                } else if c == "you" {
                     format!("choose {s}")
                 } else {
                     format!("{c} chooses {s}")

@@ -910,7 +910,12 @@ impl Renderer<'_> {
                 decline(format!("{s} chosen at random"), case)
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
-            Sel::LinkedNoted => decline("the last chosen card".into(), case),
+            // "the last chosen card" (Koh, the Face Stealer), "the chosen creature"
+            // (Tyrannical Pitlord), "the chosen permanent" (Scheming Fence).
+            Sel::LinkedNoted => decline(
+                "{alt:the last chosen card|the chosen creature|the chosen permanent}".into(),
+                case,
+            ),
             Sel::LinkedNotedLastKnown => decline("those sacrificed as ~it entered".into(), case),
             Sel::Before(inner) => self.sel(inner, case),
             Sel::ThisTurn(c) => {
