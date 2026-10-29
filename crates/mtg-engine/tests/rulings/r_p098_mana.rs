@@ -317,10 +317,16 @@ fn celestial_dawn_characteristics_lands_and_symbols() {
     assert_eq!(t.obj_now(bolt).chars.colors, ColorSet::single(Color::White));
     let cost = t.obj_now(bolt).chars.mana_cost.clone().unwrap();
     assert_eq!(format!("{cost}"), "{R}");
-    assert_eq!(t.obj_now(bears).chars.colors, ColorSet::single(Color::White));
+    assert_eq!(
+        t.obj_now(bears).chars.colors,
+        ColorSet::single(Color::White)
+    );
     destroy(&mut t, dawn);
     t.recompute();
-    assert_eq!(t.obj_now(bears).chars.colors, ColorSet::single(Color::Green));
+    assert_eq!(
+        t.obj_now(bears).chars.colors,
+        ColorSet::single(Color::Green)
+    );
 }
 
 #[test]
@@ -460,7 +466,6 @@ fn selvala_uses_the_entering_creatures_last_known_power() {
         assert_eq!(t.hand_size(P1), usize::from(!shrunk), "shrunk: {shrunk}");
     }
 }
-
 
 /// Selvala's comparison is against each other creature (Selvala included), one at a time:
 /// not against the total of their powers, nor excluding Selvala.

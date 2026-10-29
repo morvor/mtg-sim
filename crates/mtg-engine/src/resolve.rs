@@ -2993,6 +2993,7 @@ impl Game {
         // can't be evaluated later.
         if let Restriction::CantCast { what, .. } = &mut r {
             self.lock_filter_amounts(what, ctx);
+            self.lock_same_names(what, ctx);
         }
         // "This turn, creatures can't attack unless their controller pays {X} for each
         // attacking creature they control": X is fixed as the effect begins (CR 608.2h).
@@ -3169,6 +3170,40 @@ impl Game {
                 if refers_to_ctx(v) =>
             {
                 **v = Value::c(self.eval_value(v, ctx) as i32);
+            }
+            _ => {}
+        }
+    }
+
+    /// "Spells with the same name as that creature" (Reflector Mage): the names the named
+    /// objects had as the effect began, as they last existed if they've left (CR 608.2h),
+    /// not the names of what they have become (a returned Clone is "Clone" in its owner's
+    /// hand). An object with no name (face down) shares a name with nothing (CR 201.2a).
+    fn lock_same_names(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v {
+                    self.lock_same_names(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_same_names(x, ctx),
+            Filter::SameNameAs(sel)
+                if matches!(
+                    **sel,
+                    Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki
+                ) =>
+            {
+                let objs = self.eval_sel_objects(sel, ctx);
+                if objs.is_empty() || objs.iter().any(|o| self.obj(*o).chars.all_creature_names) {
+                    return;
+                }
+                let mut names: Vec<Filter> = Vec::new();
+                for o in objs {
+                    for n in self.obj(o).chars.names() {
+                        names.push(Filter::Named(smol_str::SmolStr::new(n)));
+                    }
+                }
+                *f = Filter::Or(names);
             }
             _ => {}
         }

@@ -25,7 +25,11 @@ fn at_p1(attackers: &[ObjectId]) -> Vec<(ObjectId, Entity)> {
 /// P1 declares `blocks`; the game stops after the declare blockers step begins (an
 /// illegal declaration is replaced by a legal one, CR 509.1).
 fn declare_blocks(t: &mut TestGame, blocks: &[(ObjectId, ObjectId)]) {
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(blocks.to_vec()));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(blocks.to_vec()),
+    );
     go_to(t, Step::DeclareBlockers);
 }
 
@@ -176,7 +180,11 @@ fn two_lure_attackers_each_blocker_picks_one_and_multi_blockers_block_both() {
         assert!(legal_blocks(&mut t, P1, &[(x, a), (y, b)]), "{name}");
         assert!(!legal_blocks(&mut t, P1, &[(x, a)]), "{name}");
         declare_blocks(&mut t, &[(x, b), (y, a)]);
-        assert_eq!(sorted(blocks_now(&t)), sorted(vec![(x, b), (y, a)]), "{name}");
+        assert_eq!(
+            sorted(blocks_now(&t)),
+            sorted(vec![(x, b), (y, a)]),
+            "{name}"
+        );
     }
     // Palace Guard ("can block any number of creatures each combat") must block both.
     let mut t = TestGame::new(2);
