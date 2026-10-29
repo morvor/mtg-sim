@@ -373,7 +373,6 @@ fn katara_extra_trigger_is_a_separate_instance_with_its_own_choices() {
     let mut want = vec![obj(giant), obj(wurm)];
     want.sort();
     assert_eq!(targets, want);
-    // Neither is a copy.
     // Neither is a copy: both triggered (were put on the stack as triggered abilities).
     assert_eq!(triggers_of(&t, murasa), 2);
     // The top one: yes (3 damage: three Allies). The other: no.

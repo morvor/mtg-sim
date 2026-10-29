@@ -200,7 +200,7 @@ fn splash_portal_and_a_token_that_was_exiled() {
 
 #[test]
 fn splash_portal_checks_the_creature_types_of_the_returned_permanent() {
-    cr!("400.7", "707.9");
+    cr!("400.7", "400.7j");
     ruling!(
         "Splash Portal",
         "In the case where the exiled permanent returns with different creature types than it had when it left the battlefield (for example, if the target creature was copying something else when Splash Portal began to resolve), Splash Portal will check its creature types as it exists after returning to the battlefield. If it’s a Bird, Frog, Otter, or Rat at that point, you’ll draw a card."
@@ -231,7 +231,7 @@ fn splash_portal_checks_the_creature_types_of_the_returned_permanent() {
 
 #[test]
 fn enigma_thief_returns_the_targets_still_legal() {
-    cr!("608.2b", "115.1a");
+    cr!("608.2b", "115.1d");
     ruling!(
         "Enigma Thief",
         "If a nonland permanent changes control while it's the target of Enigma Thief's ability, that permanent won't be a legal target as the ability resolves. Any remaining legal targets will be returned to their owners' hand."

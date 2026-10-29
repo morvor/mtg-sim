@@ -1,7 +1,7 @@
 //! Rulings batch P183 — typal cost reductions: the Bannerets (one reduction for a spell
 //! with both types, generic mana only, on alternative costs; CR 118.7a, 601.2f) and
-//! Morophon (colored mana, after additional and alternative costs, hybrid halves; CR
-//! 118.7c, 118.7e, 601.2f).
+//! Morophon (colored mana only, after additional and alternative costs, hybrid halves;
+//! CR 118.7, 118.7e, 601.2f).
 
 use crate::r_p194_common::{assert_total_cost, casts_for, mana, pool};
 use crate::r_s01_common::supported;
@@ -123,7 +123,7 @@ fn brighthearth_banneret_reduces_an_evoke_cost() {
 
 #[test]
 fn morophon_reduces_colored_mana_of_additional_and_alternative_costs() {
-    cr!("601.2f", "118.7c", "702.74a");
+    cr!("601.2f", "118.7", "702.74a");
     ruling!(
         "Morophon, the Boundless",
         "Cost reduction effects are applied after other cost modifiers, so Morophon can reduce additional costs or alternative costs of spells of the chosen type."
