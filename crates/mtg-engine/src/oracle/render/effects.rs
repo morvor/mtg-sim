@@ -3662,6 +3662,7 @@ impl Renderer<'_> {
             } => {
                 if let Some(s) = self
                     .each_spell_this_turn(filter, mods, expires)
+                    .or_else(|| self.next_card_you_play(filter, mods, expires))
                     .or_else(|| self.next_spell_marker(filter, mods, expires))
                 {
                     return s;
