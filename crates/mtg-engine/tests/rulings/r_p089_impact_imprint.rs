@@ -119,6 +119,13 @@ fn pandemonium_trigger_is_controlled_by_its_controller() {
         .any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseTargets { .. })));
     t.resolve_all();
     assert_eq!(t.life(P0), 17);
+    // P1, not P0, chose whether the creature deals damage.
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::YesNo { .. })));
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. })));
     // P1 may decline.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Pandemonium");

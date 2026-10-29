@@ -34,6 +34,13 @@ fn immersturm_entering_creatures_controller_chooses_the_target() {
         .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseTargets { .. })));
     t.resolve_all();
     assert_eq!(t.life(P0), 17);
+    // P1, not P0, chose whether the creature deals damage.
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::YesNo { .. })));
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. })));
     assert!(t.on_battlefield(giant));
 }
 
