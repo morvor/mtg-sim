@@ -2798,7 +2798,23 @@ impl Renderer<'_> {
                     A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
-                        format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
+                        let s = format!(
+                            "{subj} enters with {c} on {it}{}",
+                            w.clone().unwrap_or_default()
+                        );
+                        // "~ enters with a +1/+1 counter on it for each land you control".
+                        if w.is_some() {
+                            let saved = self.gaps.len();
+                            match self.counted_for_each(n, &counter_name(k)) {
+                                Some((c1, each)) => {
+                                    return format!(
+                                        "{{alt:{s}|{subj} enters with {c1} on {it} {each}}}"
+                                    )
+                                }
+                                None => self.gaps.truncate(saved),
+                            }
+                        }
+                        s
                     }
                     // "~ escapes with a +1/+1 counter on it" (CR 702.138c).
                     A::AsEnters(e)
@@ -3751,7 +3767,18 @@ impl Renderer<'_> {
             Effect::EnterPrepared => "enters prepared".into(),
             Effect::EnterWithCounters { kind, n } => {
                 let (c, w) = self.counted(n, &counter_name(kind));
-                format!("enters with {c} on it{}", w.unwrap_or_default())
+                let s = format!("enters with {c} on it{}", w.clone().unwrap_or_default());
+                // "enters with a +1/+1 counter on it for each land you control".
+                if w.is_some() {
+                    let saved = self.gaps.len();
+                    match self.counted_for_each(n, &counter_name(kind)) {
+                        Some((c1, each)) => {
+                            return format!("{{alt:{s}|enters with {c1} on it {each}}}")
+                        }
+                        None => self.gaps.truncate(saved),
+                    }
+                }
+                s
             }
             // "it enters with two +1/+1 counters on it and with haste": the keywords it
             // has from the moment it enters.

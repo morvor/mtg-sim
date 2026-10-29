@@ -779,6 +779,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.graveyard_order_condition(c) {
+            return s;
+        }
         if let Some(s) = self.compare_terms(c) {
             return s;
         }
@@ -1493,6 +1496,14 @@ impl Renderer<'_> {
                 format!("is {n}")
             };
         }
+        // "If that card has the chosen name".
+        if parts.is_empty() && matches!(atoms.as_slice(), [Filter::ChosenName]) {
+            return if negated {
+                "doesn't have {alt:the chosen name|that name}".into()
+            } else {
+                "has {alt:the chosen name|that name}".into()
+            };
+        }
         for a in atoms {
             let p = match a {
                 Filter::Tapped => "tapped".to_string(),
@@ -1522,6 +1533,7 @@ impl Renderer<'_> {
                     }
                     return format!("has {w}");
                 }
+
                 Filter::HasCounter(k) => {
                     let c = match k {
                         Some(k) => counter_name(k),

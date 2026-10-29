@@ -117,6 +117,12 @@ impl Renderer<'_> {
             return Some(s);
         }
         Some(match name {
+            // CR 701.59a, with X chosen as it's done.
+            crate::kw::choices_4::COLLECT_EVIDENCE_X => "collect evidence X".into(),
+            // CR 709.5f.
+            crate::kw::choices_4::UNLOCK_A_DOOR => {
+                "unlock a locked door of a Room you control".into()
+            }
             crate::kwa::vote::CHOOSES_VOTES => "you choose how each player votes this turn".into(),
             // Secret choices (`choices.rs`).
             crate::choices::REVEAL_CHOICES => {

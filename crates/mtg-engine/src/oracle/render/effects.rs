@@ -2632,6 +2632,19 @@ impl Renderer<'_> {
                             format!("{m} enters with a number of {cs} on it equal to {v}"),
                         )
                     }
+                    // "~ enters with a +1/+1 counter on it for each land you control".
+                    Some(_) => {
+                        let saved = self.gaps.len();
+                        match self.counted_for_each(n, &counter_name(kind)) {
+                            Some((c1, each)) => {
+                                either_form(x_form.clone(), format!("{m} enters with {c1} on it {each}"))
+                            }
+                            None => {
+                                self.gaps.truncate(saved);
+                                x_form
+                            }
+                        }
+                    }
                     _ => x_form,
                 }
             }
