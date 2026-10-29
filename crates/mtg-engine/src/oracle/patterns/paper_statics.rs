@@ -374,12 +374,12 @@ inventory::submit! { AbilityPattern { name: "paper statics: as ~ enters, sacrifi
 
 /// "During your turn, ~'s power and toughness are each equal to 2 plus the number of
 /// Swamps your opponents control. During turns other than yours, ~'s power and toughness
-/// are each 2." (Angry Mob): together, one characteristic-defining ability whose value
-/// depends on whose turn it is (CR 604.3; it defines them on every turn, so it isn't a
-/// conditional effect, CR 604.3a(5)). "Your" is its controller (its owner outside the
-/// battlefield).
-fn pt_during_your_turn(block: &str, _ctx_: &CompileContext) -> Option<Vec<Ability>> {
-    let ctx = _ctx_;
+/// are each 2." (Angry Mob): each sentence sets them only if a condition is met, so
+/// neither is a characteristic-defining ability (CR 604.3a(5)); like Gaea's Liege's
+/// "As long as ..." (`statics_cda::conditional_cda`), each is a static ability that sets
+/// the permanent's power and toughness (layer 7b, CR 613.4b) on the battlefield. Elsewhere
+/// the card has its printed 2+* with * as 0 (CR 208.2a).
+fn pt_during_your_turn(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let lower = block.trim().to_lowercase();
     let l = end(&lower);
     let r = l.strip_prefix("during your turn, ~'s power and toughness are each equal to ")?;
@@ -394,14 +394,18 @@ fn pt_during_your_turn(block: &str, _ctx_: &CompileContext) -> Option<Vec<Abilit
     if !rest.trim().is_empty() || b.as_const().is_none() {
         return None;
     }
-    let v = Value::If(Box::new(Condition::YourTurn), Box::new(a), Box::new(b));
-    let mut s = StaticAbility::new(StaticEffect::Continuous {
-        affected: Filter::Source,
-        mods: vec![Modification::CdaPT(Some(v.clone()), Some(v))],
-    });
-    s.is_cda = true;
-    s.zone = FunctionZone::Anywhere;
-    Some(vec![AbilityDef::new(AbilityKind::Static(s), block)])
+    let set = |v: Value, cond: Condition| {
+        let mut s = StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![Modification::SetPT(Some(v.clone()), Some(v))],
+        });
+        s.condition = Some(cond);
+        AbilityDef::new(AbilityKind::Static(s), block)
+    };
+    Some(vec![
+        set(a, Condition::YourTurn),
+        set(b, Condition::Not(Box::new(Condition::YourTurn))),
+    ])
 }
 
 inventory::submit! { AbilityPattern { name: "paper statics: during your turn, ~'s P/T are each equal to ...; during turns other than yours, ...", priority: 100, parse: pt_during_your_turn } }
@@ -437,3 +441,36 @@ fn name_as_creature_type(block: &str, ctx: &CompileContext) -> Option<Vec<Abilit
 }
 
 inventory::submit! { AbilityPattern { name: "paper statics: other attacking ~ (the card's name as its creature type)", priority: 100, parse: name_as_creature_type } }
+
+/// "~'s power is equal to the last chosen number and its toughness is equal to 7 minus
+/// that number." (Shapeshifter, printed */7-*): a characteristic-defining ability (CR
+/// 604.3, 208.2a) from the number chosen for it (CR 607.2d; the last one chosen, as each
+/// new choice replaces the old). Outside the battlefield no number was chosen: 0/7.
+fn pt_from_chosen_number(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l.trim()).strip_prefix("~'s power is equal to ")?;
+    let (p, t) = r.split_once(" and its toughness is equal to ")?;
+    if !matches!(p, "the last chosen number" | "the chosen number")
+        || !ctx.power.is_some_and(|p| p == "*")
+        || !ctx.toughness.is_some_and(|t| t.contains('*'))
+    {
+        return None;
+    }
+    let n = t.strip_suffix(" minus that number")?;
+    let (n, rest) = crate::oracle::phrases::parse_number(n)?;
+    let n = n.as_const()?;
+    if !rest.trim().is_empty() || ctx.toughness != Some(format!("{n}-*").as_str()) {
+        return None;
+    }
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::CdaPT(
+            Some(Value::Chosen),
+            Some(Value::Diff(Box::new(Value::c(n)), Box::new(Value::Chosen))),
+        )],
+    });
+    s.is_cda = true;
+    s.zone = FunctionZone::Anywhere;
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "paper statics: power equal to the last chosen number, toughness N minus that number", priority: 40, parse: pt_from_chosen_number } }
