@@ -186,3 +186,42 @@ fn crater_elemental_keeps_modifications_whenever_they_began() {
     formidable(&mut t, ce);
     assert_eq!(t.pt(ce), (7, 9));
 }
+
+/// A layer-7b static of a Room door unlocked after the Room entered applies from the
+/// unlocking (`room-door-unlock-timestamp`): Humility entering between the Room and the
+/// unlocking is overwritten by Porcelain Gallery; locked and unlocked again, the door
+/// gets a new timestamp, after a Humility that entered in between.
+#[test]
+fn porcelain_gallery_unlocked_later_sets_base_pt_after_earlier_effects() {
+    cr!("613.4b", "613.7", "709.5g");
+    interp!("room-door-unlock-timestamp");
+    supported("Dollmaker's Shop // Porcelain Gallery");
+    supported("Humility");
+    let mut t = TestGame::new(2);
+    let bears: Vec<ObjectId> = (0..3).map(|_| add(&mut t, P0, "Grizzly Bears")).collect();
+    let room = add(&mut t, P0, "Dollmaker's Shop // Porcelain Gallery");
+    let humility = add(&mut t, P0, "Humility");
+    t.g.recompute();
+    assert_eq!(t.pt(bears[0]), (1, 1));
+    // Unlocked after Humility entered: Gallery's effect is later and wins.
+    assert!(mtg_engine::rooms::unlock(&mut t.g, room, 1, P0));
+    t.g.flush_events();
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.pt(bears[0]), (3, 3));
+    // Locked, a second Humility, unlocked again: the door's new timestamp is still later.
+    assert!(mtg_engine::rooms::lock(&mut t.g, room, 1));
+    t.g.recompute();
+    assert_eq!(t.pt(bears[0]), (1, 1));
+    t.g.destroy(humility, None);
+    add(&mut t, P0, "Humility");
+    assert!(mtg_engine::rooms::unlock(&mut t.g, room, 1, P0));
+    t.g.flush_events();
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.pt(bears[2]), (3, 3));
+    // Humility entering after the unlocking wins.
+    add(&mut t, P0, "Humility");
+    t.g.recompute();
+    assert_eq!(t.pt(bears[1]), (1, 1));
+}

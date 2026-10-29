@@ -203,7 +203,7 @@ fn chandras_flame_wave_targets_the_player_not_the_creatures() {
     for respond in [false, true] {
         let mut t = TestGame::new(2);
         // A creature with hexproof.
-        let boa = t.battlefield(P1, "River Boa");
+        let bogle = t.battlefield(P1, "Slippery Bogle");
         t.library_top(P0, "Chandra, Flame's Fury");
         cast_new(&mut t, P0, "Chandra's Flame Wave", &[pl(P1)]);
         if respond {
@@ -213,11 +213,11 @@ fn chandras_flame_wave_targets_the_player_not_the_creatures() {
         t.resolve_all();
         if respond {
             assert_eq!(t.life(P1), 20);
-            assert_eq!(dmg(&t, boa), 0);
+            assert_eq!(dmg(&t, bogle), 0);
             assert!(!t.in_hand(P0, "Chandra, Flame's Fury"));
         } else {
             assert_eq!(t.life(P1), 18);
-            assert!(!t.on_battlefield(boa));
+            assert!(!t.on_battlefield(bogle), "the hexproof creature is dealt damage");
             assert!(t.in_hand(P0, "Chandra, Flame's Fury"));
         }
     }

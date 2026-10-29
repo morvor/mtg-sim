@@ -128,7 +128,11 @@ fn desert_condition_can_be_met_differently_on_resolution() {
         "Wretched Camel",
         "For abilities that trigger only if you control a Desert or there is a Desert card in your graveyard, one condition must be true as the ability triggers and one must be true as the ability resolves. They don’t have to be the same condition, though."
     );
-    for n in ["Sand Strangler", "Wretched Camel", "Desert"] {
+    ruling!(
+        "Gilded Cerodon",
+        "For abilities that trigger only if you control a Desert or there is a Desert card in your graveyard, one condition must be true as the ability triggers and one must be true as the ability resolves. They don’t have to be the same condition, though."
+    );
+    for n in ["Sand Strangler", "Wretched Camel", "Gilded Cerodon", "Desert"] {
         supported(n);
     }
     // Sand Strangler: P0 controls a Desert as it triggers; it's in the graveyard as the
@@ -171,6 +175,26 @@ fn desert_condition_can_be_met_differently_on_resolution() {
     t.battlefield(P0, "Desert");
     t.resolve_all();
     assert_eq!(t.hand_size(P1), 0);
+
+    // Gilded Cerodon: a Desert on the battlefield as it attacks, in the graveyard as the
+    // ability resolves (the Bears can't block); exiled from there too, it does nothing.
+    for exiled in [false, true] {
+        let mut t = TestGame::new(2);
+        let cerodon = t.battlefield(P0, "Gilded Cerodon");
+        let desert = t.battlefield(P0, "Desert");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_targets(P0, &[obj(bears)]);
+        crate::r_s01_common::attack_with(&mut t, &[(cerodon, pl(P1))]);
+        assert_eq!(t.stack_len(), 1);
+        kill(&mut t, desert);
+        if exiled {
+            let card = t.g.current(desert);
+            t.g.move_object(card, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+        }
+        t.resolve_all();
+        crate::r_s01_common::block_and_finish(&mut t, P1, &[(bears, cerodon)]);
+        assert_eq!(t.life(P1), if exiled { 20 } else { 16 }, "exiled: {exiled}");
+    }
 }
 
 fn garbage_fire_damage(notes: &[i64]) -> u32 {
@@ -430,6 +454,8 @@ fn puncture_bolt_damage_then_counter() {
     cast_new(&mut t, P0, "Puncture Bolt", &[obj(elves)]);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    // It was put into the graveyard for its toughness, not destroyed: the shield wasn't used.
+    assert!(t.g.history.regenerated.is_empty());
     // On a 2/2, regeneration saves it.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -438,6 +464,7 @@ fn puncture_bolt_damage_then_counter() {
     cast_new(&mut t, P0, "Puncture Bolt", &[obj(bears)]);
     t.resolve_all();
     assert!(t.on_battlefield(bears));
+    assert_eq!(t.g.history.regenerated, vec![bears]);
     assert!(t.obj_now(bears).tapped);
     assert_eq!(t.pt(bears), (1, 1));
     // Kitchen Finks (3/2, persist) with 1 damage: the 1 damage is lethal, but the -1/-1
@@ -516,15 +543,15 @@ fn sonic_assault_on_a_tapped_creature_still_deals_damage() {
 
 #[test]
 fn eelectrocute_cast_with_another_permission_isnt_exiled() {
-    cr!("702.81a", "601.3");
+    cr!("702.81a", "601.3", "114.4");
     ruling!(
         "Eelectrocute",
         "If you cast Eelectrocute from your graveyard using another permission, you won't exile it instead (unless that permission also states that you exile it)."
     );
-    // Retrace granted by a permanent (the text of Wrenn and Six's emblem), with a 6
+    // Retrace from an emblem with Wrenn and Six's emblem ability (CR 114.4), with a 6
     // rolled this turn too.
-    let emblem = crate::r_s01_common::custom_card(
-        "Retrace Granter",
+    let def = crate::r_s01_common::custom_card(
+        "Emblem Source",
         "Enchantment",
         "",
         None,
@@ -532,7 +559,8 @@ fn eelectrocute_cast_with_another_permission_isnt_exiled() {
     );
     for rolled in [false, true] {
         let mut t = TestGame::new(2);
-        t.custom(P0, emblem.clone(), Zone::Battlefield);
+        mtg_engine::tokens::create_emblem(&mut t.g, P0, def.front().chars.abilities.clone(), None);
+        t.g.recompute();
         if rolled {
             roll(&mut t, P0, 6, 6);
         }

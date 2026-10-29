@@ -206,17 +206,18 @@ fn crush_underfoot_chooses_the_giant_as_it_resolves() {
         "Crush Underfoot doesn't target the Giant creature you control. You choose that Giant as Crush Underfoot resolves. If you don't control a Giant creature at that time, the spell will finish resolving with no effect."
     );
     supported("Crush Underfoot");
-    // The Giant that was there as it was cast leaves; another arrives and is chosen.
+    // The Giant that was there as it was cast (power 3) leaves; another (power 6) arrives
+    // and is chosen.
     let mut t = TestGame::new(2);
     let maw = t.battlefield(P1, "Colossal Dreadmaw");
     let giant = t.battlefield(P0, "Hill Giant");
     let spell = cast_new(&mut t, P0, "Crush Underfoot", &[obj(maw)]);
     assert_eq!(crate::r_s25_common::targets_of(&t, spell), vec![obj(maw)]);
     kill(&mut t, giant);
-    let stone = add(&mut t, P0, "Stone Giant");
-    t.answer_choose(P0, &[obj(stone)]);
+    let craw = add(&mut t, P0, "Craw Giant");
+    t.answer_choose(P0, &[obj(craw)]);
     t.resolve_all();
-    assert_eq!(dmg(&t, maw), 3);
+    assert!(!t.on_battlefield(maw), "6 damage from Craw Giant");
     // No Giant at all: no effect.
     let mut t = TestGame::new(2);
     let maw = t.battlefield(P1, "Colossal Dreadmaw");
