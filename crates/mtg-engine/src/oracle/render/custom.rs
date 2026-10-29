@@ -553,6 +553,7 @@ impl Renderer<'_> {
             "mill:two milled cards share all their card types" => {
                 "two cards that share all their card types were milled this way".into()
             }
+            n if most_common_chosen(n).is_some() => most_common_chosen(n).unwrap_or_default(),
             n if n.starts_with("most_common_color:") => {
                 let c = color_of_letter(&n["most_common_color:".len()..]).unwrap_or("?");
                 format!(
@@ -1029,4 +1030,22 @@ impl Renderer<'_> {
             },
         }
     }
+}
+
+/// "the chosen color is the most common color among nontoken permanents the chosen player
+/// controls but isn't tied for most common" (`kw::most_common_chosen_color`).
+fn most_common_chosen(n: &str) -> Option<String> {
+    let (c, _, strict) = crate::kw::most_common_chosen_color::parse_name(n)?;
+    let c = match c {
+        Some(c) => color_of_letter(&c.letter().to_string())?.to_string(),
+        None => "the chosen color".to_string(),
+    };
+    let tie = if strict {
+        "but isn't tied for most common"
+    } else {
+        "or is tied for most common"
+    };
+    Some(format!(
+        "{c} is the most common color among nontoken permanents the chosen player controls {tie}"
+    ))
 }
