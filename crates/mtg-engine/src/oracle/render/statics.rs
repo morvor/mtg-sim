@@ -752,6 +752,35 @@ impl Renderer<'_> {
             Condition::Custom(n) if n == "restrictions:declare_blockers_step" => {
                 "during the declare blockers step".into()
             }
+            // CR 503.2: after the first upkeep step of an opponent's turn.
+            Condition::And(v)
+                if matches!(v.as_slice(), [Condition::NotYourTurn, Condition::Custom(n)]
+                    if n == crate::turn_structure::AFTER_UPKEEP) =>
+            {
+                "during an opponent's turn after their upkeep step".into()
+            }
+            // "Cast ~ only during combat on your turn [before blockers are declared]": the
+            // combat of that turn.
+            Condition::And(v)
+                if matches!(
+                    v.as_slice(),
+                    [Condition::YourTurn | Condition::NotYourTurn, Condition::Phase(PhaseCond::Combat) | Condition::CombatTiming(_)]
+                ) =>
+            {
+                let whose = if matches!(v[0], Condition::YourTurn) {
+                    "your turn"
+                } else {
+                    "an opponent's turn"
+                };
+                let b = self.cast_only_condition(&v[1]);
+                match b.strip_prefix("during combat") {
+                    Some(rest) => format!("during combat on {whose}{rest}"),
+                    None => {
+                        let a = self.cast_only_condition(&v[0]);
+                        format!("{a} and only {b}")
+                    }
+                }
+            }
             // "Cast ~ only during the declare attackers step and only if you've been
             // attacked this step."
             Condition::And(v) if v.len() == 2 => {
@@ -1446,6 +1475,32 @@ impl Renderer<'_> {
             None => target,
         };
         let act = if is_spell { "to cast" } else { "to activate" };
+        // "Dash costs you pay cost {2} less", "Flashback costs your opponents pay cost {2}
+        // more": the costs of a keyword ability (to cast or activate with it) a player
+        // pays.
+        let keyword_costs = match (&cm.applies_to, cm.who) {
+            (CostTarget::Keyword(k), PlayerRel::You) => {
+                Some(format!("{} costs you pay cost", k.name()))
+            }
+            (CostTarget::Keyword(k), PlayerRel::Opponent) => {
+                Some(format!("{} costs your opponents pay cost", k.name()))
+            }
+            _ => None,
+        };
+        if let (Some(kc), CostChange::IncreaseGeneric(v) | CostChange::ReduceGeneric(v)) =
+            (&keyword_costs, &cm.change)
+        {
+            if !matches!(v, Value::Min(..)) {
+                let (amt, tail) = self.cost_amount(v);
+                let dir = if matches!(cm.change, CostChange::IncreaseGeneric(_)) {
+                    "more"
+                } else {
+                    "less"
+                };
+                let one = format!("{target}{who} cost {amt} {dir} {act}{tail}");
+                return format!("{{alt:{one}|{kc} {amt} {dir}{tail}}}");
+            }
+        }
         let costs = if matches!(cm.applies_to, CostTarget::ThisSpell) {
             "costs"
         } else {
@@ -2931,7 +2986,7 @@ impl Renderer<'_> {
             (E::Transforms, A::AsEnters(e)) => {
                 let m = self.me();
                 let e = self.effect(e);
-                format!("as {m} transforms, {e}")
+                format!("as {m} transforms {{opt:into ~}}, {e}")
             }
             // --- Zone changes.
             (E::Dies(f), action) => {

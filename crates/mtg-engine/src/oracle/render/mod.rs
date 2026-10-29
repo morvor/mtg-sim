@@ -46,6 +46,7 @@ mod history_values;
 mod joined_lines;
 mod keywords;
 mod library_top;
+mod linked_terms;
 mod more_terms;
 mod named_effects;
 mod named_qualities;
@@ -103,6 +104,10 @@ pub struct FaceInfo {
     /// The face has tiered (CR 702.183): its modes are written "• [cost] — [effect]"
     /// after the keyword.
     pub tiered: bool,
+    /// What the face's ability that notes an object for its linked abilities noted: "the
+    /// chosen creature", "the creature put onto the battlefield with ~" (CR 607.2c,
+    /// 607.2d).
+    pub noted: Option<String>,
 }
 
 impl FaceInfo {
@@ -123,10 +128,12 @@ impl FaceInfo {
                 matches!(&a.kind, AbilityKind::Keyword(k)
                     if k.kind == crate::keywords::KeywordKind::Tiered)
             }),
+            noted: None,
         };
         info.enchant = enchant_noun(&face.chars.abilities, &info);
         info.reveal_card = reveal_card(&face.chars.abilities);
         info.behold = behold_terms::beheld(&face.chars.abilities);
+        info.noted = linked_terms::noted_noun(&face.chars.abilities);
         info
     }
     fn has_subtype(&self, s: &str) -> bool {
@@ -1290,6 +1297,7 @@ impl<'a> Renderer<'a> {
             r.define_stored_x(s)
         });
         let s = where_x_self_pronoun(&s, self_named);
+
         match per_player {
             Some(pf) => {
                 let n = self.player_filter_noun(&pf, Num::One);
@@ -1469,6 +1477,9 @@ impl<'a> Renderer<'a> {
                     let v = self.value(&m.max);
                     format!("up to X, where X is {v}")
                 }
+                // "When you pay this cost one or more times, choose up to that many":
+                // the times it was paid.
+                _ if matches!(m.max, Value::X) && self.extra.x_paid => "up to that many".into(),
                 _ => {
                     let v = self.value(&m.max);
                     format!("up to {v}")

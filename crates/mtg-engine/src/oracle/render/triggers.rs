@@ -388,9 +388,29 @@ impl Renderer<'_> {
     }
 
     /// Event with a determiner for its object ("a creature" / "one or more creatures").
+    /// "you play a card with two or more card types": casting a spell and playing a
+    /// land of the same kind (CR glossary, "Play": to play a card is either).
+    fn play_a_card(&mut self, a: &TriggerCond, b: &TriggerCond, det: Det) -> Option<Ev> {
+        let (TriggerCond::CastSpell { who: wa, filter: fa }, TriggerCond::LandPlayed { who: wb, filter: fb }) =
+            (a, b)
+        else {
+            return None;
+        };
+        let card = Filter::and(vec![Filter::Card, fb.clone()]);
+        if wa != wb || format!("{fa:?}") != format!("{card:?}") {
+            return None;
+        }
+        let subj = self.trigger_event(a, det.clone()).subj;
+        let n = self.noun_det(&card, det);
+        Some(Ev::new(subj, format!("play {n}")))
+    }
+
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
         let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
         if let Some((s, vp)) = self.qualified_trigger_event(t, &det) {
+            return Ev::new(s, vp);
+        }
+        if let Some((s, vp)) = self.trigger_event_nodes(t, &det) {
             return Ev::new(s, vp);
         }
         match t {
@@ -1065,16 +1085,10 @@ impl Renderer<'_> {
                     .collect();
                 // "When you play a card this way": casting it as a spell or playing it
                 // as a land (CR glossary, "Play": to play a card is either).
-                if let [TriggerCond::CastSpell { who: wa, filter: fa }, TriggerCond::LandPlayed { who: wb, filter: fb }] =
-                    v.as_slice()
-                {
-                    let card = Filter::and(vec![Filter::Card, fb.clone()]);
-                    if wa == wb
-                        && format!("{fa:?}") == format!("{card:?}")
-                        && evs[0].subj == evs[1].subj
-                    {
-                        let n = self.noun_det(&card, det.clone());
-                        return Ev::new(evs[0].subj.clone(), format!("play {n}"));
+                if let [a, b] = v.as_slice() {
+                    self.self_salient = salient;
+                    if let Some(e) = self.play_a_card(a, b, det.clone()) {
+                        return e;
                     }
                 }
                 if evs.iter().all(|e| e.subj == evs[0].subj) && !evs[0].subj.is_empty() {
@@ -1132,19 +1146,31 @@ impl Renderer<'_> {
                     // separate clauses, so ~ named in one is "it" in the next ("When ~
                     // enters and when you sacrifice it").
                     self.self_salient = salient;
-                    let evs: Vec<Ev> = v
-                        .iter()
-                        .map(|x| self.trigger_event(x, det.clone()))
-                        .collect();
+                    // Each event and whether it's a beginning of a step; casting a spell
+                    // and playing a land of the same kind is playing a card (CR
+                    // glossary, "Play").
+                    let mut items: Vec<(Ev, bool)> = Vec::new();
+                    let mut k = 0;
+                    while k < v.len() {
+                        if let Some(e) = v
+                            .get(k + 1)
+                            .and_then(|b| self.play_a_card(&v[k], b, det.clone()))
+                        {
+                            items.push((e, false));
+                            k += 2;
+                            continue;
+                        }
+                        let e = self.trigger_event(&v[k], det.clone());
+                        items.push((e, matches!(v[k], TriggerCond::BeginningOf { .. })));
+                        k += 1;
+                    }
                     // Or one trigger word for all: "Whenever you cast a blue spell or an
                     // Island you control enters" (CR 603.2: either event triggers it).
-                    let n = evs.len();
+                    let n = items.len();
                     let mut s = String::new();
-                    for (i, e) in evs.iter().enumerate() {
+                    for (i, (e, begins)) in items.iter().enumerate() {
                         let t = e.text();
-                        let begins = v
-                            .get(i)
-                            .is_some_and(|x| matches!(x, TriggerCond::BeginningOf { .. }));
+                        let begins = *begins;
                         if i > 0 {
                             let word = if begins { "at" } else { "whenever" };
                             // "At the beginning of your upkeep or whenever you cast a

@@ -365,9 +365,21 @@ impl Renderer<'_> {
                 if let (Some(p), Some(t)) = (pt, tt) {
                     np.status.push(format!("{p}/{t}"));
                 }
+                // "tokens created with ~": a token linked to the source was created by
+                // one of its abilities (CR 607.2c; an exiled token ceases to exist).
+                let created = v.iter().any(|x| matches!(x, Filter::Token))
+                    && !v.iter().any(|x| matches!(x, Filter::InZone(ZoneKind::Exile)))
+                    && v.iter()
+                        .any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked)));
                 // The same quality twice says it once.
                 let mut seen: Vec<String> = Vec::new();
                 for x in v {
+                    if created && matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked))
+                    {
+                        np.post.push("created with ~it".into());
+                        self.self_salient = true;
+                        continue;
+                    }
                     if both
                         && matches!(x, Filter::Power(Cmp::Eq, _) | Filter::Toughness(Cmp::Eq, _))
                     {
@@ -550,6 +562,11 @@ impl Renderer<'_> {
             Filter::PermanentCard => {
                 np.permanent_card = true;
                 np.kind = Some("card");
+            }
+            // "Commander spells you cast" (CR 903.3).
+            Filter::Spell if np.kind == Some("commander") => {
+                np.status.push("commander".into());
+                np.kind = Some("spell");
             }
             Filter::Spell | Filter::SpellOnStack => np.kind = Some("spell"),
             Filter::Token => np.kind = Some("token"),
@@ -1147,7 +1164,19 @@ impl Renderer<'_> {
             Filter::In(s)
                 if matches!(s.as_ref(), Sel::Var(v) if self.chosen_one.contains(v)) =>
             {
-                np.other = true
+                // "creatures other than ~ and the chosen creature": other than both.
+                if np.other && !np.is_self {
+                    np.other = false;
+                    let m = self.me();
+                    let kind = if np.types.contains(&CardType::Creature) {
+                        "creature"
+                    } else {
+                        "permanent"
+                    };
+                    np.post.push(format!("other than {m} and the chosen {kind}"));
+                } else {
+                    np.other = true
+                }
             }
             Filter::Other => np.is_self = true,
             Filter::HasKeyword(k) => np.without.push(self.keyword_kind_word(*k)),

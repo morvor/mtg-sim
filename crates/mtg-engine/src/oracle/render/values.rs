@@ -2082,7 +2082,7 @@ impl Renderer<'_> {
             if let Some(q) = q {
                 // "there are three or more oil counters on ~" / "it has three or more oil
                 // counters on it".
-                if let (Value::CountersOn(sel, Some(_)), Some((counters, _))) =
+                if let (Value::CountersOn(sel, _), Some((counters, _))) =
                     (a_value, rest.split_once(" on "))
                 {
                     let subj = self.sel(sel, Case::Subj);

@@ -199,7 +199,23 @@ impl Renderer<'_> {
     /// opponent's speed by 1. This effect can't reduce their speed below 1."
     pub(crate) fn custom_effect_as_player(&mut self, who: &PlayerRef, name: &str) -> Option<String> {
         let (n, floor) = crate::kw::game_rules_4::reduce_highest_speed_args(name)?;
-        let p = self.player(who, Case::Poss);
+        // The controller of a target "an opponent controls" is "that opponent".
+        let opponents_target = match who {
+            PlayerRef::ControllerOf(s) => match s.as_ref() {
+                Sel::Target(i) => matches!(
+                    self.targets.get(*i as usize).map(|t| &t.what),
+                    Some(TargetKind::Object(Filter::And(v)))
+                        if v.iter().any(|x| matches!(x, Filter::ControlledBy(PlayerRel::Opponent)))
+                ),
+                _ => false,
+            },
+            _ => false,
+        };
+        let p = if opponents_target {
+            "that opponent's".to_string()
+        } else {
+            self.player(who, Case::Poss)
+        };
         let mut s = format!(
             "if {p} speed is greater than each other player's speed, reduce {p} speed by {}",
             number_word(n as i32)
@@ -211,5 +227,196 @@ impl Renderer<'_> {
             ));
         }
         Some(s)
+    }
+}
+
+impl Renderer<'_> {
+    /// The (subject, verb phrase) of a trigger event worded here.
+    pub(crate) fn trigger_event_nodes(
+        &mut self,
+        t: &TriggerCond,
+        det: &super::nouns::Det,
+    ) -> Option<(String, String)> {
+        let TriggerCond::Where { trigger, cond } = t else {
+            return None;
+        };
+        match (trigger.as_ref(), cond) {
+            // "When the chosen player loses the game" (even once they've left it).
+            (TriggerCond::PlayerLoses, Condition::Custom(n))
+                if n == crate::kw::trigger_events::EVENT_PLAYER_IS_CHOSEN =>
+            {
+                Some(("the chosen player".into(), "loses the game".into()))
+            }
+            // "Whenever an instant or sorcery spell is cast during your turn": by any
+            // player.
+            (
+                TriggerCond::CastSpell {
+                    who: PlayerRel::Any,
+                    filter,
+                },
+                Condition::YourTurn,
+            ) if matches!(det, super::nouns::Det::A) => {
+                let s = self.spell_noun(filter, det.clone());
+                Some((
+                    String::new(),
+                    format!("{{alt:a player casts {s}|{s} is cast}} during your turn"),
+                ))
+            }
+            // "When you remove the last intervention counter from ~": you removed one and
+            // none are left.
+            (
+                TriggerCond::CountersRemoved {
+                    filter: Filter::Source,
+                    kind: Some(k),
+                    each: false,
+                },
+                Condition::And(cs),
+            ) if matches!(cs.as_slice(), [
+                    Condition::Compare(Value::CountersOn(s, Some(k2)), Cmp::Eq, Value::Const(0)),
+                    Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+                ] if matches!(s.as_ref(), Sel::This) && format!("{k2:?}") == format!("{k:?}")) =>
+            {
+                let m = self.me();
+                Some((
+                    "you".into(),
+                    format!("remove the last {} from {m}", counter_name(k)),
+                ))
+            }
+            // "a spell or ability you control exiles one or more permanents from the
+            // battlefield": the event's cause (`kw/trigger_events.rs`).
+            (
+                TriggerCond::ZoneChange {
+                    filter,
+                    from: Some(ZoneKind::Battlefield),
+                    to: Some(ZoneKind::Exile),
+                },
+                Condition::Custom(n),
+            ) if n == crate::kw::trigger_events::CAUSED_BY_YOURS => {
+                let o = self.noun_det(filter, det.clone());
+                Some((
+                    "a spell or ability you control".into(),
+                    format!("exiles {o} from the battlefield"),
+                ))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Renderer<'_> {
+    /// Instructions of a sequence put into words together here, and how many.
+    pub(crate) fn seq_nodes(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        self.paid_up_to_times(v)
+            .or_else(|| self.whenever_drawn_this_way(v))
+    }
+
+    /// "Draw a card, then each other player may draw a card. Whenever a card is drawn
+    /// this way, ...": the cards drawn this turn counted before and after the draws, and
+    /// a reflexive trigger repeated once for each card drawn in between (CR 603.12).
+    fn whenever_drawn_this_way(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::StoreValue { var, value }, rest @ ..] = v else {
+            return None;
+        };
+        let drawn = |x: &Value| {
+            matches!(x, Value::OverPlayers(AggOp::Sum, PlayerFilter::Any, c)
+                if matches!(c.as_ref(), Value::CardsDrawnThisTurn(PlayerRef::Iterated)))
+        };
+        if !drawn(value) {
+            return None;
+        }
+        let j = rest.iter().position(|e| {
+            matches!(e, Effect::Repeat { times: Value::Diff(a, b), effect }
+                if drawn(a)
+                    && matches!(b.as_ref(), Value::Var(x) if x == var)
+                    && matches!(effect.as_ref(), Effect::Reflexive { .. }))
+        })?;
+        if j == 0 {
+            return None;
+        }
+        let Effect::Repeat { effect, .. } = &rest[j] else {
+            return None;
+        };
+        let Effect::Reflexive { body } = effect.as_ref() else {
+            return None;
+        };
+        let draws = self.seq(&rest[..j]);
+        let b = self.in_event_scope(|r| r.body(body));
+        Some((
+            format!(
+                "{}. Whenever a card is drawn this way, {}",
+                draws.trim_end_matches('.'),
+                effects::lower_first(&b)
+            ),
+            j + 2,
+        ))
+    }
+
+    /// "You may pay {G} up to three times. When you pay this cost one or more times,
+    /// ...": the payment offered until it's declined or made N times, the payments counted
+    /// as X, then a reflexive trigger if it was paid at least once (CR 603.12).
+    fn paid_up_to_times(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::StoreValue {
+            var: paid,
+            value: Value::Const(0),
+        }, Effect::StoreValue {
+            var: declined,
+            value: Value::Const(0),
+        }, Effect::Repeat {
+            times: Value::Const(n),
+            effect,
+        }, Effect::SetX {
+            value: Value::Var(x),
+        }, Effect::If {
+            cond: Condition::Compare(Value::X, Cmp::Ge, Value::Const(1)),
+            then,
+            otherwise,
+        }, ..] = v
+        else {
+            return None;
+        };
+        if x != paid || !matches!(otherwise.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let Effect::If {
+            cond: Condition::Compare(Value::Var(d), Cmp::Eq, Value::Const(0)),
+            then: pay,
+            otherwise: no,
+        } = effect.as_ref()
+        else {
+            return None;
+        };
+        if d != declined || !matches!(no.as_ref(), Effect::Noop) {
+            return None;
+        }
+        let Effect::PayOptional {
+            who: PlayerRef::You,
+            cost,
+            then: counted,
+            otherwise: stop,
+        } = pay.as_ref()
+        else {
+            return None;
+        };
+        let counts = matches!(counted.as_ref(), Effect::StoreValue { var, value: Value::Sum(p) }
+            if var == paid && matches!(p.as_slice(), [Value::Var(a), Value::Const(1)] if a == paid));
+        let stops = matches!(stop.as_ref(), Effect::StoreValue { var, value: Value::Const(1) } if var == declined);
+        if !counts || !stops {
+            return None;
+        }
+        let Effect::Reflexive { body } = then.as_ref() else {
+            return None;
+        };
+        let c = self.cost(cost);
+        let saved = std::mem::replace(&mut self.extra.x_paid, true);
+        let b = self.in_event_scope(|r| r.body(body));
+        self.extra.x_paid = saved;
+        Some((
+            format!(
+                "you may pay {c} up to {} times. {{alt:When you pay this cost one or more times|When you do}}, {}",
+                number_word(*n as i32),
+                effects::lower_first(&b)
+            ),
+            5,
+        ))
     }
 }

@@ -96,6 +96,7 @@ impl Renderer<'_> {
             .or_else(|| self.reveal_hand_or_top(&v[i..]))
             .or_else(|| self.repeat_until_no_one(&v[i..]))
             .or_else(|| self.delayed_unless_paid(&v[i..]))
+            .or_else(|| self.seq_nodes(&v[i..]))
     }
 
     /// "Target player reveals two cards at random from their hand, then discards each

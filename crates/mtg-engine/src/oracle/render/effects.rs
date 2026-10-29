@@ -491,6 +491,12 @@ impl Renderer<'_> {
         match e {
             Effect::Noop => String::new(),
             Effect::Seq(v) => self.seq(v),
+            // A condition that's always true is no condition.
+            Effect::If {
+                cond: Condition::Always,
+                then,
+                otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop) => self.effect(then),
             Effect::If {
                 cond,
                 then,
@@ -1234,6 +1240,21 @@ impl Renderer<'_> {
                         }
                     }
                     let mut s = self.sel(&strip_chooser(sel), Case::Obj);
+                    // "Target opponent chooses one of the top two cards of your
+                    // graveyard": one of a group already selected.
+                    if let Sel::Choose {
+                        filter: Filter::In(g),
+                        count: Value::Const(1),
+                        up_to: false,
+                        ..
+                    } = sel
+                    {
+                        if matches!(g.as_ref(), Sel::Var(v) if *v != vars::IT)
+                            && s.starts_with("the top ")
+                        {
+                            s = format!("one of {s}");
+                        }
+                    }
                     // "Target opponent reveals their hand. You choose a nonland card from
                     // it."
                     if self.revealed_hand {
@@ -2036,6 +2057,16 @@ impl Renderer<'_> {
                     if let Some(whose) = whose {
                         let s = self.restriction_subject(f);
                         return format!("{s} doesn't untap during {whose} next untap step");
+                    }
+                }
+                // "The tokens are goaded for the rest of the game": the tokens just
+                // created; a resolving effect with no duration lasts for the rest of the
+                // game (CR 611.2a), as cards say or not.
+                if let (Restriction::Goaded(Filter::In(s)), Duration::Permanent) =
+                    (restriction, duration)
+                {
+                    if matches!(s.as_ref(), Sel::Var(v) if *v == vars::CREATED) {
+                        return "{alt:it is|they are|the tokens are|those tokens are|the token is|that token is} goaded {opt:for the rest of the game}".into();
                     }
                 }
                 let r = self.restriction(restriction);

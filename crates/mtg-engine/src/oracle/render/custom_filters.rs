@@ -317,6 +317,24 @@ impl Renderer<'_> {
         if let Some(s) = self.top_cards_of_graveyard(f) {
             return Some(s);
         }
+        // The object noted for the linked abilities, as it last existed (CR 607.2c,
+        // 607.2d).
+        if let Some(n) = &self.info.noted {
+            let noted = |a: &Filter| {
+                matches!(a, Filter::Custom(x) if x == crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED)
+            };
+            let atoms: Vec<&Filter> = match f {
+                Filter::And(v) => v.iter().collect(),
+                other => vec![other],
+            };
+            if atoms.iter().any(|a| noted(a))
+                && atoms
+                    .iter()
+                    .all(|a| noted(a) || matches!(a, Filter::Type(_) | Filter::Permanent))
+            {
+                return Some(n.clone());
+            }
+        }
         let atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],

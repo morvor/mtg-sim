@@ -90,6 +90,10 @@ impl Renderer<'_> {
         // "any target chosen at random".
         if t.random {
             s.push_str(" chosen at random");
+            // "target opponent chosen at random from among your opponents".
+            if matches!(t.what, TargetKind::Player(PlayerFilter::Opponent)) {
+                s.push_str(" {opt:from among your opponents}");
+            }
         }
         s
     }
@@ -910,7 +914,10 @@ impl Renderer<'_> {
                 decline(format!("{s} chosen at random"), case)
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
-            Sel::LinkedNoted => decline("the last chosen card".into(), case),
+            Sel::LinkedNoted => match self.info.noted.clone() {
+                Some(n) => decline(n, case),
+                None => decline("the last chosen card".into(), case),
+            },
             Sel::Before(inner) => self.sel(inner, case),
             Sel::ThisTurn(c) => {
                 let s = match self.this_turn_objects(c) {
