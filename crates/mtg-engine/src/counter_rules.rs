@@ -163,6 +163,16 @@ pub fn stun_instead_of_untap(g: &mut Game, obj: ObjectId) -> bool {
     true
 }
 
+/// Whether the tapped permanent can be untapped to pay a cost ({Q}, "Untap a tapped
+/// [permanent] you control", CR 107.6, 118.3). A stun counter's replacement effect
+/// replaces the untap with removing the counter, which still pays the cost (CR 122.1d);
+/// but when its stun counters can't be removed, neither happens, so the cost can't be
+/// paid (ruling on Fear of Sleep Paralysis).
+pub fn can_untap_for_cost(g: &Game, obj: ObjectId) -> bool {
+    g.obj(obj).counter(counters::STUN) == 0
+        || !crate::kw::counters_cant_be_removed(g, Entity::Object(obj), counters::STUN)
+}
+
 /// Hone counters on Equipment attached to a creature give it +1/+0 each (CR 122.1j).
 pub fn hone_bonus(g: &Game, creature: ObjectId) -> i32 {
     g.battlefield

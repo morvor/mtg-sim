@@ -661,7 +661,9 @@ impl Game {
         if ob.zone == Zone::Battlefield {
             let c = &ob.chars;
             // CR 702.18a shroud
-            if c.has_keyword(KeywordKind::Shroud) {
+            if c.has_keyword(KeywordKind::Shroud)
+                && !crate::prohibitions::targetable_as_though_no(self, o, by, KeywordKind::Shroud)
+            {
                 return true;
             }
             // CR 702.11b hexproof (and "hexproof from", 702.11d). An ability's qualities
@@ -669,7 +671,13 @@ impl Game {
             // ability ("hexproof from activated and triggered abilities").
             // CR 702.11e: "as though it didn't have hexproof" covers hexproof from too.
             let ignore_hexproof =
-                crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by);
+                crate::kw::hexproof::hexproof_ignored(self, Entity::Object(o), by)
+                    || crate::prohibitions::targetable_as_though_no(
+                        self,
+                        o,
+                        by,
+                        KeywordKind::Hexproof,
+                    );
             for kw in c.keywords_of(KeywordKind::Hexproof) {
                 if self.are_opponents(by, ob.controller) && !ignore_hexproof {
                     match &kw.filter {

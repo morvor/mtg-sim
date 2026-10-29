@@ -666,6 +666,11 @@ impl Renderer<'_> {
                 let p = self.rel_possessive(*r, Num::One);
                 format!("play with the top card of {p} library revealed")
             }
+            StaticEffect::AdditionalLandPlays(r, n) if *n == ANY_NUMBER_OF_LANDS => {
+                let w = self.rel_subject(*r);
+                let p = if w == "you" { "your" } else { "their" };
+                format!("{w} may play any number of lands on each of {p} turns")
+            }
             StaticEffect::AdditionalLandPlays(r, n) => {
                 let w = self.rel_subject(*r);
                 // "Each player may play an additional land on each of their turns."
@@ -1406,7 +1411,27 @@ impl Renderer<'_> {
                 CostChange::ReduceGeneric(_) | CostChange::IncreaseGeneric(_)
             )
         });
+        // "Spells you cast of the chosen type": the caster before or after the type.
+        let chosen_type = match &cm.applies_to {
+            CostTarget::Spells(Filter::And(v))
+                if !who.is_empty() && v.iter().any(|x| matches!(x, Filter::ChosenType)) =>
+            {
+                let rest: Vec<Filter> = v
+                    .iter()
+                    .filter(|x| !matches!(x, Filter::ChosenType))
+                    .cloned()
+                    .collect();
+                let base =
+                    self.cost_target(&CostTarget::Spells(cast_from_zone_only(&Filter::and(rest))));
+                (!base.contains('{')).then(|| {
+                    let of = "of {alt:the chosen type|that type}";
+                    format!("{{alt:{base}{who} {of}|{base} {of}{who}}}")
+                })
+            }
+            _ => None,
+        };
         let (target, who) = match target.find(" that ").or(from) {
+            _ if chosen_type.is_some() => (chosen_type.unwrap_or_default(), String::new()),
             Some(i) if !who.is_empty() && !target[..i].contains('{') => (
                 format!("{}{who}{}", &target[..i], &target[i..]),
                 String::new(),
@@ -2143,6 +2168,26 @@ impl Renderer<'_> {
             }
             Restriction::CantAttackAlone(f) => format!("{} can't attack alone", subj(self, f)),
             Restriction::CantBlockAlone(f) => format!("{} can't block alone", subj(self, f)),
+            Restriction::TargetableAsThoughNo { what, by, keyword } => {
+                let w = subj(self, what);
+                let p = self.player_filter_object(by);
+                let k = keyword.name().to_lowercase();
+                format!(
+                    "{w} can be the target of spells and abilities controlled by {p} as though it didn't have {k}"
+                )
+            }
+            Restriction::CantAttackUnlessOthersAttack { what, n } => format!(
+                "{} can't attack unless at least {} other {} attack",
+                subj(self, what),
+                number_word(*n as i32),
+                if *n == 1 { "creature" } else { "creatures" }
+            ),
+            Restriction::CantBlockUnlessOthersBlock { what, n } => format!(
+                "{} can't block unless at least {} other {} block",
+                subj(self, what),
+                number_word(*n as i32),
+                if *n == 1 { "creature" } else { "creatures" }
+            ),
             Restriction::MaxAttackers(n) => format!(
                 "no more than {} creatures can attack each combat",
                 number_word(*n as i32)
@@ -2162,6 +2207,12 @@ impl Renderer<'_> {
                 // (that would be "itself"), so "it" is ~ when ~ was named before.
                 let a = if named && matches!(attacker, Filter::Source) {
                     "~it".to_string()
+                } else if matches!(attacker, Filter::And(v) if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::Attacking))
+                    && v.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))))
+                {
+                    // "blocks each attacking creature" (a requirement for each).
+                    "each attacking creature".to_string()
                 } else {
                     self.noun_det(attacker, Det::A)
                 };
@@ -2625,6 +2676,16 @@ impl Renderer<'_> {
                     ObjectAction::Equipped => "can't be equipped",
                     ObjectAction::EnchantedByOtherAuras => "can't be enchanted by other Auras",
                     ObjectAction::Suspected => "can't become suspected",
+                    ObjectAction::Enchanted => "can't be enchanted",
+                    ObjectAction::NewlyEnchanted => {
+                        "can't be enchanted. This effect doesn't remove Auras already attached to {alt:it|them|those permanents}"
+                    }
+                    ObjectAction::ControlGainedByOthers => {
+                        return format!(
+                            "other players can't gain control of {}",
+                            self.noun(what, Num::Many)
+                        );
+                    }
                 };
                 format!("{w} {a}")
             }
@@ -2934,7 +2995,55 @@ impl Renderer<'_> {
                 format!("if {subj} would die, {then}")
             }
             (E::ZoneChange { filter, from, to }, action) => {
+                let dur = self.extra.event_duration.take();
+                let dur_words = dur.as_deref().map(|d| format!(" {d}")).unwrap_or_default();
+                // "If a card would be put into your graveyard": a card goes only to its
+                // owner's graveyard (CR 400.3).
+                let own_graveyard = match filter {
+                    Filter::And(v)
+                        if from.is_none()
+                            && *to == Some(ZoneKind::Graveyard)
+                            && v.iter()
+                                .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You))) =>
+                    {
+                        let rest: Vec<Filter> = v
+                            .iter()
+                            .filter(|x| !matches!(x, Filter::OwnedBy(PlayerRel::You)))
+                            .cloned()
+                            .collect();
+                        Some(self.noun_det(&Filter::and(rest), Det::A))
+                    }
+                    _ => None,
+                };
                 let subj = self.noun_det(filter, Det::A);
+                let (subj, dur_words) = match own_graveyard {
+                    Some(n) => (
+                        format!(
+                            "{{alt:{subj} would be put {{alt:into a graveyard|into its owner's graveyard}} {{opt:from anywhere}}{dur_words}|{n} would be put into your graveyard {{opt:from anywhere}}{dur_words}}}"
+                        ),
+                        None,
+                    ),
+                    None => (subj, Some(dur_words)),
+                };
+                if let Some(dw) = dur_words {
+                    if !dw.is_empty() {
+                        let where_ = match (from, to) {
+                            (None, Some(ZoneKind::Graveyard)) => format!(
+                                "be put {{alt:into a graveyard|into its owner's graveyard}} {{opt:from anywhere}}{dw}"
+                            ),
+                            (None, Some(t)) => format!(
+                                "be put into {} {{opt:from anywhere}}{dw}",
+                                self.zone_any(*t)
+                            ),
+                            _ => String::new(),
+                        };
+                        let then = self.replacement_then(action, "it");
+                        return format!("if {subj} would {where_}, {then}");
+                    }
+                } else {
+                    let then = self.replacement_then(action, "it");
+                    return format!("if {subj}, {then}");
+                }
                 let where_ = match (from, to) {
                     (Some(ZoneKind::Battlefield), Some(ZoneKind::Graveyard)) => "die".to_string(),
                     (Some(f), Some(t)) => format!(
@@ -3500,6 +3609,40 @@ impl Renderer<'_> {
                     return format!(
                         "{subj} enters with your choice of two different counters on it from among {}",
                         join_list(&kinds, "and")
+                    );
+                }
+            }
+        }
+        // "As ~ enters, remove all counters from all permanents. ~ enters with a +1/+1
+        // counter on it for each counter removed this way": the number of counters there
+        // were, remembered before they're removed.
+        if let Effect::Seq(v) = e {
+            if let [Effect::StoreValue {
+                var,
+                value: Value::CountersOn(s1, k1),
+            }, rm @ Effect::RemoveCounters {
+                what,
+                kind,
+                n: Value::CountersOn(s2, k2),
+            }, Effect::EnterWithCounters {
+                kind: entering,
+                n: Value::Var(x),
+            }] = v.as_slice()
+            {
+                let same = format!("{s1:?}") == format!("{what:?}")
+                    && format!("{s1:?}") == format!("{s2:?}")
+                    && k1 == kind
+                    && k1 == k2;
+                if same && x == var {
+                    let r = self.effect(rm);
+                    let removed = match kind {
+                        Some(k) => plural(&counter_name(k)),
+                        None => "counters".into(),
+                    };
+                    let me = self.me();
+                    let c = plural(&counter_name(entering));
+                    return format!(
+                        "as {me} enters, {r}. {me} enters with X {c} on it, where X is the number of {removed} removed this way"
                     );
                 }
             }

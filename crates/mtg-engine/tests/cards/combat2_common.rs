@@ -97,6 +97,20 @@ pub fn declare_blocks(t: &mut TestGame, dp: PlayerId, blocks: &[(ObjectId, Objec
     assert!(ok && t.g.turn.number == turn, "blockers not declared");
 }
 
+/// Advances to the upkeep of `p`'s next turn (a later turn than the current one), with
+/// `p` holding priority.
+pub fn next_upkeep(t: &mut TestGame, p: PlayerId) {
+    let turn = t.g.turn.number;
+    let ok = t.g.run_until(10_000, |g| {
+        g.turn.number > turn
+            && g.turn.active == p
+            && g.turn.step == Step::Upkeep
+            && g.turn.stage == Stage::Priority
+            && g.turn.priority == Some(p)
+    });
+    assert!(ok, "did not reach {p}'s next upkeep");
+}
+
 /// Runs the game to the end of combat step of the current turn.
 pub fn to_end_of_combat(t: &mut TestGame) {
     let ap = t.g.turn.active;
