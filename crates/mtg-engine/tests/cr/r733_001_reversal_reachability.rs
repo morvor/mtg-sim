@@ -503,6 +503,9 @@ fn custom_rule(name: &str) -> CustomRule {
         // (`kw::venture_prohibited`); venturing moves a marker, no library card.
         "card:Keen-Eared Sentry:opponents venture at most once each turn",
         "opponents skip extra turns",
+        // Bell Borca, Spectral Sergeant: notes a number for itself as a card is put into
+        // exile (`kw/noted_info.rs`, on the zone-change event); it moves no card.
+        "note:the mana value of each card put into exile",
         // Targets, hexproof and ward; what may be cast, activated or played, from where, when
         // and how often; what casting and activating cost (life paid instead of mana is
         // Ashiok's case above). Damping Engine's special action sacrifices a permanent, and

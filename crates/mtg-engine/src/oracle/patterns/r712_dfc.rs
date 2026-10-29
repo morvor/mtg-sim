@@ -15,7 +15,13 @@ fn s_as_transforms(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abil
     let r = r.strip_prefix("transforms into ~, ")?;
     let mut b = Builder::new(ctx);
     b.it = Sel::This;
-    let e = parse_clause(r, &mut b)?;
+    // "As ~ transforms into ~, it becomes a copy of ... Put a number of +1/+1 counters on
+    // ~ equal to ..." (Ludevic, Necrogenius): every instruction is applied as it transforms.
+    let e = if r.contains(". ") {
+        crate::oracle::effects::parse_effect_text(&format!("{r}."), &mut b)?
+    } else {
+        parse_clause(r, &mut b)?
+    };
     if !b.targets.is_empty() {
         return None;
     }

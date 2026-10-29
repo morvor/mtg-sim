@@ -68,3 +68,83 @@ fn krovikan_vampire_does_not_trigger_without_such_a_death() {
     t.resolve_all();
     assert_eq!(t.obj_now(giant).controller, P1);
 }
+
+/// Runs P0's next combat with Territorial Hellkite, declaring no attackers (its
+/// requirement makes it attack anyway): whom it attacked, and whether it was tapped by its
+/// ability.
+fn hellkite_combat(t: &mut TestGame, hk: ObjectId) -> (Option<Entity>, bool) {
+    use mtg_engine::decision::Answer;
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    let tapped = t.obj_now(hk).tapped;
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+    t.advance_to(P0, Step::DeclareAttackers);
+    let at = t
+        .g
+        .combat
+        .as_ref()
+        .and_then(|c| c.attack_target(t.g.current(hk)));
+    t.advance_to(P0, Step::EndOfCombat);
+    (at, tapped)
+}
+
+#[test]
+fn territorial_hellkite_attacks_an_opponent_it_didnt_attack_last_combat() {
+    cr!("508.1b", "508.1d");
+    ruling!(
+        "Territorial Hellkite",
+        "then any opponent can be chosen at random"
+    );
+    supported("Territorial Hellkite");
+    let mut t = TestGame::new(3);
+    let hk = t.battlefield(P0, "Territorial Hellkite");
+    // First combat: no last combat, any opponent; it attacks that player.
+    let (first, tapped) = hellkite_combat(&mut t, hk);
+    assert!(!tapped);
+    let first = first.expect("it attacks the chosen opponent");
+    assert!(matches!(first, Entity::Player(p) if p != P0));
+    // Next turn: the other opponent.
+    let (second, tapped) = hellkite_combat(&mut t, hk);
+    assert!(!tapped);
+    let second = second.expect("it attacks the chosen opponent");
+    assert!(matches!(second, Entity::Player(p) if p != P0));
+    assert_ne!(first, second);
+}
+
+#[test]
+fn territorial_hellkite_taps_if_no_opponent_can_be_chosen() {
+    cr!("508.1b", "508.1d");
+    supported("Territorial Hellkite");
+    let mut t = TestGame::new(2);
+    let hk = t.battlefield(P0, "Territorial Hellkite");
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!((at, tapped), (Some(Entity::Player(P1)), false));
+    // It attacked the only opponent last combat: it's tapped and doesn't attack.
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!((at, tapped), (None, true));
+    // It didn't attack during the last combat: P1 can be chosen again.
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!((at, tapped), (Some(Entity::Player(P1)), false));
+}
+
+#[test]
+fn territorial_hellkite_last_combat_is_an_earlier_combat_of_this_turn() {
+    cr!("500.8", "508.1d");
+    supported("Territorial Hellkite");
+    let mut t = TestGame::new(2);
+    let hk = t.battlefield(P0, "Territorial Hellkite");
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!((at, tapped), (Some(Entity::Player(P1)), false));
+    let turn = t.g.turn.number;
+    // An additional combat phase this turn: its last combat is the one just fought, in
+    // which it attacked the only opponent.
+    t.advance_to(P0, Step::PostcombatMain);
+    t.lands(P0, "Mountain", 4);
+    let ra = t.hand(P0, "Relentless Assault");
+    t.cast(P0, ra).go();
+    t.resolve_all();
+    assert!(!t.obj_now(hk).tapped);
+    let (at, tapped) = hellkite_combat(&mut t, hk);
+    assert_eq!(t.g.turn.number, turn);
+    assert_eq!((at, tapped), (None, true));
+}

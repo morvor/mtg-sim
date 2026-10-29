@@ -132,9 +132,9 @@ index: `docs/INTERPRETATIONS.md`.
 - Decision: The player announces X, and the target must be a spell whose mana value makes the definition true (twice its mana value is X); an X no target can satisfy (an odd X here) can't be announced. The result is that X is exactly the defined value for the chosen target, as 107.3c requires.
 - Alternatives: (A) Determine X after targets are chosen (out of the 601.2 order). (B) Let the player announce any X and pay it, ignoring the definition: contradicts 107.3c.
 - Why: The engine follows 601.2's order (as for Soul Foundry's "X is the mana value of that card", `r107_x_defined_by_text`); restricting the target to the announced X gives the same legal activations and the same payment as determining X from the target.
-- Affects: Reflecting Mirror.
-- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`).
-- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`).
+- Affects: Reflecting Mirror; Caller of the Untamed ("{X}, {T}: Create a token that's a copy of a card you exiled with cards named ~. X is the mana value of that card.": the card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card chosen is one with that mana value).
+- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`); `crates/mtg-engine/src/oracle/patterns/copies_6.rs` (`x_is_mana_value_of_chosen`).
+- Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`); `tests/cards/c5_copies.rs` (`caller_of_the_untamed_x_is_the_mana_value_of_the_copied_card`).
 
 ## x-defined-for-a-player: "X is the number of ... in an opponent's graveyard as you cast this spell" is that number for one opponent, announced by the caster
 - Kind: interpretation

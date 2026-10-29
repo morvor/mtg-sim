@@ -2259,11 +2259,20 @@ impl Game {
         }
         // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
         // permission it's cast with.
-        if let Some(n) = opt
-            .permission
-            .as_ref()
-            .map(|c| c.terms.cost_reduction)
-            .filter(|n| *n > 0)
+        // So does one an effect casting the spell as it resolves gives ("That copy costs
+        // {2} less to cast").
+        let during_resolution = if opt.any_time {
+            self.resolution_cost_reduction
+        } else {
+            0
+        };
+        if let Some(n) = Some(
+            opt.permission
+                .as_ref()
+                .map_or(0, |c| c.terms.cost_reduction)
+                + during_resolution,
+        )
+        .filter(|n| *n > 0)
         {
             changes
                 .reductions
@@ -4335,6 +4344,15 @@ impl Game {
                 // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
                 c.paying_cost = true;
                 self.exec(e, &mut c);
+                // "Unattach an Equipment from ~": the Equipment ("that Equipment's mana
+                // value") and what it was attached to.
+                if let Some(v) = c.vars.get(&crate::zones::UNATTACHED) {
+                    let from = c.vars.get(&crate::zones::UNATTACHED_FROM);
+                    for (i, o) in v.iter().filter_map(|x| x.object()).enumerate() {
+                        let h = from.and_then(|f| f.get(i)).copied();
+                        paid.unattached.push((o, h));
+                    }
+                }
                 crate::dice::note_cost_roll(e, &c, paid);
                 // CR 607.2q: cards the action exiled ("behold a Goblin and exile it") were
                 // exiled to pay the cost.
@@ -4524,6 +4542,9 @@ pub struct PaidCost {
     pub life: u32,
     /// The loyalty counters a loyalty cost removed (CR 606.4).
     pub loyalty_removed: u32,
+    /// The permanents an "Unattach [an Equipment] from ~" cost unattached ("that
+    /// Equipment", CR 400.7j), with what each was attached to.
+    pub unattached: Vec<(ObjectId, Option<Entity>)>,
     /// Values a cost's action noted for the ability's effect (a die rolled to pay the
     /// cost: "the result", see `dice::note_cost_roll`).
     pub nums: Vec<(Var, i64)>,
