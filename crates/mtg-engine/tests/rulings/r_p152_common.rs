@@ -35,3 +35,53 @@ pub fn set_life(t: &mut TestGame, p: PlayerId, life: i32) {
 pub fn count_named(t: &TestGame, name: &str) -> usize {
     t.named_on_battlefield(name).len()
 }
+
+/// Returns a permanent to its owner's hand (as a spell or ability would) and settles.
+pub fn bounce(t: &mut TestGame, id: ObjectId) {
+    let id = t.g.current(id);
+    let owner = t.g.obj(id).owner;
+    t.g.move_object(
+        id,
+        mtg_engine::object::Zone::Hand(owner),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+    t.g.recompute();
+    t.g.flush_events();
+    t.settle();
+}
+
+/// `p` sacrifices the permanent (as an effect or cost would), then the game settles.
+pub fn sacrifice(t: &mut TestGame, p: PlayerId, id: ObjectId) {
+    let id = t.g.current(id);
+    t.g.sacrifice(id, p);
+    t.g.recompute();
+    t.g.flush_events();
+    t.settle();
+}
+
+/// `p` gains `n` life, then the game settles.
+pub fn gain(t: &mut TestGame, p: PlayerId, n: u32) {
+    t.g.gain_life(p, n);
+    t.g.flush_events();
+    t.settle();
+}
+
+/// Whether the decision log since `from` holds a yes/no question for `p`.
+pub fn asked_yes_no(t: &TestGame, p: PlayerId, from: usize) -> bool {
+    t.asked()[from..].iter().any(|(q, d)| {
+        *q == p && matches!(d, mtg_engine::decision::Decision::YesNo { .. })
+    })
+}
+
+/// The source of the ability on top of the stack, if the top object is an ability.
+pub fn top_source(t: &TestGame) -> Option<ObjectId> {
+    use mtg_engine::object::StackKind;
+    let top = *t.g.stack.last()?;
+    match &t.g.obj(top).stack.as_deref()?.kind {
+        StackKind::Activated { source, .. } | StackKind::Triggered { source, .. } => {
+            Some(*source)
+        }
+        StackKind::Spell => None,
+    }
+}
