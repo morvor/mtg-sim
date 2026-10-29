@@ -258,3 +258,36 @@ fn gilgamesh_attaches_one_of_the_equipment_put_onto_the_battlefield_this_way() {
         .iter()
         .any(|(_, d)| matches!(d, Decision::YesNo { .. })));
 }
+
+/// Midnight Crusader Shuttle attacks P1 (crewed by a Grizzly Bears); P1 picks `option` of
+/// the villainous choice and P0 the Hill Giant if it's the second.
+fn shuttle_attacks(option: usize) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let shuttle = t.battlefield(P0, "Midnight Crusader Shuttle");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.activate(P0, shuttle, 0, &[]).expect("crew");
+    t.resolve_all();
+    t.answer(P1, DecisionKind::Option, Answer::Index(option));
+    t.answer_choose(P1, &[Entity::Object(giant)]);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.attack(&[(shuttle, Entity::Player(P1))], &[]);
+    (t, giant)
+}
+
+#[test]
+fn midnight_crusader_shuttle_makes_the_stolen_creature_attack() {
+    cr!("508.4", "701.55a");
+    supported("Midnight Crusader Shuttle");
+    // The second option: the Giant is P0's, tapped and attacking P1 (3 + 3 damage).
+    let (t, giant) = shuttle_attacks(1);
+    assert_eq!(t.life(P1), 20 - 6);
+    assert_eq!(t.obj_now(giant).controller, P0);
+    assert!(t.obj_now(giant).tapped);
+    // The first option: P1 sacrifices the Giant; nothing else attacks.
+    let (t, giant) = shuttle_attacks(0);
+    assert!(!t.on_battlefield(giant));
+    assert_eq!(t.life(P1), 20 - 3);
+}

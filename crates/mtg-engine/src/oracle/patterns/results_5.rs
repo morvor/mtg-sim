@@ -20,6 +20,10 @@
 //!   Likewise "When you put one or more Equipment onto the battlefield this way, you may
 //!   attach one of them to a Samurai you control." (Gilgamesh, Master-at-Arms) after an
 //!   instruction putting cards onto the battlefield: "them" are those permanents.
+//! * "If you gain control of a creature this way, tap it, and it's attacking that player."
+//!   (Midnight Crusader Shuttle), after "you gain control of a creature of your choice that
+//!   player controls": only if you control the chosen creature now; "it's attacking that
+//!   player" states that it's attacking (CR 508.4, `kw/attacking_this_way.rs`).
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -338,3 +342,72 @@ fn when_put_onto_battlefield_this_way(l: &str, prev: &mut Effect, b: &mut Builde
 }
 
 inventory::submit! { FollowupPattern { name: "results 5: when you put one or more [permanents] onto the battlefield this way", priority: 0, apply: when_put_onto_battlefield_this_way } }
+
+/// "If you gain control of a creature this way, [instructions][, and it's attacking that
+/// player]."
+fn if_you_gain_control_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let gained_var = super::choices_4::GAINED;
+    let l = end(l);
+    let Some(r) = l.strip_prefix("if you gain control of ") else {
+        return false;
+    };
+    let Some((what, rest)) = r.split_once(" this way, ") else {
+        return false;
+    };
+    let what = what
+        .strip_prefix("a ")
+        .or_else(|| what.strip_prefix("an "))
+        .unwrap_or(what);
+    let Some((f, false, tail)) = crate::oracle::phrases::parse_object_phrase(what) else {
+        return false;
+    };
+    if !tail.trim().is_empty() || !format!("{prev:?}").contains(&format!("Var({gained_var})")) {
+        return false;
+    }
+    let gained = Sel::Matching(
+        Box::new(Sel::Var(gained_var)),
+        Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
+    );
+    let (instr, attacking) = match rest.strip_suffix(", and it's attacking that player") {
+        Some(x) => (x, true),
+        None => (rest, false),
+    };
+    let saved = (b.it.clone(), b.targets.len());
+    b.it = gained.clone();
+    let e = crate::oracle::effects::parse_clause(instr, b);
+    b.it = saved.0;
+    let Some(e) = e.filter(|_| b.targets.len() == saved.1) else {
+        b.targets.truncate(saved.1);
+        return false;
+    };
+    let mut then = vec![e];
+    if attacking {
+        // "that player": the player the text named, the defending player after
+        // "defending player faces a villainous choice".
+        let who = if !super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+            b.it_player.clone()
+        } else if crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("defending player faces")
+        {
+            PlayerRef::DefendingPlayer
+        } else {
+            return false;
+        };
+        let Some(a) = crate::kw::attacking_this_way::attacking_effect(gained_var, &who) else {
+            return false;
+        };
+        then.push(a);
+    }
+    append(
+        prev,
+        Effect::If {
+            cond: Condition::SelNonEmpty(gained),
+            then: Box::new(Effect::seq(then)),
+            otherwise: Box::new(Effect::Noop),
+        },
+    );
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "results 5: if you gain control of a creature this way", priority: 0, apply: if_you_gain_control_this_way } }

@@ -85,6 +85,10 @@ impl Renderer<'_> {
                     format!("create {} {tname} tokens", number_word(count))
                 }
             }
+            // "It's attacking that player" (`kw/attacking_this_way.rs`).
+            n if n.starts_with(crate::kw::attacking_this_way::ATTACKING) => {
+                "{alt:it's|they're} attacking that player".into()
+            }
             n if n.starts_with("divided-counters:") => {
                 let mut it = n.split(':').skip(1);
                 let slot: u8 = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);

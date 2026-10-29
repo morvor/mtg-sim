@@ -5778,6 +5778,21 @@ impl Renderer<'_> {
                 return t.replace("after this phase", "after this main phase");
             }
         }
+        // "If you gain control of a creature this way, tap it, and it's attacking that
+        // player." (Midnight Crusader Shuttle, `patterns::results_5`).
+        if let (true, Condition::SelNonEmpty(sel @ Sel::Matching(x, Filter::And(fs)))) =
+            (else_empty, cond)
+        {
+            let gained = crate::oracle::patterns::choices_4::GAINED;
+            let yours = |f: &Filter| matches!(f, Filter::ControlledBy(PlayerRel::You));
+            if matches!(x.as_ref(), Sel::Var(v) if *v == gained) && fs.len() == 2 && yours(&fs[1]) {
+                let n = self.noun_det(&fs[0], Det::A);
+                let it = self.sel(sel, Case::Obj);
+                let t = self.effect(then).replace(&it, "it");
+                let t = t.replace(". {alt:it's|they're} attacking", ", and it's attacking");
+                return format!("if you gain control of {n} this way, {t}");
+            }
+        }
         // "When one or more counters are removed from ~ this way, it deals that much damage
         // to any target." (Magma Pummeler, `patterns::results_5`).
         if let (true, Condition::Compare(Value::Prev, Cmp::Ge, Value::Const(1)), Effect::Seq(v)) =
