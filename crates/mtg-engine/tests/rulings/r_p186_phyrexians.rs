@@ -208,7 +208,11 @@ fn phyrexian_revoker_stops_equip_but_not_static_abilities() {
     let other = t.battlefield(P0, "Hill Giant");
     t.lands(P0, "Wastes", 3);
     assert!(can_activate(&mut t, P0, staff));
-    t.answer(P1, DecisionKind::Name, Answer::Text("Wizard's Staff".into()));
+    t.answer(
+        P1,
+        DecisionKind::Name,
+        Answer::Text("Wizard's Staff".into()),
+    );
     crate::r_s05_common::enter(&mut t, P1, "Phyrexian Revoker");
     assert!(!can_activate(&mut t, P0, staff), "equip can't be activated");
     // The prowess it grants still works (static, then triggered).
@@ -239,10 +243,17 @@ fn tangle_angler_doesnt_force_it_to_attack() {
         (t, angler, giant, bears)
     };
     let (mut t, angler, giant, bears) = setup();
-    assert!(crate::r_s09_common::legal_attack(&mut t, &[(giant, Entity::Player(P1))]));
+    assert!(crate::r_s09_common::legal_attack(
+        &mut t,
+        &[(giant, Entity::Player(P1))]
+    ));
     attack_with(&mut t, &[(giant, Entity::Player(P1))]);
     assert!(crate::r_s21_common::legal_blocks(&mut t, P1, &[]));
-    assert!(crate::r_s21_common::legal_blocks(&mut t, P1, &[(bears, giant)]));
+    assert!(crate::r_s21_common::legal_blocks(
+        &mut t,
+        P1,
+        &[(bears, giant)]
+    ));
     // When it attacks, the Bears must block it.
     let (mut t, angler2, giant2, bears2) = setup();
     attack_with(
@@ -250,8 +261,16 @@ fn tangle_angler_doesnt_force_it_to_attack() {
         &[(angler2, Entity::Player(P1)), (giant2, Entity::Player(P1))],
     );
     assert!(!crate::r_s21_common::legal_blocks(&mut t, P1, &[]));
-    assert!(!crate::r_s21_common::legal_blocks(&mut t, P1, &[(bears2, giant2)]));
-    assert!(crate::r_s21_common::legal_blocks(&mut t, P1, &[(bears2, angler2)]));
+    assert!(!crate::r_s21_common::legal_blocks(
+        &mut t,
+        P1,
+        &[(bears2, giant2)]
+    ));
+    assert!(crate::r_s21_common::legal_blocks(
+        &mut t,
+        P1,
+        &[(bears2, angler2)]
+    ));
     let _ = angler;
 }
 
@@ -290,7 +309,11 @@ fn brudiclad_copies_only_the_chosen_tokens_copiable_values() {
     assert!(t.obj_now(myr[0]).chars.has_subtype("Soldier"));
     assert!(crate::r_s26_common::fresh(&t, myr[0]));
     assert_eq!(t.pt(myr[0]), (1, 1));
-    assert_eq!(t.pt(soldier), (6, 6), "the chosen token keeps its own changes");
+    assert_eq!(
+        t.pt(soldier),
+        (6, 6),
+        "the chosen token keeps its own changes"
+    );
 }
 
 #[test]
@@ -368,7 +391,10 @@ fn phyrexian_metamorph_copies_printed_values_plus_artifact() {
     let o = t.obj_now(m);
     assert!(o.is(CardType::Artifact) && o.is(CardType::Creature));
     assert_eq!(o.chars.name.as_str(), "Grizzly Bears");
-    assert_eq!(o.chars.colors, crate::r_s17_common::color_set(&[Color::Green]));
+    assert_eq!(
+        o.chars.colors,
+        crate::r_s17_common::color_set(&[Color::Green])
+    );
     // A noncreature artifact.
     let statue = t.battlefield(P1, "Jade Statue");
     let m = metamorph_copying(&mut t, P0, statue);
@@ -409,7 +435,9 @@ fn phyrexian_metamorph_cant_copy_what_enters_with_it() {
     assert!(!offered.is_empty());
     for c in &offered {
         assert!(c.contains(&Entity::Object(giant)));
-        assert!(!c.iter().any(|e| matches!(e, Entity::Object(o) if t.g.current(*o) == t.g.current(ids[1]))));
+        assert!(!c
+            .iter()
+            .any(|e| matches!(e, Entity::Object(o) if t.g.current(*o) == t.g.current(ids[1]))));
     }
 }
 
@@ -464,17 +492,27 @@ fn cathedral_membrane_triggers_however_it_dies_in_combat() {
     let attacker = t.battlefield(P1, "Craw Wurm");
     crate::r_s09_common::to_combat(&mut t, P1);
     attack_with(&mut t, &[(attacker, Entity::Player(P0))]);
-    t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![(wall, attacker)]));
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(wall, attacker)]),
+    );
     t.advance_to(P1, Step::DeclareBlockers);
     destroy(&mut t, wall);
     t.resolve_all();
-    assert!(!t.on_battlefield(attacker), "6 damage to the Wurm it blocked");
+    assert!(
+        !t.on_battlefield(attacker),
+        "6 damage to the Wurm it blocked"
+    );
 }
 
 #[test]
 fn marauding_knight_counts_every_opponents_plains() {
     cr!("102.2", "611.3a");
-    ruling!("Marauding Knight", "Counts plains controlled by all opponents.");
+    ruling!(
+        "Marauding Knight",
+        "Counts plains controlled by all opponents."
+    );
     supported("Marauding Knight");
     let mut t = TestGame::new(3);
     let k = t.battlefield(P0, "Marauding Knight");
@@ -676,7 +714,8 @@ fn spellskite_cant_take_a_target_that_would_make_another_illegal() {
     let sk = t.battlefield(P0, "Spellskite");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.set_step(P1, Step::PrecombatMain);
-    let fb = crate::r_s33_common::cast_one_slot(&mut t, P1, "Forked Bolt", &[Entity::Object(bears)]);
+    let fb =
+        crate::r_s33_common::cast_one_slot(&mut t, P1, "Forked Bolt", &[Entity::Object(bears)]);
     add_mana(&mut t, P0, ManaType::U, 1);
     t.activate(P0, sk, 0, &[Entity::Object(fb)]).unwrap();
     t.resolve_all();
@@ -760,7 +799,11 @@ fn xantcha_token_copy_is_owned_by_its_creator() {
     );
     let mut t = TestGame::new(3);
     let x = t.battlefield(P2, "Xantcha, Sleeper Agent");
-    t.answer(P0, DecisionKind::Any, Answer::Entities(vec![Entity::Player(P1)]));
+    t.answer(
+        P0,
+        DecisionKind::Any,
+        Answer::Entities(vec![Entity::Player(P1)]),
+    );
     crate::r_s17_common::token_copy(&mut t, P0, x);
     let tok: Vec<_> = t
         .named_on_battlefield("Xantcha, Sleeper Agent")
@@ -920,7 +963,10 @@ fn chancellor_of_the_spires_spell_still_needs_its_additional_cost() {
     t.answer_targets(P0, &[Entity::Object(giant)]);
     crate::r_s05_common::enter(&mut t, P0, "Chancellor of the Spires");
     t.resolve_all();
-    assert!(!t.on_battlefield(fodder), "sacrificed for the additional cost");
+    assert!(
+        !t.on_battlefield(fodder),
+        "sacrificed for the additional cost"
+    );
     assert!(!t.on_battlefield(giant));
 }
 
