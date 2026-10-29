@@ -1286,3 +1286,49 @@ fn elrond_gains_control_of_every_creature_chosen_for_a_fellowship_vote() {
     assert_eq!(t.counters(bears, "+1/+1"), 1);
     assert_eq!(t.counters(elrond, "+1/+1"), 1);
 }
+
+#[test]
+fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
+    cr!("603.12", "101.4");
+    compiles("Nihiloor");
+    // "When Nihiloor enters, for each opponent, tap up to one untapped creature you
+    // control. When you do, gain control of target creature that player controls with
+    // power less than or equal to the tapped creature's power for as long as you control
+    // Nihiloor."
+    let mut t = TestGame::new(3);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let wurm = t.battlefield(P2, "Craw Wurm");
+    let thopter = t.battlefield(P2, "Ornithopter");
+    // For P1: tap the Giant; for P2: tap the Elves.
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(elves)]);
+    let from = t.asked().len();
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(thopter)]);
+    let nihiloor = t.enter(P0, "Nihiloor");
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert!(t.obj_now(giant).tapped && t.obj_now(elves).tapped);
+    assert_eq!(t.obj_now(bears).controller, P0);
+    assert_eq!(t.obj_now(thopter).controller, P0);
+    assert_eq!(t.obj_now(wurm).controller, P2);
+    // Each reflexive ability targeted only that opponent's creatures with low enough power.
+    let cands: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(cands.iter().any(|c| c == &vec![Entity::Object(thopter)]));
+    // Leaving Nihiloor: control returns.
+    t.g.destroy(nihiloor, None);
+    t.settle();
+    t.g.recompute();
+    assert_eq!(t.obj_now(bears).controller, P1);
+}

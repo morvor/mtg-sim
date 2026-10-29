@@ -411,3 +411,89 @@ fn owners_of_spells_cast_lose_life(l: &str, prev: &mut Effect, _b: &mut Builder)
 }
 
 inventory::submit! { FollowupPattern { name: "each player who owns a spell you cast this way loses life equal to its mana value", priority: 60, apply: owners_of_spells_cast_lose_life } }
+
+/// "for each opponent, tap up to one untapped creature you control" (Nihiloor): for each
+/// of them in turn (APNAP, CR 101.4), you may tap one; "when you do" after it is a
+/// reflexive ability for each tap (CR 603.12), about that player.
+fn for_each_opponent_tap_up_to_one(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    // (After "for each opponent, " the clause is read for each of them.)
+    let (each, r) = match l.strip_prefix("for each opponent, ") {
+        Some(r) => (true, r),
+        None => (false, l),
+    };
+    let noun = r
+        .strip_prefix("tap up to one untapped ")?
+        .strip_suffix(" you control")?;
+    // Up to one: one or none, the same as "you may tap an untapped ...".
+    let _ = &b;
+    let phrase = format!("untapped {noun} you control");
+    let (f, false, tail) = parse_object_phrase(&phrase)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let f = Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]);
+    let e = Effect::Tap {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: f,
+            count: Value::c(1),
+            up_to: true,
+            store: None,
+        },
+    };
+    Some(if each {
+        Effect::ForEachPlayer {
+            who: PlayerRef::EachOpponent,
+            effect: Box::new(e),
+        }
+    } else {
+        e
+    })
+}
+
+inventory::submit! { EffectPattern { name: "for each opponent, tap up to one untapped [creature] you control", priority: 90, parse: for_each_opponent_tap_up_to_one } }
+
+/// "When you do, gain control of target creature that player controls with power less than
+/// or equal to the tapped creature's power ..." after it: in each opponent's pass, the
+/// reflexive ability of that tap, "that player" being that opponent.
+fn when_you_do_for_each_opponent(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let l = end(l);
+    if !l.starts_with("when you do, ") || !l.contains("that player") {
+        return false;
+    }
+    let Effect::ForEachPlayer {
+        who: PlayerRef::EachOpponent,
+        effect,
+    } = &*prev
+    else {
+        return false;
+    };
+    if !matches!(effect.as_ref(), Effect::Tap { what: Sel::Choose { up_to: true, .. } }) {
+        return false;
+    }
+    let saved = std::mem::replace(&mut b.it_player, PlayerRef::Iterated);
+    let text = format!("you may tap an untapped creature you control. {l}.");
+    let parsed = crate::oracle::effects::parse_effect_text(&text, b);
+    b.it_player = saved;
+    let Some(body) = parsed else {
+        return false;
+    };
+    // The reflexive ability's target must be that player's.
+    if !serde_json::to_string(&body).is_ok_and(|j| j.contains("Iterated") && j.contains("Reflexive")) {
+        return false;
+    }
+    // Each opponent's part fully, one after another in turn order (APNAP, CR 101.4): the
+    // reflexive ability of each tap is about that tap and that player.
+    *prev = Effect::InTurnOrder {
+        first: TurnOrderStart::You,
+        who: PlayerFilter::Opponent,
+        effect: Box::new(body),
+        direction: SeatSide::Left,
+    };
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "when you do, ... that player ... (after for each opponent, tap up to one)", priority: 60, apply: when_you_do_for_each_opponent } }
