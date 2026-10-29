@@ -260,3 +260,26 @@ fn spellweaver_helix_does_nothing_with_one_imprinted_card_left() {
     assert_eq!(t.hand_size(P0), hand - 1 + 2);
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn god_eternal_kefnet_reduces_the_copy_by_exactly_two() {
+    cr!("707.12", "601.2f");
+    supported("God-Eternal Kefnet");
+    let mut t = TestGame::new(2);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.battlefield(P0, "God-Eternal Kefnet");
+    // Tidings ({3}{U}{U}) costs {1}{U}{U}: all three Islands.
+    let islands = t.lands(P0, "Island", 3);
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.library_top(P0, "Tidings");
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+    }
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 5);
+    assert!(islands.iter().all(|i| t.obj_now(*i).tapped));
+}
