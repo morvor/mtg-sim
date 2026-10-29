@@ -187,10 +187,7 @@ fn spiny_starfish_with_an_unused_shield_doesnt_trigger() {
 #[test]
 fn the_fallen_keeps_damaging_the_opponents_it_has_damaged() {
     cr!("120.3", "400.7");
-    ruling!(
-        "The Fallen",
-        "The effect isn’t cumulative."
-    );
+    ruling!("The Fallen", "The effect isn’t cumulative.");
     ruling!(
         "The Fallen",
         "It stops damaging players and forgets which players it damaged when it leaves the battlefield."
@@ -265,7 +262,7 @@ fn urzas_miter_draws_only_for_artifacts_that_werent_sacrificed() {
 
 #[test]
 fn wiitigo_grows_if_it_has_blocked_or_been_blocked_since_your_last_upkeep() {
-    cr!("603.10", "509.1h");
+    cr!("509.1h");
     supported("Wiitigo");
     let mut t = TestGame::new(2);
     let w = t.enter(P0, "Wiitigo");

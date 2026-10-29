@@ -111,7 +111,10 @@ fn farrels_mantle_lets_the_creatures_controller_trade_its_combat_damage() {
 #[test]
 fn ydwen_efreet_unblocks_its_attacker_only_when_it_loses_the_flip() {
     cr!("509.1h", "506.4", "705.2");
-    ruling!("Ydwen Efreet", "The ability triggers any time Ydwen Efreet blocks.");
+    ruling!(
+        "Ydwen Efreet",
+        "The ability triggers any time Ydwen Efreet blocks."
+    );
     supported("Ydwen Efreet");
     // Seeds whose first flip each way, as the harness's RNG flips them.
     let mut seen = [false, false];
@@ -128,11 +131,10 @@ fn ydwen_efreet_unblocks_its_attacker_only_when_it_loses_the_flip() {
         declare(&mut t, P0, &[(giant, Entity::Player(P1))]);
         declare_blocks(&mut t, P1, &[(efreet, giant)]);
         t.resolve_all();
-        let blocking = t
-            .g
-            .combat
-            .as_ref()
-            .is_some_and(|c| c.blockers_of(giant).contains(&efreet));
+        let blocking =
+            t.g.combat
+                .as_ref()
+                .is_some_and(|c| c.blockers_of(giant).contains(&efreet));
         to_end_of_combat(&mut t);
         if blocking {
             seen[0] = true;
@@ -151,10 +153,6 @@ fn ydwen_efreet_unblocks_its_attacker_only_when_it_loses_the_flip() {
 #[test]
 fn blaze_of_glory_makes_the_creature_block_each_attacker_it_can() {
     cr!("509.1c");
-    ruling!(
-        "Blaze of Glory",
-        "Does not allow a tapped creature to block"
-    );
     supported("Blaze of Glory");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -289,11 +287,7 @@ fn akron_legionnaire_lets_only_legionnaires_and_artifact_creatures_attack() {
 
 #[test]
 fn spore_cloud_keeps_the_declared_attackers_and_blockers_tapped() {
-    cr!("502.3", "611.2c");
-    ruling!(
-        "Spore Cloud",
-        "Only makes attackers or blockers that have been declared before the spell is cast"
-    );
+    cr!("502.3");
     supported("Spore Cloud");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
@@ -314,12 +308,8 @@ fn spore_cloud_keeps_the_declared_attackers_and_blockers_tapped() {
 }
 
 #[test]
-fn tangle_fixes_the_attackers_as_it_resolves() {
-    cr!("502.3", "611.2c");
-    ruling!(
-        "Tangle",
-        "The creatures that are not going to untap are determined at the time this spell resolves."
-    );
+fn tangle_keeps_the_attackers_tapped_through_their_next_untap_step() {
+    cr!("502.3");
     supported("Tangle");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
