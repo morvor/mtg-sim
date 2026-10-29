@@ -1779,6 +1779,13 @@ impl Game {
         if self.cant_be_countered(id) || crate::kw::cant_be_countered_by(self, id, cause.obj) {
             return false;
         }
+        // A replacement of the counter event itself ("If a spell or ability you control
+        // would counter a spell, instead exile that spell ...", CR 614.1a): the spell
+        // isn't countered.
+        if self.obj(id).kind != ObjKind::StackAbility && crate::kw::replace_counter(self, id, cause)
+        {
+            return false;
+        }
         self.counter_or_fizzle(id, MoveCause::Counter);
         self.emit(Event::Countered {
             what: id,
