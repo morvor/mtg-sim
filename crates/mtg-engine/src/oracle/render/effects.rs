@@ -7370,6 +7370,7 @@ impl Renderer<'_> {
                 FunctionZone::Hand => Some(ZoneKind::Hand),
                 FunctionZone::Exile => Some(ZoneKind::Exile),
                 FunctionZone::Library => Some(ZoneKind::Library),
+                FunctionZone::GraveyardOrExile => None,
                 _ => Some(ZoneKind::Battlefield),
             },
             Sel::Target(i) => match self.targets.get(*i as usize) {
@@ -7733,6 +7734,10 @@ impl Renderer<'_> {
                 Modification::SetText { .. } => {
                     let g = self.gap("Modification::SetText");
                     parts.push(g)
+                }
+                Modification::CopyOf(s) => {
+                    let s = self.sel(s, Case::Obj);
+                    parts.push(format!("is a copy of {s}"));
                 }
                 Modification::FullTextOf(s) => {
                     let s = self.sel(s, Case::Poss);

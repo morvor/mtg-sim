@@ -1147,6 +1147,7 @@ impl Renderer<'_> {
             PlayerRef::EachOpponent => "each opponent".into(),
             PlayerRef::EachPlayer => "each player".into(),
             PlayerRef::EachOtherPlayer => "each other player".into(),
+            PlayerRef::TriggerPlayers => "each of those players".into(),
             PlayerRef::Target(i) => return self.target_mention(*i, case),
             // "Whenever a player attacks one of your opponents, that attacking player ...":
             // the controller of the creatures attacking.

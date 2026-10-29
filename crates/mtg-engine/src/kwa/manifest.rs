@@ -31,6 +31,43 @@ pub const MANIFESTED: &str = "Manifest";
 pub const CLOAKED: &str = "Cloak";
 /// `Event::Custom` name reported when a player manifests dread.
 pub const MANIFESTED_DREAD: &str = "manifest dread";
+/// `Event::Custom` name reported, before [`MANIFESTED_DREAD`], for each card a manifest
+/// dread put into a graveyard (the card there).
+pub const DREAD_TO_GRAVEYARD: &str = "manifest dread: put into a graveyard";
+/// `Filter::Custom`: a card the manifest dread the ability triggered on put into a
+/// graveyard (still there: CR 400.7).
+pub const PUT_IN_GRAVEYARD_BY_THAT_DREAD: &str = "put into a graveyard by that manifest dread";
+
+/// The cards the manifest dread of the triggering event (`ctx.event`) put into a
+/// graveyard: the [`DREAD_TO_GRAVEYARD`] events just before it.
+pub fn dread_graveyard_cards(g: &Game, ctx: &crate::eval::Ctx) -> Vec<ObjectId> {
+    let Some(ev) = ctx.event.as_ref() else {
+        return vec![];
+    };
+    let events: Vec<&crate::events::Event> = g.turn_events.iter().chain(g.events.iter()).collect();
+    let mut out = Vec::new();
+    for (i, e) in events.iter().enumerate() {
+        let crate::events::Event::Custom {
+            name, player, obj, ..
+        } = e
+        else {
+            continue;
+        };
+        if name.as_str() != MANIFESTED_DREAD || *player != ev.player || *obj != ev.object {
+            continue;
+        }
+        out.clear();
+        for prev in events[..i].iter().rev() {
+            match prev {
+                crate::events::Event::Custom {
+                    name, obj: Some(c), ..
+                } if name.as_str() == DREAD_TO_GRAVEYARD => out.push(*c),
+                _ => break,
+            }
+        }
+    }
+    out
+}
 
 /// Puts `card` onto the battlefield face down under `p`'s control as a manifested
 /// (`kind` = [`MANIFESTED`]) or cloaked ([`CLOAKED`]) permanent. Returns the permanent, or
@@ -144,7 +181,14 @@ pub fn manifest_dread(g: &mut Game, p: PlayerId, source: Option<ObjectId>) -> Op
                 source,
             })
             .collect();
-        g.move_objects(rest);
+        let moved = g.move_objects(rest);
+        // The cards put into a graveyard this way ("a card you put into your graveyard
+        // this way", Paranormal Analyst), reported just before the manifest dread event.
+        for c in moved.into_iter().flatten() {
+            if matches!(g.obj(c).zone, Zone::Graveyard(_)) {
+                emit(g, DREAD_TO_GRAVEYARD, p, Some(c), 0);
+            }
+        }
     }
     emit(g, MANIFESTED_DREAD, p, manifested, 0);
     manifested

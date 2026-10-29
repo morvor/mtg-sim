@@ -529,6 +529,7 @@ impl Game {
             None
         };
         let new_id = self.create_incarnation(old_id, m.to);
+        self.objects[new_id.0 as usize].moved_by = m.by;
         // CR 704.6d: a commander put into a graveyard or exile since the last check.
         if self.obj(new_id).is_commander && matches!(m.to, Zone::Graveyard(_) | Zone::Exile) {
             self.commander_moved_since_last_sba.insert(new_id);

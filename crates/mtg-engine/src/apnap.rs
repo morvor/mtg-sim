@@ -174,6 +174,11 @@ impl Game {
 /// creature they control and sacrifices the rest": the creatures that get the counters).
 pub const KEPT: crate::ability::Var = crate::ability::vars::USER + 41024;
 
+/// The player who makes each player's choices of the next
+/// [`crate::ability::Effect::KeepAndSacrificeRest`] ("you choose the permanents for each
+/// player instead", Mythos of Snapdax), if not each player for themselves.
+pub const KEEP_CHOOSER: crate::ability::Var = crate::ability::vars::USER + 41025;
+
 /// Executes [`crate::ability::Effect::KeepAndSacrificeRest`] (CR 101.4, 101.4c).
 pub fn keep_and_sacrifice_rest(
     g: &mut Game,
@@ -217,7 +222,21 @@ pub fn keep_and_sacrifice_rest(
                 .filter(|o| g.matches(*o, f, &pctx) && !again.contains(o))
                 .collect();
             let min = if up_to { 0 } else { 1 };
-            let pick = g.ask_objects(p, ctx.source, "Choose a permanent to keep", cands, min, 1);
+            // "You choose the permanents for each player": your choices must still be
+            // legal (Mythos of Snapdax rulings).
+            let chooser = ctx
+                .vars
+                .get(&KEEP_CHOOSER)
+                .and_then(|v| v.iter().find_map(|e| e.player()))
+                .unwrap_or(p);
+            let pick = g.ask_objects(
+                chooser,
+                ctx.source,
+                "Choose a permanent to keep",
+                cands,
+                min,
+                1,
+            );
             picked_for.push(pick.first().copied());
             for o in pick {
                 if !kept.contains(&o) {

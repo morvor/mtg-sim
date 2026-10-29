@@ -27,7 +27,7 @@ const ALL: [&str; 5] = ["seat", "snapshot", "rollback", "determinism", "replay"]
 
 enum Outcome {
     /// Decisions made and reversed actions checked.
-    Held(usize, u64),
+    Held(usize, u64, u64),
     Violated(String),
     Panicked(String),
     Slow,
@@ -43,18 +43,38 @@ fn check(property: &'static str, setup: GameSetup, slow: Duration) -> Outcome {
             let r = panic::catch_unwind(AssertUnwindSafe(|| match property {
                 "seat" => {
                     let rotation = 1 + (setup.seed as usize % (n - 1).max(1));
-                    properties::seat_symmetry(&setup, rotation).map(|s| (s.decisions, s.rollbacks))
+                    properties::seat_symmetry(&setup, rotation).map(|s| {
+                        (
+                            s.decisions,
+                            s.rollbacks,
+                            s.rollbacks_keeping_library_actions,
+                        )
+                    })
                 }
                 "snapshot" => {
                     let at = setup.seed % 1200;
-                    properties::snapshot_equivalence(&setup, at).map(|s| (s.decisions, s.rollbacks))
+                    properties::snapshot_equivalence(&setup, at).map(|s| {
+                        (
+                            s.decisions,
+                            s.rollbacks,
+                            s.rollbacks_keeping_library_actions,
+                        )
+                    })
                 }
-                "rollback" => {
-                    properties::rollback_identity(&setup).map(|s| (s.decisions, s.rollbacks))
-                }
-                "determinism" => {
-                    properties::determinism(&setup).map(|s| (s.decisions, s.rollbacks))
-                }
+                "rollback" => properties::rollback_identity(&setup).map(|s| {
+                    (
+                        s.decisions,
+                        s.rollbacks,
+                        s.rollbacks_keeping_library_actions,
+                    )
+                }),
+                "determinism" => properties::determinism(&setup).map(|s| {
+                    (
+                        s.decisions,
+                        s.rollbacks,
+                        s.rollbacks_keeping_library_actions,
+                    )
+                }),
                 _ => {
                     // Requests carry whole observations, so replayed games are kept
                     // shorter.
@@ -65,11 +85,11 @@ fn check(property: &'static str, setup: GameSetup, slow: Duration) -> Outcome {
                         ..Default::default()
                     };
                     mtg_api::replay::replay_check(config, setup.decks.clone(), setup.seed, 100_000)
-                        .map(|(s, _)| (s.requests, 0))
+                        .map(|(s, _)| (s.requests, 0, 0))
                 }
             }));
             let out = match r {
-                Ok(Ok((d, rb))) => Outcome::Held(d, rb),
+                Ok(Ok((d, rb, kept))) => Outcome::Held(d, rb, kept),
                 Ok(Err(e)) => Outcome::Violated(e),
                 Err(_) => Outcome::Panicked(take_panic().unwrap_or_else(|| "panic".into())),
             };
@@ -85,6 +105,8 @@ struct Tally {
     held: u64,
     decisions: u64,
     rollbacks: u64,
+    /// Reversals that kept library actions (CR 733.1).
+    rollbacks_kept: u64,
     violations: Vec<u64>,
     panics: Vec<u64>,
     slow: Vec<u64>,
@@ -195,10 +217,11 @@ pub fn run(args: &[String]) {
                  --players {n} --max-turns {max_turns}"
             );
             match out {
-                Outcome::Held(d, rb) => {
+                Outcome::Held(d, rb, kept) => {
                     t.held += 1;
                     t.decisions += d as u64;
                     t.rollbacks += rb;
+                    t.rollbacks_kept += kept;
                 }
                 Outcome::Violated(e) => {
                     println!("VIOLATION: {property}, game {gi} (seed {s}, {n} players): {e}");
@@ -229,7 +252,10 @@ pub fn run(args: &[String]) {
             t.held,
             t.decisions,
             if *p == "rollback" {
-                format!(", {} reversed actions checked", t.rollbacks)
+                format!(
+                    ", {} reversed actions checked ({} keeping library actions)",
+                    t.rollbacks, t.rollbacks_kept
+                )
             } else {
                 String::new()
             },

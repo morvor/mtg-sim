@@ -2155,7 +2155,10 @@ impl Game {
             }
             Effect::CreateEmblem { who, abilities } => {
                 for p in self.eval_players(who, ctx) {
-                    crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    let e = crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    // "You may play cards exiled with ~" on an emblem: the cards exiled
+                    // with the object that created it (see `Sel::Linked`).
+                    self.objects[e.0 as usize].created_by = ctx.source.map(|s| (s, ctx.link));
                 }
             }
             Effect::RestartGame { keep } => {
@@ -2769,6 +2772,11 @@ impl Game {
                 // the abilities it has as the effect is created (CR 608.2h).
                 Modification::AddAbilitiesOf { from, which, terms } => fixed.extend(
                     crate::ability_grants::snapshot(self, from, which, terms, ctx, &mut links),
+                ),
+                // Referents of the granted ability fixed as the effect is created
+                // (`granted_captures.rs`).
+                Modification::AddAbility(a) if crate::granted_captures::mentions(a) => fixed.push(
+                    Modification::AddAbility(crate::granted_captures::bind(self, a, ctx)),
                 ),
                 other => fixed.push(other.clone()),
             }

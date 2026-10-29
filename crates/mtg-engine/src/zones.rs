@@ -256,7 +256,27 @@ pub fn record_cost_moved(
     if !exiled.is_empty() {
         vars.insert(COST_EXILED, exiled);
     }
+    // Permanents a "return [a permanent] to its owner's hand" cost returned ("unless that
+    // land had a nonbasic land type"), as they last existed on the battlefield (CR
+    // 608.2h): the card in the hand is hidden and a new object.
+    let returned: Vec<Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| g.obj(**o).zone == Zone::Battlefield)
+        .filter(|o| {
+            let now = g.current(**o);
+            now != **o && g.is_live(now) && matches!(g.obj(now).zone, Zone::Hand(_))
+        })
+        .map(|o| Entity::Object(*o))
+        .collect();
+    if !returned.is_empty() {
+        vars.insert(COST_RETURNED, returned);
+    }
 }
+
+/// The permanents a cost of the spell or ability being resolved returned to a hand, as
+/// they last existed on the battlefield ("that land", CR 608.2h).
+pub const COST_RETURNED: Var = vars::USER + 132;
 
 /// For an activated ability whose cost exiles cards from a zone, its effect text with "the
 /// exiled card" turned into "that card", which then refers to [`COST_EXILED`] (CR 400.7j).

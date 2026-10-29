@@ -110,6 +110,12 @@ fn zone_word(s: &str) -> Option<(Vec<ZoneKind>, &str)> {
             "hand and graveyard",
             vec![ZoneKind::Hand, ZoneKind::Graveyard],
         ),
+        // "an artifact or creature card from your hand or graveyard" (Mairsil, the
+        // Pretender): one card from either zone.
+        (
+            "hand or graveyard",
+            vec![ZoneKind::Hand, ZoneKind::Graveyard],
+        ),
         ("hands", vec![ZoneKind::Hand]),
         ("hand", vec![ZoneKind::Hand]),
         ("graveyards", vec![ZoneKind::Graveyard]),
@@ -337,8 +343,19 @@ pub fn cards<'a>(
     let mut any_owner = zone.is_some() && owner_f.is_none();
     let mut rest = rest.to_string();
     let mut zones_or: Option<Vec<ZoneKind>> = None;
+    // "from your hand or graveyard" (Mairsil, the Pretender): the phrase parser read
+    // "from your hand"; one card from either zone.
+    if zone == Some(ZoneKind::Hand) {
+        if let Some(r2) = rest.trim_start().strip_prefix("or graveyard") {
+            if word_end(r2) {
+                zone = None;
+                zones_or = Some(vec![ZoneKind::Hand, ZoneKind::Graveyard]);
+                rest = r2.to_string();
+            }
+        }
+    }
     let mut per_owner = false;
-    if zone.is_none() {
+    if zone.is_none() && zones_or.is_none() {
         let t = rest.trim_start();
         let t = t
             .strip_prefix("from ")
