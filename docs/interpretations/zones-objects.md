@@ -16,3 +16,15 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: learn (Lessons), wishes (Burning Wish, Glittering Wish, ...), Coax from the Blind Eternities, Research // Development, The Raven's Warning, Eyetwitch.
 - Code: `crates/mtg-engine/src/start.rs` (`Game::add_to_sideboard`); `crates/mtg-engine/src/object.rs` (`Zone::Outside`).
 - Tests: `tests/cards/game_rules_outside.rs` (`coax_takes_an_eldrazi_from_outside_the_game_or_face_up_exile`).
+
+## alteration-host-of-two-types: "Another permanent of that type" for a host with both named types
+- Kind: interpretation
+- Status: provisional
+- Rules: 701.3a "To attach an Aura, Equipment, or Fortification to an object or player means to take it from where it currently is and put it onto that object or player. ..."
+- Question: Enchantment Alteration moves "target Aura attached to a creature or land to another permanent of that type". For an Aura on a land creature (Dryad Arbor), "that type" could be either.
+- Decision: A host that's a creature is treated as a creature (the first type named): the Aura moves to another creature.
+- Alternatives: Let the caster choose either type, or allow any permanent sharing either type.
+- Why: The text reads "that type" as one type; a host of both types is rare and the first named type is the simplest reading.
+- Affects: Enchantment Alteration.
+- Code: `crates/mtg-engine/src/oracle/patterns/attach_moves.rs` (`to_another_permanent_of_that_type`).
+- Tests: `tests/cards/c4_attach_moves.rs` (`enchantment_alteration_moves_an_aura_to_a_permanent_of_its_hosts_type`, `enchantment_alteration_treats_a_land_creature_host_as_a_creature`).

@@ -39,3 +39,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Psychic Theft, Planeswalker's Mischief, Grinning Totem, Three Wishes, Elkin Lair ("if the player hasn't played the card").
 - Code: `crates/mtg-engine/src/oracle/patterns/delayed_grammar_2.rs` (`delayed_if_still_exiled`, `delayed_cards_you_didnt_play`).
 - Tests: `tests/cards/td_delayed_conditions.rs` (`psychic_theft_cast_before_the_end_step_doesnt_trigger`).
+
+## batch-they-condition-all: "If they [did something]" in a "one or more" trigger means all of them
+- Kind: interpretation
+- Status: provisional
+- Rules: 603.2c "An ability triggers only once each time its trigger event occurs. However, it can trigger repeatedly if one event contains multiple occurrences. ..." / 603.4 "A triggered ability may read “When/Whenever/At [trigger event], if [condition], [effect].” ..."
+- Question: Twilight Diviner: "Whenever one or more other creatures you control enter, if they entered or were cast from a graveyard, create a token that's a copy of one of them." When several creatures enter at once and only some of them came from a graveyard (or were cast from one), does the condition hold?
+- Decision: "they" is the whole group: the condition holds only if each of the creatures entered from a graveyard or was cast from one (as "if they entered from a graveyard" already reads in the engine). "One of them" is then any of the creatures that entered. Wordings with "one or more of them" ("if one or more of them entered from a graveyard") are the some-of-them reading.
+- Alternatives: At least one of them: then "one of them" could still copy a creature that didn't come from a graveyard, which the card's design (copying a reanimated creature) suggests isn't intended either.
+- Why: The plural pronoun names the group, and the printed alternative "one or more of them" exists for the weaker reading. Creatures entering at once from different zones are rare.
+- Affects: Twilight Diviner.
+- Code: `crates/mtg-engine/src/oracle/patterns/history_conditions.rs` (`cast_status`), `crates/mtg-engine/src/oracle/patterns/referents_batches.rs` (`verb_one_of_them`).
+- Tests: `tests/cards/c4_batch_referents.rs` (`twilight_diviner_copies_a_creature_that_entered_from_a_graveyard`).

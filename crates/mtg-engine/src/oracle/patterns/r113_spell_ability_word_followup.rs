@@ -28,6 +28,9 @@ const BACK_REFERENCES: &[&str] = &[
     "that spell",
     "that spell's",
     "those creatures",
+    // "Search your library for a basic land card, ... Morbid — You may put that card onto
+    // the battlefield instead of putting it into your hand if ..." (Caravan Vigil).
+    "that card",
 ];
 
 fn refers_back(effect: &str) -> bool {

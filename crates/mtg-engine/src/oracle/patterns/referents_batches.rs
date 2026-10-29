@@ -14,6 +14,10 @@ use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::end;
 
+/// [`Builder::named`] key for the cards the creatures of a "one or more creatures die"
+/// trigger became (`Sel::TriggerObjects`): "one of them" may choose among them.
+pub const DIED_BATCH: &str = "\u{1}died batch";
+
 /// The object "one of them" chose ("If you do, you may cast it this turn").
 pub const ONE_OF_THEM: Var = vars::USER + 12_001;
 
@@ -30,8 +34,9 @@ fn verb_one_of_them(l: &str, b: &mut Builder) -> Option<Effect> {
     .iter()
     .find_map(|p| l.find(p).map(|i| (*p, i)))?;
     let head = &l[..i];
-    // A plain instruction: one verb, nothing chosen before it.
-    if head.contains(' ') || head.is_empty() {
+    // A plain instruction: one verb, nothing chosen before it; or a token copy of the
+    // chosen object ("create a token that's a copy of one of them", Twilight Diviner).
+    if (head.contains(' ') && head != "create a token that's a copy of") || head.is_empty() {
         return None;
     }
     let after = &l[i + phrase.len()..];
@@ -46,9 +51,16 @@ fn verb_one_of_them(l: &str, b: &mut Builder) -> Option<Effect> {
         " one of the other creatures" => "them",
         p => p[" one of ".len()..].trim(),
     };
-    let them = match super::pronoun_groups::plural_object_ref(pronoun, b)
-    {
+    let them = match super::pronoun_groups::plural_object_ref(pronoun, b) {
         Some(Some((sel, _))) => sel,
+        // "Whenever one or more creatures you control die, return one of them ...": the
+        // cards the creatures became in the graveyard (CR 400.7), which an instruction can
+        // act on; not a referent for their characteristics (their last known information).
+        Some(None) if pronoun == "them" => b
+            .named
+            .iter()
+            .find(|(n, _)| n == DIED_BATCH)
+            .map(|(_, s)| s.clone())?,
         _ => return None,
     };
     if matches!(them, Sel::None) || super::oracle_hardening_referents::is_no_referent(&them) {

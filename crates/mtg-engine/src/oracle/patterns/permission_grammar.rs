@@ -3012,6 +3012,7 @@ fn next_spell_flash(l: &str, _b: &mut Builder) -> Option<Effect> {
     let r = end(l).trim().strip_prefix("the next ")?;
     // "[quality] spell you cast", or "[quality] card you play" (a nonland card played is
     // cast, CR 305.9).
+    let mut played = false;
     let quality = if r == "spell you cast this turn can be cast as though it had flash" {
         ""
     } else if let Some(s) =
@@ -3023,6 +3024,7 @@ fn next_spell_flash(l: &str, _b: &mut Builder) -> Option<Effect> {
         if s.is_empty() {
             return None;
         }
+        played = true;
         s
     };
     let filter = if quality == "spell" || quality.is_empty() {
@@ -3032,7 +3034,17 @@ fn next_spell_flash(l: &str, _b: &mut Builder) -> Option<Effect> {
         if mentions_land(&f) {
             return None;
         }
-        Filter::and(vec![f, Filter::Spell])
+        // "Card you play": a land card with that quality played as a land (Dryad Arbor)
+        // counts too (`next_spell::CARD_YOU_PLAY`).
+        if played {
+            Filter::and(vec![
+                f,
+                Filter::Spell,
+                Filter::Custom(crate::next_spell::CARD_YOU_PLAY.into()),
+            ])
+        } else {
+            Filter::and(vec![f, Filter::Spell])
+        }
     };
     if mentions_x(&filter) {
         return None;

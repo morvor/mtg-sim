@@ -3662,6 +3662,7 @@ impl Renderer<'_> {
             } => {
                 if let Some(s) = self
                     .each_spell_this_turn(filter, mods, expires)
+                    .or_else(|| self.next_card_you_play(filter, mods, expires))
                     .or_else(|| self.next_spell_marker(filter, mods, expires))
                 {
                     return s;
@@ -7261,6 +7262,7 @@ impl Renderer<'_> {
                 FunctionZone::Hand => Some(ZoneKind::Hand),
                 FunctionZone::Exile => Some(ZoneKind::Exile),
                 FunctionZone::Library => Some(ZoneKind::Library),
+                FunctionZone::GraveyardOrExile => None,
                 _ => Some(ZoneKind::Battlefield),
             },
             Sel::Target(i) => match self.targets.get(*i as usize) {
@@ -7624,6 +7626,10 @@ impl Renderer<'_> {
                 Modification::SetText { .. } => {
                     let g = self.gap("Modification::SetText");
                     parts.push(g)
+                }
+                Modification::CopyOf(s) => {
+                    let s = self.sel(s, Case::Obj);
+                    parts.push(format!("is a copy of {s}"));
                 }
                 Modification::FullTextOf(s) => {
                     let s = self.sel(s, Case::Poss);
