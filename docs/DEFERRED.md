@@ -49,7 +49,8 @@ Decided 2026-10-01.
   Entry), and abilities that read the stickers on objects (Fight the \_\_\_\_\_ Fight,
   Ambassador Blorpityblorpboop, Clandestine Chameleon, Scampire, Lineprancers, Proficient
   Pyrodancer, Baaallerina, \_\_\_\_\_ \_\_\_\_\_ \_\_\_\_\_ Trespasser, Sword-Swallowing
-  Seraph).
+  Seraph). Rulings that apply only to these cards are DEFERRED in
+  `scripts/rulings_batches.py` (`STICKER_DEFERRED_CARDS`, kept in step with this list).
 
 ### Digital-only cards
 

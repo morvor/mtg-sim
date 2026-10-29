@@ -607,6 +607,19 @@ pub fn land_types() -> Vec<String> {
     v
 }
 
+/// Every planeswalker type (CR 205.3j), in alphabetical order: the choices for "choose a
+/// planeswalker type".
+pub fn planeswalker_types() -> Vec<String> {
+    let mut v: Vec<String> = subtype_lists().planeswalker.iter().cloned().collect();
+    v.sort();
+    v
+}
+
+/// A planeswalker type (CR 205.3j).
+pub fn is_planeswalker_type(s: &str) -> bool {
+    subtype_lists().planeswalker.contains(s)
+}
+
 /// Classifies a subtype by the card type it's correlated with.
 pub fn subtype_kind(s: &str) -> Option<SubtypeKind> {
     let l = subtype_lists();
