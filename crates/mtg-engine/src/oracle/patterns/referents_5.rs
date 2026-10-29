@@ -209,3 +209,32 @@ fn unless_unattached_from(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "referents 5: [effect] unless it was unattached from a [permanent]", priority: 390, parse: unless_unattached_from } }
+
+/// "that isn't the target of an ability from another creature named ~" (Goblin Artisans):
+/// not a target of any ability on the stack whose source (as it last existed, CR 113.7a)
+/// is such a creature (CR 115.9b).
+fn target_of_an_ability_from<'a>(s: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
+    let (negate, r) = if let Some(r) = s.strip_prefix("that isn't the target of an ability from ") {
+        (true, r)
+    } else {
+        (false, s.strip_prefix("that's the target of an ability from ")?)
+    };
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(r)? else {
+        return None;
+    };
+    let abilities = Sel::All(Filter::and(vec![
+        Filter::InZone(ZoneKind::Stack),
+        Filter::AbilityFrom(Box::new(f)),
+    ]));
+    let targeted = Filter::TargetOf(Box::new(abilities));
+    Some((
+        if negate {
+            Filter::not(targeted)
+        } else {
+            targeted
+        },
+        tail,
+    ))
+}
+
+inventory::submit! { super::FilterSuffixPattern { name: "referents 5: that isn't the target of an ability from [objects]", priority: 100, parse: target_of_an_ability_from } }

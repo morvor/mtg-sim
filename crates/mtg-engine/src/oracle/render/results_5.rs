@@ -61,3 +61,21 @@ impl Renderer<'_> {
         Some(format!("the number of creature types noted for {t}"))
     }
 }
+
+impl Renderer<'_> {
+    /// `TargetOf(all abilities on the stack from [objects])`: "the target of an ability
+    /// from [an object]".
+    pub(crate) fn target_of_ability_from(&mut self, f: &Filter) -> Option<String> {
+        let Filter::TargetOf(s) = f else {
+            return None;
+        };
+        let Sel::All(Filter::And(v)) = s.as_ref() else {
+            return None;
+        };
+        let [Filter::InZone(ZoneKind::Stack), Filter::AbilityFrom(src)] = v.as_slice() else {
+            return None;
+        };
+        let n = self.noun_det(src, nouns::Det::A);
+        Some(format!("the target of an ability from {n}"))
+    }
+}
