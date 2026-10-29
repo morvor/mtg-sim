@@ -490,6 +490,8 @@ fn custom_rule(name: &str) -> CustomRule {
         "card:Bewitching Leechcraft:remove a +1/+1 counter instead of untapping",
         "card:Fear of Sleep Paralysis:stun counters can't be removed from opponents' permanents",
         "card:Sanctum Lurker:planeswalkers you control survive 0 loyalty",
+        // Deification: damage removes one loyalty counter fewer (`loyalty_removed_by_damage`).
+        "card:Deification:damage can't remove the last loyalty counter",
         "untap all permanents you control during each opponent's untap step",
         "legend rule doesn't apply to permanents you control",
         "can't get poison counters",
