@@ -14,7 +14,9 @@
 
 use super::EffectPattern;
 use crate::ability::*;
-use crate::oracle::effects::{duration_suffix, keyword_mods, parse_clause, parse_simple, Builder};
+use crate::oracle::effects::{
+    duration_suffix, keyword_mods, parse_clause, parse_simple, player_ref, Builder,
+};
 use crate::oracle::phrases::*;
 
 /// The items of "A, B, or C" / "A or B" (None for a list joined otherwise).
@@ -193,3 +195,130 @@ fn or_objects(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "[object] has A or B", priority: 401, parse: or_objects } }
+
+/// The last target slot an effect's text added, if `first` is before it.
+fn last_target(b: &Builder, first: usize) -> Option<usize> {
+    (first..b.targets.len()).next_back()
+}
+
+/// "[player] may have it deal damage ... to any target of their choice" (Pandemonium):
+/// the target is chosen by the player the sentence is about, not by the ability's
+/// controller (CR 115.1, 601.2c; Pandemonium's ruling).
+fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    const PHRASE: &str = " of their choice";
+    let k = l.find(PHRASE)?;
+    let before = &l[..k];
+    let t = before.rfind("target")?;
+    if before[t..].contains(", ") || before[t..].contains(" and ") {
+        return None;
+    }
+    let text = format!("{before}{}", &l[k + PHRASE.len()..]);
+    if text.contains(PHRASE) {
+        return None;
+    }
+    let first = b.targets.len();
+    let e = parse_clause(&text, b)?;
+    let (Effect::AsPlayer { who, .. }, Some(slot)) = (&e, last_target(b, first)) else {
+        b.targets.truncate(first);
+        return None;
+    };
+    if b.targets[slot].chosen_by.is_some() || b.targets[slot].chosen_by_opponent {
+        b.targets.truncate(first);
+        return None;
+    }
+    b.targets[slot].chosen_by = Some(who.clone());
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "[player] ... target of their choice", priority: 300, parse: target_of_their_choice } }
+
+/// "sacrifice a land of an opponent's choice" (Demonic Hordes): you sacrifice it; an
+/// opponent you choose (CR 601.7a's procedure for "an opponent") chooses which.
+fn sacrifice_of_an_opponents_choice(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("sacrifice ")?;
+    let noun = r.strip_suffix(" of an opponent's choice")?;
+    let noun = noun.strip_prefix("a ").or_else(|| noun.strip_prefix("an "))?;
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::Seq(vec![
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::Opponent,
+        },
+        Effect::SacrificeObjects {
+            what: Sel::Choose {
+                chooser: PlayerRef::ChosenOpponent,
+                filter: Filter::and(vec![
+                    f,
+                    Filter::InZone(ZoneKind::Battlefield),
+                    Filter::ControlledBy(PlayerRel::You),
+                ]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "sacrifice a [permanent] of an opponent's choice", priority: 300, parse: sacrifice_of_an_opponents_choice } }
+
+/// "[player] may attach ~ to a land of their choice" (Kudzu): that player chooses
+/// whether to and the object (untargeted, CR 701.3a; one it can legally be attached to,
+/// CR 701.3b).
+fn may_attach_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subj, r) = l.split_once(" may attach ")?;
+    let (what, r) = r.split_once(" to ")?;
+    let noun = r.strip_suffix(" of their choice")?;
+    let noun = noun.strip_prefix("a ").or_else(|| noun.strip_prefix("an "))?;
+    let first = b.targets.len();
+    let (who, rest) = player_ref(subj, b)?;
+    if !rest.trim().is_empty() || b.targets.len() != first || matches!(who, PlayerRef::You) {
+        b.targets.truncate(first);
+        return None;
+    }
+    let (what, tail) = crate::oracle::effects::object_ref(what, b)?;
+    if !end(&tail).is_empty() || !matches!(what, Sel::This) {
+        return None;
+    }
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::AsPlayer {
+        who,
+        effect: Box::new(Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(Effect::Attach {
+                what,
+                to: Sel::Choose {
+                    chooser: PlayerRef::You,
+                    filter: Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+                    count: Value::c(1),
+                    up_to: false,
+                    store: None,
+                },
+            }),
+        }),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "[player] may attach ~ to a [permanent] of their choice", priority: 300, parse: may_attach_of_their_choice } }
+
+/// "Target opponent chooses one." after revealing cards (Intuition): one of them.
+fn chooses_one(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let subj = l.strip_suffix(" chooses one")?;
+    parse_clause(&format!("{subj} chooses one of them"), b)
+}
+
+inventory::submit! { EffectPattern { name: "[player] chooses one (of the revealed cards)", priority: 300, parse: chooses_one } }
