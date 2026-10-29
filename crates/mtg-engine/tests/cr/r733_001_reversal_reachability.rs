@@ -611,6 +611,9 @@ fn custom_rule(name: &str) -> CustomRule {
         // "~ can't have more than N [kind] counters on it" (Rasputin Dreamweaver; CR 122.4,
         // 704.5r, `counter_rules::counter_limits`): counters on a permanent.
         "counter limit:",
+        // "loses swampwalk" (Urborg; `kw::basic_effects::remove_keyword`): a layer-6
+        // ability removal.
+        "basic_effects:remove keyword:",
     ];
     if NO_LIBRARY.contains(&name) || NO_LIBRARY_FAMILIES.iter().any(|p| name.starts_with(p)) {
         return CustomRule::NoLibrary;

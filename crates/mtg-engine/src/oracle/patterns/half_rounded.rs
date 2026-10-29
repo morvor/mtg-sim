@@ -1,7 +1,8 @@
 //! "Target opponent sacrifices half the creatures they control of their choice, rounded
 //! up." / "Target opponent discards half the cards in their hand, rounded up." (Rush of
 //! Dread): half a number, rounded as the text says (CR 107.1a). Also "a tenth of the
-//! creatures they control" (Legate Lanius, Caesar's Ace).
+//! creatures they control" (Legate Lanius, Caesar's Ace) and "a third of the cards in
+//! their hand" / "a third of the creatures they control" (Pox).
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -35,14 +36,22 @@ fn half_edict_or_discard(l: &str, b: &mut Builder) -> Option<Effect> {
     let (who, rest) = player_ref(end(l), b)?;
     let rest = rest.trim();
     let parsed = (|| {
-        if let Some(r) = rest.strip_prefix("discards half the cards in their hand") {
+        // "discards a third of the cards in their hand" (Pox).
+        let discard = rest
+            .strip_prefix("discards half the cards in their hand")
+            .map(|r| (r, 2))
+            .or_else(|| {
+                rest.strip_prefix("discards a third of the cards in their hand")
+                    .map(|r| (r, 3))
+            });
+        if let Some((r, parts)) = discard {
             let up = rounding(r)?;
             // One player's hand: "each player discards half ..." is each player's own
             // (read by the iteration grammar as each player in turn, "you").
             rel_of(&who)?;
             return Some(Effect::Discard {
                 who: who.clone(),
-                n: Value::Div(Box::new(Value::HandSize(who.clone())), 2, up),
+                n: Value::Div(Box::new(Value::HandSize(who.clone())), parts, up),
                 random: false,
                 filter: Filter::Any,
             });
@@ -51,7 +60,11 @@ fn half_edict_or_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         // (Legate Lanius): a tenth.
         let (r, parts) = match rest.strip_prefix("sacrifices half the ") {
             Some(r) => (r, 2),
-            None => (rest.strip_prefix("sacrifices a tenth of the ")?, 10),
+            None => match rest.strip_prefix("sacrifices a third of the ") {
+                // "sacrifices a third of the creatures they control of their choice" (Pox).
+                Some(r) => (r, 3),
+                None => (rest.strip_prefix("sacrifices a tenth of the ")?, 10),
+            },
         };
         let (noun, r) = r.split_once(" they control")?;
         let r = r.strip_prefix(" of their choice").unwrap_or(r);

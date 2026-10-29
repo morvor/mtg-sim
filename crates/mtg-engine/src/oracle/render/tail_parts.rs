@@ -541,6 +541,29 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
 /// +1/-1 or -1/+1 until end of turn", "~ gains your choice of vigilance, lifelink, or haste
 /// until end of turn". The words all of them start and end with are written once.
 pub(crate) fn or_form(options: &[String]) -> Option<String> {
+    or_form_upto(options, usize::MAX, usize::MAX)
+}
+
+/// The "or" form with the shared words ending at the verb: "target creature has base power
+/// 1 or base toughness 1 until end of turn" (the verb's objects are whole phrases).
+pub(crate) fn or_form_at_verb(options: &[String]) -> Option<String> {
+    let first = options.first()?;
+    let verb = first.split(' ').position(|w| {
+        matches!(
+            w,
+            "has" | "have" | "gets" | "get" | "gains" | "gain" | "loses" | "lose"
+        )
+    })?;
+    // The shared tail is the duration only.
+    let words: Vec<&str> = first.trim_end_matches('.').split(' ').collect();
+    let max_suf = words
+        .iter()
+        .rposition(|w| *w == "until")
+        .map_or(0, |i| words.len() - i);
+    or_form_upto(options, verb + 1, max_suf)
+}
+
+fn or_form_upto(options: &[String], max_pre: usize, max_suf: usize) -> Option<String> {
     if options.len() < 2
         || options.iter().any(|o| {
             o.is_empty() || o.contains(['\n', '|']) || o.trim_end_matches('.').contains(". ")
@@ -558,11 +581,11 @@ pub(crate) fn or_form(options: &[String]) -> Option<String> {
     };
     let min = words.iter().map(Vec::len).min()?;
     let mut pre = 0;
-    while pre < min && words.iter().all(|w| same(w[pre], words[0][pre])) {
+    while pre < min.min(max_pre) && words.iter().all(|w| same(w[pre], words[0][pre])) {
         pre += 1;
     }
     let mut suf = 0;
-    while suf < min - pre
+    while suf < (min - pre).min(max_suf)
         && words
             .iter()
             .all(|w| same(w[w.len() - 1 - suf], words[0][words[0].len() - 1 - suf]))
@@ -581,13 +604,18 @@ pub(crate) fn or_form(options: &[String]) -> Option<String> {
     // "gains your choice of flying or vigilance": a choice among objects of a verb.
     let choice = if pre > 0 { "{opt:your choice of} " } else { "" };
     let list = super::join_list(&middles, "or");
-    Some(
-        [head, format!("{choice}{list}"), tail]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
+    let joined = [head, format!("{choice}{list}"), tail]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    // "create a Food token or a Treasure token": each object said whole after the verb.
+    if let ([a, b], 2, 1, true) = (options, pre, suf, matches!(words[0][1], "a" | "an")) {
+        let rest: Vec<&str> = b.trim_end_matches('.').split(' ').skip(1).collect();
+        let a = a.trim_end_matches('.');
+        return Some(format!("{{alt:{joined}|{a} or {}}}", rest.join(" ")));
+    }
+    Some(joined)
 }
 
 impl Renderer<'_> {

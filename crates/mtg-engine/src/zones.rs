@@ -248,11 +248,21 @@ pub fn record_cost_moved(
             paid.tapped.iter().map(|o| Entity::Object(*o)).collect(),
         );
     }
-    let exiled: Vec<Entity> = paid
+    let mut exiled: Vec<Entity> = paid
         .exiled
         .iter()
         .filter_map(|o| now_in(o, &|z| z == Zone::Exile))
         .collect();
+    // Cards an action in the cost exiled ("Exile the top card of your library", Storm
+    // Elemental): recorded as they are in exile.
+    let by_action: Vec<Entity> = paid
+        .objects
+        .iter()
+        .filter(|o| g.is_live(**o) && g.obj(**o).zone == Zone::Exile)
+        .map(|o| Entity::Object(*o))
+        .filter(|e| !exiled.contains(e))
+        .collect();
+    exiled.extend(by_action);
     if !exiled.is_empty() {
         vars.insert(COST_EXILED, exiled);
     }
@@ -278,15 +288,24 @@ pub fn record_cost_moved(
 /// they last existed on the battlefield ("that land", CR 608.2h).
 pub const COST_RETURNED: Var = vars::USER + 132;
 
+/// Whether a cost exiles cards other than its source ("Exile a creature card from your
+/// graveyard", "Exile the top card of your library").
+pub fn cost_exiles_a_card(cost: &Cost) -> bool {
+    cost.parts.iter().any(|p| match p {
+        CostPart::Exile { .. } => true,
+        // "Exile the top card of your library" (an action as a cost).
+        CostPart::Effect(e) => {
+            matches!(&**e, Effect::Move { to, .. } if to.zone == ZoneKind::Exile)
+        }
+        _ => false,
+    })
+}
+
 /// For an activated ability whose cost exiles cards from a zone, its effect text with "the
 /// exiled card" turned into "that card", which then refers to [`COST_EXILED`] (CR 400.7j).
 /// `None` if the cost exiles no such card or the text doesn't refer to it.
 pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
-    if !cost
-        .parts
-        .iter()
-        .any(|p| matches!(p, CostPart::Exile { .. }))
-    {
+    if !cost_exiles_a_card(cost) {
         return None;
     }
     // (Plural "the exiled cards" is kept as written, see below.)
@@ -739,7 +758,10 @@ pub fn custom_filter(g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bo
 /// at target face-down creature").
 pub fn may_look(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     g.is_live(id)
-        && matches!(g.obj(id).zone, Zone::Exile | Zone::Battlefield)
+        && matches!(
+            g.obj(id).zone,
+            Zone::Exile | Zone::Battlefield | Zone::Hand(_)
+        )
         && (g.zones.may_look.iter().any(|(o, q)| *o == id && *q == p)
             || crate::kw::look_face_down::may_look(g, p, id))
 }
@@ -754,8 +776,10 @@ pub fn looked_then_exiled(g: &mut Game, p: PlayerId, objs: &[ObjectId]) {
     }
 }
 
-/// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3), or at a
-/// face-down permanent while it remains on the battlefield.
+/// Lets `p` look at a face-down card in exile until it leaves exile (CR 406.3), at a
+/// face-down permanent while it remains on the battlefield, or at a card in another
+/// player's hand they looked at while it remains there ("Look at a card at random in
+/// target player's hand", `kw/look_at_random.rs`).
 pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
     if !g.zones.may_look.contains(&(id, p)) {
         g.zones.may_look.push((id, p));
@@ -766,7 +790,13 @@ pub fn allow_look(g: &mut Game, p: PlayerId, id: ObjectId) {
         .may_look
         .iter()
         .copied()
-        .filter(|(o, _)| g.is_live(*o) && matches!(g.obj(*o).zone, Zone::Exile | Zone::Battlefield))
+        .filter(|(o, _)| {
+            g.is_live(*o)
+                && matches!(
+                    g.obj(*o).zone,
+                    Zone::Exile | Zone::Battlefield | Zone::Hand(_)
+                )
+        })
         .collect();
     g.zones.may_look = live;
 }

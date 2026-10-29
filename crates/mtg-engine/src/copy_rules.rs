@@ -425,6 +425,9 @@ pub fn copied_referent(phrase: &str, it: &Sel) -> Sel {
 /// as it last existed there, from its last known information (CR 608.2h, 707.2) — not as
 /// the card it became in its new zone ("you may exile it. If you do, create a token that's
 /// a copy of that creature": a dead Clone that was copying Hill Giant makes a Hill Giant).
+/// That includes a permanent remembered in a variable as the card it became when it left
+/// the battlefield ("Whenever you sacrifice ~ or another artifact, ... at the beginning of
+/// the next end step, create a token that's a copy of that artifact").
 pub fn token_copy_sources(g: &mut Game, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectId> {
     // CR 608.2h: an Aura that was attached to nothing as it last existed on the battlefield
     // (its permanent left first) has no "enchanted permanent" to copy.
@@ -449,7 +452,22 @@ pub fn token_copy_sources(g: &mut Game, sel: &Sel, ctx: &mut Ctx) -> Vec<ObjectI
             return lki;
         }
     }
-    g.resolve_objects(sel, ctx)
+    let objs = g.resolve_objects(sel, ctx);
+    if !matches!(sel, Sel::Var(_)) {
+        return objs;
+    }
+    objs.into_iter()
+        .map(|o| match g.obj(o).prev {
+            Some(p)
+                if g.obj(o).zone != Zone::Battlefield
+                    && !g.is_live(p)
+                    && g.obj(p).zone == Zone::Battlefield =>
+            {
+                p
+            }
+            _ => o,
+        })
+        .collect()
 }
 
 /// Creates a copy of a card as an object of kind `CardCopy` in `zone`.
