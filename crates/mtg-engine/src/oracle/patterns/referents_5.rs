@@ -12,6 +12,10 @@
 //!   targets are chosen (CR 601.2b, 602.2b), so the target must be a spell with that mana
 //!   value; an X that no such spell gives (an odd X here) can't be announced
 //!   (interpretation `x-defined-by-target`).
+//! * "X is the number of artifact and/or creature cards in an opponent's graveyard as you
+//!   cast ~." (Spoils of War): X is defined by the text (CR 107.3c), as the spell is cast:
+//!   the number for one opponent, the caster's choice (interpretation
+//!   `x-defined-for-a-player`).
 
 use super::{AbilityPattern, EffectPattern, StaticPattern};
 use crate::ability::*;
@@ -141,3 +145,28 @@ fn x_defined_by_target(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 }
 
 inventory::submit! { AbilityPattern { name: "referents 5: {X} in an activation cost defined by the target", priority: 1090, parse: x_defined_by_target } }
+
+/// "X is the number of [cards] in an opponent's graveyard as you cast ~." (a spell's line).
+fn x_is_in_an_opponents_graveyard(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') || !ctx.is_spell() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("x is the number of ")?;
+    let noun = r.strip_suffix(" in an opponent's graveyard as you cast ~")?;
+    let (f, true, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() || f.zone().is_some() {
+        return None;
+    }
+    let v = Value::Count(Filter::and(vec![
+        f,
+        Filter::InZone(ZoneKind::Graveyard),
+        Filter::OwnedBy(PlayerRel::Iterated),
+    ]));
+    let rule = CostChange::Rule(CostRule::XOneOf(PlayerFilter::Opponent, Box::new(v)));
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(rule, None, text)])
+}
+
+inventory::submit! { AbilityPattern { name: "referents 5: X is the number of [cards] in an opponent's graveyard as you cast ~", priority: 80, parse: x_is_in_an_opponents_graveyard } }

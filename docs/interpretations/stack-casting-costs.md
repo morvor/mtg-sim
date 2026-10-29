@@ -111,3 +111,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Reflecting Mirror.
 - Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_defined_by_target`).
 - Tests: `tests/cards/c5_spell_targets.rs` (`reflecting_mirror_x_must_be_twice_the_targets_mana_value`, `reflecting_mirror_redirects_a_spell_that_targets_you`).
+
+## x-defined-for-a-player: "X is the number of ... in an opponent's graveyard as you cast this spell" is that number for one opponent, announced by the caster
+- Kind: interpretation
+- Status: provisional
+- Rules: 107.3c "If a spell or activated ability has an {X}, [-X], or X in its cost and/or its text, and the value of X is defined by the text of that spell or ability, then that's the value of X while that spell or ability is on the stack. The controller of that spell or ability doesn't get to choose the value. ..." / 601.2b "... If the spell has a variable cost that will be paid as it's being cast (such as an {X} in its mana cost; see rule 107.3), the player announces the value of that variable. ..."
+- Question: Spoils of War ({X}{B}): "X is the number of artifact and/or creature cards in an opponent's graveyard as you cast this spell." With several opponents, whose graveyard defines X? Its ruling: "X is set as you cast the spell to be exactly the number of appropriate cards in an opponent's graveyard. You can't choose a higher or lower value for X."
+- Decision: The caster picks the opponent; announcing X picks among the values the opponents' graveyards give (X must be one of them, CR 601.2b), so X is exactly the number for one opponent. With one opponent, X is that number.
+- Alternatives: (A) The opponent with the most (or fewest) such cards: the text says "an opponent", which elsewhere is a choice of the player (Bargaining Table's ruling for "an opponent's hand"). (B) The total over all opponents: not "an opponent's graveyard".
+- Why: As for Bargaining Table ("X is the number of cards in an opponent's hand", `r107_x_defined_by_text`): an opponent is chosen as the value is announced, and only X equal to that opponent's number is legal.
+- Affects: Spoils of War.
+- Code: `crates/mtg-engine/src/oracle/patterns/referents_5.rs` (`x_is_in_an_opponents_graveyard`); `crates/mtg-engine/src/payment_rules.rs` (`x_allowed`); `crates/mtg-engine/src/casting.rs` (the announced X).
+- Tests: `tests/cards/c5_values.rs` (`spoils_of_war_x_is_the_number_in_an_opponents_graveyard`).
