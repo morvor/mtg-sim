@@ -599,6 +599,12 @@ fn custom_rule(name: &str) -> CustomRule {
         "spend rules:",
         "keep unspent mana",
         "unspent mana becomes ",
+        // False Dawn: colored mana a player's spells and abilities add is white instead
+        // (`mana_abilities::COLORED_ADDED_BECOMES`); Foraging Wickermaw: a permanent becomes
+        // the color of the mana just added (`kw/mana_ability_added.rs`). Mana types and a
+        // color: no library involved.
+        "colored mana added becomes ",
+        "mana added:becomes that color",
         "resolve exile with counters:",
         "surveil extra:",
         "search portion:",
@@ -974,7 +980,7 @@ fn part_now(part: &CostPart, now: &mut Now) {
         CostPart::OneOf(costs) => costs
             .iter()
             .for_each(|c| c.parts.iter().for_each(|p| part_now(p, now))),
-        CostPart::PayManaCostOf(s) => {
+        CostPart::PayManaCostOf(s) | CostPart::PayManaCostOfLess(s, _) => {
             if sel_in_library(s) {
                 now.lib(LibKind::Other, "pays the mana cost of a library card");
             }
@@ -1005,6 +1011,7 @@ fn part_now(part: &CostPart, now: &mut Now) {
         | CostPart::RemoveCountersFromOne { .. }
         | CostPart::ExertSelf
         | CostPart::CollectEvidence(_)
+        | CostPart::CollectEvidenceOf(_)
         | CostPart::Forage => {}
     }
 }
@@ -1054,8 +1061,10 @@ fn part_can_fail(part: &CostPart) -> bool {
         | CostPart::RevealSelf
         | CostPart::RemoveCountersFromOne { .. }
         | CostPart::CollectEvidence(_)
+        | CostPart::CollectEvidenceOf(_)
         | CostPart::Forage
         | CostPart::PayManaCostOf(_)
+        | CostPart::PayManaCostOfLess(..)
         | CostPart::Repeated { .. }
         | CostPart::OneOf(_) => true,
     }
@@ -1132,6 +1141,7 @@ fn replacement_action_now(a: &ReplacementAction, now: &mut Now) {
         | ReplacementAction::EnterUnderControl(_)
         | ReplacementAction::Prevent
         | ReplacementAction::PreventAmount(_)
+        | ReplacementAction::PreventPerSource(_)
         | ReplacementAction::Multiply(_)
         | ReplacementAction::Add(_)
         | ReplacementAction::Subtract(_)

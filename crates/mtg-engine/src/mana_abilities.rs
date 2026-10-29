@@ -71,6 +71,25 @@ fn self_damage(g: &Game, p: PlayerId, e: &Effect, ctx: &Ctx) -> u32 {
 
 /// Mana types an AddMana effect could produce, per unit.
 fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>>> {
+    let units = production_units_raw(g, e, ctx)?;
+    // Colored mana added as another type (False Dawn).
+    Some(match colored_added_becomes(g, ctx.controller) {
+        Some(to) => units
+            .into_iter()
+            .map(|u| {
+                let mut v: Vec<ManaType> = u
+                    .into_iter()
+                    .map(|t| if t.color().is_some() { to } else { t })
+                    .collect();
+                v.dedup();
+                v
+            })
+            .collect(),
+        None => units,
+    })
+}
+
+fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>>> {
     match e {
         Effect::AddMana { mana, .. } => Some(match mana {
             ManaProduction::Fixed(v) => v.iter().map(|t| vec![*t]).collect(),
@@ -118,6 +137,14 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                     vec![t]
                 }
             }
+            ManaProduction::CouldProduceAmount(f, n) => {
+                let t = types_could_produce(g, f, ctx);
+                if t.is_empty() {
+                    vec![]
+                } else {
+                    vec![t; g.eval_value(n, ctx).max(0) as usize]
+                }
+            }
             ManaProduction::Noted { amount } => crate::noted_mana::produced(g, *amount, ctx)
                 .into_iter()
                 .map(|t| vec![t])
@@ -132,6 +159,21 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 } else {
                     vec![t]
                 }
+            }
+            ManaProduction::ColoredSymbolsOf(sel) => {
+                let mut units = Vec::new();
+                if let Some(o) = g.eval_sel_objects(sel, ctx).first() {
+                    if let Some(mc) = &g.obj(*o).chars.mana_cost {
+                        for s in &mc.symbols {
+                            let u: Vec<ManaType> =
+                                s.colors().iter().map(ManaType::from_color).collect();
+                            if !u.is_empty() {
+                                units.push(u);
+                            }
+                        }
+                    }
+                }
+                units
             }
             ManaProduction::ManaCostOf(sel) => {
                 let mut units = Vec::new();
@@ -222,6 +264,13 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
                 }
             }
             any.then_some(out)
+        }
+        // "add one mana of any type that land produced for each ...": the units, that
+        // many times.
+        Effect::Repeat { times, effect } => {
+            let u = production_units(g, effect, ctx)?;
+            let n = g.eval_value(times, ctx).max(0) as usize;
+            Some(std::iter::repeat_n(u, n).flatten().collect())
         }
         Effect::ChooseOne { options, .. } => {
             // e.g. "Add {R} or {G}": union per unit position of the first option size.
@@ -337,6 +386,10 @@ fn collect_could_produce(
     match e {
         Effect::AddMana {
             mana: ManaProduction::CouldProduce(f),
+            ..
+        }
+        | Effect::AddMana {
+            mana: ManaProduction::CouldProduceAmount(f, _),
             ..
         }
         | Effect::AddMana {
@@ -619,6 +672,13 @@ pub fn mana_cost_to_pay(g: &Game, sel: &Sel, ctx: &Ctx) -> Option<ManaCost> {
     Some(mc.with_x(crate::object::x_value_of(obj) as u32))
 }
 
+/// [`mana_cost_to_pay`] with its generic mana reduced by `less` (CR 118.7d).
+fn mana_cost_to_pay_less(g: &Game, sel: &Sel, less: u32, ctx: &Ctx) -> Option<ManaCost> {
+    let mut m = mana_cost_to_pay(g, sel, ctx)?;
+    m.reduce_generic(less);
+    Some(m)
+}
+
 pub fn can_pay_mana_cost_of(
     g: &Game,
     p: PlayerId,
@@ -626,7 +686,19 @@ pub fn can_pay_mana_cost_of(
     src: Option<ObjectId>,
     ctx: &Ctx,
 ) -> bool {
-    match mana_cost_to_pay(g, sel, ctx) {
+    can_pay_mana_cost_of_less(g, p, sel, 0, src, ctx)
+}
+
+/// [`can_pay_mana_cost_of`] for the mana cost reduced by `less` generic mana.
+pub fn can_pay_mana_cost_of_less(
+    g: &Game,
+    p: PlayerId,
+    sel: &Sel,
+    less: u32,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    match mana_cost_to_pay_less(g, sel, less, ctx) {
         None => false,
         Some(m) if m.mana_value() == 0 && m.symbols.is_empty() => true,
         Some(m) => {
@@ -660,7 +732,19 @@ pub fn pay_mana_cost_of(
     src: Option<ObjectId>,
     ctx: &Ctx,
 ) -> bool {
-    let Some(m) = mana_cost_to_pay(g, sel, ctx) else {
+    pay_mana_cost_of_less(g, p, sel, 0, src, ctx)
+}
+
+/// [`pay_mana_cost_of`] for the mana cost reduced by `less` generic mana.
+pub fn pay_mana_cost_of_less(
+    g: &mut Game,
+    p: PlayerId,
+    sel: &Sel,
+    less: u32,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    let Some(m) = mana_cost_to_pay_less(g, sel, less, ctx) else {
         return false;
     };
     let spend = SpendContext {
@@ -800,8 +884,8 @@ pub fn resolve_add_mana(
     mana: &ManaProduction,
     restriction: &Option<ManaRestriction>,
     ctx: &Ctx,
-) {
-    add_mana_with(g, who, mana, restriction, None, ctx);
+) -> Vec<ManaType> {
+    add_mana_with(g, who, mana, restriction, None, ctx)
 }
 
 /// Resolves `Effect::AddManaWithSpentTrigger` (CR 106.6): each unit of mana produced by
@@ -841,6 +925,19 @@ pub const KEEP_UNSPENT_MANA: &str = "keep unspent mana";
 /// Player modification: "If you would lose unspent mana, that mana becomes colorless
 /// instead." with the new type as suffix (`"unspent mana becomes C"`).
 pub const UNSPENT_MANA_BECOMES: &str = "unspent mana becomes";
+/// Player modification: the colored mana the player's spells and abilities would add is
+/// mana of this type instead, with the type as suffix (`"colored mana added becomes W"`,
+/// False Dawn, CR 614.1a).
+pub const COLORED_ADDED_BECOMES: &str = "colored mana added becomes ";
+
+/// The type colored mana `p`'s spells and abilities add becomes, if an effect says so.
+pub fn colored_added_becomes(g: &Game, p: PlayerId) -> Option<ManaType> {
+    custom_mods(g, p)
+        .iter()
+        .filter_map(|m| m.strip_prefix(COLORED_ADDED_BECOMES))
+        .filter_map(|t| ManaType::from_letter(t.trim().chars().next()?))
+        .last()
+}
 
 fn custom_mods(g: &Game, p: PlayerId) -> Vec<smol_str::SmolStr> {
     g.player(p)
@@ -950,9 +1047,18 @@ fn add_mana_with(
     restriction: &Option<ManaRestriction>,
     rider: Option<ManaRider>,
     ctx: &Ctx,
-) {
+) -> Vec<ManaType> {
     let p = g.eval_player(who, ctx).unwrap_or(ctx.controller);
     let mut produced = g.produce_mana(p, mana, ctx);
+    // "Spells and abilities you control that would add colored mana instead add that much
+    // white mana." (False Dawn): the controller of the spell or ability adding it.
+    if let Some(to) = colored_added_becomes(g, ctx.controller) {
+        for t in produced.iter_mut() {
+            if t.color().is_some() {
+                *t = to;
+            }
+        }
+    }
     // Tapped for mana: a mana ability of this permanent with {T} in its cost is resolving.
     let tapped = g
         .mana_ability_resolving
@@ -1038,10 +1144,11 @@ fn add_mana_with(
         .collect();
     if units.is_empty() {
         // CR 106.5: mana of an undefined type isn't produced.
-        return;
+        return vec![];
     }
     // CR 106.12a: `add_mana` reports the permanent as tapped for mana.
     g.add_mana(p, units, ctx.source);
+    produced
 }
 
 /// Binds a restriction that refers to a choice made for the mana's source ("of the chosen
@@ -2555,12 +2662,16 @@ pub fn pay_mana(
     idxs.sort_unstable_by(|a, b| b.cmp(a));
     let mut riders = Vec::new();
     let mut snow = 0;
+    let mut snow_types = Vec::new();
     let mut sources = Vec::new();
     for i in idxs {
         let m = g.players[p.idx()].mana_pool.mana.remove(i);
         g.dirty = true;
         spent.push(m.ty);
         snow += m.snow as u32;
+        if m.snow {
+            snow_types.push(m.ty);
+        }
         sources.extend(m.source);
         if let Some(r) = m.rider {
             riders.push(r);
@@ -2571,7 +2682,7 @@ pub fn pay_mana(
         crate::kw::snow_mana::record(g, spell, snow);
     }
     // "If mana from a Treasure was spent to cast it / to activate this ability".
-    crate::kw::cast_history::record_payment(g, spend, &spent, sources);
+    crate::kw::cast_history::record_payment(g, spend, &spent, sources, &snow_types);
     // "When that mana is spent to cast ..." (CR 106.6): the delayed triggers trigger now
     // and are put on the stack the next time a player would receive priority. "... or
     // activate an ability": the ability on the stack whose cost it paid.

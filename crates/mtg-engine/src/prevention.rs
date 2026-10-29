@@ -126,6 +126,21 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
                 .collect();
             Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
         }
+        // "A source of your choice that shares a color with the exiled card / with the
+        // mana spent on this activation cost": the colors as the effect is created (the
+        // mana and the resolving ability are gone afterwards).
+        Filter::SharesColor(sel) if !matches!(**sel, Sel::This) => {
+            let mut colors = ColorSet::NONE;
+            for o in g.eval_sel_objects(sel, ctx) {
+                colors = colors.union(g.obj(o).chars.colors);
+            }
+            colors_filter(colors)
+        }
+        Filter::Custom(n) if n == crate::kw::cast_history::SHARES_COLOR_WITH_MANA_SPENT => {
+            colors_filter(crate::kw::cast_history::colors_spent_on_this_ability(
+                g, ctx,
+            ))
+        }
         // "Sources of the color of your choice": the color chosen as the effect was
         // created (CR 609.7b).
         Filter::ChosenColor => match g.source_choices(ctx).and_then(|c| c.color) {
@@ -133,6 +148,54 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
             None => Filter::ChosenColor,
         },
         other => other.clone(),
+    }
+}
+
+/// Objects of any of these colors (none for no colors).
+fn colors_filter(colors: ColorSet) -> Filter {
+    Filter::Or(
+        Color::ALL
+            .iter()
+            .filter(|c| colors.contains(**c))
+            .map(|c| Filter::Color(*c))
+            .collect(),
+    )
+}
+
+/// A replacement effect's instructions with the X of the spell or ability that created it
+/// as a number (the instructions run later, when that X is gone).
+pub fn lock_x(d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
+    use serde_json::Value as J;
+    fn walk(v: J, x: i32) -> J {
+        match v {
+            J::Object(m) => J::Object(
+                m.into_iter()
+                    .map(|(k, v)| {
+                        let numeric = matches!(k.as_str(), "n" | "count" | "amount" | "times");
+                        if numeric && v == J::String("X".into()) {
+                            (k, serde_json::json!({ "Const": x }))
+                        } else {
+                            (k, walk(v, x))
+                        }
+                    })
+                    .collect(),
+            ),
+            J::Array(a) => J::Array(a.into_iter().map(|v| walk(v, x)).collect()),
+            other => other,
+        }
+    }
+    let ReplacementAction::Instead(e) = &d.action else {
+        return d.clone();
+    };
+    let locked = serde_json::to_value(&**e)
+        .ok()
+        .and_then(|v| serde_json::from_value(walk(v, ctx.x)).ok());
+    match locked {
+        Some(e) => ReplacementDef {
+            action: ReplacementAction::Instead(Box::new(e)),
+            ..d.clone()
+        },
+        None => d.clone(),
     }
 }
 
@@ -269,6 +332,17 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
         }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        // "produce mana of the chosen color" (Hall of Gemstone): the color chosen as the
+        // effect is created.
+        ReplacementAction::ManaChange(c) if c.to == ManaChangeTo::ChosenColor => {
+            match g.source_choices(ctx).and_then(|ch| ch.color) {
+                Some(col) => ReplacementAction::ManaChange(ManaChange {
+                    to: ManaChangeTo::Type(crate::mana::ManaType::from_color(col)),
+                    ..c.clone()
+                }),
+                None => d.action.clone(),
+            }
+        }
         // "They enter as copies of the chosen creature" (Mystic Reflection): the target
         // is locked in as the effect is created.
         ReplacementAction::EnterAsCopy {
@@ -499,12 +573,36 @@ pub fn damage_event_cant_be_prevented(g: &Game, source: ObjectId, combat: bool) 
             }))
 }
 
+/// Whether damage from `source` to `target` can't be prevented or redirected because of an
+/// effect naming the recipient ("Damage that would be dealt to that creature this turn
+/// can't be prevented or dealt instead to another permanent or player", Whippoorwill; "If
+/// ~ would deal damage to a creature, that damage can't be ...", Lava Burst).
+pub fn damage_cant_be_prevented_or_redirected(g: &Game, source: ObjectId, target: Entity) -> bool {
+    let Entity::Object(t) = target else {
+        return false;
+    };
+    g.restricted_obj(t, |r| match r {
+        Restriction::DamageToCantBePreventedOrRedirected(f) => Some(f),
+        _ => None,
+    }) || g
+        .all_restrictions()
+        .iter()
+        .any(|(s, c, r, locked)| match r {
+            Restriction::SourceDamageToCantBePreventedOrRedirected { source: f, to } => {
+                let ctx = Ctx::new(*s, *c);
+                g.restriction_applies(source, f, &ctx, locked) && g.matches(t, to, &ctx)
+            }
+            _ => false,
+        })
+}
+
 /// Whether a replacement action is a prevention effect (CR 615.1a).
 pub fn is_prevention(a: &ReplacementAction) -> bool {
     matches!(
         a,
         ReplacementAction::Prevent
             | ReplacementAction::PreventAmount(_)
+            | ReplacementAction::PreventPerSource(_)
             | ReplacementAction::PreventPortion(_)
             | ReplacementAction::PreventAndThen(..)
     )

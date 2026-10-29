@@ -1680,7 +1680,7 @@ impl Game {
                 .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
         // What the spell's text says about its cost ("X can't be 0", "Spend only black
         // mana on X", "You can't spend mana to cast this spell").
-        let cost_rules = crate::payment_rules::spell_rules(&chars);
+        let cost_rules = crate::payment_rules::spell_rules_for(&chars, &opt.method);
         let x_min = crate::payment_rules::x_minimum(&cost_rules);
         // "X can't be greater than ..." (CR 107.3a): determined as X is announced.
         let x_cap = crate::payment_rules::x_maximum(self, &cost_rules, &Ctx::new(Some(id), p));
@@ -1988,6 +1988,8 @@ impl Game {
                 )));
             }
         }
+        // Abilities granted depending on the mana spent (CR 601.2i, 610.5).
+        crate::next_spell::grant_after_payment(self, id);
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             // With any mana another player already spent on it (assist, CR 702.132a).
             si.cast.mana_spent.extend(paid.mana_spent.iter().cloned());
@@ -2814,12 +2816,30 @@ impl Game {
             self.exec(&body.effect, &mut ctx);
             crate::structure::record(a, &src_chars.name, "mana");
             self.mana_ability_resolving = None;
-            let mana: Vec<crate::mana::ManaType> = self
+            let added: Vec<(PlayerId, Vec<crate::mana::ManaType>)> = self
                 .players
                 .iter()
                 .zip(pools_before)
-                .flat_map(|(pl, n)| pl.mana_pool.mana.iter().skip(n).map(|m| m.ty))
+                .enumerate()
+                .map(|(i, (pl, n))| {
+                    (
+                        PlayerId(i as u8),
+                        pl.mana_pool.mana.iter().skip(n).map(|m| m.ty).collect(),
+                    )
+                })
                 .collect();
+            let mana: Vec<crate::mana::ManaType> =
+                added.iter().flat_map(|(_, m)| m.iter().copied()).collect();
+            // CR 605.1b: the mana each player added because of it.
+            for (player, m) in added {
+                if !m.is_empty() {
+                    self.emit(Event::ManaAbilityAdded {
+                        obj: src,
+                        player,
+                        mana: m,
+                    });
+                }
+            }
             // "Whenever a mana ability of [this creature] resolves, ... the amount of mana
             // [it] produced" (CR 605.3b).
             self.emit(Event::Custom {
@@ -3200,6 +3220,9 @@ impl Game {
         c.vars = ctx.vars.clone();
         c.event = ctx.event.clone();
         c.iter_player = ctx.iter_player;
+        // An X chosen for the payment ("sacrifice any number of creatures ...").
+        c.x = ctx.x;
+        c.x_defined = ctx.x_defined;
         self.can_pay_cost_optimistic_in(p, cost, src, &chars, &c)
     }
 
@@ -3463,6 +3486,17 @@ impl Game {
                     .sum();
                 total >= *n
             }
+            CostPart::CollectEvidenceOf(v) => {
+                let n = self.eval_value(v, ctx).max(0) as u32;
+                let total: u32 = self
+                    .player(p)
+                    .graveyard
+                    .iter()
+                    .filter(|c| Some(**c) != src)
+                    .map(|c| self.mana_value_of(*c))
+                    .sum();
+                total >= n
+            }
             CostPart::Forage => {
                 self.player(p).graveyard.len() >= 3
                     || self
@@ -3493,6 +3527,9 @@ impl Game {
             }
             CostPart::PayManaCostOf(s) => {
                 crate::mana_abilities::can_pay_mana_cost_of(self, p, s, src, ctx)
+            }
+            CostPart::PayManaCostOfLess(s, n) => {
+                crate::mana_abilities::can_pay_mana_cost_of_less(self, p, s, *n, src, ctx)
             }
             CostPart::Repeated { .. } => {
                 let one = Cost {
@@ -4045,7 +4082,10 @@ impl Game {
             }
             CostPart::Mill(v) => {
                 let n = self.eval_value(v, ctx).max(0) as u32;
-                self.mill(p, n);
+                // "the milled card" (Charmed Pendant): what the cost moved.
+                let milled = self.mill(p, n);
+                paid.objects
+                    .extend(milled.iter().filter_map(|o| self.obj(*o).prev));
             }
             CostPart::RevealFromHand { filter, count } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
@@ -4156,6 +4196,12 @@ impl Game {
                     return bad("can't collect evidence");
                 }
             }
+            CostPart::CollectEvidenceOf(v) => {
+                let n = self.eval_value(v, ctx).max(0) as u32;
+                if !crate::keyword_actions::collect_evidence(self, p, n, src) {
+                    return bad("can't collect evidence");
+                }
+            }
             CostPart::Forage => {
                 if !crate::keyword_actions::forage(self, p, src) {
                     return bad("can't forage");
@@ -4221,6 +4267,11 @@ impl Game {
             }
             CostPart::PayManaCostOf(s) => {
                 if !crate::mana_abilities::pay_mana_cost_of(self, p, s, src, ctx) {
+                    return bad("can't pay mana cost");
+                }
+            }
+            CostPart::PayManaCostOfLess(s, n) => {
+                if !crate::mana_abilities::pay_mana_cost_of_less(self, p, s, *n, src, ctx) {
                     return bad("can't pay mana cost");
                 }
             }

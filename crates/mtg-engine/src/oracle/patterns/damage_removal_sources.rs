@@ -63,6 +63,27 @@ fn chosen_source(s: &str) -> Option<(Filter, &str)> {
         parts.push(Filter::ChosenColor);
         rest = r;
     }
+    // "that shares a color with the mana spent on this activation cost" (Protective
+    // Sphere), "that shares a color with the exiled card" (Mourner's Shield): the colors
+    // are those as the effect is created (`prevention::lock_filter`).
+    let t = rest.trim_start();
+    if let Some(r) =
+        t.strip_prefix("that shares a color with the mana spent on this activation cost")
+    {
+        parts.push(Filter::Custom(
+            crate::kw::cast_history::SHARES_COLOR_WITH_MANA_SPENT.into(),
+        ));
+        rest = r;
+    } else if t.starts_with("that shares a color with ") {
+        let (f, r) = super::filter_suffix_patterns()
+            .iter()
+            .find_map(|p| (p.parse)(t, &Filter::Any))?;
+        if !matches!(f, Filter::SharesColor(_)) {
+            return None;
+        }
+        parts.push(f);
+        rest = r;
+    }
     Some((Filter::and(parts), rest))
 }
 
@@ -149,6 +170,17 @@ fn action(s: &str, b: &mut Builder) -> Option<ReplacementAction> {
         "that damage is dealt to ~ instead" | "that damage is dealt to this creature instead" => {
             return Some(ReplacementAction::Redirect(Sel::This))
         }
+        // "instead that source deals that much damage to you and ~ deals that much damage
+        // to that source's controller" (Eye for an Eye): the damage to you is still dealt
+        // by the original source (its rulings), and the effect's source deals as much to
+        // that source's controller (CR 614.1a).
+        "instead that source deals that much damage to you and ~ deals that much damage to that source's controller" => {
+            return Some(ReplacementAction::Also(Box::new(Effect::DealDamage {
+                source: Sel::This,
+                amount: Value::EventAmount,
+                to: Sel::Players(PlayerRef::ControllerOf(Box::new(Sel::TriggerOtherObject))),
+            })))
+        }
         _ => {}
     }
     let t = s
@@ -196,6 +228,20 @@ fn p_prevent_all_from_source(l: &str, b: &mut Builder) -> Option<Effect> {
     let saved = b.targets.len();
     let parsed = (|| {
         if let Some(r) = l.strip_prefix("prevent all damage ") {
+            // "... that would be dealt this turn by a source of your choice" (Mourner's
+            // Shield): to anything.
+            if let Some(r) = r.strip_prefix("that would be dealt this turn by ") {
+                let (source, rest) = chosen_source(r)?;
+                if !rest.trim().is_empty() {
+                    return None;
+                }
+                return Some(chosen_source_effect(
+                    source,
+                    (Some(PlayerFilter::Any), Some(Filter::Any)),
+                    ReplacementAction::Prevent,
+                    None,
+                ));
+            }
             if let Some(r) = r.strip_prefix("that would be dealt to ") {
                 // "... to you this turn by a source of your choice"
                 let (to, r) = recipient(r, b)?;
