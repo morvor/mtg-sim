@@ -76,7 +76,7 @@ must pass.
 
 27,925 of 31,789 fully supported cards passed at the start (6026924c); 28,016 of 31,789 pass
 on the branch before the first merge, and 28,043 of 31,866 after merging the later landings
-(origin's passing list at the last merge has 27,927 cards). 73 of the 148 cards in the taken
+(origin's passing list at the last merge has 27,924 cards). 73 of the 148 cards in the taken
 clusters pass.
 
 Renderer (new modules `render/draft_terms.rs`, `render/custom_nodes.rs`,
