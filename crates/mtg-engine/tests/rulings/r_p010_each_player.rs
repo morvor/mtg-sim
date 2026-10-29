@@ -173,7 +173,7 @@ fn sunspine_lynx_stops_prevention_but_not_protections_targeting_rules() {
 
 #[test]
 fn sunspine_lynx_life_gain_spells_still_resolve() {
-    cr!("119.7", "608.2c");
+    cr!("101.2", "608.2c");
     ruling!(
         "Sunspine Lynx",
         "Spells and abilities that cause players to gain life still resolve while Sunspine Lynx is on the battlefield. No player will gain life, but any other effects of that spell or ability will happen."
@@ -267,7 +267,7 @@ fn arcbond_creature_is_the_source_of_the_new_damage() {
 
 #[test]
 fn arcbond_triggers_even_if_the_creature_is_dealt_lethal_damage() {
-    cr!("603.10a", "603.7c");
+    cr!("603.7c");
     ruling!(
         "Arcbond",
         "The delayed triggered ability Arcbond creates will trigger even if the target creature is dealt lethal damage."
@@ -381,7 +381,7 @@ fn ashling_activate(t: &mut TestGame, p: PlayerId, ashling: ObjectId) {
 
 #[test]
 fn ashling_counts_resolutions_of_that_ability_from_that_creature() {
-    cr!("603.7h", "707.10");
+    cr!("608.2h");
     ruling!(
         "Ashling the Pilgrim",
         "When the ability resolves, it counts the number of times that same ability from that this creature has already resolved that turn. It doesn't matter who controlled the creature or the previous abilities when they resolved."
@@ -416,7 +416,7 @@ fn ashling_counts_resolutions_of_that_ability_from_that_creature() {
 
 #[test]
 fn ashling_counts_copies_of_the_ability() {
-    cr!("603.7h", "707.10");
+    cr!("707.10");
     ruling!(
         "Ashling the Pilgrim",
         "A copy of this ability (created by Rings of Brighthearth, for example) will count toward the total."
@@ -440,7 +440,7 @@ fn ashling_counts_copies_of_the_ability() {
 
 #[test]
 fn ashling_doesnt_count_countered_abilities_or_other_ashlings() {
-    cr!("603.7h", "701.6b");
+    cr!("701.6a");
     ruling!(
         "Ashling the Pilgrim",
         "Abilities from other creatures with the same name don't count towards the total. Neither does an ability that's been countered."

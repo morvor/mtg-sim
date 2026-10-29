@@ -149,7 +149,7 @@ fn sacrifices_are_paid_while_casting() {
 
 #[test]
 fn goblin_grenade_sacrifices_exactly_one_goblin_of_any_type() {
-    cr!("601.2b", "205.3d");
+    cr!("601.2b", "205.3m");
     ruling!(
         "Goblin Grenade",
         "The Goblin you sacrifice to cast Goblin Grenade doesn't have to be a creature. For example, you could sacrifice Boggart Shenanigans (a kindred enchantment with the subtype Goblin)."
@@ -181,7 +181,7 @@ fn goblin_grenade_sacrifices_exactly_one_goblin_of_any_type() {
 
 #[test]
 fn siege_gang_commander_can_sacrifice_itself() {
-    cr!("602.2b", "117.1");
+    cr!("602.2b");
     ruling!(
         "Siege-Gang Commander",
         "You can sacrifice any Goblin you control to activate Siege-Gang Commander's activated ability, including Siege-Gang Commander itself."
@@ -255,11 +255,21 @@ fn lightning_axe_mana_value_is_one() {
     assert_eq!(t.g.mana_value_of(spell), 1);
     t.resolve_all();
     assert_eq!(dmg(&t, wurm), 5);
+    // Discarding a card instead.
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+    t.lands(P0, "Mountain", 1);
+    let card = t.hand(P0, "Grizzly Bears");
+    let axe = t.hand(P0, "Lightning Axe");
+    t.answer_choose(P0, &[obj(card)]);
+    let spell = t.cast(P0, axe).target(obj(wurm)).go();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(t.g.mana_value_of(spell), 1);
 }
 
 #[test]
 fn barrel_down_sokenzan_returns_mountains_on_resolution() {
-    cr!("608.2c", "702.69a");
+    cr!("608.2c");
     ruling!(
         "Barrel Down Sokenzan",
         "The lands are returned on resolution; this is not a cost of casting the spell."
@@ -284,7 +294,7 @@ fn barrel_down_sokenzan_returns_mountains_on_resolution() {
 
 #[test]
 fn night_is_the_games_day_night_designation() {
-    cr!("726.2", "601.2f");
+    cr!("731.1", "601.2f");
     ruling!(
         "Moonrager's Slash",
         "The phrase \"if it's night\" refers to the day or night designation the game can have."

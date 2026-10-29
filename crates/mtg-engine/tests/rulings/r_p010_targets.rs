@@ -323,7 +323,7 @@ fn reckless_rage_still_damages_the_legal_target() {
 
 #[test]
 fn flameshot_needs_at_least_one_target() {
-    cr!("601.2c", "115.1b");
+    cr!("601.2c");
     ruling!(
         "Flameshot",
         "You can’t choose zero targets. You must choose at least one target."

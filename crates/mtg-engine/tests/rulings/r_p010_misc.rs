@@ -34,7 +34,7 @@ fn touch_of_the_void_exiles_a_damaged_creature_that_dies_later() {
 
 #[test]
 fn oaths_are_legendary_with_different_names() {
-    cr!("704.5j", "201.2");
+    cr!("704.5j", "201.2a");
     ruling!(
         "Oath of Gideon",
         "Each of the Oaths is legendary: if you control more than one of any particular Oath, you choose one to remain on the battlefield and the others are put into your graveyard."
@@ -53,10 +53,11 @@ fn oaths_are_legendary_with_different_names() {
     let mut t = TestGame::new(2);
     let first = t.battlefield(P0, "Oath of Gideon");
     let chandra = t.battlefield(P0, "Oath of Chandra");
-    // A second Oath of Gideon enters: its ability triggers, P0 keeps one, and the
-    // ability still resolves.
-    let second = t.enter(P0, "Oath of Gideon");
-    t.settle();
+    // A second Oath of Gideon is cast and enters: its ability triggers, P0 keeps one,
+    // and the ability still resolves.
+    let spell = cast_new(&mut t, P0, "Oath of Gideon", &[]);
+    t.resolve();
+    let second = t.g.current(spell);
     assert_eq!(
         [first, second].iter().filter(|o| t.on_battlefield(**o)).count(),
         1
@@ -70,7 +71,7 @@ fn oaths_are_legendary_with_different_names() {
 
 #[test]
 fn oath_of_chandra_end_step_trigger() {
-    cr!("603.4", "603.10a");
+    cr!("603.4");
     ruling!(
         "Oath of Chandra",
         "Oath of Chandra’s last ability will trigger even if the planeswalker that entered the battlefield under your control is no longer on the battlefield, no longer under your control, or no longer a planeswalker. This is also true if Oath of Chandra wasn’t on the battlefield when the planeswalker entered."
@@ -262,7 +263,7 @@ fn eelectrocute_any_die_that_rolled_a_six() {
 
 #[test]
 fn dragon_tempest_both_abilities_and_a_dragon_that_left() {
-    cr!("603.2", "608.2h", "113.7a");
+    cr!("603.2", "113.7a");
     ruling!(
         "Dragon Tempest",
         "The two abilities aren’t mutually exclusive. If a Dragon with flying (which is most of them) enters the battlefield under your control, both abilities will trigger."
@@ -290,7 +291,7 @@ fn dragon_tempest_both_abilities_and_a_dragon_that_left() {
 
 #[test]
 fn survive_with_an_empty_graveyard_still_shuffles() {
-    cr!("701.24e", "715.3");
+    cr!("701.24a", "702.127a");
     ruling!(
         "Struggle // Survive",
         "If a player has no cards in their graveyard when Survive resolves, that player just shuffles their library."
@@ -355,7 +356,7 @@ fn steaming_sauna_and_null_profusion_apply_in_timestamp_order() {
 
 #[test]
 fn savage_alliance_modes_on_the_same_creature_are_two_damage_events() {
-    cr!("700.2d", "120.2");
+    cr!("603.2c");
     ruling!(
         "Savage Alliance",
         "If you choose the second and third modes, and the targeted creature is controlled by the targeted opponent, that creature will take 2 plus 1 damage for a total of 3 damage. An ability that triggers whenever that creature is dealt damage will trigger twice."
@@ -383,7 +384,7 @@ fn savage_alliance_modes_on_the_same_creature_are_two_damage_events() {
 
 #[test]
 fn trample_counts_damage_already_marked_on_the_blocker() {
-    cr!("702.19c", "510.1c");
+    cr!("702.19b", "510.1c");
     ruling!(
         "Savage Alliance",
         "When determining how much damage a creature with trample may assign to the player or planeswalker it's attacking, take into account damage that has already been dealt to the blocking creatures."
@@ -406,7 +407,7 @@ fn trample_counts_damage_already_marked_on_the_blocker() {
 
 #[test]
 fn puncture_bolt_damage_then_counter() {
-    cr!("704.5f", "704.5g", "701.19c", "702.79a");
+    cr!("704.5f", "704.5g", "701.19a", "702.79a");
     ruling!(
         "Puncture Bolt",
         "If you target a creature with 1 toughness, Puncture Bolt deals 1 damage to it, then puts a -1/-1 counter on it, which reduces it to 0 toughness. The creature will be put into its owner’s graveyard as a result of having 0 toughness. Regeneration can’t save it."
@@ -465,7 +466,7 @@ fn two_headed() -> TestGame {
 
 #[test]
 fn two_headed_giant_each_opponent_loses_or_is_dealt_damage() {
-    cr!("810.9", "810.9a");
+    cr!("810.9");
     ruling!(
         "Cut // Ribbons",
         "In a Two-Headed Giant game, Ribbons causes the opposing team to lose two times X life."
@@ -511,4 +512,40 @@ fn sonic_assault_on_a_tapped_creature_still_deals_damage() {
     cast_new(&mut t, P0, "Sonic Assault", &[obj(wurm)]);
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn eelectrocute_cast_with_another_permission_isnt_exiled() {
+    cr!("702.81a", "601.3");
+    ruling!(
+        "Eelectrocute",
+        "If you cast Eelectrocute from your graveyard using another permission, you won't exile it instead (unless that permission also states that you exile it)."
+    );
+    // Retrace granted by a permanent (the text of Wrenn and Six's emblem), with a 6
+    // rolled this turn too.
+    let emblem = crate::r_s01_common::custom_card(
+        "Retrace Granter",
+        "Enchantment",
+        "",
+        None,
+        "Instant and sorcery cards in your graveyard have retrace.",
+    );
+    for rolled in [false, true] {
+        let mut t = TestGame::new(2);
+        t.custom(P0, emblem.clone(), Zone::Battlefield);
+        if rolled {
+            roll(&mut t, P0, 6, 6);
+        }
+        t.lands(P0, "Mountain", 2);
+        t.hand(P0, "Forest");
+        let e = t.graveyard(P0, "Eelectrocute");
+        t.cast(P0, e)
+            .method(CastMethod::Keyword(KeywordKind::Retrace))
+            .target(pl(P1))
+            .go();
+        t.resolve_all();
+        assert_eq!(t.life(P1), 18);
+        assert!(t.in_graveyard(P0, "Eelectrocute"), "rolled: {rolled}");
+        assert!(!t.in_exile("Eelectrocute"));
+    }
 }

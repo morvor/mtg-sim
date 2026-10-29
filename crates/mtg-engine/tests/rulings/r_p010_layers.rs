@@ -116,6 +116,14 @@ fn turn_doesnt_counter_abilities_that_already_triggered() {
     assert_eq!(t.pt(fk), (0, 1));
     t.resolve_all();
     assert!(!t.on_battlefield(wurm), "the trigger still resolved");
+    // An activated ability on the stack still resolves too.
+    let mut t = TestGame::new(2);
+    let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
+    t.activate(P1, sorcerer, 0, &[pl(P0)]).unwrap();
+    turn(&mut t, P0, sorcerer);
+    assert!(t.obj_now(sorcerer).chars.abilities.is_empty());
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19);
 }
 
 /// P0's Crater Elemental with enough total power for formidable (Colossal Dreadmaw 6 +
