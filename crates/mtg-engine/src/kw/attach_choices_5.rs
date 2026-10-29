@@ -21,6 +21,11 @@ use crate::types::*;
 /// `StaticEffect::Custom` name prefix: "As ~ becomes attached to a creature, choose ...";
 /// the choice kinds follow as JSON.
 pub const AS_ATTACHED_CHOOSE: &str = "attach5: as attached to a creature, choose:";
+/// `StaticEffect::Custom` name prefix: "As ~ becomes attached to a creature, [choose an
+/// object]": the instruction (JSON) is performed for the source each time it becomes
+/// attached to a creature ("choose an exiled creature card used to craft ~", noted for
+/// "the last chosen card", CR 607.2d).
+pub const AS_ATTACHED_DO: &str = "attach5: as attached to a creature:";
 /// `Modification::Custom` (layer 3): its name is the last chosen card name.
 pub const LAST_CHOSEN_NAME: &str = "attach5: name is the last chosen name";
 /// `Modification::Custom` (layer 4): its creature type is the last chosen creature type.
@@ -30,6 +35,17 @@ pub const LAST_CHOSEN_CREATURE_TYPE: &str = "attach5: creature type is the last 
 pub fn as_attached_choose(kinds: &[ChoiceKind]) -> Option<StaticEffect> {
     let json = serde_json::to_string(kinds).ok()?;
     Some(StaticEffect::Custom(format!("{AS_ATTACHED_CHOOSE}{json}").into()))
+}
+
+/// The static ability performing `e` as the source becomes attached to a creature.
+pub fn as_attached_do(e: &crate::ability::Effect) -> Option<StaticEffect> {
+    let json = serde_json::to_string(e).ok()?;
+    Some(StaticEffect::Custom(format!("{AS_ATTACHED_DO}{json}").into()))
+}
+
+/// The instruction of an [`AS_ATTACHED_DO`] static ability.
+pub fn attached_instruction(name: &str) -> Option<crate::ability::Effect> {
+    serde_json::from_str(name.strip_prefix(AS_ATTACHED_DO)?).ok()
 }
 
 /// The choice kinds of an [`AS_ATTACHED_CHOOSE`] static ability.
@@ -69,10 +85,27 @@ impl KeywordRules for AttachChoices5 {
                 _ => None,
             })
             .collect();
+        let instructions: Vec<crate::ability::Effect> = g
+            .obj(obj)
+            .chars
+            .abilities
+            .iter()
+            .filter_map(|a| match &a.kind {
+                AbilityKind::Static(s) => match &s.effect {
+                    StaticEffect::Custom(n) => attached_instruction(n),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
         let p = g.obj(obj).controller;
         for kind in kinds.iter().flatten() {
             let mut ctx = Ctx::new(Some(obj), p);
             crate::choices::make_choice(g, p, kind, &mut ctx);
+        }
+        for e in instructions {
+            let mut ctx = Ctx::new(Some(obj), p);
+            g.exec(&e, &mut ctx);
         }
     }
 

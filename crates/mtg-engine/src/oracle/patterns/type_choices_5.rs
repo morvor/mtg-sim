@@ -131,3 +131,41 @@ fn equipped_last_chosen_name_and_type(
 }
 
 inventory::submit! { StaticPattern { name: "equipped creature has ..., and its name and creature type are the last chosen name and creature type", priority: 60, parse: equipped_last_chosen_name_and_type } }
+
+/// "As ~ becomes attached to a creature, choose an exiled creature card used to craft ~."
+/// (Paleontologist's Pick-Axe // Dinosaur Headdress): one of the cards the craft cost
+/// exiled (CR 702.167c), noted for "the last chosen card" (CR 607.2d), chosen again each
+/// time it becomes attached to a creature.
+fn as_attached_choose_craft_material(
+    l: &str,
+    text: &str,
+    _ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("as ~ becomes attached to a creature, choose an exiled ")?;
+    let noun = r
+        .strip_suffix(" used to craft ~")
+        .or_else(|| r.strip_suffix(" used to craft it"))?;
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return None;
+    }
+    let choose = Effect::NoteLinked {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(vec![f, crate::kw::craft::used_to_craft_filter()]),
+            count: Value::c(1),
+            up_to: false,
+            store: None,
+        },
+        replace: true,
+    };
+    let e = crate::kw::attach_choices_5::as_attached_do(&choose)?;
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(e)),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "as ~ becomes attached to a creature, choose an exiled card used to craft ~", priority: 60, parse: as_attached_choose_craft_material } }

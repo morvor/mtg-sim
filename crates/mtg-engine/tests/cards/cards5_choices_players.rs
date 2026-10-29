@@ -835,3 +835,42 @@ fn psychic_paper_sets_the_equipped_creatures_name_and_creature_type() {
     assert_eq!(w.chars.name.as_str(), "Grizzly Bears");
     assert!(w.chars.has_subtype("Warrior") && !w.chars.has_subtype("Wurm"));
 }
+
+/// The index among `id`'s activated abilities of the one whose text starts so.
+fn activated_index(t: &mut TestGame, id: ObjectId, starts: &str) -> usize {
+    t.g.recompute();
+    t.g.obj(id)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+        .position(|a| a.text.starts_with(starts))
+        .expect("ability")
+}
+
+#[test]
+fn paleontologists_pick_axe_copies_the_chosen_craft_material() {
+    cr!("702.167c", "707.2", "607.2d");
+    compiles("Paleontologist's Pick-Axe // Dinosaur Headdress");
+    // Back face: "When this Equipment enters, attach it to target creature you control. /
+    // As this Equipment becomes attached to a creature, choose an exiled creature card
+    // used to craft this Equipment. / Equipped creature is a copy of the last chosen
+    // card."
+    let mut t = TestGame::new(2);
+    let axe = t.battlefield(P0, "Paleontologist's Pick-Axe // Dinosaur Headdress");
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 5);
+    t.set_step(P0, Step::PrecombatMain);
+    let craft = activated_index(&mut t, axe, "Craft");
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.activate(P0, axe, craft, &[]).expect("craft");
+    t.resolve_all();
+    let headdress = t.g.current(axe);
+    assert_eq!(t.obj_now(headdress).attached_to, Some(Entity::Object(bears)));
+    t.g.recompute();
+    let o = t.obj_now(bears);
+    assert_eq!(o.chars.name.as_str(), "Craw Wurm");
+    assert_eq!(t.pt(bears), (6, 4));
+}
