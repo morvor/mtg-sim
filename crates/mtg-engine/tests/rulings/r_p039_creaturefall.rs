@@ -384,9 +384,7 @@ fn zhalfirin_decoy_counts_a_creature_that_entered_before_it_and_left() {
     let b = enter(&mut t, P0, "Llanowar Elves");
     destroy(&mut t, b);
     assert!(can_activate(&mut t, P0, d));
-    // Entered before the Decoy itself did (the Decoy entering doesn't count: "a
-    // creature" other than through its own entry is what's needed here only in that it
-    // is a creature entering under your control).
+    // A creature that entered (and left) before the Decoy itself was on the battlefield.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Grizzly Bears");
     let b = enter(&mut t, P0, "Llanowar Elves");

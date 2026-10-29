@@ -4,7 +4,7 @@
 
 use crate::r_p039_common::*;
 use crate::r_p039_creatureland::{activate_text, can_activate_text};
-use crate::r_s01_common::{attack_with, block_and_finish, supported, triggers_on_stack, watch};
+use crate::r_s01_common::{attack_with, block_and_finish, supported, triggers_on_stack};
 use crate::r_s02_common::{can_activate, can_cast, can_play_land, destroy, target_candidates};
 use crate::r_s04_common::crew;
 use mtg_engine::decision::{Answer, Decision};
@@ -787,8 +787,6 @@ fn the_lunar_whale_lets_you_look_at_the_top_card_any_time() {
     let next = t.g.library_top(P0).unwrap();
     assert_eq!(t.g.obj(next).chars.name, "Grizzly Bears");
     assert!(sees(&t, P0, next));
-    // The opponent watches what P0 knows: P0 was asked nothing to look.
-    let _ = watch::<()>;
 }
 
 /// P0 crews The Lunar Whale with a Hill Giant and attacks with it, then goes to the

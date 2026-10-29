@@ -312,7 +312,8 @@ fn killians_confidence_with_an_illegal_target_doesnt_draw() {
     cast_named(&mut t, P0, "Killian's Confidence", &[o(b)]);
     destroy(&mut t, b);
     t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand - 0);
+    // (Killian's Confidence came from hand and went to the graveyard: no card drawn.)
+    assert_eq!(t.hand_size(P0), hand);
     assert!(t.in_graveyard(P0, "Killian's Confidence"));
 }
 
