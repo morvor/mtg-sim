@@ -2198,6 +2198,14 @@ impl Renderer<'_> {
                 // 611.2a); cards say so or not.
                 let d = match duration {
                     Duration::Permanent => "{opt:for the rest of the game}".to_string(),
+                    // "The next time ... this turn" says its duration itself (Bamboozling
+                    // Beeble).
+                    Duration::EndOfTurn
+                        if matches!(effect, PlayerModification::Custom(n)
+                            if n == crate::dice::NEXT_ROLL_EXTRA) =>
+                    {
+                        String::new()
+                    }
                     d => self.duration(d),
                 };
                 join_words(&[s, d])
@@ -3834,6 +3842,12 @@ impl Renderer<'_> {
                 let r = self.replacement(replacement, None);
                 format!("{e}. {r}")
             }
+            // "Choose a source you control" (Desperate Gambit, `dice_coins_5`).
+            Effect::ChooseSource {
+                who: PlayerRef::You,
+                filter: Filter::ControlledBy(PlayerRel::You),
+                ..
+            } => "choose a source you control".into(),
             Effect::ChooseSource { who, filter, .. } => {
                 let w = self.player(who, Case::Subj);
                 let f = self.noun_det(filter, Det::A);
@@ -8795,6 +8809,8 @@ impl Renderer<'_> {
         let mut s = if let (true, Some(max)) = (c.until_lose, &c.max_flips) {
             let n = self.value(max);
             format!("flip a coin {n} times or until you lose a flip, whichever comes first")
+        } else if c.until_lose && c.may_stop {
+            "flip a coin until you lose a flip or choose to stop flipping".to_string()
         } else if c.until_lose {
             "flip a coin until you lose a flip".to_string()
         } else {
@@ -8809,10 +8825,22 @@ impl Renderer<'_> {
         if p != "you" {
             s = format!("{p} {}", third_person(&s));
         }
+        if c.loss_voids {
+            s.push_str(". If you lose a flip, ~ has no effect");
+        }
         let mut add = |r: &mut Self, cond: &str, e: &Effect| {
-            if !matches!(e, Effect::Noop) {
-                let t = r.effect(e);
-                s.push_str(&format!(". If {cond}, {t}"));
+            match e {
+                Effect::Noop => {}
+                // "When you win the flip, copy that spell." (Breeches, the Blastmaker): a
+                // triggered ability for the result (`dice_coins_5`).
+                Effect::Reflexive { body } => {
+                    let t = r.body(body);
+                    s.push_str(&format!(". When {cond}, {}", lower_first(&t)));
+                }
+                e => {
+                    let t = r.effect(e);
+                    s.push_str(&format!(". If {cond}, {t}"));
+                }
             }
         };
         add(self, "you win the flip", &c.on_win);
@@ -9372,6 +9400,9 @@ fn until_event(u: &UntilEvent) -> String {
         UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
         UntilEvent::OpponentBecomesMonarch => "an opponent becomes the monarch".into(),
         UntilEvent::TargetLeavesBattlefield(_) => "that permanent leaves the battlefield".into(),
+        UntilEvent::YouRollToVisitAtMost(n) => {
+            format!("you roll a {n} or less while rolling to visit your Attractions")
+        }
     }
 }
 
