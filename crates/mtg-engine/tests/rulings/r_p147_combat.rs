@@ -381,7 +381,7 @@ fn slipstream_serpent_turned_face_up_while_attacking_stays_attacking() {
 
 #[test]
 fn sealock_monster_makes_a_land_an_island_indefinitely_in_addition_to_its_types() {
-    cr!("701.37a", "305.7", "611.2a");
+    cr!("701.37a", "305.6", "611.2a");
     ruling!(
         "Sealock Monster",
         "The effect making the land an Island doesn't have a duration and will last indefinitely. The land retains any land types and abilities it already had."
@@ -428,7 +428,7 @@ fn goblin_game(n: usize) -> (TestGame, ObjectId) {
 
 #[test]
 fn bloodcrazed_goblin_needs_damage_dealt_to_an_opponent_however_and_by_whomever() {
-    cr!("508.1c", "120.3");
+    cr!("508.1c", "120.3a");
     ruling!(
         "Bloodcrazed Goblin",
         "Bloodcrazed Goblin’s ability checks only whether damage was dealt to an opponent. It doesn’t care whether that opponent also gained life."

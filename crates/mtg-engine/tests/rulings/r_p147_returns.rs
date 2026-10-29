@@ -148,7 +148,7 @@ fn the_source_itself_may_be_returned_or_must_be() {
     t.answer_choose(P0, &[obj(d), obj(a), obj(b)]);
     t.resolve_all();
     assert!(t.in_hand(P0, "Dust Elemental"));
-    assert!(t.on_battlefield(now(&t, d)) == false);
+    assert!(!t.on_battlefield(now(&t, d)));
     assert!(!t.in_hand(P0, "Savannah Lions"));
     // Only one other creature: both are returned.
     let mut t = TestGame::new(2);
@@ -431,7 +431,7 @@ fn leonardo_triggers_once_per_life_gain_event() {
 
 #[test]
 fn leonardo_ignores_a_two_headed_giant_teammates_life_gain() {
-    cr!("810.9a", "603.2");
+    cr!("810.9", "603.2");
     ruling!(
         "Leonardo, Cutting Edge",
         "In a Two-Headed Giant game, life gained by your teammate won't cause Leonardo's last ability to trigger"
@@ -760,4 +760,59 @@ fn rescuer_sphinx_returns_only_what_was_already_there_and_its_choice_is_immediat
     t.resolve_all();
     assert_eq!(t.counters(s, "+1/+1"), 0);
     assert_eq!(t.life(P0), 21);
+}
+
+#[test]
+fn paradoxical_outcome_draws_for_each_card_of_a_merged_permanent() {
+    cr!("730.3c", "608.2c", "702.140e");
+    ruling!(
+        "Paradoxical Outcome",
+        "If a melded or merged permanent is returned to your hand this way, you'll draw a card for each of its components that are cards."
+    );
+    supported("Paradoxical Outcome");
+    use mtg_engine::keywords::KeywordKind;
+    use mtg_engine::mana::ManaType;
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let parrot = t.hand(P0, "Porcuparrot");
+    mana(&mut t, P0, ManaType::R, 1);
+    mana(&mut t, P0, ManaType::C, 2);
+    t.cast(P0, parrot)
+        .method(CastMethod::Keyword(KeywordKind::Mutate))
+        .target(bears)
+        .go();
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).chars.name, "Porcuparrot");
+    let hand = t.hand_size(P0);
+    let spell = cast_multi(&mut t, P0, "Paradoxical Outcome", &[obj(bears)]);
+    t.resolve_all();
+    assert!(resolved(&t, spell));
+    // Both cards were returned, and two cards drawn.
+    assert!(t.in_hand(P0, "Grizzly Bears") && t.in_hand(P0, "Porcuparrot"));
+    assert_eq!(t.hand_size(P0), hand + 2 + 2);
+}
+
+#[test]
+fn prehistoric_pet_stays_blocked_when_powers_change() {
+    cr!("509.1b", "506.4", "509.1h");
+    ruling!(
+        "Prehistoric Pet",
+        "Once Prehistoric Pet has been blocked, changing its power or the power of a blocking creature won't cause it to become unblocked."
+    );
+    supported("Prehistoric Pet");
+    let mut t = TestGame::new(2);
+    let pet = t.battlefield(P0, "Prehistoric Pet");
+    let wall = t.battlefield(P1, "Llanowar Elves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    to_combat(&mut t, P0);
+    attack_with(&mut t, &at(P1, &[pet]));
+    // Greater power: can't block.
+    assert!(!legal_blocks(&mut t, P1, &[(bears, pet)]));
+    declare_blocks(&mut t, P1, &[(wall, pet)]);
+    pump(&mut t, wall, 3, 0);
+    assert!(blocking(&t, wall));
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 20);
+    assert!(t.in_graveyard(P0, "Prehistoric Pet"));
 }
