@@ -156,7 +156,7 @@ fn tuvasa_damage_becomes_lethal_when_enchantments_leave() {
 
 #[test]
 fn setessan_champion_draws_even_if_it_left() {
-    cr!("608.2h", "603.10");
+    cr!("608.2h");
     ruling!(
         "Setessan Champion",
         "If Setessan Champion leaves the battlefield after its ability has triggered, you still draw a card even though you won't put a +1/+1 counter on Setessan Champion."
@@ -207,7 +207,7 @@ fn constellation_can_target_the_enchantment_creature_that_entered() {
 
 #[test]
 fn multiple_instances_of_double_strike_are_redundant() {
-    cr!("702.4d");
+    cr!("702.4e");
     ruling!(
         "Favored of Iroas",
         "Multiple instances of double strike on the same creature are redundant."
@@ -319,7 +319,7 @@ fn spirit_enchantment_token(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 #[test]
 fn ondu_spiritdancer_copies_the_copiable_values() {
-    cr!("707.2", "707.4", "111.1");
+    cr!("707.2", "707.3");
     ruling!(
         "Ondu Spiritdancer",
         "Each token copies exactly what was printed on the original enchantment and nothing else"
@@ -382,7 +382,6 @@ fn ondu_spiritdancer_copies_the_copiable_values() {
 
 #[test]
 fn ondu_spiritdancer_only_once_each_turn() {
-    cr!("603.2");
     ruling!(
         "Ondu Spiritdancer",
         "If multiple instances of the ability are on the stack (perhaps because multiple enchantments entered the battlefield under your control at the same time), you will be able to create a token copy of an enchantment for only one of those instances."
@@ -419,7 +418,7 @@ fn ondu_spiritdancer_only_once_each_turn() {
 
 #[test]
 fn copied_enchantments_enters_abilities_work_for_the_token() {
-    cr!("707.4", "603.6a", "614.12");
+    cr!("603.6a", "614.12");
     ruling!(
         "Ondu Spiritdancer",
         "Any enters-the-battlefield abilities of the copied enchantment will trigger when the token enters the battlefield. Any \"as [this enchantment] enters the battlefield\" or \"[this enchantment] enters the battlefield with\" abilities of the enchantment will also work."
@@ -476,7 +475,7 @@ fn copied_enchantments_enters_abilities_work_for_the_token() {
 
 #[test]
 fn aura_token_copies_attach_without_targeting() {
-    cr!("303.4f", "707.4");
+    cr!("303.4f");
     ruling!(
         "Ondu Spiritdancer",
         "If an Aura is put onto the battlefield without being cast, such as by being created as a token, the Aura's controller-to-be chooses what it will enchant as it enters the battlefield. An Aura put onto the battlefield this way doesn't target anything (so it could be attached to an opponent's permanent with hexproof, for example), but the Aura's enchant ability restricts what it can be attached to. If an Aura token can't legally be attached to anything, it isn't created."

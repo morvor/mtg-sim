@@ -199,7 +199,7 @@ fn deadlock_trap_untapped_creature_can_fight_but_not_activate() {
 
 #[test]
 fn deadlock_trap_and_abilities_already_activated_or_activated_in_response() {
-    cr!("602.5", "608.2", "117.3b");
+    cr!("602.5");
     ruling!(
         "Deadlock Trap",
         "Once a player has announced an ability, Deadlock Trap can't be used to undo it. The last ability must be activated before that player activates that ability."
@@ -260,7 +260,7 @@ fn deadlock_trap_active_player_gets_priority_after_a_planeswalker_enters() {
 
 #[test]
 fn demon_of_dark_schemes_energy_from_deaths_and_its_minus_two() {
-    cr!("603.10a", "603.6e", "611.2c");
+    cr!("603.10a", "611.2c");
     ruling!(
         "Demon of Dark Schemes",
         "Demon of Dark Schemes's second triggered ability triggers whenever another creature dies for any reason, not just due to the first triggered ability."
@@ -388,7 +388,7 @@ fn aether_refineries_multiply_and_their_controller_orders_energy_replacements() 
 
 #[test]
 fn fabrication_module_triggers_once_per_energy_event() {
-    cr!("603.2", "122.1");
+    cr!("603.2");
     ruling!(
         "Fabrication Module",
         "If you get multiple {E} at once, you only put one +1/+1 counter on a creature, not one counter for each {E}. If you get multiple {E} at different times, Fabrication Module's ability triggers once each time."
@@ -501,7 +501,6 @@ fn razorfield_ripper_x_is_locked_in_as_the_trigger_resolves() {
 
 #[test]
 fn lightning_runner_untaps_creatures_that_arent_attacking() {
-    cr!("508.1f");
     ruling!(
         "Lightning Runner",
         "You untap all creatures you control, including ones that aren't attacking."
@@ -601,7 +600,7 @@ fn may_pay_energy_once_if_you_do_and_when_you_do() {
 
 #[test]
 fn inventors_axe_enters_unattached_and_attaches_with_its_trigger() {
-    cr!("301.5c", "608.2b");
+    cr!("608.2b");
     ruling!(
         "Inventor's Axe",
         "Inventor's Axe doesn't enter the battlefield attached to a creature. Instead, Inventor's Axe enters the battlefield and then its triggered ability attaches it to a creature. You may cast Inventor's Axe even if you don't control any creatures."

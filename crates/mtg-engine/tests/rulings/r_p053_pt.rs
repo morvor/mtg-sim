@@ -50,7 +50,6 @@ fn embiggen_counts_every_type_and_cant_target_a_brushwagg() {
 
 #[test]
 fn haunted_plate_mail_resolves_even_if_you_gain_a_creature_in_response() {
-    cr!("602.5b", "608.2");
     ruling!(
         "Haunted Plate Mail",
         "Although you must control no creatures to activate the \"animation\" ability, having a creature somehow come under your control in response to that ability won't stop it from resolving."
@@ -115,7 +114,7 @@ fn pump_spells_with_a_conditional_keyword_check_as_they_resolve() {
 
 #[test]
 fn cankerous_thirst_two_targets_and_choices_on_resolution() {
-    cr!("115.3", "608.2c", "601.2h");
+    cr!("115.3", "608.2c");
     ruling!(
         "Cankerous Thirst",
         "As you cast Cankerous Thirst, you must target a creature for the first effect and you must target a creature for the second effect. Both targets may be the same. As Cankerous Thirst resolves, you decide whether to apply either effect."
@@ -165,7 +164,7 @@ fn growth_cycle_doesnt_count_itself() {
 
 #[test]
 fn vigilant_sentry_damage_can_become_lethal_below_threshold() {
-    cr!("704.5g", "702.109a");
+    cr!("704.5g");
     ruling!(
         "Vigilant Sentry",
         "Because damage remains marked on a creature until the damage is removed as the turn ends, nonlethal damage dealt to Vigilant Sentry may become lethal if the number of cards in your graveyard falls below seven."
@@ -300,7 +299,7 @@ fn crystalline_nautilus_sacrifices_itself_as_creature_or_aura() {
 
 #[test]
 fn wild_might_each_player_may_pay() {
-    cr!("118.12", "608.2c");
+    cr!("118.12a");
     ruling!(
         "Wild Might",
         "Each player gets the option to pay when the spell resolves."
@@ -338,7 +337,7 @@ fn emblems(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
 
 #[test]
 fn emblems_arent_permanents_and_have_no_characteristics() {
-    cr!("114.1", "114.3", "114.4");
+    cr!("114.1", "114.3");
     ruling!(
         "Elspeth, Knight-Errant",
         "Emblems behave similarly to enchantments: They have an ability that, in a general sense, continually affects the game. The primary difference between them is that emblems aren’t permanents and don’t exist on the battlefield."
@@ -386,7 +385,7 @@ fn emblems_arent_permanents_and_have_no_characteristics() {
 
 #[test]
 fn fortifying_draught_counts_life_gained_ignoring_life_lost() {
-    cr!("119.3", "608.2h");
+    cr!("608.2h");
     ruling!(
         "Fortifying Draught",
         "Fortifying Draught counts the total amount of life gained without considering any life you lost during that turn."
@@ -428,7 +427,7 @@ fn garruk_unleashed_gets_one_loyalty_counter() {
 
 #[test]
 fn giant_inheritance_returns_only_if_still_in_the_graveyard() {
-    cr!("400.7", "608.2b");
+    cr!("400.7");
     ruling!(
         "Giant Inheritance",
         "Giant Inheritance will return to its owner's hand from the graveyard only if it's still in the graveyard when its ability resolves."

@@ -674,6 +674,10 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
         }
         Effect::DealDamage { source, to, .. } => chosen_by(g, &[source, to], ctx, p),
+        // "Each player chooses a nonland permanent and puts a doom counter on it" (Eye of
+        // Doom): the players choose in turn, then the counters are put on all the chosen
+        // objects at once (CR 101.4, 608.2f).
+        Effect::AddCounters { what, .. } => chosen_by(g, &[what], ctx, p),
         // Whoever makes the choices: no control changes until all are made.
         Effect::GainControl { .. } => true,
         // "For each creature, its controller sacrifices it unless they pay X life" (Killing
