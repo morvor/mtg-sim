@@ -196,9 +196,9 @@ AST and plays as the text says (wording only) unless noted:
   ("a Room you control" for a library card), Havengul Laboratory ("if you sacrificed three
   or more Clues this turn"), Resplendent Marshal, Mechtitan Core ("other than ~" / "except
   ~"), Memory Theft, Check for Traps, Vexing Arcanix, Petra Sphinx, Coax, Karn ("or choose
-  a face-up ... card"), Nelly Borca, Norn's Decree, Dong Zhou's cluster partner Alpha Brawl
-  ("each of those creatures deals damage equal to its power"), False Orders, Balduvian
-  Warlord, Driftgloom Coyote ("If that creature had power 2 or less"), Black Widow ("the
+  a face-up ... card"), Nelly Borca, Norn's Decree ("the controller of those creatures",
+  "players being attacked"), Alpha Brawl ("each of those creatures deals damage equal to
+  its power"), False Orders, Balduvian Warlord, Driftgloom Coyote ("If that creature had
+  power 2 or less"), Black Widow ("the
   exiled nonland card"), Mutated Cultist, Elminster ("{1} less ... for each"), Taste of
-  Paradise ("an additional 3 life for each additional {1}{G} you paid"), Hero-like word
-  orders.
+  Paradise ("an additional 3 life for each additional {1}{G} you paid").
