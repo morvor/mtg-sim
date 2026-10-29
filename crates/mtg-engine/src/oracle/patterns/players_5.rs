@@ -497,3 +497,149 @@ fn when_you_do_for_each_opponent(l: &str, prev: &mut Effect, b: &mut Builder) ->
 }
 
 inventory::submit! { FollowupPattern { name: "when you do, ... that player ... (after for each opponent, tap up to one)", priority: 60, apply: when_you_do_for_each_opponent } }
+
+/// What each of the two players' digs of "[player] reveals the top three cards of their
+/// library, may put a creature card from among them onto the battlefield, ... You do the
+/// same ..." (Guild Feud) put onto the battlefield.
+const PUT_BY_THEIR_DIG: Var = vars::USER + 9534;
+const PUT_BY_YOUR_DIG: Var = vars::USER + 9535;
+
+/// "target opponent reveals the top three cards of their library, may put a creature card
+/// from among them onto the battlefield, then puts the rest into their graveyard": that
+/// player does all of it (the creature enters under their control, CR 110.2a).
+fn other_players_dig_chain(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let at = l.find(" reveals the top ")?;
+    let (subj, r) = (&l[..at], &l[at + " reveals ".len()..]);
+    let r = r.strip_prefix("the top ")?;
+    let (n, r) = r.split_once(" cards of their library, may put ")?;
+    let (put, rest) = r.split_once(" onto the battlefield, then puts the rest into their graveyard")?;
+    if !rest.is_empty() || !put.ends_with(" from among them") {
+        return None;
+    }
+    let first = b.targets.len();
+    let (who, tail) = crate::oracle::effects::player_ref(subj, b)?;
+    if !tail.trim().is_empty() || matches!(who, PlayerRef::You) {
+        b.targets.truncate(first);
+        return None;
+    }
+    let text = format!(
+        "Reveal the top {n} cards of your library. You may put {put} onto the battlefield. Put the rest into your graveyard"
+    );
+    let body = crate::oracle::effects::parse_effect_text(&format!("{text}."), b);
+    let Some(body) = body.filter(|e| serde_json::to_string(e).is_ok_and(|j| j.contains("\"Dig\""))) else {
+        b.targets.truncate(first);
+        return None;
+    };
+    b.named.push(("\u{1}dig chain".into(), Sel::Var(PUT_BY_THEIR_DIG)));
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: PUT_BY_THEIR_DIG,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::AsPlayer {
+            who,
+            effect: Box::new(Effect::seq(vec![
+                body,
+                Effect::Store {
+                    var: PUT_BY_THEIR_DIG,
+                    sel: Sel::Var(vars::IT),
+                },
+            ])),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "[player] reveals the top N cards of their library, may put a [card] from among them onto the battlefield, then puts the rest into their graveyard", priority: 90, parse: other_players_dig_chain } }
+
+/// The dig of [`other_players_dig_chain`] in `e`, with `n` replaced (for "You do the same
+/// with the top three cards of your library.").
+fn their_dig(e: &Effect) -> Option<Effect> {
+    match e {
+        Effect::Seq(v) => v.iter().rev().find_map(their_dig),
+        Effect::AsPlayer { effect, .. }
+            if serde_json::to_string(effect)
+                .is_ok_and(|j| j.contains(&format!("\"var\":{PUT_BY_THEIR_DIG}"))) =>
+        {
+            let Effect::Seq(v) = effect.as_ref() else {
+                return None;
+            };
+            v.first().cloned()
+        }
+        _ => None,
+    }
+}
+
+/// "You do the same with the top three cards of your library." after it.
+fn you_do_the_same_dig(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(n) = l
+        .strip_prefix("you do the same with the top ")
+        .and_then(|r| r.strip_suffix(" cards of your library"))
+    else {
+        return false;
+    };
+    let Some(dig) = their_dig(prev) else {
+        return false;
+    };
+    // The same number of cards (the instruction is the same).
+    let Ok(j) = serde_json::to_string(&dig) else {
+        return false;
+    };
+    let Some((k, _)) = crate::oracle::phrases::parse_number(n) else {
+        return false;
+    };
+    if !j.contains(&format!("\"n\":{}", serde_json::to_string(&k).unwrap_or_default())) {
+        return false;
+    }
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Store {
+            var: PUT_BY_YOUR_DIG,
+            sel: Sel::Union(vec![]),
+        },
+        dig,
+        Effect::Store {
+            var: PUT_BY_YOUR_DIG,
+            sel: Sel::Var(vars::IT),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "you do the same with the top N cards of your library", priority: 60, apply: you_do_the_same_dig } }
+
+/// "If two creatures are put onto the battlefield this way, those creatures fight each
+/// other." after both digs: the one each player put, if both did (CR 701.14a).
+fn if_two_put_they_fight(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "if two creatures are put onto the battlefield this way, those creatures fight each other" {
+        return None;
+    }
+    if !b.named.iter().any(|(n, _)| n == "\u{1}dig chain") {
+        return None;
+    }
+    let on_bf = |var: Var| {
+        Sel::Matching(
+            Box::new(Sel::Var(var)),
+            Filter::and(vec![
+                Filter::creature(),
+                Filter::InZone(ZoneKind::Battlefield),
+            ]),
+        )
+    };
+    let both = Value::Sum(vec![
+        Value::CountSel(Box::new(on_bf(PUT_BY_THEIR_DIG))),
+        Value::CountSel(Box::new(on_bf(PUT_BY_YOUR_DIG))),
+    ]);
+    Some(Effect::If {
+        cond: Condition::Compare(both, Cmp::Eq, Value::c(2)),
+        then: Box::new(Effect::Fight {
+            a: on_bf(PUT_BY_THEIR_DIG),
+            b: on_bf(PUT_BY_YOUR_DIG),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "if two creatures are put onto the battlefield this way, those creatures fight each other", priority: 90, parse: if_two_put_they_fight } }

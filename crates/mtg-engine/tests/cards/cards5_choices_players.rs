@@ -1332,3 +1332,36 @@ fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     t.g.recompute();
     assert_eq!(t.obj_now(bears).controller, P1);
 }
+
+#[test]
+fn guild_feud_each_player_digs_and_the_two_creatures_fight() {
+    cr!("701.14a", "110.2a", "608.2c");
+    compiles("Guild Feud");
+    // "At the beginning of your upkeep, target opponent reveals the top three cards of
+    // their library, may put a creature card from among them onto the battlefield, then
+    // puts the rest into their graveyard. You do the same with the top three cards of your
+    // library. If two creatures are put onto the battlefield this way, those creatures
+    // fight each other."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Guild Feud");
+    t.library_top(P1, "Island");
+    t.library_top(P1, "Island");
+    let bears = t.library_top(P1, "Grizzly Bears");
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    let elves = t.library_top(P0, "Llanowar Elves");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.answer_choose(P0, &[Entity::Object(elves)]);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    // The Bears entered under P1's control, the Elves under P0's; they fought.
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1);
+    assert_eq!(t.obj_now(b[0]).controller, P1);
+    assert_eq!(t.obj_now(b[0]).damage, 1);
+    assert!(t.named_on_battlefield("Llanowar Elves").is_empty());
+    assert!(t.in_graveyard(P0, "Llanowar Elves"));
+    assert_eq!(t.graveyard_size(P1), 2);
+}
