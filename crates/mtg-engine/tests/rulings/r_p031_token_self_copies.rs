@@ -420,7 +420,7 @@ fn the_token_is_a_copy_of_what_the_permanent_became() {
 
 #[test]
 fn watchful_radstag_s_token_after_it_left() {
-    cr!("707.2", "608.2h");
+    cr!("707.2", "608.2h", "702.100b");
     ruling!(
         "Watchful Radstag",
         "If Watchful Radstag leaves the battlefield before its last ability resolves, the token will still enter the battlefield as a copy of Watchful Radstag, using Watchful Radstag’s copiable values from when it was last on the battlefield."
@@ -495,7 +495,7 @@ fn shredder_s_tokens_copy_what_it_s_copying() {
 
 #[test]
 fn bloodforged_battle_axe_s_token_is_unattached_and_makes_more() {
-    cr!("707.2", "301.5");
+    cr!("707.2", "301.5e");
     ruling!("Bloodforged Battle-Axe", "The token enters the battlefield unattached.");
     ruling!(
         "Bloodforged Battle-Axe",
@@ -556,7 +556,7 @@ fn a_mirrorweaved_spawnwrithe_makes_plain_spawnwrithes() {
 
 #[test]
 fn a_sprouting_phytohydra_token_makes_another_when_dealt_damage() {
-    cr!("707.2", "120.3");
+    cr!("707.2");
     ruling!(
         "Sprouting Phytohydra",
         "If a token copy of Sprouting Phytohydra is dealt damage, it will create another token copy."
@@ -665,7 +665,7 @@ fn vaultborn_tyrant_copying_something_else_makes_that() {
 
 #[test]
 fn vaultborn_tyrant_sees_the_power_a_creature_enters_with() {
-    cr!("603.6a", "614.12", "707.5");
+    cr!("603.6a", "603.6b", "707.5");
     ruling!(
         "Vaultborn Tyrant",
         "If one or more static abilities that apply to a creature entering the battlefield change its power, those abilities are considered when determining whether or not Vaultborn Tyrant’s second ability triggers."
