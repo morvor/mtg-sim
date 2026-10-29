@@ -611,3 +611,67 @@ fn sacrifice_when_you_lose_control(l: &str, prev: &mut Effect, _b: &mut Builder)
 }
 
 inventory::submit! { FollowupPattern { name: "triggers 5: sacrifice the creature when you lose control of ~ (after a delayed return)", priority: 40, apply: sacrifice_when_you_lose_control } }
+
+/// The permanent the instruction before put onto the battlefield.
+const ENTERED: Var = vars::USER + 43104;
+
+/// "Return target permanent card ... to the battlefield under their control. When that
+/// permanent enters, return up to one target permanent card with equal or lesser mana
+/// value from your graveyard to the battlefield." (Jailbreak): the permanent enters as the
+/// instruction is performed, so the ability triggers as it's created, like a reflexive
+/// one (CR 603.12), choosing its targets only then (Jailbreak ruling); it does nothing if
+/// the card didn't enter the battlefield. "That permanent" is the new object (CR 400.7).
+fn when_that_permanent_enters(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let l = end(&lower);
+    let Some(eff) = ["when that permanent enters, ", "when that creature enters, ", "when it enters, "]
+        .into_iter()
+        .find_map(|p| l.strip_prefix(p))
+    else {
+        return false;
+    };
+    // After an instruction that put an object onto the battlefield.
+    if super::characteristic_riders::last_battlefield_move(prev).is_none() {
+        return false;
+    }
+    let mut sub = Builder::new(b.ctx);
+    sub.in_trigger = true;
+    sub.it = Sel::Var(ENTERED);
+    sub.it_player = b.it_player.clone();
+    sub.sentences = 1;
+    let Some(effect) = parse_effect_text(eff, &mut sub) else {
+        return false;
+    };
+    let body = Body {
+        targets: sub.targets,
+        effect,
+        modal: None,
+    };
+    // "with equal or lesser mana value": than that permanent.
+    let body = if super::filters_relational::mentions_referent(&body) {
+        match super::filters_relational::substitute(&body, &Sel::Var(ENTERED)) {
+            Some(b) => b,
+            None => return false,
+        }
+    } else {
+        body
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::Store {
+            var: ENTERED,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::If {
+            cond: Condition::SelMatches(Sel::Var(ENTERED), Filter::InZone(ZoneKind::Battlefield)),
+            then: Box::new(Effect::Reflexive {
+                body: Box::new(body),
+            }),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "triggers 5: when that permanent enters, [effect] (after putting it onto the battlefield)", priority: 40, apply: when_that_permanent_enters } }

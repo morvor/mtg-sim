@@ -51,3 +51,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Orcish Farmer.
 - Code: `crates/mtg-engine/src/step_durations.rs`; `crates/mtg-engine/src/oracle/patterns/durations_5.rs`.
 - Tests: `tests/cards/c4_durations.rs` (`orcish_farmer_swamp_lasts_until_the_lands_controllers_next_untap_step`).
+
+## when-that-permanent-enters-as-it-is-created: "When that permanent enters" after the instruction that put it onto the battlefield triggers at once
+- Kind: interpretation
+- Status: decided
+- Rules: 603.7a "Delayed triggered abilities are created during the resolution of spells or abilities, ... A delayed triggered ability won’t trigger until it has actually been created, even if its trigger event occurred just beforehand. ..." / 603.12 "... These reflexive triggered abilities follow the rules for delayed triggered abilities (see rule 603.7), except that they’re checked immediately after being created and trigger based on whether the trigger event or events occurred earlier during the resolution of the spell or ability that created them." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of, or relation to, its previous existence. ..." / Jailbreak ruling: "You don't choose a target from your own graveyard until after the permanent card from your opponent's graveyard has entered the battlefield. If that card doesn't enter the battlefield for some reason, you will not be able to target and return a card from your own graveyard."
+- Question: Jailbreak returns a card to the battlefield and then says "When that permanent enters, return up to one target permanent card with equal or lesser mana value ...". Read as a delayed trigger, it would be created after the permanent entered and never trigger (CR 603.7a). How does it work?
+- Decision: The ability triggers as it's created if the card entered the battlefield, like a reflexive triggered ability (CR 603.12): it's put on the stack the next time a player would receive priority, choosing its targets then, and "that permanent" is the new object on the battlefield. If the card didn't enter the battlefield, nothing triggers.
+- Alternatives: A delayed trigger that never triggers (the literal reading of CR 603.7a): the card would do half of what it says, against its ruling.
+- Why: The ruling describes exactly this: targets chosen after the permanent entered, nothing if it didn't.
+- Affects: Jailbreak (and any "[put it onto the battlefield]. When that permanent/creature enters, ..." text).
+- Code: `crates/mtg-engine/src/oracle/patterns/triggers_5.rs` (`when_that_permanent_enters`).
+- Tests: `tests/cards/c4_effect_triggers.rs` (`jailbreak_returns_a_card_with_equal_or_lesser_mana_value_once_the_permanent_entered`).

@@ -432,3 +432,47 @@ fn seraph_gone_before_the_return_never_costs_the_creature() {
     assert_eq!(back.len(), 1);
     assert_eq!(t.obj_now(back[0]).controller, P0);
 }
+
+#[test]
+fn jailbreak_returns_a_card_with_equal_or_lesser_mana_value_once_the_permanent_entered() {
+    cr!("603.12", "400.7");
+    ruling!(
+        "Jailbreak",
+        "You don't choose a target from your own graveyard until after the permanent card from your opponent's graveyard has entered the battlefield."
+    );
+    interp!("when-that-permanent-enters-as-it-is-created");
+    supported("Jailbreak");
+    let mut t = TestGame::new(2);
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.graveyard(P0, "Craw Wurm");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::PrecombatMain);
+    let jb = t.hand(P0, "Jailbreak");
+    mana(&mut t, P0);
+    t.cast_with(P0, jb, &[Entity::Object(giant)]).unwrap();
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    let g = t.named_on_battlefield("Hill Giant");
+    assert_eq!(g.len(), 1);
+    assert_eq!(t.obj_now(g[0]).controller, P1);
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1);
+    assert_eq!(t.obj_now(b[0]).controller, P0);
+    assert!(t.in_graveyard(P0, "Craw Wurm"), "mana value 6 is greater than 4");
+}
+
+#[test]
+fn jailbreak_targets_only_cards_with_equal_or_lesser_mana_value() {
+    cr!("603.12");
+    let mut t = TestGame::new(2);
+    let giant = t.graveyard(P1, "Hill Giant");
+    let wurm = t.graveyard(P0, "Craw Wurm");
+    t.advance_to(P0, Step::PrecombatMain);
+    let jb = t.hand(P0, "Jailbreak");
+    mana(&mut t, P0);
+    t.cast_with(P0, jb, &[Entity::Object(giant)]).unwrap();
+    t.answer_targets(P0, &[Entity::Object(wurm)]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    assert!(t.in_graveyard(P0, "Craw Wurm"));
+}
