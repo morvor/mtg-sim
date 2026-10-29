@@ -72,7 +72,10 @@ pub fn plan_gain_control(
         objs,
         to: p,
         // "for as long as they're the monarch": the player as the effect begins.
-        duration: bind_duration_players(g, duration, ctx),
+        duration: {
+            let d = bind_duration_players(g, duration, ctx);
+            crate::duration_refs::bind_duration_objects(g, &d, ctx)
+        },
         changed,
     })
 }

@@ -52,3 +52,15 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: Enchantment Alteration.
 - Code: `crates/mtg-engine/src/oracle/patterns/attach_moves.rs` (`to_another_permanent_of_that_type`).
 - Tests: `tests/cards/c4_attach_moves.rs` (`enchantment_alteration_moves_an_aura_to_a_permanent_of_its_hosts_type`, `enchantment_alteration_treats_a_land_creature_host_as_a_creature`).
+
+## library-arranged-by-owner-not-instructing-player: Cards an effect puts into another player's library "in any order" are arranged by their owner
+- Kind: deviation
+- Status: provisional
+- Rules: 401.4 "If an effect puts two or more cards in a specific position in a library at the same time, the owner of those cards may arrange them in any order. That library’s owner doesn’t reveal the order in which the cards go into the library." / 101.1 "Whenever a card’s text directly contradicts these rules, the card takes precedence. ..." / Misinformation ruling: "You don’t need to show the opponent what order you put the cards on top of their library." / Sealed Fate ruling: "The controller of this spell decides the order of the cards on the library."
+- Question: When a spell's controller puts cards owned by another player into that player's library "in any order" (Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories), who arranges them: the cards' owner (401.4) or the player the text instructs to put them (the card's "in any order", read as overriding 401.4, as the Misinformation and Sealed Fate rulings imply)?
+- Decision: For cards moved from another zone (graveyard, hand) into a library, the owner arranges them (`zones::order_simultaneous`), whatever the text says. Cards rearranged within a library by a dig ("look at the top N cards of target opponent's library ... put the rest back in any order") are arranged by the player the text instructs, as Sealed Fate's ruling says (`dig_steps::rearrange`).
+- Alternatives: Let the effect's controller arrange whenever the text says "in any order": matches the rulings, but the AST doesn't record "in any order" (the parser accepts and drops it, and the move pipeline knows only the moving player), so it needs a field on `Destination` and on the move events; and texts without "in any order" (Hallowed Burial) must keep 401.4's owner.
+- Why: 401.4 is explicit and the AST can't yet tell the texts apart; the order of cards from a graveyard affects only which known card is drawn first. To fix: record "in any order" on `Destination` and carry the arranger through `MoveEv` to `order_simultaneous`.
+- Affects: Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories (about 4 cards).
+- Code: `crates/mtg-engine/src/zones.rs` (`order_simultaneous`); `crates/mtg-engine/src/oracle/patterns/hand_graveyard_grammar.rs` (" in any order").
+- Tests: `tests/rulings/r_p147_restock.rs` (`misinformation_the_cards_owner_arranges_them`).

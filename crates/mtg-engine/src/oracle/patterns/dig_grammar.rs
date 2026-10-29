@@ -22,10 +22,10 @@
 
 use super::card_flow_search::card_filter;
 use crate::ability::*;
-use crate::types::{CardType, Color};
 use crate::oracle::effects::Builder;
 use crate::oracle::patterns::{EffectPattern, FollowupPattern};
 use crate::oracle::phrases::*;
+use crate::types::{CardType, Color};
 
 inventory::submit! {
     EffectPattern { name: "dig: a step on the cards dug", priority: 1000, parse: step_sentence }
@@ -90,10 +90,14 @@ pub fn check_that_many(e: &Effect, trigger: &TriggerCond) -> Option<()> {
 /// may put any number of them into your hand and the rest into your graveyard.": an
 /// optional selection is a choice of up to that many cards (what follows, "the rest",
 /// happens either way), not "you may" around the whole instruction. Only where no other
-/// pattern reads the sentence.
+/// pattern reads the sentence, except "Reveal an artifact card from among them and put it
+/// into your hand." (Catch-Up Mechanic), which the generic "[A] and [B]" split would read
+/// as revealing a card, then putting all the cards looked at into the hand.
 fn may_take_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
-    if !dug(b) || !l.starts_with("you may ") {
+    let reveal_among =
+        l.starts_with("reveal ") && l.contains(" from among ") && l.contains(" and put ");
+    if !dug(b) || !(l.starts_with("you may ") || reveal_among) {
         return false;
     }
     let saved = (
@@ -112,7 +116,7 @@ fn may_take_followup(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         saved.4.clone(),
     );
     b.targets.truncate(saved.1);
-    if others {
+    if others && !reveal_among {
         return false;
     }
     let Some(v) = parse_take(l, b) else {
@@ -918,7 +922,11 @@ fn source_count(e: &Effect) -> Option<&Value> {
             what: Sel::TopOfLibrary(_, n),
             ..
         } => Some(n),
-        Effect::Seq(v) => v.iter().rev().find(|x| source_kind(x).is_some()).and_then(source_count),
+        Effect::Seq(v) => v
+            .iter()
+            .rev()
+            .find(|x| source_kind(x).is_some())
+            .and_then(source_count),
         Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => source_count(effect),
         _ => None,
     }
@@ -962,7 +970,11 @@ fn dig_performer(e: &Effect) -> Option<PlayerRef> {
             DigStep::Until { who, .. } if !matches!(who, PlayerRef::You) => Some(who.clone()),
             _ => None,
         },
-        Effect::Seq(v) => v.iter().rev().find(|x| source_kind(x).is_some()).and_then(dig_performer),
+        Effect::Seq(v) => v
+            .iter()
+            .rev()
+            .find(|x| source_kind(x).is_some())
+            .and_then(dig_performer),
         _ => None,
     }
 }
@@ -1062,7 +1074,8 @@ pub fn dug_objects(s: &str, b: &Builder) -> Option<(Filter, String)> {
 /// Notes that the text has cards to choose among and distribute like dug cards (cards a
 /// search found and left where they are): "the rest" is `rest`.
 pub(super) fn mark_dug(b: &mut Builder, rest: Sel) {
-    b.named.retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK && n != CHOSEN_MARK);
+    b.named
+        .retain(|(n, _)| n != DIG_MARK && n != UNTIL_MARK && n != CHOSEN_MARK);
     b.named.push((DIG_MARK.to_string(), rest));
 }
 
@@ -1498,7 +1511,7 @@ fn counted_of_them(s: &str, may: bool) -> Option<(Counted, &str)> {
             count: Some(count),
             up_to: up_to && !random,
             random,
-                implicit,
+            implicit,
         },
         r,
     ))
@@ -2142,10 +2155,7 @@ fn chooses_from_among(l: &str, b: &mut Builder) -> Option<Effect> {
             let last = head.rsplit(", ").next()?;
             let template = last.strip_prefix("a card with ")?;
             let _ = template;
-            let more: Vec<&str> = more
-                .split(", and ")
-                .flat_map(|p| p.split(", "))
-                .collect();
+            let more: Vec<&str> = more.split(", and ").flat_map(|p| p.split(", ")).collect();
             let mut items: Vec<String> = head.split(", ").map(str::to_string).collect();
             items.extend(more.iter().map(|k| format!("a card with {k}")));
             let n = items.len();
@@ -2506,10 +2516,9 @@ fn forget_that_creature(b: &mut Builder, steps: &[Effect]) {
         matches!(e, Effect::DigStep(s) if matches!(&**s, DigStep::Take { to, .. } if to.zone == ZoneKind::Battlefield))
     });
     if to_battlefield {
-        b.named
-            .retain(|(n, s)| {
-                !((n == "that creature" || n == "the creature") && matches!(s, Sel::TriggerObject))
-            });
+        b.named.retain(|(n, s)| {
+            !((n == "that creature" || n == "the creature") && matches!(s, Sel::TriggerObject))
+        });
     }
 }
 

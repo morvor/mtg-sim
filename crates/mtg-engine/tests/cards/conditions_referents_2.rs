@@ -516,12 +516,13 @@ fn if_the_token_is_an_aura_yenna() {
 }
 
 #[test]
-fn delayed_enters_trigger_of_a_returned_permanent_isnt_read_jailbreak() {
+fn delayed_enters_trigger_of_a_returned_permanent_is_read_jailbreak() {
     // "Return target permanent card ... to the battlefield under their control. When that
-    // permanent enters, ...": the permanent that enters is a new object (CR 400.7), which
-    // the delayed trigger's captured referent can't follow. Rejected rather than compiled
-    // into a trigger that never fires.
-    assert!(!card("Jailbreak").unsupported_text().is_empty());
+    // permanent enters, ...": the permanent that enters is a new object (CR 400.7). It's
+    // read as an ability that triggers as it's created, about that new object, rather than
+    // a delayed trigger whose captured referent couldn't follow it (see
+    // `c4_effect_triggers.rs` for the behavior).
+    compiles("Jailbreak");
 }
 
 #[test]

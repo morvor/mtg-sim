@@ -2286,6 +2286,15 @@ impl Renderer<'_> {
                 let s = self.step_name(*s);
                 format!("until the next {s}")
             }
+            Duration::UntilItsControllersNextStep(s) => {
+                let s = self.step_name(*s);
+                format!("until its controller's next {s}")
+            }
+            Duration::UntilEndOfYourNextStep(s) => {
+                let s = self.step_name(*s);
+                format!("until the end of your next {s}")
+            }
+            Duration::UntilEndOfThisStep => "until end of step".into(),
             Duration::UntilPlaneswalk { away_from_plane } => {
                 if *away_from_plane {
                     "until a player planeswalks away from a plane".into()

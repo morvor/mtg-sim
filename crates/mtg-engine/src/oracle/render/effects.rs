@@ -2631,6 +2631,10 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Subj);
                 format!("{w} phases out")
             }
+            Effect::PhaseIn { what } => {
+                let w = self.sel(what, Case::Subj);
+                format!("{w} phases in")
+            }
             Effect::TurnFaceUp { what } => {
                 let w = self.sel(what, Case::Obj);
                 format!("turn {w} face up")
@@ -4690,6 +4694,36 @@ impl Renderer<'_> {
                     continue;
                 }
             }
+            // The same with the dig's steps (`dig_steps.rs`): "You may reveal a creature card
+            // from among them and put it into your hand. Put the rest on the bottom ... If you
+            // didn't put a card into your hand this way, draw a card."
+            if let (
+                Some(take @ Effect::DigStep(t)),
+                Some(rest @ Effect::DigStep(r)),
+                Some(Effect::If {
+                    cond: Condition::Not(c),
+                    then,
+                    otherwise,
+                }),
+            ) = (v.get(i), v.get(i + 1), v.get(i + 2))
+            {
+                if matches!(t.as_ref(), DigStep::Take { to, .. } if to.zone == ZoneKind::Hand)
+                    && matches!(r.as_ref(), DigStep::Rest { .. })
+                    && matches!(c.as_ref(), Condition::PrevHappened)
+                    && matches!(otherwise.as_ref(), Effect::Noop)
+                {
+                    let tk = self.effect(take);
+                    let rs = self.effect(rest);
+                    let th = self.effect(then);
+                    parts.push(tk);
+                    parts.push(rs);
+                    parts.push(format!(
+                        "{{alt:if you don't|if you didn't put a card into your hand this way}}, {th}"
+                    ));
+                    i += 3;
+                    continue;
+                }
+            }
             // "secretly choose an opponent" (`choices.rs`).
             if let (Some(Effect::Custom(n)), Some(next)) = (v.get(i), v.get(i + 1)) {
                 if n == crate::choices::SECRET_NEXT {
@@ -6154,6 +6188,7 @@ impl Renderer<'_> {
                 | Effect::BecomeCopyExcept { .. }
                 | Effect::Modify { .. }
                 | Effect::PhaseOut { .. }
+                | Effect::PhaseIn { .. }
                 | Effect::AddRestriction { .. }
         ) || matches!(main, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))

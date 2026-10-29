@@ -1,9 +1,9 @@
 //! Looking at and revealing the top cards of a library: "Look at the top N cards of your
 //! library." followed by what happens to them — "Put one of them into your hand and the
-//! rest on the bottom of your library in any order.", "You may reveal a creature card
-//! from among them and put it into your hand. Put the rest on the bottom of your library
-//! in a random order.", "then put them back in any order", "Put the rest into your
-//! graveyard."
+//! rest on the bottom of your library in any order.", "You may put a land card from among
+//! them onto the battlefield tapped. Put the rest on the bottom of your library in a random
+//! order.", "then put them back in any order", "Put the rest into your graveyard." (A card
+//! revealed from among them is chosen by `dig_grammar`'s steps.)
 //!
 //! The first sentence compiles to an [`Effect::Dig`] that takes nothing and leaves the
 //! cards where they are (`LibraryPosition::FromTop`); the following sentences are
@@ -250,20 +250,17 @@ fn put_some_and_rest(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
     true
 }
 
-/// "you may reveal a creature card from among them and put it into your hand", "you may
-/// put a land card from among them onto the battlefield tapped", "you may reveal up to two
-/// creature cards from among them and put them into your hand", "put a creature card from
-/// among them into your hand".
+/// "you may put a land card from among them onto the battlefield tapped", "put a creature
+/// card from among them into your hand", "you may put up to two creature cards from among
+/// them into your hand". ("You may reveal a creature card from among them and put it into
+/// your hand" is left to `dig_grammar`, whose [`DigStep::Take`] reveals the cards chosen,
+/// CR 701.20a: an [`Effect::Dig`] reveals all the cards or none.)
 fn take_from_among(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let (may, r) = match l.strip_prefix("you may ") {
         Some(r) => (true, r),
         None => (false, l),
     };
-    let (reveal, r) = if let Some(r) = r.strip_prefix("reveal ") {
-        (true, r)
-    } else if let Some(r) = r.strip_prefix("put ") {
-        (false, r)
-    } else {
+    let Some(r) = r.strip_prefix("put ") else {
         return false;
     };
     // Count.
@@ -290,23 +287,10 @@ fn take_from_among(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(filter) = card_filter(desc, b).and_then(|f| super::dig_grammar::with_prev_it(f, b)) else {
         return false;
     };
-    let r = r.trim_start();
-    let dest = if reveal {
-        let Some(x) = ["and put it ", "and put that card ", "and put them "]
-            .iter()
-            .find_map(|p| r.strip_prefix(p))
-        else {
-            return false;
-        };
-        x
-    } else {
-        r
-    };
-    let Some((to, tail)) = take_destination(dest) else {
+    let Some((to, tail)) = take_destination(r.trim_start()) else {
         return false;
     };
-    // Revealed cards go to a hidden zone; putting a card onto the battlefield needs no reveal.
-    if !tail.is_empty() || (reveal && to.zone != ZoneKind::Hand) {
+    if !tail.is_empty() {
         return false;
     }
     let Some(Effect::Dig {

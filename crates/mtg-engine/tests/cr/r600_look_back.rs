@@ -153,6 +153,22 @@ fn becoming_unattached_looks_back_in_time() {
 }
 
 #[test]
+fn leaving_the_battlefield_is_losing_control() {
+    cr!("603.10a", "603.10d");
+    ruling!(
+        "Khârn the Betrayer",
+        "You lose control of Khârn the Betrayer when it leaves the battlefield"
+    );
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Khârn the Betrayer");
+    let before = t.hand_size(P0);
+    t.g.destroy(k, None);
+    t.resolve_all();
+    assert!(!t.on_battlefield(k));
+    assert_eq!(t.hand_size(P0), before + 2);
+}
+
+#[test]
 fn losing_control_looks_back_in_time() {
     cr!("603.10", "603.10d");
     // Khârn the Betrayer: "When you lose control of Khârn the Betrayer, draw two cards."

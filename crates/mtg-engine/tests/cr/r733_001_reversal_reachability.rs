@@ -891,6 +891,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::AttachAsCreature { .. }
         | Effect::Unattach { .. }
         | Effect::PhaseOut { .. }
+        | Effect::PhaseIn { .. }
         | Effect::TurnFaceDown { .. }
         | Effect::RemoveFromCombat { .. }
         | Effect::BecomeUnblocked { .. }
