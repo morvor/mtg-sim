@@ -497,6 +497,18 @@ impl Renderer<'_> {
                 then,
                 otherwise,
             } if matches!(otherwise.as_ref(), Effect::Noop) => self.effect(then),
+            // "If you can't choose an opponent this way, [effect]" after choosing one at
+            // random (`history_5.rs`).
+            Effect::If {
+                cond: Condition::Not(c),
+                then,
+                otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop)
+                && matches!(c.as_ref(), Condition::SelNonEmpty(Sel::Players(PlayerRef::Var(v)))
+                    if *v == crate::oracle::patterns::choice_grammar_random::RANDOM_PLAYER) =>
+            {
+                format!("if you can't choose an opponent this way, {}", self.effect(then))
+            }
             Effect::If {
                 cond,
                 then,

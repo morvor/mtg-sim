@@ -88,6 +88,21 @@ impl Renderer<'_> {
             return Some(match from {
                 PlayerRef::EachOpponent => "choose an opponent at random".into(),
                 PlayerRef::EachPlayer => "choose a player at random".into(),
+                PlayerRef::Each(PlayerFilter::And(v))
+                    if matches!(v.as_slice(), [PlayerFilter::Opponent, PlayerFilter::Not(n)]
+                    if matches!(n.as_ref(), PlayerFilter::History(c)
+                        if matches!(c.as_ref(), Condition::Compare(Value::EventsDuring(
+                            HistoryWindow::PlayersLastTurn(PlayerRef::You),
+                            t,
+                            Tally::Events,
+                        ), Cmp::Ge, _) if matches!(t.as_ref(), TriggerCond::AttacksRecipient {
+                            attacker: Filter::Source,
+                            recipient: DamageRecipient::Player(PlayerRel::Iterated),
+                        })))) =>
+                {
+                    "choose an opponent at random that ~ didn't attack during your last combat"
+                        .into()
+                }
                 _ => return None,
             });
         }
