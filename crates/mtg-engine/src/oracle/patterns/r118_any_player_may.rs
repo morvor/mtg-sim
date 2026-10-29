@@ -93,17 +93,25 @@ fn any_player_may(l: &str, b: &mut Builder) -> Option<Effect> {
     // "Whenever a player casts a spell, any other player may pay that spell's mana cost."
     // (Ice Cave): each player other than the one who cast it.
     let (who, cost) = if let Some(r) = l.strip_prefix("any other player may ") {
-        if !b.in_trigger || r != "pay that spell's mana cost" {
+        // "If a player would draw a card, they reveal it instead. Then any other player
+        // may pay 2 life." (Zur's Weirding): each player other than the one the trigger
+        // or replacement is about, in turn order (CR 101.4).
+        if !b.in_trigger || !matches!(b.it_player, PlayerRef::TriggerPlayer) {
             return None;
         }
+        let cost = if r == "pay that spell's mana cost" {
+            Cost {
+                mana: None,
+                parts: vec![CostPart::PayManaCostOf(Box::new(Sel::TriggerSpell))],
+            }
+        } else {
+            any_player_cost(r)?
+        };
         (
             PlayerRef::Each(PlayerFilter::Not(Box::new(PlayerFilter::Ref(Box::new(
                 PlayerRef::TriggerPlayer,
             ))))),
-            Cost {
-                mana: None,
-                parts: vec![CostPart::PayManaCostOf(Box::new(Sel::TriggerSpell))],
-            },
+            cost,
         )
     } else {
         let r = l.strip_prefix("any player may ")?;
@@ -225,18 +233,29 @@ fn if_a_player_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 inventory::submit! { FollowupPattern { name: "r118 if a player does", priority: 60, apply: if_a_player_does } }
 
 /// "If no one does, [effect]." after "any player may [cost]": the effect happens once
-/// every player has declined (Rhystic Circle).
+/// every player has declined (Rhystic Circle). Also "Otherwise, [effect]." after "If a
+/// player does, [effect]." (Zur's Weirding).
 fn if_no_one_does(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let Some(r) = l.strip_prefix("if no one does, ") else {
-        return false;
+    // "Otherwise, [effect]." after "If a player does, [effect]." (Zur's Weirding).
+    let (r, otherwise) = match l.strip_prefix("if no one does, ") {
+        Some(r) => (r, false),
+        None => match l.strip_prefix("otherwise, ") {
+            Some(r) => (r, true),
+            None => return false,
+        },
     };
     let Effect::Seq(v) = prev else {
         return false;
     };
-    if !matches!(
-        v.as_slice(),
-        [Effect::StoreValue { var: PAID, .. }, Effect::ForEachPlayer { .. }]
-    ) {
+    let [Effect::StoreValue { var: PAID, .. }, Effect::ForEachPlayer { effect, .. }] =
+        v.as_slice()
+    else {
+        return false;
+    };
+    // "Otherwise" needs the "if a player does" it's the alternative to.
+    let unanswered = format!("{:?}", first_payment(Effect::Noop));
+    let answered = matches!(&**effect, Effect::PayOptional { then, .. } if format!("{then:?}") != unanswered);
+    if otherwise && !answered {
         return false;
     }
     let Some(e) = parse_clause(r, b) else {

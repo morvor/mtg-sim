@@ -1050,6 +1050,10 @@ fn has(sel: &Sel, h: &str, b: &mut Builder) -> Option<Condition> {
     if let Some(c) = extreme_power(sel, h) {
         return Some(c);
     }
+    // "three or more colored mana symbols in its mana cost" (`mana_6`).
+    if let Some(c) = super::mana_6::has_mana_symbols(sel, h) {
+        return Some(c);
+    }
     for (p, stat) in [
         ("mana value ", Stat::ManaValue),
         ("power ", Stat::Power),

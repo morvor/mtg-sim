@@ -89,6 +89,16 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
     })
 }
 
+/// The mana types of the colors of the first selected object (as it is, or as it last
+/// existed): "any combination of its colors".
+pub(crate) fn colors_of_sel(g: &Game, sel: &Sel, ctx: &Ctx) -> Vec<ManaType> {
+    g.eval_sel_objects(sel, ctx)
+        .first()
+        .and_then(|o| g.try_obj(*o))
+        .map(|o| o.chars.colors.iter().map(ManaType::from_color).collect())
+        .unwrap_or_default()
+}
+
 fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>>> {
     match e {
         Effect::AddMana { mana, .. } => Some(match mana {
@@ -103,6 +113,14 @@ fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaT
             }
             ManaProduction::CombinationOf(opts, n) => {
                 vec![opts.clone(); g.eval_value(n, ctx).max(0) as usize]
+            }
+            ManaProduction::CombinationOfColorsOf(sel, n) => {
+                let opts = colors_of_sel(g, sel, ctx);
+                if opts.is_empty() {
+                    vec![]
+                } else {
+                    vec![opts; g.eval_value(n, ctx).max(0) as usize]
+                }
             }
             ManaProduction::ChosenColor(n) => {
                 // CR 607.2d: the color chosen by the linked ability; CR 607.5a: no mana if

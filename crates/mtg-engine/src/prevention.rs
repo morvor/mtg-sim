@@ -60,6 +60,14 @@ pub fn followup_about_recipient(e: &Effect) -> bool {
     serde_json::to_string(e).is_ok_and(|s| s.contains("\"TriggerObject\""))
 }
 
+/// Whether a prevention effect's additional instruction is about the source of the damage
+/// prevented ("Whenever damage from a creature is prevented this way, ... to that
+/// creature", Judgment of Alexander): it happens once for each source whose damage is
+/// prevented at the same time.
+pub fn followup_about_source(e: &Effect) -> bool {
+    serde_json::to_string(e).is_ok_and(|s| s.contains("\"TriggerOtherObject\""))
+}
+
 /// Whether a prevention effect's additional instruction (CR 615.5) happens for each damage
 /// event it prevents, rather than once for all simultaneous damage: putting a fixed
 /// number of counters ("prevent that damage and put a +1/+1 counter on ~": one counter
@@ -141,6 +149,9 @@ pub fn lock_filter(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
                 g, ctx,
             ))
         }
+        // "If a creature dealt damage by the targeted creature would die this turn"
+        // (Runesword): that creature, as the effect is created.
+        Filter::DealtDamageThisTurnBy(_) => lock_damage_history(g, f, ctx),
         // "Sources of the color of your choice": the color chosen as the effect was
         // created (CR 609.7b).
         Filter::ChosenColor => match g.source_choices(ctx).and_then(|c| c.color) {
@@ -229,6 +240,24 @@ pub fn lock_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> PlayerFilter {
         PlayerFilter::Or(v) => {
             PlayerFilter::Or(v.iter().map(|x| lock_players(g, x, ctx)).collect())
         }
+        other => other.clone(),
+    }
+}
+
+/// "Creatures dealt damage by [that creature] this turn" in an effect created now: the
+/// creature named is locked in (CR 608.2h: the resolving ability's target means nothing
+/// afterwards), while which creatures it has dealt damage to is checked as the effect
+/// applies (`kw/damage_history_by.rs`). The source itself ("dealt damage by ~") is the
+/// effect's source, as it already is.
+pub fn lock_damage_history(g: &Game, f: &Filter, ctx: &Ctx) -> Filter {
+    match f {
+        Filter::DealtDamageThisTurnBy(sel) if !matches!(**sel, Sel::This) => {
+            let ids = g.eval_sel_objects(sel, ctx);
+            Filter::Custom(crate::kw::damage_history_by::dealt_damage_by(&ids).into())
+        }
+        Filter::And(v) => Filter::And(v.iter().map(|x| lock_damage_history(g, x, ctx)).collect()),
+        Filter::Or(v) => Filter::Or(v.iter().map(|x| lock_damage_history(g, x, ctx)).collect()),
+        Filter::Not(x) => Filter::Not(Box::new(lock_damage_history(g, x, ctx))),
         other => other.clone(),
     }
 }
@@ -332,6 +361,11 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
         }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        // "The next time you would draw a card this turn, ~ deals 2 damage to any target
+        // instead." (Words of War): the activated ability's targets, chosen as it was
+        // activated (CR 115.1c), are locked in as the effect is created; an object that
+        // has since left its zone is a new object the effect doesn't find (CR 400.7).
+        ReplacementAction::Instead(e) => ReplacementAction::Instead(Box::new(lock_targets(e, ctx))),
         // "produce mana of the chosen color" (Hall of Gemstone): the color chosen as the
         // effect is created.
         ReplacementAction::ManaChange(c) if c.to == ManaChangeTo::ChosenColor => {

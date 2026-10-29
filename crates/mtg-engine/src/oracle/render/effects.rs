@@ -8605,6 +8605,17 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Poss);
                 format!("mana equal to {s} mana cost")
             }
+            ManaProduction::CombinationOfColorsOf(s, n) => {
+                let (a, w) = match n {
+                    Value::Const(k) => (number_word(*k), None),
+                    other => self.amount(other),
+                };
+                let s = self.sel(s, Case::Poss);
+                format!(
+                    "{a} mana in any combination of {s} colors{}",
+                    w.unwrap_or_default()
+                )
+            }
             ManaProduction::ColoredSymbolsOf(s) => {
                 let s = self.sel(s, Case::Poss);
                 format!("one mana of that color for each colored mana symbol in {s} mana cost")

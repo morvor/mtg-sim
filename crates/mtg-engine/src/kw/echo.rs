@@ -127,6 +127,8 @@ pub(crate) fn upkeep_payment_event(g: &mut Game, name: &str, ctx: &Ctx) {
         name: name.into(),
         player: Some(ctx.controller),
         obj: ctx.source,
-        amount: 0,
+        // The payment's number, for "for each {B} or {R} spent this way"
+        // (`kw/payment_mana.rs`).
+        amount: crate::kw::payment_mana::last_payment(ctx),
     });
 }

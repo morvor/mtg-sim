@@ -1602,10 +1602,17 @@ impl Game {
                         && !crate::counter_rules::is_shield_prevention(&cand.key);
                     let recipient = |c: &Ctx| c.event.as_ref().map(|i| (i.object, i.player));
                     let this = recipient(&c);
+                    // Once for each source if it's about the source (Judgment of
+                    // Alexander's "to that creature").
+                    let about_source = crate::prevention::followup_about_source(&e);
+                    let source_of = |c: &Ctx| c.event.as_ref().and_then(|i| i.other);
+                    let this_source = source_of(&c);
                     match self.prevention_followups.as_mut() {
                         Some(list) if per_event => list.push((key, c, e)),
                         Some(list) => match list.iter_mut().find(|(k, c0, _)| {
-                            *k == key && (!per_recipient || recipient(c0) == this)
+                            *k == key
+                                && (!per_recipient || recipient(c0) == this)
+                                && (!about_source || source_of(c0) == this_source)
                         }) {
                             Some((_, first, _)) => {
                                 if let Some(ev) = first.event.as_mut() {
@@ -2460,6 +2467,10 @@ pub fn event_info_of(ev: &ReplEvent) -> EventInfo {
             e.cause = Some(m.cause);
             // What moves it: a card discarded to pay its own cycling cost was cycled.
             e.other = m.source;
+            // The player who moves it: who plays a land or puts it onto the battlefield
+            // ("If an opponent would put a land onto the battlefield, that player ...",
+            // Land Equilibrium).
+            e.player = m.by;
         }
         ReplEvent::Damage {
             source,

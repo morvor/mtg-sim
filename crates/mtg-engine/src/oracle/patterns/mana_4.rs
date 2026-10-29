@@ -101,6 +101,10 @@ pub(crate) fn count_phrase(r: &str, b: &mut Builder) -> Option<(Value, String)> 
     if let Some((v, rest)) = unspent_mana(r) {
         return Some((v, rest.to_string()));
     }
+    // Mana of given types, or from a kind of source, spent on one payment (`mana_6`).
+    if let Some(v) = super::mana_6::count_phrase(r, b) {
+        return Some(v);
+    }
     // "the number of times it's been cast from the command zone this game" about the spell
     // the mana was spent on (CR 903.8).
     if let Some(rest) = r.strip_prefix("times it's been cast from the command zone this game") {

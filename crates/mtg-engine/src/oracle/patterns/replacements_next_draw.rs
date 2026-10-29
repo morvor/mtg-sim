@@ -7,9 +7,11 @@
 //! that draw and you draw a card." (Plagiarize): the target player is locked in as the
 //! effect is created (`prevention::lock_def`).
 //!
-//! The replacing effect's choices are made as it replaces the draw. An effect with a
-//! target ("~ deals 2 damage to any target instead") would need its target chosen then,
-//! which isn't supported, so such text is left uncompiled.
+//! The replacing effect's choices are made as it replaces the draw, except its targets:
+//! "{3}: The next time you would draw a card this turn, ~ deals 2 damage to any target
+//! instead." (Words of War) is an activated ability with a target, chosen as it's
+//! activated (CR 115.1c, 602.2b) and locked into the effect as it's created
+//! (`prevention::lock_def`); see the interpretation `words-target-on-activation`.
 
 use super::EffectPattern;
 use crate::ability::*;
@@ -21,7 +23,11 @@ fn next_draw_instead(l: &str, b: &mut Builder) -> Option<Effect> {
     let inner = r.strip_suffix(" instead")?;
     let saved = b.targets.len();
     let e = parse_clause(inner, b);
-    if b.targets.len() != saved {
+    // A target of the replacing effect is the activated ability's own (CR 115.1c): only
+    // an ability with a cost has one (not a spell's or trigger's "next time" effect,
+    // whose target would be chosen as the spell or trigger is put on the stack, a
+    // reading this pattern doesn't make).
+    if b.targets.len() != saved && (b.in_trigger || b.ctx.is_spell() || e.is_none()) {
         b.targets.truncate(saved);
         return None;
     }

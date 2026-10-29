@@ -45,7 +45,7 @@ pub const CAST_BY_THEN: &str = "cast history:cast no later than:";
 /// `Value::Custom` prefix: an amount of the mana spent on a spell or ability:
 /// `cast history:spent:<whose>:<what>`, `whose` being `self`, `that spell` or `this
 /// ability`, `what` being `total`, `colored`, `colors` (how many colors), `type:<C>` (one
-/// type of mana), `source subtype:<Treasure>` or `source type:<Creature>`.
+/// type of mana), `types:<B>,<R>` (any of several), `source subtype:<Treasure>` or `source type:<Creature>`.
 pub const SPENT: &str = "cast history:spent:";
 
 /// `Filter::Custom`: the spell (or the permanent it became) was cast using mana produced by
@@ -208,6 +208,11 @@ fn amount(g: &Game, c: &CastInfo, what: &str, colors: Option<ColorSet>) -> Optio
             }
         }
         return Some(s.count() as i64);
+    }
+    // Mana of any of several types ("for each {B} or {R} spent to cast it").
+    if let Some(ts) = what.strip_prefix("types:") {
+        let ts = crate::kw::payment_mana::parse_types(ts)?;
+        return Some(n(&|m| ts.contains(m)));
     }
     if let Some(t) = what.strip_prefix("type:") {
         let t = ManaType::ALL.iter().find(|m| format!("{m:?}") == t)?;
