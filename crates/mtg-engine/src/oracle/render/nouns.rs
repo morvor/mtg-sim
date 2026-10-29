@@ -1341,6 +1341,22 @@ impl Renderer<'_> {
         if np.permanent_card {
             words.push("permanent".into());
         }
+        // "a creature card or Garruk planeswalker card": the kind said with each (for a
+        // card type and a subtype).
+        if let ([a, b], Some("card"), true, true, false, true) = (
+            np.alts.as_slice(),
+            np.kind,
+            types.is_empty() && np.subtypes.is_empty(),
+            words.len() == 1,
+            self.alt_and || np.permanent_card || a_or_b_has_markup(&np.alts),
+            np.alts
+                .iter()
+                .filter(|x| x.chars().next().is_some_and(|c| c.is_uppercase()))
+                .count()
+                == 1,
+        ) {
+            return format!("{{alt:{a} or {b} card|{a} card or {b} card}}");
+        }
         match np.kind {
             Some("permanent") if !words.is_empty() => {}
             Some("commander") if commander_first => {}
@@ -2387,4 +2403,9 @@ fn merged_alternatives(parts: &[String]) -> Option<String> {
     let k = all[0].len() - n + i;
     out[k] = join_list(&alts, "or");
     Some(out.join(" "))
+}
+
+/// Whether any of the alternatives has markup (an alternative or optional words).
+fn a_or_b_has_markup(alts: &[String]) -> bool {
+    alts.iter().any(|a| a.contains('{'))
 }

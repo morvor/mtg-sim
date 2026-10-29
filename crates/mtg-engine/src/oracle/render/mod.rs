@@ -888,6 +888,9 @@ pub struct Renderer<'a> {
     /// Rendering a triggered ability whose event is excess damage dealt: its amount is
     /// "that excess damage" (CR 120.10).
     pub(crate) excess_trigger: bool,
+    /// The player actions a triggered ability's event is one of ("Whenever you waterbend,
+    /// earthbend, firebend, or airbend"), for "if you've done all four this turn".
+    pub(crate) trigger_actions: Vec<smol_str::SmolStr>,
     /// Rendering a trigger event that triggers once for a whole batch of events
     /// (`BatchPer::Batch`): "one or more players", "one or more Humans".
     pub(crate) batch_once: bool,
@@ -1077,6 +1080,7 @@ impl<'a> Renderer<'a> {
             it_done: None,
             control_past: false,
             excess_trigger: false,
+            trigger_actions: Vec::new(),
             batch_once: false,
             batch_per_source: false,
             prev_mandatory: false,
@@ -1297,6 +1301,7 @@ impl<'a> Renderer<'a> {
             r.define_stored_x(s)
         });
         let s = where_x_self_pronoun(&s, self_named);
+
 
         match per_player {
             Some(pf) => {

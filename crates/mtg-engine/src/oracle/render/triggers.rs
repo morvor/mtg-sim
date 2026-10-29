@@ -187,6 +187,20 @@ impl Renderer<'_> {
             self.trigger_player = Some(super::players::OPPONENT_EVENT);
         }
         self.excess_trigger = matches!(t.trigger, TriggerCond::DealtExcessDamage { .. });
+        self.trigger_actions = match &t.trigger {
+            TriggerCond::AnyOf(v) => v
+                .iter()
+                .map(|x| match x {
+                    TriggerCond::PlayerAction {
+                        name,
+                        who: PlayerRel::You,
+                    } => Some(name.clone()),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
         let trig = self.trigger_text(&t.trigger);
         self.trigger_names_opponent =
             trig.contains("an opponent controls") || trig.contains("your opponents control");

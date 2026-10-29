@@ -782,6 +782,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.all_actions_done(c) {
+            return s;
+        }
         if let Some(s) = self.graveyard_order_condition(c) {
             return s;
         }

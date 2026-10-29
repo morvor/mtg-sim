@@ -3470,6 +3470,10 @@ impl Renderer<'_> {
                     A::Multiply(3) => {
                         "it produces three times as much of that mana instead".to_string()
                     }
+                    // CR 107.4c: {C} is one colorless mana.
+                    A::ManaTypeInstead(crate::mana::ManaType::C) => {
+                        "it produces {alt:{C}|colorless mana} instead of any other type".into()
+                    }
                     A::ManaTypeInstead(t) => {
                         format!("it produces {} instead of any other type", mana_symbol(*t))
                     }

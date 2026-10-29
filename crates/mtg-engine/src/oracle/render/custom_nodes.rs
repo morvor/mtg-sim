@@ -162,6 +162,20 @@ impl Renderer<'_> {
     /// spells cast this turn no later than that spell, but for that spell
     /// (`kw/cast_history.rs`, [`crate::kw::cast_history::CAST_BY_THEN`]).
     pub(crate) fn cast_before_count(&mut self, v: &Value) -> Option<String> {
+        // "you get X {E}, where X is that excess damage": the excess damage dealt to the
+        // triggering creature this turn (CR 120.10), after "if that creature was dealt
+        // excess damage this turn".
+        if let Value::EventsThisTurn(t, Tally::Amount) = v {
+            if let TriggerCond::DealtExcessDamage {
+                filter: Filter::In(s),
+                noncombat_only: false,
+            } = t.as_ref()
+            {
+                if matches!(s.as_ref(), Sel::TriggerObject) {
+                    return Some("that excess damage".into());
+                }
+            }
+        }
         let Value::Sum(parts) = v else {
             return None;
         };
@@ -418,5 +432,41 @@ impl Renderer<'_> {
             ),
             5,
         ))
+    }
+}
+
+impl Renderer<'_> {
+    /// "if you've done all four this turn": each of the player actions the trigger event
+    /// is one of happened this turn.
+    pub(crate) fn all_actions_done(&mut self, c: &Condition) -> Option<String> {
+        if self.trigger_actions.len() < 2 {
+            return None;
+        }
+        fn flat<'a>(c: &'a Condition, out: &mut Vec<&'a Condition>) {
+            match c {
+                Condition::And(v) => v.iter().for_each(|x| flat(x, out)),
+                other => out.push(other),
+            }
+        }
+        let mut parts = Vec::new();
+        flat(c, &mut parts);
+        let names: Vec<&smol_str::SmolStr> = parts
+            .iter()
+            .map(|p| match p {
+                Condition::Compare(Value::EventsThisTurn(t, Tally::Events), Cmp::Ge, Value::Const(1)) => {
+                    match t.as_ref() {
+                        TriggerCond::PlayerAction {
+                            name,
+                            who: PlayerRel::You,
+                        } => Some(name),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let same = names.len() == self.trigger_actions.len()
+            && names.iter().all(|n| self.trigger_actions.contains(n));
+        same.then(|| format!("you've done all {} this turn", number_word(names.len() as i32)))
     }
 }

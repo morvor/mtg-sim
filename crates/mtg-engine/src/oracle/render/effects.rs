@@ -2810,6 +2810,24 @@ impl Renderer<'_> {
                     let n = self.noun(f, Num::Many);
                     return format!("for each color among {n}, add one mana of that color");
                 }
+                // "Choose a color of a permanent you control. Add one mana of that color."
+                // (the same as one mana of any color among them).
+                if let (ManaProduction::AnyColorAmong(f), PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let simple = !matches!(f, Filter::Source)
+                        && !matches!(f, Filter::And(v) if v.iter()
+                            .any(|x| matches!(x, Filter::In(s) if matches!(**s, Sel::Linked))));
+                    if simple {
+                        let m = self.mana_production(mana);
+                        let a = self.noun_det(f, Det::A);
+                        if !m.contains('{') && !a.contains('{') {
+                            return format!(
+                                "{{alt:add {m}|choose a color of {a}. add one mana of that color}}"
+                            );
+                        }
+                    }
+                }
                 let m = self.mana_production(mana);
                 // "Choose a color. Add an amount of mana of that color equal to the number
                 // of ..." (Three Tree City): X mana of any one color.
@@ -3206,6 +3224,13 @@ impl Renderer<'_> {
                     // "Return it to the battlefield at the beginning of your next upkeep.
                     // It gains haste.": the time may follow the first instruction.
                     format!("{{alt:{t}, {one}|{first} {t}. {rest}}}")
+                } else if let (false, TriggerCond::ThisTurn(inner), false) =
+                    (*once, trigger, b.contains('{') || t.contains('{'))
+                {
+                    // "Until end of turn, whenever you cast a spell, copy it": the same
+                    // trigger for the rest of the turn.
+                    let w = self.trigger_text(inner);
+                    format!("{{alt:{t}, {b}|until end of turn, {w}, {b}}}")
                 } else {
                     format!("{t}, {b}")
                 }
@@ -3390,9 +3415,9 @@ impl Renderer<'_> {
                 let w = self.player(who, Case::Subj);
                 let a = self.noun(among, Num::Many);
                 let k: Vec<String> = keep.iter().map(|f| self.noun_det(f, Det::A)).collect();
+                let k = join_list(&k, "and");
                 format!(
-                    "{w} chooses from among the {a} they control {}, then sacrifices the rest",
-                    join_list(&k, "and")
+                    "{w} chooses {{alt:from among the {a} they control {k}|{k} from among the {a} they control}}, then sacrifices the rest"
                 )
             }
             Effect::RestartGame { keep } => match keep {
@@ -4726,7 +4751,22 @@ impl Renderer<'_> {
                     let mentions: usize = chosen.iter().map(|(c, _)| n.matches(*c).count()).sum();
                     if mentions == 1 && !n.contains("chosen player") {
                         if let Some((c, r)) = chosen.iter().find(|(c, _)| n.contains(*c)) {
-                            parts.push(n.replacen(c, r, 1));
+                            let one = n.replacen(c, r, 1);
+                            // Or the choice said first: "Choose an opponent. That player
+                            // returns a card ...".
+                            let that = if r.ends_with("'s") {
+                                "that player's"
+                            } else {
+                                "that player"
+                            };
+                            let two = n.replacen(c, that, 1);
+                            if one.contains('{') {
+                                parts.push(one);
+                            } else {
+                                parts.push(format!(
+                                    "{{alt:{one}|choose an opponent. {two}|choose one of your opponents. {two}}}"
+                                ));
+                            }
                             i += 2;
                             continue;
                         }
@@ -9467,3 +9507,4 @@ fn card_types_but(v: &[String]) -> Option<Vec<String>> {
         .collect();
     (1..=2).contains(&missing.len()).then_some(missing)
 }
+
