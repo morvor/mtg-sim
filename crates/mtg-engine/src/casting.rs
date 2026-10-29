@@ -1940,6 +1940,20 @@ impl Game {
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
         ctx.cost_of = None;
         let paid = paid?;
+        // CR 601.2g–h: mana abilities are activated before the total cost is paid, so a
+        // creature sacrificed for mana (Wild Cantor) isn't there to be tapped for convoke:
+        // a payment that convoked it and then used its mana can't be made.
+        let convoked_gone = self.obj(id).stack.as_ref().is_some_and(|si| {
+            si.cast
+                .convoked
+                .iter()
+                .any(|c| !self.is_in_zone(*c, Zone::Battlefield) && !paid.objects.contains(c))
+        });
+        if convoked_gone {
+            return Err(Illegal(
+                "a creature that convoked the spell was sacrificed for mana".into(),
+            ));
+        }
         // CR 601.2g–h: mana abilities are activated before the total cost is paid. If one
         // of them removed what gave the spell convoke (sacrificing Dazzling Theater), the
         // spell doesn't have it when the cost is paid: that payment can't be made.
