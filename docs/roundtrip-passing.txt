@@ -7233,6 +7233,7 @@ Endbringer
 Endbringer's Revel
 Endemic Plague
 Endless Cockroaches
+Endless Detour
 Endless Evil
 Endless Foot Assault
 Endless Horizons
@@ -10283,6 +10284,7 @@ Grip of Phyresis
 Grip of the Roil
 Griptide
 Griselbrand
+Grishnákh, Brash Instigator
 Grisly Ritual
 Grisly Salvage
 Grisly Spectacle
@@ -27660,6 +27662,7 @@ Yahenni, Undying Partisan
 Yamabushi's Flame
 Yamabushi's Storm
 Yanling's Harbinger
+Yannik, Scavenging Sentinel
 Yargle and Multani
 Yargle, Glutton of Urborg
 Yargle, Goliath of Otaria

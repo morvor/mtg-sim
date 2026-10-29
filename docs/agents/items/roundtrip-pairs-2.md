@@ -67,8 +67,8 @@ docs/roundtrip-passing.txt; `roundtrip --check` must pass.
 
 ## Result
 
-27,828 of 31,667 fully supported cards passed at the start (52c17bfe); 27,921 of 31,711
-pass after merging origin (origin's passing list at the merge has 27,828 cards). 69 of the
+27,828 of 31,667 fully supported cards passed at the start (52c17bfe); 27,924 of 31,788
+pass after merging origin (origin's passing list at the last merge has 27,828 cards). 69 of the
 147 cards in the taken clusters pass.
 
 Renderer (small hooks in the existing files and one new module, `render/graveyard_order.rs`):
