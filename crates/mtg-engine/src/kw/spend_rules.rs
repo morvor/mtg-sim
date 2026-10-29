@@ -42,10 +42,21 @@ pub fn only_colorless(types: &[ManaType]) -> String {
 /// `base` with the rules the static abilities `p` controls give.
 pub fn with_player_rules(g: &Game, p: PlayerId, base: &SpendRules) -> SpendRules {
     let mut out = base.clone();
-    for (_, ctl, n) in &g.statics.customs {
-        if *ctl != p {
-            continue;
-        }
+    // Static abilities the player controls, and effects on the player ("Until end of turn,
+    // you may spend white mana as though it were mana of any color.", False Dawn).
+    let from_effects = g.player(p).mods.iter().filter_map(|m| match m {
+        crate::ability::PlayerModification::Custom(n) => Some(n.as_str()),
+        _ => None,
+    });
+    let names: Vec<&str> = g
+        .statics
+        .customs
+        .iter()
+        .filter(|(_, ctl, _)| *ctl == p)
+        .map(|(_, _, n)| n.as_str())
+        .chain(from_effects)
+        .collect();
+    for n in names {
         if let Some((from, to)) = n.strip_prefix(AS_PREFIX).and_then(|r| r.split_once(':')) {
             let (Some(from), Some(to)) = (ManaType::from_letter_str(from), parse_letters(to))
             else {

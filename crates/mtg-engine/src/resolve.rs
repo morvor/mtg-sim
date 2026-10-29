@@ -1003,6 +1003,9 @@ impl Game {
                 };
                 // Chosen objects the effect refers to are locked in (CR 609.7b, 611.2c).
                 let def = &crate::prevention::lock_def(self, def, ctx);
+                // "instead look at the top X cards of your library" (Aladdin's Lamp): the
+                // value of X of the ability that created it (CR 107.3).
+                let def = &crate::prevention::lock_x(def, ctx);
                 self.replacements.push(ReplacementInstance {
                     id,
                     source: ctx.source,
@@ -1729,7 +1732,10 @@ impl Game {
                 mana,
                 restriction,
             } => {
-                crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                let added =
+                    crate::mana_abilities::resolve_add_mana(self, who, mana, restriction, ctx);
+                // "~ becomes that color" (Foraging Wickermaw): the colors of the mana added.
+                crate::kw::mana_ability_added::record_added(ctx, &added);
                 // "Add {R}. When you do, ..." (Rubble Rouser): adding mana is done.
                 ctx.prev_happened = true;
             }
@@ -2875,6 +2881,16 @@ impl Game {
                     }
                     Modification::AddKeyword(k)
                 }
+                // "~ becomes that color" after "Add one mana of any color": the color of
+                // the mana just added (locked in now).
+                Modification::Custom { name, .. }
+                    if name == crate::kw::mana_ability_added::BECOMES_COLOR_ADDED =>
+                {
+                    match crate::kw::mana_ability_added::added_colors(ctx) {
+                        Some(cs) => Modification::SetColors(cs),
+                        None => m.clone(),
+                    }
+                }
                 Modification::SetChosenColor => {
                     match ctx.source.and_then(|s| self.obj(s).choices.color) {
                         Some(c) => Modification::SetColors(ColorSet::single(c)),
@@ -3496,6 +3512,15 @@ impl Game {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
             }
+            ManaProduction::CouldProduceAmount(f, n) => {
+                let k = self.eval_value(n, ctx).max(0) as usize;
+                let types = crate::mana_abilities::types_could_produce(self, f, ctx);
+                if types.is_empty() || k == 0 {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types); k]
+                }
+            }
             ManaProduction::Noted { amount } => crate::noted_mana::produced(self, *amount, ctx),
             ManaProduction::CouldProduceColor(f) => {
                 // CR 106.7: colorless isn't a color.
@@ -3508,6 +3533,22 @@ impl Game {
                 } else {
                     vec![self.choose_mana_color(p, ctx, &types)]
                 }
+            }
+            ManaProduction::ColoredSymbolsOf(sel) => {
+                let symbols: Vec<crate::mana::ManaSymbol> = self
+                    .eval_sel_objects(sel, ctx)
+                    .first()
+                    .and_then(|o| self.obj(*o).chars.mana_cost.clone())
+                    .map(|m| m.symbols.to_vec())
+                    .unwrap_or_default();
+                let mut out = Vec::new();
+                for s in symbols {
+                    let opts: Vec<ManaType> = s.colors().iter().map(ManaType::from_color).collect();
+                    if !opts.is_empty() {
+                        out.push(self.choose_mana_color(p, ctx, &opts));
+                    }
+                }
+                out
             }
             ManaProduction::ManaCostOf(sel) => {
                 // CR 106.8–106.11: hybrid symbols let the player choose a half; Phyrexian
@@ -3764,6 +3805,8 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::CantTurnFaceUp(f)
         | Restriction::CantBeCopied(f)
         | Restriction::SourceDamageCantBePrevented(f)
+        | Restriction::DamageToCantBePreventedOrRedirected(f)
+        | Restriction::SourceDamageToCantBePreventedOrRedirected { source: f, .. }
         | Restriction::AttackDespiteDefender(f)
         | Restriction::AttackPlayersDespiteDefender { attackers: f, .. }
         | Restriction::BlockAsThoughUntapped(f)
