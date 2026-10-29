@@ -83,6 +83,12 @@ pub trait KeywordRules: Sync + Send {
     /// 614.1): `n` is the number it would remove. The damage is still dealt with all its
     /// other results. Called for every registered implementation, each seeing the
     /// previous ones' result.
+    ///
+    /// A hook rather than a `replace()` event: the counter removal is a result of damage
+    /// already dealt, so prevention, redirection and damage replacements have applied to
+    /// the damage event first (CR 615, 616.1), and no other card replaces this result
+    /// (Deification is the only one; several copies give the same result in any order,
+    /// so the CR 616.1 order choice can't matter).
     fn loyalty_removed_by_damage(&self, g: &Game, pw: ObjectId, n: u32) -> Option<u32> {
         None
     }
