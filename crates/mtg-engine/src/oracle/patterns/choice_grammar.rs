@@ -525,9 +525,11 @@ fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     let that_players = phrase == " of that player's choice";
     // Right after a target phrase ("target creature", "any target").
     let before = &l[..k];
-    let t = match before.strip_suffix("target") {
-        Some(r) if r.ends_with(" any ") => r.len(),
-        _ => before.rfind("target ")?,
+    let any_target = before.ends_with(" any target");
+    let t = if any_target {
+        before.len() - "target".len()
+    } else {
+        before.rfind("target ")?
     };
     if before[t..].contains(", ") || before[t..].contains(" and ") {
         return None;
@@ -577,12 +579,11 @@ fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
     let first = b.targets.len();
     let e = crate::oracle::effects::parse_sentence(&text, b)?;
     // The target named right before "of their choice" (the last one the sentence added):
-    // an object, or "any target" (Pandemonium).
-    let Some(slot) = (first..b.targets.len()).rev().find(|i| {
-        matches!(
-            b.targets[*i].what,
-            TargetKind::Object(_) | TargetKind::AnyTarget
-        )
+    // an object, or "any target" when the phrase follows it (Pandemonium).
+    let Some(slot) = (first..b.targets.len()).rev().find(|i| match b.targets[*i].what {
+        TargetKind::Object(_) => true,
+        TargetKind::AnyTarget => any_target,
+        _ => false,
     }) else {
         b.targets.truncate(saved.0);
         (b.it, b.it_player) = (saved.1, saved.2);

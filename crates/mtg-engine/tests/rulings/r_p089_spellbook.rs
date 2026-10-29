@@ -1,4 +1,4 @@
-//! Rulings batch P089 — Wizard's Spellbook (compiled in this batch): "{T}: Exile target
+//! Rulings batch P089 — Wizard's Spellbook: "{T}: Exile target
 //! instant or sorcery card from a graveyard. Roll a d20. Activate only as a sorcery.
 //! 1—9 | Copy that card. You may cast the copy. 10—19 | Copy that card. You may cast the
 //! copy by paying {1} rather than paying its mana cost. 20 | Copy each card exiled with
