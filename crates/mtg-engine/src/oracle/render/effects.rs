@@ -5384,12 +5384,28 @@ impl Renderer<'_> {
                     let s = self.sel(source, Case::Subj);
                     let mut items = Vec::new();
                     let mut wheres = String::new();
+                    // The previous part's amount and how it was rendered.
+                    let mut prev: Option<(&Value, String)> = None;
                     for e in &v[i..j] {
                         if let Effect::DealDamage { amount, to, .. } = e {
+                            // "... to target player and that much damage to up to one
+                            // target creature" (or "X damage to any target and X damage
+                            // to itself"): the previous part's computed amount again.
+                            if let Some((_, pa)) = prev.as_ref().filter(|(p, pa)| {
+                                !matches!(p, Value::Const(_))
+                                    && !pa.contains('{')
+                                    && format!("{p:?}") == format!("{amount:?}")
+                            }) {
+                                let pa = pa.clone();
+                                let t = self.sel(to, Case::Obj);
+                                items.push(format!("{{alt:{pa}|that much}} damage to {t}"));
+                                continue;
+                            }
                             let (a, w) = self.amount(amount);
                             let t = self.sel(to, Case::Obj);
                             items.push(format!("{a} damage to {t}"));
                             wheres.push_str(&w.unwrap_or_default());
+                            prev = Some((amount, a));
                         }
                     }
                     parts.push(format!("{s} deals {}{wheres}", join_list(&items, "and")));
