@@ -6118,6 +6118,7 @@ impl Renderer<'_> {
                 | Effect::BecomeCopyExcept { .. }
                 | Effect::Modify { .. }
                 | Effect::PhaseOut { .. }
+                | Effect::PhaseIn { .. }
                 | Effect::AddRestriction { .. }
         ) || matches!(main, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))
