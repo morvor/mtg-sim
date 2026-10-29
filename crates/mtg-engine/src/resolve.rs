@@ -1401,6 +1401,12 @@ impl Game {
                     self.unattach(o);
                 }
             }
+            Effect::PhaseIn { what } => {
+                // A phased-out permanent is still the same object (CR 702.26d).
+                for o in self.resolve_objects(what, ctx) {
+                    crate::keyword_impls::phase_in(self, o);
+                }
+            }
             Effect::PhaseOut { what } => {
                 let objs = self.resolve_objects(what, ctx);
                 let before = self.phased_in_permanents();

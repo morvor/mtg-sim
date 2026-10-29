@@ -482,3 +482,57 @@ fn if_none_exiled_with_source_sacrifice_it(l: &str, prev: &mut Effect, b: &mut B
 }
 
 inventory::submit! { FollowupPattern { name: "triggers 5: then if there are no cards exiled with ~, sacrifice it", priority: 40, apply: if_none_exiled_with_source_sacrifice_it } }
+
+/// "that permanent phases in", "it phases in" (CR 702.26c): the permanent named before.
+fn that_permanent_phases_in(l: &str, b: &mut Builder) -> Option<Effect> {
+    let subject = end(l).strip_suffix(" phases in")?;
+    if !matches!(subject, "that permanent" | "it" | "that creature")
+        || !matches!(b.it, Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject)
+    {
+        return None;
+    }
+    Some(Effect::PhaseIn { what: b.it.clone() })
+}
+
+inventory::submit! { EffectPattern { name: "triggers 5: that permanent phases in", priority: 100, parse: that_permanent_phases_in } }
+
+/// "When ~ becomes untapped or leaves the battlefield, that permanent phases in." (The
+/// Pandorica), "When ~ leaves the battlefield or becomes untapped, remove all -1/-1
+/// counters from the creature." (Giant Oyster): a delayed triggered ability created as the
+/// ability resolves (CR 603.7a), triggering once on the first of those events of the
+/// source (CR 603.7c), about the object the ability named (captured as it's created).
+fn when_source_event_or_event(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("when ~ ")?;
+    let (events, eff) = r.split_once(", ")?;
+    let parts: Vec<&str> = events.split(" or ").collect();
+    if parts.len() < 2 || !matches!(b.it, Sel::Target(_) | Sel::Var(_)) {
+        return None;
+    }
+    let conds: Option<Vec<TriggerCond>> = parts
+        .iter()
+        .map(|p| match *p {
+            "becomes untapped" => Some(TriggerCond::BecomesUntapped(Filter::Source)),
+            "leaves the battlefield" => Some(TriggerCond::LeavesBattlefield(Filter::Source)),
+            _ => None,
+        })
+        .collect();
+    let saved = (b.targets.len(), b.it.clone());
+    let effect = parse_effect_text(eff, b);
+    let effect = match effect {
+        Some(e) if b.targets.len() == saved.0 => e,
+        _ => {
+            b.targets.truncate(saved.0);
+            b.it = saved.1;
+            return None;
+        }
+    };
+    let (mut stores, effect) = super::triggers_delayed::capture(&effect)?;
+    stores.push(Effect::DelayedTrigger {
+        trigger: TriggerCond::AnyOf(conds?),
+        body: Box::new(Body::effect(effect)),
+        once: true,
+    });
+    Some(Effect::seq(stores))
+}
+
+inventory::submit! { EffectPattern { name: "triggers 5: when ~ [event] or [event], [effect] (delayed)", priority: 100, parse: when_source_event_or_event } }

@@ -279,3 +279,47 @@ fn scars_of_the_veteran_on_a_player_puts_no_counters() {
     t.resolve_all();
     assert!(t.g.delayed_triggers.is_empty());
 }
+
+fn pandorica_phases_out_giant() -> (TestGame, ObjectId, ObjectId) {
+    let mut t = TestGame::new(2);
+    let pandorica = t.battlefield(P0, "The Pandorica");
+    ready(&mut t, pandorica);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    mana(&mut t, P0);
+    t.activate(P0, pandorica, 0, &[Entity::Object(giant)]).unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(giant).phased_out);
+    (t, pandorica, giant)
+}
+
+#[test]
+fn the_pandorica_holds_the_permanent_until_it_untaps() {
+    cr!("603.7a", "603.7c", "702.26c", "611.2b");
+    ruling!(
+        "The Pandorica",
+        "Any continuous effects with a \"for as long as\" duration ignore phased-out objects"
+    );
+    supported("The Pandorica");
+    let (mut t, pandorica, giant) = pandorica_phases_out_giant();
+    // P1's untap step: it can't phase in while The Pandorica is tapped.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(giant).phased_out);
+    // P0's untap step: P0 chooses to untap The Pandorica, and the delayed ability phases
+    // the Giant in.
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(!t.obj_now(pandorica).tapped);
+    assert!(!t.obj_now(giant).phased_out);
+    assert_eq!(t.g.current(giant), giant, "the same object (CR 702.26d)");
+}
+
+#[test]
+fn the_pandorica_leaving_phases_the_permanent_in() {
+    cr!("603.7c", "702.26c");
+    let (mut t, pandorica, giant) = pandorica_phases_out_giant();
+    t.g.destroy(pandorica, None);
+    t.resolve_all();
+    assert!(!t.obj_now(giant).phased_out);
+}

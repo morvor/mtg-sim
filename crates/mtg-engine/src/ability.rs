@@ -4796,6 +4796,11 @@ pub enum Effect {
     PhaseOut {
         what: Sel,
     },
+    /// "That permanent phases in" (CR 702.26c): phased-out permanents phase in, with what
+    /// phased out indirectly with them (unless they can't phase in).
+    PhaseIn {
+        what: Sel,
+    },
     /// Turn face down / face up.
     TurnFaceUp {
         what: Sel,
