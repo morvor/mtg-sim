@@ -2205,6 +2205,9 @@ impl Game {
         mana: Vec<crate::mana::Mana>,
         source: Option<ObjectId>,
     ) {
+        let mut mana = mana;
+        // A player restricted to their lands' mana abilities (CR 723.7).
+        crate::player_control::restrict_lands_only_mana(self, p, &mut mana);
         for m in mana {
             self.players[p.idx()].mana_pool.add(m);
         }

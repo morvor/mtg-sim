@@ -74,6 +74,9 @@ pub struct PlayerControlState {
     /// A player who may activate only mana abilities of lands they control right now
     /// (Word of Command, CR 723.7).
     pub lands_only_mana: Option<PlayerId>,
+    /// The card that player is playing then: the mana those abilities produce may be
+    /// spent only to play it or to activate other mana abilities of lands they control.
+    pub lands_only_card: Option<ObjectId>,
 }
 
 /// `StaticEffect::Custom` name: "You control your opponents while they're searching
@@ -281,6 +284,35 @@ pub fn mana_source_allowed(g: &Game, p: PlayerId, source: ObjectId) -> bool {
     }
 }
 
+/// Mana a player restricted to the mana abilities of their lands (Word of Command, CR
+/// 723.7) produces "is spent to activate other mana abilities of lands the player controls
+/// and/or to play that card": it can pay only for casting that card (the spell it is now)
+/// or for an ability of a land they control (the abilities of lands they may activate
+/// then are mana abilities; see interpretation `word-of-command-mana`).
+pub fn restrict_lands_only_mana(g: &Game, p: PlayerId, mana: &mut [crate::mana::Mana]) {
+    use crate::ability::Filter;
+    use crate::mana::{ManaRestriction, SpendFilter};
+    if g.player_control.lands_only_mana != Some(p) {
+        return;
+    }
+    let spell: Vec<ObjectId> = g
+        .player_control
+        .lands_only_card
+        .map(|c| g.current(c))
+        .into_iter()
+        .collect();
+    let r = ManaRestriction::AnyOf(vec![
+        ManaRestriction::CastSpell(SpendFilter::new(Filter::Objects(spell))),
+        ManaRestriction::ActivateAbilityOf(SpendFilter::new(Filter::and(vec![
+            Filter::Type(CardType::Land),
+            Filter::ControlledBy(crate::ability::PlayerRel::You),
+        ]))),
+    ]);
+    for m in mana.iter_mut().filter(|m| m.restriction.is_none()) {
+        m.restriction = Some(r.clone());
+    }
+}
+
 /// `controller` controls `player` for a limited duration, starting now.
 fn control_now(g: &mut Game, controller: PlayerId, player: PlayerId, span: ControlSpan) {
     let timestamp = g.new_timestamp();
@@ -326,8 +358,13 @@ fn word_of_command_step(g: &mut Game, step: &str, slot: u8, ctx: &mut Ctx) {
         }
         "play" | "play-lands" => {
             let before = g.player_control.lands_only_mana;
+            let before_card = g.player_control.lands_only_card;
             if step == "play-lands" {
                 g.player_control.lands_only_mana = Some(p);
+                g.player_control.lands_only_card = ctx
+                    .vars
+                    .get(&CHOSEN)
+                    .and_then(|v| v.iter().find_map(|e| e.object()));
             }
             let play = Effect::PlayCard {
                 who: PlayerRef::Player(p),
@@ -337,6 +374,7 @@ fn word_of_command_step(g: &mut Game, step: &str, slot: u8, ctx: &mut Ctx) {
             };
             g.exec(&play, ctx);
             g.player_control.lands_only_mana = before;
+            g.player_control.lands_only_card = before_card;
             // The spell it was cast as, if it was.
             let chosen: Vec<ObjectId> = ctx
                 .vars

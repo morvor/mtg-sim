@@ -108,3 +108,28 @@ fn oversimplify_counts_the_power_of_creatures_each_player_controlled() {
     assert_eq!(t.counters(mine, "+1/+1"), 3, "{}", t.dump_log());
     assert_eq!(t.counters(theirs, "+1/+1"), 2);
 }
+
+#[test]
+fn word_of_command_mana_can_be_spent_only_on_the_chosen_card() {
+    cr!("723.7", "106.6");
+    interp!("word-of-command-mana");
+    // "While doing so, the player can activate mana abilities only if they're from lands
+    // that player controls and only if mana they produce is spent to activate other mana
+    // abilities of lands the player controls and/or to play that card."
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P1, "Ancient Tomb");
+    let stone = t.battlefield(P1, "Mind Stone");
+    let card = t.hand(P1, "Bonesplitter");
+    t.lands(P0, "Swamp", 2);
+    let woc = t.hand(P0, "Word of Command");
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    t.cast(P0, woc).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Bonesplitter").len(), 1, "{}", t.dump_log());
+    // Ancient Tomb made {C}{C}: one paid for Bonesplitter, the other is still in the
+    // pool, and can't pay for Mind Stone's ability.
+    assert_eq!(t.g.players[1].mana_pool.mana.len(), 1);
+    assert!(t.activate(P1, stone, 1, &[]).is_err());
+    assert!(t.on_battlefield(stone));
+}
