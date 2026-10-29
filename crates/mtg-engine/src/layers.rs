@@ -174,6 +174,12 @@ fn fixed_self_type_cda(e: &LayerEff, st: &LayerState) -> bool {
         })
 }
 
+std::thread_local! {
+    /// The controllers of permanents before the characteristics computation in progress.
+    static CONTROL_BEFORE: std::cell::RefCell<Option<std::collections::BTreeMap<ObjectId, PlayerId>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 impl Game {
     /// Objects whose characteristics are computed: every current object outside libraries
     /// (library cards keep their printed characteristics).
@@ -268,6 +274,35 @@ impl Game {
         self.dirty = false;
         self.expire_dependent_effects();
         self.compute_characteristics(true);
+        // A "for as long as" condition about characteristics just computed ("for as long
+        // as that creature's power remains less than or equal to ~'s power", CR 611.2b)
+        // ends the effect now, not at the next recomputation.
+        let before = self.dependent_effects_shape();
+        self.expire_dependent_effects();
+        if self.dependent_effects_shape() != before {
+            self.compute_characteristics(true);
+        }
+    }
+
+    /// How many effects from resolved spells and abilities exist, and how many objects
+    /// they're locked to: what `expire_dependent_effects` can change.
+    fn dependent_effects_shape(&self) -> (usize, usize, usize, usize, usize, usize) {
+        let locked: usize = self
+            .effects
+            .iter()
+            .map(|e| match &e.affected {
+                crate::game::Affected::Objects(v) => v.len(),
+                _ => 0,
+            })
+            .sum();
+        (
+            self.effects.len(),
+            locked,
+            self.rule_effects.len(),
+            self.player_effects.len(),
+            self.replacements.len(),
+            self.play_grants.len(),
+        )
     }
 
     /// Computes every object's characteristics, then the rule-modifying effects. With
@@ -280,6 +315,10 @@ impl Game {
             .iter()
             .map(|id| (*id, self.obj(*id).controller))
             .collect();
+        // The controllers before this computation, for "other players can't gain control
+        // of [it]" (see `apply_mod_to`).
+        let outer_controllers =
+            CONTROL_BEFORE.with(|c| c.replace(Some(prev_controllers.iter().copied().collect())));
 
         // Layer 0: printed values.
         for id in &live {
@@ -503,6 +542,7 @@ impl Game {
             }
         }
 
+        CONTROL_BEFORE.with(|c| c.replace(outer_controllers));
         // Post-processing.
         let turn = self.turn.number;
         let prev_controllers = if side_effects {
@@ -624,6 +664,44 @@ impl Game {
             if keep.len() != v.len() {
                 self.effects[i].affected = Affected::Objects(keep);
             }
+        }
+        // The same for a rule effect locked to objects ("Each of those creatures doesn't
+        // untap during its controller's untap step for as long as it has a paralyzation
+        // counter on it").
+        for i in 0..self.rule_effects.len() {
+            let (Duration::WhileAffectedHasCounter(kind), Some(v)) = (
+                &self.rule_effects[i].duration,
+                &self.rule_effects[i].objects,
+            ) else {
+                continue;
+            };
+            let keep: Vec<ObjectId> = v
+                .iter()
+                .copied()
+                .filter(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0)
+                .collect();
+            if keep.len() != v.len() {
+                self.rule_effects[i].objects = Some(keep);
+            }
+        }
+        // Delayed triggered abilities "for as long as [condition]": once it's false, they're
+        // gone for good (CR 603.7b, 611.2b).
+        let ended: Vec<u32> = self
+            .delayed_triggers
+            .iter()
+            .filter(|d| match &d.trigger {
+                TriggerCond::ForAsLongAs(_, c) => {
+                    let mut ctx = d.ctx.clone();
+                    ctx.source = d.source;
+                    ctx.controller = d.controller;
+                    !self.eval_cond(c, &ctx)
+                }
+                _ => false,
+            })
+            .map(|d| d.id)
+            .collect();
+        if !ended.is_empty() {
+            self.delayed_triggers.retain(|d| !ended.contains(&d.id));
         }
         // Characteristics listed for a permanent turned face down (CR 708.2a): one that's
         // turned face up stops being affected for good.
@@ -777,6 +855,10 @@ impl Game {
                 );
                 !self.eval_cond(c, &ctx)
             }
+            // CR 611.2b: none of them has such a counter (any more).
+            (Duration::WhileAffectedHasCounter(kind), Some(v)) => !v
+                .iter()
+                .any(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0),
             _ => self.effect_expired(d, source, controller),
         }
     }
@@ -1275,7 +1357,16 @@ impl Game {
                 .eval_player(r, ctx)
                 .filter(|p| self.player(*p).in_game())
             {
-                self.objects[target.0 as usize].controller = p;
+                // "Other players can't gain control of [it]" (Guardian Beast): a player
+                // other than the one who controlled it before doesn't gain control of it.
+                let now = self.objects[target.0 as usize].controller;
+                let before = CONTROL_BEFORE
+                    .with(|c| c.borrow().as_ref().and_then(|m| m.get(&target).copied()))
+                    .unwrap_or(now);
+                self.objects[target.0 as usize].controller = before;
+                let prohibited =
+                    crate::prohibitions::control_gain_prohibited(self, target, before, p);
+                self.objects[target.0 as usize].controller = if prohibited { now } else { p };
             }
             return;
         }
@@ -1597,7 +1688,9 @@ impl Game {
                         max_hand = v.as_ref().map(|v| self.eval_value(v, ctx) as i32)
                     }
                     PlayerModification::HandSizeDelta(d) => max_hand = max_hand.map(|h| h + d),
-                    PlayerModification::AdditionalLandPlays(k) => land_plays += k,
+                    PlayerModification::AdditionalLandPlays(k) => {
+                        land_plays = land_plays.saturating_add(*k)
+                    }
                     _ => {}
                 }
             }

@@ -2024,6 +2024,13 @@ impl Renderer<'_> {
                         let s = self.restriction_subject(f);
                         return format!("{s} doesn't untap during {whose} next untap step");
                     }
+                    if let Duration::ThroughNextUntapSteps(n) = duration {
+                        let s = self.restriction_subject(f);
+                        let n = crate::oracle::render::number_word(*n as i32);
+                        return format!(
+                            "{s} doesn't untap during {{alt:its controller's|its}} next {n} untap steps"
+                        );
+                    }
                 }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
@@ -2590,6 +2597,10 @@ impl Renderer<'_> {
             Effect::PhaseOut { what } => {
                 let w = self.sel(what, Case::Subj);
                 format!("{w} phases out")
+            }
+            Effect::PhaseIn { what } => {
+                let w = self.sel(what, Case::Subj);
+                format!("{w} phases in")
             }
             Effect::TurnFaceUp { what } => {
                 let w = self.sel(what, Case::Obj);
@@ -6144,6 +6155,7 @@ impl Renderer<'_> {
                 | Effect::BecomeCopyExcept { .. }
                 | Effect::Modify { .. }
                 | Effect::PhaseOut { .. }
+                | Effect::PhaseIn { .. }
                 | Effect::AddRestriction { .. }
         ) || matches!(main, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))

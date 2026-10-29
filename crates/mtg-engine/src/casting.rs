@@ -2363,6 +2363,13 @@ impl Game {
                 return false;
             }
         }
+        // "Activate no more times each turn than [value]" (CR 602.5b).
+        if let Some(v) = &act.max_per_turn_value {
+            let max = self.eval_value(v, &Ctx::new(Some(src), p));
+            if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) as i64 >= max {
+                return false;
+            }
+        }
         // "Activate only once": over the object's existence (CR 400.7).
         if let Some(max) = act.max_total {
             if o.activations.get(&a.uid).copied().unwrap_or(0) >= max {
@@ -2845,6 +2852,16 @@ impl Game {
         );
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
+        }
+        // CR 602.2a, 701.20a: a card whose ability is activated from a hidden zone stays
+        // revealed until that ability leaves the stack.
+        if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
+            crate::reveal::prune(self);
+            self.reveals.revealed.push(crate::reveal::Revealed {
+                card: src,
+                by: p,
+                stack_obj: Some(id),
+            });
         }
         // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
         // activation cost (at most one) is announced.

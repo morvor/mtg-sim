@@ -156,6 +156,20 @@ pub(crate) fn state_filter(s: &str) -> Option<Filter> {
     if simple.is_some() {
         return simple;
     }
+    // "attached to a creature you control" (Stolen Uniform): attached to one of those
+    // permanents.
+    if let Some(r) = s
+        .strip_prefix("attached to a ")
+        .or_else(|| s.strip_prefix("attached to an "))
+    {
+        let (f, false, tail) = parse_object_phrase(r)? else {
+            return None;
+        };
+        if !end(tail).is_empty() || f.zone().is_some() {
+            return None;
+        }
+        return Some(Filter::AttachedTo(Box::new(Sel::All(f))));
+    }
     // "enchanted or equipped"
     if let Some((a, b)) = s.split_once(" or ") {
         if let (Some(fa), Some(fb)) = (state_filter(a), state_filter(b)) {

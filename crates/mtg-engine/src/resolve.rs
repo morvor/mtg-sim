@@ -392,6 +392,8 @@ impl Game {
                 // "Sacrifice ~": the ability's controller sacrifices its source, which they
                 // can't do if another player controls it now (CR 701.21a). The same for
                 // "sacrifice Spare Dagger" in an ability it grants (`granted_by`).
+                // A delayed ability's "sacrifice ~" checks it explicitly, as its source is
+                // a captured variable there (`triggers_delayed::guard_own_sacrifices`).
                 let own_source =
                     matches!(what, Sel::This) || crate::granted_by::is_bound_granter(what);
                 let objs = self.resolve_objects(what, ctx);
@@ -879,6 +881,7 @@ impl Game {
                     }
                 };
                 let first = self.effects.len();
+                let duration = crate::duration_refs::bind_duration_objects(self, duration, ctx);
                 for (o, part) in parts {
                     let id = self.new_effect_id();
                     self.effects.push(ContinuousEffect {
@@ -1402,6 +1405,12 @@ impl Game {
             Effect::Unattach { what } => {
                 for o in self.resolve_objects(what, ctx) {
                     self.unattach(o);
+                }
+            }
+            Effect::PhaseIn { what } => {
+                // A phased-out permanent is still the same object (CR 702.26d).
+                for o in self.resolve_objects(what, ctx) {
+                    crate::keyword_impls::phase_in(self, o);
                 }
             }
             Effect::PhaseOut { what } => {
@@ -3781,6 +3790,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::MustBeBlockedBy { attacker, .. }
         | Restriction::BlockerCountRequirement { attacker, .. } => Some(attacker),
         Restriction::CantBeTargeted { what, .. } => Some(what),
+        Restriction::TargetableAsThoughNo { what, .. } => Some(what),
         Restriction::MustAttackPlayer { attackers, .. }
         | Restriction::MustAttackObject { attackers, .. }
         | Restriction::CantAttackPermanentsOf { attackers, .. }
@@ -3805,6 +3815,7 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
         Restriction::CantCast { who, .. } | Restriction::CantActivate { who, .. } => Some(who),
+        Restriction::TargetableAsThoughNo { by, .. } => Some(by),
         Restriction::MustAttackPlayer { defender, .. }
         | Restriction::CantAttackPlayer { defender, .. }
         | Restriction::AttackCost { defender, .. }

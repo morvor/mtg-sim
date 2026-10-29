@@ -144,6 +144,12 @@ impl Renderer<'_> {
                 format!("{} has another activated ability", self.me())
             }
             "upkeep:1" => "it's the first upkeep step of the turn".into(),
+            crate::kw::paper_history::STARTED_TURN_UNTAPPED => {
+                format!("{} started the turn untapped", self.me())
+            }
+            crate::kw::paper_history::DAMAGED_BY_SOURCE => {
+                format!("{} has dealt damage to that player this game", self.me())
+            }
             crate::search_rules::YOU_SEARCHED_THIS_WAY => "you search your library this way".into(),
             "you_were_the_starting_player" => "you were the starting player".into(),
             "restrictions:declare_blockers_step" => "it's the declare blockers step".into(),
