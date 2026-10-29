@@ -272,3 +272,58 @@ impl crate::kw::KeywordRules for ChooseTypeAndBehold {
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&ChooseTypeAndBehold) }
+
+// ---------------------------------------------------------------------------
+// Target groups sized by a repeatable additional cost
+// ---------------------------------------------------------------------------
+
+/// `Value::Custom` prefix (followed by the cost's name): how many times the spell's
+/// repeatable additional cost was announced (CR 601.2b), for the size of a target group
+/// chosen after it (CR 601.2c: "For each additional {1}{R} you paid, destroy another target
+/// artifact"). Unlike `spell_cost_grammar::paid_times`, which a cost reduction reads as the
+/// most it could be while the spell is only being considered, this is 0 until the spell is
+/// on the stack: a spell needs no targets for payments it hasn't announced.
+pub const TIMES_ANNOUNCED: &str = "cost sets:times announced:";
+
+/// The value [`TIMES_ANNOUNCED`] of the repeatable cost `name`.
+pub fn times_announced(name: &str) -> Value {
+    Value::Custom(format!("{TIMES_ANNOUNCED}{name}").into())
+}
+
+pub struct TimesAnnounced;
+
+impl crate::kw::KeywordRules for TimesAnnounced {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_value(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
+        let n = name.strip_prefix(TIMES_ANNOUNCED)?;
+        let Some(src) = ctx.source else {
+            return Some(0);
+        };
+        let times = g.obj(src).stack.as_deref().map_or(0, |si| {
+            si.cast.paid.iter().filter(|p| p.as_str() == n).count()
+        });
+        Some(times as i64)
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&TimesAnnounced) }
+
+/// The spell's own additional cost `c` without its repeatable parts ("you may pay {1}{G}
+/// any number of times") while `card` is only being considered for casting (not on the
+/// stack): the number of times is announced as it's cast (CR 601.2b), and paying it zero
+/// times is the least it can cost, so whether the spell could be cast doesn't depend on
+/// paying them.
+pub fn unannounced_repeats_left_out(g: &Game, card: ObjectId, c: &Cost) -> Cost {
+    if matches!(g.obj(card).zone, crate::object::Zone::Stack) {
+        return c.clone();
+    }
+    let prefix = crate::kw::spell_cost_grammar::paid_times("");
+    let mut out = c.clone();
+    out.parts.retain(|p| {
+        !matches!(p, CostPart::Repeated { times: Value::Custom(n), .. } if n.starts_with(prefix.as_str()))
+    });
+    out
+}

@@ -133,8 +133,9 @@ fn for_each_additional_paid(l: &str, b: &mut Builder) -> Option<Effect> {
     if !on_target {
         return fail(b);
     }
-    t.min = times.clone();
-    t.max = times.clone();
+    let announced = crate::cost_sets::times_announced(&repeat_name(mana));
+    t.min = announced.clone();
+    t.max = announced;
     let mut v = vec![e];
     if let Some(Value::Const(n)) = life {
         v.push(Effect::GainLife {

@@ -2202,7 +2202,11 @@ impl Game {
                             // first") is part of the total before reductions apply.
                             CostChange::AdditionalCost(c) => add_cost(
                                 &mut cost,
-                                &crate::kw::cumulative_upkeep::expand_repeated(self, c, &ctx),
+                                &crate::kw::cumulative_upkeep::expand_repeated(
+                                    self,
+                                    &crate::cost_sets::unannounced_repeats_left_out(self, card, c),
+                                    &ctx,
+                                ),
                             ),
                             // Alternative and optional costs are announced as the spell
                             // is cast (see `cost_choices`).

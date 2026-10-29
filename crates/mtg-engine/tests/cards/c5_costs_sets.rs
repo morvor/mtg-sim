@@ -235,12 +235,19 @@ fn primitive_justice_destroys_another_artifact_for_each_additional_payment() {
         assert!(in_gy(&t, t.g.current(o)));
     }
     assert_eq!(t.life(P0), 21);
-    // Not paid: one artifact.
+    // Not paid: one artifact. (It may be cast with one artifact to target: the other
+    // target groups are sized by payments not yet announced.)
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 2);
     let a = t.battlefield(P1, "Sol Ring");
     let b = t.battlefield(P1, "Millstone");
     let spell = t.hand(P0, "Primitive Justice");
+    t.g.turn.priority = Some(P0);
+    assert!(t
+        .g
+        .legal_actions(P0)
+        .iter()
+        .any(|x| matches!(x, mtg_engine::decision::Action::Cast { card, .. } if *card == spell)));
     t.answer(P0, DecisionKind::OptionalCost, Answer::Number(0));
     t.answer(P0, DecisionKind::OptionalCost, Answer::Number(0));
     t.cast(P0, spell).target(a).go();
@@ -256,6 +263,22 @@ fn primitive_justice_destroys_another_artifact_for_each_additional_payment() {
     t.answer(P0, DecisionKind::OptionalCost, Answer::Number(1));
     t.answer(P0, DecisionKind::OptionalCost, Answer::Number(0));
     assert!(t.cast(P0, spell).target(a).target(a).try_go().is_err());
+}
+
+#[test]
+fn a_repeatable_mana_additional_cost_doesnt_keep_the_spell_from_being_cast() {
+    cr!("601.2b", "601.2f");
+    // Taste of Paradise ({3}{G}, "you may pay {1}{G} any number of times") with exactly
+    // its mana cost available: castable, paying the additional cost zero times.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 4);
+    let spell = t.hand(P0, "Taste of Paradise");
+    t.g.turn.priority = Some(P0);
+    assert!(t
+        .g
+        .legal_actions(P0)
+        .iter()
+        .any(|x| matches!(x, mtg_engine::decision::Action::Cast { card, .. } if *card == spell)));
 }
 
 #[test]
