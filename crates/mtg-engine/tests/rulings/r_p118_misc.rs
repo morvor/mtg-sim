@@ -530,7 +530,8 @@ fn sponge(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn thought_sponge_counts_the_greatest_total_drawn_by_one_opponent() {
-    cr!("614.1c", "121.2", "800.4a");
+    cr!("614.1c", "121.2", "800.4i");
+    interp!("history-counts-players-who-left");
     ruling!(
         "Thought Sponge",
         "Thought Sponge checks how many cards were drawn by opponents this turn, even opponents who have left the game. The greatest number drawn by a single opponent is how many +1/+1 counters it enters with."

@@ -257,3 +257,30 @@ fn rip_reveals_its_power_as_the_ability_resolves() {
     assert!(t.in_hand(P0, "Craw Wurm"));
     assert_eq!(t.hand_size(P0), 5);
 }
+
+#[test]
+fn unruly_krasis_sets_base_pt_under_later_modifications() {
+    cr!("613.4b", "613.4c", "613.7");
+    ruling!(
+        "Unruly Krasis",
+        "Unruly Krasis's second ability will overwrite any previous effects that set the creature's power and toughness to specific numbers. Effects that otherwise modify its power and toughness will still apply no matter when they took effect. The same is true for +1/+1 counters."
+    );
+    use mtg_engine::ability::{Modification, Value};
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Unruly Krasis");
+    let bears = with_counters(&mut t, P0, "Grizzly Bears", 1);
+    // Earlier: its base becomes 1/1, then Giant Growth.
+    modify(
+        &mut t,
+        bears,
+        vec![Modification::SetPT(Some(Value::c(1)), Some(Value::c(1)))],
+    );
+    giant_growth(&mut t, bears);
+    assert_eq!(t.pt(bears), (1 + 1 + 3, 1 + 1 + 3));
+    t.answer_targets(P0, &[obj(bears)]);
+    t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
+    attack_with(&mut t, &[(k, Entity::Player(P1))]);
+    t.resolve_all();
+    // Base 4/4, +1/+1 counter, +3/+3.
+    assert_eq!(t.pt(bears), (8, 8));
+}
