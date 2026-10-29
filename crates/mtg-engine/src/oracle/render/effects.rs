@@ -8598,6 +8598,10 @@ impl Renderer<'_> {
                 let a = with_article(&one);
                 format!("to activate {{alt:abilities of {n}|an ability of {a}|an ability of {a} source}}")
             }
+            M::ActivateManaAbilityOf(f) => {
+                let n = self.noun(&f.0, Num::Many);
+                format!("to activate mana abilities of {n}")
+            }
             M::ClassLevel => "to gain a Class level".into(),
             M::Purpose(crate::mana::SpendPurpose::UnlockDoor) => "to unlock doors".into(),
             M::Purpose(crate::mana::SpendPurpose::Keyword(k)) => {

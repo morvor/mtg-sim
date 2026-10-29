@@ -284,16 +284,24 @@ pub fn mana_source_allowed(g: &Game, p: PlayerId, source: ObjectId) -> bool {
     }
 }
 
-/// Mana a player restricted to the mana abilities of their lands (Word of Command, CR
-/// 723.7) produces "is spent to activate other mana abilities of lands the player controls
-/// and/or to play that card": it can pay only for casting that card (the spell it is now)
-/// or for an ability of a land they control (the abilities of lands they may activate
-/// then are mana abilities; see interpretation `word-of-command-mana`).
-pub fn restrict_lands_only_mana(g: &Game, p: PlayerId, mana: &mut [crate::mana::Mana]) {
+/// The spending restriction (CR 106.6) on mana `p` adds with a mana ability of `src` while
+/// they're restricted to the mana abilities of their lands (Word of Command, CR 723.7):
+/// that mana "is spent to activate other mana abilities of lands the player controls
+/// and/or to play that card", so it can pay only for casting that card (the spell it is
+/// now) or for a mana ability of a land they control.
+pub fn lands_only_mana_restriction(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+) -> Option<crate::mana::ManaRestriction> {
     use crate::ability::Filter;
     use crate::mana::{ManaRestriction, SpendFilter};
     if g.player_control.lands_only_mana != Some(p) {
-        return;
+        return None;
+    }
+    let o = g.try_obj(src)?;
+    if !(o.is(CardType::Land) && o.controller == p) {
+        return None;
     }
     let spell: Vec<ObjectId> = g
         .player_control
@@ -301,16 +309,13 @@ pub fn restrict_lands_only_mana(g: &Game, p: PlayerId, mana: &mut [crate::mana::
         .map(|c| g.current(c))
         .into_iter()
         .collect();
-    let r = ManaRestriction::AnyOf(vec![
+    Some(ManaRestriction::AnyOf(vec![
         ManaRestriction::CastSpell(SpendFilter::new(Filter::Objects(spell))),
-        ManaRestriction::ActivateAbilityOf(SpendFilter::new(Filter::and(vec![
+        ManaRestriction::ActivateManaAbilityOf(SpendFilter::new(Filter::and(vec![
             Filter::Type(CardType::Land),
             Filter::ControlledBy(crate::ability::PlayerRel::You),
         ]))),
-    ]);
-    for m in mana.iter_mut().filter(|m| m.restriction.is_none()) {
-        m.restriction = Some(r.clone());
-    }
+    ]))
 }
 
 /// `controller` controls `player` for a limited duration, starting now.
@@ -555,6 +560,15 @@ impl KeywordRules for PlayerControlRules {
             gain_control(g, controller, p, span, extra);
         }
         true
+    }
+
+    fn added_mana_restriction(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+    ) -> Option<crate::mana::ManaRestriction> {
+        lands_only_mana_restriction(g, p, src)
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {

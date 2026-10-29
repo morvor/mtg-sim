@@ -164,9 +164,9 @@ impl Renderer<'_> {
             }
             "play" => "the player plays that card if able".into(),
             // Only mana abilities of lands that player controls can be activated, and
-            // the mana they produce can pay only for that card or for abilities of lands
-            // that player controls (`player_control::restrict_lands_only_mana`).
-            "play-lands" => "the player plays that card if able. While doing so, the player can activate mana abilities only if they're from lands that player controls and only if mana they produce is spent to activate abilities of lands the player controls and/or to play that card".into(),
+            // the mana they produce can pay only for that card or for mana abilities of
+            // lands that player controls (`player_control::lands_only_mana_restriction`).
+            "play-lands" => "the player plays that card if able. While doing so, the player can activate mana abilities only if they're from lands that player controls and only if mana they produce is spent to activate other mana abilities of lands the player controls and/or to play that card".into(),
             "spell" => "if the chosen card is cast as a spell, you control the player while that spell is resolving".into(),
             _ => return None,
         })

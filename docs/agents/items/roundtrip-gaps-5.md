@@ -142,9 +142,12 @@ Tests in `crates/mtg-engine/tests/cards/roundtrip_gaps_5.rs`; both fail on the o
 - Word of Command: "only if mana they produce is spent to activate other mana abilities of
   lands the player controls and/or to play that card" wasn't implemented: mana left in the
   pool after the card was played could pay for anything. `player_control.rs`
-  (`restrict_lands_only_mana`, called from `Game::add_mana`): a spending restriction on that
-  mana (CR 106.6); provisional register entry `word-of-command-mana` (the restriction
-  allows any ability of a land, not only mana abilities).
+  (`lands_only_mana_restriction`, through the `added_mana_restriction` hook): a spending
+  restriction on the mana of those lands' mana abilities (CR 106.6): it pays only for
+  casting that card or for a mana ability of a land that player controls
+  (`ManaRestriction::ActivateManaAbilityOf`, checked by the cost being a mana ability's).
+  (The implementer first allowed any ability of a land, as a provisional register entry;
+  the review made it follow the text and dropped the entry.)
 
 Checked in play (tests in the same file, passing on the old code too): Spikeshell Harrier
 slows the opponent who controlled the creature when another player owns it (the
@@ -161,8 +164,6 @@ Duelist and Parker Luck (each loses life for the other's card), Vexing Arcanix, 
 Of the 148 cards in the taken clusters, these still mismatch; each was checked against the
 AST and plays as the text says (wording only) unless noted:
 
-- Word of Command: the restriction allows abilities of lands the player controls, not only
-  their mana abilities (see the register entry), so it's worded that way.
 - "Choose target ..." first, then the instructions about the chosen targets (the general
   form isn't rendered; it's offered only for one instruction about several targets):
   Blizzard Brawl, Duel for Dominance, Grim Contest ("each of those creatures deals damage

@@ -112,7 +112,6 @@ fn oversimplify_counts_the_power_of_creatures_each_player_controlled() {
 #[test]
 fn word_of_command_mana_can_be_spent_only_on_the_chosen_card() {
     cr!("723.7", "106.6");
-    interp!("word-of-command-mana");
     // "While doing so, the player can activate mana abilities only if they're from lands
     // that player controls and only if mana they produce is spent to activate other mana
     // abilities of lands the player controls and/or to play that card."
@@ -121,6 +120,8 @@ fn word_of_command_mana_can_be_spent_only_on_the_chosen_card() {
     t.battlefield(P1, "Ancient Tomb");
     let stone = t.battlefield(P1, "Mind Stone");
     let card = t.hand(P1, "Bonesplitter");
+    let dismember = t.hand(P1, "Dismember");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Swamp", 2);
     let woc = t.hand(P0, "Word of Command");
     t.answer_choose(P0, &[Entity::Object(card)]);
@@ -128,8 +129,30 @@ fn word_of_command_mana_can_be_spent_only_on_the_chosen_card() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Bonesplitter").len(), 1, "{}", t.dump_log());
     // Ancient Tomb made {C}{C}: one paid for Bonesplitter, the other is still in the
-    // pool, and can't pay for Mind Stone's ability.
+    // pool. It can't pay for an artifact's ability ...
     assert_eq!(t.g.players[1].mana_pool.mana.len(), 1);
     assert!(t.activate(P1, stone, 1, &[]).is_err());
     assert!(t.on_battlefield(stone));
+    // ... nor for a land's ability that isn't a mana ability (with no other mana
+    // available) ...
+    let factory = t.battlefield(P1, "Mishra's Factory");
+    t.g.objects[factory.0 as usize].tapped = true;
+    t.g.objects[stone.0 as usize].tapped = true;
+    assert!(t.activate(P1, factory, 1, &[]).is_err());
+    assert!(!t.g.obj(factory).chars.is_creature());
+    // ... nor for another spell.
+    assert!(t
+        .cast(P1, dismember)
+        .target(Entity::Object(bears))
+        .try_go()
+        .is_err());
+    assert!(t.in_hand(P1, "Dismember"));
+    assert_eq!(t.g.players[1].mana_pool.mana.len(), 1);
+    // It can pay for another mana ability of a land that player controls.
+    let grotto = t.battlefield(P1, "Shimmering Grotto");
+    assert!(t.activate(P1, grotto, 1, &[]).is_ok(), "{}", t.dump_log());
+    let pool = &t.g.players[1].mana_pool.mana;
+    assert_eq!(pool.len(), 1);
+    assert!(pool[0].restriction.is_none());
+    assert!(t.g.obj(grotto).tapped);
 }
