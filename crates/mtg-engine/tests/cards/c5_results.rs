@@ -291,3 +291,31 @@ fn midnight_crusader_shuttle_makes_the_stolen_creature_attack() {
     assert!(!t.on_battlefield(giant));
     assert_eq!(t.life(P1), 20 - 3);
 }
+
+#[test]
+fn bounty_of_the_hunt_removes_each_counter_it_put_at_the_next_cleanup_step() {
+    cr!("603.7a", "514.3a", "614.1a");
+    supported("Bounty of the Hunt");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    // One more counter on each creature P0 controls: those count as put this way too.
+    t.battlefield(P0, "Hardened Scales");
+    let other = t.battlefield(P0, "Llanowar Elves");
+    t.g.add_counters(Entity::Object(other), "+1/+1", 1, None);
+    let before = t.counters(other, "+1/+1");
+    t.lands(P0, "Forest", 4);
+    let spell = t.hand(P0, "Bounty of the Hunt");
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 1]));
+    t.cast(P0, spell)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 3);
+    assert_eq!(t.counters(giant, "+1/+1"), 2);
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    assert_eq!(t.counters(giant, "+1/+1"), 0);
+    assert_eq!(t.counters(other, "+1/+1"), before);
+}

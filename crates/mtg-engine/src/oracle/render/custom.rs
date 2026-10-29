@@ -85,6 +85,13 @@ impl Renderer<'_> {
                     format!("create {} {tname} tokens", number_word(count))
                 }
             }
+            // "remove a +1/+1 counter from that creature" for each counter a distribution
+            // put on it (`kw/counters_put_this_way.rs`).
+            n if n.starts_with(crate::kw::counters_put_this_way::REMOVE_PER_PUT) => {
+                let kind = crate::kw::counters_put_this_way::parse_name(n)
+                    .map_or("+1/+1", |(_, k)| k);
+                format!("for each {kind} counter you put on a creature this way, remove a {kind} counter from that creature")
+            }
             // "It's attacking that player" (`kw/attacking_this_way.rs`).
             n if n.starts_with(crate::kw::attacking_this_way::ATTACKING) => {
                 "{alt:it's|they're} attacking that player".into()

@@ -24,6 +24,10 @@
 //!   (Midnight Crusader Shuttle), after "you gain control of a creature of your choice that
 //!   player controls": only if you control the chosen creature now; "it's attacking that
 //!   player" states that it's attacking (CR 508.4, `kw/attacking_this_way.rs`).
+//! * "For each +1/+1 counter you put on a creature this way, remove a +1/+1 counter from
+//!   that creature at the beginning of the next cleanup step." (Bounty of the Hunt) after a
+//!   distribution of counters: a delayed triggered ability (CR 603.7) for the counters the
+//!   distribution put on each object (`kw/counters_put_this_way.rs`).
 
 use super::FollowupPattern;
 use crate::ability::*;
@@ -411,3 +415,49 @@ fn if_you_gain_control_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> 
 }
 
 inventory::submit! { FollowupPattern { name: "results 5: if you gain control of a creature this way", priority: 0, apply: if_you_gain_control_this_way } }
+
+/// "For each [kind] counter you put on a [noun] this way, remove a [kind] counter from that
+/// [noun] at the beginning of the next cleanup step." after "distribute ... counters".
+fn for_each_counter_put_this_way(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let l = end(l);
+    let Some(r) = l.strip_prefix("for each ") else {
+        return false;
+    };
+    let Some((kind, r)) = r.split_once(" counter you put on ") else {
+        return false;
+    };
+    let Some((noun, r)) = r.split_once(" this way, remove a ") else {
+        return false;
+    };
+    let Some(noun) = noun.strip_prefix("a ").or_else(|| noun.strip_prefix("an ")) else {
+        return false;
+    };
+    let expected = format!("{kind} counter from that {noun} at the beginning of the next cleanup step");
+    if r != expected || noun.contains(' ') {
+        return false;
+    }
+    let divided = format!("{prev:?}");
+    let marker = format!("{}", crate::counter_rules::DIVIDED_COUNTERS);
+    if !divided.contains(&marker) || !divided.contains(&format!(":{kind}\"")) {
+        return false;
+    }
+    let delayed = Effect::DelayedTrigger {
+        trigger: TriggerCond::BeginningOf {
+            step: TriggerStep::Cleanup,
+            whose: PlayerRel::Any,
+        },
+        body: Box::new(Body {
+            targets: vec![],
+            effect: crate::kw::counters_put_this_way::remove_per_put(
+                crate::kw::counters_put_this_way::PUT_THIS_WAY,
+                kind,
+            ),
+            modal: None,
+        }),
+        once: true,
+    };
+    append(prev, delayed);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "results 5: for each counter you put on a creature this way, remove one at the next cleanup", priority: 0, apply: for_each_counter_put_this_way } }
