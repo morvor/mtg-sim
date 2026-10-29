@@ -125,7 +125,10 @@ fn brightling_chooses_on_resolution() {
     let from = mark(&t);
     activate_containing(&mut t, P0, b, "+1/-1").unwrap();
     assert_eq!(
-        t.asked()[from..].iter().filter(|(_, d)| is_choice(d)).count(),
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| is_choice(d))
+            .count(),
         0,
         "nothing chosen on activation"
     );
@@ -133,7 +136,10 @@ fn brightling_chooses_on_resolution() {
     t.answer(P0, DecisionKind::Any, Answer::Index(1));
     t.resolve();
     assert_eq!(
-        t.asked()[from..].iter().filter(|(_, d)| is_choice(d)).count(),
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| is_choice(d))
+            .count(),
         1
     );
     assert_eq!(t.pt(b), (2, 4));
@@ -165,7 +171,10 @@ fn metathran_aerostat_can_respond_to_itself() {
     t.answer_choose(P0, &[obj(a)]);
     t.answer_yes(P0, true);
     t.resolve();
-    assert!(t.on_battlefield(a), "the second activation still puts one in");
+    assert!(
+        t.on_battlefield(a),
+        "the second activation still puts one in"
+    );
 }
 
 #[test]
@@ -238,7 +247,11 @@ fn conviction_must_be_returned_before_combat_damage() {
     attack_with(&mut t, &[(bears, pl(P1))]);
     block_and_finish(&mut t, P1, &[(giant, bears)]);
     let first = seen.lock().unwrap().iter().flatten().next().copied();
-    assert_eq!(first, Some(3), "the Bears already damaged (and the Giant dead)");
+    assert_eq!(
+        first,
+        Some(3),
+        "the Bears already damaged (and the Giant dead)"
+    );
     assert!(!t.on_battlefield(giant));
     assert!(t.on_battlefield(bears), "a 3/5 survives");
     assert!(t.on_battlefield(aura));
@@ -248,7 +261,11 @@ fn conviction_must_be_returned_before_combat_damage() {
     let aura = crate::r_s06_common::attach_new(&mut t, P0, "Conviction", obj(bears));
     let giant = t.battlefield(P1, "Hill Giant");
     attack_with(&mut t, &[(bears, pl(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(giant, bears)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(giant, bears)]),
+    );
     t.advance_to(P0, Step::DeclareBlockers);
     t.lands(P0, "Plains", 1);
     t.activate(P0, aura, 0, &[]).unwrap();
@@ -279,7 +296,10 @@ fn cycle_of_life_targets_only_a_creature_cast_this_turn() {
     let bears_now = t.g.current(bears);
     assert!(!cands.is_empty());
     assert!(cands[0].contains(&obj(bears_now)), "the cast Bears");
-    assert!(!cands[0].contains(&obj(giant)), "not the Giant put onto the battlefield");
+    assert!(
+        !cands[0].contains(&obj(giant)),
+        "not the Giant put onto the battlefield"
+    );
     if r.is_ok() {
         assert!(!targets_of(&t, top(&t)).contains(&obj(giant)));
     }
@@ -349,7 +369,11 @@ fn a_face_down_instant_stays_face_down_when_turned_up() {
     t.library_top(P0, "Lightning Bolt");
     let coat = t.enter(P0, "Cryptic Coat");
     t.resolve_all();
-    let cloaked = t.obj_now(coat).attached_to.and_then(|e| e.object()).unwrap();
+    let cloaked = t
+        .obj_now(coat)
+        .attached_to
+        .and_then(|e| e.object())
+        .unwrap();
     assert!(t.obj_now(cloaked).face_down);
     t.lands(P1, "Mountain", 4);
     let br = t.hand(P1, "Break Open");
@@ -375,7 +399,11 @@ fn aetherplasm_blocks(attacker: &str, hand: &str) -> (TestGame, ObjectId, Object
     let plasm = t.battlefield(P1, "Aetherplasm");
     let card = t.hand(P1, hand);
     attack_with(&mut t, &[(a, pl(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(plasm, a)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(plasm, a)]),
+    );
     t.advance_to(P0, Step::DeclareBlockers);
     t.settle();
     assert_eq!(triggers_from(&t, plasm), 1);
@@ -455,7 +483,11 @@ fn aetherplasm_puts_in_a_creature_that_couldnt_block() {
     t.resolve_all();
     assert!(in_hand(&t, plasm));
     let craven = t.g.current(craven);
-    assert_eq!(blockers_of(&t, giant), vec![craven], "Craven Giant can't block");
+    assert_eq!(
+        blockers_of(&t, giant),
+        vec![craven],
+        "Craven Giant can't block"
+    );
     t.advance_to(P0, Step::EndOfCombat);
     assert!(in_graveyard(&t, craven));
     assert!(in_graveyard(&t, giant), "4 damage from Craven Giant");
@@ -465,13 +497,17 @@ fn aetherplasm_puts_in_a_creature_that_couldnt_block() {
 fn aetherplasm_can_put_itself_back_but_deathgazer_sees_the_new_blocker() {
     cr!("400.7", "509.4", "509.3d");
     interp!("put-onto-battlefield-blocking-retriggers-becomes-blocked-by");
-    ruling!(
-        "Aetherplasm",
-        "The creature you put onto the battlefield may be the Aetherplasm you just returned to your hand."
-    );
+    // Aetherplasm's ruling "The creature you put onto the battlefield may be the
+    // Aetherplasm you just returned to your hand. This allows it to dodge abilities like
+    // Deathgazer's." is superseded by CR 509.3d (exempt, rulings-P006.tsv): the first
+    // sentence holds, the dodge doesn't.
     supported("Deathgazer");
     let (mut t, gazer, plasm, _) = aetherplasm_blocks("Deathgazer", "Island");
-    assert_eq!(triggers_from(&t, gazer), 1, "Deathgazer: becomes blocked by it");
+    assert_eq!(
+        triggers_from(&t, gazer),
+        1,
+        "Deathgazer: becomes blocked by it"
+    );
     // Aetherplasm's trigger is on top (APNAP): it returns and puts itself back.
     t.answer_yes(P1, true);
     t.answer_yes(P1, true);
@@ -560,7 +596,10 @@ fn zurgo_and_ojutai_chooses_a_dragon_on_resolution() {
         .find(|(c, _, _)| c.contains(&obj(zurgo)));
     let (cands, _, _) = returned_choice.expect("asked which Dragon on resolution");
     assert!(!cands.contains(&obj(bears)), "only Dragons");
-    assert!(!cands.contains(&obj(wing)), "only Dragons that dealt damage");
+    assert!(
+        !cands.contains(&obj(wing)),
+        "only Dragons that dealt damage"
+    );
     assert!(in_hand(&t, zurgo));
 }
 
