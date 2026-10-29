@@ -1,0 +1,349 @@
+id	card	probe_text	result
+C5-wand-ml	Wand of Wonder	{4}, {T}: Roll a d20. Each opponent exiles cards from the top of their library until they exile an instant or sorcery card, then shuffles the rest into their library. You may cast up to X instant and/or sorcery spells from among cards exiled this way without paying their mana costs. / 1—9 | X is one. / 10—19 | X is two. / 20 | X is three.	FAIL
+C5-wand-noX	Wand of Wonder	{4}, {T}: Roll a d20. Each opponent exiles cards from the top of their library until they exile an instant or sorcery card, then shuffles the rest into their library. / 1—9 | Draw a card. / 10—19 | Draw two cards. / 20 | Draw three cards.	FAIL
+C5-wand-x-tbl	Divination	Roll a d20. / 1—9 | X is one. / 10—19 | X is two. / 20 | X is three. / Draw X cards.	FAIL
+C5-wand-cast	Wand of Wonder	{4}, {T}: Each opponent exiles cards from the top of their library until they exile an instant or sorcery card, then shuffles the rest into their library. You may cast up to two instant and/or sorcery spells from among cards exiled this way without paying their mana costs.	OK
+C5-danse-ml	Danse Macabre	Each player sacrifices a nontoken creature of their choice. Roll a d20 and add the toughness of the creature you sacrificed this way. / 1—14 | Return a creature card put into a graveyard this way to the battlefield under your control. / 15+ | Return up to two creature cards put into graveyards this way to the battlefield under your control.	FAIL
+C5-danse-add	Danse Macabre	Each player sacrifices a nontoken creature of their choice. Roll a d20 and add the toughness of the creature you sacrificed this way. / 1—14 | Draw a card. / 15+ | Draw two cards.	FAIL
+C5-danse-ret	Danse Macabre	Each player sacrifices a nontoken creature of their choice. Roll a d20. / 1—14 | Return a creature card put into a graveyard this way to the battlefield under your control. / 15+ | Return up to two creature cards put into graveyards this way to the battlefield under your control.	OK
+C5-ents-note	Long List of the Ents	(As this Saga enters and after your draw step, add a lore counter.) / {CHAPTER} I, II, III, IV, V, VI — Note a creature type that hasn't been noted for ~.	FAIL
+C5-ents-note2	Divination	Choose a creature type that hasn't been chosen for ~.	FAIL
+C5-ents-next	Divination	Choose a creature type. When you next cast a creature spell of the chosen type this turn, that creature enters with an additional +1/+1 counter on it.	OK
+C5-ents-next2	Divination	When you next cast a creature spell this turn, that creature enters with an additional +1/+1 counter on it.	OK
+C5-uld-each	Divination	Exile up to one target nonland card of each card type from your graveyard.	FAIL
+C5-uld-copy	Divination	Exile up to two target instant cards from your graveyard. Copy those cards. You may cast any number of spells with total mana value 6 or less from among the copies without paying their mana costs.	FAIL
+C5-uld-copy2	Divination	Exile up to two target instant cards from your graveyard. Copy those cards. You may cast the copies without paying their mana costs.	OK
+C5-storage-1	Icy Manipulator	Each player chooses artifact, creature, or land during their untap step. That player can untap only permanents of the chosen type this step.	FAIL
+C5-storage-2	Icy Manipulator	At the beginning of each player's upkeep, that player chooses artifact, creature, or land.	OK
+C5-bolt-1	Grizzly Bears	When ~ enters, you may choose new targets for target spell or ability.	OK
+C5-bolt-2	Grizzly Bears	When ~ enters, you may choose new targets for any number of other spells.	FAIL
+C5-eye-1	Eye of Ojer Taq // Apex Observatory	~ enters tapped. As it enters, choose a card type.	OK
+C5-eye-2	Eye of Ojer Taq // Apex Observatory	~ enters tapped. As it enters, choose a card type shared among two cards exiled with it.	FAIL
+C5-kayla-1	Queen Kayla bin-Kroog	{4}, {T}: Discard all the cards in your hand, then draw that many cards. You may choose an artifact or creature card with mana value 1 you discarded this way. Return that card to the battlefield. Activate only as a sorcery.	FAIL
+C5-kayla-2	Queen Kayla bin-Kroog	{4}, {T}: Discard all the cards in your hand, then draw that many cards. Return up to one artifact card with mana value 1 discarded this way to the battlefield. Activate only as a sorcery.	OK
+C5-pp-1	Psychic Paper	As ~ becomes attached to a creature, choose a creature type.	FAIL
+C5-pp-2	Psychic Paper	As ~ enters, choose a creature card name and a creature type.	OK
+C5-pp-3	Psychic Paper	Equipped creature has ward {1} and it can't be blocked.	OK
+C5-pp-4	Psychic Paper	As ~ enters, choose a creature type. / Equipped creature is the chosen type in addition to its other types.	OK
+C5-nih-1	Nihiloor	When ~ enters, for each opponent, tap up to one untapped creature you control.	FAIL
+C5-nih-2	Nihiloor	When ~ enters, tap up to one untapped creature you control. When you do, gain control of target creature an opponent controls with power less than or equal to the tapped creature's power for as long as you control ~.	FAIL
+C5-mag-1	Magma Pummeler	If damage would be dealt to ~ while it has a +1/+1 counter on it, prevent that damage and remove that many +1/+1 counters from it. When you do, it deals that much damage to any target.	OK
+C5-mag-2	Grizzly Bears	{T}: Remove any number of +1/+1 counters from ~. When one or more counters are removed this way, ~ deals that much damage to any target.	FAIL
+C5-tp-1	Tainted Pact	Exile the top card of your library. You may put that card into your hand unless it has the same name as a card in your graveyard.	OK
+C5-tp-2	Tainted Pact	Exile the top card of your library. If it doesn't have the same name as another card exiled with ~, you may put it into your hand.	FAIL
+C5-riku-1	Riku of Many Paths	Whenever you cast a modal spell, choose up to two — / • Draw a card. / • Scry 1.	FAIL
+C5-riku-2	Riku of Many Paths	Whenever you cast a modal spell, draw a card for each mode chosen for that spell.	FAIL
+C5-wand-t1	Divination	Roll a d20. / 1—9 | Draw a card. / 10—20 | Draw two cards.	OK
+C5-wand-t2	Divination	Roll a d20. You gain 1 life. / 1—9 | Draw a card. / 10—20 | Draw two cards.	FAIL
+C5-wand-t3	Divination	Roll a d20. Each opponent exiles cards from the top of their library until they exile an instant or sorcery card, then shuffles the rest into their library. / 1—9 | Draw a card. / 10—20 | Draw two cards.	FAIL
+C5-wand-t4	Divination	Each opponent exiles cards from the top of their library until they exile an instant or sorcery card, then shuffles the rest into their library. Roll a d20. / 1—9 | Draw a card. / 10—20 | Draw two cards.	OK
+C5-danse-a1	Divination	Roll a d20 and add the number of cards in your hand. / 1—14 | Draw a card. / 15+ | Draw two cards.	OK
+C5-danse-a2	Danse Macabre	Each player sacrifices a nontoken creature of their choice. You gain life equal to the toughness of the creature you sacrificed this way.	FAIL
+C5-riku-c1	Riku of Many Paths	Whenever you cast a modal spell, choose one — / • Draw a card. / • Scry 1.	FAIL
+C5-riku-c2	Riku of Many Paths	Whenever you cast a modal spell, choose one or more — / • Draw a card. / • Scry 1.	FAIL
+C5-riku-c3	Riku of Many Paths	Whenever you cast a spell, choose up to X, where X is the number of cards in your hand — / • Draw a card. / • Scry 1.	OK
+C5-shuttle-1	Grizzly Bears	Whenever ~ attacks, gain control of target creature defending player controls until end of turn. Tap it. It's attacking that player.	FAIL
+C5-shuttle-2	Grizzly Bears	Whenever ~ attacks, defending player faces a villainous choice — That player sacrifices a creature of their choice, or you gain control of a creature of their choice that player controls until end of turn.	OK
+C5-shuttle-3	Grizzly Bears	Whenever ~ attacks, defending player faces a villainous choice — That player sacrifices a creature of their choice, or you gain control of a creature of your choice that player controls until end of turn.	OK
+C5-shuttle-4	Grizzly Bears	Whenever ~ attacks, you gain control of a creature of your choice defending player controls until end of turn. If you gain control of a creature this way, tap it, and it's attacking that player.	FAIL
+C5-mogg-1	Mogg Assassin	{T}: You choose target creature an opponent controls, and that opponent chooses target creature.	FAIL
+C5-mogg-2	Mogg Assassin	{T}: Choose target creature an opponent controls. Flip a coin. If you win the flip, destroy that creature.	OK
+C5-koz-1	Divination	Target player manifests two cards from their hand.	FAIL
+C5-koz-2	Divination	Manifest two cards from your hand. For each card manifested this way, you draw a card.	FAIL
+C5-koz-3	Divination	Up to two target players each manifest the top card of their library.	FAIL
+C5-lim-1	Divination	As many times as you choose, you may pay 1 life. Draw a card.	FAIL
+C5-lim-2	Divination	Look at the top five cards of your library. Then shuffle and put the last cards you looked at this way on top in any order.	FAIL
+C5-col-1	Divination	Each player shuffles all creatures they own into their library. Each player reveals cards from the top of their library until they reveal a creature card, then puts that card onto the battlefield and the rest on the bottom of their library in a random order.	OK
+C5-col-2	Divination	Each player shuffles all creatures they own into their library. Each player who shuffled a nontoken creature into their library this way draws a card.	FAIL
+C5-elr-1	Grizzly Bears	Secret council — When ~ enters, each player secretly votes for fellowship or aid, then those votes are revealed. For each fellowship vote, the voter chooses a creature they control. You gain control of each creature chosen this way.	FAIL
+C5-elr-2	Grizzly Bears	Secret council — When ~ enters, each player secretly votes for fellowship or aid, then those votes are revealed. For each aid vote, put a +1/+1 counter on each creature you control.	OK
+C5-elr-3	Grizzly Bears	When ~ enters, gain control of target creature. It gains "~ can't attack its owner."	OK
+C5-str-1	Divination	Target opponent reveals their hand. That player exiles a card from it, then you exile a card from it.	FAIL
+C5-str-2	Divination	Target opponent reveals their hand. You choose a card from it. That player exiles that card.	OK
+C5-bell-1	Grizzly Bears	Whenever a card is put into exile, note its mana value.	FAIL
+C5-bell-2	Grizzly Bears	~'s power is equal to the greatest mana value among cards exiled this turn.	FAIL
+C5-season-1	Season of the Bold	Choose up to five {P} worth of modes. You may choose the same mode more than once. / {P} — Create a tapped Treasure token. / {P}{P} — Exile the top two cards of your library. Until the end of your next turn, you may play them. / {P}{P}{P} — Draw a card.	OK
+C5-season-2	Season of the Bold	Choose up to five {P} worth of modes. You may choose the same mode more than once. / {P} — Create a tapped Treasure token. / {P}{P} — Draw a card. / {P}{P}{P} — Until the end of your next turn, whenever you cast a spell, ~ deals 2 damage to up to one target creature.	FAIL
+C5-season-3	Divination	Until the end of your next turn, whenever you cast a spell, ~ deals 2 damage to up to one target creature.	FAIL
+C5-season-4	Divination	Until end of turn, whenever you cast a spell, ~ deals 2 damage to up to one target creature.	OK
+C5-dance-1	Divination	As many times as you choose, you may exile the top card of your library.	FAIL
+C5-dance-2	Divination	Exile the top three cards of your library. If the total mana value of the cards exiled this way is 13 or less, you may cast any number of spells from among those cards without paying their mana costs.	FAIL
+C5-cloak-1	Grizzly Bears	When ~ enters, choose target opponent and up to one target creature they control. They reveal their hand.	FAIL
+C5-cloak-2	Grizzly Bears	When ~ enters, target opponent reveals their hand. You may exile a nonland card from their hand until ~ leaves the battlefield.	OK
+C5-cloak-3	Grizzly Bears	When ~ enters, choose up to one target creature an opponent controls. You may exile the chosen creature until ~ leaves the battlefield.	OK
+C5-riku-m1	Riku of Many Paths	Whenever you cast a modal spell, draw a card.	FAIL
+C5-riku-m2	Riku of Many Paths	Whenever you cast a spell, choose up to X, where X is the number of times you chose a mode for that spell — / • Draw a card. / • Scry 1.	FAIL
+C5-gen-1	Genesis of the Daleks	{CHAPTER} IV — Target opponent faces a villainous choice — Destroy all Dalek creatures, or destroy all non-Dalek creatures.	OK
+C5-gen-2	Divination	Each opponent loses life equal to the total power of creatures that died this turn.	FAIL
+C5-gen-3	Divination	Each opponent loses life equal to the total power of Dalek creatures that died this turn.	FAIL
+C5-sg-1	Divination	Each player chooses a card in their hand. Then each player reveals their chosen card.	FAIL
+C5-sg-2	Divination	Each player reveals a card from their hand. The owner of each creature card revealed this way with the lowest mana value puts it onto the battlefield.	FAIL
+C5-dc-1	Divination	For each opponent, choose up to one target artifact or enchantment that player controls. Its controller may exile it.	OK
+C5-dc-2	Divination	For each opponent, choose up to one target artifact or enchantment that player controls. For each permanent chosen this way, its controller may exile it.	FAIL
+C5-dc-3	Divination	Choose up to one target artifact. Then if one or more of the chosen permanents are still on the battlefield, you search your library for up to that many land cards, put them onto the battlefield tapped, then shuffle.	FAIL
+C5-ty-1	Grizzly Bears	Whenever ~ attacks, choose one at random — / • Draw a card. / • Scry 1.	OK
+C5-ty-2	Grizzly Bears	Whenever ~ attacks, choose one at random. If you discarded a card this turn, you choose one instead. / • Draw a card. / • Scry 1.	FAIL
+C5-deif-1	Deification	As ~ enters, choose a creature type.	OK
+C5-deif-2	Deification	As ~ enters, choose a planeswalker type. / Planeswalkers you control of the chosen type have hexproof.	FAIL
+C5-leori-1	Grizzly Bears	Whenever ~ deals combat damage to a player, choose a creature type. Until end of turn, whenever you cast a creature spell of that type, copy that spell.	OK
+C5-leori-2	Grizzly Bears	Whenever ~ deals combat damage to a player, choose a planeswalker type.	FAIL
+C5-leori-3	Grizzly Bears	Whenever ~ deals combat damage to a player, until end of turn, whenever you activate an ability of a planeswalker, copy that ability. You may choose new targets for the copies.	OK
+C5-toy-1	Grizzly Bears	At the beginning of your upkeep, secretly choose a number between 1 and 5.	OK
+C5-toy-2	Grizzly Bears	At the beginning of your upkeep, choose a number between 1 and 5 that hasn't been chosen.	FAIL
+C5-sof-1	Grizzly Bears	At the beginning of combat on your turn, for each defending player, separate all creatures that player controls into two piles and that player chooses one.	FAIL
+C5-sof-2	Divination	Separate all creatures target player controls into two piles. That player chooses one of them. Destroy the creatures in the other pile.	FAIL
+C5-sof-3	Divination	Separate all creatures target player controls into two piles. That player chooses one of them. Only creatures in the chosen pile can block this turn.	FAIL
+C5-fea-1	Grizzly Bears	Whenever you cast a noncreature spell that targets only ~, copy that spell for each other creature you control. Each copy targets a different one of those creatures.	FAIL
+C5-fea-2	Grizzly Bears	Whenever you cast a noncreature spell that targets only ~, you may pay {2}. If you do, copy that spell.	OK
+C5-fea-3	Grizzly Bears	Whenever you cast a noncreature spell that targets only ~, you may choose any number of other creatures that spell could target.	FAIL
+C5-ts-1	Divination	Each player exiles the top card of their library. The player who exiled the card with the greatest mana value draws a card.	FAIL
+C5-ts-2	Divination	Each player exiles the top card of their library. Target player takes an extra turn after this one.	OK
+C5-stump-1	Grizzly Bears	When ~ enters, distribute X +1/+1 counters among any number of commanders.	OK
+C5-stump-2	Grizzly Bears	When ~ enters, distribute three +1/+1 counters among ~ and any number of other creatures you control.	FAIL
+C5-stump-3	Grizzly Bears	When ~ enters, distribute three +1/+1 counters among any number of target creatures.	OK
+C5-volo-1	Grizzly Bears	When ~ enters, create a legendary colorless Book artifact token named Journal with hexproof and "Whenever you cast a creature spell, draw a card."	OK
+C5-volo-2	Grizzly Bears	Whenever you cast a creature spell, note one of its creature types that hasn't been noted for ~.	FAIL
+C5-volo-3	Grizzly Bears	{2}, {T}: Draw a card for each creature type noted for ~.	FAIL
+C5-mal-1	Grizzly Bears	Whenever one or more Pirates you control deal damage to your opponents, you create a Treasure token.	OK
+C5-mal-2	Grizzly Bears	Whenever one or more creatures you control deal combat damage to one or more players, create a Treasure token for each player dealt damage this way.	FAIL
+C5-mal-3	Grizzly Bears	Whenever one or more Pirates you control deal damage to your opponents, you draw a card for each opponent dealt damage.	FAIL
+C5-equi-1	Glorious Anthem	At the beginning of your upkeep, for each land target player controls in excess of the number you control, choose a land that player controls. The chosen permanents phase out.	FAIL
+C5-equi-2	Glorious Anthem	At the beginning of your upkeep, target player chooses a land they control. It phases out.	OK
+C5-jho-1	Icy Manipulator	{T}: Choose target permanent you control or suspended card you own. Draw a card.	OK
+C5-jho-2	Icy Manipulator	{T}: Choose target permanent you control. If it has a time counter on it, you may remove a time counter from it or put another time counter on it.	OK
+C5-jho-3	Icy Manipulator	{T}: Choose target suspended card you own. You may remove a time counter from it.	OK
+C5-alh-1	Grizzly Bears	As ~ enters, each opponent reveals their hand. You choose the name of a nonland card.	FAIL
+C5-alh-2	Grizzly Bears	As ~ enters, choose a nonland card name.	OK
+C5-sar-1	Grizzly Bears	Whenever you cast your second spell each turn, each opponent mills two cards. When one or more cards are milled this way, draw a card.	FAIL
+C5-sar-2	Grizzly Bears	Whenever you cast your second spell each turn, exile target enchantment, instant, or sorcery card with equal or lesser mana value than that spell from an opponent's graveyard. Copy the exiled card. You may cast the copy without paying its mana cost.	OK
+C5-sar-3	Grizzly Bears	Whenever you cast your second spell each turn, exile target instant card from an opponent's graveyard. Copy the exiled card. You may cast the copy without paying its mana cost.	OK
+C5-ctv-1	Divination	Each player chooses a creature they control and a creature they don't control. Destroy each creature chosen this way.	FAIL
+C5-ctv-2	Divination	Each player secretly chooses a creature. Then those choices are revealed. Destroy each creature chosen this way.	FAIL
+C5-gil-1	Grizzly Bears	Whenever ~ enters or attacks, look at the top six cards of your library. You may put any number of Equipment cards from among them onto the battlefield. Put the rest on the bottom of your library in a random order.	OK
+C5-gil-2	Grizzly Bears	Whenever ~ enters or attacks, look at the top six cards of your library. You may put an Equipment card from among them onto the battlefield. Put the rest on the bottom of your library in a random order. When you do, you may attach it to a Samurai you control.	OK
+C5-gil-3	Grizzly Bears	When ~ enters, you may attach target Equipment you control to a Samurai you control.	OK
+C5-sf-1	Grizzly Bears	As ~ enters, you may choose a creature.	FAIL
+C5-sf-2	Grizzly Bears	As ~ enters, choose a nonland permanent an opponent controls.	OK
+C5-sf-3	Grizzly Bears	As ~ enters, choose an opponent.	OK
+C5-cir-1	Glorious Anthem	Whenever an artifact, creature, or enchantment enters, its controller chooses target permanent another player controls. Exchange control of those permanents.	FAIL
+C5-cir-2	Glorious Anthem	Whenever a creature enters, its controller may exchange control of it and target creature another player controls that shares a card type with it.	FAIL
+C5-cir-3	Glorious Anthem	Whenever an artifact, creature, or enchantment enters, exchange control of it and target permanent another player controls that shares a card type with it.	FAIL
+C5-ves-1	Grizzly Bears	As ~ enters, you may choose another creature on the battlefield. If you do, ~ becomes a copy of that creature.	FAIL
+C5-ves-2	Grizzly Bears	You may have ~ enter as a copy of any creature on the battlefield, except it has "At the beginning of your upkeep, you may turn ~ face down."	OK
+C5-ves-3	Grizzly Bears	As ~ is turned face up, you may choose another creature on the battlefield.	FAIL
+C5-kef-1	Grizzly Bears	At the beginning of your end step, exile a card at random from each opponent's graveyard. You may cast any number of spells from among cards exiled this way without paying their mana costs.	OK
+C5-kef-2	Grizzly Bears	At the beginning of your end step, exile a card at random from each opponent's graveyard. You may cast any number of spells from among cards exiled this way without paying their mana costs. Then each player loses life equal to the mana value of a spell they own you cast this way.	FAIL
+C5-cel-1	Grizzly Bears	At the beginning of combat on your turn, roll two six-sided dice. For each result of 1, ~ gets +1/+1 until end of turn.	FAIL
+C5-cel-2	Grizzly Bears	At the beginning of combat on your turn, roll two six-sided dice. If you rolled doubles, ~ gains double strike until end of turn.	OK
+C5-cel-3	Grizzly Bears	At the beginning of combat on your turn, roll a six-sided die. / 1 — ~ gains menace until end of turn. / 2 — ~ gains vigilance until end of turn. / 3-6 — ~ gains flying until end of turn.	FAIL
+C5-lore-1	Lore Seeker	Reveal ~ as you draft it.	FAIL
+C5-lore-2	Cogwork Librarian	Reveal ~ as you draft it.	FAIL
+C5-extra-1	Divination	You may reveal a card you own from outside the game and put it into your hand.	OK
+C5-extra-2	Divination	Reveal two cards you own from outside the game. An opponent chooses one of them. Put that card into your hand.	FAIL
+C5-lae-1	Divination	Exile all nontoken creatures you control, then roll a d20. / 1—9 | Return those cards to the battlefield under their owner's control at the beginning of the next end step. / 10—20 | Return those cards to the battlefield under their owner's control.	OK
+C5-lae-2	Divination	Exile all nontoken creatures you control. Return those cards to the battlefield under their owner's control, then exile them again. Return those cards to the battlefield under their owner's control at the beginning of the next end step.	FAIL
+C5-myra-1	Icy Manipulator	{X}, {T}: Exile target instant or sorcery card with mana value X from your graveyard and choose an Attraction you control that doesn't have a midway counter on it. Put a midway counter on it.	OK
+C5-myra-2	Icy Manipulator	{X}, {T}: Exile target instant or sorcery card with mana value X from your graveyard. Whenever you visit an Attraction, copy the exiled card. You may cast the copy without paying its mana cost.	FAIL
+C5-drop-1	Drop Tower	{VISIT} Visit — Target creature gains flying until end of turn.	OK
+C5-drop-2	Grizzly Bears	{T}: Target creature gains flying until any player rolls a 1.	FAIL
+C5-fw-1	Ferris Wheel	{VISIT} Visit — Target creature phases out until you roll a 3 or less while rolling to visit your Attractions.	FAIL
+C5-fw-2	Ferris Wheel	{VISIT} Visit — Choose target creature. That creature phases out.	OK
+C5-molt-1	Molten Sentry	As ~ enters, flip a coin. If the coin comes up heads, ~ enters with two +1/+1 counters on it.	FAIL
+C5-molt-2	Molten Sentry	As ~ enters, choose one — / • ~ enters as a 5/2 creature with haste. / • ~ enters as a 2/5 creature with defender.	FAIL
+C5-pb-1	Grizzly Bears	Whenever you roll a die, you may reveal the top card of your library. Do this only once each turn.	OK
+C5-pb-2	Grizzly Bears	Whenever you roll a die, you may exile the top card of your library. If you do, you may play it this turn.	OK
+C5-pb-3	Grizzly Bears	Whenever you reveal a card with mana value less than the result this way, you may exile it.	FAIL
+C5-fg-1	Divination	Flip a coin until you lose a flip. ~ deals 2 damage to target creature for each flip you won.	OK
+C5-fg-2	Divination	Flip a coin until you lose a flip or choose to stop flipping. Draw a card for each flip you won.	FAIL
+C5-br-1	Grizzly Bears	Whenever you cast your second spell each turn, flip a coin. If you win the flip, copy that spell. You may choose new targets for the copy. If you lose the flip, ~ deals damage equal to that spell's mana value to any target.	FAIL
+C5-br-2	Grizzly Bears	Whenever you cast your second spell each turn, flip a coin. When you win the flip, draw a card.	FAIL
+C5-chan-1	Chancellor of the Annex	You may reveal ~ from your opening hand. If you do, when each opponent casts their first spell of the game, counter that spell unless that player pays {1}.	FAIL
+C5-chan-2	Chancellor of the Forge	You may reveal this card from your opening hand. If you do, at the beginning of the first upkeep, create a 1/1 red Phyrexian Goblin creature token with haste.	OK
+C5-clay-1	Clay Golem	{6}, Roll a d8: Draw a card.	FAIL
+C5-clay-2	Clay Golem	{6}: Roll a d8. Monstrosity X, where X is the result.	OK
+C5-chaos-1	Grizzly Bears	At the beginning of combat on your turn, each player rolls a d20.	FAIL
+C5-chaos-2	Grizzly Bears	At the beginning of combat on your turn, roll a d20. If the result is 10 or less, ~ can't attack this combat.	OK
+C5-chan-3	Chancellor of the Annex	You may reveal this card from your opening hand. If you do, when each opponent casts their first spell of the game, counter that spell unless that player pays {1}.	FAIL
+C5-chan-4	Chancellor of the Annex	You may reveal this card from your opening hand. If you do, at the beginning of the first upkeep, each opponent loses 1 life.	OK
+C5-br-3	Grizzly Bears	Whenever you cast your second spell each turn, flip a coin. If you lose the flip, ~ deals damage equal to that spell's mana value to any target.	OK
+C5-br-4	Grizzly Bears	Whenever you cast your second spell each turn, ~ deals damage equal to that spell's mana value to any target.	OK
+C5-ves-4	Grizzly Bears	As ~ enters, you may choose another creature. If you do, until ~ is turned face down, it becomes a copy of that creature.	FAIL
+C5-vsw-1	Grizzly Bears	As ~ enters, roll a six-sided die twice.	FAIL
+C5-vsw-2	Grizzly Bears	As ~ enters, roll a six-sided die. Its base power becomes the result.	FAIL
+C5-vsw-3	Grizzly Bears	If you would roll one or more six-sided dice, instead roll them and you may exchange one result with ~'s base power.	FAIL
+C5-bee-1	Grizzly Bears	{2}, {T}: The next time target player would roll a die this turn, instead they roll two dice and ignore the lower roll.	FAIL
+C5-bee-2	Grizzly Bears	If you would roll a die, instead roll two of those dice and ignore the lower roll.	FAIL
+C5-gc-1	Gemstone Caverns	If ~ is in your opening hand, you may begin the game with ~ on the battlefield.	FAIL
+C5-gc-2	Gemstone Caverns	If ~ is in your opening hand and you're not the starting player, you may begin the game with ~ on the battlefield.	FAIL
+C5-gc-3	Gemstone Caverns	If ~ is in your opening hand, you may begin the game with ~ on the battlefield with a luck counter on it. If you do, exile a card from your hand.	FAIL
+C5-mrh-1	Icy Manipulator	{4}, {T}: Roll a six-sided die for each mana from Treasures spent to activate this ability.	FAIL
+C5-mrh-2	Icy Manipulator	{4}, {T}: Draw a card for each mana from Treasures spent to activate this ability.	FAIL
+C5-mrh-3	Icy Manipulator	{4}, {T}: Roll two six-sided dice.	OK
+C5-dg-1	Divination	Choose a source you control. The next time that source would deal damage this turn, it deals double that damage instead.	FAIL
+C5-dg-2	Divination	Flip a coin. If you win the flip, the next time target creature you control would deal damage this turn, it deals double that damage instead.	OK
+C5-call-1	Icy Manipulator	{X}, {T}: Create a token that's a copy of a card you exiled with ~. X is the mana value of that card.	FAIL
+C5-call-2	Icy Manipulator	{T}: Create a token that's a copy of a card you exiled with cards named ~.	OK
+C5-ga-1	Icy Manipulator	{T}: Counter target artifact spell you control that isn't the target of an ability from another creature named ~.	FAIL
+C5-ga-2	Icy Manipulator	{T}: Counter target artifact spell you control.	OK
+C5-xan-1	Grizzly Bears	At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of their library.	FAIL
+C5-xan-2	Grizzly Bears	At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time.	FAIL
+C5-xan-3	Grizzly Bears	At the beginning of your upkeep, choose target opponent. Until end of turn, that player can't cast spells.	OK
+C5-col-3	Curse of Leeches // Leeching Lurker	Enchant player / As ~ enters, attach it to a player.	FAIL
+C5-root-1	Grizzly Bears	When ~ enters, each opponent may search their library for up to three basic land cards. They each put one of those cards onto the battlefield tapped under your control and the rest onto the battlefield tapped under their control.	FAIL
+C5-eri-1	Grizzly Bears	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, draw a card.	OK
+C5-eri-2	Grizzly Bears	Whenever an Aura you control becomes attached to a creature, draw a card.	OK
+C5-eri-3	Grizzly Bears	Whenever an Aura becomes attached to a permanent an opponent controls, draw a card.	OK
+C5-guff-1	Divination	For each player, choose target nonenchantment, nonland permanent that player controls. Those permanents' owners shuffle them into their libraries.	FAIL
+C5-guff-2	Divination	For each player, choose target nonland permanent that player controls. Shuffle those permanents into their owners' libraries.	OK
+C5-fin-1	Divination	You may cast up to one target instant card and/or up to one target sorcery card from your graveyard each with mana value 3 or less without paying their mana costs.	FAIL
+C5-fin-2	Divination	You may cast up to one target instant card and up to one target sorcery card from your graveyard without paying their mana costs.	FAIL
+C5-gf-1	Glorious Anthem	At the beginning of your upkeep, target opponent reveals the top three cards of their library, may put a creature card from among them onto the battlefield, then puts the rest into their graveyard.	FAIL
+C5-gf-2	Glorious Anthem	At the beginning of your upkeep, target opponent reveals the top three cards of their library. That player may put a creature card from among them onto the battlefield. Then they put the rest into their graveyard.	OK
+C5-krov-1	Krovikan Vampire	At the beginning of each end step, if a creature dealt damage by ~ this turn died, put that card onto the battlefield under your control.	FAIL
+C5-krov-2	Krovikan Vampire	At the beginning of each end step, if a creature dealt damage by ~ this turn died, draw a card.	FAIL
+C5-krov-3	Krovikan Vampire	At the beginning of each end step, put each creature card in a graveyard that was dealt damage by ~ this turn and died this turn onto the battlefield under your control.	FAIL
+C5-krov-4	Krovikan Vampire	Sacrifice it when you lose control of ~.	FAIL
+C5-eri-4	Grizzly Bears	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls with mana value less than or equal to that Aura's mana value, draw a card.	FAIL
+C5-eri-5	Grizzly Bears	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, gain control of that permanent for as long as that Aura is attached to it.	FAIL
+C5-eri-6	Grizzly Bears	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, gain control of that permanent for as long as you control ~.	FAIL
+C5-ens-1	Divination	Each opponent faces a villainous choice — They exile cards from the top of their library until they exile a nonland card, then you may cast that card without paying its mana cost, or that player exiles the top four cards of their library.	OK
+C5-ens-2	Divination	Target opponent exiles the top four cards of their library. ~ deals damage equal to the total mana value of those exiled cards to that player.	FAIL
+C5-ens-3	Divination	Each opponent faces a villainous choice — That player discards a card, or that player exiles the top four cards of their library and ~ deals damage equal to the total mana value of those exiled cards to that player.	FAIL
+C5-th-1	Grizzly Bears	At the beginning of combat on your turn, choose an opponent at random that ~ didn't attack during your last combat.	FAIL
+C5-th-2	Grizzly Bears	At the beginning of combat on your turn, choose an opponent at random that ~ didn't attack this turn.	FAIL
+C5-th-3	Grizzly Bears	At the beginning of combat on your turn, if ~ attacked during your last combat, draw a card.	FAIL
+C5-rm-1	Icy Manipulator	{X}, {T}: Change the target of target spell with a single target if that target is you. The new target must be a player. X is twice the mana value of that spell.	FAIL
+C5-rm-2	Icy Manipulator	{T}: Change the target of target spell with a single target that targets you.	FAIL
+C5-rm-3	Icy Manipulator	{T}: Change the target of target spell with a single target. The new target must be a player.	OK
+C5-se-1	Divination	Exile any number of target creatures and/or planeswalkers you control. At the beginning of the next end step, return each of them to the battlefield under its owner's control.	OK
+C5-se-2	Divination	Exile any number of target creatures you control. At the beginning of the next end step, return each of them to the battlefield under its owner's control. Each of them enters with an additional +1/+1 counter on it.	FAIL
+C5-se-3	Divination	Exile target creature you control. At the beginning of the next end step, return it to the battlefield under its owner's control. It enters with an additional +1/+1 counter on it.	OK
+C5-ck-1	Divination	Gain control of target spell.	OK
+C5-ck-2	Divination	Counter target spell that targets only a single permanent or player.	OK
+C5-ck-3	Divination	Copy target spell that targets only a single permanent or player, then reselect the targets at random for the copy.	FAIL
+C5-rs-1	Grizzly Bears	Whenever an opponent scries, surveils, or searches their library, put a +1/+1 counter on ~.	OK
+C5-rs-2	Grizzly Bears	Whenever an opponent scries, put a +1/+1 counter on ~. Then ~ deals damage to that player equal to its power.	FAIL
+C5-rs-3	Grizzly Bears	Whenever an opponent searches their library, draw a card.	OK
+C5-rs-4	Grizzly Bears	You draw cards from the bottom of your library rather than the top.	FAIL
+C5-kef-a	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, copy that card and you may cast the copy.	FAIL
+C5-kef-b	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it.	FAIL
+C5-kef-c	God-Eternal Kefnet	Whenever you reveal an instant or sorcery card this way, draw a card.	FAIL
+C5-syn-1	Icy Manipulator	{1}, {T}, Exile a spell you control: Target opponent reveals cards from the top of their library until they reveal a card with mana value equal to 1 plus the exiled spell's mana value.	FAIL
+C5-syn-2	Icy Manipulator	{1}, {T}, Exile a spell you control: Draw cards equal to the exiled spell's mana value.	FAIL
+C5-syn-3	Icy Manipulator	{1}, {T}, Exile a spell you control: Draw a card.	OK
+C5-syn-4	Icy Manipulator	{1}, {T}: Target opponent reveals cards from the top of their library until they reveal a card with mana value 3. Exile that card, then that player shuffles. You may cast that exiled card without paying its mana cost.	FAIL
+C5-uvi-1	Icy Manipulator	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "At the beginning of your upkeep, if ~ is exiled, remove a refine counter from it."	OK
+C5-uvi-2	Icy Manipulator	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "When the last refine counter is removed from ~, if it's exiled, you may cast it."	FAIL
+C5-uvi-3	Icy Manipulator	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "When the last refine counter is removed from ~, if it's exiled, you may cast it. It costs {4} less to cast this way."	FAIL
+C5-hof-1	Grizzly Bears	Whenever another nontoken creature you control dies, exile it. If you do, create a token that's a copy of that creature, except it's a Spirit in addition to its other types.	OK
+C5-hof-2	Grizzly Bears	Whenever another nontoken creature you control dies, exile it. If you do, create a token that's a copy of that creature, except it has "When this creature leaves the battlefield, draw a card."	OK
+C5-eri-7	Grizzly Bears	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, tap that permanent.	FAIL
+C5-eri-8	Grizzly Bears	Whenever an Aura you control becomes attached to a creature an opponent controls, gain control of that creature until end of turn.	FAIL
+C5-cm-1	Glorious Anthem	At the beginning of each upkeep, count the number of permanents. If the number is odd, until end of turn, red creatures get +1/+1.	FAIL
+C5-cm-2	Glorious Anthem	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, red creatures get +1/+1 and whenever a player taps a Mountain for mana, that player adds an additional {R}.	FAIL
+C5-cm-3	Glorious Anthem	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, red creatures get +1/+1.	OK
+C5-eum-1	Grizzly Bears	Whenever ~ attacks, you and defending player each discard a card or sacrifice a permanent. You draw a card for each land card put into a graveyard this way.	FAIL
+C5-eum-2	Grizzly Bears	Whenever ~ attacks, each player discards a card. You draw a card for each land card put into a graveyard this way.	OK
+C5-eum-3	Grizzly Bears	Whenever ~ attacks, each player sacrifices a permanent. You draw a card for each land card put into a graveyard this way.	OK
+C5-cap-1	Grizzly Bears	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+C5-cap-2	Grizzly Bears	{3}: ~ deals 3 damage divided as you choose among one, two, or three targets.	OK
+C5-bd-1	Divination	Choose a player who cast one or more sorcery spells this turn. ~ deals 2 damage to that player.	FAIL
+C5-bd-2	Divination	Target player who cast one or more sorcery spells this turn loses 2 life.	OK
+C5-bd-3	Divination	~ deals damage to target player equal to half the damage dealt by sorcery spells this turn, rounded down.	FAIL
+C5-gr-1	Divination	Destroy all creatures that were blocked by target creature this turn.	FAIL
+C5-gr-2	Divination	Destroy all creatures blocking or blocked by target creature.	OK
+C5-gd-1	Divination	Put X +1/+1 counters on target creature that blocked this turn, where X is its power.	OK
+C5-sh-1	Divination	Whenever a player casts a card, if it has the same name as a card exiled with ~, you may copy it.	FAIL
+C5-sh-2	Icy Manipulator	Whenever a player casts a card, if it has the same name as a card in your graveyard, draw a card.	OK
+C5-ia-1	Pacifism	Whenever enchanted creature blocks or becomes blocked by a creature with toughness 3 or less, destroy the other creature at end of combat.	OK
+C5-ia-2	Pacifism	Whenever enchanted creature blocks or becomes blocked by a creature, destroy the other creature at end of combat. At the beginning of the next end step, if that creature was destroyed this way, put a +1/+1 counter on enchanted creature.	FAIL
+C5-shu-1	Icy Manipulator	Equipped creature has "{T}, Unattach ~: ~ deals 2 damage to target creature. That creature's controller gains control of ~."	OK
+C5-sfe-1	Grizzly Bears	As ~ enters, choose a nonland permanent an opponent controls. / Activated abilities of the chosen permanent can't be activated.	FAIL
+C5-sfe-2	Grizzly Bears	As ~ enters, choose a nonland permanent an opponent controls. / ~ has all activated abilities of the chosen permanent.	FAIL
+C5-sfe-3	Grizzly Bears	As ~ enters, choose a creature type. / Activated abilities of creatures of the chosen type can't be activated.	OK
+C5-tog-1	Grizzly Bears	Landfall — Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature gets +1/+1" and equip {1}.	OK
+C5-tog-2	Grizzly Bears	Landfall — Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature has '{T}: This creature deals 2 damage to any target'" and equip {1}.	OK
+C5-tog-3	Grizzly Bears	Landfall — Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature has '{1}, {T}, Sacrifice Rock: This creature deals 2 damage to any target'" and equip {1}.	FAIL
+C5-spo-1	Divination	X is the number of creature cards in target opponent's graveyard.	FAIL
+C5-spo-2	Spoils of War	As an additional cost to cast this spell, choose an opponent. / X is the number of artifact and/or creature cards in the chosen player's graveyard.	FAIL
+C5-spo-3	Fireball	X can't be greater than the number of cards in your hand.	OK
+C5-lud-1	Ludevic, Necrogenius // Olag, Ludevic's Hubris	As ~ transforms into ~, it becomes a copy of a creature card exiled with it, except its name is ~, it's 4/4, and it's a legendary blue and black Zombie in addition to its other colors and types.	OK
+C5-lud-2	Grizzly Bears	As ~ enters, put a +1/+1 counter on it for each creature card in your graveyard.	FAIL
+C5-lud-3	Grizzly Bears	~ enters with a +1/+1 counter on it for each creature card exiled with it.	OK
+C5-mof-1	Icy Manipulator	{T}, Sacrifice ~: Choose up to seven face-up exiled cards you own. Exile all the cards from your library, then put the chosen cards on top of your library.	FAIL
+C5-mof-2	Icy Manipulator	{T}, Sacrifice ~: Choose up to seven exiled cards you own. Put them on top of your library.	FAIL
+C5-eu-1	Divination	Search your library for up to three monocolored cards with different names and exile them. An opponent chooses one of those cards. Shuffle that card into your library. You may cast the other cards without paying their mana costs.	FAIL
+C5-eu-2	Divination	Search your library for up to three cards with different names and exile them. An opponent chooses one of those cards. Shuffle that card into your library.	OK
+C5-eu-3	Divination	Exile the top three cards of your library. An opponent chooses one of them. Put that card into your hand. You may cast the other cards without paying their mana costs.	FAIL
+C5-gc-4	Gemstone Caverns	If this card is in your opening hand and you're not the starting player, you may begin the game with it on the battlefield.	FAIL
+C5-gc-5	Gemstone Caverns	If this card is in your opening hand, you may begin the game with it on the battlefield with a luck counter on it.	FAIL
+C5-gc-6	Gemstone Caverns	If this card is in your opening hand, you may begin the game with it on the battlefield. If you do, exile a card from your hand.	FAIL
+C5-chan-5	Chancellor of the Annex	You may reveal this card from your opening hand. If you do, when each opponent casts their next spell, counter that spell unless that player pays {1}.	FAIL
+C5-chan-6	Grizzly Bears	Whenever an opponent casts their first spell each turn, counter that spell unless that player pays {1}.	OK
+C5-sof-4	Grizzly Bears	At the beginning of combat on your turn, separate all creatures target opponent controls into two piles and that player chooses one. Only creatures in the chosen pile can block this turn.	FAIL
+C5-sof-5	Divination	Separate all creatures target player controls into two piles. Destroy all creatures in the pile of that player's choice.	OK
+C5-sof-6	Divination	Separate all creatures target player controls into two piles. Creatures in the pile of that player's choice can't block this turn.	FAIL
+C5-pp-5	Psychic Paper	Whenever ~ becomes attached to a creature, choose a creature type.	OK
+C5-pa-1	Paleontologist's Pick-Axe // Dinosaur Headdress	As ~ enters, choose an exiled creature card used to craft ~.	OK
+C5-eye-3	Eye of Ojer Taq // Apex Observatory	~ enters tapped. As it enters, choose a card type among the exiled cards used to craft it.	FAIL
+C5-toy-3	Grizzly Bears	At the beginning of your upkeep, secretly choose a number between 1 and 5. If you do, an opponent guesses which number you chose, then you reveal the number you chose.	FAIL
+C5-elr-4	Grizzly Bears	Secret council — When ~ enters, each player secretly votes for fellowship or aid, then those votes are revealed. For each fellowship vote, the voter sacrifices a creature.	OK
+C5-elr-5	Grizzly Bears	When ~ enters, each player chooses a creature they control. You gain control of each creature chosen this way.	FAIL
+C5-ctv-3	Divination	Each player chooses a creature they control. Destroy each creature chosen this way.	FAIL
+C5-ctv-4	Divination	Each player chooses a creature they don't control. Destroy each creature chosen this way.	FAIL
+C5-sg-3	Divination	Each player chooses a card in their hand. The owner of each creature card chosen this way with the lowest mana value puts it onto the battlefield.	FAIL
+C5-sg-4	Divination	Each player reveals a card from their hand. Each player puts the creature card they revealed this way onto the battlefield.	FAIL
+C5-lle-1	Long List of the Ents	(As this Saga enters and after your draw step, add a lore counter.) / {CHAPTER} I, II, III, IV, V, VI — Choose a creature type. When you next cast a creature spell of that type this turn, that creature enters with an additional +1/+1 counter on it.	OK
+C5-lle-2	Long List of the Ents	(As this Saga enters and after your draw step, add a lore counter.) / {CHAPTER} I, II, III, IV, V, VI — Note a creature type. When you next cast a creature spell of that type this turn, that creature enters with an additional +1/+1 counter on it.	FAIL
+C5-bb-1	Grizzly Bears	Note the mana value of each card as it's put into exile. / ~'s power is equal to the greatest number noted for it this turn.	FAIL
+C5-bb-2	Grizzly Bears	Whenever a card is put into exile, note its mana value. / ~ gets +1/+0.	FAIL
+C5-rk-1	Riku of Many Paths	Whenever you cast an instant or sorcery spell, choose up to X, where X is the number of times you chose a mode for that spell — / • Draw a card. / • Scry 1.	FAIL
+C5-rk-2	Riku of Many Paths	Whenever you cast a spell, if it's modal, draw a card.	FAIL
+C5-kz-4	Divination	Target player puts two cards from their hand onto the battlefield face down as 2/2 creatures.	FAIL
+C5-kz-5	Divination	Manifest the top two cards of your library. For each card manifested this way, you draw a card.	FAIL
+C5-fea-4	Grizzly Bears	Whenever you cast a noncreature spell that targets only ~, for each other creature that spell could target, you may pay {2}. If you do, copy that spell. The copy targets that creature.	FAIL
+C5-mag-3	Magma Pummeler	When one or more counters are removed from ~ this way, it deals that much damage to any target.	FAIL
+C5-ts-3	Divination	Each player exiles the top card of their library. Target player who exiled the card with the greatest mana value draws a card.	FAIL
+C5-rm-4	Icy Manipulator	{T}: Change the target of target spell with a single target if that target is a player.	FAIL
+C5-kef-d	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, draw a card.	OK
+C5-kef-e	God-Eternal Kefnet	Reveal the first card you draw each turn. Whenever you reveal an instant or sorcery card this way, draw a card.	OK
+C5-kef-f	God-Eternal Kefnet	Reveal the first card you draw each turn. Whenever you reveal an instant or sorcery card this way, copy that card and you may cast the copy. That copy costs {2} less to cast.	FAIL
+C5-uvi-4	Icy Manipulator	{T}: You may exile an instant or sorcery card from your hand and put three time counters on it. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it without paying its mana cost."	OK
+C5-uvi-5	Icy Manipulator	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "When the last refine counter is removed from ~, if it's exiled, you may cast it without paying its mana cost."	OK
+C5-uvi-6	Icy Manipulator	{T}: You may exile an instant or sorcery card from your hand and put three time counters on it. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it. It costs {4} less to cast this way."	FAIL
+C5-hof-3	Grizzly Bears	Whenever another nontoken creature you control dies, exile it. If you do, create a token that's a copy of that creature, except it has "When this creature leaves the battlefield, return the exiled card to its owner's graveyard."	FAIL
+C5-rs-5	Grizzly Bears	Whenever an opponent scries, ~ deals damage to that player equal to its power.	OK
+C5-rs-6	Grizzly Bears	Whenever an opponent scries, put a +1/+1 counter on ~. Then ~ deals 1 damage to that player.	OK
+C5-tog-4	Grizzly Bears	Whenever a land you control enters, create a colorless artifact token named Rock with "{1}, {T}, Sacrifice Rock: Rock deals 2 damage to any target."	FAIL
+C5-tog-5	Grizzly Bears	Equipped creature has "{1}, {T}, Sacrifice ~: This creature deals 2 damage to any target."	OK
+C5-tog-6	Icy Manipulator	Equipped creature has "{1}, {T}, Sacrifice ~: This creature deals 2 damage to any target." / Equip {1}	OK
+C5-ia-3	Pacifism	Whenever enchanted creature blocks or becomes blocked by a creature, destroy the other creature at end of combat. At the beginning of the next end step, if that creature was destroyed this way, draw a card.	FAIL
+C5-ia-4	Pacifism	Whenever enchanted creature blocks or becomes blocked by a creature, destroy the other creature. If that creature was destroyed this way, put a +1/+1 counter on the first creature.	FAIL
+C5-cm-4	Glorious Anthem	At the beginning of each upkeep, count the number of permanents. If the number is odd, draw a card.	FAIL
+C5-cm-5	Glorious Anthem	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, whenever a player taps a Mountain for mana, that player adds an additional {R}.	OK
+C5-cm-6	Glorious Anthem	At the beginning of each upkeep, if the number of permanents is even, until end of turn, if a player taps a Mountain for mana, that Mountain produces colorless mana instead of any other type.	FAIL
+C5-fin-3	Divination	You may cast up to one target instant card from your graveyard with mana value 3 or less without paying its mana cost. If a spell cast this way would be put into your graveyard, exile it instead.	FAIL
+C5-xan-4	Grizzly Bears	At the beginning of your upkeep, choose target opponent. Until end of turn, you may spend mana as though it were mana of any color to cast spells this way.	FAIL
+C5-ga-3	Icy Manipulator	{T}: Counter target artifact spell you control that isn't the target of an ability from another creature.	FAIL
+C5-ga-4	Faerie Miscreant	When ~ enters, if you control another creature named ~, draw a card.	OK
+C5-call-3	Icy Manipulator	{X}, {T}: Create a token that's a copy of target card you own in exile with mana value X.	OK
+C5-dg-3	Divination	Choose a source you control. Prevent the next 2 damage that source would deal this turn.	FAIL
+C5-dg-4	Divination	Choose a creature you control. The next time that creature would deal damage this turn, it deals double that damage instead.	OK
+C5-pp-6	Psychic Paper	As ~ enters, choose a creature card name. / Equipped creature's name is the chosen name.	FAIL
+C5-pp-7	Psychic Paper	As ~ enters, choose a creature type. / Equipped creature's creature type is the last chosen creature type.	FAIL
+C5-jho-4	Icy Manipulator	{T}: Choose target permanent you control or suspended card you own. If it has a time counter on it, you may remove a time counter from it.	OK
+C5-jho-5	Icy Manipulator	{T}: Choose target permanent you control or suspended card you own. If that permanent or card has a time counter on it, draw a card.	FAIL
+C5-ty-3	Grizzly Bears	Whenever ~ attacks, choose one at random. If you control an artifact, you choose one instead. / • Draw a card. / • Scry 1.	FAIL
+C5-ty-4	Grizzly Bears	Whenever ~ attacks, choose one. If you discarded a card this turn, choose both instead. / • Draw a card. / • Scry 1.	OK
+C5-eum-4	Grizzly Bears	Whenever ~ attacks, you and defending player each discard a card. You draw a card for each land card put into a graveyard this way.	FAIL
+C5-eum-5	Grizzly Bears	Whenever ~ attacks, you and defending player each discard a card. You draw a card for each land card discarded this way.	OK
+C5-nih-3	Nihiloor	When ~ enters, for each opponent, gain control of up to one target creature that player controls for as long as you control ~.	OK
+C5-nih-4	Nihiloor	When ~ enters, you may tap an untapped creature you control. When you do, gain control of target creature an opponent controls for as long as you control ~.	OK
+C5-gf-3	Glorious Anthem	At the beginning of your upkeep, target opponent reveals the top three cards of their library. That player may put a creature card from among them onto the battlefield. Then they put the rest into their graveyard. You do the same with the top three cards of your library.	FAIL
+C5-gf-4	Glorious Anthem	At the beginning of your upkeep, reveal the top three cards of your library. You may put a creature card from among them onto the battlefield. Put the rest into your graveyard. If two creatures are put onto the battlefield this way, those creatures fight each other.	FAIL
+C5-kefk-1	Grizzly Bears	At the beginning of your end step, exile a card at random from each opponent's graveyard. You may cast any number of spells from among cards exiled this way without paying their mana costs. Then each opponent loses 2 life.	OK
+C5-qk-1	Queen Kayla bin-Kroog	{4}, {T}: Discard all the cards in your hand, then draw that many cards. Return up to one artifact card with mana value 1 discarded this way and up to one artifact card with mana value 2 discarded this way to the battlefield.	OK
+C5-gen-4	Divination	Each opponent loses life equal to the number of creatures that died this turn.	OK
+C5-sem-1	Divination	Exile any number of target creatures you control. At the beginning of the next end step, return those cards to the battlefield under their owner's control with an additional +1/+1 counter on each of them.	OK
+C5-mag-4	Magma Pummeler	If damage would be dealt to ~ while it has a +1/+1 counter on it, prevent that damage and remove that many +1/+1 counters from it. / When one or more counters are removed from ~ this way, it deals that much damage to any target.	FAIL
+C5-uld-2	Divination	Exile up to one target creature card and up to one target artifact card from your graveyard.	OK
