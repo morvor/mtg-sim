@@ -77,6 +77,14 @@ pub const DRAFT_GUESS_NEXT: &str = "draft:reveal and guess the next card drafted
 /// `StaticEffect::Custom` name of "Reveal [this card] as you draft it. You may look at the
 /// next card drafted from this booster pack." (Cogwork Spy).
 pub const DRAFT_LOOK_NEXT: &str = "draft:reveal and look at the next card drafted from this pack";
+/// `StaticEffect::Custom` name of "Reveal [this card] as you draft it. After you draft
+/// [this card], you may add a booster pack to the draft." (Lore Seeker): see
+/// [`Draft::add_booster`].
+pub const DRAFT_ADD_BOOSTER: &str = "draft:reveal; after you draft it, you may add a booster pack";
+/// `StaticEffect::Custom` name of "Each player passes the last card from each booster pack
+/// to a player who drafted a card named [this card's name]." (Canal Dredger): see
+/// [`Draft::choose_last_card_recipient`].
+pub const DRAFT_LAST_CARD_TO_DRAFTER: &str = "draft:last cards go to its drafters";
 /// `Condition::Custom` name: "you guessed correctly for a card named [this card's name]".
 pub const GUESSED_CORRECTLY: &str = "draft:guessed correctly for cards with this name";
 
@@ -214,6 +222,16 @@ pub enum DraftError {
     InvalidOption,
 }
 
+/// A booster pack waiting in front of a player behind the one they're drafting from: a
+/// pack added to the draft (Lore Seeker) or passed to them in addition to another one
+/// (Canal Dredger).
+#[derive(Clone, Debug)]
+struct QueuedPack {
+    cards: Vec<Arc<CardDef>>,
+    id: usize,
+    passer: Option<PlayerId>,
+}
+
 /// A booster draft in progress.
 #[derive(Clone, Debug)]
 pub struct Draft {
@@ -256,6 +274,16 @@ pub struct Draft {
     /// cards they looked at, visible to them until the packs are passed.
     lookers: Vec<(PlayerId, usize)>,
     looked: Vec<(PlayerId, Arc<CardDef>)>,
+    /// The packs waiting in front of each player after the one they're drafting from, in
+    /// the order they'll draft from them.
+    queued: Vec<std::collections::VecDeque<QueuedPack>>,
+    /// Players who may add a booster pack to the draft, having just drafted a card that
+    /// lets them (Lore Seeker).
+    may_add: Vec<PlayerId>,
+    /// (passer, recipient): to whom each player passes the last card of a booster pack
+    /// when several players drafted a card named Canal Dredger (otherwise the first such
+    /// player in the passing direction).
+    last_card_to: Vec<(PlayerId, PlayerId)>,
 }
 
 /// Whether the card has a draft ability whose name is `name` or starts with `name:`.
@@ -305,6 +333,9 @@ impl Draft {
             guesses: vec![],
             lookers: vec![],
             looked: vec![],
+            queued: vec![Default::default(); n],
+            may_add: vec![],
+            last_card_to: vec![],
         };
         d.start_round();
         d
@@ -343,7 +374,97 @@ impl Draft {
 
     /// Whether every card has been drafted.
     pub fn is_complete(&self) -> bool {
-        self.packs.iter().all(|p| p.is_empty()) && self.boosters.iter().all(|b| b.is_empty())
+        self.packs.iter().all(|p| p.is_empty())
+            && self.queued.iter().all(|q| q.is_empty())
+            && self.boosters.iter().all(|b| b.is_empty())
+    }
+
+    /// Whether `p` may add a booster pack to the draft now: right after drafting a card
+    /// that lets them ("After you draft [this card], you may add a booster pack to the
+    /// draft.", Lore Seeker), until their next pick.
+    pub fn can_add_booster(&self, p: PlayerId) -> bool {
+        self.may_add.contains(&p)
+    }
+
+    /// `p` adds the booster pack `pack` to the draft (Lore Seeker; CR 905.2). The pack the
+    /// card was drafted from is passed as usual; `p` opens the new pack and drafts from it
+    /// next, passes it in the same direction, and then drafts from the pack they would
+    /// have drafted from otherwise (the card's rulings): every later pack reaches them one
+    /// pick later this round.
+    pub fn add_booster(&mut self, p: PlayerId, pack: Vec<Arc<CardDef>>) -> Result<(), DraftError> {
+        let Some(k) = self.may_add.iter().position(|q| *q == p) else {
+            return Err(DraftError::InvalidOption);
+        };
+        if pack.is_empty() {
+            return Err(DraftError::InvalidPick);
+        }
+        self.may_add.remove(k);
+        self.next_pack_id += 1;
+        let new = QueuedPack {
+            cards: pack,
+            id: self.next_pack_id,
+            passer: None,
+        };
+        let i = p.idx();
+        if self.drafted_from_pack[i] {
+            // The packs haven't been passed yet: the new pack comes before the one passed
+            // to them.
+            self.queued[i].push_front(new);
+        } else {
+            // They were passed (the others had drafted): the pack in front of them waits.
+            let waiting = QueuedPack {
+                cards: std::mem::replace(&mut self.packs[i], new.cards),
+                id: std::mem::replace(&mut self.pack_ids[i], new.id),
+                passer: std::mem::replace(&mut self.passer[i], None),
+            };
+            if !waiting.cards.is_empty() {
+                self.queued[i].push_front(waiting);
+            }
+        }
+        Ok(())
+    }
+
+    /// When several players drafted a card named Canal Dredger, `from` passes the last
+    /// card of each booster pack to `to` (one of them; the card's rulings). Without a
+    /// choice, they pass it to the first such player in the passing direction.
+    pub fn choose_last_card_recipient(&mut self, from: PlayerId, to: PlayerId) {
+        self.last_card_to.retain(|(f, _)| *f != from);
+        self.last_card_to.push((from, to));
+    }
+
+    /// The players who drafted a card that takes the last cards of booster packs
+    /// (Canal Dredger).
+    fn last_card_drafters(&self) -> Vec<usize> {
+        (0..self.players())
+            .filter(|q| {
+                self.drafted[*q]
+                    .iter()
+                    .any(|d| has_draft_ability(&d.card, DRAFT_LAST_CARD_TO_DRAFTER))
+            })
+            .collect()
+    }
+
+    /// Who `from` passes a booster pack's last card to (Canal Dredger): themselves if they
+    /// drafted one, else their chosen drafter, else the first in the passing direction.
+    fn last_card_recipient(&self, from: usize, drafters: &[usize], dir: PassDirection) -> usize {
+        if drafters.contains(&from) {
+            return from;
+        }
+        if let Some((_, to)) = self
+            .last_card_to
+            .iter()
+            .find(|(f, t)| f.idx() == from && drafters.contains(&t.idx()))
+        {
+            return to.idx();
+        }
+        let n = self.players();
+        (1..n)
+            .map(|k| match dir {
+                PassDirection::Left => (from + k) % n,
+                PassDirection::Right => (from + n * k - k) % n,
+            })
+            .find(|q| drafters.contains(q))
+            .unwrap_or((from + 1) % n)
     }
 
     /// The pack `p` is drafting from.
@@ -427,6 +548,8 @@ impl Draft {
         if self.drafted_from_pack[i] {
             return Err(DraftError::AlreadyDrafted);
         }
+        // "After you draft [Lore Seeker], you may add a booster pack": until this pick.
+        self.may_add.retain(|q| *q != p);
         if let Some(k) = self.skip_next.iter().position(|q| *q == p) {
             if !picks.is_empty() || opt.is_some() || self.packs[i].is_empty() {
                 return Err(DraftError::InvalidPick);
@@ -655,6 +778,12 @@ impl Draft {
             self.revealed.push((p, card.clone()));
             self.next_name.push((p, card.name.clone()));
         }
+        // "Reveal [this card] as you draft it. After you draft [this card], you may add a
+        // booster pack to the draft." (Lore Seeker)
+        if has_draft_ability(&card, DRAFT_ADD_BOOSTER) {
+            self.revealed.push((p, card.clone()));
+            self.may_add.push(p);
+        }
         if has_draft_ability(&card, DRAFT_THREE_COLORS) {
             self.revealed.push((p, card.clone()));
             let colors = self.three_colors(p);
@@ -689,28 +818,51 @@ impl Draft {
         // CR 905.2b: the revealed cards were turned face down once their information was
         // noted; nobody sees them any more.
         self.revealed.clear();
-        if self.packs.iter().all(|p| p.is_empty()) {
+        if self.packs.iter().all(|p| p.is_empty()) && self.queued.iter().all(|q| q.is_empty()) {
             self.start_round();
             return;
         }
         let dir = Draft::direction(self.round);
         self.looked.clear();
-        let mut packs = vec![vec![]; n];
-        let mut passer = vec![None; n];
-        let mut ids = vec![0; n];
+        // "Each player passes the last card from each booster pack to a player who drafted
+        // a card named Canal Dredger."
+        let drafters = self.last_card_drafters();
+        let mut incoming: Vec<Vec<QueuedPack>> = vec![vec![]; n];
         for from in 0..n {
-            let to = match dir {
-                PassDirection::Left => (from + 1) % n,
-                PassDirection::Right => (from + n - 1) % n,
+            let cards = std::mem::take(&mut self.packs[from]);
+            if cards.is_empty() {
+                continue;
+            }
+            let to = if cards.len() == 1 && !drafters.is_empty() {
+                self.last_card_recipient(from, &drafters, dir)
+            } else {
+                match dir {
+                    PassDirection::Left => (from + 1) % n,
+                    PassDirection::Right => (from + n - 1) % n,
+                }
             };
-            packs[to] = std::mem::take(&mut self.packs[from]);
-            ids[to] = self.pack_ids[from];
-            passer[to] = Some(PlayerId(from as u8));
+            incoming[to].push(QueuedPack {
+                cards,
+                id: self.pack_ids[from],
+                passer: Some(PlayerId(from as u8)),
+            });
         }
-        self.packs = packs;
-        self.pack_ids = ids;
-        self.passer = passer;
+        // Each player drafts next from the first pack waiting in front of them.
+        for (p, packs) in incoming.into_iter().enumerate() {
+            self.queued[p].extend(packs);
+            match self.queued[p].pop_front() {
+                Some(q) => {
+                    self.packs[p] = q.cards;
+                    self.pack_ids[p] = q.id;
+                    self.passer[p] = q.passer;
+                }
+                None => self.passer[p] = None,
+            }
+        }
         self.drafted_from_pack = vec![false; n];
+        if self.packs.iter().all(|p| p.is_empty()) {
+            self.start_round();
+        }
     }
 
     /// An effect instructs `p` to turn a card they drafted face up face down
