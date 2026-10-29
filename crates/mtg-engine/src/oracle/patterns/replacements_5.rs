@@ -105,3 +105,36 @@ fn untap_instead(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
 }
 
 inventory::submit! { StaticPattern { name: "replacements 5: if [a permanent] would untap during its controller's untap step, [instructions] instead", priority: 100, parse: untap_instead } }
+
+/// "If a spell or ability would cause its controller to gain life, [instructions]
+/// instead." (Rain of Gore): the player-event replacement ("If a player would gain life,
+/// ...") limited to life gain a resolving spell or ability causes its own controller
+/// (`kw/life_gain_cause.rs`; lifelink combat damage isn't a spell or ability, Rain of
+/// Gore's ruling).
+fn caused_life_gain(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r =
+        end(l).strip_prefix("if a spell or ability would cause its controller to gain life, ")?;
+    let rewritten = format!("if a player would gain life, {r}");
+    let mut out = crate::oracle::statics::parse_static(&rewritten, ctx)?;
+    let [a] = out.as_mut_slice() else {
+        return None;
+    };
+    let a = std::sync::Arc::make_mut(a);
+    let AbilityKind::Static(s) = &mut a.kind else {
+        return None;
+    };
+    let StaticEffect::Replacement(def) = &mut s.effect else {
+        return None;
+    };
+    if !matches!(def.event, ReplacementEvent::GainLife(PlayerFilter::Any)) {
+        return None;
+    }
+    def.event = ReplacementEvent::Where {
+        event: Box::new(def.event.clone()),
+        cond: Condition::Custom(crate::kw::life_gain_cause::RESOLVING_CONTROLLER.into()),
+    };
+    a.text = text.into();
+    Some(out)
+}
+
+inventory::submit! { StaticPattern { name: "replacements 5: if a spell or ability would cause its controller to gain life, ...", priority: 100, parse: caused_life_gain } }

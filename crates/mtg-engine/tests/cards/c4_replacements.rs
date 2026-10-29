@@ -166,3 +166,108 @@ fn lava_burst_damage_to_a_creature_cant_be_prevented_but_to_a_player_can() {
     t.resolve();
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn rock_hydra_prevents_damage_up_to_its_counters_removing_one_for_each() {
+    cr!("615.7", "615.1a");
+    interp!("per-point-prevention-batch");
+    assert_supported(&["Rock Hydra"]);
+    let mut t = TestGame::new(2);
+    let hydra = t.battlefield(P0, "Rock Hydra");
+    t.g.add_counters(Entity::Object(hydra), "+1/+1", 2, None);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(hydra).go();
+    t.resolve();
+    // 3 damage, 2 counters: 2 prevented and both counters removed, 1 dealt.
+    assert_eq!(t.counters(hydra, "+1/+1"), 0);
+    assert_eq!(t.g.obj(hydra).damage, 1);
+    // No counters: nothing is prevented.
+    let mut t = TestGame::new(2);
+    let hydra = t.battlefield(P0, "Rock Hydra");
+    t.g.add_counters(Entity::Object(hydra), "+1/+1", 5, None);
+    t.lands(P1, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    t.cast(P1, shock).target(hydra).go();
+    t.resolve();
+    assert_eq!(t.counters(hydra, "+1/+1"), 3);
+    assert_eq!(t.g.obj(hydra).damage, 0);
+}
+
+#[test]
+fn bloatfly_swarm_turns_damage_into_counters_removed_and_rad_counters() {
+    cr!("615.5", "122.1");
+    ruling!(
+        "Bloatfly Swarm",
+        "If damage that can't be prevented is dealt to Bloatfly Swarm, you still remove"
+    );
+    assert_supported(&["Bloatfly Swarm"]);
+    let mut t = TestGame::new(2);
+    let fly = t.battlefield(P0, "Bloatfly Swarm");
+    t.g.add_counters(Entity::Object(fly), "+1/+1", 5, None);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(fly).go();
+    t.resolve();
+    assert_eq!(t.g.obj(fly).damage, 0);
+    assert_eq!(t.counters(fly, "+1/+1"), 2);
+    assert_eq!(t.g.player(P0).counter("rad"), 3);
+    assert_eq!(t.g.player(P1).counter("rad"), 3);
+}
+
+#[test]
+fn bronze_horse_prevents_damage_from_spells_that_target_it() {
+    cr!("615.1a", "115.9b");
+    assert_supported(&["Bronze Horse"]);
+    // With another creature: a Shock targeting it is prevented.
+    let mut t = TestGame::new(2);
+    let horse = t.battlefield(P0, "Bronze Horse");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P1, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    t.cast(P1, shock).target(horse).go();
+    t.resolve();
+    assert_eq!(t.g.obj(horse).damage, 0);
+    // Damage from a spell that doesn't target it isn't prevented.
+    t.lands(P1, "Mountain", 3);
+    t.set_step(P1, Step::PrecombatMain);
+    let pyro = t.hand(P1, "Pyroclasm");
+    t.cast(P1, pyro).go();
+    t.resolve();
+    assert_eq!(t.g.obj(horse).damage, 2);
+    // Without another creature: not prevented.
+    let mut t = TestGame::new(2);
+    let horse = t.battlefield(P0, "Bronze Horse");
+    t.lands(P1, "Mountain", 1);
+    let shock = t.hand(P1, "Shock");
+    t.cast(P1, shock).target(horse).go();
+    t.resolve();
+    assert_eq!(t.g.obj(horse).damage, 2);
+}
+
+#[test]
+fn rain_of_gore_turns_life_a_spell_gives_its_controller_into_life_loss() {
+    cr!("614.1a", "119.9");
+    ruling!("Rain of Gore", "does not apply to life gain caused by combat damage");
+    assert_supported(&["Rain of Gore"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Rain of Gore");
+    t.lands(P0, "Plains", 1);
+    let salve = t.hand(P0, "Healing Salve");
+    t.cast(P0, salve).modes(&[0]).target(P0).go();
+    t.resolve();
+    assert_eq!(t.life(P0), 17);
+    // A spell giving life to another player isn't "its controller" gaining it.
+    t.lands(P0, "Plains", 1);
+    let salve = t.hand(P0, "Healing Salve");
+    t.cast(P0, salve).modes(&[0]).target(P1).go();
+    t.resolve();
+    assert_eq!(t.life(P1), 23);
+    // Lifelink combat damage isn't a spell or ability causing it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Rain of Gore");
+    let lion = t.battlefield(P0, "Ajani's Sunstriker");
+    t.attack(&[(lion, Entity::Player(P1))], &[]);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 22);
+}

@@ -8,10 +8,11 @@
 //!   can't be prevented or dealt instead to another permanent or player." (Lava Burst):
 //!   the spell's damage to creatures; created before the damage is dealt.
 
-use super::{EffectPattern, FollowupPattern};
+use super::{EffectPattern, FollowupPattern, StaticPattern};
 use crate::ability::*;
 use crate::oracle::effects::Builder;
 use crate::oracle::phrases::{end, parse_object_phrase};
+use crate::oracle::CompileContext;
 
 const CANT: &str = " can't be prevented or dealt instead to another permanent or player";
 
@@ -87,3 +88,71 @@ fn spell_damage_to_cant_be_prevented(l: &str, prev: &mut Effect, b: &mut Builder
 }
 
 inventory::submit! { FollowupPattern { name: "prevention 5: if ~ would deal damage to a creature, that damage can't be prevented or redirected", priority: 50, apply: spell_damage_to_cant_be_prevented } }
+
+/// "For each 1 damage that would be dealt to ~, if it has a +1/+1 counter on it, remove a
+/// +1/+1 counter from it and prevent that 1 damage." (Rock Hydra): damage to it is
+/// prevented up to the number of +1/+1 counters on it, and that many counters (as much as
+/// the damage, at most the counters it has) are removed (CR 615.7). The counters go even if
+/// the damage can't be prevented (CR 615.12: the effect's other parts still happen).
+fn per_point_counter_prevention(
+    l: &str,
+    text: &str,
+    _ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix("for each 1 damage that would be dealt to ~, if it has a ")?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counter on it, remove a ")?;
+    let (kind2, r) = crate::oracle::costs::counter_kind(r)?;
+    if kind != kind2 || r.trim() != "counter from it and prevent that 1 damage" {
+        return None;
+    }
+    let counters = Value::CountersOn(Box::new(Sel::This), Some(kind.clone()));
+    let mut s = StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
+        event: ReplacementEvent::Damage {
+            source: Filter::Any,
+            to_players: None,
+            to_objects: Some(Filter::Source),
+            combat_only: false,
+        },
+        action: ReplacementAction::PreventAndThen(
+            Some(counters.clone()),
+            Box::new(Effect::RemoveCounters {
+                what: Sel::This,
+                kind: Some(kind),
+                n: Value::Min(
+                    Box::new(Value::Var(crate::prevention::THAT_DAMAGE)),
+                    Box::new(counters.clone()),
+                ),
+            }),
+        ),
+        self_replacement: false,
+        optional: false,
+    }));
+    s.condition = Some(Condition::Compare(counters, Cmp::Ge, Value::c(1)));
+    Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
+}
+
+inventory::submit! { StaticPattern { name: "prevention 5: for each 1 damage that would be dealt to ~, if it has a counter, remove one and prevent that 1 damage", priority: 60, parse: per_point_counter_prevention } }
+
+/// "give each player a rad counter [for each ...]" as "each player gets ...".
+fn give_each_player_counters(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (then, l) = match l.strip_prefix("then ") {
+        Some(r) => ("then ", r),
+        None => ("", l),
+    };
+    let r = l.strip_prefix("give each player ")?;
+    let (n, r) = crate::oracle::phrases::parse_number(r)?;
+    let r = r.trim_start();
+    if !(r.starts_with("rad counter") || r.starts_with("poison counter")) {
+        return None;
+    }
+    let count = match n {
+        Value::Const(1) => "a".to_string(),
+        Value::Const(k) => k.to_string(),
+        _ => return None,
+    };
+    crate::oracle::effects::parse_clause(&format!("{then}each player gets {count} {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "prevention 5: give each player N rad counters", priority: 100, parse: give_each_player_counters } }
