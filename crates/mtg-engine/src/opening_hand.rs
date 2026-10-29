@@ -16,20 +16,22 @@ pub fn before_shuffle_actions(g: &mut Game) {
     pregame_choices(g);
     for p in g.player_ids() {
         for card in g.player(p).library.clone() {
-            let filters: Vec<Filter> = g
+            let filters: Vec<(Filter, u32)> = g
                 .obj(card)
                 .base
                 .abilities
                 .iter()
                 .filter_map(|a| match &a.kind {
                     AbilityKind::Static(s) => match &s.effect {
-                        StaticEffect::BeforeShuffleExile { what } => Some(what.clone()),
+                        StaticEffect::BeforeShuffleExile { what, at_least } => {
+                            Some((what.clone(), *at_least))
+                        }
                         _ => None,
                     },
                     _ => None,
                 })
                 .collect();
-            for f in filters {
+            for (f, at_least) in filters {
                 let name = g.obj(card).base.name.clone();
                 let ctx = Ctx::new(Some(card), p);
                 let cands: Vec<ObjectId> = g
@@ -39,7 +41,9 @@ pub fn before_shuffle_actions(g: &mut Game) {
                     .into_iter()
                     .filter(|c| g.matches(*c, &f, &ctx))
                     .collect();
+                // "Three or more": only if that many can be exiled.
                 if cands.is_empty()
+                    || cands.len() < at_least as usize
                     || !g.ask_yes_no(
                         p,
                         Some(card),
@@ -49,7 +53,12 @@ pub fn before_shuffle_actions(g: &mut Game) {
                 {
                     continue;
                 }
-                let pick = g.ask_objects(p, Some(card), "Choose a card to exile", cands, 1, 1);
+                let (min, max) = if at_least == 0 {
+                    (1, 1)
+                } else {
+                    (at_least, cands.len() as u32)
+                };
+                let pick = g.ask_objects(p, Some(card), "Choose cards to exile", cands, min, max);
                 for c in pick {
                     if let Some(e) = g.move_object(c, Zone::Exile, MoveCause::Effect, Some(p)) {
                         g.named_exiles.push((p, name.clone(), e));

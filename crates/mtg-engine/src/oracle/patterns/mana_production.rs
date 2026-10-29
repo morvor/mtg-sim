@@ -61,6 +61,10 @@ fn production(r: &str) -> Option<ManaProduction> {
     if r == "one mana of any color in your commander's color identity" {
         return Some(ManaProduction::CommanderIdentity);
     }
+    // Paliano, the High City (CR 905.2b; `draft_4`).
+    if r == "one mana of any color chosen as you drafted cards named ~" {
+        return Some(ManaProduction::DraftChosenColors);
+    }
     let (n, rest) = amount(r)?;
     let rest = rest.trim_start();
     // "x mana of any one color", "ten mana of any one color".
@@ -166,8 +170,12 @@ fn mana_recipients(e: &Effect, out: &mut Vec<PlayerRef>) {
     match e {
         Effect::AddMana { who, .. } => out.push(who.clone()),
         Effect::Seq(v) => v.iter().for_each(|x| mana_recipients(x, out)),
-        Effect::ChooseOne { options, .. } => options.iter().for_each(|(_, x)| mana_recipients(x, out)),
-        Effect::If { then, otherwise, .. } => {
+        Effect::ChooseOne { options, .. } => {
+            options.iter().for_each(|(_, x)| mana_recipients(x, out))
+        }
+        Effect::If {
+            then, otherwise, ..
+        } => {
             mana_recipients(then, out);
             mana_recipients(otherwise, out);
         }
@@ -187,7 +195,9 @@ fn adds_to_you(e: &Effect) -> bool {
 fn adds_to_other(e: &Effect) -> bool {
     let mut v = Vec::new();
     mana_recipients(e, &mut v);
-    !v.is_empty() && v.iter().all(|p| matches!(p, PlayerRef::TriggerPlayer | PlayerRef::Iterated))
+    !v.is_empty()
+        && v.iter()
+            .all(|p| matches!(p, PlayerRef::TriggerPlayer | PlayerRef::Iterated))
 }
 
 inventory::submit! { FollowupPattern { name: "mana: you don't lose this mana", priority: 50, apply: f_dont_lose_this_mana } }

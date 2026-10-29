@@ -355,6 +355,10 @@ pub struct EventInfo {
     /// a card").
     #[serde(default)]
     pub caused_by: Option<PlayerId>,
+    /// For a batch of events that triggered one ability ("whenever you roll one or more
+    /// dice"), each event's amount (the results of those dice), in order.
+    #[serde(default)]
+    pub amounts: Vec<i32>,
 }
 
 /// The kind of object on the stack.

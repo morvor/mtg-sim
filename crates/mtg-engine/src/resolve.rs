@@ -3527,6 +3527,17 @@ impl Game {
                 });
                 vec![c; k.max(0) as usize]
             }
+            ManaProduction::DraftChosenColors => {
+                let types: Vec<ManaType> = crate::draft::chosen_colors(self, ctx)
+                    .into_iter()
+                    .map(ManaType::from_color)
+                    .collect();
+                if types.is_empty() {
+                    vec![]
+                } else {
+                    vec![self.choose_mana_color(p, ctx, &types)]
+                }
+            }
             ManaProduction::CommanderIdentity => {
                 // CR 903.4f: undefined without a commander; no mana.
                 let types = crate::mana_abilities::commander_identity_types(self, p);

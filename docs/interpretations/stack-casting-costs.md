@@ -75,3 +75,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: every reversed cast or activation that paid mana by activating mana abilities, e.g. a sacrificed Lotus Petal or Treasure, which returns to the battlefield.
 - Code: `crates/mtg-engine/src/game.rs` (`roll_back`); `crates/mtg-engine/src/casting.rs` (`cast_with_option`, `activate_ability`).
 - Tests: `tests/cr/r733_001_library_exceptions.rs` (`a_reversed_action_keeps_a_draw_made_while_attempting_it`, `a_reversed_cast_reverses_its_mana_abilities`); `tests/cr/r733_001_reversal_reachability.rs` (`a_reversed_cast_keeps_a_card_shuffled_into_a_library_by_a_replacement_effect`).
+
+## more-loyalty-activations-add-up: "You may activate ~'s loyalty ability two more times this turn" adds to the once of CR 606.3
+- Kind: interpretation
+- Status: decided
+- Rules: 606.3 "A player may activate a loyalty ability of a permanent they control any time they have priority and the stack is empty during a main phase of their turn, but only if no player has previously activated a loyalty ability of that permanent that turn."
+- Question: Comet, Stellar Pup's "you may activate Comet's loyalty ability two more times this turn" and Kaito-style "twice this turn rather than only once" both change the limit of 606.3. Do several such effects add up?
+- Decision: "N more times" adds N activations of that permanent this turn, on top of the usual one and of other "more times" effects (like The Chain Veil's one more); "twice (N times) each turn rather than only once" sets the limit, and several such effects don't add up (the greatest applies), as before.
+- Alternatives: Read "two more times" as "three times this turn rather than only once" (no stacking with other effects).
+- Why: "More" counts from what the player may already do, as The Chain Veil's ruling reads its "once more"; "rather than only once" replaces the limit itself.
+- Affects: Comet, Stellar Pup (and any "N more times" effect).
+- Code: `crates/mtg-engine/src/kw/game_rules_4.rs` (`MORE_LOYALTY`, `extra_loyalty_activations`); `crates/mtg-engine/src/activation_costs.rs` (`loyalty_activations_per_turn`).
+- Tests: `tests/cards/game_rules_4.rs` (`comet_rolls_a_six_and_activates_two_more_times`).

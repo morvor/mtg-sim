@@ -569,6 +569,9 @@ fn custom_rule(name: &str) -> CustomRule {
     // revealed hands, copy exceptions, lost abilities, names, triggers (Torpor Orb's
     // family, `kw/torpor.rs`), deck construction.
     const NO_LIBRARY_FAMILIES: &[&str] = &[
+        // Abilities that function during the draft (CR 905.2) and the game's reads of what
+        // was noted or removed then (`draft.rs`, `kw/draft_4.rs`): no library involved.
+        "draft:",
         "blockable as though no landwalk:",
         "cast target forbidden:",
         "tap abilities can't be activated:",
