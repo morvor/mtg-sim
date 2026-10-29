@@ -205,7 +205,7 @@ fn bind(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn hands_of_binding_follows_the_creature_to_its_new_controller() {
-    cr!("502.3", "611.2c");
+    cr!("502.3");
     ruling!(
         "Hands of Binding",
         "If a different player gains control of the creature that was tapped by Hands of Binding, Hands of Binding will stop that creature from untapping during its new controller's next untap step."
@@ -338,7 +338,7 @@ fn trait_doctoring_changes_a_plains_mana_ability_but_not_its_name() {
 
 #[test]
 fn enchanted_creature_loses_its_non_creature_subtypes() {
-    cr!("205.1b", "613.1d");
+    cr!("205.1a", "613.1d");
     ruling!(
         "Amphibian Downpour",
         "If the enchanted creature has any subtypes other than creature types, such as Equipment, Vehicle, or Urza's, it loses those as well."
@@ -370,7 +370,7 @@ fn enchanted_creature_loses_its_non_creature_subtypes() {
 
 #[test]
 fn the_flood_of_mars_on_a_land_creature_makes_a_copy_not_an_island() {
-    cr!("707.2", "205.1b");
+    cr!("707.2", "613.1a");
     ruling!(
         "The Flood of Mars",
         "If the target is both a creature and a land as the triggered ability resolves, it will become a copy of The Flood of Mars. Excepting some very unusual cases, that copy won't be a land, so it won't also become an Island."

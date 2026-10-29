@@ -202,7 +202,7 @@ fn run(c: &Case) -> (TestGame, ObjectId, Vec<ObjectId>) {
 
 #[test]
 fn the_token_copy_has_the_ability_and_makes_copies_of_itself() {
-    cr!("707.2", "111.4");
+    cr!("707.2");
     ruling!(
         "Biowaste Blob",
         "The token copy will have Biowaste Blob's abilities, including the ability to create token copies of itself."
