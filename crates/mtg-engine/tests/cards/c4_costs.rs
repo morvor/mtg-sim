@@ -5,6 +5,7 @@
 
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
+use mtg_engine::turn::Step;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -232,4 +233,77 @@ fn phyrexian_dreadnought_stays_if_creatures_with_total_power_12_are_sacrificed()
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Phyrexian Dreadnought"));
     assert!(t.named_on_battlefield("Grizzly Bears").len() == 1);
+}
+
+#[test]
+fn plumb_the_forbidden_copies_itself_for_each_creature_sacrificed() {
+    cr!("601.2b", "603.12", "707.10");
+    ruling!("Plumb the Forbidden", "If you copy Plumb the Forbidden multiple times");
+    assert_supported(&["Plumb the Forbidden"]);
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Swamp", 2);
+    let hand = t.hand_size(P0);
+    let spell = t.hand(P0, "Plumb the Forbidden");
+    t.answer(P0, DecisionKind::OptionalCost, mtg_engine::decision::Answer::Number(2));
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+    // The spell and two copies: three cards, three life.
+    assert_eq!(t.hand_size(P0), hand + 3);
+    assert_eq!(t.life(P0), 17);
+    // Without sacrificing: no copy.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 2);
+    let hand = t.hand_size(P0);
+    let spell = t.hand(P0, "Plumb the Forbidden");
+    t.answer(P0, DecisionKind::OptionalCost, mtg_engine::decision::Answer::Number(0));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.life(P0), 19);
+}
+
+#[test]
+fn jotun_grunt_cumulative_upkeep_puts_cards_from_a_single_graveyard_on_the_bottom() {
+    cr!("702.24a", "118.3");
+    assert_supported(&["Jötun Grunt"]);
+    let mut t = TestGame::new(2);
+    let grunt = t.battlefield(P0, "Jötun Grunt");
+    let x = t.graveyard(P1, "Lightning Bolt");
+    let y = t.graveyard(P1, "Shock");
+    t.graveyard(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(x), Entity::Object(y)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Draw);
+    assert!(t.on_battlefield(grunt), "{}", t.dump_log());
+    assert_eq!(t.graveyard_size(P1), 0);
+    assert_eq!(t.graveyard_size(P0), 1);
+}
+
+#[test]
+fn rift_elemental_removes_a_time_counter_from_a_suspended_card() {
+    cr!("702.62b", "118.3");
+    assert_supported(&["Rift Elemental"]);
+    let mut t = TestGame::new(2);
+    let rift = t.battlefield(P0, "Rift Elemental");
+    t.lands(P0, "Mountain", 2);
+    let bloom = t.exile(P0, "Lotus Bloom");
+    t.g.add_counters(Entity::Object(bloom), "time", 3, None);
+    t.answer_choose(P0, &[Entity::Object(bloom)]);
+    t.activate(P0, rift, 0, &[]).unwrap();
+    assert_eq!(t.counters(bloom, "time"), 2);
+    t.resolve();
+    assert_eq!(t.pt(rift), (3, 1));
+    // Nothing with a time counter: it can't be activated.
+    let mut t = TestGame::new(2);
+    let rift = t.battlefield(P0, "Rift Elemental");
+    t.lands(P0, "Mountain", 2);
+    t.exile(P0, "Lotus Bloom");
+    assert!(t.activate(P0, rift, 0, &[]).is_err());
 }

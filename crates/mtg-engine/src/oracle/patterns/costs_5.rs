@@ -240,3 +240,95 @@ fn energy_paid_this_way(block: &str, ctx: &CompileContext) -> Option<Vec<Ability
 }
 
 inventory::submit! { AbilityPattern { name: "costs 5: the {E} paid this way (pay any amount of energy)", priority: 80, parse: energy_paid_this_way } }
+
+/// "As an additional cost to cast ~, you may sacrifice one or more creatures. When you do,
+/// copy ~ for each creature sacrificed this way." (Plumb the Forbidden): an optional cost
+/// paid any number of times (one or more, or not at all: "any number of", CR 601.2b), and a
+/// reflexive triggered ability when it's paid (CR 603.12), which triggers as the spell is
+/// cast and copies it once for each creature sacrificed.
+fn optional_sacrifice_one_or_more(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if block.contains('\n') {
+        return None;
+    }
+    let (cost_s, reflexive) = block
+        .trim_end()
+        .split_once(" When you do, copy ~ for each creature sacrificed this way.")
+        .map(|(a, b)| (a, b.is_empty()))?;
+    if !reflexive {
+        return None;
+    }
+    let cost_s = cost_s.replacen(
+        "you may sacrifice one or more creatures.",
+        "you may sacrifice any number of creatures.",
+        1,
+    );
+    if !cost_s.ends_with("you may sacrifice any number of creatures.") {
+        return None;
+    }
+    let mut out = crate::oracle::parse_ability(&cost_s, ctx)?;
+    let [a] = out.as_slice() else {
+        return None;
+    };
+    // The repeatable cost's count.
+    let s = serde_json::to_string(&a.kind).ok()?;
+    let start = s.find("spell cost:times paid:")?;
+    let name: String = s[start..].chars().take_while(|c| *c != '"').collect();
+    let times = Value::Custom(name.into());
+    let mut t = TriggeredAbility::new(
+        TriggerCond::CastSpell {
+            who: PlayerRel::You,
+            filter: Filter::Source,
+        },
+        Body {
+            targets: vec![],
+            effect: Effect::CopySpell {
+                what: Sel::This,
+                count: times.clone(),
+                new_targets: false,
+            },
+            modal: None,
+        },
+    );
+    t.intervening_if = Some(Condition::Compare(times, Cmp::Ge, Value::c(1)));
+    t.zone = FunctionZone::Stack;
+    out = out
+        .into_iter()
+        .map(|a| AbilityDef::with_link(a.kind.clone(), block.trim(), a.link))
+        .collect();
+    out.push(AbilityDef::new(AbilityKind::Triggered(t), block.trim()));
+    Some(out)
+}
+
+inventory::submit! { AbilityPattern { name: "costs 5: you may sacrifice one or more creatures. When you do, copy ~ for each", priority: 80, parse: optional_sacrifice_one_or_more } }
+
+/// "Remove a time counter from a permanent you control or suspended card you own" (Rift
+/// Elemental): one permanent or one suspended card in exile (a card with suspend and a time
+/// counter, CR 702.62b), CR 118.3.
+fn remove_counter_from_permanent_or_suspended(p: &str) -> Option<CostPart> {
+    let r = crate::oracle::phrases::strip(p, "remove")?;
+    let r = r.trim_start().strip_prefix("a ")?;
+    let (kind, r) = crate::oracle::costs::counter_kind(r)?;
+    let r = r.trim_start().strip_prefix("counter from a ")?;
+    let perm = end(r).strip_suffix(" or suspended card you own")?;
+    let (f, plural, tail) = parse_object_phrase(perm)?;
+    if plural || !end(tail).is_empty() || !format!("{f:?}").contains("ControlledBy(You)") {
+        return None;
+    }
+    let suspended = Filter::and(vec![
+        Filter::Card,
+        Filter::InZone(ZoneKind::Exile),
+        Filter::OwnedBy(PlayerRel::You),
+        Filter::HasKeyword(crate::keywords::KeywordKind::Suspend),
+        Filter::HasCounter(Some(crate::types::counters::TIME.into())),
+    ]);
+    Some(CostPart::RemoveCountersFromOne {
+        kind: Some(kind),
+        filter: Filter::Or(vec![
+            Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+            suspended,
+        ]),
+        count: Value::c(1),
+    })
+}
+
+inventory::submit! { super::CostPattern { name: "costs 5: remove a counter from a permanent you control or suspended card you own", priority: 60, parse: remove_counter_from_permanent_or_suspended } }
