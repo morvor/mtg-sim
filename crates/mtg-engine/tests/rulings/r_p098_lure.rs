@@ -404,7 +404,7 @@ fn joraga_invocation_the_defender_chooses_how_to_block() {
 
 #[test]
 fn crashing_boars_is_mandatory_and_the_choice_must_still_be_untapped() {
-    cr!("509.1c", "603.3d");
+    cr!("509.1c");
     ruling!(
         "Crashing Boars",
         "If the chosen creature is not still untapped at the time blockers are declared, it does not have to block."

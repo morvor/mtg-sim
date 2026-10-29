@@ -283,7 +283,7 @@ fn chandra_acolyte_of_flame_pays_the_cost_or_an_alternative_cost() {
 
 #[test]
 fn treasure_keeper_uncast_and_all_lands_go_back_in_a_random_order() {
-    cr!("608.2g", "401.4");
+    cr!("608.2g");
     ruling!(
         "Treasure Keeper",
         "If you don't cast the nonland card with mana value 3 or less, it'll be put on the bottom of your library in a random order with the other cards."

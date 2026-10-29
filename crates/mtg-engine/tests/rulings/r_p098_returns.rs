@@ -70,7 +70,7 @@ fn returning_an_illegal_target_does_nothing_else() {
 
 #[test]
 fn unforgiving_one_x_is_checked_again_on_resolution() {
-    cr!("608.2b", "601.2c");
+    cr!("608.2b", "603.3d");
     ruling!(
         "Unforgiving One",
         "The value of X needs to be determined both when the ability triggers (so you can choose a target) and again when the ability resolves (to check if that target is still legal). If the number of modified creatures you control has decreased enough in that time to make the target illegal, Unforgiving One's ability won't resolve."
@@ -101,7 +101,7 @@ fn unforgiving_one_x_is_checked_again_on_resolution() {
 
 #[test]
 fn an_aura_returned_without_targeting_may_enchant_hexproof_but_not_protection() {
-    cr!("303.4f", "303.4d", "702.11b");
+    cr!("303.4f", "702.11b");
     ruling!(
         "Shepherd of the Cosmos",
         "If you return an Aura this way, you choose what the Aura will enchant just before it enters the battlefield. An Aura returning to the battlefield this way doesn’t target the player or permanent it will enchant, so permanents or players with hexproof may be chosen; however, the chosen recipient must be able to legally be enchanted by the Aura, so a player or permanent with protection from one of the Aura’s qualities can’t be chosen this way. If there’s nothing legal for the Aura to enchant, it stays in the graveyard."
@@ -194,7 +194,7 @@ fn matter_reshaper_aura_needs_something_to_enchant() {
 
 #[test]
 fn call_of_the_death_dweller_counters_follow_the_returned_cards() {
-    cr!("608.2c", "115.1");
+    cr!("608.2c");
     ruling!(
         "Call of the Death-Dweller",
         "If you return no creature cards to the battlefield, you won’t put any counters on any creatures."
@@ -308,7 +308,7 @@ fn carnage_returned_creature_attacks_only_if_able_and_free() {
 
 #[test]
 fn extraction_specialist_restriction_ends_when_it_leaves() {
-    cr!("611.2b", "508.1c", "509.1b");
+    cr!("611.2b", "509.1b");
     ruling!(
         "Extraction Specialist",
         "Once Extraction Specialist leaves the battlefield, the creature that is returned can attack and block as normal. If Extraction Specialist leaves the battlefield before its ability resolves, the creature that is returned will be able to attack and block as normal right away."

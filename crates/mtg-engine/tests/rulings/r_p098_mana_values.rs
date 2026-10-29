@@ -35,7 +35,7 @@ fn offered(t: &TestGame, from: usize) -> Vec<Entity> {
 /// resolve. Endless One ({X}) counts as mana value 0 in every zone.
 #[test]
 fn x_is_zero_and_printed_costs_count_for_cards_outside_the_stack() {
-    cr!("202.3e", "202.3a");
+    cr!("202.3e", "202.3");
     ruling!(
         "Renegade Rallier",
         "If the mana cost of a card in your graveyard includes {X}, X is considered to be 0."
@@ -197,7 +197,7 @@ fn no_one_left_behind_x_creature_card_gets_the_reduction() {
 
 #[test]
 fn dune_drifter_not_cast_x_is_zero() {
-    cr!("107.3f", "603.2");
+    cr!("107.3m");
     ruling!(
         "Dune Drifter",
         "If this Vehicle enters and wasn’t cast, or it was cast without paying its mana cost, X is 0."
@@ -242,7 +242,7 @@ fn turntimber_symbiosis_uses_the_mana_value_in_the_library() {
 
 #[test]
 fn ranger_of_eos_finds_zero_one_or_two_creatures_of_mana_value_1_or_less() {
-    cr!("701.23d");
+    cr!("701.23b");
     ruling!(
         "Ranger of Eos",
         "You may choose to find zero, one, or two creature cards in your library. Each card you find must have mana value 1 or less."

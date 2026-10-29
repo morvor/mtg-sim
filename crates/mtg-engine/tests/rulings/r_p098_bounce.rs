@@ -20,7 +20,7 @@ fn obj(id: ObjectId) -> Entity {
 /// enters trigger is the creature itself: it is offered just that, and it's returned.
 #[test]
 fn a_mandatory_bounce_trigger_with_only_itself_to_target_returns_itself() {
-    cr!("603.3d", "115.1");
+    cr!("603.3d");
     ruling!(
         "Aethersnipe",
         "Aethersnipe can be the target of its own ability. If it's the only nonland permanent on the battlefield, it must be the target of its ability."
@@ -93,7 +93,7 @@ fn optional_bounce_may_target_itself_and_need_not_return_it() {
 
 #[test]
 fn lumengrid_drake_metalcraft_bounce_is_mandatory_and_rechecked() {
-    cr!("603.4", "702.2", "115.1");
+    cr!("603.4");
     ruling!(
         "Lumengrid Drake",
         "The triggered ability is mandatory. If you control three or more artifacts as Lumengrid Drake enters, you must target a creature. If there are no other creatures on the battlefield, you must target Lumengrid Drake itself. As the ability resolves, if you control three or more artifacts, you must return the targeted creature to its owner's hand."
@@ -209,7 +209,7 @@ fn stolen_by_the_fae_illegal_target_makes_no_faeries() {
 
 #[test]
 fn ghitu_amplifier_pump_resolves_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "608.2");
+    cr!("603.3");
     ruling!(
         "Ghitu Amplifier",
         "Ghitu Amplifier's last triggered ability resolves before the spell that caused it to trigger. The ability will resolve even if that spell is countered."
@@ -242,7 +242,7 @@ fn reflect(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn reflector_mage_forbids_only_the_name_it_had_on_the_battlefield() {
-    cr!("201.2", "708.2", "707.2");
+    cr!("201.2a", "708.2", "707.2");
     ruling!(
         "Reflector Mage",
         "If the returned creature had no name while it was on the battlefield (likely because the creature was face down), its owner can still cast face-down creature spells with morph or megamorph, or cast the same card face up, before your next turn."

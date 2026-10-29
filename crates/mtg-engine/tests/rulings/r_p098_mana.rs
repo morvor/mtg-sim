@@ -23,7 +23,7 @@ fn pool_of(t: &TestGame, p: PlayerId) -> Vec<ManaType> {
 
 #[test]
 fn avid_reclaimer_mana_and_life_immediately_even_with_nothing_to_spend_on() {
-    cr!("605.1a", "605.3a", "605.3b");
+    cr!("605.1a", "605.3b");
     ruling!(
         "Avid Reclaimer",
         "Avid Reclaimer's ability is a mana ability. It doesn't use the stack and can't be responded to. You'll immediately add mana and gain 2 life, if applicable."
@@ -90,7 +90,7 @@ fn quirion_explorer_with_only_colorless_lands_opposing_adds_nothing() {
 
 #[test]
 fn zhur_taa_druid_trigger_uses_the_stack_above_the_spell_it_paid_for() {
-    cr!("605.4a", "603.3");
+    cr!("605.1b", "603.3");
     ruling!(
         "Zhur-Taa Druid",
         "If you tap Zhur-Taa Druid for mana during the process of casting a spell or activating an ability, its triggered ability will resolve before that spell or ability."
@@ -164,7 +164,7 @@ fn magus(t: &mut TestGame) {
 
 #[test]
 fn magus_lucea_kane_doesnt_copy_a_cost_with_x_that_isnt_the_mana_symbol() {
-    cr!("707.10", "603.7c");
+    cr!("707.10");
     ruling!(
         "Magus Lucea Kane",
         "A spell or ability with a cost that includes X, but not the mana symbol {X}, won't be copied."
@@ -210,7 +210,7 @@ fn magus_lucea_kane_doesnt_copy_a_cost_with_x_that_isnt_the_mana_symbol() {
 
 #[test]
 fn magus_lucea_kane_copy_makes_its_resolution_choices_separately() {
-    cr!("707.10", "608.2c");
+    cr!("707.10");
     ruling!(
         "Magus Lucea Kane",
         "Any choices made when the spell or ability resolves won't have been made yet when it's copied. Any such choices will be made separately when the copy resolves."
@@ -385,7 +385,7 @@ fn celestial_dawn_unspent_nonwhite_mana_pays_only_generic() {
 
 #[test]
 fn deep_water_applies_to_lands_gained_later_this_turn() {
-    cr!("106.12b", "611.2c");
+    cr!("106.12b");
     ruling!(
         "Deep Water",
         "Deep Waters affects lands you control when it resolves and any lands you gain control of this turn."
@@ -471,7 +471,6 @@ fn selvala_uses_the_entering_creatures_last_known_power() {
 /// not against the total of their powers, nor excluding Selvala.
 #[test]
 fn selvala_compares_the_power_with_each_other_creature() {
-    cr!("608.2h");
     // (creature entering, other creatures, draws)
     let cases: [(&str, &[&str], bool); 4] = [
         ("Hill Giant", &[], true),

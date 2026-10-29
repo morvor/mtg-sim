@@ -168,7 +168,7 @@ fn shield_counters_arent_regeneration_and_dont_stop_sacrifice() {
 
 #[test]
 fn bilbo_stays_blocked_when_the_blocker_grows() {
-    cr!("509.1b", "506.4");
+    cr!("509.1b", "509.1h");
     ruling!(
         "Bilbo, Unexpected Adventurer",
         "Once Bilbo has been blocked, increasing the power of a creature blocking him to 3 or greater won't cause him to become unblocked."
@@ -230,7 +230,7 @@ fn primary_research_checks_as_the_end_step_starts() {
 
 #[test]
 fn battle_of_hoover_dam_copied_without_a_choice_has_neither_ability() {
-    cr!("707.2", "614.12");
+    cr!("707.2");
     ruling!(
         "Battle of Hoover Dam",
         "If you somehow control Battle of Hoover Dam and no choice was made for it (perhaps because another permanent on the battlefield became a copy of it), it has neither of the two triggered abilities."
@@ -390,7 +390,7 @@ fn commands_choose_only_modes_with_legal_targets() {
 
 #[test]
 fn ranger_captain_of_eos_cant_counter_spells_already_cast() {
-    cr!("602.2", "608.2");
+    cr!("601.3");
     ruling!(
         "Ranger-Captain of Eos",
         "Your opponents may cast spells in response to the last ability of Ranger-Captain of Eos. The ability won’t affect those spells and it won’t affect spells that those players cast before you activated it. (In other words, the ability can’t be used to counter a spell.)"
@@ -419,7 +419,7 @@ fn ranger_captain_of_eos_cant_counter_spells_already_cast() {
 
 #[test]
 fn starting_town_counts_the_turns_you_have_taken() {
-    cr!("500.7", "614.1c");
+    cr!("614.1c");
     ruling!(
         "Squall, SeeD Mercenary",
         "Starting Town's first ability cares about how many turns you have taken, not necessarily how many turns the game has had, in case you take an extra turn."
