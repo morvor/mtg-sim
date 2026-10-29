@@ -580,3 +580,29 @@ fn a_card_returned_at_random_from_a_graveyard_is_seen_by_everyone() {
     let p1 = observe(&t.g, Some(P1));
     assert!(!json(&p1.players[0].graveyard).contains(name.as_str()));
 }
+
+#[test]
+fn a_card_returned_from_a_graveyard_to_a_hand_is_seen_by_everyone() {
+    cr!("400.2", "402.3");
+    ruling!(
+        "Haunted Fengraf",
+        "All players get to see which card you return to your hand."
+    );
+    // Haunted Fengraf: "{3}, {T}, Sacrifice this land: Return a creature card at random
+    // from your graveyard to your hand."
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    let fengraf = t.battlefield(P0, "Haunted Fengraf");
+    t.lands(P0, "Wastes", 3);
+    t.graveyard(P0, "Grizzly Bears");
+    let before = t.g.event_feed.len();
+    t.activate(P0, fengraf, 1, &[]).expect("Haunted Fengraf");
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    let events = t.g.event_feed.since(before);
+    let for_p1 = json(&describe_events(&t.g, Some(P1), &events));
+    assert!(
+        for_p1.contains("Grizzly Bears") && for_p1.contains("hand"),
+        "{for_p1}"
+    );
+}
