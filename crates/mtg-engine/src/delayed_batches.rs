@@ -51,6 +51,7 @@ pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> 
                 .or(i.player.map(Entity::Player)),
             BatchPer::Object => i.object.map(Entity::Object),
             BatchPer::Other => i.other.map(Entity::Object),
+            BatchPer::OtherController => i.other.map(|o| Entity::Player(g.obj(o).controller)),
         };
         let mut groups: Vec<Vec<EventInfo>> = Vec::new();
         for info in infos {
@@ -73,6 +74,12 @@ pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> 
                 info.amount = grp.len() as i32;
             }
             info.objects = Vec::new();
+            info.players = Vec::new();
+            for p in grp.iter().filter_map(|i| i.player) {
+                if !info.players.contains(&p) {
+                    info.players.push(p);
+                }
+            }
             for i in &grp {
                 for o in i.object.or(i.other).into_iter() {
                     if !info.objects.contains(&o) {

@@ -168,6 +168,21 @@ pub fn recipient_for_all(g: &Game, to: &Sel, objs: &[ObjectId], ctx: &Ctx) -> Se
     }
 }
 
+/// Whether `obj` (an Aura card) could enchant `to` as `to` most recently existed, for an
+/// object that has left the battlefield ("search your library for an Aura card that could
+/// enchant it" after it left: Auratouched Mage's ruling): its enchant ability and the
+/// object's last known protection (CR 303.4, 702.16c).
+pub fn could_have_enchanted(g: &Game, obj: ObjectId, to: ObjectId) -> bool {
+    let o = g.obj(obj);
+    if !o.chars.has_subtype("Aura") || o.is_creature() || obj == to {
+        return false;
+    }
+    let Some(f) = enchant_filter(&o.chars) else {
+        return false;
+    };
+    g.matches(to, &f, &Ctx::new(Some(obj), o.controller)) && !aura_protection_applies(g, to, obj)
+}
+
 pub fn can_attach(g: &Game, obj: ObjectId, to: Entity) -> bool {
     can_attach_as(g, obj, to, false)
 }

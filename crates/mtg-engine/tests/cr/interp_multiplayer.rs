@@ -242,3 +242,35 @@ fn without_shared_team_turns_the_attacking_player_is_the_active_player() {
     assert_eq!(t.life(P0), life - 3);
     assert_eq!(t.life(P1), 23);
 }
+
+#[test]
+fn norns_decree_triggers_once_for_each_opponent_whose_creatures_dealt_damage() {
+    cr!("603.2c", "805.10a", "810.10");
+    interp!("one-or-more-an-opponent-controls-per-opponent");
+    // Norn's Decree: "Whenever one or more creatures an opponent controls deal combat
+    // damage to you, that opponent gets a poison counter." Both attacking players' creatures
+    // deal P2 combat damage at once: it triggers once for each of them, and each gets a
+    // poison counter (individually, CR 810.10).
+    let mut t = thg();
+    t.battlefield(P2, "Norn's Decree");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(
+        &mut t,
+        &[
+            (bears, Entity::Player(P2)),
+            (elves, Entity::Player(P2)),
+            (giant, Entity::Player(P2)),
+        ],
+    );
+    // Stop as the Decree's triggers are put on the stack (nothing else triggers).
+    t.g.run_until(10_000, |g| !g.stack.is_empty() || g.turn.step == Step::End);
+    assert_eq!(t.stack_len(), 2, "{}", t.dump_log());
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).poison(), 1, "{}", t.dump_log());
+    assert_eq!(t.g.player(P1).poison(), 1);
+    assert_eq!(t.g.player(P2).poison(), 0);
+    assert_eq!(t.g.player(P3).poison(), 0);
+}

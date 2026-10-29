@@ -229,8 +229,10 @@ impl Game {
             Zone::Battlefield => zone == FunctionZone::Battlefield && !obj.phased_out,
             Zone::Stack => zone == FunctionZone::Stack,
             Zone::Hand(_) => zone == FunctionZone::Hand,
-            Zone::Graveyard(_) => zone == FunctionZone::Graveyard,
-            Zone::Exile => zone == FunctionZone::Exile,
+            Zone::Graveyard(_) => {
+                zone == FunctionZone::Graveyard || zone == FunctionZone::GraveyardOrExile
+            }
+            Zone::Exile => zone == FunctionZone::Exile || zone == FunctionZone::GraveyardOrExile,
             Zone::Library(_) => zone == FunctionZone::Library,
             Zone::Command => {
                 zone == FunctionZone::Command
@@ -322,16 +324,41 @@ impl Game {
         // Prototyped spells and permanents (CR 718.3b).
         crate::kw::prototype::prototyped_characteristics(self, &live);
 
-        // Layer 1a: copy effects (CR 707), in timestamp order.
-        let mut copy_effects: Vec<(Timestamp, usize)> = self
+        // Layer 1a: copy effects (CR 707), in timestamp order: those of resolved spells
+        // and abilities, and those of static abilities (`static_copy.rs`).
+        let static_copies = crate::static_copy::collect(self, &live);
+        let mut copy_effects: Vec<(Timestamp, usize, bool)> = self
             .effects
             .iter()
             .enumerate()
             .filter(|(_, e)| e.layer1.is_some())
-            .map(|(i, e)| (e.timestamp, i))
+            .map(|(i, e)| (e.timestamp, i, false))
+            .chain(
+                static_copies
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| (c.timestamp, i, true)),
+            )
             .collect();
         copy_effects.sort();
-        for (_, i) in copy_effects {
+        for (_, i, is_static) in copy_effects {
+            if is_static {
+                let c = &static_copies[i];
+                let eff_id = crate::static_copy::link_effect_id(c.source);
+                for t in &c.affected {
+                    if self.is_live(*t) {
+                        self.apply_copy_values(
+                            *t,
+                            &c.values,
+                            &[],
+                            eff_id,
+                            Some(c.source),
+                            c.controller,
+                        );
+                    }
+                }
+                continue;
+            }
             let eff = self.effects[i].clone();
             let Affected::Objects(targets) = &eff.affected else {
                 continue;
@@ -358,34 +385,7 @@ impl Game {
                 if !self.is_live(*t) {
                     continue;
                 }
-                // A flipped permanent copying a flip card has its alternative
-                // characteristics (CR 707.3, 110.5c).
-                let mut v = if self.objects[t.0 as usize].flipped {
-                    crate::flip::flipped_copy_values(values).unwrap_or_else(|| (**values).clone())
-                } else {
-                    (**values).clone()
-                };
-                v.abilities = v
-                    .abilities
-                    .iter()
-                    .map(|a| copied_ability(a, eff.id))
-                    .collect();
-                let ctx = Ctx::new(eff.source, eff.controller);
-                crate::copy::drop_overridden_cdas(&mut v, exceptions);
-                for m in exceptions {
-                    apply_mod(&mut v, m, self, &ctx, *t);
-                }
-                // A copy exception can't give power and toughness to a copy that isn't a
-                // creature in its copiable values when what it copies has none (a Vehicle
-                // copying a land that became a creature, "except it's 4/3", is 0/0 once
-                // crewed; CR 208.3, Mindlink Mech rulings).
-                if !v.is(CardType::Creature) && values.power.is_none() && values.toughness.is_none()
-                {
-                    v.power = None;
-                    v.toughness = None;
-                }
-                drop_ungainable_subtypes(&mut v, values);
-                self.objects[t.0 as usize].chars = v;
+                self.apply_copy_values(*t, values, exceptions, eff.id, eff.source, eff.controller);
             }
         }
 
@@ -588,6 +588,47 @@ impl Game {
             // CR 401.5: the revealed top cards of libraries.
             crate::zones::update_revealed_tops(self);
         }
+    }
+
+    /// Gives `t` the copiable values `values` of a copy effect (CR 707.2), with the
+    /// effect's exceptions applied on top (CR 707.9b). `eff_id` identifies the effect for
+    /// the links between the abilities it gives (CR 607.5a).
+    fn apply_copy_values(
+        &mut self,
+        t: ObjectId,
+        values: &Characteristics,
+        exceptions: &[Modification],
+        eff_id: u32,
+        source: Option<ObjectId>,
+        controller: PlayerId,
+    ) {
+        // A flipped permanent copying a flip card has its alternative
+        // characteristics (CR 707.3, 110.5c).
+        let mut v = if self.objects[t.0 as usize].flipped {
+            crate::flip::flipped_copy_values(values).unwrap_or_else(|| values.clone())
+        } else {
+            values.clone()
+        };
+        v.abilities = v
+            .abilities
+            .iter()
+            .map(|a| copied_ability(a, eff_id))
+            .collect();
+        let ctx = Ctx::new(source, controller);
+        crate::copy::drop_overridden_cdas(&mut v, exceptions);
+        for m in exceptions {
+            apply_mod(&mut v, m, self, &ctx, t);
+        }
+        // A copy exception can't give power and toughness to a copy that isn't a
+        // creature in its copiable values when what it copies has none (a Vehicle
+        // copying a land that became a creature, "except it's 4/3", is 0/0 once
+        // crewed; CR 208.3, Mindlink Mech rulings).
+        if !v.is(CardType::Creature) && values.power.is_none() && values.toughness.is_none() {
+            v.power = None;
+            v.toughness = None;
+        }
+        drop_ungainable_subtypes(&mut v, values);
+        self.objects[t.0 as usize].chars = v;
     }
 
     pub fn is_live(&self, id: ObjectId) -> bool {
@@ -1126,7 +1167,7 @@ impl Game {
         }
     }
 
-    fn static_affected(
+    pub(crate) fn static_affected(
         &self,
         src: ObjectId,
         affected: &Filter,
@@ -1911,6 +1952,8 @@ pub fn apply_mod(
         Modification::Custom { name, .. } => {
             crate::kw::custom_modification(g, name, c, ctx, _target)
         }
+        // Applied with the copy effects in layer 1 (`static_copy.rs`).
+        Modification::CopyOf(_) => {}
         Modification::RemoveAllCreatureTypes => {
             c.subtypes.retain(|s| !is_creature_type(s));
             c.all_creature_types = false;

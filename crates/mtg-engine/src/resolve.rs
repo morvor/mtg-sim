@@ -646,8 +646,12 @@ impl Game {
                 ctx.prev_happened = placed > 0;
                 // "Put a quest counter on this enchantment. When you do, if it has four or
                 // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
-                // the counters.
-                if !got.is_empty() {
+                // the counters. A choice among "them" ("Put a deathtouch counter on either
+                // of them. Then put a menace counter on either of them.") leaves "them" as
+                // it was.
+                let among_them = matches!(what, Sel::Choose { filter: Filter::In(s), .. }
+                    if matches!(**s, Sel::Var(v) if v == vars::IT));
+                if !got.is_empty() && !among_them {
                     ctx.set_var(vars::IT, got);
                 }
             }
@@ -2162,7 +2166,10 @@ impl Game {
             }
             Effect::CreateEmblem { who, abilities } => {
                 for p in self.eval_players(who, ctx) {
-                    crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    let e = crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    // "You may play cards exiled with ~" on an emblem: the cards exiled
+                    // with the object that created it (see `Sel::Linked`).
+                    self.objects[e.0 as usize].created_by = ctx.source.map(|s| (s, ctx.link));
                 }
             }
             Effect::RestartGame { keep } => {
@@ -2777,6 +2784,11 @@ impl Game {
                 Modification::AddAbilitiesOf { from, which, terms } => fixed.extend(
                     crate::ability_grants::snapshot(self, from, which, terms, ctx, &mut links),
                 ),
+                // Referents of the granted ability fixed as the effect is created
+                // (`granted_captures.rs`).
+                Modification::AddAbility(a) if crate::granted_captures::mentions(a) => fixed.push(
+                    Modification::AddAbility(crate::granted_captures::bind(self, a, ctx)),
+                ),
                 other => fixed.push(other.clone()),
             }
         }
@@ -3000,6 +3012,7 @@ impl Game {
         // can't be evaluated later.
         if let Restriction::CantCast { what, .. } = &mut r {
             self.lock_filter_amounts(what, ctx);
+            self.lock_same_names(what, ctx);
         }
         // "This turn, creatures can't attack unless their controller pays {X} for each
         // attacking creature they control": X is fixed as the effect begins (CR 608.2h).
@@ -3176,6 +3189,40 @@ impl Game {
                 if refers_to_ctx(v) =>
             {
                 **v = Value::c(self.eval_value(v, ctx) as i32);
+            }
+            _ => {}
+        }
+    }
+
+    /// "Spells with the same name as that creature" (Reflector Mage): the names the named
+    /// objects had as the effect began, as they last existed if they've left (CR 608.2h),
+    /// not the names of what they have become (a returned Clone is "Clone" in its owner's
+    /// hand). An object with no name (face down) shares a name with nothing (CR 201.2a).
+    fn lock_same_names(&self, f: &mut Filter, ctx: &Ctx) {
+        match f {
+            Filter::And(v) | Filter::Or(v) => {
+                for x in v {
+                    self.lock_same_names(x, ctx);
+                }
+            }
+            Filter::Not(x) => self.lock_same_names(x, ctx),
+            Filter::SameNameAs(sel)
+                if matches!(
+                    **sel,
+                    Sel::Target(_) | Sel::Var(_) | Sel::TriggerObject | Sel::TriggerLki
+                ) =>
+            {
+                let objs = self.eval_sel_objects(sel, ctx);
+                if objs.is_empty() || objs.iter().any(|o| self.obj(*o).chars.all_creature_names) {
+                    return;
+                }
+                let mut names: Vec<Filter> = Vec::new();
+                for o in objs {
+                    for n in self.obj(o).chars.names() {
+                        names.push(Filter::Named(smol_str::SmolStr::new(n)));
+                    }
+                }
+                *f = Filter::Or(names);
             }
             _ => {}
         }

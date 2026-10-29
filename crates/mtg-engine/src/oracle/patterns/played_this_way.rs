@@ -146,6 +146,17 @@ pub(crate) fn spell_effect(x: &str, b: &Builder, it: Sel) -> Option<Effect> {
 /// mana cost. If you cast a creature spell this way, it gains haste until end of turn."):
 /// `Var(IT)` is the spell, if one was cast.
 fn f_if_cast_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    // "..., if it's exiled, you may cast it without paying its mana cost. If you cast a
+    // creature spell this way, ..." (Alaundo the Seer's granted ability): the instruction
+    // goes with the conditional cast.
+    if let Effect::If {
+        then, otherwise, ..
+    } = prev
+    {
+        if matches!(**otherwise, Effect::Noop) && matches!(last(then), Effect::CastCard { .. }) {
+            return f_if_cast_this_way(l, then, b);
+        }
+    }
     if !matches!(last(prev), Effect::CastCard { .. }) {
         return false;
     }
