@@ -98,7 +98,31 @@ impl Renderer<'_> {
             }
             return Some(s);
         }
+        // "Put up to X +1/+0 counters on ~. This ability can't cause the total number of
+        // +1/+0 counters on ~ to be greater than four." (`kw::combat_counter_phrases`).
+        if let Some(spec) = name.strip_prefix(crate::kw::combat_counter_phrases::PUT_UP_TO_X) {
+            let (kind, cap) = match spec.rsplit_once(':') {
+                Some((k, c)) if c.parse::<i32>().is_ok() => (k, c.parse::<i32>().ok()),
+                _ => (spec, None),
+            };
+            let m = self.me();
+            let c = plural(&counter_name(kind));
+            let mut s = format!("put up to X {c} on {m}");
+            if let Some(n) = cap {
+                s.push_str(&format!(
+                    ". This ability can't cause the total number of {c} on {m} to be greater than {}",
+                    number_word(n)
+                ));
+            }
+            return Some(s);
+        }
         Some(match name {
+            // CR 701.59a, with X chosen as it's done.
+            crate::kw::choices_4::COLLECT_EVIDENCE_X => "collect evidence X".into(),
+            // CR 709.5f.
+            crate::kw::choices_4::UNLOCK_A_DOOR => {
+                "unlock a locked door of a Room you control".into()
+            }
             crate::kwa::vote::CHOOSES_VOTES => "you choose how each player votes this turn".into(),
             // Secret choices (`choices.rs`).
             crate::choices::REVEAL_CHOICES => {

@@ -4327,6 +4327,10 @@ pub enum BatchPer {
     /// battle": once for each player or battle dealt damage). The batch's objects are the
     /// sources (`EventInfo::other`).
     Recipient,
+    /// Once per controller of the other objects (`EventInfo::other`, e.g. the sources of
+    /// damage): "Whenever one or more creatures an opponent controls deal combat damage to
+    /// you" triggers once for each opponent whose creatures dealt it.
+    OtherController,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
