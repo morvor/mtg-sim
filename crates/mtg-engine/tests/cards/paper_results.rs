@@ -176,3 +176,64 @@ fn gauntlets_of_chaos_destroys_auras_only_after_an_exchange() {
         }
     }
 }
+
+fn transmute(sac: &str, find: &str, pay: Option<bool>) -> TestGame {
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let spell = t.hand(P0, "Transmute Artifact");
+    t.lands(P0, "Island", 4);
+    let s = t.battlefield(P0, sac);
+    let f = t.library_top(P0, find);
+    t.answer_choose(P0, &[Entity::Object(s)]);
+    t.answer_choose(P0, &[Entity::Object(f)]);
+    if let Some(p) = pay {
+        t.answer_yes(P0, p);
+    }
+    t.cast(P0, spell).go();
+    t.resolve();
+    t
+}
+
+#[test]
+fn transmute_artifact_puts_a_cheaper_artifact_onto_the_battlefield_for_free() {
+    cr!("701.21a", "701.23a");
+    ruling!(
+        "Transmute Artifact",
+        "If the chosen artifact costs less than or the same as the sacrificed artifact, you simply put it onto the battlefield without paying any additional costs."
+    );
+    supported("Transmute Artifact");
+    let t = transmute("Sol Ring", "Ornithopter", None);
+    assert!(t.in_graveyard(P0, "Sol Ring"));
+    assert_eq!(t.named_on_battlefield("Ornithopter").len(), 1);
+    // Two of the four Islands paid for the spell; nothing more was paid.
+    assert_eq!(
+        t.named_on_battlefield("Island")
+            .iter()
+            .filter(|i| !t.obj_now(**i).tapped)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn transmute_artifact_pays_the_difference_or_bins_the_card() {
+    cr!("107.1b", "118.12");
+    ruling!(
+        "Transmute Artifact",
+        "Additional mana spent to cover the differences in mana costs is not part of the mana cost of this spell. It is spent during spell resolution."
+    );
+    // Ornithopter (0) for Sol Ring (1): pay {1}, the difference.
+    let t = transmute("Ornithopter", "Sol Ring", Some(true));
+    assert_eq!(t.named_on_battlefield("Sol Ring").len(), 1);
+    assert_eq!(
+        t.named_on_battlefield("Island")
+            .iter()
+            .filter(|i| !t.obj_now(**i).tapped)
+            .count(),
+        1
+    );
+    // Declining: into the graveyard.
+    let t = transmute("Ornithopter", "Sol Ring", Some(false));
+    assert!(t.named_on_battlefield("Sol Ring").is_empty());
+    assert!(t.in_graveyard(P0, "Sol Ring"));
+}
