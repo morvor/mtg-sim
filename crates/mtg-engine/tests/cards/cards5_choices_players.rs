@@ -1230,3 +1230,31 @@ fn feather_copies_the_spell_for_each_other_creature_chosen_and_paid_for() {
     assert_eq!(t.pt(giant), (6, 6));
     assert_eq!(t.pt(elves), (1, 1));
 }
+
+#[test]
+fn zevlor_copies_the_spell_for_each_other_opponent() {
+    cr!("707.10c", "603.7c");
+    compiles("Zevlor, Elturel Exile");
+    // "{2}, {T}: When you next cast an instant or sorcery spell that targets only a single
+    // opponent or a single permanent an opponent controls this turn, for each other
+    // opponent, choose that player or a permanent they control, copy that spell, and the
+    // copy targets the chosen player or permanent."
+    let mut t = TestGame::new(4);
+    let zevlor = t.battlefield(P0, "Zevlor, Elturel Exile");
+    t.lands(P0, "Mountain", 3);
+    let bears = t.battlefield(P3, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, zevlor, 0, &[]).expect("activate");
+    t.resolve_all();
+    let bolt = t.hand(P0, "Lightning Bolt");
+    // P2: the player; P3: their Bears.
+    t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![Entity::Player(P2)]));
+    t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![Entity::Object(bears)]));
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P2), 17);
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.life(P3), 20);
+    assert_eq!(t.life(P0), 20);
+}

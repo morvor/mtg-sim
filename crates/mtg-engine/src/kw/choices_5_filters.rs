@@ -42,6 +42,15 @@ pub fn keep_affected(var: crate::ability::Var) -> crate::ability::Effect {
     crate::ability::Effect::Custom(format!("{KEEP_AFFECTED}{var}").into())
 }
 
+/// `Condition::Custom` name: the player being iterated over is neither a player the spell
+/// that caused the ability to trigger ("that spell") targets nor the controller of a
+/// permanent it targets ("for each other opponent", Zevlor, Elturel Exile).
+pub const NOT_THAT_SPELLS_TARGET_PLAYER: &str = "choices5:not the player that spell targets";
+/// `Effect::Custom` name: you choose the iterated player or a permanent they control that
+/// spell could target, and copy that spell, the copy targeting it (CR 707.10c).
+pub const COPY_TARGETING_PLAYER_OR_PERMANENT: &str =
+    "choices5:choose that player or a permanent they control; copy that spell targeting it";
+
 /// `Condition::Custom` name: the player being iterated over is a defending player (CR
 /// 506.2, 802.2: with several, each of them).
 pub const IS_DEFENDING_PLAYER: &str = "choices5:is a defending player";
@@ -92,6 +101,34 @@ impl KeywordRules for Choices5Filters {
             ctx.set_var(var, kept);
             return true;
         }
+        if name == COPY_TARGETING_PLAYER_OR_PERMANENT {
+            let spell = ctx.event.as_ref().and_then(|e| e.spell.or(e.object));
+            let (Some(spell), Some(p)) = (spell, ctx.iter_player) else {
+                return true;
+            };
+            if !g.is_live(spell) {
+                return true;
+            }
+            let mut cands: Vec<Entity> = vec![Entity::Player(p)];
+            cands.extend(
+                g.permanents()
+                    .filter(|o| o.controller == p)
+                    .map(|o| Entity::Object(o.id))
+                    .collect::<Vec<_>>(),
+            );
+            cands.retain(|e| crate::copy_rules::legal_for_each_target(g, spell, *e));
+            if cands.is_empty() {
+                return true;
+            }
+            let pick = g.ask_entities(ctx.controller, ctx.source, "Choose the copy's target", cands.clone(), 1, 1);
+            let Some(t) = pick.first().copied().or(cands.first().copied()) else {
+                return true;
+            };
+            if crate::copy_rules::copy_with_target(g, spell, ctx.controller, vec![t]).is_some() {
+                crate::copy::additional_copies(g, spell, ctx.controller);
+            }
+            return true;
+        }
         if name == CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS {
             choose_type_shared_by_materials(g, ctx);
             return true;
@@ -132,6 +169,21 @@ impl KeywordRules for Choices5Filters {
             let n = g.obj(id).chars.name.clone();
             (!n.is_empty()).then_some(n)
         };
+        if name == NOT_THAT_SPELLS_TARGET_PLAYER {
+            let Some(p) = ctx.iter_player else {
+                return Some(false);
+            };
+            let spell = ctx.event.as_ref().and_then(|e| e.spell.or(e.object));
+            let targets: Vec<Entity> = spell
+                .and_then(|s| g.obj(s).stack.as_deref())
+                .map(|si| si.chosen.iter().flat_map(|m| m.targets.iter().flatten().copied()).collect())
+                .unwrap_or_default();
+            let named = targets.iter().any(|t| match t {
+                Entity::Player(q) => *q == p,
+                Entity::Object(o) => g.obj(*o).controller == p,
+            });
+            return Some(!named);
+        }
         match name {
             SAME_NAME_AS_ANOTHER_EXILED => {
                 let it: Vec<ObjectId> = ctx

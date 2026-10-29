@@ -892,3 +892,31 @@ fn copy_for_each_of_those(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool 
 }
 
 inventory::submit! { super::FollowupPattern { name: "if you do, for each of those creatures, copy that spell; the copy targets that creature", priority: 60, apply: copy_for_each_of_those } }
+
+/// "for each other opponent, choose that player or a permanent they control, copy that
+/// spell, and the copy targets the chosen player or permanent" (Zevlor, Elturel Exile):
+/// each opponent the spell doesn't target (nor whose permanent it targets), one copy
+/// targeting that player or one of their permanents, as the controller chooses among the
+/// legal ones (CR 707.10c).
+fn copy_for_each_other_opponent(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l)
+        != "for each other opponent, choose that player or a permanent they control, copy that spell, and the copy targets the chosen player or permanent"
+    {
+        return None;
+    }
+    if !b.in_trigger || !matches!(b.it, Sel::TriggerSpell) {
+        return None;
+    }
+    use crate::kw::choices_5_filters::{COPY_TARGETING_PLAYER_OR_PERMANENT, NOT_THAT_SPELLS_TARGET_PLAYER};
+    Some(Effect::ForEachPlayer {
+        who: PlayerRef::Each(PlayerFilter::And(vec![
+            PlayerFilter::Opponent,
+            PlayerFilter::History(Box::new(Condition::Custom(
+                NOT_THAT_SPELLS_TARGET_PLAYER.into(),
+            ))),
+        ])),
+        effect: Box::new(Effect::Custom(COPY_TARGETING_PLAYER_OR_PERMANENT.into())),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "for each other opponent, choose that player or a permanent they control, copy that spell targeting it", priority: 90, parse: copy_for_each_other_opponent } }
