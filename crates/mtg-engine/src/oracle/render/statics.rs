@@ -350,6 +350,20 @@ impl Renderer<'_> {
                 };
                 format!("as long as {me} isn't on the battlefield, {e}")
             }
+            // "As long as ~ is on the stack, spells that target it cost {2} more to cast."
+            // (an instant's or sorcery's static ability, CR 113.6).
+            None if s.zone == FunctionZone::Stack
+                && matches!(
+                    s.effect,
+                    StaticEffect::CostModifier(_) | StaticEffect::Continuous { .. }
+                ) =>
+            {
+                let me = self.me();
+                let e = lower_first(&self.static_effect(&s.effect))
+                    .replace(&format!("target {me} "), "target it ")
+                    .replace(&format!("targets {me} "), "target it ");
+                format!("as long as {me} is on the stack, {e}")
+            }
             None => self.static_effect(&s.effect),
         };
         self.subject_types.clear();

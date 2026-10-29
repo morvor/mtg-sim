@@ -153,6 +153,9 @@ pub fn is_revealed(g: &Game, card: ObjectId) -> bool {
         Zone::Library(p) if crate::zones::revealed_top(g, p) == Some(card) => return true,
         _ => {}
     }
+    if crate::kw::card_revealed(g, card) {
+        return true;
+    }
     g.reveals
         .revealed
         .iter()

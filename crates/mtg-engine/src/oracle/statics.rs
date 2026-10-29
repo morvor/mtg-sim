@@ -453,9 +453,15 @@ fn parse_cost_modifier(l: &str, text: &str) -> Option<Ability> {
 }
 
 /// Statics that appear on instants/sorceries: additional costs, "can't be countered".
-pub fn parse_spell_static(text: &str, _ctx: &CompileContext) -> Option<Ability> {
+pub fn parse_spell_static(text: &str, ctx: &CompileContext) -> Option<Ability> {
     let lower = text.to_lowercase();
     let l = end(&lower);
+    // "As long as ~ is on the stack, [static]" (CR 113.6).
+    if let Some(mut v) = super::patterns::on_stack_static::as_long_as_on_stack(text, ctx) {
+        if v.len() == 1 {
+            return v.pop();
+        }
+    }
     if l == "~ can't be countered" {
         let mut s = StaticAbility::new(StaticEffect::Restriction(Restriction::CantBeCountered(
             Filter::Source,
