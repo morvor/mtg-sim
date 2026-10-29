@@ -19,7 +19,7 @@ use mtg_engine::*;
 
 #[test]
 fn return_abilities_work_only_on_the_battlefield() {
-    cr!("602.1", "113.6");
+    cr!("113.6");
     ruling!(
         "Skywing Aven",
         "Skywing Aven’s last ability can be activated only while it’s on the battlefield."
@@ -707,7 +707,7 @@ fn jadzi_with_a_modal_double_faced_card() {
 
 #[test]
 fn jadzi_returns_only_from_the_battlefield() {
-    cr!("602.1", "608.2b", "400.7");
+    cr!("113.6", "608.2b", "400.7");
     ruling!(
         "Jadzi, Oracle of Arcavios // Journey to the Oracle",
         "You may activate Jadzi’s activated ability only while Jadzi is on the battlefield. If Jadzi is no longer on the battlefield as the ability resolves, it won’t return her to your hand from any other zone."
