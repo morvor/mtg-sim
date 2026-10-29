@@ -47,9 +47,12 @@ fn pairwise(objs: &[&GameObject], pair: impl Fn(&GameObject, &GameObject) -> boo
 /// information for one that left its zone).
 fn stat(g: &Game, group: &TargetGroup, o: &GameObject) -> i64 {
     match group {
-        TargetGroup::TotalAtMost(stat, _) | TargetGroup::TotalAtLeast(stat, _) => {
+        TargetGroup::TotalAtMost(stat, _)
+        | TargetGroup::TotalAtLeast(stat, _)
+        | TargetGroup::TotalExactly(stat, _) => {
             crate::relational::total(g, *stat, &[Entity::Object(o.id)])
         }
+        TargetGroup::ManaSymbolsAmong(c, _) => mana_symbols(o, *c),
         _ => 0,
     }
 }
@@ -113,6 +116,13 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
         }
         TargetGroup::TotalAtLeast(stat, n) => {
             crate::relational::total(g, *stat, targets) >= g.eval_value(n, ctx)
+        }
+        TargetGroup::TotalExactly(stat, n) => {
+            crate::relational::total(g, *stat, targets) == g.eval_value(n, ctx)
+        }
+        // CR 107.4a, 107.4e: the mana symbols of the color among their mana costs.
+        TargetGroup::ManaSymbolsAmong(c, n) => {
+            objs.iter().map(|o| mana_symbols(o, *c)).sum::<i64>() >= g.eval_value(n, ctx)
         }
         // CR 201.2a: a name all of them have.
         TargetGroup::SameName => match objs.first() {
@@ -240,6 +250,8 @@ pub fn holds_on_resolution(
         | TargetGroup::OnePerCardType
         | TargetGroup::TotalAtMost(..)
         | TargetGroup::TotalAtLeast(..)
+        | TargetGroup::TotalExactly(..)
+        | TargetGroup::ManaSymbolsAmong(..)
         | TargetGroup::CardTypesAmong(_) => group_ok(g, group, legal, ctx),
     }
 }
@@ -259,7 +271,10 @@ pub fn find_group(
         return None;
     }
     // A total is largest with the largest values.
-    if matches!(group, TargetGroup::TotalAtLeast(..)) {
+    if matches!(
+        group,
+        TargetGroup::TotalAtLeast(..) | TargetGroup::ManaSymbolsAmong(..)
+    ) {
         let mut v: Vec<Entity> = cands.to_vec();
         v.sort_by_key(|e| -e.object().map_or(0, |o| stat(g, group, g.obj(o))));
         v.truncate(n);
@@ -292,8 +307,19 @@ pub fn find_group(
 fn is_whole_only(group: &TargetGroup) -> bool {
     matches!(
         group,
-        TargetGroup::TotalAtLeast(..) | TargetGroup::CardTypesAmong(_)
+        TargetGroup::TotalAtLeast(..)
+            | TargetGroup::CardTypesAmong(_)
+            | TargetGroup::ManaSymbolsAmong(..)
+            | TargetGroup::TotalExactly(..)
     )
+}
+
+/// The mana symbols of color `c` in an object's mana cost (CR 107.4a: a hybrid or
+/// Phyrexian symbol of the color is one, CR 107.4e).
+fn mana_symbols(o: &GameObject, c: Color) -> i64 {
+    o.chars.mana_cost.as_ref().map_or(0, |m| {
+        m.symbols.iter().filter(|s| s.colors().contains(c)).count() as i64
+    })
 }
 
 /// A group of `n` of the candidates for which `ok` holds of every part (in candidate
@@ -522,6 +548,27 @@ pub fn can_choose_together(g: &Game, f: &Filter, cands: &[ObjectId], n: usize, c
     }
     let groups = together_of(f);
     groups.is_empty() || find_all(g, &groups, &entities(cands), n, ctx).is_some()
+}
+
+/// `n` of the candidates that can be chosen together as `f` requires, if there are.
+pub fn find_together(
+    g: &Game,
+    f: &Filter,
+    cands: &[ObjectId],
+    n: usize,
+    ctx: &Ctx,
+) -> Option<Vec<ObjectId>> {
+    if cands.len() < n {
+        return None;
+    }
+    let groups = together_of(f);
+    let found = find_all(g, &groups, &entities(cands), n, ctx)?;
+    Some(found.into_iter().filter_map(|e| e.object()).collect())
+}
+
+/// Whether these objects, taken together, have the relationships `f` requires.
+pub fn together_ok(g: &Game, f: &Filter, objs: &[ObjectId], ctx: &Ctx) -> bool {
+    all_ok(g, &together_of(f), &entities(objs), ctx)
 }
 
 /// The chosen objects if they have the relationships `f` requires; otherwise the largest

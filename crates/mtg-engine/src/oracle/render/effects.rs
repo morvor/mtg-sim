@@ -8763,6 +8763,9 @@ impl Renderer<'_> {
             {
                 "one mana of any type the sacrificed land could produce".into()
             }
+            ManaProduction::CouldProduce(Filter::In(s)) if matches!(**s, Sel::Var(v) if v == crate::cost_sets::COST_UNTAPPED) => {
+                "one mana of any type that land could produce".into()
+            }
             ManaProduction::CouldProduce(f) => {
                 let n = self.noun_det(f, Det::A);
                 format!("one mana of any type that {n} could produce")

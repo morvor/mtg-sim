@@ -568,7 +568,13 @@ pub fn x_bound(g: &Game, p: PlayerId, act: &ActivatedAbility) -> i64 {
         .sum();
     // "Sacrifice an artifact with mana value X" (Scrap Welder): X is a characteristic
     // of the object paid with, which neither mana nor the number of objects limits.
-    let describes = act.cost.parts.iter().any(|c| match c {
+    fn inner(c: &CostPart) -> &CostPart {
+        match c {
+            CostPart::AnyNumberOf { part, .. } | CostPart::AndPayItsManaCost(part) => part,
+            c => c,
+        }
+    }
+    let describes = act.cost.parts.iter().map(inner).any(|c| match c {
         CostPart::Sacrifice { filter, .. }
         | CostPart::Discard { filter, .. }
         | CostPart::Exile { filter, .. }

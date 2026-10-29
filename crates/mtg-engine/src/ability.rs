@@ -585,6 +585,19 @@ pub enum CostPart {
     /// "Discard a card or pay {2}": one of these costs, which the player chooses as the
     /// cost is paid among those they can pay (CR 118.3, 601.2h; a ward cost, CR 702.21a).
     OneOf(Vec<Cost>),
+    /// "Exile one or more other artifacts you control with total mana value X": `part`
+    /// (an exile or sacrifice part, its count ignored) paid with as many objects as the
+    /// player chooses as it's paid, at least `min`, together having the relationships its
+    /// filter requires (`Filter::Together`; see `cost_sets.rs`).
+    AnyNumberOf {
+        part: Box<CostPart>,
+        min: u32,
+    },
+    /// "Exile a creature card from your graveyard and pay its mana cost": `part` (exiling
+    /// one card) and then the mana cost of the card it exiled, as that card last existed
+    /// (X is 0, CR 107.3h; nothing reduces it: it isn't a spell being cast). Only a card
+    /// whose mana cost could be paid may be chosen (see `cost_sets.rs`).
+    AndPayItsManaCost(Box<CostPart>),
 }
 
 // ---------------------------------------------------------------------------
@@ -864,6 +877,14 @@ pub enum TargetGroup {
     /// There are at least this many card types among them ("with four or more card types
     /// among them", CR 205.2a). A part of such a group needn't have it.
     CardTypesAmong(Box<Value>),
+    /// There are at least this many mana symbols of the color among their mana costs
+    /// ("with fifteen or more black mana symbols among their mana costs": hybrid and
+    /// Phyrexian symbols of the color count, CR 107.4a, 107.4e). A part of such a group
+    /// needn't have it.
+    ManaSymbolsAmong(Color, Box<Value>),
+    /// Their total of a value is exactly the value ("one or more other artifacts you
+    /// control with total mana value X", X announced for the cost, CR 107.3a).
+    TotalExactly(TotalStat, Box<Value>),
 }
 
 /// A step of a dig: cards looked at, revealed, milled or exiled from the top of a library

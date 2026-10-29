@@ -415,6 +415,21 @@ impl Renderer<'_> {
                 let v = self.value(v);
                 format!("with {v} or more card types among them")
             }
+            TargetGroup::ManaSymbolsAmong(c, v) => {
+                let v = self.value(v);
+                let c = format!("{c:?}").to_lowercase();
+                format!("with {v} or more {c} mana symbols among their mana costs")
+            }
+            TargetGroup::TotalExactly(stat, v) => {
+                let st = match stat {
+                    TotalStat::ManaValue => "mana value",
+                    TotalStat::Power => "power",
+                    TotalStat::Toughness => "toughness",
+                    TotalStat::PowerAndToughness => "power and toughness",
+                };
+                let v = self.value(v);
+                format!("with total {st} {v}")
+            }
         }
     }
 

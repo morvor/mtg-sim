@@ -2186,6 +2186,7 @@ pub fn group_phrase(t: &str) -> Option<(&str, TargetGroup)> {
         .find_map(|(p, g)| t.strip_prefix(p).map(|rest| (rest, g.clone())))
         .or_else(|| total_at_most(t))
         .or_else(|| card_types_among(t))
+        .or_else(|| super::patterns::costs_6::mana_symbols_among(t))
 }
 
 /// "with four or more card types among them" (CR 205.2a).
@@ -2226,6 +2227,10 @@ fn total_at_most(t: &str) -> Option<(&str, TargetGroup)> {
     };
     if let Some(r) = r.trim_start().strip_prefix("or greater") {
         return Some((r, TargetGroup::TotalAtLeast(stat, Box::new(n))));
+    }
+    // "with total mana value X": exactly X (an X announced for the cost, CR 107.3a).
+    if r.is_empty() || r.starts_with([',', '.', ':']) {
+        return Some((r, TargetGroup::TotalExactly(stat, Box::new(n))));
     }
     let r = r.trim_start().strip_prefix("or less")?;
     let grp = TargetGroup::TotalAtMost(stat, Box::new(n));

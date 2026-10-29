@@ -12,17 +12,21 @@ fn untap_tapped_cost(p: &str) -> Option<CostPart> {
     let r = strip(p, "untap")?;
     let (n, r) = parse_number(r)?;
     let r = strip(r, "tapped")?;
-    // Only your own permanents: the cost can't untap another player's ("Untap a tapped land
-    // an opponent controls", Benthic Explorers).
-    if !end(r).ends_with(" you control") {
+    // Your own permanents, or another player's ("Untap a tapped land an opponent
+    // controls", Benthic Explorers: part of the cost, not a target; its rulings).
+    let controller = if end(r).ends_with(" you control") {
+        PlayerRel::You
+    } else if end(r).ends_with(" an opponent controls") {
+        PlayerRel::Opponent
+    } else {
         return None;
-    }
+    };
     let (f, _, tail) = parse_object_phrase(r)?;
-    if !end(tail).is_empty() {
+    if !end(tail).is_empty() || !format!("{f:?}").contains(&format!("ControlledBy({controller:?})")) {
         return None;
     }
     Some(CostPart::UntapTapped {
-        filter: Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
+        filter: f,
         count: n,
     })
 }

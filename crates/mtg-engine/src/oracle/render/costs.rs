@@ -316,6 +316,31 @@ impl Renderer<'_> {
                 s
             }
             CostPart::RevealSelf => "reveal ~ from your hand".into(),
+            // "exile one or more other artifacts you control with total mana value X".
+            CostPart::AnyNumberOf { part, min } => {
+                let two = match &**part {
+                    CostPart::Exile { filter, zone, .. } => CostPart::Exile {
+                        filter: filter.clone(),
+                        zone: *zone,
+                        count: Value::c(2),
+                    },
+                    CostPart::Sacrifice { filter, .. } => CostPart::Sacrifice {
+                        filter: filter.clone(),
+                        count: Value::c(2),
+                    },
+                    other => other.clone(),
+                };
+                let s = self.cost_part(&two);
+                let n = if *min >= 1 {
+                    "one or more"
+                } else {
+                    "any number of"
+                };
+                s.replacen(" two ", &format!(" {n} "), 1)
+            }
+            CostPart::AndPayItsManaCost(part) => {
+                format!("{} and pay its mana cost", self.cost_part(part))
+            }
             CostPart::RemoveCountersFromOne {
                 kind,
                 filter,

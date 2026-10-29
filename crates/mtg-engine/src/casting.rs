@@ -2798,6 +2798,7 @@ impl Game {
                     paid.sacrificed.iter().map(|o| Entity::Object(*o)).collect(),
                 );
             }
+            crate::cost_sets::record_untapped(&paid, &mut ctx.vars);
             self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,
@@ -2973,6 +2974,7 @@ impl Game {
         }
         // CR 400.7j: "the exiled card" — what the cost moved to a public zone.
         crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
+        crate::cost_sets::record_untapped(&paid, &mut ctx.vars);
         // What was paid to activate it (Phyrexian life is recorded as the mana is paid).
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.cast.life_paid += paid.life;
@@ -3426,10 +3428,10 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as usize;
                 self.objects_matching(filter, ctx)
                     .into_iter()
+                    // Whose permanents is the filter's ("an opponent controls").
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p
-                            && ob.tapped
+                        ob.tapped
                             && !(untaps_src && Some(*o) == src)
                             && crate::counter_rules::can_untap_for_cost(self, *o)
                     })
@@ -3554,6 +3556,11 @@ impl Game {
                     .iter()
                     .any(|c| self.can_pay_cost_optimistic_in(p, c, src, &chars, ctx))
             }
+            // See `cost_sets.rs`.
+            CostPart::AnyNumberOf { part, min } => self.any_number_payable(p, part, *min, src, ctx),
+            CostPart::AndPayItsManaCost(part) => {
+                self.and_pay_its_mana_cost_payable(p, part, src, ctx)
+            }
         }
     }
 
@@ -3561,7 +3568,7 @@ impl Game {
     /// `p`'s own, unless the filter says whose they are ("Exile a Fungus card from a
     /// graveyard": owned by any player, `Filter::OwnedBy` among its parts), then from that
     /// zone of each such player (CR 118.3, 404.1).
-    fn exile_cost_cards(
+    pub(crate) fn exile_cost_cards(
         &self,
         p: PlayerId,
         zone: ZoneKind,
@@ -4054,10 +4061,10 @@ impl Game {
                 let cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
+                    // Whose permanents is the filter's ("an opponent controls").
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p
-                            && ob.tapped
+                        ob.tapped
                             && !(untaps_src && Some(*o) == src)
                             && crate::counter_rules::can_untap_for_cost(self, *o)
                     })
@@ -4070,6 +4077,7 @@ impl Game {
                 // A stun counter's replacement effect may replace an untap; the cost is still
                 // paid (CR 122.1d).
                 for o in pick {
+                    paid.untapped.push(o);
                     self.untap(o);
                 }
             }
@@ -4331,6 +4339,14 @@ impl Game {
                 paid.sacrificed.extend(sub.sacrificed);
                 paid.exiled.extend(sub.exiled);
                 paid.tapped.extend(sub.tapped);
+                paid.untapped.extend(sub.untapped);
+            }
+            // See `cost_sets.rs`.
+            CostPart::AnyNumberOf { part, min } => {
+                self.pay_any_number(p, part, *min, src, ctx, paid)?;
+            }
+            CostPart::AndPayItsManaCost(part) => {
+                self.pay_and_its_mana_cost(p, part, src, ctx, paid)?;
             }
         }
         Ok(())
@@ -4439,6 +4455,8 @@ pub struct PaidCost {
     /// The permanents among `objects` that a "tap an untapped [permanent]" cost tapped
     /// ("the creature tapped this way").
     pub tapped: Vec<ObjectId>,
+    /// The permanents an "untap a tapped [permanent]" cost untapped ("that land").
+    pub untapped: Vec<ObjectId>,
     /// The life a life payment cost paid (CR 119.4).
     pub life: u32,
     /// The loyalty counters a loyalty cost removed (CR 606.4).
@@ -4497,6 +4515,9 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
         CostPart::Loyalty(_) => false,
         // A keyword action as a cost with a variable number ("waterbend {X}", CR 701.67a).
         CostPart::Effect(e) => matches!(&**e, Effect::KeywordAction { n, .. } if is_x(n)),
+        CostPart::AnyNumberOf { part, .. } | CostPart::AndPayItsManaCost(part) => {
+            cost_part_has_x(part)
+        }
         _ => false,
     }
 }
@@ -4509,6 +4530,12 @@ pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
         }
         Filter::And(fs) | Filter::Or(fs) => fs.iter().any(filter_mentions_x),
         Filter::Not(f) => filter_mentions_x(f),
+        // "with total mana value X" (CR 107.3a).
+        Filter::Together(
+            TargetGroup::TotalExactly(_, v)
+            | TargetGroup::TotalAtMost(_, v)
+            | TargetGroup::TotalAtLeast(_, v),
+        ) => matches!(**v, Value::X),
         _ => false,
     }
 }

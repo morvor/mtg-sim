@@ -244,6 +244,14 @@ pub fn unresolved(a: &AbilityDef) -> bool {
                 if let Some(serde_json::Value::Array(parts)) = m.get_mut("parts") {
                     for part in parts {
                         if let serde_json::Value::Object(pm) = part {
+                            // "Exile one or more ... with total mana value X" (`cost_sets.rs`).
+                            if let Some(serde_json::Value::Object(any)) = pm.get_mut("AnyNumberOf") {
+                                if let Some(serde_json::Value::Object(inner)) = any.get_mut("part") {
+                                    for key in ["Sacrifice", "Exile"] {
+                                        strip_filter(inner, key);
+                                    }
+                                }
+                            }
                             for key in [
                                 "Sacrifice",
                                 "Discard",
