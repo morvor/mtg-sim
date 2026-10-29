@@ -146,6 +146,12 @@ impl Renderer<'_> {
                     _ => return self.gap(format!("Effect::Custom({n})")),
                 }
             }
+            // "Look at a card at random in target player's hand." (Urza's Bauble)
+            n if crate::kw::look_at_random::slot_of(n).is_some() => {
+                let i = crate::kw::look_at_random::slot_of(n).unwrap_or(0);
+                let t = self.target_mention(i, Case::Obj);
+                format!("look at a card at random in {t}'s hand")
+            }
             // "Target opponent reveals a card at random from their hand."
             n if n.starts_with("reveal a card at random from hand:target ") => {
                 match n["reveal a card at random from hand:target ".len()..].parse::<u8>() {
@@ -202,6 +208,7 @@ impl Renderer<'_> {
                 None => match self
                     .custom_effect_extra(other)
                     .or_else(|| self.custom_effect_tail(other))
+                    .or_else(|| self.custom_effect_nodes(other))
                 {
                     Some(s) => s,
                     None => return self.gap(format!("Effect::Custom({other})")),
@@ -368,6 +375,8 @@ impl Renderer<'_> {
                     .custom_value_extra(other)
                     .or_else(|| self.cast_history_value(other))
                     .or_else(|| self.chosen_number_value(other))
+                    .or_else(|| self.draft_value(other))
+                    .or_else(|| self.custom_value_nodes(other))
                 {
                     Some(s) => s,
                     None => self.gap(format!("Value::Custom({other})")),
@@ -597,6 +606,8 @@ impl Renderer<'_> {
                 .or_else(|| self.custom_condition_terms(other, false))
                 .or_else(|| self.custom_condition_tail(other))
                 .or_else(|| self.chosen_number_condition(other))
+                .or_else(|| self.draft_condition(other))
+                .or_else(|| self.custom_condition_nodes(other))
             {
                 Some(s) => s,
                 None => self.gap(format!("Condition::Custom({other})")),
@@ -884,6 +895,8 @@ impl Renderer<'_> {
                 None => match self
                     .custom_static_extra(other)
                     .or_else(|| self.named_static(other))
+                    .or_else(|| self.draft_static(other))
+                    .or_else(|| self.custom_static_nodes(other))
                 {
                     Some(s) => s,
                     None => self.gap(format!("StaticEffect::Custom({other})")),

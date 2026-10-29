@@ -57,13 +57,29 @@ fn who_of(who: &str) -> Option<PlayerRef> {
     })
 }
 
+/// "Target opponent reveals X cards at random from their hand." (Nebuchadnezzar): the
+/// number is the ability's X.
+pub fn effect_name_x(who: &PlayerRef) -> Option<String> {
+    effect_name_n(who, 0).map(|n| n.replacen(&format!("{PREFIX_N}0:"), &format!("{PREFIX_N}x:"), 1))
+}
+
+/// How many cards an instruction reveals.
+enum Count {
+    N(usize),
+    X,
+}
+
 /// The player and the number of cards of an instruction.
-fn player_of(name: &str) -> Option<(PlayerRef, usize)> {
+fn player_of(name: &str) -> Option<(PlayerRef, Count)> {
     if let Some(r) = name.strip_prefix(PREFIX_N) {
         let (n, who) = r.split_once(':')?;
-        return Some((who_of(who)?, n.parse().ok()?));
+        let n = match n {
+            "x" => Count::X,
+            n => Count::N(n.parse().ok()?),
+        };
+        return Some((who_of(who)?, n));
     }
-    Some((who_of(name.strip_prefix(PREFIX)?)?, 1))
+    Some((who_of(name.strip_prefix(PREFIX)?)?, Count::N(1)))
 }
 
 pub struct RevealAtRandom;
@@ -77,10 +93,14 @@ impl KeywordRules for RevealAtRandom {
         let Some((who, n)) = player_of(name) else {
             return false;
         };
+        let n = match n {
+            Count::N(n) => n,
+            Count::X => g.eval_value(&crate::ability::Value::X, ctx).max(0) as usize,
+        };
         let mut revealed = Vec::new();
         for p in g.eval_players(&who, ctx) {
             let mut hand: Vec<ObjectId> = g.player(p).hand.clone();
-            if hand.is_empty() {
+            if hand.is_empty() || n == 0 {
                 continue;
             }
             if n == 1 {
