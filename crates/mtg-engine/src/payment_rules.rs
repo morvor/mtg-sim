@@ -111,6 +111,35 @@ pub fn x_maximum(g: &Game, rules: &[CostRule], ctx: &crate::eval::Ctx) -> Option
         .min()
 }
 
+/// The values X may be announced as when the text defines X for one of several players
+/// ("X is the number of ... in an opponent's graveyard as you cast this spell", CR
+/// 107.3c), evaluated as X is announced; `None` if the text doesn't define X so.
+pub fn x_allowed(g: &Game, rules: &[CostRule], ctx: &crate::eval::Ctx) -> Option<Vec<i64>> {
+    let mut out: Option<Vec<i64>> = None;
+    for r in rules {
+        let CostRule::XOneOf(f, v) = r else {
+            continue;
+        };
+        let mut c = ctx.clone();
+        let mut vals: Vec<i64> = g
+            .players_in_game()
+            .into_iter()
+            .filter(|p| g.player_filter_matches(f, *p, ctx))
+            .map(|p| {
+                c.iter_player = Some(p);
+                g.eval_value(v, &c).max(0)
+            })
+            .collect();
+        vals.sort_unstable();
+        vals.dedup();
+        out = Some(match out {
+            Some(prev) => prev.into_iter().filter(|x| vals.contains(x)).collect(),
+            None => vals,
+        });
+    }
+    out
+}
+
 /// "Spend only [colors] mana on X" for `amount` generic mana of the cost that X still
 /// represents.
 pub fn x_spend(rules: &[CostRule], amount: u32) -> Option<XSpend> {

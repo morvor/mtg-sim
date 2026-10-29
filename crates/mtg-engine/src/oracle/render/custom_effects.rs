@@ -43,6 +43,29 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn custom_effect_more(&mut self, name: &str) -> Option<String> {
+        // "You choose the name of a nonland card revealed this way." (cards revealed
+        // from the opponents' hands just before).
+        if let Some(Sel::All(f)) = crate::kw::choices_5_filters::name_among_cards(name) {
+            let rest = match f {
+                Filter::And(v) => Filter::and(
+                    v.into_iter()
+                        .filter(|x| {
+                            !matches!(
+                                x,
+                                Filter::InZone(ZoneKind::Hand)
+                                    | Filter::OwnedBy(PlayerRel::Opponent)
+                            )
+                        })
+                        .collect(),
+                ),
+                f => f,
+            };
+            let n = self.noun(&rest, Num::One);
+            return Some(format!(
+                "{{opt:you}} choose the name of {} revealed this way",
+                with_article(&n)
+            ));
+        }
         // "Pay {E}{E}." as an instruction (see `kw/game_rules.rs`).
         if let Some(n) = crate::kw::game_rules::pay_energy_amount(name) {
             return Some(format!("pay {}", "{E}".repeat(n.max(0) as usize)));

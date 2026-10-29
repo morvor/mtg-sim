@@ -409,6 +409,13 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // Firestorm Phoenix only records the card it returned to a hand
         // (`cards/firestorm_phoenix.rs`).
         "card:Firestorm Phoenix:the returned card is revealed and can't be played",
+        // Choices made as a permanent enters: a name among revealed cards, a card type
+        // its craft materials share (`kw/choices_5_filters.rs`): no library.
+        mtg_engine::kw::choices_5_filters::NAME_AMONG,
+        mtg_engine::kw::choices_5_filters::KEEP_AFFECTED,
+        // Manifesting cards from a hand (`kw/manifest_from_hand_5.rs`): no library.
+        mtg_engine::kw::manifest_from_hand_5::MANIFEST_FROM_HAND,
+        mtg_engine::kw::choices_5_filters::CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS,
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {
         return None;
@@ -483,6 +490,14 @@ fn custom_rule(name: &str) -> CustomRule {
         "card:Bewitching Leechcraft:remove a +1/+1 counter instead of untapping",
         "card:Fear of Sleep Paralysis:stun counters can't be removed from opponents' permanents",
         "card:Sanctum Lurker:planeswalkers you control survive 0 loyalty",
+        // Deification: damage removes one loyalty counter fewer (`loyalty_removed_by_damage`).
+        "card:Deification:damage can't remove the last loyalty counter",
+        // Vedalken Squirrel-Whacker: a die result exchanged with a base power or toughness
+        // (`dice_rolled`): no library.
+        "card:Vedalken Squirrel-Whacker:exchange a six-sided die result with base power or toughness",
+        // North Star: how a spell's mana cost may be paid (`use_spend_permission`), the
+        // permission used up as the cost is paid: no library.
+        "card:North Star:for one spell this turn, spend mana as though any type for its mana cost",
         "untap all permanents you control during each opponent's untap step",
         "legend rule doesn't apply to permanents you control",
         "can't get poison counters",
@@ -626,6 +641,10 @@ fn custom_rule(name: &str) -> CustomRule {
         // "loses swampwalk" (Urborg; `kw::basic_effects::remove_keyword`): a layer-6
         // ability removal.
         "basic_effects:remove keyword:",
+        // Choices made as an Equipment becomes attached (a name, a creature type, a card
+        // used to craft it) and the name and creature type they set
+        // (`kw/attach_choices_5.rs`): no library.
+        "attach5:",
     ];
     if NO_LIBRARY.contains(&name) || NO_LIBRARY_FAMILIES.iter().any(|p| name.starts_with(p)) {
         return CustomRule::NoLibrary;

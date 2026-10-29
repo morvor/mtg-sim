@@ -24,6 +24,10 @@ pub(crate) fn custom_player_mod_more(name: &str, subj: &str) -> Option<String> {
 
 impl Renderer<'_> {
     pub(crate) fn custom_value_more(&mut self, name: &str) -> Option<String> {
+        // CR 700.2d: each choice of a mode counts.
+        if name == crate::kw::modal_spells::MODES_CHOSEN_FOR_THAT_SPELL {
+            return Some("the number of times you chose a mode for that spell".into());
+        }
         // "the number of Mountains you control as you cast ~": the value as the spell
         // was cast (`kw::referents_values_4`).
         if let Some(j) = name.strip_prefix(crate::kw::referents_values_4::AS_CAST_VALUE) {

@@ -9,6 +9,11 @@
 //!   whoever controls the creature);
 //! - "Sacrifice ~: The chosen creature gains indestructible until end of turn.";
 //! - "When ~ leaves the battlefield, sacrifice the chosen creature."
+//!
+//! "As ~ enters, you may choose a nonland permanent." (Scheming Fence) is the optional
+//! form: up to one object is chosen, and with none chosen the linked abilities have no
+//! object to refer to. Its "the chosen permanent" abilities are in `referents_5` and
+//! `r613_abilities_of_objects`.
 
 use super::{AbilityPattern, EffectPattern};
 use crate::ability::*;
@@ -16,10 +21,16 @@ use crate::oracle::effects::{parse_sentence, Builder};
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 
-/// The object chosen as the permanent entered: "another creature you control".
-fn etb_object_choice(text: &str) -> Option<Filter> {
+/// The object chosen as the permanent entered: "another creature you control", "a
+/// nonland permanent" (Scheming Fence). With "you may choose", the choice is optional
+/// (up to one). Returns the filter and whether it's optional.
+fn etb_object_choice(text: &str) -> Option<(Filter, bool)> {
     let l = text.to_lowercase();
-    let r = end(&l).strip_prefix("as ~ enters, choose ")?;
+    let r = end(&l).strip_prefix("as ~ enters, ")?;
+    let (optional, r) = match r.strip_prefix("you may choose ") {
+        Some(r) => (true, r),
+        None => (false, r.strip_prefix("choose ")?),
+    };
     let r = match r.strip_prefix("another ") {
         Some(_) => r,
         None => {
@@ -36,17 +47,24 @@ fn etb_object_choice(text: &str) -> Option<Filter> {
     if !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
         return None;
     }
-    // A creature (not a card, a player or a word).
-    if !matches!(&f, Filter::And(v) if v.iter().any(|x| matches!(x, Filter::Type(crate::types::CardType::Creature))))
-        && !matches!(f, Filter::Type(crate::types::CardType::Creature))
-    {
+    // A creature or a permanent (not a card, a player or a word).
+    let kind = |x: &Filter| {
+        matches!(
+            x,
+            Filter::Type(crate::types::CardType::Creature) | Filter::Permanent
+        )
+    };
+    if !matches!(&f, Filter::And(v) if v.iter().any(kind)) && !kind(&f) {
         return None;
     }
-    Some(Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]))
+    Some((
+        Filter::and(vec![f, Filter::InZone(ZoneKind::Battlefield)]),
+        optional,
+    ))
 }
 
 /// Whether the card has such a choice (in its raw text, normalized like blocks are).
-fn card_chooses_object() -> bool {
+pub(crate) fn card_chooses_object() -> bool {
     let raw = crate::oracle::raw_text();
     let name = crate::oracle::card_name();
     raw.lines().any(|line| {
@@ -65,7 +83,7 @@ fn as_enters_choose_object(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
     if !ctx.is_permanent() {
         return None;
     }
-    let filter = etb_object_choice(block)?;
+    let (filter, optional) = etb_object_choice(block)?;
     let effect = StaticEffect::Replacement(ReplacementDef {
         event: ReplacementEvent::EntersBattlefield(Filter::Source),
         action: ReplacementAction::AsEnters(Box::new(Effect::NoteLinked {
@@ -73,7 +91,7 @@ fn as_enters_choose_object(block: &str, ctx: &CompileContext) -> Option<Vec<Abil
                 chooser: PlayerRef::You,
                 filter,
                 count: Value::c(1),
-                up_to: false,
+                up_to: optional,
                 store: None,
             },
             replace: true,

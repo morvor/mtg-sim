@@ -151,7 +151,12 @@ impl Game {
             if available.is_empty() && min > 0 {
                 return false;
             }
-            let picks: Vec<usize> = if modal.chooser == ModeChooser::Random {
+            let random = match &modal.chooser {
+                ModeChooser::Random => true,
+                ModeChooser::RandomUnless(c) => !self.eval_cond(c, ctx),
+                _ => false,
+            };
+            let picks: Vec<usize> = if random {
                 // A mode that can't be chosen (no legal targets) can't be chosen at random.
                 if available.is_empty() {
                     vec![]
@@ -160,7 +165,7 @@ impl Game {
                     vec![available[k]]
                 }
             } else {
-                let chooser = if modal.chooser == ModeChooser::Opponent {
+                let chooser = if matches!(modal.chooser, ModeChooser::Opponent) {
                     // CR 601.7, 602.3: an opponent chooses the mode when the controller
                     // normally would; the controller decides which opponent (601.7a).
                     let o = self.deciding_opponent(controller, id, ctx);
