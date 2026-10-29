@@ -206,7 +206,12 @@ pub(crate) fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     // "Until your next turn, whenever ...": it lasts until its controller's next turn.
     let mut until_next_turn = false;
-    let (cond_s, eff) = if let Some(r) = l.strip_prefix("until end of turn, whenever ") {
+    // "This turn, whenever an attacking creature deals combat damage to you, ..." (Harsh
+    // Justice): the same as "until end of turn, whenever".
+    let (cond_s, eff) = if let Some(r) = l
+        .strip_prefix("until end of turn, whenever ")
+        .or_else(|| l.strip_prefix("this turn, whenever "))
+    {
         let (c, e) = split_condition(r)?;
         (c.to_string(), e)
     } else if let Some(r) = l.strip_prefix("until your next turn, whenever ") {
@@ -238,7 +243,14 @@ pub(crate) fn this_turn_trigger(l: &str, b: &mut Builder) -> Option<Effect> {
     let names_referent = super::trigger_grammar_combat_cast::named_referents(&trigger)
         .iter()
         .any(|(p, _)| eff.contains(p.as_str()));
-    if matches!(it, Sel::None) && has_object_pronoun(eff) && !names_referent {
+    // "that player", "they" are about the player the trigger event names ("whenever a
+    // player gains life, that player loses 2 life for each 1 life they gained").
+    let objects_only = if !matches!(it_player, PlayerRef::TriggerPlayer) {
+        eff.to_string()
+    } else {
+        eff.replace("that player", "").replace("they ", "").replace("their ", "")
+    };
+    if matches!(it, Sel::None) && has_object_pronoun(&objects_only) && !names_referent {
         return None;
     }
     // Phrases the trigger event names ("Until your next turn, whenever a creature deals

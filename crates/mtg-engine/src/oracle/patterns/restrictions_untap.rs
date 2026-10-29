@@ -99,6 +99,8 @@ fn doesnt_untap_for_as_long_as(l: &str, b: &mut Builder) -> Option<Effect> {
         Duration::WhileCondition(_)
             | Duration::WhileSourceOnBattlefield
             | Duration::WhileYouControlSource
+            // "for as long as it has a paralyzation counter on it" (Dread Wight).
+            | Duration::WhileAffectedHasCounter(_)
     ) {
         return None;
     }
@@ -112,7 +114,8 @@ fn doesnt_untap_for_as_long_as(l: &str, b: &mut Builder) -> Option<Effect> {
     let what = match subject {
         // The objects the previous sentence named ("Tap all other artifacts. They ...").
         "it" | "that creature" | "that permanent" | "that land" | "that artifact" | "they"
-        | "those creatures" | "those permanents" | "those artifacts" | "those lands" => {
+        | "those creatures" | "those permanents" | "those artifacts" | "those lands"
+        | "each of those creatures" => {
             if matches!(b.it, Sel::None | Sel::This) {
                 return None;
             }

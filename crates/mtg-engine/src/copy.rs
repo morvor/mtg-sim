@@ -231,6 +231,22 @@ pub fn become_copy(
     else {
         return;
     };
+    // CR 611.2b: a "for as long as" duration that already ended means the effect does
+    // nothing; the objects its condition names are fixed as it begins.
+    if let crate::ability::Duration::WhileCondition(c) = duration {
+        let mut c2 = ctx.clone();
+        c2.set_var(
+            crate::ability::vars::AFFECTED,
+            targets
+                .iter()
+                .map(|o| crate::types::Entity::Object(*o))
+                .collect(),
+        );
+        if !g.eval_cond(c, &c2) {
+            return;
+        }
+    }
+    let duration = &crate::duration_refs::bind_duration_objects(g, duration, ctx);
     let values = Box::new(g.obj(src).copiable.clone());
     // "except it has this ability": the resolving ability (CR 707.9a).
     let exceptions = g.fix_mods(exceptions, ctx);

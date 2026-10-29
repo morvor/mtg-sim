@@ -141,8 +141,11 @@ impl Renderer<'_> {
                     || (!each_of.is_empty() && *up_to)
                 {
                     "you may "
-                } else if matches!(count, Some(Value::Const(k)) if *k >= 999) {
-                    // Any number includes none: "you may reveal any number of ...".
+                } else if matches!(count, Some(Value::Const(k)) if *k >= 999)
+                    || (*up_to && matches!(count, Some(Value::Const(k)) if *k > 1))
+                {
+                    // Any number (and "up to two") includes none: "you may reveal any number
+                    // of ...", "you may reveal up to two ...".
                     "{opt:you may} "
                 } else {
                     ""

@@ -122,8 +122,15 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     spec.text = spec.text.replace("the iterated player", "that player");
     // "Goad those creatures.": all the targets chosen for the players.
     let slot = Sel::Target(before as u8);
+    // ("the chosen permanents" for "target artifact or creature that player controls",
+    // Kitesail Larcenist: permanents of those types.)
+    let permanent_types = ["artifact", "creature", "land", "enchantment", "planeswalker"];
     for noun in ["creatures", "permanents", "artifacts", "cards"] {
-        if spec.text.contains(&noun[..noun.len() - 1]) {
+        if spec.text.contains(&noun[..noun.len() - 1])
+            || (noun == "permanents"
+                && !spec.text.contains(" card")
+                && permanent_types.iter().any(|t| spec.text.contains(t)))
+        {
             b.named.push((format!("those {noun}"), slot.clone()));
             b.named.push((format!("the chosen {noun}"), slot.clone()));
         }
