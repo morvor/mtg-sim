@@ -950,16 +950,18 @@ impl Game {
                         return false;
                     }
                 }
-                // A modal spell needs a mode that can be chosen: one with legal targets
-                // (CR 700.2a), as `choose_modes_and_targets` requires when it's cast.
+                // A modal spell needs as many modes that can be chosen as it must have:
+                // modes with legal targets (CR 700.2a), as `choose_modes_and_targets`
+                // requires when it's cast.
                 Some(modal) => {
-                    let min = self.eval_value(&modal.min, &ctx).max(0);
-                    if min > 0
-                        && !modal
-                            .modes
-                            .iter()
-                            .any(|m| self.targets_possible(&m.targets, &ctx, card))
-                    {
+                    let min = self.eval_value(&modal.min, &ctx).max(0) as usize;
+                    let available = modal
+                        .modes
+                        .iter()
+                        .filter(|m| self.targets_possible(&m.targets, &ctx, card))
+                        .count();
+                    let needed = if modal.allow_repeat { min.min(1) } else { min };
+                    if !modal.optional && available < needed {
                         return false;
                     }
                 }
