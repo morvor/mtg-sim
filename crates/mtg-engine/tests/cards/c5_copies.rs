@@ -170,3 +170,27 @@ fn hofri_ghostforge_token_returns_the_exiled_card_when_it_leaves() {
     assert!(!t.in_exile("Grizzly Bears"));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
+
+#[test]
+fn ludevic_transforms_into_a_copy_with_a_counter_per_exiled_creature_card() {
+    cr!("712.20", "707.9b", "122.6");
+    supported("Ludevic, Necrogenius // Olag, Ludevic's Hubris");
+    use mtg_engine::decision::Answer;
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let ludevic = t.battlefield(P0, "Ludevic, Necrogenius // Olag, Ludevic's Hubris");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 4);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_choose(P0, &[Entity::Object(giant), Entity::Object(bears)]);
+    t.answer_choose_moved(P0, &[Entity::Object(giant)]);
+    t.activate(P0, ludevic, 0, &[]).expect("activates");
+    t.resolve_all();
+    let o = t.obj_now(ludevic);
+    assert_eq!(o.chars.name.as_str(), "Olag, Ludevic's Hubris");
+    assert!(o.chars.has_subtype("Zombie") && o.chars.has_subtype("Giant"));
+    assert_eq!(t.counters(ludevic, "+1/+1"), 2);
+    assert_eq!(t.pt(ludevic), (6, 6));
+}
