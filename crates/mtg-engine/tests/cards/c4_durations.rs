@@ -265,3 +265,50 @@ fn blade_of_shared_souls_copy_ends_when_it_becomes_unattached() {
     t.g.recompute();
     assert_eq!(t.obj_now(bears).chars.name.as_str(), "Grizzly Bears");
 }
+
+#[test]
+fn kitesail_larcenist_makes_treasures_while_it_remains_on_the_battlefield() {
+    cr!("611.2b", "205.1a", "613.1f");
+    ruling!(
+        "Kitesail Larcenist",
+        "will be only Treasure artifacts as long as Kitesail Larcenist remains on the battlefield"
+    );
+    supported("Kitesail Larcenist");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let kite = t.enter(P0, "Kitesail Larcenist");
+    t.resolve_all();
+    for o in [bears, giant] {
+        let c = &t.obj_now(o).chars;
+        assert!(c.has_subtype("Treasure"), "{:?}", c.name);
+        assert!(!c.card_types.contains(CardType::Creature));
+        assert!(c.card_types.contains(CardType::Artifact));
+    }
+    t.g.destroy(kite, None);
+    t.resolve_all();
+    assert!(t.obj_now(bears).chars.card_types.contains(CardType::Creature));
+    assert!(!t.obj_now(giant).chars.has_subtype("Treasure"));
+}
+
+#[test]
+fn kitesail_larcenist_gone_before_its_ability_resolves_does_nothing() {
+    cr!("611.2b");
+    ruling!(
+        "Kitesail Larcenist",
+        "If Kitesail Larcenist leaves the battlefield before its enters-the-battlefield ability resolves"
+    );
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    let kite = t.enter(P0, "Kitesail Larcenist");
+    t.g.settle();
+    t.g.destroy(kite, None);
+    t.resolve_all();
+    assert!(!t.obj_now(giant).chars.has_subtype("Treasure"));
+    assert!(t.obj_now(giant).chars.card_types.contains(CardType::Creature));
+}

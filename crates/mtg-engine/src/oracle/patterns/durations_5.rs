@@ -223,3 +223,34 @@ fn base_pt_equal_to_other(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "durations 5: ~'s base power and toughness become equal to another's", priority: 100, parse: base_pt_equal_to_other } }
+
+/// "For as long as ~ remains on the battlefield, the chosen permanents become Treasure
+/// artifacts with \"{T}, Sacrifice ~: Add one mana of any color\" and lose all other
+/// abilities." (Kitesail Larcenist): the instruction read with a leading "until end of
+/// turn" (whose list of predicates may hold quoted abilities), for as long as the source
+/// remains on the battlefield (CR 611.2b).
+fn for_as_long_as_source_remains_first(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (d, rest) = [
+        (
+            "for as long as ~ remains on the battlefield, ",
+            Duration::WhileSourceOnBattlefield,
+        ),
+        ("for as long as you control ~, ", Duration::WhileYouControlSource),
+    ]
+    .into_iter()
+    .find_map(|(p, d)| l.strip_prefix(p).map(|r| (d, r)))?;
+    if !rest.contains('"') {
+        return None;
+    }
+    let saved = (b.targets.len(), b.it.clone());
+    let mut e = parse_sentence(&format!("until end of turn, {rest}"), b)?;
+    if swap_duration(&mut e, &d, object_effect) != 1 {
+        b.targets.truncate(saved.0);
+        b.it = saved.1;
+        return None;
+    }
+    Some(e)
+}
+
+inventory::submit! { EffectPattern { name: "durations 5: for as long as ~ remains on the battlefield, [instruction with quoted abilities]", priority: 90, parse: for_as_long_as_source_remains_first } }
