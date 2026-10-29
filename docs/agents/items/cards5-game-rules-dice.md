@@ -33,7 +33,7 @@ PHRASE FAMILIES (texts in family; representative failing pieces and cards; the f
 
 ALSO BLOCKED BY: none outside this item for the 20 cards it unlocks. Vedalken Squirrel-Whacker's roll replacement (cards5-manual-defs) uses this item's "result" values: do the `dice` family first. Celebr-8000 (cards5-manual-defs) uses the compiled "roll two six-sided dice" and "If you rolled doubles".
 
-RELATED: Mr. House, President and CEO waited in round5/pending-recheck.tsv for cards4-costs-mana-replacements' mana provenance; that item landed and the count "for each mana from Treasures spent to activate this ability" still fails, so the re-plan placed the text in cards5-mana-replacements (`mana`), with its dice count ("a six-sided die plus an additional six-sided die for each ...") written there as a count Value through a small hook, not in this item's dice pattern files.
+RELATED: Mr. House, President and CEO waited in round5/pending-recheck.tsv for cards4-costs-mana-replacements' mana provenance; that item landed without the count over an activation, so the re-plan placed the text in cards5-mana-replacements (`mana`). This item then compiled it as a dice pattern (22d3ca41, dice_coins_5.rs), so it is done; cards5-mana-replacements keeps only the general "for each mana ... spent to activate this ability" count (Balduvian Fallen's family) and doesn't touch this item's dice files.
 
 RULES NOTES:
 - CR 103.1, 103.6 (starting player; opening-hand actions), 118.1, 602.2b (costs), 400.11 (outside the game), 603.7 (delayed triggers), 609.7a (sources), 611.2 (durations), 614.1c (as-enters replacements), 705 (coins), 706.2, 706.3, 706.6 (dice: results, tables, ignored rolls), 701.52 and 717 (Attractions), 905.2 (draft abilities).
