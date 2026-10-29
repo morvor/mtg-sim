@@ -523,3 +523,125 @@ fn snow_mana_spent_as_any_color_makes_the_spell_a_legal_action() {
     t.lands(P0, "Island", 2);
     assert!(!castable(&mut t, P0, bears));
 }
+
+// ---------------------------------------------------------------------------
+// Assorted permissions and their cards
+// ---------------------------------------------------------------------------
+
+/// Puts `card` into exile as if `by` had exiled it, with a counter of `kind` on it.
+fn exile_by(t: &mut TestGame, card: ObjectId, by: PlayerId, kind: &str, n: u32) -> ObjectId {
+    let x = t
+        .g
+        .move_object(card, Zone::Exile, mtg_engine::events::MoveCause::Exile, Some(by))
+        .unwrap();
+    if n > 0 {
+        t.g.obj_mut(x).counters.insert(kind.into(), n);
+    }
+    x
+}
+
+#[test]
+fn haldan_casts_an_exiled_creature_card_only_as_a_noncreature_spell() {
+    cr!("715.3", "601.3e");
+    ruling!(
+        "Haldan, Avid Arcanist",
+        "A creature card that you exiled with a fetch counter on it may be cast as a noncreature spell if a rule or effect (such as that of adventurer cards) allows you to do so."
+    );
+    supported("Haldan, Avid Arcanist");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Haldan, Avid Arcanist");
+    let card = t.library_top(P1, "Bonecrusher Giant // Stomp");
+    let card = exile_by(&mut t, card, P0, "fetch", 1);
+    // Mana of any color: Islands pay for {1}{R} and {2}{R}.
+    t.lands(P0, "Island", 3);
+    assert!(t
+        .cast(P0, card)
+        .method(mtg_engine::object::CastMethod::Normal)
+        .try_go()
+        .is_err());
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, card)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // Stomp went on an adventure: exiled again (without a fetch counter).
+    assert!(in_exile(&t, card));
+}
+
+#[test]
+fn alaundo_removes_time_counters_from_every_card_you_own_in_exile() {
+    cr!("702.62a", "122.1");
+    ruling!(
+        "Alaundo the Seer",
+        "Alaundo's ability will remove time counters from all cards you own in exile, even ones that were put there another way, such as with the suspend ability."
+    );
+    supported("Alaundo the Seer");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Alaundo the Seer");
+    let vision = t.hand(P0, "Ancestral Vision");
+    let vision = exile_by(&mut t, vision, P0, "time", 4);
+    let theirs = t.hand(P1, "Ancestral Vision");
+    let theirs = exile_by(&mut t, theirs, P1, "time", 4);
+    let island = t.hand(P0, "Island");
+    t.answer_choose(P0, &[o(island)]);
+    t.activate(P0, a, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(in_exile(&t, island));
+    assert_eq!(t.counters(vision, "time"), 3);
+    assert_eq!(t.counters(theirs, "time"), 4, "a card P0 doesn't own");
+}
+
+#[test]
+fn a_suspend_card_alaundo_exiled_loses_counters_to_suspend_too() {
+    cr!("702.62a", "702.62b");
+    ruling!(
+        "Alaundo the Seer",
+        "Alaundo's ability is not the same as the suspend ability. However, if you exile a card with suspend this way, the suspend ability will also cause you to remove time counters from it."
+    );
+    supported("Alaundo the Seer");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Alaundo the Seer");
+    // Rift Bolt (mana value 3): three time counters.
+    let bolt = t.hand(P0, "Rift Bolt");
+    t.answer_choose(P0, &[o(bolt)]);
+    t.activate(P0, a, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(in_exile(&t, bolt));
+    assert_eq!(t.counters(bolt, "time"), 3);
+    // P0's next upkeep: suspend removes one.
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.counters(bolt, "time"), 2);
+}
+
+#[test]
+fn sakashimas_protege_copy_gets_enters_abilities() {
+    cr!("707.2", "614.12", "603.6a");
+    ruling!(
+        "Sakashima's Protege",
+        "Any enters-the-battlefield abilities of the copied permanent will trigger when Sakashima's Protege enters the battlefield. Any \"as [this permanent] enters the battlefield\" or \"[this permanent] enters the battlefield with\" abilities of the chosen permanent will also work."
+    );
+    supported("Sakashima's Protege");
+    for (what, draws, plus) in [("Wall of Omens", 1, 0), ("Kalonian Hydra", 0, 4)] {
+        let mut t = TestGame::new(2);
+        let orig = t.enter(P1, what);
+        t.resolve_all();
+        mana(&mut t, P0, ManaType::U, 6);
+        let p = t.hand(P0, "Sakashima's Protege");
+        let spell = t.cast(P0, p).go();
+        // Cascade (and what it cast) first.
+        t.settle();
+        while t.g.stack.last().is_some_and(|x| *x != spell) {
+            t.resolve();
+        }
+        let hand = t.hand_size(P0);
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[o(orig)]);
+        t.resolve_all();
+        let p = t.g.current(p);
+        assert_eq!(t.obj_now(p).chars.name, what);
+        assert_eq!(t.hand_size(P0), hand + draws, "{what}");
+        assert_eq!(t.counters(p, "+1/+1"), plus, "{what}");
+    }
+}
