@@ -91,6 +91,13 @@ fn lands_or_spells(f: &Filter) -> Option<Filter> {
     Some(Filter::and(common))
 }
 
+/// The permanent this one is attached to, only while it's a creature.
+fn attached_creature(f: &Filter) -> bool {
+    matches!(f, Filter::And(v) if v.len() == 2
+        && v.iter().any(|x| matches!(x, Filter::AttachedToSource))
+        && v.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))))
+}
+
 fn filter_has(f: &Filter, p: &dyn Fn(&Filter) -> bool) -> bool {
     p(f) || match f {
         Filter::And(v) | Filter::Or(v) => v.iter().any(|x| filter_has(x, p)),
@@ -123,6 +130,11 @@ pub(crate) fn grants_to_equipment(s: &StaticAbility) -> bool {
     equipment(affected)
         || (matches!(affected, Filter::AttachedToSource)
             && matches!(&s.condition, Some(Condition::SelMatches(Sel::AttachedTo, f)) if equipment(f)))
+        // "Clues you control are Equipment in addition to their other types and have
+        // "Equipped creature gets +2/+0"": the objects it makes Equipment.
+        || mods.iter().any(|m| {
+            matches!(m, Modification::AddSubtypes(v) if v.iter().any(|t| t == "Equipment"))
+        })
 }
 
 impl Renderer<'_> {
@@ -305,7 +317,9 @@ impl Renderer<'_> {
                     Some((head, rest)) if head.starts_with("if ") || head.starts_with("If ") => {
                         format!("{head} while {c}, {rest}")
                     }
-                    _ => format!("as long as {c}, {}", lower_first(&e)),
+                    // "If you control a creature, damage that would reduce your life total
+                    // to less than 1 reduces it to 1 instead."
+                    _ => format!("if {c}, {}", lower_first(&e)),
                 }
             }
             Some(c) => {
@@ -460,6 +474,14 @@ impl Renderer<'_> {
             let n = self.spell_noun_one(&base);
             return format!("the first {n} you cast each turn");
         }
+        if attached_creature(f) {
+            // "Enchanted creature gets -4/-0" on an Aura that can enchant a Vehicle: the
+            // enchanted permanent while it's a creature ("enchanted"/"equipped" as the
+            // attachment is named).
+            let n = self.attached_noun();
+            let head = n.split(' ').next().unwrap_or("enchanted");
+            return format!("{head} creature");
+        }
         match f {
             Filter::Source => self.me(),
             Filter::AttachedToSource => self.attached_noun(),
@@ -499,7 +521,7 @@ impl Renderer<'_> {
                 let plural = !matches!(
                     affected,
                     Filter::Source | Filter::AttachedToSource | Filter::In(_)
-                );
+                ) && !attached_creature(affected);
                 if plural {
                     format!("{subj} {}", plural_vp(&vp))
                 } else {
@@ -1040,6 +1062,32 @@ impl Renderer<'_> {
         }
         // "from any graveyard", "from that player's graveyard": a permission for cards in
         // graveyards other than its player's (`PlayTerms::any_owner`).
+        // "You may play lands and cast spells from that player's hand" (Sen Triplets).
+        let owned_by = |f: &Filter| match f {
+            Filter::OwnedByPlayer(p) => Some((**p).clone()),
+            Filter::And(v) => v.iter().find_map(|x| match x {
+                Filter::OwnedByPlayer(p) => Some((**p).clone()),
+                _ => None,
+            }),
+            _ => None,
+        };
+        if pp.terms.any_owner && pp.zone == ZoneKind::Hand {
+            if let Some(p) = owned_by(&pp.what) {
+                let mut q = pp.clone();
+                q.terms.any_owner = false;
+                q.what = match &pp.what {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::OwnedByPlayer(_)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    _ => Filter::Any,
+                };
+                let p = self.player(&p, Case::Poss);
+                return self.play_permission_from(&q, Some(format!("from {p} hand")));
+            }
+        }
         if pp.terms.any_owner && pp.zone == ZoneKind::Graveyard {
             let mut q = pp.clone();
             q.terms.any_owner = false;
@@ -2147,6 +2195,21 @@ impl Renderer<'_> {
                 if *battles {
                     s.push_str(" or battles they protect");
                 }
+                // "~ can't attack if defending player controls an untapped land": the
+                // player, planeswalkers they control and battles they protect are the
+                // ones whose defending player that is (CR 506.2).
+                if *planeswalkers && *battles && !matches!(defender, PlayerFilter::Any) {
+                    let c = self.condition(&Condition::PlayerMatches(
+                        PlayerRef::DefendingPlayer,
+                        defender.clone(),
+                    ));
+                    // (Said with the condition, as a static ability's condition, in the
+                    // face's other rendering, `RenderedFace::static_if`.)
+                    if self.static_if {
+                        return format!("{a} can't attack if {c}");
+                    }
+                    return format!("{{alt:{s}|{a} can't attack if {c}}}");
+                }
                 s
             }
             Restriction::Goaded(f) => format!("{} is goaded", subj(self, f)),
@@ -3007,6 +3070,28 @@ impl Renderer<'_> {
                         format!("{subj} enter untapped")
                     }
                     A::EnterUntapped => format!("{subj} enters untapped"),
+                    // "Each other creature you control enters with a number of additional
+                    // +1/+1 counters on it equal to ~'s toughness": counters in addition
+                    // to those it would enter with (CR 614.1c).
+                    A::EnterWithCounters(k, n)
+                        if subj != "~"
+                            && subj != "~it"
+                            && !matches!(n, Value::Const(_))
+                            && !matches!(f, Filter::Source) =>
+                    {
+                        let (c, w) = self.counted(n, &counter_name(k));
+                        let one = format!(
+                            "{subj} enters with {c} on {it}{}",
+                            w.clone().unwrap_or_default()
+                        );
+                        let each = self.noun(f, Num::One);
+                        let v = self.value(n);
+                        let kind = counter_name(k);
+                        format!(
+                            "{{alt:{one}|each {each} enters with a number of additional {} on it equal to {v}}}",
+                            plural(&kind)
+                        )
+                    }
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
                         let one = format!(
@@ -3256,7 +3341,13 @@ impl Renderer<'_> {
             (E::Destroy(f), action) => {
                 let subj = self.noun_det(f, Det::A);
                 match action {
-                    A::Regenerate => format!("regenerate {subj}"),
+                    // "If ~ would be destroyed, regenerate it." (CR 701.19a: the
+                    // regeneration replaces the destruction).
+                    A::Regenerate => {
+                        format!(
+                            "{{alt:if {subj} would be destroyed, regenerate it|regenerate {subj}}}"
+                        )
+                    }
                     other => {
                         let then = self.replacement_then(other, "it");
                         format!("if {subj} would be destroyed, {then}")
@@ -3273,7 +3364,28 @@ impl Renderer<'_> {
                 },
                 action,
             ) => {
-                self.damage_replacement(source, to_players, to_objects, *combat_only, false, action)
+                let s = self.damage_replacement(
+                    source,
+                    to_players,
+                    to_objects,
+                    *combat_only,
+                    false,
+                    action,
+                );
+                // "All combat damage that would be dealt to you by unblocked creatures is
+                // dealt to ~ instead": the same redirection of each such damage event.
+                if let (A::Redirect(sel), true, Some(PlayerFilter::You), None) =
+                    (action, *combat_only, to_players, to_objects)
+                {
+                    let unblocked = matches!(source, Filter::And(v) if v.len() == 2
+                        && v.iter().any(|x| matches!(x, Filter::Unblocked))
+                        && v.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))));
+                    if unblocked {
+                        let t = self.sel(sel, Case::Obj);
+                        return format!("{{alt:{s}|all combat damage that would be dealt to you by unblocked creatures is dealt to {t} instead}}");
+                    }
+                }
+                s
             }
             (
                 E::NoncombatDamage {

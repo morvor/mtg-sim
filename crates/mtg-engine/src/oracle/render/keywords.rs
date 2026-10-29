@@ -355,6 +355,15 @@ impl Renderer<'_> {
                 let parts: Vec<String> = v.iter().map(|x| self.quality(x)).collect();
                 join_list(&parts, "and")
             }
+            // "protection from each color among permanents you control": from everything
+            // that shares a color with one of them (CR 702.16a, 105.4).
+            Filter::SharesColor(s) => match s.as_ref() {
+                Sel::All(among) => {
+                    let n = self.noun(among, Num::Many);
+                    format!("each color among {n}")
+                }
+                _ => self.noun(f, Num::Many),
+            },
             other => self.noun(other, Num::Many),
         }
     }

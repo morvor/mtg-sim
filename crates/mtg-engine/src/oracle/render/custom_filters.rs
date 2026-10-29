@@ -247,6 +247,16 @@ fn custom_clause(name: &str, subj: &str, negated: bool) -> Option<String> {
             format!("{subj} dealt damage to you this turn"),
             format!("{subj} didn't deal damage to you this turn"),
         ),
+        // "if it wasn't sacrificed" (Urza's Miter), "if it wasn't the first land you
+        // played this turn" (Fastbond): see `kw/paper_history.rs`.
+        crate::kw::paper_history::NOT_SACRIFICED => (
+            format!("{subj} wasn't sacrificed"),
+            format!("{subj} was sacrificed"),
+        ),
+        crate::kw::paper_history::NOT_FIRST_LAND_PLAYED => (
+            format!("{subj} wasn't the first land you played this turn"),
+            format!("{subj} was the first land you played this turn"),
+        ),
         _ => return super::named_qualities::custom_clause_named(name, subj, negated),
     };
     Some(if negated { no } else { yes })

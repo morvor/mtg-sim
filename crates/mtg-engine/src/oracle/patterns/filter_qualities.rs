@@ -528,6 +528,14 @@ pub fn listed_kinds(s: &str) -> Option<(Filter, bool, &str)> {
     // nonland permanent": the core grammar's).
     let noun_only = |w: &str| head_noun(w).is_some() && adjective(w).is_none();
     let adjective_only = |w: &str| head_noun(w).is_none() && adjective(w).is_some();
+    // "Bird and/or Cleric permanent cards", "Elf and/or Warrior creature cards": subtypes
+    // before a last item that is a subtype too share the narrowing nouns after it (the
+    // core grammar's "instant or sorcery spell"), unlike card types narrowed by a noun
+    // they can't have ("instant, sorcery, and/or Tamiyo planeswalker cards").
+    let subtype = |w: &str| matches!(head_noun(w), Some(Filter::Subtype(_)));
+    if items.iter().all(|w| subtype(w)) && subtype(core[0]) {
+        return None;
+    }
     let ok = if items.iter().all(|w| adjective_only(w)) {
         noun_only(core[0])
     } else if items.iter().all(|w| head_noun(w).is_some()) {

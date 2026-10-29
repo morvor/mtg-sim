@@ -99,6 +99,13 @@ impl Renderer<'_> {
                 let s = self.sel(s, Case::Obj);
                 format!("the number of {s}")
             }
+            // "for each graveyard with seven or more cards in it": each player has one
+            // graveyard (CR 404.1).
+            Value::CountPlayers(pf @ PlayerFilter::GraveyardSize(Cmp::Ge, k)) => {
+                let n = self.player_filter_noun(pf, Num::Many);
+                let k = self.value(k);
+                format!("the number of {{alt:{n}|graveyards with {k} or more cards in them}}")
+            }
             Value::CountPlayers(pf) => {
                 let n = self.player_filter_noun(pf, Num::Many);
                 format!("the number of {n}")
@@ -1071,10 +1078,13 @@ impl Renderer<'_> {
             }
             // "If its mana value was 3 or less" (judged by last known information if
             // it has left its zone, CR 608.2h).
+            // "If that spell has mana value 5 or greater" says the same.
             Condition::SelMatches(s, Filter::ManaValue(c, v)) => {
-                let poss = self.sel(s, Case::Poss);
+                let subj = self.sel(s, Case::Subj);
+                let poss = super::players::decline(subj.clone(), Case::Poss);
                 let v = self.value(v);
-                format!("{poss} mana value is {}", cmp_phrase(*c, &v))
+                let cmp = cmp_phrase(*c, &v);
+                format!("{{alt:{poss} mana value is {cmp}|{subj} has mana value {cmp}}}")
             }
             // "if ~ entered this turn".
             // "If you controlled that permanent" (after it left the battlefield; its last
@@ -1117,6 +1127,20 @@ impl Renderer<'_> {
             Condition::SelMatches(s, Filter::AttackedThisTurn) => {
                 let subj = self.sel(s, Case::Subj);
                 format!("{subj} attacked this turn")
+            }
+            // "as long as ~ is enchanted or equipped".
+            Condition::SelMatches(s, Filter::Or(v))
+                if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::Enchanted))
+                    && v.iter().any(|x| matches!(x, Filter::Equipped)) =>
+            {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} is enchanted or equipped")
+            }
+            // "if that spell was kicked" (CR 702.33d).
+            Condition::SelMatches(s, Filter::CastWithCost(name)) if name == "kicked" => {
+                let subj = self.sel(s, Case::Subj);
+                format!("{subj} was kicked")
             }
             Condition::SelMatches(s, f) => {
                 if let Some(c) = self.custom_condition_clause(s, f, false) {
@@ -1835,6 +1859,35 @@ impl Renderer<'_> {
         if let Some(s) = self.guessed(a, cmp, b) {
             return s;
         }
+        // "if that spell has mana value 5 or greater", "if that creature has power 7 or
+        // greater": one object's number against a constant, said either way.
+        if let (
+            Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s),
+            Value::Const(n),
+            Cmp::Ge | Cmp::Le,
+        ) = (a, b, cmp)
+        {
+            if matches!(
+                s.as_ref(),
+                Sel::Target(_)
+                    | Sel::TriggerObject
+                    | Sel::TriggerSpell
+                    | Sel::TriggerLki
+                    | Sel::Var(_)
+            ) {
+                let stat = match a {
+                    Value::ManaValueOf(_) => "mana value",
+                    Value::PowerOf(_) => "power",
+                    _ => "toughness",
+                };
+                let subj = self.sel(s, Case::Subj);
+                if !subj.contains(['{', '}']) && subj != "their" {
+                    let poss = super::players::decline(subj.clone(), Case::Poss);
+                    let c = cmp_phrase(cmp, &n.to_string());
+                    return format!("{{alt:{poss} {stat} is {c}|{subj} has {stat} {c}}}");
+                }
+            }
+        }
         // Pack tactics: "if you attacked with creatures with total power 6 or greater
         // this combat" (the attackers' power as they were declared).
         if let (Value::Custom(n), Cmp::Ge, Value::Const(k)) = (a, cmp, b) {
@@ -1961,6 +2014,26 @@ impl Renderer<'_> {
                 } else {
                     format!("a player has more {stat} than each other player")
                 };
+            }
+        }
+        // "creatures you control have total toughness 10 or greater" (the sum of their
+        // toughness).
+        if let (
+            Value::Aggregate(AggOp::Sum, stat @ (Stat::Power | Stat::Toughness), s),
+            Value::Const(n),
+        ) = (a, b)
+        {
+            if let Sel::All(f) = s.as_ref() {
+                let st = if matches!(stat, Stat::Power) {
+                    "power"
+                } else {
+                    "toughness"
+                };
+                let noun = self.noun_det(f, Det::Plural);
+                let c = cmp_phrase(cmp, &n.to_string());
+                return format!(
+                    "{{alt:{noun} have total {st} {c}|the total {st} of {noun} is {c}}}"
+                );
             }
         }
         // "creatures you control have total power 8 or greater".

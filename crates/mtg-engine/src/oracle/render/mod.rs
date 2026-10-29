@@ -821,6 +821,9 @@ pub struct Renderer<'a> {
     /// "you" is reworded for that player; text about the controller made there is marked
     /// with [`KEEP_YOU`] so it isn't.
     pub(crate) in_as_player: bool,
+    /// Inside an instruction about the opponents of another player ("each of that
+    /// player's opponents may draw a card"): that player, possessive.
+    pub(crate) opponents_of: Option<String>,
     /// See [`RenderedFace::static_if`].
     pub(crate) static_if: bool,
     /// The zone the ability being rendered functions from.
@@ -881,9 +884,14 @@ pub struct Renderer<'a> {
     /// Variables stored by the ability's controller outside an instruction performed as
     /// another player: "you" in them stays the controller.
     pub(crate) outer_vars: Vec<Var>,
+    /// Players stored in variables by the ability being rendered ("defending player",
+    /// for "until the end of defending player's next turn").
+    pub(crate) player_vars: Vec<(Var, PlayerRef)>,
     /// What the last instruction did to a group of objects ("permanents destroyed this
     /// way"), for counting them.
     pub(crate) it_done: Option<String>,
+    /// The kind of counter the last instruction put on "it" (see `Effect::AddCounters`).
+    pub(crate) counters_put: Option<CounterKind>,
     /// Rendering a value about an earlier moment ("the number of Mountains you control
     /// as you cast ~", "damage dealt by sources they controlled"): "you control" may be
     /// "you controlled".
@@ -932,6 +940,9 @@ pub struct Renderer<'a> {
     /// Rendering a static ability: a choice it refers to was made by another ability of
     /// the object, possibly more than once ("the last chosen color").
     pub(crate) in_static: bool,
+    /// The quote depth of the static ability being rendered: its own text, not an ability
+    /// it grants in quotes.
+    pub(crate) static_quote_depth: Option<u32>,
     /// The keyword an activated ability is introduced by ("Boast — ...").
     pub(crate) keyword_ability: Option<crate::keywords::KeywordKind>,
     /// The head noun of what the cost sacrificed ("the sacrificed artifact").
@@ -1057,6 +1068,7 @@ impl<'a> Renderer<'a> {
             self_before_target: false,
             last_actor_other: false,
             in_as_player: false,
+            opponents_of: None,
             static_if: false,
             zone: FunctionZone::Battlefield,
             self_salient: false,
@@ -1080,7 +1092,9 @@ impl<'a> Renderer<'a> {
             last_group: None,
             var_defs: Vec::new(),
             outer_vars: Vec::new(),
+            player_vars: Vec::new(),
             it_done: None,
+            counters_put: None,
             control_past: false,
             excess_trigger: false,
             trigger_actions: Vec::new(),
@@ -1098,6 +1112,7 @@ impl<'a> Renderer<'a> {
             trigger_names_opponent: false,
             intervening_exists: None,
             in_static: false,
+            static_quote_depth: None,
             keyword_ability: None,
             plural_vars: Vec::new(),
             play_terms: None,
@@ -1271,8 +1286,10 @@ impl<'a> Renderer<'a> {
                     statics::grants_to_equipment(s),
                 );
                 let saved_static = std::mem::replace(&mut self.in_static, true);
+                let saved_depth = self.static_quote_depth.replace(self.quote_depth);
                 let t = self.static_ability(s);
                 self.in_static = saved_static;
+                self.static_quote_depth = saved_depth;
                 self.grants_to_equipment = saved;
                 t
             }
@@ -1750,6 +1767,8 @@ fn plural_word(w: &str) -> String {
         ("Homunculus", "Homunculi"),
         ("Aurochs", "Aurochs"),
         ("Hero", "Heroes"),
+        // "each other attacking Kavu", "protection from Kavu".
+        ("Kavu", "Kavu"),
     ];
     for (s, p) in irregular {
         if w == s {
