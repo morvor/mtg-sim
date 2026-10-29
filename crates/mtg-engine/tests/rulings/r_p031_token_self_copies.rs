@@ -495,7 +495,7 @@ fn shredder_s_tokens_copy_what_it_s_copying() {
 
 #[test]
 fn bloodforged_battle_axe_s_token_is_unattached_and_makes_more() {
-    cr!("707.2", "301.5e");
+    cr!("707.2", "301.5b");
     ruling!("Bloodforged Battle-Axe", "The token enters the battlefield unattached.");
     ruling!(
         "Bloodforged Battle-Axe",
@@ -708,7 +708,7 @@ fn vaultborn_tyrant_sees_the_power_a_creature_enters_with() {
 
 #[test]
 fn vaultborn_tyrant_s_trigger_isn_t_undone_by_lowering_power() {
-    cr!("603.4", "608.2b");
+    cr!("603.2");
     ruling!(
         "Vaultborn Tyrant",
         "Once Vaultborn Tyrant’s second ability has triggered, lowering the power of the creature or removing it from the battlefield won’t stop you from gaining life and drawing a card."

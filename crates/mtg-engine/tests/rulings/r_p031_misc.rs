@@ -115,6 +115,16 @@ fn essence_of_the_wild_applies_after_control_changes_and_before_other_effects() 
     let v = enter(&mut t, P0, "Elite Vanguard");
     assert_eq!(t.obj_now(v).chars.name, "Essence of the Wild");
     assert_eq!(t.counters(v, counters::PLUS1), 1);
+    // Thunderous Velocipede: one counter for mana value 4 or less, three otherwise. The
+    // copy effect applies first, so the Bears (mana value 2) enter as an Essence of the
+    // Wild (mana value 6) with three.
+    supported("Thunderous Velocipede");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Essence of the Wild");
+    t.battlefield(P0, "Thunderous Velocipede");
+    let b = enter(&mut t, P0, "Grizzly Bears");
+    assert_eq!(t.obj_now(b).chars.name, "Essence of the Wild");
+    assert_eq!(t.counters(b, counters::PLUS1), 3);
     // Gather Specimens: P1's creature enters under P0's control, so it's an Essence.
     supported("Gather Specimens");
     let mut t = TestGame::new(2);

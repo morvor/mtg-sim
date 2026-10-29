@@ -290,7 +290,7 @@ fn mind_s_desire_s_card_is_face_up_and_stays_exiled() {
 
 #[test]
 fn galvanic_relay_s_card_is_played_next_turn_normally() {
-    cr!("601.3", "307.1");
+    cr!("601.3", "117.1a");
     ruling!(
         "Galvanic Relay",
         "Playing the card has the same timing restrictions and requires the same payments as normal, but it can only be played next turn."
@@ -441,6 +441,12 @@ fn plumb_the_forbidden_copies_for_each_creature_sacrificed() {
         t.cast_with(P0, plumb, &[]).unwrap();
         t.settle();
         assert_eq!(t.g.battlefield.iter().filter(|o| t.obj(**o).is(CardType::Creature)).count(), 3 - n);
+        // The spell, with above it the copy trigger (if any creature was sacrificed) and
+        // Emeritus's magecraft trigger (if it's still there), all controlled by P0.
+        let want = 1 + usize::from(n > 0) + usize::from(!emeritus_too);
+        assert_eq!(t.stack_len(), want, "sacrificed {n}, Emeritus: {emeritus_too}");
+        assert_eq!(t.obj(t.g.stack[0]).chars.name, "Plumb the Forbidden");
+        assert!(t.g.stack.iter().all(|s| t.obj(*s).controller == P0));
         t.resolve_all();
         assert!(spell_copies(&t).is_empty());
         assert_eq!(t.hand_size(P0), hand + draws, "sacrificed {n}, Emeritus: {emeritus_too}");
