@@ -97,7 +97,7 @@ fn kalitas_exiles_nontoken_creatures_so_dies_triggers_see_only_tokens() {
 
 #[test]
 fn kalitas_cant_sacrifice_itself() {
-    cr!("118.3", "602.2b");
+    cr!("118.3");
     ruling!(
         "Kalitas, Traitor of Ghet",
         "You can't sacrifice Kalitas to activate the last ability, even if it's somehow become a Zombie."
@@ -148,7 +148,7 @@ fn brightcap_badger_is_a_creature_card_outside_the_stack() {
 
 #[test]
 fn johann_can_cast_only_the_adventure_of_brightcap_badger() {
-    cr!("715.3a", "715.3b", "601.3e");
+    cr!("715.3a", "601.3e");
     ruling!(
         "Brightcap Badger // Fungus Frolic",
         "If you cast an adventurer card as an Adventure, use only its alternative characteristics to determine whether it's legal to cast that spell. For example, if you control Johann, Apprentice Sorcerer (\"Once each turn, you may cast an instant or sorcery spell from the top of your library\") and Brightcap Badger is on top of your library, you can cast Fungus Frolic, but not Brightcap Badger."
@@ -686,7 +686,7 @@ fn patriarchs_bidding_types_can_repeat_and_need_no_cards() {
 
 #[test]
 fn door_of_destinies_any_creature_type_of_a_multitype_creature_counts() {
-    cr!("205.3m", "205.3d");
+    cr!("205.3m", "205.3a");
     ruling!(
         "Door of Destinies",
         "Creature types, such as Human or Sliver, appear after the dash on the type line of creatures. Notably, artifact is not a creature type. A creature may have more than one creature type, such as Goblin Warrior. Such a creature would benefit from Door of Destinies if the chosen creature type was Goblin or Warrior."

@@ -1,4 +1,4 @@
-//! Rulings batch P183 — damage and power: Aegar's excess damage (CR 120.10, 120.4a),
+//! Rulings batch P183 — damage and power: Aegar's excess damage (CR 120.10),
 //! Valley Flamecaller's damage replacement (CR 614.1a, 616.1, 510.1c), Jason Bright's
 //! base power (CR 208.4b), Rakdos's coins (CR 608.2c), and Righteous Valkyrie's life
 //! gain read on resolution or from last known information (CR 608.2h).
@@ -20,7 +20,7 @@ use mtg_engine::*;
 
 #[test]
 fn aegar_excess_damage_takes_marked_damage_into_account() {
-    cr!("120.10", "120.4a");
+    cr!("120.10");
     ruling!(
         "Aegar, the Freezing Flame",
         "A creature has been dealt excess damage if one or more sources deal more damage to it than the minimum amount of damage required to be lethal damage. In most cases, this means damage greater than its toughness, but consider the damage already dealt to it that turn."
@@ -42,7 +42,7 @@ fn aegar_excess_damage_takes_marked_damage_into_account() {
 
 #[test]
 fn aegar_uses_the_smallest_threshold_of_a_creature_planeswalker() {
-    cr!("120.10", "120.4a");
+    cr!("120.10");
     ruling!(
         "Aegar, the Freezing Flame",
         "If a permanent is both a creature and a planeswalker, the minimum amount of damage to be considered lethal damage is used to determine if excess damage has been dealt."

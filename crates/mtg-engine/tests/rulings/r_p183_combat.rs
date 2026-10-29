@@ -257,7 +257,7 @@ fn origins_tokens_enter_attacking_without_being_declared() {
 
 #[test]
 fn origins_tokens_can_attack_whatever_you_choose() {
-    cr!("508.4", "508.4a");
+    cr!("508.4");
     ruling!(
         "Origin of the Hidden Ones",
         "You choose which player, planeswalker, or battle the Assassin tokens are attacking. Each Assassin token can enter attacking a different player, planeswalker, or battle, and they don't need to be the same ones that the Assassins you control are attacking."

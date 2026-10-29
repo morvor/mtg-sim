@@ -92,7 +92,7 @@ fn righteous_valkyries_bonus_ending_makes_marked_damage_lethal() {
 
 #[test]
 fn a_creature_with_several_of_the_listed_types_gets_the_bonus_once() {
-    cr!("205.3a", "613.4c", "702.73a");
+    cr!("205.3a", "613.4c");
     ruling!(
         "Kaheera, the Orphanguard",
         "A creature that's more than one of the five types gets +1/+1 only once from Kaheera's last ability."
@@ -191,7 +191,7 @@ fn silvergill_douser_counts_each_permanent_once_and_reads_x_on_resolution() {
 
 #[test]
 fn kithkin_mourncaller_triggers_once_for_a_kithkin_elf() {
-    cr!("603.2", "702.73a");
+    cr!("603.2c", "702.73a");
     ruling!(
         "Kithkin Mourncaller",
         "If an attacking creature that’s both a Kithkin and an Elf is put into your graveyard from the battlefield, Kithkin Mourncaller’s ability triggers only once."
