@@ -501,6 +501,11 @@ pub struct TurnHistory {
     /// triggers only for them. Recorded by `kw/reveal_first_draw.rs`.
     #[serde(default)]
     pub first_draws_revealed: Vec<ObjectId>,
+    /// Permanents that regenerated this turn, once for each time (CR 701.19a: a
+    /// regeneration shield was used to replace its destruction). Recorded by
+    /// `replacement.rs`; read by `kw/paper_history.rs`.
+    #[serde(default)]
+    pub regenerated: Vec<ObjectId>,
     /// Named actions players performed this turn, from [`Event::Custom`] events with a
     /// player ("surveil", "scry"): "as long as you've surveilled this turn". Recorded by
     /// `kw/grant_conditions.rs`.
@@ -736,6 +741,11 @@ pub struct Game {
     /// activates don't sacrifice it to pay their own costs (a Food's own ability can't
     /// also be paid for by sacrificing that Food to Gilded Goose).
     pub mana_reserve: Option<ObjectId>,
+    /// Permanents tapped to pay part of the total cost of the spell being cast other than
+    /// with mana (convoke, improvise, CR 702.51a, 702.126a), while the rest of that cost is
+    /// paid. They're tapped as the total cost is paid, after mana abilities are activated
+    /// (CR 601.2g–h), so a mana ability can't sacrifice, exile or return them first.
+    pub paid_otherwise: Vec<ObjectId>,
     /// Commanders that moved to graveyard/exile since the last SBA check (CR 704.6d).
     pub commander_moved_since_last_sba: BTreeSet<ObjectId>,
     /// When a search's decision is answered with the default, find the first matches.
@@ -926,6 +936,7 @@ impl Game {
             named_exiles: vec![],
             mana_hint: None,
             mana_reserve: None,
+            paid_otherwise: Vec::new(),
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
             untils: vec![],

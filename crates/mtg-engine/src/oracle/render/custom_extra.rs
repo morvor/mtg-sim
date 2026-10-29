@@ -36,6 +36,10 @@ pub(crate) struct ExtraState {
     /// In a "whenever the Ring tempts you" trigger, whose event object is the creature
     /// chosen as your Ring-bearer (CR 701.54a).
     pub ring_tempts: bool,
+    /// The duration of a replacement effect a resolving instruction creates, said with
+    /// its event ("If a card would be put into your graveyard from anywhere this turn"):
+    /// taken by the event's words, else said after the effect.
+    pub event_duration: Option<String>,
 }
 
 /// The past tense of a past participle ("drawn" -> "drew").
@@ -178,8 +182,20 @@ impl Renderer<'_> {
 
     /// `Value::Custom` names put into words here.
     pub(crate) fn custom_value_extra(&mut self, name: &str) -> Option<String> {
+        if name == crate::kw::paper_history::REGENERATIONS_THIS_TURN {
+            return Some(format!(
+                "the number of times {} regenerated this turn",
+                self.me()
+            ));
+        }
         if name.starts_with(crate::kw::delayed_grammar_3::MANA_SPENT_ON_TARGET) {
             return Some("the amount of mana spent to cast that spell".into());
+        }
+        if name == crate::kw::damage_history_4::GREATEST_DAMAGE_BY_A_SOURCE {
+            return Some(
+                "the greatest amount of damage dealt by a source to a permanent or player this turn"
+                    .into(),
+            );
         }
         if name == crate::kw::trigger_modifiers::LIFE_PAID_AMOUNT {
             return Some("the life paid to activate it".into());
@@ -459,6 +475,20 @@ impl Renderer<'_> {
             return Some(format!("unlock costs you pay cost {{{n}}} less"));
         }
         Some(match name {
+            // CR 702.28b: a creature with shadow can block only creatures with shadow and
+            // be blocked only by them; this one blocks them as though it had it.
+            crate::kw::shadow::BLOCKS_SHADOW_AS_THOUGH_IT_HAD_SHADOW => {
+                let m = self.me();
+                format!("{m} can block creatures with shadow as though {{alt:it|~}} had shadow")
+            }
+            crate::kw::shadow::BLOCKS_SHADOW_AS_THOUGH_THEY_DIDNT => {
+                let m = self.me();
+                format!("{m} can block creatures with shadow as though they didn't have shadow")
+            }
+            // "The first card you foretell each turn costs {0} to foretell" (CR 702.143a).
+            crate::kw::foretell::FIRST_EACH_TURN_FREE => {
+                "the first card you foretell each turn costs {0} to foretell".into()
+            }
             "facedown: may look at opponents' face-down creatures" => {
                 "you may look at face-down creatures your opponents control {opt:any time}".into()
             }

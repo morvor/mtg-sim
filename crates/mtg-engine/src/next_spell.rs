@@ -89,7 +89,52 @@ pub fn is_cast_grant(s: &StaticAbility) -> bool {
 /// turn, they gain cascade"), rather than only to the next one. Matches every object.
 pub const EACH_SPELL_THIS_TURN: &str = "next spell:each spell this turn";
 
-fn filter_has_custom(f: &Filter, name: &str) -> bool {
+/// `Filter::Custom` conjunct of a waiting effect's filter: the effect waits for the next
+/// matching card its controller *plays* ("the next creature card you play this turn can be
+/// played as though it had flash"), so a land card with that quality played as a land
+/// (Dryad Arbor) uses it up and gets its timing too (CR 305.1, 702.8a). Matches every
+/// object.
+pub const CARD_YOU_PLAY: &str = "next spell:card you play";
+
+/// Whether a waiting effect lets player `p` play the land card `card` as though it had
+/// flash: one waiting for the next matching card `p` plays (not merely casts).
+pub fn lets_land_be_played_with_flash(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    g.next_spell_effects.iter().any(|e| {
+        e.player == p
+            && filter_has_custom(&e.filter, CARD_YOU_PLAY)
+            && gives_flash(g, e)
+            && g.matches(
+                card,
+                &crate::casting::as_spell_filter(&e.filter),
+                &Ctx::new(e.source, e.player),
+            )
+    })
+}
+
+/// Called as player `p` plays the land card `card` (still where it was played from):
+/// effects waiting for the next matching card `p` plays are used up (CR 305.1).
+pub fn land_played(g: &mut Game, p: PlayerId, card: ObjectId) {
+    let turn = g.turn.number;
+    let pending = std::mem::take(&mut g.next_spell_effects);
+    let keep = pending
+        .into_iter()
+        .filter(|e| {
+            let current = !matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn)
+                || e.created_turn == turn;
+            !(current
+                && e.player == p
+                && filter_has_custom(&e.filter, CARD_YOU_PLAY)
+                && g.matches(
+                    card,
+                    &crate::casting::as_spell_filter(&e.filter),
+                    &Ctx::new(e.source, e.player),
+                ))
+        })
+        .collect();
+    g.next_spell_effects = keep;
+}
+
+pub(crate) fn filter_has_custom(f: &Filter, name: &str) -> bool {
     match f {
         Filter::Custom(n) => n == name,
         Filter::And(v) => v.iter().any(|x| filter_has_custom(x, name)),

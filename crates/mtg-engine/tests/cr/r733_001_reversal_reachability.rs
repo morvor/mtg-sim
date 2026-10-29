@@ -286,7 +286,8 @@ fn sel_in_library(s: &Sel) -> bool {
         | Sel::ExiledWithCardsNamed(_)
         | Sel::TriggerSpell
         | Sel::TopOfGraveyard(_)
-        | Sel::LinkedNoted => false,
+        | Sel::LinkedNoted
+        | Sel::LinkedNotedLastKnown => false,
     }
 }
 
@@ -603,6 +604,9 @@ fn custom_rule(name: &str) -> CustomRule {
         "counts as named for spells named:",
         "doesn't cause abilities to trigger:",
         "deck:",
+        // "~ can't have more than N [kind] counters on it" (Rasputin Dreamweaver; CR 122.4,
+        // 704.5r, `counter_rules::counter_limits`): counters on a permanent.
+        "counter limit:",
     ];
     if NO_LIBRARY.contains(&name) || NO_LIBRARY_FAMILIES.iter().any(|p| name.starts_with(p)) {
         return CustomRule::NoLibrary;
@@ -890,6 +894,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::AttachAsCreature { .. }
         | Effect::Unattach { .. }
         | Effect::PhaseOut { .. }
+        | Effect::PhaseIn { .. }
         | Effect::TurnFaceDown { .. }
         | Effect::RemoveFromCombat { .. }
         | Effect::BecomeUnblocked { .. }

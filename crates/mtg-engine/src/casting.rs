@@ -408,9 +408,9 @@ impl Game {
     fn legal_actions_now(&mut self, p: PlayerId) -> Vec<Action> {
         let mut out = vec![Action::Pass];
         // Lands (CR 305.1, 505.6b).
-        if self.can_play_land_now(p) {
+        if self.land_play_available(p) {
             for c in self.playable_land_cards(p) {
-                if !self.can_pay_land_play_cost(p, c) {
+                if !self.land_play_timing_ok(p, c) || !self.can_pay_land_play_cost(p, c) {
                     continue;
                 }
                 out.push(Action::PlayLand { card: c });
@@ -448,12 +448,36 @@ impl Game {
     pub fn can_play_land_now(&self, p: PlayerId) -> bool {
         // CR 305.2, 505.6b: active player, main phase, empty stack, land play available.
         // With shared team turns each player on the active team may (CR 805.4c).
+        self.land_play_available(p) && self.turn.step.is_main() && self.stack.is_empty()
+    }
+
+    /// Whether `p` could play a land now but for the timing of land plays (a main phase,
+    /// the stack empty): it's their turn, they have priority and a land play left, and
+    /// nothing stops them from playing lands (CR 305.2, 305.2b).
+    fn land_play_available(&self, p: PlayerId) -> bool {
         self.is_active_player(p)
-            && self.turn.step.is_main()
-            && self.stack.is_empty()
             && self.has_priority(p)
             && self.player(p).lands_played_this_turn < self.player(p).land_plays
             && !self.player_restricted(p, |r| matches!(r, Restriction::CantPlayLands(_)))
+    }
+
+    /// Whether the timing of land plays lets `p` play `card` now: during a main phase
+    /// with the stack empty (CR 305.1), or any time they could cast an instant if the
+    /// card has flash or may be played as though it had flash (CR 702.8a: "you may play
+    /// this card any time you could cast an instant"). Only the timing changes.
+    fn land_play_timing_ok(&self, p: PlayerId, card: ObjectId) -> bool {
+        if self.turn.step.is_main() && self.stack.is_empty() {
+            return true;
+        }
+        // Permissions to *cast* spells as though they had flash (Vedalken Orrery, "the
+        // next creature spell you cast") don't apply: a land is played, never cast
+        // (CR 305.9, 601.3b). "The next creature card you play ... as though it had
+        // flash" does (Scout's Warning).
+        let chars = self.land_face_characteristics(card);
+        // Likewise "[players] can cast spells only any time they could cast a sorcery"
+        // restricts casting only.
+        chars.has_keyword(KeywordKind::Flash)
+            || crate::next_spell::lets_land_be_played_with_flash(self, p, card)
     }
 
     fn playable_land_cards(&self, p: PlayerId) -> Vec<ObjectId> {
@@ -1138,7 +1162,7 @@ impl Game {
 
     /// Plays a land (CR 305.1): a special action that doesn't use the stack.
     pub fn play_land(&mut self, p: PlayerId, card: ObjectId) -> Result<(), Illegal> {
-        if !self.can_play_land_now(p) {
+        if !self.land_play_available(p) || !self.land_play_timing_ok(p, card) {
             return Err(Illegal("can't play a land now".into()));
         }
         if !self.playable_land_cards(p).contains(&card) {
@@ -1248,6 +1272,8 @@ impl Game {
             FaceState::Back
         };
         self.players[p.idx()].lands_played_this_turn += 1;
+        // "The next creature card you play this turn ...": playing it uses that up.
+        crate::next_spell::land_played(self, p, card);
         // "Each land played this way enters tapped" (CR 614.1d).
         let tapped = permission.is_some_and(|c| c.terms.lands_enter_tapped);
         crate::permissions::record_use(self, permission);
@@ -1866,7 +1892,18 @@ impl Game {
         // pay part of it other than with mana (the X part first, as for reductions).
         let generic = |c: &Cost| c.mana.as_ref().map_or(0, |m| m.generic_amount());
         let before = generic(&total);
+        let untapped: Vec<ObjectId> = self
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|o| !self.obj(*o).tapped)
+            .collect();
         let relied_on = crate::kw::pay_mana_otherwise(self, p, id, &mut total)?;
+        // What convoke, improvise and the like tapped (CR 702.51a, 702.126a).
+        let paid_otherwise: Vec<ObjectId> = untapped
+            .into_iter()
+            .filter(|o| self.is_in_zone(*o, Zone::Battlefield) && self.obj(*o).tapped)
+            .collect();
         x_left = x_left.saturating_sub(before.saturating_sub(generic(&total)));
         // 601.2g–h: activate mana abilities and pay.
         let spend = SpendContext {
@@ -1911,9 +1948,25 @@ impl Game {
             ..Default::default()
         };
         ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
+        // CR 601.2g–h: mana abilities are activated before the total cost is paid, so a
+        // creature sacrificed for mana (Wild Cantor) isn't there to be tapped for convoke:
+        // the automatic payment doesn't plan those mana abilities (`Game::paid_otherwise`),
+        // and a payment that removed such a permanent anyway (sacrificing it to another
+        // permanent's mana ability) can't be made. The spell's own costs may still
+        // sacrifice it: those are paid together with the tapping (CR 601.2h).
+        let prev_otherwise = std::mem::replace(&mut self.paid_otherwise, paid_otherwise.clone());
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
+        self.paid_otherwise = prev_otherwise;
         ctx.cost_of = None;
         let paid = paid?;
+        if paid_otherwise
+            .iter()
+            .any(|c| !self.is_in_zone(*c, Zone::Battlefield) && !paid.objects.contains(c))
+        {
+            return Err(Illegal(
+                "a permanent tapped to pay the spell's cost was removed for mana".into(),
+            ));
+        }
         // CR 601.2g–h: mana abilities are activated before the total cost is paid. If one
         // of them removed what gave the spell convoke (sacrificing Dazzling Theater), the
         // spell doesn't have it when the cost is paid: that payment can't be made.
@@ -2309,6 +2362,13 @@ impl Game {
         }
         if let Some(max) = act.max_per_turn {
             if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) >= max {
+                return false;
+            }
+        }
+        // "Activate no more times each turn than [value]" (CR 602.5b).
+        if let Some(v) = &act.max_per_turn_value {
+            let max = self.eval_value(v, &Ctx::new(Some(src), p));
+            if o.activations_this_turn.get(&a.uid).copied().unwrap_or(0) as i64 >= max {
                 return false;
             }
         }
@@ -2813,6 +2873,16 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
+        // CR 602.2a, 701.20a: a card whose ability is activated from a hidden zone stays
+        // revealed until that ability leaves the stack.
+        if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
+            crate::reveal::prune(self);
+            self.reveals.revealed.push(crate::reveal::Revealed {
+                card: src,
+                by: p,
+                stack_obj: Some(id),
+            });
+        }
         // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
         // activation cost (at most one) is announced.
         let alt = self.announce_alternative_activation_cost(p, src, a, act);
@@ -3217,7 +3287,9 @@ impl Game {
                     return false;
                 }
                 let want_tapped = matches!(part, CostPart::Untap);
-                if o.tapped != want_tapped {
+                if o.tapped != want_tapped
+                    || (want_tapped && !crate::counter_rules::can_untap_for_cost(self, o.id))
+                {
                     return false;
                 }
                 // CR 302.6: {T}/{Q} abilities of creatures need haste or no summoning
@@ -3346,7 +3418,10 @@ impl Game {
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
+                        ob.controller == p
+                            && ob.tapped
+                            && !(untaps_src && Some(*o) == src)
+                            && crate::counter_rules::can_untap_for_cost(self, *o)
                     })
                     .count()
                     >= n
@@ -3651,7 +3726,10 @@ impl Game {
             CostPart::Untap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 let o = self.obj(s);
-                if o.zone != Zone::Battlefield || !o.tapped {
+                if o.zone != Zone::Battlefield
+                    || !o.tapped
+                    || !crate::counter_rules::can_untap_for_cost(self, s)
+                {
                     return bad("can't untap");
                 }
                 // A stun counter's replacement effect may replace the untap (the counter is
@@ -3707,6 +3785,12 @@ impl Game {
                     // A mana ability activated to pay another cost doesn't sacrifice the
                     // object that cost is for (see `Game::mana_reserve`).
                     .filter(|o| Some(*o) != self.mana_reserve)
+                    // Nor what convoke or improvise tapped for the spell being cast: that's
+                    // tapped after mana abilities are activated (CR 601.2g–h).
+                    .filter(|o| {
+                        !(self.paid_otherwise.contains(o)
+                            && src.is_some_and(|s| self.is_in_zone(s, Zone::Battlefield)))
+                    })
                     .collect();
                 if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
                 {
@@ -3962,7 +4046,10 @@ impl Game {
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
+                        ob.controller == p
+                            && ob.tapped
+                            && !(untaps_src && Some(*o) == src)
+                            && crate::counter_rules::can_untap_for_cost(self, *o)
                     })
                     .collect();
                 if (cands.len() as u32) < n {

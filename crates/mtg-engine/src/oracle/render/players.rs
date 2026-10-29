@@ -911,6 +911,7 @@ impl Renderer<'_> {
             }
             Sel::Linked => decline("each card exiled with ~it".into(), case),
             Sel::LinkedNoted => decline("the last chosen card".into(), case),
+            Sel::LinkedNotedLastKnown => decline("those sacrificed as ~it entered".into(), case),
             Sel::Before(inner) => self.sel(inner, case),
             Sel::ThisTurn(c) => {
                 let s = match self.this_turn_objects(c) {
@@ -922,6 +923,17 @@ impl Renderer<'_> {
             Sel::EventsDuring(w, c) => {
                 let g = self.gap(format!("Sel::EventsDuring({w:?}, {c:?})"));
                 decline(g, case)
+            }
+            // "creatures that died this way": the permanents an earlier instruction put into
+            // a graveyard from the battlefield (CR 700.4), as they last existed there.
+            Sel::Matching(inner, f)
+                if matches!(inner.as_ref(), Sel::Before(x)
+                    if matches!(x.as_ref(), Sel::Matching(y, Filter::InZone(ZoneKind::Graveyard))
+                        if matches!(y.as_ref(), Sel::Var(v) if *v == vars::IT)
+                            && self.this_way_of(y).is_some())) =>
+            {
+                let n = self.noun(f, Num::Many);
+                decline(format!("{n} that died this way"), case)
             }
             // "the creatures destroyed this way": the objects an earlier instruction acted
             // on.
@@ -1212,6 +1224,19 @@ impl Renderer<'_> {
                 let n = self.noun(&f, Num::One);
                 let s = self.sel(sel, Case::Poss);
                 format!("{{alt:that player or that {n}'s controller|{s} controller}}")
+            }
+            // "~ deals 2 damage to each player who sacrificed a Plains this way": a player
+            // sacrifices only permanents they control (CR 701.21a).
+            PlayerRef::ControllerOf(sel)
+                if !matches!(case, Case::Poss)
+                    && matches!(sel.as_ref(), Sel::Matching(inner, _)
+                        if self.this_way_of(inner).is_some_and(|(v, _, _)| v == "sacrificed")) =>
+            {
+                let Sel::Matching(_, f) = sel.as_ref() else {
+                    return self.gap("sacrificed this way");
+                };
+                let n = self.noun_det(f, Det::A);
+                format!("each player who sacrificed {n} this way")
             }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);

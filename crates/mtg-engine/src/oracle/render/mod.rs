@@ -36,6 +36,7 @@ mod effects;
 mod events_happened;
 mod extremes;
 mod flashback_reduction;
+mod graveyard_order;
 mod graveyard_this_way;
 mod guesses;
 mod history_filters;

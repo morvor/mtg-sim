@@ -580,3 +580,64 @@ fn a_card_returned_at_random_from_a_graveyard_is_seen_by_everyone() {
     let p1 = observe(&t.g, Some(P1));
     assert!(!json(&p1.players[0].graveyard).contains(name.as_str()));
 }
+
+#[test]
+fn the_card_revealed_from_among_the_cards_looked_at_is_shown_to_everyone() {
+    cr!("701.20a", "401.2");
+    ruling!(
+        "Augur of Bolas",
+        "You don't reveal the other two cards, nor do you reveal their order on the bottom of the library."
+    );
+    // Augur of Bolas: "look at the top three cards of your library. You may reveal an
+    // instant or sorcery card from among them and put it into your hand."
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    t.g.players[0].library.clear();
+    for name in ["Forest", "Hill Giant", "Grizzly Bears", "Lightning Bolt"] {
+        t.library_top(P0, name);
+    }
+    let before = t.g.event_feed.len();
+    t.enter(P0, "Augur of Bolas");
+    t.answer_yes(P0, true);
+    let bolt =
+        t.g.find_in_zone(mtg_engine::object::Zone::Library(P0), "Lightning Bolt")[0];
+    t.answer_choose(P0, &[mtg_engine::types::Entity::Object(bolt)]);
+    t.resolve_all();
+    assert_eq!(
+        t.g.find_in_zone(mtg_engine::object::Zone::Hand(P0), "Lightning Bolt")
+            .len(),
+        1
+    );
+    let events = t.g.event_feed.since(before);
+    let for_p1 = json(&describe_events(&t.g, Some(P1), &events));
+    assert!(for_p1.contains("revealed Lightning Bolt"), "{for_p1}");
+    for hidden in ["Grizzly Bears", "Hill Giant"] {
+        assert!(!for_p1.contains(hidden), "{hidden}: {for_p1}");
+    }
+}
+
+#[test]
+fn a_card_returned_from_a_graveyard_to_a_hand_is_seen_by_everyone() {
+    cr!("400.2");
+    ruling!(
+        "Haunted Fengraf",
+        "All players get to see which card you return to your hand."
+    );
+    // Haunted Fengraf: "{3}, {T}, Sacrifice this land: Return a creature card at random
+    // from your graveyard to your hand."
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    let fengraf = t.battlefield(P0, "Haunted Fengraf");
+    t.lands(P0, "Wastes", 3);
+    t.graveyard(P0, "Grizzly Bears");
+    let before = t.g.event_feed.len();
+    t.activate(P0, fengraf, 1, &[]).expect("Haunted Fengraf");
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    let events = t.g.event_feed.since(before);
+    let for_p1 = json(&describe_events(&t.g, Some(P1), &events));
+    assert!(
+        for_p1.contains("Grizzly Bears") && for_p1.contains("hand"),
+        "{for_p1}"
+    );
+}

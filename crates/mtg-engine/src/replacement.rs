@@ -1791,6 +1791,7 @@ impl Game {
             (ReplacementAction::Prevent, _) => vec![],
             (ReplacementAction::Regenerate, ReplEvent::Destroy { obj, .. }) => {
                 // CR 701.19a: remove all damage, tap it, remove it from combat.
+                self.history.regenerated.push(obj);
                 let o = &mut self.objects[obj.0 as usize];
                 o.damage = 0;
                 o.deathtouch_damage = false;

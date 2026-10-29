@@ -160,6 +160,9 @@ const PASSIVE: &[(&str, &str)] = &[
     ("was turned face up", "is turned face up"),
     ("became tapped", "becomes tapped"),
     ("blocked or was blocked by", "blocks or becomes blocked by"),
+    // "if it has blocked or been blocked since your last upkeep" (Wiitigo).
+    ("blocked or been blocked", "blocks or becomes blocked"),
+    ("blocked or was blocked", "blocks or becomes blocked"),
     ("was removed", "is removed"),
     ("were removed", "is removed"),
 ];

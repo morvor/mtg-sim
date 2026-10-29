@@ -351,7 +351,23 @@ impl Renderer<'_> {
                     w.unwrap_or_default()
                 )
             }
-            CostPart::Effect(e) => self.effect(e),
+            CostPart::Effect(e) => {
+                let s = self.effect(e);
+                // "Cumulative upkeep—Have an opponent create a 1/1 red Survivor creature
+                // token" ("—An opponent gains 1 life"): a cost another player performs.
+                let last = match &**e {
+                    Effect::Seq(v) => v.last(),
+                    e => Some(e),
+                };
+                let by_other = last
+                    .and_then(|l| self.actor_vp_peek(l))
+                    .is_some_and(|(w, _, _)| !matches!(w, PlayerRef::You));
+                if by_other {
+                    format!("{{opt:have}} {s}")
+                } else {
+                    s
+                }
+            }
             CostPart::PayManaCostOf(s) => {
                 let s = self.sel(s, players::Case::Poss);
                 format!("pay {s} mana cost")
@@ -465,6 +481,7 @@ impl Renderer<'_> {
             if matches!(a.timing, ActivationTiming::Sorcery)
                 && matches!(&a.condition, Some(Condition::Compare(Value::ClassLevel, Cmp::Eq, Value::Const(n))) if *n as i64 + 1 == *level as i64)
                 && a.max_per_turn.is_none()
+                && a.max_per_turn_value.is_none()
                 && a.max_total.is_none()
                 && a.own_cost_changes.is_empty()
             {
@@ -582,6 +599,8 @@ impl Renderer<'_> {
                 }
                 _ => None,
             },
+            // "Any player may activate this ability but only during any upkeep step."
+            (Some(Condition::Phase(PhaseCond::Upkeep)), true) => Some("any upkeep step"),
             _ => None,
         };
         match a.condition.as_ref().filter(|_| {
@@ -665,6 +684,11 @@ impl Renderer<'_> {
                 }
                 _ => s = join_words(&[s, restriction]),
             }
+        }
+        // "Activate no more times each turn than the number of snow Swamps you control."
+        if let Some(v) = &a.max_per_turn_value {
+            let n = self.value(v);
+            s = join_words(&[s, format!("Activate no more times each turn than {n}.")]);
         }
         // "Any player may activate this ability but only as a sorcery."
         let sorcery_only = " Activate only as a sorcery.";

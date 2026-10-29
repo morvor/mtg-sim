@@ -17,7 +17,8 @@ fn batched(t: &TriggerCond) -> Option<(&TriggerCond, BatchPer)> {
     match t {
         TriggerCond::ThisTurn(i)
         | TriggerCond::UntilYourNextTurn(i)
-        | TriggerCond::ThisCombat(i) => batched(i),
+        | TriggerCond::ThisCombat(i)
+        | TriggerCond::ForAsLongAs(i, _) => batched(i),
         TriggerCond::Batched { trigger, per } => Some((trigger, *per)),
         _ => None,
     }
@@ -50,6 +51,7 @@ pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> 
                 .or(i.player.map(Entity::Player)),
             BatchPer::Object => i.object.map(Entity::Object),
             BatchPer::Other => i.other.map(Entity::Object),
+            BatchPer::OtherController => i.other.map(|o| Entity::Player(g.obj(o).controller)),
         };
         let mut groups: Vec<Vec<EventInfo>> = Vec::new();
         for info in infos {

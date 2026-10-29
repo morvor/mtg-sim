@@ -193,6 +193,16 @@ pub fn can_attach_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -> 
     if Entity::Object(obj) == to {
         return false; // an object can't be attached to itself
     }
+    // "can't be enchanted. This effect doesn't remove Auras already attached": only
+    // new attachments (Guardian Beast).
+    if let Entity::Object(t) = to {
+        if g.obj(obj).chars.has_subtype("Aura")
+            && g.obj(obj).attached_to != Some(Entity::Object(t))
+            && crate::prohibitions::cant_be_enchanted(g, t, true)
+        {
+            return false;
+        }
+    }
     legal_attachment_as(g, obj, to, as_creature)
 }
 
@@ -253,8 +263,10 @@ fn legal_attachment_as(g: &Game, obj: ObjectId, to: Entity, as_creature: bool) -
                 if !g.matches(t, &f, &Ctx::new(Some(obj), o.controller)) {
                     return false;
                 }
-                // "can't be enchanted by other Auras".
-                if crate::prohibitions::aura_prohibited(g, obj, t) {
+                // "can't be enchanted by other Auras", "can't be enchanted" (CR 303.4c).
+                if crate::prohibitions::aura_prohibited(g, obj, t)
+                    || crate::prohibitions::cant_be_enchanted(g, t, false)
+                {
                     return false;
                 }
                 // CR 702.16c: can't be enchanted by Auras with the protected quality —
@@ -420,6 +432,14 @@ pub(crate) fn entry_attachment(g: &mut Game, mv: &mut MoveEv) -> bool {
         && o.chars.has_subtype("Aura")
         && !o.face_down;
     if aura_spell {
+        // CR 303.4i: an Aura spell whose target "can't be enchanted" (CR 303.4) can't be
+        // attached to it; its target is still legal (CR 702.5a), so it resolves and is
+        // put into its owner's graveyard instead.
+        if let Some(Entity::Object(t)) = mv.etb.attach_to {
+            if crate::prohibitions::cant_be_enchanted(g, t, true) {
+                return false;
+            }
+        }
         return true;
     }
     let id = mv.obj;

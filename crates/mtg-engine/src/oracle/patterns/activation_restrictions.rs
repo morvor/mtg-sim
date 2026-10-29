@@ -49,6 +49,8 @@ pub(crate) enum Clause {
     PerTurn(u32),
     /// "once".
     Total(u32),
+    /// "no more times each turn than [value]" (CR 602.5b).
+    PerTurnValue(Value),
     /// "if ~ is on the stack", "if ~ is in your graveyard": where the ability functions
     /// (CR 113.6).
     Zone(FunctionZone),
@@ -528,6 +530,14 @@ pub(crate) fn restriction_sentence(s: &str, ctx: &CompileContext) -> Option<(Vec
     {
         return Some((vec![Clause::PerTurn(times(r)?)], Who::Controller));
     }
+    // "Activate no more times each turn than the number of snow Swamps you control."
+    if let Some(r) = s.strip_prefix("activate no more times each turn than ") {
+        let v = crate::oracle::patterns::statics::parse_amount(r, Some(&Sel::This))?;
+        if v.as_const().is_some() {
+            return None;
+        }
+        return Some((vec![Clause::PerTurnValue(v)], Who::Controller));
+    }
     for (head, who) in [
         ("any player may activate this ability", Who::AnyPlayer),
         (
@@ -593,6 +603,12 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
             Clause::If(cond) => conds.push(cond),
             Clause::PerTurn(n) => act.max_per_turn = Some(act.max_per_turn.map_or(n, |m| m.min(n))),
             Clause::Total(n) => act.max_total = Some(act.max_total.map_or(n, |m| m.min(n))),
+            Clause::PerTurnValue(v) => {
+                if act.max_per_turn_value.is_some() {
+                    return None;
+                }
+                act.max_per_turn_value = Some(v);
+            }
             Clause::Zone(z) => act.zone = z,
             Clause::ZoneIf(z, cond) => {
                 act.zone = z;
@@ -677,6 +693,52 @@ fn activated_with_restrictions(block: &str, ctx: &CompileContext) -> Option<Vec<
 }
 
 inventory::submit! { AbilityPattern { name: "activation restrictions: clause grammar", priority: 105, parse: activated_with_restrictions } }
+
+/// "[cost]: Choose one. [restriction sentences]\n• [mode]\n• [mode]" (Triassic Egg:
+/// "Sacrifice ~: Choose one. Activate only if there are two or more hatchling counters on
+/// ~."): the restrictions on a modal ability's header line.
+fn modal_header_restrictions(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let text = crate::oracle::strip_ability_word(block.trim());
+    let (cost_s, eff_s) = crate::oracle::split_cost(text)?;
+    let (head, modes) = eff_s.split_once('\n')?;
+    let sentences = crate::oracle::effects::split_sentences(head);
+    let (first, rest) = sentences.split_first()?;
+    if !first.to_lowercase().starts_with("choose ") || rest.is_empty() {
+        return None;
+    }
+    let mut parsed = Vec::new();
+    let mut needed = false;
+    for s in rest {
+        if s.contains('"') {
+            return None;
+        }
+        let r = restriction_sentence(&s.to_lowercase(), ctx)?;
+        needed |= !core_handles(s);
+        parsed.push(r);
+    }
+    if !needed {
+        return None;
+    }
+    let new_block = format!("{cost_s}: {first}\n{modes}");
+    let mut abilities = crate::oracle::parse_ability(&new_block, ctx)?;
+    if abilities.len() != 1 {
+        return None;
+    }
+    let a = abilities.pop()?;
+    let AbilityKind::Activated(act) = &a.kind else {
+        return None;
+    };
+    if act.body.modal.is_none() {
+        return None;
+    }
+    let mut act = act.clone();
+    for (clauses, who) in parsed {
+        apply(&mut act, clauses, who)?;
+    }
+    Some(vec![AbilityDef::new(AbilityKind::Activated(act), block)])
+}
+
+inventory::submit! { AbilityPattern { name: "activation restrictions: on a modal ability's header line", priority: 104, parse: modal_header_restrictions } }
 
 #[cfg(test)]
 mod tests {

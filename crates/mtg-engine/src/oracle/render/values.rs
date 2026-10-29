@@ -615,6 +615,15 @@ impl Renderer<'_> {
         if let Some(s) = x_arithmetic(v) {
             return (s, None);
         }
+        // "X plus 3 damage, where X is the number of creatures that died this way".
+        if let Value::Sum(parts) = v {
+            if let [a, Value::Const(k)] = parts.as_slice() {
+                if *k > 0 && !Self::is_simple(a) {
+                    let s = self.value(a);
+                    return (format!("X plus {k}"), Some(format!(", where X is {s}")));
+                }
+            }
+        }
         let s = self.value(v);
         ("X".into(), Some(format!(", where X is {s}")))
     }
@@ -777,6 +786,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.graveyard_order_condition(c) {
+            return s;
+        }
         if let Some(s) = self.compare_terms(c) {
             return s;
         }
@@ -1474,6 +1486,7 @@ impl Renderer<'_> {
                     | Filter::Multicolored
                     | Filter::Monocolored
                     | Filter::Historic
+                    | Filter::ChosenType
                     | Filter::Or(_)
                     | Filter::Not(_)
             )
@@ -1491,11 +1504,20 @@ impl Renderer<'_> {
                 format!("is {n}")
             };
         }
+        // "If that card has the chosen name".
+        if parts.is_empty() && matches!(atoms.as_slice(), [Filter::ChosenName]) {
+            return if negated {
+                "doesn't have {alt:the chosen name|that name}".into()
+            } else {
+                "has {alt:the chosen name|that name}".into()
+            };
+        }
         for a in atoms {
             let p = match a {
                 Filter::Tapped => "tapped".to_string(),
                 Filter::Untapped => "untapped".into(),
                 Filter::Attacking => "attacking".into(),
+                Filter::AttackingAlone => "attacking alone".into(),
                 Filter::Blocking => "blocking".into(),
                 Filter::Blocked => "blocked".into(),
                 Filter::Unblocked => "unblocked".into(),
@@ -1519,6 +1541,7 @@ impl Renderer<'_> {
                     }
                     return format!("has {w}");
                 }
+
                 Filter::HasCounter(k) => {
                     let c = match k {
                         Some(k) => counter_name(k),
@@ -1539,6 +1562,16 @@ impl Renderer<'_> {
                         return format!("doesn't have power {}", cmp_phrase(*c, &v));
                     }
                     return format!("has power {}", cmp_phrase(*c, &v));
+                }
+                // "if it's nonbasic": a land without the supertype basic (CR 205.4c).
+                Filter::Not(inner)
+                    if !negated
+                        && matches!(
+                            inner.as_ref(),
+                            Filter::Supertype(crate::types::Supertype::Basic)
+                        ) =>
+                {
+                    return "{alt:is nonbasic|isn't basic}".into();
                 }
                 Filter::Not(inner) => {
                     let p = self.is_predicate(inner, !negated);
@@ -2246,6 +2279,10 @@ impl Renderer<'_> {
             Duration::ThisTurn => "this turn".into(),
             Duration::ThroughNextUntapStep => "during its controller's next untap step".into(),
             Duration::ThroughYourNextUntapStep => "during your next untap step".into(),
+            Duration::ThroughNextUntapSteps(n) => format!(
+                "during its controller's next {} untap steps",
+                crate::oracle::render::number_word(*n as i32)
+            ),
             Duration::UntilYourNextStep(s) => {
                 let s = self.step_name(*s);
                 format!("until your next {s}")
@@ -2257,6 +2294,15 @@ impl Renderer<'_> {
                 let s = self.step_name(*s);
                 format!("until the next {s}")
             }
+            Duration::UntilItsControllersNextStep(s) => {
+                let s = self.step_name(*s);
+                format!("until its controller's next {s}")
+            }
+            Duration::UntilEndOfYourNextStep(s) => {
+                let s = self.step_name(*s);
+                format!("until the end of your next {s}")
+            }
+            Duration::UntilEndOfThisStep => "until end of step".into(),
             Duration::UntilPlaneswalk { away_from_plane } => {
                 if *away_from_plane {
                     "until a player planeswalks away from a plane".into()

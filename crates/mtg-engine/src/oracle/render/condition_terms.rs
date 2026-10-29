@@ -71,6 +71,24 @@ impl Renderer<'_> {
     /// and/or planeswalkers you control", "you have the most life or are tied for most
     /// life" (CR 119).
     pub(crate) fn compare_terms(&mut self, c: &Condition) -> Option<String> {
+        // "its power is greater than each other creature's power": no other such creature
+        // has a power that fails the comparison (`conditions_compare::versus_each_other`).
+        if let Condition::Compare(Value::Count(Filter::And(v)), Cmp::Eq, Value::Const(0)) = c {
+            if let [f, Filter::Not(not), Filter::Power(failing, pv)] = v.as_slice() {
+                if let (Filter::In(s), Value::PowerOf(s2)) = (not.as_ref(), pv.as_ref()) {
+                    let word = match failing {
+                        Cmp::Ge => "greater than",
+                        Cmp::Le => "less than",
+                        _ => return None,
+                    };
+                    if format!("{s:?}") == format!("{s2:?}") {
+                        let power = self.value(pv);
+                        let noun = self.noun(f, Num::One);
+                        return Some(format!("{power} is {word} each other {noun}'s power"));
+                    }
+                }
+            }
+        }
         match c {
             Condition::Compare(Value::CountSel(sel), Cmp::Ge, Value::Const(n))
                 if matches!(sel.as_ref(), Sel::Matching(s, Filter::Custom(q))
