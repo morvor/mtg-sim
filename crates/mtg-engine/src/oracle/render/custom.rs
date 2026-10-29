@@ -92,6 +92,7 @@ impl Renderer<'_> {
                     .map_or("+1/+1", |(_, k)| k);
                 format!("for each {kind} counter you put on a creature this way, remove a {kind} counter from that creature")
             }
+            crate::kw::copy_the_other::COPY_THE_OTHER => "copy the other".into(),
             crate::kw::noted_info::NOTE_CREATURE_TYPE => {
                 format!("note a creature type that hasn't been noted for {}", me(self))
             }

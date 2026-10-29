@@ -145,7 +145,11 @@ fn parse_triggered_at(
                 ))
             ) || parsed.as_ref().is_some_and(|p| {
                 let d = format!("{p:?}");
-                d.contains("TriggerObject") || d.contains("TriggerLki")
+                // (Or the spell a cast trigger names: "if it has the same name as one of
+                // the cards exiled with ~", Spellweaver Helix.)
+                d.contains("TriggerObject")
+                    || d.contains("TriggerLki")
+                    || d.contains("TriggerSpell")
             });
             // Otherwise the condition's pronouns refer to the trigger's object and player
             // ("if it had a +1/+1 counter on it", "if that player has no cards in hand").

@@ -113,3 +113,32 @@ fn caller_of_the_untamed_x_is_the_mana_value_of_the_copied_card() {
     assert!(t.obj_now(bears[0]).is_token());
     assert!(t.named_on_battlefield("Hill Giant").is_empty());
 }
+
+#[test]
+fn spellweaver_helix_copies_the_other_imprinted_card() {
+    cr!("707.12", "607.2a");
+    supported("Spellweaver Helix");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let div = t.graveyard(P1, "Divination");
+    let spike = t.graveyard(P1, "Lava Spike");
+    t.answer_targets(P0, &[Entity::Object(div), Entity::Object(spike)]);
+    t.answer_yes(P0, true);
+    t.enter(P0, "Spellweaver Helix");
+    t.resolve_all();
+    assert!(t.in_exile("Divination") && t.in_exile("Lava Spike"));
+    // Casting a Divination: copy the Lava Spike and cast it at P1.
+    t.lands(P0, "Island", 3);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let mine = t.hand(P0, "Divination");
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+    }
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, mine).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Lava Spike"));
+}

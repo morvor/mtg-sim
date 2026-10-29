@@ -11,6 +11,8 @@
 //!   effect chooses (CR 107.3c); it's announced first (CR 601.2b, 602.2b), so it must be
 //!   the mana value of one of those cards, and the card chosen is one with that mana value
 //!   (interpretation `x-defined-by-target`, as for a target).
+//! * "Whenever a player casts a card, if it has the same name as one of the cards exiled
+//!   with ~, you may copy the other." (Spellweaver Helix; `kw/copy_the_other.rs`).
 
 use super::{AbilityPattern, EffectPattern, FollowupPattern};
 use crate::ability::*;
@@ -161,3 +163,33 @@ fn x_is_mana_value_of_chosen(block: &str, ctx: &crate::oracle::CompileContext) -
 }
 
 inventory::submit! { AbilityPattern { name: "copies 6: {X} defined as the mana value of the card the effect chooses", priority: 1095, parse: x_is_mana_value_of_chosen } }
+
+/// "it has the same name as one of the cards exiled with ~": the spell the ability
+/// triggered on (CR 201.2) and the cards its linked ability exiled (CR 607.2a).
+fn same_name_as_exiled(c: &str) -> Option<Condition> {
+    if end(c) != "it has the same name as one of the cards exiled with ~" {
+        return None;
+    }
+    Some(Condition::SelMatches(
+        Sel::TriggerSpell,
+        Filter::SameNameAs(Box::new(Sel::All(
+            crate::kw::copy_the_other::exiled_with_source(),
+        ))),
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "copies 6: it has the same name as one of the cards exiled with ~", priority: 100, parse: same_name_as_exiled } }
+
+/// "copy the other" after "if it has the same name as one of the cards exiled with ~".
+fn copy_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "copy the other" || !b.in_trigger {
+        return None;
+    }
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("the same name as one of the cards exiled with ") {
+        return None;
+    }
+    Some(Effect::Custom(crate::kw::copy_the_other::COPY_THE_OTHER.into()))
+}
+
+inventory::submit! { EffectPattern { name: "copies 6: copy the other (exiled card)", priority: 50, parse: copy_the_other } }
