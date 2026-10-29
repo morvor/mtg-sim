@@ -9,7 +9,8 @@ use mtg_engine::*;
 
 #[test]
 fn urzas_bauble_looks_privately_at_a_random_card() {
-    cr!("701.16a", "701.20a");
+    cr!("402.3", "701.20a");
+    interp!("looked-at-hand-card-stays-seen");
     supported("Urza's Bauble");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -22,7 +23,6 @@ fn urzas_bauble_looks_privately_at_a_random_card() {
     assert!(mtg_engine::facedown::can_look_at(&t.g, P0, card));
     assert!(!mtg_engine::reveal::is_revealed(&t.g, card));
     assert!(t.in_hand(P1, "Lightning Bolt"));
-    // Once it leaves the hand, the permission is gone with it (a new object).
     let hand = t.hand_size(P0);
     // "You draw a card at the beginning of the next turn's upkeep."
     t.advance_to(P1, Step::Upkeep);

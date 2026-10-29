@@ -69,6 +69,7 @@ fn tokens(t: &TestGame, name: &str) -> Vec<ObjectId> {
 #[test]
 fn dance_of_many_exiles_its_token_when_it_leaves() {
     cr!("607.1d", "603.6c");
+    interp!("the-token-another-ability-created");
     ruling!(
         "Dance of Many",
         "Each Dance of Many is associated only with its token creature. If one Dance leaves the battlefield, only the corresponding token is affected, not all tokens from all instances of Dance of Many."
@@ -94,6 +95,7 @@ fn dance_of_many_exiles_its_token_when_it_leaves() {
 #[test]
 fn dance_of_many_is_sacrificed_when_its_token_leaves() {
     cr!("607.1d", "603.6c");
+    interp!("the-token-another-ability-created");
     ruling!(
         "Dance of Many",
         "Destroying the creature that was copied will not cause the token creature to be destroyed as well."

@@ -11,6 +11,7 @@ use mtg_engine::*;
 #[test]
 fn burning_of_xinye_each_player_chooses_their_own_lands_to_destroy() {
     cr!("701.8a", "608.2d");
+    interp!("player-destroys-chosen-permanents");
     ruling!(
         "Burning of Xinye",
         "That player chooses which of their lands to destroy. Neither of you can choose to destroy a land with indestructible."

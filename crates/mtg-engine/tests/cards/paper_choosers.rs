@@ -57,6 +57,7 @@ fn pandemonium_the_creatures_controller_may_decline() {
 #[test]
 fn demonic_hordes_an_opponent_chooses_the_land_you_sacrifice() {
     cr!("701.21a", "118.12");
+    interp!("opponents-choice-untargeted");
     supported("Demonic Hordes");
     let mut t = TestGame::new(2);
     let hordes = t.battlefield(P0, "Demonic Hordes");

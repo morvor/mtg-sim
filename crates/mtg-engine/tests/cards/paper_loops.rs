@@ -45,6 +45,7 @@ fn helm_of_obedience_mills_until_a_creature_and_takes_it() {
 #[test]
 fn helm_of_obedience_stops_after_x_cards() {
     cr!("701.17a");
+    interp!("mill-until-stops-when-nothing-moves");
     let (t, helm) = helm_setup(2, false);
     assert!(t.in_graveyard(P1, "Island"));
     assert!(t.in_graveyard(P1, "Forest"));
@@ -56,6 +57,7 @@ fn helm_of_obedience_stops_after_x_cards() {
 #[test]
 fn helm_of_obedience_mills_the_whole_library_against_leyline_of_the_void() {
     cr!("701.17a", "614.1a");
+    interp!("mill-until-stops-when-nothing-moves");
     ruling!(
         "Helm of Obedience",
         "If an effect like that of Leyline of the Void prevents cards from being put into your opponent’s graveyard, the process described in the first sentence of Helm of Obedience’s effect will never stop. Your opponent’s entire library will be exiled, even if X is 1."
