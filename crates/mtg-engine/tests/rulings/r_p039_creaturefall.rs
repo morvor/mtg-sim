@@ -202,7 +202,7 @@ fn goldnight_commander_pumps_the_creature_that_entered_too() {
 
 #[test]
 fn aether_flash_damages_creatures_that_cant_be_targeted() {
-    cr!("115.1", "702.11b");
+    cr!("115.10", "702.11b");
     ruling!(
         "Aether Flash",
         "This is not a targeted ability, so it deals damage to creatures that can’t be targeted by spells and abilities."
@@ -371,7 +371,7 @@ fn saddled_rimestag_checks_each_turn() {
 
 #[test]
 fn zhalfirin_decoy_counts_a_creature_that_entered_before_it_and_left() {
-    cr!("602.5b");
+    cr!("602.1b");
     ruling!(
         "Zhalfirin Decoy",
         "Zhalfirin Decoy’s ability can be activated even if a creature entered the battlefield under your control only before Zhalfirin Decoy entered the battlefield, and even if that creature has left the battlefield."

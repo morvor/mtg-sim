@@ -163,3 +163,15 @@ pub fn new_card(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
         mtg_engine::object::Zone::Nowhere,
     )
 }
+
+/// The casting methods `p` has for `card` now (from the legal actions).
+pub fn cast_methods(t: &mut TestGame, p: PlayerId, card: ObjectId) -> Vec<mtg_engine::object::CastMethod> {
+    t.g.turn.priority = Some(p);
+    t.g.legal_actions(p)
+        .into_iter()
+        .filter_map(|a| match a {
+            mtg_engine::decision::Action::Cast { card: c, method } if c == card => Some(method),
+            _ => None,
+        })
+        .collect()
+}

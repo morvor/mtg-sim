@@ -202,7 +202,7 @@ fn ballista_charger_kills_a_would_be_blocker_before_blocks() {
 
 #[test]
 fn esikas_chariot_token_copy_has_its_enters_abilities() {
-    cr!("707.2", "111.4", "614.1c");
+    cr!("707.2", "614.1c", "603.6a");
     ruling!(
         "Esika's Chariot",
         "Any enters-the-battlefield abilities of the token you create will trigger when it enters the battlefield. Any \"As [this permanent] enters the battlefield\" or \"[This permanent] enters the battlefield with\" abilities of the copied token will also work."
@@ -249,7 +249,7 @@ fn esikas_chariot_token_copy_has_its_enters_abilities() {
 
 #[test]
 fn esikas_chariot_copy_doesnt_copy_status_counters_or_attacking() {
-    cr!("707.2", "110.5", "508.4");
+    cr!("707.2", "110.5");
     ruling!(
         "Esika's Chariot",
         "The token you create copies the original characteristics of the token it's copying as stated by the effect that created that token. The newly created token doesn't copy whether the original token is tapped or untapped, whether it has any counters on it"
@@ -289,7 +289,7 @@ fn esikas_chariot_copy_doesnt_copy_status_counters_or_attacking() {
 
 #[test]
 fn golden_argosy_returns_the_crew_even_if_it_left() {
-    cr!("603.7c", "610.3");
+    cr!("603.7c");
     ruling!(
         "Golden Argosy",
         "The exiled creatures will be returned at the beginning of the next end step even if Golden Argosy is no longer on the battlefield at that time."
@@ -388,7 +388,7 @@ fn recon_craft_theta_proliferates_permanents_and_players_only() {
 
 #[test]
 fn foreboding_steamboat_leaving_first_exiles_nothing() {
-    cr!("610.3c");
+    cr!("610.3b");
     ruling!(
         "Foreboding Steamboat",
         "If Foreboding Steamboat leaves the battlefield before its first triggered ability resolves, the chosen creatures won't be exiled at all."
@@ -502,7 +502,7 @@ fn nautiloid_ship_returned_is_a_new_object() {
 
 #[test]
 fn unidentified_hovership_exiles_even_if_it_left_first() {
-    cr!("603.2", "608.2b");
+    cr!("113.7a");
     ruling!(
         "Unidentified Hovership",
         "If Unidentified Hovership leaves the battlefield before its second ability resolves, the ability still exiles the target creature."
@@ -525,7 +525,7 @@ fn face_down(t: &TestGame, p: PlayerId) -> usize {
 
 #[test]
 fn unidentified_hovership_each_owner_of_an_exiled_card_manifests_dread() {
-    cr!("603.2", "701.62a");
+    cr!("607.2a", "701.62a");
     ruling!(
         "Unidentified Hovership",
         "If Unidentified Hovership's second ability exiled more than one card (possibly because another effect caused it to trigger an additional time), each player who owns one or more of the exiled cards manifests dread."
@@ -547,7 +547,7 @@ fn unidentified_hovership_each_owner_of_an_exiled_card_manifests_dread() {
 
 #[test]
 fn detention_chariot_leaving_first_exiles_nothing() {
-    cr!("610.3c");
+    cr!("610.3b");
     ruling!(
         "Detention Chariot",
         "If this Vehicle leaves the battlefield before its triggered ability resolves, the target will never be exiled."
@@ -672,7 +672,7 @@ fn bespoke_battlewagon_tap_abilities_and_summoning_sickness() {
 
 #[test]
 fn demolition_stomper_stays_blocked_when_the_blockers_power_drops() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Demolition Stomper",
         "Once a creature with power 3 or greater has blocked Demolition Stomper, changing the power of the blocking creature won't cause Demolition Stomper to become unblocked."
@@ -764,7 +764,7 @@ fn boommobile_mana_on_one_ability_or_several() {
 
 #[test]
 fn the_lunar_whale_lets_you_look_at_the_top_card_any_time() {
-    cr!("401.5", "116.1");
+    cr!("401.5");
     ruling!(
         "The Lunar Whale",
         "The Lunar Whale lets you look at the top card of your library whenever you want (with one restriction—see below), even if you don't have priority."
@@ -804,7 +804,7 @@ fn whale_attacked(t: &mut TestGame) {
 
 #[test]
 fn the_lunar_whale_top_card_follows_normal_timing_and_costs() {
-    cr!("601.3", "305.2", "702.33a");
+    cr!("307.1", "305.2", "702.33a");
     ruling!(
         "The Lunar Whale",
         "You must follow all normal timing rules for spells cast and lands played using the third ability and must pay all costs for spells cast this way."
@@ -857,4 +857,97 @@ fn crucible_of_worlds_doesnt_allow_cycling_from_the_graveyard() {
     mana_all(&mut t, P0, 2);
     assert!(!can_activate(&mut t, P0, s));
     assert!(can_play_land(&mut t, P0, s));
+}
+
+#[test]
+fn esikas_chariot_copying_an_aura_token_attaches_it_without_targeting() {
+    cr!("303.4f", "707.2");
+    ruling!(
+        "Esika's Chariot",
+        "If the original token is an Aura, the token you create is put onto the battlefield without being cast. The Aura's controller-to-be chooses what it will enchant as it enters the battlefield. An Aura put onto the battlefield this way doesn't target anything (so it could be attached to an opponent's permanent with hexproof, for example), but the Aura's enchant ability restricts what it can be attached to."
+    );
+    let mut t = TestGame::new(2);
+    let ch = old(&mut t, P0, "Esika's Chariot");
+    let b = old(&mut t, P0, "Grizzly Bears");
+    let giant = old(&mut t, P0, "Hill Giant");
+    let elf = old(&mut t, P0, "Llanowar Elves");
+    let hex = old(&mut t, P1, "Silhana Ledgewalker");
+    let land = old(&mut t, P1, "Forest");
+    // Smoke Spirits' Aid: an Aura token "Smoke Blessing" (enchant creature) on the Bears.
+    mana_all(&mut t, P0, 1);
+    let c = t.hand(P0, "Smoke Spirits' Aid");
+    t.cast(P0, c).x(1).targets(&[o(b)]).go();
+    t.resolve_all();
+    let aura = named(&t, P0, "Smoke Blessing");
+    assert_eq!(aura.len(), 1);
+    t.set_step(P0, Step::BeginningOfCombat);
+    crewed(&mut t, ch, &[giant, elf]);
+    t.answer_targets(P0, &[o(aura[0])]);
+    t.answer_choose(P0, &[o(hex)]);
+    let from = mark(&t);
+    attack_with(&mut t, &[(ch, pl(P1))]);
+    t.resolve_all();
+    let copies: Vec<ObjectId> = named(&t, P0, "Smoke Blessing")
+        .into_iter()
+        .filter(|a| *a != aura[0])
+        .collect();
+    assert_eq!(copies.len(), 1);
+    assert_eq!(t.obj_now(copies[0]).attached_to, Some(o(hex)));
+    // P0 chose among what it could enchant: creatures (the hexproof one included), not
+    // lands; nobody else was asked.
+    let asks: Vec<(PlayerId, Vec<Entity>)> = t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if candidates.contains(&o(hex)) => {
+                Some((*p, candidates.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asks.len(), 1, "{asks:?}");
+    assert_eq!(asks[0].0, P0);
+    assert!(!asks[0].1.contains(&o(land)));
+    assert!(t.g.stack.is_empty());
+}
+
+#[test]
+fn tardis_planeswalks_as_its_ability_resolves() {
+    cr!("701.31a");
+    ruling!(
+        "TARDIS",
+        "You may planeswalk at the time TARDIS's triggered ability resolves, not at the time you cast the next spell."
+    );
+    supported("TARDIS");
+    use mtg_engine::planechase;
+    let mut t = TestGame::with_config(
+        2,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::Planechase,
+            ..Default::default()
+        },
+    );
+    for n in ["Goldmeadow", "Krosa"] {
+        let id = t.command(P0, n);
+        t.g.objects[id.0 as usize].face_down = true;
+    }
+    t.g.recompute();
+    planechase::set_starting_plane(&mut t.g);
+    let face_up = |t: &TestGame| -> Vec<String> {
+        planechase::face_up_planar_cards(&t.g)
+            .iter()
+            .map(|id| t.obj_now(*id).chars.name.to_string())
+            .collect()
+    };
+    assert_eq!(face_up(&t), vec!["Goldmeadow"]);
+    let tardis = old(&mut t, P0, "TARDIS");
+    // Changeling Outcast is a Time Lord.
+    old(&mut t, P0, "Changeling Outcast");
+    let g = old(&mut t, P0, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    crewed(&mut t, tardis, &[g]);
+    yes(&mut t, P0, true);
+    attack_with(&mut t, &[(tardis, pl(P1))]);
+    t.resolve_all();
+    // No spell cast yet: already on Krosa.
+    assert_eq!(face_up(&t), vec!["Krosa"]);
 }

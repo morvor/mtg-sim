@@ -146,7 +146,7 @@ fn blunt_the_assault_counts_every_creature_on_the_battlefield() {
 
 #[test]
 fn fumigate_counts_only_creatures_actually_destroyed() {
-    cr!("700.4", "702.12b");
+    cr!("701.8a", "702.12b");
     ruling!(
         "Fumigate",
         "You won't gain 1 life for a creature that isn't actually destroyed, such as a creature with indestructible."
@@ -294,7 +294,7 @@ fn sylvan_offering_chooses_opponents_on_resolution() {
 
 #[test]
 fn muerra_adds_a_chosen_color_for_each_raccoon() {
-    cr!("106.1b", "603.2");
+    cr!("603.2");
     ruling!(
         "Muerra, Trash Tactician",
         "You choose {R} or {G} for each Raccoon you control. You aren’t limited to only one color of mana."
@@ -320,7 +320,7 @@ fn muerra_adds_a_chosen_color_for_each_raccoon() {
 
 #[test]
 fn muerra_cards_stay_playable_after_muerra_leaves() {
-    cr!("611.2c", "305.1");
+    cr!("611.2a");
     ruling!(
         "Muerra, Trash Tactician",
         "You may play the exiled cards even if Muerra is no longer on the battlefield or under your control."
