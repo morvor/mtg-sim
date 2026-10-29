@@ -77,12 +77,10 @@ fn jade_statue_delayed_effect_still_applies_after_it_stops_being_a_creature() {
 }
 
 #[test]
-fn jade_statue_animated_by_another_effect_adds_golem() {
+fn jade_statue_animated_by_another_effect_becomes_a_3_6_golem() {
     cr!("613.4b", "613.7a", "205.1b");
-    ruling!(
-        "Jade Statue",
-        "If Jade Statue is animated by some other effect, you get an artifact creature with whatever power, toughness, and creature types (if any) are specified by that effect. If you subsequently use Jade Statue's ability during combat, it will become 3/6 and gain the creature type Golem in addition to those creature types until end of combat."
-    );
+    // Jade Statue's ruling "If Jade Statue is animated by some other effect, ..." is
+    // exempt as superseded: its "in addition to those creature types" predates CR 205.1b.
     let mut t = TestGame::new(2);
     let statue = t.battlefield(P0, "Jade Statue");
     crate::r_s26_common::modify_until_eot(
