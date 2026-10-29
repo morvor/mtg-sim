@@ -2,6 +2,7 @@
 //! mismatches from the long tail (the two-card clusters).
 
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 /// Puts the real Aura or Equipment `name` onto the battlefield under `p`'s control attached
@@ -99,4 +100,108 @@ fn crackdown_construct_ignores_abilities_of_cards_in_hand() {
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
     assert_eq!(t.pt(construct), (3, 3));
+}
+
+#[test]
+fn rivalry_needs_more_lands_than_each_other_player() {
+    cr!("103.1", "603.2");
+    // "At the beginning of each player's upkeep, if that player controls more lands than
+    // each other player, ~ deals 2 damage to them." (Compiled as "no other player
+    // controls at least as many lands".) In a three-player game, more lands than one
+    // opponent isn't enough.
+    for (p1, p2, life) in [(3, 5, 20), (5, 5, 20), (6, 5, 18)] {
+        let mut t = TestGame::new(3);
+        t.battlefield(P0, "Rivalry");
+        t.lands(P1, "Forest", p1);
+        t.lands(P2, "Forest", p2);
+        t.advance_to(P1, Step::Draw);
+        t.resolve_all();
+        assert_eq!(t.life(P1), life, "{p1} lands against {p2}");
+    }
+}
+
+#[test]
+fn shapeshifters_marrow_becomes_a_copy_of_the_revealed_creature_card() {
+    cr!("707.2", "608.2c");
+    // "At the beginning of each opponent's upkeep, that player reveals the top card of
+    // their library. If it's a creature card, the player puts the card into their
+    // graveyard and ~ becomes a copy of that card." The card is the one now in the
+    // graveyard (CR 400.7).
+    let mut t = TestGame::new(2);
+    let marrow = t.battlefield(P0, "Shapeshifter's Marrow");
+    t.library_top(P1, "Island");
+    t.library_top(P1, "Grizzly Bears");
+    t.advance_to(P1, Step::Draw);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    let m = t.obj_now(marrow);
+    assert_eq!(m.chars.name.as_str(), "Grizzly Bears");
+    assert_eq!(t.pt(marrow), (2, 2));
+}
+
+#[test]
+fn kambal_copies_each_of_the_tokens_that_entered() {
+    cr!("111.10", "603.2c", "707.2");
+    // "Whenever one or more tokens your opponents control enter, for each of them, create
+    // a tapped token that's a copy of it."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kambal, Profiteering Mayor");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Plains", 2);
+    let alarm = t.hand(P1, "Raise the Alarm");
+    t.cast(P1, alarm).go();
+    t.resolve_all();
+    let copies: Vec<_> = t
+        .g
+        .permanents()
+        .filter(|o| o.controller == P0 && o.is_token())
+        .map(|o| (o.chars.name.to_string(), o.tapped))
+        .collect();
+    assert_eq!(copies.len(), 2, "{copies:?}");
+    assert!(
+        copies.iter().all(|(n, tapped)| n == "Soldier Token" && *tapped),
+        "{copies:?}"
+    );
+    // Its other ability: those tokens entered under P0's control, once.
+    assert_eq!((t.life(P0), t.life(P1)), (21, 19));
+}
+
+#[test]
+fn healing_grace_prevents_three_damage_in_all() {
+    cr!("615.7", "609.7a");
+    // "Prevent the next 3 damage that would be dealt to any target this turn by a source
+    // of your choice. You gain 3 life.": a shield of 3, used up as it prevents.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Plains", 1);
+    let grace = t.hand(P0, "Healing Grace");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.cast(P0, grace).target(P0).go();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    t.g.deal_damage(giant, Entity::Player(P0), 2, false);
+    t.settle();
+    assert_eq!(t.life(P0), 23);
+    t.g.deal_damage(giant, Entity::Player(P0), 2, false);
+    t.settle();
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
+fn tanazir_quandrix_sets_base_power_and_toughness_once() {
+    cr!("608.2h", "613.4b");
+    // "Whenever ~ attacks, you may have the base power and toughness of other creatures
+    // you control become equal to ~'s power and toughness until end of turn." The numbers
+    // are determined as the ability resolves: Tanazir growing later doesn't change them.
+    let mut t = TestGame::new(2);
+    let tanazir = t.battlefield(P0, "Tanazir Quandrix");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.attack(&[(tanazir, Entity::Player(P1))], &[]);
+    assert_eq!(t.pt(bears), (4, 4));
+    t.g.add_counters(Entity::Object(tanazir), "+1/+1", 2, None);
+    t.g.recompute();
+    assert_eq!(t.pt(tanazir), (6, 6));
+    assert_eq!(t.pt(bears), (4, 4));
 }

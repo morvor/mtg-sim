@@ -2509,8 +2509,14 @@ fn merged_alternatives(parts: &[String]) -> Option<String> {
     if all.iter().skip(1).any(|w| w.len() != n) {
         return None;
     }
+    // "a noncreature spell or an Otter spell": the articles agree with the next word.
+    let article = |w: &str| w == "a" || w == "an";
     let differ: Vec<usize> = (0..n)
-        .filter(|i| words.iter().any(|w| w[*i] != words[0][*i]))
+        .filter(|i| {
+            words
+                .iter()
+                .any(|w| w[*i] != words[0][*i] && !(article(w[*i]) && article(words[0][*i])))
+        })
         .collect();
     let [i] = differ.as_slice() else { return None };
     let alts: Vec<String> = words.iter().map(|w| w[*i].to_string()).collect();

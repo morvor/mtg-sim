@@ -4615,9 +4615,15 @@ impl Renderer<'_> {
                 "prevent that damage. Exile cards from the top of your library equal to the damage prevented this way".to_string()
             }
             // "that source's controller": the damage event's source (CR 614.1a).
+            // The same source deals it (CR 614.9): "that source deals that damage to
+            // you instead".
             ReplacementAction::Redirect(t) => {
                 let t = self.in_event_scope(|r| r.sel(t, Case::Obj));
-                format!("that damage is dealt to {t} instead")
+                if uses.is_some() {
+                    format!("{{alt:that damage is dealt to {t}|that source deals that damage to {t}}} instead")
+                } else {
+                    format!("that damage is dealt to {t} instead")
+                }
             }
             a => self.damage_then(a)?,
         };
