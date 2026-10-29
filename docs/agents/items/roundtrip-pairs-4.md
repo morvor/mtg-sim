@@ -108,7 +108,9 @@ untriaged two-card clusters in the tool's order up to about 150 cards (151):
 
 ## Result
 
-28,198 of 31,972 fully supported cards passed at the start (2934da1b); RESULT_LINE
+28,198 of 31,972 fully supported cards passed at the start (2934da1b); 28,314 of 31,972 on
+the branch before merging origin, and 28,348 of 32,023 after merging it (origin's passing
+list at the merge has 28,198 cards). 92 of the 151 taken cards pass.
 
 Parser (three fixes, see "Parser bugs found"): `phrases::named_this_card` ("named ~" is the
 card's name, in `phrases.rs`, `patterns/statics.rs`, `cost_parts.rs`, `etb_choices.rs`,
