@@ -286,7 +286,8 @@ fn sel_in_library(s: &Sel) -> bool {
         | Sel::ExiledWithCardsNamed(_)
         | Sel::TriggerSpell
         | Sel::TopOfGraveyard(_)
-        | Sel::LinkedNoted => false,
+        | Sel::LinkedNoted
+        | Sel::LinkedNotedLastKnown => false,
     }
 }
 
