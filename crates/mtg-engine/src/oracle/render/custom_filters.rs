@@ -148,6 +148,8 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kw::craft::USED_TO_CRAFT => Some(AdjRelInExile("exiled", "used to craft ~it".into())),
         // CR 702.143c.
         crate::kw::foretell::FORETOLD_CARD => Some(Adj("foretold")),
+        // A card exiled by its warp ability (CR 702.185b).
+        crate::kw::warp::WARPED_CARD => Some(Adj("warped")),
         crate::kwa::harness::HARNESSED => Some(Adj("harnessed")),
         // CR 712.1.
         crate::kw::dig_filters::DOUBLE_FACED => Some(Adj("double-faced")),

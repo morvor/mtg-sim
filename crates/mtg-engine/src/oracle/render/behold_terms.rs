@@ -75,7 +75,7 @@ impl Renderer<'_> {
             None => "creature".into(),
         };
         format!(
-            "{{alt:the power of that card or creature|the power of the {q} you chose or the card you revealed}}"
+            "{{alt:the power of that card or creature|the power of the {q} you chose or the card you revealed|the power of the chosen {q} or card|the power of the chosen {q}}}"
         )
     }
 }

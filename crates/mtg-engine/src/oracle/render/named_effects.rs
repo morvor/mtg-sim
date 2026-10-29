@@ -72,6 +72,15 @@ impl Renderer<'_> {
             // Bookkeeping: the object beheld is remembered for the spell (`choices.rs`),
             // named by the value that reads it.
             crate::choices::REMEMBER_CHOSEN_OBJECTS => String::new(),
+            // "choose a creature type and behold two creatures of that type" as a cost
+            // (`cost_sets.rs`).
+            n if n.starts_with(crate::cost_sets::CHOOSE_TYPE_AND_BEHOLD) => {
+                let k: u32 = n[crate::cost_sets::CHOOSE_TYPE_AND_BEHOLD.len()..].parse().ok()?;
+                let words = ["zero", "one", "two", "three", "four", "five"];
+                let w = words.get(k as usize).copied().unwrap_or("X");
+                let c = if k == 1 { "creature" } else { "creatures" };
+                format!("choose a creature type and behold {w} {c} of that type")
+            }
             z::REORDER_GRAVEYARD_CHOOSE => "reorder your graveyard as you choose".into(),
             z::REORDER_GRAVEYARD_RANDOM => "reorder your graveyard at random".into(),
             // The player performing it reveals their own library.
