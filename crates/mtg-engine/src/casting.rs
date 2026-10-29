@@ -989,7 +989,7 @@ impl Game {
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
         crate::permissions::spend_terms(opt.permission.as_ref(), &mut cost);
         crate::kw::payable_otherwise(self, p, card, &chars, &opt.method, &mut cost);
-        self.can_pay_cost_optimistic(p, &cost, Some(card), &chars)
+        self.can_pay_spell_cost_with_terms(p, &cost, card, &chars, opt.permission.as_ref())
     }
 
     /// Whether `p` may cast `card` while a spell or ability resolves (CR 608.2g): the
@@ -3153,6 +3153,28 @@ impl Game {
         self.can_pay_cost_optimistic_in(p, cost, src, chars, &ctx)
     }
 
+    /// [`Self::can_pay_cost_optimistic`] for a spell cast with a permission whose terms let
+    /// mana of a type, or mana from snow sources, be spent as though it were mana of any
+    /// color (CR 609.4b), as paying the spell's cost allows.
+    fn can_pay_spell_cost_with_terms(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        card: ObjectId,
+        chars: &Characteristics,
+        perm: Option<&crate::permissions::CastPermission>,
+    ) -> bool {
+        let mut ctx = Ctx::new(Some(card), p);
+        ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Spell);
+        let terms = perm.map(|c| &c.terms);
+        let any_color: Vec<ManaType> = terms
+            .and_then(|t| t.spend_type_as_any_color)
+            .into_iter()
+            .collect();
+        let snow = terms.is_some_and(|t| t.snow_as_any_color);
+        self.can_pay_cost_optimistic_spending(p, cost, Some(card), chars, &ctx, &any_color, snow)
+    }
+
     /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
     /// the value announced for X: "Remove X +1/+1 counters from ~").
     pub fn can_pay_cost_optimistic_in(
@@ -3162,6 +3184,23 @@ impl Game {
         src: Option<ObjectId>,
         chars: &Characteristics,
         ctx: &Ctx,
+    ) -> bool {
+        self.can_pay_cost_optimistic_spending(p, cost, src, chars, ctx, &[], false)
+    }
+
+    /// [`Self::can_pay_cost_optimistic_in`], where mana of the types `any_color` (and, with
+    /// `snow_any_color`, mana from snow sources) may also be spent as though it were mana
+    /// of any color (CR 609.4b).
+    #[allow(clippy::too_many_arguments)]
+    fn can_pay_cost_optimistic_spending(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        chars: &Characteristics,
+        ctx: &Ctx,
+        any_color: &[ManaType],
+        snow_any_color: bool,
     ) -> bool {
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         // CR 107.3a: parts that use an object described with X can be paid if they could
@@ -3192,6 +3231,7 @@ impl Game {
                     .map(|s| {
                         let mut v = self.any_color_mana(p, s, true);
                         v.extend(self.any_color_mana(p, s, false));
+                        v.extend_from_slice(any_color);
                         // The activation instructions of the ability being checked.
                         if ctx.ability_uid != 0 {
                             if let Some(AbilityKind::Activated(act)) = self
@@ -3215,6 +3255,10 @@ impl Game {
                 // "You can't spend mana to cast this spell" (see `payment_rules`).
                 no_mana: ctx.cost_of == Some(crate::rule_statics::payment::CostOf::Spell)
                     && crate::payment_rules::no_mana(&crate::payment_rules::spell_rules(chars)),
+                rules: crate::mana::SpendRules {
+                    snow_any_color,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             // As when paying: only a cost that uses the source itself keeps the source's own
