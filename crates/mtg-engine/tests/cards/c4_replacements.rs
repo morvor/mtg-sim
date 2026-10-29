@@ -306,3 +306,28 @@ fn island_sanctuary_skips_a_draw_step_draw_and_keeps_out_ground_attackers() {
     t.g.draw_cards(P0, 1);
     assert_eq!(t.hand_size(P0), hand + 1);
 }
+
+#[test]
+fn mox_diamond_enters_only_if_a_land_card_is_discarded() {
+    cr!("614.1c", "614.12");
+    ruling!("Mox Diamond", "Mox Diamond never enters");
+    assert_supported(&["Mox Diamond"]);
+    let mut t = TestGame::new(2);
+    let land = t.hand(P0, "Forest");
+    let mox = t.hand(P0, "Mox Diamond");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(land)]);
+    t.cast(P0, mox).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(mox)));
+    assert!(t.in_graveyard(P0, "Forest"));
+    // Declined: it goes to the graveyard without entering.
+    let mut t = TestGame::new(2);
+    t.hand(P0, "Forest");
+    let mox = t.hand(P0, "Mox Diamond");
+    t.answer_yes(P0, false);
+    t.cast(P0, mox).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Mox Diamond"));
+    assert!(t.in_hand(P0, "Forest"));
+}
