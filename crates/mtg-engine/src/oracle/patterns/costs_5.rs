@@ -367,3 +367,25 @@ fn cost_less_per_shared_card_type(
 }
 
 inventory::submit! { super::StaticPattern { name: "costs 5: spells cost {1} less for each card type they share with cards exiled with ~", priority: 100, parse: cost_less_per_shared_card_type } }
+
+/// "As an additional cost to cast ~, collect evidence X, where X is the total mana value of
+/// the permanents ~ targets." (Urgent Necropsy, CR 701.59): X is the total of the targets'
+/// mana values, determined once they're chosen (CR 601.2c-f).
+fn collect_evidence_of_targets(block: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let t = block.trim();
+    if t != "As an additional cost to cast ~, collect evidence X, where X is the total mana value of the permanents ~ targets."
+    {
+        return None;
+    }
+    let v = Value::Aggregate(AggOp::Sum, Stat::ManaValue, Box::new(Sel::AllTargets));
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::AdditionalCost(Cost {
+            mana: None,
+            parts: vec![CostPart::CollectEvidenceOf(v)],
+        }),
+        None,
+        t,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "costs 5: collect evidence X, where X is the total mana value of the permanents ~ targets", priority: 80, parse: collect_evidence_of_targets } }

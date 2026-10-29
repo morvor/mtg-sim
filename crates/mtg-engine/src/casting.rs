@@ -3406,6 +3406,17 @@ impl Game {
                     .sum();
                 total >= *n
             }
+            CostPart::CollectEvidenceOf(v) => {
+                let n = self.eval_value(v, ctx).max(0) as u32;
+                let total: u32 = self
+                    .player(p)
+                    .graveyard
+                    .iter()
+                    .filter(|c| Some(**c) != src)
+                    .map(|c| self.mana_value_of(*c))
+                    .sum();
+                total >= n
+            }
             CostPart::Forage => {
                 self.player(p).graveyard.len() >= 3
                     || self
@@ -4090,6 +4101,12 @@ impl Game {
             }
             CostPart::CollectEvidence(n) => {
                 if !crate::keyword_actions::collect_evidence(self, p, *n, src) {
+                    return bad("can't collect evidence");
+                }
+            }
+            CostPart::CollectEvidenceOf(v) => {
+                let n = self.eval_value(v, ctx).max(0) as u32;
+                if !crate::keyword_actions::collect_evidence(self, p, n, src) {
                     return bad("can't collect evidence");
                 }
             }

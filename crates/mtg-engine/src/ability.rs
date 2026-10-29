@@ -547,6 +547,10 @@ pub enum CostPart {
     ExertSelf,
     /// "Collect evidence N" (CR 701.59).
     CollectEvidence(u32),
+    /// "collect evidence X, where X is the total mana value of the permanents ~ targets"
+    /// (Urgent Necropsy): N determined after targets are chosen, before costs are paid
+    /// (CR 601.2c, 601.2f; its ruling).
+    CollectEvidenceOf(Value),
     /// Forage (CR 701.61): exile three cards from your graveyard or sacrifice a Food.
     Forage,
     /// Put a card from hand on top/bottom of library etc.

@@ -361,3 +361,39 @@ fn sokrates_prevents_combat_damage_and_both_players_draw_half_of_it() {
     assert_eq!(t.hand_size(P0), h0 + 1);
     assert_eq!(t.hand_size(P1), h1 + 1);
 }
+
+#[test]
+fn urgent_necropsy_collects_evidence_equal_to_its_targets_total_mana_value() {
+    cr!("701.59a", "601.2c", "601.2f");
+    ruling!("Urgent Necropsy", "The value of X is locked in after you choose targets");
+    assert_supported(&["Urgent Necropsy"]);
+    // Targets of total mana value 6 (Mind Stone 2, Hill Giant 4): cards with a total mana
+    // value of 6 or more exiled from the graveyard.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Forest", 2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let ring = t.battlefield(P1, "Mind Stone");
+    let a = t.graveyard(P0, "Serra Angel");
+    let b = t.graveyard(P0, "Shock");
+    t.answer_choose(P0, &[Entity::Object(a), Entity::Object(b)]);
+    let spell = t.hand(P0, "Urgent Necropsy");
+    t.cast(P0, spell)
+        .target(Entity::Object(ring))
+        .target(Entity::Object(giant))
+        .go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.in_graveyard(P1, "Mind Stone"));
+    assert!(t.in_exile("Serra Angel") && t.in_exile("Shock"));
+    // Not enough mana value in the graveyard: it can't be cast with those targets.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Forest", 2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.graveyard(P0, "Shock");
+    let spell = t.hand(P0, "Urgent Necropsy");
+    let r = t.cast(P0, spell).target(Entity::Object(giant)).try_go();
+    assert!(r.is_err());
+    assert!(t.on_battlefield(giant));
+}

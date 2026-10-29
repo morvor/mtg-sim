@@ -992,6 +992,7 @@ fn part_now(part: &CostPart, now: &mut Now) {
         | CostPart::RemoveCountersFromOne { .. }
         | CostPart::ExertSelf
         | CostPart::CollectEvidence(_)
+        | CostPart::CollectEvidenceOf(_)
         | CostPart::Forage => {}
     }
 }
@@ -1041,6 +1042,7 @@ fn part_can_fail(part: &CostPart) -> bool {
         | CostPart::RevealSelf
         | CostPart::RemoveCountersFromOne { .. }
         | CostPart::CollectEvidence(_)
+        | CostPart::CollectEvidenceOf(_)
         | CostPart::Forage
         | CostPart::PayManaCostOf(_)
         | CostPart::PayManaCostOfLess(..)

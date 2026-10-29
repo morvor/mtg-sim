@@ -323,6 +323,10 @@ impl Renderer<'_> {
             }
             CostPart::ExertSelf => "exert ~".into(),
             CostPart::CollectEvidence(n) => format!("collect evidence {n}"),
+            CostPart::CollectEvidenceOf(v) => {
+                let v = self.value(v);
+                format!("collect evidence X, where X is {v}")
+            }
             CostPart::Forage => "forage".into(),
             CostPart::PutFromHandOnLibrary { filter, count, top } => {
                 let noun = {

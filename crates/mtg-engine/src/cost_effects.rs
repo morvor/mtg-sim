@@ -73,25 +73,6 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
         Effect::Unattach {
             what: Sel::Choose { filter, count, .. },
         } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
-        // "Put three cards from your graveyard on the bottom of your library", "Put two
-        // cards from a single graveyard on the bottom of their owner's library": that many
-        // cards to choose, together if they must be (from a single graveyard).
-        Effect::Move {
-            what:
-                Sel::Choose {
-                    filter,
-                    count,
-                    up_to: false,
-                    ..
-                },
-            ..
-        } => {
-            let n = g.eval_value(count, ctx).max(0) as usize;
-            let cands = g.objects_matching(filter, ctx);
-            Some(crate::target_groups::can_choose_together(
-                g, filter, &cands, n, ctx,
-            ))
-        }
         // "Put a -1/-1 counter on a creature you control" (an "unless" action, Tourach's
         // Chant): a creature to put it on.
         Effect::AddCounters {
@@ -140,7 +121,8 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
             Some(!objs.is_empty() && objs.iter().all(|o| g.is_live(*o)))
         }
         // "Return a basic land card from your graveyard to your hand", "exile a creature
-        // card from your graveyard": as many objects as it names must be there.
+        // card from your graveyard": as many objects as it names must be there, and
+        // together if they must be ("two cards from a single graveyard", Jötun Grunt).
         Effect::Move {
             what:
                 Sel::Choose {
@@ -160,7 +142,13 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                     ..
                 },
             ..
-        } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
+        } => {
+            let n = g.eval_value(count, ctx).max(0) as usize;
+            let cands = g.objects_matching(filter, ctx);
+            Some(crate::target_groups::can_choose_together(
+                g, filter, &cands, n, ctx,
+            ))
+        }
         _ => None,
     }
 }
