@@ -405,6 +405,47 @@ fn for_each_symbol_among_dug(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "mana 5: for each [color] mana symbol in the mana costs of the revealed cards, [instruction]", priority: 100, parse: for_each_symbol_among_dug } }
 
+/// "Until end of turn, lands tapped for mana produce mana of the chosen color instead of any
+/// other color." (Hall of Gemstone): a mana-production replacement (CR 106.12b, 614.1a) on
+/// the colored mana those permanents produce, of the color chosen for the source (locked in
+/// as the effect is created; colorless mana is unchanged).
+fn produce_chosen_color_instead(l: &str, _b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("until end of turn, ")?;
+    let subject = r.strip_suffix(
+        " tapped for mana produce mana of the chosen color instead of any other color",
+    )?;
+    let (f, true, rest) = crate::oracle::phrases::parse_object_phrase(subject)? else {
+        return None;
+    };
+    if !rest.trim().is_empty() {
+        return None;
+    }
+    use crate::mana::ManaType;
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::ProduceMana(f),
+            action: ReplacementAction::ManaChange(ManaChange {
+                min_amount: 0,
+                only: Some(vec![
+                    ManaType::W,
+                    ManaType::U,
+                    ManaType::B,
+                    ManaType::R,
+                    ManaType::G,
+                ]),
+                to: ManaChangeTo::ChosenColor,
+                amount: None,
+            }),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::EndOfTurn,
+        uses: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "mana 5: until end of turn, [permanents] tapped for mana produce mana of the chosen color instead", priority: 100, parse: produce_chosen_color_instead } }
+
 #[cfg(test)]
 mod tests {
     use super::*;

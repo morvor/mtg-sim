@@ -2762,6 +2762,10 @@ pub enum ManaChangeTo {
     /// "mana of a color of your choice": the player tapping the permanent chooses a color
     /// each time it applies.
     ColorOfChoice,
+    /// "mana of the chosen color" (Hall of Gemstone): the color chosen for the source,
+    /// locked in as the effect is created (`prevention::lock_def`); no change without one
+    /// (CR 607.5a).
+    ChosenColor,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

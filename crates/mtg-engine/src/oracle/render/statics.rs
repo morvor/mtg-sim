@@ -4355,6 +4355,7 @@ impl Renderer<'_> {
             ManaChangeTo::Type(ManaType::C) => "{alt:colorless mana|{C}}".to_string(),
             ManaChangeTo::Type(t) => mana_symbol(t),
             ManaChangeTo::ColorOfChoice => format!("{one}mana of a color of your choice"),
+            ManaChangeTo::ChosenColor => format!("{one}mana of the chosen color"),
         };
         let colored = [
             ManaType::W,

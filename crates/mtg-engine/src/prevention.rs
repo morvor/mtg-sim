@@ -332,6 +332,17 @@ pub fn lock_def(g: &Game, d: &ReplacementDef, ctx: &Ctx) -> ReplacementDef {
             ReplacementAction::PreventAndThen(n.clone(), Box::new(lock_targets(e, ctx)))
         }
         ReplacementAction::Redirect(sel) => ReplacementAction::Redirect(lock_to(sel)),
+        // "produce mana of the chosen color" (Hall of Gemstone): the color chosen as the
+        // effect is created.
+        ReplacementAction::ManaChange(c) if c.to == ManaChangeTo::ChosenColor => {
+            match g.source_choices(ctx).and_then(|ch| ch.color) {
+                Some(col) => ReplacementAction::ManaChange(ManaChange {
+                    to: ManaChangeTo::Type(crate::mana::ManaType::from_color(col)),
+                    ..c.clone()
+                }),
+                None => d.action.clone(),
+            }
+        }
         // "They enter as copies of the chosen creature" (Mystic Reflection): the target
         // is locked in as the effect is created.
         ReplacementAction::EnterAsCopy {

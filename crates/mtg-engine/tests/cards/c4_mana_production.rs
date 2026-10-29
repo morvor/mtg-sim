@@ -277,3 +277,33 @@ fn bigger_on_the_inside_targeting_an_opponent_waits_for_their_spell() {
     t.g.recompute();
     assert!(t.g.obj(theirs).chars.has_keyword(KeywordKind::Cascade));
 }
+
+#[test]
+fn hall_of_gemstone_makes_lands_produce_the_upkeep_players_color() {
+    cr!("106.12b", "614.1a", "607.2d");
+    ruling!("Hall of Gemstone", "Any colorless mana that's produced isn't affected");
+    assert_supported(&["Hall of Gemstone"]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hall of Gemstone");
+    let forest = t.battlefield(P1, "Forest");
+    let wastes = t.battlefield(P1, "Wastes");
+    let mine = t.battlefield(P0, "Island");
+    // P1 chooses red (W, U, B, R, G) in their upkeep.
+    t.answer(
+        P1,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(3),
+    );
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    let fu = uid_of(&mut t, forest, "{T}");
+    activate_uid(&mut t, P1, forest, fu);
+    assert_eq!(pool(&t, P1), vec![ManaType::R]);
+    let wu = uid_of(&mut t, wastes, "{T}");
+    activate_uid(&mut t, P1, wastes, wu);
+    assert_eq!(pool(&t, P1), vec![ManaType::R, ManaType::C]);
+    // Every land: P0's Island too.
+    let iu = uid_of(&mut t, mine, "{T}");
+    activate_uid(&mut t, P0, mine, iu);
+    assert_eq!(pool(&t, P0), vec![ManaType::R]);
+}
