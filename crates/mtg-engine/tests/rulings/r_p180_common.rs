@@ -28,3 +28,30 @@ pub fn can_block(t: &mut TestGame, blocker: ObjectId, attacker: ObjectId) -> boo
         .iter()
         .any(|(c, attackers)| *c == b && attackers.contains(&a))
 }
+
+/// `p` casts the real card `name` face down with disguise (paying {3} with Wastes) and it
+/// resolves. Returns the face-down permanent.
+pub fn disguise(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
+    use mtg_engine::keywords::KeywordKind;
+    use mtg_engine::object::CastMethod;
+    t.lands(p, "Wastes", 3);
+    let card = t.hand(p, name);
+    let spell = t
+        .cast(p, card)
+        .method(CastMethod::FaceDown(KeywordKind::Disguise))
+        .go();
+    t.resolve_all();
+    let id = t.g.current(spell);
+    assert!(t.obj(id).face_down && t.on_battlefield(id), "{name} not face down");
+    id
+}
+
+/// `p` turns the face-down permanent `id` face up (with lands named `lands` for its
+/// cost) and the resulting triggered abilities are put on the stack.
+pub fn turn_up(t: &mut TestGame, p: PlayerId, id: ObjectId, lands: &[(&str, usize)]) {
+    for (land, n) in lands {
+        t.lands(p, land, *n);
+    }
+    assert!(turn_face_up(t, p, id), "couldn't turn it face up");
+    t.settle();
+}

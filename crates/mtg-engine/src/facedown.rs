@@ -375,3 +375,27 @@ pub fn turn_face_up_by(g: &mut Game, id: ObjectId, by: PlayerId) -> bool {
     });
     true
 }
+
+/// The filter of a "whenever a face-down permanent ... is turned face up" trigger as it's
+/// checked against the permanent just turned face up: "face-down" describes the
+/// permanent before the event (only a face-down permanent can be turned face up), so that
+/// requirement is dropped (Sumala Sentry).
+pub fn turned_face_up_filter(f: &Filter) -> std::borrow::Cow<'_, Filter> {
+    use std::borrow::Cow;
+    match f {
+        Filter::FaceDown => Cow::Owned(Filter::Permanent),
+        Filter::And(fs) if fs.iter().any(|f| matches!(f, Filter::FaceDown)) => {
+            let fs: Vec<Filter> = fs
+                .iter()
+                .filter(|f| !matches!(f, Filter::FaceDown))
+                .cloned()
+                .collect();
+            Cow::Owned(if fs.is_empty() {
+                Filter::Permanent
+            } else {
+                Filter::And(fs)
+            })
+        }
+        f => Cow::Borrowed(f),
+    }
+}

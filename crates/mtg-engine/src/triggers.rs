@@ -1880,7 +1880,8 @@ impl Game {
                 }
             }
             (TriggerCond::TurnedFaceUp(f), Event::TurnedFaceUp { obj, by }) => {
-                if self.matches(*obj, f, &ctx) {
+                let f = crate::facedown::turned_face_up_filter(f);
+                if self.matches(*obj, &f, &ctx) {
                     one(EventInfo {
                         object: Some(*obj),
                         player: *by,
