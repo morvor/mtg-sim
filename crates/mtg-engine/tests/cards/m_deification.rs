@@ -45,6 +45,17 @@ fn damage_to_a_planeswalker_of_the_chosen_type_leaves_its_last_loyalty_counter()
     assert!(t.on_battlefield(jace));
     assert_eq!(t.counters(jace, counters::LOYALTY), 1);
     assert!(t.g.history.objects_dealt_damage.contains(&jace));
+    // A planeswalker of another type: all of them are removed.
+    let chandra = t.battlefield(P0, "Chandra Nalaar");
+    let n = t.counters(chandra, counters::LOYALTY);
+    t.g.deal_damage(giant, Entity::Object(chandra), n, false);
+    t.settle();
+    assert!(!t.on_battlefield(chandra));
+    // Damage that leaves counters on it isn't replaced.
+    let (mut t, jace, giant) = setup(true);
+    t.g.deal_damage(giant, Entity::Object(jace), 2, false);
+    t.settle();
+    assert_eq!(t.counters(jace, counters::LOYALTY), 1);
     // Without a creature: all of them are removed.
     let (mut t, jace, giant) = setup(false);
     t.g.deal_damage(giant, Entity::Object(jace), 5, false);

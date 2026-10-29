@@ -211,8 +211,17 @@ fn typhoid_mary_chooses_at_random_unless_you_discarded_a_card() {
     cr!("700.2b");
     round_trips("Typhoid Mary, Fractured");
     // No card discarded this turn: the mode is chosen at random, nobody is asked.
-    let (asked, _) = typhoid_mary(false);
+    let (asked, t) = typhoid_mary(false);
     assert!(!asked);
+    // Exactly one of the modes happened.
+    let treasure = t.named_on_battlefield("Treasure Token").len() == 1;
+    let drew = t.hand_size(P0) == 1;
+    let drained = t.life(P0) == 22;
+    assert_eq!(
+        [treasure, drew, drained].iter().filter(|x| **x).count(),
+        1,
+        "treasure {treasure}, drew {drew}, drained {drained}"
+    );
     // A card discarded this turn: P0 chooses (draw a card).
     let (asked, t) = typhoid_mary(true);
     assert!(asked);
@@ -789,6 +798,26 @@ fn jhoiras_timebug_adds_or_removes_a_time_counter_on_the_target() {
     t.activate(P0, bug, 0, &[Entity::Object(card)]).expect("activate");
     t.resolve_all();
     assert_eq!(t.counters(card, "time"), 1);
+    // Put another on a permanent you control with a time counter.
+    let mut t = TestGame::new(2);
+    let bug = t.battlefield(P0, "Jhoira's Timebug");
+    let rock = t.battlefield(P0, "Mind Stone");
+    t.g.add_counters(Entity::Object(rock), "time", 1, None);
+    t.g.recompute();
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.activate(P0, bug, 0, &[Entity::Object(rock)]).expect("activate");
+    t.resolve_all();
+    assert_eq!(t.counters(rock, "time"), 2);
+    // Without a time counter: nothing.
+    let mut t = TestGame::new(2);
+    let bug = t.battlefield(P0, "Jhoira's Timebug");
+    let rock = t.battlefield(P0, "Mind Stone");
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.activate(P0, bug, 0, &[Entity::Object(rock)]).expect("activate");
+    t.resolve_all();
+    assert_eq!(t.counters(rock, "time"), 0);
 }
 
 #[test]
@@ -1100,6 +1129,52 @@ fn dance_with_calamity_exiles_as_many_times_as_you_choose_then_casts_if_13_or_le
 }
 
 #[test]
+fn dance_with_calamity_you_choose_the_order_to_cast_the_exiled_cards() {
+    cr!("608.2c", "601.2");
+    ruling!(
+        "Dance with Calamity",
+        "If you cast more than one of the exiled cards, you choose the order in which to cast them."
+    );
+    // Exile both cards of the library, then cast them in the order given (`reversed`: the
+    // second listed first). The last one cast is on top of the stack.
+    let run = |reversed: bool| {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 8);
+        t.g.players[P0.idx()].library.clear();
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P0, "Llanowar Elves");
+        let spell = t.hand(P0, "Dance with Calamity");
+        t.set_step(P0, Step::PrecombatMain);
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, false);
+        if reversed {
+            t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
+        }
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        let from = t.asked().len();
+        t.cast(P0, spell).go();
+        t.resolve();
+        let items = t.asked()[from..]
+            .iter()
+            .find_map(|(p, d)| match d {
+                Decision::Order { items, .. } if *p == P0 => Some(items.clone()),
+                _ => None,
+            })
+            .expect("asked for the order");
+        assert_eq!(t.stack_len(), 2);
+        let top = t.g.stack.last().copied().expect("a spell");
+        (items, t.obj_now(top).chars.name.to_string())
+    };
+    // Listed order: the second listed is cast last. Reversed: the first listed.
+    let (items, top) = run(false);
+    assert_eq!(top, items[1]);
+    let (items, top) = run(true);
+    assert_eq!(top, items[0]);
+}
+
+#[test]
 fn tainted_pact_stops_at_a_card_put_into_hand_or_two_with_the_same_name() {
     cr!("608.2c", "201.2");
     compiles("Tainted Pact");
@@ -1290,6 +1365,7 @@ fn elrond_gains_control_of_every_creature_chosen_for_a_fellowship_vote() {
 #[test]
 fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     cr!("603.12", "101.4");
+    interp!("nihiloor-taps-one-opponent-at-a-time");
     compiles("Nihiloor");
     // "When Nihiloor enters, for each opponent, tap up to one untapped creature you
     // control. When you do, gain control of target creature that player controls with
