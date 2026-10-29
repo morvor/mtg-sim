@@ -257,7 +257,7 @@ fn tangle_angler_doesnt_force_it_to_attack() {
 
 #[test]
 fn brudiclad_copies_only_the_chosen_tokens_copiable_values() {
-    cr!("707.2", "707.9a", "111.10");
+    cr!("707.2", "707.9a");
     ruling!(
         "Brudiclad, Telchor Engineer",
         "All other tokens you control become a copy of the chosen token, even those that aren't of the same type."
@@ -833,7 +833,8 @@ fn belbe_rewards_the_active_opponent_who_lost_life() {
 
 #[test]
 fn belbe_counts_an_opponent_who_lost_life_then_the_game() {
-    cr!("800.4a", "505.1a");
+    cr!("800.4i", "505.1a");
+    interp!("history-counts-players-who-left");
     ruling!(
         "Belbe, Corrupted Observer",
         "If an opponent lost life and subsequently lost the game, Belbe's triggered ability still counts that player to determine how much mana to add."
@@ -902,7 +903,7 @@ fn phyrexian_gremlins_tapping_itself_as_an_artifact_never_untaps() {
 
 #[test]
 fn chancellor_of_the_spires_spell_still_needs_its_additional_cost() {
-    cr!("601.2b", "118.9");
+    cr!("601.2b", "118.9d");
     ruling!(
         "Chancellor of the Spires",
         "If the card has any mandatory additional costs, then you must pay them in order to cast the spell."
