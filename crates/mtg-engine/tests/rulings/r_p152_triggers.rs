@@ -65,12 +65,22 @@ fn brink_of_madness_needs_an_empty_hand_but_the_discard_happens_anyway() {
     );
     ruling!(
         "Brink of Madness",
-        "the opponent discards their hand even if you can’t sacrifice it for some reason"
+        "the opponent discards their hand even if you can’t sacrifice it for some reason (for example, if it were returned to its owner’s hand before the ability resolved)"
     );
     supported("Brink of Madness");
-    for (in_hand, bounced) in [(true, false), (false, false), (false, true)] {
+    // (card in hand, how Brink of Madness leaves in response)
+    for (in_hand, gone) in [(true, ""), (false, ""), (false, "exile"), (false, "owner")] {
         let mut t = TestGame::new(2);
-        let brink = t.battlefield(P0, "Brink of Madness");
+        // The ruling's example: P0 controls a Brink of Madness P1 owns, and it returns to
+        // its owner's hand in response, so P0 still has no cards in hand.
+        let brink = if gone == "owner" {
+            let b = t.battlefield(P1, "Brink of Madness");
+            steal_for_good(&mut t, P0, b);
+            assert_eq!(t.g.obj(t.g.current(b)).controller, P0);
+            b
+        } else {
+            t.battlefield(P0, "Brink of Madness")
+        };
         for _ in 0..3 {
             t.hand(P1, "Grizzly Bears");
         }
@@ -81,16 +91,24 @@ fn brink_of_madness_needs_an_empty_hand_but_the_discard_happens_anyway() {
         let p1_hand = t.hand_size(P1);
         assert!(p1_hand >= 3);
         assert_eq!(triggers_on_stack(&t, "discards their hand"), !in_hand as usize);
-        if bounced {
-            // Exiled rather than returned to hand: a card in your hand would stop the
-            // ability on resolution (CR 603.4).
-            exile(&mut t, brink);
+        match gone {
+            "exile" => exile(&mut t, brink),
+            "owner" => {
+                bounce(&mut t, brink);
+                assert!(t.in_hand(P1, "Brink of Madness"));
+                assert_eq!(t.hand_size(P0), 0);
+            }
+            _ => {}
         }
         t.answer_targets(P0, &[Entity::Player(P1)]);
         t.resolve_all();
-        assert_eq!(t.hand_size(P1) == 0, !in_hand, "{in_hand} {bounced}");
+        assert_eq!(t.hand_size(P1) == 0, !in_hand, "{in_hand} {gone}");
         assert_eq!(t.on_battlefield(brink), in_hand);
-        if !in_hand && !bounced {
+        if gone == "owner" {
+            // Discarded along with the rest of its owner's hand.
+            assert!(t.in_graveyard(P1, "Brink of Madness"));
+        }
+        if !in_hand && gone.is_empty() {
             assert!(t.in_graveyard(P0, "Brink of Madness"));
         }
     }
@@ -590,9 +608,11 @@ fn aura_flux_gives_other_enchantments_an_upkeep_cost() {
 }
 
 #[test]
-fn brink_of_madness_returned_to_hand_fails_its_intervening_if() {
+fn brink_of_madness_returned_to_your_own_hand_fails_its_intervening_if() {
+    // Unlike the ruling's example (a Brink of Madness someone else owns, returned to
+    // their hand), returning your own Brink of Madness to your hand gives you a card in
+    // hand, so the intervening "if" is false on resolution and the ability does nothing.
     cr!("603.4");
-    interp!("intervening-if-over-ruling-example");
     supported("Brink of Madness");
     let mut t = TestGame::new(2);
     let brink = t.battlefield(P0, "Brink of Madness");

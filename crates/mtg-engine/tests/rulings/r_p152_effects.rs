@@ -684,7 +684,7 @@ fn suicidal_charge_affects_creatures_the_opponents_control_then() {
 
 #[test]
 fn last_light_of_durins_day_puts_a_dragon_permanent_card_onto_the_battlefield() {
-    cr!("701.23a");
+    cr!("701.23a", "400.4a");
     ruling!(
         "Last Light of Durin's Day",
         "Only a Dragon permanent card can be put onto the battlefield this way."
@@ -701,6 +701,32 @@ fn last_light_of_durins_day_puts_a_dragon_permanent_card_onto_the_battlefield() 
     assert!(!t.on_battlefield(ll));
     assert_eq!(count_named(&t, "Shivan Dragon"), 1);
     assert!(t.in_hand(P0, "Grizzly Bears"));
+    // A Dragon card that isn't a permanent card (a kindred instant) can't be put onto
+    // the battlefield: if it's found, it stays where it was (CR 400.4a).
+    let mut t = TestGame::new(2);
+    let ll = t.battlefield(P0, "Last Light of Durin's Day");
+    put_counters(&mut t, ll, "quest", 5);
+    let def = crate::r_s01_common::custom_card(
+        "Draconic Spark",
+        "Kindred Instant — Dragon",
+        "{R}",
+        None,
+        "Draconic Spark deals 1 damage to any target.",
+    );
+    let spark = t.custom(P0, def, Zone::Hand(P0));
+    let n = t.asked().len();
+    t.answer_choose(P0, &[obj(spark)]);
+    t.enter(P0, "Mountain");
+    t.resolve_all();
+    let found = t.asked()[n..].iter().any(|(_, d)| match d {
+        mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => {
+            candidates.contains(&obj(spark))
+        }
+        _ => false,
+    });
+    assert!(found, "a Dragon card can be found");
+    assert!(!t.on_battlefield(ll));
+    assert_eq!(t.zone(spark), Zone::Hand(P0), "not put onto the battlefield");
 }
 
 #[test]
