@@ -39,6 +39,7 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
             | TriggerCond::ThisTurn(c)
             | TriggerCond::UntilYourNextTurn(c)
             | TriggerCond::ThisCombat(c)
+            | TriggerCond::ForAsLongAs(c, _)
             | TriggerCond::Noncombat(c),
             ev,
         ) => looks_back(c, ev),
@@ -119,7 +120,8 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
         | TriggerCond::FirstTimeEachTurn(c)
         | TriggerCond::ThisTurn(c)
         | TriggerCond::UntilYourNextTurn(c)
-        | TriggerCond::ThisCombat(c) => phase_out_trigger(c),
+        | TriggerCond::ThisCombat(c)
+        | TriggerCond::ForAsLongAs(c, _) => phase_out_trigger(c),
         _ => false,
     }
 }
@@ -799,6 +801,8 @@ impl Game {
                 || d.created_turn == turn
                 || in_progress.contains(&d.created_turn)
                 || matches!(d.trigger, TriggerCond::UntilYourNextTurn(_))
+                // "For as long as ...": until its condition is false (see `layers.rs`).
+                || matches!(d.trigger, TriggerCond::ForAsLongAs(..))
         });
         let mut once_matches: Vec<(u32, EventInfo)> = Vec::new();
         // One-shot delayed triggers whose event happened with their intervening "if"
@@ -2253,6 +2257,14 @@ impl Game {
                 | TriggerCond::ThisCombat(inner),
                 ev,
             ) => self.trigger_matches_ctx(inner, base, ev),
+            // While its condition holds (once false, it's removed, see `layers.rs`).
+            (TriggerCond::ForAsLongAs(inner, cond), ev) => {
+                if self.eval_cond(cond, base) {
+                    self.trigger_matches_ctx(inner, base, ev)
+                } else {
+                    none()
+                }
+            }
             (TriggerCond::Noncombat(inner), Event::Damage { combat: false, .. }) => {
                 self.trigger_matches_ctx(inner, base, ev)
             }
@@ -2486,6 +2498,7 @@ fn on_sacrifice(t: &TriggerCond) -> bool {
         | TriggerCond::ThisTurn(trigger)
         | TriggerCond::UntilYourNextTurn(trigger)
         | TriggerCond::ThisCombat(trigger)
+        | TriggerCond::ForAsLongAs(trigger, _)
         | TriggerCond::Noncombat(trigger) => on_sacrifice(trigger),
         TriggerCond::AnyOf(ts) => ts.iter().all(on_sacrifice),
         _ => false,

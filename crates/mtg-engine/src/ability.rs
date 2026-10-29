@@ -340,6 +340,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
             | TriggerCond::ThisCombat(t)
+            | TriggerCond::ForAsLongAs(t, _)
             | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
             _ => false,
         }
@@ -4284,6 +4285,11 @@ pub enum TriggerCond {
     /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
     /// step is skipped.
     UntilYourNextTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts for as long as the condition holds ("For as
+    /// long as ~ remains tapped, ... at the beginning of each of your draw steps, ...",
+    /// Giant Oyster; CR 603.7b, 611.2b): it's removed for good once the condition is false
+    /// (checked with the context it was created with; see `layers.rs`).
+    ForAsLongAs(Box<TriggerCond>, Condition),
     /// A delayed triggered ability that lasts for the rest of the combat phase it was
     /// created in ("whenever that creature deals combat damage to a player this combat",
     /// CR 603.7b, 506.1): removed as that combat phase ends (CR 500.5a).

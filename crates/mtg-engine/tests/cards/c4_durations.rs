@@ -394,3 +394,45 @@ fn oracle_en_vec_chosen_creatures_must_attack_and_the_others_cant() {
     assert!(t.on_battlefield(bears) || t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.on_battlefield(wurm));
 }
+
+#[test]
+fn giant_oyster_shrinks_the_creature_while_it_remains_tapped() {
+    cr!("603.7b", "603.7c", "611.2b", "502.3");
+    ruling!(
+        "Giant Oyster",
+        "a repeating delayed triggered ability that’s in effect only as long as Giant Oyster remains tapped"
+    );
+    supported("Giant Oyster");
+    let mut t = TestGame::new(2);
+    let oyster = t.battlefield(P0, "Giant Oyster");
+    untapped(&mut t, oyster);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.g.objects[wurm.0 as usize].tapped = true;
+    t.advance_to(P0, Step::PrecombatMain);
+    t.activate(P0, oyster, 0, &[Entity::Object(wurm)]).unwrap();
+    t.resolve_all();
+    // The Wurm doesn't untap during P1's untap step.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(wurm).tapped);
+    // P0 keeps the Oyster tapped: a -1/-1 counter at P0's draw step.
+    t.answer_yes(P0, false);
+    t.advance_to(P0, Step::Draw);
+    t.resolve_all();
+    assert_eq!(t.counters(wurm, "-1/-1"), 1);
+    assert_eq!(t.pt(wurm), (5, 3));
+    // P0 untaps the Oyster: the counters are removed, and no more come.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(wurm).tapped);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(!t.obj_now(oyster).tapped);
+    assert_eq!(t.counters(wurm, "-1/-1"), 0);
+    t.advance_to(P0, Step::Draw);
+    t.resolve_all();
+    assert_eq!(t.counters(wurm, "-1/-1"), 0);
+    assert!(t.g.delayed_triggers.is_empty());
+    // And the Wurm untaps as usual.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.obj_now(wurm).tapped);
+}

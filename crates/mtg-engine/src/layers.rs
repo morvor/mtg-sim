@@ -632,6 +632,25 @@ impl Game {
                 self.rule_effects[i].objects = Some(keep);
             }
         }
+        // Delayed triggered abilities "for as long as [condition]": once it's false, they're
+        // gone for good (CR 603.7b, 611.2b).
+        let ended: Vec<u32> = self
+            .delayed_triggers
+            .iter()
+            .filter(|d| match &d.trigger {
+                TriggerCond::ForAsLongAs(_, c) => {
+                    let mut ctx = d.ctx.clone();
+                    ctx.source = d.source;
+                    ctx.controller = d.controller;
+                    !self.eval_cond(c, &ctx)
+                }
+                _ => false,
+            })
+            .map(|d| d.id)
+            .collect();
+        if !ended.is_empty() {
+            self.delayed_triggers.retain(|d| !ended.contains(&d.id));
+        }
         // Characteristics listed for a permanent turned face down (CR 708.2a): one that's
         // turned face up stops being affected for good.
         for i in 0..self.effects.len() {

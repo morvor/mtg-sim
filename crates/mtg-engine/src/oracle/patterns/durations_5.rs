@@ -422,3 +422,58 @@ fn at_that_turns_end_step(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 }
 
 inventory::submit! { FollowupPattern { name: "durations 5: at the beginning of that turn's end step, destroy each of the chosen creatures that didn't attack", priority: 40, apply: at_that_turns_end_step } }
+
+/// "For as long as ~ remains tapped, target tapped creature doesn't untap during its
+/// controller's untap step, and at the beginning of each of your draw steps, put a -1/-1
+/// counter on that creature." (Giant Oyster): the instruction lasts for as long as the
+/// condition holds, and so does the repeating delayed triggered ability it creates
+/// (CR 603.7b, 611.2b), which refers to the objects the instruction named (captured as
+/// it's created).
+fn for_as_long_as_and_at_the_beginning(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("for as long as ")?;
+    let (cond_s, rest) = r.split_once(", ")?;
+    let (d, _) = crate::oracle::effects::duration_suffix(&format!("x for as long as {cond_s}"));
+    let Duration::WhileCondition(cond) = d.clone() else {
+        return None;
+    };
+    let (first, when) = rest.split_once(", and at the beginning of ")?;
+    let (when, eff) = when.split_once(", ")?;
+    let saved = (b.targets.len(), b.it.clone());
+    let restore = |b: &mut Builder| {
+        b.targets.truncate(saved.0);
+        b.it = saved.1.clone();
+    };
+    let Some(instruction) = parse_sentence(&format!("{first} for as long as {cond_s}"), b) else {
+        restore(b);
+        return None;
+    };
+    let Some((trigger, _, _)) = crate::oracle::triggers::parse_trigger_condition(&format!(
+        "at the beginning of {when}"
+    )) else {
+        restore(b);
+        return None;
+    };
+    if !matches!(trigger, TriggerCond::BeginningOf { .. }) {
+        restore(b);
+        return None;
+    }
+    let n = b.targets.len();
+    let effect = parse_sentence(eff, b);
+    let captured = effect
+        .filter(|_| b.targets.len() == n)
+        .and_then(|e| super::triggers_delayed::capture(&e));
+    let Some((stores, effect)) = captured else {
+        restore(b);
+        return None;
+    };
+    let mut seq = vec![instruction];
+    seq.extend(stores);
+    seq.push(Effect::DelayedTrigger {
+        trigger: TriggerCond::ForAsLongAs(Box::new(trigger), cond),
+        body: Box::new(Body::effect(effect)),
+        once: false,
+    });
+    Some(Effect::seq(seq))
+}
+
+inventory::submit! { EffectPattern { name: "durations 5: for as long as [condition], [instruction], and at the beginning of [step], [instruction]", priority: 90, parse: for_as_long_as_and_at_the_beginning } }

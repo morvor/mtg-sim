@@ -17,7 +17,8 @@ fn batched(t: &TriggerCond) -> Option<(&TriggerCond, BatchPer)> {
     match t {
         TriggerCond::ThisTurn(i)
         | TriggerCond::UntilYourNextTurn(i)
-        | TriggerCond::ThisCombat(i) => batched(i),
+        | TriggerCond::ThisCombat(i)
+        | TriggerCond::ForAsLongAs(i, _) => batched(i),
         TriggerCond::Batched { trigger, per } => Some((trigger, *per)),
         _ => None,
     }
