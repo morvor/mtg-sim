@@ -345,6 +345,9 @@ fn value_comparison(c: &str, b: &mut Builder) -> Option<Condition> {
         ("equal to ", Cmp::Eq),
     ] {
         if let Some(x) = r.strip_prefix(p) {
+            if let Some(c) = versus_each_other(&v, cmp, x) {
+                return Some(c);
+            }
             let (w, rest) = parse_value(x, b)?;
             if !end(&rest).trim().is_empty() {
                 return None;
@@ -353,6 +356,40 @@ fn value_comparison(c: &str, b: &mut Builder) -> Option<Condition> {
         }
     }
     None
+}
+
+/// "its power is greater than each other creature's power" (Selvala, Heart of the Wilds):
+/// the comparison holds against each other such object one at a time (no creature other
+/// than the compared one has a power that fails it), not against the total of their
+/// powers, and "other" means other than the compared creature, not other than the source.
+pub(crate) fn versus_each_other(v: &Value, cmp: Cmp, x: &str) -> Option<Condition> {
+    let Value::PowerOf(s) = v else {
+        return None;
+    };
+    let noun = end(x.trim())
+        .strip_prefix("each other ")?
+        .strip_suffix("'s power")?;
+    let (f, _, tail) = parse_object_phrase(noun)?;
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    // A creature that would break "[it] [cmp] [that creature]".
+    let failing = match cmp {
+        Cmp::Gt => Cmp::Ge,
+        Cmp::Ge => Cmp::Gt,
+        Cmp::Lt => Cmp::Le,
+        Cmp::Le => Cmp::Lt,
+        _ => return None,
+    };
+    Some(Condition::Compare(
+        Value::Count(Filter::and(vec![
+            f,
+            Filter::Not(Box::new(Filter::In(s.clone()))),
+            Filter::Power(failing, Box::new(v.clone())),
+        ])),
+        Cmp::Eq,
+        Value::c(0),
+    ))
 }
 
 /// "the difference between [value] and [value] is N or less".
