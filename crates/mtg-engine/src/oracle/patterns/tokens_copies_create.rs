@@ -727,6 +727,8 @@ fn f_token_has(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(r) = [
         "it has ",
         "they have ",
+        // "They each have flying and ..." (Tetravus).
+        "they each have ",
         "those creatures have ",
         "the token has ",
         "the tokens have ",

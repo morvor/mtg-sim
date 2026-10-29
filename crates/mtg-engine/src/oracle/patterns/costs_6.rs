@@ -247,7 +247,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod compile_tests {
+pub(crate) mod compile_tests {
     use crate::card::Layout;
     use crate::oracle::{compile, CompileContext};
     use crate::types::TypeLine;
@@ -265,6 +265,22 @@ mod compile_tests {
             toughness: Some("1"),
         };
         compile(text, &ctx).unsupported
+    }
+
+    /// The compiled abilities of a text, for test failure messages.
+    pub(crate) fn dump(text: &str, types: &str) -> String {
+        let tl = TypeLine::parse(types);
+        let ctx = CompileContext {
+            card_name: "Probe",
+            full_name: "Probe",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: Some("1"),
+            toughness: Some("1"),
+        };
+        format!("{:#?}", compile(text, &ctx).abilities)
     }
 
     #[test]

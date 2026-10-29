@@ -111,3 +111,27 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Plumb the Forbidden.
 - Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`); rendered back as one line by `crates/mtg-engine/src/oracle/render/cost_paid_copies.rs`.
 - Tests: `tests/rulings/r_p031_spell_copies.rs` (`plumb_the_forbidden_copies_for_each_creature_sacrificed`).
+
+## choose-type-and-behold-payable-type: A creature type chosen as part of a behold cost is one the player can then behold
+- Kind: interpretation
+- Status: provisional
+- Rules: 601.2b "... If the spell has alternative or additional costs that will be paid as it’s being cast ..., the player announces their intentions to pay any or all of those costs ..." / 118.3 "A player can’t pay a cost without having the necessary resources to pay it fully. ..." / 701.4a "“Behold a [quality]” means “Reveal a [quality] card from your hand or choose a [quality] permanent you control on the battlefield.”"
+- Question: Celestial Reunion's additional cost is "choose a creature type and behold two creatures of that type". May the player choose a type they can't behold two creatures of (and then not pay the cost), and when is "the revealed card is the chosen type" judged?
+- Decision: The type is chosen among the types the player could then behold that many creatures of (creature cards in hand and creatures they control; not kindred cards, its ruling); the cost can't be announced if there's none. The condition "the revealed card is the chosen type" is judged once the card is found, before it's put anywhere: onto the battlefield if it's true (and the cost was paid), into the hand otherwise; then the library is shuffled.
+- Alternatives: Any type may be chosen and the cost then fails (the cast is reversed, CR 733.1).
+- Why: Choosing a type and beholding are one cost (118.3: it must be paid in full), so a choice that makes it unpayable isn't a way of paying it; reversal would reach the same end state with an extra illegal attempt.
+- Affects: Celestial Reunion.
+- Code: `crates/mtg-engine/src/cost_sets.rs` (`CHOOSE_TYPE_AND_BEHOLD`); `crates/mtg-engine/src/oracle/patterns/additional_cost_choices.rs` (`found_card_onto_battlefield_instead`).
+- Tests: `tests/cards/c5_costs_sets.rs` (`celestial_reunion_puts_a_card_of_the_chosen_type_onto_the_battlefield`).
+
+## if-you-do-any-number-removed: "You may remove any number of counters. If you do, ..." happens only if one or more were removed
+- Kind: interpretation
+- Status: provisional
+- Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..."
+- Question: Tetravus: "you may remove any number of +1/+1 counters from this creature. If you do, create that many ... tokens." If the player chooses to remove zero counters, did they "do" it?
+- Decision: No: "If you do" is "if one or more counters were removed this way", and "that many" is the number removed.
+- Alternatives: Choosing to remove (even zero) is doing it: the result is the same (zero tokens), so the choice only matters for other "if you do" bodies.
+- Why: Removing zero counters removes nothing; the outcome for Tetravus is identical either way.
+- Affects: Tetravus.
+- Code: `crates/mtg-engine/src/oracle/patterns/set_results.rs` (`if_you_do_that_many_removed`).
+- Tests: `tests/cards/c5_costs_sets.rs` (`tetravus_turns_the_counters_removed_into_tetravites`).

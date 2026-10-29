@@ -7,6 +7,14 @@
 //!   destroy another target artifact.": a target group whose size is that count (chosen
 //!   after the costs are announced, CR 601.2c; the same artifact can't be targeted twice,
 //!   its ruling), with "and you gain 1 life" once for each.
+//! - "As an additional cost to cast ~, choose a creature you control or a warped creature
+//!   card you own in exile." (Close Encounter): an object chosen as a cost, over two zones,
+//!   remembered for the spell ("the power of the chosen creature or card", its last known
+//!   power if it has left, the ruling).
+//! - "As an additional cost to cast ~, you may choose a creature type and behold two
+//!   creatures of that type." (Celestial Reunion; `cost_sets::CHOOSE_TYPE_AND_BEHOLD`) and
+//!   "If ~'s additional cost was paid and the revealed card is the chosen type, put that
+//!   card onto the battlefield instead of putting it into your hand." after a search.
 
 use super::{AbilityPattern, EffectPattern};
 use crate::ability::*;

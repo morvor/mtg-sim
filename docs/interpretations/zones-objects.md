@@ -20,7 +20,7 @@ decision listed in `docs/DEFERRED.md`, not here.
 ## looked-at-hand-card-stays-seen: A card looked at in another player's hand stays visible to the looker while it remains there
 - Kind: interpretation
 - Status: provisional
-- Rules: 402.3 "A player may arrange their hand in any convenient fashion and look at it at any time. A player can’t look at the cards in another player’s hand but may count those cards at any time." / 701.20e "Some effects instruct a player to look at one or more cards. Looking at a card follows the same rules as revealing a card, except that the card is shown only to the specified player." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of or relation to its previous existence. ..."
+- Rules: 402.3 "A player may arrange their hand in any convenient fashion and look at it at any time. A player can’t look at the cards in another player’s hand but may count those cards at any time." / 701.20e "Some effects instruct a player to look at one or more cards. Looking at a card follows the same rules as revealing a card, except that the card is shown only to the specified player." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of, or relation to, its previous existence. ..."
 - Question: Urza's Bauble: "Look at a card at random in target player's hand." By 701.20e/701.20a the card is shown only for as long as the effect needs it, but the player remembers what they saw. Should the looker's view keep showing it?
 - Decision: The ability's controller looks at one card chosen at random (only they see it, it isn't revealed) and may see that card for as long as it remains in that hand; once it changes zones it's a new object and the permission ends. In mtg-api observations the card shows in the looker's view.
 - Alternatives: (A) Only a log line, as `Effect::LookAtHand` does: the looker learns the card but no view shows it. (B) Visible until the end of the resolution: the player "forgets" it, which a real player wouldn't.
@@ -112,3 +112,27 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Affects: Blitz Hellion, Lightning Shrieker, Inferno Hellion and every "shuffle [this/it] into its owner's library" ability.
 - Code: `crates/mtg-engine/src/shuffle_rules.rs` (`shuffle_into`).
 - Tests: `tests/rulings/r_p180_tuck.rs` (`end_step_self_shuffles_leave_a_creature_that_left_where_it_is`).
+
+## each-player-exiled-this-way: "Cards you own exiled this way" after "Each player may exile their hand" are all the cards the players exiled, of those the ones you own
+- Kind: interpretation
+- Status: provisional
+- Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of, or relation to, its previous existence. ..."
+- Question: Wheel of Potential: "Each player may exile their hand and draw ... If seven or more {E} was paid this way, you may play cards you own exiled this way until the end of your next turn." Which cards are "exiled this way"?
+- Decision: The cards every player exiled from their hand by that instruction (as the new objects in exile), restricted to those you own. Cards you don't own can't be played by this permission; cards you own that another player exiled (they were in that player's hand) can.
+- Alternatives: Only the cards you exiled from your own hand ("you own" would then be redundant).
+- Why: "this way" names the whole each-player instruction, and the owner filter is the card's own restriction among them.
+- Affects: Wheel of Potential.
+- Code: `crates/mtg-engine/src/oracle/patterns/set_results.rs` (`each_players_exiled_cards`, `EACH_EXILED_HAND`).
+- Tests: `tests/cards/c5_costs_sets.rs` (`wheel_of_potential_lets_you_play_the_cards_you_own_that_were_exiled`).
+
+## chosen-card-power-after-leaving: The power of an object chosen as a cost uses its last known power once it has left its zone
+- Kind: interpretation
+- Status: provisional
+- Rules: 608.2h "If an effect requires information from the game (such as the number of creatures on the battlefield), the answer is determined only once, when the effect is applied. If the effect requires information from a specific object, including the source of the ability itself, the effect uses the current information of that object if it’s in the public zone it was expected to be in; if it’s no longer in that zone, or if the effect has moved it ..."
+- Question: Close Encounter's ruling covers a chosen creature that left the battlefield. What about a chosen warped creature card that leaves exile before the spell resolves?
+- Decision: The same: its last known information (its power as it last existed in exile).
+- Alternatives: None for a card that left exile (0 damage).
+- Why: 608.2h gives last known information for any object no longer in the public zone it was expected to be in.
+- Affects: Close Encounter.
+- Code: `crates/mtg-engine/src/choices.rs` (`CHOSEN_OBJECT_POWER`); `crates/mtg-engine/src/oracle/patterns/additional_cost_choices.rs` (`choose_object_as_cost`).
+- Tests: `tests/cards/c5_costs_sets.rs` (`close_encounter_uses_the_chosen_creatures_power`).

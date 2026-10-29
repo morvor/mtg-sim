@@ -737,7 +737,7 @@ inventory::submit! { EffectPattern { name: "counter grammar: put [counters] on [
 pub const REMOVED: Var = vars::USER + 4122;
 
 /// The last instruction of `e` if it removes counters.
-fn last_removal(e: &mut Effect) -> Option<&mut Effect> {
+pub(crate) fn last_removal(e: &mut Effect) -> Option<&mut Effect> {
     if matches!(
         e,
         Effect::RemoveCounters { .. }
