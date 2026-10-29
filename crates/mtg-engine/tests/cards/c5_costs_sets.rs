@@ -82,6 +82,20 @@ fn fabrication_foundry_exiles_artifacts_totaling_exactly_x() {
     let r = t.activate(P0, foundry, 1, &[Entity::Object(stone)]);
     t.resolve_all();
     assert!(r.is_err() || !t.on_battlefield(t.g.current(stone)));
+    // X = 1: exactly one of the two artifacts is exiled, even if both are chosen (their
+    // total, 2, isn't X).
+    let (mut t, foundry, ring, splitter, _) = setup();
+    let thopter = t.graveyard(P0, "Ornithopter");
+    t.answer(P0, DecisionKind::X, Answer::Number(1));
+    t.answer_choose(P0, &[Entity::Object(ring), Entity::Object(splitter)]);
+    t.activate(P0, foundry, 1, &[Entity::Object(thopter)]).unwrap();
+    let exiled = [ring, splitter]
+        .iter()
+        .filter(|o| t.zone(t.g.current(**o)) == Zone::Exile)
+        .count();
+    assert_eq!(exiled, 1, "a total of exactly X");
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(thopter)));
     // X = 3: no set of the other artifacts totals 3.
     let (mut t, foundry, ring, splitter, stone) = setup();
     t.answer(P0, DecisionKind::X, Answer::Number(3));
@@ -102,9 +116,17 @@ fn back_from_the_brink_pays_the_exiled_cards_mana_cost() {
     // {3}{R} can't be paid with three lands.
     assert!(t.activate(P0, brink, 0, &[]).is_err());
     assert!(in_gy(&t, giant));
-    t.lands(P0, "Mountain", 1);
+    let mut mountains = t.lands(P0, "Mountain", 1);
     t.activate(P0, brink, 0, &[]).unwrap();
     assert_eq!(t.zone(t.g.current(giant)), Zone::Exile);
+    // Its mana cost was paid: every Mountain is tapped.
+    mountains.extend(
+        t.g.objects
+            .iter()
+            .filter(|o| o.zone == Zone::Battlefield && o.chars.name.as_str() == "Mountain")
+            .map(|o| o.id),
+    );
+    assert!(mountains.iter().all(|m| t.g.obj(*m).tapped), "{{3}}{{R}} was paid");
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     // An {X} creature costs nothing: X is 0.
@@ -444,4 +466,49 @@ fn black_mana_symbols_among_a_cost_set() {
     // Add another Rakdos Cackler: the hybrid symbols count, four.
     let (ok, _, _) = run(&["Dark Ritual", "Dark Ritual", "Rakdos Cackler", "Rakdos Cackler"]);
     assert!(ok);
+}
+
+#[test]
+fn tap_cost_over_an_opponents_permanent() {
+    cr!("118.3", "602.2b");
+    // "Tap an untapped land an opponent controls" as a cost: the opponent's land, not one of
+    // the payer's own (a drilled text; the filter says whose it is).
+    use mtg_engine::card::{CardDef, Layout};
+    use mtg_engine::object::Characteristics;
+    use mtg_engine::oracle::{self, CompileContext};
+    use mtg_engine::types::TypeLine;
+    const TEXT: &str = "{T}, Tap an untapped land an opponent controls: Draw a card.";
+    let tl = TypeLine::parse("Artifact");
+    let ctx = CompileContext {
+        card_name: "Land Leech",
+        full_name: "Land Leech",
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(TEXT, &ctx);
+    assert!(compiled.unsupported.is_empty(), "{:?}", compiled.unsupported);
+    let def = CardDef::custom(Characteristics {
+        name: "Land Leech".into(),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        ..Default::default()
+    });
+    let mut t = TestGame::new(2);
+    let leech = t.custom(P0, def, Zone::Battlefield);
+    let mine = t.battlefield(P0, "Island");
+    // Only P0's own untapped land: can't be paid.
+    assert!(t.activate(P0, leech, 0, &[]).is_err());
+    assert!(!t.g.obj(leech).tapped && !t.g.obj(mine).tapped);
+    let theirs = t.battlefield(P1, "Forest");
+    t.library_top(P0, "Plains");
+    let hand = t.g.player(P0).hand.len();
+    t.activate(P0, leech, 0, &[]).unwrap();
+    assert!(t.g.obj(theirs).tapped, "the opponent's land is tapped");
+    assert!(!t.g.obj(mine).tapped);
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).hand.len(), hand + 1);
 }

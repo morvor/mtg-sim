@@ -3526,7 +3526,9 @@ impl Game {
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p && !ob.tapped && !(taps_src && Some(*o) == src)
+                        (ob.controller == p || filter_names_other_controller(filter))
+                            && !ob.tapped
+                            && !(taps_src && Some(*o) == src)
                     })
                     .collect();
                 crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
@@ -4130,7 +4132,11 @@ impl Game {
                 let cands: Vec<ObjectId> = self
                     .objects_matching(filter, ctx)
                     .into_iter()
-                    .filter(|o| self.obj(*o).controller == p && !self.obj(*o).tapped)
+                    // Yours, unless the filter says whose ("an opponent controls").
+                    .filter(|o| {
+                        (self.obj(*o).controller == p || filter_names_other_controller(filter))
+                            && !self.obj(*o).tapped
+                    })
                     .collect();
                 if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
                 {
@@ -4642,6 +4648,17 @@ pub(crate) fn cost_part_has_x(c: &CostPart) -> bool {
 }
 
 /// Whether a filter compares a characteristic with X ("power X or greater").
+/// Whether a cost's filter names a controller other than the player paying it ("Tap an
+/// untapped land an opponent controls"): the objects are then that player's, as the filter
+/// says, rather than the payer's (CR 118.3).
+pub(crate) fn filter_names_other_controller(f: &Filter) -> bool {
+    match f {
+        Filter::ControlledBy(r) => *r != PlayerRel::You,
+        Filter::And(fs) => fs.iter().any(filter_names_other_controller),
+        _ => false,
+    }
+}
+
 pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
     match f {
         Filter::Power(_, v) | Filter::Toughness(_, v) | Filter::ManaValue(_, v) => {

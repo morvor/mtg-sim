@@ -454,10 +454,14 @@ fn tap(p: &str) -> Option<CostPart> {
     if plural != (n.as_const() != Some(1)) {
         return None;
     }
-    Some(CostPart::TapUntapped {
-        filter: you_control(f),
-        count: n,
-    })
+    // Your own permanents unless the phrase says whose ("Tap an untapped land an opponent
+    // controls": that player's, see `casting::filter_names_other_controller`).
+    let filter = if crate::casting::filter_names_other_controller(&f) {
+        f
+    } else {
+        you_control(f)
+    };
+    Some(CostPart::TapUntapped { filter, count: n })
 }
 
 fn cost_part(p: &str) -> Option<CostPart> {

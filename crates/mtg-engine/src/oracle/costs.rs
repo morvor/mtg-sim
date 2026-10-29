@@ -329,10 +329,14 @@ fn parse_cost_part_core(p: &str) -> Option<CostPart> {
         if !end(tail).is_empty() {
             return None;
         }
-        return Some(CostPart::TapUntapped {
-            filter: Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)]),
-            count: n,
-        });
+        // Your own permanents unless the phrase says whose ("Tap an untapped land an
+        // opponent controls": that player's, `casting::filter_names_other_controller`).
+        let filter = if crate::casting::filter_names_other_controller(&f) {
+            f
+        } else {
+            Filter::and(vec![f, Filter::ControlledBy(PlayerRel::You)])
+        };
+        return Some(CostPart::TapUntapped { filter, count: n });
     }
     if p == "return ~ to its owner's hand" {
         return Some(CostPart::ReturnSelfToHand);
