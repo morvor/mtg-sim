@@ -987,7 +987,11 @@ impl Game {
     /// the object gets a new timestamp, abilities it was granted keep their order after
     /// its own abilities.
     fn static_timestamp(&self, src: ObjectId, uid: u64, st: &LayerState) -> (Timestamp, Timestamp) {
-        let obj_ts = self.obj(src).timestamp;
+        let mut obj_ts = self.obj(src).timestamp;
+        // A Room's door unlocked after the permanent entered (see `rooms::door_timestamp`).
+        if let Some(ts) = crate::rooms::door_timestamp(self, src, uid) {
+            obj_ts = obj_ts.max(ts);
+        }
         match st.grants.get(&(src, uid)) {
             Some(g) => (obj_ts.max(*g), *g),
             None => (obj_ts, 0),
@@ -1573,7 +1577,12 @@ impl Game {
                         st.flash_permissions.push((id, ctl, *who, what.clone()))
                     }
                     StaticEffect::Custom(n) => st.customs.push((id, ctl, n.clone())),
-                    other => st.other.push((id, ctl, other.clone())),
+                    other => {
+                        if let Some(ts) = crate::rooms::door_timestamp(self, id, a.uid) {
+                            st.other_ts.insert(st.other.len(), ts.max(o.timestamp));
+                        }
+                        st.other.push((id, ctl, other.clone()))
+                    }
                 }
             }
         }
@@ -1638,7 +1647,7 @@ impl Game {
         let n = self.players.len();
         let mut ordered: Vec<(Timestamp, usize, PlayerId, PlayerModification, Ctx)> = Vec::new();
         for (k, (src, ctl, e)) in self.statics.other.clone().into_iter().enumerate() {
-            let ts = self.obj(src).timestamp;
+            let ts = (self.statics.other_ts.get(&k).copied()).unwrap_or(self.obj(src).timestamp);
             let ctx = Ctx::new(Some(src), ctl);
             match e {
                 StaticEffect::PlayerEffect { affected, effect } => {
