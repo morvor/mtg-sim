@@ -402,3 +402,48 @@ fn a_little_chat_with_one_card_in_the_library() {
     assert!(t.in_hand(P0, "Grizzly Bears"));
     assert_eq!(t.library_size(P0), 0);
 }
+
+// --- Plumb the Forbidden -------------------------------------------------------------------
+
+#[test]
+fn plumb_the_forbidden_copies_for_each_creature_sacrificed() {
+    cr!("601.2b", "601.2i", "707.10");
+    interp!("cost-paid-reflexive-trigger");
+    ruling!(
+        "Plumb the Forbidden",
+        "If you copy Plumb the Forbidden multiple times, each magecraft ability of a creature you control will trigger that many times."
+    );
+    ruling!(
+        "Plumb the Forbidden",
+        "If you sacrifice a creature with a magecraft ability to cast Plumb the Forbidden, that creature's ability will not trigger."
+    );
+    supported("Plumb the Forbidden");
+    supported("Archmage Emeritus");
+    // (creatures sacrificed, Emeritus sacrificed too?) → (cards drawn, life lost)
+    for (n, emeritus_too, draws, loss) in [
+        (0, false, 2, 1),
+        (2, false, 6, 3),
+        (1, true, 2, 2),
+    ] {
+        let mut t = TestGame::new(2);
+        let em = t.battlefield(P0, "Archmage Emeritus");
+        let bears: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+        let sacs: Vec<Entity> = if emeritus_too {
+            vec![obj(em)]
+        } else {
+            bears.iter().take(n).map(|b| obj(*b)).collect()
+        };
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Number(n as i64));
+        t.answer_choose(P0, &sacs);
+        lands_for_cost(&mut t, P0, "Plumb the Forbidden");
+        let plumb = t.hand(P0, "Plumb the Forbidden");
+        let hand = t.hand_size(P0) - 1;
+        t.cast_with(P0, plumb, &[]).unwrap();
+        t.settle();
+        assert_eq!(t.g.battlefield.iter().filter(|o| t.obj(**o).is(CardType::Creature)).count(), 3 - n);
+        t.resolve_all();
+        assert!(spell_copies(&t).is_empty());
+        assert_eq!(t.hand_size(P0), hand + draws, "sacrificed {n}, Emeritus: {emeritus_too}");
+        assert_eq!(t.life(P0), 20 - loss);
+    }
+}
