@@ -14,9 +14,9 @@ cards' function (Scryfall Tagger oracle tags), so a batch covers one kind of abi
 Status comes from the repo: a text is CITED when a test has ruling!("<card or face name>",
 "<substring of that ruling>") for any card with that ruling, EXEMPT when
 docs/rulings-exemptions/*.tsv lists it as having no engine-testable content, DEFERRED when
-every card it applies to is deferred (docs/DEFERRED.md: digital-only cards, sticker sheets,
-cards not legal in any format, the dexterity cards Chaos Orb and Falling Star),
-OPEN otherwise.
+every card it applies to is deferred (docs/DEFERRED.md: digital-only cards, sticker sheets
+and the cards deferred with them, cards not legal in any format, the dexterity cards
+Chaos Orb and Falling Star), OPEN otherwise.
 
 Usage (from the repo root):
   python3 scripts/rulings_batches.py summary            # overall coverage
@@ -92,8 +92,8 @@ def is_paper(c):
 
 def deferred(c):
     """Cards the project has decided not to support for now (docs/DEFERRED.md):
-    digital-only cards, sticker sheets, cards not legal in any format, the dexterity
-    cards and the Conspiracy face-down draft cards."""
+    digital-only cards, sticker sheets and the cards deferred with them, cards not legal
+    in any format, the dexterity cards and the Conspiracy face-down draft cards."""
     if not is_paper(c):
         return 'digital-only'
     if 'Stickers' in (c.get('type_line') or ''):
@@ -109,6 +109,8 @@ def deferred(c):
         return 'dexterity card'
     if c.get('name') in FACE_DOWN_DRAFT_CARDS:
         return 'Conspiracy face-down draft card'
+    if c.get('name') in STICKER_DEFERRED_CARDS:
+        return 'deferred with the sticker sheets'
     return None
 
 
@@ -117,6 +119,20 @@ def deferred(c):
 FACE_DOWN_DRAFT_CARDS = {
     'Agent of Acquisitions', 'Archdemon of Paliano', 'Deal Broker',
     'Illusionary Informant', 'Whispergear Sneak',
+}
+
+
+# Cards whose sticker abilities need sticker sheets and are deferred with them
+# (docs/DEFERRED.md, "Cards deferred with the sheets"; keep the two lists in step).
+STICKER_DEFERRED_CARDS = {
+    'Wizards of the _____', '_____ Goblin', 'Wolf in _____ Clothing',
+    'Last Voyage of the _____', '_____ _____ Rocketship', 'Pin Collection',
+    'Roxi, Publicist to the Stars', 'Done for the Day', 'Goblin Airbrusher',
+    'Wee Champion', 'A Good Day to Pie', '_____ Balls of Fire', 'Make a _____ Splash',
+    'Tusk and Whiskers', 'Unlawful Entry', 'Fight the _____ Fight',
+    'Ambassador Blorpityblorpboop', 'Clandestine Chameleon', 'Scampire', 'Lineprancers',
+    'Proficient Pyrodancer', 'Baaallerina', '_____ _____ _____ Trespasser',
+    'Sword-Swallowing Seraph',
 }
 
 
@@ -269,7 +285,7 @@ def main():
         c = collections.Counter(status(os_, t) for b in batches.values() for _, t, os_ in b)
         tot = sum(c.values())
         print(f'ruling texts {tot} in {len(batches)} batches: CITED {c["CITED"]} ({100 * c["CITED"] / tot:.1f}%), '
-              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only, sticker sheets, not legal anywhere, dexterity cards) {c["DEFERRED"]}; '
+              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only, sticker sheets and their cards, not legal anywhere, dexterity cards) {c["DEFERRED"]}; '
               f'out of scope (Contraptions, host/augment): {len(oos)}')
     elif cmd == 'list':
         for bid, b in batches.items():
