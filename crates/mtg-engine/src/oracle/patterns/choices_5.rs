@@ -97,10 +97,10 @@ fn owners_put_revealed(l: &str, b: &mut Builder) -> Option<Effect> {
             )
         }
     };
-    Some(Effect::Move {
-        what,
-        to: Destination::battlefield(),
-    })
+    // Each card under its own owner's control.
+    let mut to = Destination::battlefield();
+    to.controller = Some(PlayerRef::OwnerOf(Box::new(what.clone())));
+    Some(Effect::Move { what, to })
 }
 
 inventory::submit! { EffectPattern { name: "the owner of each [card] revealed this way [with the lowest mana value] puts it onto the battlefield", priority: 90, parse: owners_put_revealed } }

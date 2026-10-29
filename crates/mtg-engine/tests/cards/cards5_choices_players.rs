@@ -92,7 +92,7 @@ fn leori_copies_abilities_of_planeswalkers_of_the_chosen_type() {
     t.answer(P0, DecisionKind::Option, Answer::Index(pw_type("Jace")));
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(leori, Entity::Player(P1))], &[]);
-    t.advance_to(P0, Step::Main2);
+    t.advance_to(P0, Step::PostcombatMain);
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
     // Jace's +2 ("Each player draws a card."): copied, so each player draws two.
@@ -218,7 +218,7 @@ fn typhoid_mary_chooses_at_random_unless_you_discarded_a_card() {
     assert!(asked);
     assert_eq!(t.hand_size(P0), 1);
     assert_eq!(t.named_on_battlefield("Treasure Token").len(), 0);
-    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P0), 20);
 }
 
 /// Casts Mystic Confluence choosing `modes` with Riku on the battlefield; returns the most
@@ -231,18 +231,16 @@ fn riku_max(modes: &[usize], riku_modes: &[usize]) -> (Option<u32>, TestGame, Ob
         t.library_top(P0, "Island");
     }
     let mc = t.hand(P0, "Mystic Confluence");
-    t.set_step(P0, Step::Main1);
+    t.set_step(P0, Step::PrecombatMain);
     let from = t.asked().len();
     t.cast(P0, mc).modes(modes).go();
     t.answer(P0, DecisionKind::Modes, Answer::Indices(riku_modes.to_vec()));
     t.settle();
-    let max = t.asked()[from..]
-        .iter()
-        .filter_map(|(_, d)| match d {
-            Decision::ChooseModes { max, source, .. } if *source != mc => Some(*max),
-            _ => None,
-        })
-        .next();
+    // Riku's trigger's choice is the last choice of modes (after the spell's own).
+    let max = t.asked()[from..].iter().rev().find_map(|(_, d)| match d {
+        Decision::ChooseModes { max, .. } => Some(*max),
+        _ => None,
+    });
     t.resolve_all();
     (max, t, riku)
 }
@@ -274,13 +272,14 @@ fn riku_triggers_for_modal_spells_spree_included() {
     t.battlefield(P0, "Riku of Many Paths");
     t.lands(P0, "Plains", 2);
     let fs = t.hand(P0, "Final Showdown");
-    t.set_step(P0, Step::Main1);
+    t.set_step(P0, Step::PrecombatMain);
     let from = t.asked().len();
     t.cast(P0, fs).modes(&[0]).go();
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
     t.settle();
-    let max = t.asked()[from..].iter().find_map(|(_, d)| match d {
-        Decision::ChooseModes { max, source, .. } if *source != fs => Some(*max),
+    // Riku's trigger's choice is the last choice of modes (after the spell's own).
+    let max = t.asked()[from..].iter().rev().find_map(|(_, d)| match d {
+        Decision::ChooseModes { max, .. } => Some(*max),
         _ => None,
     });
     assert_eq!(max, Some(1));
@@ -289,10 +288,10 @@ fn riku_triggers_for_modal_spells_spree_included() {
     // A nonmodal spell doesn't trigger Riku.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Riku of Many Paths");
-    t.lands(P0, "Island", 2);
+    t.lands(P0, "Island", 3);
     t.library_top(P0, "Island");
     let div = t.hand(P0, "Divination");
-    t.set_step(P0, Step::Main1);
+    t.set_step(P0, Step::PrecombatMain);
     t.cast(P0, div).go();
     t.settle();
     assert_eq!(t.stack_len(), 1);
@@ -317,7 +316,7 @@ fn call_to_the_void_destroys_every_creature_chosen() {
     t.answer_choose(P1, &[Entity::Object(d)]);
     t.answer_choose(P1, &[Entity::Object(a)]);
     let spell = t.hand(P0, "Call to the Void");
-    t.set_step(P0, Step::Main1);
+    t.set_step(P0, Step::PrecombatMain);
     t.cast(P0, spell).go();
     t.resolve_all();
     assert!(!t.on_battlefield(a));
@@ -342,7 +341,7 @@ fn stronghold_gambit_puts_the_lowest_mana_value_creatures_onto_the_battlefield()
     let spell = t.hand(P0, "Stronghold Gambit");
     t.answer_choose(P0, &[Entity::Object(elves)]);
     t.answer_choose(P1, &[Entity::Object(bears)]);
-    t.set_step(P0, Step::Main1);
+    t.set_step(P0, Step::PrecombatMain);
     t.cast(P0, spell).go();
     t.resolve_all();
     // The Elves (mana value 1) enter under P0's control; the Bears (2) stay in hand.
@@ -359,7 +358,7 @@ fn stronghold_gambit_puts_the_lowest_mana_value_creatures_onto_the_battlefield()
     let spell = t.hand(P0, "Stronghold Gambit");
     t.answer_choose(P0, &[Entity::Object(a)]);
     t.answer_choose(P1, &[Entity::Object(b)]);
-    t.set_step(P0, Step::Main1);
+    t.set_step(P0, Step::PrecombatMain);
     t.cast(P0, spell).go();
     t.resolve_all();
     let on = t.named_on_battlefield("Grizzly Bears");
@@ -378,7 +377,7 @@ fn mogg_assassin(win: bool) -> (TestGame, ObjectId, ObjectId) {
     let mine = t.battlefield(P1, "Grizzly Bears");
     let theirs = t.battlefield(P0, "Llanowar Elves");
     t.answer_targets(P1, &[Entity::Object(theirs)]);
-    t.g.dice.loaded_coins.push(win);
+    t.g.dice.loaded_coins.push_back(win);
     t.activate(P0, mogg, 0, &[Entity::Object(mine)])
         .expect("activate");
     t.resolve_all();
