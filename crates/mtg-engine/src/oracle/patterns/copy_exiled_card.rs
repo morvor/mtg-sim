@@ -11,7 +11,7 @@ use crate::oracle::effects::{parse_clause, Builder};
 use crate::oracle::phrases::{end, parse_number};
 
 /// Whether the effect ends by exiling targeted cards face up.
-pub(crate) fn ends_with_exiling_a_target(e: &Effect) -> bool {
+fn ends_with_exiling_a_target(e: &Effect) -> bool {
     match e {
         Effect::Exile {
             what: Sel::Target(_),
@@ -53,7 +53,7 @@ fn exiled_by_another_player(e: &Effect) -> Option<Var> {
     }
 }
 
-pub(crate) fn copy_of_exiled() -> Effect {
+fn copy_of_exiled() -> Effect {
     Effect::CopyCard {
         what: Sel::Var(vars::IT),
         named: None,

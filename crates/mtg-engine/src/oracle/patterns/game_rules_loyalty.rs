@@ -85,8 +85,12 @@ inventory::submit! { EffectPattern { name: "game rules: can't activate loyalty a
 /// rather than only once." (Urza Assembles the Titans): the permission of Oath of Teferi
 /// until end of turn (CR 606.3).
 fn twice_this_turn(l: &str, _b: &mut Builder) -> Option<Effect> {
-    let r = end(l)
-        .strip_prefix("you may activate the loyalty abilities of ")?
+    // "you may activate loyalty abilities of Kaito twice this turn ..." (Kaito, Dancing
+    // Shadow): the same without "the".
+    let l = end(l);
+    let r = l
+        .strip_prefix("you may activate the loyalty abilities of ")
+        .or_else(|| l.strip_prefix("you may activate loyalty abilities of "))?
         .strip_suffix(" twice this turn rather than only once")?;
     let sources = super::activated_ability_costs::sources(r)?;
     Some(Effect::AddPlayerEffect {

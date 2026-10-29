@@ -422,40 +422,33 @@ fn copy_each_card_exiled_with(l: &str, prev: &mut Effect, _b: &mut Builder) -> b
     if l != "copy each card exiled with ~" {
         return false;
     }
+    fn link_last_exile(e: &mut Effect) -> bool {
+        match e {
+            Effect::Exile {
+                face_down: false,
+                link,
+                ..
+            } => {
+                *link = true;
+                true
+            }
+            Effect::Seq(v) => v.last_mut().is_some_and(link_last_exile),
+            _ => false,
+        }
+    }
     if !link_last_exile(prev) {
         return false;
     }
-    let old = std::mem::take(prev);
-    *prev = Effect::seq(vec![old, copy_each_linked_exiled_card()]);
-    true
-}
-
-/// Links the effect's last exile (face up) to the ability (CR 607.2a): its cards are
-/// "exiled with ~". Returns false if the effect doesn't end with one.
-pub(crate) fn link_last_exile(e: &mut Effect) -> bool {
-    match e {
-        Effect::Exile {
-            face_down: false,
-            link,
-            ..
-        } => {
-            *link = true;
-            true
-        }
-        Effect::Seq(v) => v.last_mut().is_some_and(link_last_exile),
-        _ => false,
-    }
-}
-
-/// "Copy each card exiled with ~": the linked cards still in exile (CR 707.12).
-pub(crate) fn copy_each_linked_exiled_card() -> Effect {
-    Effect::CopyCard {
+    let copy = Effect::CopyCard {
         what: Sel::All(Filter::And(vec![
             Filter::In(Box::new(Sel::Linked)),
             Filter::InZone(ZoneKind::Exile),
         ])),
         named: None,
-    }
+    };
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![old, copy]);
+    true
 }
 
 inventory::submit! { FollowupPattern { name: "copy spell grammar 2: then copy each card exiled with ~", priority: 45, apply: copy_each_card_exiled_with } }

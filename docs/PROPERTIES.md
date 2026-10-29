@@ -89,8 +89,8 @@ game.
 ## 2. Snapshot equivalence
 
 **The property.** The engine reverses illegal actions by restoring a clone of the whole
-`Game` (`Game::roll_back`). At a random point of a random game (after `seed mod 1200`
-units of play), the game and its agents are cloned; the original and the copy are played
+`Game` (`Game::roll_back`, which then keeps CR 733.1's library actions). At a random point
+of a random game (after `seed mod 1200` units of play), the game and its agents are cloned; the original and the copy are played
 to the end with identical agents, and their transcripts after the copy, a hash of the
 whole game's debug output at the beginning of every turn, and the final game must be
 equal. A difference means state a clone doesn't copy faithfully or shares with the
@@ -112,11 +112,21 @@ hand.
 
 **What may differ.** CR 733.1 lets these stay: moving cards to a library, moving cards from
 a library to a zone other than the stack, shuffling a library, revealing cards from a
-library. The engine reverses even those (it restores the whole game), which the property
-allows. Besides, the comparison ignores the simulation's bookkeeping, which isn't game
-state: the decision counter, the count of reversed attempts at this priority, the log,
-the count of state-based-action checks, and the loop watch (CR 732.3, 104.4b), which
-records the choices players made at priority, attempts included.
+library. The engine keeps them: it restores the game from before the action, then performs
+those library actions again (`reversal::keep_library_actions`, register entry
+`illegal-action-reversal-restores-libraries`), and abilities may trigger on them
+(`reversal-kept-library-actions-trigger`). So the property is "exactly, except the library
+actions 733.1 keeps": a reversal that kept none (`Game::reversals` counts the kept ones)
+must leave the game exactly as it was; one that kept some is checked for what it must
+still undo (`properties::agent::undone_difference`): each player's life total, counters and
+mana pool, each permanent still on the battlefield as it was (tapped, counters, damage,
+controller), and the stack, to which only triggered abilities may have been added. The
+command line reports how many reversals kept library actions. Besides, the comparison
+ignores the simulation's bookkeeping, which isn't game state: the decision counter, the
+count of reversed attempts at this priority, the log, the count of state-based-action
+checks, the events recorded for observers (whose positions don't go back on a reversal,
+`EventFeed::skip_to`), the count of kept library actions, and the loop watch (CR 732.3,
+104.4b), which records the choices players made at priority, attempts included.
 
 ## 4. Determinism and replay
 
@@ -352,28 +362,15 @@ Not bugs in the rules, but found and handled by the properties:
 
 ## Remaining gaps
 
-* **CR 733.1's exceptions aren't kept.** The engine reverses an illegal action by restoring
-  a copy of the whole game, so it also reverses what CR 733.1 says players may not reverse
-  (moving cards to or from a library, shuffling, revealing library cards). It's the
-  deviation `illegal-action-reversal-restores-libraries`
-  (docs/interpretations/stack-casting-costs.md). The user accepted it on Oct 21 while no
-  supported card was known to reach it, with the plan to fix it when one could. A cost's
-  library actions are paid after everything that can make the action illegal, and no
-  supported mana ability touches a library; the test
-  `tests/cr/r733_001_reversal_reachability.rs` checks that on every run by scanning every
-  fully supported card, and follows what replacement effects and the rules the engine
-  applies in the middle of a payment (`until::check_untils`) make of it. It found that 22
-  supported cards do reach the difference, through replacement effects and one rule
-  implemented in code that make something that happens in the middle of a payment a
-  library action (Darksteel Colossus sacrificed to Ashnod's Altar for mana while casting a
-  spell that then can't be cast is shuffled into its library, and the reversal undoes the
-  shuffle; with Ashiok, Wicked Manipulator, the life Mana Confluence costs exiles library
-  cards instead; with Pariah on Swans of Bryn Argoll, Shivan Reef's damage draws a card).
-  Told of the 16 found first, the user chose to follow 733.1 exactly (item
-  `reversal-library-exceptions`, which covers the six found since too); it will change
-  the rollback property to "exactly, except the library actions 733.1 keeps". The entry
-  lists the cards. The first, one-off scan also found that Thought Lash's
-  cumulative upkeep could be paid in part; that's fixed.
+* **CR 733.1's exceptions, in games.** The engine keeps the library actions of a reversed
+  action (register entry `illegal-action-reversal-restores-libraries`, since Oct 28; it
+  restored the whole game before). The 22 fully supported cards that can reach them
+  (`KNOWN_REACHABLE` in `tests/cr/r733_001_reversal_reachability.rs`, which scans every
+  fully supported card on every run) need particular combinations (Darksteel Colossus
+  sacrificed to Ashnod's Altar for mana while casting a spell that then can't be cast), so
+  random games rarely reach them, and the rollback property checks those reversals only
+  for what they must undo (section 3); the `a_reversed_cast_keeps_` tests and
+  `tests/cr/r733_001_kept_library_actions.rs` check each kind exactly.
 * **Links of abilities continuous effects give are hashes.** Abilities a static or
   other continuously reevaluated effect gives (`layers::acquired_ability`,
   `ability_grants::gained_link`) get links hashed from the ability, the granter and the
