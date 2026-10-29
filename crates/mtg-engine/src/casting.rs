@@ -3220,7 +3220,9 @@ impl Game {
                     return false;
                 }
                 let want_tapped = matches!(part, CostPart::Untap);
-                if o.tapped != want_tapped {
+                if o.tapped != want_tapped
+                    || (want_tapped && !crate::counter_rules::can_untap_for_cost(self, o.id))
+                {
                     return false;
                 }
                 // CR 302.6: {T}/{Q} abilities of creatures need haste or no summoning
@@ -3349,7 +3351,10 @@ impl Game {
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
+                        ob.controller == p
+                            && ob.tapped
+                            && !(untaps_src && Some(*o) == src)
+                            && crate::counter_rules::can_untap_for_cost(self, *o)
                     })
                     .count()
                     >= n
@@ -3640,7 +3645,10 @@ impl Game {
             CostPart::Untap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 let o = self.obj(s);
-                if o.zone != Zone::Battlefield || !o.tapped {
+                if o.zone != Zone::Battlefield
+                    || !o.tapped
+                    || !crate::counter_rules::can_untap_for_cost(self, s)
+                {
                     return bad("can't untap");
                 }
                 // A stun counter's replacement effect may replace the untap (the counter is
@@ -3951,7 +3959,10 @@ impl Game {
                     .into_iter()
                     .filter(|o| {
                         let ob = self.obj(*o);
-                        ob.controller == p && ob.tapped && !(untaps_src && Some(*o) == src)
+                        ob.controller == p
+                            && ob.tapped
+                            && !(untaps_src && Some(*o) == src)
+                            && crate::counter_rules::can_untap_for_cost(self, *o)
                     })
                     .collect();
                 if (cands.len() as u32) < n {
