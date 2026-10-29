@@ -373,3 +373,62 @@ fn elemental_expressionist_grant_ends_with_the_turn() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
+
+/// Seraph deals lethal damage to P1's Bears, which return under P0's control at the next
+/// end step. Returns the returned Bears.
+fn seraph_returns_bears(t: &mut TestGame) -> (ObjectId, ObjectId) {
+    let seraph = t.battlefield(P0, "Seraph");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.g.deal_damage(seraph, Entity::Object(bears), 3, false);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let back = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.obj_now(back[0]).controller, P0);
+    (seraph, back[0])
+}
+
+#[test]
+fn seraph_returned_creature_is_sacrificed_when_you_lose_control_of_seraph() {
+    cr!("603.7a", "603.7c", "603.10d");
+    ruling!(
+        "Seraph",
+        "you will have to sacrifice it when you lose control of Seraph"
+    );
+    supported("Seraph");
+    let mut t = TestGame::new(2);
+    let (seraph, bears) = seraph_returns_bears(&mut t);
+    t.advance_to(P1, Step::PrecombatMain);
+    let act = t.hand(P1, "Act of Treason");
+    mana(&mut t, P1);
+    t.cast_with(P1, act, &[Entity::Object(seraph)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(seraph).controller, P1);
+    assert!(!t.on_battlefield(bears));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"), "its owner's graveyard");
+}
+
+#[test]
+fn seraph_gone_before_the_return_never_costs_the_creature() {
+    cr!("603.7c", "400.7");
+    ruling!(
+        "Seraph",
+        "if Seraph leaves the battlefield before the card is returned to the battlefield, you’ll never have to sacrifice it"
+    );
+    let mut t = TestGame::new(2);
+    let seraph = t.battlefield(P0, "Seraph");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.g.deal_damage(seraph, Entity::Object(bears), 3, false);
+    t.resolve_all();
+    t.g.destroy(seraph, None);
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let back = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.obj_now(back[0]).controller, P0);
+}

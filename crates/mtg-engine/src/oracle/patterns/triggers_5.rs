@@ -549,3 +549,65 @@ fn source_put_into_exile(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 }
 
 inventory::submit! { TriggerPattern { name: "triggers 5: ~ is put into exile", priority: 100, parse: source_put_into_exile } }
+
+/// The permanent the delayed ability put onto the battlefield, and the source, for its own
+/// "when you lose control of ~" ability.
+const RETURNED: Var = vars::USER + 43102;
+const RETURNED_BY: Var = vars::USER + 43103;
+
+/// "Sacrifice the creature when you lose control of ~." after "put that card onto the
+/// battlefield under your control at the beginning of the next end step" (Seraph): as
+/// the delayed ability puts the card onto the battlefield, it creates another delayed
+/// ability that triggers the next time its controller loses control of the source
+/// (CR 603.7a, 603.10d), sacrificing that permanent if they still control it (CR 701.21a).
+/// If the source has left the battlefield by then, it's a new object it never triggers
+/// for (Seraph ruling).
+fn sacrifice_when_you_lose_control(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    if end(&lower) != "sacrifice the creature when you lose control of ~" {
+        return false;
+    }
+    fn returns(e: &mut Effect) -> Option<&mut Body> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(returns),
+            Effect::DelayedTrigger { body, once: true, .. }
+                if matches!(&body.effect, Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield) =>
+            {
+                Some(body)
+            }
+            _ => None,
+        }
+    }
+    let Some(body) = returns(prev) else {
+        return false;
+    };
+    let mv = std::mem::take(&mut body.effect);
+    body.effect = Effect::seq(vec![
+        mv,
+        Effect::Store {
+            var: RETURNED,
+            sel: Sel::Var(vars::IT),
+        },
+        Effect::Store {
+            var: RETURNED_BY,
+            sel: Sel::This,
+        },
+        Effect::DelayedTrigger {
+            trigger: TriggerCond::LoseControl(Filter::In(Box::new(Sel::Var(RETURNED_BY)))),
+            body: Box::new(Body::effect(Effect::If {
+                cond: Condition::SelMatches(
+                    Sel::Var(RETURNED),
+                    Filter::ControlledBy(PlayerRel::You),
+                ),
+                then: Box::new(Effect::SacrificeObjects {
+                    what: Sel::Var(RETURNED),
+                }),
+                otherwise: Box::new(Effect::Noop),
+            })),
+            once: true,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "triggers 5: sacrifice the creature when you lose control of ~ (after a delayed return)", priority: 40, apply: sacrifice_when_you_lose_control } }
