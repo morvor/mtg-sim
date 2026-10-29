@@ -2853,6 +2853,16 @@ impl Game {
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             si.x = Some(x as i32);
         }
+        // CR 602.2a, 701.20a: a card whose ability is activated from a hidden zone stays
+        // revealed until that ability leaves the stack.
+        if matches!(self.obj(src).zone, Zone::Hand(_) | Zone::Library(_)) {
+            crate::reveal::prune(self);
+            self.reveals.revealed.push(crate::reveal::Revealed {
+                card: src,
+                by: p,
+                stack_obj: Some(id),
+            });
+        }
         // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
         // activation cost (at most one) is announced.
         let alt = self.announce_alternative_activation_cost(p, src, a, act);
