@@ -107,6 +107,7 @@ Queues from the 06:42 check-in:
 - **cards-1:** `cards5-choices-players` and `cards5-referents-statics`, together because they share the Builder's referent tracking and the optional as-enters choice.
 - **structure:** re-place cards4-manual-defs' leftover texts (an update section in plan 5), then `cards5-game-rules-dice`. It also re-places the leftovers of cards-2's round-4 items when they land, and re-probes Mr. House after costs-mana.
 - **cards-2:** its two round-4 items, then `cards5-manual-defs` (Celebr-8000, Curse of Leeches and the hooks first).
+- **Change at 10:43:** round 4 has fully landed (cards4-costs-mana-replacements, 15183001). cards-2 landed the first part of cards5-manual-defs and was free, so it took over the re-placement of its two round-4 items' leftovers and Mr. House's re-probe from the structure worker. It places them in new `cards5-<area>` items and implements them. River Song, Deification and Vedalken Squirrel-Whacker wait for their cards5 items.
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
