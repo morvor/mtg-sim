@@ -24,8 +24,13 @@ use crate::oracle::CompileContext;
 fn rounded(s: &str) -> Option<(&str, bool)> {
     if let Some(r) = s.strip_suffix(", rounded up") {
         Some((r, true))
+    } else if let Some(r) = s.strip_suffix(", rounded down") {
+        Some((r, false))
     } else {
-        s.strip_suffix(", rounded down").map(|r| (r, false))
+        // "Round up each time." after the instructions (CR 107.1a).
+        super::value_grammar::half_rounding()
+            .filter(|_| fraction(s).is_some())
+            .map(|up| (s, up))
     }
 }
 

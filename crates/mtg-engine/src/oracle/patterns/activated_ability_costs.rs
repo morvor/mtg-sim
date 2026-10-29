@@ -104,6 +104,13 @@ fn split_targeting(s: &str) -> Option<(&str, Option<Filter>)> {
 
 fn cost_modifier(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let l = end(l);
+    // "... in that ability's activation cost ..." (Convergence of Dominion) is the same
+    // floor (CR 601.2f, 602.2b).
+    let l = l.replace(
+        ". this effect can't reduce the mana in that ability's activation cost to less than one mana",
+        FLOOR,
+    );
+    let l = l.as_str();
     let (l, floor) = match l.strip_suffix(FLOOR) {
         Some(r) => (r, true),
         None => (l, false),
@@ -112,9 +119,7 @@ fn cost_modifier(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Abilit
         Some(r) => (r, true),
         None => (l, false),
     };
-    let (subject, rest) = l
-        .split_once(" cost ")
-        .or_else(|| l.split_once(" costs "))?;
+    let (subject, rest) = l.split_once(" cost ").or_else(|| l.split_once(" costs "))?;
     // "... if it targets a colorless creature".
     let (rest, if_targets) = match rest.split_once(" if it targets ") {
         Some((head, t)) => (head, Some(sources(t)?)),

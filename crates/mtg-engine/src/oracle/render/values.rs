@@ -18,6 +18,9 @@ impl Renderer<'_> {
         if let Some(s) = self.value_extra(v) {
             return s;
         }
+        if let Some(s) = self.cast_before_count(v) {
+            return s;
+        }
         match v {
             Value::Const(n) => n.to_string(),
             Value::PlayerTally { var, .. } => crate::tallies::words(*var).into(),
@@ -306,6 +309,13 @@ impl Renderer<'_> {
                             other => super::nouns::possessive(other),
                         };
                         return format!("the number of {} mana symbols in {p} mana cost", c.word());
+                    }
+                    Stat::ColoredManaSymbols if *op == AggOp::Sum => {
+                        let p = match s.as_str() {
+                            "it" => "its".to_string(),
+                            other => super::nouns::possessive(other),
+                        };
+                        return format!("the number of colored mana symbols in {p} mana cost");
                     }
                     other => return self.gap(format!("Value::Aggregate {other:?}")),
                 };
@@ -779,6 +789,9 @@ impl Renderer<'_> {
 
     pub(crate) fn condition(&mut self, c: &Condition) -> String {
         self.new_clause();
+        if let Some(s) = self.all_actions_done(c) {
+            return s;
+        }
         if let Some(s) = self.graveyard_order_condition(c) {
             return s;
         }
@@ -1133,6 +1146,7 @@ impl Renderer<'_> {
                 PhaseCond::Upkeep => "it's an upkeep step".into(),
                 PhaseCond::DeclareAttackers => "it's the declare attackers step".into(),
                 PhaseCond::EndStep => "it's the end step".into(),
+                PhaseCond::DrawStep => "it's the draw step".into(),
             },
             Condition::CitysBlessing => "you have the city's blessing".into(),
             Condition::IsMonarch => "you're the monarch".into(),
@@ -2079,7 +2093,7 @@ impl Renderer<'_> {
             if let Some(q) = q {
                 // "there are three or more oil counters on ~" / "it has three or more oil
                 // counters on it".
-                if let (Value::CountersOn(sel, Some(_)), Some((counters, _))) =
+                if let (Value::CountersOn(sel, _), Some((counters, _))) =
                     (a_value, rest.split_once(" on "))
                 {
                     let subj = self.sel(sel, Case::Subj);

@@ -1,4 +1,6 @@
-//! Shrouded Lore (hand-written, `src/cards/shrouded_lore.rs`).
+//! Shrouded Lore, compiled from its Oracle text with Forgotten Lore's "repeat this process
+//! except that opponent can't choose a card already chosen" (cards4-paper-effects; it was
+//! hand-written before).
 
 use mtg_engine::testing::*;
 use mtg_engine::*;

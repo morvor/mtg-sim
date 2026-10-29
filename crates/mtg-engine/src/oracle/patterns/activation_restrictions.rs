@@ -105,10 +105,7 @@ pub(crate) fn during(r: &str) -> Option<Clause> {
             after: false,
             during_combat: false,
         };
-        return Some(Clause::When(
-            and2(turn, Condition::CombatTiming(t)),
-            None,
-        ));
+        return Some(Clause::When(and2(turn, Condition::CombatTiming(t)), None));
     }
     // "during their turn before the end step".
     if let Some(a) = r.strip_suffix(" before the end step") {
@@ -181,9 +178,16 @@ fn if_clause(r: &str, ctx: &CompileContext) -> Option<Condition> {
         if ["~ is ", "~ isn't ", "this card is "]
             .iter()
             .any(|x| p.contains(x))
-            && ["graveyard", "hand", "exile", "library", "battlefield", "stack"]
-                .iter()
-                .any(|z| p.contains(z))
+            && [
+                "graveyard",
+                "hand",
+                "exile",
+                "library",
+                "battlefield",
+                "stack",
+            ]
+            .iter()
+            .any(|z| p.contains(z))
         {
             return None;
         }
@@ -217,9 +221,11 @@ pub(crate) fn condition(c: &str, ctx: &CompileContext) -> Option<Condition> {
 
 /// "you've been attacked this step" (CR 508.1).
 fn attacked_this_step(c: &str) -> Option<Condition> {
-    matches!(c, "you've been attacked this step" | "you were attacked this step").then(|| {
-        Condition::Custom(super::restrictions_timing::ATTACKED_THIS_STEP.into())
-    })
+    matches!(
+        c,
+        "you've been attacked this step" | "you were attacked this step"
+    )
+    .then(|| Condition::Custom(super::restrictions_timing::ATTACKED_THIS_STEP.into()))
 }
 
 /// Conditions restrictions use about the source in combat, its abilities and hands:
@@ -251,16 +257,22 @@ fn restriction_state(c: &str) -> Option<Condition> {
     }
     let hand = |r: &str| -> Option<(Cmp, Value)> {
         let (cmp, n, rest) = amount_cmp(r)?;
-        matches!(rest.trim(), "cards in hand" | "cards in your hand" | "card in hand")
-            .then_some((cmp, n))
+        matches!(
+            rest.trim(),
+            "cards in hand" | "cards in your hand" | "card in hand"
+        )
+        .then_some((cmp, n))
     };
     if let Some((cmp, n)) = c.strip_prefix("you have ").and_then(hand) {
         return Some(Condition::Compare(Value::HandSize(PlayerRef::You), cmp, n));
     }
     if let Some((cmp, n)) = c.strip_prefix("a player has ").and_then(|r| {
         let (cmp, n, rest) = amount_cmp(r)?;
-        matches!(rest.trim(), "cards in hand" | "card in hand" | "cards in their hand")
-            .then_some((cmp, n))
+        matches!(
+            rest.trim(),
+            "cards in hand" | "card in hand" | "cards in their hand"
+        )
+        .then_some((cmp, n))
     }) {
         return Some(Condition::Compare(
             Value::CountPlayers(PlayerFilter::HandSize(cmp, Box::new(n))),
@@ -277,7 +289,9 @@ fn cast_another_spell(c: &str) -> Option<Condition> {
     let c = crate::oracle::phrases::end(c);
     match c {
         "you've cast another spell this turn" => {
-            return Some(Condition::Custom(crate::spell_costs::CAST_ANOTHER_SPELL.into()))
+            return Some(Condition::Custom(
+                crate::spell_costs::CAST_ANOTHER_SPELL.into(),
+            ))
         }
         "you've cast another instant or sorcery spell this turn" => {
             return Some(Condition::Custom(
@@ -495,6 +509,8 @@ pub(crate) enum Who {
     Opponents,
     /// "Only the controller of the enchanted creature may activate this ability."
     EnchantedController,
+    /// "Only ~'s owner may activate this ability." (Personal Incarnation).
+    Owner,
     /// "Only the player ~ is attacking may activate this ability" (Capricopian): the
     /// player the source is attacking (not a planeswalker or battle, CR 506.2).
     AttackedPlayer,
@@ -524,7 +540,10 @@ pub(crate) fn restriction_sentence(s: &str, ctx: &CompileContext) -> Option<(Vec
     }
     for (head, who) in [
         ("any player may activate this ability", Who::AnyPlayer),
-        ("only your opponents may activate this ability", Who::Opponents),
+        (
+            "only your opponents may activate this ability",
+            Who::Opponents,
+        ),
         (
             "only the controller of the enchanted creature may activate this ability",
             Who::EnchantedController,
@@ -533,6 +552,7 @@ pub(crate) fn restriction_sentence(s: &str, ctx: &CompileContext) -> Option<(Vec
             "only the player ~ is attacking may activate this ability",
             Who::AttackedPlayer,
         ),
+        ("only ~'s owner may activate this ability", Who::Owner),
     ] {
         if let Some(r) = s.strip_prefix(head) {
             if r.is_empty() {
@@ -618,6 +638,11 @@ pub(crate) fn apply(act: &mut ActivatedAbility, clauses: Vec<Clause>, who: Who) 
         }
         Who::AttackedPlayer => {
             act.activator = Some(PlayerFilter::Ref(Box::new(PlayerRef::DefendingPlayer)))
+        }
+        Who::Owner => {
+            act.activator = Some(PlayerFilter::Ref(Box::new(PlayerRef::OwnerOf(Box::new(
+                Sel::This,
+            )))))
         }
     }
     Some(())
@@ -746,7 +771,8 @@ mod tests {
         .unwrap();
         assert_eq!(who, Who::AnyPlayer);
         assert!(matches!(cl[..], [Clause::When(Condition::And(_), None)]));
-        let (cl, _) = restriction_sentence("activate no more than three times each turn.", &c).unwrap();
+        let (cl, _) =
+            restriction_sentence("activate no more than three times each turn.", &c).unwrap();
         assert!(matches!(cl[..], [Clause::PerTurn(3)]));
         let (cl, _) = restriction_sentence("activate no more than twice each turn.", &c).unwrap();
         assert!(matches!(cl[..], [Clause::PerTurn(2)]));
@@ -761,9 +787,11 @@ mod tests {
             cl[..],
             [Clause::When(..), Clause::If(_), Clause::PerTurn(1)]
         ));
-        let (cl, _) =
-            restriction_sentence("activate only during an opponent's turn and only before combat.", &c)
-                .unwrap();
+        let (cl, _) = restriction_sentence(
+            "activate only during an opponent's turn and only before combat.",
+            &c,
+        )
+        .unwrap();
         assert!(matches!(cl[..], [Clause::When(..), Clause::When(..)]));
         let (cl, _) =
             restriction_sentence("you can't activate this ability during combat.", &c).unwrap();

@@ -804,8 +804,46 @@ impl Renderer<'_> {
                 "during the declare attackers step".into()
             }
             Condition::Phase(PhaseCond::EndStep) => "during the end step".into(),
+            Condition::Phase(PhaseCond::DrawStep) => "during the draw step".into(),
             Condition::Custom(n) if n == "restrictions:declare_blockers_step" => {
                 "during the declare blockers step".into()
+            }
+            // CR 503.2: after the first upkeep step of the turn, on an opponent's turn or
+            // on yours.
+            Condition::And(v)
+                if matches!(v.as_slice(), [Condition::NotYourTurn | Condition::YourTurn, Condition::Custom(n)]
+                    if n == crate::turn_structure::AFTER_UPKEEP) =>
+            {
+                if matches!(v[0], Condition::YourTurn) {
+                    "during your turn after your upkeep step".into()
+                } else {
+                    "during an opponent's turn after their upkeep step".into()
+                }
+            }
+            // "Cast ~ only during combat on your turn [before blockers are declared]": the
+            // combat of that turn.
+            Condition::And(v)
+                if matches!(
+                    v.as_slice(),
+                    [
+                        Condition::YourTurn | Condition::NotYourTurn,
+                        Condition::Phase(PhaseCond::Combat) | Condition::CombatTiming(_)
+                    ]
+                ) =>
+            {
+                let whose = if matches!(v[0], Condition::YourTurn) {
+                    "your turn"
+                } else {
+                    "an opponent's turn"
+                };
+                let b = self.cast_only_condition(&v[1]);
+                match b.strip_prefix("during combat") {
+                    Some(rest) => format!("during combat on {whose}{rest}"),
+                    None => {
+                        let a = self.cast_only_condition(&v[0]);
+                        format!("{a} and only {b}")
+                    }
+                }
             }
             // "Cast ~ only during the declare attackers step and only if you've been
             // attacked this step."
@@ -1034,6 +1072,12 @@ impl Renderer<'_> {
     /// [`Self::play_permission`], saying where the cards are with `from` if given.
     fn play_permission_from(&mut self, pp: &PlayPermission, from: Option<String>) -> String {
         let who = self.rel_subject(pp.who);
+        // A permission for any player is for each player.
+        let who = if matches!(pp.who, PlayerRel::Any) && who == "a player" {
+            "{alt:a player|each player}".to_string()
+        } else {
+            who
+        };
         let p = if who == "you" { "your" } else { "their" };
         // A spell isn't a land, and it's the card that's cast (CR 305.9): "nonland" and
         // "card" in what may be cast say nothing more.
@@ -1501,6 +1545,32 @@ impl Renderer<'_> {
             None => target,
         };
         let act = if is_spell { "to cast" } else { "to activate" };
+        // "Dash costs you pay cost {2} less", "Flashback costs your opponents pay cost {2}
+        // more": the costs of a keyword ability (to cast or activate with it) a player
+        // pays.
+        let keyword_costs = match (&cm.applies_to, cm.who) {
+            (CostTarget::Keyword(k), PlayerRel::You) => {
+                Some(format!("{} costs you pay cost", k.name()))
+            }
+            (CostTarget::Keyword(k), PlayerRel::Opponent) => {
+                Some(format!("{} costs your opponents pay cost", k.name()))
+            }
+            _ => None,
+        };
+        if let (Some(kc), CostChange::IncreaseGeneric(v) | CostChange::ReduceGeneric(v)) =
+            (&keyword_costs, &cm.change)
+        {
+            if !matches!(v, Value::Min(..)) {
+                let (amt, tail) = self.cost_amount(v);
+                let dir = if matches!(cm.change, CostChange::IncreaseGeneric(_)) {
+                    "more"
+                } else {
+                    "less"
+                };
+                let one = format!("{target}{who} cost {amt} {dir} {act}{tail}");
+                return format!("{{alt:{one}|{kc} {amt} {dir}{tail}}}");
+            }
+        }
         let costs = if matches!(cm.applies_to, CostTarget::ThisSpell) {
             "costs"
         } else {
@@ -1561,6 +1631,26 @@ impl Renderer<'_> {
                 };
                 let n = self.noun(&f, Num::Many);
                 format!("spend only mana produced by {n} to cast ~")
+            }
+            // "Spend only mana produced by Treasures to cast it this way."
+            CostChange::Rule(CostRule::CastThisWay { rule, .. })
+                if matches!(&**rule, CostRule::OnlyManaFrom(_)) =>
+            {
+                let f = match &**rule {
+                    CostRule::OnlyManaFrom(f) => &*f.0,
+                    _ => &Filter::Any,
+                };
+                let f = match f {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::InZone(ZoneKind::Battlefield)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let n = self.noun(&f, Num::Many);
+                format!("spend only mana produced by {n} to cast it this way")
             }
             CostChange::Rule(CostRule::XAtMost(v)) => {
                 let v = self.value(v);
@@ -1991,6 +2081,10 @@ impl Renderer<'_> {
         }
         let s = self.value(inner);
         if let Some(r) = s.strip_prefix("the number of ") {
+            // "the number of times you've cast ..." is one for each time.
+            if let Some(t) = r.strip_prefix("times ") {
+                return Some((k, format!("time {t}")));
+            }
             return Some((k, r.to_string()));
         }
         None
@@ -2659,6 +2753,14 @@ impl Renderer<'_> {
                     format!("damage that would be dealt by {n} can't be prevented")
                 }
             }
+            Restriction::DamageToCantBePreventedOrRedirected(f) => {
+                let n = self.noun(f, Num::One);
+                format!("damage that would be dealt to {n} this turn can't be prevented or dealt instead to another permanent or player")
+            }
+            Restriction::SourceDamageToCantBePreventedOrRedirected { to, .. } => {
+                let n = self.noun_det(to, Det::A);
+                format!("if ~ would deal damage to {n}, that damage can't be prevented or dealt instead to another permanent or player")
+            }
             Restriction::CantTransform(f) => format!("{} can't transform", subj(self, f)),
             // "As long as enchanted creature is face down, it can't be turned face up."
             Restriction::CantTurnFaceUp(Filter::And(v))
@@ -2895,7 +2997,24 @@ impl Renderer<'_> {
                     A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
-                        format!("{subj} enters with {c} on {it}{}", w.unwrap_or_default())
+                        let one = format!(
+                            "{subj} enters with {c} on {it}{}",
+                            w.clone().unwrap_or_default()
+                        );
+                        // "~ enters with a +1/+1 counter on it for each land you control":
+                        // one counter for each thing counted.
+                        match w
+                            .as_deref()
+                            .and_then(|w| w.strip_prefix(", where X is the number of "))
+                        {
+                            Some(each) if c.starts_with("X ") && !one.contains('{') => {
+                                let a = with_article(&counter_name(k));
+                                format!(
+                                    "{{alt:{one}|{subj} enters with {a} on {it} for each {each}}}"
+                                )
+                            }
+                            _ => one,
+                        }
                     }
                     // "~ escapes with a +1/+1 counter on it" (CR 702.138c).
                     A::AsEnters(e)
@@ -2992,6 +3111,7 @@ impl Renderer<'_> {
                     }
                     A::Prevent => format!("{subj} can't enter the battlefield"),
                     other @ (A::PreventAmount(_)
+                    | A::PreventPerSource(_)
                     | A::PreventPortion(_)
                     | A::Multiply(_)
                     | A::Add(_)
@@ -3022,7 +3142,7 @@ impl Renderer<'_> {
             (E::Transforms, A::AsEnters(e)) => {
                 let m = self.me();
                 let e = self.effect(e);
-                format!("as {m} transforms, {e}")
+                format!("as {m} transforms {{opt:into ~}}, {e}")
             }
             // --- Zone changes.
             (E::Dies(f), action) => {
@@ -3506,6 +3626,10 @@ impl Renderer<'_> {
                     A::Multiply(3) => {
                         "it produces three times as much of that mana instead".to_string()
                     }
+                    // CR 107.4c: {C} is one colorless mana.
+                    A::ManaTypeInstead(crate::mana::ManaType::C) => {
+                        "it produces {alt:{C}|colorless mana} instead of any other type".into()
+                    }
                     A::ManaTypeInstead(t) => {
                         format!("it produces {} instead of any other type", mana_symbol(*t))
                     }
@@ -3963,7 +4087,7 @@ impl Renderer<'_> {
                 format!("{first}. {then}")
             }
             A::Prevent => "prevent that event".into(),
-            A::PreventAmount(v) | A::PreventPortion(v) => {
+            A::PreventAmount(v) | A::PreventPortion(v) | A::PreventPerSource(v) => {
                 let v = self.value(v);
                 format!("prevent {v} of that damage")
             }
@@ -4472,6 +4596,10 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
         CostRule::OnlyChosenColor => {
             "spend only mana of the chosen color to activate this ability".into()
         }
+        CostRule::CastThisWay { rule, .. } => match &**rule {
+            CostRule::XAtLeast(1) => "if you cast ~ this way, X can't be 0".into(),
+            r => format!("{} if you cast ~ this way", cost_rule_text(r)),
+        },
     }
 }
 
@@ -4515,6 +4643,7 @@ impl Renderer<'_> {
             ManaChangeTo::Type(ManaType::C) => "{alt:colorless mana|{C}}".to_string(),
             ManaChangeTo::Type(t) => mana_symbol(t),
             ManaChangeTo::ColorOfChoice => format!("{one}mana of a color of your choice"),
+            ManaChangeTo::ChosenColor => format!("{one}mana of the chosen color"),
         };
         let colored = [
             ManaType::W,

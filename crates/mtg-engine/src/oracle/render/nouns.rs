@@ -365,9 +365,45 @@ impl Renderer<'_> {
                 if let (Some(p), Some(t)) = (pt, tt) {
                     np.status.push(format!("{p}/{t}"));
                 }
+                // "tokens created with ~": a token linked to the source was created by
+                // one of its abilities (CR 607.2c; an exiled token ceases to exist).
+                let created = v.iter().any(|x| matches!(x, Filter::Token))
+                    && !v.iter().any(|x| matches!(x, Filter::InZone(ZoneKind::Exile)))
+                    && v.iter()
+                        .any(|x| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked)));
+                // "cards they exiled with ~": cards exiled with the source by the player
+                // the permission is for (`kw/exile_provenance.rs`).
+                let linked = |x: &Filter| matches!(x, Filter::In(s) if matches!(s.as_ref(), Sel::Linked));
+                let exiled_by = v.iter().find_map(|x| match x {
+                    Filter::Custom(n) if n == crate::kw::exile_provenance::EXILED_BY_THEM => {
+                        Some("they")
+                    }
+                    Filter::Custom(n) if n == crate::kw::exile_provenance::EXILED_BY_YOU => {
+                        Some("you")
+                    }
+                    _ => None,
+                });
+                let exiled_by = exiled_by.filter(|_| v.iter().any(linked));
                 // The same quality twice says it once.
                 let mut seen: Vec<String> = Vec::new();
                 for x in v {
+                    if created && linked(x) {
+                        np.post.push("created with ~it".into());
+                        self.self_salient = true;
+                        continue;
+                    }
+                    if let Some(w) = exiled_by {
+                        if linked(x) {
+                            np.post.push(format!("{w} exiled with ~it"));
+                            np.zone_said = true;
+                            self.self_salient = true;
+                            continue;
+                        }
+                        if matches!(x, Filter::Custom(n) if crate::kw::exile_provenance::is_provenance(n) && n != crate::kw::exile_provenance::EXILED_THIS_TURN)
+                        {
+                            continue;
+                        }
+                    }
                     if both
                         && matches!(x, Filter::Power(Cmp::Eq, _) | Filter::Toughness(Cmp::Eq, _))
                     {
@@ -550,6 +586,11 @@ impl Renderer<'_> {
             Filter::PermanentCard => {
                 np.permanent_card = true;
                 np.kind = Some("card");
+            }
+            // "Commander spells you cast" (CR 903.3).
+            Filter::Spell if np.kind == Some("commander") => {
+                np.status.push("commander".into());
+                np.kind = Some("spell");
             }
             Filter::Spell | Filter::SpellOnStack => np.kind = Some("spell"),
             Filter::Token => np.kind = Some("token"),
@@ -1054,6 +1095,13 @@ impl Renderer<'_> {
             Filter::Custom(name) if name == crate::kw::trigger_modifiers::EMBLEM => {
                 np.kind = Some("emblem")
             }
+            // "all other activated and triggered abilities you control": on the stack,
+            // other than the one resolving (`kw/referents_5.rs`).
+            Filter::Custom(name) if name == crate::kw::referents_5::OTHER_ABILITY_ON_STACK => {
+                np.kind = Some("activated and triggered ability");
+                np.other = true;
+                np.zone_said = true;
+            }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {
                     use super::custom_filters::CustomQuality as Q;
@@ -1127,6 +1175,11 @@ impl Renderer<'_> {
             Filter::Colorless => np.colors.push("colored".into()),
             Filter::FaceDown => np.status.push("face-up".into()),
             Filter::Source => np.other = true,
+            // The source, or the object it became (CR 400.7): "another creature card from
+            // your graveyard" after ~ died.
+            Filter::Custom(n) if n == crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT => {
+                np.other = true
+            }
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
             // "it gets +1/+1 for each other creature you control": other than "it".
@@ -1273,6 +1326,19 @@ impl Renderer<'_> {
                 let s = self.noun(inner, Num::One);
                 np.rel.push(format!("other than {s}"));
             }
+            // "all creatures except those that share a creature type with a creature that
+            // convoked ~" (CR 702.51c).
+            Filter::Custom(n) if n == crate::kw::damage_history_4::SHARES_TYPE_WITH_CONVOKER => np
+                .rel
+                .push("except those that share a creature type with a creature that convoked ~".into()),
+            // "creatures other than ~ and the chosen creature": other than the source
+            // (said before) and that object.
+            Filter::In(s) if matches!(s.as_ref(), Sel::Var(_)) && np.other && !np.is_self => {
+                np.other = false;
+                let m = self.me();
+                let x = self.noun(inner, Num::One);
+                np.post.push(format!("other than {m} and {x}"));
+            }
             other => {
                 let s = self.noun(other, Num::One);
                 np.rel.push(format!("that isn't {}", with_article(&s)));
@@ -1306,6 +1372,22 @@ impl Renderer<'_> {
         }
         if np.permanent_card {
             words.push("permanent".into());
+        }
+        // "a creature card or Garruk planeswalker card": the kind said with each (for a
+        // card type and a subtype).
+        if let ([a, b], Some("card"), true, true, false, true) = (
+            np.alts.as_slice(),
+            np.kind,
+            types.is_empty() && np.subtypes.is_empty(),
+            words.len() == 1,
+            self.alt_and || np.permanent_card || a_or_b_has_markup(&np.alts),
+            np.alts
+                .iter()
+                .filter(|x| x.chars().next().is_some_and(|c| c.is_uppercase()))
+                .count()
+                == 1,
+        ) {
+            return format!("{{alt:{a} or {b} card|{a} card or {b} card}}");
         }
         match np.kind {
             Some("permanent") if !words.is_empty() => {}
@@ -2353,4 +2435,9 @@ fn merged_alternatives(parts: &[String]) -> Option<String> {
     let k = all[0].len() - n + i;
     out[k] = join_list(&alts, "or");
     Some(out.join(" "))
+}
+
+/// Whether any of the alternatives has markup (an alternative or optional words).
+fn a_or_b_has_markup(alts: &[String]) -> bool {
+    alts.iter().any(|a| a.contains('{'))
 }

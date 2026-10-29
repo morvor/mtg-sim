@@ -119,9 +119,9 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
         crate::kwa::vote::GOT_VOTES => rel("with one or more votes"),
         crate::battle::PROTECTED_BY_OPPONENT => rel("an opponent protects"),
         // An object the source can legally be attached to (CR 301.5c, 303.4k, 701.3b).
-        crate::attach::SOURCE_CAN_ATTACH | crate::kw::attach_each::CAN_ATTACH_IT => {
-            Some(Implied)
-        }
+        // "a creature you control it could be attached to": said or not.
+        crate::attach::SOURCE_CAN_ATTACH => rel("{opt:it could be attached to}"),
+        crate::kw::attach_each::CAN_ATTACH_IT => Some(Implied),
         n if n.starts_with(hga::PUT_THERE_THIS_TURN) => {
             match &n[hga::PUT_THERE_THIS_TURN.len()..] {
                 "" => rel("{alt:that was put there this turn|that were put there this turn|that was put there from anywhere this turn|that were put there from anywhere this turn}"),
@@ -319,6 +319,25 @@ impl Renderer<'_> {
     /// target player's graveyard", "the top creature card of defending player's
     /// graveyard", "~" (the source, or the object it became).
     pub(crate) fn custom_whole_noun(&mut self, f: &Filter) -> Option<String> {
+        if let Some(s) = self.top_cards_of_graveyard(f) {
+            return Some(s);
+        }
+        // The object noted for the linked abilities, as it last existed (CR 607.2c,
+        // 607.2d).
+        if let Some(n) = &self.info.noted {
+            let noted = |a: &Filter| matches!(a, Filter::Custom(x) if x == crate::kw::trigger_events::NOTED_AS_IT_LAST_EXISTED);
+            let atoms: Vec<&Filter> = match f {
+                Filter::And(v) => v.iter().collect(),
+                other => vec![other],
+            };
+            if atoms.iter().any(|a| noted(a))
+                && atoms
+                    .iter()
+                    .all(|a| noted(a) || matches!(a, Filter::Type(_) | Filter::Permanent))
+            {
+                return Some(n.clone());
+            }
+        }
         let atoms: Vec<&Filter> = match f {
             Filter::And(v) => v.iter().collect(),
             other => vec![other],

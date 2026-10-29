@@ -74,6 +74,9 @@ pub struct PlayerControlState {
     /// A player who may activate only mana abilities of lands they control right now
     /// (Word of Command, CR 723.7).
     pub lands_only_mana: Option<PlayerId>,
+    /// The card that player is playing then: the mana those abilities produce may be
+    /// spent only to play it or to activate other mana abilities of lands they control.
+    pub lands_only_card: Option<ObjectId>,
 }
 
 /// `StaticEffect::Custom` name: "You control your opponents while they're searching
@@ -281,6 +284,40 @@ pub fn mana_source_allowed(g: &Game, p: PlayerId, source: ObjectId) -> bool {
     }
 }
 
+/// The spending restriction (CR 106.6) on mana `p` adds with a mana ability of `src` while
+/// they're restricted to the mana abilities of their lands (Word of Command, CR 723.7):
+/// that mana "is spent to activate other mana abilities of lands the player controls
+/// and/or to play that card", so it can pay only for casting that card (the spell it is
+/// now) or for a mana ability of a land they control.
+pub fn lands_only_mana_restriction(
+    g: &Game,
+    p: PlayerId,
+    src: ObjectId,
+) -> Option<crate::mana::ManaRestriction> {
+    use crate::ability::Filter;
+    use crate::mana::{ManaRestriction, SpendFilter};
+    if g.player_control.lands_only_mana != Some(p) {
+        return None;
+    }
+    let o = g.try_obj(src)?;
+    if !(o.is(CardType::Land) && o.controller == p) {
+        return None;
+    }
+    let spell: Vec<ObjectId> = g
+        .player_control
+        .lands_only_card
+        .map(|c| g.current(c))
+        .into_iter()
+        .collect();
+    Some(ManaRestriction::AnyOf(vec![
+        ManaRestriction::CastSpell(SpendFilter::new(Filter::Objects(spell))),
+        ManaRestriction::ActivateManaAbilityOf(SpendFilter::new(Filter::and(vec![
+            Filter::Type(CardType::Land),
+            Filter::ControlledBy(crate::ability::PlayerRel::You),
+        ]))),
+    ]))
+}
+
 /// `controller` controls `player` for a limited duration, starting now.
 fn control_now(g: &mut Game, controller: PlayerId, player: PlayerId, span: ControlSpan) {
     let timestamp = g.new_timestamp();
@@ -326,8 +363,13 @@ fn word_of_command_step(g: &mut Game, step: &str, slot: u8, ctx: &mut Ctx) {
         }
         "play" | "play-lands" => {
             let before = g.player_control.lands_only_mana;
+            let before_card = g.player_control.lands_only_card;
             if step == "play-lands" {
                 g.player_control.lands_only_mana = Some(p);
+                g.player_control.lands_only_card = ctx
+                    .vars
+                    .get(&CHOSEN)
+                    .and_then(|v| v.iter().find_map(|e| e.object()));
             }
             let play = Effect::PlayCard {
                 who: PlayerRef::Player(p),
@@ -337,6 +379,7 @@ fn word_of_command_step(g: &mut Game, step: &str, slot: u8, ctx: &mut Ctx) {
             };
             g.exec(&play, ctx);
             g.player_control.lands_only_mana = before;
+            g.player_control.lands_only_card = before_card;
             // The spell it was cast as, if it was.
             let chosen: Vec<ObjectId> = ctx
                 .vars
@@ -517,6 +560,15 @@ impl KeywordRules for PlayerControlRules {
             gain_control(g, controller, p, span, extra);
         }
         true
+    }
+
+    fn added_mana_restriction(
+        &self,
+        g: &Game,
+        p: PlayerId,
+        src: ObjectId,
+    ) -> Option<crate::mana::ManaRestriction> {
+        lands_only_mana_restriction(g, p, src)
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
