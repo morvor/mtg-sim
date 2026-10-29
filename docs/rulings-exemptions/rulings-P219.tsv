@@ -1,0 +1,4 @@
+Bruvac the Grandiloquent	Many cards printed before the Core Set 2021 release have received errata	Oracle-wording history: an errata note pointing to Gatherer, no game behavior
+The Water Crystal	Some older cards have received errata to instruct a player to mill cards	Oracle-wording history: an errata note pointing to Gatherer, no game behavior
+Zephyrim	See also "New Keyword Ability: Squad"	Release-notes cross-reference, no game behavior
+Deranged Assistant	Once Deranged Assistant’s ability has been activated, it can’t be reversed for any reason.	Superseded: under the current CR 605.1a an ability whose cost mills a card (moves a card from a library) is not a mana ability, so it uses the stack and can't be activated while casting a spell (Millikin's ruling; tested in tests/rulings/r_p219_mill_resolution.rs)

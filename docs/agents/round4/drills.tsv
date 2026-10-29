@@ -1,0 +1,915 @@
+id	card	probe_text	result
+opp-chooses-top2	Divination	Target opponent chooses one of the top two cards of your library. Put that card into your hand and the other into your graveyard.	FAIL
+opp-chooses-hand	Divination	Target opponent chooses a card in your hand. Discard that card.	FAIL
+cast-the-other	Divination	Exile the top three cards of your library. An opponent chooses one of those cards. Put that card into your graveyard. You may cast the other cards without paying their mana costs.	FAIL
+cast-the-rest	Divination	Exile the top three cards of your library. You may cast the rest without paying their mana costs.	FAIL
+aura-attached-ret	Divination	Return target Aura card from your graveyard to the battlefield attached to target creature you control.	OK
+aura-anynum	Divination	Return any number of Aura cards from your graveyard to the battlefield attached to creatures you control.	FAIL
+aura-search-attached	Grizzly Bears	When ~ enters, search your library for an Aura card, put it onto the battlefield attached to ~, then shuffle.	OK
+aura-couldenchant	Grizzly Bears	When ~ enters, search your library for an Aura card that could enchant ~, put it onto the battlefield attached to ~, then shuffle.	OK
+still-on-bf	Grizzly Bears	When ~ enters, draw a card. If ~ is still on the battlefield, put a +1/+1 counter on it.	FAIL
+attach-player	Curse of Death's Hold	When ~ enters, attach it to target player.	OK
+attach-random-opp	Curse of Death's Hold	At the beginning of your upkeep, attach ~ to an opponent chosen at random.	FAIL
+attach-another-opp	Curse of Death's Hold	At the beginning of your upkeep, attach ~ to another one of your opponents.	FAIL
+choose-random-creature	Pacifism	When enchanted creature dies, return ~ to the battlefield attached to a creature chosen at random.	OK
+reveal-until-ctl	Divination	The controller of target artifact reveals cards from the top of their library until they reveal an artifact card. That player puts that card onto the battlefield, then shuffles.	FAIL
+reveal-until-shares	Divination	Destroy target permanent. Its controller reveals cards from the top of their library until they reveal a card that shares a card type with it, puts that card onto the battlefield, then shuffles.	OK
+foreach-exiled-reveal	Divination	Exile target creature. For each creature exiled this way, its controller reveals cards from the top of their library until they reveal a creature card, puts that card onto the battlefield, then shuffles.	OK
+put-under-opp	Divination	Search your library for a basic land card and put it onto the battlefield tapped under an opponent's control, then shuffle.	OK
+put-split	Divination	Search your library for up to three basic land cards and reveal them. Put one of them onto the battlefield tapped and the rest into your hand. Then shuffle.	OK
+put-two-of-them	Divination	Search your library for up to four basic land cards and reveal them. Put two of them onto the battlefield tapped and the rest into your hand. Then shuffle.	OK
+top-or-bottom-owner	Divination	The owner of target nonland permanent puts it on their choice of the top or bottom of their library.	OK
+top-or-bottom-owner2	Divination	Target nonland permanent's owner puts it on the top or bottom of their library.	OK
+same-name-exile	Divination	Exile target card from a graveyard and all other cards from graveyards with the same name as that card.	OK
+same-name-perm	Divination	Exile target card from a graveyard and all permanents with that name.	OK
+same-name-chosen-land	Divination	Choose a land you control. Search your library for a basic land card with the same name as the chosen land, put it onto the battlefield tapped, then shuffle.	OK
+gy-or-exile	Grizzly Bears	{2}{G}: Return ~ from your graveyard or from exile to the battlefield tapped.	FAIL
+gy-or-hand-exile-counter	Grizzly Bears	When ~ enters, you may exile a creature card from your hand or graveyard.	FAIL
+exile-put-counter	Grizzly Bears	When ~ enters, you may exile a creature card from your graveyard and put a cage counter on it.	OK
+each-opp-exile-revealed	Grizzly Bears	When ~ enters, each opponent reveals their hand. For each opponent, exile a creature card they revealed this way.	FAIL
+play-from-exile-counter	Grizzly Bears	You may play lands and cast spells from among cards you own in exile with fetch counters on them.	OK
+play-exiled-by-you	Grizzly Bears	You may play cards exiled with ~.	OK
+spend-any-color-exiled	Grizzly Bears	You may play cards exiled with ~, and you may spend mana as though it were mana of any color to cast those spells.	OK
+emblem-quoted	Grizzly Bears	When ~ enters, you get an emblem with "Creatures you control get +1/+1."	OK
+each-player-exiled-with	Grizzly Bears	Each player may play lands and cast spells from among cards they own exiled with ~.	FAIL
+for-as-long-one-of	Grizzly Bears	When ~ enters, exile the top three cards of target opponent's library. For as long as you control ~, you may play one of the exiled cards.	OK
+once-each-turn-play	Grizzly Bears	Once each turn, you may play a card from exile with a collection counter on it.	OK
+for-each-type-cast	Divination	Exile the top eight cards of your library. Until end of turn, for each nonland card type, you may cast a spell of that type from among the exiled cards without paying its mana cost.	FAIL
+up-to-one-andor	Divination	You may cast up to one target instant card and/or up to one target sorcery card from your graveyard without paying their mana costs.	FAIL
+each-of-those-opp	Grizzly Bears	Whenever one or more creatures you control deal damage to your opponents, exile the top card of each of those opponents' libraries.	FAIL
+exiled-gains-quoted	Divination	Exile a card from your hand. It gains "At the beginning of your upkeep, if ~ is exiled, draw a card."	OK
+last-time-counter	Divination	Exile a card from your hand and put three time counters on it. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it without paying its mana cost."	OK
+exile-spell-counters	Grizzly Bears	Whenever you cast your second spell each turn, exile that spell with four time counters on it. If it doesn't have suspend, it gains suspend.	OK
+mana-art-split	Grizzly Bears	Each spell you cast has flying if mana from an artifact was spent to cast it.	FAIL
+treasure-first-spell	Grizzly Bears	The first spell you cast each turn has cascade.	OK
+any-type-one-spell	Divination	For one spell this turn, you may spend mana as though it were mana of any type to pay that spell's mana cost.	FAIL
+any-color-thisturn	Divination	Until end of turn, you may spend mana as though it were mana of any color to cast spells.	FAIL
+reveal-first-draw	Grizzly Bears	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant card this way, draw a card.	OK
+reveal-first-draw2	Grizzly Bears	Reveal the first card you draw each turn. Whenever you reveal a land card this way, draw a card.	OK
+0a	Phyrexian Grimoire	{4}, {T}: Target opponent chooses a card in your graveyard. Exile that card.	OK
+0b	Phyrexian Grimoire	{4}, {T}: Choose one of the top two cards of your graveyard. Exile that card.	FAIL
+1a	Shadow the Hedgehog	Each spell you cast has split second.	OK
+1b	Shadow the Hedgehog	Whenever you cast a spell, if mana from an artifact was spent to cast it, draw a card.	FAIL
+2a	Emergent Ultimatum	Search your library for up to three monocolored cards with different names and exile them. You may cast those cards without paying their mana costs. Exile ~.	OK
+3a	Ensnared by the Mara	Each opponent faces a villainous choice — They exile cards from the top of their library until they exile a nonland card, then you may cast that card without paying its mana cost, or that player loses 4 life.	OK
+3b	Ensnared by the Mara	Each opponent exiles cards from the top of their library until they exile a nonland card. You may cast that card without paying its mana cost.	OK
+3c	Ensnared by the Mara	Each opponent faces a villainous choice — That player loses 2 life, or that player exiles the top four cards of their library and ~ deals damage equal to the total mana value of those exiled cards to that player.	FAIL
+4a	Storm Herald	When ~ enters, return up to two target Aura cards from your graveyard to the battlefield attached to target creature you control.	OK
+5a	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, that player can't cast spells.	OK
+5b	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time, you may play the top card of their library, and you may spend mana as though it were mana of any color to cast spells this way.	FAIL
+5c	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of their library.	FAIL
+6a	Alaundo the Seer	{T}: Draw a card, then exile a card from your hand and put a number of time counters on it equal to its mana value. It gains "When the last time counter is removed from ~, if it's exiled, you may cast it without paying its mana cost."	OK
+6b	Alaundo the Seer	{T}: Draw a card. Then remove a time counter from each other card you own in exile.	OK
+7a	Shape Anew	The controller of target artifact sacrifices it. That player draws a card.	FAIL
+7b	Shape Anew	Destroy target artifact. Its controller reveals cards from the top of their library until they reveal an artifact card. That player puts that card onto the battlefield, then shuffles all other cards revealed this way into their library.	OK
+8a	Mirror of Fate	{T}, Sacrifice ~: Choose up to seven target face-up exiled cards you own. Put them on top of your library.	OK
+8b	Mirror of Fate	{T}, Sacrifice ~: Exile all the cards from your library.	OK
+9a	Auratouched Mage	When ~ enters, search your library for an Aura card that could enchant it, put it onto the battlefield attached to ~, then shuffle.	OK
+10a	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, draw a card.	OK
+10b	God-Eternal Kefnet	You may reveal the first card you draw each turn as you draw it. Whenever you reveal an instant or sorcery card this way, copy that card and you may cast the copy.	FAIL
+11a	Curse of Leeches // Leeching Lurker	As ~ enters, attach it to a player.	FAIL
+12a	Evelyn, the Covetous	Once each turn, you may play a card from exile with a collection counter on it, and you may spend mana as though it were mana of any color to cast it.	OK
+12b	Evelyn, the Covetous	Once each turn, you may play a card from exile with a collection counter on it if it was exiled by an ability you controlled.	FAIL
+13a	Maddening Hex	Whenever enchanted player casts a noncreature spell, roll a d6. ~ deals damage to that player equal to the result. Then attach ~ to another target opponent.	FAIL
+14a	Canoptek Wraith	When ~ deals combat damage to a player, you may pay {3} and sacrifice it. If you do, choose a land you control. Then search your library for up to two basic land cards with the same name as the chosen land, put them onto the battlefield tapped, then shuffle.	OK
+15a	Wandering Archaic // Explore the Vastlands	Each player looks at the top five cards of their library and may reveal a land card from among them. Each player puts the cards they revealed this way into their hand and the rest on the bottom of their library in a random order.	FAIL
+15b	Wandering Archaic // Explore the Vastlands	Each player looks at the top five cards of their library. Each player may put a land card from among them into their hand and the rest on the bottom of their library in a random order.	FAIL
+16a	Haldan, Avid Arcanist	You may play lands and cast noncreature spells from among cards you own in exile that have fetch counters on them.	OK
+17a	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards and put them onto the battlefield tapped under your control, then shuffle.	OK
+18a	Reweave	Target permanent's controller sacrifices it. If the player does, they draw a card.	OK
+18b	Reweave	Destroy target permanent. Its controller reveals cards from the top of their library until they reveal a permanent card that shares a card type with the destroyed permanent, puts that card onto the battlefield, then shuffles.	FAIL
+20a	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Those permanents' owners shuffle them into their libraries.	FAIL
+20b	Guff Rewrites History	Shuffle target nonland permanent into its owner's library.	OK
+21a	Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, each opponent reveals their hand. For each opponent, exile a creature card that player revealed this way until ~ leaves the battlefield.	FAIL
+21b	Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, target opponent reveals their hand. Exile a creature card from it until ~ leaves the battlefield.	OK
+22a	Valki, God of Lies // Tibalt, Cosmic Impostor	As ~ enters, you get an emblem with "You may play cards exiled with ~."	FAIL
+22b	Valki, God of Lies // Tibalt, Cosmic Impostor	When ~ enters, you get an emblem with "You may play cards exiled with ~, and you may spend mana as though it were mana of any color to cast those spells."	OK
+24a	Chaotic Transformation	Exile up to one target artifact and/or up to one target creature. For each permanent exiled this way, its controller reveals cards from the top of their library until they reveal a card that shares a card type with it, puts that card onto the battlefield, then shuffles.	FAIL
+25a	Curse of Misfortunes	At the beginning of your upkeep, you may search your library for a Curse card, put it onto the battlefield attached to enchanted player, then shuffle.	FAIL
+25b	Curse of Misfortunes	At the beginning of your upkeep, you may search your library for a Curse card that doesn't have the same name as a permanent you control, put it into your hand, then shuffle.	OK
+26a	Verdant Mastery	Search your library for up to four basic land cards and reveal them. Put one of them onto the battlefield tapped under an opponent's control. Put two of them onto the battlefield tapped under your control and the rest into your hand. Then shuffle.	FAIL
+26b	Verdant Mastery	Search your library for up to four basic land cards and reveal them. Put two of them onto the battlefield tapped under your control and the rest into your hand. Then shuffle.	OK
+27a	Moratorium Stone	{2}{W}{B}, {T}, Sacrifice ~: Exile target nonland card from a graveyard, all other cards from graveyards with the same name as that card, and all permanents with that name.	FAIL
+27b	Moratorium Stone	{2}{W}{B}, {T}, Sacrifice ~: Exile target nonland card from a graveyard and all other cards from graveyards with the same name as that card.	OK
+28a	Kotose, the Silent Spider	When ~ enters, exile target card other than a basic land card from an opponent's graveyard. For as long as you control ~, you may play one of the exiled cards, and you may spend mana as though it were mana of any color to cast it.	FAIL
+28b	Kotose, the Silent Spider	When ~ enters, exile target card other than a basic land card from an opponent's graveyard. For as long as you control ~, you may play that card, and you may spend mana as though it were mana of any color to cast it.	OK
+29a	Enchantment Alteration	Attach target Aura attached to a creature to another creature.	OK
+30a	Aminatou's Augury	Exile the top eight cards of your library. You may put a land card from among them onto the battlefield. Until end of turn, you may cast a spell from among the exiled cards without paying its mana cost.	OK
+31a	Kaboom!	Choose any number of target players or planeswalkers. For each of them, reveal cards from the top of your library until you reveal a nonland card, ~ deals damage equal to that card's mana value to that player or planeswalker, then you put the revealed cards on the bottom of your library in any order.	FAIL
+31b	Kaboom!	Choose target player. Reveal cards from the top of your library until you reveal a nonland card, ~ deals damage equal to that card's mana value to that player, then you put the revealed cards on the bottom of your library in any order.	FAIL
+32a	Knowledge Pool	Whenever a player casts a spell from their hand, that player exiles it. If the player does, they may cast a spell from among cards exiled with ~ without paying its mana cost.	OK
+33a	Share the Spoils	During each player's turn, that player may play a land or cast a spell from among cards exiled with ~.	OK
+33b	Share the Spoils	During each player's turn, that player may play a land or cast a spell from among cards exiled with ~. When they do, exile the top card of their library.	FAIL
+34a	Endless Detour	The owner of target nonland permanent or card in a graveyard puts it on their choice of the top or bottom of their library.	OK
+34b	Endless Detour	The owner of target spell puts it on their choice of the top or bottom of their library.	OK
+35a	Finale of Promise	You may cast up to one target instant card from your graveyard with mana value X or less without paying its mana cost.	OK
+36a	Gonti, Night Minister	Whenever a creature deals combat damage to one of your opponents, its controller looks at the top card of that opponent's library and exiles it face down.	FAIL
+36b	Gonti, Night Minister	Whenever a creature you control deals combat damage to one of your opponents, you look at the top card of that opponent's library and exile it face down. You may play that card for as long as it remains exiled.	FAIL
+37a	Indomitable Creativity	Destroy X target artifacts and/or creatures. For each permanent destroyed this way, its controller reveals cards from the top of their library until an artifact or creature card is revealed and puts that card onto the battlefield, then shuffles.	OK
+38a	Shared Fate	Each player may look at cards they exiled with ~.	FAIL
+38b	Shared Fate	You may look at cards exiled with ~, and you may play lands and cast spells from among those cards.	OK
+39a	Flickerform	{2}{W}{W}: Exile enchanted creature and all Auras attached to it. At the beginning of the next end step, return that card to the battlefield under its owner's control.	OK
+40a	Bruna, Light of Alabaster	Whenever ~ attacks or blocks, you may attach to it any number of Auras on the battlefield.	FAIL
+40b	Bruna, Light of Alabaster	Whenever ~ attacks or blocks, you may put onto the battlefield attached to it any number of Aura cards that could enchant it from your graveyard and/or hand.	FAIL
+41a	Infectious Rage	When enchanted creature dies, return ~ to the battlefield attached to a creature chosen at random.	OK
+42a	Rain of Riches	The first spell you cast each turn that mana from a Treasure was spent to cast has cascade.	FAIL
+42b	Rain of Riches	Each spell you cast that mana from a Treasure was spent to cast has cascade.	FAIL
+44a	Cass, Hand of Vengeance	Whenever ~ or another creature you control dies, if it was enchanted or equipped, return any number of Aura cards that were attached to it from your graveyard to the battlefield attached to target creature.	FAIL
+44b	Cass, Hand of Vengeance	Whenever ~ dies, attach any number of Equipment that were attached to it to target creature.	FAIL
+45a	Guild Feud	At the beginning of your upkeep, target opponent reveals the top three cards of their library, may put a creature card from among them onto the battlefield, then puts the rest into their graveyard.	FAIL
+45b	Guild Feud	At the beginning of your upkeep, reveal the top three cards of your library. You may put a creature card from among them onto the battlefield. Put the rest into your graveyard.	OK
+46a	Grifter's Blade	As ~ enters, choose a creature you control. If you do, it enters attached to that creature.	FAIL
+47a	Territorial Hellkite	At the beginning of combat on your turn, choose an opponent at random. ~ attacks that player this combat if able.	OK
+47b	Territorial Hellkite	At the beginning of combat on your turn, choose an opponent that ~ didn't attack during your last combat. ~ attacks that player this combat if able.	FAIL
+48a	Metamorphic Alteration	As ~ enters, choose a creature. Enchanted creature is a copy of the chosen creature.	FAIL
+49a	Hellish Rebuke	Until end of turn, permanents your opponents control gain "When ~ deals damage to you, sacrifice ~."	OK
+49b	Hellish Rebuke	Until end of turn, creatures your opponents control gain "When ~ deals damage, sacrifice ~. You lose 2 life."	FAIL
+50a	Uvilda, Dean of Perfection // Nassari, Dean of Expression	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "At the beginning of your upkeep, if ~ is exiled, remove a refine counter from it."	OK
+50b	Uvilda, Dean of Perfection // Nassari, Dean of Expression	{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "When the last refine counter is removed from ~, if it's exiled, you may cast it. It costs {4} less to cast this way."	FAIL
+51a	Monk Class	At the beginning of your upkeep, exile the top card of your library. For as long as it remains exiled, it has "You may cast ~ from exile."	FAIL
+51b	Monk Class	At the beginning of your upkeep, exile the top card of your library. You may cast it as long as you've cast another spell this turn.	OK
+52a	Timothar, Baron of Bats	Whenever another nontoken Vampire you control dies, you may pay {1} and exile it. If you do, create a 1/1 black Bat creature token with flying. It gains "When ~ deals combat damage to a player, sacrifice it."	OK
+52b	Timothar, Baron of Bats	Whenever another nontoken Vampire you control dies, you may pay {1} and exile it. If you do, create a 1/1 black Bat creature token with flying and "When ~ deals combat damage to a player, sacrifice it and return the exiled card to the battlefield tapped."	FAIL
+53a	Glyph of Reincarnation	Destroy all creatures that were blocked by target creature this turn.	FAIL
+53b	Glyph of Reincarnation	Destroy all creatures blocked by target Wall this turn.	FAIL
+54a	Paleontologist's Pick-Axe // Dinosaur Headdress	Equipped creature is a copy of the chosen card.	FAIL
+55a	Symbiote Spider-Man	{2}{U/B}, Exile ~ from your graveyard: Put a +1/+1 counter on target creature you control. It gains ~'s abilities. Activate only as a sorcery.	FAIL
+55b	Symbiote Spider-Man	{2}{U/B}, Exile ~ from your graveyard: Put a +1/+1 counter on target creature you control. It gains flying. Activate only as a sorcery.	OK
+56a	Shuriken	Equipped creature has "{T}, Unattach ~: ~ deals 2 damage to target creature. That creature's controller gains control of ~."	OK
+57a	Scheming Fence	As ~ enters, choose a nonland permanent. Activated abilities of the chosen permanent can't be activated.	FAIL
+58a	Scheming Fence	~ has all activated abilities of the chosen permanent.	FAIL
+58b	Scheming Fence	As ~ enters, choose a nonland permanent. ~ has all activated abilities of the chosen permanent except for loyalty abilities.	FAIL
+59a	Toggo, Goblin Weaponsmith	Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature has '{1}, {T}, Sacrifice Rock: This creature deals 2 damage to any target'" and equip {1}.	FAIL
+59b	Toggo, Goblin Weaponsmith	Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature gets +1/+1" and equip {1}.	OK
+60a	Glyph of Delusion	Put X glyph counters on target creature that target creature blocked this turn, where X is the power of that blocked creature.	FAIL
+60b	Glyph of Delusion	Put a glyph counter on target creature. The creature gains "~ doesn't untap during your untap step if it has a glyph counter on it."	OK
+61a	Mairsil, the Pretender	When ~ enters, you may exile an artifact or creature card from your graveyard and put a cage counter on it.	OK
+62a	Close Encounter	As an additional cost to cast ~, choose a creature you control.	FAIL
+63a	Close Encounter	As an additional cost to cast ~, choose a creature you control. ~ deals damage equal to the power of the chosen creature to target creature.	FAIL
+64a	Nethergoyf	Escape—{2}{B}, Exile four other cards from your graveyard.	OK
+64b	Winter, Cynical Opportunist	At the beginning of your end step, you may exile any number of cards from your graveyard. If you do, put a permanent card from among them onto the battlefield with a finality counter on it.	FAIL
+65a	Caged Sun	Whenever a land's ability causes you to add one or more mana of the chosen color, draw a card.	FAIL
+65b	Caged Sun	Whenever a land you control is tapped for mana of the chosen color, add an additional one mana of that color.	FAIL
+66a	Fabrication Foundry	{2}{W}, {T}, Exile one or more other artifacts you control with total mana value X: Draw a card.	FAIL
+66b	Fabrication Foundry	{2}{W}, {T}, Sacrifice one or more other artifacts you control with total mana value X: Draw a card.	FAIL
+67a	Baron Helmut Zemo	Exile any number of black cards from your graveyard: Draw a card.	OK
+69a	Foraging Wickermaw	{1}: Add one mana of any color. Activate only once each turn.	OK
+69b	Foraging Wickermaw	{1}: Choose a color. ~ becomes that color until end of turn.	FAIL
+70a	Charmed Pendant	{T}, Mill a card: Add {C}.	OK
+70b	Charmed Pendant	{T}, Mill a card: For each colored mana symbol in the milled card's mana cost, you gain 1 life.	FAIL
+71a	Boreal Outrider	Whenever you cast a creature spell, if {S} was spent to cast it, that creature enters with an additional +1/+1 counter on it.	FAIL
+72a	Araumi of the Dead Tide	{T}, Exile two cards from your graveyard: Target creature card in your graveyard gains encore until end of turn. The encore cost is equal to its mana cost.	FAIL
+72b	Araumi of the Dead Tide	{T}, Exile cards from your graveyard equal to the number of opponents you have: Draw a card.	FAIL
+73a	Protective Sphere	{1}, Pay 1 life: Prevent all damage that would be dealt to you this turn by a source of your choice.	OK
+73b	Protective Sphere	{1}, Pay 1 life: Prevent all damage that would be dealt to you this turn by a source of your choice that shares a color with ~.	FAIL
+74a	Omnath, Locus of All	At the beginning of your first main phase, look at the top card of your library. You may reveal that card if it has three or more colored mana symbols in its mana cost. If you do, put it into your hand.	FAIL
+74b	Omnath, Locus of All	At the beginning of your first main phase, look at the top card of your library. You may reveal that card. If you do, add three mana in any combination of its colors and put it into your hand. If you don't reveal it, put it into your hand.	FAIL
+75a	Aladdin's Lamp	{X}, {T}: The next time you would draw a card this turn, instead look at the top X cards of your library, put all but one of them on the bottom of your library in a random order, then draw a card.	FAIL
+75b	Aladdin's Lamp	{X}, {T}: The next time you would draw a card this turn, instead scry X, then draw a card.	FAIL
+76a	Megatron, Tyrant // Megatron, Destructive Force	Whenever ~ attacks, you may sacrifice another artifact. When you do, ~ deals damage equal to the sacrificed artifact's mana value to target creature. If excess damage would be dealt to that creature this way, instead that damage is dealt to that creature's controller.	FAIL
+77a	Incubation Druid	{T}: Add one mana of any type that a land you control could produce. If ~ has a +1/+1 counter on it, add three mana of any one color instead.	OK
+78a	Mourner's Shield	{2}, {T}: Prevent all damage that would be dealt this turn by a source of your choice that shares a color with target creature.	FAIL
+79a	Urgent Necropsy	As an additional cost to cast ~, collect evidence X.	FAIL
+80a	Hall of Gemstone	At the beginning of each player's upkeep, that player chooses a color. Until end of turn, lands tapped for mana produce mana of the chosen color.	FAIL
+81a	Flash	You may put a creature card from your hand onto the battlefield. If you do, sacrifice it unless you pay its mana cost.	FAIL
+81b	Flash	You may put a creature card from your hand onto the battlefield. If you do, sacrifice it unless you pay {2}.	OK
+82a	Balduvian Fallen	Whenever ~'s cumulative upkeep is paid, it gets +1/+0 until end of turn.	OK
+83a	Jötun Grunt	Cumulative upkeep—Put a card from a graveyard on the bottom of its owner's library.	OK
+84a	Light Up the Night	Flashback—{3}{R}, Remove X loyalty counters from among planeswalkers you control.	OK
+85a	Vault 112: Sadistic Simulation	{CHAPTER} III — Pay any amount of {E}. Draw a card.	OK
+86a	Mythos of Snapdax	Each player chooses an artifact, a creature, an enchantment, and a planeswalker from among the nonland permanents they control, then sacrifices the rest. If {B}{R} was spent to cast ~, draw a card.	OK
+87a	Terra, Magical Adept // Esper Terra	{CHAPTER} IV — Add {W}{W}{U}{U}.	OK
+88a	Guile	If a spell or ability you control would counter a spell, instead exile that spell.	FAIL
+89a	Unpredictable Cyclone	If a cycling ability of another nonland card would cause you to draw a card, instead exile the top card of your library.	FAIL
+90a	Snowfall	Whenever an Island is tapped for mana, its controller adds an additional {U}.	OK
+91a	Convergence of Dominion	As long as you control your commander, activated abilities of cards in your graveyard cost {2} less to activate.	OK
+91b	Convergence of Dominion	Activated abilities of creatures you control cost {2} less to activate. This effect can't reduce the mana in that ability's activation cost to less than one mana.	FAIL
+92a	Spinning Darkness	You may exile three black cards from your graveyard rather than pay ~'s mana cost.	OK
+93a	Back from the Brink	Exile a creature card from your graveyard and pay {2}: Create a token that's a copy of that card. Activate only as a sorcery.	FAIL
+94a	Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, red creatures get +1/+1 until end of turn.	FAIL
+94b	Chaos Moon	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, red creatures get +1/+1 and whenever a player taps a Mountain for mana, that player adds an additional {R}.	FAIL
+95a	Vazi, Keen Negotiator	Whenever an opponent casts a spell or activates an ability, if mana from a Treasure was spent to cast it, draw a card.	OK
+96a	Uba Mask	If a player would draw a card, that player exiles the top card of their library face up instead.	FAIL
+97a	Words of War	{1}: The next time you would draw a card this turn, you gain 2 life instead.	OK
+98a	Whippoorwill	{G}{G}, {T}: Target creature can't be regenerated this turn. Damage that would be dealt to that creature this turn can't be prevented.	FAIL
+99a	Bigger on the Inside	Enchanted permanent has "{T}: Target player adds two mana of any one color."	OK
+99b	Bigger on the Inside	Enchanted permanent has "{T}: Add two mana of any one color. The next spell you cast this turn has cascade."	OK
+100a	Wheel of Potential	Each player may exile their hand and draw that many cards.	OK
+101a	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. When that creature leaves the battlefield this turn, sacrifice ~.	OK
+101b	Runesword	{3}, {T}: Target attacking creature gets +2/+0 until end of turn. Creatures dealt damage by that creature this turn can't be regenerated this turn.	FAIL
+102a	Phyrexian Dreadnought	When ~ enters, sacrifice it unless you sacrifice three creatures.	OK
+103a	Plumb the Forbidden	As an additional cost to cast ~, you may sacrifice a creature.	OK
+103b	Plumb the Forbidden	As an additional cost to cast ~, sacrifice one or more creatures.	FAIL
+104a	Celestial Reunion	As an additional cost to cast ~, you may behold a creature.	OK
+107a	Sunbird Standard // Sunbird Effigy	{T}: For each color among permanents you control, add one mana of that color.	OK
+108a	Zur's Weirding	If a player would draw a card, they reveal it instead.	FAIL
+109a	Rain of Gore	If a player would gain life, that player loses that much life instead.	OK
+110a	Security Rhox	You may pay {R}{G} rather than pay ~'s mana cost. Spend only mana produced by Treasures to cast ~.	FAIL
+111a	Shared Fate	If a player would draw a card, that player exiles the top card of an opponent's library face down instead.	FAIL
+113a	Rift Elemental	{1}{R}, Remove a time counter from a permanent you control: ~ gets +2/+0 until end of turn.	OK
+114a	Judgment of Alexander	Prevent all damage that would be dealt to you this turn by sources your opponents control. Whenever damage from a creature is prevented this way, you gain 1 life.	FAIL
+115a	False Dawn	Until end of turn, spells and abilities you control that would add colored mana instead add that much white mana.	FAIL
+116a	Sasaya, Orochi Ascendant // Sasaya's Essence	Whenever a land you control is tapped for mana, add an additional one mana of any type that land produced.	OK
+117a	Torrent of Lava	Each creature has "{T}: Prevent the next 1 damage that would be dealt to ~ this turn."	FAIL
+118a	Sokrates, Athenian Teacher	{T}: Until end of turn, target creature gains "If ~ would deal combat damage to a player, prevent that damage."	OK
+119a	Martyrdom	Until end of turn, target creature you control gains "{0}: The next 1 damage that would be dealt to target creature, planeswalker, or player this turn is dealt to ~ instead."	OK
+121a	Cover of Winter	If a creature would deal combat damage to you, prevent 1 of that damage.	OK
+121b	Cover of Winter	If a creature would deal combat damage to you and/or one or more creatures you control, prevent 1 of that damage.	OK
+122a	Cemetery Prowler	Spells you cast cost {1} less to cast for each card exiled with ~.	OK
+123a	Bloatfly Swarm	If damage would be dealt to ~ while it has a +1/+1 counter on it, prevent that damage and remove that many +1/+1 counters from it.	OK
+124a	The Last Agni Kai	Target creature you control fights target creature an opponent controls. If the creature the opponent controls is dealt excess damage this way, you gain that much life.	FAIL
+125a	Twilight Diviner	Whenever one or more other creatures you control enter, if they were cast from a graveyard, create a token that's a copy of one of them.	FAIL
+125b	Twilight Diviner	Whenever one or more other creatures you control enter, create a token that's a copy of one of them.	FAIL
+127a	Jailbreak	Return target permanent card in an opponent's graveyard to the battlefield under their control. Return up to one target permanent card with equal or lesser mana value from your graveyard to the battlefield.	FAIL
+130a	Eriette, the Beguiler	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, gain control of that permanent for as long as that Aura is attached to it.	FAIL
+131a	Backdraft	Choose target player who cast one or more sorcery spells this turn.	OK
+132a	Springheart Nantuko	Whenever a land you control enters, you may pay {1}{G}. If you do, create a token that's a copy of that land.	FAIL
+133a	Faramir, Prince of Ithilien	At the beginning of your end step, choose an opponent. At the beginning of that player's next end step, you draw a card.	OK
+134a	Soulflayer	If a creature card with flying was exiled with ~'s delve ability, ~ has flying.	FAIL
+136a	The Eagles Are Coming!	Choose target creature you own. Return it to your hand.	OK
+137a	Stolen Uniform	Choose target creature you control and target Equipment. Gain control of that Equipment until end of turn. Attach it to the chosen creature.	OK
+138a	Grishnákh, Brash Instigator	When ~ enters, amass Orcs 2. When you do, until end of turn, gain control of target nonlegendary creature an opponent controls with power 2 or less.	FAIL
+139a	Semester's End	Exile any number of target creatures you control. At the beginning of the next end step, return each of them to the battlefield under its owner's control. Each of them enters with an additional +1/+1 counter on it.	FAIL
+140a	Call the Spirit Dragons	At the beginning of your upkeep, for each color, put a +1/+1 counter on a Dragon you control of that color.	OK
+141a	River Song	Whenever an opponent scries, put a +1/+1 counter on ~. Then ~ deals damage to that player equal to its power.	FAIL
+142a	Rinoa, Angel Wing	Whenever one or more attacking creatures you control die, you may return one of them to the battlefield tapped under its owner's control.	FAIL
+143a	Hordewing Skaab	Whenever one or more Zombies you control deal combat damage to one or more of your opponents, you may draw a card.	OK
+144a	Taigam, Master Opportunist	Whenever you cast your second spell each turn, copy it, then exile that spell with four time counters on it.	OK
+146a	Hofri Ghostforge	Whenever another nontoken creature you control dies, exile it. If you do, create a token that's a copy of that creature, except it's a Spirit in addition to its other types.	OK
+147a	Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card or sacrifice a permanent.	OK
+148a	Zimone, Mystery Unraveler	Whenever a land you control enters, manifest dread if this is the first time this ability has resolved this turn.	OK
+148b	Zimone, Mystery Unraveler	Whenever a land you control enters, you may turn a permanent you control face up.	FAIL
+149a	Glimpse the Impossible	Exile the top three cards of your library. You may play those cards this turn. At the beginning of the next end step, if any of those cards remain exiled, put them into your graveyard, then create a 0/1 colorless Eldrazi Spawn creature token for each card put into your graveyard this way.	OK
+150a	Captain America, First Avenger	{3}, Unattach an Equipment from ~: He deals 2 damage divided as you choose among one, two, or three targets.	OK
+151a	Yannik, Scavenging Sentinel	When ~ enters, exile another creature you control until ~ leaves the battlefield. When you do, put X +1/+1 counters on target creature, where X is the exiled creature's power.	FAIL
+152a	Paranormal Analyst	Whenever you manifest dread, draw a card.	OK
+153a	Vault 21: House Gambit	{CHAPTER} III — Reveal up to five nonland cards from your hand. Create a Treasure token for each card revealed this way.	OK
+154a	Turf War	Whenever a creature deals combat damage to a player, if that player controls one or more lands with contested counters on them, draw a card.	OK
+155a	Overclocked Electromancer	Whenever ~ deals combat damage to a creature, if that creature was dealt excess damage this turn, you get {E}.	OK
+156a	Sword of Hearth and Home	Whenever equipped creature deals combat damage to a player, exile up to one target creature you own, then return it to the battlefield under your control.	OK
+157a	Caravan Vigil	Search your library for a land card, reveal it, put it into your hand, then shuffle. You may put that card onto the battlefield instead of putting it into your hand if a creature died this turn.	FAIL
+158a	Central Elevator // Promising Stairs	At the beginning of your upkeep, surveil 1. You win the game if there are eight or more unlocked doors among Rooms you control.	OK
+159a	Wonderscape Sage	{T}, Return a land you control to its owner's hand: Draw a card. Then discard a card.	OK
+160a	Spellweaver Helix	Whenever a player casts a card, if it has the same name as a card exiled with ~, draw a card.	FAIL
+161a	Ulalek, Fused Atrocity	Whenever you cast an Eldrazi spell, you may pay {C}{C}. If you do, copy all spells you control.	FAIL
+163a	Infinite Authority	Whenever enchanted creature blocks or becomes blocked by a creature with toughness 3 or less, destroy the other creature at end of combat.	OK
+164a	Soundwave, Sonic Spy // Soundwave, Superior Captain	Whenever one or more creature tokens you control deal combat damage to a player, exile target instant or sorcery card from their graveyard. Copy it. You may cast the copy without paying its mana cost.	FAIL
+165a	Magus of the Jar	{T}, Sacrifice ~: Each player exiles all cards from their hand face down and draws seven cards. At the beginning of the next end step, each player discards their hand.	OK
+166a	Ambitious Augmenter	When ~ dies, if it had one or more counters on it, create a 0/0 green and blue Fractal creature token.	OK
+167a	Godsend	Whenever equipped creature blocks or becomes blocked by one or more creatures, you may exile target creature blocking or blocked by it.	FAIL
+168a	Spirit of Resilience	Whenever one or more cards leave your graveyard, put a +1/+1 counter on ~.	OK
+169a	Breeches, Brazen Plunderer	Whenever one or more Pirates you control deal damage to your opponents, draw a card.	OK
+170a	Spoils of War	X is the number of artifact and/or creature cards in an opponent's graveyard.	FAIL
+171a	Boreas Charger	When ~ leaves the battlefield, choose an opponent who controls more lands than you. Draw a card.	OK
+172a	False Cure	Until end of turn, whenever a player gains life, that player loses 2 life.	FAIL
+erA	Eriette, the Beguiler	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls, gain control of that permanent for as long as you control ~.	FAIL
+erB	Eriette, the Beguiler	Whenever an Aura you control becomes attached to a nonland permanent an opponent controls with mana value 3 or less, gain control of that permanent.	FAIL
+bdA	Backdraft	Choose a player who lost life this turn. That player draws a card.	FAIL
+bdB	Backdraft	Target player who cast one or more sorcery spells this turn loses 2 life.	OK
+cpA	Divination	Exile target instant card from your graveyard. Copy it. You may cast the copy without paying its mana cost.	OK
+cpB	Divination	Exile target instant card from your graveyard. Copy that card. You may cast the copy without paying its mana cost.	OK
+cmA	Divination	Count the number of permanents. If the number is odd, draw a card.	FAIL
+cmB	Divination	If the number of permanents is odd, draw a card.	OK
+emA	Emergent Ultimatum	Search your library for up to three monocolored cards with different names and exile them. An opponent chooses one of those cards. Shuffle that card into your library.	OK
+moA	Mirror of Fate	{T}, Sacrifice ~: Choose up to seven face-up exiled cards you own. Put them on top of your library.	FAIL
+mySA	Mythos of Snapdax	Each player chooses an artifact, a creature, an enchantment, and a planeswalker from among the nonland permanents they control, then sacrifices the rest. If {B}{R} was spent to cast ~, draw a card.	OK
+torA	Torrent of Lava	Each creature has "{T}: You gain 1 life."	FAIL
+torB	Torrent of Lava	As long as ~ is on the stack, each creature has "{T}: You gain 1 life."	FAIL
+guA	Guile	If a spell or ability you control would counter a spell, you gain 1 life instead.	FAIL
+rgA	Rain of Gore	If a spell would cause its controller to gain life, that player loses that much life instead.	FAIL
+ucA	Unpredictable Cyclone	If a cycling ability would cause you to draw a card, instead exile the top card of your library.	FAIL
+fdA	False Dawn	Until end of turn, you may spend white mana as though it were mana of any color.	FAIL
+whA	Whippoorwill	Damage that would be dealt to target creature this turn can't be prevented.	FAIL
+faA	Faramir, Prince of Ithilien	At the beginning of your end step, choose an opponent. At the beginning of that player's next end step, you draw a card if they didn't attack you that turn.	FAIL
+rsA	River Song	Whenever an opponent searches their library, ~ deals 1 damage to that player.	OK
+rsB	River Song	Whenever an opponent scries, ~ deals 1 damage to that player.	OK
+sgA	Spoils of War	As an additional cost to cast ~, choose an opponent. X is the number of artifact and creature cards in that player's graveyard.	FAIL
+gbA	Grishnákh, Brash Instigator	When ~ enters, amass Orcs 2. When you do, gain control of target nonlegendary creature an opponent controls with power less than or equal to the amassed Army's power until end of turn.	OK
+tdA	Twilight Diviner	Whenever one or more other creatures you control enter, if they entered from a graveyard, draw a card.	OK
+zmA	Zimone, Mystery Unraveler	Whenever a land you control enters, turn target face-down permanent you control face up.	OK
+stA	Soulflayer	As long as a creature card with flying was exiled with ~'s delve ability, ~ has flying.	FAIL
+R-costsets	Grizzly Bears	Sacrifice any number of creatures with total power 5 or greater: Draw a card.	OK
+R-costsets2	Grizzly Bears	{T}, Exile cards from your graveyard equal to the number of creatures you control: Draw a card.	FAIL
+R-addcost	Divination	As an additional cost to cast ~, choose a creature you control. Draw two cards.	FAIL
+R-addcost2	Divination	As an additional cost to cast ~, sacrifice one or more creatures. Draw two cards.	FAIL
+R-manasym	Divination	For each green mana symbol in the mana costs of cards in your hand, you gain 1 life.	FAIL
+R-manasym2	Divination	Reveal the top card of your library. You gain life equal to the number of colored mana symbols in its mana cost.	FAIL
+R-mananeut	Grizzly Bears	Whenever a land you control is tapped for mana, its controller may add an additional {G}.	FAIL
+R-manaprov	Grizzly Bears	Whenever you cast a spell, if mana from a Treasure was spent to cast it, draw a card.	OK
+R-manaprov2	Grizzly Bears	Spend only mana produced by Treasures to cast creature spells.	FAIL
+R-manarepl	Grizzly Bears	Lands you control tapped for mana produce {G} instead of any other type.	FAIL
+R-drawrep	Grizzly Bears	If you would draw a card, reveal it instead.	FAIL
+R-drawrep2	Grizzly Bears	{1}: The next time you would draw a card this turn, instead mill a card, then draw a card.	FAIL
+R-prev	Divination	Prevent all damage a source of your choice that shares a color with target creature would deal this turn.	FAIL
+R-prevX	Grizzly Bears	If a source would deal damage to you, prevent X of that damage, where X is the number of +1/+1 counters on ~.	OK
+R-copystatic	Pacifism	Enchanted creature is a copy of target creature.	FAIL
+R-gainabil	Grizzly Bears	~ has all activated abilities of creatures your opponents control.	OK
+R-gainabil2	Divination	Target creature gains all abilities of another target creature until end of turn.	FAIL
+R-batch	Grizzly Bears	Whenever one or more creatures you control die, return one of them to your hand.	FAIL
+R-batch2	Grizzly Bears	Whenever one or more creatures you control deal combat damage to one or more players, draw a card for each player dealt damage this way.	FAIL
+R-results	Divination	Each player mills three cards. You draw a card for each land card put into a graveyard this way.	OK
+R-excess	Divination	~ deals 5 damage to target creature. You gain life equal to the excess damage dealt this way.	OK
+R-costref	Grizzly Bears	{1}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+R-costref2	Grizzly Bears	{T}, Exile a creature card from your graveyard: Draw cards equal to the exiled card's mana value.	OK
+R-values	Divination	X is the number of creature cards in target opponent's graveyard. Draw X cards.	FAIL
+R-spelltgt	Divination	Counter target spell if it targets you.	FAIL
+R-instead	Divination	Search your library for a land card, reveal it, put it into your hand, then shuffle. If you control a Forest, put that card onto the battlefield instead of putting it into your hand.	FAIL
+R-combathist	Grizzly Bears	{T}: Destroy target creature that ~ blocked this turn.	FAIL
+R-zones	Divination	Return target creature card from your graveyard or from exile to your hand.	OK
+R-asenters	Grizzly Bears	As ~ enters, you gain 3 life.	OK
+R-splitctl	Divination	Each opponent may search their library for a basic land card and put it onto the battlefield tapped, then shuffle.	OK
+R-revctl	Divination	Target opponent reveals cards from the top of their library until they reveal a creature card. That player puts that card onto the battlefield, then shuffles.	OK
+R-perm	Grizzly Bears	You may play lands and cast spells from among cards you exiled with ~.	FAIL
+R-grant-ex	Divination	Exile target creature card from your graveyard. It gains "You may cast this card from exile."	OK
+R-monument	Monument to Perfection	{T}: Draw a card. Activate only if there are nine or more lands with different names among the basic, Sphere, and Locus lands you control.	OK
+ca1	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value divided as you choose among one, two, or three targets.	FAIL
+ca2	Captain America, First Avenger	{3}, Unattach an Equipment from ~: He deals damage equal to that Equipment's mana value to any target.	OK
+ca3	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+ca4	Grizzly Bears	{3}: ~ deals damage equal to its power divided as you choose among one, two, or three targets.	OK
+cw1	Cover of Winter	If a creature would deal combat damage to you and/or one or more creatures you control, prevent X of that damage, where X is the number of age counters on ~.	FAIL
+cw2	Cover of Winter	If a creature would deal combat damage to you, prevent X of that damage, where X is the number of age counters on ~.	OK
+cw3	Cover of Winter	If a creature would deal combat damage to you, prevent 1 of that damage.	OK
+eu1	Eumidian Wastewaker	Whenever ~ attacks, you and defending player each discard a card. You draw a card for each land card put into a graveyard this way.	FAIL
+T-effecttrig	Divination	Until end of turn, whenever a player gains life, you draw a card.	OK
+T-effecttrig2	Divination	Until end of turn, whenever a creature you control attacks, you gain 1 life.	OK
+T-nextcast	Divination	When you next cast an instant spell this turn, copy that spell.	OK
+T-nextcast2	Divination	When you next cast an instant spell or activate a loyalty ability this turn, copy that spell or ability.	FAIL
+T-delayed-enter	Divination	Return target creature card from your graveyard to the battlefield. When that creature enters, you gain 2 life.	FAIL
+T-losecontrol	Divination	Gain control of target artifact until end of turn. When you lose control of that artifact this turn, draw a card.	FAIL
+T-aslong-copy	Grizzly Bears	{2}{U}: Tap another target creature. ~ becomes a copy of that creature for as long as that creature remains tapped.	FAIL
+T-aslong-copy2	Grizzly Bears	{2}{U}: ~ becomes a copy of target creature until end of turn.	OK
+T-castcard	Grizzly Bears	Whenever a player casts an instant or sorcery card, you gain 1 life.	FAIL
+T-untap-trig	Grizzly Bears	{T}: Tap target creature. When ~ becomes untapped, untap that creature.	OK
+P-mask-x	Icy Manipulator	{X}: You may cast a creature card from your hand with mana value X or less face down as a 2/2 creature spell without paying its mana cost. Activate only as a sorcery.	FAIL
+P-mask-spent	Icy Manipulator	{X}: Look at the top X cards of your library.	OK
+P-coffin-note	Icy Manipulator	{2}, {T}: Exile target creature. Note the number and kind of counters that were on that creature.	FAIL
+P-coffin-untap	Icy Manipulator	{2}, {T}: Exile target creature. When ~ leaves the battlefield or becomes untapped, return that exiled card to the battlefield under its owner's control.	FAIL
+P-coffin-lb	Icy Manipulator	{2}, {T}: Exile target creature. When ~ leaves the battlefield, return that exiled card to the battlefield under its owner's control.	FAIL
+P-pand-have	Grizzly Bears	Whenever a creature enters, that creature's controller may have it deal 1 damage to any target.	OK
+P-pand-dmgpow	Grizzly Bears	Whenever a creature enters, it deals damage equal to its power to any target.	OK
+P-pand-oftheir	Grizzly Bears	Whenever a creature enters, that creature's controller may have it deal damage equal to its power to any target.	OK
+P-leeches-all	Divination	Target player loses all poison counters.	FAIL
+P-leeches-remove	Divination	Remove all poison counters from target player.	OK
+P-leeches-much	Divination	Remove all poison counters from target player. ~ deals that much damage to that player.	OK
+P-musician-gains	Icy Manipulator	{T}: Target creature gains "At the beginning of your upkeep, destroy this creature unless you pay {1}."	OK
+P-musician-foreach	Icy Manipulator	{T}: Put a music counter on target creature. It gains "At the beginning of your upkeep, destroy this creature unless you pay {1} for each music counter on it."	OK
+P-musician-ifnot	Icy Manipulator	{T}: Put a music counter on target creature. If it doesn't have flying, it gains flying.	OK
+P-ydwen-remove	Grizzly Bears	Whenever ~ blocks, flip a coin. If you lose the flip, remove ~ from combat.	OK
+P-ydwen-cantblock	Grizzly Bears	Whenever ~ blocks, flip a coin. If you lose the flip, remove ~ from combat and it can't block this turn.	OK
+P-helm-repeat	Icy Manipulator	{X}, {T}: Target opponent mills a card, then repeats this process until a creature card or X cards have been put into their graveyard this way, whichever comes first.	FAIL
+P-helm-reveal	Icy Manipulator	{T}: Target opponent reveals cards from the top of their library until they reveal a creature card. They put those cards into their graveyard.	OK
+P-helm-xcant	Icy Manipulator	{X}, {T}: Draw X cards. X can't be 0.	OK
+P-volrath-full	Grizzly Bears	As long as the top card of your graveyard is a creature card, ~ has the full text of that card.	FAIL
+P-volrath-has	Grizzly Bears	As long as the top card of your graveyard is a creature card, ~ has flying.	FAIL
+P-vhati-or	Icy Manipulator	{T}: Until end of turn, target creature has base power 1.	OK
+P-vhati-or2	Icy Manipulator	{T}: Target creature has base power 1 until end of turn.	OK
+P-bauble-look	Icy Manipulator	{T}: Look at a card at random in target player's hand.	FAIL
+P-bauble-reveal	Icy Manipulator	{T}: Target player reveals a card at random from their hand.	OK
+P-bauble-draw	Icy Manipulator	{T}: You draw a card at the beginning of the next turn's upkeep.	OK
+P-fallen-hist	Grizzly Bears	At the beginning of your upkeep, ~ deals 1 damage to each opponent it has dealt damage to this game.	FAIL
+P-fallen-turn	Grizzly Bears	At the beginning of your end step, ~ deals 1 damage to each opponent it dealt damage to this turn.	FAIL
+P-tele-two	Divination	Tap target creature. It doesn't untap during its controller's next two untap steps.	FAIL
+P-tele-one	Divination	Tap target creature. It doesn't untap during its controller's next untap step.	OK
+P-tele-prev	Divination	Tap target creature. Prevent all combat damage that would be dealt by that creature this turn.	OK
+P-tomb-rest	Grizzly Bears	When ~ dies, at the beginning of each of your upkeeps for the rest of the game, draw a card.	FAIL
+P-tomb-mire	Icy Manipulator	{2}, {T}: Put a mire counter on target land. That land is a Swamp for as long as it has a mire counter on it.	OK
+P-sword-cost	Icy Manipulator	{T}, Sacrifice ~ and any number of creatures you control: Draw a card.	FAIL
+P-sword-cost2	Icy Manipulator	{T}, Sacrifice any number of creatures: ~ deals X damage to any target, where X is the total power of the creatures sacrificed this way.	OK
+P-eye-redirect	Divination	The next time a source of your choice would deal damage to you this turn, prevent that damage. ~ deals that much damage to that source's controller.	FAIL
+P-hordes-unless	Grizzly Bears	At the beginning of your upkeep, unless you pay {B}{B}{B}, tap ~.	OK
+P-hordes-oppchoice	Grizzly Bears	At the beginning of your upkeep, sacrifice a land of an opponent's choice.	FAIL
+P-devourer-state	Grizzly Bears	When ~'s power is 7 or greater, sacrifice it.	FAIL
+P-devourer-state2	Grizzly Bears	When you control no Islands, sacrifice ~.	OK
+P-obelisk	Icy Manipulator	{6}, {T}: Return target permanent you own to your hand.	OK
+P-obelisk2	Icy Manipulator	{6}, {T}: Return target permanent you both own and control to your hand.	FAIL
+P-wood-sac	Grizzly Bears	As ~ enters, sacrifice any number of untapped Forests.	OK
+P-wood-pt	Grizzly Bears	As ~ enters, sacrifice any number of untapped Forests. ~'s power and toughness are each equal to the number of Forests sacrificed as it entered.	FAIL
+P-cauldron-cast	Icy Manipulator	{X}, {T}: You may exile a nonland card from your hand. You may cast that card for as long as it remains exiled.	OK
+P-cauldron-onlyif	Icy Manipulator	{X}, {T}: Put a charge counter on ~. Activate only if there are no charge counters on ~.	OK
+P-halfdane-copy	Grizzly Bears	At the beginning of your upkeep, ~'s base power and toughness become equal to the power and toughness of target creature other than ~ until end of turn.	FAIL
+P-halfdane-until	Grizzly Bears	At the beginning of your upkeep, ~ gets +1/+1 until the end of your next upkeep.	FAIL
+P-titania-lose	Glorious Anthem	Each noncreature artifact loses all abilities.	OK
+P-titania-becomes	Glorious Anthem	Each noncreature artifact is an artifact creature with power and toughness each equal to its mana value.	OK
+P-titania-becomes2	Glorious Anthem	Each noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value.	FAIL
+P-titania-cont	Glorious Anthem	Creatures you control get +1/+1. If ~ leaves the battlefield, this effect continues until end of turn.	FAIL
+P-draco-sac	Grizzly Bears	As ~ enters, sacrifice any number of creatures.	OK
+P-draco-pt	Grizzly Bears	As ~ enters, sacrifice any number of creatures. ~'s power becomes the total power of those creatures.	FAIL
+P-takkle-ret	Pacifism	When enchanted creature dies, return ~ to the battlefield under your control attached to a creature of your choice.	FAIL
+P-takkle-chooses	Pacifism	When enchanted creature dies, that creature's controller chooses a creature. Return ~ to the battlefield attached to that creature.	OK
+P-takkle-nonaura	Pacifism	When enchanted creature dies, return ~ to the battlefield under your control as a non-Aura enchantment.	FAIL
+P-bestiary-t	Pacifism	Enchanted creature's activated abilities with {T} in their costs can't be activated.	FAIL
+P-bestiary-t2	Pacifism	Enchanted creature can't attack or block, and its activated abilities can't be activated.	OK
+P-guardian-ench	Grizzly Bears	Noncreature artifacts you control can't be enchanted.	FAIL
+P-guardian-ctrl	Grizzly Bears	Other players can't gain control of noncreature artifacts you control.	FAIL
+P-guardian-ind	Grizzly Bears	As long as ~ is untapped, noncreature artifacts you control have indestructible.	OK
+P-soulx-addcost	Divination	As an additional cost to cast this spell, exile a creature you control. Return target creature card from your graveyard to the battlefield. Put a +2/+2 counter on that creature if the exiled creature was a Thrull.	FAIL
+P-soulx-if	Divination	As an additional cost to cast this spell, exile a creature you control. Return target creature card from your graveyard to the battlefield. If the exiled creature was a Thrull, put a +1/+1 counter on that creature.	FAIL
+P-spore-tapall	Divination	Tap all blocking creatures. Prevent all combat damage that would be dealt this turn.	OK
+P-spore-each	Divination	Each attacking creature doesn't untap during its controller's next untap step.	FAIL
+P-spore-all	Divination	Attacking creatures don't untap during their controllers' next untap step.	FAIL
+P-sink-tapall	Divination	Target player taps all lands with mana abilities they control.	OK
+P-sink-lose	Divination	Target player loses all unspent mana.	OK
+P-sink-unless	Divination	Counter target spell unless its controller pays {X}. If that player doesn't, they tap all lands they control.	FAIL
+P-aurochs-foreach	Grizzly Bears	Whenever ~ attacks, it gets +1/+0 until end of turn for each other attacking creature.	OK
+P-aurochs-named	Grizzly Bears	Whenever ~ attacks, it gets +1/+0 until end of turn for each other attacking creature named ~.	OK
+P-aurochs-named2	Grizzly Bears	Whenever ~ attacks, it gets +1/+0 until end of turn for each other attacking ~.	FAIL
+P-xinye-destroy	Divination	You destroy four lands you control.	FAIL
+P-xinye-opp	Divination	Target opponent destroys four lands they control.	FAIL
+P-xinye-sac	Divination	Target opponent sacrifices four lands.	OK
+P-dreams-gains	Divination	Return target creature card from your graveyard to the battlefield. That creature gains "Cumulative upkeep {2}."	OK
+P-dreams-exile	Divination	Return target creature card from your graveyard to the battlefield. If the creature would leave the battlefield, exile it instead of putting it anywhere else.	FAIL
+P-intuition-opp	Divination	Search your library for three cards and reveal them. Target opponent chooses one. Put that card into your hand and the rest into your graveyard. Then shuffle.	FAIL
+P-intuition-opp2	Divination	Reveal the top three cards of your library. An opponent chooses one of them. Put that card into your hand and the rest into your graveyard.	OK
+P-flow-or	Grizzly Bears	{2}, Discard a card: Put a +1/+1 counter on ~ or ~ gains flying until end of turn.	FAIL
+P-flow-or2	Grizzly Bears	{2}, Discard a card: ~ gains your choice of flying, first strike, or trample.	OK
+P-flow-or3	Grizzly Bears	{2}: ~ gains flying, first strike, or trample.	FAIL
+P-banshee-half	Icy Manipulator	{X}, {T}: ~ deals half X damage, rounded down, to any target.	OK
+P-banshee-half2	Divination	~ deals damage equal to half X, rounded down, to any target.	FAIL
+P-manabond-reveal	Grizzly Bears	At the beginning of your end step, you may put all land cards from your hand onto the battlefield.	OK
+P-manabond-ifdo	Grizzly Bears	At the beginning of your end step, you may reveal your hand. If you do, discard your hand.	OK
+P-egg-header	Icy Manipulator	Sacrifice ~: Choose one. Activate only if there are two or more hatchling counters on ~. / • Draw a card. / • You gain 1 life.	FAIL
+P-egg-header2	Icy Manipulator	Sacrifice ~: Choose one. / • Draw a card. / • You gain 1 life.	OK
+P-egg-only	Icy Manipulator	Sacrifice ~: Draw a card. Activate only if there are two or more hatchling counters on ~.	OK
+P-kudzu-attach	Pacifism	When enchanted creature dies, its controller may attach ~ to a creature of their choice.	FAIL
+P-kudzu-attach2	Pacifism	When enchanted creature becomes tapped, attach ~ to a creature of your choice.	FAIL
+P-pox-third	Divination	Each player loses a third of their life. Round up each time.	FAIL
+P-pox-half	Divination	Each player loses half their life, rounded up.	OK
+P-pox-discard	Divination	Each player discards half the cards in their hand, rounded up.	OK
+P-pox-sac	Divination	Each player sacrifices half the creatures they control, rounded up.	OK
+P-sorrow-same	Icy Manipulator	{T}: Choose two target blocking creatures controlled by the same opponent. Tap them.	OK
+P-sorrow-remove	Icy Manipulator	{T}: Remove target blocking creature from combat.	OK
+P-bloodlust-if	Divination	If target creature has toughness 5 or greater, it gets +4/-4 until end of turn.	FAIL
+P-bloodlust-x	Divination	Target creature gets +4/-X until end of turn, where X is its toughness minus 1.	OK
+P-phoenix-reveal	Grizzly Bears	If ~ would die, return it to its owner's hand instead.	OK
+P-phoenix-play	Divination	Return target creature to its owner's hand. Until that player's next turn, that player plays with that card revealed in their hand and can't play it.	FAIL
+P-miter-sac	Grizzly Bears	Whenever an artifact you control is put into a graveyard from the battlefield, if it wasn't sacrificed, draw a card.	FAIL
+P-miter-sac2	Grizzly Bears	Whenever a creature you control dies, if it wasn't sacrificed, draw a card.	FAIL
+P-winter-x	Divination	Tap X target creatures.	OK
+P-winter-each	Divination	Tap X target creatures. ~ deals 2 damage to each of those creatures with flying.	FAIL
+P-winter-each2	Divination	Tap two target creatures. ~ deals 2 damage to each of those creatures with flying.	FAIL
+P-cloak-nodmg	Pacifism	Whenever enchanted creature attacks and isn't blocked, you may have it assign no combat damage this turn.	FAIL
+P-cloak-nodmg2	Pacifism	Whenever enchanted creature attacks and isn't blocked, it assigns no combat damage this turn. Defending player discards a card at random.	OK
+P-scars-prev	Divination	Prevent the next 7 damage that would be dealt to any target this turn.	OK
+P-scars-foreach	Divination	Prevent the next 7 damage that would be dealt to any target this turn. If it's a creature, put a +0/+1 counter on it for each 1 damage prevented this way.	OK
+P-lode-top	Icy Manipulator	{T}: Put up to four target basic land cards from a player's graveyard on top of their library in any order.	FAIL
+P-lode-top2	Icy Manipulator	{T}: Put target card from a graveyard on top of its owner's library.	OK
+P-lode-draw	Icy Manipulator	{T}: Target player draws a card at the beginning of the next turn's upkeep.	OK
+P-starfish-regen	Grizzly Bears	At the beginning of each end step, if ~ regenerated this turn, draw a card.	FAIL
+P-starfish-count	Grizzly Bears	At the beginning of each end step, create a 0/1 blue Starfish creature token for each time ~ regenerated this turn.	FAIL
+P-djinn-this	Grizzly Bears	At the beginning of your upkeep, sacrifice a land. If you sacrifice an Island this way, ~ deals 3 damage to you.	FAIL
+P-djinn-this2	Grizzly Bears	At the beginning of your upkeep, sacrifice a land. If an Island was sacrificed this way, ~ deals 3 damage to you.	OK
+P-incarn-redirect	Grizzly Bears	{0}: The next 1 damage that would be dealt to ~ this turn is dealt to you instead.	OK
+P-incarn-only	Grizzly Bears	{0}: ~ gets +1/+1 until end of turn. Only ~'s owner may activate this ability.	FAIL
+P-reveka	Icy Manipulator	{T}: ~ deals 2 damage to any target. ~ doesn't untap during your next untap step.	OK
+P-reveka2	Grizzly Bears	{T}: ~ deals 2 damage to any target and doesn't untap during your next untap step.	FAIL
+P-dance-tok	Pacifism	When ~ enters, create a token that's a copy of target creature. When ~ leaves the battlefield, exile the token.	FAIL
+P-dance-tok2	Pacifism	When ~ enters, create a token that's a copy of target creature. When the token leaves the battlefield, sacrifice ~.	FAIL
+P-arms-common	Glorious Anthem	White creatures get +1/+1 as long as white is the most common color among nontoken permanents.	FAIL
+P-arms-chosen	Glorious Anthem	As ~ enters, choose a color and an opponent. White creatures get +1/+1 as long as the chosen player controls a permanent of the chosen color.	FAIL
+P-bounty-dist	Divination	Distribute three +1/+1 counters among one, two, or three target creatures.	OK
+P-bounty-cleanup	Divination	Put a +1/+1 counter on target creature. Remove a +1/+1 counter from that creature at the beginning of the next cleanup step.	OK
+P-rites-random	Divination	Discard any number of cards at random.	FAIL
+P-rites-random2	Divination	Discard two cards at random. Creatures you control get +1/+0 until end of turn for each card discarded this way.	OK
+P-nebu-reveal	Icy Manipulator	{X}, {T}: Target opponent reveals X cards at random from their hand.	FAIL
+P-nebu-name	Icy Manipulator	{T}: Choose a card name. Target opponent reveals their hand and discards all cards with that name.	OK
+P-sanctuary-skip	Glorious Anthem	If you would draw a card during your draw step, instead you may skip that draw.	FAIL
+P-sanctuary-skip2	Glorious Anthem	If you would draw a card during your draw step, skip that draw instead.	FAIL
+P-sanctuary-att	Glorious Anthem	You can't be attacked except by creatures with flying and/or islandwalk.	FAIL
+P-wiitigo	Grizzly Bears	At the beginning of your upkeep, put a +1/+1 counter on ~ if it has blocked or been blocked since your last upkeep.	FAIL
+P-wiitigo2	Grizzly Bears	At the beginning of your upkeep, if ~ blocked or was blocked this turn, put a +1/+1 counter on it.	FAIL
+P-gorilla	Grizzly Bears	At the beginning of your upkeep, you may sacrifice a Forest. If you sacrifice a snow Forest this way, ~ gains trample until end of turn.	FAIL
+P-gorilla2	Grizzly Bears	At the beginning of your upkeep, you may sacrifice a Forest. If you don't, sacrifice ~ and it deals 7 damage to you.	OK
+P-tetra-remove	Grizzly Bears	At the beginning of your upkeep, you may remove any number of +1/+1 counters from ~. If you do, create that many 1/1 colorless Tetravite artifact creature tokens.	FAIL
+P-tetra-tok	Grizzly Bears	At the beginning of your upkeep, create a 1/1 colorless Tetravite artifact creature token with flying and "This creature can't be enchanted."	FAIL
+P-minion-unless	Grizzly Bears	At the beginning of your upkeep, ~ deals 5 damage to you unless you sacrifice a creature other than ~.	OK
+P-minion-this	Grizzly Bears	At the beginning of your upkeep, ~ deals 5 damage to you unless you sacrifice a creature other than ~. If ~ deals damage to you this way, tap it.	FAIL
+P-vamp-died	Grizzly Bears	At the beginning of each end step, if a creature dealt damage by ~ this turn died, draw a card.	FAIL
+P-vamp-ret	Grizzly Bears	Whenever a creature dealt damage by ~ this turn dies, put that card onto the battlefield under your control.	OK
+P-vamp-lose	Grizzly Bears	Whenever a creature dealt damage by ~ this turn dies, put that card onto the battlefield under your control. Sacrifice it when you lose control of ~.	FAIL
+P-gaunt-exch	Icy Manipulator	{5}, Sacrifice ~: Exchange control of target artifact, creature, or land you control and target permanent an opponent controls that shares one of those types with it.	OK
+P-gaunt-exch2	Icy Manipulator	{5}, Sacrifice ~: Exchange control of target creature you control and target creature an opponent controls.	OK
+P-mob	Grizzly Bears	During your turn, ~'s power and toughness are each equal to 2 plus the number of Swamps your opponents control.	FAIL
+P-mob2	Grizzly Bears	~'s power and toughness are each equal to the number of Swamps your opponents control.	OK
+P-mob3	Grizzly Bears	During your turn, ~ gets +1/+1.	OK
+P-vault	Icy Manipulator	If you would begin your turn while ~ is tapped, you may skip that turn instead. If you do, untap ~.	FAIL
+P-vault2	Icy Manipulator	You may skip your next turn. If you do, untap ~.	FAIL
+P-seraph-delay	Grizzly Bears	Whenever a creature dealt damage by ~ this turn dies, put that card onto the battlefield under your control at the beginning of the next end step.	OK
+P-landeq	Glorious Anthem	If an opponent would put a land onto the battlefield, that player instead puts that land onto the battlefield then sacrifices a land.	FAIL
+P-juxt	Divination	You and target player exchange control of the creature you each control with the greatest mana value.	FAIL
+P-bronze	Grizzly Bears	Prevent all damage that would be dealt to ~ by spells that target it.	FAIL
+P-bronze2	Grizzly Bears	As long as you control another creature, prevent all damage that would be dealt to ~.	OK
+P-blessing	Icy Manipulator	{G}{W}: Put a +1/+1 counter on target creature or that creature gains first strike until end of turn.	FAIL
+P-hydra	Grizzly Bears	For each 1 damage that would be dealt to ~, if it has a +1/+1 counter on it, remove a +1/+1 counter from it and prevent that 1 damage.	FAIL
+P-blaze	Divination	Target creature defending player controls can block any number of creatures this turn.	OK
+P-blaze2	Divination	Target creature blocks each attacking creature this turn if able.	FAIL
+P-digger	Icy Manipulator	{2}: Put the top card of your graveyard on the bottom of your library.	FAIL
+P-digger2	Icy Manipulator	{2}: Put target card from your graveyard on the bottom of your library.	OK
+P-urborg	Icy Manipulator	{T}: Target creature loses first strike until end of turn.	OK
+P-urborg2	Icy Manipulator	{T}: Target creature loses first strike or swampwalk until end of turn.	FAIL
+P-benthic	Icy Manipulator	{T}, Untap a tapped land an opponent controls: Add {C}.	FAIL
+P-benthic2	Icy Manipulator	{T}: Add one mana of any type that a land an opponent controls could produce.	OK
+P-cannib	Divination	Choose two target creatures controlled by the same player. Exile one of those creatures.	OK
+P-cannib2	Divination	Choose two target creatures. Exile one of those creatures and put two +1/+1 counters on the other.	FAIL
+P-farmer	Icy Manipulator	{T}: Target land becomes a Swamp until end of turn.	OK
+P-farmer2	Icy Manipulator	{T}: Target land becomes a Swamp until its controller's next untap step.	FAIL
+P-akron	Glorious Anthem	Except for artifact creatures, creatures you control can't attack.	FAIL
+P-akron2	Glorious Anthem	Nonartifact creatures you control can't attack.	OK
+P-torch	Divination	As long as ~ is on the stack, spells that target it cost {2} more to cast.	FAIL
+P-torch2	Grizzly Bears	Spells that target ~ cost {2} more to cast.	OK
+P-ring	Icy Manipulator	{5}, {T}, Exile ~: The next time you would draw a card this turn, instead draw two cards.	FAIL
+P-ring2	Icy Manipulator	{T}: Put a card you own from outside the game into your hand.	OK
+P-willow	Grizzly Bears	{G}: Until end of turn, ~ can be the target of spells and abilities controlled by target player as though it didn't have shroud.	FAIL
+P-lore	Divination	Target opponent chooses a card in your graveyard. Put that card into your hand.	OK
+P-oldman	Icy Manipulator	{T}: Gain control of target creature for as long as ~ remains tapped.	OK
+P-oldman2	Icy Manipulator	{T}: Gain control of target creature with power less than or equal to ~'s power for as long as ~ remains tapped.	OK
+P-wisps	Icy Manipulator	{B}: Draw a card. Activate no more times each turn than the number of Swamps you control.	FAIL
+P-pj-add	Divination	As an additional cost to cast this spell, you may pay {1}{R} any number of times. Destroy target artifact. For each additional {1}{R} you paid, destroy another target artifact.	FAIL
+P-ferrets	Grizzly Bears	At end of combat, tap all creatures that blocked ~ this turn.	FAIL
+P-ferrets2	Grizzly Bears	At end of combat, tap all creatures blocking ~.	OK
+P-hazezon	Grizzly Bears	When ~ enters, create X 1/1 Sand Warrior creature tokens at the beginning of your next upkeep, where X is the number of lands you control at that time.	FAIL
+P-hazezon2	Grizzly Bears	When ~ enters, at the beginning of your next upkeep, create X 1/1 red Sand Warrior creature tokens, where X is the number of lands you control.	OK
+P-horror	Grizzly Bears	At the beginning of your upkeep, destroy ~ unless you pay {3}{B}{B}{B}. If ~ is destroyed this way, it deals 7 damage to you.	FAIL
+P-magus	Icy Manipulator	{1}{U}, {T}: Untap target artifact an opponent controls and gain control of it until end of turn. It gains haste until end of turn.	OK
+P-conscripts	Grizzly Bears	~ can't attack unless at least two other creatures attack.	FAIL
+P-conscripts2	Grizzly Bears	~ can't attack unless at least one other creature attacks.	FAIL
+P-conscripts3	Grizzly Bears	~ can't block unless at least two other creatures block.	FAIL
+P-transmute	Divination	Sacrifice an artifact. If you do, search your library for an artifact card. If that card's mana value is less than or equal to the sacrificed artifact's mana value, put it onto the battlefield. Then shuffle.	FAIL
+P-fastbond	Glorious Anthem	You may play any number of lands on each of your turns.	FAIL
+P-fastbond2	Glorious Anthem	You may play an additional land on each of your turns.	OK
+P-fastbond-trig	Glorious Anthem	Whenever you play a land, if it wasn't the first land you played this turn, you lose 1 life.	FAIL
+P-skycaptain	Grizzly Bears	At the beginning of your upkeep, put a wage counter on ~. You may pay {2} for each wage counter on it. If you don't, remove all wage counters from ~ and an opponent gains control of it.	FAIL
+P-skycaptain2	Grizzly Bears	At the beginning of your upkeep, put a wage counter on ~. You may pay {2}. If you don't, an opponent gains control of ~.	OK
+P-jar	Icy Manipulator	{T}, Sacrifice ~: Each player exiles all cards from their hand face down and draws seven cards.	OK
+P-jar2	Icy Manipulator	{T}: Each player exiles their hand. At the beginning of the next end step, each player returns to their hand each card they exiled this way.	FAIL
+P-eve	Glorious Anthem	At the beginning of your upkeep, if ~ is exiled with a scream counter on it, remove a scream counter from it.	OK
+P-eve2	Glorious Anthem	At the beginning of your upkeep, if ~ is exiled with a scream counter on it, remove a scream counter from it. If there are no more scream counters on it, put it into your graveyard.	FAIL
+P-eve3	Divination	Each player returns all creature cards from their graveyard to the battlefield.	OK
+P-spined	Grizzly Bears	Whenever a Sliver becomes blocked, that Sliver gets +1/+1 until end of turn for each creature blocking it.	FAIL
+P-spined2	Grizzly Bears	Whenever ~ becomes blocked, it gets +1/+1 until end of turn for each creature blocking it.	OK
+P-city	Glorious Anthem	When you play another land, sacrifice ~.	FAIL
+P-city2	Glorious Anthem	Whenever you play a land, sacrifice ~.	OK
+P-storm	Grizzly Bears	{U}, Exile the top card of your library: ~ gets +1/+1 until end of turn.	OK
+P-storm2	Grizzly Bears	{U}, Exile the top card of your library: If the exiled card is a land, ~ gets +1/+1 until end of turn.	FAIL
+P-mox	Icy Manipulator	If ~ would enter, you may discard a land card instead. If you do, put ~ onto the battlefield. If you don't, put it into its owner's graveyard.	FAIL
+P-mox2	Icy Manipulator	As an additional cost to cast this spell, discard a land card.	OK
+P-liu	Grizzly Bears	~ gets +2/+2 as long as you control a permanent named Guan Yu, Sainted Warrior.	FAIL
+P-liu2	Grizzly Bears	~ gets +2/+2 as long as you control a creature named Guan Yu, Sainted Warrior or a creature named Zhang Fei, Fierce Warrior.	FAIL
+P-tangle	Divination	Each attacking creature doesn't untap during its controller's next untap step.	FAIL
+P-lava	Divination	~ deals X damage to any target. If ~ would deal damage to a creature, that damage can't be prevented.	FAIL
+P-lava2	Divination	~ deals X damage to any target. That damage can't be prevented.	FAIL
+P-guan	Grizzly Bears	When ~ is put into your graveyard from the battlefield, you may shuffle ~ into your library.	FAIL
+P-guan2	Grizzly Bears	When ~ dies, you may shuffle it into its owner's library.	OK
+P-wight	Grizzly Bears	At end of combat, put a paralyzation counter on each creature blocking or blocked by ~ and tap those creatures.	OK
+P-wight2	Divination	Put a paralyzation counter on target creature. It doesn't untap during its controller's untap step for as long as it has a paralyzation counter on it.	FAIL
+P-wight3	Divination	Target creature gains "{2}: Remove a paralyzation counter from this creature."	OK
+P-xenic	Icy Manipulator	{T}: Until your next upkeep, target noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value.	FAIL
+P-xenic2	Icy Manipulator	{T}: Until end of turn, target noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value.	OK
+P-decree	Glorious Anthem	Whenever a Swamp, Mountain, black permanent, or red permanent becomes tapped, ~ deals 1 damage to that permanent's controller.	FAIL
+P-decree2	Glorious Anthem	Whenever a Swamp becomes tapped, ~ deals 1 damage to that permanent's controller.	OK
+P-harsh	Divination	This turn, whenever an attacking creature deals combat damage to you, it deals that much damage to its controller.	FAIL
+P-harsh2	Divination	Until end of turn, whenever an attacking creature deals combat damage to you, it deals that much damage to its controller.	OK
+P-rasputin	Grizzly Bears	At the beginning of your upkeep, if ~ started the turn untapped, put a dream counter on it.	FAIL
+P-mantle	Pacifism	Whenever enchanted creature attacks and isn't blocked, its controller may have it deal damage equal to its power plus 2 to another target creature.	OK
+P-winds	Glorious Anthem	If a permanent with a wind counter on it would untap during its controller's untap step, remove all wind counters from it instead.	FAIL
+P-winds2	Glorious Anthem	Permanents with wind counters on them don't untap during their controllers' untap steps.	OK
+P-pand-their	Grizzly Bears	Whenever a creature enters, that creature's controller may have it deal 1 damage to any target of their choice.	FAIL
+P-pand-their2	Grizzly Bears	Whenever a creature enters, it deals 1 damage to any target of its controller's choice.	FAIL
+P-volrath-cond	Grizzly Bears	~ has flying as long as the top card of your graveyard is a creature card.	FAIL
+P-volrath-cond2	Grizzly Bears	As long as the top card of your library is a creature card, ~ has flying.	OK
+P-lava-fb	Fireball	~ deals X damage to any target. If ~ would deal damage to a creature, that damage can't be prevented.	FAIL
+P-lava-fb2	Fireball	~ deals X damage to any target. That damage can't be prevented.	FAIL
+P-lava-fb3	Fireball	~ deals X damage to any target. If ~ would deal damage to a creature, that damage can't be prevented or dealt instead to another permanent or player.	FAIL
+P-banshee-fb	Fireball	~ deals half X damage, rounded down, to any target, and half X damage, rounded up, to you.	FAIL
+P-banshee-fb2	Fireball	~ deals X damage to any target and X damage to you.	OK
+P-liu-gb	Grizzly Bears	~ gets +2/+2 as long as you control a permanent named Grizzly Bears.	OK
+P-liu-gb2	Grizzly Bears	~ gets +2/+2 as long as you control a creature named Llanowar Elves or a creature named Grizzly Bears.	OK
+P-liu-comma	Grizzly Bears	~ gets +2/+2 as long as you control a creature named Guan Yu, Sainted Warrior.	FAIL
+P-wiit-this	Grizzly Bears	At the beginning of your upkeep, if ~ blocked this turn, put a +1/+1 counter on it.	OK
+P-wiit-since	Grizzly Bears	At the beginning of your end step, if ~ blocked this turn, put a +1/+1 counter on it.	OK
+P-wiit-since2	Grizzly Bears	At the beginning of your end step, if ~ blocked or became blocked this turn, put a +1/+1 counter on it. Otherwise, remove a +1/+1 counter from it.	FAIL
+P-city-other	Glorious Anthem	Whenever you play a land other than ~, sacrifice ~.	OK
+P-spore-it	Divination	Tap target creature. It doesn't untap during its controller's next untap step.	OK
+P-spore-allcr	Divination	Tap all creatures. They don't untap during their controllers' next untap steps.	OK
+P-spore-alltap	Divination	Tap all blocking creatures. They don't untap during their controllers' next untap steps.	OK
+P-spore-each2	Divination	Each attacking creature gets +1/+0 until end of turn.	OK
+P-devour-p	Grizzly Bears	When ~ has 7 or more +1/+1 counters on it, sacrifice it.	OK
+P-devour-p2	Grizzly Bears	When ~'s toughness is 7 or greater, sacrifice it.	FAIL
+P-eve-no	Glorious Anthem	At the beginning of your upkeep, remove a scream counter from ~. If there are no scream counters on it, sacrifice ~.	OK
+P-eve-exiled	Glorious Anthem	At the beginning of your upkeep, if ~ is exiled with a scream counter on it, remove a scream counter from it. Then if it has no scream counters on it, put it into your graveyard.	OK
+P-horror-dest	Grizzly Bears	At the beginning of your upkeep, destroy ~ unless you pay {3}{B}{B}{B}.	OK
+P-horror-this	Grizzly Bears	At the beginning of your upkeep, destroy ~. If ~ is destroyed this way, it deals 7 damage to you.	FAIL
+P-horror-this2	Divination	Destroy target creature. If that creature is destroyed this way, you gain 2 life.	OK
+P-minion-this2	Grizzly Bears	At the beginning of your upkeep, ~ deals 5 damage to you. If ~ deals damage to you this way, tap it.	FAIL
+P-djinn-sac	Grizzly Bears	At the beginning of your upkeep, sacrifice a land. If you sacrificed an Island this way, ~ deals 3 damage to you.	OK
+P-gorilla-snow	Grizzly Bears	At the beginning of your upkeep, you may sacrifice a Forest. If a snow Forest was sacrificed this way, ~ gains trample until end of turn.	OK
+P-tetra-rem	Grizzly Bears	At the beginning of your upkeep, you may remove any number of +1/+1 counters from ~.	OK
+P-tetra-rem2	Grizzly Bears	{T}, Remove any number of +1/+1 counters from ~: Create that many 1/1 colorless Thopter artifact creature tokens with flying.	OK
+P-tetra-quote	Grizzly Bears	At the beginning of your upkeep, create a 1/1 colorless Tetravite artifact creature token. It has flying and "This creature can't be enchanted."	FAIL
+P-tetra-cantench	Grizzly Bears	~ can't be enchanted.	FAIL
+P-skycap-each	Grizzly Bears	At the beginning of your upkeep, put a wage counter on ~. You may pay {2} for each wage counter on it. If you don't, an opponent gains control of ~.	FAIL
+P-skycap-rem	Grizzly Bears	At the beginning of your upkeep, put a wage counter on ~. You may pay {2}. If you don't, remove all wage counters from ~ and an opponent gains control of it.	OK
+P-jar-ret	Icy Manipulator	{T}: Each player exiles all cards from their hand face down and draws seven cards. At the beginning of the next end step, each player discards their hand.	OK
+P-jar-ret2	Icy Manipulator	{T}: Exile all cards from your hand. At the beginning of the next end step, return to your hand each card you exiled this way.	FAIL
+P-jar-ret3	Icy Manipulator	{T}: Each player exiles all cards from their hand. At the beginning of the next end step, each player returns to their hand the cards they exiled this way.	FAIL
+P-miter-notsac	Grizzly Bears	Whenever a creature you control dies, if it wasn't sacrificed, you gain 1 life.	FAIL
+P-miter-art	Grizzly Bears	Whenever an artifact you control is put into a graveyard from the battlefield, you may pay {3}. If you do, draw a card.	OK
+P-fallen-dealt	Grizzly Bears	At the beginning of your upkeep, ~ deals 1 damage to each opponent.	OK
+P-fallen-dealt2	Grizzly Bears	At the beginning of your upkeep, ~ deals 1 damage to each player it dealt damage to this turn.	FAIL
+P-tomb-each	Grizzly Bears	When ~ dies, at the beginning of your next upkeep, draw a card.	OK
+P-tomb-each2	Glorious Anthem	At the beginning of each of your upkeeps for the rest of the game, draw a card.	FAIL
+P-starf-regen	Grizzly Bears	At the beginning of each end step, if ~ was dealt damage this turn, draw a card.	OK
+P-vamp-died2	Grizzly Bears	At the beginning of each end step, if a creature died this turn, draw a card.	OK
+P-rasp-untapped	Grizzly Bears	At the beginning of your upkeep, if ~ is untapped, put a dream counter on it.	OK
+P-ferrets-blocked	Grizzly Bears	At end of combat, tap all creatures blocking or blocked by ~.	OK
+P-ferrets-blocked2	Grizzly Bears	At end of combat, tap all creatures that blocked ~ this combat.	FAIL
+P-ferrets-dont	Grizzly Bears	At end of combat, tap all creatures blocking ~. They don't untap during their controller's next untap step.	OK
+P-spined-sliver	Grizzly Bears	Whenever a Sliver becomes blocked, it gets +1/+1 until end of turn.	OK
+P-spined-sliver2	Grizzly Bears	Whenever a creature you control becomes blocked, it gets +1/+1 until end of turn for each creature blocking it.	OK
+P-decree-list	Glorious Anthem	Whenever a Swamp or Mountain becomes tapped, ~ deals 1 damage to that permanent's controller.	OK
+P-decree-list2	Glorious Anthem	Whenever a black permanent becomes tapped, ~ deals 1 damage to that permanent's controller.	OK
+P-decree-list3	Glorious Anthem	Whenever a Swamp or black permanent becomes tapped, ~ deals 1 damage to that permanent's controller.	OK
+P-harsh-this	Divination	This turn, whenever a creature deals combat damage to you, you gain 1 life.	FAIL
+P-harsh-this2	Divination	Until end of turn, whenever an attacking creature deals combat damage to you, it deals that much damage to its controller.	OK
+P-cloak-may	Pacifism	Whenever enchanted creature attacks and isn't blocked, you may have it assign no combat damage this turn. If you do, defending player discards a card at random.	FAIL
+P-cloak-may2	Pacifism	Whenever enchanted creature attacks and isn't blocked, you may have it deal 1 damage to target creature. If you do, it assigns no combat damage this turn.	OK
+P-hydra-each	Grizzly Bears	If damage would be dealt to ~ while it has a +1/+1 counter on it, prevent that damage and remove a +1/+1 counter from it.	OK
+P-bronze-sp	Grizzly Bears	Prevent all damage that would be dealt to ~ by spells.	OK
+P-bronze-sp2	Grizzly Bears	Prevent all damage that would be dealt to ~ by instant and sorcery spells.	OK
+P-incarn-only2	Grizzly Bears	{0}: ~ gets +1/+1 until end of turn. Only ~'s controller may activate this ability.	FAIL
+P-incarn-redir2	Grizzly Bears	{0}: The next 1 damage that would be dealt to ~ this turn is dealt to its owner instead.	FAIL
+P-eye-redir2	Divination	The next time a source of your choice would deal damage to you this turn, prevent that damage. You gain 1 life.	OK
+P-eye-redir3	Divination	The next time a source of your choice would deal damage to you this turn, instead that source deals that much damage to you and ~ deals that much damage to that source's controller.	FAIL
+P-ring-draw	Icy Manipulator	{T}: The next time you would draw a card this turn, instead return a card from your graveyard to your hand.	FAIL
+P-ring-draw2	Icy Manipulator	{T}: If you would draw a card this turn, instead put a card you own from outside the game into your hand.	OK
+P-sanct-draw	Glorious Anthem	If you would draw a card, you may skip that draw instead.	OK
+P-sanct-draw2	Glorious Anthem	If you would draw a card during your draw step, instead you gain 1 life.	FAIL
+P-sanct-atk	Glorious Anthem	Creatures without flying can't attack you.	OK
+P-sanct-atk2	Divination	Until your next turn, creatures without flying can't attack you.	OK
+P-winds-repl	Glorious Anthem	If a creature would untap during its controller's untap step, remove a +1/+1 counter from it instead.	FAIL
+P-landeq2	Glorious Anthem	Whenever a land enters under an opponent's control, if that player controls at least as many lands as you, that player sacrifices a land.	FAIL
+P-landeq3	Glorious Anthem	If an opponent who controls at least as many lands as you do would draw a card, that player skips that draw instead.	FAIL
+P-vault-skip	Icy Manipulator	If you would begin your turn while ~ is tapped, you may skip that turn instead.	FAIL
+P-vault-skip2	Icy Manipulator	{T}: Skip your next turn.	OK
+P-mox-repl	Icy Manipulator	If ~ would enter, you may discard a land card instead. If you do, put ~ onto the battlefield.	FAIL
+P-mox-repl2	Icy Manipulator	As ~ enters, you may discard a land card. If you don't, sacrifice it.	FAIL
+P-conscr-alone	Grizzly Bears	~ can't attack alone.	OK
+P-conscr-alone2	Grizzly Bears	~ can't attack or block alone.	OK
+P-conscr-unless	Grizzly Bears	~ can't attack unless you control an artifact.	OK
+P-akron-named	Glorious Anthem	Creatures you control not named ~ can't attack.	OK
+P-akron-except	Glorious Anthem	Except for Elves, creatures you control can't attack.	FAIL
+P-fast-any	Glorious Anthem	You may play any number of additional lands on each of your turns.	FAIL
+P-fast-first	Glorious Anthem	Whenever you play a land, if it's the first land you played this turn, you gain 1 life.	FAIL
+P-fast-second	Glorious Anthem	Whenever you play your second land each turn, you gain 1 life.	FAIL
+P-blaze-each	Divination	Target creature blocks each combat if able.	FAIL
+P-blaze-each2	Divination	Target creature can block any number of creatures this turn. It blocks each attacking creature this turn if able.	FAIL
+P-digger-top	Icy Manipulator	{2}: Put the top card of your library on the bottom of your library.	OK
+P-digger-top2	Icy Manipulator	{2}: Exile the top card of your graveyard.	FAIL
+P-urborg-or	Icy Manipulator	{T}: Target creature loses flying or first strike until end of turn.	FAIL
+P-urborg-or2	Icy Manipulator	{T}: Target creature loses your choice of first strike or swampwalk until end of turn.	OK
+P-farmer-ns	Icy Manipulator	{T}: Target land becomes a Swamp until your next turn.	OK
+P-farmer-ns2	Icy Manipulator	{T}: Target creature doesn't untap during its controller's next untap step.	OK
+P-xenic-ns	Icy Manipulator	{T}: Until your next turn, target noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value.	OK
+P-xenic-ns2	Icy Manipulator	{T}: Until your next upkeep, target creature gets +1/+1.	OK
+P-halfd-ns	Grizzly Bears	At the beginning of your upkeep, ~'s base power and toughness become 3/3 until end of turn.	OK
+P-halfd-ns2	Grizzly Bears	At the beginning of your upkeep, ~'s base power and toughness become equal to the power and toughness of target creature until end of turn.	FAIL
+P-halfd-ns3	Grizzly Bears	At the beginning of your upkeep, ~ has base power and toughness equal to target creature's power and toughness until end of turn.	FAIL
+P-mob-during	Grizzly Bears	During your turn, ~'s power and toughness are each equal to the number of Swamps your opponents control.	FAIL
+P-mob-plus	Grizzly Bears	~'s power and toughness are each equal to 2 plus the number of Swamps your opponents control.	OK
+P-mob-other	Grizzly Bears	As long as it's your turn, ~ has base power and toughness 5/5.	OK
+P-titania-bec	Glorious Anthem	Each noncreature artifact is an artifact creature with power and toughness each equal to its mana value in addition to its other types.	OK
+P-titania-bec3	Glorious Anthem	Noncreature artifacts you control are artifact creatures with base power and toughness each equal to their mana value.	FAIL
+P-draco-tot	Grizzly Bears	As ~ enters, sacrifice any number of creatures. ~ enters with a +1/+1 counter on it for each creature sacrificed this way.	OK
+P-draco-tot2	Grizzly Bears	As ~ enters, sacrifice any number of creatures. ~'s power is equal to the total power of the creatures sacrificed this way.	FAIL
+P-wood-tot	Grizzly Bears	As ~ enters, sacrifice any number of untapped Forests. ~ enters with a +1/+1 counter on it for each Forest sacrificed this way.	OK
+P-takkle-att	Pacifism	When enchanted creature dies, return ~ to the battlefield attached to target creature.	OK
+P-takkle-att2	Pacifism	When enchanted creature dies, return ~ to the battlefield.	OK
+P-kudzu-att3	Pacifism	When enchanted creature dies, attach ~ to target creature.	OK
+P-kudzu-att4	Pacifism	{1}: Attach ~ to target creature.	OK
+P-bestiary-t3	Pacifism	Activated abilities of enchanted creature with {T} in their costs can't be activated.	FAIL
+P-bestiary-t4	Glorious Anthem	Activated abilities of creatures with {T} in their costs can't be activated.	FAIL
+P-guard-ench	Grizzly Bears	~ can't be enchanted.	FAIL
+P-guard-ench2	Grizzly Bears	Artifacts you control can't be enchanted.	FAIL
+P-guard-ctrl	Grizzly Bears	Other players can't gain control of ~.	FAIL
+P-guard-ctrl2	Grizzly Bears	Other players can't gain control of artifacts you control.	FAIL
+P-soul-ex	Divination	As an additional cost to cast this spell, exile a creature you control. You gain life equal to the exiled creature's power.	FAIL
+P-soul-ex2	Divination	As an additional cost to cast this spell, exile a creature you control. Return target creature card from your graveyard to the battlefield.	FAIL
+P-sink-dont	Divination	Counter target spell unless its controller pays {X}. If they don't, they lose all unspent mana.	FAIL
+P-sink-dont2	Divination	Counter target spell unless its controller pays {3}. If that player doesn't, you draw a card.	OK
+P-xinye-dest	Divination	Target opponent chooses four lands they control. Destroy those lands.	OK
+P-xinye-dest2	Divination	Destroy four target lands you control.	OK
+P-dreams-ex2	Divination	Return target creature card from your graveyard to the battlefield. If it would leave the battlefield, exile it instead of putting it anywhere else.	OK
+P-dreams-ex3	Divination	Return target creature card from your graveyard to the battlefield. It gains haste. If it would leave the battlefield, exile it instead of putting it anywhere else.	OK
+P-intu-opp	Divination	Search your library for three cards and reveal them. An opponent chooses one of them. Put that card into your hand and the rest into your graveyard. Then shuffle.	OK
+P-intu-opp2	Divination	Search your library for three cards and reveal them. Target opponent chooses one of them. Put that card into your hand and the rest into your graveyard. Then shuffle.	OK
+P-flow-gains	Grizzly Bears	{2}: Put a +1/+1 counter on ~ or ~ gains flying.	FAIL
+P-flow-gains2	Grizzly Bears	{2}: ~ gains flying.	OK
+P-flow-gains3	Grizzly Bears	{2}: ~ gains your choice of flying, first strike, or trample until end of turn.	OK
+P-egg-ht	Icy Manipulator	Sacrifice ~: Choose one. Activate only if there are two or more charge counters on ~. / • Draw a card. / • You gain 1 life.	FAIL
+P-egg-ht2	Icy Manipulator	Sacrifice ~: Choose one. Activate only as a sorcery. / • Draw a card. / • You gain 1 life.	OK
+P-pox-third2	Divination	Each player loses a third of their life, rounded up.	OK
+P-pox-third3	Divination	Each player discards a third of the cards in their hand, rounded up.	FAIL
+P-bl-if2	Divination	If target creature has flying, it gets +4/-4 until end of turn.	FAIL
+P-bl-if3	Divination	Target creature gets +4/-4 until end of turn if it has toughness 5 or greater.	OK
+P-bl-other	Divination	If target creature has toughness 5 or greater, it gets +4/-4 until end of turn. Otherwise, it gets +4/-X until end of turn, where X is its toughness minus 1.	FAIL
+P-phoe-rev	Divination	Return target creature to its owner's hand. Its owner plays with that card revealed in their hand.	FAIL
+P-phoe-rev2	Divination	Return target creature to its owner's hand. Until that player's next turn, they can't play that card.	FAIL
+P-winter-th	Divination	Tap two target creatures. ~ deals 2 damage to each of them with flying.	FAIL
+P-winter-th2	Divination	Tap two target creatures. ~ deals 2 damage to each of those creatures.	OK
+P-lode-up	Icy Manipulator	{T}: Put up to four target cards from a single graveyard on top of their owner's library in any order.	OK
+P-lode-up2	Icy Manipulator	{T}: Put up to two target basic land cards from your graveyard on top of your library in any order.	OK
+P-starf-tok	Grizzly Bears	At the beginning of each end step, create a 0/1 blue Starfish creature token for each creature that died this turn.	OK
+P-dance-tok3	Pacifism	When ~ enters, create a token that's a copy of target creature. When ~ leaves the battlefield, exile that token.	OK
+P-dance-tok4	Pacifism	When ~ leaves the battlefield, exile the token.	FAIL
+P-arms-mc	Glorious Anthem	White creatures get +1/+1 as long as white is the most common color among all permanents or is tied for most common.	OK
+P-arms-mc2	Glorious Anthem	As ~ enters, choose a color. White creatures get +1/+1 as long as the chosen color is the most common color among all permanents.	FAIL
+P-rites-any	Divination	Discard any number of cards. Creatures you control get +1/+0 until end of turn for each card discarded this way.	OK
+P-nebu-x	Icy Manipulator	{X}, {T}: Target opponent reveals X cards from their hand.	OK
+P-nebu-x2	Icy Manipulator	{T}: Target opponent reveals two cards at random from their hand. Then that player discards all cards revealed this way.	FAIL
+P-juxt2	Divination	Exchange control of the creature you control with the greatest mana value and target creature an opponent controls.	OK
+P-juxt3	Divination	You and target player exchange control of a creature you each control.	FAIL
+P-bless-or	Icy Manipulator	{T}: Put a +1/+1 counter on target creature or that creature gains first strike.	FAIL
+P-bless-or2	Icy Manipulator	{T}: Put a +1/+1 counter on target creature or that creature gains banding, first strike, or trample.	FAIL
+P-blaze3	Divination	Target creature blocks each attacking creature this turn if able.	FAIL
+P-blaze4	Divination	Target creature blocks this turn if able.	OK
+P-cannib3	Divination	Choose two target creatures controlled by the same player. Exile one of those creatures and put two +1/+1 counters on the other.	FAIL
+P-cannib4	Divination	Destroy one of two target creatures and put a +1/+1 counter on the other.	FAIL
+P-farmer3	Icy Manipulator	{T}: Target land becomes a Swamp until end of your next turn.	FAIL
+P-torch3	Divination	As long as ~ is on the stack, it has flying.	FAIL
+P-willow2	Grizzly Bears	{G}: Until end of turn, ~ can be the target of spells and abilities controlled by target player.	FAIL
+P-willow3	Grizzly Bears	{G}: Until end of turn, ~ can be the target of spells and abilities your opponents control as though it didn't have shroud.	FAIL
+P-wisps2	Icy Manipulator	{B}: Draw a card. Activate no more than three times each turn.	OK
+P-wisps3	Icy Manipulator	{B}: Draw a card. Activate no more times each turn than the number of Swamps you control.	FAIL
+P-pj2	Divination	As an additional cost to cast this spell, you may pay {1}{R} any number of times. Draw a card for each time you paid that cost.	FAIL
+P-pj3	Divination	Destroy target artifact. For each additional {1}{R} you paid, destroy another target artifact.	FAIL
+P-pj4	Divination	As an additional cost to cast this spell, you may pay {1}{R} and/or {1}{G} any number of times.	FAIL
+P-hazez-at	Grizzly Bears	When ~ enters, at the beginning of your next upkeep, create X 1/1 red Sand Warrior creature tokens, where X is the number of lands you control at that time.	FAIL
+P-hazez-col	Grizzly Bears	When ~ enters, create a 1/1 Sand Warrior creature token that's red, green, and white.	OK
+P-trans2	Divination	Sacrifice an artifact. If you do, search your library for an artifact card with mana value less than or equal to the sacrificed artifact's mana value, put it onto the battlefield, then shuffle.	OK
+P-trans3	Divination	Sacrifice an artifact. If you do, search your library for an artifact card. If that card's mana value is greater than 2, put it onto the battlefield. Then shuffle.	OK
+P-storm3	Grizzly Bears	{U}, Exile the top card of your library: If it's a land card, ~ gets +1/+1 until end of turn.	OK
+P-storm4	Grizzly Bears	{U}: Exile the top card of your library. If it's a land card, ~ gets +1/+1 until end of turn.	OK
+P-guan3	Grizzly Bears	When ~ is put into your graveyard from the battlefield, you may draw a card.	OK
+P-guan4	Grizzly Bears	When ~ dies, you may shuffle ~ into your library.	FAIL
+P-wight4	Divination	Put a stun counter on target creature. It doesn't untap during its controller's untap step for as long as it has a +1/+1 counter on it.	FAIL
+P-wight5	Divination	Tap target creature. It doesn't untap during its controller's untap step for as long as you control ~.	OK
+P-wight6	Grizzly Bears	At end of combat, put a paralyzation counter on each creature blocking or blocked by ~ and tap those creatures. Each of those creatures gains "{4}: Remove a paralyzation counter from this creature."	OK
+P-rasp-st	Grizzly Bears	At the beginning of your upkeep, if ~ was untapped at the beginning of this turn, put a dream counter on it.	FAIL
+P-mantle2	Pacifism	Whenever enchanted creature attacks and isn't blocked, its controller may have it deal damage equal to its power plus 2 to another target creature. If that player does, the attacking creature assigns no combat damage this turn.	FAIL
+P-winds3	Glorious Anthem	If a permanent with a wind counter on it would untap, remove all wind counters from it instead.	FAIL
+P-oldman-full	Icy Manipulator	{T}: Gain control of target creature with power less than or equal to ~'s power for as long as ~ remains tapped and that creature's power remains less than or equal to ~'s power.	FAIL
+P-coffin2	Icy Manipulator	{2}, {T}: Exile target creature. When ~ becomes untapped, return that exiled card to the battlefield under its owner's control.	FAIL
+P-coffin3	Icy Manipulator	{2}, {T}: Exile target creature and all Auras attached to it.	OK
+P-coffin4	Icy Manipulator	{2}, {T}: Exile target creature for as long as ~ remains tapped.	FAIL
+P-leech2	Divination	Target player loses all their poison counters.	FAIL
+P-leech3	Divination	Remove all poison counters from target player. ~ deals damage to that player equal to the number of poison counters removed this way.	OK
+P-helm2	Icy Manipulator	{X}, {T}: Target opponent mills cards until a creature card or X cards have been put into their graveyard this way.	FAIL
+P-helm3	Icy Manipulator	{T}: Target opponent reveals cards from the top of their library until they reveal a creature card. They put those cards into their graveyard. Put that creature card onto the battlefield under your control.	FAIL
+P-bauble2	Icy Manipulator	{T}: Look at a random card in target player's hand.	FAIL
+P-bauble3	Icy Manipulator	{T}: Look at target player's hand.	OK
+P-tele2	Divination	Tap target creature. It doesn't untap during its controller's untap step for two turns.	FAIL
+P-sword2	Icy Manipulator	{T}, Sacrifice ~ and a creature: Draw a card.	OK
+P-sword3	Icy Manipulator	{T}, Sacrifice ~, Sacrifice any number of creatures: Draw a card.	OK
+P-hordes2	Grizzly Bears	At the beginning of your upkeep, sacrifice a land of your choice.	FAIL
+P-hordes3	Divination	Target opponent chooses a land you control. Sacrifice that land.	FAIL
+P-obel2	Icy Manipulator	{6}, {T}: Return target permanent you own and control to your hand.	FAIL
+P-cauld-note	Icy Manipulator	{X}, {T}: Put a charge counter on ~ and note the amount of mana spent to pay this activation cost.	FAIL
+P-lava-shock	Shock	~ deals 2 damage to any target. That damage can't be prevented.	FAIL
+P-lava-shock2	Shock	~ deals 2 damage to any target. If ~ would deal damage to a creature, that damage can't be prevented.	FAIL
+P-lava-shock3	Shock	Damage that would be dealt by ~ to creatures can't be prevented or dealt instead to another permanent or player. ~ deals 2 damage to any target.	FAIL
+P-hordes-opp	Divination	Target player sacrifices a land of an opponent's choice.	FAIL
+P-hordes-opp2	Divination	Sacrifice a land of an opponent's choice.	FAIL
+P-hordes-opp3	Divination	Each player sacrifices a land of their choice.	OK
+P-city-another	Glorious Anthem	Whenever you play another land, you gain 1 life.	FAIL
+P-city-another2	Glorious Anthem	Whenever another land you control enters, sacrifice ~.	OK
+P-dance-sep	Pacifism	When ~ enters, create a token that's a copy of target creature. / When ~ leaves the battlefield, exile the token.	FAIL
+P-dance-sep2	Pacifism	When ~ enters, create a token that's a copy of target creature. / When ~ leaves the battlefield, exile that token.	FAIL
+P-spined-that	Grizzly Bears	Whenever a Sliver becomes blocked, that Sliver gets +1/+1 until end of turn.	FAIL
+P-spined-that2	Grizzly Bears	Whenever a Sliver becomes blocked, it gets +1/+1 until end of turn for each creature blocking it.	OK
+P-aurochs-other	Grizzly Bears	Whenever ~ attacks, it gets +1/+0 until end of turn for each other attacking Aurochs.	OK
+P-vhati-chs	Icy Manipulator	{T}: Until end of turn, target creature has your choice of base power 1 or base toughness 1.	FAIL
+P-decree4	Glorious Anthem	Whenever a Swamp, Mountain, or black permanent becomes tapped, ~ deals 1 damage to that permanent's controller.	FAIL
+P-decree5	Glorious Anthem	Whenever a Swamp, Mountain, black permanent, or red permanent becomes tapped, you gain 1 life.	FAIL
+P-cannib-other	Divination	Choose two target creatures. Exile one of them. Put two +1/+1 counters on the other.	FAIL
+P-cannib-other2	Divination	Choose two target creatures. Exile one of them and put two +1/+1 counters on the other one.	FAIL
+P-manab-from	Grizzly Bears	At the beginning of your end step, you may reveal your hand and put all land cards from it onto the battlefield.	FAIL
+P-manab-from2	Grizzly Bears	At the beginning of your end step, you may put all land cards from your hand onto the battlefield. If you do, discard your hand.	OK
+P-guan-your	Grizzly Bears	When ~ dies, you may shuffle it into your library.	OK
+P-guan-your2	Grizzly Bears	When ~ dies, shuffle ~ into its owner's library.	OK
+P-digger-gy	Icy Manipulator	{2}: Put a card from your graveyard on the bottom of your library.	OK
+P-kudzu-their	Pacifism	When enchanted creature becomes tapped, destroy it. That creature's controller may attach ~ to a creature of their choice.	FAIL
+P-kudzu-their2	Pacifism	When enchanted creature becomes tapped, destroy it. Attach ~ to target creature.	OK
+P-intu-one	Divination	Reveal the top three cards of your library. Target opponent chooses one. Put that card into your hand and the rest into your graveyard.	FAIL
+P-intu-one2	Divination	Search your library for three cards and reveal them. Target opponent chooses one of those cards. Put that card into your hand and the rest into your graveyard. Then shuffle.	OK
+P-eve-more	Glorious Anthem	At the beginning of your upkeep, remove a scream counter from ~. If there are no more scream counters on it, sacrifice ~.	FAIL
+P-eve-gy	Glorious Anthem	At the beginning of your upkeep, if ~ is exiled with a scream counter on it, remove a scream counter from it. Then if it has no scream counters on it, put it into your graveyard and each player returns all creature cards from their graveyard to the battlefield.	OK
+P-storm-snow	Grizzly Bears	{U}, Exile the top card of your library: If it's a snow land card, ~ gets +1/+1 until end of turn.	OK
+P-storm-exiled	Grizzly Bears	{U}: Exile the top card of your library. If the exiled card is a land card, ~ gets +1/+1 until end of turn.	OK
+P-liu-quote	Grizzly Bears	~ gets +2/+2 as long as you control a creature named Ral, Storm Conduit.	FAIL
+P-akron-and	Glorious Anthem	Except for creatures named ~ and artifact creatures, creatures you control can't attack.	FAIL
+P-akron-and2	Glorious Anthem	Except for artifact creatures and Elves, creatures you control can't attack.	FAIL
+P-akron-and3	Glorious Anthem	Creatures you control other than artifact creatures can't attack.	FAIL
+P-ydwen-self	Grizzly Bears	Whenever ~ blocks, remove ~ from combat. Creatures it was blocking that had become blocked by only ~ this combat become unblocked.	FAIL
+P-ydwen-that	Divination	Remove target blocking creature from combat. Creatures it was blocking that had become blocked by only that creature this combat become unblocked.	OK
+P-fallen-pw	Grizzly Bears	At the beginning of your upkeep, ~ deals 1 damage to each opponent and each planeswalker they control.	OK
+P-fallen-game	Grizzly Bears	At the beginning of your upkeep, ~ deals 1 damage to each opponent who was dealt damage this turn.	FAIL
+P-arms-trig	Glorious Anthem	When white isn't the most common color among all permanents, sacrifice ~.	FAIL
+P-arms-np	Glorious Anthem	White creatures get +1/+1 as long as white is the most common color among nontoken permanents you control.	FAIL
+P-arms-chp	Glorious Anthem	As ~ enters, choose an opponent. White creatures get +1/+1 as long as white is the most common color among permanents the chosen player controls.	FAIL
+P-gaunt-ex	Icy Manipulator	{5}, Sacrifice ~: Exchange control of target creature you control and target creature an opponent controls. If those permanents are exchanged this way, destroy all Auras attached to them.	FAIL
+P-gaunt-ex2	Icy Manipulator	{5}, Sacrifice ~: Exchange control of target creature you control and target creature an opponent controls. Destroy all Auras attached to them.	OK
+P-trans-diff	Divination	Sacrifice an artifact. If you do, search your library for an artifact card. If that card's mana value is greater than the sacrificed artifact's mana value, you may pay {X}, where X is the difference. If you do, put it onto the battlefield. Then shuffle.	FAIL
+P-trans-le	Divination	Sacrifice an artifact. If you do, search your library for an artifact card. If that card's mana value is less than or equal to 3, put it onto the battlefield. Then shuffle.	OK
+P-tetra-each	Grizzly Bears	At the beginning of your upkeep, create two 1/1 colorless Tetravite artifact creature tokens. They each have flying.	FAIL
+P-tetra-each2	Grizzly Bears	At the beginning of your upkeep, create two 1/1 colorless Tetravite artifact creature tokens with flying and "This token can't be enchanted."	FAIL
+P-sky-for	Grizzly Bears	At the beginning of your upkeep, put a wage counter on ~. Sacrifice ~ unless you pay {2} for each wage counter on it.	OK
+P-sink-mana	Divination	Counter target spell unless its controller pays {X}. If that player doesn't, they tap all lands they control and lose all unspent mana.	FAIL
+P-sink-mana2	Divination	Target player taps all lands with mana abilities they control.	OK
+P-bl-oth	Divination	Target creature gets +4/-4 until end of turn if it has toughness 5 or greater. Otherwise, it gets +4/-X until end of turn, where X is its toughness minus 1.	OK
+P-pand-full	Grizzly Bears	Whenever a creature enters, that creature's controller may have it deal damage equal to its power to any target of their choice.	FAIL
+P-pand-opp	Grizzly Bears	Whenever a creature enters, its controller may have it deal 1 damage to target creature.	OK
+P-leech-much	Divination	Target player loses all poison counters. ~ deals that much damage to that player.	FAIL
+P-leech-n	Divination	Target player loses two poison counters.	FAIL
+P-helm-rep	Icy Manipulator	{T}: Target opponent mills a card, then repeats this process until a creature card is put into their graveyard this way.	FAIL
+P-helm-rep2	Icy Manipulator	{T}: Target opponent mills cards until they mill a creature card.	FAIL
+P-lore-rep	Divination	Target opponent chooses a card in your graveyard. You may pay {G}. If you do, repeat this process. Then put the last chosen card into your hand.	FAIL
+P-wiit-has	Grizzly Bears	At the beginning of your upkeep, put a +1/+1 counter on ~ if it blocked or was blocked since your last upkeep.	FAIL
+P-wiit-has2	Grizzly Bears	At the beginning of your upkeep, put a +1/+1 counter on ~ if it attacked or blocked since your last upkeep. Otherwise, remove a +1/+1 counter from it.	OK
+P-xinye-you	Divination	You sacrifice four lands, then target opponent sacrifices four lands. Then ~ deals 4 damage to each creature.	OK
+P-ferret-this	Grizzly Bears	At end of combat, tap all creatures that blocked or were blocked by ~ this turn.	FAIL
+P-pox-disc	Divination	Each player discards a third of the cards in their hand, rounded up.	FAIL
+P-pox-sac3	Divination	Each player sacrifices a third of the creatures they control, rounded up.	FAIL
+P-winter-those	Divination	Tap two target creatures. ~ deals 2 damage to each of those creatures.	OK
+P-winter-those2	Divination	Tap two target creatures. ~ deals 2 damage to each of them that has flying.	FAIL
+P-spore-tap	Divination	Each blocking creature doesn't untap during its controller's next untap step.	FAIL
+P-spore-tap2	Divination	Attacking creatures and blocking creatures don't untap during their controllers' next untap steps.	FAIL
+P-egg-cnt	Icy Manipulator	Sacrifice ~: Draw a card. Activate only if there are two or more hatchling counters on ~.	OK
+P-wisps-snow	Icy Manipulator	{B}: Draw a card. Activate no more times each turn than the number of snow Swamps you control.	FAIL
+P-wisps-snow2	Icy Manipulator	{B}: Draw a card. Activate only if you control a snow Swamp.	OK
+P-blaze-any	Divination	Target creature defending player controls can block any number of creatures this turn.	OK
+P-blaze-any2	Divination	Target creature can block any number of creatures this turn. It blocks each combat this turn if able.	FAIL
+P-fast-p	Glorious Anthem	You may play any number of additional lands on each of your turns.	FAIL
+P-nebu-rand	Icy Manipulator	{X}, {T}: Choose a card name. Target opponent reveals X cards at random from their hand. Then that player discards all cards with that name revealed this way.	FAIL
+P-nebu-rand2	Icy Manipulator	{T}: Target opponent reveals a card at random from their hand. Then that player discards all cards revealed this way.	FAIL
+P-bauble-lk	Icy Manipulator	{T}: Target player reveals a card at random from their hand.	OK
+P-rites-rand	Divination	Discard two cards at random.	OK
+P-rites-rand3	Divination	Discard X cards at random.	OK
+P-obel-own	Icy Manipulator	{6}, {T}: Return target permanent you own to your hand.	OK
+P-obel-own2	Icy Manipulator	{6}, {T}: Return target nonland permanent you own and control to its owner's hand.	FAIL
+P-guard-noench	Grizzly Bears	As long as ~ is untapped, noncreature artifacts you control have shroud.	OK
+P-guard-ctrl3	Grizzly Bears	Other players can't gain control of permanents you control.	FAIL
+P-bestiary-their	Pacifism	Enchanted creature can't attack or block, and its activated abilities with {T} in their costs can't be activated.	FAIL
+P-bestiary-their2	Glorious Anthem	Creatures with flying can't attack or block, and their activated abilities with {T} in their costs can't be activated.	OK
+P-devour-pow	Grizzly Bears	When ~'s power is 7 or greater, draw a card.	FAIL
+P-devour-pow2	Grizzly Bears	At the beginning of your end step, if ~'s power is 7 or greater, sacrifice it.	OK
+P-rasp-beg	Grizzly Bears	At the beginning of your upkeep, if ~ was untapped at the beginning of this turn, draw a card.	FAIL
+P-fastt	Glorious Anthem	Whenever you play a land, if you've played another land this turn, you lose 1 life.	FAIL
+P-miter-was	Grizzly Bears	Whenever a creature you control dies, if it was sacrificed, draw a card.	FAIL
+P-star-time	Grizzly Bears	At the beginning of each end step, create a 0/1 blue Starfish creature token for each time ~ attacked this turn.	FAIL
+P-reveka-gb	Grizzly Bears	{T}: ~ deals 2 damage to any target. It doesn't untap during your next untap step.	OK
+P-mob-dur	Grizzly Bears	As long as it's your turn, ~'s power and toughness are each equal to the number of Swamps your opponents control.	OK
+P-mob-dur2	Grizzly Bears	During your turn, ~ has base power and toughness 5/5.	OK
+P-wood-cda	Grizzly Bears	As ~ enters, sacrifice any number of untapped Forests. / ~'s power and toughness are each equal to the number of Forests sacrificed as it entered.	FAIL
+P-willow-noshr	Grizzly Bears	{G}: Until end of turn, ~ can be the target of spells and abilities your opponents control as though it didn't have hexproof.	FAIL
+P-willow-noshr2	Glorious Anthem	Creatures your opponents control with hexproof can be the targets of spells and abilities you control as though they didn't have hexproof.	OK
+P-conscr-two	Grizzly Bears	~ can't attack unless two or more other creatures attack.	FAIL
+P-blood-tough	Divination	If target creature has flying, you gain 1 life.	FAIL
+P-juxt-same	Divination	Exchange control of the creature you control with the greatest mana value and the creature target opponent controls with the greatest mana value.	FAIL
+P-shape-full-token	Shapeshifter	As ~ enters, choose a number between 0 and 7. / At the beginning of your upkeep, you may choose a number between 0 and 7. / ~'s power is equal to the last chosen number and its toughness is equal to 7 minus that number.	OK
+P-shape-chosen-token	Shapeshifter	As ~ enters, choose a number between 0 and 7. / ~'s power is equal to the chosen number and its toughness is equal to 7 minus that number.	OK
+P-shape-pow-token	Shapeshifter	As ~ enters, choose a number between 0 and 7. / At the beginning of your upkeep, you may choose a number between 0 and 7. / ~'s power is equal to the last chosen number.	OK
+P-shape-pow2-token	Shapeshifter	As ~ enters, choose a number between 0 and 7. / ~'s power is equal to the chosen number.	OK
+P-shape-upk-token	Shapeshifter	As ~ enters, choose a number between 0 and 7. / At the beginning of your upkeep, you may choose a number between 0 and 7.	OK
+P-shape-full	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / At the beginning of your upkeep, you may choose a number between 0 and 7. / ~'s power is equal to the last chosen number and its toughness is equal to 7 minus that number.	FAIL
+P-shape-chosen	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / ~'s power is equal to the chosen number and its toughness is equal to 7 minus that number.	FAIL
+P-shape-pow	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / At the beginning of your upkeep, you may choose a number between 0 and 7. / ~'s power is equal to the last chosen number and its toughness is equal to 7 minus the last chosen number.	FAIL
+P-shape-pow2	Shapeshifter (me4 record)	As ~ enters, choose a number between 0 and 7. / ~'s power is equal to the chosen number and its toughness is equal to the chosen number.	FAIL
+P-R-oppchoice-cr	Divination	Sacrifice a creature of an opponent's choice.	FAIL
+P-R-oppchoice-tgt	Grizzly Bears	When ~ enters, target opponent may have it deal 2 damage to any target of their choice.	FAIL
+P-R-random-look	Divination	Look at two cards at random in target opponent's hand.	FAIL
+P-R-or-pump	Divination	Target creature gets +2/+2 or gains flying until end of turn.	FAIL
+P-R-results-sac	Divination	Sacrifice a creature. If you sacrifice a Goblin this way, draw a card.	FAIL
+P-R-other-two	Divination	Choose two target creatures. Destroy one of them. The other gets +1/+1 until end of turn.	FAIL
+P-R-repeat-mill	Divination	Mill a card, then repeat this process until a land card is put into your graveyard this way.	FAIL
+P-R-half-up	Fireball	~ deals half X damage, rounded up, to you.	OK
+P-R-destroy-each	Divination	Each player destroys a creature they control.	FAIL
+P-R-nodmg-bears	Grizzly Bears	Whenever ~ attacks and isn't blocked, you may have it assign no combat damage this turn.	FAIL
+P-R-block-unless	Grizzly Bears	~ can't block unless two other creatures block.	FAIL
+P-R-untap-group	Divination	Each creature you control doesn't untap during its controller's next untap step.	FAIL
+P-R-ench-other	Pacifism	Enchanted creature can't be enchanted by other Auras.	OK
+P-R-cda-turn	Grizzly Bears	During your turn, ~'s power is equal to the number of cards in your hand.	FAIL
+P-R-hist-blocked	Grizzly Bears	At the beginning of your end step, if ~ has blocked this turn, draw a card.	OK
+P-R-state-pow	Grizzly Bears	When ~'s power is 0 or less, sacrifice it.	FAIL
+P-R-limit-hand	Icy Manipulator	{1}: Draw a card. Activate no more times each turn than the number of cards in your hand.	FAIL
+P-R-losectl	Divination	Gain control of target creature. Sacrifice it when you lose control of ~.	FAIL
+P-R-thisturn-trig	Divination	This turn, whenever a creature dies, you gain 1 life.	FAIL
+P-R-until-step	Divination	Target creature gets +2/+2 until its controller's next untap step.	FAIL
+P-R-nexttime-draw	Icy Manipulator	{T}: The next time you would draw a card this turn, instead you gain 1 life.	FAIL
+P-R-prev-target	Grizzly Bears	Prevent all damage that would be dealt to ~ by abilities that target it.	FAIL
+P-R-cant-prev	Shock	Damage that would be dealt by ~ can't be prevented. ~ deals 2 damage to any target.	FAIL
+P-R-untap-repl	Glorious Anthem	If a creature you control would untap during your untap step, you gain 1 life instead.	FAIL
+P-R-enter-repl	Icy Manipulator	If ~ would enter, you may pay 2 life instead. If you do, put ~ onto the battlefield.	FAIL
+P-R-soulx-para	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield.	OK
+P-R-soulx-para2	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield. Put a +2/+2 counter on that creature if the exiled creature was a Thrull.	FAIL
+P-R-soulx-para3	Soul Exchange	As an additional cost to cast this spell, exile a creature you control. / Return target creature card from your graveyard to the battlefield. If the exiled creature was a Thrull, put a +2/+2 counter on that creature.	FAIL
+P-R-pj-one	Primitive Justice	As an additional cost to cast this spell, you may pay {1}{R} any number of times.	OK
+P-R-amulet-add	Icy Manipulator	{T}: Add one mana of ~'s last noted type.	FAIL

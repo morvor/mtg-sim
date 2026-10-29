@@ -1,0 +1,407 @@
+//! Replacement effects that modify how other permanents enter (CR 614.1d, 614.12), and
+//! "it becomes day as this enters" (CR 731).
+
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+fn assert_supported(name: &str) {
+    let c = card(name);
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{name} has unsupported text: {:?}",
+        c.unsupported_text()
+    );
+}
+
+#[test]
+fn opponents_creatures_and_nonbasic_lands_enter_tapped() {
+    cr!("614.1d", "614.12");
+    assert_supported("Thalia, Heretic Cathar");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thalia, Heretic Cathar");
+    let their_bears = t.enter(P1, "Grizzly Bears");
+    let their_forest = t.enter(P1, "Forest");
+    let their_nonbasic = t.enter(P1, "Reliquary Tower");
+    let my_bears = t.enter(P0, "Grizzly Bears");
+    assert!(t.obj_now(their_bears).tapped);
+    assert!(!t.obj_now(their_forest).tapped, "basic land");
+    assert!(t.obj_now(their_nonbasic).tapped, "nonbasic land");
+    assert!(!t.obj_now(my_bears).tapped, "your own creature");
+}
+
+#[test]
+fn opponents_creature_spell_enters_tapped() {
+    cr!("614.1d", "608.3a");
+    assert_supported("Imposing Sovereign");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Imposing Sovereign");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Forest", 2);
+    let bears = t.hand(P1, "Grizzly Bears");
+    t.cast(P1, bears).go();
+    t.resolve();
+    assert!(t.on_battlefield(bears));
+    assert!(t.obj_now(bears).tapped);
+}
+
+#[test]
+fn entering_controller_is_the_one_it_will_have() {
+    cr!("614.12");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Imposing Sovereign");
+    // A card P1 owns put onto the battlefield under P0's control: not an opponent's.
+    let id =
+        t.g.create_card_object(card("Grizzly Bears"), P1, object::Zone::Nowhere);
+    let new =
+        t.g.move_object_ev(replacement::MoveEv {
+            obj: id,
+            to: object::Zone::Battlefield,
+            pos: ability::LibraryPosition::Top,
+            cause: events::MoveCause::Effect,
+            by: Some(P0),
+            etb: replacement::EtbInfo {
+                controller: Some(P0),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .unwrap();
+    assert!(!t.g.obj(new).tapped);
+}
+
+#[test]
+fn general_enter_tapped_effect_doesnt_affect_itself() {
+    cr!("614.12");
+    assert_supported("Orb of Dreams");
+    let mut t = TestGame::new(2);
+    let orb = t.enter(P0, "Orb of Dreams");
+    assert!(!t.obj_now(orb).tapped);
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert!(t.obj_now(bears).tapped);
+}
+
+// ---------------------------------------------------------------------------
+// Day and night
+// ---------------------------------------------------------------------------
+
+#[test]
+fn it_becomes_day_as_it_enters() {
+    cr!("731.1", "731.1a", "614.1c");
+    assert_supported("Firmament Sage");
+    let mut t = TestGame::new(2);
+    assert_eq!(t.g.day, None);
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Firmament Sage");
+    t.resolve_all();
+    assert_eq!(t.g.day, Some(true));
+    // Becoming day from neither isn't "night becomes day": no card drawn.
+    assert_eq!(t.hand_size(P0), hand);
+    // Night becomes day triggers it.
+    t.g.set_day(false);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn it_doesnt_become_day_if_it_is_night() {
+    cr!("731.1");
+    let mut t = TestGame::new(2);
+    t.g.set_day(false);
+    t.enter(P0, "Firmament Sage");
+    assert_eq!(t.g.day, Some(false));
+}
+
+// ---------------------------------------------------------------------------
+// "You may have ~ enter as a copy of ..." (CR 707.9)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn clone_enters_as_a_copy() {
+    cr!("707.2", "614.1c");
+    assert_supported("Clone");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let c = t.enter(P0, "Clone");
+    let now = t.g.current(c);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Grizzly Bears");
+    assert_eq!(t.pt(c), (2, 2));
+    assert_eq!(t.g.obj(now).controller, P0);
+}
+
+#[test]
+fn clone_may_copy_nothing() {
+    cr!("707.2", "704.5f");
+    ruling!("Clone", "You can choose not to copy anything");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[]);
+    let c = t.enter(P0, "Clone");
+    t.settle();
+    assert!(!t.on_battlefield(c));
+    assert!(t.in_graveyard(P0, "Clone"));
+}
+
+#[test]
+fn clone_uses_the_copied_creatures_as_enters_abilities() {
+    cr!("707.2", "614.12", "607.2d");
+    ruling!(
+        "Clone",
+        "Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the chosen creature will also work"
+    );
+    let mut t = TestGame::new(2);
+    let voice = t.battlefield(P1, "Voice of All");
+    t.answer_choose(P0, &[Entity::Object(voice)]);
+    // Blue is index 1.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    let c = t.enter(P0, "Clone");
+    let now = t.g.current(c);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Voice of All");
+    assert_eq!(t.g.obj(now).choices.color, Some(types::Color::Blue));
+    let blue = t.battlefield(P1, "Coral Merfolk");
+    assert!(t.g.protected_from(now, blue));
+}
+
+#[test]
+fn vesuva_enters_tapped_as_a_copy_of_a_land() {
+    cr!("707.2", "614.1c");
+    assert_supported("Vesuva");
+    let mut t = TestGame::new(2);
+    let ground = t.battlefield(P1, "Stomping Ground");
+    t.answer_choose(P0, &[Entity::Object(ground)]);
+    // Stomping Ground's "you may pay 2 life" applies too; it enters tapped either way.
+    t.answer_yes(P0, true);
+    let v = t.hand(P0, "Vesuva");
+    t.play_land(P0, v).unwrap();
+    let now = t.g.current(v);
+    assert_eq!(t.g.obj(now).chars.name.as_str(), "Stomping Ground");
+    assert!(t.obj_now(v).tapped);
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn copy_with_type_exceptions() {
+    cr!("707.9", "707.9b");
+    assert_supported("Phyrexian Metamorph");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let m = t.enter(P0, "Phyrexian Metamorph");
+    let now = t.g.current(m);
+    let c = &t.g.obj(now).chars;
+    assert_eq!(c.name.as_str(), "Grizzly Bears");
+    assert!(c.is(types::CardType::Artifact));
+    assert!(c.is(types::CardType::Creature));
+    assert!(c.has_subtype("Bear"));
+    // The exception is part of its copiable values (CR 707.9b).
+    assert!(t.g.obj(now).copiable.is(types::CardType::Artifact));
+}
+
+#[test]
+fn copy_with_subtype_exceptions() {
+    cr!("707.9b");
+    assert_supported("Glasspool Mimic // Glasspool Shore");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let m = t.enter(P0, "Glasspool Mimic // Glasspool Shore");
+    let now = t.g.current(m);
+    let c = &t.g.obj(now).chars;
+    assert!(c.has_subtype("Bear"));
+    assert!(c.has_subtype("Shapeshifter"));
+    assert!(c.has_subtype("Rogue"));
+}
+
+#[test]
+fn copy_with_ability_exception() {
+    cr!("707.9b");
+    assert_supported("Mercurial Pretender");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    let m = t.enter(P0, "Mercurial Pretender");
+    let now = t.g.current(m);
+    // "{2}{U}{U}: Return this creature to its owner's hand."
+    t.lands(P0, "Island", 4);
+    t.activate(P0, now, 0, &[]).unwrap();
+    t.resolve();
+    assert!(t.in_hand(P0, "Mercurial Pretender"));
+}
+
+#[test]
+fn enters_tapped_if_you_were_the_starting_player() {
+    cr!("614.1d", "103.1");
+    // Rising Chicane: "If you were the starting player, this land enters tapped."
+    let c = card("Rising Chicane");
+    assert!(!c
+        .unsupported_text()
+        .iter()
+        .any(|u| u.contains("starting player")));
+    let mut t = TestGame::new(2);
+    assert_eq!(t.g.turn.starting_player, P0);
+    let a = t.enter(P0, "Rising Chicane");
+    assert!(t.obj_now(a).tapped);
+    let b = t.enter(P1, "Rising Chicane");
+    assert!(!t.obj_now(b).tapped);
+}
+
+// ---------------------------------------------------------------------------
+// Adamant; "if you do or if ..."
+// ---------------------------------------------------------------------------
+
+#[test]
+fn adamant_counter_needs_three_mana_of_the_color() {
+    cr!("614.1c", "207.2c", "601.2h");
+    assert_supported("Ardenvale Paladin");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 4);
+    let p = t.hand(P0, "Ardenvale Paladin");
+    t.cast(P0, p).go();
+    t.resolve();
+    assert_eq!(t.counters(p, "+1/+1"), 1);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Island", 2);
+    let p = t.hand(P0, "Ardenvale Paladin");
+    t.cast(P0, p).go();
+    t.resolve();
+    assert_eq!(t.counters(p, "+1/+1"), 0);
+}
+
+#[test]
+fn adamant_same_color() {
+    cr!("614.1c", "207.2c");
+    assert_supported("Henge Walker");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 3);
+    let h = t.hand(P0, "Henge Walker");
+    t.cast(P0, h).go();
+    t.resolve();
+    assert_eq!(t.counters(h, "+1/+1"), 1);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Forest", 1);
+    let h = t.hand(P0, "Henge Walker");
+    t.cast(P0, h).go();
+    t.resolve();
+    assert_eq!(t.counters(h, "+1/+1"), 0);
+}
+
+#[test]
+fn reveal_or_control_a_dragon_for_a_counter() {
+    cr!("614.1c", "614.12a");
+    assert_supported("Dragon's Disciple");
+    // Reveal a Dragon card from hand.
+    let mut t = TestGame::new(2);
+    let dragon = t.hand(P0, "Shivan Dragon");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(dragon)]);
+    let d = t.enter(P0, "Dragon's Disciple");
+    assert_eq!(t.counters(d, "+1/+1"), 1);
+    // Control a Dragon (and don't reveal).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Shivan Dragon");
+    let d = t.enter(P0, "Dragon's Disciple");
+    assert_eq!(t.counters(d, "+1/+1"), 1);
+    // Neither.
+    let mut t = TestGame::new(2);
+    let d = t.enter(P0, "Dragon's Disciple");
+    assert_eq!(t.counters(d, "+1/+1"), 0);
+}
+
+// ---------------------------------------------------------------------------
+// "Each other [X] you control enters with an additional counter" (CR 614.1d)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn metallic_mimic_adds_counters_to_the_chosen_type() {
+    cr!("614.1d", "614.12", "607.2d", "122.6");
+    assert_supported("Metallic Mimic");
+    let mut t = TestGame::new(2);
+    let i = types::subtype_lists()
+        .creature
+        .iter()
+        .position(|s| s == "Bear")
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    let mimic = t.enter(P0, "Metallic Mimic");
+    // Not itself ("each other").
+    assert_eq!(t.counters(mimic, "+1/+1"), 0);
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    let elves = t.enter(P0, "Llanowar Elves");
+    assert_eq!(t.counters(elves, "+1/+1"), 0);
+    // Not an opponent's Bear.
+    let theirs = t.enter(P1, "Grizzly Bears");
+    assert_eq!(t.counters(theirs, "+1/+1"), 0);
+}
+
+#[test]
+fn additional_counters_for_non_humans() {
+    cr!("614.1d", "122.6");
+    assert_supported("Grumgully, the Generous");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grumgully, the Generous");
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    let human = t.enter(P0, "Elite Vanguard");
+    assert_eq!(t.counters(human, "+1/+1"), 0);
+}
+
+#[test]
+fn planeswalkers_enter_with_an_additional_loyalty_counter() {
+    cr!("614.1d", "306.5b");
+    assert_supported("Oath of Gideon");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Oath of Gideon");
+    let jace = t.enter(P0, "Jace Beleren");
+    assert_eq!(t.counters(jace, "loyalty"), 4);
+}
+
+#[test]
+fn permanents_enter_tapped_this_turn() {
+    cr!("614.1c", "611.2a", "514.2");
+    assert_supported("Due Respect");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Plains", 2);
+    let s = t.hand(P0, "Due Respect");
+    t.cast(P0, s).go();
+    t.resolve();
+    let mine = t.enter(P0, "Grizzly Bears");
+    let theirs = t.enter(P1, "Grizzly Bears");
+    assert!(t.obj_now(mine).tapped);
+    assert!(t.obj_now(theirs).tapped);
+    // The effect ends at the end of the turn.
+    t.advance_to(P1, Step::Upkeep);
+    let later = t.enter(P1, "Grizzly Bears");
+    assert!(!t.obj_now(later).tapped);
+}
+
+#[test]
+fn trigger_on_a_permanent_entering_tapped() {
+    cr!("603.6a", "603.6d", "614.1c");
+    assert_supported("Amulet of Vigor");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Amulet of Vigor");
+    let gate = t.hand(P0, "Azorius Guildgate");
+    t.play_land(P0, gate).unwrap();
+    assert!(t.obj_now(gate).tapped);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    assert!(!t.obj_now(gate).tapped);
+    // An untapped permanent entering doesn't trigger it.
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // Nor does an opponent's tapped land.
+    let theirs = t.hand(P1, "Azorius Guildgate");
+    t.set_step(P1, Step::PrecombatMain);
+    t.play_land(P1, theirs).unwrap();
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.obj_now(theirs).tapped);
+}

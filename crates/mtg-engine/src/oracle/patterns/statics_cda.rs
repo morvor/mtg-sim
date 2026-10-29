@@ -1,0 +1,154 @@
+//! Characteristic-defining power/toughness abilities (CR 604.3, 613.4a): "~'s power
+//! and toughness are each equal to [amount]", "~'s power is equal to [amount]", and
+//! "~'s power is equal to [amount] and its toughness is equal to that number plus N".
+//! Amounts are parsed by [`super::statics::parse_amount`]. A CDA functions in every
+//! zone (CR 604.3), so it's compiled with `FunctionZone::Anywhere`.
+
+use super::statics::parse_amount;
+use crate::ability::*;
+use crate::oracle::patterns::StaticPattern;
+use crate::oracle::phrases::end;
+use crate::oracle::CompileContext;
+
+fn cda(p: Option<Value>, t: Option<Value>, text: &str) -> Ability {
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::Source,
+        mods: vec![Modification::CdaPT(p, t)],
+    });
+    s.is_cda = true;
+    s.zone = FunctionZone::Anywhere;
+    AbilityDef::new(AbilityKind::Static(s), text)
+}
+
+/// Whether the printed value is a `*` (CR 208.2a: the CDA defines it). A CDA for a
+/// characteristic that's printed as a number would be something else.
+fn is_star(v: Option<&str>) -> bool {
+    v.is_some_and(|v| v.contains('*'))
+}
+
+/// An amount the value grammar reads ("20 minus the highest life total among players",
+/// "your life total minus the life total of an opponent with the most life"), with no
+/// targets and "it" meaning the source.
+fn grammar_amount(s: &str, ctx: &CompileContext) -> Option<Value> {
+    let mut b = crate::oracle::effects::Builder::new(ctx);
+    b.it = Sel::This;
+    let (v, rest) = crate::oracle::statics::parse_value_phrase(s, &mut b)?;
+    (rest.trim().is_empty() && b.targets.is_empty()).then_some(v)
+}
+
+/// Whether the card has its own line defining `stat` ("~'s toughness is equal to ..."):
+/// separate characteristic-defining abilities for power and toughness (CR 604.3).
+fn separate_cda(ctx: &CompileContext, stat: &str) -> bool {
+    let raw = crate::oracle::raw_text().to_lowercase();
+    let name = ctx.card_name.to_lowercase();
+    raw.lines()
+        .any(|l| l.starts_with(&format!("{name}'s {stat} is equal to ")) || l.starts_with(&format!("this creature's {stat} is equal to ")))
+}
+
+fn parse_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let it = Some(Sel::This);
+    if let Some(r) = l.strip_prefix("~'s power and toughness are each equal to ") {
+        if !is_star(ctx.power) || !is_star(ctx.toughness) {
+            return None;
+        }
+        let v = parse_amount(r, it.as_ref()).or_else(|| grammar_amount(r, ctx))?;
+        return Some(vec![cda(Some(v.clone()), Some(v), text)]);
+    }
+    if let Some(r) = l.strip_prefix("~'s power is equal to ") {
+        if !is_star(ctx.power) {
+            return None;
+        }
+        // "~'s power is equal to the total power of the exiled cards and its toughness is
+        // equal to their total toughness" (Sutured Ghoul): the cards its linked ability
+        // exiled (CR 607.2a).
+        if r == "the total power of the exiled cards and its toughness is equal to their total toughness" {
+            if !is_star(ctx.toughness) {
+                return None;
+            }
+            let exiled = Sel::All(Filter::and(vec![
+                Filter::In(Box::new(Sel::Linked)),
+                Filter::InZone(ZoneKind::Exile),
+            ]));
+            let total = |s: Stat| Value::Aggregate(AggOp::Sum, s, Box::new(exiled.clone()));
+            return Some(vec![cda(
+                Some(total(Stat::Power)),
+                Some(total(Stat::Toughness)),
+                text,
+            )]);
+        }
+        // "... and its toughness is equal to that number plus N"
+        if let Some((a, b)) = r.split_once(" and its toughness is equal to ") {
+            if !is_star(ctx.toughness) {
+                return None;
+            }
+            let p = parse_amount(a, it.as_ref())?;
+            let t = if let Some(n) = b.strip_prefix("that number plus ") {
+                Value::Sum(vec![p.clone(), parse_amount(n, it.as_ref())?])
+            } else if b == "that number" {
+                p.clone()
+            } else {
+                parse_amount(b, it.as_ref())?
+            };
+            return Some(vec![cda(Some(p), Some(t), text)]);
+        }
+        // A "*/*" creature with a separate CDA for each (Yavimaya Kavu, CR 604.3).
+        if is_star(ctx.toughness) && !separate_cda(ctx, "toughness") {
+            return None;
+        }
+        let p = parse_amount(r, it.as_ref()).or_else(|| grammar_amount(r, ctx))?;
+        return Some(vec![cda(Some(p), None, text)]);
+    }
+    if let Some(r) = l.strip_prefix("~'s toughness is equal to ") {
+        if !is_star(ctx.toughness) || (is_star(ctx.power) && !separate_cda(ctx, "power")) {
+            return None;
+        }
+        let t = parse_amount(r, it.as_ref()).or_else(|| grammar_amount(r, ctx))?;
+        return Some(vec![cda(None, Some(t), text)]);
+    }
+    None
+}
+
+/// "As long as ~ isn't attacking, its power and toughness are each equal to the number of
+/// Forests you control. As long as ~ is attacking, its power and toughness are each equal
+/// to the number of Forests defending player controls." (Gaea's Liege). An ability that
+/// sets power and toughness only if a condition is met isn't a characteristic-defining
+/// ability (CR 604.3a(5)): each is an ordinary static ability that sets the permanent's
+/// power and toughness (layer 7b, CR 613.4b) and functions only on the battlefield
+/// (CR 113.6), so elsewhere the card is 0/0 (CR 208.2a).
+fn conditional_cda(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if !is_star(ctx.power) || !is_star(ctx.toughness) {
+        return None;
+    }
+    let l = end(l);
+    let mut out = Vec::new();
+    for part in l.split(". ") {
+        let r = part.strip_prefix("as long as ")?;
+        let (c, amount) = r.split_once(", its power and toughness are each equal to ")?;
+        let cond = crate::oracle::statics::parse_condition(c, ctx)?;
+        let v = parse_amount(amount, Some(&Sel::This)).or_else(|| grammar_amount(amount, ctx))?;
+        let mut st = StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods: vec![Modification::SetPT(Some(v.clone()), Some(v))],
+        });
+        st.condition = Some(cond);
+        out.push(AbilityDef::new(AbilityKind::Static(st), text));
+    }
+    (out.len() >= 2).then_some(out)
+}
+
+inventory::submit! {
+    StaticPattern {
+        name: "statics: conditional power/toughness setting (not CDAs)",
+        priority: 50,
+        parse: conditional_cda,
+    }
+}
+
+inventory::submit! {
+    StaticPattern {
+        name: "statics: power/toughness CDAs",
+        priority: 50,
+        parse: parse_cda,
+    }
+}

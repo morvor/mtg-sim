@@ -1,0 +1,341 @@
+//! Rendering of the dig steps ([`DigStep`], `dig_steps.rs`): "you may put a land card from
+//! among them into your hand", "put the rest on the bottom of your library in a random
+//! order", "reveal cards from the top of your library until you reveal two land cards".
+
+use super::*;
+
+impl Renderer<'_> {
+    /// Where cards go, as a dig's text says it ("into your hand", "onto the battlefield
+    /// tapped", "on the bottom of your library in any order").
+    pub(crate) fn dig_destination(&mut self, to: &Destination, many: bool) -> String {
+        let mut d = match to.zone {
+            ZoneKind::Hand => "into your hand".to_string(),
+            ZoneKind::Graveyard => "into your graveyard".to_string(),
+            ZoneKind::Exile => "into exile".to_string(),
+            ZoneKind::Library => match to.position {
+                LibraryPosition::Top if many => "on top of your library in any order".into(),
+                LibraryPosition::Top => "on top of your library".into(),
+                LibraryPosition::Bottom if many => {
+                    "{alt:on the bottom of your library|on the bottom} in any order".into()
+                }
+                LibraryPosition::Bottom => "on the bottom of your library".into(),
+                LibraryPosition::BottomRandom => {
+                    "{alt:on the bottom of your library|on the bottom} in a random order".into()
+                }
+                LibraryPosition::FromTop(_) => String::new(),
+                LibraryPosition::Shuffled => "into your library".into(),
+            },
+            _ => self.destination_phrase(to, many, true),
+        };
+        if to.zone == ZoneKind::Battlefield {
+            d = "onto the battlefield".into();
+            if to.tapped {
+                d.push_str(" tapped");
+            }
+            if to.attacking {
+                d.push_str(" and attacking");
+            }
+            if let Some(c) = &to.controller {
+                if !matches!(c, PlayerRef::You) {
+                    let p = self.player(c, super::players::Case::Poss);
+                    d.push_str(&format!(" under {p} control"));
+                } else if to.tapped && to.attacking {
+                    // "onto the battlefield under your control tapped and attacking".
+                    d = "onto the battlefield {alt:tapped and attacking {opt:under your control}|under your control tapped and attacking}".into();
+                } else {
+                    // The player putting it there controls it (CR 110.2a): cards may say
+                    // so.
+                    d.push_str(" {opt:under your control}");
+                }
+            }
+            for (k, n) in &to.with_counters {
+                let name = counter_name(&format!("{k:?}").to_lowercase());
+                let n = match n {
+                    Value::Const(1) => with_article(&format!("{name} counter")),
+                    Value::Const(k) => format!("{} {name} counters", number_word(*k)),
+                    other => format!("{} {name} counters", self.value(other)),
+                };
+                let it = if many { "them" } else { "it" };
+                d.push_str(&format!(" with {n} on {it}"));
+            }
+        }
+        d
+    }
+
+    pub(crate) fn dig_step(&mut self, step: &DigStep) -> String {
+        match step {
+            DigStep::Take {
+                from,
+                filter,
+                each_of,
+                count,
+                up_to,
+                random,
+                reveal,
+                to,
+                ..
+            } => {
+                if let Some(s) = self.take_for_each_kind(each_of, *up_to, to) {
+                    return s;
+                }
+                // "Put that card onto the battlefield": the card a reveal found (all of
+                // one card).
+                if matches!(from, Sel::Var(v) if *v == vars::IT)
+                    && count.is_none()
+                    && matches!(filter, Filter::Any)
+                    && each_of.is_empty()
+                    && !*reveal
+                {
+                    let d = self.dig_destination(to, false);
+                    return if self.in_as_player {
+                        format!("{{alt:the player|that player}} puts that card {d}")
+                    } else {
+                        format!("put that card {d}")
+                    };
+                }
+                // "Exile four of them at random."
+                if let (true, Some(Value::Const(k)), true) = (*random, count, each_of.is_empty()) {
+                    if *k > 1 && matches!(filter, Filter::Any) {
+                        let n = number_word(*k);
+                        if to.zone == ZoneKind::Exile {
+                            return format!("exile {n} of them at random");
+                        }
+                        let d = self.dig_destination(to, true);
+                        return format!("put {n} of them at random {d}");
+                    }
+                }
+                let many = !matches!(count, Some(Value::Const(1)));
+                let what = if !each_of.is_empty() {
+                    let names: Vec<String> = each_of
+                        .iter()
+                        .map(|f| {
+                            let n = self.card_noun(f);
+                            with_article(&n)
+                        })
+                        .collect();
+                    join_list(&names, "and/or")
+                } else {
+                    // "up to two instant and/or sorcery cards": several, of either kind.
+                    let saved = self.alt_and;
+                    self.alt_and = !matches!(count, Some(Value::Const(1)));
+                    let noun = self.card_noun(filter);
+                    self.alt_and = saved;
+                    match count {
+                        None => format!("all {}", plural(&noun)),
+                        Some(Value::Const(1)) if *random => with_article(&format!("random {noun}")),
+                        Some(Value::Const(1)) => with_article(&noun),
+                        Some(Value::Const(k)) if *k >= 999 => {
+                            format!("any number of {}", plural(&noun))
+                        }
+                        Some(Value::Const(k)) if *up_to => {
+                            format!("up to {} {}", number_word(*k), plural(&noun))
+                        }
+                        Some(Value::Const(k)) => format!("{} {}", number_word(*k), plural(&noun)),
+                        Some(v) => {
+                            let v = self.value(v);
+                            format!("{v} {}", plural(&noun))
+                        }
+                    }
+                };
+                let may = if *up_to && each_of.is_empty() && matches!(count, Some(Value::Const(1)))
+                    || (!each_of.is_empty() && *up_to)
+                {
+                    "you may "
+                } else if matches!(count, Some(Value::Const(k)) if *k >= 999)
+                    || (*up_to && matches!(count, Some(Value::Const(k)) if *k > 1))
+                {
+                    // Any number (and "up to two") includes none: "you may reveal any number
+                    // of ...", "you may reveal up to two ...".
+                    "{opt:you may} "
+                } else {
+                    ""
+                };
+                let verb = if *reveal { "reveal" } else { "put" };
+                let d = self.dig_destination(to, many);
+                // "You may reveal a land card" / "reveal up to one land card".
+                if *reveal
+                    && *up_to
+                    && each_of.is_empty()
+                    && !*random
+                    && matches!(count, Some(Value::Const(1)))
+                {
+                    let noun = self.card_noun(filter);
+                    let head = format!(
+                        "{{alt:you may reveal {what}|reveal up to one {noun}}} from among them"
+                    );
+                    // Kept among them for the next instruction (`dig_steps.rs`).
+                    if d.is_empty() {
+                        return head;
+                    }
+                    return format!("{head} and put {{alt:it|the revealed card}} {d}");
+                }
+                // "Exile up to one nonland card from among them": to exile a card is to
+                // put it into exile (CR 701.13a).
+                if to.zone == ZoneKind::Exile && !*reveal && !*random && each_of.is_empty() {
+                    let exiled = if *up_to && matches!(count, Some(Value::Const(1))) {
+                        format!("up to one {}", self.card_noun(filter))
+                    } else {
+                        what.clone()
+                    };
+                    return format!(
+                        "{{alt:{may}put {what} from among them {d}|exile {exiled} from among them}}"
+                    );
+                }
+                if *reveal && !d.is_empty() {
+                    let it = if many {
+                        "{alt:them|the revealed cards}"
+                    } else {
+                        "{alt:it|the revealed card}"
+                    };
+                    format!("{may}reveal {what} from among them and put {it} {d}")
+                } else {
+                    // "from among the milled cards" after milling.
+                    let among = if self.milled {
+                        "{alt:from among them|from among the milled cards}"
+                    } else if count.is_none()
+                        && self
+                            .this_way_of(from)
+                            .is_some_and(|(v, _, _)| v == "revealed")
+                    {
+                        "{alt:from among them|revealed this way}"
+                    } else {
+                        "from among them"
+                    };
+                    // "You may put one of them back on top of your library": the cards looked
+                    // at came from the top of that library.
+                    if !*reveal
+                        && what == "a card"
+                        && among == "from among them"
+                        && d.starts_with("on top of ")
+                    {
+                        return format!(
+                            "{may}put {{alt:a card from among them|one of them back}} {d}"
+                        );
+                    }
+                    // "Put one of them into your hand": any card of those.
+                    let picked = match count {
+                        Some(Value::Const(k))
+                            if matches!(filter, Filter::Any)
+                                && !*up_to
+                                && *k < 999
+                                && each_of.is_empty()
+                                && among == "from among them" =>
+                        {
+                            format!("{{alt:{what} {among}|{} of them}}", number_word(*k))
+                        }
+                        _ => format!("{what} {among}"),
+                    };
+                    if d.is_empty() {
+                        format!("{may}{verb} {picked}")
+                    } else {
+                        format!("{may}{verb} {picked} {d}")
+                    }
+                }
+            }
+            DigStep::Rest { to, .. } => {
+                let d = self.dig_destination(to, true);
+                // "Shuffle the rest into your library" (not put in place).
+                if to.zone == ZoneKind::Library && to.position == LibraryPosition::Shuffled {
+                    return if self.in_as_player {
+                        format!("{{alt:the player|that player}} shuffles the rest {d}")
+                    } else {
+                        format!("shuffle the rest {d}")
+                    };
+                }
+                // "Put that card into your hand and all other cards revealed this way on
+                // the bottom of your library": the rest of the cards revealed.
+                if self
+                    .this_way_of(&Sel::Var(vars::DUG))
+                    .is_some_and(|(v, _, _)| v == "revealed")
+                {
+                    if to.zone == ZoneKind::Exile && !to.face_down && to.with_counters.is_empty() {
+                        return format!(
+                            "{{alt:put {{alt:the rest|all other cards revealed this way}} {d}|exile {{alt:the rest|all other cards revealed this way}}}}"
+                        );
+                    }
+                    return format!("put {{alt:the rest|all other cards revealed this way}} {d}");
+                }
+                // "exile the rest": to exile a card is to put it into exile (CR 701.13a).
+                if to.zone == ZoneKind::Exile && !to.face_down && to.with_counters.is_empty() {
+                    return format!("{{alt:put the rest {d}|exile the rest}}");
+                }
+                format!("put the rest {d}")
+            }
+            DigStep::Until {
+                who,
+                filter,
+                count,
+                exile,
+                total,
+                cap,
+            } => {
+                let p = self.possessive_for(who);
+                let verb = if *exile { "exile" } else { "reveal" };
+                if let Some(stat) = total {
+                    let stat = match stat {
+                        TotalStat::ManaValue => "mana value",
+                        TotalStat::Power => "power",
+                        TotalStat::Toughness => "toughness",
+                        TotalStat::PowerAndToughness => "power and toughness",
+                    };
+                    let v = self.value(count);
+                    let (subj, done) = if p == "your" {
+                        ("you", verb.to_string())
+                    } else {
+                        (
+                            "{alt:they|that player}",
+                            "{alt:have|has} exiled".to_string(),
+                        )
+                    };
+                    let vp = format!(
+                        "{verb} cards from the top of {p} library until {subj} {done} cards with total {stat} {v} or greater{{opt: this way}}"
+                    );
+                    return self.with_subject(who, &vp, false);
+                }
+                let noun = self.card_noun(filter);
+                // "until you reveal X nonland cards, where X is ..." (CR 107.3).
+                let mut where_x = String::new();
+                let n = match count {
+                    Value::Const(1) => with_article(&noun),
+                    Value::Const(k) => format!("{} {}", number_word(*k), plural(&noun)),
+                    Value::Max(v, z)
+                        if matches!(z.as_ref(), Value::Const(0))
+                            && !matches!(v.as_ref(), Value::X | Value::Var(_)) =>
+                    {
+                        let v = self.value(v);
+                        where_x = format!(", where X is {v}");
+                        format!("X {}", plural(&noun))
+                    }
+                    other => {
+                        let v = self.value(other);
+                        format!("{v} {}", plural(&noun))
+                    }
+                };
+                let subj = if p == "your" { "you" } else { "they" };
+                if let Some(cap) = cap {
+                    let c = self.value(cap);
+                    let vp = format!(
+                        "{verb} cards from the top of {p} library until {n} or {c} cards are revealed, whichever comes first"
+                    );
+                    return self.with_subject(who, &vp, false);
+                }
+                let are = if matches!(count, Value::Const(1)) {
+                    "is"
+                } else {
+                    "are"
+                };
+                let done = if *exile { "exiled" } else { "revealed" };
+                let vp = if p == "your" {
+                    format!(
+                        "{verb} cards from the top of {p} library until {subj} {verb} {n}{where_x}"
+                    )
+                } else {
+                    format!(
+                        "{verb} cards from the top of {p} library until {{alt:{subj} {verb} {n}|{n} {are} {done}}}"
+                    )
+                };
+                self.with_subject(who, &vp, false)
+            }
+        }
+    }
+}

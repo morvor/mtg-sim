@@ -1,0 +1,2 @@
+403.5	Informational: historical terminology ("in play") replaced by Oracle errata; the engine reads Oracle text, which says "battlefield", so there is no game behavior to test
+406.8	Informational: historical terminology ("removed from the game", "set aside") replaced by Oracle errata; the engine reads Oracle text, which says "exile", so there is no game behavior to test
