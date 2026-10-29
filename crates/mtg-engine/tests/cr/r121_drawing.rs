@@ -557,7 +557,8 @@ fn offering(name: &str, filter: Filter) -> CardDef {
 
 #[test]
 fn a_card_drawn_while_a_spell_is_cast_stays_face_down_until_it_becomes_cast() {
-    cr!("121.8");
+    cr!("121.8", "733.1");
+    interp!("illegal-action-reversal-restores-libraries");
     // The card drawn by the mana ability has no characteristics while the spell is being
     // cast: it can't be discarded as "a creature card", so the spell can't be cast.
     let setup = |filter: Filter, bears_in_hand: bool| {
@@ -576,7 +577,9 @@ fn a_card_drawn_while_a_spell_is_cast_stays_face_down_until_it_becomes_cast() {
     let (mut t, s) = setup(Filter::creature(), false);
     assert!(t.cast(P0, s).try_go().is_err());
     assert!(t.in_hand(P0, "Offering"));
-    assert_eq!(t.hand_size(P0), 1);
+    // The cast is reversed, but the draw stays (CR 733.1): the Bears are in the hand now.
+    assert_eq!(t.hand_size(P0), 2);
+    assert!(t.in_hand(P0, "Grizzly Bears"));
     // With the creature card already in hand, the same spell can be cast.
     let (mut t, s) = setup(Filter::creature(), true);
     t.cast(P0, s).go();
