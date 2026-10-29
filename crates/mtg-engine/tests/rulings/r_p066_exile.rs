@@ -8,6 +8,7 @@ use crate::r_s01_common::{attack_with, block_and_finish, stack_library, supporte
 use crate::r_s02_common::destroy;
 use crate::r_s21_common::castable;
 use crate::r_s25_common::cast_new;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -1026,5 +1027,262 @@ fn replenish_aura_cant_enchant_an_enchantment_entering_with_it() {
                 assert_eq!(t.obj_now(x).controller, P0);
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Awaken the Maelstrom
+// ---------------------------------------------------------------------------
+
+/// Distributes Awaken the Maelstrom's counters to the token creature (or, with `token`
+/// false, a nontoken creature) among the candidates.
+fn distribute_to(g: &mtg_engine::game::Game, d: &Decision, token: bool) -> Option<Answer> {
+    match d {
+        Decision::ChooseEntities {
+            prompt, candidates, ..
+        } if prompt.contains("distribute") => {
+            let tok = candidates
+                .iter()
+                .find(|e| e.object().is_some_and(|x| g.obj(x).is_token() == token))?;
+            Some(Answer::Entities(vec![*tok]))
+        }
+        _ => None,
+    }
+}
+
+fn distribute_to_the_token(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    distribute_to(g, d, true)
+}
+
+fn distribute_to_a_nontoken(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    distribute_to(g, d, false)
+}
+
+/// P0's Invasion of Alara (protected by P1) is defeated; P0 casts Awaken the Maelstrom
+/// (if it can) with P0 drawing and `destroy` destroyed. Returns the decisions index before
+/// it was cast.
+fn awaken(t: &mut TestGame, destroy_it: Option<ObjectId>) -> usize {
+    supported("Invasion of Alara // Awaken the Maelstrom");
+    // No nonland cards in the library: its enters ability finds nothing.
+    t.g.players[0].library.clear();
+    for _ in 0..6 {
+        t.library_top(P0, "Forest");
+    }
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    let inv = t.enter(P0, "Invasion of Alara // Awaken the Maelstrom");
+    t.resolve_all();
+    assert!(t.on_battlefield(inv));
+    // (A damage source P0 controls, so it's not a permanent an opponent controls.)
+    let src = t.battlefield(P0, "Bonesplitter");
+    crate::r_s06_common::damage(t, src, 7, inv);
+    t.settle();
+    let from = t.asked().len();
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    if let Some(d) = destroy_it {
+        t.answer_targets(P0, &[o(d)]);
+    }
+    // Resolve the Siege's ability: Awaken the Maelstrom is cast.
+    t.resolve();
+    from
+}
+
+#[test]
+fn awaken_the_maelstrom_targets_two_and_chooses_the_rest_on_resolution() {
+    cr!("601.2c", "608.2d");
+    ruling!(
+        "Invasion of Alara // Awaken the Maelstrom",
+        "Awaken the Maelstrom has two targets: the player who will draw cards and the permanent an opponent controls that will be destroyed. You must choose legal targets for both to cast Awaken the Maelstrom. All other choices are made on resolution. Specifically, this means you can create a token that's a copy of the artifact you just put onto the battlefield (which perhaps you just drew) and then put +1/+1 counters on it if it's also a creature."
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let thopter = t.hand(P0, "Ornithopter");
+    let from = awaken(&mut t, Some(bears));
+    let spell = *t.g.stack.last().expect("Awaken the Maelstrom wasn't cast");
+    assert_eq!(t.obj(spell).chars.name, "Awaken the Maelstrom");
+    // Only targets were chosen as it was cast.
+    let cast_choices: Vec<String> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| {
+            matches!(
+                d,
+                Decision::ChooseEntities { .. } | Decision::Divide { .. }
+            )
+        })
+        .map(|(_, d)| format!("{d:?}"))
+        .collect();
+    assert!(cast_choices.is_empty(), "{cast_choices:?}");
+    assert_eq!(
+        crate::r_s25_common::targets_of(&t, spell),
+        vec![Entity::Player(P0), o(bears)]
+    );
+    // On resolution: put Ornithopter onto the battlefield, copy it, and put the three
+    // counters on the copy.
+    let hand = t.hand_size(P0);
+    let res = t.asked().len();
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[o(thopter)]);
+    t.answer_choose_moved(P0, &[o(thopter)]);
+    crate::r_s03_common::respond(&mut t, P0, distribute_to_the_token);
+    t.resolve();
+    // Every other choice was made as it resolved.
+    let kinds: Vec<&str> = t.asked()[res..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::YesNo { .. } if *p == P0 => Some("may"),
+            Decision::ChooseEntities { .. } if *p == P0 => Some("choose"),
+            Decision::Divide { .. } if *p == P0 => Some("divide"),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kinds, vec!["may", "choose", "choose", "choose", "divide"]);
+    let thopters = t.named_on_battlefield("Ornithopter");
+    assert_eq!(thopters.len(), 2, "the artifact and its token copy");
+    let token = *thopters.iter().find(|x| t.obj(**x).is_token()).unwrap();
+    assert_eq!(t.counters(token, "+1/+1"), 3);
+    assert_eq!(t.counters(t.g.current(thopter), "+1/+1"), 0);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn awaken_the_maelstrom_cant_be_cast_without_both_targets() {
+    cr!("601.2c", "115.1a");
+    ruling!(
+        "Invasion of Alara // Awaken the Maelstrom",
+        "You must choose legal targets for both to cast Awaken the Maelstrom."
+    );
+    // No permanent an opponent controls: it can't be cast, and stays in exile.
+    let mut t = TestGame::new(2);
+    awaken(&mut t, None);
+    t.resolve_all();
+    assert_eq!(t.g.find_in_zone(Zone::Exile, "Invasion of Alara").len(), 1);
+    assert!(t.stack.is_empty());
+}
+
+#[test]
+fn awaken_the_maelstrom_token_copy_gets_enters_abilities() {
+    cr!("707.2", "111.5", "603.6a", "614.12");
+    ruling!(
+        "Invasion of Alara // Awaken the Maelstrom",
+        "Any enters-the-battlefield abilities of the copied permanent will trigger when the token enters the battlefield. Any \"as [this permanent] enters the battlefield\" or \"[this permanent] enters the battlefield with\" abilities of the copied permanent will also work."
+    );
+    for (what, draws, plus) in [("Wall of Omens", 1, 0), ("Kalonian Hydra", 0, 4)] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let orig = t.enter(P0, what);
+        t.resolve_all();
+        awaken(&mut t, Some(bears));
+        let hand = t.hand_size(P0);
+        t.answer_yes(P0, false);
+        t.answer_choose(P0, &[o(orig)]);
+        crate::r_s03_common::respond(&mut t, P0, distribute_to_a_nontoken);
+        t.resolve_all();
+        let copy = t
+            .named_on_battlefield(what)
+            .into_iter()
+            .find(|x| t.obj(*x).is_token())
+            .unwrap_or_else(|| panic!("no copy of {what}"));
+        // Two cards drawn by Awaken the Maelstrom, plus the copy's.
+        assert_eq!(t.hand_size(P0), hand + 2 + draws, "{what}");
+        // The Hydra copy's four counters (the three distributed went on the original).
+        assert_eq!(t.counters(copy, "+1/+1"), plus, "{what}");
+        assert_eq!(t.counters(orig, "+1/+1"), 3 + plus, "{what}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Plargg and Nassari: spells cast during the resolution
+// ---------------------------------------------------------------------------
+
+/// Three players; P0's Plargg and Nassari's upkeep trigger exiles `tops` (P0's, P1's and
+/// P2's top cards); P1 is the opponent who chooses, and chooses `chosen`; P0 casts `cast`
+/// in that order. The trigger is resolved; returns the exiled cards.
+fn plargg(tops: [&str; 3], chosen: usize, cast: &[usize], targets: &[Entity]) -> (TestGame, Vec<ObjectId>) {
+    supported("Plargg and Nassari");
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Plargg and Nassari");
+    let cards: Vec<ObjectId> = [P0, P1, P2]
+        .iter()
+        .zip(tops)
+        .map(|(p, n)| t.library_top(*p, n))
+        .collect();
+    t.set_step(P2, Step::End);
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    t.answer_choose_moved(P1, &[o(cards[chosen])]);
+    let picks: Vec<Entity> = cast.iter().map(|i| o(cards[*i])).collect();
+    t.answer_choose_moved(P0, &picks);
+    for e in targets {
+        t.answer_targets(P0, &[*e]);
+    }
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    (t, cards)
+}
+
+#[test]
+fn plargg_spells_cast_this_way_can_target_earlier_ones() {
+    cr!("608.2g", "115.1a", "707.10");
+    ruling!(
+        "Plargg and Nassari",
+        "A spell you cast this way can be the target of a later spell you cast this way. However, permanent spells cast this way won't resolve until you're done casting spells, so the permanents they become can't be the target of spells cast this way. For example, if you exile Twincast and Lightning Strike, you can cast Lightning Strike and then cast Twincast targeting it, but if you exile a creature card and an Aura card, you can't cast that Aura targeting that creature."
+    );
+    ruling!(
+        "Plargg and Nassari",
+        "All the spells you cast due to the triggered ability are cast during the resolution of that ability. You can cast them in any order."
+    );
+    interp!("cast-order-as-chosen");
+    // Lightning Strike at P1, then Twincast copying it.
+    let (mut t, c) = plargg(
+        ["Lightning Strike", "Twincast", "Grizzly Bears"],
+        2,
+        &[0, 1],
+        &[Entity::Player(P1)],
+    );
+    let strike = t.g.current(c[0]);
+    let twin = t.g.current(c[1]);
+    // Both were cast during the resolution, in that order.
+    assert_eq!(t.g.stack, vec![strike, twin]);
+    assert_eq!(crate::r_s25_common::targets_of(&t, twin), vec![o(strike)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(t.zone(c[2]), Zone::Exile);
+    // A creature card and an Aura: the creature is still a spell as the Aura is cast, so
+    // the Aura can't target it (here it can only enchant Plargg and Nassari).
+    for order in [[0usize, 1], [1, 0]] {
+        let (mut t, c) = plargg(["Grizzly Bears", "Pacifism", "Lightning Bolt"], 2, &order, &[]);
+        let plargg = t.named_on_battlefield("Plargg and Nassari")[0];
+        let pacifism = t.g.current(c[1]);
+        let offered = crate::r_s02_common::target_candidates(&t, P0, 0);
+        assert!(offered.iter().all(|x| !x.contains(&o(t.g.current(c[0])))));
+        assert_eq!(crate::r_s25_common::targets_of(&t, pacifism), vec![o(plargg)]);
+        t.resolve_all();
+        let bears = t.g.current(c[0]);
+        assert!(t.on_battlefield(bears));
+        assert_eq!(t.obj_now(c[1]).attached_to, Some(o(plargg)), "{order:?}");
+    }
+    // Twincast exiled first (listed first), Lightning Strike second: P0 still casts the
+    // Strike first.
+    let (mut t, c) = plargg(
+        ["Twincast", "Lightning Strike", "Grizzly Bears"],
+        2,
+        &[1, 0],
+        &[Entity::Player(P1)],
+    );
+    assert_eq!(t.g.stack, vec![t.g.current(c[1]), t.g.current(c[0])]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    // Any order: Bears, then Lightning Bolt; or Lightning Bolt, then Bears.
+    for order in [[0usize, 2], [2, 0]] {
+        let (t, c) = plargg(
+            ["Grizzly Bears", "Hill Giant", "Lightning Bolt"],
+            1,
+            &order,
+            &[Entity::Player(P2)],
+        );
+        let want: Vec<ObjectId> = order.iter().map(|i| t.g.current(c[*i])).collect();
+        assert_eq!(t.g.stack, want, "{order:?}");
     }
 }
