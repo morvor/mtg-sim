@@ -14,3 +14,15 @@ Judgment calls about how characteristics are determined (CR 604.3, 613). Format 
 - Affects: no supported card that is legal in some format behaves differently under A, B or C today. The cards granting the bare keyword (Everyone's an Imposter, Oddric, Lunar Marquis, Brigid) are legal in no format; token creators (Birthing Boughs, Stalactite Dagger, Crib Swap, Formless Genesis, ...) and copy exceptions (Omni-Changeling, Moritte of the Frost) get the characteristic-defining ability.
 - Code: `crates/mtg-engine/src/kw/changeling.rs` (`every_creature_type`, `changeling_cda`); `crates/mtg-engine/src/eval.rs` (`Filter::Subtype` reads `Characteristics::has_subtype`); `crates/mtg-engine/src/oracle/keywords.rs` (`compile_keyword` adds the characteristic-defining ability to a printed changeling and to a token "with changeling").
 - Tests: `tests/keywords/k702_073_changeling.rs` (`a_creature_given_changeling_by_an_effect_is_not_every_creature_type`, `changeling_acquired_through_token_creation_or_a_copy_effect_is_every_creature_type`); `tests/cards/structure_triggered_9.rs` (`stalactite_dagger_creates_a_changeling_shapeshifter`); `tests/cards/structure_activated_10.rs` (`birthing_boughs_makes_a_changeling_shapeshifter`, Birthing Boughs and Ovinize).
+
+## commander-identity-protection-player: "Protection from each color that's not in your commander's color identity" uses the protected permanent's controller's commanders
+- Kind: interpretation
+- Status: decided
+- Rules: 903.4f "If an ability refers to the colors or number of colors in a commander’s color identity, that quality is undefined if that player doesn’t have a commander. That part of the ability won’t do anything. ..." / 702.16a "Protection is an evasion ability that ..."
+- Question: Commander's Plate grants the equipped creature protection based on "your commander's color identity". If the Equipment's controller and the creature's controller differ (an Equipment attached to another player's creature), whose commander is it?
+- Decision: The color identity of the commanders of the protected permanent's controller (the player for whom the protection ability is evaluated); none (no protection) if that player has no commander. With two commanders, their combined identity (its rulings).
+- Alternatives: The Equipment's controller's commander.
+- Why: Protection abilities are evaluated for the permanent that has them; the two players are the same whenever Commander's Plate is equipped by its own ability, the usual case.
+- Affects: Commander's Plate.
+- Code: `crates/mtg-engine/src/kw/game_rules_4.rs` (`COLOR_OUTSIDE_COMMANDER_IDENTITY`); `crates/mtg-engine/src/stack.rs` (`protected_from`).
+- Tests: `tests/cards/game_rules_4.rs` (`commanders_plate_protects_from_colors_outside_the_commanders_identity`).

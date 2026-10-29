@@ -418,6 +418,7 @@ impl Game {
                     // "That much"/"that many": the total amount (damage, life, ...), or the
                     // number of events for events without an amount (objects entering, ...).
                     info.amount = g.iter().map(|i| i.amount).sum();
+                    info.amounts = g.iter().map(|i| i.amount).collect();
                     // Die rolls always have an amount: their result, which a planar die roll
                     // doesn't have (CR 706.7).
                     let die_roll = matches!(trigger, TriggerCond::RollDie(_));

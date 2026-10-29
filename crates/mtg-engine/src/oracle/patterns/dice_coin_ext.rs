@@ -21,8 +21,8 @@ use super::{
 use crate::ability::*;
 use crate::dice::*;
 use crate::oracle::effects::{parse_clause, player_ref, Builder};
-use crate::oracle::CompileContext;
 use crate::oracle::phrases::*;
+use crate::oracle::CompileContext;
 use smol_str::SmolStr;
 
 fn word_end(rest: &str) -> bool {
@@ -37,6 +37,10 @@ fn the_result() -> Value {
 /// grammar by `value_results::atom_ext`). "The result" is the result of the ability's own
 /// roll, or of the roll that triggered it (CR 706.4).
 pub fn value(s: &str) -> Option<(Value, String)> {
+    // Noted draft information (`draft_4`).
+    if let Some(v) = super::draft_4::value(s) {
+        return Some(v);
+    }
     for (p, v) in [
         ("the total of those results", the_result()),
         ("the other result", Value::Var(OTHER)),
@@ -123,7 +127,15 @@ fn p_for_each_result(l: &str, b: &mut Builder) -> Option<Effect> {
             .filter(|_| *v == EVENS || *v == ODDS)
             .map(|h| (*v, h.to_string()))
     })?;
-    let e = parse_clause(&head, b)?;
+    let mut e = parse_clause(&head, b)?;
+    // "For each flip you won, create a token that's a copy of that creature. Those tokens
+    // gain haste.": the tokens are created at once, and "those tokens" are all of them.
+    if let Effect::CreateToken { count, .. } | Effect::CreateTokenCopy { count, .. } = &mut e {
+        if matches!(count, Value::Const(1)) {
+            *count = Value::Var(var);
+            return Some(e);
+        }
+    }
     Some(Effect::Repeat {
         times: Value::Var(var),
         effect: Box::new(e),
@@ -249,7 +261,11 @@ fn f_whose_coin_objects(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(f) = last_flip(prev) else {
         return false;
     };
-    let branch = if heads { &mut f.on_heads } else { &mut f.on_tails };
+    let branch = if heads {
+        &mut f.on_heads
+    } else {
+        &mut f.on_tails
+    };
     if !matches!(branch, Effect::Noop) {
         return false;
     }
@@ -268,8 +284,7 @@ fn f_whose_coin(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !matches!(f.who, PlayerRef::EachPlayer) || !matches!(f.count, Value::Const(1)) {
         return false;
     }
-    let (heads, rest) = if let Some(r) = l.strip_prefix("each player whose coin comes up tails ")
-    {
+    let (heads, rest) = if let Some(r) = l.strip_prefix("each player whose coin comes up tails ") {
         (false, r)
     } else if let Some(r) = l.strip_prefix("each player whose coin comes up heads ") {
         (true, r)
@@ -285,7 +300,11 @@ fn f_whose_coin(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(f) = last_flip(prev) else {
         return false;
     };
-    let branch = if heads { &mut f.on_heads } else { &mut f.on_tails };
+    let branch = if heads {
+        &mut f.on_heads
+    } else {
+        &mut f.on_tails
+    };
     if !matches!(branch, Effect::Noop) {
         return false;
     }
@@ -375,19 +394,22 @@ fn named_suffix<'a>(s: &'a str, _f: &Filter) -> Option<(Filter, &'a str)> {
     let r = s.strip_prefix("named ")?;
     let n = r.find([',', '.', ';']).unwrap_or(r.len());
     let (name, rest) = (&r[..n], &r[n..]);
-    if name.is_empty() || name.contains('~') || name.contains(" and ") || name.contains(" or ")
-    {
+    if name.is_empty() || name.contains('~') || name.contains(" and ") || name.contains(" or ") {
         return None;
     }
     let printed = super::cost_parts::printed_name(name)?;
     // The whole phrase must be a name ("permanents named Wirefly"), not a name and more
     // ("a card named Wirefly with mana value 3"): its words are capitalized, but for short
     // connecting words between capitalized ones.
-    const CONNECTORS: &[&str] = &["of", "the", "a", "an", "to", "in", "from", "for", "on", "at"];
+    const CONNECTORS: &[&str] = &[
+        "of", "the", "a", "an", "to", "in", "from", "for", "on", "at",
+    ];
     let words: Vec<&str> = printed.split_whitespace().collect();
     let capitalized = |w: &str| w.chars().next().is_some_and(|c| c.is_uppercase());
     if !words.last().is_some_and(|w| capitalized(w))
-        || !words.iter().all(|w| capitalized(w) || CONNECTORS.contains(w))
+        || !words
+            .iter()
+            .all(|w| capitalized(w) || CONNECTORS.contains(w))
     {
         return None;
     }
@@ -487,8 +509,8 @@ fn s_after_you_roll(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
     let n: i64 = n.trim().parse().ok()?;
     let (cost, _) = crate::oracle::costs::parse_cost(cost)?;
     Some(vec![AbilityDef::new(
-        AbilityKind::Static(StaticAbility::new(StaticEffect::Dice(DiceStatic::Modifier(
-            DieModifier {
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Dice(
+            DiceStatic::Modifier(DieModifier {
                 whose: PlayerRel::You,
                 kind: ModifierKind::AddOrSubtract(n),
                 cost,
@@ -496,8 +518,8 @@ fn s_after_you_roll(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ab
                 natural: None,
                 sides: None,
                 text: text.to_string(),
-            },
-        )))),
+            }),
+        ))),
         text,
     )])
 }
@@ -668,7 +690,9 @@ mod tests {
     #[test]
     fn values() {
         assert!(matches!(value("the other result"), Some((Value::Var(v), _)) if v == OTHER));
-        assert!(matches!(value("that result to each creature"), Some((Value::Custom(_), r)) if r == " to each creature"));
+        assert!(
+            matches!(value("that result to each creature"), Some((Value::Custom(_), r)) if r == " to each creature")
+        );
         assert!(value("the results").is_none());
     }
 
