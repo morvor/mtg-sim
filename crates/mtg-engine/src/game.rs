@@ -608,6 +608,9 @@ pub struct ActiveStatics {
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,
+    /// Timestamps of `other` entries (by index) that differ from their source's: a Room
+    /// door's abilities, unlocked after it entered (`rooms::door_timestamp`).
+    pub other_ts: std::collections::BTreeMap<usize, Timestamp>,
     /// Alternative costs other objects offer for the spells players cast ("You may pay
     /// {W}{U}{B}{R}{G} rather than pay the mana cost for spells you cast"), with the
     /// once-each-turn use each is: see `kw/offered_costs.rs`.
