@@ -973,3 +973,40 @@ fn emergent_ultimatum_casts_the_cards_the_opponent_didnt_choose() {
     assert!(!t.in_exile("Divination"));
     assert!(t.in_exile("Emergent Ultimatum"));
 }
+
+#[test]
+fn cloak_and_dagger_may_exile_a_card_from_hand_or_the_chosen_creature() {
+    cr!("610.3", "115.1", "601.2c");
+    compiles("Cloak and Dagger, Entwined");
+    // "When Cloak and Dagger enter, choose target opponent and up to one target creature
+    // they control. They reveal their hand. You may exile a nonland card from their hand or
+    // the chosen creature until Cloak and Dagger leave the battlefield."
+    let run = |option: usize| {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.hand(P1, "Lightning Bolt");
+        t.hand(P1, "Mountain");
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.answer_targets(P0, &[Entity::Object(bears)]);
+        t.answer_yes(P0, true);
+        t.answer(P0, DecisionKind::Option, Answer::Index(option));
+        let cd = t.enter(P0, "Cloak and Dagger, Entwined");
+        t.g.flush_events();
+        t.settle();
+        t.resolve_all();
+        (t, bears, cd)
+    };
+    // The chosen creature.
+    let (mut t, bears, cd) = run(1);
+    assert!(!t.on_battlefield(bears));
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    t.g.destroy(cd, None);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // A nonland card from their hand (the only one: the Bolt).
+    let (t, bears, _) = run(0);
+    assert!(t.on_battlefield(bears));
+    assert!(t.in_exile("Lightning Bolt"));
+    assert_eq!(t.hand_size(P1), 1);
+}

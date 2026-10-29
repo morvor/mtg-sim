@@ -683,3 +683,97 @@ fn cast_the_other_cards(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "you may cast the other cards without paying their mana costs", priority: 90, parse: cast_the_other_cards } }
+
+/// "choose target opponent and up to one target creature they control" (Cloak and
+/// Dagger, Entwined): two targets of one instruction; "they" is the opponent afterward and
+/// "the chosen creature" the creature (if one was chosen).
+fn choose_target_player_and_their_object(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("choose target ")?;
+    let (player, r) = r.split_once(" and ")?;
+    let pf = match player {
+        "opponent" => PlayerFilter::Opponent,
+        "player" => PlayerFilter::Any,
+        _ => return None,
+    };
+    let obj = r
+        .strip_suffix(" they control")
+        .or_else(|| r.strip_suffix(" that player controls"))?;
+    let (min, noun) = match obj.strip_prefix("up to one target ") {
+        Some(n) => (0, n),
+        None => (1, obj.strip_prefix("target ")?),
+    };
+    if noun.contains(' ') {
+        return None;
+    }
+    let (f, false, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let ptext = format!("target {player}");
+    let p = b.add_target(TargetSpec::player(pf, &ptext), &ptext);
+    let otext = format!("{} target {noun} they control", if min == 0 { "up to one" } else { "" })
+        .trim()
+        .to_string();
+    let mut spec = TargetSpec::object(
+        Filter::and(vec![
+            f,
+            Filter::ControlledByPlayer(Box::new(PlayerRef::Target(p))),
+        ]),
+        &otext,
+    );
+    spec.min = Value::c(min);
+    let o = b.add_target(spec, &otext);
+    b.it_player = PlayerRef::Target(p);
+    // "They reveal their hand.": the chosen player (`choice_grammar`'s "they").
+    b.named.push((
+        "the chosen player".into(),
+        Sel::Players(PlayerRef::Target(p)),
+    ));
+    b.named
+        .push((format!("the chosen {noun}"), Sel::Target(o)));
+    Some(Effect::Noop)
+}
+
+inventory::submit! { EffectPattern { name: "choose target opponent and up to one target creature they control", priority: 90, parse: choose_target_player_and_their_object } }
+
+/// "You may exile a nonland card from their hand or the chosen creature until ~ leave the
+/// battlefield." (Cloak and Dagger, Entwined): the controller may exile one of the two,
+/// their choice which.
+fn exile_this_or_the_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    // (After "you may", the instruction is read without it and made optional around.)
+    let (may, r) = match l.strip_prefix("you may exile ") {
+        Some(r) => (true, r),
+        None => (false, l.strip_prefix("exile ")?),
+    };
+    let (first, rest) = r.split_once(" or the chosen ")?;
+    let (noun, until) = rest.split_once(' ')?;
+    if !until.starts_with("until ") {
+        return None;
+    }
+    let until = until
+        .replace("~ leave the battlefield", "~ leaves the battlefield");
+    let chosen = format!("the chosen {noun}");
+    if !b.named.iter().any(|(n, _)| *n == chosen) {
+        return None;
+    }
+    let a = parse_sentence(&format!("exile {first} {until}"), b)?;
+    let c = parse_sentence(&format!("exile {chosen} {until}"), b)?;
+    let choice = Effect::ChooseOne {
+        who: PlayerRef::You,
+        options: vec![(first.to_string(), a), (chosen, c)],
+    };
+    Some(if may {
+        Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(choice),
+        }
+    } else {
+        choice
+    })
+}
+
+inventory::submit! { EffectPattern { name: "you may exile [a card] or the chosen [object] until ...", priority: 90, parse: exile_this_or_the_chosen } }
