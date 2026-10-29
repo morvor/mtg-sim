@@ -97,6 +97,43 @@ fn spell_delayed_line(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>>
 /// First variable used to capture values for a delayed trigger.
 const CAPTURE_BASE: Var = 200;
 
+/// "Sacrifice ~" addresses the ability's controller, who can sacrifice it only while they
+/// control it (CR 608.2c, 701.21a); the resolver checks that for `Sel::This`. A delayed
+/// ability refers to the source through a variable captured as it's created (CR 603.7c),
+/// which a group sacrifice ("each player sacrifices the chosen creatures") could be too,
+/// so before the source is captured, each "sacrifice ~" becomes "if you control ~,
+/// sacrifice it": "you" is whoever performs the delayed instruction — the delayed
+/// ability's controller (CR 603.7d–e: "at end of combat, sacrifice it", Time Elemental,
+/// Dragon Whelp, Chimeric Coils), or the player the text names when it names one ("its
+/// controller sacrifices it at the beginning of the next end step", Goblin Ski Patrol; see
+/// `player_subjects::delay_subject_inside`).
+pub(crate) fn guard_own_sacrifices(e: &Effect) -> Option<Effect> {
+    use serde_json::Value as J;
+    fn guarded() -> J {
+        serde_json::to_value(Effect::If {
+            cond: Condition::SelMatches(Sel::This, Filter::ControlledBy(PlayerRel::You)),
+            then: Box::new(Effect::SacrificeObjects { what: Sel::This }),
+            otherwise: Box::new(Effect::Noop),
+        })
+        .expect("serializable")
+    }
+    fn walk(v: J, bare: &J, guard: &J) -> J {
+        match v {
+            // Already guarded, or an ability the instruction creates or grants (its own
+            // "sacrifice ~" is about its own source, checked as it resolves).
+            v if &v == guard => v,
+            J::Object(m) if m.contains_key("uid") && m.contains_key("kind") => J::Object(m),
+            v if &v == bare => guard.clone(),
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v, bare, guard))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, bare, guard)).collect()),
+            other => other,
+        }
+    }
+    let bare = serde_json::to_value(Effect::SacrificeObjects { what: Sel::This }).ok()?;
+    let json = serde_json::to_value(e).ok()?;
+    serde_json::from_value(walk(json, &bare, &guarded())).ok()
+}
+
 /// The delay phrases: (text, trigger).
 fn delays() -> Vec<(&'static str, TriggerCond)> {
     let at = |step, whose| TriggerCond::BeginningOf { step, whose };
@@ -385,6 +422,7 @@ pub fn capture(e: &Effect) -> Option<(Vec<Effect>, Effect)> {
             other => other,
         }
     }
+    let e = &guard_own_sacrifices(e)?;
     let json = serde_json::to_value(e).ok()?;
     let rewritten = walk(json, &mut used, &mut stores);
     // A reference that isn't a selection (e.g. a player relation in a filter) can't be

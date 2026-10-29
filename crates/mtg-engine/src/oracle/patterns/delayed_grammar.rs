@@ -316,6 +316,8 @@ fn capture_refs(e: &Effect, outer_targets: u8, what: Capture) -> Option<(Vec<Eff
         outer: outer_targets,
         what,
     };
+    // "Sacrifice ~": only while the performer controls it (see `guard_own_sacrifices`).
+    let e = &super::triggers_delayed::guard_own_sacrifices(e)?;
     let json = serde_json::to_value(e).ok()?;
     let rewritten = w.walk(json);
     // A reference that can't be a variable there fails to deserialize: the text stays
