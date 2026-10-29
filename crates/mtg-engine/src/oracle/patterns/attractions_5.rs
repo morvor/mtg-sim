@@ -206,7 +206,9 @@ fn reveal_then_whenever_you_reveal(
             then: Box::new(Effect::Reflexive {
                 body: Box::new(body),
             }),
-            otherwise: Box::new(Effect::Noop),
+            // (An empty instruction, not `Noop`: whether the card was revealed stays what
+            // "Do this only once each turn" reads, CR 603.2h.)
+            otherwise: Box::new(Effect::Seq(vec![])),
         },
     ]);
     def.text = block.to_string();

@@ -391,11 +391,7 @@ impl Draft {
     /// next, passes it in the same direction, and then drafts from the pack they would
     /// have drafted from otherwise (the card's rulings): every later pack reaches them one
     /// pick later this round.
-    pub fn add_booster(
-        &mut self,
-        p: PlayerId,
-        pack: Vec<Arc<CardDef>>,
-    ) -> Result<(), DraftError> {
+    pub fn add_booster(&mut self, p: PlayerId, pack: Vec<Arc<CardDef>>) -> Result<(), DraftError> {
         let Some(k) = self.may_add.iter().position(|q| *q == p) else {
             return Err(DraftError::InvalidOption);
         };

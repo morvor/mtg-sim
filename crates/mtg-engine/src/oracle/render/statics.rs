@@ -608,7 +608,8 @@ impl Renderer<'_> {
                             whose: PlayerRel::Any,
                         } => "at the beginning of the first upkeep".to_string(),
                         TriggerCond::Custom(n)
-                            if n == crate::kw::first_spell_of_game::OPPONENT_FIRST_SPELL_OF_GAME =>
+                            if n
+                                == crate::kw::first_spell_of_game::OPPONENT_FIRST_SPELL_OF_GAME =>
                         {
                             "when each opponent casts their first spell of the game".to_string()
                         }
@@ -639,7 +640,10 @@ impl Renderer<'_> {
                 )
             }
             StaticEffect::BeforeShuffleExile { what, at_least } => {
-                let n = self.noun_det(what, Det::Count(format!("{} or more", number_word(*at_least as i32))));
+                let n = self.noun_det(
+                    what,
+                    Det::Count(format!("{} or more", number_word(*at_least as i32))),
+                );
                 format!(
                     "before you shuffle your deck to start the game, you may reveal ~ from your deck and exile {n} you drafted that aren't in your deck"
                 )
@@ -675,7 +679,9 @@ impl Renderer<'_> {
                     SpecialActionEffect::IgnoreSourceEffects => {
                         "that player ignores this effect until end of turn".into()
                     }
-                    SpecialActionEffect::StopDelayedTrigger => "that ability doesn't trigger".into(),
+                    SpecialActionEffect::StopDelayedTrigger => {
+                        "that ability doesn't trigger".into()
+                    }
                 };
                 format!("{who} may {c} any time they could cast an instant. If they do, {what}")
             }

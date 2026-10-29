@@ -360,7 +360,10 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
             // CR 706.3c: rolling again uses the same kind and number of dice, including
             // the instruction's modifiers.
             let bonus = spec.bonus.as_ref().map_or(0, |b| g.eval_value(b, ctx));
-            let dice = roll_dice(g, p, n, spec.sides, spec.ignore, bonus, ctx.source);
+            // The roll is one action; the results table's instructions are separate ones
+            // (`trigger_timing::is_sequencing`).
+            let source = ctx.source;
+            let dice = g.atomically(|g| roll_dice(g, p, n, spec.sides, spec.ignore, bonus, source));
             rolled |= !dice.is_empty();
             let results: Vec<i64> = dice.iter().map(|d| d.result() + bonus).collect();
             let total: i64 = results.iter().sum();
@@ -504,9 +507,9 @@ pub fn roll_dice(
     // "... or until any player rolls a 1, whichever comes first" (Drop Tower's rulings:
     // the effect ends as soon as the result is known).
     let results: Vec<i64> = dice.iter().map(|d| d.result() + bonus).collect();
-    g.expire_effects(|d| {
-        matches!(d, Duration::UntilEndOfTurnOrRoll(n) if results.contains(&(*n as i64)))
-    });
+    g.expire_effects(
+        |d| matches!(d, Duration::UntilEndOfTurnOrRoll(n) if results.contains(&(*n as i64))),
+    );
     g.end_event_batch();
     g.log(|_| {
         format!(
@@ -638,7 +641,9 @@ pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
         })
         .count();
     let choosers = take_next_roll_extras(g, p);
-    let mut rolls: Vec<i64> = (0..=extra + choosers.len()).map(|_| natural(g, 6)).collect();
+    let mut rolls: Vec<i64> = (0..=extra + choosers.len())
+        .map(|_| natural(g, 6))
+        .collect();
     // "... and you choose one of those rolls to ignore" (CR 706.6).
     for c in choosers {
         let opts = rolls
@@ -1112,11 +1117,12 @@ impl crate::kw::KeywordRules for DiceHistory {
             return None;
         }
         let src = ctx.source.map(|s| g.ability_source_of(s));
-        Some(!g
-            .dice
-            .phased_out_by
-            .iter()
-            .any(|(s, o)| *o == id && Some(*s) == src))
+        Some(
+            !g.dice
+                .phased_out_by
+                .iter()
+                .any(|(s, o)| *o == id && Some(*s) == src),
+        )
     }
 }
 

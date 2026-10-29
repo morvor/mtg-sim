@@ -159,7 +159,12 @@ pub fn opening_hand_actions_for(g: &mut Game, p: PlayerId) {
                         not_starting_player,
                         counters,
                         then,
-                    } => Some((delayed.clone(), *not_starting_player, counters.clone(), then.clone())),
+                    } => Some((
+                        delayed.clone(),
+                        *not_starting_player,
+                        counters.clone(),
+                        then.clone(),
+                    )),
                     _ => None,
                 },
                 _ => None,

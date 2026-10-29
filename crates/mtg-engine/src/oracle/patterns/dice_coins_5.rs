@@ -104,6 +104,30 @@ fn only_body(text: &str, ctx: &CompileContext) -> Option<(Ability, Body)> {
     Some((a.clone(), body))
 }
 
+/// "Each opponent exiles cards from the top of their library until they exile an instant
+/// or sorcery card, then shuffles the rest into their library. You may cast ... from among
+/// cards exiled this way ...": the cards the reveal exiled (`vars::DUG`, those still in
+/// exile), not what the shuffle of the rest left as "it".
+fn exiled_this_way_after_shuffle(e: &mut Effect) {
+    let Effect::Seq(v) = e else {
+        return;
+    };
+    let Some(i) = v.iter().position(|x| matches!(x, Effect::RevealUntil { .. })) else {
+        return;
+    };
+    let shuffles = |x: &Effect| {
+        serde_json::to_string(x).is_ok_and(|j| j.contains("\"ShuffleIntoLibrary\""))
+    };
+    let Some(k) = v[i + 1..].iter().position(|x| shuffles(x)).map(|k| k + i + 1) else {
+        return;
+    };
+    if let Some(Effect::Store { sel, .. }) = v.get_mut(k + 1) {
+        if matches!(sel, Sel::Var(vars::IT)) {
+            *sel = Sel::Var(vars::DUG);
+        }
+    }
+}
+
 /// "{4}, {T}: Roll a d20. [instructions using X]. 1—9 | X is one. 10—19 | X is two. 20 | X
 /// is three." (Wand of Wonder): the roll comes first and its table only defines X, so each
 /// row performs the instructions after the roll with its value of X.
@@ -140,11 +164,9 @@ fn table_defines_x(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
         if !b.targets.is_empty() || b.modal.is_some() {
             return None;
         }
-        spec.table.push(ResultRow {
-            lo,
-            hi,
-            effect: b.effect,
-        });
+        let mut effect = b.effect;
+        exiled_this_way_after_shuffle(&mut effect);
+        spec.table.push(ResultRow { lo, hi, effect });
     }
     body.effect = Effect::RollDice(spec);
     let def = std::sync::Arc::make_mut(&mut ability);
