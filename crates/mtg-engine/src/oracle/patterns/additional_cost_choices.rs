@@ -141,3 +141,262 @@ fn for_each_additional_paid(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "additional cost choices: for each additional {M} you paid, [instruction on another target]", priority: 60, parse: for_each_additional_paid } }
+
+// ---------------------------------------------------------------------------
+// "choose a creature you control or a warped creature card you own in exile"
+// ---------------------------------------------------------------------------
+
+/// One alternative of an object chosen as a cost: "a creature you control" (on the
+/// battlefield), "a warped creature card you own in exile" (CR 702.185b), "a creature card
+/// in your graveyard".
+fn chosen_object_alternative(s: &str) -> Option<Filter> {
+    let r = s.strip_prefix("a ").or_else(|| s.strip_prefix("an "))?;
+    let (warped, r) = match r.strip_prefix("warped ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    let (f, plural, tail) = crate::oracle::phrases::parse_object_phrase(r)?;
+    if plural || !end(tail).is_empty() {
+        return None;
+    }
+    let dbg = format!("{f:?}");
+    let in_zone = dbg.contains("InZone(");
+    let card = r.contains(" card");
+    if warped && !(card && dbg.contains("InZone(Exile)")) {
+        return None;
+    }
+    let mut parts = vec![f];
+    if !in_zone {
+        if card {
+            return None;
+        }
+        parts.push(Filter::InZone(ZoneKind::Battlefield));
+    }
+    if warped {
+        parts.push(Filter::Custom(crate::kw::warp::WARPED_CARD.into()));
+    }
+    Some(Filter::and(parts))
+}
+
+/// The cost of choosing one object matching `filter`, remembered for the spell
+/// (`choices::REMEMBER_CHOSEN_OBJECTS`; "the chosen creature or card").
+fn choose_object_cost(filter: Filter) -> Cost {
+    Cost::free().with(CostPart::Effect(Box::new(Effect::seq(vec![
+        Effect::Store {
+            var: vars::IT,
+            sel: Sel::Choose {
+                chooser: PlayerRef::You,
+                filter,
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+        },
+        Effect::Custom(crate::choices::REMEMBER_CHOSEN_OBJECTS.into()),
+    ]))))
+}
+
+/// "As an additional cost to cast ~, choose a creature you control[ or a warped creature
+/// card you own in exile]." (Close Encounter): the object is chosen as the spell's costs
+/// are paid (CR 601.2b, 601.2h; a cost that can't be paid without an object to choose),
+/// and remembered for the spell.
+fn choose_object_as_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') || !ctx.is_spell() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as an additional cost to cast ~, choose ")?;
+    let mut alts = Vec::new();
+    for a in r.split(" or ") {
+        alts.push(chosen_object_alternative(a)?);
+    }
+    let filter = match alts.len() {
+        1 => alts.pop()?,
+        _ => Filter::Or(alts),
+    };
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        CostChange::AdditionalCost(choose_object_cost(filter)),
+        None,
+        text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "additional cost choices: choose a creature you control or a warped creature card", priority: 74, parse: choose_object_as_cost } }
+
+/// "~ deals damage equal to the power of the chosen creature or card to target creature"
+/// after an object chosen as an additional cost: that object's power, or its last known
+/// power if it has left the battlefield (Close Encounter's ruling).
+fn power_of_object_chosen_as_cost(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let phrase = [
+        "damage equal to the power of the chosen creature or card",
+        "damage equal to the power of the chosen creature",
+    ]
+    .into_iter()
+    .find(|p| l.contains(p))?;
+    let raw = crate::oracle::raw_text().to_lowercase();
+    if !raw.contains("as an additional cost to cast this spell, choose a ")
+        && !raw.contains("as an additional cost to cast ~, choose a ")
+    {
+        return None;
+    }
+    let saved = b.targets.len();
+    let Some(e) = parse_clause(&l.replacen(phrase, "x damage", 1), b) else {
+        b.targets.truncate(saved);
+        return None;
+    };
+    Some(Effect::seq(vec![
+        Effect::SetX {
+            value: Value::Custom(crate::choices::CHOSEN_OBJECT_POWER.into()),
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "additional cost choices: the power of the chosen creature or card", priority: 59, parse: power_of_object_chosen_as_cost } }
+
+// ---------------------------------------------------------------------------
+// "choose a creature type and behold two creatures of that type"
+// ---------------------------------------------------------------------------
+
+/// "[you may ]choose a creature type and behold N creatures of that type" as an
+/// additional cost (Celestial Reunion; see `cost_sets::CHOOSE_TYPE_AND_BEHOLD`).
+fn choose_type_and_behold_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    if text.contains('\n') || !ctx.is_spell() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let r = end(&lower).strip_prefix("as an additional cost to cast ~, ")?;
+    let (optional, r) = match r.strip_prefix("you may ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    let n = r
+        .strip_prefix("choose a creature type and behold ")?
+        .strip_suffix(" creatures of that type")
+        .or_else(|| {
+            r.strip_prefix("choose a creature type and behold ")?
+                .strip_suffix(" creature of that type")
+        })?;
+    let (Value::Const(n), rest) = parse_number(n)? else {
+        return None;
+    };
+    if !rest.trim().is_empty() || n < 1 {
+        return None;
+    }
+    let cost = Cost::free().with(CostPart::Effect(Box::new(Effect::Custom(
+        format!("{}{n}", crate::cost_sets::CHOOSE_TYPE_AND_BEHOLD).into(),
+    ))));
+    let change = if optional {
+        CostChange::OptionalAdditionalCost {
+            name: smol_str::SmolStr::new(r),
+            cost,
+        }
+    } else {
+        CostChange::AdditionalCost(cost)
+    };
+    Some(vec![super::costs_casting_self::this_spell_cost_ability(
+        change, None, text,
+    )])
+}
+
+inventory::submit! { AbilityPattern { name: "additional cost choices: choose a creature type and behold N creatures of that type", priority: 74, parse: choose_type_and_behold_cost } }
+
+/// A condition of "If [condition], put that card onto the battlefield instead of putting
+/// it into your hand", judged once the card is found: "the revealed card is the chosen
+/// type" (the type chosen for the spell), or any condition of the game.
+fn found_card_condition(c: &str, b: &Builder) -> Option<Condition> {
+    let mut parts = Vec::new();
+    for p in c.split(" and ") {
+        let cond = match p {
+            "the revealed card is the chosen type" | "it's the chosen type" | "that card is the chosen type" => {
+                Condition::SelMatches(Sel::Var(vars::IT), Filter::ChosenType)
+            }
+            p => crate::oracle::statics::parse_condition(p, b.ctx)?,
+        };
+        parts.push(cond);
+    }
+    Some(match parts.len() {
+        1 => parts.pop()?,
+        _ => Condition::And(parts),
+    })
+}
+
+/// "Search your library for a creature card ..., reveal it, put it into your hand, then
+/// shuffle. If [condition], put that card onto the battlefield instead of putting it into
+/// your hand." (Celestial Reunion): the card is found and revealed, then put onto the
+/// battlefield if the condition is true of it, or into the hand, then the library is
+/// shuffled (CR 614.1a: "instead"; 701.23).
+fn found_card_onto_battlefield_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let Some(c) = end(l).strip_prefix("if ").and_then(|r| {
+        r.strip_suffix(", put that card onto the battlefield instead of putting it into your hand")
+    }) else {
+        return false;
+    };
+    let Some(cond) = found_card_condition(c, b) else {
+        return false;
+    };
+    let last = super::referents_values_5::last_mut_pub(prev);
+    let (filter, reveal) = match &*last {
+        Effect::Search {
+            who: PlayerRef::You,
+            whose: PlayerRef::You,
+            filter,
+            count,
+            to,
+            reveal,
+            shuffle: true,
+            ..
+        } if count.as_const() == Some(1) && to.zone == ZoneKind::Hand => (
+            match filter {
+                Filter::And(v) => Filter::and(
+                    v.iter()
+                        .filter(|f| !matches!(f, Filter::InZone(ZoneKind::Library)))
+                        .cloned()
+                        .collect(),
+                ),
+                f => f.clone(),
+            },
+            *reveal,
+        ),
+        _ => return false,
+    };
+    let search = Effect::SearchCards(Box::new(SearchSpec {
+        who: PlayerRef::You,
+        whose: PlayerRef::You,
+        zones: vec![ZoneKind::Library],
+        zones_optional: false,
+        parts: vec![SearchPart {
+            filter,
+            count: Value::c(1),
+            up_to: false,
+            all: false,
+        }],
+        distinct_names: false,
+        optional: false,
+        reveal,
+        dests: vec![],
+        shuffle: SearchShuffle::No,
+    }));
+    let it = Sel::Var(vars::IT);
+    *last = Effect::seq(vec![
+        search,
+        Effect::If {
+            cond,
+            then: Box::new(Effect::Move {
+                what: it.clone(),
+                to: Destination::battlefield(),
+            }),
+            otherwise: Box::new(Effect::Move {
+                what: it,
+                to: Destination::zone(ZoneKind::Hand),
+            }),
+        },
+        Effect::Shuffle {
+            who: PlayerRef::You,
+        },
+    ]);
+    true
+}
+
+inventory::submit! { super::FollowupPattern { name: "additional cost choices: if [condition of the found card], put that card onto the battlefield instead of putting it into your hand", priority: 99, apply: found_card_onto_battlefield_instead } }

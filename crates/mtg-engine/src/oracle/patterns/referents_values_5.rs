@@ -140,6 +140,11 @@ inventory::submit! { EffectPattern { name: "referents 5: each of those opponents
 
 /// The last instruction of an effect, mutably, past the bookkeeping that records its
 /// referents ([`Effect::Store`]).
+/// [`last_mut`] for other patterns.
+pub fn last_mut_pub(e: &mut Effect) -> &mut Effect {
+    last_mut(e)
+}
+
 fn last_mut(e: &mut Effect) -> &mut Effect {
     let i = match &*e {
         Effect::Seq(v) => v.iter().rposition(|x| !matches!(x, Effect::Store { .. })),

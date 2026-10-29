@@ -200,3 +200,75 @@ impl Game {
         Ok(())
     }
 }
+
+// ---------------------------------------------------------------------------
+// "choose a creature type and behold two creatures of that type" (a cost)
+// ---------------------------------------------------------------------------
+
+/// `Effect::Custom` prefix (followed by the number): "choose a creature type and behold N
+/// creatures of that type" (Celestial Reunion's additional cost). The type is chosen among
+/// those the player could then behold N creatures of (a cost must be payable in full,
+/// CR 118.3; only creature cards in hand and creatures they control, not kindred cards,
+/// its ruling), recorded as the spell's chosen type (CR 601.2b), and then N creatures of
+/// it are beheld (CR 701.4a).
+pub const CHOOSE_TYPE_AND_BEHOLD: &str = "cost sets:choose a creature type and behold ";
+
+fn behold_count(name: &str) -> Option<u32> {
+    name.strip_prefix(CHOOSE_TYPE_AND_BEHOLD)?.parse().ok()
+}
+
+fn of_type(t: &str) -> Filter {
+    Filter::and(vec![
+        Filter::Type(CardType::Creature),
+        Filter::Subtype(smol_str::SmolStr::new(t)),
+    ])
+}
+
+/// The creature types `p` could behold `n` creatures of.
+fn beholdable_types(g: &Game, p: PlayerId, n: u32, ctx: &Ctx) -> Vec<String> {
+    subtype_lists()
+        .creature
+        .iter()
+        .filter(|t| crate::behold::can_behold(g, p, &of_type(t), n, ctx))
+        .cloned()
+        .collect()
+}
+
+pub struct ChooseTypeAndBehold;
+
+impl crate::kw::KeywordRules for ChooseTypeAndBehold {
+    fn kinds(&self) -> &'static [crate::keywords::KeywordKind] {
+        &[]
+    }
+
+    fn custom_effect_possible(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        let n = behold_count(name)?;
+        Some(!beholdable_types(g, ctx.controller, n, ctx).is_empty())
+    }
+
+    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
+        let Some(n) = behold_count(name) else {
+            return false;
+        };
+        let p = ctx.controller;
+        let types = beholdable_types(g, p, n, ctx);
+        let (Some(src), false) = (ctx.source, types.is_empty()) else {
+            ctx.prev_happened = false;
+            return true;
+        };
+        let i = g.ask_option(p, Some(src), "Choose a creature type", types.clone());
+        let t = smol_str::SmolStr::new(&types[i.min(types.len() - 1)]);
+        let link = ctx.link;
+        let o = &mut g.objects[src.0 as usize];
+        o.choices.creature_type = Some(t.clone());
+        o.choices.list.push(t.clone());
+        for l in [0, link] {
+            o.linked_choices.entry(l).or_default().creature_type = Some(t.clone());
+        }
+        g.dirty = true;
+        crate::behold::behold(g, p, &of_type(&t), n, ctx);
+        true
+    }
+}
+
+inventory::submit! { crate::kw::KeywordRegistration(&ChooseTypeAndBehold) }

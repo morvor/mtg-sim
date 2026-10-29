@@ -149,6 +149,23 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                 g, filter, &cands, n, ctx,
             ))
         }
+        // "choose a creature you control" as a cost (`additional_cost_choices`): an object
+        // to choose.
+        Effect::Store {
+            sel:
+                Sel::Choose {
+                    filter,
+                    count,
+                    up_to: false,
+                    ..
+                },
+            ..
+        } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
+        // Each action of a sequence that this module judges.
+        Effect::Seq(v) => {
+            let judged: Vec<bool> = v.iter().filter_map(|e| payable(g, e, ctx)).collect();
+            (!judged.is_empty()).then(|| judged.iter().all(|b| *b))
+        }
         _ => None,
     }
 }

@@ -274,6 +274,9 @@ mod compile_tests {
             ("{T}, Untap a tapped land an opponent controls: Add one mana of any type that land could produce.", "Creature — Merfolk"),
             ("Exile a creature card from your graveyard and pay its mana cost: Create a token that's a copy of that card. Activate only as a sorcery.", "Enchantment"),
             ("{T}, Sacrifice Probe and any number of creatures you control: Probe deals X damage to any target, where X is the total power of the creatures sacrificed this way, then exile Probe and those creature cards.", "Artifact"),
+            ("As an additional cost to cast this spell, choose a creature you control or a warped creature card you own in exile.\nProbe deals damage equal to the power of the chosen creature or card to target creature.", "Instant"),
+            ("As an additional cost to cast this spell, you may choose a creature type and behold two creatures of that type.\nSearch your library for a creature card with mana value X or less, reveal it, put it into your hand, then shuffle. If this spell's additional cost was paid and the revealed card is the chosen type, put that card onto the battlefield instead of putting it into your hand.", "Sorcery"),
+            ("As an additional cost to cast this spell, you may pay {1}{R} and/or {1}{G} any number of times.\nDestroy target artifact. For each additional {1}{R} you paid, destroy another target artifact. For each additional {1}{G} you paid, destroy another target artifact, and you gain 1 life.", "Sorcery"),
         ] {
             assert_eq!(unsupported(t, ty), Vec::<String>::new(), "{t}");
         }
