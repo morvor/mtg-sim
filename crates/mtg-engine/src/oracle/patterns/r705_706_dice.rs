@@ -57,22 +57,56 @@ fn table_row(line: &str) -> Option<(i64, Option<i64>, &str)> {
 }
 
 /// The lines of a results table join the ability that rolls (CR 706.3b), as further
-/// sentences of its effect text.
+/// sentences of its effect text. An activation restriction printed before the table
+/// ("Roll a d20. Activate only as a sorcery." over the rows, Wizard's Spellbook) still
+/// applies to the whole ability: it's moved after the rows, where activation
+/// restrictions are read.
 fn group_table_rows(blocks: Vec<String>, _ctx: &CompileContext) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
+    // (index in `out`, the restriction moved off its end)
+    let mut moved: Vec<(usize, String)> = Vec::new();
     for b in blocks {
+        let n = out.len();
         match out.last_mut() {
             Some(last)
                 if table_row(&b).is_some()
                     && (b.contains(" | ") || last.to_lowercase().contains("roll ")) =>
             {
+                if !moved.iter().any(|(i, _)| *i == n - 1) {
+                    if let Some(r) = trailing_activation_restriction(last) {
+                        let k = last.len() - r.len();
+                        moved.push((n - 1, r.to_string()));
+                        last.truncate(k);
+                        last.truncate(last.trim_end().len());
+                    }
+                }
                 last.push(' ');
                 last.push_str(b.trim());
             }
             _ => out.push(b),
         }
     }
+    for (i, r) in moved {
+        out[i].push(' ');
+        out[i].push_str(&r);
+    }
     out
+}
+
+/// The last sentence of an activated ability's text when it's only an activation
+/// restriction ("Activate only as a sorcery.").
+fn trailing_activation_restriction(block: &str) -> Option<&str> {
+    let (cost, effect) = block.split_once(": ")?;
+    if cost.contains(". ") {
+        return None;
+    }
+    let effect = effect.trim_end();
+    let start = effect[..effect.len().saturating_sub(1)]
+        .rfind(". ")
+        .map(|i| i + 2)?;
+    let sentence = &effect[start..];
+    let (rest, ..) = crate::oracle::costs::split_activation_restrictions(sentence);
+    rest.is_empty().then_some(sentence)
 }
 
 inventory::submit! { BlockGroupPattern { name: "r706 results table", priority: 80, group: group_table_rows } }
@@ -95,17 +129,44 @@ fn last_roll(e: &mut Effect) -> Option<&mut DieRoll> {
 /// A results table row after the sentence that rolls, or a further sentence of the last
 /// row's effect.
 fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
-    let Some(roll) = last_roll(prev) else {
-        return false;
-    };
+    if last_roll(prev).is_none() {
+        // "Exile target instant or sorcery card from a graveyard. Roll a d20." (Wizard's
+        // Spellbook): the roll joins the exile, so that the rows' "that card" is the
+        // exiled card (see `exiled_a_target_before_roll`).
+        if !super::copy_exiled_card::ends_with_exiling_a_target(prev) {
+            return false;
+        }
+        let Some(roll @ Effect::RollDice(_)) = p_roll(l, b) else {
+            return false;
+        };
+        *prev = Effect::seq(vec![std::mem::take(prev), roll]);
+        return true;
+    }
     if let Some((lo, hi, text)) = table_row(l) {
-        let Some(e) = parse_row_text(text, b, &roll.table) else {
+        let after_exile = exiled_a_target_before_roll(prev);
+        // "20 | Copy each card exiled with ~." (Wizard's Spellbook): the exile before the
+        // roll is linked to the ability (CR 607.2a).
+        let each_exiled = after_exile
+            && end(&text.trim().to_lowercase()) == "copy each card exiled with ~"
+            && link_exile_before_roll(prev);
+        let Some(roll) = last_roll(prev) else {
+            return false;
+        };
+        let e = if each_exiled {
+            Some(super::copy_spell_grammar_2::copy_each_linked_exiled_card())
+        } else {
+            parse_row_text(text, b, &roll.table, after_exile)
+        };
+        let Some(e) = e else {
             return false;
         };
         roll.table.push(ResultRow { lo, hi, effect: e });
         return true;
     }
     // A sentence after a row continues that row's effect.
+    let Some(roll) = last_roll(prev) else {
+        return false;
+    };
     let Some(row) = roll.table.last_mut() else {
         return false;
     };
@@ -122,10 +183,49 @@ fn f_table_row(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "r706 results table row", priority: 10, apply: f_table_row } }
 
+/// Whether the effect exiled a target card just before its last die roll ("Exile target
+/// instant or sorcery card from a graveyard. Roll a d20." — "that card" in the rows is
+/// the exiled card).
+fn exiled_a_target_before_roll(e: &Effect) -> bool {
+    match e {
+        Effect::Seq(v) => match v.as_slice() {
+            [.., before, Effect::RollDice(_)] => {
+                super::copy_exiled_card::ends_with_exiling_a_target(before)
+            }
+            [.., last] => exiled_a_target_before_roll(last),
+            [] => false,
+        },
+        _ => false,
+    }
+}
+
+/// Links the exile just before the effect's last die roll (see
+/// `exiled_a_target_before_roll`).
+fn link_exile_before_roll(e: &mut Effect) -> bool {
+    match e {
+        Effect::Seq(v) => match v.as_mut_slice() {
+            [.., before, Effect::RollDice(_)] => {
+                super::copy_spell_grammar_2::link_last_exile(before)
+            }
+            [.., last] => link_exile_before_roll(last),
+            [] => false,
+        },
+        _ => false,
+    }
+}
+
 /// A row's effect: one sentence (a row ends at its period; further sentences are added
-/// by [`f_table_row`]).
-fn parse_row_text(text: &str, b: &mut Builder, rows: &[ResultRow]) -> Option<Effect> {
+/// by [`f_table_row`]). After exiling a target card, "Copy that card." copies it.
+fn parse_row_text(
+    text: &str,
+    b: &mut Builder,
+    rows: &[ResultRow],
+    after_exile: bool,
+) -> Option<Effect> {
     let mut t = end(text.trim());
+    if after_exile && matches!(t, "copy that card" | "copy it") {
+        return Some(super::copy_exiled_card::copy_of_exiled());
+    }
     // "1 | Trapped! — You lose 3 life.": a row's flavor words have no rules meaning.
     if let Some((flavor, rest)) = t.split_once(" — ") {
         if flavor.split_whitespace().count() <= 4 && !flavor.contains([',', '.', '|']) {
