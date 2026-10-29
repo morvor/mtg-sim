@@ -311,6 +311,18 @@ fn parse_cost_part_core(p: &str) -> Option<CostPart> {
         }
     }
     if let Some(r) = strip(p, "tap") {
+        // "Tap enchanted land: ..." (Earthlore): the permanent this one is attached to,
+        // not any land with an Aura on it (CR 303.4m). (A tap cost is paid with
+        // permanents the payer controls, `casting.rs`.)
+        if matches!(
+            end(r),
+            "enchanted creature" | "enchanted land" | "enchanted permanent" | "equipped creature"
+        ) {
+            return Some(CostPart::TapUntapped {
+                filter: Filter::AttachedToSource,
+                count: Value::Const(1),
+            });
+        }
         let (n, r2) = parse_number(r).unwrap_or((Value::Const(1), r));
         let r2 = strip(r2, "untapped").unwrap_or(r2);
         let (f, _, tail) = parse_object_phrase(r2)?;

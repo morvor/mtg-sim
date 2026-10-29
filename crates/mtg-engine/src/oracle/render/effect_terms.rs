@@ -68,6 +68,44 @@ impl Renderer<'_> {
     /// The instruction, if this module words it.
     pub(crate) fn effect_terms(&mut self, e: &Effect) -> Option<String> {
         match e {
+            // "For each color, return up to one target creature card of that color from
+            // your graveyard to your hand": five targets, one of each color (CR 105.1).
+            Effect::Move {
+                what: Sel::Union(v),
+                to,
+            } if to.zone == ZoneKind::Hand && self.one_target_of_each_color(v).is_some() => {
+                let rest = self.one_target_of_each_color(v)?;
+                let parts: Vec<Filter> = match &rest {
+                    Filter::And(f) => f.clone(),
+                    other => vec![other.clone()],
+                };
+                let from_your_graveyard = parts
+                    .iter()
+                    .any(|x| matches!(x, Filter::InZone(ZoneKind::Graveyard)))
+                    && parts
+                        .iter()
+                        .any(|x| matches!(x, Filter::OwnedBy(PlayerRel::You)));
+                if !from_your_graveyard {
+                    return None;
+                }
+                let kind = Filter::and(
+                    parts
+                        .into_iter()
+                        .filter(|x| !matches!(x, Filter::InZone(_) | Filter::OwnedBy(_)))
+                        .collect(),
+                );
+                let n = self.noun(&kind, Num::One);
+                for t in v {
+                    if let Sel::Target(i) = t {
+                        if let Some(x) = self.introduced.get_mut(*i as usize) {
+                            *x = true;
+                        }
+                    }
+                }
+                Some(format!(
+                    "for each color, return up to one target {n} of that color from your graveyard to your hand"
+                ))
+            }
             // "Target player sacrifices an artifact and a land of their choice."
             Effect::AsPlayer { who, effect } => {
                 let Effect::ForEachPlayer {
@@ -80,6 +118,29 @@ impl Renderer<'_> {
                 let kinds = one_of_each_sacrifice(inner)?;
                 let w = self.player(who, Case::Subj);
                 Some(self.sacrifice_one_of_each(&w, &kinds))
+            }
+            // "Each player's life total becomes the number of creatures they control."
+            Effect::ForEachPlayer {
+                who: PlayerRef::EachPlayer,
+                effect: inner,
+            } if matches!(
+                inner.as_ref(),
+                Effect::SetLife {
+                    who: PlayerRef::Iterated,
+                    n: Value::Count(_)
+                }
+            ) =>
+            {
+                let Effect::SetLife {
+                    n: Value::Count(f), ..
+                } = inner.as_ref()
+                else {
+                    return None;
+                };
+                let n = self.noun(f, Num::Many);
+                Some(format!(
+                    "each player's life total becomes the number of {n}"
+                ))
             }
             // "Each player sacrifices an artifact, a creature, ... of their choice."
             Effect::ForEachPlayer { who, effect } => {
@@ -392,5 +453,56 @@ impl Renderer<'_> {
         };
         let line = self.ability(a);
         Some(format!("∞ — {line}"))
+    }
+}
+
+impl Renderer<'_> {
+    /// The quality five targets share when they are up to one of each of the five colors
+    /// (white, blue, black, red, green, in that order): "for each color, ... up to one
+    /// target creature card of that color".
+    fn one_target_of_each_color(&self, v: &[Sel]) -> Option<Filter> {
+        const ORDER: [Color; 5] = [
+            Color::White,
+            Color::Blue,
+            Color::Black,
+            Color::Red,
+            Color::Green,
+        ];
+        if v.len() != 5 {
+            return None;
+        }
+        let mut rest: Option<String> = None;
+        let mut shared = None;
+        for (k, s) in v.iter().enumerate() {
+            let Sel::Target(i) = s else {
+                return None;
+            };
+            let t = self.targets.get(*i as usize)?;
+            if !matches!((&t.min, &t.max), (Value::Const(0), Value::Const(1))) {
+                return None;
+            }
+            let TargetKind::Object(Filter::And(f)) = &t.what else {
+                return None;
+            };
+            if !f
+                .iter()
+                .any(|x| matches!(x, Filter::Color(c) if *c == ORDER[k]))
+            {
+                return None;
+            }
+            let others = Filter::and(
+                f.iter()
+                    .filter(|x| !matches!(x, Filter::Color(_)))
+                    .cloned()
+                    .collect(),
+            );
+            let d = format!("{others:?}");
+            if rest.as_ref().is_some_and(|r| *r != d) {
+                return None;
+            }
+            rest = Some(d);
+            shared = Some(others);
+        }
+        shared
     }
 }

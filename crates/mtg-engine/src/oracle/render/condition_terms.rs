@@ -71,6 +71,27 @@ impl Renderer<'_> {
     /// and/or planeswalkers you control", "you have the most life or are tied for most
     /// life" (CR 119).
     pub(crate) fn compare_terms(&mut self, c: &Condition) -> Option<String> {
+        // "if it has greater power or toughness than ~": its power is greater than ~'s
+        // or its toughness is greater than ~'s (both said of the same object, which
+        // naming ~ for the comparison doesn't make "that creature").
+        if let Condition::Or(v) = c {
+            if let [Condition::Compare(Value::PowerOf(a), Cmp::Gt, Value::PowerOf(b)), Condition::Compare(Value::ToughnessOf(a2), Cmp::Gt, Value::ToughnessOf(b2))] =
+                v.as_slice()
+            {
+                if matches!(b.as_ref(), Sel::This)
+                    && matches!(b2.as_ref(), Sel::This)
+                    && format!("{a:?}") == format!("{a2:?}")
+                    && !matches!(a.as_ref(), Sel::This)
+                {
+                    let subj = self.sel(a, super::players::Case::Subj);
+                    let poss = super::players::decline(subj.clone(), super::players::Case::Poss);
+                    let me = self.me();
+                    return Some(format!(
+                        "{{alt:{subj} has greater power or toughness than {me}|{poss} power is greater than {me}'s power or {poss} toughness is greater than {me}'s toughness}}"
+                    ));
+                }
+            }
+        }
         // "its power is greater than each other creature's power": no other such creature
         // has a power that fails the comparison (`conditions_compare::versus_each_other`).
         if let Condition::Compare(Value::Count(Filter::And(v)), Cmp::Eq, Value::Const(0)) = c {

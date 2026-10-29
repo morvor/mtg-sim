@@ -230,6 +230,14 @@ impl Renderer<'_> {
                 let (c, w) = self.counted(count, &counter_name(kind));
                 format!("put {c} on ~{}", w.unwrap_or_default())
             }
+            // "Tap enchanted creature": the permanent this one is attached to.
+            CostPart::TapUntapped {
+                filter: Filter::AttachedToSource,
+                count: Value::Const(1),
+            } => {
+                let n = self.attached_noun();
+                format!("tap {n}")
+            }
             CostPart::TapUntapped { filter, count } => {
                 let f = Filter::and(vec![Filter::Untapped, filter.clone()]);
                 let det = self.det_for(count);

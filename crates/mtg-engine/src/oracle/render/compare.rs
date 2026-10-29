@@ -201,10 +201,12 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               player\".",
     },
     Equivalence {
-        pattern: r"\bin addition to (its|their) other creature types\b",
+        pattern: r"\bin addition to (its|their) other (?:creature|land) types\b",
         replacement: "in addition to $1 other types",
-        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b): \
-              \"in addition to its other creature types\" and \"in addition to its other \
+        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b), and \
+              adding a land type only land types (CR 305.7: the land keeps its other land \
+              types when the type is added \"in addition\"): \"in addition to its other \
+              creature types\", \"... other land types\" and \"in addition to its other \
               types\" keep the same types.",
     },
     Equivalence {
