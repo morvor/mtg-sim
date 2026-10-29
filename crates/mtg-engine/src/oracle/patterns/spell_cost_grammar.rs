@@ -925,8 +925,17 @@ fn any_number_additional_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ab
         None => (l, None),
     };
     let r = first.strip_prefix("as an additional cost to cast ~, ")?;
+    let optional = r.starts_with("you may ");
     let r = r.strip_prefix("you may ").unwrap_or(r);
-    let one = repeatable_part(r)?;
+    // "you may sacrifice one or more creatures" (Plumb the Forbidden): any number of them,
+    // paying it zero times being not paying it.
+    let one_or_more = r
+        .strip_prefix("sacrifice one or more ")
+        .filter(|_| optional);
+    let one = match one_or_more {
+        Some(what) => repeatable_part(&format!("sacrifice any number of {what}"))?,
+        None => repeatable_part(r)?,
+    };
     let name = smol_str::SmolStr::new(r);
     let times = Value::Custom(rules::paid_times(&name).into());
     let cost = Cost::free().with(CostPart::Repeated {
@@ -938,6 +947,34 @@ fn any_number_additional_cost(text: &str, ctx: &CompileContext) -> Option<Vec<Ab
         None,
         text,
     )];
+    if let (Some(s), Some(what)) = (second, one_or_more) {
+        // "When you do, copy ~ for each creature sacrificed this way.": triggers on paying
+        // the cost as the spell is cast, read as "When you cast ~, if you sacrificed one
+        // or more creatures to cast it" (as casualty is defined, CR 702.153a; see the
+        // interpretation register, `cost-paid-reflexive-trigger`): one copy for each one
+        // sacrificed (CR 707.10).
+        let each = s
+            .strip_prefix("when you do, copy ~ for each ")?
+            .strip_suffix(" sacrificed this way")?;
+        if format!("{each}s") != what {
+            return None;
+        }
+        let mut t = TriggeredAbility::new(
+            TriggerCond::CastSpell {
+                who: PlayerRel::You,
+                filter: Filter::Source,
+            },
+            Body::effect(Effect::CopySpell {
+                what: Sel::This,
+                count: times.clone(),
+                new_targets: false,
+            }),
+        );
+        t.zone = FunctionZone::Stack;
+        t.intervening_if = Some(Condition::Compare(times, Cmp::Gt, Value::c(0)));
+        out.push(AbilityDef::new(AbilityKind::Triggered(t), text));
+        return Some(out);
+    }
     if let Some(s) = second {
         let s = s.strip_prefix("~ costs ")?;
         let mut changes = Vec::new();

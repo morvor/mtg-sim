@@ -70,6 +70,8 @@ pub(crate) fn mana_from_kind(kind: &str) -> Option<String> {
     let kind = kind.trim();
     for (p, t) in [
         ("an artifact source", "Artifact"),
+        ("an artifact", "Artifact"),
+        ("artifacts", "Artifact"),
         ("artifact sources", "Artifact"),
         ("a creature source", "Creature"),
         ("creature sources", "Creature"),

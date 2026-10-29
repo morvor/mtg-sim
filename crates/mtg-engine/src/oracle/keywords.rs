@@ -421,7 +421,16 @@ pub fn parse_keyword_cost(s: &str) -> Option<Cost> {
             }
         }
     }
-    super::costs::parse_cost(&s.replace('—', ", ")).map(|(c, _)| c)
+    let s = s.replace('—', ", ");
+    super::costs::parse_cost(&s).map(|(c, _)| c).or_else(|| {
+        // "Escape—{2}{B}, Exile any number of other cards from your graveyard with four or
+        // more card types among them.": the number is chosen as X when the cost is paid
+        // (CR 107.3, as for activation costs).
+        let (rewritten, None) = super::patterns::cost_parts::amount_as_x(&s)? else {
+            return None;
+        };
+        super::costs::parse_cost(&rewritten).map(|(c, _)| c)
+    })
 }
 
 /// "from red", "from everything", "from creatures", "from each color", "from multicolored"

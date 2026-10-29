@@ -768,6 +768,7 @@ impl Renderer<'_> {
                 "during the declare attackers step".into()
             }
             Condition::Phase(PhaseCond::EndStep) => "during the end step".into(),
+            Condition::Phase(PhaseCond::DrawStep) => "during the draw step".into(),
             Condition::Custom(n) if n == "restrictions:declare_blockers_step" => {
                 "during the declare blockers step".into()
             }
@@ -1594,6 +1595,26 @@ impl Renderer<'_> {
                 };
                 let n = self.noun(&f, Num::Many);
                 format!("spend only mana produced by {n} to cast ~")
+            }
+            // "Spend only mana produced by Treasures to cast it this way."
+            CostChange::Rule(CostRule::CastThisWay { rule, .. })
+                if matches!(&**rule, CostRule::OnlyManaFrom(_)) =>
+            {
+                let f = match &**rule {
+                    CostRule::OnlyManaFrom(f) => &*f.0,
+                    _ => &Filter::Any,
+                };
+                let f = match f {
+                    Filter::And(v) => Filter::and(
+                        v.iter()
+                            .filter(|x| !matches!(x, Filter::InZone(ZoneKind::Battlefield)))
+                            .cloned()
+                            .collect(),
+                    ),
+                    other => other.clone(),
+                };
+                let n = self.noun(&f, Num::Many);
+                format!("spend only mana produced by {n} to cast it this way")
             }
             CostChange::Rule(CostRule::XAtMost(v)) => {
                 let v = self.value(v);
@@ -2696,6 +2717,14 @@ impl Renderer<'_> {
                     format!("damage that would be dealt by {n} can't be prevented")
                 }
             }
+            Restriction::DamageToCantBePreventedOrRedirected(f) => {
+                let n = self.noun(f, Num::One);
+                format!("damage that would be dealt to {n} this turn can't be prevented or dealt instead to another permanent or player")
+            }
+            Restriction::SourceDamageToCantBePreventedOrRedirected { to, .. } => {
+                let n = self.noun_det(to, Det::A);
+                format!("if ~ would deal damage to {n}, that damage can't be prevented or dealt instead to another permanent or player")
+            }
             Restriction::CantTransform(f) => format!("{} can't transform", subj(self, f)),
             // "As long as enchanted creature is face down, it can't be turned face up."
             Restriction::CantTurnFaceUp(Filter::And(v))
@@ -3046,6 +3075,7 @@ impl Renderer<'_> {
                     }
                     A::Prevent => format!("{subj} can't enter the battlefield"),
                     other @ (A::PreventAmount(_)
+                    | A::PreventPerSource(_)
                     | A::PreventPortion(_)
                     | A::Multiply(_)
                     | A::Add(_)
@@ -4021,7 +4051,7 @@ impl Renderer<'_> {
                 format!("{first}. {then}")
             }
             A::Prevent => "prevent that event".into(),
-            A::PreventAmount(v) | A::PreventPortion(v) => {
+            A::PreventAmount(v) | A::PreventPortion(v) | A::PreventPerSource(v) => {
                 let v = self.value(v);
                 format!("prevent {v} of that damage")
             }
@@ -4530,6 +4560,10 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
         CostRule::OnlyChosenColor => {
             "spend only mana of the chosen color to activate this ability".into()
         }
+        CostRule::CastThisWay { rule, .. } => match &**rule {
+            CostRule::XAtLeast(1) => "if you cast ~ this way, X can't be 0".into(),
+            r => format!("{} if you cast ~ this way", cost_rule_text(r)),
+        },
     }
 }
 
@@ -4573,6 +4607,7 @@ impl Renderer<'_> {
             ManaChangeTo::Type(ManaType::C) => "{alt:colorless mana|{C}}".to_string(),
             ManaChangeTo::Type(t) => mana_symbol(t),
             ManaChangeTo::ColorOfChoice => format!("{one}mana of a color of your choice"),
+            ManaChangeTo::ChosenColor => format!("{one}mana of the chosen color"),
         };
         let colored = [
             ManaType::W,
