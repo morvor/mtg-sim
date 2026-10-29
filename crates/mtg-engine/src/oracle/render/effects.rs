@@ -6547,6 +6547,7 @@ impl Renderer<'_> {
             ZoneKind::Hand => "hand",
             ZoneKind::Exile => "exile",
             ZoneKind::Battlefield => "battlefield",
+            ZoneKind::Outside => "outside the game",
             _ => "zone",
         };
         let zones: Vec<&str> = spec.zones.iter().map(zone).collect();
@@ -8225,6 +8226,9 @@ impl Renderer<'_> {
             ManaProduction::CommanderIdentity => {
                 "one mana of any color in your commander's color identity".into()
             }
+            ManaProduction::DraftChosenColors => {
+                "one mana of any color chosen as you drafted cards named ~".into()
+            }
             ManaProduction::DevotionToChosenColor => {
                 "an amount of mana of that color equal to your devotion to that color".into()
             }
@@ -8357,9 +8361,17 @@ impl Renderer<'_> {
         if p != "you" {
             s = format!("{p} {}", third_person(&s));
         }
-        if let Some(b) = &r.bonus {
-            let b = self.value(b);
-            s.push_str(&format!(" and add {b} to the result"));
+        match &r.bonus {
+            // "and subtract the number of cards in your hand" (`Diff(0, x)`).
+            Some(Value::Diff(z, b)) if matches!(**z, Value::Const(0)) => {
+                let b = self.value(b);
+                s.push_str(&format!(" and subtract {b}"));
+            }
+            Some(b) => {
+                let b = self.value(b);
+                s.push_str(&format!(" and add {b} to the result"));
+            }
+            None => {}
         }
         match r.ignore {
             crate::dice::DiceIgnore::None => {}

@@ -2531,6 +2531,10 @@ pub enum ManaProduction {
     /// 702.124c: the combined identities of their commanders). Undefined without a
     /// commander, so no mana is added (CR 903.4f).
     CommanderIdentity,
+    /// One mana of any color chosen as the controller drafted cards with the source's name
+    /// ("one mana of any color chosen as you drafted cards named Paliano, the High City",
+    /// CR 905.2b). No mana if no colors were chosen (its rulings).
+    DraftChosenColors,
     /// "Choose a color. Add an amount of mana of that color equal to your devotion to that
     /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
     /// resolves, then the amount is the controller's devotion to it.
@@ -3577,6 +3581,10 @@ pub enum StaticEffect {
     /// (CR 607.2n). Functions in the library before the game begins.
     BeforeShuffleExile {
         what: Filter,
+        /// "exile three or more creature cards you drafted that aren't in your deck"
+        /// (Volatile Chimera): any number, at least this many; 0 for exactly one.
+        #[serde(default)]
+        at_least: u32,
     },
     /// Companion (CR 702.139a): the condition the owner's starting deck must fulfill for
     /// this card to be revealed as their companion before the game (CR 103.2b).
