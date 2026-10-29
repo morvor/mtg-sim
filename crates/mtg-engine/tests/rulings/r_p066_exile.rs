@@ -247,7 +247,7 @@ fn robber_of_the_rich_cant_play_an_exiled_land() {
 
 #[test]
 fn fiend_of_the_shadows_card_stays_playable_after_fiend_leaves_or_changes_control() {
-    cr!("610.3", "611.2a");
+    cr!("611.2a");
     ruling!(
         "Fiend of the Shadows",
         "As long as the card remains exiled, you may still play it, even if Fiend of the Shadows leaves the battlefield or changes controllers."
@@ -282,7 +282,7 @@ fn fiend_of_the_shadows_card_stays_playable_after_fiend_leaves_or_changes_contro
 
 #[test]
 fn codie_stops_only_permanent_spells() {
-    cr!("101.2", "305.9");
+    cr!("601.3", "305.4");
     ruling!(
         "Codie, Vociferous Codex",
         "A permanent spell is an artifact, creature, enchantment, or planeswalker spell. You may still play lands and cast instant and sorcery spells. Other effects can still put permanents onto the battlefield."
@@ -318,7 +318,7 @@ fn codie_stops_only_permanent_spells() {
 
 #[test]
 fn sweet_gum_recluse_can_target_a_permanent_that_entered_as_a_noncreature() {
-    cr!("115.1a", "603.6a");
+    cr!("115.1d", "603.6a");
     ruling!(
         "Sweet-Gum Recluse",
         "A permanent that wasn't a creature as it entered the battlefield this turn but is currently a creature can be chosen as a target of Sweet-Gum Recluse's last ability."
@@ -473,7 +473,7 @@ fn bre_checks_life_gained_as_the_end_step_starts() {
 
 #[test]
 fn primordial_mist_exiling_a_face_down_card_doesnt_turn_it_face_up() {
-    cr!("708.8", "702.37e");
+    cr!("708.9", "400.7");
     ruling!(
         "Primordial Mist",
         "Activating Primordial Mist's last ability doesn't trigger abilities that trigger \"when [something] is turned face up.\""
@@ -776,7 +776,7 @@ fn crabomination_emerge_uses_the_artifacts_mana_value() {
 
 #[test]
 fn spinerock_knoll_counts_an_opponent_who_left_the_game() {
-    cr!("702.75a", "800.4a");
+    cr!("702.75a");
     ruling!(
         "Spinerock Knoll",
         "At the time the last ability resolves, you'll get to play the card if a player who is currently your opponent, or a player who was your opponent at the time they left the game, has been dealt 7 damage over the course of the turn."
@@ -857,7 +857,7 @@ fn knowledge_pool_doesnt_stop_the_original_spells_cast_triggers() {
 
 #[test]
 fn calix_and_oko_token_copies_get_enters_abilities() {
-    cr!("707.2", "111.5", "603.6a", "614.12");
+    cr!("707.2", "603.6a", "614.12");
     ruling!(
         "Calix, Guided by Fate",
         "Any enters-the-battlefield abilities of the copied permanent will trigger when the token enters the battlefield. Any \"as [this permanent] enters the battlefield\" or \"[this permanent] enters the battlefield with\" abilities of the copied permanent will also work."
@@ -922,7 +922,7 @@ fn calix_and_oko_token_copies_get_enters_abilities() {
 
 #[test]
 fn arcane_savant_chooses_one_of_several_exiled_cards_to_copy() {
-    cr!("905.2b", "707.10");
+    cr!("707.10", "608.2d");
     ruling!(
         "Arcane Savant",
         "As Arcane Savant's last ability resolves, if there are multiple cards you exiled with cards named Arcane Savant, you choose one of them to copy."
@@ -989,7 +989,7 @@ fn striking_palette_copies_the_next_spell_with_or_without_targets() {
 
 #[test]
 fn replenish_aura_cant_enchant_an_enchantment_entering_with_it() {
-    cr!("303.4g", "303.4a");
+    cr!("303.4f", "303.4g");
     ruling!(
         "Eiganjo Dynastorian // Replenish",
         "An Aura put onto the battlefield this way can't enchant an enchantment that's also being put onto the battlefield with Replenish."
@@ -1162,7 +1162,7 @@ fn awaken_the_maelstrom_cant_be_cast_without_both_targets() {
 
 #[test]
 fn awaken_the_maelstrom_token_copy_gets_enters_abilities() {
-    cr!("707.2", "111.5", "603.6a", "614.12");
+    cr!("707.2", "603.6a", "614.12");
     ruling!(
         "Invasion of Alara // Awaken the Maelstrom",
         "Any enters-the-battlefield abilities of the copied permanent will trigger when the token enters the battlefield. Any \"as [this permanent] enters the battlefield\" or \"[this permanent] enters the battlefield with\" abilities of the copied permanent will also work."

@@ -157,7 +157,7 @@ fn stony_strength_targets_only_a_creature_you_control() {
 
 #[test]
 fn colossal_heroics_can_target_untapped_creatures() {
-    cr!("115.1a", "702.92a");
+    cr!("115.1a");
     ruling!(
         "Colossal Heroics",
         "Colossal Heroics can target any creatures, not just ones that are tapped."
@@ -301,7 +301,7 @@ fn protect_from_green(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn echoing_courage_pumps_a_same_named_creature_it_doesnt_target() {
-    cr!("115.1", "702.16b");
+    cr!("115.1a", "702.16b");
     ruling!(
         "Echoing Courage",
         "Echoing Courage has only one target. Other creatures with that name are not targeted. For example, a creature with protection from green will still get +2/+2 if it has the same name as the target creature."
