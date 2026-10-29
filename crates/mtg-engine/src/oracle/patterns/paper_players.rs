@@ -62,7 +62,7 @@ fn player_destroys(l: &str, b: &mut Builder) -> Option<Effect> {
                 Filter::InZone(ZoneKind::Battlefield),
                 Filter::ControlledBy(rel),
                 // A player can't choose to destroy a permanent with indestructible
-                // (Burning of Xinye's ruling; interpretation `destroy-choice-indestructible`).
+                // (Burning of Xinye's ruling; interpretation `player-destroys-chosen-permanents`).
                 Filter::not(Filter::HasKeyword(crate::keywords::KeywordKind::Indestructible)),
             ]),
             count: n,

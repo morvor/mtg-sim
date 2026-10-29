@@ -9,10 +9,10 @@ use mtg_engine::*;
 
 #[test]
 fn urzas_bauble_looks_privately_at_a_random_card() {
-    cr!("402.3", "701.20a");
+    cr!("402.3", "701.20e", "400.7");
     interp!("looked-at-hand-card-stays-seen");
     supported("Urza's Bauble");
-    let mut t = TestGame::new(2);
+    let mut t = TestGame::new(3);
     t.set_step(P0, Step::PrecombatMain);
     let bauble = t.battlefield(P0, "Urza's Bauble");
     let card = t.hand(P1, "Lightning Bolt");
@@ -22,12 +22,23 @@ fn urzas_bauble_looks_privately_at_a_random_card() {
     // The controller now sees it; it isn't revealed to anyone else.
     assert!(mtg_engine::facedown::can_look_at(&t.g, P0, card));
     assert!(!mtg_engine::reveal::is_revealed(&t.g, card));
+    // Only the looking player: a third player still can't see it.
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P2, card));
     assert!(t.in_hand(P1, "Lightning Bolt"));
     let hand = t.hand_size(P0);
     // "You draw a card at the beginning of the next turn's upkeep."
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P0, card));
+    // Once it changes zones it's a new object the looker hasn't seen (CR 400.7): put on
+    // top of its owner's library, it's hidden again.
+    let moved = t
+        .g
+        .move_object(card, mtg_engine::object::Zone::Library(P1), events::MoveCause::Effect, None)
+        .expect("moved");
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P0, moved));
+    assert!(!mtg_engine::facedown::can_look_at(&t.g, P0, card));
 }
 
 #[test]

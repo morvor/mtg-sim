@@ -20,11 +20,11 @@ decision listed in `docs/DEFERRED.md`, not here.
 ## looked-at-hand-card-stays-seen: A card looked at in another player's hand stays visible to the looker while it remains there
 - Kind: interpretation
 - Status: provisional
-- Rules: 402.3 "A player may arrange their hand in any convenient fashion and look at it as much as they want. A player can’t look at the cards in another player’s hand but may count those cards at any time." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of or relation to its previous existence. ..."
-- Question: Urza's Bauble: "Look at a card at random in target player's hand." The CR doesn't say for how long the looking player may keep seeing the card (a player remembers it; the card is shuffled among the others physically).
+- Rules: 402.3 "A player may arrange their hand in any convenient fashion and look at it at any time. A player can’t look at the cards in another player’s hand but may count those cards at any time." / 701.20e "Some effects instruct a player to look at one or more cards. Looking at a card follows the same rules as revealing a card, except that the card is shown only to the specified player." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of or relation to its previous existence. ..."
+- Question: Urza's Bauble: "Look at a card at random in target player's hand." By 701.20e/701.20a the card is shown only for as long as the effect needs it, but the player remembers what they saw. Should the looker's view keep showing it?
 - Decision: The ability's controller looks at one card chosen at random (only they see it, it isn't revealed) and may see that card for as long as it remains in that hand; once it changes zones it's a new object and the permission ends. In mtg-api observations the card shows in the looker's view.
 - Alternatives: (A) Only a log line, as `Effect::LookAtHand` does: the looker learns the card but no view shows it. (B) Visible until the end of the resolution: the player "forgets" it, which a real player wouldn't.
-- Why: The information was legitimately obtained and the card is the same object until it moves (400.7); keeping it visible is how a player who remembers the card would play.
+- Why: The information was legitimately obtained and the card is the same object until it moves (400.7); keeping it visible models a player who remembers the card (a presentation choice: no game rule reads it). Only the looking player gains the permission; other players' views are unchanged.
 - Affects: Urza's Bauble.
 - Code: `crates/mtg-engine/src/kw/look_at_random.rs`; `crates/mtg-engine/src/zones.rs` (`allow_look`, `may_look`); `crates/mtg-engine/src/facedown.rs` (`can_look_at`).
 - Tests: `tests/cards/paper_random_hand.rs` (`urzas_bauble_looks_privately_at_a_random_card`).

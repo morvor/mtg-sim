@@ -290,3 +290,47 @@ fn one_and_the_other(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "[verb] one of those creatures and [instruction on] the other", priority: 300, parse: one_and_the_other } }
+
+#[cfg(test)]
+mod grammar {
+    use crate::card::Layout;
+    use crate::oracle::{compile, CompileContext};
+    use crate::types::TypeLine;
+
+    fn compiles(ty: &str, text: &str) -> bool {
+        let tl = TypeLine::parse(ty);
+        let ctx = CompileContext {
+            card_name: "Test Card",
+            full_name: "Test Card",
+            type_line: &tl,
+            layout: Layout::Normal,
+            face_index: 0,
+            keywords: &[],
+            power: None,
+            toughness: None,
+        };
+        compile(text, &ctx).unsupported.is_empty()
+    }
+
+    #[test]
+    fn the_card_a_cost_exiled() {
+        let ty = "Creature — Elemental";
+        // "The exiled card" is the card the cost exiled (Storm Elemental).
+        assert!(compiles(
+            ty,
+            "{U}, Exile the top card of your library: If the exiled card is a snow land, Test Card gets +1/+1 until end of turn."
+        ));
+        // A bare "it" has no referent in the effect: it isn't read as the source.
+        for text in [
+            "{U}, Exile the top card of your library: If it's a snow land card, Test Card gets +1/+1 until end of turn.",
+            "{1}, Exile a creature card from your graveyard: If it has flying, Test Card gains flying until end of turn.",
+        ] {
+            assert!(!compiles(ty, text), "{text}");
+        }
+        // A cost that exiles the source itself keeps "it" as the source.
+        assert!(compiles(
+            ty,
+            "{2}, Exile Test Card from your graveyard: Draw a card."
+        ));
+    }
+}

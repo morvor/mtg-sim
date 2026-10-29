@@ -196,43 +196,6 @@ fn or_objects(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { EffectPattern { name: "[object] has A or B", priority: 401, parse: or_objects } }
 
-/// The last target slot an effect's text added, if `first` is before it.
-fn last_target(b: &Builder, first: usize) -> Option<usize> {
-    (first..b.targets.len()).next_back()
-}
-
-/// "[player] may have it deal damage ... to any target of their choice" (Pandemonium):
-/// the target is chosen by the player the sentence is about, not by the ability's
-/// controller (CR 115.1, 601.2c; Pandemonium's ruling).
-fn target_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
-    let l = end(l);
-    const PHRASE: &str = " of their choice";
-    let k = l.find(PHRASE)?;
-    let before = &l[..k];
-    let t = before.rfind("target")?;
-    if before[t..].contains(", ") || before[t..].contains(" and ") {
-        return None;
-    }
-    let text = format!("{before}{}", &l[k + PHRASE.len()..]);
-    if text.contains(PHRASE) {
-        return None;
-    }
-    let first = b.targets.len();
-    let e = parse_clause(&text, b)?;
-    let (Effect::AsPlayer { who, .. }, Some(slot)) = (&e, last_target(b, first)) else {
-        b.targets.truncate(first);
-        return None;
-    };
-    if b.targets[slot].chosen_by.is_some() || b.targets[slot].chosen_by_opponent {
-        b.targets.truncate(first);
-        return None;
-    }
-    b.targets[slot].chosen_by = Some(who.clone());
-    Some(e)
-}
-
-inventory::submit! { EffectPattern { name: "[player] ... target of their choice", priority: 300, parse: target_of_their_choice } }
-
 /// "sacrifice a land of an opponent's choice" (Demonic Hordes): you sacrifice it; an
 /// opponent you choose (CR 601.7a's procedure for "an opponent") chooses which.
 fn sacrifice_of_an_opponents_choice(l: &str, _b: &mut Builder) -> Option<Effect> {

@@ -1,6 +1,6 @@
 //! "Look at a card at random in target player's hand." (Urza's Bauble): a card chosen at
 //! random from that player's hand is looked at by the ability's controller only
-//! (CR 701.16a: looking, unlike revealing, shows it to that player alone). The looking
+//! (CR 701.20e: looking, unlike revealing, shows it to that player alone). The looking
 //! player may go on seeing that card while it stays in that hand (`zones::allow_look`);
 //! it's "it" for the rest of the effect (`vars::IT`).
 //!

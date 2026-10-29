@@ -110,7 +110,7 @@ fn discard_any_number_at_random(l: &str, _b: &mut Builder) -> Option<Effect> {
             who: PlayerRef::You,
             kind: ChoiceKind::Number {
                 min: 0,
-                max: 1_000_000,
+                max: crate::choices::MAX_CHOSEN_NUMBER,
             },
         },
         Effect::Discard {

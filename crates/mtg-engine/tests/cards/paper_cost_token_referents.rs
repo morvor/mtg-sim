@@ -119,3 +119,28 @@ fn dance_of_many_is_sacrificed_when_its_token_leaves() {
     assert!(!t.on_battlefield(d));
     assert!(t.in_graveyard(P0, "Dance of Many"));
 }
+
+#[test]
+fn dance_of_many_leaving_before_its_token_exists_leaves_the_token_alone() {
+    cr!("607.1d");
+    interp!("the-token-another-ability-created");
+    ruling!(
+        "Dance of Many",
+        "That token won't have any connection to a Dance of Many permanent, so it won't be exiled when a Dance of Many leaves the battlefield."
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    let d = t.enter(P0, "Dance of Many");
+    t.g.flush_events();
+    t.settle();
+    // The enters trigger is on the stack; Dance of Many leaves first.
+    assert!(!t.g.stack.is_empty());
+    t.g.destroy(d, None);
+    t.g.flush_events();
+    t.settle();
+    t.resolve_all();
+    assert!(!t.on_battlefield(d));
+    assert_eq!(tokens(&t, "Grizzly Bears").len(), 1);
+}

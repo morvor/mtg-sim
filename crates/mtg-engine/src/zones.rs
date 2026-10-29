@@ -288,19 +288,24 @@ pub fn record_cost_moved(
 /// they last existed on the battlefield ("that land", CR 608.2h).
 pub const COST_RETURNED: Var = vars::USER + 132;
 
-/// For an activated ability whose cost exiles cards from a zone, its effect text with "the
-/// exiled card" turned into "that card", which then refers to [`COST_EXILED`] (CR 400.7j).
-/// `None` if the cost exiles no such card or the text doesn't refer to it.
-pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
-    let exiles = |p: &CostPart| match p {
+/// Whether a cost exiles cards other than its source ("Exile a creature card from your
+/// graveyard", "Exile the top card of your library").
+pub fn cost_exiles_a_card(cost: &Cost) -> bool {
+    cost.parts.iter().any(|p| match p {
         CostPart::Exile { .. } => true,
         // "Exile the top card of your library" (an action as a cost).
         CostPart::Effect(e) => {
             matches!(&**e, Effect::Move { to, .. } if to.zone == ZoneKind::Exile)
         }
         _ => false,
-    };
-    if !cost.parts.iter().any(exiles) {
+    })
+}
+
+/// For an activated ability whose cost exiles cards from a zone, its effect text with "the
+/// exiled card" turned into "that card", which then refers to [`COST_EXILED`] (CR 400.7j).
+/// `None` if the cost exiles no such card or the text doesn't refer to it.
+pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
+    if !cost_exiles_a_card(cost) {
         return None;
     }
     // (Plural "the exiled cards" is kept as written, see below.)
