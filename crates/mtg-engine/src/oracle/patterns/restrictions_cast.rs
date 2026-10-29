@@ -75,6 +75,11 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
         Some(w) => (w, true),
         None => (what, false),
     };
+    // "can't cast spells or activate abilities" (Sen Triplets): mana abilities too.
+    let (what, all_abilities) = match what.strip_suffix(" or activate abilities") {
+        Some(w) if !non_mana => (w, true),
+        _ => (what, false),
+    };
     let what = if what == "spells" {
         Filter::Any
     } else if let Some(z) = what.strip_prefix("spells from ") {
@@ -94,7 +99,7 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
         },
         duration: dur.clone(),
     };
-    if !non_mana {
+    if !non_mana && !all_abilities {
         return Some(cast);
     }
     Some(Effect::Seq(vec![
@@ -103,7 +108,7 @@ fn players_cant_cast(l: &str, b: &mut Builder) -> Option<Effect> {
             restriction: Restriction::CantActivate {
                 who,
                 sources: Filter::Any,
-                include_mana: false,
+                include_mana: all_abilities,
             },
             duration: dur,
         },

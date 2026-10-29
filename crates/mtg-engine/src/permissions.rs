@@ -189,6 +189,8 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
         ZoneKind::Graveyard if perm.top_only => g.player(p).graveyard.last() == Some(&card),
         ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
         ZoneKind::Exile => o.zone == Zone::Exile,
+        // "from that player's hand" (Sen Triplets): another player's hand.
+        ZoneKind::Hand if perm.terms.any_owner => matches!(o.zone, Zone::Hand(_)),
         ZoneKind::Hand => o.zone == Zone::Hand(p),
         ZoneKind::Command => o.zone == Zone::Command,
         ZoneKind::Outside => o.zone == Zone::Outside(p),
@@ -411,6 +413,12 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             }
             ZoneKind::Graveyard => g.player(p).graveyard.clone(),
             ZoneKind::Exile => g.exile.clone(),
+            ZoneKind::Hand if perm.terms.any_owner => g
+                .players
+                .iter()
+                .filter(|q| q.id != p)
+                .flat_map(|q| q.hand.iter().copied())
+                .collect(),
             ZoneKind::Hand => g.player(p).hand.clone(),
             ZoneKind::Command => g.command.clone(),
             // The cards the player has outside the game (CR 400.11b) that a Commander

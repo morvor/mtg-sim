@@ -349,6 +349,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             TriggerCond::ThisTurn(t)
             | TriggerCond::UntilYourNextTurn(t)
             | TriggerCond::ThisCombat(t)
+            | TriggerCond::ForAsLongAs(t, _)
             | TriggerCond::Where { trigger: t, .. } => from_mana_ability(t),
             _ => false,
         }
@@ -2201,6 +2202,16 @@ pub enum Duration {
     UntilEndOfCombatOnYourNextTurn,
     /// "until the next end step": until the next end step (of any turn) begins (CR 500.4).
     UntilNextStep(TriggerStep),
+    /// "until its controller's next untap step": for each affected object, until that
+    /// step of the turn of the player controlling it next begins (see
+    /// `step_durations`).
+    UntilItsControllersNextStep(TriggerStep),
+    /// "until the end of your next upkeep": until that step of a later turn of the
+    /// controller ends (see `step_durations`).
+    UntilEndOfYourNextStep(TriggerStep),
+    /// An [`Duration::UntilEndOfYourNextStep`] effect whose step has begun: it ends as the
+    /// current step ends.
+    UntilEndOfThisStep,
     /// "until a player planeswalks" (CR 901.11); with `away_from_plane`, "until a player
     /// planeswalks away from a plane" (planeswalking away from only a phenomenon doesn't
     /// end it).
@@ -4343,6 +4354,11 @@ pub enum TriggerCond {
     /// next turn, whenever …", CR 603.7b): removed as that turn begins, even if its untap
     /// step is skipped.
     UntilYourNextTurn(Box<TriggerCond>),
+    /// A delayed triggered ability that lasts for as long as the condition holds ("For as
+    /// long as ~ remains tapped, ... at the beginning of each of your draw steps, ...",
+    /// Giant Oyster; CR 603.7b, 611.2b): it's removed for good once the condition is false
+    /// (checked with the context it was created with; see `layers.rs`).
+    ForAsLongAs(Box<TriggerCond>, Condition),
     /// A delayed triggered ability that lasts for the rest of the combat phase it was
     /// created in ("whenever that creature deals combat damage to a player this combat",
     /// CR 603.7b, 506.1): removed as that combat phase ends (CR 500.5a).
@@ -4865,6 +4881,11 @@ pub enum Effect {
         what: Sel,
     },
     PhaseOut {
+        what: Sel,
+    },
+    /// "That permanent phases in" (CR 702.26c): phased-out permanents phase in, with what
+    /// phased out indirectly with them (unless they can't phase in).
+    PhaseIn {
         what: Sel,
     },
     /// Turn face down / face up.

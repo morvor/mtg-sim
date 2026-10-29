@@ -2624,6 +2624,10 @@ impl Renderer<'_> {
                 let w = self.sel(what, Case::Subj);
                 format!("{w} phases out")
             }
+            Effect::PhaseIn { what } => {
+                let w = self.sel(what, Case::Subj);
+                format!("{w} phases in")
+            }
             Effect::TurnFaceUp { what } => {
                 let w = self.sel(what, Case::Obj);
                 format!("turn {w} face up")
@@ -6147,6 +6151,7 @@ impl Renderer<'_> {
                 | Effect::BecomeCopyExcept { .. }
                 | Effect::Modify { .. }
                 | Effect::PhaseOut { .. }
+                | Effect::PhaseIn { .. }
                 | Effect::AddRestriction { .. }
         ) || matches!(main, Effect::KeywordAction { action, .. }
             if matches!(action, KeywordAction::Explore | KeywordAction::Connive | KeywordAction::Endure))

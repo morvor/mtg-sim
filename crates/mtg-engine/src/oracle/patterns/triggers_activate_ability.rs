@@ -126,7 +126,12 @@ inventory::submit! { TriggerPattern { name: "you cast [spell] or activate an abi
 /// activating one (or casting a spell): the ability activated or spell cast ("copy it" is
 /// `copy_spells`).
 fn copy_that_ability(l: &str, b: &mut Builder) -> Option<Effect> {
-    if !matches!(end(l), "copy that ability" | "copy that spell or ability")
+    // "copy that spell or ability twice" (Repeated Reverberation).
+    let (l, count) = match end(l).strip_suffix(" twice") {
+        Some(r) => (r, 2),
+        None => (end(l), 1),
+    };
+    if !matches!(l, "copy that ability" | "copy that spell or ability")
         || !(matches!(b.it, Sel::TriggerSpell)
             || b.named
                 .iter()
@@ -136,7 +141,7 @@ fn copy_that_ability(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     Some(Effect::CopySpell {
         what: Sel::TriggerSpell,
-        count: Value::c(1),
+        count: Value::c(count),
         new_targets: false,
     })
 }
