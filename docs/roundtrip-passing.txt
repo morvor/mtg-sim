@@ -2035,6 +2035,7 @@ Belbe's Portal
 Beledros Witherbloom
 Belfry Spirit
 Belisarius Cawl
+Bell Borca, Spectral Sergeant
 Belladonna Took
 Belle of the Brawl
 Belligerent Brontodon
@@ -9871,6 +9872,7 @@ Gobhobbler Rats
 Goblin Archaeologist
 Goblin Arsonist
 Goblin Artillery
+Goblin Artisans
 Goblin Assailant
 Goblin Assault
 Goblin Assault Team
@@ -14090,6 +14092,7 @@ Lonesome Unicorn // Rider in Need
 Long Feng, Grand Secretariat
 Long Goodbye
 Long Lake Nuisance
+Long List of the Ents
 Long Rest
 Long River Lurker
 Long River's Pull
@@ -24473,6 +24476,7 @@ Territorial Bruntar
 Territorial Dispute
 Territorial Gorger
 Territorial Hammerskull
+Territorial Hellkite
 Territorial Kavu
 Territorial Maro
 Territorial Roc
