@@ -25,6 +25,14 @@ pub const STILL_ON_BATTLEFIELD: &str = "choices5:still on the battlefield";
 pub const CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS: &str =
     "choices5:choose a card type shared among the exiled cards used to craft it";
 
+/// `Condition::Custom` name: the card the last exile of the top card exiled
+/// (`vars::DUG`) has the same name as another of the cards kept in
+/// `oracle::patterns::loops_5::EXILED_BY_PASSES` (Tainted Pact).
+pub const SAME_NAME_AS_ANOTHER_EXILED: &str = "choices5:has the same name as another card exiled this way";
+/// `Condition::Custom` name: two of the cards kept in
+/// `oracle::patterns::loops_5::EXILED_BY_PASSES` have the same name.
+pub const TWO_EXILED_SHARE_A_NAME: &str = "choices5:two cards exiled this way have the same name";
+
 /// `Condition::Custom` name: the player being iterated over is a defending player (CR
 /// 506.2, 802.2: with several, each of them).
 pub const IS_DEFENDING_PLAYER: &str = "choices5:is a defending player";
@@ -86,6 +94,42 @@ impl KeywordRules for Choices5Filters {
     }
 
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        let exiled = || -> Vec<ObjectId> {
+            ctx.vars
+                .get(&crate::oracle::patterns::loops_5::EXILED_BY_PASSES)
+                .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                .unwrap_or_default()
+        };
+        // Names, as cards have them (CR 201.2; a nameless object shares none).
+        let named = |id: ObjectId| -> Option<smol_str::SmolStr> {
+            let n = g.obj(id).chars.name.clone();
+            (!n.is_empty()).then_some(n)
+        };
+        match name {
+            SAME_NAME_AS_ANOTHER_EXILED => {
+                let it: Vec<ObjectId> = ctx
+                    .vars
+                    .get(&crate::ability::vars::DUG)
+                    .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                    .unwrap_or_default();
+                let all = exiled();
+                return Some(it.iter().any(|x| {
+                    named(*x).is_some_and(|n| {
+                        all.iter()
+                            .any(|y| y != x && named(*y).as_ref() == Some(&n))
+                    })
+                }));
+            }
+            TWO_EXILED_SHARE_A_NAME => {
+                let all = exiled();
+                return Some(all.iter().enumerate().any(|(i, x)| {
+                    named(*x).is_some_and(|n| {
+                        all[i + 1..].iter().any(|y| named(*y).as_ref() == Some(&n))
+                    })
+                }));
+            }
+            _ => {}
+        }
         (name == IS_DEFENDING_PLAYER).then(|| {
             ctx.iter_player.is_some_and(|p| {
                 g.combat

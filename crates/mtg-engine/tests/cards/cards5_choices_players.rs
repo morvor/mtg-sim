@@ -1010,3 +1010,138 @@ fn cloak_and_dagger_may_exile_a_card_from_hand_or_the_chosen_creature() {
     assert!(t.in_exile("Lightning Bolt"));
     assert_eq!(t.hand_size(P1), 1);
 }
+
+#[test]
+fn kozilek_target_players_manifest_cards_from_their_hands_and_you_draw() {
+    cr!("701.40a", "701.40e", "603.3");
+    ruling!(
+        "Kozilek, the Broken Reality",
+        "If a targeted player has only one card in hand as Kozilek's triggered ability resolves, they manifest that card."
+    );
+    compiles("Kozilek, the Broken Reality");
+    // "When you cast this spell, up to two target players each manifest two cards from
+    // their hands. For each card manifested this way, you draw a card."
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Wastes", 9);
+    let a = t.hand(P1, "Grizzly Bears");
+    let b = t.hand(P1, "Lightning Bolt");
+    let c = t.hand(P1, "Llanowar Elves");
+    let d = t.hand(P2, "Shock");
+    for _ in 0..4 {
+        t.library_top(P0, "Island");
+    }
+    let k = t.hand(P0, "Kozilek, the Broken Reality");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1), Entity::Player(P2)]);
+    // P1 manifests the Bears and the Bolt; P2 has only Shock.
+    t.answer_choose(P1, &[Entity::Object(a), Entity::Object(b)]);
+    let hand = t.hand_size(P0);
+    t.cast(P0, k).go();
+    t.settle();
+    // Resolve the cast trigger (Kozilek itself stays on the stack).
+    t.resolve();
+    let face_down = |t: &TestGame, p: PlayerId| {
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).controller == p && t.g.obj(**id).face_down)
+            .count()
+    };
+    assert_eq!(face_down(&t, P1), 2);
+    assert_eq!(face_down(&t, P2), 1);
+    assert!(t.in_hand(P1, "Llanowar Elves"));
+    assert_eq!(t.hand_size(P0), hand - 1 + 3);
+    let m = t.g.current(a);
+    assert_eq!(t.pt(m), (2, 2));
+    let _ = (c, d);
+}
+
+#[test]
+fn dance_with_calamity_exiles_as_many_times_as_you_choose_then_casts_if_13_or_less() {
+    cr!("608.2c", "202.3");
+    ruling!(
+        "Dance with Calamity",
+        "the total mana value of the exiled cards is greater than 13"
+    );
+    compiles("Dance with Calamity");
+    // "Shuffle your library. As many times as you choose, you may exile the top card of
+    // your library. If the total mana value of the cards exiled this way is 13 or less,
+    // you may cast any number of spells from among those cards without paying their mana
+    // costs."
+    let run = |times: usize| {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Mountain", 8);
+        // Only Grizzly Bears and Craw Wurms (mana value 2 and 6) in the library.
+        t.g.players[P0.idx()].library.clear();
+        t.library_top(P0, "Grizzly Bears");
+        for _ in 0..3 {
+            t.library_top(P0, "Craw Wurm");
+        }
+        let spell = t.hand(P0, "Dance with Calamity");
+        t.set_step(P0, Step::PrecombatMain);
+        for _ in 0..times {
+            t.answer_yes(P0, true);
+        }
+        t.answer_yes(P0, false);
+        // Cast each exiled card.
+        for _ in 0..times {
+            t.answer_yes(P0, true);
+        }
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        (t.g.battlefield.iter().filter(|id| t.g.obj(**id).chars.is(mtg_engine::types::CardType::Creature)).count(), t.g.exile.len())
+    };
+    // Two cards (at most 12): both cast.
+    let (creatures, _) = run(2);
+    assert_eq!(creatures, 2);
+    // Three cards: at least 14 in total, so nothing is cast and they stay in exile.
+    let (creatures, exiled) = run(3);
+    assert_eq!(creatures, 0);
+    assert_eq!(exiled, 3);
+}
+
+#[test]
+fn tainted_pact_stops_at_a_card_put_into_hand_or_two_with_the_same_name() {
+    cr!("608.2c", "201.2");
+    compiles("Tainted Pact");
+    // "Exile the top card of your library. You may put that card into your hand unless it
+    // has the same name as another card exiled this way. Repeat this process until you put
+    // a card into your hand or you exile two cards with the same name, whichever comes
+    // first."
+    let setup = || {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Swamp", 2);
+        t.g.players[P0.idx()].library.clear();
+        t.library_top(P0, "Island");
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P0, "Lightning Bolt");
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P0, "Shock");
+        let spell = t.hand(P0, "Tainted Pact");
+        t.set_step(P0, Step::PrecombatMain);
+        (t, spell)
+    };
+    // Decline Shock and the Bears, take the Bolt: two cards left in the library.
+    let (mut t, spell) = setup();
+    t.answer_yes(P0, false);
+    t.answer_yes(P0, false);
+    t.answer_yes(P0, true);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+    assert_eq!(t.library_size(P0), 2);
+    // Decline everything: it stops at the second Grizzly Bears (no choice offered for it).
+    let (mut t, spell) = setup();
+    for _ in 0..3 {
+        t.answer_yes(P0, false);
+    }
+    let from = t.asked().len();
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.library_size(P0), 1);
+    assert_eq!(t.hand_size(P0), 0);
+    let asked = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { .. }))
+        .count();
+    assert_eq!(asked, 3);
+}

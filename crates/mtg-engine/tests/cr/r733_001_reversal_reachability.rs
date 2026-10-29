@@ -406,6 +406,10 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // Firestorm Phoenix only records the card it returned to a hand
         // (`cards/firestorm_phoenix.rs`).
         "card:Firestorm Phoenix:the returned card is revealed and can't be played",
+        // Choices made as a permanent enters: a name among revealed cards, a card type
+        // its craft materials share (`kw/choices_5_filters.rs`): no library.
+        mtg_engine::kw::choices_5_filters::NAME_AMONG,
+        mtg_engine::kw::choices_5_filters::CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS,
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {
         return None;
@@ -620,6 +624,10 @@ fn custom_rule(name: &str) -> CustomRule {
         // "loses swampwalk" (Urborg; `kw::basic_effects::remove_keyword`): a layer-6
         // ability removal.
         "basic_effects:remove keyword:",
+        // Choices made as an Equipment becomes attached (a name, a creature type, a card
+        // used to craft it) and the name and creature type they set
+        // (`kw/attach_choices_5.rs`): no library.
+        "attach5:",
     ];
     if NO_LIBRARY.contains(&name) || NO_LIBRARY_FAMILIES.iter().any(|p| name.starts_with(p)) {
         return CustomRule::NoLibrary;

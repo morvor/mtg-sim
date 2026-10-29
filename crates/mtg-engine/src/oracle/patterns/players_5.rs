@@ -262,3 +262,90 @@ fn draw_for_each_card_put_into_graveyards(l: &str, prev: &mut Effect, _b: &mut B
 }
 
 inventory::submit! { FollowupPattern { name: "you draw a card for each [card] put into a graveyard this way (after discards and sacrifices)", priority: 60, apply: draw_for_each_card_put_into_graveyards } }
+
+/// Replaces each discard of a constant number of cards in `v` (JSON of an effect) with a
+/// manifest of that many cards from the hand. Returns how many were replaced.
+fn discard_to_manifest(v: &mut serde_json::Value) -> usize {
+    use serde_json::Value as J;
+    let mut n = 0;
+    match v {
+        J::Object(m) => {
+            if let Some(d) = m.get("Discard") {
+                let k = d.get("n").and_then(|x| x.get("Const")).and_then(|x| x.as_u64());
+                let plain = d.get("random") == Some(&J::Bool(false))
+                    && d.get("filter") == Some(&J::String("Any".into()));
+                if let (Some(k), true, 1) = (k, plain, m.len()) {
+                    let e = crate::kw::manifest_from_hand_5::manifest_from_hand(k as u32);
+                    *v = serde_json::to_value(e).unwrap_or(J::Null);
+                    return 1;
+                }
+            }
+            for x in m.values_mut() {
+                n += discard_to_manifest(x);
+            }
+        }
+        J::Array(a) => {
+            for x in a {
+                n += discard_to_manifest(x);
+            }
+        }
+        _ => {}
+    }
+    n
+}
+
+/// "up to two target players each manifest two cards from their hands" (Kozilek, the
+/// Broken Reality): see `kw/manifest_from_hand_5.rs`; "each card manifested this way"
+/// afterward.
+fn players_manifest_from_hands(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (subj, n) = l.split_once(" manifest ")?;
+    let n = n
+        .strip_suffix(" cards from their hands")
+        .or_else(|| n.strip_suffix(" cards from their hand"))
+        .or_else(|| n.strip_suffix(" card from their hand"))?;
+    let first = b.targets.len();
+    let e = parse_sentence(&format!("{subj} discard {n} cards"), b)?;
+    let mut j = serde_json::to_value(&e).ok()?;
+    if discard_to_manifest(&mut j) == 0 {
+        b.targets.truncate(first);
+        return None;
+    }
+    let e: Effect = serde_json::from_value(j).ok()?;
+    let var = crate::kw::manifest_from_hand_5::MANIFESTED_THIS_WAY;
+    b.named
+        .push(("cards manifested this way".into(), Sel::Var(var)));
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var,
+            sel: Sel::Union(vec![]),
+        },
+        e,
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "[players] each manifest N cards from their hands", priority: 90, parse: players_manifest_from_hands } }
+
+/// "For each card manifested this way, you draw a card."
+fn draw_for_each_manifested(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    if !matches!(
+        l,
+        "for each card manifested this way, you draw a card"
+            | "for each card manifested this way, draw a card"
+    ) {
+        return None;
+    }
+    let sel = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == "cards manifested this way")
+        .map(|(_, s)| s.clone())?;
+    Some(Effect::Draw {
+        who: PlayerRef::You,
+        n: Value::CountSel(Box::new(sel)),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "for each card manifested this way, you draw a card", priority: 90, parse: draw_for_each_manifested } }
