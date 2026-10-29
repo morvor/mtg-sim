@@ -92,9 +92,18 @@ fn energy_spells_whose_targets_are_illegal_dont_resolve() {
         "Aether Meltdown",
         "If the target creature or Vehicle becomes an illegal target while Aether Meltdown is on the stack, Aether Meltdown won't resolve. It won't enter the battlefield and you won't get {E}{E}."
     );
+    ruling!(
+        "Territorial Aetherkite",
+        "Some spells and abilities which give you {E} or say you “may pay” some amount of {E} require one or more targets. If each target chosen is an illegal target as that spell or ability tries to resolve, it won’t resolve. None of its effects will happen, you won’t get any {E} from it, and you won’t get the chance to pay any {E} for its effects even if you want to."
+    );
+    supported("Territorial Aetherkite");
     for name in ["Harnessed Lightning", "Die Young", "Aether Meltdown"] {
         let mut t = TestGame::new(2);
-        give_energy(&mut t, P0, 1);
+        // One {E} from Territorial Aetherkite (paying 1 of its 2 to deal 1 damage).
+        t.answer(P0, DecisionKind::X, Answer::Number(1));
+        t.enter(P0, "Territorial Aetherkite");
+        t.resolve_all();
+        assert_eq!(energy(&t, P0), 1, "{name}");
         let bears = t.battlefield(P1, "Grizzly Bears");
         crate::r_s25_common::lands_for_cost(&mut t, P0, name);
         let c = t.hand(P0, name);
@@ -328,4 +337,301 @@ fn demon_of_dark_schemes_creature_leaves_with_its_owner_or_is_exiled() {
     let (mut t, bears) = setup();
     concede(&mut t, P0);
     assert_eq!(t.zone(bears), Zone::Exile);
+}
+
+#[test]
+fn aether_refineries_multiply_and_their_controller_orders_energy_replacements() {
+    cr!("616.1", "616.1e", "107.14");
+    ruling!(
+        "Aether Refinery",
+        "If you control two Aether Refineries, the amount of {E} you get is four times the original number."
+    );
+    ruling!(
+        "Aether Refinery",
+        "If two or more effects attempt to modify how many {E} you get (or how many counters you would get), you choose the order to apply those effects, no matter who controls the sources of those effects."
+    );
+    supported("Aether Refinery");
+    supported("Vorinclex, Monstrous Raider");
+    let mut t = TestGame::new(2);
+    let r = t.battlefield(P0, "Aether Refinery");
+    t.battlefield(P0, "Aether Refinery");
+    t.answer(P0, DecisionKind::X, Answer::Number(0));
+    t.activate(P0, r, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 4);
+    assert!(crate::r_s01_common::tokens(&t, P0).is_empty());
+    // An opponent's Vorinclex halves it; P0 (the player getting {E}) orders the effects:
+    // doubling first gives 1, halving first gives 0.
+    fn half_first(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+        crate::r_s30_common::pick_replacement(g, d, "half")
+    }
+    type Responder = crate::r_s29_common::Responder;
+    for (refinery_first, order, expect) in [
+        (true, crate::r_s29_common::twice_first as Responder, 1),
+        (false, half_first, 0),
+    ] {
+        let mut t = TestGame::new(2);
+        let r = t.battlefield(P0, "Aether Refinery");
+        t.battlefield(P1, "Vorinclex, Monstrous Raider");
+        crate::r_s03_common::respond(&mut t, P0, order);
+        t.answer(P0, DecisionKind::X, Answer::Number(0));
+        let from = t.asked().len();
+        t.activate(P0, r, 0, &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(energy(&t, P0), expect, "refinery first: {refinery_first}");
+        assert_eq!(
+            crate::r_s29_common::replacement_choosers(&t, from),
+            vec![P0]
+        );
+    }
+}
+
+#[test]
+fn fabrication_module_triggers_once_per_energy_event() {
+    cr!("603.2", "122.1");
+    ruling!(
+        "Fabrication Module",
+        "If you get multiple {E} at once, you only put one +1/+1 counter on a creature, not one counter for each {E}. If you get multiple {E} at different times, Fabrication Module's ability triggers once each time."
+    );
+    supported("Fabrication Module");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fabrication Module");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(bears)]);
+    // Aether Chaser: "When this creature enters, you get {E}{E}".
+    t.answer_targets(P0, &[obj(bears)]);
+    t.enter(P0, "Aether Chaser");
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 2);
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+    t.answer_targets(P0, &[obj(bears)]);
+    t.enter(P0, "Aether Chaser");
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 4);
+    assert_eq!(t.counters(bears, counters::PLUS1), 2);
+}
+
+#[test]
+fn peema_aether_seer_energy_from_greatest_power_as_it_resolves() {
+    cr!("608.2h", "107.1b");
+    ruling!(
+        "Peema Aether-Seer",
+        "The amount of {E} you get is determined as Peema Aether-Seer's first ability resolves. If the greatest power among creatures you control is somehow negative, you don't get or lose any {E}."
+    );
+    supported("Peema Aether-Seer");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.enter(P0, "Peema Aether-Seer");
+    t.settle();
+    crate::r_p021_common::giant_growth(&mut t, P0, bears);
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 5);
+    // Its power is negative (-4/-0 until end of turn): no energy gained or lost.
+    let mut t = TestGame::new(2);
+    give_energy(&mut t, P0, 2);
+    let peema = t.enter(P0, "Peema Aether-Seer");
+    t.settle();
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        peema,
+        vec![mtg_engine::ability::Modification::ModifyPT(
+            mtg_engine::ability::Value::c(-4),
+            mtg_engine::ability::Value::c(0),
+        )],
+    );
+    assert_eq!(t.pt(peema).0, -1);
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 2);
+}
+
+#[test]
+fn peema_aether_seer_target_blocks_if_able_and_its_controller_picks_the_attacker() {
+    cr!("509.1c");
+    ruling!(
+        "Peema Aether-Seer",
+        "The controller of the target creature chooses which attacking creature that creature blocks."
+    );
+    ruling!(
+        "Peema Aether-Seer",
+        "The target creature blocks only if it's able to do so as the declare blockers step begins. If, at that time, the creature is tapped, it's affected by a spell or ability that says it can't block"
+    );
+    let setup = || {
+        let mut t = TestGame::new(2);
+        let peema = t.battlefield(P0, "Peema Aether-Seer");
+        let a = t.battlefield(P0, "Grizzly Bears");
+        let b = t.battlefield(P0, "Gray Ogre");
+        let wall = t.battlefield(P1, "Hill Giant");
+        give_energy(&mut t, P0, 3);
+        t.answer_targets(P0, &[obj(wall)]);
+        activate_containing(&mut t, P0, peema, "blocks this turn").unwrap();
+        t.resolve_all();
+        (t, a, b, wall)
+    };
+    let (mut t, a, b, wall) = setup();
+    attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    assert!(!legal_blocks(&mut t, P1, &[]));
+    assert!(legal_blocks(&mut t, P1, &[(wall, a)]));
+    assert!(legal_blocks(&mut t, P1, &[(wall, b)]));
+    // Tapped as blockers are declared: it doesn't block.
+    let (mut t, a, b, wall) = setup();
+    attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    t.g.tap(wall);
+    assert!(legal_blocks(&mut t, P1, &[]));
+}
+
+#[test]
+fn razorfield_ripper_x_is_locked_in_as_the_trigger_resolves() {
+    cr!("608.2h");
+    ruling!(
+        "Razorfield Ripper",
+        "The value of X is calculated only once, as Razorfield Ripper's triggered ability resolves."
+    );
+    supported("Razorfield Ripper");
+    let mut t = TestGame::new(2);
+    let ripper = t.battlefield(P0, "Razorfield Ripper");
+    give_energy(&mut t, P0, 2);
+    attack_with(&mut t, &[(ripper, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 3);
+    assert_eq!(t.pt(ripper), (6, 6));
+    give_energy(&mut t, P0, 5);
+    t.g.recompute();
+    assert_eq!(t.pt(ripper), (6, 6));
+}
+
+#[test]
+fn lightning_runner_untaps_creatures_that_arent_attacking() {
+    cr!("508.1f");
+    ruling!(
+        "Lightning Runner",
+        "You untap all creatures you control, including ones that aren't attacking."
+    );
+    supported("Lightning Runner");
+    let mut t = TestGame::new(2);
+    let runner = t.battlefield(P0, "Lightning Runner");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.tap(bears);
+    give_energy(&mut t, P0, 6);
+    t.answer_yes(P0, true);
+    attack_with(&mut t, &[(runner, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 0);
+    assert!(!t.obj_now(bears).tapped);
+    assert!(!t.obj_now(runner).tapped);
+}
+
+#[test]
+fn aethergeode_miner_returns_as_a_new_object() {
+    cr!("400.7", "506.4");
+    ruling!(
+        "Aethergeode Miner",
+        "After Aethergeode Miner returns to the battlefield, it will be a new object with no connection to the creature that was exiled. It won't be in combat or have any additional abilities it may have had when it was exiled. Any +1/+1 counters on it or Auras attached to it are removed, and any Equipment will no longer be attached."
+    );
+    supported("Aethergeode Miner");
+    let mut t = TestGame::new(2);
+    let miner = t.battlefield(P0, "Aethergeode Miner");
+    put_counters(&mut t, miner, counters::PLUS1, 1);
+    let aura = attach_new(&mut t, P0, "Holy Strength", obj(miner));
+    let axe = attach_new(&mut t, P0, "Bonesplitter", obj(miner));
+    attack_with(&mut t, &[(miner, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(energy(&t, P0), 2);
+    activate_containing(&mut t, P0, miner, "Exile").unwrap();
+    t.resolve_all();
+    let now = t.g.current(miner);
+    assert_ne!(now, miner);
+    assert!(t.on_battlefield(now));
+    assert!(!attacking(&t, now));
+    assert_eq!(t.counters(now, counters::PLUS1), 0);
+    assert_eq!(t.pt(now), (3, 1));
+    assert!(!t.on_battlefield(aura));
+    assert!(t.on_battlefield(axe));
+    assert_eq!(attached_to(&t, axe), None);
+}
+
+#[test]
+fn may_pay_energy_once_if_you_do_and_when_you_do() {
+    cr!("603.12", "608.2c", "107.14");
+    ruling!(
+        "Aether Chaser",
+        "Some triggered abilities state that you \"may pay\" a certain amount of {E}. You can't pay that amount multiple times to multiply the effect. You simply choose whether or not to pay that amount of {E} as the ability resolves."
+    );
+    ruling!(
+        "Aether Chaser",
+        "Some triggered abilities that state that you \"may pay\" a certain amount of {E} describe an effect that happens \"If you do.\" In that case, no player may take actions to try to stop the ability's effect after you make your choice. If the payment is followed by the phrase \"When you do,\" then you'll choose any targets for that reflexive triggered ability and put it on the stack before players can take actions."
+    );
+    ruling!(
+        "Territorial Aetherkite",
+        "Some spells and abilities say that you “may pay” a certain amount of {E}, then describes an effect that happens “if you do.” In that case, no player may take actions to try to stop the ability’s effect after you make your choice. If the payment is instead followed by the phrase “when you do” followed by an effect, then after you choose to pay {E}, a new triggered ability called a reflexive trigger is put on the stack"
+    );
+    supported("Aether Chaser");
+    supported("Territorial Aetherkite");
+    // "If you do": paying {E}{E} once makes one Servo within the same resolution.
+    let mut t = TestGame::new(2);
+    let chaser = t.battlefield(P0, "Aether Chaser");
+    give_energy(&mut t, P0, 6);
+    t.answer_yes(P0, true);
+    attack_with(&mut t, &[(chaser, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 1);
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(energy(&t, P0), 4);
+    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1);
+    let pays = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| !matches!(d, Decision::Priority { .. }))
+        .count();
+    assert_eq!(pays, 1, "{:?}", asked_debug(&t, from));
+    // "When you do": the reflexive trigger goes on the stack; players may respond.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    let kite = t.enter(P0, "Territorial Aetherkite");
+    t.settle();
+    t.resolve();
+    assert_eq!(energy(&t, P0), 0);
+    assert_eq!(t.stack_len(), 1);
+    assert!(is_trigger(&t, top(&t)));
+    assert!(t.on_battlefield(bears));
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(kite));
+}
+
+#[test]
+fn inventors_axe_enters_unattached_and_attaches_with_its_trigger() {
+    cr!("301.5c", "608.2b");
+    ruling!(
+        "Inventor's Axe",
+        "Inventor's Axe doesn't enter the battlefield attached to a creature. Instead, Inventor's Axe enters the battlefield and then its triggered ability attaches it to a creature. You may cast Inventor's Axe even if you don't control any creatures."
+    );
+    ruling!(
+        "Inventor's Axe",
+        "If the target creature becomes an illegal target, Inventor's Axe remains on the battlefield unattached."
+    );
+    supported("Inventor's Axe");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 1);
+    let axe = t.hand(P0, "Inventor's Axe");
+    t.cast(P0, axe).go();
+    t.resolve_all();
+    let axe = t.named_on_battlefield("Inventor's Axe")[0];
+    assert_eq!(energy(&t, P0), 2);
+    assert_eq!(attached_to(&t, axe), None);
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Mountain", 1);
+    let axe = t.hand(P0, "Inventor's Axe");
+    t.answer_targets(P0, &[obj(bears)]);
+    t.cast(P0, axe).go();
+    t.resolve();
+    let axe = t.named_on_battlefield("Inventor's Axe")[0];
+    assert_eq!(attached_to(&t, axe), None);
+    assert_eq!(t.stack_len(), 2);
+    destroy(&mut t, bears);
+    t.resolve_all();
+    assert!(t.on_battlefield(axe));
+    assert_eq!(attached_to(&t, axe), None);
+    assert_eq!(energy(&t, P0), 2);
 }
