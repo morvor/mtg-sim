@@ -657,7 +657,8 @@ fn round_each_time(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     } else {
         return None;
     };
-    if !body.to_lowercase().contains("half ") {
+    let lower = body.to_lowercase();
+    if !lower.contains("half ") && !lower.contains("a third of ") {
         return None;
     }
     let mut abilities =

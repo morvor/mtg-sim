@@ -700,7 +700,20 @@ fn damage_clause(l: &str, b: &mut Builder, verb: &str) -> Option<Effect> {
     let mut effects = Vec::new();
     let mut r = rest;
     loop {
-        let (e, tail) = damage_part(&src, &r, &where_x, b)?;
+        let (mut e, tail) = damage_part(&src, &r, &where_x, b)?;
+        // "deals damage equal to N to target player and that much damage to up to one
+        // target creature" (Dragonspark Reactor): a later part's "that much" is the amount
+        // the previous part states, dealt even if that part's recipient became illegal
+        // (CR 608.2b).
+        if let (
+            Effect::DealDamage { amount, .. },
+            Some(Effect::DealDamage { amount: prev, .. }),
+        ) = (&mut e, effects.last())
+        {
+            if matches!(amount, Value::EventAmount) {
+                *amount = prev.clone();
+            }
+        }
         effects.push(e);
         let t = end(&tail);
         if t.is_empty() {

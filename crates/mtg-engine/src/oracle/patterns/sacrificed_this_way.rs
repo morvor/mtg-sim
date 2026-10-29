@@ -10,7 +10,11 @@ use crate::oracle::phrases::*;
 fn sacrificed_this_way(c: &str) -> Option<Condition> {
     let c = end(c);
     // "If you sacrificed an Angel this way" (Shilgengar, Sire of Famine).
-    let r = match c.strip_prefix("you sacrificed ") {
+    // "If you sacrifice an Island this way" (Serendib Djinn): the same, in the present.
+    let r = match c
+        .strip_prefix("you sacrificed ")
+        .or_else(|| c.strip_prefix("you sacrifice "))
+    {
         Some(r) => r.strip_suffix(" this way")?,
         None => c.strip_suffix(" was sacrificed this way")?,
     };

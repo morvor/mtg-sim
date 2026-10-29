@@ -1,4 +1,5 @@
-//! Remove Enchantments (hand-written, `src/cards/remove_enchantments.rs`).
+//! Remove Enchantments, compiled from its Oracle text now that "you both own and control"
+//! is read (cards4-paper-effects; it was hand-written before).
 
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
