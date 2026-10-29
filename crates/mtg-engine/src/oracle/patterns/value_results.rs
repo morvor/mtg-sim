@@ -1712,6 +1712,17 @@ fn this_way_count(r: &str, b: &mut Builder) -> Option<(Value, String)> {
 /// An object (or objects) a result phrase names: "the sacrificed creature(s)", "the
 /// discarded card(s)", "[the] [objects] [verb] this way".
 fn result_ref(s: &str, b: &Builder) -> Option<(Sel, String)> {
+    // "{3}, Unattach an Equipment from ~: ... that Equipment's mana value" (Captain
+    // America, First Avenger): the Equipment the cost unattached (CR 400.7j).
+    if let Some(rest) = s.strip_prefix("that equipment") {
+        if (word_end(rest) || rest.starts_with('\''))
+            && crate::oracle::raw_text()
+                .to_lowercase()
+                .contains("unattach an equipment from ")
+        {
+            return Some((Sel::Var(crate::zones::COST_UNATTACHED), rest.to_string()));
+        }
+    }
     for (p, var) in [
         ("the sacrificed creatures", vars::SACRIFICED),
         ("the sacrificed creature", vars::SACRIFICED),

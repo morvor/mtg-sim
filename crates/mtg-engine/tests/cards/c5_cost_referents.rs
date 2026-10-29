@@ -50,3 +50,71 @@ fn synthesis_pod_reveals_a_card_with_one_more_than_the_exiled_spells_mana_value(
     assert!(t.in_exile("Grizzly Bears"));
     assert!(t.named_on_battlefield("Hill Giant").is_empty());
 }
+
+/// Shuriken equipped to `holder` (P0's); the granted ability targets P1's Hill Giant.
+fn shuriken(holder: &str) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    let h = t.battlefield(P0, holder);
+    let s = t.battlefield(P0, "Shuriken");
+    t.g.attach(s, Entity::Object(h));
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.recompute();
+    t.activate(P0, h, 0, &[Entity::Object(giant)])
+        .expect("the granted ability");
+    t.resolve_all();
+    assert_eq!(t.g.obj(giant).damage, 2);
+    assert_eq!(t.obj_now(s).attached_to, None);
+    (t, s)
+}
+
+#[test]
+fn shuriken_goes_to_the_damaged_creatures_controller_unless_unattached_from_a_ninja() {
+    cr!("400.7j", "608.2h");
+    supported("Shuriken");
+    let (t, s) = shuriken("Grizzly Bears");
+    assert_eq!(t.obj_now(s).controller, P1);
+    let (t, s) = shuriken("Ninja of the Deep Hours");
+    assert_eq!(t.obj_now(s).controller, P0);
+}
+
+#[test]
+fn captain_americas_throw_reads_the_unattached_equipments_mana_value() {
+    cr!("400.7j");
+    // "{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana
+    // value to any target." (the single-target form of Captain America's ability): the
+    // Equipment's mana value, not the creature's.
+    let text = "{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.";
+    let tl = mtg_engine::types::TypeLine::parse("Creature — Human Soldier");
+    let ctx = mtg_engine::oracle::CompileContext {
+        card_name: "Thrower",
+        full_name: "Thrower",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: Some("2"),
+        toughness: Some("2"),
+    };
+    let compiled = mtg_engine::oracle::compile(text, &ctx);
+    assert!(compiled.unsupported.is_empty(), "{:?}", compiled.unsupported);
+    let def = CardDef::custom(mtg_engine::object::Characteristics {
+        name: "Thrower".into(),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{1}{W}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        rules_text: std::sync::Arc::from(text),
+        power: Some(2),
+        toughness: Some(2),
+        ..Default::default()
+    });
+    let mut t = TestGame::new(2);
+    let thrower = t.custom(P0, def, mtg_engine::object::Zone::Battlefield);
+    let sword = t.battlefield(P0, "Bonesplitter");
+    t.g.attach(sword, Entity::Object(thrower));
+    t.lands(P0, "Plains", 3);
+    t.activate(P0, thrower, 0, &[Entity::Player(P1)])
+        .expect("activates");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.obj_now(sword).attached_to, None);
+}

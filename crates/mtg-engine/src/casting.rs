@@ -4267,6 +4267,15 @@ impl Game {
                 // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
                 c.paying_cost = true;
                 self.exec(e, &mut c);
+                // "Unattach an Equipment from ~": the Equipment ("that Equipment's mana
+                // value") and what it was attached to.
+                if let Some(v) = c.vars.get(&crate::zones::UNATTACHED) {
+                    let from = c.vars.get(&crate::zones::UNATTACHED_FROM);
+                    for (i, o) in v.iter().filter_map(|x| x.object()).enumerate() {
+                        let h = from.and_then(|f| f.get(i)).copied();
+                        paid.unattached.push((o, h));
+                    }
+                }
                 // CR 607.2q: cards the action exiled ("behold a Goblin and exile it") were
                 // exiled to pay the cost.
                 if let Some(v) = c.vars.get(&vars::IT) {
@@ -4455,6 +4464,9 @@ pub struct PaidCost {
     pub life: u32,
     /// The loyalty counters a loyalty cost removed (CR 606.4).
     pub loyalty_removed: u32,
+    /// The permanents an "Unattach [an Equipment] from ~" cost unattached ("that
+    /// Equipment", CR 400.7j), with what each was attached to.
+    pub unattached: Vec<(ObjectId, Option<Entity>)>,
 }
 
 /// Adds one cost to another.

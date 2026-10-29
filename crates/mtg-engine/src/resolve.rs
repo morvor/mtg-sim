@@ -1407,9 +1407,18 @@ impl Game {
                 }
             }
             Effect::Unattach { what } => {
+                let mut done = Vec::new();
+                let mut from = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
-                    self.unattach(o);
+                    if let Some(h) = self.obj(o).attached_to {
+                        self.unattach(o);
+                        done.push(Entity::Object(o));
+                        from.push(h);
+                    }
                 }
+                // What a cost unattached, and from what (`zones::COST_UNATTACHED`).
+                ctx.set_var(crate::zones::UNATTACHED, done);
+                ctx.set_var(crate::zones::UNATTACHED_FROM, from);
             }
             Effect::PhaseIn { what } => {
                 // A phased-out permanent is still the same object (CR 702.26d).

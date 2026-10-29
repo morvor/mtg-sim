@@ -170,3 +170,42 @@ fn x_is_in_an_opponents_graveyard(text: &str, ctx: &CompileContext) -> Option<Ve
 }
 
 inventory::submit! { AbilityPattern { name: "referents 5: X is the number of [cards] in an opponent's graveyard as you cast ~", priority: 80, parse: x_is_in_an_opponents_graveyard } }
+
+/// "it was unattached from a Ninja" (Shuriken's granted ability, "That creature's
+/// controller gains control of ~ unless it was unattached from a Ninja."): what the cost
+/// "Unattach ~" unattached it from, as that permanent last existed (CR 400.7j, 608.2h).
+fn unattached_from(c: &str) -> Option<Condition> {
+    let r = end(c).strip_prefix("it was unattached from ")?;
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    let (f, false, tail) = crate::oracle::phrases::parse_object_phrase(r)? else {
+        return None;
+    };
+    if !tail.trim().is_empty() {
+        return None;
+    }
+    Some(Condition::SelMatches(
+        Sel::Var(crate::zones::COST_UNATTACHED_FROM),
+        f,
+    ))
+}
+
+inventory::submit! { super::ConditionPattern { name: "referents 5: it was unattached from a [permanent]", priority: 100, parse: unattached_from } }
+
+/// "[effect] unless it was unattached from a Ninja": the condition is about what the
+/// ability's unattach cost did (the trailing-condition grammar keeps away from pronouns).
+fn unless_unattached_from(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let (x, c) = l.rsplit_once(" unless ")?;
+    if !c.starts_with("it was unattached from ") || x.contains(" unless ") || x.contains(" if ") {
+        return None;
+    }
+    let cond = unattached_from(c)?;
+    let e = crate::oracle::effects::parse_clause(x, b)?;
+    Some(Effect::If {
+        cond: Condition::Not(Box::new(cond)),
+        then: Box::new(e),
+        otherwise: Box::new(Effect::Noop),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: [effect] unless it was unattached from a [permanent]", priority: 390, parse: unless_unattached_from } }
