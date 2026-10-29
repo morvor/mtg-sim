@@ -955,6 +955,16 @@ impl Renderer<'_> {
                     x => x,
                 };
                 let (verb, _, _) = self.this_way_of(inner).unwrap_or(("affected", false, None));
+                // "the creature you sacrificed this way" (Danse Macabre): of those
+                // sacrificed by each player, the one you controlled.
+                let yours = |x: &Filter| matches!(x, Filter::ControlledBy(PlayerRel::You));
+                if let (Filter::And(v), "sacrificed") = (f, verb) {
+                    if v.iter().any(yours) {
+                        let rest = Filter::and(v.iter().filter(|x| !yours(x)).cloned().collect());
+                        let n = self.noun(&rest, Num::One);
+                        return decline(format!("the {n} you sacrificed this way"), case);
+                    }
+                }
                 let n = self.noun(f, Num::Many);
                 decline(format!("{n} {verb} this way"), case)
             }

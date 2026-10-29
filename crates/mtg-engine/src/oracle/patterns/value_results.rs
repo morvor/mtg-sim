@@ -384,6 +384,13 @@ fn action_after(who: PlayerRel, r: &str, f: Filter, card: bool) -> Option<(Value
 /// this turn", "... you've sacrificed this turn", "... sacrificed this turn", "... you
 /// created this turn": the object phrase before the verb, which must read all of it.
 fn object_history(r: &str) -> Option<(Value, String)> {
+    let (cond, rest) = object_history_cond(r)?;
+    Some((events(cond, Tally::Events), rest))
+}
+
+/// The event of [`object_history`]: "creatures that died this turn" is a creature dying
+/// this turn.
+fn object_history_cond(r: &str) -> Option<(TriggerCond, String)> {
     let you = || Some(Filter::ControlledBy(PlayerRel::You));
     let yours = || Some(Filter::OwnedBy(PlayerRel::You));
     // CR 700.4: "dies" means is put into a graveyard from the battlefield.
@@ -445,9 +452,21 @@ fn object_history(r: &str) -> Option<(Value, String)> {
             Some(e) => Filter::and(vec![f, e]),
             None => f,
         };
-        return Some((events(mk(f), Tally::Events), rest.to_string()));
+        return Some((mk(f), rest.to_string()));
     }
     None
+}
+
+/// "the total power of Daleks that died this turn" (Genesis of the Daleks), "the greatest
+/// toughness among creatures that died this turn": the objects as they last existed on the
+/// battlefield (CR 608.2h), each once.
+fn history_aggregate(op: AggOp, stat: Stat, r: &str) -> Option<(Value, String)> {
+    let (cond, rest) = object_history_cond(r)?;
+    if !matches!(cond, TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)) {
+        return None;
+    }
+    let sel = Sel::Before(Box::new(Sel::ThisTurn(Box::new(cond))));
+    Some((Value::Aggregate(op, stat, Box::new(sel)), rest))
 }
 
 /// A damage source phrase: "~", "~ or a Dragon", "artifacts", "other sources named ~",
@@ -1449,7 +1468,7 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     let head = &r[..i];
     let yours = Some(Filter::OwnedBy(PlayerRel::You));
     let theirs = their_rel(b).map(Filter::OwnedBy);
-    let verbs: [(&str, Var, Option<Filter>); 25] = [
+    let verbs: [(&str, Var, Option<Filter>); 26] = [
         // "Forests put onto the battlefield this way" (Hunting Wilds): the permanents.
         (" put onto the battlefield", vars::IT, None),
         // "each card exiled from their hand this way" (Necromentia).
@@ -1471,6 +1490,13 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
         (" that phased out", vars::PHASED_OUT, None),
         (" phased out", vars::PHASED_OUT, None),
         (" destroyed", DESTROYED, None),
+        // "the creature you sacrificed this way" after "Each player sacrifices ..." (Danse
+        // Macabre): the one you controlled as it was sacrificed.
+        (
+            " you sacrificed",
+            vars::SACRIFICED,
+            Some(Filter::ControlledBy(PlayerRel::You)),
+        ),
         (" sacrificed", vars::SACRIFICED, None),
         (" exiled", vars::IT, None),
         (" discarded", DISCARDED, None),
@@ -1727,8 +1753,18 @@ fn result_ref(s: &str, b: &Builder) -> Option<(Sel, String)> {
         "the exiled card",
         "the card you exiled",
         "the exiled creature card",
+        // "Exile a spell you control: ... the exiled spell's mana value" (Synthesis Pod):
+        // the card the cost exiled from the stack.
+        "the exiled spell",
     ] {
         if let Some(rest) = s.strip_prefix(p) {
+            if p == "the exiled spell"
+                && !crate::oracle::raw_text()
+                    .to_lowercase()
+                    .contains("exile a spell you control:")
+            {
+                continue;
+            }
             if word_end(rest) || rest.starts_with('\'') {
                 let sel = Sel::Union(vec![
                     Sel::Var(crate::zones::COST_EXILED),
@@ -1904,6 +1940,9 @@ fn result_value(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             let Some(y) = y.strip_prefix(link) else {
                 continue;
             };
+            if let Some(v) = history_aggregate(op, stat.clone(), y) {
+                return Some(v);
+            }
             let Some((sel, rest)) = result_ref(y, b) else {
                 continue;
             };

@@ -8584,7 +8584,7 @@ impl Renderer<'_> {
             }
             Some(b) => {
                 let b = self.value(b);
-                s.push_str(&format!(" and add {b} to the result"));
+                s.push_str(&format!(" and add {b} {{opt:to the result}}"));
             }
             None => {}
         }

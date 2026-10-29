@@ -922,6 +922,8 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
         "that creature",
         "that permanent",
         "that card",
+        // "Exile that card ... You may cast that exiled card" (Synthesis Pod).
+        "that exiled card",
         "that spell",
         "the creature",
         "that token",
