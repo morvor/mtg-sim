@@ -21,8 +21,9 @@ fn infectious_rage_returns_to_a_creature_it_can_enchant() {
         let bears = t.battlefield(P1, "Grizzly Bears");
         // Protection from red: the Aura can't enchant it.
         t.battlefield(P1, "Paladin en-Vec");
+        // Shroud doesn't stop it: the Aura isn't targeting.
         if with_giant {
-            t.battlefield(P1, "Hill Giant");
+            t.battlefield(P1, "Simic Sky Swallower");
         }
         let rage = t.hand(P0, "Infectious Rage");
         t.lands(P0, "Mountain", 2);
@@ -35,7 +36,7 @@ fn infectious_rage_returns_to_a_creature_it_can_enchant() {
         if with_giant {
             assert_eq!(r.len(), 1);
             let host = t.obj_now(r[0]).attached_to.and_then(|e| e.object()).unwrap();
-            assert_eq!(t.obj_now(host).name(), "Hill Giant");
+            assert_eq!(t.obj_now(host).name(), "Simic Sky Swallower");
         } else {
             assert!(r.is_empty());
             assert!(t.in_graveyard(P0, "Infectious Rage"));
@@ -93,6 +94,56 @@ fn enchantment_alteration_moves_an_aura_to_a_permanent_of_its_hosts_type() {
         _ => None,
     });
     assert_eq!(offered, Some(vec![Entity::Object(giant)]));
+}
+
+#[test]
+fn enchantment_alteration_moves_an_aura_on_a_land_to_another_land() {
+    cr!("701.3a");
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P1, "Forest");
+    let island = t.battlefield(P0, "Island");
+    t.battlefield(P0, "Grizzly Bears");
+    let wg = t.battlefield(P1, "Wild Growth");
+    t.g.attach(wg, Entity::Object(forest));
+    t.lands(P0, "Island", 1);
+    let ea = t.hand(P0, "Enchantment Alteration");
+    t.answer_choose(P0, &[Entity::Object(island)]);
+    t.cast(P0, ea).target(Entity::Object(wg)).go();
+    t.resolve();
+    assert_eq!(t.obj_now(wg).attached_to, Some(Entity::Object(island)));
+    // Lands only (not the Bears, not the land it was on).
+    let offered = t.asked().into_iter().find_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+        _ => None,
+    });
+    let offered = offered.expect("a land was chosen");
+    assert!(offered.contains(&Entity::Object(island)));
+    assert!(!offered.contains(&Entity::Object(forest)));
+    assert!(offered.iter().all(|e| t.obj_now(e.object().unwrap()).is(types::CardType::Land)));
+}
+
+#[test]
+fn enchantment_alteration_treats_a_land_creature_host_as_a_creature() {
+    cr!("701.3a");
+    interp!("alteration-host-of-two-types");
+    let mut t = TestGame::new(2);
+    let arbor = t.battlefield(P1, "Dryad Arbor");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Forest");
+    // Faith's Fetters can enchant any permanent.
+    let ff = t.battlefield(P0, "Faith's Fetters");
+    t.g.attach(ff, Entity::Object(arbor));
+    t.lands(P0, "Island", 1);
+    let ea = t.hand(P0, "Enchantment Alteration");
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.cast(P0, ea).target(Entity::Object(ff)).go();
+    t.resolve();
+    assert_eq!(t.obj_now(ff).attached_to, Some(Entity::Object(bears)));
+    let offered = t.asked().into_iter().find_map(|(_, d)| match d {
+        decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+        _ => None,
+    });
+    assert_eq!(offered, Some(vec![Entity::Object(bears)]));
 }
 
 #[test]
@@ -231,8 +282,8 @@ fn cass_returns_the_auras_and_moves_the_equipment_that_were_attached_to_it() {
 
 #[test]
 fn storm_herald_returns_auras_attached_to_creatures_you_control_then_exiles_them() {
-    cr!("303.4f", "614.1a", "603.7a");
-    interp!("auras-returned-to-chosen-hosts-one-at-a-time");
+    cr!("303.4f", "603.7a");
+    ruling!("Storm Herald", "Storm Herald itself is among the creatures");
     assert_supported("Storm Herald");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -253,10 +304,47 @@ fn storm_herald_returns_auras_attached_to_creatures_you_control_then_exiles_them
         _ => None,
     }).next().unwrap();
     assert_eq!(offered.len(), 3);
+    // Storm Herald itself is one of them.
+    let herald = t.named_on_battlefield("Storm Herald")[0];
+    assert!(offered.contains(&Entity::Object(herald)));
     // At the next end step they're exiled.
     t.advance_to_step(mtg_engine::turn::Step::End);
     t.resolve_all();
     assert!(t.in_exile("Holy Strength") && t.in_exile("Unholy Strength"));
+}
+
+#[test]
+fn storm_herald_auras_that_would_leave_are_exiled_instead() {
+    cr!("614.1a", "303.4f");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let hs = t.graveyard(P0, "Holy Strength");
+    let lonely = t.graveyard(P0, "Unholy Strength");
+    // Only Holy Strength is returned.
+    t.answer_choose(P0, &[Entity::Object(hs)]);
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.enter(P0, "Storm Herald");
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (3, 4));
+    assert_eq!(t.zone(lonely), Zone::Graveyard(P0));
+    // Its creature dies: the Aura would go to the graveyard and is exiled instead.
+    t.g.move_object(bears, Zone::Graveyard(P0), MoveCause::Destroy, None);
+    t.settle();
+    assert!(t.in_exile("Holy Strength"));
+    assert!(!t.in_graveyard(P0, "Holy Strength"));
+}
+
+#[test]
+fn storm_herald_returns_no_aura_that_couldnt_enchant_a_creature_you_control() {
+    cr!("303.4g");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    let wg = t.graveyard(P0, "Wild Growth");
+    t.answer_choose(P0, &[Entity::Object(wg)]);
+    t.enter(P0, "Storm Herald");
+    t.resolve_all();
+    // Wild Growth enchants a land: it stays in the graveyard.
+    assert_eq!(t.zone(wg), Zone::Graveyard(P0));
 }
 
 #[test]

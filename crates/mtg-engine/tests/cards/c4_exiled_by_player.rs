@@ -20,10 +20,6 @@ fn exile_by(t: &mut TestGame, card: ObjectId, by: PlayerId, kind: &str) -> Objec
 #[test]
 fn haldan_plays_noncreature_cards_pako_exiled_from_any_library() {
     cr!("601.3", "609.4b");
-    ruling!(
-        "Haldan, Avid Arcanist",
-        "You'll be able to play cards you exiled with fetch counters before Haldan entered"
-    );
     assert_supported("Haldan, Avid Arcanist");
     assert_supported("Pako, Arcane Retriever");
     let mut t = TestGame::new(2);
@@ -44,6 +40,37 @@ fn haldan_plays_noncreature_cards_pako_exiled_from_any_library() {
     t.cast(P0, bolt).target(Entity::Player(P1)).go();
     t.resolve();
     assert_eq!(t.life(P1), 20 - 4 - 3);
+}
+
+#[test]
+fn haldan_plays_cards_exiled_before_it_entered_and_only_while_on_the_battlefield() {
+    cr!("601.3");
+    ruling!(
+        "Haldan, Avid Arcanist",
+        "You'll be able to play cards you exiled with fetch counters before Haldan entered"
+    );
+    let mut t = TestGame::new(2);
+    let pako = t.battlefield(P0, "Pako, Arcane Retriever");
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    let shock = t.library_top(P0, "Shock");
+    t.attack(&[(pako, Entity::Player(P1))], &[]);
+    let (bolt, shock) = (t.g.current(bolt), t.g.current(shock));
+    assert_eq!((t.zone(bolt), t.zone(shock)), (Zone::Exile, Zone::Exile));
+    t.advance_to(P0, Step::PostcombatMain);
+    t.lands(P0, "Mountain", 2);
+    // Without Haldan, nothing lets P0 cast them.
+    assert!(t.cast_with(P0, bolt, &[Entity::Player(P1)]).is_err());
+    // Haldan enters after they were exiled: they can be cast.
+    let haldan = t.battlefield(P0, "Haldan, Avid Arcanist");
+    let life = t.life(P1);
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    t.resolve();
+    assert_eq!(t.life(P1), life - 3);
+    // Once Haldan has left, not any more.
+    t.g.move_object(haldan, Zone::Graveyard(P0), MoveCause::Effect, None);
+    t.settle();
+    assert!(t.cast_with(P0, shock, &[Entity::Player(P1)]).is_err());
 }
 
 #[test]

@@ -12,10 +12,6 @@ use mtg_engine::*;
 #[test]
 fn valki_exiles_a_creature_card_from_each_opponents_revealed_hand() {
     cr!("701.20a", "610.3");
-    ruling!(
-        "Valki, God of Lies // Tibalt, Cosmic Impostor",
-        "each opponent will reveal their hand, but no cards will be exiled"
-    );
     assert_supported("Valki, God of Lies // Tibalt, Cosmic Impostor");
     let mut t = TestGame::new(3);
     let a = t.hand(P1, "Grizzly Bears");
@@ -35,18 +31,42 @@ fn valki_exiles_a_creature_card_from_each_opponents_revealed_hand() {
 }
 
 #[test]
+fn valki_leaving_before_its_ability_resolves_exiles_nothing() {
+    cr!("610.3c");
+    ruling!(
+        "Valki, God of Lies // Tibalt, Cosmic Impostor",
+        "each opponent will reveal their hand, but no cards will be exiled"
+    );
+    let mut t = TestGame::new(2);
+    let a = t.hand(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[Entity::Object(a)]);
+    let valki = t.enter(P0, "Valki, God of Lies // Tibalt, Cosmic Impostor");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.g.move_object(valki, Zone::Graveyard(P0), events::MoveCause::Effect, None);
+    t.resolve_all();
+    assert_eq!(t.zone(a), Zone::Hand(P1));
+    assert!(!t.in_exile("Grizzly Bears"));
+}
+
+#[test]
 fn magus_of_the_jar_returns_each_players_exiled_hand_at_end_step() {
     cr!("406.3", "603.7a");
     assert_supported("Magus of the Jar");
     let mut t = TestGame::new(2);
     let magus = t.battlefield(P0, "Magus of the Jar");
-    t.hand(P0, "Lightning Bolt");
-    t.hand(P1, "Grizzly Bears");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let bears = t.hand(P1, "Grizzly Bears");
     t.hand(P1, "Hill Giant");
     t.activate(P0, magus, 0, &[]).unwrap();
     t.resolve();
     assert_eq!((t.hand_size(P0), t.hand_size(P1)), (7, 7));
-    assert!(t.in_exile("Grizzly Bears") || t.g.exile.len() == 3);
+    assert_eq!(t.g.exile.len(), 3);
+    for c in [bolt, bears] {
+        let c = t.g.current(c);
+        assert_eq!(t.zone(c), Zone::Exile);
+        assert!(t.g.obj(c).face_down);
+    }
     t.advance_to_step(Step::End);
     t.resolve_all();
     // The seven cards were discarded; each player has their own exiled cards back.
@@ -64,15 +84,18 @@ fn sword_of_hearth_and_home_puts_both_cards_onto_the_battlefield() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let sword = t.battlefield(P0, "Sword of Hearth and Home");
     t.g.attach(sword, Entity::Object(bears));
-    let giant = t.battlefield(P0, "Hill Giant");
+    let lynx = t.battlefield(P0, "Steppe Lynx");
     t.library_top(P0, "Forest");
     t.advance_to(P0, Step::BeginningOfCombat);
-    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_targets(P0, &[Entity::Object(lynx)]);
     t.attack(&[(bears, Entity::Player(P1))], &[]);
-    let g = t.named_on_battlefield("Hill Giant");
-    assert_eq!(g.len(), 1);
-    assert_ne!(g[0], giant);
+    t.resolve_all();
+    let l = t.named_on_battlefield("Steppe Lynx");
+    assert_eq!(l.len(), 1);
+    assert_ne!(l[0], lynx);
     assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    // The returned Lynx saw the Forest enter (landfall): +2/+2.
+    assert_eq!(t.pt(l[0]), (2, 3));
     assert_eq!(t.life(P1), 16);
 }
 

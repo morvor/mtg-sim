@@ -259,13 +259,14 @@ inventory::submit! { AbilityPattern { name: "attach moves: search for a Curse an
 const FLICKER_AURAS: Var = vars::USER + 52022;
 const FLICKER_CREATURE: Var = vars::USER + 52023;
 const FLICKER_OTHERS: Var = vars::USER + 52024;
+const FLICKER_HOST: Var = vars::USER + 52029;
 
 /// "Exile enchanted creature and all Auras attached to it. At the beginning of the next
 /// end step, return that card to the battlefield under its owner's control. If you do,
 /// return the other cards exiled this way to the battlefield under their owners' control
 /// attached to that creature." (Flickerform): "that card" is the creature card; the Aura
-/// cards return attached to the permanent it became (CR 400.7, 303.4f). The creature is
-/// exiled first, then its Auras (no state-based actions in between, CR 704.3).
+/// cards return attached to the permanent it became (CR 400.7, 303.4f). The creature and
+/// its Auras are exiled at the same time.
 fn exile_with_auras_and_return_attached(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let (cost, effect) = crate::oracle::split_cost(block)?;
     if effect.trim()
@@ -316,32 +317,32 @@ fn exile_with_auras_and_return_attached(block: &str, ctx: &CompileContext) -> Op
         ]))),
         once: true,
     };
+    let was_host = crate::kw::attached_before::was_in_var(FLICKER_HOST);
     act.body = Body::effect(Effect::seq(vec![
+        Effect::Store {
+            var: FLICKER_HOST,
+            sel: Sel::AttachedTo,
+        },
         Effect::Store {
             var: FLICKER_AURAS,
             sel: Sel::All(Filter::and(vec![
                 Filter::Subtype("Aura".into()),
-                Filter::AttachedToAnyOf(Box::new(Sel::AttachedTo)),
+                Filter::AttachedToAnyOf(Box::new(Sel::Var(FLICKER_HOST))),
                 Filter::InZone(ZoneKind::Battlefield),
             ])),
         },
         Effect::Exile {
-            what: Sel::AttachedTo,
+            what: Sel::Union(vec![Sel::Var(FLICKER_HOST), Sel::Var(FLICKER_AURAS)]),
             face_down: false,
             link: false,
         },
         Effect::Store {
             var: FLICKER_CREATURE,
-            sel: Sel::Var(vars::IT),
-        },
-        Effect::Exile {
-            what: Sel::Var(FLICKER_AURAS),
-            face_down: false,
-            link: false,
+            sel: Sel::Matching(Box::new(Sel::Var(vars::IT)), was_host.clone()),
         },
         Effect::Store {
             var: FLICKER_OTHERS,
-            sel: Sel::Var(vars::IT),
+            sel: Sel::Matching(Box::new(Sel::Var(vars::IT)), Filter::not(was_host)),
         },
         delayed,
     ]));
@@ -470,19 +471,17 @@ fn return_auras_and_equipment_that_were_attached(block: &str, ctx: &CompileConte
 
 inventory::submit! { AbilityPattern { name: "attach moves: return Aura cards and attach Equipment that were attached to it", priority: 40, parse: return_auras_and_equipment_that_were_attached } }
 
-const HERALD_AURAS: Var = vars::USER + 52025;
-const HERALD_EACH: Var = vars::USER + 52026;
-const HERALD_HOST: Var = vars::USER + 52027;
 const HERALD_RETURNED: Var = vars::USER + 52028;
 
 /// "When ~ enters, return any number of Aura cards from your graveyard to the battlefield
 /// attached to creatures you control. Exile those Auras at the beginning of your next end
 /// step. If those Auras would leave the battlefield, exile them instead of putting them
 /// anywhere else." (Storm Herald): for each Aura card chosen, a creature you control it
-/// could enchant is chosen (CR 303.4f, not targeted), and it's returned attached to it;
-/// an Aura with no such creature stays in the graveyard (CR 303.4g). The Auras return one
-/// at a time.
+/// could enchant is chosen (CR 303.4f, not targeted), and they're all returned at the same
+/// time, each attached to its creature (`kw/auras_to_chosen_hosts.rs`); an Aura with no
+/// such creature stays in the graveyard (CR 303.4g).
 fn return_auras_attached_to_creatures_you_control(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+    use crate::kw::auras_to_chosen_hosts::{AURAS, HOSTS, PUT_AURAS_ONTO_CHOSEN_HOSTS};
     const BODY: &str = ", return any number of Aura cards from your graveyard to the battlefield attached to creatures you control. Exile those Auras at the beginning of your next end step. If those Auras would leave the battlefield, exile them instead of putting them anywhere else.";
     let trigger = block.strip_suffix(BODY)?;
     if block.contains('\n') {
@@ -507,49 +506,10 @@ fn return_auras_attached_to_creatures_you_control(block: &str, ctx: &CompileCont
         Filter::InZone(ZoneKind::Graveyard),
         Filter::OwnedBy(PlayerRel::You),
     ]);
-    let mut onto = Destination::battlefield();
-    onto.attached_to = Some(Sel::Var(HERALD_HOST));
-    let per_aura = Effect::If {
-        cond: Condition::Always,
-        then: Box::new(Effect::seq(vec![
-            Effect::Store {
-                var: HERALD_HOST,
-                sel: Sel::Choose {
-                    chooser: PlayerRef::You,
-                    filter: Filter::and(vec![
-                        yours.clone(),
-                        Filter::CanBeAttachedBy(Box::new(Sel::Var(HERALD_EACH))),
-                    ]),
-                    count: Value::c(1),
-                    up_to: false,
-                    store: None,
-                },
-            },
-            Effect::If {
-                cond: Condition::SelNonEmpty(Sel::Var(HERALD_HOST)),
-                then: Box::new(Effect::seq(vec![
-                    Effect::Move {
-                        what: Sel::Var(HERALD_EACH),
-                        to: onto,
-                    },
-                    Effect::Store {
-                        var: HERALD_RETURNED,
-                        sel: Sel::Union(vec![Sel::Var(HERALD_RETURNED), Sel::Var(vars::IT)]),
-                    },
-                ])),
-                otherwise: Box::new(Effect::Noop),
-            },
-        ])),
-        otherwise: Box::new(Effect::Noop),
-    };
     let returned = Filter::In(Box::new(Sel::Var(HERALD_RETURNED)));
     t.body = Body::effect(Effect::seq(vec![
         Effect::Store {
-            var: HERALD_RETURNED,
-            sel: Sel::Union(vec![]),
-        },
-        Effect::Store {
-            var: HERALD_AURAS,
+            var: AURAS,
             sel: Sel::Choose {
                 chooser: PlayerRef::You,
                 count: Value::Count(auras.clone()),
@@ -558,10 +518,14 @@ fn return_auras_attached_to_creatures_you_control(block: &str, ctx: &CompileCont
                 store: None,
             },
         },
-        Effect::ForEach {
-            sel: Sel::Var(HERALD_AURAS),
-            var: HERALD_EACH,
-            effect: Box::new(per_aura),
+        Effect::Store {
+            var: HOSTS,
+            sel: Sel::All(yours),
+        },
+        Effect::Custom(PUT_AURAS_ONTO_CHOSEN_HOSTS.into()),
+        Effect::Store {
+            var: HERALD_RETURNED,
+            sel: Sel::Var(vars::IT),
         },
         Effect::DelayedTrigger {
             trigger: TriggerCond::BeginningOf {

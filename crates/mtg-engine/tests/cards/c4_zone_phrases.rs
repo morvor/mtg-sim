@@ -62,7 +62,7 @@ fn mairsil_exiles_a_card_from_hand_or_graveyard_with_a_cage_counter() {
 
 #[test]
 fn moratorium_stone_exiles_the_card_its_namesakes_and_permanents_with_that_name() {
-    cr!("201.2", "406.2");
+    cr!("201.2a", "406.2");
     assert_supported("Moratorium Stone");
     let mut t = TestGame::new(2);
     let stone = t.battlefield(P0, "Moratorium Stone");
@@ -83,9 +83,8 @@ fn moratorium_stone_exiles_the_card_its_namesakes_and_permanents_with_that_name(
 
 #[test]
 fn endless_detour_puts_a_spell_on_the_bottom_of_its_owners_library() {
-    cr!("115.1", "401.4");
+    cr!("115.1");
     ruling!("Endless Detour", "The card's owner chooses whether to put it on the top or bottom");
-    ruling!("Endless Detour", "doesn't counter spells");
     assert_supported("Endless Detour");
     let mut t = TestGame::new(2);
     for _ in 0..3 {
@@ -122,6 +121,28 @@ fn endless_detour_puts_a_spell_on_the_bottom_of_its_owners_library() {
     t.resolve();
     // The default choice is the top (the library's last card).
     assert_eq!(t.g.obj(*t.g.player(P1).library.last().unwrap()).name(), "Forest");
+}
+
+#[test]
+fn endless_detour_moves_a_spell_that_cant_be_countered() {
+    cr!("115.1");
+    ruling!("Endless Detour", "doesn't counter spells");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P1, "Swamp", 1);
+    t.lands(P1, "Forest", 1);
+    let decay = t.hand(P1, "Abrupt Decay");
+    t.cast(P1, decay).target(Entity::Object(bears)).go();
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Island", 1);
+    let d = t.hand(P0, "Endless Detour");
+    t.cast(P0, d).target(Entity::Object(decay)).go();
+    t.resolve();
+    // Abrupt Decay left the stack for its owner's library; it never resolved.
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.g.player(P1).library.iter().any(|o| t.g.obj(*o).name() == "Abrupt Decay"));
+    assert!(t.on_battlefield(bears));
 }
 
 #[test]
@@ -216,7 +237,7 @@ fn phyrexian_grimoire_with_one_card_exiles_it() {
 
 #[test]
 fn canoptek_wraith_finds_basic_lands_which_have_the_chosen_lands_name() {
-    cr!("201.2", "701.23a");
+    cr!("201.2a", "701.23a");
     ruling!("Canoptek Wraith", "the two lands must have the same name as each other");
     assert_supported("Canoptek Wraith");
     let mut t = TestGame::new(2);

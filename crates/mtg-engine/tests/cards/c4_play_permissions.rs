@@ -14,6 +14,8 @@ fn kotose_plays_one_of_all_the_cards_it_exiled() {
     assert_supported("Kotose, the Silent Spider");
     let mut t = TestGame::new(2);
     let target = t.graveyard(P1, "Lightning Bolt");
+    let basic = t.graveyard(P1, "Forest");
+    let own = t.graveyard(P0, "Shock");
     let in_hand = t.hand(P1, "Lightning Bolt");
     let in_lib = t.library_top(P1, "Lightning Bolt");
     t.answer_targets(P0, &[Entity::Object(target)]);
@@ -25,6 +27,9 @@ fn kotose_plays_one_of_all_the_cards_it_exiled() {
         .map(|o| t.g.current(*o))
         .collect();
     assert!(exiled.iter().all(|o| t.zone(*o) == Zone::Exile));
+    // Only a card other than a basic land card in an opponent's graveyard was a target.
+    assert_eq!(last_target_candidates(&t, P0), vec![Entity::Object(target)]);
+    assert_eq!((t.zone(basic), t.zone(own)), (Zone::Graveyard(P1), Zone::Graveyard(P0)));
     // The target card (exiled by the first instruction) can be cast, with any mana.
     t.lands(P0, "Forest", 2);
     t.cast(P0, exiled[0]).target(Entity::Player(P1)).go();
