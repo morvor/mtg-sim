@@ -266,6 +266,15 @@ impl Renderer<'_> {
                     format!("suspend {n}—{c}")
                 }
             }
+            // "Devour X, where X is the number of creatures devoured this way"
+            // (`kw::devour`: N = -1).
+            KeywordKind::Devour if k.n == Some(-1) && k.x.is_none() => {
+                let q = match &k.filter {
+                    Some(f) => self.noun(f, Num::Many),
+                    None => "creatures".into(),
+                };
+                format!("devour X, where X is the number of {q} devoured this way")
+            }
             KeywordKind::Reinforce if k.n == Some(-1) => {
                 let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
                 format!("reinforce X—{c}")

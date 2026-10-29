@@ -212,10 +212,23 @@ impl Renderer<'_> {
                             "{may}put {{alt:a card from among them|one of them back}} {d}"
                         );
                     }
+                    // "Put one of them into your hand": any card of those.
+                    let picked = match count {
+                        Some(Value::Const(k))
+                            if matches!(filter, Filter::Any)
+                                && !*up_to
+                                && *k < 999
+                                && each_of.is_empty()
+                                && among == "from among them" =>
+                        {
+                            format!("{{alt:{what} {among}|{} of them}}", number_word(*k))
+                        }
+                        _ => format!("{what} {among}"),
+                    };
                     if d.is_empty() {
-                        format!("{may}{verb} {what} {among}")
+                        format!("{may}{verb} {picked}")
                     } else {
-                        format!("{may}{verb} {what} {among} {d}")
+                        format!("{may}{verb} {picked} {d}")
                     }
                 }
             }
@@ -235,7 +248,16 @@ impl Renderer<'_> {
                     .this_way_of(&Sel::Var(vars::DUG))
                     .is_some_and(|(v, _, _)| v == "revealed")
                 {
+                    if to.zone == ZoneKind::Exile && !to.face_down && to.with_counters.is_empty() {
+                        return format!(
+                            "{{alt:put {{alt:the rest|all other cards revealed this way}} {d}|exile {{alt:the rest|all other cards revealed this way}}}}"
+                        );
+                    }
                     return format!("put {{alt:the rest|all other cards revealed this way}} {d}");
+                }
+                // "exile the rest": to exile a card is to put it into exile (CR 701.13a).
+                if to.zone == ZoneKind::Exile && !to.face_down && to.with_counters.is_empty() {
+                    return format!("{{alt:put the rest {d}|exile the rest}}");
                 }
                 format!("put the rest {d}")
             }
