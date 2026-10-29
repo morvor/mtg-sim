@@ -675,3 +675,73 @@ fn when_that_permanent_enters(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
 }
 
 inventory::submit! { FollowupPattern { name: "triggers 5: when that permanent enters, [effect] (after putting it onto the battlefield)", priority: 40, apply: when_that_permanent_enters } }
+
+/// The player and their turn count for "until the end of [player]'s next turn".
+const UNTIL_PLAYER: Var = vars::USER + 43105;
+const UNTIL_TURNS: Var = vars::USER + 43106;
+
+/// "until the end of defending player's next turn, that player gets two rad counters
+/// whenever they cast a spell" (Nuka-Nuke Launcher): a delayed triggered ability on that
+/// player's events, lasting until the end of their next turn
+/// (`kw::until_end_of_players_next_turn`).
+fn until_end_of_players_next_turn_whenever(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("until the end of ")?;
+    let (who_s, r) = r.split_once("'s next turn, ")?;
+    let who = match who_s {
+        "defending player" => PlayerRef::DefendingPlayer,
+        "that player" if !matches!(b.it_player, PlayerRef::You) => b.it_player.clone(),
+        _ => return None,
+    };
+    let (eff, event) = r.split_once(" whenever they ")?;
+    let (inner, _, _) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever a player {event}"))?;
+    if !matches!(inner, TriggerCond::CastSpell { who: PlayerRel::Any, .. }) {
+        return None;
+    }
+    let body = crate::oracle::effects::parse_trigger_body(
+        eff,
+        b.ctx,
+        Sel::TriggerSpell,
+        PlayerRef::TriggerPlayer,
+    )?;
+    if body.modal.is_some() || !body.targets.is_empty() {
+        return None;
+    }
+    let theirs = TriggerCond::Where {
+        trigger: Box::new(inner),
+        cond: Condition::PlayerMatches(
+            PlayerRef::TriggerPlayer,
+            PlayerFilter::Ref(Box::new(PlayerRef::Var(UNTIL_PLAYER))),
+        ),
+    };
+    let lasting = Condition::Custom(
+        format!(
+            "{}{UNTIL_PLAYER}:{UNTIL_TURNS}",
+            crate::kw::until_end_of_players_next_turn::UNTIL_END_OF_NEXT_TURN_OF
+        )
+        .into(),
+    );
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: UNTIL_PLAYER,
+            sel: Sel::Players(who),
+        },
+        Effect::StoreValue {
+            var: UNTIL_TURNS,
+            value: Value::Custom(
+                format!(
+                    "{}{UNTIL_PLAYER}",
+                    crate::kw::until_end_of_players_next_turn::TURNS_TAKEN_OF
+                )
+                .into(),
+            ),
+        },
+        Effect::DelayedTrigger {
+            trigger: TriggerCond::ForAsLongAs(Box::new(theirs), lasting),
+            body: Box::new(body),
+            once: false,
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "triggers 5: until the end of [player]'s next turn, [effect] whenever they [event]", priority: 100, parse: until_end_of_players_next_turn_whenever } }

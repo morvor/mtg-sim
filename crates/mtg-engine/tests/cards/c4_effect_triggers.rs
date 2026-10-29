@@ -476,3 +476,51 @@ fn jailbreak_targets_only_cards_with_equal_or_lesser_mana_value() {
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     assert!(t.in_graveyard(P0, "Craw Wurm"));
 }
+
+fn rad(t: &TestGame, p: PlayerId) -> u32 {
+    t.g.players[p.idx()]
+        .counters
+        .iter()
+        .find(|(k, _)| k.as_str() == "rad")
+        .map_or(0, |(_, n)| *n)
+}
+
+/// P1 casts a Shock at P0.
+fn p1_shocks(t: &mut TestGame) {
+    let shock = t.hand(P1, "Shock");
+    mana(t, P1);
+    t.cast_with(P1, shock, &[Entity::Player(P0)]).unwrap();
+    t.resolve_all();
+}
+
+#[test]
+fn nuka_nuke_launcher_irradiates_the_defending_player_until_the_end_of_their_next_turn() {
+    cr!("603.7b", "603.7c", "611.2a", "122.1");
+    supported("Nuka-Nuke Launcher");
+    let mut t = TestGame::new(2);
+    let launcher = t.battlefield(P0, "Nuka-Nuke Launcher");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    ready(&mut t, bears);
+    t.g.attach(launcher, Entity::Object(bears));
+    declare(&mut t, P0, &[(bears, Entity::Player(P1))]);
+    t.resolve_all();
+    // This turn.
+    p1_shocks(&mut t);
+    assert_eq!(rad(&t, P1), 2);
+    // P0 casting a spell doesn't count.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    mana(&mut t, P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(rad(&t, P1), 2);
+    // P1's next turn.
+    t.advance_to(P1, Step::Upkeep);
+    p1_shocks(&mut t);
+    assert_eq!(rad(&t, P1), 4);
+    // Not after it ends (P1's rad counters were used up in their precombat main phase).
+    t.advance_to(P0, Step::Upkeep);
+    assert!(t.g.delayed_triggers.is_empty());
+    let before = rad(&t, P1);
+    p1_shocks(&mut t);
+    assert_eq!(rad(&t, P1), before);
+}
