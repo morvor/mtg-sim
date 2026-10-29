@@ -133,7 +133,7 @@ fn augur_of_bolas_with_a_short_library_and_what_it_reveals() {
     t.resolve_all();
     assert!(in_hand(&t, cards[0]));
     let shown = revealed(&t);
-    // TODO-P006: the chosen instant should be revealed.
+    assert!(shown.contains(&cards[0]), "the instant taken is revealed");
     for c in &cards[1..3] {
         assert!(!shown.contains(c) && !shown.contains(&t.g.current(*c)));
     }
