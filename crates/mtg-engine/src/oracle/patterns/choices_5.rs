@@ -455,3 +455,97 @@ fn if_chosen_still_on_battlefield(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "if one or more of the chosen permanents are still on the battlefield, [do something that many times]", priority: 90, parse: if_chosen_still_on_battlefield } }
+
+/// The chosen piles of all the players a "for each defending player, separate ... and
+/// that player chooses one" was performed for.
+const CHOSEN_PILES: Var = vars::USER + 9541;
+
+/// "for each defending player, separate all creatures that player controls into two piles
+/// and that player chooses one" (Stand or Fall): you separate each defending player's
+/// creatures (CR 700.3), and that player chooses one of the two piles; "the chosen piles"
+/// are all those chosen.
+fn for_each_defending_player_piles(l: &str, b: &mut Builder) -> Option<Effect> {
+    use crate::piles::PileAction;
+    let l = end(l);
+    let what = l
+        .strip_prefix("for each defending player, separate all ")?
+        .strip_suffix(" that player controls into two piles and that player chooses one")?;
+    let (f, true, tail) = parse_object_phrase(what)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    let each = Effect::seq(vec![
+        Effect::Piles(Box::new(PileAction::Separate {
+            what: Sel::All(Filter::and(vec![
+                f,
+                Filter::ControlledBy(PlayerRel::Iterated),
+            ])),
+            separator: PlayerRef::You,
+            count: 0,
+            face_down: false,
+            own: false,
+        })),
+        Effect::Piles(Box::new(PileAction::Choose {
+            chooser: PlayerRef::Iterated,
+            picked_by: None,
+            of: None,
+            at_random: false,
+        })),
+        Effect::Store {
+            var: CHOSEN_PILES,
+            sel: Sel::Union(vec![
+                Sel::Var(CHOSEN_PILES),
+                Sel::Var(crate::piles::CHOSEN),
+            ]),
+        },
+    ]);
+    b.named
+        .push(("the chosen piles".into(), Sel::Var(CHOSEN_PILES)));
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN_PILES,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::ForEachPlayer {
+            who: PlayerRef::Each(PlayerFilter::History(Box::new(Condition::Custom(
+                crate::kw::choices_5_filters::IS_DEFENDING_PLAYER.into(),
+            )))),
+            effect: Box::new(each),
+        },
+    ]))
+}
+
+inventory::submit! { EffectPattern { name: "for each defending player, separate all [objects] that player controls into two piles and that player chooses one", priority: 90, parse: for_each_defending_player_piles } }
+
+/// "Only creatures in the chosen piles can block this turn." (Stand or Fall): every other
+/// creature can't block this turn; which creatures are in the piles is fixed as the
+/// effect begins (a creature that enters later can't block either).
+fn only_chosen_piles_can_block(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let noun = l
+        .strip_prefix("only ")?
+        .strip_suffix(" in the chosen piles can block this turn")?;
+    let piles = b
+        .named
+        .iter()
+        .rev()
+        .find(|(n, _)| n == "the chosen piles")
+        .map(|(_, s)| s.clone())?;
+    let (f, true, tail) = parse_object_phrase(noun)? else {
+        return None;
+    };
+    if !end(tail).is_empty() {
+        return None;
+    }
+    Some(Effect::AddRestriction {
+        restriction: Restriction::CantBlock(Filter::and(vec![
+            f,
+            Filter::not(Filter::In(Box::new(piles))),
+        ])),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "only [objects] in the chosen piles can block this turn", priority: 90, parse: only_chosen_piles_can_block } }

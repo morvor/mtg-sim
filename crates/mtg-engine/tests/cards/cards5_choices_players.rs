@@ -709,3 +709,27 @@ fn disorienting_choice_searches_for_each_chosen_permanent_still_on_the_battlefie
     // Exiled: none of the chosen permanents remain, so no search.
     assert_eq!(run(true), (4, 0));
 }
+
+#[test]
+fn stand_or_fall_only_creatures_in_the_chosen_piles_can_block() {
+    cr!("700.3", "509.1b", "506.2");
+    compiles("Stand or Fall");
+    // "At the beginning of combat on your turn, for each defending player, separate all
+    // creatures that player controls into two piles and that player chooses one. Only
+    // creatures in the chosen piles can block this turn."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stand or Fall");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    // P0 puts the Bears in one pile and the Elves in the other; P1 chooses the Elves'.
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer(P1, DecisionKind::Option, Answer::Index(1));
+    t.set_step(P0, Step::PrecombatMain);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    t.g.recompute();
+    assert!(t.g.can_block_at_all(elves));
+    assert!(!t.g.can_block_at_all(bears));
+    let _ = mine;
+}

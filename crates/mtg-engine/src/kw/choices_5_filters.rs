@@ -18,6 +18,10 @@ use crate::types::ObjectId;
 /// permanents are still on the battlefield": not one that left, CR 400.7).
 pub const STILL_ON_BATTLEFIELD: &str = "choices5:still on the battlefield";
 
+/// `Condition::Custom` name: the player being iterated over is a defending player (CR
+/// 506.2, 802.2: with several, each of them).
+pub const IS_DEFENDING_PLAYER: &str = "choices5:is a defending player";
+
 /// `Filter::Custom` name: not the resolving spell or ability itself.
 pub const NOT_RESOLVING: &str = "choices5:not the resolving spell or ability";
 
@@ -68,6 +72,16 @@ impl KeywordRules for Choices5Filters {
         g.objects[src.0 as usize].choices.card_name = Some(n.into());
         g.dirty = true;
         true
+    }
+
+    fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
+        (name == IS_DEFENDING_PLAYER).then(|| {
+            ctx.iter_player.is_some_and(|p| {
+                g.combat
+                    .as_ref()
+                    .is_some_and(|c| c.defending_players.contains(&p))
+            })
+        })
     }
 
     fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
