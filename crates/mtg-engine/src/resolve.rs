@@ -1558,8 +1558,25 @@ impl Game {
                 }
             }
             Effect::EnterAs(mods) => {
+                // "Its base power becomes the first result" (Vedalken Squirrel-Whacker): a
+                // value is determined as it enters (CR 608.2h).
+                let lock = |g: &Self, v: &Option<Value>| match v {
+                    Some(v) if v.as_const().is_none() => Some(Value::c(
+                        g.eval_value(v, ctx).clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+                    )),
+                    v => v.clone(),
+                };
+                let mods: Vec<Modification> = mods
+                    .iter()
+                    .map(|m| match m {
+                        Modification::SetPT(p, t) => {
+                            Modification::SetPT(lock(self, p), lock(self, t))
+                        }
+                        m => m.clone(),
+                    })
+                    .collect();
                 if let Some(e) = ctx.entering.as_mut() {
-                    e.copiable.extend(mods.iter().cloned());
+                    e.copiable.extend(mods);
                 }
             }
             Effect::SetDayNight { day } => self.set_day(*day),
