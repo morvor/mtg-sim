@@ -544,6 +544,14 @@ pub(crate) fn source(s: &str, b: &mut OneShot) -> Option<Src> {
                 pre,
             });
         }
+        // "Choose a source you control ... the next time that source would deal damage"
+        // (Desperate Gambit): a source named earlier.
+        if let Some((_, sel)) = bb.named.iter().find(|(n, _)| s == "that source" && n == s) {
+            return Some(Src {
+                filter: Filter::In(Box::new(sel.clone())),
+                pre,
+            });
+        }
         if s.starts_with("target ") || s.starts_with("up to one target ") {
             let s2 = s.strip_prefix("up to one ").unwrap_or(s);
             let (spec, r) = parse_target(s)?;

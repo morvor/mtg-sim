@@ -808,6 +808,17 @@ impl Renderer<'_> {
         if let Some(s) = self.all_actions_done(c) {
             return s;
         }
+        // "If you win two or more flips" after a flip whose loss voids the rest (Fiery
+        // Gambit, `dice_coins_5`).
+        if let Condition::And(v) = c {
+            if let [Condition::Compare(Value::Var(w), Cmp::Ge, Value::Const(n)), Condition::Compare(Value::Var(l), Cmp::Eq, Value::Const(0))] =
+                v.as_slice()
+            {
+                if *w == crate::dice::WINS && *l == crate::dice::LOSSES {
+                    return format!("you win {} or more flips", number_word(*n));
+                }
+            }
+        }
         if let Some(s) = self.graveyard_order_condition(c) {
             return s;
         }
@@ -2271,6 +2282,9 @@ impl Renderer<'_> {
         match d {
             Duration::EndOfTurn => "until end of turn".into(),
             Duration::EndOfCombat => "until end of combat".into(),
+            Duration::UntilEndOfTurnOrRoll(n) => {
+                format!("until end of turn, or until any player rolls a {n}, whichever comes first")
+            }
             Duration::UntilYourNextTurn => "until your next turn".into(),
             Duration::UntilEndOfYourNextTurn => "until the end of your next turn".into(),
             // CR 611.2b: "until ~ leaves the battlefield" is the same duration.

@@ -39,6 +39,8 @@ impl Renderer<'_> {
             d::DRAFT_ADDITIONAL_SKIP_NEXT => "As you draft a card, you may draft an additional card from that booster pack. If you do, turn ~ face down, then pass the next booster pack without drafting a card from it".into(),
             d::DRAFT_GUESS_NEXT => "Reveal ~ as you draft it. The next time a player drafts a card from this booster pack, guess that card's name. Then that player reveals the drafted card".into(),
             d::DRAFT_LOOK_NEXT => "Reveal ~ as you draft it. You may look at the next card drafted from this booster pack".into(),
+            d::DRAFT_ADD_BOOSTER => "Reveal ~ as you draft it. After you draft ~, you may add a booster pack to the draft".into(),
+            d::DRAFT_LAST_CARD_TO_DRAFTER => "Each player passes the last card from each booster pack to a player who drafted a card named ~".into(),
             _ => return None,
         })
     }

@@ -288,7 +288,7 @@ fn keyword_list(s: &str, ctx: &CompileContext) -> Option<Vec<Modification>> {
 
 /// "a 3/3 creature", "a 2/2 creature with flying": the characteristics an "as enters"
 /// ability gives the permanent (CR 707.2).
-fn creature_form(s: &str, in_addition: bool, ctx: &CompileContext) -> Option<Vec<Modification>> {
+pub(crate) fn creature_form(s: &str, in_addition: bool, ctx: &CompileContext) -> Option<Vec<Modification>> {
     // A bare size: "your choice of 5/1 or 1/5" (Aquamorph Entity).
     if let Some((p, t)) = s.split_once('/') {
         if let (Ok(p), Ok(t)) = (p.parse::<i32>(), t.parse::<i32>()) {

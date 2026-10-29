@@ -1198,6 +1198,11 @@ pub fn player_ref(s: &str, b: &mut Builder) -> Option<(PlayerRef, String)> {
 /// Duration suffix: "until end of turn", "this turn", "until your next turn".
 pub fn duration_suffix(s: &str) -> (Duration, &str) {
     let t = s.trim();
+    // "until end of turn, or until any player rolls a 1, whichever comes first" (Drop
+    // Tower; `dice_coins_5`).
+    if let Some(x) = super::patterns::dice_coins_5::end_of_turn_or_roll(t) {
+        return x;
+    }
     for (p, d) in [
         (" until end of turn", Duration::EndOfTurn),
         (" this turn", Duration::EndOfTurn),

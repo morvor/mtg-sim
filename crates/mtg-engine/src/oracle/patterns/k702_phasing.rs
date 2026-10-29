@@ -18,7 +18,12 @@ fn phase_out(l: &str, b: &mut Builder) -> Option<Effect> {
     // "It phases out until ~ leaves the battlefield." (CR 610.4).
     let (l, until) = match l.strip_suffix(" until ~ leaves the battlefield") {
         Some(r) => (r, Some(UntilEvent::SourceLeavesBattlefield)),
-        None => (l, None),
+        // "until you roll a 3 or less while rolling to visit your Attractions" (Ferris
+        // Wheel, `dice_coins_5`).
+        None => match super::dice_coins_5::until_roll_to_visit(l) {
+            Some((r, u)) => (r, Some(u)),
+            None => (l, None),
+        },
     };
     let subject = l
         .strip_suffix(" phases out")

@@ -2241,6 +2241,10 @@ pub enum Duration {
     UntilPlaneswalk {
         away_from_plane: bool,
     },
+    /// "until end of turn, or until any player rolls a 1, whichever comes first" (Drop
+    /// Tower): it also ends as soon as any player's die roll has that result (CR 611.2b,
+    /// 706.2; see `dice::roll_dice`).
+    UntilEndOfTurnOrRoll(u32),
 }
 
 /// Which part of a player's next turn an [`Effect::DuringNext`] effect applies during.
@@ -3714,6 +3718,19 @@ pub enum StaticEffect {
     /// triggered ability]", whose source is this card (CR 603.7g).
     OpeningHand {
         delayed: Option<Box<(TriggerCond, Body)>>,
+        /// "If ~ is in your opening hand and you're not the starting player, ..." (Gemstone
+        /// Caverns): only a player who isn't the starting player may take the action
+        /// (CR 103.1, 103.6).
+        #[serde(default)]
+        not_starting_player: bool,
+        /// "... with a luck counter on it": counters the permanent begins the game with
+        /// (CR 103.6a, 122.6).
+        #[serde(default)]
+        counters: Vec<(CounterKind, u32)>,
+        /// "If you do, exile a card from your hand.": an instruction the player performs
+        /// right after beginning the game with it on the battlefield.
+        #[serde(default)]
+        then: Option<Box<Effect>>,
     },
     /// "If this card is your commander, choose a color before the game begins" (CR 607.2p):
     /// the choice is linked to the characteristic-defining ability in the same paragraph
@@ -5456,6 +5473,10 @@ pub enum UntilEvent {
     /// "until [target enchantment you control] leaves the battlefield": the object chosen
     /// as the target in that slot, as the effect begins (CR 610.3).
     TargetLeavesBattlefield(u8),
+    /// "until you roll a 3 or less while rolling to visit your Attractions" (Ferris Wheel):
+    /// the effect's controller rolls to visit their Attractions (CR 701.52) with a result
+    /// of at most this.
+    YouRollToVisitAtMost(u32),
 }
 
 impl Effect {
