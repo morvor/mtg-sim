@@ -35,6 +35,10 @@ impl Renderer<'_> {
             return self.gap("history filter");
         };
         let s = self.condition(&c2);
+        // "a creature dealt damage this turn by a source you controlled".
+        if let Some(r) = s.strip_prefix("~ was dealt ") {
+            return format!("{{opt:that was}} dealt {r}");
+        }
         match s.strip_prefix("~ ") {
             Some(r) => format!("that {r}"),
             None => format!("such that {s}"),
@@ -46,6 +50,22 @@ impl Renderer<'_> {
         let Some(c2) = reworded(c, false, true) else {
             return self.gap("history player filter");
         };
+        // "each player ~ attacked this turn".
+        if let Condition::Compare(
+            Value::EventsThisTurn(t, Tally::Events),
+            Cmp::Ge,
+            Value::Const(1),
+        ) = c
+        {
+            if let TriggerCond::AttacksRecipient {
+                attacker: Filter::Source,
+                recipient: DamageRecipient::Player(PlayerRel::Iterated),
+            } = t.as_ref()
+            {
+                let m = self.me();
+                return format!("{m} attacked this turn");
+            }
+        }
         let s = self.condition(&c2);
         if let Some(r) = s.strip_prefix("you've ") {
             return format!("who has {r}");

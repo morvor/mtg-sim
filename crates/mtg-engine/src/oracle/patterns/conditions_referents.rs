@@ -1235,6 +1235,14 @@ fn possessive(sel: &Sel, r: &str, b: &mut Builder) -> Option<Condition> {
                 let other = other_object(o, b)?;
                 return Some(Condition::Compare(stat.of(sel), Cmp::Gt, stat.of(&other)));
             }
+            // "its power is greater than each other creature's power"
+            for (q, cmp) in [("greater than ", Cmp::Gt), ("less than ", Cmp::Lt)] {
+                if let Some(c) = r.strip_prefix(q).and_then(|o| {
+                    super::conditions_compare::versus_each_other(&stat.of(sel), cmp, o)
+                }) {
+                    return Some(c);
+                }
+            }
             let (cmp, v) = value_cmp(r, b)?;
             return Some(Condition::Compare(stat.of(sel), cmp, v));
         }

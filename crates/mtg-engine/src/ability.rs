@@ -296,6 +296,9 @@ pub enum FunctionZone {
     Command,
     /// Functions in every zone (e.g. characteristic-defining abilities, CR 604.3).
     Anywhere,
+    /// Functions in its owner's graveyard and in exile ("Return ~ from your graveyard or
+    /// from exile to the battlefield", CR 113.6m).
+    GraveyardOrExile,
     /// Functions everywhere except the given zone, even outside the game (an ability that
     /// states which zones it doesn't function in, CR 113.6c).
     AnywhereExcept(ZoneKind),
@@ -1196,6 +1199,10 @@ pub enum PlayerRef {
     OwnerOf(Box<Sel>),
     /// The player from the triggering event.
     TriggerPlayer,
+    /// The players of the batch of events that triggered a "one or more" ability, each
+    /// once (CR 603.2c): "the number of opponents dealt damage this way", "each of those
+    /// opponents".
+    TriggerPlayers,
     /// The active player.
     ActivePlayer,
     /// "The attacking player": the active player (CR 506.2). With shared team turns, one
@@ -2388,6 +2395,12 @@ pub enum Modification {
         name: SmolStr,
         layer: Layer,
     },
+    /// A static ability's copy effect: "Enchanted creature is a copy of the chosen
+    /// creature" (CR 707.2, 613.2a): the affected objects have the copiable values of the
+    /// selected object, locked in as the effect first begins to apply (later changes to
+    /// that object's copiable values, or its leaving the battlefield, don't change them).
+    /// Applied in layer 1 with the copy effects (see `static_copy.rs`).
+    CopyOf(Box<Sel>),
 }
 
 impl Modification {
@@ -2436,6 +2449,7 @@ impl Modification {
             ModifyPT(..) => Layer::L7cModify,
             SwitchPT => Layer::L7dSwitch,
             Custom { layer, .. } => *layer,
+            CopyOf(_) => Layer::L1aCopy,
         }
     }
 }
@@ -4363,6 +4377,10 @@ pub enum BatchPer {
     /// battle": once for each player or battle dealt damage). The batch's objects are the
     /// sources (`EventInfo::other`).
     Recipient,
+    /// Once per controller of the other objects (`EventInfo::other`, e.g. the sources of
+    /// damage): "Whenever one or more creatures an opponent controls deal combat damage to
+    /// you" triggers once for each opponent whose creatures dealt it.
+    OtherController,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

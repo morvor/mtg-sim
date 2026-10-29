@@ -67,6 +67,43 @@ pub(crate) fn custom_clause_named(name: &str, subj: &str, negated: bool) -> Opti
 impl Renderer<'_> {
     /// "As you cast spells from your hand this turn, they gain cascade": a waiting effect
     /// for each such spell this turn, not only the next (`next_spell.rs`).
+    /// "The next creature card you play this turn can be played as though it had flash"
+    /// (`next_spell::CARD_YOU_PLAY`).
+    pub(crate) fn next_card_you_play(
+        &mut self,
+        filter: &Filter,
+        mods: &[Modification],
+        expires: &Duration,
+    ) -> Option<String> {
+        let mark = crate::next_spell::CARD_YOU_PLAY;
+        let Filter::And(parts) = filter else {
+            return None;
+        };
+        if !parts
+            .iter()
+            .any(|f| matches!(f, Filter::Custom(n) if n == mark))
+            || !matches!(expires, Duration::EndOfTurn | Duration::ThisTurn)
+            || !matches!(mods, [Modification::AddKeyword(k)]
+                if k.kind == crate::keywords::KeywordKind::Flash)
+        {
+            return None;
+        }
+        let rest: Vec<Filter> = parts
+            .iter()
+            .filter(|f| !matches!(f, Filter::Spell) && !matches!(f, Filter::Custom(n) if n == mark))
+            .cloned()
+            .collect();
+        let n = self.noun(&Filter::and(rest), Num::One);
+        let n = if n.contains("card") {
+            n
+        } else {
+            format!("{n} card")
+        };
+        Some(format!(
+            "the next {n} you play this turn can be played as though it had flash"
+        ))
+    }
+
     pub(crate) fn each_spell_this_turn(
         &mut self,
         filter: &Filter,

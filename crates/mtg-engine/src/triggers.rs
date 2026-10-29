@@ -375,6 +375,9 @@ impl Game {
                         .or(i.player.map(Entity::Player)),
                     BatchPer::Object => i.object.map(Entity::Object),
                     BatchPer::Other => i.other.map(Entity::Object),
+                    BatchPer::OtherController => {
+                        i.other.map(|o| Entity::Player(self.obj(o).controller))
+                    }
                 };
                 let mut groups: Vec<Vec<EventInfo>> = Vec::new();
                 let mut group_extra: Vec<usize> = Vec::new();
@@ -432,6 +435,12 @@ impl Game {
                         info.amount = g.len() as i32;
                     }
                     info.objects = Vec::new();
+                    info.players = Vec::new();
+                    for p in g.iter().filter_map(|i| i.player) {
+                        if !info.players.contains(&p) {
+                            info.players.push(p);
+                        }
+                    }
                     for i in &g {
                         // An event about several objects at once (the creatures attacking a
                         // player) contributes all of them.
