@@ -192,6 +192,10 @@ impl Renderer<'_> {
         if name == crate::kw::space_sculptor::IN_CHOSEN_SECTOR {
             return Some((false, "in the sector of your choice".into()));
         }
+        // Ferris Wheel (`dice_coins_5`).
+        if name == crate::oracle::patterns::dice_coins_5::NOT_PHASED_OUT_WITH_THIS {
+            return Some((false, "that hasn't been phased out with ~".into()));
+        }
         None
     }
 

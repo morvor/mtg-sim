@@ -46,6 +46,11 @@ fn ended(g: &Game, source: Option<ObjectId>, controller: PlayerId, until: &Until
                 !g.is_live(s) || o.zone != Zone::Battlefield
             }),
         // The events not yet processed (`check_untils` runs as they're flushed).
+        // "until you roll a 3 or less while rolling to visit your Attractions".
+        UntilEvent::YouRollToVisitAtMost(n) => g.events.iter().any(|e| {
+            matches!(e, crate::events::Event::Custom { name, player: Some(p), amount, .. }
+                if name == crate::variants::ROLLED_TO_VISIT && *p == controller && *amount <= *n as i32)
+        }),
         UntilEvent::OpponentBecomesMonarch => {
             let opponents = g.opponents(controller);
             g.events.iter().any(|e| {
@@ -135,6 +140,9 @@ pub fn exec_phase_out_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEven
         return;
     }
     crate::keyword_impls::phase_out(g, objs.clone());
+    if let Some(src) = ctx.source {
+        g.dice.phased_out_by.extend(objs.iter().map(|o| (src, *o)));
+    }
     let id = g.new_effect_id();
     g.untils.push(UntilEffect {
         id,

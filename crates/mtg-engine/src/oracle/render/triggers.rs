@@ -375,6 +375,14 @@ impl Renderer<'_> {
                 let s = self.trigger_text(inner);
                 format!("{s} this combat")
             }
+            TriggerCond::ForAsLongAs(inner, Condition::Custom(c))
+                if c.starts_with(
+                    crate::kw::until_end_of_players_next_turn::UNTIL_END_OF_YOUR_NEXT_TURN,
+                ) =>
+            {
+                let s = self.trigger_text(inner);
+                format!("until the end of your next turn, {}", lower_first(&s))
+            }
             TriggerCond::ForAsLongAs(inner, cond) => {
                 let s = self.trigger_text(inner);
                 let c = self.condition(cond);

@@ -1050,6 +1050,11 @@ impl Renderer<'_> {
             "unspent mana becomes C" => {
                 format!("if {subj} would lose unspent mana, that mana becomes colorless instead")
             }
+            // Bamboozling Beeble (`dice::NEXT_ROLL_EXTRA`).
+            crate::dice::NEXT_ROLL_EXTRA => {
+                let they = if you { "you" } else { "they" };
+                format!("the next time {subj} would roll one or more dice this turn, instead {they} roll that many dice plus one and you choose one of those rolls to ignore")
+            }
             crate::reveal::PLAYS_WITH_HAND_REVEALED => {
                 let verb = if you || subj.ends_with('s') {
                     "play"

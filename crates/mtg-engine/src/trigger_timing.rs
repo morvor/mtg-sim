@@ -85,6 +85,11 @@ pub fn is_sequencing(e: &Effect) -> bool {
             | Effect::Note { .. }
             | Effect::SetX { .. }
             | Effect::SelfReplace { .. }
+            // A roll and its results table (CR 706.3a, 706.3b): the roll is done before the
+            // row's instructions, each an instruction of its own ("Return those cards to
+            // the battlefield ..., then exile them again": the returned creatures' enters
+            // abilities trigger, Lae'zel's Acrobatics' rulings).
+            | Effect::RollDice(_)
     )
 }
 

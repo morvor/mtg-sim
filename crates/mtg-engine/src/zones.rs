@@ -312,6 +312,38 @@ pub const COST_UNATTACHED_FROM: Var = vars::USER + 14_562;
 /// they last existed on the battlefield ("that land", CR 608.2h).
 pub const COST_RETURNED: Var = vars::USER + 132;
 
+/// The objects an instruction about the source itself (`Sel::This`: "exile it", "~")
+/// moved while the spell or ability resolves, as the new objects they became. A target
+/// isn't such an object even if it was the source's card: "When ~ dies, exile it, then
+/// return up to two target ... cards from your graveyard" (Celestial Gatekeeper) doesn't
+/// return ~ when it was one of the targets (CR 400.7, 608.2b).
+pub const SOURCE_MOVED: Var = vars::USER + 18301;
+
+/// Records that the instruction about `what` moved `moved` (see [`SOURCE_MOVED`]).
+pub fn note_source_moved(ctx: &mut Ctx, what: &Sel, moved: &[ObjectId]) {
+    if matches!(what, Sel::This) && !moved.is_empty() {
+        ctx.vars
+            .entry(SOURCE_MOVED)
+            .or_default()
+            .extend(moved.iter().map(|o| Entity::Object(*o)));
+    }
+}
+
+/// `found` (what [`Game::found_after_move`] found for an object `what` selected) unless
+/// `what` is a target and `found` is what an instruction about the source moved: then
+/// the target is the object that moved, which is gone (CR 400.7).
+pub fn target_not_source_moved(ctx: &Ctx, what: &Sel, e: Entity, found: Entity) -> Entity {
+    let moved_source = ctx
+        .vars
+        .get(&SOURCE_MOVED)
+        .is_some_and(|v| v.contains(&found));
+    if found != e && moved_source && matches!(what, Sel::Target(_)) {
+        e
+    } else {
+        found
+    }
+}
+
 /// Whether a cost exiles cards other than its source ("Exile a creature card from your
 /// graveyard", "Exile the top card of your library").
 pub fn cost_exiles_a_card(cost: &Cost) -> bool {

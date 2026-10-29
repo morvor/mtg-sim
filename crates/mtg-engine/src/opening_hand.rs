@@ -147,26 +147,41 @@ pub fn opening_hand_actions_for(g: &mut Game, p: PlayerId) {
                 g.turn.active = p;
             }
         }
-        let actions: Vec<Option<Box<(TriggerCond, Body)>>> = g
+        let actions: Vec<OpeningHandAction> = g
             .obj(card)
             .chars
             .abilities
             .iter()
             .filter_map(|a| match &a.kind {
                 AbilityKind::Static(s) => match &s.effect {
-                    StaticEffect::OpeningHand { delayed } => Some(delayed.clone()),
+                    StaticEffect::OpeningHand {
+                        delayed,
+                        not_starting_player,
+                        counters,
+                        then,
+                    } => Some((
+                        delayed.clone(),
+                        *not_starting_player,
+                        counters.clone(),
+                        then.clone(),
+                    )),
                     _ => None,
                 },
                 _ => None,
             })
             .collect();
-        for delayed in actions {
+        for (delayed, not_starting_player, counters, then) in actions {
             let name = g.obj(card).chars.name.clone();
             match delayed {
                 None => {
+                    // "If ~ is in your opening hand and you're not the starting player, ..."
+                    // (Gemstone Caverns, CR 103.1).
+                    if not_starting_player && g.turn.starting_player == p {
+                        continue;
+                    }
                     let prompt = format!("Begin the game with {name} on the battlefield?");
                     if g.ask_yes_no(p, Some(card), &prompt, true) {
-                        g.move_object(card, Zone::Battlefield, MoveCause::Effect, Some(p));
+                        begin_on_battlefield(g, p, card, &counters, then.as_deref());
                         break;
                     }
                 }
@@ -183,6 +198,10 @@ pub fn opening_hand_actions_for(g: &mut Game, p: PlayerId) {
                         amount: 0,
                     });
                     let (trigger, body) = *d;
+                    // "When each opponent casts their first spell of the game, ...": it
+                    // triggers once for each opponent, whenever that happens.
+                    let whole_game = matches!(&trigger, TriggerCond::Custom(n)
+                        if n == crate::kw::first_spell_of_game::OPPONENT_FIRST_SPELL_OF_GAME);
                     // CR 603.7g: the source is the card with the static ability; its
                     // controller is the player who took the action.
                     let id = g.new_effect_id();
@@ -192,16 +211,61 @@ pub fn opening_hand_actions_for(g: &mut Game, p: PlayerId) {
                         controller: p,
                         trigger,
                         body,
-                        once: true,
+                        once: !whole_game,
                         ctx: Ctx::new(Some(card), p),
                         created_turn: g.turn.number,
                         created_step: None,
                         created_steps: 0,
-                        for_rest_of_game: false,
+                        for_rest_of_game: whole_game,
                         performer: None,
                     });
                 }
             }
         }
     }
+}
+
+/// An opening-hand action of a card: its delayed triggered ability, or beginning the game
+/// with it on the battlefield (only if its owner isn't the starting player, with counters,
+/// then an instruction).
+type OpeningHandAction = (
+    Option<Box<(TriggerCond, Body)>>,
+    bool,
+    Vec<(crate::types::CounterKind, u32)>,
+    Option<Box<Effect>>,
+);
+
+/// CR 103.6a: `p` puts `card` onto the battlefield from their opening hand, with the
+/// counters the ability names (CR 122.6), then performs the ability's further instruction
+/// ("If you do, exile a card from your hand.").
+fn begin_on_battlefield(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    counters: &[(crate::types::CounterKind, u32)],
+    then: Option<&Effect>,
+) {
+    let mut ctx = Ctx::new(Some(card), p);
+    let mut to = Destination::battlefield();
+    to.with_counters = counters
+        .iter()
+        .map(|(k, n)| (k.clone(), Value::c(*n as i32)))
+        .collect();
+    g.exec(
+        &Effect::Move {
+            what: Sel::This,
+            to,
+        },
+        &mut ctx,
+    );
+    let Some(e) = then else {
+        return;
+    };
+    if !ctx.prev_happened {
+        return;
+    }
+    let cur = g.current(card);
+    let source = (g.obj(cur).zone == Zone::Battlefield).then_some(cur);
+    let mut c = Ctx::new(source, p);
+    g.exec(e, &mut c);
 }

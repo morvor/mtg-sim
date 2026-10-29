@@ -482,6 +482,12 @@ fn p_flip(l: &str, _b: &mut Builder) -> Option<Effect> {
         spec.until_lose = true;
         return Some(Effect::FlipCoins(Box::new(spec)));
     }
+    // "Flip a coin until you lose a flip or choose to stop flipping." (Fiery Gambit)
+    if r == "a coin until you lose a flip or choose to stop flipping" {
+        spec.until_lose = true;
+        spec.may_stop = true;
+        return Some(Effect::FlipCoins(Box::new(spec)));
+    }
     let (n, rest) = parse_number(r)?;
     if !matches!(rest.trim(), "coin" | "coins") {
         return None;
@@ -621,6 +627,11 @@ pub(crate) fn last_flip(e: &mut Effect) -> Option<&mut CoinFlip> {
 /// "If you win the flip, X." / "If you lose the flip, X." / "If the coin comes up heads,
 /// X." / "If it comes up tails, X." after a coin flip.
 fn f_flip_result(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    // "When you win the flip, copy that spell." (Breeches, the Blastmaker): a triggered
+    // ability for the flip's result (`dice_coins_5`).
+    if super::dice_coins_5::when_flip_result(l, prev, b) {
+        return true;
+    }
     let Some(r) = l.strip_prefix("if ") else {
         return false;
     };
