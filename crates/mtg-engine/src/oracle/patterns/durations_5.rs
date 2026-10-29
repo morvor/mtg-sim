@@ -254,3 +254,78 @@ fn for_as_long_as_source_remains_first(l: &str, b: &mut Builder) -> Option<Effec
 }
 
 inventory::submit! { EffectPattern { name: "durations 5: for as long as ~ remains on the battlefield, [instruction with quoted abilities]", priority: 90, parse: for_as_long_as_source_remains_first } }
+
+/// Verbs that start a second predicate of a player subject ("can't cast spells ... and
+/// plays with their hand revealed").
+const PLAYER_PREDICATES: [&str; 6] = ["plays ", "can't ", "skips ", "loses ", "gains ", "gets "];
+
+/// "This turn, that player can't cast spells or activate abilities and plays with their
+/// hand revealed." (Sen Triplets): each predicate of the player is its own instruction
+/// lasting this turn.
+fn this_turn_player_predicates(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("this turn, ")?;
+    let (subject, preds) = ["that player ", "target player ", "target opponent "]
+        .into_iter()
+        .find_map(|s| r.strip_prefix(s).map(|p| (s, p)))?;
+    let (a, c) = preds
+        .match_indices(" and ")
+        .map(|(i, _)| (&preds[..i], &preds[i + 5..]))
+        .find(|(_, c)| PLAYER_PREDICATES.iter().any(|v| c.starts_with(v)))?;
+    let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
+    let first = parse_sentence(&format!("{subject}{a} this turn"), b);
+    // The second predicate is about the same player.
+    let second = first
+        .as_ref()
+        .and_then(|_| parse_sentence(&format!("that player {c} this turn"), b));
+    match (first, second) {
+        (Some(x), Some(y)) => Some(Effect::seq(vec![x, y])),
+        _ => {
+            b.targets.truncate(saved.0);
+            (b.it, b.it_player) = (saved.1, saved.2);
+            None
+        }
+    }
+}
+
+inventory::submit! { EffectPattern { name: "durations 5: this turn, [player] [predicate] and [predicate]", priority: 90, parse: this_turn_player_predicates } }
+
+/// "You may play lands and cast spells from that player's hand this turn." (Sen
+/// Triplets): a permission to play the cards in that player's hand (the player as the
+/// effect begins), as lands or spells (CR 305.1, 601.2a).
+fn play_from_that_players_hand(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("you may ")?;
+    let (lands, spells, r) = if let Some(r) = r.strip_prefix("play lands and cast spells ") {
+        (true, true, r)
+    } else if let Some(r) = r.strip_prefix("cast spells ") {
+        (false, true, r)
+    } else {
+        return None;
+    };
+    if r != "from that player's hand this turn"
+        || !matches!(b.it_player, PlayerRef::Target(_) | PlayerRef::TriggerPlayer)
+    {
+        return None;
+    }
+    let terms = PlayTerms {
+        any_owner: true,
+        ..Default::default()
+    };
+    Some(Effect::AddPlayerEffect {
+        who: PlayerRef::You,
+        effect: PlayerModification::PlayPermission(PlayPermission {
+            who: PlayerRel::You,
+            zone: ZoneKind::Hand,
+            top_only: false,
+            what: Filter::OwnedByPlayer(Box::new(b.it_player.clone())),
+            lands,
+            spells,
+            cost: None,
+            flash: false,
+            terms,
+        }),
+        duration: Duration::EndOfTurn,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "durations 5: you may play lands and cast spells from that player's hand this turn", priority: 100, parse: play_from_that_players_hand } }

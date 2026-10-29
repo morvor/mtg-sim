@@ -312,3 +312,42 @@ fn kitesail_larcenist_gone_before_its_ability_resolves_does_nothing() {
     assert!(!t.obj_now(giant).chars.has_subtype("Treasure"));
     assert!(t.obj_now(giant).chars.card_types.contains(CardType::Creature));
 }
+
+#[test]
+fn sen_triplets_locks_the_opponent_and_lets_you_play_from_their_hand() {
+    cr!("611.2a", "305.1", "601.2a");
+    ruling!(
+        "Sen Triplets",
+        "Sen Triplets doesn't allow you to play more than one land during your turn"
+    );
+    supported("Sen Triplets");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sen Triplets");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let forest = t.hand(P1, "Forest");
+    let mountain = t.hand(P1, "Mountain");
+    t.advance_to(P0, Step::Upkeep);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve_all();
+    // The opponent can't cast spells this turn.
+    mana(&mut t, P1);
+    assert!(t.cast_with(P1, bolt, &[Entity::Player(P0)]).is_err());
+    t.g.players[1].mana_pool = Default::default();
+    // P0 casts the opponent's Bolt and plays one of their lands.
+    t.advance_to(P0, Step::PrecombatMain);
+    mana(&mut t, P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_graveyard(P1, "Lightning Bolt"), "its owner's graveyard");
+    t.play_land(P0, forest).unwrap();
+    let f = t.g.current(forest);
+    assert!(t.on_battlefield(f));
+    assert_eq!(t.obj_now(f).controller, P0);
+    assert!(t.play_land(P0, mountain).is_err(), "one land a turn");
+    // Only this turn.
+    let shock = t.hand(P1, "Shock");
+    t.advance_to(P1, Step::PrecombatMain);
+    mana(&mut t, P0);
+    assert!(t.cast_with(P0, shock, &[Entity::Player(P1)]).is_err());
+}
