@@ -698,7 +698,7 @@ fn crab_emerges(t: &mut TestGame, artifact: ObjectId, swamps: usize) -> bool {
 
 #[test]
 fn crabomination_emerge_uses_the_artifacts_mana_value() {
-    cr!("202.3", "202.3a", "702.119a", "707.2");
+    cr!("202.3", "202.3a", "702.119a", "707.2", "712.8g");
     ruling!(
         "Crabomination",
         "An artifact's mana value is determined solely by the mana symbols printed in its upper right corner (unless that artifact is the back face of a double-faced card, is a melded permanent, or is copying something else; see below). If the mana cost includes {X}, X is 0. If it's a single-faced card with no mana symbols in its upper right corner (because it's an animated land, for example), its mana value is 0. Ignore any alternative costs or additional costs (such as kicker) that were paid as the artifact was cast."
@@ -772,6 +772,31 @@ fn crabomination_emerge_uses_the_artifacts_mana_value() {
         let a = setup(&mut t);
         assert!(!crab_emerges(&mut t, a, 6 - mv), "{what}: one mana fewer");
     }
+    // A melded permanent: the sum of its front faces' mana values. Mishra, Lost to
+    // Phyrexia (an artifact) from Mishra, Claimed by Gix {2}{B}{R} and Phyrexian Dragon
+    // Engine {3}: 7, so only {B}{B} (the colored part, never reduced) is left to pay.
+    let melded = |t: &mut TestGame| {
+        let mishra = t.exile(P0, "Mishra, Claimed by Gix");
+        let engine = t.exile(P0, "Phyrexian Dragon Engine");
+        let m = mtg_engine::merge::meld(
+            &mut t.g,
+            mishra,
+            engine,
+            mtg_engine::card::card("Mishra, Lost to Phyrexia"),
+            P0,
+        )
+        .expect("meld");
+        t.g.recompute();
+        m
+    };
+    let mut t = TestGame::new(2);
+    let m = melded(&mut t);
+    assert!(t.obj(m).chars.is(mtg_engine::types::CardType::Artifact));
+    assert_eq!(t.g.mana_value_of(m), 7);
+    assert!(crab_emerges(&mut t, m, 2), "melded");
+    let mut t = TestGame::new(2);
+    let m = melded(&mut t);
+    assert!(!crab_emerges(&mut t, m, 1), "melded: one mana fewer");
 }
 
 #[test]

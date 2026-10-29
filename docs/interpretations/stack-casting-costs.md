@@ -112,14 +112,14 @@ index: `docs/INTERPRETATIONS.md`.
 - Code: `crates/mtg-engine/src/oracle/patterns/spell_cost_grammar.rs` (`any_number_additional_cost`); rendered back as one line by `crates/mtg-engine/src/oracle/render/cost_paid_copies.rs`.
 - Tests: `tests/rulings/r_p031_spell_copies.rs` (`plumb_the_forbidden_copies_for_each_creature_sacrificed`).
 
-## cast-order-as-chosen: Several spells cast from among cards during a resolution are cast in the order the player lists them
+## cast-order-as-chosen: Several spells cast from among cards during a resolution are cast in the order the player's answer lists them
 - Kind: policy
 - Status: decided
 - Rules: 608.2g "... If an effect specifically instructs or allows a player to cast a spell during resolution, they do so by following the steps in rules 601.2a–i, except no player receives priority after it’s cast. That spell becomes the topmost object on the stack, and the currently resolving spell or ability continues to resolve, which may include casting other spells this way. ..."
-- Question: "You may cast up to two spells from among the other cards exiled this way" (Plargg and Nassari; Etali, Primal Storm; Villainous Wealth, ...) lets the player cast the spells one after another, in any order (the Plargg and Nassari ruling). The order matters: a later spell can target an earlier one (Twincast after Lightning Strike), and each spell's targets are chosen with the earlier ones on the stack. The agent interface asks for the cards to cast with one `ChooseEntities` decision; how is the order chosen?
-- Decision: The cards are cast in the order the player's answer lists them; the default answer (and an invalid one) takes the cards in the order the candidates were offered.
-- Alternatives: Ask for the next card to cast after each cast (one decision per spell): exact, more decisions; cast in the order the engine lists the cards (what the engine did before): the player can't put Twincast after Lightning Strike when Twincast is listed first.
-- Why: The answer is already an ordered list, so the player gets every order without a new decision.
+- Question: That the player chooses the order isn't a judgment call: 608.2g has the spells cast one at a time, and the rulings say so (Etali, Primal Storm: "If you cast more than one of the exiled cards, you choose the order in which to cast them."; Plargg and Nassari: "You can cast them in any order."). What this entry records is only how the agent interface expresses that order, and the default: the engine asks for the cards to cast with one `ChooseEntities` decision.
+- Decision: The cards are cast in the order the player's answer lists them; the default answer (and an invalid one) takes the cards in the order the candidates were offered (as `default-first-listed-choice`).
+- Alternatives: Ask for the next card to cast after each cast (one decision per spell): exact, more decisions; cast in the order the engine lists the cards (what the engine did before): contradicts the rulings, since the player couldn't put Twincast after Lightning Strike when Twincast is listed first.
+- Why: The answer is already an ordered list, so the player gets every order the rules allow without a new decision. Uncontroversial (an interface encoding, not a reading of the rules), so not provisional.
 - Affects: every "cast [any number / up to N] spells from among [cards]" effect compiled to `Effect::CastCard` with a choice (Plargg and Nassari, Etali, Primal Storm, Villainous Wealth and the like).
 - Code: `crates/mtg-engine/src/spell_choice.rs` (`choose_cards_to_cast`).
 - Tests: `tests/rulings/r_p066_exile.rs` (`plargg_spells_cast_this_way_can_target_earlier_ones`).

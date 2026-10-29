@@ -92,3 +92,33 @@ fn default_modes_repeat_a_mode_that_may_be_chosen_more_than_once() {
     assert_eq!(scions, 3);
 }
 
+#[test]
+fn fiery_confluence_default_modes_repeat_the_available_ones() {
+    cr!("700.2d", "700.2a");
+    interp!("default-first-listed-choice");
+    // Fiery Confluence: "Choose three. You may choose the same mode more than once." With
+    // no artifact to target, the default takes "1 damage to each creature", "2 damage to
+    // each opponent", then "1 damage to each creature" again: performed in printed order,
+    // 2 damage to each creature and 2 to each opponent.
+    let mut t = TestGame::new(2);
+    t.g.players[0].mana_pool.add_type(ManaType::R, 4);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let c = t.hand(P0, "Fiery Confluence");
+    t.cast(P0, c).go();
+    t.resolve_all();
+    assert_eq!(t.zone(bears), mtg_engine::object::Zone::Graveyard(P1));
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.obj(giant).damage, 2);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 20);
+    // A chosen answer may repeat one mode: three times 2 damage to each opponent.
+    let mut t = TestGame::new(2);
+    t.g.players[0].mana_pool.add_type(ManaType::R, 4);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let c = t.hand(P0, "Fiery Confluence");
+    t.cast(P0, c).modes(&[1, 1, 1]).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert!(t.on_battlefield(bears));
+}

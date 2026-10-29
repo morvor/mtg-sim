@@ -123,7 +123,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `per-source-prevention-division` | A shared "prevent X of that damage" is divided by its controller only when one source's damage exceeds X | policy | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `shared-color-source-locked` | "A source of your choice that shares a color with X" compares with X's colors as the effect is created | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `automatic-mana-payment` | The engine chooses which mana abilities pay a cost | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
-| `cast-order-as-chosen` | Several spells cast from among cards during a resolution are cast in the order the player lists them | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
+| `cast-order-as-chosen` | Several spells cast from among cards during a resolution are cast in the order the player's answer lists them | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `castability-is-optimistic` | The engine's list of castable spells assumes favorable choices | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `cost-paid-reflexive-trigger` | "When you do" after an optional additional cost is a cast trigger | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `illegal-action-reversal-restores-libraries` | Reversing an illegal action keeps the library actions 733.1 names, and undoes the rest | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
