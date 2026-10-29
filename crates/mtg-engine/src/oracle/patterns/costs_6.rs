@@ -170,13 +170,13 @@ fn sacrifice_self_and_any_number_then_exile(
         if !matches!(what, Sel::This) {
             return None;
         }
-        *what = Sel::Union(vec![
-            Sel::This,
-            Sel::Matching(
-                Box::new(Sel::Var(crate::zones::COST_MOVED)),
-                Filter::and(vec![Filter::Type(t), Filter::InZone(ZoneKind::Graveyard)]),
-            ),
-        ]);
+        // What the cost sacrificed is ~ and the creatures: the new objects they became in
+        // the graveyard (tokens cease to exist, CR 111.7).
+        let _ = t;
+        *what = Sel::Matching(
+            Box::new(Sel::Var(crate::zones::COST_MOVED)),
+            Filter::InZone(ZoneKind::Graveyard),
+        );
     }
     a.text = block.trim().to_string();
     Some(abilities)

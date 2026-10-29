@@ -325,6 +325,16 @@ pub fn target_not_source_moved(ctx: &Ctx, what: &Sel, e: Entity, found: Entity) 
 pub fn cost_exiles_a_card(cost: &Cost) -> bool {
     cost.parts.iter().any(|p| match p {
         CostPart::Exile { .. } => true,
+        // "Exile a creature card from your graveyard and pay its mana cost",
+        // "Exile one or more other artifacts you control ..." (`cost_sets.rs`).
+        CostPart::AndPayItsManaCost(_) | CostPart::AnyNumberOf { .. } => {
+            cost_exiles_a_card(&Cost::free().with(match p {
+                CostPart::AndPayItsManaCost(i) | CostPart::AnyNumberOf { part: i, .. } => {
+                    (**i).clone()
+                }
+                _ => CostPart::Tap,
+            }))
+        }
         // "Exile the top card of your library" (an action as a cost).
         CostPart::Effect(e) => {
             matches!(&**e, Effect::Move { to, .. } if to.zone == ZoneKind::Exile)
@@ -366,6 +376,25 @@ pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
             || text.starts_with("You may cast that card"))
     {
         changed = true;
+    }
+    // "Exile a creature card from your graveyard [and pay its mana cost]: Create a token
+    // that's a copy of that card." (Back from the Brink): the one card the cost exiled, in
+    // the first instruction, before the effect names anything else.
+    let one_card = cost.parts.iter().any(|p| {
+        matches!(
+            p,
+            CostPart::Exile {
+                count: Value::Const(1),
+                zone: ZoneKind::Graveyard | ZoneKind::Hand,
+                ..
+            }
+        ) || matches!(p, CostPart::AndPayItsManaCost(_))
+    });
+    if !changed && one_card {
+        let first = text.split(". ").next().unwrap_or(&text);
+        if first.contains("that card") && !first.contains(" target ") {
+            changed = true;
+        }
     }
     changed.then_some(text)
 }
