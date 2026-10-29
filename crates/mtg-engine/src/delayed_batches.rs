@@ -72,6 +72,12 @@ pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> 
                 info.amount = grp.len() as i32;
             }
             info.objects = Vec::new();
+            info.players = Vec::new();
+            for p in grp.iter().filter_map(|i| i.player) {
+                if !info.players.contains(&p) {
+                    info.players.push(p);
+                }
+            }
             for i in &grp {
                 for o in i.object.or(i.other).into_iter() {
                     if !info.objects.contains(&o) {

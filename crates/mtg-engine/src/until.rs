@@ -75,6 +75,7 @@ pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, c
     let watched = watched_object(g, until, ctx);
     if ended(g, watched, ctx.controller, until) {
         ctx.prev_affected.clear();
+        ctx.prev_happened = false;
         return;
     }
     let moves: Vec<MoveEv> = objs
@@ -105,6 +106,8 @@ pub fn exec_exile_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEvent, c
     }
     ctx.prev_affected = exiled.iter().map(|(o, _)| Entity::Object(*o)).collect();
     ctx.set_var(vars::IT, ctx.prev_affected.clone());
+    // "Exile ... until ~ leaves the battlefield. When you do, ..." (CR 603.12).
+    ctx.prev_happened = !exiled.is_empty();
     if exiled.is_empty() {
         return;
     }

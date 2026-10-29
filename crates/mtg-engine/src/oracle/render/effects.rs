@@ -7626,6 +7626,10 @@ impl Renderer<'_> {
                     let g = self.gap("Modification::SetText");
                     parts.push(g)
                 }
+                Modification::CopyOf(s) => {
+                    let s = self.sel(s, Case::Obj);
+                    parts.push(format!("is a copy of {s}"));
+                }
                 Modification::FullTextOf(s) => {
                     let s = self.sel(s, Case::Poss);
                     parts.push(format!("has the full text of {s}"));

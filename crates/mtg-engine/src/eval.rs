@@ -568,6 +568,11 @@ impl Game {
                 .and_then(|e| e.player)
                 .into_iter()
                 .collect(),
+            PlayerRef::TriggerPlayers => ctx
+                .event
+                .as_ref()
+                .map(|e| e.players.clone())
+                .unwrap_or_default(),
             // CR 805.9: with shared team turns, the active player the ability's controller
             // chose as its effect began to apply.
             PlayerRef::ActivePlayer => ctx

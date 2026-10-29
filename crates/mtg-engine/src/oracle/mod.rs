@@ -78,6 +78,15 @@ pub fn raw_text() -> String {
     RAW_TEXT.with(|r| r.borrow().clone())
 }
 
+/// Runs `f` with [`raw_text`] reading `text` (a rewording of the face's text that a
+/// pattern compiles instead of it), then restores it.
+pub(crate) fn with_raw_text<R>(text: &str, f: impl FnOnce() -> R) -> R {
+    let prev = RAW_TEXT.with(|r| r.replace(text.to_string()));
+    let out = f();
+    RAW_TEXT.with(|r| *r.borrow_mut() = prev);
+    out
+}
+
 /// Runs `f` with hand-written definitions ([`crate::cards`]) disabled on this thread, so
 /// that what the compiler parses on its own can be checked (`manual-check`).
 pub fn without_manual<T>(f: impl FnOnce() -> T) -> T {
