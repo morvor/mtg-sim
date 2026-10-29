@@ -103,6 +103,11 @@ fn with_zero_targets_a_player_is_still_chosen_and_draws() {
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
     assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert_eq!(
+        t.hand_size(P0),
+        0,
+        "the chosen player draws, not the controller"
+    );
 }
 
 #[test]
@@ -143,4 +148,9 @@ fn choosing_yourself_targets_your_own_graveyard() {
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
     assert!(t.in_hand(P0, "Mountain"));
+    // It triggers once: not again at the beginning of P0's next upkeep.
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand, "one draw only");
 }

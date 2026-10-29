@@ -116,3 +116,42 @@ fn the_permission_lasts_only_this_turn() {
     let div = t.hand(P0, "Divination");
     assert!(t.cast(P0, div).try_go().is_err());
 }
+
+#[test]
+fn not_for_a_spell_cast_for_an_alternative_cost() {
+    interp!("one-spell-spend-permission");
+    cr!("118.9", "609.4b");
+    // Mulldrifter's evoke cost {2}{U} is paid rather than its mana cost: red mana can't
+    // pay its {U}, and the permission isn't used up ...
+    let mut t = activated(5);
+    let md = t.hand(P0, "Mulldrifter");
+    assert!(t
+        .cast(P0, md)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Evoke
+        ))
+        .try_go()
+        .is_err());
+    assert_eq!(t.zone(md), Zone::Hand(P0));
+    // ... so it can still pay its mana cost {4}{U} with red mana.
+    t.answer_yes(P0, true);
+    t.library_top(P0, "Island");
+    t.library_top(P0, "Island");
+    t.cast(P0, md).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 2, "Mulldrifter entered and drew two cards");
+}
+
+#[test]
+fn x_in_the_mana_cost_is_generic_and_colored_symbols_are_covered() {
+    interp!("one-spell-spend-permission");
+    cr!("609.4b", "107.3");
+    // Blue Sun's Zenith ({X}{U}{U}{U}) with X=1, paid with four red mana.
+    let mut t = activated(4);
+    t.library_top(P0, "Island");
+    let z = t.hand(P0, "Blue Sun's Zenith");
+    t.answer_yes(P0, true);
+    t.cast(P0, z).target(Entity::Player(P0)).x(1).go();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Island"));
+}
