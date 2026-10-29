@@ -24,8 +24,10 @@ impl Renderer<'_> {
     /// nightbound). The engine tells these apart by the keyword's name text.
     fn variant(k: &Keyword) -> Option<&'static str> {
         let t = k.text.as_deref().unwrap_or("").to_lowercase();
-        let pairs: [(&str, &str); 8] = [
+        let pairs: [(&str, &str); 9] = [
             ("megamorph", "megamorph"),
+            // CR 702.49d (`kw/ninjutsu.rs`: is_commander_ninjutsu).
+            ("commander ninjutsu", "commander ninjutsu"),
             ("multikicker", "multikicker"),
             ("sticker kicker", "sticker kicker"),
             ("trample over planeswalkers", "trample over planeswalkers"),
@@ -49,6 +51,11 @@ impl Renderer<'_> {
         };
         let cost = |r: &mut Self, c: &Cost| -> String {
             let s = r.cost(c);
+            // "Madness—Pay six {C}": the same cost, the colorless symbols counted.
+            let n = s.matches("{C}").count();
+            if c.parts.is_empty() && n >= 2 && s.len() == 3 * n {
+                return format!(" {{alt:{s}|— pay {} {{C}}}}", number_word(n as i32));
+            }
             if c.mana.is_some() && c.parts.is_empty() {
                 format!(" {s}")
             } else if c.mana.is_none() {
@@ -58,6 +65,16 @@ impl Renderer<'_> {
             }
         };
         match k.kind {
+            // "has escape. The escape cost is equal to its mana cost plus exile three other
+            // cards from your graveyard" (`kw/escape.rs`: the keyword's cost is the added
+            // part).
+            KeywordKind::Escape if k.text.as_deref() == Some(crate::kw::escape::MANA_COST_PLUS) => {
+                let c = k.cost.as_ref().map(|c| self.cost(c)).unwrap_or_default();
+                let c = super::effects::lower_first(&c);
+                format!(
+                    "escape. The escape cost is equal to {{alt:its|the card's}} mana cost plus {c}"
+                )
+            }
             KeywordKind::Enchant => match &k.filter {
                 // "enchant creature put onto the battlefield with ~" (CR 607.2c).
                 Some(Filter::And(v))

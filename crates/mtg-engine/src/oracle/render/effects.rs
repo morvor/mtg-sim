@@ -410,7 +410,7 @@ impl Renderer<'_> {
     /// "You may choose new targets for the copy" (CR 707.10c): the player who copies
     /// the spell may choose; inside an instruction another player follows ("that player
     /// may copy ~"), that player, so the clause shares the instruction's subject.
-    fn choose_new_targets(&self, copies: &str) -> String {
+    pub(crate) fn choose_new_targets(&self, copies: &str) -> String {
         if self.in_as_player {
             format!(" and may choose new targets for {copies}")
         } else {
@@ -491,6 +491,12 @@ impl Renderer<'_> {
         match e {
             Effect::Noop => String::new(),
             Effect::Seq(v) => self.seq(v),
+            // A condition that's always true is no condition.
+            Effect::If {
+                cond: Condition::Always,
+                then,
+                otherwise,
+            } if matches!(otherwise.as_ref(), Effect::Noop) => self.effect(then),
             Effect::If {
                 cond,
                 then,
@@ -876,6 +882,19 @@ impl Renderer<'_> {
                     format!("for {w}, {inner}")
                 }
             }
+            // A custom effect worded about the player who performs it.
+            Effect::AsPlayer { who, effect }
+                if matches!(effect.as_ref(), Effect::Custom(n)
+                    if crate::kw::game_rules_4::reduce_highest_speed_args(n).is_some()) =>
+            {
+                let Effect::Custom(n) = effect.as_ref() else {
+                    return self.gap("AsPlayer custom");
+                };
+                match self.custom_effect_as_player(who, n) {
+                    Some(s) => s,
+                    None => self.gap(format!("Effect::Custom({n})")),
+                }
+            }
             Effect::AsPlayer { who, effect } if self.choose_and_pay_each(effect).is_some() => {
                 let w = self.player(who, Case::Subj);
                 let s = self.choose_and_pay_each(effect).unwrap_or_default();
@@ -1254,6 +1273,21 @@ impl Renderer<'_> {
                         }
                     }
                     let mut s = self.sel(&strip_chooser(sel), Case::Obj);
+                    // "Target opponent chooses one of the top two cards of your
+                    // graveyard": one of a group already selected.
+                    if let Sel::Choose {
+                        filter: Filter::In(g),
+                        count: Value::Const(1),
+                        up_to: false,
+                        ..
+                    } = sel
+                    {
+                        if matches!(g.as_ref(), Sel::Var(v) if *v != vars::IT)
+                            && s.starts_with("the top ")
+                        {
+                            s = format!("one of {s}");
+                        }
+                    }
                     // "Target opponent reveals their hand. You choose a nonland card from
                     // it."
                     if self.revealed_hand {
@@ -2069,6 +2103,16 @@ impl Renderer<'_> {
                         );
                     }
                 }
+                // "The tokens are goaded for the rest of the game": the tokens just
+                // created; a resolving effect with no duration lasts for the rest of the
+                // game (CR 611.2a), as cards say or not.
+                if let (Restriction::Goaded(Filter::In(s)), Duration::Permanent) =
+                    (restriction, duration)
+                {
+                    if matches!(s.as_ref(), Sel::Var(v) if *v == vars::CREATED) {
+                        return "{alt:it is|they are|the tokens are|those tokens are|the token is|that token is} goaded {opt:for the rest of the game}".into();
+                    }
+                }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);
                 // "~ can attack this turn as though it didn't have defender."
@@ -2836,6 +2880,24 @@ impl Renderer<'_> {
                     let n = self.noun(f, Num::Many);
                     return format!("for each color among {n}, add one mana of that color");
                 }
+                // "Choose a color of a permanent you control. Add one mana of that color."
+                // (the same as one mana of any color among them).
+                if let (ManaProduction::AnyColorAmong(f), PlayerRef::You, None) =
+                    (mana, who, restriction)
+                {
+                    let simple = !matches!(f, Filter::Source)
+                        && !matches!(f, Filter::And(v) if v.iter()
+                            .any(|x| matches!(x, Filter::In(s) if matches!(**s, Sel::Linked))));
+                    if simple {
+                        let m = self.mana_production(mana);
+                        let a = self.noun_det(f, Det::A);
+                        if !m.contains('{') && !a.contains('{') {
+                            return format!(
+                                "{{alt:add {m}|choose a color of {a}. add one mana of that color}}"
+                            );
+                        }
+                    }
+                }
                 let m = self.mana_production(mana);
                 // "Choose a color. Add an amount of mana of that color equal to the number
                 // of ..." (Three Tree City): X mana of any one color.
@@ -3232,6 +3294,13 @@ impl Renderer<'_> {
                     // "Return it to the battlefield at the beginning of your next upkeep.
                     // It gains haste.": the time may follow the first instruction.
                     format!("{{alt:{t}, {one}|{first} {t}. {rest}}}")
+                } else if let (false, TriggerCond::ThisTurn(inner), false) =
+                    (*once, trigger, b.contains('{') || t.contains('{'))
+                {
+                    // "Until end of turn, whenever you cast a spell, copy it": the same
+                    // trigger for the rest of the turn.
+                    let w = self.trigger_text(inner);
+                    format!("{{alt:{t}, {b}|until end of turn, {w}, {b}}}")
                 } else {
                     format!("{t}, {b}")
                 }
@@ -3416,9 +3485,9 @@ impl Renderer<'_> {
                 let w = self.player(who, Case::Subj);
                 let a = self.noun(among, Num::Many);
                 let k: Vec<String> = keep.iter().map(|f| self.noun_det(f, Det::A)).collect();
+                let k = join_list(&k, "and");
                 format!(
-                    "{w} chooses from among the {a} they control {}, then sacrifices the rest",
-                    join_list(&k, "and")
+                    "{w} chooses {{alt:from among the {a} they control {k}|{k} from among the {a} they control}}, then sacrifices the rest"
                 )
             }
             Effect::RestartGame { keep } => match keep {
@@ -4815,7 +4884,22 @@ impl Renderer<'_> {
                     let mentions: usize = chosen.iter().map(|(c, _)| n.matches(*c).count()).sum();
                     if mentions == 1 && !n.contains("chosen player") {
                         if let Some((c, r)) = chosen.iter().find(|(c, _)| n.contains(*c)) {
-                            parts.push(n.replacen(c, r, 1));
+                            let one = n.replacen(c, r, 1);
+                            // Or the choice said first: "Choose an opponent. That player
+                            // returns a card ...".
+                            let that = if r.ends_with("'s") {
+                                "that player's"
+                            } else {
+                                "that player"
+                            };
+                            let two = n.replacen(c, that, 1);
+                            if one.contains('{') {
+                                parts.push(one);
+                            } else {
+                                parts.push(format!(
+                                    "{{alt:{one}|choose an opponent. {two}|choose one of your opponents. {two}}}"
+                                ));
+                            }
                             i += 2;
                             continue;
                         }
@@ -5023,7 +5107,12 @@ impl Renderer<'_> {
                 // The cards in graveyards before an instruction, named by the later
                 // "that weren't put there this way" it's remembered for.
                 let put_there = var_n == crate::oracle::patterns::referents_values_4::PUT_THERE;
-                if !next.is_some_and(names) && !named_later && !put_there {
+                // ("Put that card on the bottom of your library and return the other to
+                // the battlefield": the rest, named by the instruction after the next.)
+                let named_after = v
+                    .get(i + 2)
+                    .is_some_and(|n| names(n) && matches!(next, Some(Effect::Move { .. })));
+                if !next.is_some_and(names) && !named_later && !put_there && !named_after {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
             }
@@ -8591,6 +8680,10 @@ impl Renderer<'_> {
                 let a = with_article(&one);
                 format!("to activate {{alt:abilities of {n}|an ability of {a}|an ability of {a} source}}")
             }
+            M::ActivateManaAbilityOf(f) => {
+                let n = self.noun(&f.0, Num::Many);
+                format!("to activate mana abilities of {n}")
+            }
             M::ClassLevel => "to gain a Class level".into(),
             M::Purpose(crate::mana::SpendPurpose::UnlockDoor) => "to unlock doors".into(),
             M::Purpose(crate::mana::SpendPurpose::Keyword(k)) => {
@@ -9237,7 +9330,7 @@ fn unreachable_text() -> String {
     String::new()
 }
 
-fn strip_chooser(s: &Sel) -> Sel {
+pub(crate) fn strip_chooser(s: &Sel) -> Sel {
     match s {
         Sel::Choose {
             filter,

@@ -663,6 +663,14 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "See \"from your graveyard\".",
     },
     Equivalence {
+        pattern: r"\b(you|they)'ve\b",
+        replacement: "$1",
+        why: "\"If you've gained life this turn\" and \"if you gained life this turn\" ask \
+              the same thing. (Before the subject \"you\" is dropped, so \"you've cast\" and \
+              \"you cast\" are normalized alike, and normalizing a normalized alternative of a \
+              rendering gives the same tokens.)",
+    },
+    Equivalence {
         pattern: r"\byou (draw|discard|mill|scry|surveil|sacrifice|create|put|return|exile|search|reveal|look|shuffle|tap|untap|destroy|investigate|proliferate|seek|conjure|venture|explore|amass|populate|manifest|cloak|choose|add|counter|attach|transform|gain|lose|get|become|take|may|cast|pay|play|win|skip)\b",
         replacement: "$1",
         why: "An instruction without a subject is performed by the ability's controller \
@@ -843,12 +851,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "$1 is tapped for mana",
         why: "Only a player can tap a permanent for mana (CR 106.12): \"a player taps a \
               land for mana\" and \"a land is tapped for mana\" are the same event.",
-    },
-    Equivalence {
-        pattern: r"\b(you|they)'ve\b",
-        replacement: "$1",
-        why: "\"If you've gained life this turn\" and \"if you gained life this turn\" ask \
-              the same thing.",
     },
     Equivalence {
         pattern: r"\b(?:has|have) cast ([^.,;]*?) this turn\b",
