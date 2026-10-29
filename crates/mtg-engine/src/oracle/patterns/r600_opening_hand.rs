@@ -65,12 +65,40 @@ fn opening_hand(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             lower == format!("if {this} is in your opening hand, you may begin the game with {it} on the battlefield.")
         }) {
             return Some(opening_hand_ability(
-                StaticEffect::OpeningHand { delayed: None },
+                StaticEffect::OpeningHand {
+                    delayed: None,
+                    not_starting_player: false,
+                    counters: vec![],
+                    then: None,
+                },
                 t,
             ));
         }
         let prefix = format!("you may reveal {this} from your opening hand. if you do, ");
         if let Some(r) = lower.strip_prefix(&prefix) {
+            // "If you do, when each opponent casts their first spell of the game, counter
+            // that spell unless that player pays {1}." (Chancellor of the Annex): about
+            // each opponent's first spell (`kw::first_spell_of_game`).
+            if let Some(e) = r.strip_prefix("when each opponent casts their first spell of the game, ") {
+                let body = crate::oracle::effects::parse_trigger_body(
+                    e,
+                    ctx,
+                    Sel::TriggerSpell,
+                    PlayerRef::TriggerPlayer,
+                )?;
+                let trigger = TriggerCond::Custom(
+                    crate::kw::first_spell_of_game::OPPONENT_FIRST_SPELL_OF_GAME.into(),
+                );
+                return Some(opening_hand_ability(
+                    StaticEffect::OpeningHand {
+                        delayed: Some(Box::new((trigger, body))),
+                        not_starting_player: false,
+                        counters: vec![],
+                        then: None,
+                    },
+                    t,
+                ));
+            }
             let (trigger, effect_text) = delayed_timing(r)?;
             let mut b = Builder::new(ctx);
             b.in_trigger = true;
@@ -83,6 +111,9 @@ fn opening_hand(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
             return Some(opening_hand_ability(
                 StaticEffect::OpeningHand {
                     delayed: Some(Box::new((trigger, body))),
+                    not_starting_player: false,
+                    counters: vec![],
+                    then: None,
                 },
                 t,
             ));

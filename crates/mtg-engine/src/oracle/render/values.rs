@@ -2241,6 +2241,9 @@ impl Renderer<'_> {
         match d {
             Duration::EndOfTurn => "until end of turn".into(),
             Duration::EndOfCombat => "until end of combat".into(),
+            Duration::UntilEndOfTurnOrRoll(n) => format!(
+                "until end of turn, or until any player rolls a {n}, whichever comes first"
+            ),
             Duration::UntilYourNextTurn => "until your next turn".into(),
             Duration::UntilEndOfYourNextTurn => "until the end of your next turn".into(),
             // CR 611.2b: "until ~ leaves the battlefield" is the same duration.

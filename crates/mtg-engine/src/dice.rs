@@ -87,6 +87,43 @@ pub const DICE_THIS_TURN: &str = "die:rolled dice this turn";
 /// turn:20`).
 pub const RESULT_THIS_TURN: &str = "die:rolled result this turn";
 
+/// `PLAYER_RESULT + p`: the result of player `p`'s roll in the resolving ability's most
+/// recent roll instruction; `PLAYER_ROLLED + p` is 1 if `p` rolled in it.
+pub const PLAYER_RESULT: Var = vars::USER + 8600;
+pub const PLAYER_ROLLED: Var = vars::USER + 8640;
+/// `Condition::Custom`, about the iterated player: "had the highest result" — no player who
+/// rolled in the resolving ability's roll instruction had a higher result (ties included:
+/// "if one or more opponents had the highest result").
+pub const HAD_HIGHEST: &str = "die:had the highest result";
+
+/// `PlayerModification::Custom` (until end of turn): "The next time [this player] would
+/// roll one or more dice this turn, instead they roll that many dice plus one and you
+/// choose one of those rolls to ignore." (Bamboozling Beeble). The effect's controller
+/// chooses; it's used up by the next roll instruction (or planar die roll) of the player.
+pub const NEXT_ROLL_EXTRA: &str = "die:next roll one more, controller ignores one";
+
+/// The pending [`NEXT_ROLL_EXTRA`] effects on `p`, used up now: their controllers, in
+/// timestamp order.
+fn take_next_roll_extras(g: &mut Game, p: PlayerId) -> Vec<PlayerId> {
+    let is = |e: &crate::game::PlayerEffect| {
+        e.players.contains(&p)
+            && matches!(&e.effect, PlayerModification::Custom(n) if n == NEXT_ROLL_EXTRA)
+    };
+    let mut used: Vec<(crate::types::Timestamp, PlayerId)> = g
+        .player_effects
+        .iter()
+        .filter(|e| is(e))
+        .map(|e| (e.timestamp, e.controller))
+        .collect();
+    if used.is_empty() {
+        return vec![];
+    }
+    used.sort_by_key(|(t, _)| *t);
+    g.player_effects.retain(|e| !is(e));
+    g.dirty = true;
+    used.into_iter().map(|(_, c)| c).collect()
+}
+
 /// Per-game dice and coin bookkeeping.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DiceState {
@@ -99,6 +136,11 @@ pub struct DiceState {
     pub stored: BTreeMap<ObjectId, Vec<(u32, i64)>>,
     /// Once-each-turn die-roll modifiers used: (source, modifier index, turn).
     pub used: Vec<(ObjectId, usize, u32)>,
+    /// (source, permanent): permanents an effect of the source phased out until an event
+    /// (`until::exec_phase_out_until`), for "target creature that hasn't been phased out
+    /// with this Attraction" (Ferris Wheel; a new object has no such history, CR 400.7).
+    #[serde(default)]
+    pub phased_out_by: Vec<(ObjectId, ObjectId)>,
 }
 
 /// "Roll [count] d[sides] [and add bonus] [and ignore ...]" plus its results table.
@@ -176,6 +218,15 @@ pub struct CoinFlip {
     /// first".
     #[serde(default)]
     pub max_flips: Option<Value>,
+    /// With `until_lose`: "... or choose to stop flipping" (Fiery Gambit): after each flip
+    /// the flipper won, they choose whether to flip again.
+    #[serde(default)]
+    pub may_stop: bool,
+    /// "If you lose a flip, ~ has no effect." (Fiery Gambit): the instructions after the
+    /// flip are all about flips won (`dice_coins_5`), which count only if no flip was
+    /// lost; read by the renderer.
+    #[serde(default)]
+    pub loss_voids: bool,
     pub on_win: Effect,
     pub on_lose: Effect,
     pub on_heads: Effect,
@@ -190,6 +241,8 @@ impl CoinFlip {
             call: true,
             until_lose: false,
             max_flips: None,
+            may_stop: false,
+            loss_voids: false,
             on_win: Effect::Noop,
             on_lose: Effect::Noop,
             on_heads: Effect::Noop,
@@ -346,6 +399,10 @@ pub fn roll(g: &mut Game, spec: &DieRoll, ctx: &mut Ctx) {
                 }
             }
             ctx.nums.insert(RESULT, total);
+            // "Each player rolls a d20. If one or more opponents had the highest result,
+            // ...": each player's result.
+            ctx.nums.insert(PLAYER_RESULT + p.0 as Var, total);
+            ctx.nums.insert(PLAYER_ROLLED + p.0 as Var, 1);
             if spec.choose_one && results.len() >= 2 {
                 let opts = results.iter().map(|r| format!("Choose {r}")).collect();
                 let k = g
@@ -388,7 +445,10 @@ pub fn roll_dice(
             matches!(d, DiceStatic::ExtraDie { who } if applies_to(g, *who, *ctl, p))
         })
         .count() as u32;
-    let mut dice: Vec<RolledDie> = (0..n + extra)
+    // "The next time target player would roll one or more dice this turn, instead they
+    // roll that many dice plus one and you choose one of those rolls to ignore."
+    let choosers = take_next_roll_extras(g, p);
+    let mut dice: Vec<RolledDie> = (0..n + extra + choosers.len() as u32)
         .map(|_| RolledDie {
             sides,
             natural: natural(g, sides),
@@ -417,6 +477,20 @@ pub fn roll_dice(
         };
         dice.remove(pick);
     }
+    // CR 706.6: then each of those players chooses a roll to ignore, after seeing all the
+    // results (Bamboozling Beeble's ruling).
+    for c in choosers {
+        if dice.len() <= 1 {
+            break;
+        }
+        let opts = dice
+            .iter()
+            .enumerate()
+            .map(|(i, d)| format!("Ignore die {} (showing {})", i + 1, d.natural))
+            .collect();
+        let k = g.ask_option(c, source, "Choose a roll to ignore", opts);
+        dice.remove(k.min(dice.len() - 1));
+    }
     apply_modifiers(g, p, &mut dice, source, false);
     for d in &dice {
         g.emit(Event::DieRolled {
@@ -427,6 +501,12 @@ pub fn roll_dice(
             planar: false,
         });
     }
+    // "... or until any player rolls a 1, whichever comes first" (Drop Tower's rulings:
+    // the effect ends as soon as the result is known).
+    let results: Vec<i64> = dice.iter().map(|d| d.result() + bonus).collect();
+    g.expire_effects(|d| {
+        matches!(d, Duration::UntilEndOfTurnOrRoll(n) if results.contains(&(*n as i64)))
+    });
     g.end_event_batch();
     g.log(|_| {
         format!(
@@ -557,7 +637,17 @@ pub fn roll_planar_natural(g: &mut Game, p: PlayerId) -> u32 {
             matches!(d, DiceStatic::ExtraPlanarDie { who } if applies_to(g, *who, *ctl, p))
         })
         .count();
-    let rolls: Vec<i64> = (0..=extra).map(|_| natural(g, 6)).collect();
+    let choosers = take_next_roll_extras(g, p);
+    let mut rolls: Vec<i64> = (0..=extra + choosers.len()).map(|_| natural(g, 6)).collect();
+    // "... and you choose one of those rolls to ignore" (CR 706.6).
+    for c in choosers {
+        let opts = rolls
+            .iter()
+            .map(|r| format!("Ignore {:?}", crate::planechase::face_for(*r as u32)))
+            .collect();
+        let k = g.ask_option(c, None, "Choose a planar die roll to ignore", opts);
+        rolls.remove(k.min(rolls.len() - 1));
+    }
     let kept = if rolls.len() > 1 {
         let opts = rolls
             .iter()
@@ -666,6 +756,19 @@ pub fn flip(g: &mut Game, spec: &CoinFlip, ctx: &mut Ctx) {
         loop {
             if spec.until_lose {
                 if losses > 0 || i >= max {
+                    break;
+                }
+                // "... or choose to stop flipping": after each flip (Fiery Gambit's
+                // rulings).
+                if spec.may_stop
+                    && i > 0
+                    && !g.ask_yes_no(
+                        p,
+                        ctx.source,
+                        &format!("You've won {wins} flips. Flip again?"),
+                        false,
+                    )
+                {
                     break;
                 }
             } else if i >= n {
@@ -797,6 +900,21 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> Option<i64> {
 pub fn custom_condition(name: &str, ctx: &Ctx) -> Option<bool> {
     match name {
         ROLLED_DOUBLES => Some(ctx.nums.get(&DOUBLES).copied() == Some(1)),
+        HAD_HIGHEST => {
+            let results: Vec<(Var, i64)> = (0..PLAYER_ROLLED - PLAYER_RESULT)
+                .filter(|k| ctx.nums.get(&(PLAYER_ROLLED + k)) == Some(&1))
+                .map(|k| (k, ctx.nums.get(&(PLAYER_RESULT + k)).copied().unwrap_or(0)))
+                .collect();
+            let Some(p) = ctx.iter_player else {
+                return Some(false);
+            };
+            let max = results.iter().map(|(_, r)| *r).max();
+            Some(
+                results
+                    .iter()
+                    .any(|(k, r)| *k == p.0 as Var && Some(*r) == max),
+            )
+        }
         _ => {
             let n: i64 = name
                 .strip_prefix(ANY_RESULT_AT_LEAST)?
@@ -989,6 +1107,31 @@ impl crate::kw::KeywordRules for DiceHistory {
     fn custom_condition(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
         history_condition(g, name, ctx)
     }
+    fn custom_filter(&self, g: &Game, name: &str, id: ObjectId, ctx: &Ctx) -> Option<bool> {
+        if name != crate::oracle::patterns::dice_coins_5::NOT_PHASED_OUT_WITH_THIS {
+            return None;
+        }
+        let src = ctx.source.map(|s| g.ability_source_of(s));
+        Some(!g
+            .dice
+            .phased_out_by
+            .iter()
+            .any(|(s, o)| *o == id && Some(*s) == src))
+    }
 }
 
 inventory::submit! { crate::kw::KeywordRegistration(&DiceHistory) }
+
+/// After a cost's action ("{6}, Roll a d8: Monstrosity X, where X is the result."): a die
+/// rolled to pay the cost keeps its result for the ability's effect (CR 118.1, 602.2b,
+/// 706.2).
+pub fn note_cost_roll(e: &Effect, ctx: &Ctx, paid: &mut crate::casting::PaidCost) {
+    if !matches!(e, Effect::RollDice(_)) {
+        return;
+    }
+    for k in [RESULT, NATURAL, HIGHEST] {
+        if let Some(v) = ctx.nums.get(&k) {
+            paid.nums.push((k, *v));
+        }
+    }
+}

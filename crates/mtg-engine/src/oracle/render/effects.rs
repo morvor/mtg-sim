@@ -9222,6 +9222,9 @@ fn until_event(u: &UntilEvent) -> String {
         UntilEvent::SourceLeavesBattlefield => "~ leaves the battlefield".into(),
         UntilEvent::OpponentBecomesMonarch => "an opponent becomes the monarch".into(),
         UntilEvent::TargetLeavesBattlefield(_) => "that permanent leaves the battlefield".into(),
+        UntilEvent::YouRollToVisitAtMost(n) => {
+            format!("you roll a {n} or less while rolling to visit your Attractions")
+        }
     }
 }
 
