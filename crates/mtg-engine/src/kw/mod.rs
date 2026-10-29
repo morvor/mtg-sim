@@ -101,6 +101,12 @@ pub trait KeywordRules: Sync + Send {
     ) -> bool {
         false
     }
+    /// Whether a rule this implementation defines keeps `card` revealed to all players
+    /// ("plays with that card revealed in their hand"). Called for every registered
+    /// implementation.
+    fn card_revealed(&self, g: &Game, card: ObjectId) -> bool {
+        false
+    }
     /// A replacement of beginning a turn (CR 614.10): `p` would begin a turn. Returns true
     /// if this implementation's rule skips that turn instead. Called for every registered
     /// implementation until one skips it.
@@ -815,6 +821,11 @@ pub fn replace_counter(g: &mut Game, spell: ObjectId, cause: crate::event_causes
     registry()
         .iter()
         .any(|r| r.replace_counter(g, spell, cause))
+}
+
+/// See [`KeywordRules::card_revealed`].
+pub fn card_revealed(g: &Game, card: ObjectId) -> bool {
+    registry().iter().any(|r| r.card_revealed(g, card))
 }
 
 /// See [`KeywordRules::replace_turn_begin`].
