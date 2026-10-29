@@ -913,3 +913,31 @@ fn eye_of_ojer_taq_chooses_a_card_type_its_craft_materials_share() {
         Some(mtg_engine::types::CardType::Creature)
     );
 }
+
+#[test]
+fn mirror_of_fate_puts_the_chosen_face_up_exiled_cards_on_top_of_an_empty_library() {
+    cr!("406.3", "608.2c");
+    ruling!("Mirror of Fate", "You don’t choose the exiled cards until Mirror of Fate’s ability resolves.");
+    compiles("Mirror of Fate");
+    let mut t = TestGame::new(2);
+    let mirror = t.battlefield(P0, "Mirror of Fate");
+    let bolt = t.exile(P0, "Lightning Bolt");
+    let hidden = t.exile(P0, "Shock");
+    t.g.objects[hidden.0 as usize].face_down = true;
+    let theirs = t.exile(P1, "Giant Growth");
+    t.library_top(P0, "Island");
+    let from = t.asked().len();
+    t.answer_choose(P0, &[Entity::Object(bolt)]);
+    t.activate(P0, mirror, 0, &[]).expect("activate");
+    t.resolve_all();
+    // Only P0's face-up exiled card could be chosen.
+    let offered = t.asked()[from..].iter().find_map(|(_, d)| match d {
+        Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+        _ => None,
+    });
+    assert_eq!(offered, Some(vec![Entity::Object(bolt)]));
+    assert_eq!(t.library_size(P0), 1);
+    assert_eq!(t.zone(t.g.current(bolt)), mtg_engine::object::Zone::Library(P0));
+    assert!(t.in_exile("Island"));
+    let _ = theirs;
+}

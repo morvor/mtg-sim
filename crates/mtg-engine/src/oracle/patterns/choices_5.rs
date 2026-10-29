@@ -603,3 +603,52 @@ fn that_permanent_or_card(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "that permanent or card (the target that's one or the other)", priority: 200, parse: that_permanent_or_card } }
+
+/// "Choose up to seven face-up exiled cards you own." (Mirror of Fate): cards in exile,
+/// chosen as the ability resolves (not targeted); face-down ones can't be (CR 406.3);
+/// "the chosen cards" afterward.
+fn choose_exiled_cards(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("choose ")?;
+    let (up_to, r) = match r.strip_prefix("up to ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    let (n, r) = parse_number(r)?;
+    let r = r.trim_start();
+    let (face_up, r) = match r.strip_prefix("face-up ") {
+        Some(r) => (true, r),
+        None => (false, r),
+    };
+    let r = r.strip_prefix("exiled ")?;
+    let noun = r.strip_suffix(" you own")?;
+    let (f, _, tail) = parse_object_phrase(noun)?;
+    if !end(tail).is_empty() || f.zone().is_some() {
+        return None;
+    }
+    let mut parts = vec![
+        f,
+        Filter::Card,
+        Filter::InZone(ZoneKind::Exile),
+        Filter::OwnedBy(PlayerRel::You),
+    ];
+    if face_up {
+        parts.push(Filter::not(Filter::FaceDown));
+    }
+    let chosen = super::choice_grammar_objects::CHOSEN;
+    for name in ["the chosen cards", "the chosen card", "those cards"] {
+        b.named.push((name.into(), Sel::Var(chosen)));
+    }
+    Some(Effect::Store {
+        var: chosen,
+        sel: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: Filter::and(parts),
+            count: n,
+            up_to,
+            store: None,
+        },
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choose [up to N] [face-up] exiled cards you own", priority: 90, parse: choose_exiled_cards } }
