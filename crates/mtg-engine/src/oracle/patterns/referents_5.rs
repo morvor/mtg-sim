@@ -238,3 +238,58 @@ fn target_of_an_ability_from<'a>(s: &'a str, _so_far: &Filter) -> Option<(Filter
 }
 
 inventory::submit! { super::FilterSuffixPattern { name: "referents 5: that isn't the target of an ability from [objects]", priority: 100, parse: target_of_an_ability_from } }
+
+/// "Whenever an Aura you control becomes attached to a nonland permanent an opponent
+/// controls with mana value less than or equal to that Aura's mana value" (Eriette, the
+/// Beguiler): the comparison is part of the trigger event, made as the Aura becomes
+/// attached (not an intervening "if", CR 603.4).
+fn attached_with_lesser_mana_value(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let head = end(l)
+        .strip_suffix(" with mana value less than or equal to that aura's mana value")?;
+    if !head.contains(" becomes attached to ") || !head.starts_with("an aura ") {
+        return None;
+    }
+    let (t, it, player) = crate::oracle::triggers::parse_trigger_condition(&format!("whenever {head}"))?;
+    if !matches!(t, TriggerCond::AttachChanged { attached: true, .. }) {
+        return None;
+    }
+    let cond = Condition::Compare(
+        Value::ManaValueOf(Box::new(Sel::TriggerOtherObject)),
+        Cmp::Le,
+        Value::ManaValueOf(Box::new(Sel::TriggerObject)),
+    );
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(t),
+            cond,
+        },
+        it,
+        player,
+    ))
+}
+
+inventory::submit! { super::TriggerPattern { name: "referents 5: an Aura becomes attached to a permanent with lesser or equal mana value", priority: 100, parse: attached_with_lesser_mana_value } }
+
+/// "gain control of that permanent for as long as that Aura is attached to it" in an
+/// "Aura becomes attached to a permanent" trigger: the permanent, for as long as the Aura
+/// stays attached to it (both fixed as the effect begins, `duration_refs`).
+fn gain_control_while_aura_attached(l: &str, b: &mut Builder) -> Option<Effect> {
+    if end(l) != "gain control of that permanent for as long as that aura is attached to it"
+        || !b.in_trigger
+        || !crate::oracle::raw_text()
+            .to_lowercase()
+            .contains("aura you control becomes attached to ")
+    {
+        return None;
+    }
+    Some(Effect::GainControl {
+        what: Sel::TriggerOtherObject,
+        who: PlayerRef::You,
+        duration: Duration::WhileCondition(Condition::SelMatches(
+            Sel::TriggerObject,
+            Filter::AttachedTo(Box::new(Sel::TriggerOtherObject)),
+        )),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "referents 5: gain control of that permanent for as long as that Aura is attached to it", priority: 100, parse: gain_control_while_aura_attached } }
