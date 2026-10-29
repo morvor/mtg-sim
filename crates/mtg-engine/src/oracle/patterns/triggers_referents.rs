@@ -137,6 +137,11 @@ fn to_owners_library(l: &str, b: &mut Builder) -> Option<Effect> {
     let pronoun = |w: &str, b: &Builder| -> Option<Sel> {
         match w {
             "~" => Some(Sel::This),
+            // "if a creature dealt damage by ~ this turn died, put that card ..."
+            // (`history_5`).
+            "that card" if super::history_5::died_that_card().is_some() => {
+                super::history_5::died_that_card()
+            }
             "it" | "that card" | "that creature" if !matches!(b.it, Sel::None) => {
                 Some(b.it.clone())
             }

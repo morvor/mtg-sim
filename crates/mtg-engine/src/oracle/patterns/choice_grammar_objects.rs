@@ -197,6 +197,16 @@ fn chosen_kind(s: &str, c: &Chooser, b: &mut Builder) -> Option<(Filter, &'stati
             None => Filter::ControlledByPlayer(Box::new(c.chooser.clone())),
         };
         (Some(rel), r.to_string())
+    } else if let Some(r) = t
+        .strip_prefix("they don't control")
+        .filter(|_| c.each.is_some() && !c.single)
+    {
+        // "Each player chooses a creature they don't control": one another player
+        // controls.
+        (
+            Some(Filter::not(Filter::ControlledBy(PlayerRel::Iterated))),
+            r.to_string(),
+        )
     } else {
         let (f2, r) = crate::oracle::effects::bind_target_player(Filter::Any, t, b);
         match f2 {
@@ -222,6 +232,12 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
         (b.it, b.it_player) = (saved.1.clone(), saved.2.clone());
         b.named.truncate(saved.3);
     };
+    // "Each player chooses a creature they control and a creature they don't control."
+    // (Call to the Void): two choices by each player.
+    if let Some(e) = choose_two_kinds(l, b) {
+        return Some(e);
+    }
+    restore(b);
     let r = (|| {
         let c = chooser(l, b)?;
         // Choices of words, types and players are other patterns'.
@@ -333,19 +349,89 @@ fn choose_objects(l: &str, b: &mut Builder) -> Option<Effect> {
             Filter::not(Filter::In(Box::new(chosen.clone()))),
         ])),
     ));
+    name_chosen(b, word, !c.single);
+    Some(Effect::seq(out))
+}
+
+/// Names the chosen objects for the instructions that follow ("the chosen creatures",
+/// "those creatures", "each creature chosen this way").
+fn name_chosen(b: &mut Builder, word: &str, several_players: bool) {
+    let chosen = Sel::Var(CHOSEN);
     let plural = format!("{word}s");
-    for name in [
+    let mut names = vec![
         format!("the chosen {plural}"),
         format!("the chosen {word}"),
         format!("those {plural}"),
         format!("that {word}"),
         "the chosen cards".to_string(),
         "the chosen permanents".to_string(),
-    ] {
+    ];
+    // "each creature chosen this way": every object any of the players chose.
+    if several_players {
+        names.push(format!("each {word} chosen this way"));
+        names.push("each permanent chosen this way".to_string());
+    }
+    for name in names {
         b.named.push((name, chosen.clone()));
     }
+    // "Then each player reveals their chosen card.": the one that player chose.
+    if several_players {
+        let theirs = Sel::Matching(
+            Box::new(chosen.clone()),
+            Filter::OwnedBy(PlayerRel::Iterated),
+        );
+        b.named.push((format!("their chosen {word}"), theirs));
+    }
     b.it = chosen;
-    Some(Effect::seq(out))
+}
+
+/// "Each player chooses a creature they control and a creature they don't control."
+/// (Call to the Void): each of the players chooses one object of each kind, in APNAP
+/// order (CR 101.4); the chosen objects are all those chosen, by anyone.
+fn choose_two_kinds(l: &str, b: &mut Builder) -> Option<Effect> {
+    let c = chooser(l, b)?;
+    let who = c.each.clone().filter(|_| !c.single)?;
+    let (first, second) = ["and a ", "and an "]
+        .iter()
+        .find_map(|sep| c.rest.split_once(&format!(" {sep}")).map(|(a, b2)| (a, format!("a {b2}"))))?;
+    let mut chooses = Vec::new();
+    let mut words = Vec::new();
+    for part in [first.to_string(), second] {
+        let (count, up_to, any_number, r) = quantity(&part)?;
+        if up_to || any_number || count.as_const() != Some(1) {
+            return None;
+        }
+        let (filter, word, rest) = chosen_kind(r, &c, b)?;
+        if !end(&rest).is_empty() || matches!(filter, Filter::In(_)) {
+            return None;
+        }
+        words.push(word);
+        chooses.push(Effect::Store {
+            var: CHOSEN,
+            sel: Sel::Union(vec![
+                Sel::Var(CHOSEN),
+                Sel::Choose {
+                    chooser: c.chooser.clone(),
+                    filter,
+                    count,
+                    up_to: false,
+                    store: None,
+                },
+            ]),
+        });
+    }
+    let word = if words[0] == words[1] { words[0] } else { "permanent" };
+    name_chosen(b, word, true);
+    Some(Effect::seq(vec![
+        Effect::Store {
+            var: CHOSEN,
+            sel: Sel::Union(vec![]),
+        },
+        Effect::ForEachPlayer {
+            who,
+            effect: Box::new(Effect::seq(chooses)),
+        },
+    ]))
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: [player] chooses [objects]", priority: 115, parse: choose_objects } }
@@ -357,7 +443,7 @@ fn without_iterated(f: Filter) -> Filter {
         matches!(
             x,
             Filter::ControlledBy(PlayerRel::Iterated) | Filter::OwnedBy(PlayerRel::Iterated)
-        )
+        ) || matches!(x, Filter::Not(n) if matches!(**n, Filter::ControlledBy(PlayerRel::Iterated)))
     };
     match f {
         Filter::And(v) => Filter::and(v.into_iter().filter(|x| !mine(x)).collect()),

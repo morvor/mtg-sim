@@ -1703,6 +1703,20 @@ impl Game {
         let x_min = crate::payment_rules::x_minimum(&cost_rules);
         // "X can't be greater than ..." (CR 107.3a): determined as X is announced.
         let x_cap = crate::payment_rules::x_maximum(self, &cost_rules, &Ctx::new(Some(id), p));
+        // "X is the number of ... in an opponent's graveyard as you cast this spell"
+        // (CR 107.3c): one of those values.
+        let x_allowed = crate::payment_rules::x_allowed(self, &cost_rules, &Ctx::new(Some(id), p));
+        let x_cap = match (&x_allowed, x_cap) {
+            (Some(v), c) => Some(
+                v.iter()
+                    .copied()
+                    .max()
+                    .unwrap_or(-1)
+                    .min(c.unwrap_or(i64::MAX)),
+            ),
+            (None, c) => c,
+        };
+        let x_ok = |n: i64| x_allowed.as_ref().is_none_or(|v| v.contains(&n));
         let mut x: i64 = 0;
         if base_cost_has_x {
             let mut max = self.max_mana_available(p) as i64;
@@ -1764,12 +1778,16 @@ impl Game {
                 _ => true,
             };
             x = match answer {
-                Answer::Number(n) if n >= x_min && x_cap.is_none_or(|c| n <= c) && payable(n) => n,
+                Answer::Number(n)
+                    if n >= x_min && x_cap.is_none_or(|c| n <= c) && payable(n) && x_ok(n) =>
+                {
+                    n
+                }
                 // Otherwise the greatest legal value whose total cost could be paid.
                 _ => (x_min..=max)
                     .rev()
                     .find(|n| {
-                        payable(*n) && {
+                        payable(*n) && x_ok(*n) && {
                             let c = self.total_cost_with(p, id, &chars, opt, *n as u32, &extra);
                             self.can_pay_cost_optimistic(p, &c, Some(id), &chars)
                         }
@@ -1779,7 +1797,7 @@ impl Game {
         }
         // CR 107.3a, 107.3b: "X can't be 0" leaves no legal value for an X that must be 0
         // (the spell is cast without paying a cost that includes it).
-        if (x < x_min || x_cap.is_some_and(|c| x > c))
+        if (x < x_min || x_cap.is_some_and(|c| x > c) || !x_ok(x))
             && (base_cost_has_x || chars.mana_cost.as_ref().is_some_and(|m| m.has_x()))
         {
             return Err(Illegal("no legal value of X".into()));
