@@ -646,8 +646,12 @@ impl Game {
                 ctx.prev_happened = placed > 0;
                 // "Put a quest counter on this enchantment. When you do, if it has four or
                 // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
-                // the counters.
-                if !got.is_empty() {
+                // the counters. A choice among "them" ("Put a deathtouch counter on either
+                // of them. Then put a menace counter on either of them.") leaves "them" as
+                // it was.
+                let among_them = matches!(what, Sel::Choose { filter: Filter::In(s), .. }
+                    if matches!(**s, Sel::Var(v) if v == vars::IT));
+                if !got.is_empty() && !among_them {
                     ctx.set_var(vars::IT, got);
                 }
             }

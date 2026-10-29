@@ -224,7 +224,8 @@ fn declining_to_cast_on_resolution_leaves_the_card_uncastable_later() {
     let div = t.graveyard(P0, "Divination");
     t.lands(P0, "Island", 3);
     t.answer_yes(P0, false);
-    t.activate(P0, chandra, 2, &[obj(div)]).expect("activate -2");
+    t.activate(P0, chandra, 2, &[obj(div)])
+        .expect("activate -2");
     t.resolve_all();
     assert_eq!(t.zone(div), Zone::Graveyard(P0));
     assert!(cast_methods(&mut t, P0, div).is_empty());
@@ -242,7 +243,8 @@ fn chandra_acolyte_of_flame_pays_the_cost_or_an_alternative_cost() {
     let chandra = t.battlefield(P0, "Chandra, Acolyte of Flame");
     let div = t.graveyard(P0, "Divination");
     t.answer_yes(P0, true);
-    t.activate(P0, chandra, 2, &[obj(div)]).expect("activate -2");
+    t.activate(P0, chandra, 2, &[obj(div)])
+        .expect("activate -2");
     t.resolve_all();
     assert_eq!(t.zone(div), Zone::Graveyard(P0));
     // With three Islands, it's cast for its mana cost.
@@ -251,7 +253,8 @@ fn chandra_acolyte_of_flame_pays_the_cost_or_an_alternative_cost() {
     let div = t.graveyard(P0, "Divination");
     t.lands(P0, "Island", 3);
     t.answer_yes(P0, true);
-    t.activate(P0, chandra, 2, &[obj(div)]).expect("activate -2");
+    t.activate(P0, chandra, 2, &[obj(div)])
+        .expect("activate -2");
     t.resolve_all();
     assert_eq!(t.hand_size(P0), 2);
     assert_eq!(tapped_lands(&t, P0), 3);
@@ -267,7 +270,8 @@ fn chandra_acolyte_of_flame_pays_the_cost_or_an_alternative_cost() {
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.answer_targets(P0, &[obj(bears)]);
     let from = t.asked().len();
-    t.activate(P0, chandra, 2, &[obj(inv)]).expect("activate -2");
+    t.activate(P0, chandra, 2, &[obj(inv)])
+        .expect("activate -2");
     t.resolve_all();
     let methods = method_choices(&t, from);
     assert_eq!(methods.len(), 1, "{methods:?}");
