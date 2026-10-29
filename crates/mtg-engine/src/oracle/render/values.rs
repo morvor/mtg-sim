@@ -2238,6 +2238,10 @@ impl Renderer<'_> {
             Duration::ThisTurn => "this turn".into(),
             Duration::ThroughNextUntapStep => "during its controller's next untap step".into(),
             Duration::ThroughYourNextUntapStep => "during your next untap step".into(),
+            Duration::ThroughNextUntapSteps(n) => format!(
+                "during its controller's next {} untap steps",
+                crate::oracle::render::number_word(*n as i32)
+            ),
             Duration::UntilYourNextStep(s) => {
                 let s = self.step_name(*s);
                 format!("until your next {s}")

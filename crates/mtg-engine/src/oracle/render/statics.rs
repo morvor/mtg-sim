@@ -2129,6 +2129,18 @@ impl Renderer<'_> {
             }
             Restriction::CantAttackAlone(f) => format!("{} can't attack alone", subj(self, f)),
             Restriction::CantBlockAlone(f) => format!("{} can't block alone", subj(self, f)),
+            Restriction::CantAttackUnlessOthersAttack { what, n } => format!(
+                "{} can't attack unless at least {} other {} attack",
+                subj(self, what),
+                number_word(*n as i32),
+                if *n == 1 { "creature" } else { "creatures" }
+            ),
+            Restriction::CantBlockUnlessOthersBlock { what, n } => format!(
+                "{} can't block unless at least {} other {} block",
+                subj(self, what),
+                number_word(*n as i32),
+                if *n == 1 { "creature" } else { "creatures" }
+            ),
             Restriction::MaxAttackers(n) => format!(
                 "no more than {} creatures can attack each combat",
                 number_word(*n as i32)
@@ -2148,6 +2160,12 @@ impl Renderer<'_> {
                 // (that would be "itself"), so "it" is ~ when ~ was named before.
                 let a = if named && matches!(attacker, Filter::Source) {
                     "~it".to_string()
+                } else if matches!(attacker, Filter::And(v) if v.len() == 2
+                    && v.iter().any(|x| matches!(x, Filter::Attacking))
+                    && v.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))))
+                {
+                    // "blocks each attacking creature" (a requirement for each).
+                    "each attacking creature".to_string()
                 } else {
                     self.noun_det(attacker, Det::A)
                 };

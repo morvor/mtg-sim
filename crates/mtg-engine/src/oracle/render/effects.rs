@@ -1979,6 +1979,13 @@ impl Renderer<'_> {
                         let s = self.restriction_subject(f);
                         return format!("{s} doesn't untap during {whose} next untap step");
                     }
+                    if let Duration::ThroughNextUntapSteps(n) = duration {
+                        let s = self.restriction_subject(f);
+                        let n = crate::oracle::render::number_word(*n as i32);
+                        return format!(
+                            "{s} doesn't untap during {{alt:its controller's|its}} next {n} untap steps"
+                        );
+                    }
                 }
                 let r = self.restriction(restriction);
                 let d = self.restriction_duration(duration);

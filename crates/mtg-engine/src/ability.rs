@@ -2165,6 +2165,10 @@ pub enum Duration {
     /// "[doesn't untap] during its controller's next untap step": for each affected
     /// object, until its controller's next untap step has passed (CR 502.3).
     ThroughNextUntapStep,
+    /// "[doesn't untap] during its controller's next two untap steps" (Telekinesis): like
+    /// [`Duration::ThroughNextUntapStep`], for this many of each affected object's
+    /// controllers' untap steps (whoever controls it at each one, CR 502.3). Always 2 or more.
+    ThroughNextUntapSteps(u32),
     /// "[doesn't untap] during your next untap step": until the next untap step of the
     /// effect's controller has passed; it applies only during that player's untap steps,
     /// so an affected permanent another player gains control of untaps as usual during
@@ -2943,6 +2947,17 @@ pub enum Restriction {
     /// "can't attack alone" / "can't block alone" (CR 506.5, 508.1c).
     CantAttackAlone(Filter),
     CantBlockAlone(Filter),
+    /// "~ can't attack unless at least two other creatures attack" / "... can't block
+    /// unless at least two other creatures block" (Orcish Conscripts): the numeric form of
+    /// "alone", checked on the whole declaration (CR 508.1c, 509.1b). `n` is at least 1.
+    CantAttackUnlessOthersAttack {
+        what: Filter,
+        n: u32,
+    },
+    CantBlockUnlessOthersBlock {
+        what: Filter,
+        n: u32,
+    },
     /// "No more than N creatures can attack/block each combat" (CR 508.1c, 509.1b).
     MaxAttackers(u32),
     MaxBlockers(u32),
