@@ -416,6 +416,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // Manifesting cards from a hand (`kw/manifest_from_hand_5.rs`): no library.
         mtg_engine::kw::manifest_from_hand_5::MANIFEST_FROM_HAND,
         mtg_engine::kw::choices_5_filters::CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS,
+        // A creature type chosen and creatures of it beheld as a cost (Celestial Reunion,
+        // `cost_sets.rs`): a hand and permanents, no library.
+        mtg_engine::cost_sets::CHOOSE_TYPE_AND_BEHOLD,
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {
         return None;
