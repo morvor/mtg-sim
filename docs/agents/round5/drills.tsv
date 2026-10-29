@@ -650,3 +650,46 @@ C5-W-cm-3	Chaos Moon	At the beginning of each upkeep, if the number of permanent
 C5-W-cm-4	Chaos Moon	If a Mountain is tapped for mana, it produces colorless mana instead of any other type.	OK
 C5-W-cm-5	Chaos Moon	At the beginning of each upkeep, until end of turn, if a Mountain is tapped for mana, it produces colorless mana instead of any other type.	OK
 C5-W-cm-6	Chaos Moon	At the beginning of each upkeep, until end of turn, if a player taps a Mountain for mana, it produces colorless mana instead of any other type.	OK
+C5-W-R-cs-1	Icy Manipulator	{1}, Untap a tapped creature an opponent controls: Draw a card.	FAIL
+C5-W-R-cs-2	Icy Manipulator	{1}, {T}, Sacrifice two or more artifacts with total mana value X: Draw X cards.	FAIL
+C5-W-R-cs-3	Icy Manipulator	{1}, {T}, Exile any number of cards from your graveyard with three or more red mana symbols among their mana costs: Draw a card.	FAIL
+C5-W-R-cs-4	Icy Manipulator	{T}, Sacrifice this artifact and any number of lands: Draw a card for each land sacrificed this way.	FAIL
+C5-W-R-cs-5	Icy Manipulator	{T}, Sacrifice a creature: Return the sacrificed creature card to its owner's hand.	FAIL
+C5-W-R-cs-6	Icy Manipulator	Exile an artifact card from your graveyard and pay its mana cost: Draw a card.	FAIL
+C5-W-R-ac-1	Divination	As an additional cost to cast this spell, choose a land you control. / Draw a card.	FAIL
+C5-W-R-ac-2	Divination	As an additional cost to cast this spell, choose a creature type. / Draw a card.	OK
+C5-W-R-ac-3	Divination	As an additional cost to cast this spell, you may pay {1} and/or {2}. / Draw a card.	FAIL
+C5-W-R-ac-4	Divination	As an additional cost to cast this spell, you may pay {1} any number of times. / For each additional {1} you paid, draw a card.	FAIL
+C5-W-R-ac-5	Divination	Search your library for a land card, reveal it, put it into your hand, then shuffle. If you control a Forest, put that card onto the battlefield instead of putting it into your hand.	FAIL
+C5-W-R-ac-6	Divination	As an additional cost to cast this spell, you may choose a creature type and behold a creature of that type. / Draw a card.	FAIL
+C5-W-R-sr-1	Divination	You may discard any number of cards with two or more card types among them. If you do, draw a card.	FAIL
+C5-W-R-sr-2	Divination	You may exile any number of cards from your graveyard. If you do, return a creature card from among them to your hand.	FAIL
+C5-W-R-sr-3	Grizzly Bears	When this creature enters, you may remove any number of +1/+1 counters from this creature. If you do, draw that many cards.	FAIL
+C5-W-R-sr-4	Divination	Create two 1/1 white Soldier creature tokens. They each have vigilance.	FAIL
+C5-W-R-sr-5	Divination	Each player exiles their hand. Each player draws a card for each card they own exiled this way.	OK
+C5-W-R-sr-6	Divination	Each player exiles their hand. You may cast spells from among cards exiled this way this turn.	FAIL
+C5-W-R-mn-1	Glorious Anthem	Whenever a Forest is tapped for mana, its controller may add an additional {G}.	FAIL
+C5-W-R-mn-2	Glorious Anthem	Whenever a Forest is tapped for mana, its controller adds an additional {G}. If that Forest is snow, its controller adds an additional {G}{G} instead.	FAIL
+C5-W-R-mn-3	Icy Manipulator	{X}, {T}: Draw a card for each {U} spent to activate this ability.	FAIL
+C5-W-R-mn-4	Icy Manipulator	{X}, {T}: Draw a card for each mana from a Treasure spent to activate this ability.	FAIL
+C5-W-R-mn-5	Icy Manipulator	{1}, {T}: Roll a six-sided die for each card in your hand.	FAIL
+C5-W-R-mn-6	Divination	Reveal the top card of your library. If it has two or more blue mana symbols in its mana cost, draw a card.	FAIL
+C5-W-R-mn-7	Divination	Reveal the top card of your library. Add two mana in any combination of its colors.	FAIL
+C5-W-R-mn-8	Divination	Look at the top card of your library. You may reveal it. If you don't reveal it, draw a card.	FAIL
+C5-W-R-rp-1	Glorious Anthem	If an opponent would put a creature onto the battlefield, that player instead puts that creature onto the battlefield tapped.	FAIL
+C5-W-R-rp-2	Icy Manipulator	{1}: The next time you would draw a card this turn, this artifact deals 1 damage to target creature instead.	FAIL
+C5-W-R-rp-3	Glorious Anthem	If a player would draw a card, they reveal it instead. Then that player draws a card.	FAIL
+C5-W-R-rp-4	Glorious Anthem	If a cycling ability would cause you to draw a card, instead you scry 1.	FAIL
+C5-W-R-rp-5	Divination	Reveal the top card of your library. Any other player may pay 1 life. If a player does, mill a card.	FAIL
+C5-W-R-rp-6	Divination	Discard a card. Exile cards from the top of your library until you exile a card that shares a card type with the discarded card.	FAIL
+C5-W-R-pd-1	Divination	Prevent all damage that would be dealt to you this turn by creatures your opponents control. Whenever damage is prevented this way, you gain 1 life.	FAIL
+C5-W-R-pd-2	Icy Manipulator	{1}, {T}: If a creature dealt damage by target creature would die this turn, exile it instead.	FAIL
+C5-W-R-pd-3	Icy Manipulator	{1}, {T}: Choose target creature. If that creature deals damage to a creature this turn, the creature dealt damage can't be regenerated this turn.	FAIL
+C5-W-R-oo-1	Icy Manipulator	{1}, {T}: Exile up to two target cards from a player's graveyard. That player draws a card.	FAIL
+C5-W-R-oo-2	Icy Manipulator	{1}, {T}: For one spell this turn, you may spend mana as though it were mana of any color to pay that spell's mana cost.	FAIL
+C5-W-R-oo-3	Icy Manipulator	{1}, {T}: Until end of turn, you may spend mana as though it were mana of any color to cast creature spells.	FAIL
+C5-W-R-ctl-1	Icy Manipulator	{1}, {T}: Draw a card.	OK
+C5-W-R-ctl-2	Glorious Anthem	Whenever a Forest is tapped for mana, its controller adds an additional {G}.	OK
+C5-W-R-ctl-3	Divination	Reveal the top card of your library. Any player may pay 1 life. If a player does, mill a card.	OK
+C5-W-R-ctl-4	Icy Manipulator	{1}: The next time you would draw a card this turn, this artifact deals 1 damage to each opponent instead.	OK
+C5-W-R-ctl-5	Divination	Exile your hand. You may cast spells from among cards exiled this way this turn.	OK
