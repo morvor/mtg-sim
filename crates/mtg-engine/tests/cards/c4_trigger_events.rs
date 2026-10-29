@@ -104,3 +104,75 @@ fn kaya_ignores_cards_exiled_from_an_opponents_graveyard() {
     t.g.settle();
     assert_eq!(t.stack_len(), 0);
 }
+
+/// Search the City enters with `top` (top first) as P0's whole library.
+fn search_the_city(top: &[&str]) -> TestGame {
+    let mut t = TestGame::new(2);
+    t.g.players[0].library.clear();
+    for n in top.iter().rev() {
+        t.library_top(P0, n);
+    }
+    t.advance_to(P0, Step::PrecombatMain);
+    t.enter(P0, "Search the City");
+    t.resolve_all();
+    t
+}
+
+#[test]
+fn search_the_city_returns_an_exiled_card_named_like_the_card_played() {
+    cr!("607.2a", "603.2");
+    ruling!(
+        "Search the City",
+        "You can put only one card into its owner’s hand for each card you play."
+    );
+    ruling!(
+        "Search the City",
+        "To “play a card” is to play that card as a land or cast that card as a spell"
+    );
+    supported("Search the City");
+    let mut t = search_the_city(&[
+        "Lightning Bolt",
+        "Lightning Bolt",
+        "Forest",
+        "Grizzly Bears",
+        "Shock",
+    ]);
+    assert_eq!(t.g.exile.len(), 5);
+    // Casting a Bolt: one of the exiled Bolts goes to P0's hand.
+    let bolt = t.hand(P0, "Lightning Bolt");
+    mana(&mut t, P0);
+    let hand = t.hand_size(P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand, "the Bolt cast, an exiled Bolt returned");
+    assert_eq!(t.g.exile.len(), 4);
+    // A card no exiled card shares a name with doesn't trigger it.
+    let giant = t.hand(P0, "Hill Giant");
+    mana(&mut t, P0);
+    t.cast_with(P0, giant, &[]).unwrap();
+    t.g.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    // Playing a land with an exiled card's name.
+    let forest = t.hand(P0, "Forest");
+    t.answer_yes(P0, true);
+    t.play_land(P0, forest).unwrap();
+    t.resolve_all();
+    assert_eq!(t.g.exile.len(), 3);
+    assert!(t.g.extra_turns.is_empty());
+}
+
+#[test]
+fn search_the_city_is_sacrificed_for_an_extra_turn_once_empty() {
+    cr!("607.2a", "500.7");
+    let mut t = search_the_city(&["Shock"]);
+    assert_eq!(t.g.exile.len(), 1);
+    let shock = t.hand(P0, "Shock");
+    mana(&mut t, P0);
+    t.cast_with(P0, shock, &[Entity::Player(P1)]).unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Search the City"));
+    assert_eq!(t.g.extra_turns, vec![P0]);
+}

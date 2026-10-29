@@ -396,3 +396,89 @@ fn choose_a_card_from_among_them(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "triggers 5: choose a [card] from among them", priority: 100, parse: choose_a_card_from_among_them } }
+
+/// The cards exiled with the source that are still in exile (CR 607.2a).
+fn exiled_with_source() -> Filter {
+    Filter::and(vec![
+        Filter::In(Box::new(Sel::Linked)),
+        Filter::InZone(ZoneKind::Exile),
+    ])
+}
+
+/// "Whenever you play a card with the same name as one of the exiled cards" (Search the
+/// City): playing a land or casting a spell from a card (its ruling: "To “play a card” is
+/// to play that card as a land or cast that card as a spell") that shares a name with a
+/// card exiled with the source (CR 607.2a).
+fn play_a_card_named_like_exiled(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let head = end(l).strip_suffix(" with the same name as one of the exiled cards")?;
+    let (t, it, p) = crate::oracle::triggers::parse_trigger_condition(&format!("whenever {head}"))?;
+    let named = Filter::SameNameAs(Box::new(Sel::All(exiled_with_source())));
+    let TriggerCond::AnyOf(v) = t else {
+        return None;
+    };
+    let v: Option<Vec<TriggerCond>> = v
+        .into_iter()
+        .map(|c| match c {
+            TriggerCond::CastSpell { who, filter } => Some(TriggerCond::CastSpell {
+                who,
+                filter: Filter::and(vec![filter, named.clone()]),
+            }),
+            TriggerCond::LandPlayed { who, filter } => Some(TriggerCond::LandPlayed {
+                who,
+                filter: Filter::and(vec![filter, named.clone()]),
+            }),
+            _ => None,
+        })
+        .collect();
+    Some((TriggerCond::AnyOf(v?), it, p))
+}
+
+inventory::submit! { TriggerPattern { name: "triggers 5: you play a card with the same name as one of the exiled cards", priority: 100, parse: play_a_card_named_like_exiled } }
+
+/// "you may put one of those cards with that name into its owner's hand" after "Whenever
+/// you play a card with the same name as one of the exiled cards" (Search the City): one
+/// of the cards exiled with the source with the name of the card played.
+fn one_of_those_cards_with_that_name(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let r = l.strip_prefix("put one of those cards with that name ")?;
+    if !crate::oracle::raw_text()
+        .to_lowercase()
+        .contains("with the same name as one of the exiled cards, ")
+    {
+        return None;
+    }
+    crate::oracle::effects::parse_sentence(&format!("put a card exiled with ~ with that name {r}"), b)
+}
+
+inventory::submit! { EffectPattern { name: "triggers 5: put one of those cards with that name", priority: 100, parse: one_of_those_cards_with_that_name } }
+
+/// "Then if there are no cards exiled with ~, sacrifice it." (Search the City): "it" is
+/// the object the condition names, the source (not the card the instruction before moved).
+fn if_none_exiled_with_source_sacrifice_it(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let l = end(&lower);
+    let l = l.strip_prefix("then ").unwrap_or(l);
+    if l != "if there are no cards exiled with ~, sacrifice it" {
+        return false;
+    }
+    let Some(sacrifice) = crate::oracle::effects::parse_sentence("sacrifice ~", b) else {
+        return false;
+    };
+    let none_left = Condition::Compare(
+        Value::Count(Filter::and(vec![Filter::Card, exiled_with_source()])),
+        Cmp::Eq,
+        Value::c(0),
+    );
+    let old = std::mem::take(prev);
+    *prev = Effect::seq(vec![
+        old,
+        Effect::If {
+            cond: none_left,
+            then: Box::new(sacrifice),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "triggers 5: then if there are no cards exiled with ~, sacrifice it", priority: 40, apply: if_none_exiled_with_source_sacrifice_it } }
