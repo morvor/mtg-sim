@@ -115,8 +115,11 @@ Tests in `crates/mtg-engine/tests/cards/roundtrip_pairs_2.rs`; both fail on the 
 - Norn's Decree: "Whenever one or more creatures an opponent controls deal combat damage to
   you, that opponent gets a poison counter": "that opponent" was the player dealt damage, so
   you got the poison counter. `patterns/triggers.rs` (the controller of those creatures).
-  With creatures of several opponents dealing damage at once it triggers once and each of
-  those opponents gets a counter.
+  Review: with creatures of several opponents dealing damage at once (shared team turns) it
+  triggers once for each of those opponents (`BatchPer::OtherController`), as Stronghold
+  Arena's ruling has "one or more creatures you control deal combat damage to a player"
+  trigger once for each player; provisional register entry
+  `one-or-more-an-opponent-controls-per-opponent`, test in `tests/cr/interp_multiplayer.rs`.
 
 Checked in play (tests in the same file, passing on the old code too): Belligerent Yearling
 keeps the power it copied when the Dinosaur is pumped later (CR 608.2h); Thief of Blood
