@@ -22,6 +22,40 @@ impl Renderer<'_> {
         else {
             return None;
         };
+        // "All cards that aren't on the battlefield, spells, and permanents are colorless"
+        // (Mycosynth Lattice): every card in each other zone, everything on the stack and
+        // on the battlefield.
+        let card_in = |f: &Filter| match f {
+            Filter::And(v) if v.len() == 2 && v.iter().any(|x| matches!(x, Filter::Card)) => {
+                v.iter().find_map(|x| match x {
+                    Filter::InZone(z) => Some(*z),
+                    _ => None,
+                })
+            }
+            _ => None,
+        };
+        let others: Vec<ZoneKind> = NOT_ON_BATTLEFIELD
+            .iter()
+            .copied()
+            .filter(|z| *z != ZoneKind::Stack)
+            .collect();
+        let everything = alts.len() == others.len() + 2
+            && others
+                .iter()
+                .all(|z| alts.iter().any(|f| card_in(f) == Some(*z)))
+            && alts
+                .iter()
+                .any(|f| matches!(f, Filter::InZone(ZoneKind::Stack)))
+            && alts
+                .iter()
+                .any(|f| matches!(f, Filter::InZone(ZoneKind::Battlefield)));
+        if everything {
+            let vp = self.mods_vp(mods, false);
+            return Some(format!(
+                "all cards that aren't on the battlefield, spells, and permanents {}",
+                super::statics::plural_vp(&vp)
+            ));
+        }
         // The cards in each zone but the battlefield: one quality, in every such zone.
         let zone_of = |f: &Filter| match f {
             Filter::And(v) => v.iter().find_map(|x| match x {
