@@ -2240,11 +2240,20 @@ impl Game {
         }
         // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
         // permission it's cast with.
-        if let Some(n) = opt
-            .permission
-            .as_ref()
-            .map(|c| c.terms.cost_reduction)
-            .filter(|n| *n > 0)
+        // So does one an effect casting the spell as it resolves gives ("That copy costs
+        // {2} less to cast").
+        let during_resolution = if opt.any_time {
+            self.resolution_cost_reduction
+        } else {
+            0
+        };
+        if let Some(n) = Some(
+            opt.permission
+                .as_ref()
+                .map_or(0, |c| c.terms.cost_reduction)
+                + during_resolution,
+        )
+        .filter(|n| *n > 0)
         {
             changes
                 .reductions

@@ -847,6 +847,9 @@ pub struct Game {
     /// instant or sorcery card from your graveyard by paying {R}{R} in addition to its
     /// other costs", CR 601.2b, 601.2f).
     pub resolution_extra_cost: Option<Cost>,
+    /// Likewise, a reduction of the generic mana those spells cost ("you may cast the copy.
+    /// That copy costs {2} less to cast", CR 601.2f).
+    pub resolution_cost_reduction: u32,
     /// Bookkeeping about reversed illegal actions (CR 733.1, `reversal.rs`).
     pub reversals: crate::reversal::ReversalState,
 }
@@ -983,6 +986,7 @@ impl Game {
             timing: Default::default(),
             resolution_alt_cost: None,
             resolution_extra_cost: None,
+            resolution_cost_reduction: 0,
             reversals: Default::default(),
         };
         if let Some(teams) = g.config.teams.clone() {
