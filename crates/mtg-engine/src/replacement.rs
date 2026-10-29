@@ -1704,7 +1704,18 @@ impl Game {
                 c.x = m.etb.cast.as_ref().and_then(|ci| ci.x).unwrap_or(0);
                 c.entering = Some(crate::eval::EntryMods::default());
                 let linked_before = self.obj(m.obj).linked.clone();
+                // CR 614.12: when it's entering as a copy (a copy effect applied earlier,
+                // CR 616.1c), the effect sees it as it would exist on the battlefield
+                // ("if its mana value is 4 or less", Thunderous Velocipede with Essence
+                // of the Wild).
+                let saved_chars = m.etb.copy_of.map(|_| {
+                    let hyp = self.with_hypothetical_entry(&m, |g| g.obj(m.obj).chars.clone());
+                    std::mem::replace(&mut self.objects[m.obj.0 as usize].chars, hyp)
+                });
                 self.exec(&e, &mut c);
+                if let Some(chars) = saved_chars {
+                    self.objects[m.obj.0 as usize].chars = chars;
+                }
                 for (link, objs) in self.obj(m.obj).linked.clone() {
                     for o in objs {
                         if !linked_before.get(&link).is_some_and(|v| v.contains(&o)) {
