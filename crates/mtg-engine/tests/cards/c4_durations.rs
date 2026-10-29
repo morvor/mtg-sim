@@ -351,3 +351,46 @@ fn sen_triplets_locks_the_opponent_and_lets_you_play_from_their_hand() {
     mana(&mut t, P0);
     assert!(t.cast_with(P0, shock, &[Entity::Player(P1)]).is_err());
 }
+
+#[test]
+fn oracle_en_vec_chosen_creatures_must_attack_and_the_others_cant() {
+    cr!("508.1c", "508.1d", "603.7a", "611.2a");
+    ruling!(
+        "Oracle en-Vec",
+        "Creatures which are chosen to attack, but do not attack, are destroyed at the end of that turn"
+    );
+    interp!("next-turn-effects-start-with-the-turn");
+    supported("Oracle en-Vec");
+    let mut t = TestGame::new(2);
+    let oracle = t.battlefield(P0, "Oracle en-Vec");
+    untapped(&mut t, oracle);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_choose(P1, &[Entity::Object(bears), Entity::Object(giant)]);
+    t.activate(P0, oracle, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    // Nothing yet during P0's turn; during P1's next turn the Bears and the Giant must
+    // attack, and the Wurm can't.
+    t.advance_to(P1, Step::BeginningOfCombat);
+    t.g.objects[giant.0 as usize].tapped = true;
+    assert!(!crate::combat2_common::legal_attack(&mut t, &[]));
+    assert!(!crate::combat2_common::legal_attack(
+        &mut t,
+        &[(bears, Entity::Player(P0)), (wurm, Entity::Player(P0))]
+    ));
+    assert!(crate::combat2_common::legal_attack(
+        &mut t,
+        &[(bears, Entity::Player(P0))]
+    ));
+    crate::combat2_common::declare(&mut t, P1, &[(bears, Entity::Player(P0))]);
+    t.advance_to(P1, Step::End);
+    t.resolve_all();
+    // The Giant (chosen, tapped, didn't attack) is destroyed; the Bears attacked; the Wurm
+    // wasn't chosen.
+    assert!(!t.on_battlefield(giant));
+    assert!(t.on_battlefield(bears) || t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.on_battlefield(wurm));
+}

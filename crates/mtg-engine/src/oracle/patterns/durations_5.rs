@@ -14,7 +14,7 @@
 //! Each instruction is read as the core grammar reads it with "until end of turn", and the
 //! duration of the one continuous effect it creates is replaced.
 
-use super::EffectPattern;
+use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
 use crate::oracle::effects::{parse_sentence, Builder};
 use crate::oracle::phrases::end;
@@ -329,3 +329,96 @@ fn play_from_that_players_hand(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "durations 5: you may play lands and cast spells from that player's hand this turn", priority: 100, parse: play_from_that_players_hand } }
+
+/// What "the chosen creatures" names (a choice made earlier in the ability).
+fn chosen_creatures(b: &Builder) -> Option<Sel> {
+    b.named
+        .iter()
+        .rev()
+        .find(|(p, _)| p == "the chosen creatures")
+        .map(|(_, s)| s.clone())
+}
+
+/// "During that player's next turn, the chosen creatures attack if able, and other
+/// creatures can't attack." (Oracle en-Vec): a requirement and a restriction that apply
+/// during that player's next turn (`next_turn.rs`), about the creatures chosen as the
+/// ability resolved; "other creatures" are all creatures but those, whenever they came
+/// under that player's control (CR 611.2c, 508.1c-d).
+fn during_next_turn_chosen_attack(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("during that player's next turn, ")?;
+    if r != "the chosen creatures attack if able, and other creatures can't attack"
+        || !matches!(b.it_player, PlayerRef::Target(_) | PlayerRef::TriggerPlayer)
+    {
+        return None;
+    }
+    let chosen = chosen_creatures(b)?;
+    let them = Filter::In(Box::new(chosen));
+    Some(Effect::DuringNext {
+        who: b.it_player.clone(),
+        part: NextTurnPart::Turn,
+        effect: Box::new(Effect::seq(vec![
+            Effect::AddRestriction {
+                restriction: Restriction::MustAttack(them.clone()),
+                duration: Duration::EndOfTurn,
+            },
+            Effect::AddRestriction {
+                restriction: Restriction::CantAttack(Filter::and(vec![
+                    Filter::creature(),
+                    Filter::not(them),
+                ])),
+                duration: Duration::EndOfTurn,
+            },
+        ])),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "durations 5: during that player's next turn, the chosen creatures attack if able, and other creatures can't attack", priority: 100, parse: during_next_turn_chosen_attack } }
+
+/// "At the beginning of that turn's end step, destroy each of the chosen creatures that
+/// didn't attack this turn." after an instruction waiting for that player's next turn
+/// (Oracle en-Vec): a delayed ability created as that turn begins, for its end step
+/// (CR 603.7a), about the creatures chosen as the ability resolved.
+fn at_that_turns_end_step(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    let lower = l.to_lowercase();
+    let Some(r) = end(&lower).strip_prefix("at the beginning of that turn's end step, ") else {
+        return false;
+    };
+    if r != "destroy each of the chosen creatures that didn't attack this turn" {
+        return false;
+    }
+    fn waiting(e: &mut Effect) -> Option<&mut Effect> {
+        match e {
+            Effect::Seq(v) => v.last_mut().and_then(waiting),
+            Effect::DuringNext {
+                part: NextTurnPart::Turn,
+                effect,
+                ..
+            } => Some(&mut **effect),
+            _ => None,
+        }
+    }
+    let Some(chosen) = chosen_creatures(b) else {
+        return false;
+    };
+    let Some(effect) = waiting(prev) else {
+        return false;
+    };
+    let destroy = Effect::Destroy {
+        what: Sel::All(Filter::and(vec![
+            Filter::In(Box::new(chosen)),
+            Filter::not(Filter::AttackedThisTurn),
+        ])),
+        no_regen: false,
+    };
+    let old = std::mem::take(effect);
+    *effect = Effect::seq(vec![
+        old,
+        Effect::AtNext {
+            step: TriggerStep::End,
+            effect: Box::new(destroy),
+        },
+    ]);
+    true
+}
+
+inventory::submit! { FollowupPattern { name: "durations 5: at the beginning of that turn's end step, destroy each of the chosen creatures that didn't attack", priority: 40, apply: at_that_turns_end_step } }
