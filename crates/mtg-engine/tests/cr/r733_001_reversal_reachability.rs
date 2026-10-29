@@ -398,6 +398,10 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // Pyramids, `cards/pyramids.rs`).
         "umbra armor:remove all damage from it",
         "card:Pyramids:remove all damage marked on it",
+        // Entering attached to a host chosen as it enters, or going to the graveyard
+        // instead (`kw/enters_attached.rs`): no library.
+        "enter attached to the chosen object",
+        "put the entering permanent into its owner's graveyard instead",
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {
         return None;
@@ -544,6 +548,8 @@ fn custom_rule(name: &str) -> CustomRule {
         "may look at the top card of their library any time",
         "may look at face-down creatures you don't control",
         "may look at cards exiled with this",
+        // (Each player looks at the face-down cards they exiled with it, `kw/exile_provenance.rs`.)
+        "each player may look at cards they exiled with this",
         "facedown: may look at opponents' face-down creatures",
         "plays with their hand revealed",
         // Characteristics (layers), names, devotion, triggers.

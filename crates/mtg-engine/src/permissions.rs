@@ -265,10 +265,13 @@ pub fn allowing(
         if hidden || (land && !perm.lands) || (!land && !perm.spells) {
             continue;
         }
-        let ctx = Ctx::new(Some(*src), *ctl);
+        let mut ctx = Ctx::new(Some(*src), *ctl);
         if !g.player_rel_matches(perm.who, p, &ctx) || !in_permission_zone(g, p, card, perm) {
             continue;
         }
+        // "Each player may play ... from among cards they exiled with ~": the cards are
+        // judged for the player the permission is for (`PlayerRel::Iterated`).
+        ctx.iter_player = Some(p);
         // A single-use permission already used ("You may cast a creature spell from your
         // graveyard this turn"), or one that applies only while a condition holds.
         if once.as_ref().is_some_and(|slot| {
@@ -354,6 +357,8 @@ fn free_option(
 fn spell_qualities(f: &Filter) -> Filter {
     match f {
         Filter::In(_) | Filter::InZone(_) => Filter::Any,
+        // Who put the card into exile (`kw/exile_provenance.rs`): also judged as it began.
+        Filter::Custom(n) if crate::kw::exile_provenance::is_provenance(n) => Filter::Any,
         Filter::And(v) => Filter::And(v.iter().map(spell_qualities).collect()),
         other => other.clone(),
     }

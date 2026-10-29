@@ -2155,7 +2155,10 @@ impl Game {
             }
             Effect::CreateEmblem { who, abilities } => {
                 for p in self.eval_players(who, ctx) {
-                    crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    let e = crate::tokens::create_emblem(self, p, abilities.clone(), ctx.source);
+                    // "You may play cards exiled with ~" on an emblem: the cards exiled
+                    // with the object that created it (see `Sel::Linked`).
+                    self.objects[e.0 as usize].created_by = ctx.source.map(|s| (s, ctx.link));
                 }
             }
             Effect::RestartGame { keep } => {

@@ -229,8 +229,10 @@ impl Game {
             Zone::Battlefield => zone == FunctionZone::Battlefield && !obj.phased_out,
             Zone::Stack => zone == FunctionZone::Stack,
             Zone::Hand(_) => zone == FunctionZone::Hand,
-            Zone::Graveyard(_) => zone == FunctionZone::Graveyard,
-            Zone::Exile => zone == FunctionZone::Exile,
+            Zone::Graveyard(_) => {
+                zone == FunctionZone::Graveyard || zone == FunctionZone::GraveyardOrExile
+            }
+            Zone::Exile => zone == FunctionZone::Exile || zone == FunctionZone::GraveyardOrExile,
             Zone::Library(_) => zone == FunctionZone::Library,
             Zone::Command => {
                 zone == FunctionZone::Command
