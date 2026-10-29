@@ -8,6 +8,7 @@ use crate::r_p046_common::*;
 use crate::r_p052_common::*;
 use crate::r_s01_common::*;
 use crate::r_s06_common::activate_containing;
+use crate::r_s17_common::enter_transformed;
 use crate::r_s20_common::tap_for_mana;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -235,4 +236,100 @@ fn a_dies_trigger_copies_a_dead_clone_as_it_last_existed() {
     assert_eq!(toks.len(), 1);
     assert_eq!(t.obj_now(toks[0]).chars.name, "Ochre Jelly");
     assert_eq!(t.counters(toks[0], "+1/+1"), 2);
+}
+
+/// P0 sacrifices `zombie` to Cleaver Skaab ("{3}, {T}, Sacrifice another Zombie: Create
+/// two tokens that are copies of the sacrificed creature."); returns P0's tokens.
+fn cleave(t: &mut TestGame, zombie: ObjectId) -> Vec<ObjectId> {
+    supported("Cleaver Skaab");
+    let skaab = t.battlefield(P0, "Cleaver Skaab");
+    old(t, skaab);
+    fill_pool(t, P0, 3);
+    t.answer_choose(P0, &[obj(zombie)]);
+    activate_containing(t, P0, skaab, "Sacrifice another Zombie").expect("Cleaver Skaab");
+    t.resolve_all();
+    tokens(t, P0)
+}
+
+#[test]
+fn cleaver_skaab_copies_the_sacrificed_zombie_as_it_last_existed() {
+    cr!("707.3", "707.2", "608.2h");
+    ruling!(
+        "Cleaver Skaab",
+        "If the sacrificed Zombie was itself copying a permanent, the tokens will be copies of whatever it was copying, as modified by that copy effect. The tokens won't copy any other effects that were applying to the sacrificed creature, including effects that changed its types, color, power, or toughness while it was on the battlefield."
+    );
+    // A Clone copying Walking Corpse (a 2/2 Zombie), given +3/+3 by Giant Growth.
+    let mut t = TestGame::new(2);
+    let corpse = t.battlefield(P1, "Walking Corpse");
+    t.answer_choose(P0, &[obj(corpse)]);
+    let clone = t.enter(P0, "Clone");
+    t.settle();
+    let growth = t.hand(P0, "Giant Growth");
+    fill_pool(&mut t, P0, 1);
+    t.cast(P0, growth).target(obj(clone)).go();
+    t.resolve_all();
+    assert_eq!(t.pt(clone), (5, 5));
+    let toks = cleave(&mut t, clone);
+    assert!(t.in_graveyard(P0, "Clone"));
+    assert_eq!(toks.len(), 2);
+    for tok in toks {
+        let o = t.obj_now(tok);
+        assert_eq!(o.chars.name, "Walking Corpse");
+        assert!(o.chars.has_subtype("Zombie"));
+        assert_eq!(t.pt(tok), (2, 2));
+    }
+}
+
+#[test]
+fn cleaver_skaab_copies_a_transformed_zombie_back_face_up() {
+    cr!("707.8a", "608.2h");
+    // Catapult Fodder // Catapult Captain (Zombie on both faces), sacrificed back face up:
+    // as it last existed on the battlefield, the Captain.
+    let mut t = TestGame::new(2);
+    let fodder = enter_transformed(&mut t, P0, "Catapult Fodder // Catapult Captain");
+    assert_eq!(t.obj_now(fodder).chars.name, "Catapult Captain");
+    let toks = cleave(&mut t, fodder);
+    assert_eq!(toks.len(), 2);
+    for tok in toks {
+        assert_eq!(t.obj_now(tok).chars.name, "Catapult Captain");
+        assert_eq!(t.obj_now(tok).face, mtg_engine::object::FaceState::Back);
+    }
+}
+
+#[test]
+fn coiling_rebirth_copies_the_returned_creature_not_its_earlier_life() {
+    cr!("400.7", "707.2");
+    // A Clone that died as a copy of Hill Giant returns with Coiling Rebirth (gift
+    // promised) as a copy of Grizzly Bears: the token copies the returned creature, a new
+    // object (a 1/1 Grizzly Bears), not the Clone's earlier existence on the battlefield.
+    supported("Coiling Rebirth");
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_choose(P0, &[obj(giant)]);
+    let clone = t.enter(P0, "Clone");
+    t.settle();
+    assert_eq!(t.obj_now(clone).chars.name, "Hill Giant");
+    t.g.destroy(clone, None);
+    t.resolve_all();
+    let card = t.g.current(clone);
+    assert_eq!(t.zone(card), mtg_engine::object::Zone::Graveyard(P0));
+    t.g.destroy(giant, None);
+    t.resolve_all();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let spell = t.hand(P0, "Coiling Rebirth");
+    fill_pool(&mut t, P0, 5);
+    t.answer(
+        P0,
+        DecisionKind::OptionalCost,
+        mtg_engine::decision::Answer::Bool(true),
+    );
+    t.answer_targets(P0, &[obj(card)]);
+    t.answer_choose(P0, &[obj(bears)]);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.obj_now(card).chars.name, "Grizzly Bears");
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.obj_now(toks[0]).chars.name, "Grizzly Bears");
+    assert_eq!(t.pt(toks[0]), (1, 1));
 }

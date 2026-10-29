@@ -1,5 +1,5 @@
 //! Rulings batch P052 — The Moment and Oubliette: "phases out until [this] leaves the
-//! battlefield" (CR 702.26, 610.3), phasing in tapped (CR 702.26c), and a
+//! battlefield" (CR 702.26, 610.4), phasing in tapped (CR 702.26c), and a
 //! permanent destroyed by its own ability before it's sacrificed (CR 701.8a, 701.21a).
 
 use crate::r_p046_common::*;
@@ -15,7 +15,7 @@ fn phased_out(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn the_moments_creature_phases_in_only_when_the_moment_leaves() {
-    cr!("702.26b", "702.26c");
+    cr!("610.4", "610.4a", "702.26c");
     ruling!(
         "The Moment",
         "A creature phased out by The Moment doesn't phase in during its controller's untap step as normal. Rather, it phases in immediately after The Moment leaves the battlefield."
@@ -42,7 +42,7 @@ fn the_moments_creature_phases_in_only_when_the_moment_leaves() {
 
 #[test]
 fn the_moment_leaving_first_untaps_without_phasing_out() {
-    cr!("610.3a", "702.26b");
+    cr!("610.4b");
     ruling!(
         "The Moment",
         "If The Moment leaves the battlefield before its first activated ability resolves, the target creature will be untapped, but won't phase out."
