@@ -5,11 +5,10 @@
 //! A replacement of one result of damage (CR 120.3c, 614.1), the
 //! `loyalty_removed_by_damage` hook, keyed to the marker [`LAST_LOYALTY`] (with its
 //! condition "as long as you control a creature", CR 604): the damage is still dealt with
-//! all its other results (ruling). The card's [`super::ManualAbility`] registration waits
-//! for its "As ~ enters, choose a planeswalker type." to compile (cards5-choices-players):
-//! `manual-check` rejects a hand-written block on a card that still has unsupported text.
+//! all its other results (ruling). Its "As ~ enters, choose a planeswalker type." and
+//! "Planeswalkers you control of the chosen type have hexproof." compile (CR 205.3j).
 
-use super::active;
+use super::{active, marker_if, ManualAbility};
 use crate::ability::Filter;
 use crate::eval::Ctx;
 use crate::game::Game;
@@ -42,3 +41,19 @@ impl KeywordRules for Rules {
 }
 
 inventory::submit! { KeywordRegistration(&Rules) }
+
+const TEXT: &str = "As long as you control a creature, if damage dealt to a planeswalker you control of the chosen type would result in all loyalty counters on it being removed, instead all but one of those counters are removed.";
+
+inventory::submit! { ManualAbility {
+    card: "Deification",
+    face: 0,
+    text: TEXT,
+    build: |_| {
+        vec![marker_if(
+            LAST_LOYALTY,
+            crate::ability::Condition::Exists(Filter::creature().you_control()),
+            TEXT,
+        )]
+    },
+    reason: "damage can't remove a planeswalker's last loyalty counter (a replacement of one result of damage, CR 120.3c): unique",
+} }

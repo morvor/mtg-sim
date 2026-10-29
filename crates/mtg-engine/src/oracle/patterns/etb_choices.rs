@@ -1117,6 +1117,7 @@ fn choice_kind(s: &str) -> Option<ChoiceKind> {
         "a player" => ChoiceKind::Player,
         "a basic land type" => ChoiceKind::BasicLandType,
         "a land type" => ChoiceKind::OneOf(crate::types::land_types()),
+        "a planeswalker type" => ChoiceKind::OneOf(crate::types::planeswalker_types()),
         "a card type" => ChoiceKind::CardType,
         "odd or even" => ChoiceKind::OddOrEven,
         "a number" => ChoiceKind::Number {

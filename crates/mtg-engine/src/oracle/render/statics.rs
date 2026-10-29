@@ -1704,6 +1704,18 @@ impl Renderer<'_> {
                 let v = self.value(v);
                 format!("X can't be greater than {v}")
             }
+            // "X is the number of artifact and/or creature cards in an opponent's graveyard
+            // as you cast ~."
+            CostChange::Rule(CostRule::XOneOf(PlayerFilter::Opponent, v)) => {
+                let v = self.value(v);
+                let v = v
+                    .replace(
+                        "{alt:that player's|their} graveyard",
+                        "an opponent's graveyard",
+                    )
+                    .replace("their graveyard", "an opponent's graveyard");
+                format!("X is {v} as you cast ~")
+            }
             CostChange::Rule(r) => cost_rule_text(r),
             CostChange::IncreaseMana(m) => format!("{target}{who} {costs} {m} more {act}"),
             CostChange::ReduceColored(c, v) => {
@@ -4703,6 +4715,7 @@ pub(crate) fn cost_rule_text(r: &CostRule) -> String {
         }
         // (Rendered with its value where a renderer is at hand.)
         CostRule::XAtMost(_) => "X can't be greater than that value".into(),
+        CostRule::XOneOf(..) => "X is that value".into(),
         CostRule::NoMana => "you can't spend mana to cast ~".into(),
         CostRule::OnlyManaFrom(_) => "spend only mana produced by permanents to cast ~".into(),
         CostRule::OnlyChosenColor => {

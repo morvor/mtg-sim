@@ -138,12 +138,16 @@ pub struct Modal {
     pub optional: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub enum ModeChooser {
     #[default]
     Controller,
     Opponent,
     Random,
+    /// "choose one at random. If [condition], you choose one instead." (Typhoid Mary,
+    /// Fractured): at random unless the condition holds as the modes are chosen (CR
+    /// 700.2b), in which case the controller chooses.
+    RandomUnless(Box<Condition>),
     /// The controller chooses modes whose total number of pawprint symbols is at most this
     /// many ("Choose up to five {P} worth of modes", CR 107.18, 700.2i).
     Pawprints(u32),
@@ -3642,6 +3646,11 @@ pub enum CostRule {
     /// "X can't be greater than the number of players in the game." (CR 107.3a, 601.2b):
     /// the greatest value that may be announced for X, determined as X is announced.
     XAtMost(Box<Value>),
+    /// "X is the number of artifact and/or creature cards in an opponent's graveyard as
+    /// you cast this spell." (Spoils of War, CR 107.3c): X is exactly the value for one of
+    /// the players matching, `value` evaluated with each as the iterated player; the
+    /// caster announces which by announcing X (interpretation `x-defined-for-a-player`).
+    XOneOf(PlayerFilter, Box<Value>),
     /// "Spend only black mana on X.", "Spend only black and/or red mana on X.", "Spend
     /// only colored mana on X.": only mana of these colors may pay the part of the cost
     /// that X represents (CR 107.3a, 601.2h). It's still generic mana (cost reductions
