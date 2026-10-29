@@ -4359,6 +4359,39 @@ impl Renderer<'_> {
                 return format!("for each {each}, add {sym} and you gain 1 life");
             }
         }
+        // "Zombies you control get +2/+1 until end of turn. Other creatures you control get
+        // +1/+1 until end of turn." (`patterns/other_than_previous_group.rs`): the second
+        // group is "other" than the first.
+        if let [first @ Effect::Modify {
+            what: Sel::All(group),
+            ..
+        }, Effect::Modify {
+            what: Sel::All(Filter::And(fs)),
+            mods,
+            duration,
+        }] = v
+        {
+            let not_group = format!("{:?}", Filter::Not(Box::new(group.clone())));
+            let is_not_group = |f: &Filter| format!("{f:?}") == not_group;
+            if fs.iter().filter(|f| is_not_group(f)).count() == 1 {
+                let other = Effect::Modify {
+                    what: Sel::All(Filter::And(
+                        fs.iter()
+                            .map(|f| {
+                                if is_not_group(f) {
+                                    Filter::Other
+                                } else {
+                                    f.clone()
+                                }
+                            })
+                            .collect(),
+                    )),
+                    mods: mods.clone(),
+                    duration: duration.clone(),
+                };
+                return format!("{}. {}", self.effect(first), self.effect(&other));
+            }
+        }
         let mut parts: Vec<String> = Vec::new();
         let mut outcomes = Vec::new();
         let mut i = 0;
