@@ -772,3 +772,259 @@ fn crabomination_emerge_uses_the_artifacts_mana_value() {
         assert!(!crab_emerges(&mut t, a, 6 - mv), "{what}: one mana fewer");
     }
 }
+
+#[test]
+fn spinerock_knoll_counts_an_opponent_who_left_the_game() {
+    cr!("702.75a", "800.4a");
+    ruling!(
+        "Spinerock Knoll",
+        "At the time the last ability resolves, you'll get to play the card if a player who is currently your opponent, or a player who was your opponent at the time they left the game, has been dealt 7 damage over the course of the turn."
+    );
+    supported("Spinerock Knoll");
+    for leaves in [false, true] {
+        let mut t = TestGame::new(3);
+        let lib = stack_library(&mut t, P0, &["Grizzly Bears", "Forest", "Forest", "Forest"]);
+        t.answer_choose(P0, &[o(lib[0])]);
+        let knoll = t.enter(P0, "Spinerock Knoll");
+        t.resolve_all();
+        assert!(in_exile(&t, lib[0]));
+        let src = t.battlefield(P0, "Hill Giant");
+        crate::r_s03_common::run_effect(
+            &mut t,
+            Some(src),
+            P0,
+            mtg_engine::ability::Effect::DealDamage {
+                source: mtg_engine::ability::Sel::This,
+                amount: mtg_engine::ability::Value::c(7),
+                to: mtg_engine::ability::Sel::Players(mtg_engine::ability::PlayerRef::Player(P1)),
+            },
+            &[],
+        );
+        assert_eq!(t.life(P1), 13);
+        if leaves {
+            t.g.lose_game(P1);
+            t.settle();
+            assert!(!t.g.player(P1).in_game());
+        }
+        t.g.untap(knoll);
+        mana(&mut t, P0, ManaType::R, 1);
+        t.answer_yes(P0, true);
+        t.activate(P0, knoll, 1, &[]).unwrap();
+        t.resolve_all();
+        assert!(t.on_battlefield(lib[0]), "leaves: {leaves}");
+    }
+    // Damage to no opponent: nothing.
+    let mut t = TestGame::new(3);
+    let lib = stack_library(&mut t, P0, &["Grizzly Bears", "Forest", "Forest", "Forest"]);
+    t.answer_choose(P0, &[o(lib[0])]);
+    let knoll = t.enter(P0, "Spinerock Knoll");
+    t.resolve_all();
+    t.g.untap(knoll);
+    mana(&mut t, P0, ManaType::R, 1);
+    t.answer_yes(P0, true);
+    t.activate(P0, knoll, 1, &[]).unwrap();
+    t.resolve_all();
+    assert!(in_exile(&t, lib[0]));
+}
+
+#[test]
+fn knowledge_pool_doesnt_stop_the_original_spells_cast_triggers() {
+    cr!("603.2", "601.2i");
+    ruling!(
+        "Knowledge Pool",
+        "Any other abilities that trigger when you cast the original spell (for example, if you cast Emrakul, the Aeons Torn) will still trigger and go on the stack."
+    );
+    supported("Knowledge Pool");
+    supported("Emrakul, the Aeons Torn");
+    let mut t = TestGame::new(2);
+    for _ in 0..3 {
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P1, "Grizzly Bears");
+    }
+    t.enter(P0, "Knowledge Pool");
+    t.resolve_all();
+    let e = t.hand(P0, "Emrakul, the Aeons Torn");
+    mana(&mut t, P0, ManaType::C, 15);
+    t.cast(P0, e).go();
+    t.settle();
+    // Knowledge Pool's trigger and Emrakul's own "when you cast this spell" trigger.
+    assert_eq!(t.stack_len(), 3);
+    t.resolve_all();
+    assert!(in_exile(&t, e));
+    assert_eq!(t.g.extra_turns, vec![P0]);
+}
+
+#[test]
+fn calix_and_oko_token_copies_get_enters_abilities() {
+    cr!("707.2", "111.5", "603.6a", "614.12");
+    ruling!(
+        "Calix, Guided by Fate",
+        "Any enters-the-battlefield abilities of the copied permanent will trigger when the token enters the battlefield. Any \"as [this permanent] enters the battlefield\" or \"[this permanent] enters the battlefield with\" abilities of the copied permanent will also work."
+    );
+    ruling!(
+        "Oko, the Ringleader",
+        "Any enters-the-battlefield abilities of the copied permanent will trigger when the token enters the battlefield. Any \"as [this permanent] enters the battlefield\" or \"[this permanent] enters the battlefield with\" abilities of the copied permanent will also work."
+    );
+    supported("Calix, Guided by Fate");
+    supported("Oko, the Ringleader");
+    // Calix: a token copy of Oblivion Ring (its enters ability exiles a target) and of
+    // Shared Triumph (its "as enters" choice of a creature type is made for the copy).
+    for what in ["Oblivion Ring", "Shared Triumph"] {
+        let mut t = TestGame::new(2);
+        let calix = t.battlefield(P0, "Calix, Guided by Fate");
+        let ench = t.battlefield(P0, what);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let mine = t.battlefield(P0, "Grizzly Bears");
+        attack_with(&mut t, &[(calix, Entity::Player(P1))]);
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[o(ench)]);
+        // The token's enters ability and Calix's constellation trigger both target.
+        t.answer_targets(P0, &[o(bears)]);
+        t.answer_targets(P0, &[o(bears)]);
+        crate::r_s24_common::choose_creature_type(&mut t, P0, "Bear");
+        block_and_finish(&mut t, P1, &[]);
+        t.resolve_all();
+        let copies: Vec<ObjectId> = t
+            .named_on_battlefield(what)
+            .into_iter()
+            .filter(|x| t.obj(*x).is_token())
+            .collect();
+        assert_eq!(copies.len(), 1, "{what}");
+        if what == "Oblivion Ring" {
+            assert!(in_exile(&t, bears));
+        } else {
+            // Neither Shared Triumph had a type chosen but the copy's: Bears get +1/+1.
+            assert_eq!(t.pt(mine), (3, 3));
+        }
+    }
+    // Oko's −5: copies of Wall of Omens (draw a card) and Kalonian Hydra (four +1/+1
+    // counters).
+    let mut t = TestGame::new(2);
+    let oko = t.battlefield(P0, "Oko, the Ringleader");
+    t.g.objects[oko.0 as usize]
+        .counters
+        .insert("loyalty".into(), 5);
+    t.battlefield(P0, "Wall of Omens");
+    // (Kalonian Hydra is 0/0: it needs its counters as it enters.)
+    t.enter(P0, "Kalonian Hydra");
+    let hand = t.hand_size(P0);
+    crate::r_s06_common::activate_containing(&mut t, P0, oko, "For each other").unwrap();
+    t.resolve_all();
+    let hydra = t
+        .named_on_battlefield("Kalonian Hydra")
+        .into_iter()
+        .find(|x| t.obj(*x).is_token())
+        .expect("no Hydra copy");
+    assert_eq!(t.counters(hydra, "+1/+1"), 4);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn arcane_savant_chooses_one_of_several_exiled_cards_to_copy() {
+    cr!("905.2b", "707.10");
+    ruling!(
+        "Arcane Savant",
+        "As Arcane Savant's last ability resolves, if there are multiple cards you exiled with cards named Arcane Savant, you choose one of them to copy."
+    );
+    supported("Arcane Savant");
+    let mut t = TestGame::new(2);
+    let side = t.g.add_to_sideboard(
+        P0,
+        vec![
+            mtg_engine::card::card("Lightning Bolt"),
+            mtg_engine::card::card("Divination"),
+        ],
+    );
+    let mut exiled = vec![];
+    for c in side {
+        let x = t
+            .g
+            .move_object(c, Zone::Exile, mtg_engine::events::MoveCause::Effect, Some(P0))
+            .unwrap();
+        t.g.named_exiles.push((P0, "Arcane Savant".into(), x));
+        exiled.push(x);
+    }
+    let from = t.asked().len();
+    t.answer_choose(P0, &[o(exiled[1])]);
+    t.answer_yes(P0, true);
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Arcane Savant");
+    t.resolve_all();
+    let offered = crate::r_s03_common::choice_candidates(&t, from, "");
+    assert!(offered
+        .iter()
+        .any(|c| c.contains(&o(exiled[0])) && c.contains(&o(exiled[1]))));
+    // A copy of Divination was cast: two cards drawn. Both cards stay exiled.
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.life(P1), 20);
+    assert!(in_exile(&t, exiled[0]) && in_exile(&t, exiled[1]));
+}
+
+#[test]
+fn striking_palette_copies_the_next_spell_with_or_without_targets() {
+    cr!("707.10", "603.7a", "722.3a");
+    ruling!(
+        "Pigment Wrangler // Striking Palette",
+        "After Striking Palette resolves, the next instant or sorcery spell you cast that turn will be copied whether or not it has targets."
+    );
+    supported("Pigment Wrangler // Striking Palette");
+    let mut t = TestGame::new(2);
+    let w = t.enter(P0, "Pigment Wrangler // Striking Palette");
+    t.resolve_all();
+    let copy = t.obj_now(w).prepared.expect("enters prepared");
+    mana(&mut t, P0, ManaType::R, 1);
+    t.cast(P0, copy).go();
+    t.resolve_all();
+    let hand = t.hand_size(P0);
+    cast_new(&mut t, P0, "Divination", &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 4);
+    // Only the next one.
+    let hand = t.hand_size(P0);
+    cast_new(&mut t, P0, "Divination", &[]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+}
+
+#[test]
+fn replenish_aura_cant_enchant_an_enchantment_entering_with_it() {
+    cr!("303.4g", "303.4a");
+    ruling!(
+        "Eiganjo Dynastorian // Replenish",
+        "An Aura put onto the battlefield this way can't enchant an enchantment that's also being put onto the battlefield with Replenish."
+    );
+    supported("Eiganjo Dynastorian // Replenish");
+    supported("Steal Enchantment");
+    for other in [false, true] {
+        let mut t = TestGame::new(2);
+        let d = t.battlefield(P0, "Eiganjo Dynastorian // Replenish");
+        t.graveyard(P0, "Glorious Anthem");
+        let steal = t.graveyard(P0, "Steal Enchantment");
+        let theirs = other.then(|| t.battlefield(P1, "Glorious Anthem"));
+        mtg_engine::designations::become_prepared(&mut t.g, d);
+        let copy = t.obj_now(d).prepared.expect("prepared");
+        mana(&mut t, P0, ManaType::W, 4);
+        let from = t.asked().len();
+        if let Some(x) = theirs {
+            t.answer_choose(P0, &[o(x)]);
+        }
+        t.cast(P0, copy).go();
+        t.resolve_all();
+        let anthems: Vec<ObjectId> = t
+            .named_on_battlefield("Glorious Anthem")
+            .into_iter()
+            .filter(|x| t.obj(*x).owner == P0)
+            .collect();
+        assert_eq!(anthems.len(), 1, "other: {other}");
+        let offered = crate::r_s03_common::choice_candidates(&t, from, "");
+        assert!(offered.iter().all(|c| !c.contains(&o(anthems[0]))));
+        match theirs {
+            None => assert!(t.in_graveyard(P0, "Steal Enchantment")),
+            Some(x) => {
+                assert!(t.on_battlefield(steal));
+                assert_eq!(t.obj_now(steal).attached_to, Some(o(x)));
+                assert_eq!(t.obj_now(x).controller, P0);
+            }
+        }
+    }
+}
