@@ -110,3 +110,133 @@ cards and then the two-card clusters in the tool's order up to the 80th (152 car
 - oracle `kicked` vs rendered `a kicked permanent`: Hallar, the Firefletcher; Bloodstone Goblin
 - oracle `look at the top card` vs rendered `{alt:look at the top card of {alt:that player's|its} library, then exile it face down|exile the top card of {alt:that player's|its} library face down and look at it|exile the top card of {alt:that player's|its} library face down. may look at {alt:thatit|it} for as long as it remains exiled} may play it {alt:for as long as it remains exiled|for as long as it remain exiled}`: Dream-Thief's Bandana; Klaw, Master of Sound
 - oracle `may cast up to 2` vs rendered `cast up to 2 nonland`: Collected Conjuring; Doom Reigns Supreme
+
+## Result
+
+28,046 of 31,866 fully supported cards passed at the start (711b6545); 28,165 of 31,866 pass on the branch before the merge, and 28,186 of 31,951 after
+merging the later landings (origin's passing list at the merge has 28,046 cards). 87 of the
+152 taken cards pass.
+
+Parser (one fix, one fidelity change):
+
+- `oracle/costs.rs`: "Tap enchanted land: ..." / "Tap enchanted creature: ..." is the
+  permanent the Aura enchants (`Filter::AttachedToSource`), not any enchanted land or
+  creature you control (the bug below).
+- `oracle/statics.rs` (`restrict_enchanted_creature`, called once per face from
+  `oracle::compile`): on an Aura that can enchant a permanent that isn't a creature
+  ("Enchant creature or Vehicle": Aether Meltdown, Mists of Littjara, Aerial Modification,
+  Siege Modification), "Enchanted creature gets ..." affects the enchanted permanent only
+  while it's a creature, as the text says (CR 303.4m names the attachment; the noun is the
+  kind). Not observable through the rules (a noncreature Vehicle has no power or
+  toughness, CR 301.7a), so not listed as a bug; the test pins the creature case through
+  the crew ability's type change (layer 4 before 7c).
+
+Renderer (small hooks in the existing files): "At the beginning of each of your main
+phases" (CR 505.1, 505.1a); "protection from each color among permanents you control";
+"if it has greater power or toughness than ~"; dig steps that exile "face down" and "with
+a hatching counter on it" (the face-down and counter qualities used to be dropped, and a
+battlefield destination's counters were named `"hatching" counter counter`); "When they
+do" / "If they do" after "Target opponent gains control of ..."; "each of that player's
+opponents"; "Each player shuffles their graveyard into their library" (CR 400.3); "Kavu"
+as its own plural; a permission's "until the end of their next turn" for another player;
+"any time you could activate a mana ability, you may pay 1 life" (`mana_timing`); "When
+you next activate an ability that isn't a mana ability this turn by spending four or more
+mana to activate it"; "~ is the chosen color" in a static ability (not a choice on
+resolution); "If ~ would be destroyed, regenerate it"; "If you control a creature, damage
+that would ..." (a conditional replacement's other wording); "if that spell was kicked";
+"if that spell has mana value 5 or greater" / "if it has power 7 or greater"; "for each
+graveyard with seven or more cards in it" (CR 404.1); "Whenever you exert a creature";
+"When a player doesn't pay ~'s cumulative upkeep"; "until the end of defending player's
+next turn, whenever ..."; "if it wasn't sacrificed", "if it wasn't the first land you
+played this turn"; "creatures it was blocking that had become blocked by only ~";
+"exile a land you control" / "exile any number of other nonland permanents you control
+until ~ leaves the battlefield" (a choice of permanents, then the exile); "For each
+color, return up to one target creature card of that color ..." (CR 105.1); "from the
+battlefield" for a permanent returned to a hand or the command zone (CR 109.2); "gets
+-5/-0 and loses all abilities" in either order (CR 613.1f, 613.4c); "~ can't attack if
+defending player controls an untapped land" (CR 506.2); "your third spell in a turn";
+"becomes the target of an instant or sorcery spell"; "is all creature types";
+"Equipped creature gets +2/+0" in an ability granted to objects made Equipment, the
+granted abilities in their listed order; "creatures you control have total toughness 10
+or greater"; "into an opponent's graveyard from their library"; "one of your opponents or
+a planeswalker they control"; "target creature blocking or blocked by it"; "Choose target
+artifact or enchantment. Its owner shuffles it into their library."; "Reveal the top card
+of your library. If it's a creature card, put it onto the battlefield. Otherwise, put it
+into your graveyard."; "the cards in your hand"; "you may play lands and cast spells from
+that player's hand"; "all combat damage that would be dealt to you by unblocked creatures
+is dealt to ~ instead"; "is enchanted or equipped"; "until it leaves the battlefield";
+"each creature that had a +1/+1 counter put on it this way"; "Each player's life total
+becomes the number of creatures they control"; "All cards that aren't on the battlefield,
+spells, and permanents"; "each other creature you control enters with a number of
+additional +1/+1 counters on it equal to ~'s toughness"; "dies while ~ is in your
+graveyard" (CR 113.6k). The equivalence "in addition to its other creature types" now also
+covers "other land types" (CR 305.7).
+
+## Parser bugs found
+
+- Tourach's Gate, Earthlore, Krovikan Plague, Nature's Chosen, Veteran's Voice: "Tap
+  enchanted land: ..." / "Tap enchanted creature: ..." was compiled as "tap an untapped
+  enchanted land (creature) you control", so another land with an Aura on it (Wild
+  Growth's) could pay the cost, leaving the enchanted one untapped for another
+  activation. Fixed in `oracle/costs.rs`; test
+  `tap_enchanted_land_taps_the_land_this_aura_enchants` in
+  `crates/mtg-engine/tests/cards/roundtrip_pairs_3.rs` (fails on the old code: checked by
+  restoring the old `costs.rs`).
+
+Checked in play (same file, passing on the old code too): Ydwen Efreet's lost flip
+unblocks the creature it blocked; Abdel Adrian makes a Soldier for an exiled token (its
+ruling) and nothing when it left before its ability resolved (its ruling, CR 610.3b);
+Boneyard Scourge and Furious Forebear don't trigger for creatures dying with them (their
+rulings); two Goblin Researchers each let you play only their own card (its ruling);
+Weathered Bodyguards takes the unblocked creature's damage but not a blocked trampler's
+(its ruling). Also checked by reading the AST or existing tests: Master Biomancer (the
+Mutant type goes to the entering creature), Suspend Aggression (the permission lasts
+through each owner's own next turn, `PlayGrant::duration_player`), Lost in Thought (the
+payer exiles from their own graveyard, `tests/cr/r116_special_actions.rs`), Mnemonic
+Nexus, Truce, Ill-Gotten Gains, Duskmantle Seer, Living Death, Fight for the Throne (the
+opponent's creature), Rhino's Rampage (excess dealt to the second creature only), Yes Man
+and Bill Ferny (the draw and the Treasures need the control change), Fangs of Kalonia and
+Spectacular Showdown (only creatures that got a counter), Discover the Impossible (the
+spell's characteristics, CR 601.3e), Muse Vortex, Undead Alchemist (each trigger makes a
+Zombie, its ruling), Dynaheir (one activation, mana abilities excluded).
+
+## Remaining
+
+Of the 152 taken cards, these still mismatch; each was checked against the AST and plays as
+the text says (wording only) unless noted:
+
+- Several sentences or abilities printed as one: Hand to Hand, Sen Triplets ("This turn,
+  that player can't cast spells or activate abilities and plays with their hand
+  revealed"), Lost in Thought, Volrath's Curse ("for that player to ignore this effect";
+  the payer's "your graveyard" is theirs), Master Biomancer ("and as a Mutant"), Frontier
+  Siege (the modes after "choose Khans or Dragons"), Aerial Modification, Siege
+  Modification ("it's a creature" after naming the enchanted permanent), Serra the
+  Benevolent (the emblem's condition placement), Living End, Living Death, Magus of the
+  Jar, Memory Jar, Ill-Gotten Gains, Duskmantle Seer ("each player ..., then ..." with the
+  subject repeated), Nuka-Nuke Launcher ("that player gets two rad counters whenever they
+  cast a spell": the trigger after the effect).
+- "Choose target ..." first: Kitesail Larcenist, Galion, Surgical Extraction, Extirpate.
+- Order only: Gamble, Wild Research (the shuffle compiled as part of the search, before the
+  random discard: no replacement can put your own discarded card into your library at a
+  position the shuffle would change), Katara, Water Tribe's Hope ("X can't be 0" before
+  the timing), Bohn ("in your hand without foretell"), Lazav, Likeness Looter ("in your
+  graveyard with mana value X"), Dragon-Kami's Egg ("from among cards you own in exile
+  with hatching counters"), Kjeldoran Royal Guard, The Sea Devils, Harsh Justice ("this
+  turn" placement).
+- Other wordings: Coram (permission for "cards in graveyards that were put there from
+  libraries": `any owner` term), Candlekeep Inspiration (X), Truce, Temporary Truce ("for
+  each card less than two a player draws this way"), Boros Strike-Captain, Goblin
+  Researcher ("During any turn you attacked with ...": tested), Carpet of Flowers ("if you
+  haven't added mana with this ability this turn", compiled as once each turn), Discover
+  the Impossible, Abdel Adrian ("for each permanent exiled this way"), Suspend Aggression
+  ("For each of those cards"), Aurelia's Vindicator, Angel of Serenity ("from the
+  battlefield and/or creature cards from graveyards"), Huatli, Nissa, Katara, Seeking
+  Revenge, Agent Maria Hill ("her", as for Michelangelo in earlier items), Parallel
+  Thoughts, Mangara's Tome, Ghastly Conscription, Expose the Culprit ("in a face-down pile,
+  shuffle that pile": the controller may look at face-down permanents anyway, CR 708.5),
+  Head Games, Jester's Mask ("that many"), Goblin War Cry, Eunuchs' Intrigues ("Other
+  creatures they control"), Rhino's Rampage ("When excess damage is dealt ... this way"),
+  Fight for the Throne ("the creature an opponent controls"), Fa'adiyah Seer, Sindbad
+  ("reveal it", "discard it"), Muse Vortex, Talent of the Telepath, Collected Conjuring,
+  Doom Reigns Supreme ("cast up to two ... spells from among them"), Shelinda ("its power"
+  after "that creature"), Dream-Thief's Bandana, Klaw ("mana of any type can be spent").
