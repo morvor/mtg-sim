@@ -323,3 +323,53 @@ fn the_pandorica_leaving_phases_the_permanent_in() {
     t.resolve_all();
     assert!(!t.obj_now(giant).phased_out);
 }
+
+#[test]
+fn elemental_expressionist_grants_exile_instead_and_a_trigger_on_being_exiled() {
+    cr!("614.1a", "603.10a", "611.2a");
+    ruling!(
+        "Elemental Expressionist",
+        "If the creature is put into exile for any reason, that ability will trigger."
+    );
+    supported("Elemental Expressionist");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elemental Expressionist");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::PrecombatMain);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    mana(&mut t, P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    // Dying: exiled instead, and an Elemental is created.
+    t.g.destroy(bears, None);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    let elementals: Vec<ObjectId> = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|o| t.g.obj(*o).chars.has_subtype("Elemental") && t.g.obj(*o).is_token())
+        .collect();
+    assert_eq!(elementals.len(), 1);
+    assert_eq!(t.pt(elementals[0]), (4, 4));
+}
+
+#[test]
+fn elemental_expressionist_grant_ends_with_the_turn() {
+    cr!("611.2a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Elemental Expressionist");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.advance_to(P0, Step::PrecombatMain);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    mana(&mut t, P0);
+    t.cast_with(P0, bolt, &[Entity::Player(P1)]).unwrap();
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    t.advance_to(P1, Step::Upkeep);
+    t.g.destroy(bears, None);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}

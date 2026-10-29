@@ -536,3 +536,16 @@ fn when_source_event_or_event(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "triggers 5: when ~ [event] or [event], [effect] (delayed)", priority: 100, parse: when_source_event_or_event } }
+
+/// "When ~ is put into exile, create ..." (granted by Elemental Expressionist): a
+/// permanent's ability functions only on the battlefield (CR 113.6), so it triggers on
+/// the permanent being exiled from the battlefield, looking back in time (CR 603.10a), as
+/// "dies or is put into exile" does (Kaya's Ghostform).
+fn source_put_into_exile(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(l) != "~ is put into exile" {
+        return None;
+    }
+    crate::oracle::triggers::parse_trigger_condition("when ~ is put into exile from the battlefield")
+}
+
+inventory::submit! { TriggerPattern { name: "triggers 5: ~ is put into exile", priority: 100, parse: source_put_into_exile } }
