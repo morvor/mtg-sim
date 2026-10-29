@@ -25,12 +25,10 @@ fn shuffled(t: &TestGame) -> Vec<PlayerId> {
 #[test]
 fn end_step_self_shuffles_leave_a_creature_that_left_where_it_is() {
     cr!("701.24c");
-    // The ruling's "its owner doesn't shuffle their library" yields to CR 701.24c.
+    // The ruling's "nothing happens ... its owner doesn't shuffle their library" yields to
+    // CR 701.24c; only its "stays wherever it is" is followed.
     interp!("self-shuffle-gone-library-still-shuffled");
-    ruling!(
-        "Blitz Hellion",
-        "If it’s not on the battlefield by the time this ability resolves, nothing happens. Blitz Hellion stays wherever it is"
-    );
+    ruling!("Blitz Hellion", "Blitz Hellion stays wherever it is");
     ruling!(
         "Inferno Hellion",
         "Inferno Hellion’s owner shuffles it into their library only if it’s on the battlefield as its last ability resolves."

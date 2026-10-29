@@ -318,7 +318,7 @@ fn maralen_stops_every_draw_and_its_trigger_is_mandatory() {
     );
     supported("Maralen of the Mornsong");
     let mut t = TestGame::new(2);
-    t.battlefield(P1, "Maralen of the Mornsong");
+    let maralen = t.battlefield(P1, "Maralen of the Mornsong");
     t.set_step(P1, Step::End);
     let bolt = t.library_top(P0, "Lightning Bolt");
     t.library_top(P0, "Grizzly Bears");
@@ -330,6 +330,13 @@ fn maralen_stops_every_draw_and_its_trigger_is_mandatory() {
     t.settle();
     // No draw; one card searched for even though P0 tried to find none; 3 life lost.
     assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(
+        !t.g.turn_events.iter().any(
+            |e| matches!(e, mtg_engine::events::Event::Drew { player, .. } if *player == P0)
+        ),
+        "the draw step's draw didn't happen"
+    );
+    assert_eq!(triggered_from(&t, maralen), 1);
     assert!(t.has_lost(P0), "3 life lost at 2 life");
     let _ = bolt;
     // Drawing by an effect does nothing either.
@@ -421,7 +428,7 @@ fn spire_serpent_keeps_attacking_after_metalcraft_ends() {
 
 #[test]
 fn sentry_oak_triggers_at_the_beginning_of_combat_on_its_controllers_turn() {
-    cr!("507.2");
+    cr!("603.2b");
     ruling!(
         "Sentry Oak",
         "Specifically, this ability triggers when the beginning of combat step starts during your turn."

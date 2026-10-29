@@ -340,3 +340,31 @@ fn karonas_zealot_stops_redirecting_once_the_creature_is_gone() {
     assert_eq!(damage_on(&t, zealot), 3);
     assert!(t.on_battlefield(zealot));
 }
+
+#[test]
+fn turned_face_up_trigger_filters_see_the_face_up_permanent() {
+    // Turning face up doesn't look back in time: "a Detective you control ... is turned
+    // face up" is checked against the face-up permanent (a face-down 2/2 has no creature
+    // types), while Sumala Sentry's "face-down" describes it just before the event.
+    cr!("603.10", "708.8");
+    supported("Case of the Pilfered Proof");
+    supported("Sumala Sentry");
+    let mut t = TestGame::new(2);
+    let case = t.battlefield(P0, "Case of the Pilfered Proof");
+    let sentry = t.battlefield(P0, "Sumala Sentry");
+    // Mistway Spy: a Merfolk Detective with disguise {1}{U}.
+    let spy = disguise(&mut t, P0, "Mistway Spy");
+    turn_up(&mut t, P0, spy, &[("Island", 2)]);
+    assert_eq!(triggered_from(&t, case), 1, "the face-up Detective");
+    assert_eq!(triggered_from(&t, sentry), 1, "it was face down");
+    t.resolve_all();
+    assert_eq!(plus(&t, spy), 2);
+    assert_eq!(plus(&t, sentry), 1);
+    // A face-down non-Detective turned face up doesn't trigger the Case.
+    let w = morph(&mut t, P0, "Willbender");
+    turn_up(&mut t, P0, w, &[("Island", 2)]);
+    assert_eq!(triggered_from(&t, case), 1, "counted this turn: no new trigger");
+    assert_eq!(triggered_from(&t, sentry), 2);
+    t.resolve_all();
+    assert_eq!(plus(&t, w), 1);
+}

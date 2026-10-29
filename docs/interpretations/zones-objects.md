@@ -108,7 +108,7 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Question: Blitz Hellion ("At the beginning of the end step, this creature's owner shuffles it into their library.") has left the battlefield when its ability resolves. It stays where it is; is its owner's library shuffled?
 - Decision: Yes. The engine follows CR 701.24c, which is newer than the ruling and has an example of the same shape (Guile exiled in response to "shuffle it into its owner's library"): the object stays where it is and the library is shuffled. Shuffle triggers trigger.
 - Alternatives: Follow the 2009 ruling: no shuffle when the object isn't where the ability expects it.
-- Why: The CR is the more recent and more general statement; the ruling predates 701.24c, and the two readings differ only in whether a library is randomized and shuffle triggers fire.
+- Why: The current CR is the more recent and more general statement (the ruling dates from 2009), and the two readings differ only in whether a library is randomized and shuffle triggers fire. The test cites only the ruling's "Blitz Hellion stays wherever it is", which both readings share.
 - Affects: Blitz Hellion, Lightning Shrieker, Inferno Hellion and every "shuffle [this/it] into its owner's library" ability.
 - Code: `crates/mtg-engine/src/shuffle_rules.rs` (`shuffle_into`).
 - Tests: `tests/rulings/r_p180_tuck.rs` (`end_step_self_shuffles_leave_a_creature_that_left_where_it_is`).
