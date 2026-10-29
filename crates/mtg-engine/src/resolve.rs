@@ -2770,6 +2770,11 @@ impl Game {
                 Modification::AddAbilitiesOf { from, which, terms } => fixed.extend(
                     crate::ability_grants::snapshot(self, from, which, terms, ctx, &mut links),
                 ),
+                // Referents of the granted ability fixed as the effect is created
+                // (`granted_captures.rs`).
+                Modification::AddAbility(a) if crate::granted_captures::mentions(a) => fixed.push(
+                    Modification::AddAbility(crate::granted_captures::bind(self, a, ctx)),
+                ),
                 other => fixed.push(other.clone()),
             }
         }
