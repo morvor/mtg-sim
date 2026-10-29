@@ -3,7 +3,7 @@
 //! random mode its controller chooses instead), and the other choice and player grammar
 //! of the item.
 
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Action, Decision, SpecialAction};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::oracle::render::compare::check_card;
 use mtg_engine::testing::*;
@@ -448,4 +448,41 @@ fn malcolm_creates_a_treasure_for_each_opponent_dealt_damage() {
     t.resolve_all();
     // One batch of damage to two opponents: two Treasures (not three).
     assert_eq!(t.named_on_battlefield("Treasure Token").len(), 2);
+}
+
+#[test]
+fn boltbender_chooses_new_targets_for_any_number_of_other_spells() {
+    cr!("115.7d", "702.168a");
+    ruling!(
+        "Boltbender",
+        "If you choose new targets for a spell or ability, those new targets must be legal."
+    );
+    round_trips("Boltbender");
+    // "When this creature is turned face up, you may choose new targets for any number of
+    // other spells and/or abilities."
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    t.lands(P1, "Mountain", 1);
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let card = t.hand(P0, "Boltbender");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, card)
+        .method(mtg_engine::object::CastMethod::FaceDown(KeywordKind::Disguise))
+        .go();
+    t.resolve();
+    let bb = t.g.current(card);
+    assert!(t.obj_now(bb).face_down);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(elves).go();
+    // P0 turns Boltbender face up: its ability chooses the Bolt and its new target.
+    let spell = t.g.current(bolt);
+    t.answer_choose(P0, &[Entity::Object(spell)]);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.g.turn.priority = Some(P0);
+    t.g.take_action(P0, Action::Special(SpecialAction::TurnFaceUp { obj: bb }));
+    t.settle();
+    t.resolve_all();
+    assert!(t.on_battlefield(elves));
+    assert!(!t.on_battlefield(bears));
 }

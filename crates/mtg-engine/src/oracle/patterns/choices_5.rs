@@ -151,3 +151,40 @@ fn exchange_those_permanents(l: &str, b: &mut Builder) -> Option<Effect> {
 }
 
 inventory::submit! { EffectPattern { name: "exchange control of those permanents (the target and the triggering permanent)", priority: 90, parse: exchange_those_permanents } }
+
+/// "you may choose new targets for any number of other spells and/or abilities"
+/// (Boltbender): the controller chooses any number of the other spells and abilities on
+/// the stack (not targeted) and may choose new targets for each (CR 115.7d); a new target
+/// must be legal.
+fn new_targets_for_any_number(l: &str, b: &mut Builder) -> Option<Effect> {
+    let l = end(l);
+    let what = l
+        .strip_prefix("you may choose new targets for any number of other ")
+        .or_else(|| l.strip_prefix("choose new targets for any number of other "))?;
+    if !matches!(
+        what,
+        "spells and/or abilities" | "spells and abilities" | "spells or abilities"
+    ) {
+        return None;
+    }
+    let _ = b;
+    // Every spell and ability on the stack is an object there (CR 113.1, 405.1).
+    let filter = Filter::and(vec![
+        Filter::InZone(ZoneKind::Stack),
+        Filter::Custom(crate::kw::choices_5_filters::NOT_RESOLVING.into()),
+    ]);
+    Some(Effect::ChangeTargets {
+        what: Sel::Choose {
+            chooser: PlayerRef::You,
+            filter: filter.clone(),
+            count: Value::CountSel(Box::new(Sel::All(filter))),
+            up_to: true,
+            store: None,
+        },
+        who: PlayerRef::You,
+        how: TargetChange::ChooseNew,
+        to: None,
+    })
+}
+
+inventory::submit! { EffectPattern { name: "choose new targets for any number of other spells and/or abilities", priority: 90, parse: new_targets_for_any_number } }

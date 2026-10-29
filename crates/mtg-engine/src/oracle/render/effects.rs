@@ -2493,7 +2493,16 @@ impl Renderer<'_> {
                 ])
             }
             Effect::ChangeTargets { what, who, how, to } => {
-                let w = self.sel(what, Case::Obj);
+                // "any number of other spells and/or abilities": chosen among everything
+                // else on the stack (Boltbender).
+                let other_stack_objects = matches!(what, Sel::Choose { filter: Filter::And(v), up_to: true, .. }
+                    if v.iter().any(|f| matches!(f, Filter::Custom(n) if n == crate::kw::choices_5_filters::NOT_RESOLVING))
+                        && v.iter().any(|f| matches!(f, Filter::InZone(ZoneKind::Stack))));
+                let w = if other_stack_objects {
+                    "any number of other spells and/or abilities".to_string()
+                } else {
+                    self.sel(what, Case::Obj)
+                };
                 let vp = match (how, to) {
                     // "Change a target of target spell or ability to ~": one of its targets
                     // (CR 115.7c).
