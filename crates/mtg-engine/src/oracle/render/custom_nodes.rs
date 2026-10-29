@@ -54,7 +54,9 @@ pub(crate) fn custom_rel_nodes(name: &str) -> Option<CustomQuality> {
 pub(crate) fn custom_clause_nodes(name: &str, subj: &str, negated: bool) -> Option<String> {
     // "if that creature was cast for its warp cost" (`kw/cast_history.rs`).
     if let Some(k) = name.strip_prefix(crate::kw::cast_history::CAST_FOR) {
-        let k = crate::keywords::KeywordKind::from_name(k)?.name().to_lowercase();
+        let k = crate::keywords::KeywordKind::from_name(k)?
+            .name()
+            .to_lowercase();
         return Some(if negated {
             format!("{subj} wasn't cast for its {k} cost")
         } else {
@@ -237,7 +239,10 @@ impl Renderer<'_> {
         Some(match name {
             // CR 406.3: each player may look at the face-down cards they exiled with it.
             crate::kw::exile_provenance::EACH_MAY_LOOK_AT_OWN_EXILED => {
-                format!("each player may look at cards they exiled with {}", self.me())
+                format!(
+                    "each player may look at cards they exiled with {}",
+                    self.me()
+                )
             }
             _ => return None,
         })
@@ -290,13 +295,19 @@ impl Renderer<'_> {
         (self.alt_and, self.plural_alts) = (true, true);
         let n = self.noun(&Filter::and(rest), Num::Many);
         (self.alt_and, self.plural_alts) = saved;
-        Some(format!("the number of {n} cast before that spell this turn"))
+        Some(format!(
+            "the number of {n} cast before that spell this turn"
+        ))
     }
 
     /// The player-subject form of a custom effect, for an effect another player performs:
     /// "If that opponent's speed is greater than each other player's speed, reduce that
     /// opponent's speed by 1. This effect can't reduce their speed below 1."
-    pub(crate) fn custom_effect_as_player(&mut self, who: &PlayerRef, name: &str) -> Option<String> {
+    pub(crate) fn custom_effect_as_player(
+        &mut self,
+        who: &PlayerRef,
+        name: &str,
+    ) -> Option<String> {
         let (n, floor) = crate::kw::game_rules_4::reduce_highest_speed_args(name)?;
         // The controller of a target "an opponent controls" is "that opponent".
         let opponents_target = match who {
@@ -412,6 +423,29 @@ impl Renderer<'_> {
             .or_else(|| self.auras_to_hosts(v))
             .or_else(|| self.enters_attached_to_chosen(v))
             .or_else(|| self.random_missing_counter(v))
+            .or_else(|| self.copy_both(v))
+    }
+
+    /// "Copy all spells you control, then copy all other activated and triggered abilities
+    /// you control. You may choose new targets for the copies.": two copy instructions,
+    /// new targets for all the copies said once.
+    fn copy_both(&mut self, v: &[Effect]) -> Option<(String, usize)> {
+        let [Effect::CopySpell {
+            what: a,
+            count: Value::Const(1),
+            new_targets: true,
+        }, Effect::CopySpell {
+            what: b,
+            count: Value::Const(1),
+            new_targets: true,
+        }, ..] = v
+        else {
+            return None;
+        };
+        let a = self.sel(a, Case::Obj);
+        let b = self.sel(b, Case::Obj);
+        let t = self.choose_new_targets("the copies");
+        Some((format!("copy {a}, then copy {b}{t}"), 2))
     }
 
     /// "Choose a kind of counter at random that ~ doesn't have on it from among flying,
@@ -470,7 +504,10 @@ impl Renderer<'_> {
         }
         let c = self.effect(choose);
         let kind = match filter {
-            Filter::And(p) if p.iter().any(|x| matches!(x, Filter::Type(CardType::Creature))) => {
+            Filter::And(p)
+                if p.iter()
+                    .any(|x| matches!(x, Filter::Type(CardType::Creature))) =>
+            {
                 "creature"
             }
             Filter::Type(CardType::Creature) => "creature",
@@ -707,20 +744,27 @@ impl Renderer<'_> {
         let names: Vec<&smol_str::SmolStr> = parts
             .iter()
             .map(|p| match p {
-                Condition::Compare(Value::EventsThisTurn(t, Tally::Events), Cmp::Ge, Value::Const(1)) => {
-                    match t.as_ref() {
-                        TriggerCond::PlayerAction {
-                            name,
-                            who: PlayerRel::You,
-                        } => Some(name),
-                        _ => None,
-                    }
-                }
+                Condition::Compare(
+                    Value::EventsThisTurn(t, Tally::Events),
+                    Cmp::Ge,
+                    Value::Const(1),
+                ) => match t.as_ref() {
+                    TriggerCond::PlayerAction {
+                        name,
+                        who: PlayerRel::You,
+                    } => Some(name),
+                    _ => None,
+                },
                 _ => None,
             })
             .collect::<Option<Vec<_>>>()?;
         let same = names.len() == self.trigger_actions.len()
             && names.iter().all(|n| self.trigger_actions.contains(n));
-        same.then(|| format!("you've done all {} this turn", number_word(names.len() as i32)))
+        same.then(|| {
+            format!(
+                "you've done all {} this turn",
+                number_word(names.len() as i32)
+            )
+        })
     }
 }

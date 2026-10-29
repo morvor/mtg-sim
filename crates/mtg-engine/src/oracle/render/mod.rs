@@ -30,8 +30,8 @@ mod custom_extra;
 mod custom_filters;
 mod custom_more;
 mod custom_nodes;
-mod draft_terms;
 mod dig;
+mod draft_terms;
 mod each_player;
 mod effect_terms;
 mod effects;
@@ -1308,13 +1308,15 @@ impl<'a> Renderer<'a> {
         // comparison doesn't look inside alternatives nested in alternatives.)
         let s = match self.targets_named_first(before, b) {
             Some(first)
-                if !s.contains('{') && !first.contains('{') && !s.contains('X') && !first.contains('X') =>
+                if !s.contains('{')
+                    && !first.contains('{')
+                    && !s.contains('X')
+                    && !first.contains('X') =>
             {
                 format!("{{alt:{s}|{first}}}")
             }
             _ => s,
         };
-
 
         match per_player {
             Some(pf) => {

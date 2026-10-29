@@ -14,7 +14,10 @@ fn kind_noun(f: &Filter) -> &'static str {
     // A card (not a permanent) chosen: "the last chosen card".
     if atoms.iter().any(|a| matches!(a, Filter::Card)) {
         "card"
-    } else if atoms.iter().any(|a| matches!(a, Filter::Type(CardType::Creature))) {
+    } else if atoms
+        .iter()
+        .any(|a| matches!(a, Filter::Type(CardType::Creature)))
+    {
         "creature"
     } else {
         "permanent"
@@ -59,10 +62,12 @@ fn notes_of(body_targets: &[TargetSpec], effect: &Effect, again: bool) -> Option
                     if let Some(Effect::Move { what, to }) = before.last() {
                         if to.zone == ZoneKind::Battlefield {
                             let f = match what {
-                                Sel::Target(k) => match body_targets.get(*k as usize).map(|t| &t.what) {
-                                    Some(TargetKind::Object(f)) => f.clone(),
-                                    _ => return None,
-                                },
+                                Sel::Target(k) => {
+                                    match body_targets.get(*k as usize).map(|t| &t.what) {
+                                        Some(TargetKind::Object(f)) => f.clone(),
+                                        _ => return None,
+                                    }
+                                }
                                 Sel::All(f) => f.clone(),
                                 _ => return None,
                             };
@@ -90,25 +95,23 @@ fn notes_of(body_targets: &[TargetSpec], effect: &Effect, again: bool) -> Option
 pub(crate) fn noted_noun(abilities: &[Ability]) -> Option<String> {
     let mut found: Vec<Option<String>> = Vec::new();
     for a in abilities {
-        let n = match &a.kind {
-            AbilityKind::Triggered(t) => {
-                has_note(&t.body.effect).then(|| notes_of(&t.body.targets, &t.body.effect, false))
-            }
-            AbilityKind::Spell(s) => {
-                has_note(&s.body.effect).then(|| notes_of(&s.body.targets, &s.body.effect, false))
-            }
-            AbilityKind::Activated(x) => {
-                has_note(&x.body.effect).then(|| notes_of(&x.body.targets, &x.body.effect, true))
-            }
-            AbilityKind::Static(s) => match &s.effect {
-                StaticEffect::Replacement(ReplacementDef {
-                    action: ReplacementAction::AsEnters(e),
-                    ..
-                }) if has_note(e) => Some(notes_of(&[], e, false)),
+        let n =
+            match &a.kind {
+                AbilityKind::Triggered(t) => has_note(&t.body.effect)
+                    .then(|| notes_of(&t.body.targets, &t.body.effect, false)),
+                AbilityKind::Spell(s) => has_note(&s.body.effect)
+                    .then(|| notes_of(&s.body.targets, &s.body.effect, false)),
+                AbilityKind::Activated(x) => has_note(&x.body.effect)
+                    .then(|| notes_of(&x.body.targets, &x.body.effect, true)),
+                AbilityKind::Static(s) => match &s.effect {
+                    StaticEffect::Replacement(ReplacementDef {
+                        action: ReplacementAction::AsEnters(e),
+                        ..
+                    }) if has_note(e) => Some(notes_of(&[], e, false)),
+                    _ => None,
+                },
                 _ => None,
-            },
-            _ => None,
-        };
+            };
         if let Some(n) = n {
             found.push(n);
         }

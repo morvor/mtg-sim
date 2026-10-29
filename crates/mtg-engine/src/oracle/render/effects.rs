@@ -410,7 +410,7 @@ impl Renderer<'_> {
     /// "You may choose new targets for the copy" (CR 707.10c): the player who copies
     /// the spell may choose; inside an instruction another player follows ("that player
     /// may copy ~"), that player, so the clause shares the instruction's subject.
-    fn choose_new_targets(&self, copies: &str) -> String {
+    pub(crate) fn choose_new_targets(&self, copies: &str) -> String {
         if self.in_as_player {
             format!(" and may choose new targets for {copies}")
         } else {
@@ -5017,9 +5017,9 @@ impl Renderer<'_> {
                 let put_there = var_n == crate::oracle::patterns::referents_values_4::PUT_THERE;
                 // ("Put that card on the bottom of your library and return the other to
                 // the battlefield": the rest, named by the instruction after the next.)
-                let named_after = v.get(i + 2).is_some_and(|n| {
-                    names(n) && matches!(next, Some(Effect::Move { .. }))
-                });
+                let named_after = v
+                    .get(i + 2)
+                    .is_some_and(|n| names(n) && matches!(next, Some(Effect::Move { .. })));
                 if !next.is_some_and(names) && !named_later && !put_there && !named_after {
                     parts.push(self.gap("a remembered group no instruction names"));
                 }
@@ -9554,4 +9554,3 @@ fn card_types_but(v: &[String]) -> Option<Vec<String>> {
         .collect();
     (1..=2).contains(&missing.len()).then_some(missing)
 }
-

@@ -1095,6 +1095,13 @@ impl Renderer<'_> {
             Filter::Custom(name) if name == crate::kw::trigger_modifiers::EMBLEM => {
                 np.kind = Some("emblem")
             }
+            // "all other activated and triggered abilities you control": on the stack,
+            // other than the one resolving (`kw/referents_5.rs`).
+            Filter::Custom(name) if name == crate::kw::referents_5::OTHER_ABILITY_ON_STACK => {
+                np.kind = Some("activated and triggered ability");
+                np.other = true;
+                np.zone_said = true;
+            }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {
                     use super::custom_filters::CustomQuality as Q;

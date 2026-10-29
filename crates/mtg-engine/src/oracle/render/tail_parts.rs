@@ -587,12 +587,7 @@ pub(crate) fn or_form(options: &[String]) -> Option<String> {
         .collect::<Vec<_>>()
         .join(" ");
     // "create a Food token or a Treasure token": each object said whole after the verb.
-    if let ([a, b], 2, 1, true) = (
-        options,
-        pre,
-        suf,
-        matches!(words[0][1], "a" | "an"),
-    ) {
+    if let ([a, b], 2, 1, true) = (options, pre, suf, matches!(words[0][1], "a" | "an")) {
         let rest: Vec<&str> = b.trim_end_matches('.').split(' ').skip(1).collect();
         let a = a.trim_end_matches('.');
         return Some(format!("{{alt:{joined}|{a} or {}}}", rest.join(" ")));

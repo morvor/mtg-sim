@@ -412,12 +412,24 @@ impl Renderer<'_> {
     fn play_a_card(&mut self, a: &TriggerCond, b: &TriggerCond, det: Det) -> Option<Ev> {
         let (cast, wa, fa, wb, fb) = match (a, b) {
             (
-                TriggerCond::CastSpell { who: wa, filter: fa },
-                TriggerCond::LandPlayed { who: wb, filter: fb },
+                TriggerCond::CastSpell {
+                    who: wa,
+                    filter: fa,
+                },
+                TriggerCond::LandPlayed {
+                    who: wb,
+                    filter: fb,
+                },
             ) => (a, wa, fa, wb, fb),
             (
-                TriggerCond::LandPlayed { who: wb, filter: fb },
-                TriggerCond::CastSpell { who: wa, filter: fa },
+                TriggerCond::LandPlayed {
+                    who: wb,
+                    filter: fb,
+                },
+                TriggerCond::CastSpell {
+                    who: wa,
+                    filter: fa,
+                },
             ) => (b, wa, fa, wb, fb),
             _ => return None,
         };
@@ -431,7 +443,9 @@ impl Renderer<'_> {
             }
         };
         let qa = quality(fa, &|x| matches!(x, Filter::Card | Filter::Spell));
-        let qb = quality(fb, &|x| matches!(x, Filter::Card | Filter::Type(CardType::Land)));
+        let qb = quality(fb, &|x| {
+            matches!(x, Filter::Card | Filter::Type(CardType::Land))
+        });
         // (Only for a quality implemented in code that cards say of the card played.)
         let same = format!("{qa:?}").contains("Custom(") && format!("{qa:?}") == format!("{qb:?}");
         let card = Filter::and(vec![Filter::Card, fb.clone()]);

@@ -49,7 +49,9 @@ impl Renderer<'_> {
         if name == d::GUESSED_CORRECTLY {
             return Some("you guessed correctly for a card named ~".into());
         }
-        let kw = name.strip_prefix(d::REMOVED_CREATURE_WITH)?.strip_prefix(':')?;
+        let kw = name
+            .strip_prefix(d::REMOVED_CREATURE_WITH)?
+            .strip_prefix(':')?;
         let kind = crate::keywords::KeywordKind::from_name(kw)?;
         Some(format!(
             "you removed a creature card with {} from the draft with cards named ~",
@@ -108,7 +110,10 @@ pub(crate) fn removed_keywords_group(abilities: &[Ability]) -> Option<(usize, St
         "If you removed a creature card with {first} from the draft with cards named ~, ~ has {first}."
     );
     if !rest.is_empty() {
-        line.push_str(&format!(" The same is true for {}.", join_list(rest, "and")));
+        line.push_str(&format!(
+            " The same is true for {}.",
+            join_list(rest, "and")
+        ));
     }
     Some((kinds.len(), line))
 }

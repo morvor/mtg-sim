@@ -769,7 +769,10 @@ impl Renderer<'_> {
             Condition::And(v)
                 if matches!(
                     v.as_slice(),
-                    [Condition::YourTurn | Condition::NotYourTurn, Condition::Phase(PhaseCond::Combat) | Condition::CombatTiming(_)]
+                    [
+                        Condition::YourTurn | Condition::NotYourTurn,
+                        Condition::Phase(PhaseCond::Combat) | Condition::CombatTiming(_)
+                    ]
                 ) =>
             {
                 let whose = if matches!(v[0], Condition::YourTurn) {
@@ -2002,6 +2005,10 @@ impl Renderer<'_> {
         }
         let s = self.value(inner);
         if let Some(r) = s.strip_prefix("the number of ") {
+            // "the number of times you've cast ..." is one for each time.
+            if let Some(t) = r.strip_prefix("times ") {
+                return Some((k, format!("time {t}")));
+            }
             return Some((k, r.to_string()));
         }
         None
@@ -2906,13 +2913,21 @@ impl Renderer<'_> {
                     A::EnterUntapped => format!("{subj} enters untapped"),
                     A::EnterWithCounters(k, n) => {
                         let (c, w) = self.counted(n, &counter_name(k));
-                        let one = format!("{subj} enters with {c} on {it}{}", w.clone().unwrap_or_default());
+                        let one = format!(
+                            "{subj} enters with {c} on {it}{}",
+                            w.clone().unwrap_or_default()
+                        );
                         // "~ enters with a +1/+1 counter on it for each land you control":
                         // one counter for each thing counted.
-                        match w.as_deref().and_then(|w| w.strip_prefix(", where X is the number of ")) {
+                        match w
+                            .as_deref()
+                            .and_then(|w| w.strip_prefix(", where X is the number of "))
+                        {
                             Some(each) if c.starts_with("X ") && !one.contains('{') => {
                                 let a = with_article(&counter_name(k));
-                                format!("{{alt:{one}|{subj} enters with {a} on {it} for each {each}}}")
+                                format!(
+                                    "{{alt:{one}|{subj} enters with {a} on {it} for each {each}}}"
+                                )
                             }
                             _ => one,
                         }
