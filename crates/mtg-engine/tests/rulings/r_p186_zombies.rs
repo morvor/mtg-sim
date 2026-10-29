@@ -375,3 +375,52 @@ fn corpse_harvester_may_find_nothing() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Scathe Zombies") && t.in_hand(P0, "Swamp"));
 }
+
+/// Answers a text change's "Replace which word?" with Zombie and "With which word?" with
+/// Elf.
+fn zombie_to_elf(_: &mtg_engine::game::Game, d: &mtg_engine::decision::Decision) -> Option<Answer> {
+    let mtg_engine::decision::Decision::ChooseOption { prompt, options, .. } = d else {
+        return None;
+    };
+    let word = match prompt.as_str() {
+        "Replace which word?" => "Zombie",
+        "With which word?" => "Elf",
+        _ => return None,
+    };
+    options.iter().position(|o| o == word).map(Answer::Index)
+}
+
+#[test]
+fn putrid_raptor_text_change_while_face_down_changes_its_morph_cost() {
+    cr!("612.1", "708.2", "702.37e");
+    ruling!(
+        "Putrid Raptor",
+        "You can use a text-changing effect that changes creature types on this card while is it face down to change Zombie to something else. This will change the type of card you have to discard to turn it face up."
+    );
+    supported("Putrid Raptor");
+    let mut t = TestGame::new(2);
+    let r = crate::r_s12_common::morph(&mut t, P0, "Putrid Raptor");
+    crate::r_s03_common::respond(&mut t, P0, zombie_to_elf);
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    ctx.targets = vec![vec![Entity::Object(r)]];
+    t.g.exec(
+        &mtg_engine::ability::Effect::ChangeText {
+            what: mtg_engine::ability::Sel::Target(0),
+            words: mtg_engine::text_change::TextWords::CreatureType,
+            exclude: vec![],
+            duration: mtg_engine::ability::Duration::Permanent,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(t.obj_now(r).face_down);
+    // Only a Zombie card in hand: it can't be turned face up any more.
+    t.hand(P0, "Scathe Zombies");
+    assert!(!crate::r_s11_common::can_turn_face_up(&mut t, P0, r));
+    t.hand(P0, "Elvish Visionary");
+    assert!(crate::r_s11_common::can_turn_face_up(&mut t, P0, r));
+    assert!(crate::r_s11_common::turn_face_up(&mut t, P0, r));
+    assert!(!t.obj_now(r).face_down);
+    assert!(t.in_graveyard(P0, "Elvish Visionary"));
+    assert!(t.in_hand(P0, "Scathe Zombies"));
+}
