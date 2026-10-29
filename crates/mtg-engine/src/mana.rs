@@ -401,6 +401,10 @@ pub enum ManaRestriction {
     /// "... or activate abilities of Dragons": the source of the ability being activated
     /// matches the filter.
     ActivateAbilityOf(SpendFilter),
+    /// "... to activate other mana abilities of lands the player controls" (Word of
+    /// Command): the ability being activated is a mana ability (its cost is paid as a mana
+    /// ability's, [`SpendContext::cost_of`]) of a source matching the filter.
+    ActivateManaAbilityOf(SpendFilter),
     /// "... or to gain a Class level": to activate a class level bar's ability
     /// (CR 716.2c).
     ClassLevel,
@@ -597,7 +601,9 @@ impl ManaRestriction {
             ManaRestriction::NotGeneric => true,
             ManaRestriction::AnyOf(v) => v.iter().any(|r| r.allows(ctx)),
             // Filters need the game: see `allows_in`.
-            ManaRestriction::CastSpell(_) | ManaRestriction::ActivateAbilityOf(_) => false,
+            ManaRestriction::CastSpell(_)
+            | ManaRestriction::ActivateAbilityOf(_)
+            | ManaRestriction::ActivateManaAbilityOf(_) => false,
             ManaRestriction::NotCastSpell(_) => !ctx.is_spell,
             ManaRestriction::Purpose(p) => ctx.purpose == Some(*p),
             ManaRestriction::CostWithColorless => ctx.cost_has_colorless,
@@ -627,6 +633,11 @@ impl ManaRestriction {
         match self {
             ManaRestriction::CastSpell(f) => ctx.is_spell && matches(f),
             ManaRestriction::ActivateAbilityOf(f) => ctx.is_ability && matches(f),
+            ManaRestriction::ActivateManaAbilityOf(f) => {
+                ctx.is_ability
+                    && ctx.cost_of == Some(crate::rule_statics::payment::CostOf::ManaAbility)
+                    && matches(f)
+            }
             ManaRestriction::NotCastSpell(f) => !(ctx.is_spell && matches(f)),
             // "Abilities of artifacts": of artifact permanents, not of artifact cards in
             // other zones (Renowned Weaponsmith's and Dalakos's rulings).
