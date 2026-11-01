@@ -170,6 +170,7 @@ pub mod tokens_predefined;
 pub mod transform_rules;
 pub mod trigger_limits;
 pub mod trigger_timing;
+pub mod trigger_x;
 pub mod triggers;
 pub mod turn;
 pub mod turn_order_choices;

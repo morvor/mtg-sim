@@ -2452,6 +2452,13 @@ impl Game {
         {
             ctx.x = x;
         }
+        // CR 107.3f: an X its targets depend on is chosen now (Relentless Dead).
+        let chosen_x =
+            if t.saved.is_none() && cycled_x.or(cast_self_x).is_none() && etb_cast.is_none() {
+                crate::trigger_x::choose_before_targets(self, &body, &mut ctx)
+            } else {
+                None
+            };
         let id = crate::stack::create_stack_ability(
             self,
             t.source,
@@ -2478,6 +2485,10 @@ impl Game {
             }
             self.saved_ctx.insert(id, saved);
         } else if let Some(x) = cycled_x.or(cast_self_x) {
+            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                si.x = Some(x);
+            }
+        } else if let Some(x) = chosen_x {
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = Some(x);
             }
