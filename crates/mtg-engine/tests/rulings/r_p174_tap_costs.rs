@@ -7,7 +7,6 @@
 use crate::r_s01_common::{give_mana_for, supported};
 use crate::r_s06_common::{activate_containing, has_kw};
 use crate::r_s24_common::tapped;
-use mtg_engine::card::card;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -803,7 +802,6 @@ fn hollow_warrior_cant_tap_itself_to_attack() {
     supported("Hollow Warrior");
     let mut t = TestGame::new(2);
     let hw = t.battlefield(P0, "Hollow Warrior");
-    let _ = card("Hollow Warrior");
     t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
     t.answer(
         P0,
@@ -813,4 +811,17 @@ fn hollow_warrior_cant_tap_itself_to_attack() {
     t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
     assert_eq!(t.life(P1), 20, "no other creature to tap: it can't attack");
     assert_eq!(t.zone(hw), Zone::Battlefield);
+    // With another untapped creature to tap, it attacks.
+    let mut t = TestGame::new(2);
+    let hw = t.battlefield(P0, "Hollow Warrior");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(hw, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::EndOfCombat);
+    assert!(tapped(&t, bears), "the Bears paid the attack cost");
+    assert_eq!(t.life(P1), 16);
 }

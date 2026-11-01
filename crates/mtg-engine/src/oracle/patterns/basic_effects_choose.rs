@@ -111,6 +111,7 @@ fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
         .find_map(|v| l.strip_prefix(v.word()).and_then(|r| r.strip_prefix(' ')).map(|r| (v, r)))?;
     // "any number of", "one or more", "up to N", or exactly N ("exile a land you
     // control"; exactly N only for exiling, the others' exact forms are core verbs).
+    let one_or_more = r.starts_with("one or more ");
     let (count, up_to, r) = if let Some(r) = r
         .strip_prefix("any number of ")
         .or_else(|| r.strip_prefix("one or more "))
@@ -188,6 +189,7 @@ fn verb_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
     // "Return those cards to the battlefield ...", "each of those Vampires": the objects
     // the instruction affected (exiled cards are new objects, CR 400.7).
     b.it = Sel::Var(DONE);
+    b.chose_one_or_more = one_or_more;
     Some(Effect::seq(vec![
         choose,
         act,
@@ -371,9 +373,10 @@ fn f_about_chosen(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     // "Tap any number of untapped creatures you control. When you do, ...": the
     // instruction is done even if no objects are chosen, so the reflexive ability triggers
     // anyway (CR 603.12; Teferi Akosa of Zhalfir and Yotia Declares War rulings). Not
-    // under "you may" (declining isn't doing it), nor "when you [verb] one or more ...
-    // this way" (that needs one).
-    let done_anyway = l.starts_with("when you do, ") && !chosen_optionally(prev);
+    // under "you may" (declining isn't doing it), after "[verb] one or more ..." or
+    // before "when you [verb] one or more ... this way" (those need one).
+    let done_anyway =
+        l.starts_with("when you do, ") && !chosen_optionally(prev) && !b.chose_one_or_more;
     // "When you sacrifice one or more artifacts this way, ...": when you do (CR 603.12).
     if let Some(r) = l.strip_prefix(&format!("when you {} one or more ", verb.word())) {
         let way = format!(" this way, ");

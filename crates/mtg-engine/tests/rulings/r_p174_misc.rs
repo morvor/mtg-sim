@@ -296,12 +296,15 @@ fn master_of_the_wild_hunt_divides_damage_on_resolution() {
             .any(|(p, d)| *p == P1 && matches!(d, Decision::Divide { .. }))
     };
     assert!(!divided(&t, from), "nothing divided on activation");
+    // As it resolves, P1 divides the Wurm's 6 damage: all of it to one Wolf.
     let from = t.asked().len();
+    t.answer(P1, DecisionKind::Divide, Answer::Numbers(vec![6, 0]));
     t.resolve_all();
-    let _ = (w1, w2);
-    // The Wurm (6/4) took 6 and died; its 6 damage was divided by P1 as it resolved.
+    assert!(divided(&t, from), "P1 divided the damage as the ability resolved");
+    // The Wurm (6/4) took 3 + 3 and died; exactly one Wolf took the 6.
     assert!(!t.on_battlefield(giant));
-    assert!(divided(&t, from) || (!t.on_battlefield(w1) && !t.on_battlefield(w2)));
+    let dead = [w1, w2].iter().filter(|w| !t.on_battlefield(**w)).count();
+    assert_eq!(dead, 1, "{}", t.dump_log());
 }
 
 #[test]
@@ -478,10 +481,23 @@ fn rishkar_cant_target_one_creature_twice() {
     supported("Rishkar, Peema Renegade");
     let mut t = TestGame::new(2);
     let b = t.battlefield(P0, "Grizzly Bears");
+    let from = t.asked().len();
     t.answer_targets(P0, &[obj(b), obj(b)]);
     t.enter(P0, "Rishkar, Peema Renegade");
     t.resolve_all();
-    assert!(t.counters(b, counters::PLUS1) <= 1);
+    assert!(asked_since(&t, from)
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })));
+    assert_ne!(t.counters(b, counters::PLUS1), 2, "the same creature twice");
+    // Two different creatures: one counter each.
+    let mut t = TestGame::new(2);
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(b), obj(other)]);
+    t.enter(P0, "Rishkar, Peema Renegade");
+    t.resolve_all();
+    assert_eq!(t.counters(b, counters::PLUS1), 1);
+    assert_eq!(t.counters(other, counters::PLUS1), 1);
 }
 
 #[test]

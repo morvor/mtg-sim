@@ -451,14 +451,28 @@ fn tapped_mirri_restricts_attacks_on_its_controller_only() {
     let b = t.battlefield(P0, "Grizzly Bears");
     attack_with(&mut t, &[(a, obj(pw)), (b, obj(pw))]);
     assert!(t.g.is_attacking(a) && t.g.is_attacking(b));
-    // Attacking the player: no more than one.
-    let mut t = TestGame::new(2);
-    let mirri = t.battlefield(P1, "Mirri, Weatherlight Duelist");
-    tap(&mut t, mirri);
-    let a = t.battlefield(P0, "Grizzly Bears");
-    let b = t.battlefield(P0, "Grizzly Bears");
-    attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
-    assert!(t.g.attackers().len() <= 1);
+    // Attacking the player: no more than one (and with Mirri untapped, no limit).
+    for mirri_tapped in [true, false] {
+        let mut t = TestGame::new(2);
+        let mirri = t.battlefield(P1, "Mirri, Weatherlight Duelist");
+        if mirri_tapped {
+            tap(&mut t, mirri);
+        }
+        let a = t.battlefield(P0, "Grizzly Bears");
+        let b = t.battlefield(P0, "Grizzly Bears");
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.g.recompute();
+        let options = mtg_engine::combat::attack_options(&t.g);
+        let legal = |decl: &[(ObjectId, Entity)]| {
+            mtg_engine::combat::attack_declaration_legal(&t.g, &options, decl)
+        };
+        let both = [(a, Entity::Player(P1)), (b, Entity::Player(P1))];
+        assert_eq!(legal(&both), !mirri_tapped, "tapped: {mirri_tapped}");
+        assert!(legal(&both[..1]));
+        let decl: &[(ObjectId, Entity)] = if mirri_tapped { &both[..1] } else { &both };
+        attack_with(&mut t, decl);
+        assert_eq!(t.g.attackers().len(), decl.len(), "tapped: {mirri_tapped}");
+    }
 }
 
 #[test]

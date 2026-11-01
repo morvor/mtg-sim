@@ -42,6 +42,9 @@ pub struct Builder<'c> {
     /// `patterns::triggers_referents::that_creatures`): "its" then means what "it" refers
     /// to even where a plain "its" would mean the clause's subject.
     pub its_is_it: bool,
+    /// Set by a "[verb] one or more [objects]" instruction (cleared by "[verb] any number
+    /// of"): a following "When you do, ..." then needs at least one object chosen.
+    pub chose_one_or_more: bool,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -66,6 +69,7 @@ impl<'c> Builder<'c> {
             group: None,
             named: vec![],
             its_is_it: false,
+            chose_one_or_more: false,
             ctx,
         }
     }

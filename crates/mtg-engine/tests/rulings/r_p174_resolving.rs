@@ -457,14 +457,22 @@ fn heirloom_epic_taps_at_most_the_mana_in_its_cost() {
         "Heirloom Epic",
         "You can’t tap more creatures than the amount of mana in the cost of Heirloom Epic’s ability."
     );
-    // Five creatures, no lands: at most four can be tapped (and four pay it all).
+    // Five creatures, no lands: P0 is offered at most four to tap, and four pay it all.
     let mut t = TestGame::new(2);
     let e = t.battlefield(P0, "Heirloom Epic");
     let cs: Vec<ObjectId> = (0..5).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
-    t.answer_choose(P0, &objs(&cs));
-    let _ = activate_containing(&mut t, P0, e, "Draw a card");
+    let from = t.asked().len();
+    t.answer_choose(P0, &objs(&cs[..4]));
+    activate_containing(&mut t, P0, e, "Draw a card").expect("four creatures pay {4}");
+    let max = asked_since(&t, from).into_iter().find_map(|(_, d)| match d {
+        Decision::ChooseEntities { max, candidates, .. } if candidates.len() == 5 => Some(max),
+        _ => None,
+    });
+    assert_eq!(max, Some(4), "no more creatures than the mana in the cost");
     t.resolve_all();
-    assert!(cs.iter().filter(|c| tapped(&t, **c)).count() <= 4);
+    assert_eq!(cs.iter().filter(|c| tapped(&t, **c)).count(), 4);
+    assert!(!tapped(&t, cs[4]));
+    assert_eq!(t.hand_size(P0), 1);
     // Suppression Field: "Activated abilities cost {2} more ...": six creatures pay it.
     supported("Suppression Field");
     let mut t = TestGame::new(2);
@@ -503,4 +511,36 @@ fn yotia_declares_war_reflexive_trigger_triggers_with_zero_artifacts_tapped() {
     t.resolve_all();
     assert_eq!(t.obj_now(wurm).damage, 0);
     assert!(t.on_battlefield(wurm));
+}
+
+#[test]
+fn when_you_do_after_tapping_any_number_triggers_but_after_one_or_more_needs_one() {
+    cr!("603.12");
+    // "Tap any number of ...": done even with none chosen, so the reflexive ability
+    // triggers anyway; "tap one or more ..." with none chosen isn't done, and neither is
+    // declining "you may tap any number of ...".
+    use mtg_engine::card::Layout;
+    use mtg_engine::oracle::{self, CompileContext};
+    let tl = TypeLine::parse("Sorcery");
+    let ctx = CompileContext {
+        card_name: "Test Sorcery",
+        full_name: "Test Sorcery",
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    for (text, unconditional) in [
+        ("Tap any number of untapped creatures you control. When you do, you gain that much life.", true),
+        ("Tap one or more untapped creatures you control. When you do, you gain that much life.", false),
+        ("You may tap any number of untapped creatures you control. When you do, you gain that much life.", false),
+    ] {
+        let compiled = oracle::compile(text, &ctx);
+        assert!(compiled.unsupported.is_empty(), "{text}: {:?}", compiled.unsupported);
+        let ast = format!("{:?}", compiled.abilities);
+        assert!(ast.contains("Reflexive"), "{text}: {ast}");
+        assert_eq!(!ast.contains("PrevHappened"), unconditional, "{text}: {ast}");
+    }
 }
