@@ -6794,6 +6794,10 @@ impl Renderer<'_> {
             // "that player sacrifices it unless they pay {X}": the player named before.
             let p = if p == "that player" && o.contains("that player") {
                 "{alt:that player|they}".to_string()
+            } else if p == "{alt:its controller|that player}" && o.starts_with("counter target ") {
+                // "counter target spell an opponent controls unless they pay {1}"
+                // (Hope-Ender Coatl): the target's controller.
+                "{alt:its controller|that player|they}".to_string()
             } else {
                 p
             };

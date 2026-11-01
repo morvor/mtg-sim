@@ -236,6 +236,7 @@ pub fn dig(
     );
     // "From among them", "the rest" (`dig_steps.rs`).
     crate::dig_steps::set_dug(ctx, cards.iter().map(|o| Entity::Object(*o)).collect());
+    crate::dig_steps::set_dug_from(ctx, &[p]);
     let mut cands: Vec<ObjectId> = cards
         .iter()
         .copied()

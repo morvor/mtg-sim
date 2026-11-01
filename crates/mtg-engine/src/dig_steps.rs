@@ -56,10 +56,17 @@ pub fn resolve(g: &mut Game, step: &DigStep, ctx: &mut Ctx) {
                 // (CR 701.24d). Libraries that get some of the rest are shuffled as
                 // they're put there.
                 let receiving: Vec<PlayerId> = cards.iter().map(|o| g.obj(*o).owner).collect();
+                // The libraries the dig looked at, even if it found no cards there (X was
+                // 0, or the library was empty).
+                let looked_at = ctx.vars.get(&DUG_FROM).cloned().unwrap_or_default();
                 let mut owners: Vec<PlayerId> = ctx
                     .var_objects(vars::DUG)
                     .iter()
                     .map(|o| g.obj(*o).owner)
+                    .chain(looked_at.iter().filter_map(|e| match e {
+                        Entity::Player(p) => Some(*p),
+                        _ => None,
+                    }))
                     .filter(|p| !receiving.contains(p))
                     .collect();
                 owners.sort_unstable_by_key(|p| p.idx());
@@ -112,6 +119,20 @@ pub fn set_dug(ctx: &mut Ctx, cards: Vec<Entity>) {
     ctx.set_var(vars::DUG, cards);
     ctx.set_var(vars::DUG_TAKEN, vec![]);
     ctx.set_var(DUG_PLACED, vec![]);
+    ctx.set_var(DUG_FROM, vec![]);
+}
+
+/// The players whose libraries the most recent dig looked at the top of (set with
+/// [`set_dug_from`]): "then shuffle the rest into your library" shuffles that library
+/// even when the dig found no cards there (CR 701.24d).
+pub const DUG_FROM: Var = vars::USER + 9206;
+
+/// Records the libraries a dig looked at (after [`set_dug`]).
+pub fn set_dug_from(ctx: &mut Ctx, players: &[PlayerId]) {
+    ctx.set_var(
+        DUG_FROM,
+        players.iter().map(|p| Entity::Player(*p)).collect(),
+    );
 }
 
 /// The objects the most recent dig's selections and "the rest" became where they were put

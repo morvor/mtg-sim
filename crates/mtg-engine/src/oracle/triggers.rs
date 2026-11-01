@@ -267,6 +267,19 @@ fn parse_triggered_at(
     } else {
         eff
     };
+    // "When you cast this spell, target opponent exiles ..., then you may put any number
+    // of land cards that player owns ...": the player who cast it is you, who isn't "that
+    // player"; a later "that player" is one the body names.
+    let it_player = match (&trigger, it_player) {
+        (
+            TriggerCond::CastSpell {
+                who: PlayerRel::You,
+                ..
+            },
+            PlayerRef::TriggerPlayer,
+        ) => PlayerRef::You,
+        (_, p) => p,
+    };
     let trigger_it = it.clone();
     // Phrases the trigger event names ("the blocking creature", "that Archer").
     let named = super::patterns::trigger_grammar_combat_cast::name_referents(&trigger);
