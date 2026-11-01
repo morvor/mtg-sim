@@ -510,3 +510,40 @@ fn asmoranomardicadaistinaculdacar_needs_a_discard_from_elsewhere() {
     t.resolve_all();
     assert!(t.on_battlefield(asmor));
 }
+
+#[test]
+fn salvage_titan_returns_only_from_the_graveyard_and_not_if_exiled_for_the_cost() {
+    cr!("113.6k", "602.2", "400.7");
+    ruling!(
+        "Salvage Titan",
+        "You may activate its second ability only if Salvage Titan is in your graveyard."
+    );
+    // On the battlefield, with three artifact cards in the graveyard: not activatable.
+    let mut t = TestGame::new(2);
+    let titan = t.battlefield(P0, "Salvage Titan");
+    for _ in 0..3 {
+        t.graveyard(P0, "Ornithopter");
+    }
+    assert!(!crate::r_s02_common::can_activate(&mut t, P0, titan));
+    // In the graveyard with two other artifact cards: it may exile itself to pay the
+    // cost, and then it isn't returned.
+    let mut t = TestGame::new(2);
+    let titan = t.graveyard(P0, "Salvage Titan");
+    let a = t.graveyard(P0, "Ornithopter");
+    let b = t.graveyard(P0, "Ornithopter");
+    assert!(crate::r_s02_common::can_activate(&mut t, P0, titan));
+    choose(&mut t, P0, &[titan, a, b]);
+    t.activate(P0, titan, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(titan), Zone::Exile);
+    assert!(!t.in_hand(P0, "Salvage Titan"));
+    // With three other artifact cards it returns.
+    let mut t = TestGame::new(2);
+    let titan = t.graveyard(P0, "Salvage Titan");
+    let others: Vec<ObjectId> = (0..3).map(|_| t.graveyard(P0, "Ornithopter")).collect();
+    choose(&mut t, P0, &others);
+    t.activate(P0, titan, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Salvage Titan"));
+    assert!(others.iter().all(|id| t.zone(*id) == Zone::Exile));
+}
