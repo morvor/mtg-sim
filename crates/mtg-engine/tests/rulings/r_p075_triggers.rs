@@ -247,7 +247,7 @@ fn lita_and_breeches_fourth_instance_does_nothing() {
 
 #[test]
 fn galadriel_modes_are_tracked_for_the_permanent_not_the_player() {
-    cr!("700.2", "108.4");
+    cr!("700.2");
     ruling!(
         "Galadriel, Light of Valinor",
         "It doesn't matter who has chosen any particular mode."

@@ -39,7 +39,7 @@ fn blowfly_infestation_puts_a_single_counter() {
 
 #[test]
 fn ruthless_sniper_pays_only_once() {
-    cr!("603.5", "118.8");
+    cr!("603.5", "603.12");
     ruling!(
         "Ruthless Sniper",
         "you can’t pay {1} multiple times to put more counters on creatures"
@@ -146,11 +146,27 @@ fn grind_cant_target_the_same_creature_twice() {
     t.lands(P0, "Swamp", 2);
     let c = t.hand(P0, "Grind // Dust");
     t.answer_targets(P0, &[obj(wurm), obj(wurm)]);
-    // Naming it twice is an invalid answer: the engine keeps one instance (or refuses).
-    if t.cast(P0, c).method(CastMethod::Half(0)).try_go().is_ok() {
-        t.resolve_all();
+    // Naming it twice is an invalid answer.
+    match t.cast(P0, c).method(CastMethod::Half(0)).try_go() {
+        Ok(spell) => {
+            let chosen: Vec<Entity> = t
+                .obj(spell)
+                .stack
+                .as_ref()
+                .unwrap()
+                .chosen
+                .iter()
+                .flat_map(|cm| cm.targets.iter().flatten().copied())
+                .collect();
+            // The invalid answer is rejected (falling back to a legal choice): the
+            // creature is never chosen for both instances of "target".
+            let times = chosen.iter().filter(|e| **e == obj(wurm)).count() as u32;
+            assert!(times <= 1, "{chosen:?}");
+            t.resolve_all();
+            assert_eq!(minus(&t, wurm), times, "one counter per time it's a target");
+        }
+        Err(_) => assert_eq!(minus(&t, wurm), 0),
     }
-    assert!(minus(&t, wurm) <= 1, "never two counters from one Grind");
     // Two different creatures: one counter each.
     let mut t = TestGame::new(2);
     let wurm = t.battlefield(P1, "Craw Wurm");

@@ -417,7 +417,7 @@ fn fire_whip_tap_ability_taps_the_creature() {
 
 #[test]
 fn presence_of_gond_the_creatures_controller_activates() {
-    cr!("602.1", "113.8");
+    cr!("602.2", "113.8");
     ruling!(
         "Presence of Gond",
         "The creature's controller, not Presence of Gond's controller, is the one who can activate the ability"
@@ -436,7 +436,7 @@ fn presence_of_gond_the_creatures_controller_activates() {
 
 #[test]
 fn petrified_hamlet_names_a_land_card() {
-    cr!("201.3", "602.5b");
+    cr!("201.4", "201.4a", "602.5b");
     ruling!(
         "Petrified Hamlet",
         "You can choose the name of any land card. You can't choose the name of a token unless it's also the name of a card."
@@ -461,7 +461,14 @@ fn petrified_hamlet_names_a_land_card() {
     let h = t.enter(P0, "Petrified Hamlet");
     t.resolve_all();
     let chosen = t.obj_now(h).choices.card_name.clone();
-    assert_ne!(chosen.as_deref(), Some("Treasure"));
+    // The invalid answer names nothing: the choice stays undefined (CR 607.5a).
+    assert!(chosen.as_deref().map_or(true, str::is_empty), "{chosen:?}");
+    // A land card's name is accepted.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Name, Answer::Text("Forest".into()));
+    let h = t.enter(P0, "Petrified Hamlet");
+    t.resolve_all();
+    assert_eq!(t.obj_now(h).choices.card_name.as_deref(), Some("Forest"));
 }
 
 #[test]

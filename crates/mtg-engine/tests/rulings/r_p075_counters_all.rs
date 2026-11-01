@@ -86,7 +86,7 @@ fn simple_group_counter_rulings() {
 
 #[test]
 fn brokers_ascendancy_creature_planeswalker_gets_both() {
-    cr!("306.5b", "122.1");
+    cr!("122.1");
     ruling!(
         "Brokers Ascendancy",
         "A permanent that is somehow both a creature and a planeswalker as Brokers Ascendancy's ability resolves will get both a +1/+1 counter and a loyalty counter."
@@ -103,7 +103,7 @@ fn brokers_ascendancy_creature_planeswalker_gets_both() {
 
 #[test]
 fn leyline_of_abundance_only_for_the_creatures_own_tap_mana_ability() {
-    cr!("106.12a", "605.1a");
+    cr!("106.12", "605.1a");
     ruling!(
         "Leyline of Abundance",
         "triggers only if you activate a mana ability of a creature including {T} in its cost"

@@ -197,7 +197,7 @@ fn spider_man_triggers_only_for_himself() {
 
 #[test]
 fn flopsie_power_increase_after_blocks_doesnt_undo_them() {
-    cr!("509.1b", "509.2");
+    cr!("509.1b", "509.1h");
     ruling!(
         "Flopsie, Bumi's Buddy",
         "If a creature you control with power less than 4 becomes blocked by more than one creature, increasing its power to 4 or greater won't change or undo the block."
