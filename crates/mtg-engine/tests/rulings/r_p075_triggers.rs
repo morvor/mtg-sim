@@ -69,7 +69,11 @@ fn mazirek_sacrificed_with_other_permanents_triggers_for_them() {
     t.resolve();
     assert!(!t.on_battlefield(m) && !t.on_battlefield(bears));
     t.resolve_all();
-    assert_eq!(plus(&t, giant), 3, "one trigger per other sacrificed permanent");
+    assert_eq!(
+        plus(&t, giant),
+        3,
+        "one trigger per other sacrificed permanent"
+    );
 }
 
 #[test]
@@ -100,7 +104,11 @@ fn mazirek_trigger_from_a_cost_resolves_first() {
     assert_eq!(t.stack_len(), 2);
     t.resolve();
     assert_eq!(plus(&t, a), 1, "Mazirek's trigger resolved first");
-    assert_eq!(t.stack_len(), 1, "the Aristocrat's ability is still waiting");
+    assert_eq!(
+        t.stack_len(),
+        1,
+        "the Aristocrat's ability is still waiting"
+    );
     t.resolve_all();
     assert_eq!(plus(&t, a), 2);
     // The Aristocrat can be sacrificed to pay for its own ability.
@@ -165,7 +173,11 @@ fn genku_different_modes_and_only_three() {
     leave_together(&mut t, &ids);
     t.resolve_all();
     let toks = tokens(&t, P0);
-    assert_eq!(toks.len(), 3, "only three of the four instances do anything");
+    assert_eq!(
+        toks.len(),
+        3,
+        "only three of the four instances do anything"
+    );
     for sub in ["Fox", "Moonfolk", "Rat"] {
         assert_eq!(tokens_with(&t, P0, sub), 1, "{sub}");
     }
@@ -253,10 +265,12 @@ fn galadriel_modes_are_tracked_for_the_permanent_not_the_player() {
     let from = t.asked().len();
     t.enter(P1, "Grizzly Bears");
     t.resolve_all();
-    let avail = asked_since(&t, from).into_iter().find_map(|(p, d)| match d {
-        Decision::ChooseModes { available, .. } if p == P1 => Some(available),
-        _ => None,
-    });
+    let avail = asked_since(&t, from)
+        .into_iter()
+        .find_map(|(p, d)| match d {
+            Decision::ChooseModes { available, .. } if p == P1 => Some(available),
+            _ => None,
+        });
     if let Some(avail) = avail {
         assert_eq!(avail, vec![2]);
     }
@@ -272,7 +286,10 @@ fn thalias_lieutenant_entering_with_another_human() {
     );
     supported("Thalia's Lieutenant");
     let mut t = TestGame::new(2);
-    let ids = enter_together(&mut t, &[(P0, "Thalia's Lieutenant"), (P0, "Elite Vanguard")]);
+    let ids = enter_together(
+        &mut t,
+        &[(P0, "Thalia's Lieutenant"), (P0, "Elite Vanguard")],
+    );
     t.resolve_all();
     assert_eq!((plus(&t, ids[0]), plus(&t, ids[1])), (1, 1));
 }

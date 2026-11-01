@@ -45,10 +45,18 @@ fn drana_counters_arrive_before_regular_combat_damage() {
     let d = t.battlefield(P0, "Drana, Liberator of Malakir");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let striker = t.battlefield(P0, "Elite Vanguard");
-    grant(&mut t, striker, mtg_engine::keywords::KeywordKind::FirstStrike);
+    grant(
+        &mut t,
+        striker,
+        mtg_engine::keywords::KeywordKind::FirstStrike,
+    );
     let blocker = t.battlefield(P1, "Grizzly Bears");
     let killer = t.battlefield(P1, "Hill Giant");
-    grant(&mut t, killer, mtg_engine::keywords::KeywordKind::FirstStrike);
+    grant(
+        &mut t,
+        killer,
+        mtg_engine::keywords::KeywordKind::FirstStrike,
+    );
     to_beginning_of_combat(&mut t, P0);
     attack_with(&mut t, &at_p1(&[d, bears, striker]));
     block_and_finish(&mut t, P1, &[(blocker, bears), (killer, striker)]);
@@ -78,7 +86,11 @@ fn gleam_of_battle_attackers_only_and_before_blocks() {
     to_beginning_of_combat(&mut t, P0);
     attack_with(&mut t, &at_p1(&[hero]));
     t.resolve_all();
-    assert_eq!(t.g.turn.step, Step::DeclareAttackers, "no blockers declared yet");
+    assert_eq!(
+        t.g.turn.step,
+        Step::DeclareAttackers,
+        "no blockers declared yet"
+    );
     assert_eq!(plus(&t, hero), 1);
     let soldiers = tokens(&t, P0);
     assert_eq!(soldiers.len(), 2);
@@ -151,7 +163,11 @@ fn finneas_checks_total_power_right_after_the_counters() {
     attack_with(&mut t, &at_p1(&[f]));
     t.resolve_all();
     assert_eq!(plus(&t, tok), 1);
-    assert_eq!(t.hand_size(P0), hand + 1, "9 power became 10 within the resolution");
+    assert_eq!(
+        t.hand_size(P0),
+        hand + 1,
+        "9 power became 10 within the resolution"
+    );
 }
 
 #[test]
@@ -236,7 +252,10 @@ fn zar_ojanen_trigger_from_a_cost_resolves_first() {
     assert_eq!(t.stack_len(), 2);
     t.resolve();
     assert_eq!(plus(&t, bears), 1, "toughness 2 < 3 basic land types");
-    assert!(!tapped(&t, target), "Opposition's ability hasn't resolved yet");
+    assert!(
+        !tapped(&t, target),
+        "Opposition's ability hasn't resolved yet"
+    );
     t.resolve_all();
     assert!(tapped(&t, target));
     // Attacking taps it too.

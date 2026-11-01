@@ -85,5 +85,9 @@ fn armament_corps_counter_for_an_illegal_target_is_lost() {
     assert_eq!(t.stack_len(), 1);
     exile_now(&mut t, a);
     t.resolve_all();
-    assert_eq!(plus(&t, b), 1, "the lost counter isn't moved to the other target");
+    assert_eq!(
+        plus(&t, b),
+        1,
+        "the lost counter isn't moved to the other target"
+    );
 }

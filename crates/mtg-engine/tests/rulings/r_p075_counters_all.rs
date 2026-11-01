@@ -175,7 +175,11 @@ fn cosmogrand_zenith_counts_itself_and_resolves_before_the_spell() {
     t.resolve_all();
     let bears = t.named_on_battlefield("Grizzly Bears")[0];
     assert_eq!(plus(&t, z), 1);
-    assert_eq!(plus(&t, bears), 0, "still a spell when the counters were put");
+    assert_eq!(
+        plus(&t, bears),
+        0,
+        "still a spell when the counters were put"
+    );
 }
 
 #[test]
@@ -250,7 +254,10 @@ fn valiant_veteran_exiles_itself_as_a_cost() {
     t.lands(P0, "Plains", 1);
     act(&mut t, P0, v, "Exile", &[]).expect("activates from the graveyard");
     assert_eq!(t.stack_len(), 1);
-    assert!(t.in_exile("Valiant Veteran"), "already exiled while on the stack");
+    assert!(
+        t.in_exile("Valiant Veteran"),
+        "already exiled while on the stack"
+    );
     t.resolve_all();
     assert_eq!(plus(&t, soldier), 1);
 }
@@ -264,7 +271,10 @@ fn valentin_and_another_exile_effect_the_opponent_chooses() {
     );
     for choose_valentin in [false, true] {
         let mut t = TestGame::new(2);
-        t.battlefield(P0, "Valentin, Dean of the Vein // Lisette, Dean of the Root");
+        t.battlefield(
+            P0,
+            "Valentin, Dean of the Vein // Lisette, Dean of the Root",
+        );
         t.battlefield(P0, "Rest in Peace");
         let bears = t.battlefield(P1, "Grizzly Bears");
         t.lands(P0, "Swamp", 2);
@@ -274,10 +284,12 @@ fn valentin_and_another_exile_effect_the_opponent_chooses() {
         t.answer_yes(P0, true);
         destroy(&mut t, bears);
         t.resolve_all();
-        let options = asked_since(&t, from).into_iter().find_map(|(p, d)| match d {
-            Decision::ChooseReplacement { options } => Some((p, options)),
-            _ => None,
-        });
+        let options = asked_since(&t, from)
+            .into_iter()
+            .find_map(|(p, d)| match d {
+                Decision::ChooseReplacement { options } => Some((p, options)),
+                _ => None,
+            });
         let (who, options) = options.expect("a replacement choice");
         assert_eq!(who, P1, "the affected creature's controller chooses");
         let valentin_chosen = options[i].contains("Valentin");

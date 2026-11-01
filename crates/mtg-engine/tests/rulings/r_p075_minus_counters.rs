@@ -180,10 +180,12 @@ fn splendid_agony_divides_as_cast_at_least_one_each() {
     give_mana_for(&mut t, P0, "Splendid Agony");
     let c = t.hand(P0, "Splendid Agony");
     t.cast(P0, c).go();
-    let min_each = asked_since(&t, from).into_iter().find_map(|(_, d)| match d {
-        Decision::Divide { min_each, .. } => Some(min_each),
-        _ => None,
-    });
+    let min_each = asked_since(&t, from)
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::Divide { min_each, .. } => Some(min_each),
+            _ => None,
+        });
     assert_eq!(min_each, Some(1), "divided as it's cast, at least one each");
     t.resolve_all();
     assert_eq!((minus(&t, a), minus(&t, b)), (1, 1));

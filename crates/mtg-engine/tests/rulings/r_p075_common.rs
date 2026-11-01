@@ -17,8 +17,8 @@ pub use crate::r_p151_common::{act, damage, next_upkeep};
 pub use crate::r_p152_common::{gain, sacrifice, set_life};
 pub use crate::r_p212_common::{back_face, boost, grant};
 pub use crate::r_s01_common::{
-    asked_since, attack_with, block_and_finish, creatures, give_mana_for, stack_library,
-    supported, tokens, triggers_on_stack,
+    asked_since, attack_with, block_and_finish, creatures, give_mana_for, stack_library, supported,
+    tokens, triggers_on_stack,
 };
 pub use crate::r_s02_common::{can_activate, destroy};
 pub use crate::r_s20_common::{tap_for_mana, to_beginning_of_combat};
@@ -54,10 +54,7 @@ pub fn cast_card(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) 
 
 /// The number of decisions since `from` for which `pred` holds.
 pub fn count_since(t: &TestGame, from: usize, pred: impl Fn(&Decision) -> bool) -> usize {
-    asked_since(t, from)
-        .iter()
-        .filter(|(_, d)| pred(d))
-        .count()
+    asked_since(t, from).iter().filter(|(_, d)| pred(d)).count()
 }
 
 /// Whether the decision is a yes/no question.

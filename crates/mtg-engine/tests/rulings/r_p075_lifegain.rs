@@ -50,7 +50,11 @@ fn nykthos_paragon_once_each_turn_per_paragon_and_only_once_used() {
     assert_eq!(plus(&t, bears), 0);
     t.answer_yes(P0, true);
     gain(&mut t, P0, 2);
-    assert_eq!(triggers_on_stack(&t, "+1/+1"), 1, "triggers again after declining");
+    assert_eq!(
+        triggers_on_stack(&t, "+1/+1"),
+        1,
+        "triggers again after declining"
+    );
     t.resolve_all();
     assert_eq!(plus(&t, bears), 2);
     gain(&mut t, P0, 3);
@@ -83,7 +87,11 @@ fn nykthos_paragon_one_trigger_per_lifelink_creature() {
     let b = t.battlefield(P0, "Child of Night");
     to_beginning_of_combat(&mut t, P0);
     attack_with(&mut t, &at_p1(&[a, b]));
-    t.answer(P1, DecisionKind::Blockers, mtg_engine::decision::Answer::Blockers(vec![]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        mtg_engine::decision::Answer::Blockers(vec![]),
+    );
     t.advance_to_step(Step::CombatDamage);
     t.settle();
     assert_eq!(triggers_on_stack(&t, "+1/+1"), 2);
@@ -238,7 +246,11 @@ fn lisette_pays_once_per_life_gain_event() {
         "You may only pay {1} once for each life gain event."
     );
     let mut t = TestGame::new(2);
-    let l = back_face(&mut t, P0, "Valentin, Dean of the Vein // Lisette, Dean of the Root");
+    let l = back_face(
+        &mut t,
+        P0,
+        "Valentin, Dean of the Vein // Lisette, Dean of the Root",
+    );
     mana(&mut t, P0, mtg_engine::mana::ManaType::C, 3);
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
@@ -260,7 +272,13 @@ fn blech_one_counter_for_a_creature_with_several_listed_types() {
     supported("Blech, Loafing Pest");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Blech, Loafing Pest");
-    let def = custom_card("Bat Insect", "Creature — Bat Insect Snake", "{1}", Some((1, 1)), "");
+    let def = custom_card(
+        "Bat Insect",
+        "Creature — Bat Insect Snake",
+        "{1}",
+        Some((1, 1)),
+        "",
+    );
     let both = t.custom(P0, def, Zone::Battlefield);
     gain(&mut t, P0, 1);
     t.resolve_all();
@@ -278,13 +296,17 @@ fn gourmands_talent_artifact_is_a_food_on_your_turn() {
     let mut t = TestGame::new(2);
     let talent = t.battlefield(P0, "Gourmand's Talent");
     let coating = t.battlefield(P0, "Liquimetal Coating");
-    t.activate(P0, coating, 0, &[obj(talent)]).expect("activates");
+    t.activate(P0, coating, 0, &[obj(talent)])
+        .expect("activates");
     t.resolve_all();
     assert!(t.obj_now(talent).is(CardType::Artifact));
     assert!(t.obj_now(talent).chars.has_subtype("Food"));
     t.set_step(P1, Step::PrecombatMain);
     t.g.recompute();
-    assert!(!t.obj_now(talent).chars.has_subtype("Food"), "only during your turn");
+    assert!(
+        !t.obj_now(talent).chars.has_subtype("Food"),
+        "only during your turn"
+    );
 }
 
 #[test]
@@ -315,7 +337,10 @@ fn food_and_clue_granting_keeps_the_artifacts_types_and_abilities() {
         let o = t.obj_now(treasure);
         assert!(o.chars.has_subtype(sub), "{name}");
         assert!(o.chars.has_subtype("Treasure"), "{name}");
-        assert!(tap_for_mana(&mut t, P0, treasure, "Add"), "{name}: still a Treasure");
+        assert!(
+            tap_for_mana(&mut t, P0, treasure, "Add"),
+            "{name}: still a Treasure"
+        );
     }
 }
 

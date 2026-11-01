@@ -47,8 +47,15 @@ fn atarkas_command_land_isnt_played_and_earlier_life_stays() {
     let c = t.hand(P0, "Atarka's Command");
     t.cast(P0, c).modes(&[0, 2]).go();
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Forest").len(), 2, "one put onto the battlefield");
-    assert!(t.play_land(P0, mountain).is_ok(), "the land play is still available");
+    assert_eq!(
+        t.named_on_battlefield("Forest").len(),
+        2,
+        "one put onto the battlefield"
+    );
+    assert!(
+        t.play_land(P0, mountain).is_ok(),
+        "the land play is still available"
+    );
     assert_eq!(t.life(P1), 23, "life gained earlier stays");
     gain(&mut t, P1, 3);
     assert_eq!(t.life(P1), 23, "can't gain life now");
@@ -148,7 +155,10 @@ fn shroud_doesnt_remove_auras_or_stop_their_abilities() {
         "Svyelunite Priest",
         "Auras which confer an ability (such as Lance or Firebreathing) are not prevented."
     );
-    ruling!("Spectral Cloak", "Does not destroy Auras already on the creature.");
+    ruling!(
+        "Spectral Cloak",
+        "Does not destroy Auras already on the creature."
+    );
     supported("Svyelunite Priest");
     supported("Spectral Cloak");
     for cloak in [false, true] {
@@ -171,7 +181,8 @@ fn shroud_doesnt_remove_auras_or_stop_their_abilities() {
         assert!(has(&t, bears, KeywordKind::Shroud), "cloak={cloak}");
         assert_eq!(t.obj_now(fb).attached_to, Some(obj(bears)), "cloak={cloak}");
         t.lands(P0, "Mountain", 1);
-        t.activate(P0, fb, 0, &[]).expect("Firebreathing still works");
+        t.activate(P0, fb, 0, &[])
+            .expect("Firebreathing still works");
         t.resolve_all();
         assert_eq!(t.pt(bears).0, 3, "cloak={cloak}");
     }
@@ -180,10 +191,7 @@ fn shroud_doesnt_remove_auras_or_stop_their_abilities() {
 #[test]
 fn familiar_ground_with_menace_means_unblockable() {
     cr!("702.111b", "509.1b");
-    ruling!(
-        "Familiar Ground",
-        "none of your creatures can be blocked"
-    );
+    ruling!("Familiar Ground", "none of your creatures can be blocked");
     supported("Familiar Ground");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Familiar Ground");
@@ -353,7 +361,8 @@ fn insidious_roots_one_trigger_for_cards_leaving_together() {
     t.graveyard(P0, "Grizzly Bears");
     t.graveyard(P0, "Hill Giant");
     let crypt = t.battlefield(P0, "Tormod's Crypt");
-    t.activate(P0, crypt, 0, &[Entity::Player(P0)]).expect("activates");
+    t.activate(P0, crypt, 0, &[Entity::Player(P0)])
+        .expect("activates");
     t.resolve_all();
     let plants = tokens(&t, P0);
     assert_eq!(plants.len(), 1);
@@ -400,7 +409,8 @@ fn fire_whip_tap_ability_taps_the_creature() {
         .filter(|a| a.text.contains("deals 1 damage"))
         .count();
     assert_eq!(n, 2);
-    t.activate(P0, bears, 0, &[Entity::Player(P1)]).expect("first");
+    t.activate(P0, bears, 0, &[Entity::Player(P1)])
+        .expect("first");
     assert!(tapped(&t, bears));
     assert!(t.activate(P0, bears, 1, &[Entity::Player(P1)]).is_err());
 }
@@ -433,7 +443,11 @@ fn petrified_hamlet_names_a_land_card() {
     );
     let mut t = TestGame::new(2);
     let factory = t.battlefield(P1, "Mishra's Factory");
-    t.answer(P0, DecisionKind::Name, Answer::Text("Mishra's Factory".into()));
+    t.answer(
+        P0,
+        DecisionKind::Name,
+        Answer::Text("Mishra's Factory".into()),
+    );
     t.enter(P0, "Petrified Hamlet");
     t.resolve_all();
     t.lands(P1, "Wastes", 1);
@@ -446,11 +460,7 @@ fn petrified_hamlet_names_a_land_card() {
     t.answer(P0, DecisionKind::Name, Answer::Text("Treasure".into()));
     let h = t.enter(P0, "Petrified Hamlet");
     t.resolve_all();
-    let chosen = t
-        .obj_now(h)
-        .choices
-        .card_name
-        .clone();
+    let chosen = t.obj_now(h).choices.card_name.clone();
     assert_ne!(chosen.as_deref(), Some("Treasure"));
 }
 

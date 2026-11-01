@@ -72,7 +72,11 @@ fn gaining_protection_in_response_makes_targets_illegal() {
             let case = format!("giver={giver} player={also_player}");
             assert_eq!(t.obj_now(bears).damage, 0, "{case}");
             if also_player {
-                assert_eq!(t.life(P0), 19, "{case}: the legal target is still dealt damage");
+                assert_eq!(
+                    t.life(P0),
+                    19,
+                    "{case}: the legal target is still dealt damage"
+                );
                 assert_eq!(t.hand_size(P1), hand + 1, "{case}: still draws");
             } else {
                 assert_eq!(t.life(P0), 20, "{case}");
@@ -93,7 +97,10 @@ fn check_debt(
     aura: Option<&str>,
     equipment: Option<&str>,
 ) {
-    assert!(!spell_targets(t, P1, spell).contains(&obj(bears)), "{spell}");
+    assert!(
+        !spell_targets(t, P1, spell).contains(&obj(bears)),
+        "{spell}"
+    );
     if let Some(a) = aura {
         let aura = t.battlefield(P0, a);
         assert!(!t.g.attach(aura, obj(bears)), "{a} can't enchant it");
@@ -114,7 +121,10 @@ fn check_debt(
     assert_eq!(t.obj_now(bears).damage, 0);
     to_beginning_of_combat(t, P0);
     attack_with(t, &at_p1(&[bears]));
-    assert!(!legal_blocks(t, P1, &[(blocker, bears)]), "{creature} can't block");
+    assert!(
+        !legal_blocks(t, P1, &[(blocker, bears)]),
+        "{creature} can't block"
+    );
 }
 
 #[test]
@@ -149,7 +159,10 @@ fn protection_from_a_color_is_debt_and_nothing_else() {
         t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
         cast_card(&mut t, P1, "Infest", &[]);
         t.resolve_all();
-        assert!(!t.on_battlefield(bears), "giver={giver}: Infest isn't stopped");
+        assert!(
+            !t.on_battlefield(bears),
+            "giver={giver}: Infest isn't stopped"
+        );
     }
 }
 
@@ -193,10 +206,12 @@ fn devoted_caretaker_protection_from_instants_and_sorceries() {
     let from = t.asked().len();
     t.answer_targets(P1, &[obj(other)]);
     cast_card(&mut t, P1, "Shock", &[]);
-    let candidates = asked_since(&t, from).into_iter().find_map(|(_, d)| match d {
-        Decision::ChooseTargets { candidates, .. } => Some(candidates),
-        _ => None,
-    });
+    let candidates = asked_since(&t, from)
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates),
+            _ => None,
+        });
     let candidates = candidates.expect("Shock's target chosen");
     assert!(!candidates.contains(&obj(bears)) && candidates.contains(&obj(other)));
     t.resolve_all();
@@ -275,10 +290,12 @@ fn shelter_keeps_drawing_after_protection_from_its_own_color() {
     assert_eq!(t.hand_size(P0), hand + 1);
     let lions = t.battlefield(P1, "Savannah Lions");
     assert!(t.g.protected_from(bears, lions));
-    let options = asked_since(&t, from).into_iter().find_map(|(_, d)| match d {
-        Decision::ChooseOption { options, .. } => Some(options),
-        _ => None,
-    });
+    let options = asked_since(&t, from)
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseOption { options, .. } => Some(options),
+            _ => None,
+        });
     let options = options.expect("a color was chosen");
     assert_eq!(options.len(), 5, "{options:?}");
     assert!(options
