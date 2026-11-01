@@ -525,6 +525,7 @@ fn rekindled_flame_checks_each_opponent_on_trigger_and_resolution() {
 #[test]
 fn relentless_dead_both_abilities_trigger_and_each_payment_is_chosen_on_resolution() {
     cr!("603.3b", "608.2", "107.3f");
+    interp!("trigger-x-before-targets");
     ruling!(
         "Relentless Dead",
         "Relentless Dead’s last two abilities trigger at the same time and can be put on the stack in either order."
