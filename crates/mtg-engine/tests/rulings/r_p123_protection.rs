@@ -87,6 +87,40 @@ fn phased_out_targets_are_illegal() {
 }
 
 #[test]
+fn perch_protection_phases_out_only_if_the_gift_was_promised() {
+    cr!("702.26b", "608.2b", "702.174a");
+    ruling!(
+        "Perch Protection",
+        "A permanent phasing out causes a spell or ability on the stack to have an illegal target if it targets that permanent. As a spell or ability tries to resolve, if all its targets are illegal, that spell or ability doesn't resolve and none of its effects happen, including effects unrelated to the target."
+    );
+    supported("Perch Protection");
+    for promised in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.set_step(P1, Step::PrecombatMain);
+        t.answer_targets(P1, &[obj(bears)]);
+        t.answer(P1, DecisionKind::Divide, Answer::Numbers(vec![2]));
+        cast_card(&mut t, P1, "Electrolyze");
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(promised));
+        cast_card(&mut t, P0, "Perch Protection");
+        t.resolve();
+        let hand = t.hand_size(P1);
+        t.resolve_all();
+        if promised {
+            // The Bears (and the new Birds) phased out: Electrolyze's only target is
+            // illegal, so it does nothing at all, not even the draw.
+            assert!(t.obj_now(bears).phased_out);
+            assert_eq!(t.obj_now(bears).damage, 0);
+            assert_eq!(t.hand_size(P1), hand, "no card drawn");
+        } else {
+            // No gift: nothing phases out; the Bears are dealt 2 damage and die.
+            assert!(!t.g.is_live(bears), "the Bears died");
+            assert_eq!(t.hand_size(P1), hand + 1);
+        }
+    }
+}
+
+#[test]
 fn cant_be_countered_still_gets_the_counterspells_other_effects() {
     cr!("101.2", "608.2c", "701.6b");
     ruling!(

@@ -248,7 +248,7 @@ fn a_copy_of_melira_keepers_keeps_its_counters() {
 
 #[test]
 fn solemnity_tribute_cant_be_paid() {
-    cr!("702.104a", "614.1");
+    cr!("702.104a", "702.104b", "702.136a", "614.1");
     ruling!(
         "Solemnity",
         "If a creature with tribute is entering the battlefield, the chosen opponent can’t pay tribute even if they want to."
@@ -264,7 +264,12 @@ fn solemnity_tribute_cant_be_paid() {
     // Tribute wasn't paid: its "if tribute wasn't paid" ability happened.
     assert_eq!(t.pt(fanatic), (4, 4));
     assert!(t.obj_now(fanatic).has_keyword(KeywordKind::Haste));
-    // Likewise riot offers no counter: the creature gains haste (Frenzied Arynx).
+    // Likewise riot offers no counter: the creature gains haste even though its
+    // controller would choose the counter (CR 702.136a; the riot ruling).
+    ruling!(
+        "Frenzied Arynx",
+        "If a creature entering the battlefield has riot but can't have a +1/+1 counter put onto it, it gains haste."
+    );
     t.answer_yes(P0, true);
     let arynx = t.enter(P0, "Frenzied Arynx");
     t.settle();
