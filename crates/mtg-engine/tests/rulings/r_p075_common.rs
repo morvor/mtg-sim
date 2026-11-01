@@ -81,3 +81,31 @@ pub fn draw(t: &mut TestGame, p: PlayerId) {
 pub fn hand(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
     t.g.player(p).hand.clone()
 }
+
+/// The permanents leave the battlefield at the same time, each going to its owner's
+/// graveyard (one simultaneous zone change, as a destroy-all effect would), then settles.
+pub fn leave_together(t: &mut TestGame, ids: &[ObjectId]) {
+    use mtg_engine::ability::LibraryPosition;
+    use mtg_engine::events::MoveCause;
+    use mtg_engine::object::Zone;
+    use mtg_engine::replacement::{EtbInfo, MoveEv};
+    let moves = ids
+        .iter()
+        .map(|id| {
+            let obj = t.g.current(*id);
+            MoveEv {
+                obj,
+                to: Zone::Graveyard(t.g.obj(obj).owner),
+                pos: LibraryPosition::Top,
+                cause: MoveCause::Effect,
+                by: None,
+                etb: EtbInfo::default(),
+                source: None,
+            }
+        })
+        .collect();
+    t.g.move_objects(moves);
+    t.g.recompute();
+    t.g.flush_events();
+    t.settle();
+}
