@@ -569,9 +569,25 @@ pub(crate) fn sacrifices_jointly_payable(
     src: Option<ObjectId>,
     ctx: &Ctx,
 ) -> bool {
+    // Parts with X in their filter are checked for each value of X elsewhere.
+    let parts: Vec<&CostPart> = cost
+        .parts
+        .iter()
+        .filter(|c| {
+            matches!(c, CostPart::SacrificeSelf | CostPart::Sacrifice { .. })
+                && !crate::x_cost_filters::part_has_x_filter(c)
+        })
+        .collect();
+    let single = |c: &CostPart| match c {
+        CostPart::Sacrifice { count, .. } => count.as_const().is_some_and(|n| n <= 1),
+        _ => true,
+    };
+    if parts.len() < 2 && parts.iter().all(|c| single(c)) {
+        return true;
+    }
     // One slot per permanent to sacrifice, with its candidates.
     let mut slots: Vec<Vec<ObjectId>> = Vec::new();
-    for part in &cost.parts {
+    for part in parts {
         match part {
             CostPart::SacrificeSelf => slots.push(src.into_iter().collect()),
             CostPart::Sacrifice { filter, count } => {
