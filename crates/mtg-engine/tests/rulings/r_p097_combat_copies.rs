@@ -95,7 +95,7 @@ fn attacking_alone_means_the_only_creature_declared_as_an_attacker() {
     );
     for case in ["Seifer Almasy", "Squall, SeeD Mercenary"] {
         supported(case);
-        // Declared alone: double strike, even with a creature entering attacking later.
+        // Declared alone: double strike.
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P0, "Grizzly Bears");
         t.battlefield(P0, case);
@@ -203,7 +203,8 @@ fn withengar_triggers_however_a_player_loses() {
         "Withengar's triggered ability will trigger no matter how a player loses the game"
     );
     supported("Elbrus, the Binding Blade // Withengar Unbound");
-    let mut t = TestGame::new(6);
+    let mut t = TestGame::new(7);
+    // (Seven players: the game goes on after five of them lose.)
     let w = t.battlefield(P0, "Elbrus, the Binding Blade // Withengar Unbound");
     mtg_engine::dfc::transform(&mut t.g, w);
     t.g.recompute();
@@ -229,6 +230,12 @@ fn withengar_triggers_however_a_player_loses() {
     t.g.lose_game(PlayerId(4));
     t.resolve_all();
     assert_eq!(t.counters(w, "+1/+1"), 52);
+    // Drawing from an empty library (SBA).
+    let n = t.library_size(PlayerId(5)) as u32;
+    t.g.draw_cards(PlayerId(5), n + 1);
+    t.resolve_all();
+    assert!(t.has_lost(PlayerId(5)));
+    assert_eq!(t.counters(w, "+1/+1"), 65);
 }
 
 #[test]

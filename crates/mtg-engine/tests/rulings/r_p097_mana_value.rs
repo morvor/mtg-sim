@@ -333,6 +333,14 @@ fn goblin_engineer_cant_target_the_artifact_it_sacrifices() {
     // cost is paid.
     assert!(t.activate(P0, e, 0, &[]).is_err());
     assert!(t.on_battlefield(ring));
+    // With another artifact card there, it can be activated (sacrificing the Sol Ring).
+    let mox = t.graveyard(P0, "Mox Amber");
+    t.answer_choose(P0, &[Entity::Object(ring)]);
+    t.activate(P0, e, 0, &[Entity::Object(mox)])
+        .expect("a legal target");
+    t.resolve_all();
+    assert!(!t.on_battlefield(ring));
+    assert!(t.on_battlefield(mox));
 }
 
 #[test]
@@ -491,19 +499,22 @@ fn lurrus_x_is_zero_in_the_starting_deck() {
         "If a card in a player's deck has {X} in its mana cost, X is considered to be 0."
     );
     use mtg_engine::card::card;
-    let mut deck: Vec<_> = (0..20).map(|_| card("Grizzly Bears")).collect();
-    deck.extend((0..24).map(|_| card("Forest")));
-    // Hangarback Walker ({X}{X}): mana value 0.
-    deck.extend((0..16).map(|_| card("Hangarback Walker")));
-    let mut t = crate::r_s12_common::pregame(
-        mtg_engine::game::GameConfig {
-            starting_player: Some(P0),
-            ..Default::default()
-        },
-        vec![deck, (0..60).map(|_| card("Forest")).collect()],
-    );
-    let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
-    t.answer_choose(P0, &[Entity::Object(side[0])]);
-    t.g.start();
-    assert_eq!(t.g.companion_of(P0), Some(side[0]));
+    // Hangarback Walker ({X}{X}) has mana value 0; Hill Giant (mana value 4) breaks the
+    // condition.
+    for (extra, ok) in [("Hangarback Walker", true), ("Hill Giant", false)] {
+        let mut deck: Vec<_> = (0..20).map(|_| card("Grizzly Bears")).collect();
+        deck.extend((0..24).map(|_| card("Forest")));
+        deck.extend((0..16).map(|_| card(extra)));
+        let mut t = crate::r_s12_common::pregame(
+            mtg_engine::game::GameConfig {
+                starting_player: Some(P0),
+                ..Default::default()
+            },
+            vec![deck, (0..60).map(|_| card("Forest")).collect()],
+        );
+        let side = t.g.add_to_sideboard(P0, vec![card("Lurrus of the Dream-Den")]);
+        t.answer_choose(P0, &[Entity::Object(side[0])]);
+        t.g.start();
+        assert_eq!(t.g.companion_of(P0) == Some(side[0]), ok, "{extra}");
+    }
 }

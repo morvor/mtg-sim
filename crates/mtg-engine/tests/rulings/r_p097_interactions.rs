@@ -407,6 +407,8 @@ fn tezzerets_emblem_animates_vehicles_as_0_0_without_crewing_them() {
     assert_eq!(t.pt(mech), (3, 3));
 }
 
+// Scryfall files Starting Town's rulings under Squall, SeeD Mercenary's oracle id, so they
+// are cited by that name.
 #[test]
 fn starting_town_enters_tapped_on_other_players_turns() {
     cr!("614.1c", "500.7");
@@ -488,14 +490,17 @@ fn an_aura_put_onto_the_battlefield_cant_enchant_a_permanent_entering_with_it() 
     assert!(t.on_battlefield(cards[1]));
     assert!(t.on_battlefield(cards[0]), "{}", t.dump_log());
     assert_eq!(t.obj_now(cards[0]).attached_to, Some(Entity::Object(giant)));
-    let bears = t.g.current(cards[1]);
+    let bears = [cards[1], t.g.current(cards[1])];
+    let mut asked = false;
     for (_, d) in &t.asked()[from..] {
         if let Decision::ChooseEntities { candidates, .. } = d {
             if candidates.contains(&Entity::Object(giant)) {
-                assert!(!candidates.contains(&Entity::Object(bears)));
+                asked = true;
+                assert!(bears.iter().all(|b| !candidates.contains(&Entity::Object(*b))));
             }
         }
     }
+    assert!(asked, "the Aura's host was chosen");
 }
 
 #[test]

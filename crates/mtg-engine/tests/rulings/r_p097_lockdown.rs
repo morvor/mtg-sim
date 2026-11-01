@@ -113,10 +113,13 @@ fn encrust_leaves_static_and_triggered_abilities_alone() {
     t.enter(P1, "Grizzly Bears");
     t.resolve_all();
     assert_eq!(t.life(P1), 21);
-    // Activated: Prodigal Sorcerer's can't be activated.
+    // Activated: Prodigal Sorcerer's can't be activated (an unenchanted one's can).
+    let other = t.battlefield(P1, "Prodigal Sorcerer");
     t.set_step(P1, Step::PrecombatMain);
     t.answer_targets(P1, &[Entity::Player(P0)]);
     assert!(t.activate(P1, sorcerer, 0, &[]).is_err());
+    t.answer_targets(P1, &[Entity::Player(P0)]);
+    assert!(t.activate(P1, other, 0, &[]).is_ok());
 }
 
 /// Puts `n` Paralyzes on P1's tapped Grizzly Bears, gives P1 four Swamps, and runs P1's
