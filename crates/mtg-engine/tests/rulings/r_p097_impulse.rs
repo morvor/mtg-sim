@@ -28,6 +28,13 @@ fn impulse(case: &str, top: &[&str]) -> (TestGame, Vec<ObjectId>) {
             let s = t.hand(P0, case);
             t.cast(P0, s).go();
         }
+        "Season of the Bold" => {
+            // {P}{P} — Exile the top two cards of your library. Until the end of your
+            // next turn, you may play them.
+            pool(&mut t, P0, &[(ManaType::R, 2), (ManaType::C, 3)]);
+            let s = t.hand(P0, case);
+            t.cast(P0, s).modes(&[1]).go();
+        }
         "Ignite the Future" => {
             pool(&mut t, P0, &[(ManaType::R, 1), (ManaType::C, 3)]);
             let s = t.hand(P0, case);
@@ -189,7 +196,12 @@ fn an_exiled_land_needs_a_land_play_and_main_phase_timing() {
         "Goblin Researcher",
         "If you exile a land card with Goblin Researcher's enters-the-battlefield ability, you may play that land only if you have any available land plays. Normally, this means you can play the land only if you haven't played a land yet that turn."
     );
+    ruling!(
+        "Season of the Bold",
+        "You pay all costs and follow all timing rules for cards played with the permission granted by the second mode. For example, if one of the exiled cards is a land card, you may play it only during your main phase while the stack is empty."
+    );
     for case in [
+        "Season of the Bold",
         "Commune with Lava",
         "Showdown of the Skalds",
         "Captive Weird // Compleated Conjurer",

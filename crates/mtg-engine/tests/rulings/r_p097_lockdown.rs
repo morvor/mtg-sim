@@ -199,3 +199,32 @@ fn dream_tides_untaps_nongreen_creatures_only_at_the_beginning_of_upkeep() {
     t.resolve_all();
     assert!(tapped(&t, warrior));
 }
+
+#[test]
+fn storage_matrix_doesnt_override_effects_that_stop_untapping() {
+    cr!("502.3");
+    ruling!(
+        "Storage Matrix",
+        "This card’s ability does not override effects which prevent a permanent from untapping."
+    );
+    supported("Storage Matrix");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Storage Matrix");
+    let shackled = t.battlefield(P1, "Grizzly Bears");
+    let free = t.battlefield(P1, "Grizzly Bears");
+    let forest = t.battlefield(P1, "Forest");
+    for c in [shackled, free, forest] {
+        t.g.tap(c);
+    }
+    attach_new(&mut t, P0, "Shackles", shackled);
+    // P1 chooses creature.
+    t.answer(
+        P1,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(1),
+    );
+    through_untap(&mut t, P1);
+    assert!(!tapped(&t, free), "{}", t.dump_log());
+    assert!(tapped(&t, shackled));
+    assert!(tapped(&t, forest));
+}
