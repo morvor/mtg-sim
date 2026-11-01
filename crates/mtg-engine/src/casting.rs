@@ -3480,7 +3480,8 @@ impl Game {
                     .exile_cost_cards(p, *zone, filter, ctx)
                     .into_iter()
                     .filter(|c| {
-                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                        exile_cost_may_use_source(*c, src, ctx)
+                            && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
                     .collect();
                 crate::target_groups::can_choose_together(self, filter, &cands, n, ctx)
@@ -4011,7 +4012,8 @@ impl Game {
                     .exile_cost_cards(p, *zone, filter, ctx)
                     .into_iter()
                     .filter(|c| {
-                        Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                        exile_cost_may_use_source(*c, src, ctx)
+                            && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
                     .collect();
                 // ("Exile two cards from a single graveyard": they must be chosen together,
@@ -4695,4 +4697,13 @@ fn reserves_source(cost: &Cost) -> bool {
                 | CostPart::ReturnSelfToHand
         )
     })
+}
+
+/// Whether card `c` may be exiled to pay an exile cost whose source is `src`: the source
+/// of an activated ability may pay for its own ability ("To pay this ability's cost, you
+/// may exile any three artifact cards from your graveyard—including Salvage Titan
+/// itself", CR 602.2b); a spell can't pay for itself (it's on the stack, CR 601.2a).
+fn exile_cost_may_use_source(c: ObjectId, src: Option<ObjectId>, ctx: &Ctx) -> bool {
+    use crate::rule_statics::payment::CostOf;
+    Some(c) != src || matches!(ctx.cost_of, Some(CostOf::Ability | CostOf::ManaAbility))
 }

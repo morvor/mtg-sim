@@ -82,8 +82,8 @@ fn is_keyword_ability(g: &Game, ctx: &Ctx, k: KeywordKind) -> bool {
     }
 }
 
-/// `Filter::Custom`: a permanent with a mana ability (CR 605.1a): "each creature you control
-/// with a mana ability".
+/// `Filter::Custom`: a permanent with a mana ability, activated or triggered (CR 605.1a-b):
+/// "each creature you control with a mana ability".
 pub const HAS_MANA_ABILITY: &str = "object: has a mana ability";
 
 /// `Filter::Custom`: a backup triggered ability on the stack (CR 702.165a): "becomes the
@@ -213,7 +213,7 @@ impl KeywordRules for ActivatedAbilityKind {
                     .chars
                     .abilities
                     .iter()
-                    .any(|a| matches!(&a.kind, AbilityKind::Activated(act) if act.is_mana_ability)),
+                    .any(|a| a.counts_as_mana_ability()),
             );
         }
         if name == BACKUP_ABILITY {

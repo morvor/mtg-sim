@@ -22,8 +22,15 @@ pub fn landwalk_ignored(g: &Game, kw: &Keyword) -> bool {
     let text = kw.text.as_deref().unwrap_or("").to_lowercase();
     g.statics.customs.iter().any(|(_, _, name)| {
         name.strip_prefix(BLOCKABLE_AS_THOUGH_NO_LANDWALK)
-            .is_some_and(|which| which.is_empty() || which == text)
+            .is_some_and(|which| which.is_empty() || is_kind_of(&text, which))
     })
+}
+
+/// Whether the landwalk ability with (lowercase) text `text` is a `which` ability
+/// ("islandwalk"): the same text, or that text with a qualifier in front ("snow
+/// islandwalk" is an islandwalk ability: Merfolk Assassin's rulings; CR 702.14c).
+fn is_kind_of(text: &str, which: &str) -> bool {
+    text == which || text.strip_suffix(which).is_some_and(|q| q.ends_with(' '))
 }
 
 /// Prefix of a `Filter::Custom` name: "with [type]walk", one specific landwalk ability
@@ -35,7 +42,9 @@ pub const HAS_LANDWALK: &str = "has landwalk:";
 pub fn has_landwalk(g: &Game, id: crate::types::ObjectId, which: &str) -> bool {
     g.obj(id).chars.keywords().any(|k| {
         k.kind == KeywordKind::Landwalk
-            && k.text.as_deref().is_some_and(|t| t.to_lowercase() == which)
+            && k.text
+                .as_deref()
+                .is_some_and(|t| is_kind_of(&t.to_lowercase(), which))
     })
 }
 

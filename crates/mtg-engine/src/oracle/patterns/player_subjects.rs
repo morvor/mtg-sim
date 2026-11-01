@@ -645,6 +645,43 @@ fn player_subject(l: &str, b: &mut Builder) -> Option<Effect> {
     r
 }
 
+/// The targets an instruction performed by `who` named: they're chosen as the ability is
+/// put on the stack, where "you" is still its controller, so "[a land] they control" in
+/// the reworded predicate ("that player puts a flood counter on target non-Island land
+/// they control of their choice", Quicksilver Fountain) names `who`.
+fn subject_targets(who: &PlayerRef, targets: &mut [TargetSpec]) {
+    use serde_json::Value as J;
+    if matches!(who, PlayerRef::You) {
+        return;
+    }
+    let (Ok(ctl), Ok(own)) = (
+        serde_json::to_value(super::value_grammar::controlled_by(who)),
+        serde_json::to_value(super::value_grammar::owned_by(who)),
+    ) else {
+        return;
+    };
+    let you = |kind: &str| serde_json::json!({ kind: "You" });
+    let map = [(you("ControlledBy"), ctl), (you("OwnedBy"), own)];
+    fn walk(v: J, map: &[(J, J)]) -> J {
+        if let Some((_, to)) = map.iter().find(|(from, _)| *from == v) {
+            return to.clone();
+        }
+        match v {
+            J::Object(m) => J::Object(m.into_iter().map(|(k, v)| (k, walk(v, map))).collect()),
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, map)).collect()),
+            other => other,
+        }
+    }
+    for t in targets.iter_mut() {
+        let Ok(v) = serde_json::to_value(&t.what) else {
+            continue;
+        };
+        if let Ok(what) = serde_json::from_value(walk(v, &map)) {
+            t.what = what;
+        }
+    }
+}
+
 /// The value of X as the instruction begins, for an instruction another player performs:
 /// an X an outer pattern later defines ("..., where X is the number of Faeries you
 /// control") is read for the ability's controller, not for that player.
@@ -842,7 +879,10 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                     effect: Box::new(e),
                 });
             }
+            let first = b.targets.len();
             let (_, e, hoisted) = predicate(pred, true, b)?;
+            let first = first.min(b.targets.len());
+            subject_targets(&who, &mut b.targets[first..]);
             let e = match delay_subject_inside(&who, &e) {
                 Some(e) => e,
                 None => with_outer_x(e, |e| Effect::AsPlayer {
