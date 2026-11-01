@@ -250,7 +250,7 @@ fn eldrazi_obligator_may_target_any_creature() {
 
 #[test]
 fn herigast_with_an_empty_hand_still_draws_three() {
-    cr!("603.5", "608.2d");
+    cr!("603.5", "118.12");
     ruling!(
         "Herigast, Erupting Nullkite",
         "You may choose to exile your hand even if you have no cards in hand. If you do, you'll still draw three cards."
@@ -354,7 +354,7 @@ fn genesis_hydra(t: &mut TestGame, x: i64) -> ObjectId {
 
 #[test]
 fn genesis_hydra_shuffles_even_with_no_rest() {
-    cr!("701.24a", "608.2c");
+    cr!("701.24a", "701.24d");
     ruling!(
         "Genesis Hydra",
         "If \"the rest\" is zero cards, either because X was 0 or because X was 1 and that card was put onto the battlefield, the library is still shuffled."
