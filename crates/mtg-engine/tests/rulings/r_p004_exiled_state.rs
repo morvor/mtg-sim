@@ -3,7 +3,6 @@
 //! counters cease to exist (122.2), and the card returns as a new object (400.7).
 
 use crate::r_p004_common::*;
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::counters;
@@ -321,5 +320,4 @@ fn every_permanent_exiled_by_a_multi_exile_banisher_is_cleaned_up() {
     assert_eq!(g.len(), 1);
     assert_eq!(t.counters(g[0], counters::PLUS1), 0);
     assert_eq!(t.obj_now(g[0]).controller, P2);
-    let _ = Zone::Exile;
 }
