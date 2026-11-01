@@ -50,3 +50,15 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 - Affects: Aetherplasm with Deathgazer and other "becomes blocked by a creature" abilities; any effect putting a creature onto the battlefield blocking.
 - Code: `crates/mtg-engine/src/combat.rs` (`combat_trigger_matches`, `TriggerCond::BlockedByCreature`).
 - Tests: `tests/rulings/r_p006_activated_bounce.rs` (`aetherplasm_can_put_itself_back_but_deathgazer_sees_the_new_blocker`).
+
+## qualified-landwalk-is-that-landwalk: "snow islandwalk" is an islandwalk ability
+- Kind: interpretation
+- Status: provisional
+- Rules: 702.14a "Landwalk is a generic term that appears within an object’s rules text as “[type]walk,” where [type] is usually a land type, but it can also be the card type land plus any combination of land types, card types, and/or supertypes." / 702.14c "... or with both the specified type or supertype and the specified subtype (as in “snow swampwalk”)." / Merfolk Assassin ruling: "Can target a creature with snow islandwalk."
+- Question: Does a reference to one landwalk ability ("target creature with islandwalk", "Creatures with islandwalk can be blocked as though they didn't have islandwalk") cover the same landwalk with a qualifier in front ("snow islandwalk")?
+- Decision: Yes: a landwalk ability whose text is the named one with words in front of it ("snow islandwalk" for "islandwalk") is that kind of landwalk, for both "with [type]walk" filters and "blocked as though they didn't have [type]walk" effects. A different land type ("snow swampwalk" for "islandwalk") isn't.
+- Alternatives: Match only the exact text: Merfolk Assassin couldn't target a creature with snow islandwalk, contradicting its ruling; or apply the ruling only to filters, so Undertow wouldn't let a snow islandwalker be blocked (no ruling addresses Undertow-style effects directly).
+- Why: The Merfolk Assassin ruling treats snow islandwalk as islandwalk; the same words in Undertow and Staff of the Ages-style effects should mean the same thing.
+- Affects: Merfolk Assassin, Stormtide Leviathan-style filters; Undertow and other "[type]walk can be blocked as though" effects; creatures with qualified landwalk (no printed card has snow islandwalk; Legions of Lim-Dûl has snow swampwalk).
+- Code: `crates/mtg-engine/src/kw/landwalk.rs` (`is_kind_of`, `has_landwalk`, `landwalk_ignored`).
+- Tests: `tests/rulings/r_p054_misc.rs` (`merfolk_assassin_can_target_a_creature_with_snow_islandwalk`, `undertow_lets_a_snow_islandwalker_be_blocked`).

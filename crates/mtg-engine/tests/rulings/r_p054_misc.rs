@@ -414,3 +414,36 @@ fn commanders_plate_uses_both_commanders_combined_color_identity() {
     assert!(can_target(&mut t, P1, "Giant Growth"), "green");
     assert!(can_target(&mut t, P1, "Disfigure"), "black");
 }
+
+/// The same reading for "creatures with islandwalk can be blocked as though they didn't
+/// have islandwalk" (Undertow): it covers snow islandwalk.
+#[test]
+fn undertow_lets_a_snow_islandwalker_be_blocked() {
+    cr!("702.14c", "509.1b");
+    interp!("qualified-landwalk-is-that-landwalk");
+    for undertow in [false, true] {
+        let mut t = TestGame::new(2);
+        let snowy = t.custom(
+            P0,
+            custom_card(
+                "Snowy Merfolk",
+                "Creature — Merfolk",
+                "{U}",
+                Some((1, 1)),
+                "Snow islandwalk",
+            ),
+            Zone::Battlefield,
+        );
+        t.battlefield(P1, "Snow-Covered Island");
+        let wall = t.battlefield(P1, "Wall of Wood");
+        if undertow {
+            t.battlefield(P1, "Undertow");
+        }
+        crate::r_s01_common::attack_with(&mut t, &[(snowy, pl(P1))]);
+        assert_eq!(
+            crate::r_s21_common::legal_blocks(&mut t, P1, &[(wall, snowy)]),
+            undertow,
+            "Undertow: {undertow}"
+        );
+    }
+}
