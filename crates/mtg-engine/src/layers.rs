@@ -2075,6 +2075,13 @@ pub fn apply_mod(
             if let (Some(f), Some(ch)) = (k.filter.as_ref(), g.source_choices(ctx)) {
                 if crate::choices::filter_mentions_choice(f) {
                     k.filter = Some(crate::choices::bind_choices(f, ch));
+                    // "Protection from the [last] chosen color" with no color chosen
+                    // grants no protection ability at all (CR 607.5a; Sanctuary Blade).
+                    if k.kind == KeywordKind::Protection
+                        && matches!(&k.filter, Some(Filter::Not(x)) if matches!(**x, Filter::Any))
+                    {
+                        return;
+                    }
                 }
             }
             // CR 702.16n, 702.16p: "This effect doesn't remove [this Aura / what's
