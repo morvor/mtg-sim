@@ -60,3 +60,56 @@ pub fn ob(id: ObjectId) -> Entity {
 pub fn sup(name: &str) {
     supported(name)
 }
+
+/// Applies `mods` to `id` until end of turn, as an effect controlled by `p`.
+pub fn modify(t: &mut TestGame, p: PlayerId, id: ObjectId, mods: Vec<mtg_engine::ability::Modification>) {
+    use mtg_engine::ability::*;
+    crate::r_s05_common::run_from(
+        t,
+        p,
+        None,
+        Effect::Modify {
+            what: Sel::Target(0),
+            mods,
+            duration: Duration::EndOfTurn,
+        },
+        &[Entity::Object(t.g.current(id))],
+    );
+}
+
+/// `id` gains indestructible until end of turn.
+pub fn indestructible(t: &mut TestGame, id: ObjectId) {
+    use mtg_engine::ability::Modification;
+    use mtg_engine::keywords::{Keyword, KeywordKind};
+    let c = t.obj_now(id).controller;
+    modify(t, c, id, vec![Modification::AddKeyword(Keyword::new(KeywordKind::Indestructible))]);
+}
+
+/// A regeneration shield for `id` (CR 701.19a).
+pub fn regen_shield(t: &mut TestGame, id: ObjectId) {
+    use mtg_engine::ability::*;
+    let c = t.obj_now(id).controller;
+    crate::r_s05_common::run_from(
+        t,
+        c,
+        None,
+        Effect::Regenerate { what: Sel::Target(0) },
+        &[Entity::Object(t.g.current(id))],
+    );
+}
+
+/// `id` becomes a 2/2 creature in addition to its other types until end of turn.
+pub fn animate(t: &mut TestGame, id: ObjectId) {
+    use mtg_engine::ability::*;
+    use mtg_engine::types::CardType;
+    let c = t.obj_now(id).controller;
+    modify(
+        t,
+        c,
+        id,
+        vec![
+            Modification::AddTypes(vec![CardType::Creature]),
+            Modification::SetPT(Some(Value::Const(2)), Some(Value::Const(2))),
+        ],
+    );
+}
