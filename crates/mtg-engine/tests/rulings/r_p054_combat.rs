@@ -7,6 +7,7 @@
 use crate::r_p054_common::*;
 use crate::r_s01_common::{attack_with, with_subtype};
 use crate::r_s14_common::triggers_from;
+use crate::r_s06_common::attach_new;
 use crate::r_s21_common::legal_blocks;
 use mtg_engine::ability::{Modification, Value};
 use mtg_engine::decision::Answer;
@@ -448,7 +449,8 @@ fn blocking_requirements_skip_tapped_creatures_and_creatures_with_a_blocking_cos
     assert!(legal_blocks(&mut t, P1, &[(w1, bear), (w2, bear)]));
     assert!(legal_blocks(&mut t, P1, &[(w1, bear), (w2, lion)]));
 
-    // A blocking cost (War Cadence with X = 0): blocking is optional for both.
+    // A blocking cost (War Cadence with X = 0, still a cost): blocking is optional for both.
+    interp!("combat-tax-of-zero-is-a-cost");
     for which in ["Declare Dominance", "Monstrous Step"] {
         let mut t = TestGame::new(2);
         let bear = t.battlefield(P0, "Grizzly Bears");
@@ -483,21 +485,38 @@ fn multiple_menace_trample_or_lifelink_counters_are_redundant() {
         "T-45 Power Armor",
         "Multiple instances of menace are redundant. The same is true for trample and lifelink."
     );
+    // T-45 Power Armor (+3/+3) puts a keyword counter on the equipped creature at each of
+    // P0's upkeeps; the other counters are added directly so each kind is doubled.
     let mut t = TestGame::new(2);
     let bear = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "T-45 Power Armor", bear);
+    t.g.add_counters(pl(P0), "energy", 2, None);
+    t.answer_yes(P0, true);
+    t.advance_to(P1, Step::Upkeep);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let by_t45: u32 = ["menace", "lifelink", "trample"]
+        .iter()
+        .map(|k| t.counters(bear, k))
+        .sum();
+    assert_eq!(by_t45, 1, "one keyword counter from T-45 Power Armor");
     for kind in ["menace", "lifelink", "trample"] {
-        t.g.add_counters(o(bear), kind, 2, None);
+        let have = t.counters(bear, kind);
+        t.g.add_counters(o(bear), kind, 2 - have, None);
     }
     t.g.recompute();
+    assert_eq!(t.pt(bear), (5, 5));
     let w1 = t.battlefield(P1, "Wall of Wood");
     let w2 = t.battlefield(P1, "Wall of Wood");
+    t.advance_to(P0, Step::BeginningOfCombat);
     attack_with(&mut t, &[(bear, pl(P1))]);
     // Menace twice: still two blockers are enough, one isn't.
     assert!(!legal_blocks(&mut t, P1, &[(w1, bear)]));
     assert!(legal_blocks(&mut t, P1, &[(w1, bear), (w2, bear)]));
     t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
     t.advance_to(P0, Step::EndOfCombat);
-    // Lifelink twice: 2 damage, 2 life.
-    assert_eq!(t.life(P1), 18);
-    assert_eq!(t.life(P0), 22);
+    // Lifelink twice: 5 damage, 5 life.
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.life(P0), 25);
 }

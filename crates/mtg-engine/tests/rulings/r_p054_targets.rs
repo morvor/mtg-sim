@@ -578,6 +578,7 @@ fn opponent_targeting_protection_on_an_opponents_creature_stops_its_controller()
             r.is_err() || cands.iter().all(|c| !c.contains(&o(theirs))),
             "{name}: P1 can't target their own creature"
         );
+        t.resolve_all();
         assert_eq!(t.pt(theirs), (2, 2), "{name}");
     }
 }

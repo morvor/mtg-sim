@@ -245,6 +245,7 @@ fn a_modal_trigger_cant_choose_a_mode_without_legal_targets() {
 #[test]
 fn merfolk_assassin_can_target_a_creature_with_snow_islandwalk() {
     cr!("702.14a", "702.14c", "115.1");
+    interp!("qualified-landwalk-is-that-landwalk");
     ruling!(
         "Merfolk Assassin",
         "Can target a creature with snow islandwalk."
