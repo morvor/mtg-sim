@@ -19,7 +19,10 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
-fn spell(name: &'static str, modes: &'static [usize]) -> impl Fn(&mut TestGame, ObjectId, ObjectId) {
+fn spell(
+    name: &'static str,
+    modes: &'static [usize],
+) -> impl Fn(&mut TestGame, ObjectId, ObjectId) {
     move |t, m, o| {
         cast_modes(t, P0, name, modes, &[ob(m), ob(o)]);
     }
@@ -53,30 +56,115 @@ fn invasion(t: &mut TestGame, m: ObjectId, o: ObjectId) {
 }
 
 /// (name, start, P0's creature, power it deals with both targets legal)
-type FightCase = (&'static str, Box<dyn Fn(&mut TestGame, ObjectId, ObjectId)>, &'static str, u32);
+type FightCase = (
+    &'static str,
+    Box<dyn Fn(&mut TestGame, ObjectId, ObjectId)>,
+    &'static str,
+    u32,
+);
 
 fn fight_cases() -> Vec<FightCase> {
     vec![
         ("Pounce", Box::new(spell("Pounce", &[])), "Grizzly Bears", 2),
-        ("Inscription of Abundance", Box::new(spell("Inscription of Abundance", &[2])), "Grizzly Bears", 2),
-        ("Go for Blood", Box::new(spell("Go for Blood", &[])), "Grizzly Bears", 2),
-        ("Hunt the Weak", Box::new(spell("Hunt the Weak", &[])), "Grizzly Bears", 3),
+        (
+            "Inscription of Abundance",
+            Box::new(spell("Inscription of Abundance", &[2])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Go for Blood",
+            Box::new(spell("Go for Blood", &[])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Hunt the Weak",
+            Box::new(spell("Hunt the Weak", &[])),
+            "Grizzly Bears",
+            3,
+        ),
         ("Joust", Box::new(spell("Joust", &[])), "White Knight", 4),
-        ("Khalni Ambush", Box::new(spell("Khalni Ambush // Khalni Territory", &[])), "Grizzly Bears", 2),
-        ("Prey Upon", Box::new(spell("Prey Upon", &[])), "Grizzly Bears", 2),
-        ("Savage Smash", Box::new(spell("Savage Smash", &[])), "Grizzly Bears", 4),
-        ("Savage Swipe", Box::new(spell("Savage Swipe", &[])), "Grizzly Bears", 4),
-        ("Savage Punch", Box::new(spell("Savage Punch", &[])), "Grizzly Bears", 2),
-        ("Swift Kick", Box::new(spell("Swift Kick", &[])), "Grizzly Bears", 3),
-        ("Temur Charm", Box::new(spell("Temur Charm", &[0])), "Grizzly Bears", 3),
-        ("Epic Confrontation", Box::new(spell("Epic Confrontation", &[])), "Grizzly Bears", 3),
-        ("Time to Feed", Box::new(spell("Time to Feed", &[])), "Grizzly Bears", 2),
-        ("Unnatural Aggression", Box::new(spell("Unnatural Aggression", &[])), "Grizzly Bears", 2),
-        ("Struggle for Skemfar", Box::new(spell("Struggle for Skemfar", &[])), "Grizzly Bears", 3),
-        ("Bridgeworks Battle", Box::new(spell("Bridgeworks Battle // Tanglespan Bridgeworks", &[])), "Grizzly Bears", 4),
+        (
+            "Khalni Ambush",
+            Box::new(spell("Khalni Ambush // Khalni Territory", &[])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Prey Upon",
+            Box::new(spell("Prey Upon", &[])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Savage Smash",
+            Box::new(spell("Savage Smash", &[])),
+            "Grizzly Bears",
+            4,
+        ),
+        (
+            "Savage Swipe",
+            Box::new(spell("Savage Swipe", &[])),
+            "Grizzly Bears",
+            4,
+        ),
+        (
+            "Savage Punch",
+            Box::new(spell("Savage Punch", &[])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Swift Kick",
+            Box::new(spell("Swift Kick", &[])),
+            "Grizzly Bears",
+            3,
+        ),
+        (
+            "Temur Charm",
+            Box::new(spell("Temur Charm", &[0])),
+            "Grizzly Bears",
+            3,
+        ),
+        (
+            "Epic Confrontation",
+            Box::new(spell("Epic Confrontation", &[])),
+            "Grizzly Bears",
+            3,
+        ),
+        (
+            "Time to Feed",
+            Box::new(spell("Time to Feed", &[])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Unnatural Aggression",
+            Box::new(spell("Unnatural Aggression", &[])),
+            "Grizzly Bears",
+            2,
+        ),
+        (
+            "Struggle for Skemfar",
+            Box::new(spell("Struggle for Skemfar", &[])),
+            "Grizzly Bears",
+            3,
+        ),
+        (
+            "Bridgeworks Battle",
+            Box::new(spell("Bridgeworks Battle // Tanglespan Bridgeworks", &[])),
+            "Grizzly Bears",
+            4,
+        ),
         ("Ulvenwald Tracker", Box::new(tracker), "Grizzly Bears", 2),
         ("Ayula", Box::new(ayula), "Grizzly Bears", 2),
-        ("Invasion of Muraganda", Box::new(invasion), "Grizzly Bears", 3),
+        (
+            "Invasion of Muraganda",
+            Box::new(invasion),
+            "Grizzly Bears",
+            3,
+        ),
     ]
 }
 
@@ -160,10 +248,20 @@ fn the_bonus_applies_only_if_your_creature_is_still_a_legal_target() {
     }
     // Joust's bonus is only for a Knight; Savage Swipe's only for power 2.
     let joust = &cases.iter().find(|c| c.0 == "Joust").unwrap().1;
-    let (t, m, _) = fight_scenario("Grizzly Bears", "Colossal Dreadmaw", joust, Bad::Theirs(Spoil::Hexproof));
+    let (t, m, _) = fight_scenario(
+        "Grizzly Bears",
+        "Colossal Dreadmaw",
+        joust,
+        Bad::Theirs(Spoil::Hexproof),
+    );
     assert_eq!(t.pt(m), (2, 2));
     let swipe = &cases.iter().find(|c| c.0 == "Savage Swipe").unwrap().1;
-    let (t, m, _) = fight_scenario("Hill Giant", "Colossal Dreadmaw", swipe, Bad::Theirs(Spoil::Hexproof));
+    let (t, m, _) = fight_scenario(
+        "Hill Giant",
+        "Colossal Dreadmaw",
+        swipe,
+        Bad::Theirs(Spoil::Hexproof),
+    );
     assert_eq!(t.pt(m), (3, 3));
 }
 
@@ -172,7 +270,12 @@ fn unnatural_aggression_still_exiles_the_other_creature_if_yours_is_illegal() {
     cr!("608.2b", "614.1a");
     ruling!("Unnatural Aggression", "If the creature you control becomes an illegal target (perhaps due to being destroyed by another spell or ability), Unnatural Aggression will resolve, but the target creature an opponent controls will neither deal nor receive any damage. If that creature would die later in the turn for another reason, it will be exiled instead.");
     let start = spell("Unnatural Aggression", &[]);
-    let (mut t, _, o) = fight_scenario("Grizzly Bears", "Colossal Dreadmaw", start, Bad::Mine(Spoil::Gone));
+    let (mut t, _, o) = fight_scenario(
+        "Grizzly Bears",
+        "Colossal Dreadmaw",
+        start,
+        Bad::Mine(Spoil::Gone),
+    );
     assert!(t.in_graveyard(P0, "Unnatural Aggression"));
     assert_eq!(damage_on(&t, o), 0);
     destroy(&mut t, o);
@@ -229,8 +332,10 @@ fn fight_triggers_do_nothing_if_the_source_left_or_the_target_is_illegal() {
     cr!("701.14b", "608.2b");
     ruling!("Atzocan Archer", "If Atzocan Archer isn’t on the battlefield as its triggered ability resolves, or if the target of that ability is illegal, no creature will deal or be dealt damage.");
     ruling!("Territorial Allosaurus", "If Territorial Allosaurus isn't on the battlefield as its triggered ability resolves, or if the target of that ability is illegal, no creature will deal or be dealt damage.");
-    let starts: [(&str, fn(&mut TestGame, ObjectId) -> ObjectId, u32); 2] =
-        [("Atzocan Archer", archer, 1), ("Territorial Allosaurus", allosaurus, 5)];
+    let starts: [(&str, fn(&mut TestGame, ObjectId) -> ObjectId, u32); 2] = [
+        ("Atzocan Archer", archer, 1),
+        ("Territorial Allosaurus", allosaurus, 5),
+    ];
     for (name, start, power) in starts {
         // Baseline: it fights.
         let mut t = TestGame::new(2);
@@ -378,7 +483,10 @@ fn primordial_plasm_removes_characteristic_defining_abilities_and_allows_new_one
 #[test]
 fn gargos_reduces_only_generic_mana_and_only_from_the_battlefield() {
     cr!("601.2f", "118.7d");
-    ruling!("Gargos, Vicious Watcher", "Gargos's cost-reduction ability affects only generic mana in a Hydra's cost.");
+    ruling!(
+        "Gargos, Vicious Watcher",
+        "Gargos's cost-reduction ability affects only generic mana in a Hydra's cost."
+    );
     ruling!("Gargos, Vicious Watcher", "Gargos's cost-reduction ability applies only while it's on the battlefield. Gargos doesn't reduce its own cost.");
     supported("Gargos, Vicious Watcher");
     supported("Bristling Hydra");
@@ -459,7 +567,13 @@ fn gargos_triggers_once_per_creature_targeted() {
         let b = t.battlefield(P0, "Runeclaw Bear");
         let c = t.battlefield(P0, "Hill Giant");
         let tg = if spread { [a, b, c] } else { [a, a, a] };
-        cast_modes(&mut t, P0, "Seeds of Strength", &[], &[ob(tg[0]), ob(tg[1]), ob(tg[2])]);
+        cast_modes(
+            &mut t,
+            P0,
+            "Seeds of Strength",
+            &[],
+            &[ob(tg[0]), ob(tg[1]), ob(tg[2])],
+        );
         t.settle();
         assert_eq!(t.stack_len(), if spread { 4 } else { 2 }, "spread {spread}");
     }
@@ -475,7 +589,10 @@ fn gimli_counts_creatures_that_died_before_it_was_on_the_battlefield() {
     destroy(&mut t, a);
     let gimli = t.battlefield(P0, "Gimli, Mournful Avenger");
     t.g.recompute();
-    assert!(!has_kw(&t, gimli, KeywordKind::Indestructible), "only one died");
+    assert!(
+        !has_kw(&t, gimli, KeywordKind::Indestructible),
+        "only one died"
+    );
     let mut t = TestGame::new(2);
     let a2 = t.battlefield(P0, "Grizzly Bears");
     let b2 = t.battlefield(P0, "Runeclaw Bear");
@@ -547,16 +664,20 @@ fn labyrinth_scene(t: &mut TestGame) -> (ObjectId, ObjectId, ObjectId) {
     let bear = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Wastes", 4);
     t.set_step(P1, Step::DeclareBlockers);
-    t.g.combat.as_mut().unwrap().attackers.push(mtg_engine::combat::AttackerInfo {
-        id: bear,
-        target: Some(Entity::Player(P0)),
-        original_target: Some(Entity::Player(P0)),
-        declared: true,
-        blocked: false,
-        blockers: vec![],
-        band: None,
-        defending_player: Some(P0),
-    });
+    t.g.combat
+        .as_mut()
+        .unwrap()
+        .attackers
+        .push(mtg_engine::combat::AttackerInfo {
+            id: bear,
+            target: Some(Entity::Player(P0)),
+            original_target: Some(Entity::Player(P0)),
+            declared: true,
+            blocked: false,
+            blockers: vec![],
+            band: None,
+            defending_player: Some(P0),
+        });
     (w, lab, bear)
 }
 

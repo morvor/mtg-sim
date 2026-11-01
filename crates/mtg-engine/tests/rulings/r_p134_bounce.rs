@@ -56,7 +56,10 @@ fn raise_the_palisade_offers_single_existing_creature_types() {
 #[test]
 fn selective_snare_choosing_one_type_lets_you_target_a_multi_type_creature() {
     cr!("205.3m", "601.2c");
-    ruling!("Selective Snare", "but choosing “Vampire” is enough to allow you to target a Vampire Knight.");
+    ruling!(
+        "Selective Snare",
+        "but choosing “Vampire” is enough to allow you to target a Vampire Knight."
+    );
     supported("Selective Snare");
     let mut t = TestGame::new(2);
     let vk = t.battlefield(P1, "Bloodcrazed Paladin");
@@ -69,7 +72,11 @@ fn selective_snare_choosing_one_type_lets_you_target_a_multi_type_creature() {
     pick_options(&mut t, P0, &["Vampire"]);
     t.cast(P0, card).x(1).target(vk).go();
     t.resolve_all();
-    assert_eq!(creature_type_options(&t, P0, from).len(), 1, "chosen once, as it's cast");
+    assert_eq!(
+        creature_type_options(&t, P0, from).len(),
+        1,
+        "chosen once, as it's cast"
+    );
     assert!(in_hand_of(&t, vk, P1));
     assert!(t.on_battlefield(knight));
     // The same for cards in a graveyard (Aphetto Dredging): the type is chosen with the
@@ -107,7 +114,12 @@ fn total_cost_alternative_cost_plus_increases_minus_reductions_mana_value_unchan
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.hand(P0, "Counterspell");
     let snap = t.hand(P0, "Snapback");
-    assert!(crate::r_s07_common::cast_methods(&mut t, P0, snap).iter().all(|m| !matches!(m, object::CastMethod::Alternative(_))), "the {{1}} isn't payable");
+    assert!(
+        crate::r_s07_common::cast_methods(&mut t, P0, snap)
+            .iter()
+            .all(|m| !matches!(m, object::CastMethod::Alternative(_))),
+        "the {{1}} isn't payable"
+    );
     t.lands(P0, "Wastes", 1);
     let alt = alternative(&mut t, snap);
     let s = t.cast(P0, snap).method(alt).target(bears).go();
@@ -123,7 +135,10 @@ fn total_cost_alternative_cost_plus_increases_minus_reductions_mana_value_unchan
     t.lands(P0, "Island", 1);
     t.lands(P0, "Wastes", 1);
     let gust = t.hand(P0, "Gust of Wind");
-    assert!(t.cast(P0, gust).target(bears).try_go().is_err(), "{{1}}{{U}} isn't enough");
+    assert!(
+        t.cast(P0, gust).target(bears).try_go().is_err(),
+        "{{1}}{{U}} isn't enough"
+    );
     t.clear_answers();
     t.lands(P0, "Wastes", 1);
     let s = t.cast(P0, gust).target(bears).go();
@@ -184,7 +199,11 @@ fn vronos_ultimate_sets_creature_type_and_keeps_everything_else() {
     t.activate(P0, v, 2, &[ob(eq)]).expect("-7");
     t.resolve_all();
     let o = t.obj_now(eq);
-    assert!(o.chars.supertypes.iter().any(|s| format!("{s:?}") == "Legendary"));
+    assert!(o
+        .chars
+        .supertypes
+        .iter()
+        .any(|s| format!("{s:?}") == "Legendary"));
     assert!(o.chars.subtypes.iter().any(|s| s == "Equipment"));
     assert!(o.chars.subtypes.iter().any(|s| s == "Construct"));
 }
@@ -201,7 +220,11 @@ fn jace_living_guildpact_plus_one_leaves_the_other_card_on_top() {
     t.activate(P0, j, 0, &[]).expect("+1");
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Forest"));
-    assert_eq!(t.g.players[0].library.last().copied(), Some(lib[0]), "the Island stays on top");
+    assert_eq!(
+        t.g.players[0].library.last().copied(),
+        Some(lib[0]),
+        "the Island stays on top"
+    );
 }
 
 #[test]
@@ -220,7 +243,11 @@ fn temporal_machinations_checks_artifacts_after_returning_the_creature() {
         t.cast(P0, card).target(th).go();
         t.resolve_all();
         assert!(in_hand_of(&t, th, P0));
-        assert_eq!(t.hand_size(P0), if other { 2 } else { 1 }, "other artifact {other}");
+        assert_eq!(
+            t.hand_size(P0),
+            if other { 2 } else { 1 },
+            "other artifact {other}"
+        );
     }
 }
 
@@ -273,7 +300,10 @@ fn ghostly_wings_only_the_first_activation_does_anything() {
 #[test]
 fn castable_without_targets_for_its_trigger_or_with_up_to_targets() {
     cr!("603.3d", "115.1");
-    ruling!("Stern Proctor", "You can cast this card if there are no artifacts or enchantments on the battlefield.");
+    ruling!(
+        "Stern Proctor",
+        "You can cast this card if there are no artifacts or enchantments on the battlefield."
+    );
     supported("Stern Proctor");
     let mut t = TestGame::new(2);
     lands_for_cost(&mut t, P0, "Stern Proctor");
@@ -300,7 +330,10 @@ fn rushing_river_kicker_can_sacrifice_a_tapped_land() {
     t.answer_targets(P0, &[ob(b)]);
     t.cast(P0, card).kicked(true).go();
     t.resolve_all();
-    assert!(!t.on_battlefield(lands[3]), "the tapped Island was sacrificed");
+    assert!(
+        !t.on_battlefield(lands[3]),
+        "the tapped Island was sacrificed"
+    );
     assert!(in_hand_of(&t, a, P1) && in_hand_of(&t, b, P1));
 }
 
@@ -308,10 +341,21 @@ fn rushing_river_kicker_can_sacrifice_a_tapped_land() {
 fn spells_that_need_their_targets_to_be_cast() {
     cr!("601.2c", "115.1");
     ruling!("Whiplash Trap", "You must target two creatures as you cast Whiplash Trap. If you can't (because just one creature is on the battlefield, perhaps), you can't cast the spell.");
-    ruling!("Whiplash Trap", "You can target any two creatures, not just ones that entered this turn.");
-    ruling!("Dramatic Rescue", "You must be able to target a creature to cast Dramatic Rescue.");
+    ruling!(
+        "Whiplash Trap",
+        "You can target any two creatures, not just ones that entered this turn."
+    );
+    ruling!(
+        "Dramatic Rescue",
+        "You must be able to target a creature to cast Dramatic Rescue."
+    );
     ruling!("Aether Helix", "You must choose two legal targets in order to cast Aether Helix. If there are either no permanent cards in your graveyard or no permanents on the battlefield, you cannot begin to cast it.");
-    for name in ["Whiplash Trap", "Dramatic Rescue", "Aether Helix", "Aether Gale"] {
+    for name in [
+        "Whiplash Trap",
+        "Dramatic Rescue",
+        "Aether Helix",
+        "Aether Gale",
+    ] {
         supported(name);
     }
     // Whiplash Trap: one creature isn't enough; any two (one of them yours) are.
@@ -358,7 +402,10 @@ fn aether_gale_needs_six_targets_and_returns_the_legal_ones() {
     lands_for_cost(&mut t, P0, "Aether Gale");
     let card = t.hand(P0, "Aether Gale");
     let es: Vec<Entity> = ids.iter().map(|i| ob(*i)).collect();
-    assert!(t.cast(P0, card).targets(&es).try_go().is_err(), "five aren't enough");
+    assert!(
+        t.cast(P0, card).targets(&es).try_go().is_err(),
+        "five aren't enough"
+    );
     t.clear_answers();
     ids.push(t.battlefield(P0, "Hill Giant"));
     let es: Vec<Entity> = ids.iter().map(|i| ob(*i)).collect();
@@ -406,7 +453,10 @@ fn legendary_sorceries_check_legendary_permanents_only_when_cast() {
 #[test]
 fn cryptic_command_needs_two_different_modes() {
     cr!("700.2a", "700.2d", "601.2b");
-    ruling!("Cryptic Command", "You choose both modes as you cast Cryptic Command. You must choose two different modes.");
+    ruling!(
+        "Cryptic Command",
+        "You choose both modes as you cast Cryptic Command. You must choose two different modes."
+    );
     supported("Cryptic Command");
     let mut t = TestGame::new(2);
     lands_for_cost(&mut t, P0, "Cryptic Command");
@@ -418,7 +468,12 @@ fn cryptic_command_needs_two_different_modes() {
     let r = t.cast(P0, card).modes(&[3, 3]).try_go();
     let asked = t.asked();
     let d = asked[from..].iter().find_map(|(_, d)| match d {
-        Decision::ChooseModes { min, max, allow_repeat, .. } => Some((*min, *max, *allow_repeat)),
+        Decision::ChooseModes {
+            min,
+            max,
+            allow_repeat,
+            ..
+        } => Some((*min, *max, *allow_repeat)),
         _ => None,
     });
     assert_eq!(d, Some((2, 2, false)));
@@ -494,7 +549,11 @@ fn optional_targets_skip_or_fizzle() {
             kill(&mut t, bears);
         }
         t.resolve_all();
-        assert_eq!(t.hand_size(P0), if target { 0 } else { 1 }, "target {target}");
+        assert_eq!(
+            t.hand_size(P0),
+            if target { 0 } else { 1 },
+            "target {target}"
+        );
     }
     for (spell, jace) in [
         ("Grasping Current", "Jace, Ingenious Mind-Mage"),
@@ -529,7 +588,8 @@ fn neurok_replica_can_target_itself_but_then_fizzles() {
     let mut t = TestGame::new(2);
     let r = t.battlefield(P0, "Neurok Replica");
     t.lands(P0, "Island", 2);
-    t.activate(P0, r, 0, &[ob(r)]).expect("it can target itself");
+    t.activate(P0, r, 0, &[ob(r)])
+        .expect("it can target itself");
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Neurok Replica"));
@@ -553,7 +613,11 @@ fn geistwave_draws_only_if_you_control_the_permanent_as_it_resolves() {
         }
         t.resolve_all();
         assert!(in_hand_of(&t, bears, P0));
-        assert_eq!(t.hand_size(P0), if stolen { 1 } else { 2 }, "stolen {stolen}");
+        assert_eq!(
+            t.hand_size(P0),
+            if stolen { 1 } else { 2 },
+            "stolen {stolen}"
+        );
     }
 }
 

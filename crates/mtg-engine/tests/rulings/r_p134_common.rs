@@ -62,7 +62,12 @@ pub fn sup(name: &str) {
 }
 
 /// Applies `mods` to `id` until end of turn, as an effect controlled by `p`.
-pub fn modify(t: &mut TestGame, p: PlayerId, id: ObjectId, mods: Vec<mtg_engine::ability::Modification>) {
+pub fn modify(
+    t: &mut TestGame,
+    p: PlayerId,
+    id: ObjectId,
+    mods: Vec<mtg_engine::ability::Modification>,
+) {
     use mtg_engine::ability::*;
     crate::r_s05_common::run_from(
         t,
@@ -82,7 +87,14 @@ pub fn indestructible(t: &mut TestGame, id: ObjectId) {
     use mtg_engine::ability::Modification;
     use mtg_engine::keywords::{Keyword, KeywordKind};
     let c = t.obj_now(id).controller;
-    modify(t, c, id, vec![Modification::AddKeyword(Keyword::new(KeywordKind::Indestructible))]);
+    modify(
+        t,
+        c,
+        id,
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Indestructible,
+        ))],
+    );
 }
 
 /// A regeneration shield for `id` (CR 701.19a).
@@ -93,7 +105,9 @@ pub fn regen_shield(t: &mut TestGame, id: ObjectId) {
         t,
         c,
         None,
-        Effect::Regenerate { what: Sel::Target(0) },
+        Effect::Regenerate {
+            what: Sel::Target(0),
+        },
         &[Entity::Object(t.g.current(id))],
     );
 }

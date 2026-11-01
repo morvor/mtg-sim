@@ -108,10 +108,15 @@ fn killing_glare_checks_power_on_cast_and_on_resolution() {
     assert!(cands[0].contains(&ob(bears)) && !cands[0].contains(&ob(giant)));
     // The Bears gets +1/+0 in response: it doesn't resolve.
     fizzles(&mut t, s, |t| {
-        modify(t, P1, bears, vec![mtg_engine::ability::Modification::ModifyPT(
-            mtg_engine::ability::Value::Const(1),
-            mtg_engine::ability::Value::Const(0),
-        )])
+        modify(
+            t,
+            P1,
+            bears,
+            vec![mtg_engine::ability::Modification::ModifyPT(
+                mtg_engine::ability::Value::Const(1),
+                mtg_engine::ability::Value::Const(0),
+            )],
+        )
     });
 }
 
@@ -136,7 +141,11 @@ fn dawn_to_dusk_affects_only_legal_targets() {
         t.resolve_all();
         assert_eq!(resolved(&t, s), !(gy_gone && bf_gone));
         assert_eq!(t.in_hand(P0, "Bad Moon"), !gy_gone, "{gy_gone} {bf_gone}");
-        assert_eq!(t.in_graveyard(P1, "Glorious Anthem"), !bf_gone, "{gy_gone} {bf_gone}");
+        assert_eq!(
+            t.in_graveyard(P1, "Glorious Anthem"),
+            !bf_gone,
+            "{gy_gone} {bf_gone}"
+        );
     }
 }
 
@@ -144,7 +153,10 @@ fn dawn_to_dusk_affects_only_legal_targets() {
 fn two_target_exile_with_one_target_gone_affects_the_other() {
     cr!("608.2b", "115.3");
     ruling!("Dust to Dust", "If one target is removed or becomes invalid after declaration, the other target is still affected.");
-    ruling!("Into the Core", "You must be able to target two different artifacts in order to cast Into the Core.");
+    ruling!(
+        "Into the Core",
+        "You must be able to target two different artifacts in order to cast Into the Core."
+    );
     ruling!("Peace and Quiet", "Must target two different enchantments.");
     for name in ["Dust to Dust", "Into the Core"] {
         let mut t = TestGame::new(2);
@@ -157,15 +169,28 @@ fn two_target_exile_with_one_target_gone_affects_the_other() {
         assert!(t.in_exile("Bonesplitter"), "{name}");
     }
     // One artifact / enchantment isn't enough.
-    for (name, perm) in [("Into the Core", "Sol Ring"), ("Peace and Quiet", "Glorious Anthem")] {
+    for (name, perm) in [
+        ("Into the Core", "Sol Ring"),
+        ("Peace and Quiet", "Glorious Anthem"),
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         let a = t.battlefield(P1, perm);
         lands_for_cost(&mut t, P0, name);
         let card = t.hand(P0, name);
-        assert!(t.cast(P0, card).targets(&[ob(a), ob(a)]).try_go().is_err(), "{name}");
+        assert!(
+            t.cast(P0, card).targets(&[ob(a), ob(a)]).try_go().is_err(),
+            "{name}"
+        );
         t.clear_answers();
-        let b = t.battlefield(P1, if perm == "Sol Ring" { "Bonesplitter" } else { "Bad Moon" });
+        let b = t.battlefield(
+            P1,
+            if perm == "Sol Ring" {
+                "Bonesplitter"
+            } else {
+                "Bad Moon"
+            },
+        );
         t.cast(P0, card).targets(&[ob(a), ob(b)]).go();
         t.resolve_all();
         assert!(!t.on_battlefield(a) && !t.on_battlefield(b), "{name}");
@@ -205,7 +230,14 @@ fn mortify_destroys_a_target_that_changed_between_creature_and_enchantment() {
     let mut t = TestGame::new(2);
     let ram = t.battlefield(P1, "Nyx-Fleece Ram");
     cast_modes(&mut t, P0, "Mortify", &[], &[ob(ram)]);
-    modify(&mut t, P1, ram, vec![mtg_engine::ability::Modification::RemoveTypes(vec![types::CardType::Creature])]);
+    modify(
+        &mut t,
+        P1,
+        ram,
+        vec![mtg_engine::ability::Modification::RemoveTypes(vec![
+            types::CardType::Creature,
+        ])],
+    );
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Nyx-Fleece Ram"));
 }
@@ -217,8 +249,14 @@ fn mortify_destroys_a_target_that_changed_between_creature_and_enchantment() {
 #[test]
 fn shatter_and_aura_blast_regeneration() {
     cr!("701.19a", "701.19c");
-    ruling!("Shatter", "Regenerating artifacts can regenerate from this.");
-    ruling!("Aura Blast", "You still draw a card if the enchantment regenerates.");
+    ruling!(
+        "Shatter",
+        "Regenerating artifacts can regenerate from this."
+    );
+    ruling!(
+        "Aura Blast",
+        "You still draw a card if the enchantment regenerates."
+    );
     let mut t = TestGame::new(2);
     let ring = t.battlefield(P1, "Sol Ring");
     let s = cast_modes(&mut t, P0, "Shatter", &[], &[ob(ring)]);
@@ -277,7 +315,10 @@ fn destroyed_this_way_counts_only_permanents_that_were_destroyed() {
         let bane = t.enter(P0, "Bane of Progress");
         t.resolve_all();
         assert_eq!(t.counters(bane, "+1/+1"), destroyed as u32, "rip {rip}");
-        assert!(t.g.permanents().all(|o| o.chars.name != "Sol Ring" && o.chars.name != "Bad Moon"));
+        assert!(t
+            .g
+            .permanents()
+            .all(|o| o.chars.name != "Sol Ring" && o.chars.name != "Bad Moon"));
         if rip {
             assert!(t.in_exile("Glorious Anthem"));
         }
@@ -288,7 +329,11 @@ fn destroyed_this_way_counts_only_permanents_that_were_destroyed() {
         cast_modes(&mut t, P0, "Rampage of the Clans", &[], &[]);
         t.resolve_all();
         assert_eq!(creature_tokens(&t, P0), 2, "rip {rip}");
-        assert_eq!(creature_tokens(&t, P1), if rip { 2 } else { 1 }, "rip {rip}");
+        assert_eq!(
+            creature_tokens(&t, P1),
+            if rip { 2 } else { 1 },
+            "rip {rip}"
+        );
     }
 }
 
@@ -303,12 +348,11 @@ fn rampage_tokens_arrive_after_the_destroyed_permanents_left() {
     t.resolve_all();
     assert_eq!(creature_tokens(&t, P0), 2);
     assert_eq!(t.life(P1), 20, "Impact Tremors didn't see the Centaurs");
-    let c = t
-        .g
-        .permanents()
-        .find(|o| o.controller == P0 && o.is_token())
-        .map(|o| o.id)
-        .unwrap();
+    let c =
+        t.g.permanents()
+            .find(|o| o.controller == P0 && o.is_token())
+            .map(|o| o.id)
+            .unwrap();
     assert_eq!(t.pt(c), (3, 3), "Glorious Anthem doesn't pump them");
 }
 
@@ -338,7 +382,10 @@ fn magus_of_the_disk_survives_its_ability_if_indestructible_or_regenerating() {
 #[test]
 fn serenity_destroys_itself() {
     cr!("701.8a", "503.1a");
-    ruling!("Serenity", "Serenity's triggered ability destroys itself too.");
+    ruling!(
+        "Serenity",
+        "Serenity's triggered ability destroys itself too."
+    );
     supported("Serenity");
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::End);
@@ -360,7 +407,10 @@ fn exile_instead_of_dying_lasts_the_whole_turn() {
     cr!("614.1a", "614.6", "611.2a");
     ruling!("Bleed Dry", "If Bleed Dry resolves, its effect causes the creature to be exiled any time it would die that turn, not just if it would die as a result of having toughness 0 or less.");
     ruling!("Ob Nixilis's Cruelty", "The replacement effect from Ob Nixilis’s Cruelty will exile the target creature if it would die this turn for any reason, not just immediately after Ob Nixilis’s Cruelty resolves.");
-    for (spell, victim) in [("Bleed Dry", "Worldspine Wurm"), ("Ob Nixilis's Cruelty", "Colossal Dreadmaw")] {
+    for (spell, victim) in [
+        ("Bleed Dry", "Worldspine Wurm"),
+        ("Ob Nixilis's Cruelty", "Colossal Dreadmaw"),
+    ] {
         supported(spell);
         let mut t = TestGame::new(2);
         let v = t.battlefield(P1, victim);
@@ -416,7 +466,10 @@ fn unnatural_aggression_style_exile_and_false_prophet() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "False Prophet"));
     assert!(t.in_exile("Grizzly Bears"));
-    assert!(t.in_graveyard(P1, "Hill Giant"), "creature cards in graveyards stay");
+    assert!(
+        t.in_graveyard(P1, "Hill Giant"),
+        "creature cards in graveyards stay"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -509,7 +562,11 @@ fn owner_chooses_second_from_top_or_bottom() {
             let bears = t.battlefield(P1, "Grizzly Bears");
             let from = t.asked().len();
             t.answer_yes(P1, !bottom);
-            t.answer(P1, DecisionKind::Option, mtg_engine::decision::Answer::Index(bottom as usize));
+            t.answer(
+                P1,
+                DecisionKind::Option,
+                mtg_engine::decision::Answer::Index(bottom as usize),
+            );
             cast_modes(&mut t, P0, name, &[], &[ob(bears)]);
             t.resolve_all();
             let lib = &t.g.players[1].library;
@@ -520,7 +577,11 @@ fn owner_chooses_second_from_top_or_bottom() {
             } else {
                 assert_eq!(pos, lib.len() - 2, "{name}: second from the top");
             }
-            assert!(t.asked()[from..].iter().any(|(p, d)| *p == P1 && !matches!(d, mtg_engine::decision::Decision::Priority { .. })), "{name}: the owner chose");
+            assert!(
+                t.asked()[from..].iter().any(|(p, d)| *p == P1
+                    && !matches!(d, mtg_engine::decision::Decision::Priority { .. })),
+                "{name}: the owner chose"
+            );
         }
     }
 }
@@ -533,14 +594,27 @@ fn harmonic_convergence_owner_orders_their_enchantments() {
     let mut t = TestGame::new(2);
     let a = t.battlefield(P1, "Glorious Anthem");
     let b = t.battlefield(P1, "Bad Moon");
-    t.answer(P1, DecisionKind::Order, mtg_engine::decision::Answer::Entities(vec![ob(b), ob(a)]));
+    t.answer(
+        P1,
+        DecisionKind::Order,
+        mtg_engine::decision::Answer::Entities(vec![ob(b), ob(a)]),
+    );
     cast_modes(&mut t, P0, "Harmonic Convergence", &[], &[]);
     t.resolve_all();
     let lib = &t.g.players[1].library;
     let top2: Vec<ObjectId> = lib[lib.len() - 2..].to_vec();
-    let names: Vec<String> = top2.iter().map(|c| t.obj(*c).chars.name.to_string()).collect();
-    assert!(names.contains(&"Glorious Anthem".to_string()) && names.contains(&"Bad Moon".to_string()), "{names:?}");
-    let asked_p1 = t.asked().iter().any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::Order { .. }));
+    let names: Vec<String> = top2
+        .iter()
+        .map(|c| t.obj(*c).chars.name.to_string())
+        .collect();
+    assert!(
+        names.contains(&"Glorious Anthem".to_string()) && names.contains(&"Bad Moon".to_string()),
+        "{names:?}"
+    );
+    let asked_p1 = t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::Order { .. }));
     assert!(asked_p1, "P1 orders their own enchantments");
 }
 
@@ -551,7 +625,10 @@ fn harmonic_convergence_owner_orders_their_enchantments() {
 #[test]
 fn modes_are_chosen_on_cast_and_performed_in_printed_order() {
     cr!("700.2a", "700.2", "601.2b");
-    ruling!("Merciless Eviction", "You choose the mode as you cast the spell.");
+    ruling!(
+        "Merciless Eviction",
+        "You choose the mode as you cast the spell."
+    );
     ruling!("Farewell", "If you choose more than one mode for Farewell, you perform the actions in the order written.");
     supported("Merciless Eviction");
     supported("Farewell");
@@ -601,9 +678,16 @@ fn march_of_otherworldly_light_x_and_exiled_white_cards() {
     let whites: Vec<ObjectId> = (0..4).map(|_| t.hand(P0, "Glorious Anthem")).collect();
     t.lands(P0, "Plains", 1);
     let card = t.hand(P0, "March of Otherworldly Light");
-    t.answer(P0, DecisionKind::OptionalCost, mtg_engine::decision::Answer::Number(4));
+    t.answer(
+        P0,
+        DecisionKind::OptionalCost,
+        mtg_engine::decision::Answer::Number(4),
+    );
     let s = t.cast(P0, card).x(6).target(dm).go();
-    assert!(whites.iter().all(|w| t.zone(*w) == Zone::Exile), "four exiled");
+    assert!(
+        whites.iter().all(|w| t.zone(*w) == Zone::Exile),
+        "four exiled"
+    );
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 1);
     assert_eq!(crate::r_s08_common::mana_value(&t, s), 7);
     t.resolve_all();
@@ -619,4 +703,21 @@ fn march_of_otherworldly_light_x_and_exiled_white_cards() {
     t.cast(P0, card).x(5).target(bears).go();
     let cands = crate::r_s02_common::target_candidates(&t, P0, from);
     assert!(!cands[0].contains(&ob(dm)));
+}
+
+#[test]
+fn erase_exiles_without_going_to_the_graveyard_first() {
+    cr!("406.2", "603.6c");
+    ruling!("Erase", "The card does not go to the graveyard first.");
+    supported("Erase");
+    // Rancor: "When this Aura is put into a graveyard from the battlefield, return it to
+    // its owner's hand." It never goes there, so it isn't returned.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let r = attach_new(&mut t, P1, "Rancor", bears);
+    cast_modes(&mut t, P0, "Erase", &[], &[ob(r)]);
+    t.resolve_all();
+    assert!(t.in_exile("Rancor"));
+    assert!(!t.in_hand(P1, "Rancor"));
+    assert_eq!(t.stack_len(), 0);
 }

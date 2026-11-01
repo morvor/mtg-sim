@@ -51,7 +51,11 @@ fn banishing_stroke_isnt_drawn_when_put_into_hand_otherwise() {
     supported("Impulse");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Grizzly Bears");
-    let lib = stack_library(&mut t, P0, &["Banishing Stroke", "Island", "Forest", "Swamp"]);
+    let lib = stack_library(
+        &mut t,
+        P0,
+        &["Banishing Stroke", "Island", "Forest", "Swamp"],
+    );
     t.lands(P0, "Plains", 1);
     t.answer_choose(P0, &[ob(lib[0])]);
     t.answer_yes(P0, true);
@@ -81,7 +85,11 @@ fn nahiri_abilities() {
     assert_eq!(t.hand_size(P0), 1);
     assert!(t.in_hand(P0, "Island"));
     // -8: a noncreature artifact gains haste; a creature that left isn't returned.
-    for (card, leaves) in [("Sol Ring", false), ("Grizzly Bears", true), ("Grizzly Bears", false)] {
+    for (card, leaves) in [
+        ("Sol Ring", false),
+        ("Grizzly Bears", true),
+        ("Grizzly Bears", false),
+    ] {
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::PrecombatMain);
         let n = t.battlefield(P0, "Nahiri, the Harbinger");
@@ -92,7 +100,10 @@ fn nahiri_abilities() {
         t.resolve_all();
         let it = t.g.current(c);
         assert!(t.on_battlefield(it), "{card}");
-        assert!(t.obj_now(it).chars.has_keyword(KeywordKind::Haste), "{card}: haste");
+        assert!(
+            t.obj_now(it).chars.has_keyword(KeywordKind::Haste),
+            "{card}: haste"
+        );
         if leaves {
             destroy(&mut t, it);
         }
@@ -160,8 +171,14 @@ fn divine_gambit_double_faced_cards_enter_front_face_up_if_a_permanent() {
 #[test]
 fn cloudchaser_eagle_must_target_an_enchantment_even_yours() {
     cr!("603.3d", "115.1");
-    ruling!("Cloudchaser Eagle", "It destroys one of your enchantments if you are the only player with any enchantments.");
-    ruling!("Cloudchaser Eagle", "Nothing happens if there are no legal enchantments to target when it enters.");
+    ruling!(
+        "Cloudchaser Eagle",
+        "It destroys one of your enchantments if you are the only player with any enchantments."
+    );
+    ruling!(
+        "Cloudchaser Eagle",
+        "Nothing happens if there are no legal enchantments to target when it enters."
+    );
     supported("Cloudchaser Eagle");
     let mut t = TestGame::new(2);
     let moon = t.battlefield(P0, "Bad Moon");
@@ -228,7 +245,15 @@ fn kalemnes_captain_monstrous_once_and_kept() {
     assert_eq!(t.counters(k, "+1/+1"), 3);
     assert!(t.on_battlefield(ring2));
     // It loses its abilities and stops being a creature: still monstrous.
-    modify(&mut t, P0, k, vec![Modification::RemoveAllAbilities, Modification::RemoveTypes(vec![CardType::Creature])]);
+    modify(
+        &mut t,
+        P0,
+        k,
+        vec![
+            Modification::RemoveAllAbilities,
+            Modification::RemoveTypes(vec![CardType::Creature]),
+        ],
+    );
     assert!(t.obj_now(k).monstrous);
 }
 

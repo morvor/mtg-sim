@@ -30,9 +30,7 @@ fn leading_choice(body: &Body) -> Option<(&PlayerRef, &ChoiceKind)> {
     let Some(Effect::Choose { who, kind }) = v.first() else {
         return None;
     };
-    let refers = |s: &str| {
-        s.contains("\"ChosenType\"") || s.contains("\"ChosenColor\"")
-    };
+    let refers = |s: &str| s.contains("\"ChosenType\"") || s.contains("\"ChosenColor\"");
     body.targets
         .iter()
         .any(|t| serde_json::to_string(&t.what).is_ok_and(|s| refers(&s)))
