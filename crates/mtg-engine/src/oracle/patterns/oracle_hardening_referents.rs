@@ -239,7 +239,7 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
                 .contains("that card") =>
         {
             // ("Return that card": the card in the graveyard, which this doesn't track.)
-            b.it = Sel::Var(vars::SACRIFICED);
+            b.it_is_sacrificed();
         }
         Effect::Search { .. } => {
             let search = std::mem::replace(last, Effect::Noop);

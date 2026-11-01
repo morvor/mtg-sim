@@ -148,6 +148,11 @@ fn add_after_nth(g: &mut Game, main: bool, nth: u32, parts: &[TurnPart]) -> Opti
             _ => return None,
         }
     }
+    let combats = steps
+        .iter()
+        .filter(|s| **s == Step::BeginningOfCombat)
+        .count() as u32;
+    crate::next_turn::combats_inserted(g, n, combats);
     for (j, s) in steps.into_iter().enumerate() {
         g.turn.schedule.insert(pos + j, s);
     }

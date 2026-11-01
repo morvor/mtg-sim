@@ -1154,7 +1154,7 @@ fn p_edict(l: &str, b: &mut Builder) -> Option<Effect> {
             PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
         )
     {
-        b.it = Sel::Var(vars::SACRIFICED);
+        b.it_is_sacrificed();
     }
     Some(Effect::Sacrifice {
         who,

@@ -731,6 +731,14 @@ impl Game {
         } else {
             0
         };
+        let combats = steps
+            .iter()
+            .filter(|s| **s == Step::BeginningOfCombat)
+            .count() as u32;
+        if combats > 0 {
+            let first = crate::kw::added_combat_phases::combat_number_at(self, pos);
+            crate::next_turn::combats_inserted(self, first, combats);
+        }
         for (i, s) in steps.into_iter().enumerate() {
             self.turn.schedule.insert(pos + i, s);
         }
