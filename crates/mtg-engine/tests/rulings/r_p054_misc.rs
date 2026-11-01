@@ -166,7 +166,7 @@ fn equipment_and_aura_pumps_as_written() {
 
 #[test]
 fn rubblehulks_power_and_toughness_apply_in_every_zone() {
-    cr!("604.3", "208.3");
+    cr!("604.3", "208.2a");
     ruling!(
         "Rubblehulk",
         "The ability that defines Rubblehulk's power and toughness works in all zones, not just the battlefield."
@@ -185,7 +185,7 @@ fn rubblehulks_power_and_toughness_apply_in_every_zone() {
 
 #[test]
 fn lumarets_favor_copy_keeps_the_target_unless_changed() {
-    cr!("707.10c", "702.170a");
+    cr!("707.10c", "707.10");
     ruling!(
         "Lumaret's Favor",
         "The copy will have the same target as the original spell unless you choose a new one. If the target is illegal but you can't choose a new legal target, it remains unchanged."
@@ -287,7 +287,7 @@ fn merfolk_assassin_can_target_a_creature_with_snow_islandwalk() {
 
 #[test]
 fn homarid_warriors_shroud_keeps_its_auras_and_it_taps_on_resolution() {
-    cr!("702.18a", "303.4d", "602.2");
+    cr!("702.18a", "303.4c", "602.2");
     ruling!(
         "Homarid Warrior",
         "Does not cause Auras on it to be removed when the effect is activated. An Aura on the battlefield is neither a spell nor an ability."
@@ -352,4 +352,65 @@ fn emissary_of_grudges_is_a_new_object_after_leaving() {
     t.resolve_all();
     assert_eq!(t.life(P0), 17);
     assert_eq!(t.life(P2), 17);
+}
+
+#[test]
+fn aurochs_is_still_its_printed_size_when_attack_legality_is_checked() {
+    cr!("508.1c", "508.1m", "508.2");
+    ruling!(
+        "Aurochs",
+        "The bonus is not applied until after you check for attack legality, so it is a 2/3 creature when declaring attackers."
+    );
+    crate::r_s01_common::supported("Aurochs");
+    // Ensnaring Bridge with two cards in hand: power 2 may attack, power 3 may not.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ensnaring Bridge");
+    t.hand(P0, "Island");
+    t.hand(P0, "Island");
+    let a = t.battlefield(P0, "Aurochs");
+    let b = t.battlefield(P0, "Aurochs");
+    crate::r_s01_common::attack_with(&mut t, &[(a, pl(P1)), (b, pl(P1))]);
+    t.resolve_all();
+    let attacking = |t: &TestGame, id: ObjectId| {
+        t.g.combat
+            .as_ref()
+            .is_some_and(|c| c.attack_target(t.g.current(id)).is_some())
+    };
+    assert!(attacking(&t, a) && attacking(&t, b));
+    assert_eq!(t.pt(a), (3, 3));
+    assert_eq!(t.pt(b), (3, 3));
+}
+
+#[test]
+fn commanders_plate_uses_both_commanders_combined_color_identity() {
+    cr!("903.4", "702.16a");
+    ruling!(
+        "Commander's Plate",
+        "If you have two commanders and attach Commander's Plate to one, it has protection from each color not in your two commanders' combined color identity."
+    );
+    crate::r_s01_common::supported("Commander's Plate");
+    let mut t = crate::r_s13_common::commander_game();
+    // Thrasios (green-blue) and Tymna (white-black): protection from red only.
+    crate::r_s13_common::commander(&mut t, P0, "Thrasios, Triton Hero");
+    let tymna = crate::r_s13_common::commander(&mut t, P0, "Tymna the Weaver");
+    move_to(&mut t, tymna, Zone::Battlefield);
+    let tymna = t.g.current(tymna);
+    attach_new(&mut t, P0, "Commander's Plate", tymna);
+    assert_eq!(t.pt(tymna), (5, 5));
+    let can_target = |t: &mut TestGame, p: PlayerId, name: &str| -> bool {
+        pool(t, p);
+        let c = t.hand(p, name);
+        let mark = t.asked().len();
+        t.answer_targets(p, &[o(tymna)]);
+        let ok = t.cast(p, c).try_go().is_ok();
+        let offered = target_candidates(t, p, mark)
+            .iter()
+            .any(|c| c.contains(&o(tymna)));
+        t.clear_answers();
+        t.resolve_all();
+        ok && offered
+    };
+    assert!(!can_target(&mut t, P1, "Lightning Bolt"), "red");
+    assert!(can_target(&mut t, P1, "Giant Growth"), "green");
+    assert!(can_target(&mut t, P1, "Disfigure"), "black");
 }

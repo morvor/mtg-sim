@@ -39,7 +39,7 @@ fn illusory_ambusher_draws_all_the_damage_dealt_even_beyond_its_toughness() {
 
 #[test]
 fn a_trampler_blocked_by_illusory_ambusher_may_assign_it_anything_from_one_to_all() {
-    cr!("702.19c", "510.1c");
+    cr!("702.19b", "510.1c");
     ruling!(
         "Illusory Ambusher",
         "If Illusory Ambusher blocks a creature with trample, that creature's controller can assign any amount of damage from 1 to that creature's power to Illusory Ambusher. Excess damage doesn't have to be assigned to the defending player."

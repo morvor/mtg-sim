@@ -181,7 +181,7 @@ fn finale_treats_x_in_a_creature_cards_cost_as_zero() {
 
 #[test]
 fn lion_umbra_needs_a_modified_creature_and_keeps_it_modified_while_yours() {
-    cr!("303.4d", "700.9", "704.5m", "115.1");
+    cr!("702.5a", "303.4c", "700.9", "704.5m");
     ruling!(
         "Lion Umbra",
         "Lion Umbra can't become attached to a creature unless that creature is already modified."
@@ -334,7 +334,7 @@ fn alternative_method(t: &mut TestGame, card: ObjectId) -> Option<CastMethod> {
 
 #[test]
 fn invigorates_alternative_cost_and_life_gain_restrictions() {
-    cr!("118.3", "119.8", "614.1");
+    cr!("118.3", "119.7", "614.1");
     ruling!(
         "Invigorate",
         "If an effect says that an opponent can't gain life, you can't have that player gain life to pay Invigorate's alternative cost. If an effect instead replaces life gain, such as that of Sulfuric Vortex, you may choose to pay the cost even though the cost's action is replaced with nothing."

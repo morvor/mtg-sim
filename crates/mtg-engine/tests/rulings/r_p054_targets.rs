@@ -552,7 +552,7 @@ fn targets_that_are_legal_though_the_effect_seems_to_assume_otherwise() {
 /// opponent can't target their own creature.
 #[test]
 fn opponent_targeting_protection_on_an_opponents_creature_stops_its_controller() {
-    cr!("115.4", "702.11a");
+    cr!("115.1", "702.11b");
     ruling!(
         "Shielding Plax",
         "This is not the same as hexproof. If, for example, you target one of your opponent's creatures, your opponents won't be able to target their own creature with spells or abilities."
