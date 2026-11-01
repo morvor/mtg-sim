@@ -124,6 +124,7 @@ Queues from the 06:42 check-in:
   - Budget: $35 per run, $190 in total.
   - Batches, in order, until the budget runs out: P015 P134 P174 P097 P004 P075 P102 P127 P013 P054.
   - When the subscription workers resume, the rulings pool continues at P007, plus any of those batches the launcher reports unfinished.
+  - **05:40 update.** Six batches landed in 4.5 hours for $57, about $9.50 a batch: P015, P134, P174, P097, P004 and P075. The children run at Claude Code's default effort; the cloud sessions run with CLAUDE_EFFORT=max. The list was extended within the same $190 cap: P007 P132 P072 P150 P038 P123 P005 P091 P128 P198. The subscription pool resumes after the last batch the launcher starts, which it reports in its final message.
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
