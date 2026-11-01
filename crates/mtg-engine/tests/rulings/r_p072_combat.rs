@@ -265,6 +265,18 @@ fn grappling_hook_block_requirement() {
         let blocked = blocks_now(&t) == vec![(giant, bears)];
         assert_eq!(blocked, yes && !tapped, "{yes} {tapped}");
     }
+    // Three players: a creature of a player who isn't defending can be targeted, but
+    // the requirement does nothing.
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Grappling Hook", bears);
+    let bystander = t.battlefield(P2, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(bystander)]);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    t.advance_to(P0, Step::DeclareBlockers);
+    assert!(blocks_now(&t).is_empty());
 }
 
 #[test]
@@ -359,9 +371,10 @@ fn rowan_fearless_sparkmage_abilities() {
     let rowan = t.battlefield(P0, "Rowan, Fearless Sparkmage");
     let giant = t.battlefield(P1, "Hill Giant");
     t.answer_targets(P0, &[Entity::Object(giant), Entity::Object(giant)]);
-    let _ = activate_containing(&mut t, P0, rowan, "1 damage");
+    activate_containing(&mut t, P0, rowan, "1 damage").unwrap();
     t.resolve_all();
-    assert!(t.obj_now(giant).damage <= 1);
+    // The answer naming it twice is rejected (an invalid answer: no targets chosen).
+    assert_eq!(t.obj_now(giant).damage, 0);
     // −9 affects P0's own tapped creature: untapped, with haste.
     let mut t = TestGame::new(2);
     let rowan = t.battlefield(P0, "Rowan, Fearless Sparkmage");

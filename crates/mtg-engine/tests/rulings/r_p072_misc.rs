@@ -387,9 +387,10 @@ fn rally_maneuver_and_abandon_reason_target_different_creatures() {
     t.answer_targets(P0, &[Entity::Object(bears), Entity::Object(bears)]);
     lands_for_cost(&mut t, P0, "Abandon Reason");
     let spell = t.hand(P0, "Abandon Reason");
-    let _ = t.cast(P0, spell).try_go();
+    t.cast(P0, spell).go();
     t.resolve_all();
-    assert!(t.pt(bears).0 <= 3);
+    // The answer naming it twice is rejected (an invalid answer: no targets chosen).
+    assert_eq!(t.pt(bears), (2, 2));
 }
 
 #[test]
