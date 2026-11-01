@@ -6,7 +6,6 @@
 use crate::r_p015_common::*;
 use crate::r_p016_common::{cast_at, lots};
 use crate::r_s01_common::{attack_with, supported};
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -286,7 +285,7 @@ fn swampbenders_adds_swamp_to_lands_on_the_battlefield_you_control() {
     let mut t = TestGame::new(2);
     let f = t.battlefield(P0, "Snow-Covered Forest");
     let theirs = t.battlefield(P1, "Forest");
-    let their_swamp = t.battlefield(P1, "Swamp");
+    t.battlefield(P1, "Swamp");
     let in_hand = t.hand(P0, "Forest");
     let in_gy = t.graveyard(P0, "Forest");
     let s = t.battlefield(P0, "Swampbenders");
@@ -302,7 +301,6 @@ fn swampbenders_adds_swamp_to_lands_on_the_battlefield_you_control() {
         assert!(!t.obj_now(id).chars.has_subtype("Swamp"));
     }
     // Swamps on the battlefield: the Forest and P1's Swamp.
-    let _ = their_swamp;
     assert_eq!(t.pt(s), (2, 2));
 }
 
@@ -479,5 +477,4 @@ fn ixidron_turns_creatures_face_down_as_it_enters() {
     assert_eq!(t.g.current(giant), giant_now);
     assert!(t.obj_now(giant).face_down && t.obj_now(x1).face_down);
     assert_eq!(t.pt(x2), (3, 3));
-    let _ = Zone::Battlefield;
 }
