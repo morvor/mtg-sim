@@ -107,9 +107,10 @@ fn rummage_spells_with_an_illegal_target_do_nothing() {
         assert_eq!(t.zone(card), Zone::Hand(P0), "{name}");
         assert_eq!(t.hand_size(P0), 1, "{name}");
         assert!(
-            !t.asked()[from..]
-                .iter()
-                .any(|(_, d)| matches!(d, Decision::YesNo { .. } | Decision::ChooseEntities { .. })),
+            !t.asked()[from..].iter().any(|(_, d)| matches!(
+                d,
+                Decision::YesNo { .. } | Decision::ChooseEntities { .. }
+            )),
             "{name}: asked to rummage"
         );
         assert!(t.in_graveyard(P0, name), "{name}");
@@ -180,7 +181,7 @@ fn single_rummages_discard_or_bottom_only_one_card() {
 
 #[test]
 fn rummaging_with_too_few_cards_in_hand() {
-    cr!("701.9a", "701.9b", "121.2");
+    cr!("701.9a", "701.9b");
     ruling!(
         "Faithless Salvaging",
         "If you have no cards in hand as Faithless Salvaging resolves, you won't discard a card, but you will still draw a card."
@@ -226,10 +227,7 @@ fn nantuko_cultivator_counters_and_draws_are_modified_separately() {
     );
     supported("Nantuko Cultivator");
     // (modifier, counters, cards drawn) for two land cards discarded.
-    for (modifier, counters, drawn) in [
-        ("Hardened Scales", 3, 2),
-        ("Thought Reflection", 2, 4),
-    ] {
+    for (modifier, counters, drawn) in [("Hardened Scales", 3, 2), ("Thought Reflection", 2, 4)] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, modifier);
         let lands = hand_of(&mut t, P0, "Forest", 2);
@@ -284,14 +282,24 @@ fn crypt_lurker_can_sacrifice_itself_but_only_one_thing() {
             _ => None,
         })
         .collect();
-    assert!(offered.iter().any(|c| c.contains(&obj(lurker))), "{offered:?}");
+    assert!(
+        offered.iter().any(|c| c.contains(&obj(lurker))),
+        "{offered:?}"
+    );
     // Exactly one thing was given up, and one card drawn.
     let gone = [lurker, bears, giant]
         .iter()
         .filter(|id| matches!(t.zone(**id), Zone::Graveyard(_)))
         .count();
     assert_eq!(gone, 1);
-    assert_eq!(t.hand_size(P0), if t.zone(giant) == Zone::Hand(P0) { 2 } else { 1 });
+    assert_eq!(
+        t.hand_size(P0),
+        if t.zone(giant) == Zone::Hand(P0) {
+            2
+        } else {
+            1
+        }
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -339,27 +347,26 @@ fn fear_of_missing_out_combat_follows_the_combat_directly() {
         t.graveyard(P0, n);
     }
     t.set_step(P0, Step::PrecombatMain);
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(fomo, Entity::Player(P1))]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(fomo, Entity::Player(P1))]),
+    );
     t.answer_targets(P0, &[obj(fomo)]);
     go_to(&mut t, Step::DeclareAttackers);
     t.resolve_all();
     go_to(&mut t, Step::PostcombatMain);
-    let steps: Vec<Step> = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            mtg_engine::events::Event::StepBegan { step, .. } => Some(*step),
-            _ => None,
-        })
-        .collect();
+    let steps: Vec<Step> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                mtg_engine::events::Event::StepBegan { step, .. } => Some(*step),
+                _ => None,
+            })
+            .collect();
     let first_end = steps.iter().position(|s| *s == Step::EndOfCombat).unwrap();
     assert_eq!(steps[first_end + 1], Step::BeginningOfCombat, "{steps:?}");
-    assert_eq!(
-        steps.iter().filter(|s| s.is_main()).count(),
-        1,
-        "{steps:?}"
-    );
+    assert_eq!(steps.iter().filter(|s| s.is_main()).count(), 1, "{steps:?}");
 }
 
 // ---------------------------------------------------------------------------------------
@@ -396,7 +403,10 @@ fn arterial_alchemy_blood_equipment() {
     let blood = create_token(&mut t, P0, "Blood");
     t.lands(P0, "Wastes", 2);
     equip(&mut t, blood, bears);
-    assert_eq!(crate::r_s06_common::attached_to(&t, blood), Some(obj(bears)));
+    assert_eq!(
+        crate::r_s06_common::attached_to(&t, blood),
+        Some(obj(bears))
+    );
     assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 0);
     t.g.recompute();
     assert_eq!(t.pt(bears), (6, 2));
@@ -420,7 +430,10 @@ fn arterial_alchemy_blood_equipment() {
     crate::r_s26_common::modify_until_eot(
         &mut t,
         blood,
-        vec![Modification::AddTypes(vec![CardType::Creature]), Modification::SetPT(Some(Value::c(1)), Some(Value::c(1)))],
+        vec![
+            Modification::AddTypes(vec![CardType::Creature]),
+            Modification::SetPT(Some(Value::c(1)), Some(Value::c(1))),
+        ],
     );
     t.settle();
     assert_eq!(crate::r_s06_common::attached_to(&t, blood), None);
@@ -515,8 +528,23 @@ fn one_blood_token_pays_only_one_cost() {
     // of them benefited, not both.
     let dealt = 20 - t.life(P1);
     let sec_paid = t.counters(sec, "+1/+1") == 1;
-    assert_eq!(dealt, if sec_paid { 5 + 3 } else { 4 + 5 }, "{}", t.dump_log());
+    assert_eq!(
+        dealt,
+        if sec_paid { 5 + 3 } else { 4 + 5 },
+        "{}",
+        t.dump_log()
+    );
     assert!(blood_tokens(&t, P0).is_empty());
+    // Bloodcrazed Socialite alone: "If you do, it gets +2/+2" pumps the Socialite, not the
+    // sacrificed token.
+    let mut t = TestGame::new(2);
+    let soc = t.battlefield(P0, "Bloodcrazed Socialite");
+    let b = create_token(&mut t, P0, "Blood");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(b)]);
+    t.attack(&[(soc, Entity::Player(P1))], &[]);
+    assert!(blood_tokens(&t, P0).is_empty());
+    assert_eq!(t.life(P1), 15);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -547,10 +575,15 @@ fn academic_dispute_reach_is_chosen_on_resolution_and_block_only_if_able() {
         t.answer_yes(P0, false); // learn: nothing
         t.resolve_all();
         assert!(
-            t.asked()[from..].iter().any(|(_, d)| matches!(d, Decision::YesNo { .. })),
+            t.asked()[from..]
+                .iter()
+                .any(|(_, d)| matches!(d, Decision::YesNo { .. })),
             "asked on resolution"
         );
-        assert_eq!(t.obj_now(blocker).chars.has_keyword(KeywordKind::Reach), reach);
+        assert_eq!(
+            t.obj_now(blocker).chars.has_keyword(KeywordKind::Reach),
+            reach
+        );
         if tap_it {
             t.g.tap(blocker);
         }
@@ -559,4 +592,3 @@ fn academic_dispute_reach_is_chosen_on_resolution_and_block_only_if_able() {
         assert_eq!(crate::r_s10_common::blocking(&t, blocker), !tap_it);
     }
 }
-

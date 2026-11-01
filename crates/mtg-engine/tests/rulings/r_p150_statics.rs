@@ -3,10 +3,10 @@
 
 use crate::r_s01_common::*;
 use crate::r_s02_common::target_candidates;
+use crate::r_s17_common::color_set;
 use crate::r_s21_common::castable;
 use crate::r_s25_common::cast_new;
 use crate::r_s29_common::cast_and_resolve;
-use crate::r_s17_common::color_set;
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::decision::Answer;
 use mtg_engine::object::Zone;
@@ -32,7 +32,8 @@ fn royal_assassin_cant_target_itself() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.g.tap(bears);
     let from = t.asked().len();
-    t.activate(P0, assassin, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, assassin, 0, &[Entity::Object(bears)])
+        .unwrap();
     let offered = target_candidates(&t, P0, from);
     assert_eq!(offered, vec![vec![Entity::Object(bears)]]);
     assert!(t.obj_now(assassin).tapped);
@@ -51,7 +52,8 @@ fn royal_assassin_ability_does_nothing_if_the_target_untapped() {
     let assassin = t.battlefield(P0, "Royal Assassin");
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.g.tap(bears);
-    t.activate(P0, assassin, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, assassin, 0, &[Entity::Object(bears)])
+        .unwrap();
     t.g.untap(bears);
     t.resolve_all();
     assert!(t.on_battlefield(bears));
@@ -165,7 +167,10 @@ fn painters_servant_adds_its_color_cumulatively_everywhere() {
         "Painter's Servant",
         "This ability doesn't overwrite any previous colors. Rather, it adds another color."
     );
-    ruling!("Painter's Servant", "The effects of multiple Painter's Servants are cumulative.");
+    ruling!(
+        "Painter's Servant",
+        "The effects of multiple Painter's Servants are cumulative."
+    );
     ruling!(
         "Painter's Servant",
         "If something affected by Painter's Servant is normally colorless, it will simply be the new color. It won't be both the new color and colorless."
@@ -186,11 +191,17 @@ fn painters_servant_adds_its_color_cumulatively_everywhere() {
     servant(&mut t, P0, Color::Blue);
     servant(&mut t, P0, Color::Red);
     let blue_red = color_set(&[Color::Blue, Color::Red]);
-    assert_eq!(colors(&mut t, bears), color_set(&[Color::Blue, Color::Red, Color::Green]));
+    assert_eq!(
+        colors(&mut t, bears),
+        color_set(&[Color::Blue, Color::Red, Color::Green])
+    );
     assert_eq!(colors(&mut t, thopter), blue_red);
     assert_eq!(colors(&mut t, token), blue_red);
     assert_eq!(colors(&mut t, hand), blue_red);
-    assert_eq!(colors(&mut t, lib), color_set(&[Color::Blue, Color::Red, Color::Green]));
+    assert_eq!(
+        colors(&mut t, lib),
+        color_set(&[Color::Blue, Color::Red, Color::Green])
+    );
     assert_eq!(colors(&mut t, exiled), blue_red);
     assert_eq!(colors(&mut t, gy), blue_red);
     // A spell an opponent controls and a copy of it on the stack.
@@ -202,7 +213,9 @@ fn painters_servant_adds_its_color_cumulatively_everywhere() {
     let twincast = t.hand(P0, "Twincast");
     t.cast_with(P0, twincast, &[Entity::Object(spell)]).unwrap();
     t.resolve();
-    let copy = *crate::r_s25_common::spell_copies(&t).first().expect("a copy");
+    let copy = *crate::r_s25_common::spell_copies(&t)
+        .first()
+        .expect("a copy");
     assert_eq!(colors(&mut t, spell), blue_red);
     assert_eq!(colors(&mut t, copy), blue_red);
 }
@@ -248,6 +261,33 @@ fn painters_servant_colors_objects_as_they_enter_and_as_they_are_cast() {
     cast_new(&mut t, P1, "Lightning Bolt", &[Entity::Player(P0)]);
     t.resolve_all();
     assert_eq!(t.life(P0), 20 - 3 + 1);
+}
+
+#[test]
+fn painters_servant_color_applies_to_replacement_effects_on_entering_permanents() {
+    cr!("614.12", "613.1e");
+    ruling!(
+        "Painter's Servant",
+        "replacement effects that care about the color of permanents entering the battlefield"
+    );
+    supported("Curator Beastie");
+    // Curator Beastie: "Colorless creatures you control enter with two additional +1/+1
+    // counters on them." A colorless Ornithopter gets them, unless a Painter's Servant
+    // makes it red as it enters.
+    for with_servant in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Curator Beastie");
+        if with_servant {
+            servant(&mut t, P0, Color::Red);
+        }
+        let thopter = t.enter(P0, "Ornithopter");
+        let expected = if with_servant { 0 } else { 2 };
+        assert_eq!(
+            t.counters(thopter, "+1/+1"),
+            expected,
+            "servant: {with_servant}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------------------

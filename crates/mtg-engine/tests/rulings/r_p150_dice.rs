@@ -6,11 +6,11 @@ use crate::r_s01_common::*;
 use crate::r_s21_common::go_to;
 use crate::r_s29_common::cast_and_resolve;
 use crate::r_s35_common::{die_rolls, load_dice};
+use mtg_engine::card::card;
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
-use mtg_engine::card::card;
 use mtg_engine::*;
 
 /// `p` rolls to visit their Attractions with the given die result.
@@ -22,7 +22,11 @@ fn roll_to_visit(t: &mut TestGame, p: PlayerId, result: u32) {
 }
 
 fn lit(t: &TestGame, attraction: ObjectId) -> u32 {
-    t.obj_now(attraction).card.as_ref().unwrap().attraction_lights[0] as u32
+    t.obj_now(attraction)
+        .card
+        .as_ref()
+        .unwrap()
+        .attraction_lights[0] as u32
 }
 
 fn tapped(t: &TestGame, id: ObjectId) -> bool {
@@ -34,7 +38,9 @@ fn tapped(t: &TestGame, id: ObjectId) -> bool {
 fn next_combat(t: &mut TestGame) {
     let turn = t.g.turn.number;
     // Leave the current combat phase (if any) first.
-    let ok = t.g.run_until(10_000, |g| g.turn.step == Step::EndOfCombat || g.turn.number != turn);
+    let ok = t.g.run_until(10_000, |g| {
+        g.turn.step == Step::EndOfCombat || g.turn.number != turn
+    });
     assert!(ok && t.g.turn.number == turn);
     let ok = t.g.run_until(10_000, |g| {
         (g.turn.step == Step::BeginningOfCombat
@@ -49,7 +55,13 @@ fn combats_this_turn(t: &TestGame) -> usize {
     t.g.turn_events
         .iter()
         .filter(|e| {
-            matches!(e, mtg_engine::events::Event::StepBegan { step: Step::BeginningOfCombat, .. })
+            matches!(
+                e,
+                mtg_engine::events::Event::StepBegan {
+                    step: Step::BeginningOfCombat,
+                    ..
+                }
+            )
         })
         .count()
 }
@@ -72,21 +84,33 @@ fn swinging_ship_visited_twice_gives_two_combats_that_each_untap_attackers() {
     roll_to_visit(&mut t, P0, n);
     t.resolve_all();
     // Combat 1: the Bears attack.
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(bears, Entity::Player(P1))]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
     go_to(&mut t, Step::BeginningOfCombat);
     go_to(&mut t, Step::DeclareAttackers);
     assert!(tapped(&t, bears));
     // Combat 2: untapped at its beginning; they attack again.
     next_combat(&mut t);
     assert!(!tapped(&t, bears));
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(bears, Entity::Player(P1))]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
     go_to(&mut t, Step::DeclareAttackers);
     assert!(tapped(&t, bears));
     // Combat 3: untapped again.
     next_combat(&mut t);
     assert!(!tapped(&t, bears));
     assert_eq!(combats_this_turn(&t), 3);
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(bears, Entity::Player(P1))]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
     go_to(&mut t, Step::PostcombatMain);
     assert_eq!(t.life(P1), 14);
     assert_eq!(combats_this_turn(&t), 3);
@@ -94,7 +118,7 @@ fn swinging_ship_visited_twice_gives_two_combats_that_each_untap_attackers() {
 
 #[test]
 fn swinging_ship_doesnt_untap_creatures_that_entered_attacking() {
-    cr!("506.3", "508.4", "701.52a");
+    cr!("508.4", "701.52a");
     ruling!(
         "Swinging Ship",
         "Swinging Ship won’t untap any creatures that entered the battlefield attacking. Those creatures never attacked, meaning they were never declared as attacking creatures."
@@ -107,7 +131,11 @@ fn swinging_ship_doesnt_untap_creatures_that_entered_attacking() {
     let n = lit(&t, ship);
     roll_to_visit(&mut t, P0, n);
     t.resolve_all();
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(hero, Entity::Player(P1))]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(hero, Entity::Player(P1))]),
+    );
     go_to(&mut t, Step::BeginningOfCombat);
     go_to(&mut t, Step::DeclareAttackers);
     t.resolve_all();
@@ -162,19 +190,18 @@ fn atomwheel_acrobats_roll_triggers_roll_abilities() {
 
 /// The stored results on the object, sorted.
 fn stored(t: &TestGame, id: ObjectId) -> Vec<i64> {
-    let mut v: Vec<i64> = t
-        .g
-        .dice
-        .stored
-        .get(&id)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(sides, r)| {
-            assert_eq!(sides, 6);
-            r
-        })
-        .collect();
+    let mut v: Vec<i64> =
+        t.g.dice
+            .stored
+            .get(&id)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(sides, r)| {
+                assert_eq!(sides, 6);
+                r
+            })
+            .collect();
     v.sort();
     v
 }
@@ -218,5 +245,8 @@ fn centaur_of_attention_rerolls_replace_stored_results_even_ones_kept_before() {
     assert_eq!(stored(&t, centaur), vec![5, 5, 5, 5, 6]);
     assert!(die_rolls(&t).iter().all(|r| r.1 == 6));
     t.g.recompute();
-    assert_eq!(t.pt(centaur).0, card("Centaur of Attention").front().chars.power.unwrap() + 4);
+    assert_eq!(
+        t.pt(centaur).0,
+        card("Centaur of Attention").front().chars.power.unwrap() + 4
+    );
 }

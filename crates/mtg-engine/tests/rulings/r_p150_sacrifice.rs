@@ -72,7 +72,11 @@ fn merfolk_spy_reveals_once_per_damage_event_and_only_while_resolving() {
     let card = t.hand(P1, "Grizzly Bears");
     crate::r_s29_common::put_counters(&mut t, spy, "+1/+1", 2);
     t.set_step(P0, Step::PrecombatMain);
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![(spy, Entity::Player(P1))]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(spy, Entity::Player(P1))]),
+    );
     go_to(&mut t, Step::CombatDamage);
     assert_eq!(t.life(P1), 17);
     t.settle();
@@ -115,7 +119,11 @@ fn lavacore_elemental_counts_its_own_and_each_creatures_combat_damage() {
     let b = t.battlefield(P0, "Hill Giant");
     let before = t.counters(lava, "time");
     t.attack(
-        &[(lava, Entity::Player(P1)), (a, Entity::Player(P1)), (b, Entity::Player(P1))],
+        &[
+            (lava, Entity::Player(P1)),
+            (a, Entity::Player(P1)),
+            (b, Entity::Player(P1)),
+        ],
         &[],
     );
     t.resolve_all();
@@ -153,7 +161,10 @@ fn sacrifice_triggers_that_must_sacrifice_the_source_itself() {
         "Lotus Field",
         "If Lotus Field enters the battlefield while you control fewer than two other lands, you must sacrifice each land you control, including Lotus Field."
     );
-    ruling!("Mold Demon", "The sacrifice is done as a triggered ability just after it enters.");
+    ruling!(
+        "Mold Demon",
+        "The sacrifice is done as a triggered ability just after it enters."
+    );
     supported("Accursed Centaur");
     supported("Lotus Field");
     supported("Mold Demon");
@@ -276,7 +287,10 @@ fn morkrut_necropod_sacrifices_after_attackers_and_blockers_are_chosen() {
     let pod = t.battlefield(P1, "Morkrut Necropod");
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer_choose(P1, &[obj(bears)]);
-    t.attack(&[(attacker, Entity::Player(P1))], &[(bears, attacker), (pod, attacker)]);
+    t.attack(
+        &[(attacker, Entity::Player(P1))],
+        &[(bears, attacker), (pod, attacker)],
+    );
     assert!(!t.on_battlefield(bears));
     assert!(t.on_battlefield(pod));
     assert_eq!(t.life(P1), 20);
@@ -434,7 +448,7 @@ fn cant_play_lands_doesnt_stop_putting_lands_onto_the_battlefield() {
 
 #[test]
 fn aggressive_mining_once_on_each_players_turn() {
-    cr!("602.5b");
+    cr!("602.1b");
     ruling!(
         "Aggressive Mining",
         "You can activate the ability once on each player’s turn, not just your own."
@@ -458,7 +472,7 @@ fn aggressive_mining_once_on_each_players_turn() {
 
 #[test]
 fn dwarven_armory_works_in_any_upkeep() {
-    cr!("602.5b", "503.1");
+    cr!("602.1b", "503.1");
     ruling!(
         "Dwarven Armory",
         "The ability can be activated during your opponent’s upkeep as well as your own."
@@ -483,7 +497,7 @@ fn dwarven_armory_works_in_any_upkeep() {
 
 #[test]
 fn merciless_resolve_sacrifices_exactly_one_as_it_is_cast() {
-    cr!("601.2h", "117.1a");
+    cr!("601.2h");
     ruling!(
         "Merciless Resolve",
         "You must sacrifice exactly one creature or land to cast Merciless Resolve. You can’t cast it without sacrificing a permanent, and you can’t sacrifice additional permanents."
@@ -503,7 +517,10 @@ fn merciless_resolve_sacrifices_exactly_one_as_it_is_cast() {
     let spell = t.cast_with(P0, mr, &[]).unwrap();
     // Paid as it was cast: on the stack, exactly one gone.
     assert_eq!(t.zone(spell), Zone::Stack);
-    let gone = [bears, forest].iter().filter(|id| !t.on_battlefield(**id)).count();
+    let gone = [bears, forest]
+        .iter()
+        .filter(|id| !t.on_battlefield(**id))
+        .count();
     assert_eq!(gone, 1);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), 2);
@@ -667,7 +684,10 @@ fn goblin_trenches_token_names_and_types() {
 #[test]
 fn reprocess_and_highway_robbery_choices() {
     cr!("701.21a", "608.2d");
-    ruling!("Reprocess", "You can sacrifice zero permanents if you want to.");
+    ruling!(
+        "Reprocess",
+        "You can sacrifice zero permanents if you want to."
+    );
     ruling!(
         "Highway Robbery",
         "You can’t choose to discard a card if you have no cards in hand. Similarly, you can’t choose to sacrifice a land if you control no lands."
@@ -696,7 +716,10 @@ fn reprocess_and_highway_robbery_choices() {
 #[test]
 fn jeweled_spirit_chooses_on_resolution() {
     cr!("608.2d", "702.16a");
-    ruling!("Jeweled Spirit", "You choose the color (or artifacts) on resolution.");
+    ruling!(
+        "Jeweled Spirit",
+        "You choose the color (or artifacts) on resolution."
+    );
     supported("Jeweled Spirit");
     let mut t = TestGame::new(2);
     let spirit = t.battlefield(P0, "Jeweled Spirit");
@@ -728,7 +751,10 @@ fn sacrifice_on_entering_lands_however_they_enter() {
     );
     supported("Heart of Yavimaya");
     supported("Kjeldoran Outpost");
-    for (name, basic) in [("Heart of Yavimaya", "Forest"), ("Kjeldoran Outpost", "Plains")] {
+    for (name, basic) in [
+        ("Heart of Yavimaya", "Forest"),
+        ("Kjeldoran Outpost", "Plains"),
+    ] {
         // Put onto the battlefield by an effect: without the land, it goes to the graveyard.
         let mut t = TestGame::new(2);
         let card = t.hand(P0, name);
@@ -778,7 +804,9 @@ fn hew_the_entwood_triggers_wait_and_go_on_the_stack_in_apnap_order() {
     // Both lands entered (tapped); four Ankh triggers (each Ankh, each land) are waiting,
     // P1's on top.
     let entered: Vec<ObjectId> = top.iter().map(|c| t.g.current(*c)).collect();
-    assert!(entered.iter().all(|c| t.on_battlefield(*c) && t.obj_now(*c).tapped));
+    assert!(entered
+        .iter()
+        .all(|c| t.on_battlefield(*c) && t.obj_now(*c).tapped));
     assert_eq!(t.stack_len(), 4);
     let ctl: Vec<PlayerId> = t.g.stack.iter().map(|s| t.g.obj(*s).controller).collect();
     assert_eq!(ctl, vec![P0, P0, P1, P1]);
@@ -793,7 +821,7 @@ fn hew_the_entwood_triggers_wait_and_go_on_the_stack_in_apnap_order() {
 
 #[test]
 fn old_growth_troll_returns_under_its_controller_or_stays_in_the_graveyard() {
-    cr!("603.6c", "303.4f", "110.2");
+    cr!("603.6c", "303.4f", "303.4g", "110.2");
     ruling!(
         "Old-Growth Troll",
         "If there’s nothing for Old-Growth Troll to legally enchant, it remains in its owner’s graveyard."
@@ -846,7 +874,9 @@ fn old_growth_troll_copies() {
     t.resolve_all();
     assert!(t.named_on_battlefield("Old-Growth Troll").len() == 1);
     assert_eq!(
-        t.g.permanents().filter(|o| o.is(CardType::Enchantment)).count(),
+        t.g.permanents()
+            .filter(|o| o.is(CardType::Enchantment))
+            .count(),
         0
     );
     // A Clone copying it returns as an Aura: Clone's own card, an Aura enchantment.
@@ -857,6 +887,16 @@ fn old_growth_troll_copies() {
     let clone = t.enter(P0, "Clone");
     t.resolve_all();
     assert_eq!(t.obj_now(clone).chars.name.as_str(), "Old-Growth Troll");
+    let forest_abilities = |t: &mut TestGame| {
+        t.g.recompute();
+        t.obj_now(forest)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+            .count()
+    };
+    let before = forest_abilities(&mut t);
     t.answer_choose(P0, &[]); // Clone doesn't copy anything as it returns
     t.answer_choose(P0, &[obj(forest)]);
     destroy(&mut t, clone);
@@ -867,5 +907,10 @@ fn old_growth_troll_copies() {
     assert_eq!(o.chars.name.as_str(), "Clone");
     assert!(o.is(CardType::Enchantment) && o.chars.has_subtype("Aura"));
     assert!(!o.is(CardType::Creature));
-    assert_eq!(crate::r_s06_common::attached_to(&t, back), Some(obj(forest)));
+    assert_eq!(
+        crate::r_s06_common::attached_to(&t, back),
+        Some(obj(forest))
+    );
+    // The two abilities the return grants: the enchanted Forest has both.
+    assert_eq!(forest_abilities(&mut t), before + 2);
 }
