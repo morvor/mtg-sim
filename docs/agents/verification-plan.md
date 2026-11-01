@@ -119,6 +119,11 @@ Queues from the 06:42 check-in:
   - rulings-2: P066.
 
   Queued for after the hold: River Song (structure) and P096 (rulings-2); the rulings pool continues at P015. The hourly check-in is disabled during the hold, with one hold check at 18:45 UTC. Workers resume when the user says so.
+- **API-billed worker (Nov 1, user).** The user has about $200 of API credits that expire in a few days, and approved spending them on extra rulings batches through the usual pipeline (implementer, reviewer, scripts/land.sh).
+  - A launcher session, session_019p6spxpwd25URaDvPYLJ9P, runs each batch as a headless Claude Code child process billed to the key in the environment variable `MTG_SIM_KEY`. The child's environment is cleaned of the platform's ANTHROPIC_*/CLAUDE* variables, and the launcher checks apiKeySource on a trial run.
+  - Budget: $35 per run, $190 in total.
+  - Batches, in order, until the budget runs out: P015 P134 P174 P097 P004 P075 P102 P127 P013 P054.
+  - When the subscription workers resume, the rulings pool continues at P007, plus any of those batches the launcher reports unfinished.
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
