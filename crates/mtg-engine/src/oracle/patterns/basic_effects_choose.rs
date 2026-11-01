@@ -368,6 +368,12 @@ fn f_about_chosen(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     let chosen = chosen.clone();
     let mut l = end(&s.to_lowercase()).to_string();
+    // "Tap any number of untapped creatures you control. When you do, ...": the
+    // instruction is done even if no objects are chosen, so the reflexive ability triggers
+    // anyway (CR 603.12; Teferi Akosa of Zhalfir and Yotia Declares War rulings). Not
+    // under "you may" (declining isn't doing it), nor "when you [verb] one or more ...
+    // this way" (that needs one).
+    let done_anyway = l.starts_with("when you do, ") && !chosen_optionally(prev);
     // "When you sacrifice one or more artifacts this way, ...": when you do (CR 603.12).
     if let Some(r) = l.strip_prefix(&format!("when you {} one or more ", verb.word())) {
         let way = format!(" this way, ");
@@ -461,8 +467,33 @@ fn f_about_chosen(s: &str, prev: &mut Effect, b: &mut Builder) -> bool {
             }
         }
     }
+    let e = match e {
+        Effect::If {
+            cond: Condition::PrevHappened,
+            then,
+            otherwise,
+        } if done_anyway
+            && matches!(*then, Effect::Reflexive { .. })
+            && matches!(*otherwise, Effect::Noop) =>
+        {
+            *then
+        }
+        e => e,
+    };
     append(prev, e);
     true
+}
+
+/// Whether the chosen-objects instruction at the end of `e` is optional ("you may ...").
+fn chosen_optionally(e: &Effect) -> bool {
+    match e {
+        Effect::May { .. } => true,
+        Effect::Seq(v) => {
+            !matches!(v.last(), Some(Effect::StoreValue { var, .. }) if *var == COUNT)
+                && v.last().is_some_and(chosen_optionally)
+        }
+        _ => false,
+    }
 }
 
 /// "put a +1/+1 counter on each of those Vampires" → "... on them", when the noun
