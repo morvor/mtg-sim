@@ -55,7 +55,8 @@ fn arahbo_triggers_for_each_attacking_cat_but_not_one_entering_attacking() {
     let cats = with_subtype(&t, P0, "Cat");
     assert_eq!(cats.len(), 3, "Arahbo, Brimaz and the token");
     // Arahbo triggered once (for Brimaz), not for the token: one payment offered.
-    let offers = t.asked()
+    let offers = t
+        .asked()
         .iter()
         .filter(|(p, d)| *p == P0 && is_offer(d))
         .count();
@@ -77,7 +78,11 @@ fn arahbo_triggers_for_each_attacking_cat_but_not_one_entering_attacking() {
     assert_eq!(t.pt(a), (4, 3));
     assert_eq!(t.pt(b), (4, 3));
     assert!(t.obj_now(a).has_keyword(KeywordKind::Trample));
-    assert_eq!(mana_before - t.g.players[0].mana_pool.total(), 6, "paid once each");
+    assert_eq!(
+        mana_before - t.g.players[0].mana_pool.total(),
+        6,
+        "paid once each"
+    );
 }
 
 #[test]
@@ -173,7 +178,12 @@ fn kestia_draws_once_per_qualifying_attacker_you_control() {
     let hand = t.hand_size(P0);
     attack_with(
         &mut t,
-        &[(both, pl(P1)), (ench, pl(P1)), (enchanted, pl(P1)), (plain, pl(P1))],
+        &[
+            (both, pl(P1)),
+            (ench, pl(P1)),
+            (enchanted, pl(P1)),
+            (plain, pl(P1)),
+        ],
     );
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 3);
@@ -273,7 +283,10 @@ fn argentum_armor_may_target_any_permanent_even_your_own() {
     t.resolve_all();
     // One of P0's own permanents was destroyed (the only kind there is).
     let survivors = t.g.permanents().filter(|p| p.controller == P0).count();
-    assert_eq!(survivors, 2, "of the bear, the Armor and the Forest, one is gone");
+    assert_eq!(
+        survivors, 2,
+        "of the bear, the Armor and the Forest, one is gone"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -389,7 +402,11 @@ fn blocking_requirements_skip_tapped_creatures_and_creatures_with_a_blocking_cos
     assert!(!legal_blocks(&mut t, P1, &[(w1, bear)]));
     assert!(!legal_blocks(&mut t, P1, &[(w1, bear), (w2, lion)]));
     assert!(legal_blocks(&mut t, P1, &[(w1, bear), (w2, bear)]));
-    assert!(!legal_blocks(&mut t, P1, &[(w1, bear), (w2, bear), (w3, bear)]));
+    assert!(!legal_blocks(
+        &mut t,
+        P1,
+        &[(w1, bear), (w2, bear), (w3, bear)]
+    ));
 
     // Monstrous Step: the second target must block the first; tapped, it's free.
     for tap in [false, true] {
@@ -478,11 +495,7 @@ fn multiple_menace_trample_or_lifelink_counters_are_redundant() {
     // Menace twice: still two blockers are enough, one isn't.
     assert!(!legal_blocks(&mut t, P1, &[(w1, bear)]));
     assert!(legal_blocks(&mut t, P1, &[(w1, bear), (w2, bear)]));
-    t.answer(
-        P1,
-        DecisionKind::Blockers,
-        Answer::Blockers(vec![]),
-    );
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
     t.advance_to(P0, Step::EndOfCombat);
     // Lifelink twice: 2 damage, 2 life.
     assert_eq!(t.life(P1), 18);
