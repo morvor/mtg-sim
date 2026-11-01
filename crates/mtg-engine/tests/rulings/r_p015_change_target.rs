@@ -86,6 +86,14 @@ fn meddler_gone_before_its_trigger_resolves_leaves_targets_unchanged() {
         "Mizzium Meddler",
         "If Mizzium Meddler leaves the battlefield before its ability resolves, the targets remain unchanged."
     );
+    // Control: with Meddler still on the battlefield, Shock is redirected to it.
+    let mut t = setup();
+    let shock = cast_at(&mut t, P1, "Shock", &[Entity::Player(P0)]);
+    let m = meddler_enters(&mut t, "Mizzium Meddler", shock);
+    assert_eq!(t.stack_len(), 2);
+    t.resolve();
+    assert_eq!(stack_targets(&t, shock), vec![o(t.g.current(m))]);
+
     let mut t = setup();
     let shock = cast_at(&mut t, P1, "Shock", &[Entity::Player(P0)]);
     let m = meddler_enters(&mut t, "Mizzium Meddler", shock);
@@ -153,7 +161,7 @@ fn hydroelectric_specimen_cant_target_a_spell_with_several_targets() {
 
 #[test]
 fn mendicant_core_copy_remembers_x() {
-    cr!("707.10", "707.10c", "107.3c");
+    cr!("707.10", "707.2");
     ruling!(
         "Mendicant Core, Guidelight",
         "The copy remembers any decisions that were made for the original spell as it was cast, including values chosen for X in its mana cost and whether any alternative or additional costs were chosen."

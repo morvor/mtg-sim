@@ -88,7 +88,7 @@ fn defined_power_follows_the_count_and_is_never_locked_in() {
 
 #[test]
 fn kalonian_twingrove_and_its_token_both_follow_the_forest_count() {
-    cr!("604.3", "111.4");
+    cr!("604.3", "111.3");
     ruling!(
         "Kalonian Twingrove",
         "The power and toughness of both Kalonian Twingrove and the token it creates will change as the number of Forests you control changes."
@@ -162,7 +162,7 @@ fn goyf_style_abilities_count_card_types_not_cards() {
 
 #[test]
 fn consuming_blob_tokens_count_card_types_too() {
-    cr!("604.3", "111.4");
+    cr!("604.3", "111.3");
     ruling!(
         "Consuming Blob",
         "The above rulings are also true for Consuming Blob's children"
