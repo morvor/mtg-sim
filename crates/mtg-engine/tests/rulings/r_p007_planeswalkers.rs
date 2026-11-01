@@ -93,16 +93,24 @@ fn chandra_fire_artisan_exiled_cards_keep_their_timing() {
     t.resolve_all();
     assert_eq!(t.life(P1), 15);
     // A land: only with a land play left.
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let c = pw(&mut t, P0, "Chandra, Fire Artisan", 4);
-    let m = t.library_top(P0, "Mountain");
-    loyalty(&mut t, P0, c, 0, &[]);
-    t.resolve_all();
-    let m = t.g.current(m);
-    let other = t.hand(P0, "Forest");
-    t.play_land(P0, other).expect("the turn's land");
-    assert!(t.play_land(P0, m).is_err(), "no land play left");
+    for land_played in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let c = pw(&mut t, P0, "Chandra, Fire Artisan", 4);
+        let m = t.library_top(P0, "Mountain");
+        loyalty(&mut t, P0, c, 0, &[]);
+        t.resolve_all();
+        let m = t.g.current(m);
+        if land_played {
+            let other = t.hand(P0, "Forest");
+            t.play_land(P0, other).expect("the turn's land");
+        }
+        assert_eq!(
+            t.play_land(P0, m).is_ok(),
+            !land_played,
+            "land played {land_played}"
+        );
+    }
 }
 
 #[test]
