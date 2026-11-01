@@ -83,8 +83,15 @@ pub fn payable(g: &Game, e: &Effect, ctx: &Ctx) -> Option<bool> {
                     up_to: false,
                     ..
                 },
+            kind,
             ..
-        } => Some(g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx)),
+        } => Some(
+            g.objects_matching(filter, ctx)
+                .into_iter()
+                .filter(|o| !crate::counter_rules::counters_prevented(g, *o, kind))
+                .count() as i64
+                >= g.eval_value(count, ctx),
+        ),
         // "Sacrifice that artifact" (an "unless" action, CR 118.12a): a player can
         // sacrifice only permanents they control (CR 701.21a).
         Effect::SacrificeObjects { what } => {
@@ -213,4 +220,41 @@ pub fn note_paid(g: &mut Game, cost: &crate::ability::Cost, ctx: &mut Ctx) {
         .map(|o| crate::types::Entity::Object(g.current(*o)))
         .collect();
     ctx.set_var(crate::discard_rules::DISCARDED, discarded);
+}
+
+/// The cost action `e` as it's performed to pay a cost: "put a counter on a [permanent]
+/// you control" can be performed only on a permanent that can have that counter put on
+/// it (CR 118.3; Tatterkite, Solemnity), so the others can't be chosen. `None`: `e` as is.
+pub fn as_paid(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Effect> {
+    let Effect::AddCounters {
+        what:
+            Sel::Choose {
+                chooser,
+                filter,
+                count,
+                up_to,
+                store,
+            },
+        kind,
+        n,
+    } = e
+    else {
+        return None;
+    };
+    let ok: Vec<_> = g
+        .objects_matching(filter, ctx)
+        .into_iter()
+        .filter(|o| !crate::counter_rules::counters_prevented(g, *o, kind))
+        .collect();
+    Some(Effect::AddCounters {
+        what: Sel::Choose {
+            chooser: chooser.clone(),
+            filter: Filter::and(vec![filter.clone(), Filter::Objects(ok)]),
+            count: count.clone(),
+            up_to: *up_to,
+            store: store.clone(),
+        },
+        kind: kind.clone(),
+        n: n.clone(),
+    })
 }

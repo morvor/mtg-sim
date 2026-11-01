@@ -4379,7 +4379,8 @@ impl Game {
                 c.controller = p;
                 // Counters it puts are put as a cost, not by an effect (CR 118, 602.2b).
                 c.paying_cost = true;
-                self.exec(e, &mut c);
+                let restricted = crate::cost_effects::as_paid(self, e, &c);
+                self.exec(restricted.as_ref().unwrap_or(e), &mut c);
                 // "Unattach an Equipment from ~": the Equipment ("that Equipment's mana
                 // value") and what it was attached to.
                 if let Some(v) = c.vars.get(&crate::zones::UNATTACHED) {

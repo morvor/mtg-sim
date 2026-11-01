@@ -54,6 +54,34 @@ pub fn counters_prevented(g: &Game, obj: ObjectId, kind: &str) -> bool {
     })
 }
 
+/// [`counters_prevented`] for an object about to enter the battlefield under
+/// `controller` ("as it enters" choices: tribute, riot), judged as it would exist on the
+/// battlefield (CR 614.12): "Counters can't be put on creatures" (Solemnity) stops them
+/// even though it's not a creature on the battlefield yet.
+pub fn counters_prevented_entering(
+    g: &mut Game,
+    obj: ObjectId,
+    controller: PlayerId,
+    kind: &str,
+) -> bool {
+    if g.obj(obj).zone == Zone::Battlefield {
+        return counters_prevented(g, obj, kind);
+    }
+    let m = crate::replacement::MoveEv {
+        obj,
+        to: Zone::Battlefield,
+        pos: LibraryPosition::Top,
+        cause: crate::events::MoveCause::Effect,
+        by: Some(controller),
+        etb: crate::replacement::EtbInfo {
+            controller: Some(controller),
+            ..Default::default()
+        },
+        source: None,
+    };
+    g.with_hypothetical_entry(&m, |g| counters_prevented(g, obj, kind))
+}
+
 /// Whether a replacement key is the prevention effect shield counters create (CR 122.1c),
 /// a single effect for all the damage that would be dealt to the permanent at once.
 pub fn is_shield_prevention(key: &ReplKey) -> bool {

@@ -96,7 +96,12 @@ fn tribute(g: &mut Game, ctx: &mut Ctx, this: ObjectId, n: u32) {
         .first()
         .and_then(|e| e.player());
     let name = g.obj(this).chars.name.clone();
-    let paid = chosen.is_some_and(|q| {
+    // Counters that can't be put on it (Solemnity): tribute can't be paid even if the
+    // opponent wants to (CR 614.17b-style; Solemnity ruling).
+    let payable =
+        !crate::counter_rules::counters_prevented_entering(g, this, p, counters::PLUS1);
+    let paid = payable
+        && chosen.is_some_and(|q| {
         g.ask_yes_no(
             q,
             Some(this),

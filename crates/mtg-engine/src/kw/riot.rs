@@ -46,7 +46,7 @@ impl KeywordRules for Riot {
             return true;
         };
         let p = ctx.controller;
-        let counter = !crate::counter_rules::counters_prevented(g, this, counters::PLUS1)
+        let counter = !crate::counter_rules::counters_prevented_entering(g, this, p, counters::PLUS1)
             && g.ask_yes_no(
                 p,
                 Some(this),
