@@ -45,6 +45,9 @@ pub struct Builder<'c> {
     /// Set by a "[verb] one or more [objects]" instruction (cleared by "[verb] any number
     /// of"): a following "When you do, ..." then needs at least one object chosen.
     pub chose_one_or_more: bool,
+    /// What "it" referred to before a "sacrifice a [permanent]" instruction made it mean
+    /// the sacrificed permanent (see [`Builder::it_is_sacrificed`]).
+    pub it_before_sacrifice: Option<Sel>,
     pub ctx: &'c CompileContext<'c>,
 }
 
@@ -70,7 +73,18 @@ impl<'c> Builder<'c> {
             named: vec![],
             its_is_it: false,
             chose_one_or_more: false,
+            it_before_sacrifice: None,
             ctx,
+        }
+    }
+    /// After "sacrifice a [permanent]": "it" is the permanent sacrificed ("You gain life
+    /// equal to its toughness"), except as the subject of an instruction that changes a
+    /// permanent ("If you do, it gets +2/+2 until end of turn.", Bloodcrazed Socialite):
+    /// the sacrificed permanent is gone, so that "it" keeps its earlier antecedent.
+    pub fn it_is_sacrificed(&mut self) {
+        let before = std::mem::replace(&mut self.it, Sel::Var(vars::SACRIFICED));
+        if !matches!(before, Sel::Var(v) if v == vars::SACRIFICED) {
+            self.it_before_sacrifice = Some(before);
         }
     }
     /// Whether target slot `i` is for objects (and so could be the object a later
@@ -1008,6 +1022,16 @@ pub fn object_ref(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
                     && other_participant
                 {
                     return Some((Sel::This, rest.to_string()));
+                }
+                if p == "it"
+                    && matches!(it, Sel::Var(v) if v == vars::SACRIFICED)
+                    && [" gets ", " gains ", " get ", " gain "]
+                        .iter()
+                        .any(|x| rest.starts_with(x))
+                {
+                    if let Some(before) = b.it_before_sacrifice.clone() {
+                        return Some((before, rest.to_string()));
+                    }
                 }
                 // No antecedent (a spell's first mention), or "that creature" meaning the
                 // source, which oracle text calls "~" (except "that card" for what the

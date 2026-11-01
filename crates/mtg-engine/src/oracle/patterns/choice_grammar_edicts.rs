@@ -252,7 +252,7 @@ fn edict_of_their_choice(l: &str, b: &mut Builder) -> Option<Effect> {
                 PlayerRef::EachOpponent | PlayerRef::EachPlayer | PlayerRef::EachOtherPlayer
             )
         {
-            b.it = Sel::Var(vars::SACRIFICED);
+            b.it_is_sacrificed();
         }
         return Some(Effect::Sacrifice {
             who,

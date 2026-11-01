@@ -557,3 +557,76 @@ pub fn pay_with_any_mana(cost: &mut Cost, any_type: bool) {
         m.symbols.insert(0, ManaSymbol::Generic(generic));
     }
 }
+
+/// CR 118.3, 701.21a: one permanent can't be sacrificed to pay two parts of a cost
+/// ("Sacrifice a Swamp and a Forest" needs two lands even if one is both). Whether the
+/// cost's sacrifice parts can be paid with different permanents (each part on its own is
+/// checked elsewhere).
+pub(crate) fn sacrifices_jointly_payable(
+    g: &Game,
+    p: PlayerId,
+    cost: &Cost,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) -> bool {
+    // Parts with X in their filter are checked for each value of X elsewhere.
+    let parts: Vec<&CostPart> = cost
+        .parts
+        .iter()
+        .filter(|c| {
+            matches!(c, CostPart::SacrificeSelf | CostPart::Sacrifice { .. })
+                && !crate::x_cost_filters::part_has_x_filter(c)
+        })
+        .collect();
+    let single = |c: &CostPart| match c {
+        CostPart::Sacrifice { count, .. } => count.as_const().is_some_and(|n| n <= 1),
+        _ => true,
+    };
+    if parts.len() < 2 && parts.iter().all(|c| single(c)) {
+        return true;
+    }
+    // One slot per permanent to sacrifice, with its candidates.
+    let mut slots: Vec<Vec<ObjectId>> = Vec::new();
+    for part in parts {
+        match part {
+            CostPart::SacrificeSelf => slots.push(src.into_iter().collect()),
+            CostPart::Sacrifice { filter, count } => {
+                let n = g.eval_value(count, ctx).max(0) as usize;
+                let cands: Vec<ObjectId> = g
+                    .objects_matching(filter, ctx)
+                    .into_iter()
+                    .filter(|o| g.obj(*o).controller == p && g.may_sacrifice_for_cost(*o, ctx))
+                    .collect();
+                slots.extend(std::iter::repeat_n(cands, n));
+            }
+            _ => {}
+        }
+    }
+    if slots.len() < 2 {
+        return true;
+    }
+    // Bipartite matching of slots to permanents (augmenting paths).
+    fn augment(
+        slot: usize,
+        slots: &[Vec<ObjectId>],
+        owner: &mut std::collections::HashMap<ObjectId, usize>,
+        seen: &mut std::collections::HashSet<ObjectId>,
+    ) -> bool {
+        for &o in &slots[slot] {
+            if !seen.insert(o) {
+                continue;
+            }
+            let free = match owner.get(&o) {
+                None => true,
+                Some(&other) => augment(other, slots, owner, seen),
+            };
+            if free {
+                owner.insert(o, slot);
+                return true;
+            }
+        }
+        false
+    }
+    let mut owner = std::collections::HashMap::new();
+    (0..slots.len()).all(|i| augment(i, &slots, &mut owner, &mut std::collections::HashSet::new()))
+}

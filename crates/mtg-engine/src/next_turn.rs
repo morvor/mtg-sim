@@ -88,6 +88,23 @@ pub fn schedule(g: &mut Game, who: &PlayerRef, part: NextTurnPart, effect: &Effe
     }
 }
 
+/// `count` combat phases were just inserted into this turn's schedule, the first of them
+/// becoming the turn's `first`th combat phase: effects waiting for an earlier-added combat
+/// phase that is now later in the turn wait for it under its new number (CR 500.8: the
+/// most recently added phase comes first, so "that combat" of an earlier instruction may
+/// move back).
+pub fn combats_inserted(g: &mut Game, first: u32, count: u32) {
+    let turn = g.turn.number;
+    for s in g.scheduled.iter_mut() {
+        if s.part == NextTurnPart::AddedCombatPhase
+            && s.created_turn == turn
+            && s.created_combats + 1 >= first
+        {
+            s.created_combats += count;
+        }
+    }
+}
+
 /// As a turn begins: creates the effects waiting for the turn of one of its active
 /// players. Effects for players who left the game are dropped (CR 800.4a).
 pub fn turn_began(g: &mut Game) {

@@ -3264,6 +3264,9 @@ impl Game {
                 return false;
             }
         }
+        if !crate::cost_rules::sacrifices_jointly_payable(self, p, cost, src, ctx) {
+            return false;
+        }
         if let Some(m) = &cost.mana {
             let need = crate::as_though::payment_cost(self, p, &m.with_x(0));
             if need.mana_value() == 0
