@@ -425,3 +425,38 @@ fn suki_token_attacks_whichever_opponent_you_choose() {
     assert_eq!(attacking(&t, toks[0]), Some(Entity::Player(P2)));
     assert_eq!(attacking(&t, suki), Some(Entity::Player(P1)));
 }
+
+#[test]
+fn scourge_of_the_skyclaves_in_two_headed_giant_is_a_draw() {
+    cr!("810.9", "810.9a", "810.8c", "104.4a");
+    ruling!(
+        "Scourge of the Skyclaves",
+        "In a Two-Headed Giant game, Scourge of the Skyclaves causes each team to lose twice half their life rounded up, which is their full life total or, if it's odd, that much life plus 1. This causes the game to end in a draw."
+    );
+    supported("Scourge of the Skyclaves");
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    t.set_step(P0, Step::PrecombatMain);
+    // An odd team life total: 29 for P2 and P3's team.
+    t.g.lose_life(P2, 1);
+    assert_eq!(t.life(P3), 29);
+    lots(&mut t, P0);
+    let c = t.hand(P0, "Scourge of the Skyclaves");
+    t.cast(P0, c).kicked(true).go();
+    t.resolve();
+    // 30 - 15 - 15 and 29 - 15 - 15.
+    assert_eq!(t.life(P0), 0);
+    assert_eq!(t.life(P2), -1);
+    assert_eq!(
+        t.g.result,
+        Some(mtg_engine::game::GameResult::Draw),
+        "{:?}",
+        t.g.result
+    );
+}
