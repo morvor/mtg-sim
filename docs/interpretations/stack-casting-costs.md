@@ -207,3 +207,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Zur's Weirding, Shivan Wumpus, and every "any player may [cost]. If a player does" card.
 - Code: `crates/mtg-engine/src/oracle/patterns/r118_any_player_may.rs`.
 - Tests: `tests/cards/c5_mana_replacements.rs` (`zurs_weirding_every_other_player_is_offered_the_payment`).
+
+## trigger-x-before-targets: A triggered ability whose targets depend on an X it pays as it resolves has X chosen as it's put on the stack
+- Kind: interpretation
+- Status: provisional
+- Rules: 107.3f "Sometimes X appears in the text of a spell or ability but not in a mana cost, alternative cost, additional cost, or activation cost. If the value of X isn’t defined, the controller of the spell or ability chooses the value of X at the appropriate time (either as it’s put on the stack or as it resolves)." / 603.3d "The remainder of the process for putting a triggered ability on the stack is identical to the process for casting a spell listed in rules 601.2c–d. ..." / 601.2b, 601.2c (X is announced before targets are chosen)
+- Question: Relentless Dead: "When this creature dies, you may pay {X}. If you do, return another target Zombie creature card with mana value X from your graveyard to the battlefield." The {X} is paid as the ability resolves, but the target must be chosen as it's put on the stack. When is X chosen?
+- Decision: As the ability is put on the stack, before its targets (the "appropriate time" of 107.3f, since the targets depend on it); the {X} paid as it resolves is that value. Implemented for triggered abilities whose target filters mention X and whose effect pays a cost with {X} ("you may pay {X}. If you do, ..."). Before, X was undefined (0) while targets were chosen, so the ability was removed from the stack for lack of a target whenever no card had mana value 0.
+- Alternatives: X chosen as it resolves, with the target chosen freely on the stack and the card returned only if its mana value equals the X paid; equivalent in outcome for a player who pays the target's mana value, but it lets the target be chosen without regard to X.
+- Why: 107.3f leaves the time open, and 601.2b–c (applied to triggered abilities by 603.3d) has X announced before targets whenever targets depend on it; the target can then be checked against a known X on resolution.
+- Affects: Relentless Dead and any other "you may pay {X}. If you do, ... target ... with mana value X" trigger.
+- Code: `crates/mtg-engine/src/trigger_x.rs` (`choose_before_targets`); `crates/mtg-engine/src/triggers.rs` (`put_trigger_on_this_stack`).
+- Tests: `tests/rulings/r_p132_graveyard_triggers.rs` (`relentless_dead_both_abilities_trigger_and_each_payment_is_chosen_on_resolution`).
