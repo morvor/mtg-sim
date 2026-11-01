@@ -1,4 +1,4 @@
-//! Rulings batch P004 — "exile ... until this leaves the battlefield" (CR 610.3c): if the
+//! Rulings batch P004 — "exile ... until this leaves the battlefield" (CR 610.3a–b): if the
 //! banishing permanent leaves the battlefield before its exile ability resolves, nothing
 //! is exiled (the rest of the ability still happens); an illegal target makes the whole
 //! ability not resolve (CR 608.2b).
@@ -9,7 +9,7 @@ use mtg_engine::*;
 
 #[test]
 fn if_the_banisher_leaves_before_its_ability_resolves_nothing_is_exiled() {
-    cr!("610.3c", "603.2");
+    cr!("610.3b", "610.3a", "603.2");
     ruling!(
         "Alabaster Host Intercessor",
         "If Alabaster Host Intercessor leaves the battlefield before its enters-the-battlefield ability resolves, the target creature won’t be exiled at all."
@@ -143,7 +143,7 @@ fn if_the_banisher_leaves_before_its_ability_resolves_nothing_is_exiled() {
 
 #[test]
 fn the_life_gain_still_happens_when_the_banisher_left_but_the_target_is_legal() {
-    cr!("610.3c", "608.2b");
+    cr!("610.3b", "608.2b");
     // (Cited in the test above.) Liminal Hold, Makeshift Binding and Prayer of Binding.
     for name in ["Liminal Hold", "Makeshift Binding", "Prayer of Binding"] {
         let mut t = TestGame::new(2);

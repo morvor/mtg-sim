@@ -162,3 +162,12 @@ pub fn destroy_and_flush(t: &mut TestGame, id: ObjectId) {
 pub fn zone_now(t: &TestGame, id: ObjectId) -> Zone {
     t.g.obj(t.g.current(id)).zone
 }
+
+/// `p` casts the real spell `name` from hand (paying from a full mana pool) with the given
+/// targets (one per slot), leaving it on the stack.
+pub fn cast_now(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    supported(name);
+    mana(t, p);
+    let c = t.hand(p, name);
+    t.cast_with(p, c, targets).expect("couldn't cast")
+}

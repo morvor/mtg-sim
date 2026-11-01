@@ -223,7 +223,7 @@ fn flickered_permanents_lose_auras_equipment_and_counters() {
         let mut t = TestGame::new(2);
         let (bears, _aura, eq) = decorated_bears(&mut t, P0);
         if name == "Personify" {
-            crate::r_p209_common::cast_spell(&mut t, P0, name, &[obj(bears)]);
+            cast_now(&mut t, P0, name, &[obj(bears)]);
         } else {
             t.answer_targets(P0, &[obj(bears)]);
             t.answer_yes(P0, true);
@@ -239,7 +239,7 @@ fn flickered_permanents_lose_auras_equipment_and_counters() {
         t.set_step(P0, Step::PrecombatMain);
         let (bears, _aura, eq) = decorated_bears(&mut t, P0);
         let targets: &[Entity] = if name == "Ghostway" { &[] } else { &[obj(bears)] };
-        crate::r_p209_common::cast_spell(&mut t, P0, name, targets);
+        cast_now(&mut t, P0, name, targets);
         t.resolve_all();
         assert_cleaned_up(&t, name, P0, bears, eq);
         t.advance_to(P0, Step::End);
