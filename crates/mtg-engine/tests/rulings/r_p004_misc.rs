@@ -372,3 +372,65 @@ fn badgermole_cub_only_sees_creatures_tapped_for_their_own_tap_mana_abilities() 
     assert!(t.obj_now(elves).tapped);
     assert_eq!(t.g.player(P0).mana_pool.total(), 1);
 }
+
+#[test]
+fn phasing_in_tapped_isnt_becoming_tapped() {
+    cr!("702.26c", "702.26d", "603.2");
+    // The Pandorica isn't supported; the rule is exercised with a direct phase-out/in.
+    ruling!(
+        "The Pandorica",
+        "Abilities that trigger when a creature becomes tapped won't trigger when a creature phases in tapped. (This might happen if the creature in question has one or more stun counters on it.)"
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Verity Circle");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.tap(bears);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "control: tapping triggers Verity Circle");
+    t.resolve_all();
+    mtg_engine::keyword_impls::phase_out(&mut t.g, vec![bears]);
+    t.g.flush_events();
+    t.settle();
+    assert!(t.obj_now(bears).phased_out);
+    mtg_engine::keyword_impls::phase_in(&mut t.g, bears);
+    t.g.flush_events();
+    t.settle();
+    let o = t.obj_now(bears);
+    assert!(!o.phased_out && o.tapped);
+    assert_eq!(t.stack_len(), 0, "phasing in tapped triggered Verity Circle");
+}
+
+#[test]
+fn suspends_last_counter_cast_ignores_type_timing_or_leaves_it_exiled() {
+    cr!("702.62a", "702.62b");
+    // Taigam isn't supported; the suspend rule is exercised with Rift Bolt.
+    ruling!(
+        "Taigam, Master Opportunist",
+        "As the second triggered ability of suspend resolves, you may cast the card. Timing permissions based on the card’s type are ignored. If you choose not to (or can’t) cast the card, it remains exiled with no time counters on it, and it’s no longer suspended."
+    );
+    for cast in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::End);
+        let c = t.exile(P0, "Rift Bolt");
+        t.g.add_counters(obj(c), counters::TIME, 1, None);
+        t.answer_yes(P0, cast);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.advance_to(P0, Step::Upkeep);
+        t.resolve_all();
+        if cast {
+            // A sorcery cast during the upkeep.
+            assert_eq!(t.life(P1), 17);
+            assert!(t.in_graveyard(P0, "Rift Bolt"));
+        } else {
+            assert_eq!(t.zone(c), Zone::Exile);
+            assert_eq!(t.counters(c, counters::TIME), 0);
+            // No longer suspended: nothing happens at the next upkeep.
+            t.advance_to(P0, Step::Draw);
+            t.set_step(P1, Step::End);
+            t.advance_to(P0, Step::Upkeep);
+            assert_eq!(t.stack_len(), 0);
+            assert_eq!(t.zone(c), Zone::Exile);
+        }
+    }
+}

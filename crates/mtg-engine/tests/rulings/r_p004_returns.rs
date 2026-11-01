@@ -245,6 +245,7 @@ fn in_the_trenches_can_be_activated_once_per_object() {
     destroy_now(&mut t, bears);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    t.set_step(P0, Step::PrecombatMain);
     mana(&mut t, P0);
     assert!(
         t.activate(P0, trenches, 0, &[obj(giant)]).is_err(),
@@ -310,6 +311,13 @@ fn deputy_of_detention_exiles_same_named_permanents_without_targeting_them() {
     banish_trigger(&mut t, "Deputy of Detention", bears);
     t.resolve_all();
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty(), "the hexproof one stayed");
+    // Only that player's permanents: another opponent's Grizzly Bears stays.
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let p2s = t.battlefield(P2, "Grizzly Bears");
+    banish_trigger(&mut t, "Deputy of Detention", bears);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears"), vec![p2s]);
 }
 
 /// P1 controls two face-down 2/2 creatures (Hill Giant and Grizzly Bears turned face
