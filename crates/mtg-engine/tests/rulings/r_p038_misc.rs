@@ -4,7 +4,6 @@
 
 use crate::r_p038_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, creatures, stack_library, supported};
-use crate::r_s02_common::create_token;
 use mtg_engine::ability::{Effect, PlayerRef, TokenSpec, Value};
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
@@ -454,7 +453,6 @@ fn plagon_changes_only_the_combat_damage_assigned() {
     block_and_finish(&mut t, P1, &[]);
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.pt(plagon).0, 0);
-    let _ = create_token;
 }
 
 #[test]

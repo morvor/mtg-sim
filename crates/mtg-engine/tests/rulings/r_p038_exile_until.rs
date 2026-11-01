@@ -3,7 +3,7 @@
 //! (CR 400.7, 603.6, 610.3, 603.3b).
 
 use crate::r_p038_common::*;
-use crate::r_s01_common::{creatures, supported, tokens};
+use crate::r_s01_common::{supported, tokens};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -247,5 +247,4 @@ fn creatures_banisher_priest_exiled_return_before_aerial_assault_gains_life() {
     assert!(t.in_graveyard(P1, "Banisher Priest"));
     assert_eq!(t.named_on_battlefield("Serra Angel").len(), 1);
     assert_eq!(t.life(P0), 21, "the returned Serra Angel counts");
-    let _ = creatures;
 }

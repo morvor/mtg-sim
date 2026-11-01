@@ -946,6 +946,10 @@ impl Renderer<'_> {
             Filter::HasAbilities => np.with.push("an ability".into()),
             Filter::Source => np.is_self = true,
             Filter::Other => np.other = true,
+            // "other" on a noncreature Aura or Equipment: other than the attached creature.
+            Filter::Custom(n) if n == crate::kw::other_than_attached::OTHER_THAN_ATTACHED => {
+                np.other = true
+            }
             // "a creature dealt damage this way".
             Filter::In(s) if matches!(s.as_ref(), Sel::Var(crate::ability::vars::DAMAGED)) => {
                 np.post.push("dealt damage this way".into())

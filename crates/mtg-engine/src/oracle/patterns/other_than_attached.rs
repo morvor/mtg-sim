@@ -5,7 +5,10 @@
 //! Equipment isn't a creature, so "other" can't mean other than it: it means other than
 //! the creature it's attached to. The phrase parsers read "other" as "not the source"
 //! ([`Filter::Other`]); this pass rewrites it, in a filter that requires a creature, to
-//! "not the object the source is attached to".
+//! "neither the source nor the object it's attached to"
+//! ([`crate::kw::other_than_attached::OTHER_THAN_ATTACHED`]). Abilities the Aura or
+//! Equipment grants (their "other" is about the creature that has them) and targets
+//! (support's "other target creatures" is other than the source) are left alone.
 
 use crate::ability::*;
 use crate::oracle::CompileContext;
@@ -24,7 +27,9 @@ pub(crate) fn apply(abilities: &mut [Ability], ctx: &CompileContext) {
     let (Ok(other), Ok(creature), Ok(not_attached)) = (
         serde_json::to_value(Filter::Other),
         serde_json::to_value(Filter::Type(CardType::Creature)),
-        serde_json::to_value(Filter::not(Filter::AttachedToSource)),
+        serde_json::to_value(Filter::Custom(
+            crate::kw::other_than_attached::OTHER_THAN_ATTACHED.into(),
+        )),
     ) else {
         return;
     };
@@ -52,7 +57,14 @@ pub(crate) fn apply(abilities: &mut [Ability], ctx: &CompileContext) {
                 }
             }
             serde_json::Value::Object(m) => {
-                for x in m.values_mut() {
+                // A granted ability (an `AbilityDef`) keeps its own "other".
+                if m.contains_key("kind") && m.contains_key("text") {
+                    return changed;
+                }
+                for (k, x) in m.iter_mut() {
+                    if k == "targets" {
+                        continue;
+                    }
                     changed |= walk(x, other, creature, to);
                 }
             }

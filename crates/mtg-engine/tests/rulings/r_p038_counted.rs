@@ -3,7 +3,7 @@
 //! and intervening "if" clauses checked again on resolution (CR 603.4).
 
 use crate::r_p038_common::*;
-use crate::r_s01_common::{attack_with, creatures, supported};
+use crate::r_s01_common::{attack_with, supported};
 use crate::r_s02_common::create_token;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::CastMethod;
@@ -567,7 +567,6 @@ fn mana_adding_triggers_and_loyalty_abilities_use_the_stack() {
     create_token(&mut t, P0, "Raccoon");
     t.resolve_all();
     assert_eq!(pool_total(&t, P0), 2);
-    let _ = creatures;
 }
 
 #[test]
