@@ -250,6 +250,8 @@ fn ebondeath_cares_about_any_non_ebondeath_death_this_turn() {
     );
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 4);
+    let other = t.graveyard(P0, "Ebondeath, Dracolich");
+    assert!(!castable(&mut t, P0, other), "no creature died yet");
     // A token dies while Ebondeath is still in P0's hand.
     let tok = create_token(&mut t, P1, "Soldier");
     destroy(&mut t, tok);
@@ -279,6 +281,9 @@ fn ebondeath_uses_the_dead_creatures_last_name() {
     assert!(t.in_graveyard(P1, "Clone"));
     assert!(t.on_battlefield(theirs));
     assert!(!castable(&mut t, P0, eb));
+    // A creature with another name dies: now it can be cast.
+    a_creature_dies(&mut t, P1);
+    assert!(castable(&mut t, P0, eb));
 }
 
 #[test]
@@ -509,6 +514,8 @@ fn oathsworn_vampire_needs_only_some_life_gained_this_turn() {
     supported("Oathsworn Vampire");
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 2);
+    let other = t.graveyard(P0, "Oathsworn Vampire");
+    assert!(!castable(&mut t, P0, other), "no life gained yet");
     // Life gained while it was still in hand, then more life lost.
     cast_new(&mut t, P0, "Healing Salve", &[Entity::Player(P0)]);
     t.resolve_all();

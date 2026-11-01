@@ -507,6 +507,14 @@ fn nether_spirit_only_creature_card_at_trigger_and_resolution() {
     t.answer_yes(P0, true);
     t.resolve_all();
     assert!(is_in(&t, ns, Zone::Graveyard(P0)));
+    // Still alone as it resolves: it returns.
+    let mut t = TestGame::new(2);
+    let ns = t.graveyard(P0, "Nether Spirit");
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.on_battlefield(ns));
 }
 
 #[test]
@@ -681,9 +689,15 @@ fn polukranos_greater_damage_removes_all_counters() {
     let mut t = TestGame::new(2);
     let pk = t.enter(P0, "Polukranos, Unchained");
     assert_eq!(t.counters(pk, counters::PLUS1), 6);
+    // Indomitable Will (+1/+2) keeps it alive at 1/2 once the counters are gone, so the
+    // 2 damage beyond the counters would be lethal if it weren't prevented.
+    attach_new(&mut t, P0, "Indomitable Will", pk);
     let src = t.battlefield(P1, "Grizzly Bears");
     damage(&mut t, src, 8, pk);
-    assert!(t.in_graveyard(P0, "Polukranos, Unchained"));
+    assert!(t.on_battlefield(pk));
+    assert_eq!(t.counters(pk, counters::PLUS1), 0);
+    assert_eq!(t.obj_now(pk).damage, 0);
+    assert_eq!(t.pt(pk), (1, 2));
 }
 
 #[test]

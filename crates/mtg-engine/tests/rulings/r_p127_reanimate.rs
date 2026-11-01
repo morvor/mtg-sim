@@ -203,6 +203,8 @@ fn iridescent_drake_aura_that_cant_attach_stays_in_the_graveyard() {
     let growth = t.graveyard(P0, "Wild Growth");
     t.answer_targets(P0, &[obj(growth)]);
     t.enter(P0, "Iridescent Drake");
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "the trigger targets Wild Growth");
     t.resolve_all();
     assert!(is_in(&t, growth, Zone::Graveyard(P0)));
 }
