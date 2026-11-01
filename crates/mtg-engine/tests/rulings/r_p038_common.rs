@@ -108,3 +108,33 @@ pub fn next_p0_upkeep(t: &mut TestGame) {
 pub fn pool_total(t: &TestGame, p: PlayerId) -> u32 {
     t.g.player(p).mana_pool.total() as u32
 }
+
+/// Adds `n` mana of each color (and colorless) to `p`'s pool.
+pub fn mana_all(t: &mut TestGame, p: PlayerId, n: u32) {
+    use mtg_engine::mana::ManaType;
+    for ty in [
+        ManaType::W,
+        ManaType::U,
+        ManaType::B,
+        ManaType::R,
+        ManaType::G,
+        ManaType::C,
+    ] {
+        t.g.players[p.idx()].mana_pool.add_type(ty, n);
+    }
+}
+
+/// Resolves the top of the stack without putting the triggers it causes on the stack
+/// (they wait until it has finished resolving, CR 603.3).
+pub fn resolve_top_only(t: &mut TestGame) {
+    t.settle();
+    t.g.resolve_top();
+}
+
+/// The tokens `p` controls with the subtype.
+pub fn tokens_of(t: &TestGame, p: PlayerId, subtype: &str) -> Vec<ObjectId> {
+    tokens(t, p)
+        .into_iter()
+        .filter(|o| t.obj_now(*o).chars.has_subtype(subtype))
+        .collect()
+}

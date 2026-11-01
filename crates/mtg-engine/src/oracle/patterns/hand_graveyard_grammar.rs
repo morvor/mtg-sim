@@ -505,6 +505,15 @@ pub fn acted(b: &Builder) -> bool {
     b.named.iter().any(|(n, _)| n == ACTED)
 }
 
+/// Whether an action of this grammar was noted after the cards a dig took
+/// (`dig_grammar`): "Each player mills three cards. Exile up to two creature cards put
+/// into graveyards this way. Create an X/X ... where X is the total power of the cards
+/// exiled this way." (Stitcher Geralf) — "exiled this way" is the later exile.
+pub fn acted_after(b: &Builder, mark: &str) -> bool {
+    let pos = |m: &str| b.named.iter().rposition(|(n, _)| n == m);
+    matches!((pos(ACTED), pos(mark)), (Some(a), Some(d)) if a > d)
+}
+
 // ---------------------------------------------------------------------------
 // Discard
 // ---------------------------------------------------------------------------

@@ -1065,6 +1065,16 @@ pub fn dug_objects(s: &str, b: &Builder) -> Option<(Filter, String)> {
         "the cards exiled this way",
     ] {
         if let Some(r) = s.strip_prefix(p) {
+            // An exile after the dig (recorded by the hand/graveyard grammar) is what
+            // "the cards exiled this way" means, not the cards dug.
+            if p.contains("exiled")
+                && super::hand_graveyard_grammar::acted_after(b, DIG_MARK)
+            {
+                return Some((
+                    Filter::In(Box::new(Sel::Var(super::hand_graveyard_grammar::AFFECTED))),
+                    r.to_string(),
+                ));
+            }
             return Some((Filter::In(Box::new(dug_sel())), r.to_string()));
         }
     }
