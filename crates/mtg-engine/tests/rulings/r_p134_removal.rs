@@ -591,31 +591,39 @@ fn harmonic_convergence_owner_orders_their_enchantments() {
     cr!("401.4");
     ruling!("Harmonic Convergence", "If any player needs to put more than one enchantment on top of their library, they choose the order.");
     supported("Harmonic Convergence");
-    let mut t = TestGame::new(2);
-    let a = t.battlefield(P1, "Glorious Anthem");
-    let b = t.battlefield(P1, "Bad Moon");
-    t.answer(
-        P1,
-        DecisionKind::Order,
-        mtg_engine::decision::Answer::Entities(vec![ob(b), ob(a)]),
-    );
-    cast_modes(&mut t, P0, "Harmonic Convergence", &[], &[]);
-    t.resolve_all();
-    let lib = &t.g.players[1].library;
-    let top2: Vec<ObjectId> = lib[lib.len() - 2..].to_vec();
-    let names: Vec<String> = top2
-        .iter()
-        .map(|c| t.obj(*c).chars.name.to_string())
-        .collect();
-    assert!(
-        names.contains(&"Glorious Anthem".to_string()) && names.contains(&"Bad Moon".to_string()),
-        "{names:?}"
-    );
-    let asked_p1 = t
-        .asked()
-        .iter()
-        .any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::Order { .. }));
-    assert!(asked_p1, "P1 orders their own enchantments");
+    // P1 orders their two enchantments one way, then the other: the order they chose is
+    // the order in their library.
+    let mut tops = Vec::new();
+    for reversed in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Glorious Anthem");
+        t.battlefield(P1, "Bad Moon");
+        let order = if reversed { vec![1, 0] } else { vec![0, 1] };
+        t.answer(
+            P1,
+            DecisionKind::Order,
+            mtg_engine::decision::Answer::Indices(order),
+        );
+        cast_modes(&mut t, P0, "Harmonic Convergence", &[], &[]);
+        t.resolve_all();
+        let lib = &t.g.players[1].library;
+        let names: Vec<String> = lib[lib.len() - 2..]
+            .iter()
+            .map(|c| t.obj(*c).chars.name.to_string())
+            .collect();
+        assert!(
+            names.contains(&"Glorious Anthem".to_string())
+                && names.contains(&"Bad Moon".to_string()),
+            "{names:?}"
+        );
+        let asked_p1 = t
+            .asked()
+            .iter()
+            .any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::Order { .. }));
+        assert!(asked_p1, "P1 orders their own enchantments");
+        tops.push(names[1].clone());
+    }
+    assert_ne!(tops[0], tops[1], "the owner's order is used");
 }
 
 // ---------------------------------------------------------------------------------------

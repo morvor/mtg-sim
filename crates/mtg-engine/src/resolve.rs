@@ -1482,7 +1482,7 @@ impl Game {
             }
             // A choice made with the targets (CR 601.2c) isn't made again.
             Effect::Choose { .. }
-                if crate::kw::choice_with_targets::chosen_with_targets(self, ctx) => {}
+                if crate::kw::choice_with_targets::take_chosen_with_targets(self, ctx) => {}
             Effect::Choose { who, kind } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 crate::choices::make_choice(self, p, kind, ctx);

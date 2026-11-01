@@ -9,7 +9,7 @@
 //! your choice" as `Effect::Choose` followed by the sentence about "the chosen
 //! [quality]". When a target of the body refers to that choice, the choice is made here
 //! (the `choose_with_targets` hook), recorded on the stack object, and the
-//! `Effect::Choose` isn't repeated as it resolves ([`chosen_with_targets`]).
+//! `Effect::Choose` isn't repeated as it resolves ([`take_chosen_with_targets`]).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::*;
@@ -38,11 +38,13 @@ fn leading_choice(body: &Body) -> Option<(&PlayerRef, &ChoiceKind)> {
 }
 
 /// Whether the choice of the spell or ability being resolved (`ctx.source`) was already
-/// made with its targets: its `Effect::Choose` does nothing now.
-pub fn chosen_with_targets(g: &Game, ctx: &Ctx) -> bool {
+/// made with its targets: its leading `Effect::Choose` does nothing now. The record is
+/// consumed, so any later choice of the same instructions is still made as it resolves.
+pub fn take_chosen_with_targets(g: &mut Game, ctx: &Ctx) -> bool {
     ctx.source
-        .and_then(|s| g.obj(s).stack.as_deref())
-        .is_some_and(|si| si.chosen_values.contains_key(&CHOSEN_WITH_TARGETS_KEY))
+        .and_then(|s| g.objects.get_mut(s.0 as usize))
+        .and_then(|o| o.stack.as_mut())
+        .is_some_and(|si| si.chosen_values.remove(&CHOSEN_WITH_TARGETS_KEY).is_some())
 }
 
 struct ChoiceWithTargets;
