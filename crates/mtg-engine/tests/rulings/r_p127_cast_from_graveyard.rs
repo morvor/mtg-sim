@@ -295,11 +295,6 @@ fn me_the_immortal_returns_a_new_object_free_of_counter_durations() {
     t.set_step(P1, Step::End);
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[obj(me)]);
-    t.answer(
-        P0,
-        DecisionKind::Option,
-        mtg_engine::decision::Answer::Index(0),
-    );
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.counters(me, "feather"), 1);

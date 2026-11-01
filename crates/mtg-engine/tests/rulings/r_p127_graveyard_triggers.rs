@@ -225,9 +225,9 @@ fn phoenixes_enter_attacking_a_chosen_opponent_without_attacking() {
             Some(Entity::Player(P2)),
             "{card}"
         );
-        // Fervent Charge didn't trigger for it.
-        let base = if card == "Phoenix Chick" { 2 } else { 2 };
-        assert_eq!(t.pt(c).0, base, "{card}");
+        // Fervent Charge didn't trigger for it (Warcry Phoenix is a 2/2, Phoenix Chick a
+        // 1/1 with a +1/+1 counter).
+        assert_eq!(t.pt(c).0, 2, "{card}");
     }
 }
 
@@ -1040,4 +1040,27 @@ fn forsaken_miner_must_be_in_the_graveyard_as_the_crime_is_committed() {
     t.answer_yes(P0, true);
     t.resolve_all();
     assert!(t.on_battlefield(fm));
+}
+
+#[test]
+fn nethergoyf_counts_card_types_not_cards() {
+    cr!("604.3", "205.2a");
+    ruling!(
+        "Nethergoyf",
+        "Nethergoyf's first ability counts card types, not cards. If the only card in your graveyard is a single artifact creature card, Nethergoyf will be a 2/3."
+    );
+    supported("Nethergoyf");
+    let mut t = TestGame::new(2);
+    let ng = t.battlefield(P0, "Nethergoyf");
+    t.g.players[0].graveyard.clear();
+    t.graveyard(P0, "Ornithopter");
+    t.g.recompute();
+    assert_eq!(t.pt(ng), (2, 3));
+    // Ten artifact cards and ten creature cards: still two card types.
+    for _ in 0..10 {
+        t.graveyard(P0, "Sol Ring");
+        t.graveyard(P0, "Grizzly Bears");
+    }
+    t.g.recompute();
+    assert_eq!(t.pt(ng), (2, 3));
 }
