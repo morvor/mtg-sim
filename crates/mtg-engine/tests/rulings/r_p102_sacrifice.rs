@@ -178,7 +178,11 @@ fn self_sacrificing_reanimators_cant_target_themselves() {
         "Valgavoth's Faithful",
         "Since targets are chosen before costs are paid, Valgavoth's Faithful isn't a legal target for its own ability because it won't be in the graveyard at that time."
     );
-    for name in ["Soulcoil Viper", "Bonecaller Cleric", "Valgavoth's Faithful"] {
+    for name in [
+        "Soulcoil Viper",
+        "Bonecaller Cleric",
+        "Valgavoth's Faithful",
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         let id = t.battlefield(P0, name);
@@ -385,14 +389,10 @@ fn magus_of_the_balance_choices_in_apnap_order_then_simultaneous() {
     // P0 chose first; nobody got priority during the resolution.
     assert_eq!(choosers_since(&t, from).first(), Some(&P0));
     let asked = t.asked();
-    let last_choice = asked
+    let last_choice = asked.iter().rposition(|(_, d)| is_choose(d)).unwrap();
+    assert!(!asked[from..last_choice]
         .iter()
-        .rposition(|(_, d)| is_choose(d))
-        .unwrap();
-    assert!(!asked[from..last_choice].iter().any(|(_, d)| matches!(
-        d,
-        mtg_engine::decision::Decision::Priority { .. }
-    )));
+        .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::Priority { .. })));
     assert_eq!(crate::r_p116_common::lands_controlled(&t, P0), 1);
     assert!(t.on_battlefield(p0_lands[0]));
     // P0 has 1 creature (the Magus was sacrificed as a cost), so P1 keeps Blood Artist

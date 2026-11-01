@@ -358,7 +358,11 @@ fn meandering_towershell_and_raid() {
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
     // The turn it returns attacking (P0 declared no attackers): no raid.
-    t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![Entity::Player(P1)]));
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(vec![Entity::Player(P1)]),
+    );
     t.advance_to(P0, Step::End);
     t.advance_to(P0, Step::PostcombatMain);
     assert!(t.on_battlefield(ts));
@@ -451,9 +455,7 @@ fn platinum_angel_stops_every_way_of_losing() {
     let mut t = TestGame::new(2);
     let angel = t.battlefield(P0, "Platinum Angel");
     t.g.players[0].life = 0;
-    t.g.players[0]
-        .counters
-        .insert(counters::POISON.into(), 10);
+    t.g.players[0].counters.insert(counters::POISON.into(), 10);
     t.g.players[0].library.clear();
     t.g.draw_cards(P0, 1);
     t.settle();

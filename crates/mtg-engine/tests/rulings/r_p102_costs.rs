@@ -66,7 +66,11 @@ fn daze_alternative_cost_plus_increase_keeps_mana_value() {
     let alt = alternatives(&mut t, P0, daze);
     assert_eq!(alt.len(), 1);
     choose(&mut t, P0, &[island]);
-    let spell = t.cast(P0, daze).method(alt[0].clone()).target(Entity::Object(s)).go();
+    let spell = t
+        .cast(P0, daze)
+        .method(alt[0].clone())
+        .target(Entity::Object(s))
+        .go();
     assert_eq!(t.zone(island), Zone::Hand(P0));
     // One mana paid Thalia's {1} (the Island may tap for it before it's returned).
     let paid = t.obj(spell).stack.as_ref().unwrap().cast.mana_spent.len();
@@ -160,7 +164,11 @@ fn commandeer_cant_exile_itself_to_pay_for_itself() {
         .first()
         .map(|m| {
             choose(&mut t, P0, &[other, cmd]);
-            t.cast(P0, cmd).method(m.clone()).target(Entity::Object(s)).try_go().is_ok()
+            t.cast(P0, cmd)
+                .method(m.clone())
+                .target(Entity::Object(s))
+                .try_go()
+                .is_ok()
         })
         .unwrap_or(false);
     assert!(!ok);
@@ -173,35 +181,49 @@ fn commandeer_cant_exile_itself_to_pay_for_itself() {
     assert_eq!(alt.len(), 1);
     choose(&mut t, P0, &[other, other2]);
     t.answer_yes(P0, false);
-    t.cast(P0, cmd).method(alt[0].clone()).target(Entity::Object(s)).go();
+    t.cast(P0, cmd)
+        .method(alt[0].clone())
+        .target(Entity::Object(s))
+        .go();
     assert_eq!(t.zone(other), Zone::Exile);
     assert_eq!(t.zone(other2), Zone::Exile);
 }
 
 #[test]
-fn commandeer_alternative_cost_and_other_costs_are_paid_together() {
-    cr!("118.9", "601.2f");
+fn commandeer_alternative_cost_and_additional_costs_are_paid_together() {
+    cr!("118.9", "118.8", "601.2f", "702.56a");
     ruling!(
         "Commandeer",
         "You may pay the alternative cost rather than the card's mana cost. Any additional costs are paid as normal."
     );
-    // P1's Thalia adds {1} to noncreature spells: P0 exiles two blue cards and pays {1}.
+    // P0's Djinn Illuminatus gives Commandeer replicate {5}{U}{U} (an additional cost, CR
+    // 702.56a). Exiling two blue cards for the alternative cost and replicating once,
+    // P0 pays both: the two cards and the seven mana of the replicate cost.
     let mut t = TestGame::new(2);
-    t.battlefield(P1, "Thalia, Guardian of Thraben");
-    t.lands(P1, "Mountain", 2);
     let s = p1_shock(&mut t);
-    t.battlefield(P0, "Plains");
+    t.battlefield(P0, "Djinn Illuminatus");
+    t.lands(P0, "Island", 8);
     let a = t.hand(P0, "Counterspell");
     let b = t.hand(P0, "Daze");
     let cmd = t.hand(P0, "Commandeer");
     let alt = alternatives(&mut t, P0, cmd);
+    assert_eq!(alt.len(), 1);
     choose(&mut t, P0, &[a, b]);
-    t.answer_yes(P0, false);
-    t.cast(P0, cmd).method(alt[0].clone()).target(Entity::Object(s)).go();
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(1));
+    t.cast(P0, cmd)
+        .method(alt[0].clone())
+        .target(Entity::Object(s))
+        .go();
     assert_eq!(t.zone(a), Zone::Exile);
     assert_eq!(t.zone(b), Zone::Exile);
-    assert_eq!(tapped(&t, P0), 1);
-    t.resolve();
+    assert_eq!(tapped(&t, P0), 7, "the replicate cost {{5}}{{U}}{{U}}");
+    // The replicate trigger copies it once.
+    t.settle();
+    assert_eq!(t.stack_len(), 3);
+    for _ in 0..3 {
+        t.resolve();
+    }
+    assert_eq!(t.g.stack, vec![s]);
     assert_eq!(t.obj_now(s).controller, P0);
 }
 
@@ -370,7 +392,10 @@ fn nevinyrrals_disk_ruling_on_mogg_salvage_page() {
     t.battlefield(P0, "Mountain");
     let ms = t.hand(P0, "Mogg Salvage");
     let alt = alternatives(&mut t, P0, ms);
-    t.cast(P0, ms).method(alt[0].clone()).target(Entity::Object(disk)).go();
+    t.cast(P0, ms)
+        .method(alt[0].clone())
+        .target(Entity::Object(disk))
+        .go();
     t.resolve();
     assert!(in_gy(&t, disk));
     t.resolve_all();
@@ -449,7 +474,11 @@ fn evermind_has_no_mana_cost() {
             "exile" => t.exile(P0, "Evermind"),
             _ => continue,
         };
-        assert_eq!(t.obj(id).chars.colors, ColorSet::single(Color::Blue), "{zone}");
+        assert_eq!(
+            t.obj(id).chars.colors,
+            ColorSet::single(Color::Blue),
+            "{zone}"
+        );
     }
     // An alternate means (Omniscience: "without paying their mana costs") casts it.
     t.battlefield(P0, "Omniscience");
@@ -476,7 +505,10 @@ fn evermind_is_a_blue_card_for_force_of_will() {
     let alt = alternatives(&mut t, P0, fow);
     assert_eq!(alt.len(), 1);
     choose(&mut t, P0, &[ev]);
-    t.cast(P0, fow).method(alt[0].clone()).target(Entity::Object(s)).go();
+    t.cast(P0, fow)
+        .method(alt[0].clone())
+        .target(Entity::Object(s))
+        .go();
     assert_eq!(t.zone(ev), Zone::Exile);
     assert_eq!(t.life(P0), 19, "and 1 life");
     t.resolve_all();
