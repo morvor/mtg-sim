@@ -537,7 +537,8 @@ fn place_in_library(
 }
 
 /// `Filter::Custom`: "with a mana ability" (CR 605.1a: an activated ability that could add
-/// mana, doesn't target, and isn't a loyalty ability).
+/// mana, doesn't target, and isn't a loyalty ability; CR 605.1b: or a triggered mana
+/// ability).
 pub const HAS_MANA_ABILITY: &str = "search: has a mana ability";
 /// `Filter::Custom`: "an Aura card with enchant creature" (CR 702.5).
 pub const ENCHANT_CREATURE: &str = "search: has enchant creature";
@@ -545,11 +546,7 @@ pub const ENCHANT_CREATURE: &str = "search: has enchant creature";
 pub fn custom_filter(g: &Game, name: &str, id: ObjectId, _ctx: &Ctx) -> Option<bool> {
     let c = &g.obj(id).chars;
     match name {
-        HAS_MANA_ABILITY => Some(
-            c.abilities
-                .iter()
-                .any(|a| matches!(&a.kind, AbilityKind::Activated(x) if x.is_mana_ability)),
-        ),
+        HAS_MANA_ABILITY => Some(c.abilities.iter().any(|a| a.counts_as_mana_ability())),
         ENCHANT_CREATURE => Some(
             c.keywords_of(crate::keywords::KeywordKind::Enchant)
                 .any(|k| matches!(&k.filter, Some(Filter::Type(CardType::Creature)))),

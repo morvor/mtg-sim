@@ -73,6 +73,17 @@ impl AbilityDef {
             _ => false,
         }
     }
+    /// Whether this is a mana ability for "with a mana ability" (CR 605.1a-b): an
+    /// activated mana ability, or a triggered one (recognized from its trigger and body,
+    /// since the compiled flag may only be set when it triggers).
+    pub fn counts_as_mana_ability(&self) -> bool {
+        match &self.kind {
+            AbilityKind::Triggered(t) => {
+                t.is_mana_ability || is_triggered_mana_ability(&t.trigger, &t.body)
+            }
+            _ => self.is_mana_ability(),
+        }
+    }
 }
 
 pub type Ability = Arc<AbilityDef>;
