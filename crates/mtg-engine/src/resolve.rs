@@ -119,6 +119,22 @@ impl Game {
                     if matches!(**effect, Effect::Draw { .. }) {
                         ctx.prev_happened = true;
                     }
+                    // "You may exile your hand. If you do, ...": exiling a whole set of
+                    // cards is a choice the player can make even when the set is empty,
+                    // and "if you do" follows that choice (CR 118.12; Herigast ruling).
+                    fn exiles_whole_set(e: &Effect) -> bool {
+                        match e {
+                            Effect::Exile {
+                                what: Sel::All(_) | Sel::Union(_),
+                                ..
+                            } => true,
+                            Effect::Seq(v) => v.first().is_some_and(exiles_whole_set),
+                            _ => false,
+                        }
+                    }
+                    if exiles_whole_set(effect) {
+                        ctx.prev_happened = true;
+                    }
                 }
             }
             Effect::PayOptional {

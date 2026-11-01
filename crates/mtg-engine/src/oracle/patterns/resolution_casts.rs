@@ -32,14 +32,14 @@ fn p_player_casts_it(l: &str, b: &mut Builder) -> Option<Effect> {
     } else {
         (false, r.strip_prefix("casts ")?)
     };
-    let r = [
+    let (noun, r) = [
         "it",
         "that card",
         "the revealed card",
         "the exiled card",
     ]
     .iter()
-    .find_map(|w| r.strip_prefix(w))?;
+    .find_map(|w| r.strip_prefix(w).map(|r| (*w, r)))?;
     let rest = r.strip_prefix(" without paying its mana cost")?;
     match (optional, rest) {
         (true, "") | (false, " if able") => {}
@@ -51,9 +51,22 @@ fn p_player_casts_it(l: &str, b: &mut Builder) -> Option<Effect> {
     if matches!(b.it_player, PlayerRef::You) {
         return None;
     }
+    // "The revealed card": the card an earlier instruction revealed from the top of a
+    // library, even when an instruction in between ("counter that spell") made "it"
+    // something else (Swindler's Scheme).
+    let what = match noun {
+        "the revealed card" => b
+            .named
+            .iter()
+            .rev()
+            .find(|(p, _)| p == "the revealed card" || p == super::dig_grammar::DIG_MARK)
+            .map(|(_, sel)| sel.clone())
+            .unwrap_or_else(|| b.it.clone()),
+        _ => b.it.clone(),
+    };
     Some(Effect::CastCard {
         who: b.it_player.clone(),
-        what: b.it.clone(),
+        what,
         free: true,
         optional,
     })

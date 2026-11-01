@@ -19,8 +19,36 @@ fn unless_that_player_pays(l: &str, b: &mut Builder) -> Option<Effect> {
         Some((m, w)) => (m, Some(w)),
         None => (l, None),
     };
-    let (eff, cost_text) = main.rsplit_once(" unless that player pays ")?;
-    let (who, _) = player_ref("that player", b)?;
+    // "unless they pay": read here only for a target spell's controller (below); other
+    // "they"s are read where "they" names a player mentioned before.
+    let (eff, cost_text, they) = match main.rsplit_once(" unless that player pays ") {
+        Some((e, c)) => (e, c, false),
+        None => {
+            let (e, c) = main.rsplit_once(" unless they pay ")?;
+            if !super::oracle_hardening_referents::is_no_player_referent(&b.it_player) {
+                return None;
+            }
+            (e, c, true)
+        }
+    };
+    // The effect first: "counter target spell an opponent controls unless they pay {1}"
+    // (Hope-Ender Coatl): "they" is the player its target names.
+    let effect = match eff.strip_prefix("you may ") {
+        Some(r) => Effect::May {
+            who: PlayerRef::You,
+            effect: Box::new(parse_clause(r, b)?),
+        },
+        None => parse_clause(eff, b)?,
+    };
+    let named = if they { None } else { player_ref("that player", b) };
+    let who = match named {
+        Some((who, _)) => who,
+        // No player named before: the controller of the target spell the effect names.
+        None if matches!(effect, Effect::CounterSpell { .. }) && matches!(b.it, Sel::Target(_)) => {
+            PlayerRef::ControllerOf(Box::new(b.it.clone()))
+        }
+        None => return None,
+    };
     let (cost, x) = match where_x {
         Some(w) => {
             if cost_text != "{x}" {
@@ -40,13 +68,6 @@ fn unless_that_player_pays(l: &str, b: &mut Builder) -> Option<Effect> {
             (Cost::free().with(CostPart::PayLife(Value::X)), None)
         }
         None => (resolution_cost(cost_text)?, None),
-    };
-    let effect = match eff.strip_prefix("you may ") {
-        Some(r) => Effect::May {
-            who: PlayerRef::You,
-            effect: Box::new(parse_clause(r, b)?),
-        },
-        None => parse_clause(eff, b)?,
     };
     let pay = Effect::PayOptional {
         who,
