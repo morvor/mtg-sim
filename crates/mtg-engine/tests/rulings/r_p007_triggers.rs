@@ -161,7 +161,7 @@ fn spiteful_sliver_trigger_is_noncombat_and_once_per_simultaneous_damage() {
 
 #[test]
 fn mogg_maniac_is_dealt_only_the_damage_assigned_to_it() {
-    cr!("702.19c", "510.1c");
+    cr!("702.19b", "510.1c");
     ruling!(
         "Mogg Maniac",
         "If it blocks a trample creature, it only gets dealt damage equal to what is assigned to it. This means it will likely only get to deal 1 damage to the opponent."

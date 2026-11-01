@@ -43,6 +43,12 @@ fn mythos_of_vadrok_stops_activated_but_not_triggered_abilities() {
         "Activated abilities contain a colon. They’re generally written “[Cost]: [Effect].” Some keyword abilities are activated abilities and will have colons in their reminder text. Triggered abilities (starting with “when,” “whenever,” or “at”) are unaffected by Mythos of Vadrok."
     );
     supported("Mythos of Vadrok");
+    // Control: without Mythos, P1 can activate Vivien's +1 (with no targets) on their turn.
+    let mut t = TestGame::new(2);
+    let walker = pw(&mut t, P1, "Vivien, Arkbow Ranger", 4);
+    t.set_step(P1, Step::PrecombatMain);
+    t.answer_targets(P1, &[]);
+    assert!(t.activate(P1, walker, 0, &[]).is_ok(), "control");
     let mut t = TestGame::new(2);
     let walker = pw(&mut t, P1, "Vivien, Arkbow Ranger", 4);
     let bombers = t.battlefield(P1, "Mogg Bombers");

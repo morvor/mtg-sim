@@ -1,7 +1,7 @@
 //! Rulings batch P007 — prevention and replacement effects around burn: "damage can't be
 //! prevented" (CR 615.12), "players can't gain life" (CR 119.7), Vengeful Archon's
 //! prevention shield with an additional effect (CR 615.7, 616.1), "if it would die,
-//! exile it instead" (CR 614.6), and doubled combat damage with trample (CR 702.19c).
+//! exile it instead" (CR 614.6), and doubled combat damage with trample (CR 702.19b).
 
 use crate::r_p007_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, supported};
@@ -263,7 +263,7 @@ fn exile_instead_of_dying_replacements() {
 
 #[test]
 fn insult_trample_assigns_unmodified_lethal_damage() {
-    cr!("702.19c", "510.1c", "614.1a");
+    cr!("702.19b", "510.1c", "614.1a");
     ruling!(
         "Insult // Injury",
         "If a creature with trample you control would deal combat damage to a blocking creature this turn, you must assign its unmodified damage. For example, a 3/3 creature with trample blocked by a 2/2 creature can only have 1 damage assigned to the defending player. It will then deal 4 damage to the blocking creature and 2 to the defending player."
