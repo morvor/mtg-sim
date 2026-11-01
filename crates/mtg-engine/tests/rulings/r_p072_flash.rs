@@ -263,8 +263,8 @@ fn tidal_barracuda_restriction_and_permission() {
     assert!(!castable(&mut t, P1, bolt));
     assert!(!castable(&mut t, P1, div));
     assert!(can_activate(&mut t, P1, sorcerer));
-    // On P1's turn, P1 may cast Divination as though it had flash, and it doesn't have
-    // flash.
+    // On P1's turn, P1 may cast Grizzly Bears as though it had flash, and it doesn't
+    // have flash.
     t.set_step(P1, Step::BeginningOfCombat);
     let bears = t.hand(P1, "Grizzly Bears");
     t.lands(P1, "Forest", 2);

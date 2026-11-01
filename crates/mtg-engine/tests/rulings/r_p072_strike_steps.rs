@@ -79,6 +79,16 @@ fn losing_double_strike_after_first_strike_damage_means_no_regular_damage() {
     destroy(&mut t, aura);
     finish_combat(&mut t);
     assert_eq!(t.life(P1), 18);
+    // The other way round (CR 702.4d): Youthful Knight (2/1 first strike) given double
+    // strike after it dealt first-strike damage deals damage again.
+    let mut t = TestGame::new(2);
+    let knight = t.battlefield(P0, "Youthful Knight");
+    to_first_strike_damage(&mut t, &[knight]);
+    assert_eq!(t.life(P1), 18);
+    attach_new(&mut t, P0, "Battle Mastery", knight);
+    assert!(has_kw(&t, knight, KeywordKind::DoubleStrike));
+    finish_combat(&mut t);
+    assert_eq!(t.life(P1), 16);
 }
 
 #[test]

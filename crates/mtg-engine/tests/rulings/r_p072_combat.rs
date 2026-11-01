@@ -271,8 +271,12 @@ fn grappling_hook_block_requirement() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     attach_new(&mut t, P0, "Grappling Hook", bears);
     let bystander = t.battlefield(P2, "Hill Giant");
+    let from = t.asked().len();
     t.answer_targets(P0, &[Entity::Object(bystander)]);
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(crate::r_s02_common::target_candidates(&t, P0, from)
+        .iter()
+        .any(|c| c.contains(&Entity::Object(bystander))));
     t.answer_yes(P0, true);
     t.resolve_all();
     t.advance_to(P0, Step::DeclareBlockers);
@@ -366,15 +370,34 @@ fn rowan_fearless_sparkmage_abilities() {
     crate::r_s09_common::to_combat(&mut t, P0);
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
     assert!(!legal_blocks(&mut t, P1, &[(attacker, bears)]));
-    // −2 can't target the same creature twice.
+    // −2 can't target the same creature twice: an answer naming the Giant twice is
+    // invalid and the default (the first `min` = 0 candidates: no targets) is used, so
+    // the Giant isn't dealt 2 damage (nor 1).
+    interp!("default-first-listed-choice");
     let mut t = TestGame::new(2);
     let rowan = t.battlefield(P0, "Rowan, Fearless Sparkmage");
     let giant = t.battlefield(P1, "Hill Giant");
+    // A second candidate, so two targets may be chosen.
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let from = t.asked().len();
     t.answer_targets(P0, &[Entity::Object(giant), Entity::Object(giant)]);
     activate_containing(&mut t, P0, rowan, "1 damage").unwrap();
     t.resolve_all();
-    // The answer naming it twice is rejected (an invalid answer: no targets chosen).
+    assert!(t.asked()[from..].iter().any(
+        |(p, d)| *p == P0 && matches!(d, Decision::ChooseTargets { max: 2, .. })
+    ));
     assert_eq!(t.obj_now(giant).damage, 0);
+    assert_eq!(t.obj_now(wurm).damage, 0);
+    // Control: two different creatures are each dealt 1 damage.
+    let mut t = TestGame::new(2);
+    let rowan = t.battlefield(P0, "Rowan, Fearless Sparkmage");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let other = t.battlefield(P1, "Craw Wurm");
+    t.answer_targets(P0, &[Entity::Object(giant), Entity::Object(other)]);
+    activate_containing(&mut t, P0, rowan, "1 damage").unwrap();
+    t.resolve_all();
+    assert_eq!(t.obj_now(giant).damage, 1);
+    assert_eq!(t.obj_now(other).damage, 1);
     // −9 affects P0's own tapped creature: untapped, with haste.
     let mut t = TestGame::new(2);
     let rowan = t.battlefield(P0, "Rowan, Fearless Sparkmage");

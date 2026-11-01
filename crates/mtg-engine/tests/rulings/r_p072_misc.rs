@@ -381,16 +381,36 @@ fn rally_maneuver_and_abandon_reason_target_different_creatures() {
     assert!(!cands[1].contains(&Entity::Object(bears)));
     t.resolve_all();
     assert_eq!(t.pt(giant), (3, 5));
-    // Abandon Reason: naming the same creature twice gives it +1/+0 once.
+    // Abandon Reason: an answer naming the same creature twice is invalid; the default
+    // (the first `min` = 0 candidates: no targets) is used, so it never gets +2/+0.
+    interp!("default-first-listed-choice");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
+    // A second candidate, so two targets may be chosen.
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let from = t.asked().len();
     t.answer_targets(P0, &[Entity::Object(bears), Entity::Object(bears)]);
     lands_for_cost(&mut t, P0, "Abandon Reason");
     let spell = t.hand(P0, "Abandon Reason");
     t.cast(P0, spell).go();
     t.resolve_all();
-    // The answer naming it twice is rejected (an invalid answer: no targets chosen).
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseTargets { max: 2, .. })));
     assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.pt(wurm), (6, 4));
+    // Control: two different creatures each get +1/+0 and first strike.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_targets(P0, &[Entity::Object(bears), Entity::Object(giant)]);
+    lands_for_cost(&mut t, P0, "Abandon Reason");
+    let spell = t.hand(P0, "Abandon Reason");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (3, 2));
+    assert_eq!(t.pt(giant), (4, 3));
+    assert!(has_kw(&t, giant, KeywordKind::FirstStrike));
 }
 
 #[test]
@@ -524,7 +544,7 @@ fn justiciars_portal_returns_a_new_untapped_object() {
 
 #[test]
 fn helm_of_kaldra_creates_kaldra() {
-    cr!("111.4", "205.4d");
+    cr!("111.4");
     ruling!(
         "Helm of Kaldra",
         "The token is named Kaldra, has the supertype legendary, and has creature type Avatar."
@@ -570,7 +590,7 @@ fn runechanters_pike_counts_continuously() {
 
 #[test]
 fn rowans_talent_one_loyalty_ability_per_turn() {
-    cr!("606.3", "707.10");
+    cr!("606.3");
     ruling!(
         "Rowan's Talent",
         "You can activate one loyalty ability of each planeswalker you control during each of your turns, whether that ability is one it always has or the one it gains because of Rowan's Talent."
