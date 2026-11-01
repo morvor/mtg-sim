@@ -1528,6 +1528,14 @@ impl Game {
         if n == 0 || target.object().is_some_and(|o| !self.is_live(o)) {
             return 0;
         }
+        // A phased-out permanent can't be affected by anything (CR 702.26b): Out of Time
+        // that phased itself out gets no time counters.
+        if target
+            .object()
+            .is_some_and(|o| self.obj(o).zone == Zone::Battlefield && self.obj(o).phased_out)
+        {
+            return 0;
+        }
         // "You can't get poison counters" (with shared poison counters, for the team,
         // CR 810.10c).
         if crate::multiplayer::two_headed::cant_get_counters(self, target, kind) {

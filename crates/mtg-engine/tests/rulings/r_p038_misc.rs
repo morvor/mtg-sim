@@ -377,7 +377,9 @@ fn growing_rites_and_creatures_leaving_or_lent_until_end_of_turn() {
         assert!(t.in_graveyard(P0, "Ball Lightning"));
         results.push(transformed(&t, rites));
     }
-    assert!(results.contains(&true), "{results:?}");
+    // Exactly one of the two orders (Rites' trigger resolving first) transforms it; the
+    // other sacrifices Ball Lightning first.
+    assert_ne!(results[0], results[1], "{results:?}");
 
     // A creature P0 gained control of until end of turn is the fourth creature.
     supported("Threaten");

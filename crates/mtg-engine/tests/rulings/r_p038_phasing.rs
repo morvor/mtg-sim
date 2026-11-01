@@ -93,7 +93,7 @@ fn phasing_out_is_not_leaving_the_battlefield_for_banisher_priest() {
 
 #[test]
 fn out_of_time_as_a_creature_phases_itself_out_forever() {
-    cr!("702.26d", "702.63a", "702.26a");
+    cr!("702.26d", "702.63a", "702.26a", "702.26b");
     ruling!(
         "Out of Time",
         "If Out of Time happens to be a creature when its enter the battlefield trigger resolves, it will phase out along with all other creatures."
@@ -106,9 +106,10 @@ fn out_of_time_as_a_creature_phases_itself_out_forever() {
     assert!(t.obj_now(oot).is(CardType::Creature));
     t.resolve_all();
     assert!(phased_out(&t, oot) && phased_out(&t, a));
-    // (Whether a phased-out permanent can get the time counters is left open: the ruling
-    // only says vanishing never removes the last one.)
+    // It phased out before the counters are put: a phased-out permanent can't be
+    // affected (CR 702.26b), so it gets none.
     let counters = t.counters(oot, "time");
+    assert_eq!(counters, 0);
     for _ in 0..3 {
         next_p0_upkeep(&mut t);
         t.resolve_all();
