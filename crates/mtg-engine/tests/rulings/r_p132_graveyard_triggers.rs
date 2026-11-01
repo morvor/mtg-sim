@@ -541,8 +541,19 @@ fn relentless_dead_both_abilities_trigger_and_each_payment_is_chosen_on_resoluti
     // X is chosen as the ability is put on the stack, before its target (CR 107.3f).
     t.answer(P0, DecisionKind::X, Answer::Number(2));
     t.answer_targets(P0, &[obj(corpse)]);
+    let from = t.asked().len();
     destroy(&mut t, dead);
     assert_eq!(t.stack_len(), 2);
+    let order: Vec<&str> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseX { .. } => Some("x"),
+            mtg_engine::decision::Decision::ChooseTargets { .. } => Some("targets"),
+            mtg_engine::decision::Decision::YesNo { .. } => Some("pay"),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(order, vec!["x", "targets"], "X before targets, no payment yet");
     t.answer_yes(P0, true);
     t.answer_yes(P0, true);
     t.resolve_all();
@@ -641,14 +652,12 @@ fn brood_of_cockroaches_loses_life_and_returns_as_one_mandatory_effect() {
     t.resolve_all();
     assert_eq!(where_is(&t, brood), "graveyard");
     assert_eq!(t.life(P0), 20);
-    let from = t.asked().len();
     t.answer_yes(P0, false);
     t.advance_to(P0, Step::End);
     t.settle();
     t.resolve_all();
     assert_eq!(t.life(P0), 19);
     assert_eq!(where_is(&t, brood), "hand");
-    let _ = from;
 }
 
 #[test]

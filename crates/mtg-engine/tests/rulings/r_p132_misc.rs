@@ -342,7 +342,7 @@ fn blood_clock_payment_options() {
 
 #[test]
 fn displacement_wave_sees_token_mana_values() {
-    cr!("111.10", "707.2", "202.3");
+    cr!("202.3a", "707.2", "202.3");
     ruling!(
         "Displacement Wave",
         "A token has mana value 0 unless it's a copy of something else, in which case it has the mana cost of whatever it's copying."

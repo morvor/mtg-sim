@@ -2453,12 +2453,15 @@ impl Game {
             ctx.x = x;
         }
         // CR 107.3f: an X its targets depend on is chosen now (Relentless Dead).
-        let chosen_x =
-            if t.saved.is_none() && cycled_x.or(cast_self_x).is_none() && etb_cast.is_none() {
-                crate::trigger_x::choose_before_targets(self, &body, &mut ctx)
-            } else {
-                None
-            };
+        let x_known = cycled_x
+            .or(cast_self_x)
+            .or_else(|| etb_cast.as_ref().and_then(|ci| ci.x))
+            .is_some();
+        let chosen_x = if t.saved.is_none() && !x_known {
+            crate::trigger_x::choose_before_targets(self, &body, &mut ctx)
+        } else {
+            None
+        };
         let id = crate::stack::create_stack_ability(
             self,
             t.source,
@@ -2488,15 +2491,15 @@ impl Game {
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = Some(x);
             }
-        } else if let Some(x) = chosen_x {
-            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-                si.x = Some(x);
-            }
         } else if let Some(ci) = etb_cast {
             // CR 107.3m: the permanent's enters ability uses its spell's value of X.
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-                si.x = ci.x;
+                si.x = ci.x.or(chosen_x);
                 si.cast = ci;
+            }
+        } else if let Some(x) = chosen_x {
+            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                si.x = Some(x);
             }
         }
         self.emit(Event::AbilityTriggeredOnStack {

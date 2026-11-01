@@ -241,14 +241,17 @@ fn cost_reductions_apply_after_increases_and_dont_change_mana_value() {
         "Tale of Momo",
         "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions (such as that of Tale of Momo's first ability)."
     );
-    // Thalia: noncreature spells cost {1} more. {3}{B} + {1} - {3} = {1}{B};
-    // {2}{W} + {1} - {2} = {1}{W}.
+    // Thalia: noncreature spells cost {1} more; Goblin Electromancer: instants and
+    // sorceries cost {1} less. Increase first: {3}{B} + {1} - {3} - {1} = {B} and
+    // {2}{W} + {1} - {2} - {1} = {W} (one land). Reductions first would leave the
+    // increase unreduced: {1}{B} / {1}{W} (two lands).
     for (name, land, mv) in [
         ("Sanguine Indulgence", "Swamp", 4),
         ("Tale of Momo", "Plains", 3),
     ] {
         let mut t = TestGame::new(2);
         t.battlefield(P1, "Thalia, Guardian of Thraben");
+        t.battlefield(P0, "Goblin Electromancer");
         if name == "Sanguine Indulgence" {
             gain(&mut t, P0, 3);
         } else {
@@ -259,7 +262,7 @@ fn cost_reductions_apply_after_increases_and_dont_change_mana_value() {
         t.lands(P0, "Wastes", 1);
         let c = t.hand(P0, name);
         let spell = t.cast(P0, c).go();
-        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2, "{name}");
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 1, "{name}");
         assert_eq!(t.g.mana_value_of(spell), mv, "{name}");
     }
 }
