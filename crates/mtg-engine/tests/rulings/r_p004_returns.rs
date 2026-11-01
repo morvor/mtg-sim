@@ -5,7 +5,6 @@
 
 use crate::r_p004_common::*;
 use crate::r_p079_common::concede;
-use crate::r_p023_common::wolf_token;
 use mtg_engine::decision::Decision;
 use mtg_engine::events::MoveCause;
 use mtg_engine::object::Zone;
@@ -412,15 +411,30 @@ fn ixalans_binding_names_the_card_as_it_exists_in_exile() {
     t.set_step(P1, Step::PrecombatMain);
     let f2 = t.hand(P1, "Forest");
     t.play_land(P1, f2).expect("couldn't play a Forest");
-    // A token was exiled: nothing is named, every spell can be cast.
+    // A token named Grizzly Bears was exiled: there's no exiled card, so nothing is
+    // named and Grizzly Bears can still be cast.
     let mut t = TestGame::new(2);
-    let wolf = wolf_token(&mut t, P1);
-    banish_trigger(&mut t, "Ixalan's Binding", wolf);
+    let spec = mtg_engine::ability::TokenSpec {
+        name: "Grizzly Bears".into(),
+        colors: types::ColorSet::single(types::Color::Green),
+        supertypes: vec![],
+        card_types: vec![types::CardType::Creature],
+        subtypes: vec!["Bear".into()],
+        power: Some(2),
+        toughness: Some(2),
+        abilities: vec![],
+        scryfall_name: None,
+        pt_values: None,
+    };
+    let tok = crate::r_p023_common::token_of(&mut t, P1, spec);
+    assert_eq!(t.obj_now(tok).chars.name, "Grizzly Bears");
+    banish_trigger(&mut t, "Ixalan's Binding", tok);
     t.resolve_all();
+    assert!(!t.on_battlefield(tok), "the token wasn't exiled");
     t.set_step(P1, Step::PrecombatMain);
     mana(&mut t, P1);
     let gb = t.hand(P1, "Grizzly Bears");
-    assert!(t.cast(P1, gb).try_go().is_ok());
+    assert!(t.cast(P1, gb).try_go().is_ok(), "the token's name was named");
 }
 
 #[test]
