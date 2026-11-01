@@ -456,3 +456,28 @@ fn plagon_changes_only_the_combat_damage_assigned() {
     assert_eq!(t.pt(plagon).0, 0);
     let _ = create_token;
 }
+
+#[test]
+fn xenagos_puts_bestow_cards_onto_the_battlefield_as_creatures() {
+    cr!("702.103e", "702.103b");
+    ruling!(
+        "Xenagos, the Reveler",
+        "Creature cards with bestow put onto the battlefield with the third ability will be creatures on the battlefield, not Auras."
+    );
+    supported("Xenagos, the Reveler");
+    supported("Boon Satyr");
+    let mut t = TestGame::new(2);
+    let x = t.battlefield(P0, "Xenagos, the Reveler");
+    t.g.add_counters(obj(x), counters::LOYALTY, 4, None);
+    t.battlefield(P0, "Grizzly Bears");
+    let satyr = stack_library(&mut t, P0, &["Boon Satyr"])[0];
+    t.answer_choose_moved(P0, &[obj(satyr)]);
+    t.activate(P0, x, 2, &[]).unwrap();
+    t.resolve_all();
+    let s = t.named_on_battlefield("Boon Satyr");
+    assert_eq!(s.len(), 1);
+    let o = t.obj_now(s[0]);
+    assert!(o.is(CardType::Creature));
+    assert!(!o.chars.has_subtype("Aura"));
+    assert_eq!(o.attached_to, None);
+}
