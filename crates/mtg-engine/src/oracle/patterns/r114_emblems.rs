@@ -39,12 +39,18 @@ fn quoted_abilities(s: &str, b: &Builder) -> Option<Vec<Ability>> {
             return None;
         }
         let inner = if nested {
-            inner.replace(" '", " \"").trim_end_matches('\'').to_string() + "\""
+            inner
+                .replace(" '", " \"")
+                .trim_end_matches('\'')
+                .to_string()
+                + "\""
         } else {
             inner.to_string()
         };
         let parsed = if nested {
-            super::statics::with_quotes_naming_no_card(|| crate::oracle::parse_ability(&inner, &ctx))
+            super::statics::with_quotes_naming_no_card(|| {
+                crate::oracle::parse_ability(&inner, &ctx)
+            })
         } else {
             crate::oracle::parse_ability(&inner, &ctx)
         };
@@ -71,7 +77,12 @@ fn nested_quote_names_card(ctx: &CompileContext) -> bool {
     let raw = crate::oracle::raw_text();
     raw.split(" '").skip(1).any(|seg| {
         let q = seg.split('\'').next().unwrap_or("");
-        q.contains(ctx.card_name) || ctx.card_name.split([' ', ',']).next().is_some_and(|w| !w.is_empty() && q.contains(w))
+        q.contains(ctx.card_name)
+            || ctx
+                .card_name
+                .split([' ', ','])
+                .next()
+                .is_some_and(|w| !w.is_empty() && q.contains(w))
     })
 }
 
@@ -82,6 +93,14 @@ fn gets_an_emblem(l: &str, b: &mut Builder) -> Option<Effect> {
     let who = who
         .strip_suffix(" gets")
         .or_else(|| who.strip_suffix(" get"))?;
+    // "Each player dealt damage this way gets an emblem" is compiled as "that player gets
+    // an emblem" with "that player" bound to the damaged players (Chandra, Roaring Flame).
+    if who == "that player" {
+        if let Some((r, _)) = crate::oracle::effects::player_ref(who, b) {
+            let abilities = quoted_abilities(rest, b)?;
+            return Some(Effect::CreateEmblem { who: r, abilities });
+        }
+    }
     let who_sp = format!("{who} ");
     let (r, spec, tail) = parse_player(&who_sp)?;
     if !tail.trim().is_empty() {
