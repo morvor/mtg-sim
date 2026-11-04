@@ -149,7 +149,7 @@ The user resumed normal work, at the normal pace.
 - **rulings-2:** P096, P005. **rulings-1:** P091, P128. **mutation:** P198, P034.
 - **Next in the rulings pool:** P124 P012 P001 P008 P025 P199 P140 P027 P003 P195 ...
 
-**Still open with the user:** the verified-count refresh.
+**Verified-count refresh:** approved by the user on Nov 4 evening. The compile worker runs it (`verified-refresh-nov4`) after roundtrip-pairs-5, then does rulings P001 and P008.
 
 ### Priorities (user, Nov 4 evening)
 
