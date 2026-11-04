@@ -75,16 +75,34 @@ impl Renderer<'_> {
         let StaticEffect::CostModifier(CostModifier {
             applies_to: CostTarget::ActivatedAbilities(scope),
             change: CostChange::ReduceGeneric(v),
-            ..
+            who,
         }) = &s.effect
         else {
             return None;
         };
-        if s.condition.is_some()
-            || !matches!(scope.sources, Filter::Source)
+        if !matches!(scope.sources, Filter::Source)
+            || !matches!(who, PlayerRel::Any)
             || !matches!(scope.class, AbilityClass::Keyword(c) if c == k.kind)
-            || target_slots(&format!("{v:?}")).is_empty()
+            || scope.nonmana
+            || scope.targeting.is_some()
+            || scope.first_each_turn
         {
+            return None;
+        }
+        // "Equip {3}. This ability costs {1} less to activate for each other Equipment you
+        // control.", "... if you have one or fewer cards in hand": the change to the cost of
+        // this object's abilities of that keyword, which is the one printed (the static
+        // ability's condition is checked as the cost is determined either way, CR 601.2f).
+        if target_slots(&format!("{v:?}")).is_empty() {
+            let own = OwnCostChange {
+                change: CostChange::ReduceGeneric(v.clone()),
+                condition: s.condition.clone(),
+            };
+            let line = self.ability(a);
+            let change = self.own_cost_change(&own);
+            return Some(format!("{line}. {}", change.trim_end_matches('.')));
+        }
+        if s.condition.is_some() {
             return None;
         }
         let saved = self.targeted_noun.replace("the creature it targets");

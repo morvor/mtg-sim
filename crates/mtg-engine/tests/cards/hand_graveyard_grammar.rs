@@ -924,7 +924,8 @@ fn suffer_the_past_targets_cards_in_the_target_players_graveyard() {
 
 #[test]
 fn drafnas_restoration_puts_artifact_cards_on_top() {
-    cr!("401.4");
+    cr!("401.4", "101.1");
+    interp!("library-in-any-order-arranged-by-instructing-player");
     let mut t = TestGame::new(2);
     t.lands(P0, "Island", 1);
     let a = t.graveyard(P1, "Ornithopter");
@@ -938,11 +939,16 @@ fn drafnas_restoration_puts_artifact_cards_on_top() {
     let top2 = &lib[lib.len() - 2..];
     assert!(top2.contains(&t.g.current(a)) && top2.contains(&t.g.current(a2)));
     assert_eq!(t.zone(b), Zone::Graveyard(P1));
-    // The cards' owner arranged them (CR 401.4).
+    // "In any order": its caster arranged them, not their owner (decided by the user on
+    // Nov 4, following Misinformation's ruling for the same wording; CR 101.1).
     assert!(t
         .asked()
         .iter()
-        .any(|(p, d)| *p == P1 && matches!(d, Decision::Order { items, .. } if items.len() == 2)));
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { items, .. } if items.len() == 2)));
+    assert!(!t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::Order { .. })));
 }
 
 #[test]

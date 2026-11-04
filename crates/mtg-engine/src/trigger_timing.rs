@@ -75,6 +75,7 @@ pub fn is_sequencing(e: &Effect) -> bool {
             | Effect::ForEach { .. }
             | Effect::ForEachPlayer { .. }
             | Effect::InTurnOrder { .. }
+            | Effect::ChooseForEachPlayer { .. }
             | Effect::AsPlayer { .. }
             | Effect::Repeat { .. }
             | Effect::RepeatProcess { .. }

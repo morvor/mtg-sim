@@ -67,6 +67,42 @@ fn join_same_subject(a: &str, b: &str) -> Option<String> {
             ));
         }
     }
+    // "~ costs {1} less to cast if you control a Spirit. It also costs {1} less to cast if
+    // you control an enchantment." (two reductions of the spell's own cost, each with its
+    // own condition, CR 601.2f).
+    if let (Some(x), Some(y)) = (a.strip_prefix("~ costs "), b.strip_prefix("~ costs ")) {
+        if x.contains(" less to cast if ") && y.contains(" less to cast if ") {
+            return Some(format!("{a}. It also costs {y}."));
+        }
+    }
+    // "During combat, players can't cast spells or activate abilities that aren't mana
+    // abilities." (two restrictions with the same duration).
+    let combat = " during combat";
+    if let (Some(x), Some(y)) = (a.strip_suffix(combat), b.strip_suffix(combat)) {
+        if x == "Players can't activate abilities that aren't mana abilities"
+            // (Exactly these two: a restriction with any other quality isn't joined.)
+            && y == "{alt:players can't cast spells|spells can't be cast}"
+        {
+            return Some(
+                "During combat, players can't cast spells or activate abilities that aren't mana abilities."
+                    .into(),
+            );
+        }
+    }
+    // "You and Humans you control have hexproof.", "You, planeswalkers you control, and
+    // other creatures you control have hexproof." (a player's ability and the objects',
+    // the same keyword).
+    if let Some(kw) = a.strip_prefix("You have ") {
+        if let Some(s) = b.strip_suffix(&format!(" have {kw}")) {
+            if !s.contains('{') && !s.starts_with("You") {
+                let s = lower_start(s);
+                return Some(match s.split_once(" and/or ") {
+                    Some((x, y)) => format!("You, {x}, and {y} have {kw}."),
+                    None => format!("You and {s} have {kw}."),
+                });
+            }
+        }
+    }
     let look = "You may look at ";
     if let (Some(x), Some(y)) = (
         a.strip_prefix(look)
@@ -108,4 +144,13 @@ fn join_same_subject(a: &str, b: &str) -> Option<String> {
         ));
     }
     None
+}
+
+/// `s` with its first letter in lower case.
+fn lower_start(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_lowercase().chain(c).collect(),
+        None => String::new(),
+    }
 }

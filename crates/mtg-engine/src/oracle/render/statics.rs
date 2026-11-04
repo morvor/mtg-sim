@@ -177,7 +177,12 @@ impl Renderer<'_> {
             let when = match c.as_ref() {
                 Condition::YourTurn => "during your turn".to_string(),
                 Condition::Phase(PhaseCond::Combat) => "during combat".to_string(),
-                other => format!("if {}", self.condition(other)),
+                // "You can't cast ~ unless there are seven or more cards in your graveyard."
+                // (the player who would cast it, CR 601.3).
+                other => {
+                    let c = self.condition(other);
+                    return format!("{{alt:Cast {m} only if {c}|You can't cast {m} unless {c}}}.");
+                }
             };
             return format!("Cast {m} only {when}.");
         }
@@ -1484,6 +1489,14 @@ impl Renderer<'_> {
             };
             parts.push(format!("{t} each turn rather than only once"));
         }
+        // "You may activate the loyalty abilities of planeswalkers you control twice each
+        // turn": those of each of them.
+        let what = match what.strip_prefix("loyalty abilities ") {
+            Some(rest) if ap.loyalty_per_turn.is_some() => {
+                format!("{{opt:the}} loyalty abilities {rest}")
+            }
+            _ => what,
+        };
         if ap.as_though_haste {
             parts.push("as though those creatures had haste".to_string());
         }
@@ -2213,6 +2226,13 @@ impl Renderer<'_> {
                 let a = subj(self, attackers);
                 // "~ can't attack unless defending player controls an Island".
                 if let (PlayerFilter::Not(inner), true) = (defender, *planeswalkers) {
+                    // "~ can't attack unless you control more creatures than defending
+                    // player."
+                    if let Some(n) = self.fewer_than_yours(inner) {
+                        return format!(
+                            "{a} can't attack unless you control more {n} than defending player"
+                        );
+                    }
                     let c = self.condition(&Condition::PlayerMatches(
                         PlayerRef::DefendingPlayer,
                         (**inner).clone(),
@@ -2371,6 +2391,15 @@ impl Renderer<'_> {
             },
             Restriction::CanBlockOnly { blocker, attackers } => {
                 let b = subj(self, blocker);
+                // "~ can't block unless you control more creatures than attacking player":
+                // the attacking creatures are all the attacking player's (CR 506.2).
+                if let Filter::ControllerMatches(p) = attackers {
+                    if let Some(n) = self.fewer_than_yours(p) {
+                        return format!(
+                            "{b} can't block unless you control more {n} than attacking player"
+                        );
+                    }
+                }
                 let a = self.noun(attackers, Num::Many);
                 format!("{b} can block only {a}")
             }
@@ -3595,13 +3624,34 @@ impl Renderer<'_> {
                     kind,
                 },
                 A::Prevent,
-            ) if !matches!(f, Filter::Source) => {
+            ) => {
                 let k = match kind {
                     Some(k) => plural(&counter_name(k)),
                     None => "counters".into(),
                 };
+                // "~ can't have counters put on it." (Tatterkite)
+                if matches!(f, Filter::Source) {
+                    let m = self.me();
+                    return format!("{m} can't have {k} put on it");
+                }
                 let subj = self.affected_subject(f);
                 format!("{subj} can't have {k} put on them")
+            }
+            // "If you would get one or more {E}, you get that many plus one {E} instead."
+            // (energy counters a player gets, CR 107.14, 122.1)
+            (
+                E::PutCounters {
+                    on_objects: None,
+                    on_players: Some(PlayerFilter::You),
+                    kind: Some(k),
+                },
+                action @ (A::Multiply(2) | A::Add(Value::Const(1))),
+            ) if k == "energy" => {
+                let then = match action {
+                    A::Multiply(2) => "twice that many {E}",
+                    _ => "that many plus one {E}",
+                };
+                format!("if you would get one or more {{E}}, you get {then} instead")
             }
             (
                 E::PutCounters {
@@ -3743,6 +3793,15 @@ impl Renderer<'_> {
                         with_article(&d)
                     );
                 }
+                // "If you would create one or more Treasure tokens, instead create those
+                // tokens plus an additional Treasure token." (Xorn)
+                if let (PlayerFilter::You, Filter::Subtype(sub), A::Add(Value::Const(1))) =
+                    (who, tokens, action)
+                {
+                    return format!(
+                        "if you would create one or more {sub} tokens, instead create those tokens plus an additional {sub} token"
+                    );
+                }
                 let then = match action {
                     A::Multiply(2) => {
                         "twice that many of those tokens are created instead".to_string()
@@ -3876,6 +3935,24 @@ impl Renderer<'_> {
             // object itself.
             Filter::In(s) if matches!(s.as_ref(), Sel::TriggerSpell) && self.trigger_is_self => {
                 "~it".into()
+            }
+            // "Creatures and nonbasic lands your opponents control enter tapped.": the
+            // controller said once for both kinds.
+            Filter::And(v) if matches!(v.as_slice(), [Filter::Or(alts), Filter::ControlledBy(_)] if alts.len() == 2) =>
+            {
+                let old = self.noun_det(f, Det::Plural);
+                let (Filter::Or(alts), ctl) = (&v[0], &v[1]) else {
+                    return old;
+                };
+                let a = self.noun(&alts[0], Num::Many);
+                let b = self.noun(&alts[1], Num::Many);
+                let full_b = self.noun(&Filter::And(vec![alts[1].clone(), ctl.clone()]), Num::Many);
+                match full_b.strip_prefix(&b) {
+                    Some(c) if !c.is_empty() && !format!("{a}{b}{c}").contains('{') => {
+                        format!("{{alt:{old}|{a} and {b}{c}}}")
+                    }
+                    _ => old,
+                }
             }
             other => self.noun_det(other, Det::Plural),
         }

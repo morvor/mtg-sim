@@ -1258,7 +1258,11 @@ impl Game {
                 .into_iter()
                 .flatten()
                 .filter(|o| match self.obj(*o).zone {
-                    Zone::Library(_) => false,
+                    // A card revealed in a library is known (CR 701.20a: it stays revealed
+                    // while the triggered ability that triggered on its reveal waits or
+                    // is on the stack; "Whenever you reveal a card ... this way, you may
+                    // exile it").
+                    Zone::Library(_) => crate::reveal::is_revealed(self, *o),
                     Zone::Hand(p) => p == ctx.controller,
                     _ => true,
                 })

@@ -789,6 +789,8 @@ fn destination_of<'a>(
         return None;
     }
     if let Some(r2) = rest.strip_prefix(" in any order") {
+        // The player told to put them there arranges them, whoever owns them.
+        to.arranged_by = Some(subject.clone());
         rest = r2;
     } else if let Some(r2) = rest.strip_prefix(" in a random order") {
         to.position = LibraryPosition::BottomRandom;

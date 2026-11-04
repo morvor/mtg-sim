@@ -77,17 +77,17 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/cards/cyclopean_tomb.rs` (`custom_effect`, `REMOVE`).
 - Tests: `tests/cards/m_cyclopean_tomb.rs` (`after_it_dies_each_upkeep_one_of_its_lands_loses_its_mire_counters`, `all_mire_counters_go_whatever_their_source_and_the_land_then_no_longer_qualifies`).
 
-## library-arranged-by-owner-not-instructing-player: Cards an effect puts into another player's library "in any order" are arranged by their owner
-- Kind: deviation
-- Status: provisional
+## library-in-any-order-arranged-by-instructing-player: Cards an effect puts into another player's library "in any order" are arranged by the player the text instructs
+- Kind: interpretation
+- Status: decided
 - Rules: 401.4 "If an effect puts two or more cards in a specific position in a library at the same time, the owner of those cards may arrange them in any order. That library’s owner doesn’t reveal the order in which the cards go into the library." / 101.1 "Whenever a card’s text directly contradicts these rules, the card takes precedence. ..." / Misinformation ruling: "You don’t need to show the opponent what order you put the cards on top of their library." / Sealed Fate ruling: "The controller of this spell decides the order of the cards on the library."
-- Question: When a spell's controller puts cards owned by another player into that player's library "in any order" (Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories), who arranges them: the cards' owner (401.4) or the player the text instructs to put them (the card's "in any order", read as overriding 401.4, as the Misinformation and Sealed Fate rulings imply)?
-- Decision: For cards moved from another zone (graveyard, hand) into a library, the owner arranges them (`zones::order_simultaneous`), whatever the text says. Cards rearranged within a library by a dig ("look at the top N cards of target opponent's library ... put the rest back in any order") are arranged by the player the text instructs, as Sealed Fate's ruling says (`dig_steps::rearrange`).
-- Alternatives: Let the effect's controller arrange whenever the text says "in any order": matches the rulings, but the AST doesn't record "in any order" (the parser accepts and drops it, and the move pipeline knows only the moving player), so it needs a field on `Destination` and on the move events; and texts without "in any order" (Hallowed Burial) must keep 401.4's owner.
-- Why: 401.4 is explicit and the AST can't yet tell the texts apart; the order of cards from a graveyard affects only which known card is drawn first. To fix: record "in any order" on `Destination` and carry the arranger through `MoveEv` to `order_simultaneous`.
+- Question: When a spell's controller puts cards owned by another player into that player's library "in any order" (Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories), who arranges them: the cards' owner (401.4) or the player the text instructs to put them?
+- Decision: Decided by the user, Nov 4. The player the text instructs arranges them: "in any order" is recorded on the destination (`Destination::arranged_by`, the instructed player) and carried by each move (`EtbInfo::arranged_by`) to `zones::order_simultaneous`, which asks that player when every card put into that position at the same time was put there by such an instruction. Without "in any order" (Hallowed Burial), or for cards a replacement effect sends there, the owner arranges them (401.4). Cards rearranged within a library by a dig ("look at the top N cards of target opponent's library ... put the rest back in any order") are arranged by the player the text instructs too (`dig_steps::rearrange`).
+- Alternatives: The owner arranges them whatever the text says (401.4 alone; the engine's earlier provisional reading).
+- Why: The text instructs its controller to put the cards "in any order", which overrides 401.4 (101.1), as Misinformation's ruling says; the other cards with that wording have no ruling of their own and are read the same way.
 - Affects: Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories (about 4 cards).
-- Code: `crates/mtg-engine/src/zones.rs` (`order_simultaneous`); `crates/mtg-engine/src/oracle/patterns/hand_graveyard_grammar.rs` (" in any order").
-- Tests: `tests/rulings/r_p147_restock.rs` (`misinformation_the_cards_owner_arranges_them`).
+- Code: `crates/mtg-engine/src/zones.rs` (`order_simultaneous`); `crates/mtg-engine/src/destinations.rs` (`prepare_destination`); `crates/mtg-engine/src/oracle/patterns/hand_graveyard_grammar.rs` (`destination_of`, " in any order"); `crates/mtg-engine/src/oracle/patterns/control_exile_library.rs` (`p_put_into_library`).
+- Tests: `tests/rulings/r_p147_restock.rs` (`misinformation_you_arrange_the_cards_on_their_library`, `drafnas_restoration_its_caster_arranges_the_cards_on_their_library`, `agonizing_memories_its_caster_arranges_the_cards_on_their_library`, `hallowed_burial_without_in_any_order_the_owner_arranges`); `tests/cards/m_lodestone_bauble.rs` (`its_controller_arranges_the_cards_on_the_players_library`).
 
 ## attach-as-it-transforms-to-a-legal-player: Curse of Leeches is attached as it transforms to a player its controller chooses among the players it can enchant
 - Kind: interpretation
