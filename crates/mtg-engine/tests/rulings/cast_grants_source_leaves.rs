@@ -112,14 +112,15 @@ fn zinnia_sacrificed_while_a_creature_is_cast_with_offspring_still_makes_the_tok
 fn fling_with_conspire(sacrifice_wort: bool) -> i32 {
     let mut t = TestGame::new(2);
     let wort = t.battlefield(P0, "Wort, the Raidmother");
-    let goblins: Vec<ObjectId> = (0..3)
-        .map(|_| t.battlefield(P0, "Raging Goblin"))
-        .collect();
+    let goblins: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Raging Goblin")).collect();
     t.lands(P0, "Mountain", 2);
     let fling = t.hand(P0, "Fling");
     let sac = if sacrifice_wort { wort } else { goblins[2] };
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
-    t.answer_choose(P0, &[Entity::Object(goblins[0]), Entity::Object(goblins[1])]);
+    t.answer_choose(
+        P0,
+        &[Entity::Object(goblins[0]), Entity::Object(goblins[1])],
+    );
     t.answer_choose(P0, &[Entity::Object(sac)]);
     t.cast(P0, fling).target(P1).go();
     assert_eq!(t.zone(t.g.current(sac)), Zone::Graveyard(P0));
@@ -184,8 +185,15 @@ fn caetus_sacrificed_for_mana_while_a_noncreature_spell_is_cast_takes_convoke_aw
     );
     for wastes in [false, true] {
         let mut t = TestGame::new(2);
-        let caetus = enter_transformed(&mut t, P0, "Invasion of Segovia // Caetus, Sea Tyrant of Segovia");
-        assert_eq!(t.obj_now(caetus).chars.name, "Caetus, Sea Tyrant of Segovia");
+        let caetus = enter_transformed(
+            &mut t,
+            P0,
+            "Invasion of Segovia // Caetus, Sea Tyrant of Segovia",
+        );
+        assert_eq!(
+            t.obj_now(caetus).chars.name,
+            "Caetus, Sea Tyrant of Segovia"
+        );
         let goblin = t.battlefield(P0, "Raging Goblin");
         // Searing Spear {1}{R}: the red Goblin convokes {R}.
         let spear = t.hand(P0, "Searing Spear");

@@ -375,6 +375,12 @@ fn a_copy_of_a_siege_thats_not_a_transforming_double_faced_card_stays_in_exile()
         "Invasion of Segovia // Caetus, Sea Tyrant of Segovia",
         "If a token or a card that isn't represented by a transforming double-faced card becomes a copy of a Siege, it can't be cast as its triggered ability resolves. It will remain in exile."
     );
+    // (The ruling's "a card that isn't represented by a transforming double-faced card"
+    // predates the Marvel's Spider-Man CR update effective 2025-09-19: a modal
+    // double-faced card that becomes a copy of a Siege is now cast transformed too, CR
+    // 712.11a, 712.11d — see
+    // `a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed`. The
+    // cards tested here are still right.)
     // A single-faced card (Grizzly Bears) and a meld card (Graf Rats) that became copies of
     // Invasion of Theros and got a defense counter: defeated, they're exiled and stay
     // there.
@@ -440,6 +446,10 @@ fn a_transforming_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transf
         "Invasion of Segovia // Caetus, Sea Tyrant of Segovia",
         "If a permanent that is represented by a transforming double-faced card becomes a copy of a Siege, it will be exiled as that Siege's triggered ability resolves, then it will be cast transformed."
     );
+    // (The ruling's next sentence, "Note that this applies only to transforming
+    // double-faced cards, not to modal double-faced cards that can normally be played
+    // using either face.", predates the Marvel's Spider-Man CR update effective
+    // 2025-09-19: see the next test.)
     // P0's Ashling, Rekindled becomes a copy of Invasion of Theros, with a defense
     // counter. Defeated, it's exiled and cast transformed: as Ashling, Rimebound (its own
     // back face), not as Ephara.
@@ -457,6 +467,36 @@ fn a_transforming_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transf
     assert_eq!(rimebound.len(), 1);
     assert_eq!(t.obj(rimebound[0]).face, FaceState::Back);
     assert!(t.obj(rimebound[0])
+        .cast
+        .as_ref()
+        .is_some_and(|c| c.was_cast));
+    assert!(t.named_on_battlefield("Ephara, Ever-Sheltering").is_empty());
+}
+
+#[test]
+fn a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed() {
+    // CR 712.11a has applied to any double-faced card since the Marvel's Spider-Man CR
+    // update effective 2025-09-19 (before, only to transforming double-faced cards, as the
+    // 2023-04-14 Siege rulings say); the copy's Siege ability on its front face lets it be
+    // cast transformed (CR 712.11d).
+    cr!("310.12b", "712.11a", "712.11d", "707.2");
+    // P0's Eddie Brock (a modal double-faced card) becomes a copy of Invasion of Theros,
+    // with a defense counter. Defeated, it's exiled and cast transformed: as Venom, Lethal
+    // Protector (its own back face), not as Ephara.
+    let mut t = TestGame::new(2);
+    let siege = enter_siege(&mut t, P1, P0, THEROS);
+    let eddie = t.battlefield(P0, "Eddie Brock // Venom, Lethal Protector");
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    become_siege_with_defense(&mut t, eddie, siege, 1);
+    assert_eq!(name_of(&t, eddie), "Invasion of Theros");
+    let source = t.battlefield(P1, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    damage(&mut t, source, 1, eddie);
+    t.resolve_all();
+    let venom = t.named_on_battlefield("Venom, Lethal Protector");
+    assert_eq!(venom.len(), 1);
+    assert_eq!(t.obj(venom[0]).face, FaceState::Back);
+    assert!(t.obj(venom[0])
         .cast
         .as_ref()
         .is_some_and(|c| c.was_cast));
