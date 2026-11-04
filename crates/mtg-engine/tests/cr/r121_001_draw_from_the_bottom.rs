@@ -1,7 +1,7 @@
 //! CR 121.1, 121.2: a player who draws "from the bottom of [their] library rather than the
 //! top" (River Song's rule, the `draws_from_bottom` hook): each draw takes the bottom card
-//! and is still a draw. Tested with a custom permanent carrying River Song's marker (the
-//! card itself: `tests/cards/m_river_song.rs`).
+//! and is still a draw. Tested with a custom permanent carrying River Song's marker until
+//! the card itself is supported.
 
 use super::r600_common::CB;
 use mtg_engine::object::Zone;

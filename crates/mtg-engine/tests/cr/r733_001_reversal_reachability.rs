@@ -568,8 +568,6 @@ fn custom_rule(name: &str) -> CustomRule {
         "reveal the first card you draw on each of your turns",
         "you may reveal the first card you draw each turn as you draw it",
         "card:Booby Trap:the chosen player reveals each card they draw",
-        // River Song: which card a draw takes (`draws_from_bottom`); still a draw.
-        "card:River Song:you draw from the bottom of your library",
         "you draw a card during each opponent's draw step",
         "control opponents while searching",
         "spells and abilities your opponents control can't cause their controller to search their library",
