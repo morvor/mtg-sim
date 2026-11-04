@@ -4971,6 +4971,15 @@ pub enum Effect {
         how: TargetChange,
         to: Option<Sel>,
     },
+    /// "Reselect its target at random" (Grip of Chaos), "reselect the targets at random for
+    /// the spell and the copy. The new targets can't be you or a permanent you control."
+    /// (Chef's Kiss): each target of each selected spell or ability is chosen again at
+    /// random among its legal targets other than `except` (CR 115.7d), see
+    /// [`crate::target_rules::reselect_at_random`].
+    ReselectTargetsAtRandom {
+        what: Sel,
+        except: Option<Sel>,
+    },
     /// "[this] becomes a copy of [object]" (CR 707).
     BecomeCopy {
         what: Sel,

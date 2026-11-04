@@ -352,6 +352,84 @@ pub fn change_targets_among(
     true
 }
 
+/// "Reselect its target at random" (Grip of Chaos), "reselect the targets at random for
+/// the spell and the copy. The new targets can't be you or a permanent you control."
+/// (Chef's Kiss): each target of the spell or ability `id` (each instance of the word
+/// "target", CR 115.9a) is chosen again at random among all its legal targets, which may
+/// include the original one, except those in `except`. A target with no such legal target
+/// stays unchanged (CR 115.7d). Only the final set of targets is evaluated (CR 115.7e):
+/// if a later choice makes an earlier new target illegal, nothing changes. Modes and the
+/// division of damage or counters are kept (CR 115.7f). Returns true if a target changed.
+pub fn reselect_at_random(g: &mut Game, id: ObjectId, except: &[Entity]) -> bool {
+    if !g.is_live(id) || g.obj(id).zone != Zone::Stack {
+        return false;
+    }
+    if g.dirty {
+        g.recompute();
+    }
+    let body = g.stack_body(id);
+    let Some(orig) = g.obj(id).stack.as_deref().map(|si| si.chosen.clone()) else {
+        return false;
+    };
+    let instances: Vec<Instance> =
+        orig.iter()
+            .enumerate()
+            .flat_map(|(cm, m)| {
+                m.targets.iter().enumerate().flat_map(move |(slot, v)| {
+                    (0..v.len()).map(move |pos| Instance { cm, slot, pos })
+                })
+            })
+            .collect();
+    let mut cur = orig.clone();
+    for i in &instances {
+        let Some(spec) = spec_of(&body, &cur, *i) else {
+            continue;
+        };
+        let ctx = ctx_at(g, id, &cur, *i);
+        let cands: Vec<Entity> = g
+            .legal_target_candidates(spec, &ctx, id)
+            .into_iter()
+            .filter(|c| *c != Entity::Object(id) && !except.contains(c))
+            .filter(|c| {
+                let mut trial = cur.clone();
+                trial[i.cm].targets[i.slot][i.pos] = *c;
+                legal_at(g, id, &body, &trial, *i)
+            })
+            .collect();
+        if cands.is_empty() {
+            continue;
+        }
+        let k = g.random_range(0, cands.len() as u32 - 1) as usize;
+        cur[i.cm].targets[i.slot][i.pos] = cands[k];
+    }
+    let changed: Vec<Instance> = instances
+        .iter()
+        .copied()
+        .filter(|i| entity_at(&cur, *i) != entity_at(&orig, *i))
+        .collect();
+    if changed.is_empty() || !changed.iter().all(|i| legal_at(g, id, &body, &cur, *i)) {
+        return false;
+    }
+    let controller = g.obj(id).controller;
+    if let Some(si) = g.objects[id.0 as usize].stack.as_mut() {
+        si.chosen = cur.clone();
+    }
+    g.log(|_| format!("the targets of {id} are reselected at random"));
+    let mut seen = Vec::new();
+    for i in changed {
+        let t = entity_at(&cur, i);
+        if !seen.contains(&t) {
+            seen.push(t);
+            g.emit(Event::BecameTarget {
+                target: t,
+                by: id,
+                controller,
+            });
+        }
+    }
+    true
+}
+
 /// The target requirements checked again as a spell or ability resolves (CR 608.2b):
 /// requirements on a target player that apply only as the target is chosen
 /// ([`PlayerFilter::AsChosen`], "as you activate this ability") are dropped. `None` when

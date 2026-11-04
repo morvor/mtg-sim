@@ -2732,6 +2732,16 @@ impl Renderer<'_> {
                 }
                 self.gap("targets changed by a player other than you")
             }
+            Effect::ReselectTargetsAtRandom { what, except } => {
+                let w = self.sel(what, Case::Obj);
+                match except {
+                    Some(e) => {
+                        let e = self.sel(e, Case::Obj);
+                        format!("reselect the targets at random for {w}. the new targets can't be {e}")
+                    }
+                    None => format!("reselect the targets at random for {w}"),
+                }
+            }
             Effect::BecomeCopy { what, of, duration } => {
                 let w = self.sel(what, Case::Subj);
                 let o = self.sel(of, Case::Obj);
