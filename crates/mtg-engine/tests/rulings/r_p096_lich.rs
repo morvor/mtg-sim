@@ -87,9 +87,7 @@ fn lich_damage_sacrifices_the_permanents_simultaneously() {
     let s = seen.clone();
     t.g.observer = Some(mtg_engine::game::EventObserver::new(move |g, ev| {
         if matches!(ev, Event::Sacrificed { .. }) {
-            s.lock()
-                .unwrap()
-                .push((g.is_live(bears), g.is_live(aura)));
+            s.lock().unwrap().push((g.is_live(bears), g.is_live(aura)));
         }
     }));
     t.answer_choose(P0, &[Entity::Object(bears), Entity::Object(aura)]);
@@ -108,7 +106,9 @@ fn lich_damage_sacrifices_the_permanents_simultaneously() {
     assert_eq!(*seen.lock().unwrap(), vec![(false, false); 2]);
     let choices: Vec<_> = t.asked()[from..]
         .iter()
-        .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. }))
+        .filter(|(p, d)| {
+            *p == P0 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })
+        })
         .cloned()
         .collect();
     assert_eq!(choices.len(), 1);
@@ -198,7 +198,10 @@ fn multiple_liches_sacrifice_for_each_but_draw_only_once() {
     t.resolve();
     assert_eq!(triggers_on_stack(&t, "sacrifice that many"), 2);
     t.resolve_all();
-    assert_eq!(t.g.permanents().filter(|o| o.controller == P0).count(), 2 + 6 - 4);
+    assert_eq!(
+        t.g.permanents().filter(|o| o.controller == P0).count(),
+        2 + 6 - 4
+    );
     assert!(swamps[..4].iter().all(|s| !t.on_battlefield(*s)));
     // Gaining 4 life: one replacement applies, 4 cards drawn (not 8), no life gained.
     let hand = t.hand_size(P0);

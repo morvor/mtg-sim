@@ -144,7 +144,12 @@ fn gained_life_thresholds_trigger_once_or_not_at_all() {
     );
     for th in &THRESHOLDS {
         // One life short: no trigger at all.
-        assert_eq!(run(th, false, |t| gain(t, th.needs - 1)), (0, 0), "{}", th.name);
+        assert_eq!(
+            run(th, false, |t| gain(t, th.needs - 1)),
+            (0, 0),
+            "{}",
+            th.name
+        );
         // Exactly enough, and far more: one trigger, one effect.
         assert_eq!(run(th, false, |t| gain(t, th.needs)), (1, 1), "{}", th.name);
         assert_eq!(run(th, false, |t| gain(t, 15)), (1, 1), "{}", th.name);

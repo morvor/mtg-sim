@@ -357,7 +357,8 @@ fn deserters_quarters_lock_survives_the_creature_untapping_another_way() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let quarters = t.battlefield(P0, "Deserter's Quarters");
     t.lands(P0, "Wastes", 6);
-    t.activate(P0, quarters, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, quarters, 0, &[Entity::Object(bears)])
+        .unwrap();
     t.resolve_all();
     assert!(tapped(&t, bears));
     cast_and_resolve(&mut t, P1, "Colossal Heroics", &[Entity::Object(bears)]);
@@ -396,7 +397,11 @@ fn lockdown_auras_can_enchant_tapped_or_untapped_creatures() {
         t.g.tap(bears);
         let aura = cast_new(&mut t, P0, name, &[Entity::Object(bears)]);
         t.resolve_all();
-        assert_eq!(t.obj_now(aura).attached_to, Some(Entity::Object(bears)), "{name}");
+        assert_eq!(
+            t.obj_now(aura).attached_to,
+            Some(Entity::Object(bears)),
+            "{name}"
+        );
         to_p1_upkeep(&mut t);
         assert!(tapped(&t, bears), "{name}");
     }
@@ -437,7 +442,11 @@ fn lockdown_auras_with_an_illegal_target_dont_enter() {
         "If the target creature is an illegal target by the time Sleep Paralysis tries to resolve, the spell doesn't resolve. It won't enter the battlefield, so its ability won't trigger."
     );
     // In response, P1 returns the Bears to their hand with Unsummon.
-    for name in ["Sleep with the Fishes", "Fall from Favor", "Sleep Paralysis"] {
+    for name in [
+        "Sleep with the Fishes",
+        "Fall from Favor",
+        "Sleep Paralysis",
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P1, "Grizzly Bears");
@@ -448,8 +457,10 @@ fn lockdown_auras_with_an_illegal_target_dont_enter() {
         assert!(t.in_graveyard(P0, name), "{name}");
         assert!(t.g.turn_events[from..].iter().all(|e| !matches!(
             e,
-            Event::ZoneChange { to: mtg_engine::object::Zone::Battlefield, .. }
-                | Event::AbilityTriggeredOnStack { .. }
+            Event::ZoneChange {
+                to: mtg_engine::object::Zone::Battlefield,
+                ..
+            } | Event::AbilityTriggeredOnStack { .. }
         )));
         assert_eq!(crate::r_s25_common::creature_tokens(&t, P0), 0, "{name}");
         assert_eq!(t.g.monarch, None, "{name}");
@@ -482,7 +493,10 @@ fn paralyze_paying_to_untap_is_optional() {
             .collect();
         assert_eq!(asked, vec![P1]);
         assert_eq!(tapped(&t, bears), !pay);
-        assert_eq!(crate::r_s01_common::tapped_lands(&t, P1), if pay { 4 } else { 0 });
+        assert_eq!(
+            crate::r_s01_common::tapped_lands(&t, P1),
+            if pay { 4 } else { 0 }
+        );
     }
 }
 
@@ -519,7 +533,9 @@ fn mudslide_chooses_all_creatures_then_pays_all_at_once() {
                 let tapped_bears = ids.iter().filter(|b| g.obj(**b).tapped).count();
                 let tapped_lands = g
                     .permanents()
-                    .filter(|o| o.controller == P1 && o.is(mtg_engine::types::CardType::Land) && o.tapped)
+                    .filter(|o| {
+                        o.controller == P1 && o.is(mtg_engine::types::CardType::Land) && o.tapped
+                    })
                     .count();
                 s.lock().unwrap().push((tapped_bears, tapped_lands));
             }
