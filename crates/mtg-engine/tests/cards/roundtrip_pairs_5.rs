@@ -90,3 +90,26 @@ fn pact_weapon_gives_no_bonus_when_the_draw_is_replaced_by_draws() {
     assert_eq!(t.pt(bears), (2, 2));
     assert_eq!(t.life(P0), life);
 }
+
+#[test]
+fn chain_of_vapor_asks_the_bounced_permanents_controller_not_its_owner() {
+    cr!("608.2h", "707.10");
+    // "Return target nonland permanent to its owner's hand. Then that permanent's
+    // controller may sacrifice a land of their choice. If the player does, they may copy
+    // ~": the controller as the permanent last existed on the battlefield (P0, through
+    // Control Magic), not its owner (P1).
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    attach_new(&mut t, P0, "Control Magic", bears);
+    assert_eq!(t.obj_now(bears).controller, P0);
+    t.lands(P0, "Island", 1);
+    t.lands(P1, "Island", 1);
+    let chain = t.hand(P1, "Chain of Vapor");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, false);
+    t.cast(P1, chain).target(bears).go();
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.in_graveyard(P0, "Island"), "P0 sacrificed a land");
+    assert!(!t.in_graveyard(P1, "Island"));
+}
