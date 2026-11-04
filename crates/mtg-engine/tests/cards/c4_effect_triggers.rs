@@ -515,6 +515,40 @@ fn jailbreak_returns_a_card_with_equal_or_lesser_mana_value_once_the_permanent_e
 }
 
 #[test]
+fn jailbreak_returns_nothing_of_yours_if_the_opponents_card_didnt_enter() {
+    cr!("603.12");
+    ruling!(
+        "Jailbreak",
+        "If that card doesn't enter the battlefield for some reason, you will not be able to target and return a card from your own graveyard."
+    );
+    interp!("when-that-permanent-enters-as-it-is-created");
+    supported("Jailbreak");
+    supported("Grafdigger's Cage");
+    supported("Mind Stone");
+    // Grafdigger's Cage keeps P1's Hill Giant in the graveyard; P0's candidate, Mind Stone,
+    // isn't a creature card, so only the missing trigger keeps it in P0's graveyard.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grafdigger's Cage");
+    let giant = t.graveyard(P1, "Hill Giant");
+    let stone = t.graveyard(P0, "Mind Stone");
+    t.advance_to(P0, Step::PrecombatMain);
+    let jb = t.hand(P0, "Jailbreak");
+    mana(&mut t, P0);
+    t.cast_with(P0, jb, &[Entity::Object(giant)]).unwrap();
+    t.answer_targets(P0, &[Entity::Object(stone)]);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.in_graveyard(P0, "Mind Stone"));
+    assert!(t.named_on_battlefield("Mind Stone").is_empty());
+    let asked_targets = t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. }));
+    assert!(!asked_targets, "nothing triggered, so no target is chosen");
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
 fn jailbreak_targets_only_cards_with_equal_or_lesser_mana_value() {
     cr!("603.12");
     let mut t = TestGame::new(2);

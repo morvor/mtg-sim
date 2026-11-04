@@ -617,10 +617,13 @@ const ENTERED: Var = vars::USER + 43104;
 
 /// "Return target permanent card ... to the battlefield under their control. When that
 /// permanent enters, return up to one target permanent card with equal or lesser mana
-/// value from your graveyard to the battlefield." (Jailbreak): the permanent enters as the
-/// instruction is performed, so the ability triggers as it's created, like a reflexive
-/// one (CR 603.12), choosing its targets only then (Jailbreak ruling); it does nothing if
-/// the card didn't enter the battlefield. "That permanent" is the new object (CR 400.7).
+/// value from your graveyard to the battlefield." (Jailbreak): a reflexive triggered
+/// ability (CR 603.12: a resolving spell that instructs an action and creates a trigger
+/// "when [something happens] this way"; "that permanent" stands for "this way"), checked
+/// as it's created and choosing its targets only then (Jailbreak ruling); it does nothing
+/// if the card didn't enter the battlefield. "That permanent" is the new object (CR
+/// 400.7). The zone check below stands in for "entered during this resolution", which is
+/// the same for Jailbreak (nothing in the spell follows the return).
 fn when_that_permanent_enters(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let lower = l.to_lowercase();
     let l = end(&lower);
