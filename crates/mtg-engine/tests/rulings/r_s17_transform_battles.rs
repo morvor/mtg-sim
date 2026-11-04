@@ -496,10 +496,7 @@ fn a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed()
     let venom = t.named_on_battlefield("Venom, Lethal Protector");
     assert_eq!(venom.len(), 1);
     assert_eq!(t.obj(venom[0]).face, FaceState::Back);
-    assert!(t.obj(venom[0])
-        .cast
-        .as_ref()
-        .is_some_and(|c| c.was_cast));
+    assert!(t.obj(venom[0]).cast.as_ref().is_some_and(|c| c.was_cast));
     assert!(t.named_on_battlefield("Ephara, Ever-Sheltering").is_empty());
 }
 

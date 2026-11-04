@@ -121,8 +121,7 @@ fn corruption_of_towashi_draws_when_a_modal_double_faced_card_transforms_or_is_p
 }
 
 #[test]
-fn corruption_of_towashi_draws_when_a_modal_double_faced_card_is_cast_or_played_back_face_up(
-) {
+fn corruption_of_towashi_draws_when_a_modal_double_faced_card_is_cast_or_played_back_face_up() {
     // The 2023-04-14 ruling "modal double-faced permanents can't enter transformed, even
     // if they enter with their back faces up" predates the Marvel's Spider-Man CR update
     // effective 2025-09-19 (docs/rulings-exemptions/rulings-P225.tsv); a modal
