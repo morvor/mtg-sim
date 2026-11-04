@@ -162,6 +162,25 @@ The user resumed normal work, at the normal pace.
 - **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
 - **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
 
+### Effort and fresh sessions (user, Nov 4, late evening)
+
+The user decided:
+- Implementers run at effort `high`.
+- Reviewers, rules investigations and register judgment calls stay at `max`. This is now in worker.md.
+- The long-running worker sessions are replaced by fresh ones, because their 300–760k-token contexts were re-read on every step.
+- The user turned Ultracode off in the coordinator's session.
+- No A/B measurement.
+
+Transition: each old worker lands its current item and stops. The coordinator then starts a fresh session for that role, with the rest of the queue, and archives the old one. cards-2 keeps its session, which compacted to 94k on Nov 4.
+
+New-session prompt (fill in ROLE, QUEUE and N):
+> You are a worker session for morvor/mtg-sim, a Rust Magic: The Gathering rules engine. You replace an earlier session for the same role, whose context had grown large.
+> - Read CLAUDE.md and docs/agents/worker.md (the worker guide: the per-item flow, the implementer and reviewer briefs, the rulings batch brief), and follow it, including its effort rule.
+> - Role: ROLE. Queue, in order, at most N item(s) at a time: QUEUE.
+> - Pull origin claude/mtg-rules-engine-lkr27h first.
+> - When an item lands, report: the landed commit, the counts, the remaining gaps, any provisional register entries added, and any ruling that seems to contradict the CR or the Oracle text.
+> - Keep working autonomously.
+
 Rulings queues from Nov 4 22:55:
 - **rulings-1:** P128, P124, P012.
 - **rulings-2:** P096, P005, P195.
@@ -243,6 +262,8 @@ The coordinator marks them decided. The 733.1 deviation also gets a scan test ov
   - It comes after rulings coverage.
 
 ## Resuming (coordinator)
+
+0. **Refresh long-running worker sessions** (user, Nov 4). When a worker session's context passes about 300k tokens, refresh it at an item boundary: the worker lands its current item and stops, and a new session takes over its role and the rest of its queue. The new session gets the worker guide and its queue, and the old one is archived. The template is in the "Effort and fresh sessions" section above.
 
 1. The workers are the cloud sessions tagged `mtg-sim-worker`. Check each one. Resume any item a
    usage limit interrupted on its existing worktree, with a fresh implementer or reviewer told to
