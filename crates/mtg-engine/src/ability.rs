@@ -1260,6 +1260,11 @@ pub enum PlayerRef {
     /// once (CR 603.2c): "the number of opponents dealt damage this way", "each of those
     /// opponents".
     TriggerPlayers,
+    /// The player who put the triggering object onto the battlefield (CR 110.2a: the
+    /// player whose spell, ability or action put it there, who may not be its controller):
+    /// "Whenever a player puts a Swamp onto the battlefield, ~ deals 3 damage to that
+    /// player" (Thelon's Chant). The triggering player if no such player is recorded.
+    TriggerMover,
     /// The active player.
     ActivePlayer,
     /// "The attacking player": the active player (CR 506.2). With shared team turns, one

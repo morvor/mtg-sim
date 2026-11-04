@@ -246,11 +246,13 @@ fn rewritten(r: &str) -> Option<Parsed> {
     }
     if let Some(x) = r.strip_prefix("a player puts ") {
         let obj = x.strip_suffix(" onto the battlefield")?;
-        let (c, it, p) = reparse(&format!("{obj} enters"))?;
+        let (c, it, _) = reparse(&format!("{obj} enters"))?;
         if !matches!(c, TriggerCond::EntersBattlefield(_)) {
             return None;
         }
-        return Some((c, it, p));
+        // "That player" is the player who put it there, not necessarily its controller
+        // (Thelon's Chant's ruling).
+        return Some((c, it, PlayerRef::TriggerMover));
     }
     None
 }

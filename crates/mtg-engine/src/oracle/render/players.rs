@@ -1189,6 +1189,14 @@ impl Renderer<'_> {
             PlayerRef::EachPlayer => "each player".into(),
             PlayerRef::EachOtherPlayer => "each other player".into(),
             PlayerRef::TriggerPlayers => "each of those players".into(),
+            // "Whenever a player puts a Swamp onto the battlefield, ... that player".
+            PlayerRef::TriggerMover => {
+                return match case {
+                    Case::Subj => "{alt:that player|they|the player}".into(),
+                    Case::Obj => "{alt:that player|them|the player}".into(),
+                    Case::Poss => "{alt:that player's|their|the player's}".into(),
+                }
+            }
             PlayerRef::Target(i) => return self.target_mention(*i, case),
             // "Whenever a player attacks one of your opponents, that attacking player ...":
             // the controller of the creatures attacking.
