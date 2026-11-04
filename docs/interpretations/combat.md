@@ -29,10 +29,10 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 
 ## that-excess-damage-this-turn: "that excess damage" after "was dealt excess damage this turn" is the turn's total
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 120.10 "Excess damage has been dealt to a creature if the damage dealt to it is greater than lethal damage. ..." / 608.2c "The controller of the spell or ability follows its instructions in the order written. ..."
 - Question: Overclocked Electromancer: "Whenever this creature deals combat damage to a creature, if that creature was dealt excess damage this turn, you get X {E}, where X is that excess damage." Is X the excess damage of this combat damage, or all the excess damage the creature was dealt this turn?
-- Decision: All the excess damage that creature was dealt this turn (the excess damage the condition asks about), counted as the ability resolves.
+- Decision: Decided by the user, Nov 4. All the excess damage that creature was dealt this turn (the excess damage the condition asks about), counted as the ability resolves.
 - Alternatives: Only the excess of the combat damage event that triggered the ability: the same number unless the creature was also dealt excess damage earlier in the turn (by another source, or in a first-strike damage step).
 - Why: "that excess damage" refers back to the phrase "was dealt excess damage this turn", which isn't limited to this event.
 - Affects: Overclocked Electromancer.
@@ -53,10 +53,10 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 
 ## qualified-landwalk-is-that-landwalk: "snow islandwalk" is an islandwalk ability
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 702.14a "Landwalk is a generic term that appears within an object’s rules text as “[type]walk,” where [type] is usually a land type, but it can also be the card type land plus any combination of land types, card types, and/or supertypes." / 702.14c "... or with both the specified type or supertype and the specified subtype (as in “snow swampwalk”)." / Merfolk Assassin ruling: "Can target a creature with snow islandwalk."
 - Question: Does a reference to one landwalk ability ("target creature with islandwalk", "Creatures with islandwalk can be blocked as though they didn't have islandwalk") cover the same landwalk with a qualifier in front ("snow islandwalk")?
-- Decision: Yes: a landwalk ability whose text is the named one with words in front of it ("snow islandwalk" for "islandwalk") is that kind of landwalk, for both "with [type]walk" filters and "blocked as though they didn't have [type]walk" effects. A different land type ("snow swampwalk" for "islandwalk") isn't.
+- Decision: Decided by the user, Nov 4. Yes: a landwalk ability whose text is the named one with words in front of it ("snow islandwalk" for "islandwalk") is that kind of landwalk, for both "with [type]walk" filters and "blocked as though they didn't have [type]walk" effects. A different land type ("snow swampwalk" for "islandwalk") isn't.
 - Alternatives: Match only the exact text: Merfolk Assassin couldn't target a creature with snow islandwalk, contradicting its ruling; or apply the ruling only to filters, so Undertow wouldn't let a snow islandwalker be blocked (no ruling addresses Undertow-style effects directly).
 - Why: The Merfolk Assassin ruling treats snow islandwalk as islandwalk; the same words in Undertow and Staff of the Ages-style effects should mean the same thing.
 - Affects: Merfolk Assassin, Stormtide Leviathan-style filters; Undertow and other "[type]walk can be blocked as though" effects; creatures with qualified landwalk (no printed card has snow islandwalk; Legions of Lim-Dûl has snow swampwalk).

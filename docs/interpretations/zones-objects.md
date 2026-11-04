@@ -19,10 +19,10 @@ decision listed in `docs/DEFERRED.md`, not here.
 
 ## looked-at-hand-card-stays-seen: A card looked at in another player's hand stays visible to the looker while it remains there
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 402.3 "A player may arrange their hand in any convenient fashion and look at it at any time. A player can’t look at the cards in another player’s hand but may count those cards at any time." / 701.20e "Some effects instruct a player to look at one or more cards. Looking at a card follows the same rules as revealing a card, except that the card is shown only to the specified player." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of, or relation to, its previous existence. ..."
 - Question: Urza's Bauble: "Look at a card at random in target player's hand." By 701.20e/701.20a the card is shown only for as long as the effect needs it, but the player remembers what they saw. Should the looker's view keep showing it?
-- Decision: The ability's controller looks at one card chosen at random (only they see it, it isn't revealed) and may see that card for as long as it remains in that hand; once it changes zones it's a new object and the permission ends. In mtg-api observations the card shows in the looker's view.
+- Decision: Decided by the user, Nov 4. The ability's controller looks at one card chosen at random (only they see it, it isn't revealed) and may see that card for as long as it remains in that hand; once it changes zones it's a new object and the permission ends. In mtg-api observations the card shows in the looker's view.
 - Alternatives: (A) Only a log line, as `Effect::LookAtHand` does: the looker learns the card but no view shows it. (B) Visible until the end of the resolution: the player "forgets" it, which a real player wouldn't.
 - Why: The information was legitimately obtained and the card is the same object until it moves (400.7); keeping it visible models a player who remembers the card (a presentation choice: no game rule reads it). Only the looking player gains the permission; other players' views are unchanged.
 - Affects: Urza's Bauble.
@@ -43,10 +43,10 @@ decision listed in `docs/DEFERRED.md`, not here.
 
 ## alteration-host-of-two-types: "Another permanent of that type" for a host with both named types
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 701.3a "To attach an Aura, Equipment, or Fortification to an object or player means to take it from where it currently is and put it onto that object or player. ..."
 - Question: Enchantment Alteration moves "target Aura attached to a creature or land to another permanent of that type". For an Aura on a land creature (Dryad Arbor), "that type" could be either.
-- Decision: A host that's a creature is treated as a creature (the first type named): the Aura moves to another creature.
+- Decision: Decided by the user, Nov 4. A host that's a creature is treated as a creature (the first type named): the Aura moves to another creature.
 - Alternatives: Let the caster choose either type, or allow any permanent sharing either type.
 - Why: The text reads "that type" as one type; a host of both types is rare and the first named type is the simplest reading.
 - Affects: Enchantment Alteration.
@@ -115,10 +115,10 @@ decision listed in `docs/DEFERRED.md`, not here.
 
 ## each-player-exiled-this-way: "Cards you own exiled this way" after "Each player may exile their hand" are all the cards the players exiled, of those the ones you own
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of, or relation to, its previous existence. ..."
 - Question: Wheel of Potential: "Each player may exile their hand and draw ... If seven or more {E} was paid this way, you may play cards you own exiled this way until the end of your next turn." Which cards are "exiled this way"?
-- Decision: The cards every player exiled from their hand by that instruction (as the new objects in exile), restricted to those you own. Cards you don't own can't be played by this permission; cards you own that another player exiled (they were in that player's hand) can.
+- Decision: Decided by the user, Nov 4. The cards every player exiled from their hand by that instruction (as the new objects in exile), restricted to those you own. Cards you don't own can't be played by this permission; cards you own that another player exiled (they were in that player's hand) can.
 - Alternatives: Only the cards you exiled from your own hand ("you own" would then be redundant).
 - Why: "this way" names the whole each-player instruction, and the owner filter is the card's own restriction among them.
 - Affects: Wheel of Potential.
@@ -127,10 +127,10 @@ decision listed in `docs/DEFERRED.md`, not here.
 
 ## chosen-card-power-after-leaving: The power of an object chosen as a cost uses its last known power once it has left its zone
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 608.2h "If an effect requires information from the game (such as the number of creatures on the battlefield), the answer is determined only once, when the effect is applied. If the effect requires information from a specific object, including the source of the ability itself, the effect uses the current information of that object if it’s in the public zone it was expected to be in; if it’s no longer in that zone, or if the effect has moved it ..."
 - Question: Close Encounter's ruling covers a chosen creature that left the battlefield. What about a chosen warped creature card that leaves exile before the spell resolves?
-- Decision: The same: its last known information (its power as it last existed in exile).
+- Decision: Decided by the user, Nov 4. The same: its last known information (its power as it last existed in exile).
 - Alternatives: None for a card that left exile (0 damage).
 - Why: 608.2h gives last known information for any object no longer in the public zone it was expected to be in.
 - Affects: Close Encounter.

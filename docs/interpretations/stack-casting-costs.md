@@ -54,10 +54,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## reversal-kept-library-actions-trigger: Abilities trigger on the library actions a reversal keeps, but not on the payment they were part of
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 733.1 "If a player takes an illegal action or starts to take an action but can’t legally complete it, the entire action is reversed and any payments already made are canceled. No abilities trigger and no effects apply as a result of an undone action. ... Players may not reverse actions that moved cards to a library, moved cards from a library to any zone other than the stack, caused a library to be shuffled, or caused cards from a library to be revealed." / 603.2 "Whenever a game event or game state matches a triggered ability’s trigger event, that ability automatically triggers. ..."
 - Question: The library actions an illegal action took while it was attempted stay (`illegal-action-reversal-restores-libraries`). Do abilities trigger on them ("whenever you draw a card", "when ~ leaves the battlefield", "whenever one or more cards are put into exile from your library")? And on the payment a replacement effect made one of them (a creature sacrificed for mana that Darksteel Colossus's ability shuffles into the library instead: "whenever you sacrifice a permanent")?
-- Decision: The kept actions are actions that happened, not undone ones, so abilities trigger on them as on any other: as zone changes (a permanent leaving the battlefield for a library: Nefarious Lich's "When Nefarious Lich leaves the battlefield, you lose the game" after Lich's Mirror shuffled it away in the middle of a payment), draws, mills, shuffles and reveals. The payment, the cast or the activation they were part of is undone, so nothing triggers on it: a kept move is performed again without the cause that was the payment (a sacrifice, a discard, a destruction, a cost; `reversal::kept_cause`), so "whenever you sacrifice" and "whenever you discard" don't trigger, and neither does anything on the parts of the event the replacement didn't keep (damage, life). What triggered while the action was attempted is dropped with it, and triggers again from the kept actions, in the restored game, once they're performed.
+- Decision: Decided by the user, Nov 4. The kept actions are actions that happened, not undone ones, so abilities trigger on them as on any other: as zone changes (a permanent leaving the battlefield for a library: Nefarious Lich's "When Nefarious Lich leaves the battlefield, you lose the game" after Lich's Mirror shuffled it away in the middle of a payment), draws, mills, shuffles and reveals. The payment, the cast or the activation they were part of is undone, so nothing triggers on it: a kept move is performed again without the cause that was the payment (a sacrifice, a discard, a destruction, a cost; `reversal::kept_cause`), so "whenever you sacrifice" and "whenever you discard" don't trigger, and neither does anything on the parts of the event the replacement didn't keep (damage, life). What triggered while the action was attempted is dropped with it, and triggers again from the kept actions, in the restored game, once they're performed.
 - Alternatives: Nothing triggers on the kept actions either, since they happened as part of an action that is reversed (733.1's "no abilities trigger ... as a result of an undone action" read as covering the whole attempt). Or the kept move keeps its cause, so a sacrifice the replacement effect made a library move still triggers "whenever you sacrifice".
 - Why: 733.1 says players may not reverse those actions, and the sentence about triggers is about undone actions; an action that stands triggers abilities like any other (603.2). The sacrifice or discard is the payment, which 733.1 cancels; only the move to or from the library stands. A reasonable judge could read the whole attempt as undone for triggers, so the entry is provisional.
 - Affects: the cards that reach 733.1's exceptions (`KNOWN_REACHABLE` in `tests/cr/r733_001_reversal_reachability.rs`) with an ability that triggers on what they do: Nefarious Lich shuffled away by Lich's Mirror (its controller loses the game), draws with "whenever you draw" abilities, Ashiok's exiles with abilities that watch cards leaving a library.
@@ -90,10 +90,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## jeweled-amulet-several-types: When mana of several types was spent on Jeweled Amulet's activation, its controller chooses the type noted
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: Jeweled Amulet: "{1}, {T}: Put a charge counter on this artifact. Note the type of mana spent to pay this activation cost. ..." / 607.2e "If an object has an ability printed on it that allows some information to be noted and another ability which refers to information noted for that object, those abilities are linked. The second ability refers only to information noted as a result of the first ability."
 - Question: The printed cost is {1}, so one type of mana is spent. A cost increase ("Activated abilities cost {2} more to activate unless they're mana abilities", Suppression Field) can make the controller spend mana of several types: which one is "the type of mana spent"?
-- Decision: As the ability resolves, its controller chooses one of the types spent, and that type is noted (with one type spent, that one).
+- Decision: Decided by the user, Nov 4. As the ability resolves, its controller chooses one of the types spent, and that type is noted (with one type spent, that one).
 - Alternatives: (A) Note every type spent, in the order paid, and treat the last as "the last noted type": depends on the engine's payment order, which the player doesn't see. (B) Note nothing when more than one type was spent: the instruction would do nothing in a case the card plainly expects to note something.
 - Why: The singular "the type" reads as one type; when the payment leaves it open, the player who paid decides, like other choices an instruction leaves to its controller (CR 608.2d).
 - Affects: Jeweled Amulet (with an activation cost increase in play).
@@ -114,10 +114,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## choose-type-and-behold-payable-type: A creature type chosen as part of a behold cost is one the player can then behold
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 601.2b "... If the spell has alternative or additional costs that will be paid as it’s being cast ..., the player announces their intentions to pay any or all of those costs ..." / 118.3 "A player can’t pay a cost without having the necessary resources to pay it fully. ..." / 701.4a "“Behold a [quality]” means “Reveal a [quality] card from your hand or choose a [quality] permanent you control on the battlefield.”"
 - Question: Celestial Reunion's additional cost is "choose a creature type and behold two creatures of that type". May the player choose a type they can't behold two creatures of (and then not pay the cost), and when is "the revealed card is the chosen type" judged?
-- Decision: The type is chosen among the types the player could then behold that many creatures of (creature cards in hand and creatures they control; not kindred cards, its ruling); the cost can't be announced if there's none. The condition "the revealed card is the chosen type" is judged once the card is found, before it's put anywhere: onto the battlefield if it's true (and the cost was paid), into the hand otherwise; then the library is shuffled.
+- Decision: Decided by the user, Nov 4. The type is chosen among the types the player could then behold that many creatures of (creature cards in hand and creatures they control; not kindred cards, its ruling); the cost can't be announced if there's none. The condition "the revealed card is the chosen type" is judged once the card is found, before it's put anywhere: onto the battlefield if it's true (and the cost was paid), into the hand otherwise; then the library is shuffled.
 - Alternatives: Any type may be chosen and the cost then fails (the cast is reversed, CR 733.1).
 - Why: Choosing a type and beholding are one cost (118.3: it must be paid in full), so a choice that makes it unpayable isn't a way of paying it; reversal would reach the same end state with an extra illegal attempt.
 - Affects: Celestial Reunion.
@@ -126,10 +126,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## if-you-do-any-number-removed: "You may remove any number of counters. If you do, ..." happens only if one or more were removed
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..."
 - Question: Tetravus: "you may remove any number of +1/+1 counters from this creature. If you do, create that many ... tokens." If the player chooses to remove zero counters, did they "do" it?
-- Decision: No: "If you do" is "if one or more counters were removed this way", and "that many" is the number removed.
+- Decision: Decided by the user, Nov 4. No: "If you do" is "if one or more counters were removed this way", and "that many" is the number removed.
 - Alternatives: Choosing to remove (even zero) is doing it: the result is the same (zero tokens), so the choice only matters for other "if you do" bodies.
 - Why: Removing zero counters removes nothing; the outcome for Tetravus is identical either way.
 - Affects: Tetravus.
@@ -174,10 +174,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## x-defined-by-target: An {X} in an activation cost that the text defines by the ability's target must be announced as that value
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 107.3c "If a spell or activated ability has an {X}, [-X], or X in its cost and/or its text, and the value of X is defined by the text of that spell or ability, then that's the value of X while that spell or ability is on the stack. The controller of that spell or ability doesn't get to choose the value. ..." / 601.2b "... If the spell has a variable cost that will be paid as it's being cast (such as an {X} in its mana cost; see rule 107.3), the player announces the value of that variable. ..." / 601.2c "The player announces their choice of an appropriate object or player for each target the spell requires. ..."
 - Question: Reflecting Mirror: "{X}, {T}: Change the target of target spell with a single target if that target is you. The new target must be a player. X is twice the mana value of that spell." X is defined by the target, but the cost's X is announced (601.2b) before targets are chosen (601.2c). How is X determined?
-- Decision: The player announces X, and the target must be a spell whose mana value makes the definition true (twice its mana value is X); an X no target can satisfy (an odd X here) can't be announced. The result is that X is exactly the defined value for the chosen target, as 107.3c requires.
+- Decision: Decided by the user, Nov 4. The player announces X, and the target must be a spell whose mana value makes the definition true (twice its mana value is X); an X no target can satisfy (an odd X here) can't be announced. The result is that X is exactly the defined value for the chosen target, as 107.3c requires.
 - Alternatives: (A) Determine X after targets are chosen (out of the 601.2 order). (B) Let the player announce any X and pay it, ignoring the definition: contradicts 107.3c.
 - Why: The engine follows 601.2's order (as for Soul Foundry's "X is the mana value of that card", `r107_x_defined_by_text`); restricting the target to the announced X gives the same legal activations and the same payment as determining X from the target.
 - Affects: Reflecting Mirror; Caller of the Untamed ("{X}, {T}: Create a token that's a copy of a card you exiled with cards named ~. X is the mana value of that card.": the card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card chosen is one with that mana value).
@@ -186,10 +186,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## x-defined-for-a-player: "X is the number of ... in an opponent's graveyard as you cast this spell" is that number for one opponent, announced by the caster
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 107.3c "If a spell or activated ability has an {X}, [-X], or X in its cost and/or its text, and the value of X is defined by the text of that spell or ability, then that's the value of X while that spell or ability is on the stack. The controller of that spell or ability doesn't get to choose the value. ..." / 601.2b "... If the spell has a variable cost that will be paid as it's being cast (such as an {X} in its mana cost; see rule 107.3), the player announces the value of that variable. ..."
 - Question: Spoils of War ({X}{B}): "X is the number of artifact and/or creature cards in an opponent's graveyard as you cast this spell." With several opponents, whose graveyard defines X? Its ruling: "X is set as you cast the spell to be exactly the number of appropriate cards in an opponent's graveyard. You can't choose a higher or lower value for X."
-- Decision: The caster picks the opponent; announcing X picks among the values the opponents' graveyards give (X must be one of them, CR 601.2b), so X is exactly the number for one opponent. With one opponent, X is that number.
+- Decision: Decided by the user, Nov 4. The caster picks the opponent; announcing X picks among the values the opponents' graveyards give (X must be one of them, CR 601.2b), so X is exactly the number for one opponent. With one opponent, X is that number.
 - Alternatives: (A) The opponent with the most (or fewest) such cards: the text says "an opponent", which elsewhere is a choice of the player (Bargaining Table's ruling for "an opponent's hand"). (B) The total over all opponents: not "an opponent's graveyard".
 - Why: As for Bargaining Table ("X is the number of cards in an opponent's hand", `r107_x_defined_by_text`): an opponent is chosen as the value is announced, and only X equal to that opponent's number is legal.
 - Affects: Spoils of War.
@@ -198,10 +198,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## any-player-may-after-a-payment: Once a player has paid an "any [other] player may [cost]", the remaining players are still offered it
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 118.12 "... “[A player] may [do something]. If [that player] [does, doesn’t, or can’t], [effect].” The action [do something] is a cost, paid when the spell or ability resolves. ..." / 101.4 "If multiple players would make choices and/or take actions at the same time, the active player (the player whose turn it is) makes any choices required, then the next player in turn order ..." / Shivan Wumpus ruling: "If a player elects to sacrifice a land, Shivan Wumpus is put on top of its owner's library, but then all remaining players still get the option."
 - Question: Zur's Weirding ("If a player would draw a card, they reveal it instead. Then any other player may pay 2 life. If a player does, put that card into its owner's graveyard. Otherwise, that player draws a card.") has no ruling on what happens after one player pays. Are the remaining players still offered the payment (which then changes nothing but costs them 2 life), or does the offer stop?
-- Decision: As for every "any player may [cost]" (Shivan Wumpus's ruling): each player, in turn order starting with the active player, is offered the payment; the effect happens once, as soon as the first player pays, and the remaining players are still offered the cost and may pay it to no further effect.
+- Decision: Decided by the user, Nov 4. As for every "any player may [cost]" (Shivan Wumpus's ruling): each player, in turn order starting with the active player, is offered the payment; the effect happens once, as soon as the first player pays, and the remaining players are still offered the cost and may pay it to no further effect.
 - Alternatives: (A) Stop offering after the first payment: no rule or ruling says so, and Shivan Wumpus's ruling says the opposite for the same template.
 - Why: The template and its official ruling are the same; Zur's Weirding's "any other player" only excludes the drawing player.
 - Affects: Zur's Weirding, Shivan Wumpus, and every "any player may [cost]. If a player does" card.
@@ -210,10 +210,10 @@ index: `docs/INTERPRETATIONS.md`.
 
 ## trigger-x-before-targets: A triggered ability whose targets depend on an X it pays as it resolves has X chosen as it's put on the stack
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 107.3f "Sometimes X appears in the text of a spell or ability but not in a mana cost, alternative cost, additional cost, or activation cost. If the value of X isn’t defined, the controller of the spell or ability chooses the value of X at the appropriate time (either as it’s put on the stack or as it resolves)." / 603.3d "The remainder of the process for putting a triggered ability on the stack is identical to the process for casting a spell listed in rules 601.2c–d. ..." / 601.2b, 601.2c (X is announced before targets are chosen)
 - Question: Relentless Dead: "When this creature dies, you may pay {X}. If you do, return another target Zombie creature card with mana value X from your graveyard to the battlefield." The {X} is paid as the ability resolves, but the target must be chosen as it's put on the stack. When is X chosen?
-- Decision: As the ability is put on the stack, before its targets (the "appropriate time" of 107.3f, since the targets depend on it); the {X} paid as it resolves is that value. Implemented for triggered abilities whose target filters mention X and whose effect pays a cost with {X} ("you may pay {X}. If you do, ..."). Before, X was undefined (0) while targets were chosen, so the ability was removed from the stack for lack of a target whenever no card had mana value 0.
+- Decision: Decided by the user, Nov 4. As the ability is put on the stack, before its targets (the "appropriate time" of 107.3f, since the targets depend on it); the {X} paid as it resolves is that value. Implemented for triggered abilities whose target filters mention X and whose effect pays a cost with {X} ("you may pay {X}. If you do, ..."). Before, X was undefined (0) while targets were chosen, so the ability was removed from the stack for lack of a target whenever no card had mana value 0.
 - Alternatives: X chosen as it resolves, with the target chosen freely on the stack and the card returned only if its mana value equals the X paid; equivalent in outcome for a player who pays the target's mana value, but it lets the target be chosen without regard to X.
 - Why: 107.3f leaves the time open, and 601.2b–c (applied to triggered abilities by 603.3d) has X announced before targets whenever targets depend on it; the target can then be checked against a known X on resolution.
 - Affects: Relentless Dead and any other "you may pay {X}. If you do, ... target ... with mana value X" trigger.

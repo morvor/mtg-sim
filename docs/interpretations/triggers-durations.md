@@ -66,10 +66,10 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 
 ## batch-they-condition-all: "If they [did something]" in a "one or more" trigger means all of them
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 603.2c "An ability triggers only once each time its trigger event occurs. However, it can trigger repeatedly if one event contains multiple occurrences. ..." / 603.4 "A triggered ability may read “When/Whenever/At [trigger event], if [condition], [effect].” ..."
 - Question: Twilight Diviner: "Whenever one or more other creatures you control enter, if they entered or were cast from a graveyard, create a token that's a copy of one of them." When several creatures enter at once and only some of them came from a graveyard (or were cast from one), does the condition hold?
-- Decision: "they" is the whole group: the condition holds only if each of the creatures entered from a graveyard or was cast from one (as "if they entered from a graveyard" already reads in the engine). "One of them" is then any of the creatures that entered. Wordings with "one or more of them" ("if one or more of them entered from a graveyard") are the some-of-them reading.
+- Decision: Decided by the user, Nov 4. "they" is the whole group: the condition holds only if each of the creatures entered from a graveyard or was cast from one (as "if they entered from a graveyard" already reads in the engine). "One of them" is then any of the creatures that entered. Wordings with "one or more of them" ("if one or more of them entered from a graveyard") are the some-of-them reading.
 - Alternatives: At least one of them: then "one of them" could still copy a creature that didn't come from a graveyard, which the card's design (copying a reanimated creature) suggests isn't intended either.
 - Why: The plural pronoun names the group, and the printed alternative "one or more of them" exists for the weaker reading. Creatures entering at once from different zones are rare.
 - Affects: Twilight Diviner.
@@ -78,10 +78,10 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 
 ## one-or-more-an-opponent-controls-per-opponent: "One or more creatures an opponent controls deal combat damage to you" triggers once for each opponent
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 603.2c "An ability triggers only once each time its trigger event occurs. However, it can trigger repeatedly if one event contains multiple occurrences." / Stronghold Arena ruling: "Normally, combat damage is dealt all at the same time. In that case, Stronghold Arena's last ability triggers once for each opponent that creatures you control dealt combat damage to, regardless of how many creatures were dealing that damage." (its trigger: "Whenever one or more creatures you control deal combat damage to a player") / 810.10 "Effects that cause players to get poison counters happen to each player individually."
 - Question: Norn's Decree: "Whenever one or more creatures an opponent controls deal combat damage to you, that opponent gets a poison counter." When creatures of several opponents deal combat damage to you at once (shared team turns, CR 805.10a: both players of the attacking team attack), does it trigger once, or once for each of those opponents? And who is "that opponent"?
-- Decision: Once for each opponent whose creatures dealt you combat damage, and "that opponent" is the controller of that trigger's creatures. Without shared team turns only the active player's creatures deal combat damage, so it triggers once and that player gets the counter.
+- Decision: Decided by the user, Nov 4. Once for each opponent whose creatures dealt you combat damage, and "that opponent" is the controller of that trigger's creatures. Without shared team turns only the active player's creatures deal combat damage, so it triggers once and that player gets the counter.
 - Alternatives: Trigger once per combat damage step, with each of those opponents getting a poison counter as it resolves: the same poison counters, but one trigger instead of several (it differs for abilities that copy, counter or count triggers).
 - Why: The singular "an opponent" picks out one opponent per occurrence, as the singular "a player" of Stronghold Arena's trigger does, whose ruling makes it trigger once for each player dealt damage; and "that opponent" names one player.
 - Affects: Norn's Decree.
@@ -90,10 +90,10 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 
 ## other-than-trigger-object: "Other [type]s" in the intervening "if" of a trigger about "a [type]" on a source without that type means other than the triggering object
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 603.4 "A triggered ability may read “When/Whenever/At [trigger event], if [condition], [effect].” When the trigger event occurs, the ability checks whether the stated condition is true. ... If the ability triggers, it checks the stated condition again as it resolves. ..." / Portcullis ruling: "You check the count of the number of creatures on the battlefield again during resolution."
 - Question: Portcullis (an artifact) reads "Whenever a creature enters, if there are two or more other creatures on the battlefield, exile that creature." "Other" usually means other than the object with the ability, which can't be what an artifact counting creatures means. Other than what? And what if Portcullis is itself a creature (March of the Machines)?
-- Decision: In the intervening "if" of an enters, leaves-the-battlefield or dies trigger about "a [type]" (not about the source), "other [type]s" means other than the triggering object when the source's printed type line lacks that type. The reading is fixed when the text is compiled: an animated Portcullis is one of the "other creatures" (it isn't the entering creature), so it counts.
+- Decision: Decided by the user, Nov 4. In the intervening "if" of an enters, leaves-the-battlefield or dies trigger about "a [type]" (not about the source), "other [type]s" means other than the triggering object when the source's printed type line lacks that type. The reading is fixed when the text is compiled: an animated Portcullis is one of the "other creatures" (it isn't the entering creature), so it counts.
 - Alternatives: Read the source's current types: an animated Portcullis would then exclude itself (and, on the usual reading of "other", not the entering creature, so the entering creature would count). Exclude both the source and the triggering object while the source is a creature. Each changes only games where the source has become a creature.
 - Why: The words "other creatures" are set against "a creature" (the one that entered); that meaning comes from the printed card and shouldn't flip when an effect changes the source's types.
 - Affects: Portcullis; Lifeline ("if another creature is on the battlefield": the dying creature is no longer on the battlefield either way, so the outcome is the same).

@@ -126,6 +126,30 @@ Queues from the 06:42 check-in:
   - When the subscription workers resume, the rulings pool continues at P007, plus any of those batches the launcher reports unfinished.
   - **05:40 update.** Six batches landed in 4.5 hours for $57, about $9.50 a batch: P015, P134, P174, P097, P004 and P075. The children run at Claude Code's default effort; the cloud sessions run with CLAUDE_EFFORT=max. The list was extended within the same $190 cap: P007 P132 P072 P150 P038 P123 P005 P091 P128 P198. The subscription pool resumes after the last batch the launcher starts, which it reports in its final message.
   - **Finished (15:34).** $183.31 spent. 16 batches landed, with no unfinished items: P015 P134 P174 P097 P004 P075 P102 P127 P013 P054 P007 P132 P072 P150 P038 P123. Rulings cited went from 17,998 (53.0%) to 19,800 (58.3%). Two provisional register entries were added: qualified-landwalk-is-that-landwalk and trigger-x-before-targets. **The subscription rulings pool resumes at P005:** P005 P091 P128 P198 P034 P124 P012 P001 P008 P025 ..., after rulings-2's queued P096.
+
+### Resumed Nov 4 (user)
+
+The user resumed normal work, at the normal pace.
+
+**Register decisions:**
+- **Accepted (25 entries), marked decided "Decided by the user, Nov 4":** every provisional entry except the nine below.
+- **To fix (item `register-fixes-1`):** `library-arranged-by-owner-not-instructing-player`, `linked-reveal-trigger-as-reflexive`, `nihiloor-taps-one-opponent-at-a-time`.
+- **To investigate (item `ruling-conflicts-1`).** The user: "The CR and rulings should NOT contradict. If they seem to, we need to examine these cases much more closely." This covers:
+  - the six entries where the CR or the Oracle text and a ruling seem to disagree: `put-onto-battlefield-blocking-retriggers-becomes-blocked-by`, `history-counts-players-who-left`, `self-shuffle-gone-library-still-shuffled`, `room-door-unlock-timestamp`, `ice-cauldron-last-exiled`, `cyclopean-tomb-land-choice`;
+  - the rulings exempted earlier as superseded by the CR: Krosan Adaptation, Jade Statue, Deranged Assistant, Mossfire Egg, Oculus Whelp, Corruption of Towashi;
+  - any other case its inventory finds.
+
+  Conclusions go to the user. Until then, these entries stay provisional.
+
+**Queues:**
+- **compile:** its round-trip queue (items/roundtrip-followups.md).
+- **cards-1:** `cards6-plan`, then the round-6 items it creates.
+- **cards-2:** `register-fixes-1`, which includes River Song.
+- **structure:** `ruling-conflicts-1`.
+- **rulings-2:** P096, P005. **rulings-1:** P091, P128. **mutation:** P198, P034.
+- **Next in the rulings pool:** P124 P012 P001 P008 P025 P199 P140 P027 P003 P195 ...
+
+**Still open with the user:** the verified-count refresh, and newer card data (Scryfall hosts in the network settings).
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
