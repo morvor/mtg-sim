@@ -97,7 +97,7 @@ fn pact_weapon_gives_no_bonus_when_the_draw_is_replaced_by_draws() {
 
 #[test]
 fn chain_of_vapor_asks_the_bounced_permanents_controller_not_its_owner() {
-    cr!("608.2h", "707.10");
+    cr!("608.2h");
     // "Return target nonland permanent to its owner's hand. Then that permanent's
     // controller may sacrifice a land of their choice. If the player does, they may copy
     // ~": the controller as the permanent last existed on the battlefield (P0, through

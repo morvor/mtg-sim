@@ -237,3 +237,19 @@ the text says (wording only) unless noted:
   controls"), Shield of Kaldra ("Sword of Kaldra, ~, and Helm of Kaldra"), Mister Hyde,
   Sanctuary Warden ("with a counter on it" stated), Sigarda's Summons ("have base power and
   toughness 4/4, have flying, and are Angels").
+
+## Review
+
+- The Deck of Many Things fix confirmed: with `patterns/r104_game_end.rs` reverted the test
+  fails ("the Wurm's owner loses"). No other compiled card says "its owner/its controller
+  loses (wins) the game".
+- Checked in play (tests in `tests/cards/roundtrip_pairs_5.rs`, all passing on the old code
+  too, so wording only): Skyserpent Seeker (only the land cards revealed enter, tapped; the
+  rest go to the bottom), Kaito, Dancing Shadow (one of the creatures returns, though the
+  rendering says "them"), Taster of Wares (only the exiled card can be cast, not another
+  revealed card), Parallax Wave (each card returns under its owner's control).
+- Renderer tightened: the "During combat, players can't cast spells or activate abilities"
+  join now needs exactly the two unqualified restrictions (it accepted any line containing
+  "players can't cast spells" and dropped its qualities); the "Equip {N}. This ability
+  costs ..." hook also checks whose activations the cost change applies to.
+- Chain of Vapor's test no longer cites CR 707.10 (it declines the copy).
