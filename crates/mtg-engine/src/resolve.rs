@@ -3384,7 +3384,18 @@ impl Game {
             _ => return None,
         };
         if filter_references_specific(f) {
-            Some(self.eval_filter_specific(f, ctx))
+            // CR 400.7j: an object an earlier part of the effect moved to a public zone
+            // ("return target creature card ... If that creature would leave the
+            // battlefield, ...") is found as the object it became.
+            Some(
+                self.eval_filter_specific(f, ctx)
+                    .into_iter()
+                    .map(|o| match self.current(o) {
+                        n if self.obj(n).zone.is_public() => n,
+                        _ => o,
+                    })
+                    .collect(),
+            )
         } else {
             None
         }
