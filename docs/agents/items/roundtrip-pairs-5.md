@@ -115,3 +115,125 @@ then the untriaged two-card clusters, then single-card clusters in the tool's or
 - oracle `1 of it put the` vs rendered `a card among it in`: Write into Being
 - oracle `1 of it to owner` vs rendered `it to owner hand if`: Kaito, Dancing Shadow
 - oracle `1 of it to owner` vs rendered `{alt:one|either} of it to owner`: Advice from the Fae
+
+## Result
+
+28,358 of 32,059 fully supported cards passed at the start (ae329d28); 28,443 of 32,059 on the branch after merging origin. 65 of
+the 151 taken cards pass.
+
+Parser (one fix, see "Parser bugs found"): `patterns/r104_game_end.rs` ("its owner" /
+"its controller loses the game" names the owner of the object "it" is).
+
+Renderer (most in the new `oracle/render/pairs5_terms.rs`, hooks in the existing files):
+"~ can't have counters put on it"; "If you would get one or more {E}, you get that many
+plus one {E} (twice that many {E}) instead"; "The new target must be a creature (a
+player)"; "X can't be greater than ..." after a "you may pay {X}" (the cap the payment
+reads, `value_results::X_MAX`, was silently dropped); "if there is no monarch"; "if you
+didn't attack with a creature this turn" (intervening "if"); "if you created a token this
+turn"; "if you sacrificed three or more Clues this turn"; "you had another creature enter
+the battlefield under your control this turn"; "Equip {3}. This ability costs {1} less to
+activate for each ..." (any own cost change of a keyword's abilities, with a condition
+too); "the power of target creature you control"; "where X is the amount of {E} paid this
+way" for an X/X token; "[instruction] unless you control another colorless creature";
+"When ~ enters and whenever it ..." (an equivalence: one triggered ability with two
+trigger conditions, CR 603.1b, 603.2); "Counter target spell unless its controller pays
+{3}. If that spell is countered this way, exile it instead ..." (the replacement after the
+payment); "~ costs {1} less ... It also costs {1} less ..."; "During combat, players can't
+cast spells or activate abilities that aren't mana abilities"; "You and Humans you control
+have hexproof", "You, planeswalkers you control, and other creatures you control have
+hexproof"; "Activate only if you control three or more lands with the same name"; "~ can't
+attack (block) unless you control more creatures than defending (attacking) player"; "You
+can't cast ~ unless ..."; "Artifact spells you cast this turn cost {1} less to cast"; "It
+gets an additional -1/-1 until end of turn for each ..." (also after "If ~ was kicked");
+"-X/-Y" (a power and toughness change by two different negative amounts was "+X/-X" with
+one X, a wrong rendering); "-4/-4 for each ..." (negative multiples); "+2/+0 for every seven
+cards in your graveyard"; "goad up to X target creatures" after "becomes monstrous" (CR
+701.37c); "reveals X cards from their hand, where X is ..."; "that targets you or a
+creature you control" (either order); "if you own a card in exile"; "If you would create
+one or more Treasure tokens, instead create those tokens plus an additional Treasure
+token"; "the total number of cards in all players' hands"; "cards in your graveyard with
+four or more card types among them"; "the loyalty abilities of planeswalkers you control"
+and "twice this turn rather than only once"; "Put one into your hand and the other ...";
+"if {W}{W} was spent to cast it"; "+X/+X or -X/-X"; "Creatures and nonbasic lands your
+opponents control enter tapped"; "You and permanents you control gain hexproof until end
+of turn".
+
+## Parser bugs found
+
+Test in `crates/mtg-engine/tests/cards/roundtrip_pairs_5.rs`; it fails on the old code
+(checked by running it before the fix):
+
+- The Deck of Many Things: "20 | Put a creature card from any graveyard onto the
+  battlefield under your control. When that creature dies, its owner loses the game." "Its
+  owner" in "loses the game" was always read as the owner of target 0 (`phrases::
+  parse_player`), and the delayed ability has no targets, so when the creature died nobody
+  lost. `patterns/r104_game_end.rs` reads "its owner"/"its controller" through
+  `effects::player_ref` (the object "it" is: the creature that died); test
+  `the_deck_of_many_things_creature_owner_loses_when_it_dies`.
+
+Checked in play (same file, passing on the old code too): Pact Weapon uses the drawn
+card's mana value, and gives no bonus and costs no life when Thought Reflection replaces
+the draw (its ruling); Chain of Vapor asks the bounced permanent's controller as it last
+existed (Control Magic), not its owner. Also checked by reading the AST or existing tests:
+Shanna and Mortarion (the X cap is applied, `value_results_payments.rs`), Tatterkite and
+Melira's Keepers (a cost putting a counter on them can't be paid, `r_p123_no_counters.rs`),
+Wheel of Potential (`c5_costs_sets.rs`), Stronghold Gambit (ties enter under each owner's
+control, `cards5_choices_players.rs`), Cryptic Spires (`r207_text_box.rs`), The Ring Goes
+South and Skyserpent Seeker (only the land cards found go onto the battlefield,
+`DUG_CHOSEN`), Johtull Wurm and Dark Matter Manipulator (the AST had the right numbers;
+only the rendering was wrong), Write into Being (the other card is on top after the
+manifest, so "on the top or bottom" is the choice offered), Kaito, Dancing Shadow (one of
+the creatures), Parallax Wave (each player returns the cards they own), Turtles in Time
+(only the players who shuffle draw), Tainted Pact, Struggle for Sanity, Band Together
+(another target), Reject (the payment, then the replacement), Eye for an Eye (any source,
+CR 609.7a, `prevention::source_candidates`).
+
+## Remaining
+
+Of the 151 taken cards, these still mismatch; each was checked against the AST and plays as
+the text says (wording only) unless noted:
+
+- Custom nodes or replacement shapes not worded (`gap:`): Eye of Ojer Taq, Zevlor, Struggle
+  for Sanity, Stronghold Gambit, Wheel of Potential (opt-in), Alania, Dance of Many, Rain
+  of Riches, Unpredictable Cyclone, Land Equilibrium, Freyalise's Winds, Tainted Pact,
+  Stand or Fall, Chaos Dragon, Psychic Paper, Paleontologist's Pick-Axe, Rasputin
+  Dreamweaver, Primitive Justice, Cemetery Prowler, Foraging Wickermaw, False Dawn,
+  Evolving Door, Knights of the Black Rose, Forcefield, Flickerform.
+- "The next time a source of your choice would ...": Eye for an Eye, New Way Forward (the
+  choice, then the shield, as Refraction Trap and Healing Grace in roundtrip-pairs-4).
+- One printed sentence compiled as several, or several abilities as one line: The Deck of
+  Many Things ("If the result is 0 or less, discard your hand" after the table: no row
+  applies then, so the order isn't observable), Reveka, Ellie ("and doesn't untap", "and
+  gains indestructible": the subject repeated), Collective Defiance, Steal the Show ("then
+  draws that many": the subject repeated), Dawn's Truce ("also gain indestructible"),
+  Elenda, Cosmos Elixir ("your life total is greater than your starting life total": the
+  predicate is worded for the player), Dragon's Approach, Sphinx's Approach (the "four
+  cards named ~" condition said before the choice).
+- Referents and quantities worded differently: Crown of Doom ("gains control of it"),
+  Mindshrieker ("the milled card's mana value"), Pact Weapon ("The creature" for the
+  equipped attacker), The Ring Goes South, Skyserpent Seeker ("those land cards"),
+  Worldpurge ("shuffles the rest"), Turtles in Time ("each player who does"), Chain of
+  Vapor, String of Disappearances ("If the player does, they may copy ~ and may choose a
+  new target for that copy"), Torch the Witness ("to that creature"), Lashknife Barrier
+  ("to that creature instead"), Parallax Wave, Parallax Tide ("each player returns ... all
+  cards they own": "you" inside the per-player instruction), Last-Ditch Effort, Landslide
+  ("that much damage" for the number sacrificed), Stench of Evil, Pandemonium ("they"),
+  Dakra Mystic ("the revealed cards"), Vesuvan Duplimancy, Dack Fayden ("those
+  permanents"), Kaito, Dancing Shadow ("one of them"), Experiment Twelve, Lotleth Giant
+  ("for each"), Blademane Baku ("For each counter removed"), Johtull Wurm ("beyond the
+  first"), Dimir Charm ("Put one back"), Grime Gorger ("up to one card of each card
+  type"), Bend or Break ("one of their opponents of their choice"), Write into Being,
+  Advice from the Fae ("Otherwise, put one of them"), You Find Some Prisoners ("Until the
+  end of your next turn" first), Taster of Wares ("If an instant or sorcery card is exiled
+  this way"), Arcane Savant, Caller of the Untamed ("a card you exiled with cards named
+  ~"), Cryptic Spires (the circled colors are written into the card's text when circled,
+  `deck::circle_colors`; the printed card's ability adds nothing).
+- Word order: Winter, Cynical Opportunist ("a permanent card from among them"), Reach the
+  Horizon ("with different names" once for both kinds), Journey of Discovery ("up to two
+  additional lands"), Band Together, Allies at Last ("each deal damage equal to their
+  power"), Treeguard Duo ("until end of turn," first), Ral's Staticaster ("for each card in
+  your hand until end of turn"), Grim Giganotosaurus, Hidden Dragonslayer ("with power 4 or
+  greater an opponent controls"), Thrasher Brute, Decorated Champion ("your team
+  controls"), Shield of Kaldra ("Sword of Kaldra, ~, and Helm of Kaldra"), Mister Hyde,
+  Sanctuary Warden ("with a counter on it" stated), Sigarda's Summons ("have base power and
+  toughness 4/4, have flying, and are Angels").
