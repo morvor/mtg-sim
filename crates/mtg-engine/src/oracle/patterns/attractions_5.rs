@@ -149,12 +149,10 @@ inventory::submit! { super::AbilityPattern { name: "attractions 5: for as long a
 
 /// "Whenever you roll a die, you may reveal the top card of your library. Do this only
 /// once each turn. Whenever you reveal a card with mana value less than the result this
-/// way, you may exile it. If you do, you may play it this turn." (Priority Boarding): the
-/// second triggered ability triggers on the first one's reveal (CR 603.2, 607.2), with
-/// "the result" the roll that triggered the first. It's compiled into the first ability:
-/// if this permanent is still on the battlefield as the card is revealed (its triggered
-/// abilities trigger only then, CR 603.6) and the card's mana value is less than the
-/// result, a triggered ability triggers then (CR 603.12's timing) and does the rest.
+/// way, you may exile it. If you do, you may play it this turn." (Priority Boarding): two
+/// triggered abilities, linked (CR 607.1, 607.2). The second triggers on a card revealed
+/// by the first (or a copy of it) while the permanent has it (CR 603.2, 603.6), with "the
+/// result" the roll that triggered the first (`kw/revealed_this_way.rs`).
 fn reveal_then_whenever_you_reveal(
     block: &str,
     ctx: &crate::oracle::CompileContext,
@@ -166,12 +164,11 @@ fn reveal_then_whenever_you_reveal(
     if !lower.starts_with("whenever you roll a die, you may reveal the top card of your library.") {
         return None;
     }
-    let mut abilities = crate::oracle::parse_ability(head, ctx)?;
-    let [a] = abilities.as_mut_slice() else {
+    let abilities = crate::oracle::parse_ability(head, ctx)?;
+    let [a] = abilities.as_slice() else {
         return None;
     };
-    let def = std::sync::Arc::make_mut(a);
-    let AbilityKind::Triggered(tr) = &mut def.kind else {
+    let AbilityKind::Triggered(tr) = &a.kind else {
         return None;
     };
     // The reveal is the ability's only instruction.
@@ -180,39 +177,35 @@ fn reveal_then_whenever_you_reveal(
     if !reveals || !tr.body.targets.is_empty() {
         return None;
     }
-    let b = Builder::new(ctx);
-    let body = super::r600_triggers::reflexive_body_about(
+    let body = crate::oracle::effects::parse_trigger_body(
         &rest.to_lowercase(),
-        &b,
-        Sel::Var(vars::DUG),
+        ctx,
+        Sel::TriggerObject,
+        PlayerRef::You,
     )?;
-    let revealed = Sel::Var(vars::DUG);
-    let cond = Condition::And(vec![
-        Condition::SelNonEmpty(revealed.clone()),
-        Condition::SelMatches(Sel::This, Filter::InZone(ZoneKind::Battlefield)),
-        Condition::SelMatches(
-            revealed,
+    let trigger = TriggerCond::Where {
+        trigger: Box::new(TriggerCond::Custom(
+            crate::kw::revealed_this_way::REVEALED_THIS_WAY.into(),
+        )),
+        cond: Condition::SelMatches(
+            Sel::TriggerObject,
             Filter::ManaValue(
                 Cmp::Lt,
                 Box::new(Value::Custom(crate::dice::THE_RESULT.into())),
             ),
         ),
-    ]);
-    let old = std::mem::take(&mut tr.body.effect);
-    tr.body.effect = Effect::seq(vec![
-        old,
-        Effect::If {
-            cond,
-            then: Box::new(Effect::Reflexive {
-                body: Box::new(body),
-            }),
-            // (An empty instruction, not `Noop`: whether the card was revealed stays what
-            // "Do this only once each turn" reads, CR 603.2h.)
-            otherwise: Box::new(Effect::Seq(vec![])),
-        },
-    ]);
-    def.text = block.to_string();
-    Some(abilities)
+    };
+    Some(vec![
+        AbilityDef::with_link(a.kind.clone(), block, REVEAL_THIS_WAY_LINK),
+        AbilityDef::with_link(
+            AbilityKind::Triggered(TriggeredAbility::new(trigger, body)),
+            block,
+            REVEAL_THIS_WAY_LINK,
+        ),
+    ])
 }
+
+/// Links the revealing ability and its "Whenever you reveal ... this way" (CR 607.2).
+const REVEAL_THIS_WAY_LINK: u16 = 0x3fb7;
 
 inventory::submit! { super::AbilityPattern { name: "attractions 5: whenever you reveal a card with mana value less than the result this way", priority: 104, parse: reveal_then_whenever_you_reveal } }

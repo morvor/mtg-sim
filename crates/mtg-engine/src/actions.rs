@@ -140,7 +140,7 @@ impl Game {
         // APNAP order.
         self.order_simultaneous_entries(&mut finals);
         // CR 401.4, 404.3: the owner arranges cards put into a library position or a
-        // graveyard at the same time.
+        // graveyard at the same time (for "in any order", the player the effect instructs).
         crate::zones::order_simultaneous(self, &mut finals);
         // CR 701.24g: a position in a library that's shuffled at the same time.
         crate::shuffle_rules::positions_after_shuffles(self, &mut finals);

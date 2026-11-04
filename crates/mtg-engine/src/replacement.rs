@@ -21,6 +21,10 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct EtbInfo {
     pub tapped: bool,
+    /// A card put into a library "in any order": the player the effect instructs, who
+    /// arranges the cards put into the same position at the same time instead of their
+    /// owner (see [`crate::ability::Destination::arranged_by`], `zones::order_simultaneous`).
+    pub arranged_by: Option<PlayerId>,
     /// Cards exiled with the entering object while it entered ("As this creature enters,
     /// exile a creature card from your graveyard"): linked to the permanent's abilities
     /// (CR 607.2b, 614.12), by link id.
