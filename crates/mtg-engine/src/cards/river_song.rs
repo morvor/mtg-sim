@@ -3,12 +3,9 @@
 //! bottom card of their library (CR 121.1; ruling: not just the draw for the turn). It's
 //! still a draw, so draw replacements and draw triggers apply as usual.
 //!
-//! The rule is the `draws_from_bottom` hook, keyed to the marker [`FROM_BOTTOM`]. The
-//! card's [`super::ManualAbility`] registration waits for its other text ("Then ~ deals
-//! damage to that player equal to its power.") to compile (cards5-referents-statics):
-//! `manual-check` rejects a hand-written block on a card that still has unsupported text.
+//! The rule is the `draws_from_bottom` hook, keyed to the marker [`FROM_BOTTOM`].
 
-use super::active;
+use super::{active, marker, ManualAbility};
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::kw::{KeywordRegistration, KeywordRules};
@@ -16,6 +13,17 @@ use crate::types::PlayerId;
 
 /// The marker of "You draw cards from the bottom of your library rather than the top."
 pub const FROM_BOTTOM: &str = "card:River Song:you draw from the bottom of your library";
+
+const TEXT: &str =
+    "Meet in Reverse — You draw cards from the bottom of your library rather than the top.";
+
+inventory::submit! { ManualAbility {
+    card: "River Song",
+    face: 0,
+    text: TEXT,
+    build: |_ctx| vec![marker(FROM_BOTTOM, TEXT)],
+    reason: "draws from the bottom of the library instead of the top: only this card",
+} }
 
 struct Rules;
 
