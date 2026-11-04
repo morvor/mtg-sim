@@ -9,7 +9,7 @@
 use crate::ability::*;
 use crate::eval::Ctx;
 use crate::game::Game;
-use crate::types::PlayerId;
+use crate::types::{Entity, PlayerId};
 
 /// The players matching `who`, in turn order starting with `first` (CR 101.4b), or around
 /// the table in `direction`.
@@ -65,4 +65,72 @@ pub fn run(
         g.exec(effect, ctx);
     }
     ctx.iter_player = saved;
+}
+
+/// [`Effect::ChooseForEachPlayer`]: the choices for each player first (in turn order,
+/// each knowing the earlier ones, CR 101.4b), then the action on all the chosen objects at
+/// once, then the instruction for each of them about its player (Nihiloor's ruling).
+#[allow(clippy::too_many_arguments)]
+pub fn choose_for_each_player(
+    g: &mut Game,
+    first: TurnOrderStart,
+    who: &PlayerFilter,
+    chooser: &PlayerRef,
+    filter: &Filter,
+    act: &Effect,
+    done: Var,
+    each: &Effect,
+    ctx: &mut Ctx,
+) {
+    let saved_iter = ctx.iter_player;
+    let mut chosen: Vec<(PlayerId, Entity)> = Vec::new();
+    for p in order(g, first, SeatSide::Left, who, ctx) {
+        if g.result.is_some() {
+            break;
+        }
+        ctx.iter_player = Some(p);
+        let Some(c) = g.eval_player(chooser, ctx) else {
+            continue;
+        };
+        let candidates: Vec<Entity> = g
+            .eval_sel(&Sel::All(filter.clone()), ctx)
+            .into_iter()
+            .filter(|e| !chosen.iter().any(|(_, x)| x == e))
+            .collect();
+        if candidates.is_empty() {
+            continue;
+        }
+        let prompt = format!("Choose up to one for {p}");
+        if let Some(e) = g
+            .ask_entities(c, ctx.source, &prompt, candidates, 0, 1)
+            .first()
+        {
+            chosen.push((p, *e));
+        }
+    }
+    ctx.iter_player = saved_iter;
+    if g.result.is_some() {
+        return;
+    }
+    // The action, once, on all of them.
+    ctx.set_var(vars::IT, chosen.iter().map(|(_, e)| *e).collect());
+    ctx.set_var(done, vec![]);
+    g.exec(act, ctx);
+    let affected = ctx.vars.get(&done).cloned().unwrap_or_default();
+    // Then each one's own instruction, about the player it was chosen for.
+    for (p, e) in chosen {
+        if g.result.is_some() {
+            break;
+        }
+        ctx.iter_player = Some(p);
+        ctx.set_var(vars::IT, vec![e]);
+        let this_one = if affected.contains(&e) {
+            vec![e]
+        } else {
+            vec![]
+        };
+        ctx.set_var(done, this_one);
+        g.exec(each, ctx);
+    }
+    ctx.iter_player = saved_iter;
 }
