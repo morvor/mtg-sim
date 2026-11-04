@@ -78,9 +78,10 @@ fn jade_statue_delayed_effect_still_applies_after_it_stops_being_a_creature() {
 
 #[test]
 fn jade_statue_animated_by_another_effect_becomes_a_3_6_golem() {
-    cr!("613.4b", "613.7a", "205.1b");
-    // Jade Statue's ruling "If Jade Statue is animated by some other effect, ..." is
-    // exempt as superseded: its "in addition to those creature types" predates CR 205.1b.
+    cr!("613.4b", "613.7a", "205.1b", "613.1d");
+    // Jade Statue's ruling (2013-09-20) "If Jade Statue is animated by some other effect,
+    // ..." is exempt as outdated: its "in addition to those creature types" predates the
+    // Throne of Eldraine (2019-10-04) addition to CR 205.1b.
     let mut t = TestGame::new(2);
     let statue = t.battlefield(P0, "Jade Statue");
     crate::r_s26_common::modify_until_eot(
@@ -97,7 +98,8 @@ fn jade_statue_animated_by_another_effect_becomes_a_3_6_golem() {
     animate_statue(&mut t, statue);
     assert_eq!(t.pt(statue), (3, 6));
     // A "Golem artifact creature" effect replaces its creature types (CR 205.1b; the
-    // ruling's "in addition to those creature types" predates that rule).
+    // ruling's "in addition to those creature types" predates the Throne of Eldraine
+    // (2019-10-04) addition to that rule).
     let o = t.obj_now(statue);
     assert!(o.chars.has_subtype("Golem") && !o.chars.has_subtype("Elemental"));
     assert!(o.is(CardType::Artifact) && o.is(CardType::Creature));
