@@ -68,7 +68,10 @@ fn land_count_bonuses_that_stop_applying_can_make_marked_damage_lethal() {
         assert!(t.on_battlefield(arbor));
         destroy(&mut t, if advocate_leaves { adv } else { ls[1] });
         t.settle();
-        assert!(!t.on_battlefield(arbor), "advocate leaves: {advocate_leaves}");
+        assert!(
+            !t.on_battlefield(arbor),
+            "advocate leaves: {advocate_leaves}"
+        );
     }
     // Maja: other creatures get +1/+1. Bears 3/3 with 2 damage.
     let mut t = TestGame::new(2);
@@ -192,8 +195,16 @@ fn serpent_and_kraken_check_the_count_only_when_attacking_or_blocking() {
     let mut c = t.battlefield(P1, "Craw Wurm");
     let _ = &mut c;
     attack_with(&mut t, &[(kraken, Entity::Player(P1))]);
-    assert!(!crate::r_s21_common::legal_blocks(&mut t, P1, &[(small, kraken)]));
-    assert!(crate::r_s21_common::legal_blocks(&mut t, P1, &[(c, kraken)]));
+    assert!(!crate::r_s21_common::legal_blocks(
+        &mut t,
+        P1,
+        &[(small, kraken)]
+    ));
+    assert!(crate::r_s21_common::legal_blocks(
+        &mut t,
+        P1,
+        &[(c, kraken)]
+    ));
     t.answer(
         P1,
         DecisionKind::Blockers,
@@ -219,7 +230,10 @@ fn counts_are_taken_as_the_spell_or_ability_resolves() {
         "Glimmerpost",
         "As the triggered ability resolves, count each Locus on the battlefield regardless of who controls it."
     );
-    ruling!("Omnath, Locus of Rage", "Omanth doesn't have the land type Locus.");
+    ruling!(
+        "Omnath, Locus of Rage",
+        "Omanth doesn't have the land type Locus."
+    );
     ruling!(
         "Charix, the Raging Isle",
         "Each time you activate Charix's last ability, the value of X for that instance of the ability is determined only as that ability resolves. Once that happens, the size of the power-and-toughness change for that instance of the ability won't change later in the turn, even if the number of Islands you control does change."
@@ -377,7 +391,14 @@ fn garruk_counts_on_resolution() {
         .counters
         .insert(counters::LOYALTY.into(), 4);
     let wall = t.battlefield(P0, "Wall of Wood");
-    crate::r_s26_common::modify_until_eot(&mut t, wall, vec![Modification::ModifyPT(mtg_engine::ability::Value::Const(-2), mtg_engine::ability::Value::Const(0))]);
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        wall,
+        vec![Modification::ModifyPT(
+            mtg_engine::ability::Value::Const(-2),
+            mtg_engine::ability::Value::Const(0),
+        )],
+    );
     t.hand(P0, "Grizzly Bears");
     let hand = t.hand_size(P0);
     let gy = t.graveyard_size(P0);
@@ -450,9 +471,10 @@ fn liliana_of_the_dark_realms_rulings() {
     t.activate(P0, lili, 1, &[obj(wurm)]).unwrap();
     let on_activation = asked_since(&t, from);
     assert!(
-        on_activation
-            .iter()
-            .all(|(_, d)| !matches!(d, Decision::ChooseOption { .. } | Decision::ChooseModes { .. })),
+        on_activation.iter().all(|(_, d)| !matches!(
+            d,
+            Decision::ChooseOption { .. } | Decision::ChooseModes { .. }
+        )),
         "{on_activation:?}"
     );
     t.battlefield(P0, "Swamp");
@@ -477,7 +499,12 @@ fn liliana_of_the_dark_realms_rulings() {
         .iter()
         .map(|a| a.text.to_string())
         .collect();
-    assert!(texts.iter().any(|x| x.to_lowercase().contains("{b}{b}{b}{b}")), "{texts:?}");
+    assert!(
+        texts
+            .iter()
+            .any(|x| x.to_lowercase().contains("{b}{b}{b}{b}")),
+        "{texts:?}"
+    );
     assert!(crate::r_s20_common::tap_for_mana(&mut t, P0, grave, "{U}"));
 }
 

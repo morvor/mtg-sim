@@ -196,11 +196,19 @@ fn simultaneous_lands_are_all_counted() {
     let b = t.hand(P0, "Island");
     crate::r_s31_common::put_together(&mut t, &[a, b]);
     assert_eq!(triggers_of(&t, tat), 2);
-    // Field of the Dead and five lands with different names enter together with one other
-    // land: each of the two Fields' triggers... here one Field: six triggers (one per land).
+    // Field of the Dead enters together with five lands with other names (a Wastes is
+    // already there): it triggers once for each of the six lands, itself included, and
+    // each trigger sees seven names.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Wastes");
-    let names = ["Field of the Dead", "Plains", "Island", "Swamp", "Mountain", "Forest"];
+    let names = [
+        "Field of the Dead",
+        "Plains",
+        "Island",
+        "Swamp",
+        "Mountain",
+        "Forest",
+    ];
     let cards: Vec<ObjectId> = names.iter().map(|n| t.hand(P0, n)).collect();
     crate::r_s31_common::put_together(&mut t, &cards);
     let field = t.g.current(cards[0]);
@@ -229,15 +237,16 @@ fn ankh_of_mishra_uses_the_controller_on_resolution_and_triggers_on_any_land() {
     give_control(&mut t, land, P1);
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (20, 18));
-    // Put onto the battlefield by P1's effect, then gone before resolution: last
-    // controller P1.
+    // Put onto the battlefield under P0's control (P0 owns it), P1 gains control of it,
+    // then it's gone before resolution: its last controller, P1, is dealt 2 (not the
+    // controller when it triggered, nor the owner).
     let mut t = TestGame::new(2);
-    let ankh = t.battlefield(P0, "Ankh of Mishra");
-    let land = put_onto_battlefield(&mut t, P1, "Forest");
+    let ankh = t.battlefield(P1, "Ankh of Mishra");
+    let land = put_onto_battlefield(&mut t, P0, "Forest");
     assert_eq!(triggers_of(&t, ankh), 1);
-    give_control(&mut t, land, P0);
     give_control(&mut t, land, P1);
     destroy(&mut t, land);
+    assert!(!t.on_battlefield(land));
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (20, 18));
 }
@@ -262,6 +271,40 @@ fn hidden_herd_only_triggers_on_played_lands() {
     assert_eq!(triggers_of(&t, herd), 1);
     t.resolve_all();
     assert!(crate::r_s20_common::creature_now(&mut t, herd));
+}
+
+#[test]
+fn hidden_stag_only_triggers_on_played_lands() {
+    cr!("305.1", "603.2", "603.4");
+    ruling!(
+        "Hidden Stag",
+        "Does not trigger on lands put onto the battlefield by a spell or ability."
+    );
+    supported("Hidden Stag");
+    // "Whenever an opponent plays a land" (any land, unlike Hidden Herd's nonbasic).
+    let mut t = TestGame::new(2);
+    let stag = t.battlefield(P0, "Hidden Stag");
+    t.set_step(P1, Step::PrecombatMain);
+    put_onto_battlefield(&mut t, P1, "Forest");
+    assert_eq!(triggers_of(&t, stag), 0);
+    let forest = t.hand(P1, "Forest");
+    t.play_land(P1, forest).unwrap_or_else(|e| panic!("{e:?}"));
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(triggers_of(&t, stag), 1);
+    t.resolve_all();
+    assert!(crate::r_s20_common::creature_now(&mut t, stag));
+    assert_eq!(t.pt(stag), (3, 2));
+    // "Whenever you play a land": a land P0 puts onto the battlefield doesn't turn it
+    // back; a land P0 plays does.
+    t.set_step(P0, Step::PrecombatMain);
+    put_onto_battlefield(&mut t, P0, "Plains");
+    assert_eq!(triggers_of(&t, stag), 0);
+    play_from_hand(&mut t, P0, "Plains");
+    assert_eq!(triggers_of(&t, stag), 1);
+    t.resolve_all();
+    assert!(!crate::r_s20_common::creature_now(&mut t, stag));
+    assert!(t.obj_now(stag).is(CardType::Enchantment));
 }
 
 #[test]

@@ -204,7 +204,11 @@ fn desert_warfare_returns_only_deserts_still_in_the_graveyard_after_it_entered()
         t.advance_to(P0, Step::End);
         t.resolve_all();
         let returned = !t.named_on_battlefield("Sunscorched Desert").is_empty();
-        assert_eq!(returned, !before && !leaves, "before {before}, leaves {leaves}");
+        assert_eq!(
+            returned,
+            !before && !leaves,
+            "before {before}, leaves {leaves}"
+        );
         if leaves {
             assert!(t.in_exile("Sunscorched Desert"));
         }
@@ -317,8 +321,16 @@ fn chocobo_doubled_hideaway_exiles_two_cards_for_the_linked_ability() {
     }
     crate::r_s06_common::activate_containing(&mut t, P0, hideaway, "{2}").unwrap();
     t.resolve_all();
-    assert!(!t.named_on_battlefield("Grizzly Bears").is_empty(), "{}", t.dump_log());
-    assert!(!t.named_on_battlefield("Hill Giant").is_empty(), "{}", t.dump_log());
+    assert!(
+        !t.named_on_battlefield("Grizzly Bears").is_empty(),
+        "{}",
+        t.dump_log()
+    );
+    assert!(
+        !t.named_on_battlefield("Hill Giant").is_empty(),
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]

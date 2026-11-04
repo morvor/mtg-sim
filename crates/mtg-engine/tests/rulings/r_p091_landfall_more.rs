@@ -94,7 +94,9 @@ fn cosima_upkeep_and_exile_rulings() {
     assert_eq!(t.zone(back), Zone::Exile);
     assert_eq!(t.counters(back, "voyage"), 0);
     assert_eq!(t.hand_size(P0), hand);
-    assert!(t.named_on_battlefield("Cosima, God of the Voyage").is_empty());
+    assert!(t
+        .named_on_battlefield("Cosima, God of the Voyage")
+        .is_empty());
     // Zero voyage counters: declining returns it with no counters and draws nothing.
     let (mut t, _c) = cosima_exiled();
     put_onto_battlefield(&mut t, P0, "Forest");
@@ -292,7 +294,13 @@ fn zimone_needs_a_land_this_turn_and_any_prime() {
     t.settle();
     assert_eq!(triggers_of(&t, z), 0);
     // (lands with play, total, primo)
-    for (total, primo) in [(3usize, true), (37, true), (101, true), (35, false), (39, false)] {
+    for (total, primo) in [
+        (3usize, true),
+        (37, true),
+        (101, true),
+        (35, false),
+        (39, false),
+    ] {
         let mut t = TestGame::new(2);
         let z = t.battlefield(P0, "Zimone, All-Questioning");
         t.lands(P0, "Forest", total - 1);

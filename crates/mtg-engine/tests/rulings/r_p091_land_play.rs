@@ -127,7 +127,10 @@ fn chocobo_follows_timing_and_allows_optional_costs_for_birds_from_the_top() {
     assert!(!may_cast(&mut t, P0, owl));
     t.lands(P0, "Island", 7);
     t.set_step(P0, Step::Upkeep);
-    assert!(!may_cast(&mut t, P0, owl), "sorcery timing for a creature spell");
+    assert!(
+        !may_cast(&mut t, P0, owl),
+        "sorcery timing for a creature spell"
+    );
     t.set_step(P0, Step::PrecombatMain);
     assert!(may_cast(&mut t, P0, owl));
     let a = t.battlefield(P1, "Grizzly Bears");
@@ -207,9 +210,12 @@ fn cant_play_lands_doesnt_stop_putting_lands_or_activating_land_abilities() {
         t.answer_choose(P0, &[]);
         t.cast(P0, growth).go();
         let before = t.g.find_in_zone(Zone::Battlefield, "Plains").len();
-        let plains = t.g.player(P0).library.iter().copied().find(|id| {
-            t.g.obj(*id).chars.name == "Plains"
-        });
+        let plains =
+            t.g.player(P0)
+                .library
+                .iter()
+                .copied()
+                .find(|id| t.g.obj(*id).chars.name == "Plains");
         t.clear_answers();
         t.answer_choose(P0, &[Entity::Object(plains.unwrap())]);
         t.resolve_all();
@@ -220,7 +226,9 @@ fn cant_play_lands_doesnt_stop_putting_lands_or_activating_land_abilities() {
         );
         // A land's activated (mana) ability can still be activated.
         let karoo = t.battlefield(P0, "Gruul Turf");
-        assert!(crate::r_s20_common::tap_for_mana(&mut t, P0, karoo, "{R}{G}"));
+        assert!(crate::r_s20_common::tap_for_mana(
+            &mut t, P0, karoo, "{R}{G}"
+        ));
     }
 }
 
@@ -330,7 +338,7 @@ fn omenkeel_lands_follow_normal_rules_and_outlive_the_omenkeel() {
     t.play_land(P0, exiled[0]).unwrap();
     // Only one land per turn.
     assert!(!may_play_land(&mut t, P0, exiled[1]));
-    // Not in the end step either.
+    // Not during an opponent's turn, nor in the upkeep.
     t.advance_to(P1, Step::PrecombatMain);
     assert!(!may_play_land(&mut t, P0, exiled[1]));
     t.advance_to(P0, Step::Upkeep);
