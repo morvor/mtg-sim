@@ -426,7 +426,7 @@ fn oloro_triggers_when_you_gain_life_even_if_your_life_total_goes_down() {
 
 #[test]
 fn oloros_first_ability_works_only_on_the_battlefield() {
-    cr!("113.6", "113.6k", "603.6");
+    cr!("113.6", "113.6b");
     ruling!(
         "Oloro, Ageless Ascetic",
         "Oloro's first ability works only if Oloro is on the battlefield."

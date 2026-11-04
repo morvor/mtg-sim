@@ -430,7 +430,7 @@ fn life_doublers_dont_apply_to_life_gained_by_a_teammate() {
 
 #[test]
 fn felidar_sovereign_two_headed_giant_checks_the_team_life_total() {
-    cr!("810.9", "603.4", "104.3h");
+    cr!("810.9", "810.9a", "603.4");
     ruling!(
         "Felidar Sovereign",
         "In a Two-Headed Giant game, your life total is the same as your team's life total. As such, the ability triggers if your team has 40 or more life."
