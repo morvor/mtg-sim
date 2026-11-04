@@ -938,6 +938,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::PutSticker { .. }
         | Effect::SpendAnyTypeMana { .. }
         | Effect::ChangeTargets { .. }
+        | Effect::ReselectTargetsAtRandom { .. }
         | Effect::BecomeCopy { .. }
         | Effect::BecomeCopyExcept { .. }
         | Effect::Regenerate { .. }
