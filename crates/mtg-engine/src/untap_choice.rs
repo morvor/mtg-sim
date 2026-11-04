@@ -30,6 +30,17 @@ pub fn remains_tapped(control: bool) -> Duration {
     Duration::WhileCondition(Condition::Custom(name.into()))
 }
 
+/// The duration ended before the effect `ctx` (the resolving ability's context) is about
+/// to create could begin (CR 611.2b): see [`untapped_while_on_stack`].
+pub fn ended_before_it_began(g: &Game, d: &Duration, ctx: &Ctx) -> bool {
+    match d {
+        Duration::WhileCondition(Condition::Custom(n)) => {
+            custom_condition(g, n, ctx) == Some(false)
+        }
+        _ => false,
+    }
+}
+
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     let control = match name {
         SOURCE_REMAINS_TAPPED => false,
@@ -43,20 +54,22 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
             && !o.phased_out
             && o.tapped
             && (!control || o.controller == ctx.controller)
-            && !untapped_while_on_stack(g, s)
+            && !ctx
+                .stack_obj
+                .is_some_and(|a| untapped_while_on_stack(g, s, a))
     }))
 }
 
-/// Whether `src` became untapped after the topmost stack object — an ability of `src`
-/// that's resolving or about to — was put on the stack: its "for as long as ~ remains
-/// tapped" duration then ended before the effect could begin, even if `src` was tapped
-/// again (CR 611.2b; Rubinia Soulsinger ruling). Once an effect exists, an untap ends it.
-fn untapped_while_on_stack(g: &Game, src: ObjectId) -> bool {
+/// Whether `src` became untapped after `ability` — the ability of `src` creating the
+/// effect, whose resolution context is the condition's — was put on the stack: its "for as
+/// long as ~ remains tapped" duration then ended before the effect could begin, even if
+/// `src` was tapped again (CR 611.2b; Rubinia Soulsinger and Entrancing Lyre rulings).
+/// Once an effect exists (its condition is checked without a resolving ability), only an
+/// untap after that ends it, not one before another ability of `src` was activated.
+fn untapped_while_on_stack(g: &Game, src: ObjectId, ability: ObjectId) -> bool {
     use crate::events::Event;
     use crate::object::StackKind;
-    let Some(&top) = g.stack.last() else {
-        return false;
-    };
+    let top = ability;
     let of_src = g.obj(top).stack.as_deref().is_some_and(|si| {
         matches!(&si.kind,
             StackKind::Activated { source, .. } | StackKind::Triggered { source, .. }
