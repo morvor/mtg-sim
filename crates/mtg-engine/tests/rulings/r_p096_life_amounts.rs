@@ -177,6 +177,17 @@ fn angel_of_destiny_combat_damage_redirected_to_you_gains_twice_as_one_event() {
     assert_eq!(gains_since(&t, from, P0), vec![4]);
     assert_eq!(gains_since(&t, from, P1), Vec::<u32>::new());
     assert_eq!(t.life(P0), 22);
+    // Damage dealt to the opponent: each of the two players gains 2.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Angel of Destiny");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    declare(&mut t, &[bears]);
+    let from = t.g.turn_events.len();
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(gains_since(&t, from, P0), vec![2]);
+    assert_eq!(gains_since(&t, from, P1), vec![2]);
+    assert_eq!((t.life(P0), t.life(P1)), (22, 20));
 }
 
 #[test]
