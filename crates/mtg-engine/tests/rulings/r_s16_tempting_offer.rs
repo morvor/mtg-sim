@@ -67,7 +67,9 @@ fn opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices() {
         "Tempt with Glory",
         "Your opponents decide in turn order whether or not they accept the offer, starting with the opponent on your left. Each opponent will know the decisions of previous opponents in turn order when making their decision."
     );
-    // P2 casts it during P2's turn: P3 decides first, then P0, then P1.
+    // P2 casts it during P2's turn (the caster is the active player): P3 decides first,
+    // then P0, then P1. For the order when it's cast on another player's turn (the active
+    // player first, CR 101.4), see the Tempt with Mayhem ruling and test below.
     let mut t = glory_game(P2, &[(P3, true), (P0, false), (P1, true)]);
     let seen: Vec<Seen<Vec<String>>> = [P3, P0, P1]
         .iter()
@@ -93,6 +95,57 @@ fn opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices() {
         vec![vec!["P3 chooses to take part".to_string()]]
     );
     assert_eq!(counters_by_player(&t.g), vec![0, 1, 3, 1]);
+}
+
+#[test]
+fn off_turn_the_active_opponent_decides_first() {
+    cr!("101.4", "101.4b");
+    ruling!(
+        "Tempt with Mayhem",
+        "or the active player, if that player is one of your opponents"
+    );
+    supported("Tempt with Mayhem");
+    supported("Divination");
+    // P2 casts Tempt with Mayhem on P0's turn, copying P0's Divination (no targets, so the
+    // only decisions are the yes/no ones): P0, the active player, decides first, then P1,
+    // then P3.
+    let mut t = TestGame::new(4);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Island", 3);
+    let div = t.hand(P0, "Divination");
+    let spell = t.cast(P0, div).go();
+    t.lands(P2, "Mountain", 3);
+    let tm = t.hand(P2, "Tempt with Mayhem");
+    for (p, yes) in [(P0, true), (P1, false), (P3, true)] {
+        t.answer_yes(p, yes);
+    }
+    let seen: Vec<Seen<Vec<String>>> = [P0, P1, P3]
+        .iter()
+        .map(|p| watch(&mut t, *p, is_yes_no, acceptances))
+        .collect();
+    let from = t.asked().len();
+    t.cast(P2, tm).target(spell).go();
+    let hands: Vec<usize> = [P0, P1, P2, P3].iter().map(|p| t.hand_size(*p)).collect();
+    t.resolve_all();
+    let order: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| is_yes_no(d))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(order, vec![P0, P1, P3]);
+    // Each one knows the choices made before theirs (CR 101.4b).
+    assert_eq!(*seen[0].lock().unwrap(), vec![Vec::<String>::new()]);
+    let p0_took_part = vec![vec!["P0 chooses to take part".to_string()]];
+    assert_eq!(*seen[1].lock().unwrap(), p0_took_part);
+    assert_eq!(*seen[2].lock().unwrap(), p0_took_part);
+    // P2 copies it three times (once, plus once for each of P0 and P3); P0 draws for its
+    // copy and the original, P3 for its copy.
+    let drawn: Vec<usize> = [P0, P1, P2, P3]
+        .iter()
+        .zip(&hands)
+        .map(|(p, h)| t.hand_size(*p) - h)
+        .collect();
+    assert_eq!(drawn, vec![4, 0, 6, 2]);
 }
 
 #[test]
