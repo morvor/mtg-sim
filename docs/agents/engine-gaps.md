@@ -725,12 +725,6 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   unless a real meld pair resolves, but the instruction "exile them, then meld them" should still exile both
   and leave them in exile (CR 701.42b-c: objects that can't be melded stay where they are, i.e. exiled).
   Size S.
-- "A player other than you [did something] this turn" doesn't count players who have left the game:
-  `history_conditions_4.rs` compiles it to `Value::CountPlayers` with a `PlayerFilter::History` filter,
-  which sees only players in the game, unlike the `Value::EventsThisTurn` tallies (interpretation
-  history-counts-players-who-left). Card: Ludevic, Necro-Alchemist, whose ruling "If a player lost life and
-  subsequently lost the game, the player whose turn it is may draw a card." is OPEN (P114). Fix: let
-  `CountPlayers` with a history filter consider players who left. Size S.
 
 ---
 

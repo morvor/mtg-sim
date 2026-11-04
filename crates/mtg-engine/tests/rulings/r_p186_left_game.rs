@@ -166,3 +166,45 @@ fn kaito_counts_an_opponent_who_lost_life_then_the_game() {
     assert_eq!(drawn(false), 2);
     assert_eq!(drawn(true), 2, "the opponent who left still counts");
 }
+
+#[test]
+fn ludevic_counts_a_player_who_lost_life_then_the_game() {
+    cr!("800.4i", "603.4");
+    interp!("history-counts-players-who-left");
+    ruling!(
+        "Ludevic, Necro-Alchemist",
+        "If a player lost life and subsequently lost the game, the player whose turn it is may draw a card."
+    );
+    // "a player other than you lost life this turn" is a count of players
+    // (`Value::CountPlayers` with a history filter), checked as the trigger resolves.
+    let drawn = |damage: u32, leave: bool| {
+        let (mut t, _) = p2_damaged_then_left("Ludevic, Necro-Alchemist", damage, false, leave);
+        t.answer_yes(P0, true);
+        let hand = t.hand_size(P0);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        t.hand_size(P0) - hand
+    };
+    assert_eq!(drawn(1, false), 1);
+    assert_eq!(drawn(1, true), 1, "the player who left still counts");
+    // Control: no other player lost life this turn.
+    assert_eq!(drawn(0, true), 0);
+}
+
+#[test]
+fn bloodthirst_counts_an_opponent_dealt_damage_who_then_left() {
+    // Bloodthirst N: "If an opponent was dealt damage this turn" asks about players by what
+    // happened to them this turn, like Spinerock Knoll's "an opponent was dealt 7 or more
+    // damage this turn", whose ruling counts an opponent who has since left the game.
+    cr!("702.54a", "800.4i");
+    interp!("history-counts-players-who-left");
+    let counters = |damage: u32, leave: bool| {
+        let (mut t, _) = p2_damaged_then_left("Grizzly Bears", damage, false, leave);
+        let minotaurs = t.enter(P0, "Gorehorn Minotaurs");
+        t.counters(minotaurs, "+1/+1")
+    };
+    assert_eq!(counters(1, false), 2);
+    assert_eq!(counters(1, true), 2, "the opponent who left still counts");
+    // Control: no opponent was dealt damage this turn.
+    assert_eq!(counters(0, true), 0);
+}
