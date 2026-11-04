@@ -43,6 +43,8 @@ pub(crate) struct PreparedDestination {
     with_mods: Option<(Option<ObjectId>, PlayerId, Vec<Modification>)>,
     /// `Some(None)`: attached to something undefined (CR 303.4i).
     attach_to: Option<Option<Entity>>,
+    /// "In any order": who arranges the cards put into a library position together.
+    arranged_by: Option<PlayerId>,
 }
 
 /// How a library position is offered.
@@ -98,7 +100,12 @@ impl Game {
         } else {
             to.position_choice.first().copied().unwrap_or(to.position)
         };
+        let arranged_by = match (&to.arranged_by, to.zone) {
+            (Some(r), ZoneKind::Library) => self.eval_player(r, ctx),
+            _ => None,
+        };
         PreparedDestination {
+            arranged_by,
             zone: to.zone,
             pos,
             tapped: to.tapped,
@@ -222,6 +229,9 @@ impl PreparedDestination {
                 etb.attach_to = a;
                 etb.attach_specified = true;
             }
+        }
+        if self.zone == ZoneKind::Library {
+            etb.arranged_by = self.arranged_by;
         }
         etb.transformed |= self.transformed;
         if attack.is_some() {
