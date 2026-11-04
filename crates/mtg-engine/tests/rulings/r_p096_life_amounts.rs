@@ -162,8 +162,12 @@ fn angel_of_destiny_combat_damage_redirected_to_you_gains_twice_as_one_event() {
     // ("The next 2 damage that a source of your choice would deal to you and/or
     // permanents you control this turn is dealt to any target instead.") choosing the
     // Bears and targeting P0: the Bears' 2 combat damage is dealt to P0.
+    // Ajani's Pridemate ("Whenever you gain life, put a +1/+1 counter on this creature.")
+    // triggers once.
+    supported("Ajani's Pridemate");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Angel of Destiny");
+    let pridemate = t.battlefield(P0, "Ajani's Pridemate");
     let bears = t.battlefield(P0, "Grizzly Bears");
     declare(&mut t, &[bears]);
     t.answer_choose(P1, &[Entity::Object(bears)]);
@@ -177,6 +181,7 @@ fn angel_of_destiny_combat_damage_redirected_to_you_gains_twice_as_one_event() {
     assert_eq!(gains_since(&t, from, P0), vec![4]);
     assert_eq!(gains_since(&t, from, P1), Vec::<u32>::new());
     assert_eq!(t.life(P0), 22);
+    assert_eq!(t.pt(pridemate), (3, 3));
     // Damage dealt to the opponent: each of the two players gains 2.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Angel of Destiny");

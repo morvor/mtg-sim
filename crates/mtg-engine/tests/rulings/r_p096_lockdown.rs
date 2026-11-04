@@ -235,7 +235,7 @@ fn lyre(t: &mut TestGame, target: ObjectId) -> ObjectId {
 
 #[test]
 fn entrancing_lyre_lock_lasts_while_it_stays_tapped() {
-    cr!("611.2b", "502.3", "115.1b");
+    cr!("611.2b", "502.3", "115.1c");
     ruling!(
         "Entrancing Lyre",
         "Entrancing Lyre’s activated ability can target a creature that’s already tapped. That creature won’t untap for as long as Entrancing Lyre remains tapped."
@@ -321,7 +321,7 @@ fn entrancing_lyre_leaving_the_battlefield_ends_the_lock() {
 
 #[test]
 fn entrancing_lyre_illegal_target_doesnt_tap() {
-    cr!("608.2b", "115.1b");
+    cr!("608.2b", "115.1c");
     ruling!(
         "Entrancing Lyre",
         "If the target creature is an illegal target by the time Entrancing Lyre’s ability tries to resolve, the ability won’t resolve. The creature isn’t tapped and can untap as usual."
@@ -593,11 +593,13 @@ fn remains_tapped_control_effect_survives_an_untap_before_a_later_activation() {
     let shackles = t.battlefield(P0, "Vedalken Shackles");
     let key = t.battlefield(P0, "Voltaic Key");
     t.lands(P0, "Island", 5);
-    t.activate(P0, shackles, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, shackles, 0, &[Entity::Object(bears)])
+        .unwrap();
     t.activate(P0, key, 0, &[Entity::Object(shackles)]).unwrap();
     t.resolve();
     assert!(!tapped(&t, shackles));
-    t.activate(P0, shackles, 0, &[Entity::Object(giant)]).unwrap();
+    t.activate(P0, shackles, 0, &[Entity::Object(giant)])
+        .unwrap();
     t.resolve_all();
     assert!(tapped(&t, shackles));
     assert_eq!(t.obj_now(giant).controller, P0);
