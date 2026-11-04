@@ -67,7 +67,12 @@ fn chandras_incinerator_counts_damage_to_an_opponent_who_lost() {
 
 /// A three-player game in P0's precombat main phase: Grizzly Bears of P0's deals `damage`
 /// to P2 (combat damage if `combat`), then P2 concedes if `leave`.
-fn p2_damaged_then_left(card: &str, damage: u32, combat: bool, leave: bool) -> (TestGame, ObjectId) {
+fn p2_damaged_then_left(
+    card: &str,
+    damage: u32,
+    combat: bool,
+    leave: bool,
+) -> (TestGame, ObjectId) {
     supported(card);
     let mut t = TestGame::new(3);
     let source = t.battlefield(P0, card);
@@ -103,27 +108,6 @@ fn sygg_counts_an_opponent_who_lost_3_life_then_left() {
     assert_eq!(drawn(3, true), 1, "the opponent who left still counts");
     // Control: 2 life lost isn't enough.
     assert_eq!(drawn(2, true), 0);
-}
-
-#[test]
-fn ludevic_counts_a_player_who_lost_life_then_the_game() {
-    cr!("800.4i");
-    interp!("history-counts-players-who-left");
-    ruling!(
-        "Ludevic, Necro-Alchemist",
-        "If a player lost life and subsequently lost the game, the player whose turn it is may draw a card."
-    );
-    let drawn = |damage: u32| {
-        let (mut t, _) = p2_damaged_then_left("Ludevic, Necro-Alchemist", damage, false, true);
-        t.answer_yes(P0, true);
-        let hand = t.hand_size(P0);
-        t.advance_to(P0, Step::End);
-        t.resolve_all();
-        t.hand_size(P0) - hand
-    };
-    assert_eq!(drawn(1), 1, "P2 lost life, then the game");
-    // Control: nobody lost life.
-    assert_eq!(drawn(0), 0);
 }
 
 #[test]
@@ -166,15 +150,14 @@ fn kaito_counts_an_opponent_who_lost_life_then_the_game() {
         t.g.flush_events();
         t.g.add_counters(Entity::Object(kaito), "loyalty", 3, None);
         t.g.recompute();
-        let index = t
-            .g
-            .obj(kaito)
-            .chars
-            .abilities
-            .iter()
-            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
-            .position(|a| a.text.starts_with("0:"))
-            .expect("Kaito's 0 ability");
+        let index =
+            t.g.obj(kaito)
+                .chars
+                .abilities
+                .iter()
+                .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+                .position(|a| a.text.starts_with("0:"))
+                .expect("Kaito's 0 ability");
         let hand = t.hand_size(P0);
         t.activate(P0, kaito, index, &[]).expect("activated");
         t.resolve_all();

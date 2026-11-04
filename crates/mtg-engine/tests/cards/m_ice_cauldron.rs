@@ -34,7 +34,11 @@ fn the_charged_mana_casts_the_exiled_card() {
     t.activate(P0, cauldron, 1, &[]).unwrap();
     assert_eq!(t.counters(cauldron, "charge"), 0);
     assert_eq!(pool(&t, P0), vec![ManaType::G, ManaType::G]);
-    let exiled = t.g.exile.iter().copied().find(|o| t.obj(*o).chars.name == "Grizzly Bears");
+    let exiled =
+        t.g.exile
+            .iter()
+            .copied()
+            .find(|o| t.obj(*o).chars.name == "Grizzly Bears");
     t.cast(P0, exiled.unwrap()).go();
     assert!(pool(&t, P0).is_empty());
     t.resolve();
@@ -44,7 +48,10 @@ fn the_charged_mana_casts_the_exiled_card() {
 #[test]
 fn the_charged_mana_cant_pay_for_another_spell() {
     cr!("106.6");
-    ruling!("Ice Cauldron", "The mana put in the Cauldron can only be used to cast the given spell");
+    ruling!(
+        "Ice Cauldron",
+        "The mana put in the Cauldron can only be used to cast the given spell"
+    );
     let mut t = TestGame::new(2);
     let cauldron = t.battlefield(P0, "Ice Cauldron");
     let bears = t.hand(P0, "Grizzly Bears");
@@ -59,7 +66,10 @@ fn the_charged_mana_cant_pay_for_another_spell() {
 #[test]
 fn x_of_zero_charges_it_with_no_mana() {
     cr!("607.2e");
-    ruling!("Ice Cauldron", "X can be zero. This places a zero mana counter on the Cauldron.");
+    ruling!(
+        "Ice Cauldron",
+        "X can be zero. This places a zero mana counter on the Cauldron."
+    );
     let mut t = TestGame::new(2);
     let cauldron = t.battlefield(P0, "Ice Cauldron");
     let bolt = t.hand(P0, "Lightning Bolt");
@@ -91,22 +101,20 @@ fn only_the_last_exiled_card_can_be_cast_with_the_mana() {
     charge(&mut t, cauldron, elves);
     t.g.untap(cauldron);
     t.activate(P0, cauldron, 1, &[]).unwrap();
-    let exiled_bears = t
-        .g
-        .exile
-        .iter()
-        .copied()
-        .find(|o| t.obj(*o).chars.name == "Grizzly Bears")
-        .unwrap();
+    let exiled_bears =
+        t.g.exile
+            .iter()
+            .copied()
+            .find(|o| t.obj(*o).chars.name == "Grizzly Bears")
+            .unwrap();
     // Both are castable from exile, but the mana pays only for the Elves.
     assert!(t.cast(P0, exiled_bears).try_go().is_err());
-    let exiled_elves = t
-        .g
-        .exile
-        .iter()
-        .copied()
-        .find(|o| t.obj(*o).chars.name == "Llanowar Elves")
-        .unwrap();
+    let exiled_elves =
+        t.g.exile
+            .iter()
+            .copied()
+            .find(|o| t.obj(*o).chars.name == "Llanowar Elves")
+            .unwrap();
     t.cast(P0, exiled_elves).go();
     assert_eq!(pool(&t, P0).len(), 1);
 }
@@ -114,10 +122,22 @@ fn only_the_last_exiled_card_can_be_cast_with_the_mana() {
 #[test]
 fn the_exiled_cards_can_be_cast_with_other_mana_and_after_it_leaves() {
     cr!("601.2");
-    ruling!("Ice Cauldron", "If multiple cards are exiled by the Cauldron, any one of them can be cast.");
-    ruling!("Ice Cauldron", "You do not have to use any mana from the Cauldron when casting the spell");
-    ruling!("Ice Cauldron", "If the Cauldron leaves the battlefield, you can still cast any cards it exiled");
-    ruling!("Ice Cauldron", "It is possible to have more than one card exiled by the Cauldron.");
+    ruling!(
+        "Ice Cauldron",
+        "If multiple cards are exiled by the Cauldron, any one of them can be cast."
+    );
+    ruling!(
+        "Ice Cauldron",
+        "You do not have to use any mana from the Cauldron when casting the spell"
+    );
+    ruling!(
+        "Ice Cauldron",
+        "If the Cauldron leaves the battlefield, you can still cast any cards it exiled"
+    );
+    ruling!(
+        "Ice Cauldron",
+        "It is possible to have more than one card exiled by the Cauldron."
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let cauldron = t.battlefield(P0, "Ice Cauldron");
@@ -144,7 +164,10 @@ fn the_exiled_cards_can_be_cast_with_other_mana_and_after_it_leaves() {
 #[test]
 fn the_exiled_card_is_cast_only_when_it_could_be_cast_normally() {
     cr!("601.3", "307.1");
-    ruling!("Ice Cauldron", "You can only cast the spell when you could legally cast it normally.");
+    ruling!(
+        "Ice Cauldron",
+        "You can only cast the spell when you could legally cast it normally."
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let cauldron = t.battlefield(P0, "Ice Cauldron");
@@ -162,9 +185,18 @@ fn the_exiled_card_is_cast_only_when_it_could_be_cast_normally() {
 #[test]
 fn its_mana_ability_and_a_countered_charge_keep_the_card() {
     cr!("605.1a", "701.6a");
-    ruling!("Ice Cauldron", "Tapping the Cauldron for the mana is a mana ability.");
-    ruling!("Ice Cauldron", "If the ability to exile a card with the Cauldron is countered, you do not lose the card");
-    ruling!("Ice Cauldron", "Cards which are not actually in your hand can't be exiled by the Ice Cauldron.");
+    ruling!(
+        "Ice Cauldron",
+        "Tapping the Cauldron for the mana is a mana ability."
+    );
+    ruling!(
+        "Ice Cauldron",
+        "If the ability to exile a card with the Cauldron is countered, you do not lose the card"
+    );
+    ruling!(
+        "Ice Cauldron",
+        "Cards which are not actually in your hand can't be exiled by the Ice Cauldron."
+    );
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let cauldron = t.battlefield(P0, "Ice Cauldron");
@@ -200,9 +232,9 @@ fn its_mana_ability_and_a_countered_charge_keep_the_card() {
         .flatten()
         .collect();
     assert!(offered.contains(&Entity::Object(bears)));
-    assert!(offered
-        .iter()
-        .all(|e| e.object().is_some_and(|o| t.obj(o).chars.name != "Hill Giant")));
+    assert!(offered.iter().all(|e| e
+        .object()
+        .is_some_and(|o| t.obj(o).chars.name != "Hill Giant")));
     t.g.untap(cauldron);
     t.activate(P0, cauldron, 1, &[]).unwrap();
     assert_eq!(t.stack_len(), 0);
@@ -237,7 +269,7 @@ fn a_charge_that_exiles_nothing_keeps_the_earlier_card_as_the_last() {
     let elves = t.hand(P0, "Llanowar Elves");
     t.lands(P0, "Forest", 2);
     t.answer(P0, DecisionKind::X, Answer::Number(2));
-    t.answer_choose(P0, &[]);
+    t.answer_yes(P0, false);
     t.activate(P0, cauldron, 0, &[]).unwrap();
     t.resolve_all();
     assert!(t.g.player(P0).hand.contains(&elves), "nothing was exiled");
@@ -272,7 +304,11 @@ fn a_charge_counter_from_another_source_releases_mana_for_the_last_exiled_card()
     t.resolve_all();
     assert_eq!(t.counters(cauldron, "charge"), 1);
     t.activate(P0, cauldron, 1, &[]).unwrap();
-    assert_eq!(pool(&t, P0), vec![ManaType::G, ManaType::G], "the noted mana");
+    assert_eq!(
+        pool(&t, P0),
+        vec![ManaType::G, ManaType::G],
+        "the noted mana"
+    );
     let other = t.hand(P0, "Grizzly Bears");
     assert!(t.cast(P0, other).try_go().is_err());
     t.cast(P0, exiled_bears(&t).unwrap()).go();

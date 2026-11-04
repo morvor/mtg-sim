@@ -78,7 +78,8 @@ fn grist_keeps_making_insects_after_it_leaves() {
     assert!(t.in_graveyard(P0, "Moldgraf Millipede"));
     assert!(t.in_graveyard(P0, "Forest"));
     assert_eq!(t.library_size(P0), 30 + 1);
-    let grist = t.g.find_in_zone(Zone::Graveyard(P0), "Grist, the Hunger Tide");
+    let grist =
+        t.g.find_in_zone(Zone::Graveyard(P0), "Grist, the Hunger Tide");
     assert_eq!(t.counters(grist[0], "loyalty"), 0);
 }
 
@@ -375,8 +376,16 @@ fn deranged_assistant_mana_survives_a_reversed_cast() {
     assert!(t.cast(P0, spell).try_go().is_err());
     assert_eq!(t.zone(spell), Zone::Hand(P0), "the spell is back in hand");
     assert_eq!(t.stack_len(), 0);
-    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::C), 1, "the {{C}} is still there");
-    assert_eq!(t.graveyard_size(P0), 1, "the milled card stays in the graveyard");
+    assert_eq!(
+        t.g.player(P0).mana_pool.count(ManaType::C),
+        1,
+        "the {{C}} is still there"
+    );
+    assert_eq!(
+        t.graveyard_size(P0),
+        1,
+        "the milled card stays in the graveyard"
+    );
     assert_eq!(t.library_size(P0), library);
     assert!(t.on_battlefield(assistant) && t.obj_now(assistant).tapped);
     assert_eq!(t.life(P0), 20);

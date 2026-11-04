@@ -193,7 +193,9 @@ fn tempt_with_vengeance_gives_you_x_tokens_again_for_each_opponent_who_accepted(
         for e in with_subtype(&t, p, "Elemental") {
             let o = t.obj(e);
             assert!(o.is_token() && o.controller == p && o.owner == p);
-            assert!(o.chars.has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+            assert!(o
+                .chars
+                .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
         }
     }
 }

@@ -32,10 +32,7 @@ fn an_egg_that_draws_a_card_is_not_a_mana_ability() {
     t.resolve();
     assert_eq!(t.hand_size(P0), hand + 1);
     let pool = &t.g.player(P0).mana_pool;
-    assert_eq!(
-        (pool.count(ManaType::R), pool.count(ManaType::G)),
-        (1, 1)
-    );
+    assert_eq!((pool.count(ManaType::R), pool.count(ManaType::G)), (1, 1));
 }
 
 /// P0 casts Pir's Whim ("For each player, choose friend or foe. Each friend searches

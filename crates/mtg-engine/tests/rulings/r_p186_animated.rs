@@ -25,7 +25,8 @@ use mtg_engine::*;
 /// Activates Jade Statue ({2}) for P0, paid from P0's mana pool, and resolves it.
 fn animate_statue(t: &mut TestGame, statue: ObjectId) {
     add_mana(t, P0, ManaType::C, 2);
-    t.activate(P0, statue, 0, &[]).expect("Jade Statue activation");
+    t.activate(P0, statue, 0, &[])
+        .expect("Jade Statue activation");
     t.resolve_all();
 }
 
@@ -73,7 +74,10 @@ fn jade_statue_delayed_effect_still_applies_after_it_stops_being_a_creature() {
     t.advance_to(P0, Step::End);
     t.advance_to(P1, Step::End);
     t.advance_to(P0, Step::Upkeep);
-    assert!(!crate::r_s24_common::tapped(&t, statue), "untaps a turn later");
+    assert!(
+        !crate::r_s24_common::tapped(&t, statue),
+        "untaps a turn later"
+    );
 }
 
 #[test]
@@ -143,7 +147,9 @@ fn threshold(t: &mut TestGame, p: PlayerId) {
 fn animate_monastery(t: &mut TestGame, m: ObjectId) {
     add_mana(t, P0, ManaType::G, 1);
     add_mana(t, P0, ManaType::W, 1);
-    crate::r_s06_common::activate_containing(t, P0, m, "{G}{W}").unwrap().unwrap();
+    crate::r_s06_common::activate_containing(t, P0, m, "{G}{W}")
+        .unwrap()
+        .unwrap();
     t.resolve_all();
 }
 
@@ -163,7 +169,10 @@ fn nantuko_monastery_summoning_sickness_and_abilities() {
     let mut t = TestGame::new(2);
     threshold(&mut t, P0);
     let m = entered_this_turn(&mut t, P0, "Nantuko Monastery");
-    assert!(tap_for_mana(&mut t, P0, m, "{C}"), "it can tap for mana as a land");
+    assert!(
+        tap_for_mana(&mut t, P0, m, "{C}"),
+        "it can tap for mana as a land"
+    );
     let mut t = TestGame::new(2);
     threshold(&mut t, P0);
     let m = entered_this_turn(&mut t, P0, "Nantuko Monastery");
@@ -179,7 +188,11 @@ fn nantuko_monastery_summoning_sickness_and_abilities() {
     animate_monastery(&mut t, m);
     assert_eq!(t.pt(m), (4, 4));
     assert!(t.obj_now(m).is(CardType::Land));
-    assert!(crate::r_s06_common::has_kw(&t, m, mtg_engine::keywords::KeywordKind::FirstStrike));
+    assert!(crate::r_s06_common::has_kw(
+        &t,
+        m,
+        mtg_engine::keywords::KeywordKind::FirstStrike
+    ));
     assert!(tap_for_mana(&mut t, P0, m, "{C}"));
     let mut t = TestGame::new(2);
     threshold(&mut t, P0);
@@ -293,7 +306,10 @@ fn juggernaut_and_xantcha_dont_have_to_attack_when_unable_or_taxed() {
     t2.battlefield(P0, "Juggernaut");
     t2.battlefield(P1, "Ghostly Prison");
     to_combat(&mut t2, P0);
-    assert!(legal_attack(&mut t2, &[]), "Ghostly Prison's cost isn't forced");
+    assert!(
+        legal_attack(&mut t2, &[]),
+        "Ghostly Prison's cost isn't forced"
+    );
     // Xantcha (owned by P1, controlled by P0) can attack only P2.
     let mut t = TestGame::new(3);
     let x = t.battlefield(P1, "Xantcha, Sleeper Agent");
@@ -302,7 +318,10 @@ fn juggernaut_and_xantcha_dont_have_to_attack_when_unable_or_taxed() {
     t.g.objects[xi].summoning_sick = false;
     to_combat(&mut t, P0);
     assert!(!legal_attack(&mut t, &[]));
-    assert!(!legal_attack(&mut t, &[(x, Entity::Player(P1))]), "not its owner");
+    assert!(
+        !legal_attack(&mut t, &[(x, Entity::Player(P1))]),
+        "not its owner"
+    );
     assert!(legal_attack(&mut t, &[(x, Entity::Player(P2))]));
     t.battlefield(P2, "Ghostly Prison");
     assert!(legal_attack(&mut t, &[]));
@@ -330,7 +349,10 @@ fn triskelion_removing_a_counter_can_make_damage_lethal() {
     assert!(t.on_battlefield(tri));
     t.activate(P0, tri, 0, &[Entity::Player(P1)]).unwrap();
     t.settle();
-    assert!(!t.on_battlefield(tri), "destroyed before the ability resolves");
+    assert!(
+        !t.on_battlefield(tri),
+        "destroyed before the ability resolves"
+    );
     assert!(!can_activate(&mut t, P0, tri));
     t.resolve_all();
     assert_eq!(t.life(P1), 19, "the activation still resolves");
@@ -349,7 +371,11 @@ fn triskelion_in_combat() {
     let blocker = t.battlefield(P1, "Hill Giant");
     let pinged = t.battlefield(P1, "Grizzly Bears");
     attack_with(&mut t, &[(tri, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(blocker, tri)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(blocker, tri)]),
+    );
     t.advance_to(P0, Step::DeclareBlockers);
     t.activate(P0, tri, 0, &[Entity::Object(pinged)]).unwrap();
     t.resolve_all();
@@ -376,7 +402,10 @@ fn triskelion_in_combat() {
         .map(|(_, a, b)| (*a, *b))
         .collect();
     assert!(!in_damage_step.is_empty());
-    assert!(in_damage_step.iter().all(|x| *x == (0, 0)), "{in_damage_step:?}");
+    assert!(
+        in_damage_step.iter().all(|x| *x == (0, 0)),
+        "{in_damage_step:?}"
+    );
 }
 
 /// P1 controls Creeping Dread; in P1's upkeep each player discards their only card in
@@ -442,7 +471,9 @@ fn mindless_automaton_dies_before_the_card_is_drawn() {
     let src = t.battlefield(P1, "Grizzly Bears");
     damage(&mut t, src, 2, a);
     let hand = t.hand_size(P0);
-    crate::r_s06_common::activate_containing(&mut t, P0, a, "Remove two").unwrap().unwrap();
+    crate::r_s06_common::activate_containing(&mut t, P0, a, "Remove two")
+        .unwrap()
+        .unwrap();
     t.settle();
     assert!(!t.on_battlefield(a));
     assert_eq!(t.hand_size(P0), hand, "not drawn yet");
@@ -477,7 +508,10 @@ fn metalworker_is_a_mana_ability_and_may_reveal_nothing() {
         "Metalworker",
         "This is a mana ability. It does not go on the stack and can’t be responded to."
     );
-    ruling!("Metalworker", "You can reveal zero cards to gain zero mana.");
+    ruling!(
+        "Metalworker",
+        "You can reveal zero cards to gain zero mana."
+    );
     supported("Metalworker");
     let mut t = TestGame::new(2);
     let mw = t.battlefield(P0, "Metalworker");
@@ -510,7 +544,9 @@ fn clockwork_steed_may_get_fewer_than_x_counters() {
     add_mana(&mut t, P0, ManaType::C, 3);
     t.answer(P0, DecisionKind::X, Answer::Number(3));
     t.answer(P0, DecisionKind::Number, Answer::Number(1));
-    crate::r_s06_common::activate_containing(&mut t, P0, steed, "up to X").unwrap().unwrap();
+    crate::r_s06_common::activate_containing(&mut t, P0, steed, "up to X")
+        .unwrap()
+        .unwrap();
     t.resolve_all();
     assert_eq!(t.counters(steed, "+1/+0"), 1);
     assert_eq!(t.pt(steed), (1, 3));
@@ -550,7 +586,10 @@ fn steel_golem_and_grid_monitor_stop_only_their_controller_casting_creatures() {
 #[test]
 fn copper_gnomes_chooses_the_artifact_on_resolution() {
     cr!("608.2d", "602.2");
-    ruling!("Copper Gnomes", "You choose the artifact card on resolution.");
+    ruling!(
+        "Copper Gnomes",
+        "You choose the artifact card on resolution."
+    );
     supported("Copper Gnomes");
     let mut t = TestGame::new(2);
     let g = t.battlefield(P0, "Copper Gnomes");
