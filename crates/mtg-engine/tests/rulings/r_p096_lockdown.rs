@@ -576,3 +576,53 @@ fn intruder_alarm_triggers_for_each_creature_entering_at_once() {
     t.settle();
     assert_eq!(triggers_from(&t, alarm), 2);
 }
+
+#[test]
+fn remains_tapped_control_effect_survives_an_untap_before_a_later_activation() {
+    cr!("611.2b", "613.1b");
+    // The general case of Entrancing Lyre's ruling for a control-changing effect: Vedalken
+    // Shackles ("{2}, {T}: Gain control of target creature with power less than or equal
+    // to the number of Islands you control for as long as this artifact remains tapped.")
+    // is activated targeting the Bears; in response it's untapped (Voltaic Key) and
+    // activated again targeting the Hill Giant. The second ability's effect begins and
+    // lasts; the first one's duration ended before it began.
+    supported("Vedalken Shackles");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let shackles = t.battlefield(P0, "Vedalken Shackles");
+    let key = t.battlefield(P0, "Voltaic Key");
+    t.lands(P0, "Island", 5);
+    t.activate(P0, shackles, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, key, 0, &[Entity::Object(shackles)]).unwrap();
+    t.resolve();
+    assert!(!tapped(&t, shackles));
+    t.activate(P0, shackles, 0, &[Entity::Object(giant)]).unwrap();
+    t.resolve_all();
+    assert!(tapped(&t, shackles));
+    assert_eq!(t.obj_now(giant).controller, P0);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    // Still P0's while the Shackles stay tapped, until they untap.
+    t.g.recompute();
+    assert_eq!(t.obj_now(giant).controller, P0);
+    t.g.untap(shackles);
+    t.g.recompute();
+    assert_eq!(t.obj_now(giant).controller, P1);
+    // The same for a characteristic-changing effect: Ashnod's Battle Gear ("{2}, {T}:
+    // Target creature you control gets +2/-2 for as long as this artifact remains
+    // tapped.").
+    supported("Ashnod's Battle Gear");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let courser = t.battlefield(P0, "Centaur Courser");
+    let gear = t.battlefield(P0, "Ashnod's Battle Gear");
+    let key = t.battlefield(P0, "Voltaic Key");
+    t.lands(P0, "Wastes", 5);
+    t.activate(P0, gear, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, key, 0, &[Entity::Object(gear)]).unwrap();
+    t.resolve();
+    t.activate(P0, gear, 0, &[Entity::Object(courser)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.pt(courser), (5, 1));
+    assert_eq!(t.pt(bears), (2, 2));
+}
