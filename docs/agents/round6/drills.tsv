@@ -1,0 +1,179 @@
+id	card	probe_text	result
+C6-uld-1	Uldaros Theorix	When ~ enters, if you cast him, exile up to one target nonland card of each card type from your graveyard.	FAIL
+C6-uld-2	Uldaros Theorix	When ~ enters, exile up to one target creature card and up to one target artifact card from your graveyard. Copy those cards. You may cast the copies without paying their mana costs.	OK
+C6-uld-3	Uldaros Theorix	When ~ enters, exile up to one target creature card and up to one target artifact card from your graveyard. Copy those cards. You may cast any number of spells with total mana value 6 or less from among the copies without paying their mana costs.	FAIL
+C6-uld-4	Uldaros Theorix	When ~ enters, exile up to one target creature card and up to one target artifact card from your graveyard. Copy those cards. You may cast up to two of the copies without paying their mana costs.	FAIL
+C6-bz-1	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard with fifteen or more black mana symbols among their mana costs: Draw a card.	OK
+C6-bz-2	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy those exiled cards. You may cast the copies without paying their mana costs.	FAIL
+C6-bz-3	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy those cards. You may cast the copies without paying their mana costs.	FAIL
+C6-bz-4	Baron Helmut Zemo	Boast — Exile any number of black cards from your graveyard: Copy those cards. You may cast up to three of the copies without paying their mana costs.	FAIL
+C6-bz-5	Divination	Exile up to three target cards from your graveyard. Copy those cards. You may cast up to two of the copies without paying their mana costs.	FAIL
+C6-bz-6	Divination	Exile up to three target cards from your graveyard. Copy those cards. You may cast the copies without paying their mana costs.	OK
+C6-xan-1	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, that player can't cast spells.	OK
+C6-xan-2	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of their library.	FAIL
+C6-xan-3	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time.	FAIL
+C6-xan-4	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of that player's library.	FAIL
+C6-xan-5	Xanathar, Guild Kingpin	At the beginning of your upkeep, until end of turn, you may play the top card of target opponent's library.	FAIL
+C6-xan-6	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time and you may play the top card of their library.	FAIL
+C6-ck-1	Chef's Kiss	Gain control of target spell that targets only a single permanent or player.	FAIL
+C6-ck-2	Chef's Kiss	Gain control of target spell.	OK
+C6-ck-3	Chef's Kiss	Counter target spell that targets only a single permanent or player.	OK
+C6-ck-4	Chef's Kiss	Gain control of target spell. Copy it, then reselect the targets at random for the spell and the copy.	FAIL
+C6-ck-5	Chef's Kiss	Gain control of target spell that targets only a single creature.	FAIL
+C6-ck-6	Chef's Kiss	Gain control of target spell that targets a creature.	FAIL
+C6-ck-7	Chef's Kiss	Copy target spell that targets only a single permanent or player.	OK
+C6-ck-8	Chef's Kiss	Gain control of target spell. Copy it.	OK
+C6-lim-1	Divination	As many times as you choose, you may pay 1 life. If you do, draw a card.	FAIL
+C6-lim-2	Lim-Dûl's Vault	Look at the top five cards of your library. Then shuffle and put the last cards you looked at this way on top in any order.	FAIL
+C6-rw-1	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards and put them onto the battlefield tapped under your control. Then each player who searched their library this way shuffles.	OK
+C6-rw-2	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards. They each put one of those cards onto the battlefield tapped under your control and the rest into their hand. Then each player who searched their library this way shuffles.	FAIL
+C6-rw-3	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards and put them onto the battlefield tapped under your control, then shuffle.	OK
+C6-cm-1	Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, until end of turn, red creatures get +1/+1.	FAIL
+C6-cm-2	Chaos Moon	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, red creatures get +1/+1 and whenever a player taps a Mountain for mana, that player adds an additional {R}.	FAIL
+C6-cm-3	Chaos Moon	At the beginning of each upkeep, if the number of permanents is even, until end of turn, red creatures get -1/-1 and if a player taps a Mountain for mana, that Mountain produces colorless mana instead of any other type.	FAIL
+C6-cm-4	Chaos Moon	At the beginning of each upkeep, if the number of permanents is even, until end of turn, red creatures get -1/-1 and if a player taps a Mountain for mana, it produces colorless mana instead of any other type.	FAIL
+C6-cm-5	Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, you gain 1 life. If the number is even, you lose 1 life.	FAIL
+C6-cm-6	Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, until end of turn, red creatures get +1/+1 and whenever a player taps a Mountain for mana, that player adds an additional {R}. If the number is even, until end of turn, red creatures get -1/-1 and if a player taps a Mountain for mana, it produces colorless mana instead of any other type.	FAIL
+C6-cap-1	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value to any target.	OK
+C6-cap-2	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals 3 damage divided as you choose among one, two, or three targets.	OK
+C6-cap-3	Icy Manipulator	{1}, Sacrifice a creature: ~ deals damage equal to the sacrificed creature's power divided as you choose among one, two, or three targets.	OK
+C6-cap-4	Icy Manipulator	{X}, {T}: ~ deals X damage divided as you choose among one, two, or three targets.	OK
+C6-g-1	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Shuffle those permanents into their owners' libraries.	OK
+C6-g-2	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Shuffle those permanents into their owners' libraries. Each player who controlled one of those permanents exiles cards from the top of their library until they exile a nonland card, then puts the rest on the bottom of their library in a random order.	FAIL
+C6-g-3	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Shuffle those permanents into their owners' libraries. Each player exiles cards from the top of their library until they exile a nonland card, then puts the rest on the bottom of their library in a random order. Each player may cast the nonland card they exiled without paying its mana cost.	FAIL
+C6-g-4	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. The owners of those permanents shuffle them into their libraries.	OK
+C6-bd-1	Backdraft	Choose a player who cast one or more sorcery spells this turn. ~ deals 2 damage to that player.	FAIL
+C6-bd-2	Backdraft	~ deals damage to target player equal to half the damage dealt by sorcery spells this turn, rounded down.	FAIL
+C6-bd-3	Backdraft	Choose target player who cast one or more sorcery spells this turn. ~ deals 2 damage to that player.	OK
+C6-bd-4	Backdraft	~ deals damage to target player who cast one or more sorcery spells this turn equal to half the damage dealt by one of those sorcery spells this turn, rounded down.	FAIL
+C6-toy-1	The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between 1 and 5. If you do, an opponent guesses which number you chose, then you reveal the number you chose. If they guessed wrong, they lose life equal to the number they guessed and you draw a card. If they guessed right, sacrifice ~.	FAIL
+C6-toy-2	The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between 1 and 5 that hasn't been chosen.	FAIL
+C6-toy-3	The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between 1 and 5.	OK
+C6-gr-1	Glyph of Reincarnation	Destroy all creatures that were blocked by target Wall this turn. They can't be regenerated.	FAIL
+C6-gr-2	Glyph of Reincarnation	Destroy all creatures blocked by target Wall this turn. They can't be regenerated.	FAIL
+C6-gr-3	Glyph of Reincarnation	Destroy all creatures that were blocked this turn. They can't be regenerated.	FAIL
+C6-gr-4	Glyph of Reincarnation	Destroy all creatures blocking or blocked by target Wall. They can't be regenerated. For each creature that died this way, put a creature card from the graveyard of the player who controlled that creature the last time it became blocked by that Wall onto the battlefield under its owner's control.	FAIL
+C6-gr-5	Glyph of Reincarnation	Destroy all creatures blocking or blocked by target Wall. They can't be regenerated. For each creature that died this way, put a creature card from its controller's graveyard onto the battlefield under its owner's control.	FAIL
+C6-gd-1	Glyph of Delusion	Put X glyph counters on target creature that target Wall blocked this turn, where X is the power of that blocked creature.	FAIL
+C6-gd-2	Glyph of Delusion	Put X glyph counters on target creature blocked by target Wall this turn, where X is its power.	FAIL
+C6-gd-3	Glyph of Delusion	Put X glyph counters on target creature that was blocked this turn, where X is its power.	OK
+C6-ts-1	Timesifter	At the beginning of each upkeep, each player exiles the top card of their library. The player who exiled the card with the greatest mana value draws a card.	FAIL
+C6-ts-2	Timesifter	At the beginning of each upkeep, each player reveals the top card of their library. The player who revealed the card with the greatest mana value takes an extra turn after this one.	FAIL
+C6-ts-3	Timesifter	At the beginning of each upkeep, each player exiles the top card of their library. The player who exiled the card with the greatest mana value takes an extra turn after this one.	FAIL
+C6-tog-1	Toggo, Goblin Weaponsmith	Landfall — Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature has '{1}, {T}, Sacrifice this artifact: This creature deals 2 damage to any target'" and equip {1}.	OK
+C6-tog-2	Toggo, Goblin Weaponsmith	Landfall — Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "{1}, {T}, Sacrifice Rock: Rock deals 2 damage to any target" and equip {1}.	FAIL
+C6-tog-3	Toggo, Goblin Weaponsmith	Landfall — Whenever a land you control enters, create a colorless Equipment artifact token named Rock with "Equipped creature has '{1}, {T}, Sacrifice Rock: This creature deals 2 damage to any target'" and equip {1}.	FAIL
+C6-ves-1	Vesuvan Shapeshifter	As ~ enters, you may choose another creature on the battlefield. If you do, ~ becomes a copy of that creature.	FAIL
+C6-ves-2	Vesuvan Shapeshifter	As ~ enters or is turned face up, you may choose another creature on the battlefield.	FAIL
+C6-ves-3	Vesuvan Shapeshifter	As ~ is turned face up, you may choose another creature on the battlefield. If you do, ~ becomes a copy of that creature.	FAIL
+C6-ves-4	Vesuvan Shapeshifter	You may have ~ enter as a copy of any creature on the battlefield, except it has "At the beginning of your upkeep, you may turn ~ face down."	OK
+C6-ves-5	Vesuvan Shapeshifter	As ~ enters, choose another creature on the battlefield. Until ~ is turned face down, it becomes a copy of that creature.	FAIL
+C6-ves-6	Vesuvan Shapeshifter	As ~ is turned face up, choose another creature on the battlefield.	FAIL
+C6-ves-7	Vesuvan Shapeshifter	As ~ enters, you may choose another creature on the battlefield.	OK
+C6-cap-5	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value divided as you choose among one, two, or three targets.	FAIL
+C6-cap-6	Captain America, First Avenger	{3}, Unattach an Equipment from ~: He deals damage equal to that Equipment's mana value to any target.	OK
+C6-cap-7	Captain America, First Avenger	Throw — {3}, Unattach an Equipment from ~: ~ deals damage equal to that Equipment's mana value divided as you choose among one, two, or three targets.	FAIL
+C6-cap-8	Icy Manipulator	{1}, Sacrifice an artifact: ~ deals damage equal to the sacrificed artifact's mana value divided as you choose among one, two, or three targets.	OK
+C6-cap-9	Icy Manipulator	{1}, Sacrifice an artifact: ~ deals damage equal to that artifact's mana value divided as you choose among one, two, or three targets.	OK
+C6-g-5	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Shuffle those permanents into their owners' libraries. Each player exiles cards from the top of their library until they exile a nonland card, then puts the rest on the bottom of their library in a random order.	OK
+C6-g-6	Guff Rewrites History	Each player exiles cards from the top of their library until they exile a nonland card, then puts the rest on the bottom of their library in a random order. Each player may cast the nonland card they exiled without paying its mana cost.	FAIL
+C6-g-7	Guff Rewrites History	For each player, choose target nonenchantment, nonland permanent that player controls. Shuffle those permanents into their owners' libraries. Each player who controlled one of those permanents draws a card.	FAIL
+C6-g-8	Divination	Each player exiles cards from the top of their library until they exile a nonland card. Each player may cast the nonland card they exiled without paying its mana cost.	FAIL
+C6-ves-8	Vesuvan Shapeshifter	As ~ is turned face up, you may choose another creature on the battlefield. If you do, ~ becomes a copy of that creature until end of turn.	FAIL
+C6-ves-9	Vesuvan Shapeshifter	As ~ enters, you may choose another creature on the battlefield. If you do, until ~ is turned face down, it becomes a copy of that creature.	FAIL
+C6-ves-10	Vesuvan Shapeshifter	As ~ enters, you may choose another creature on the battlefield. If you do, ~ becomes a copy of that creature, except it has "At the beginning of your upkeep, you may turn ~ face down."	FAIL
+C6-ves-11	Vesuvan Shapeshifter	As ~ enters, you may choose another creature on the battlefield. If you do, it becomes a copy of that creature.	FAIL
+C6-cm-7	Chaos Moon	At the beginning of each upkeep, if the number of permanents is odd, until end of turn, red creatures get +1/+1.	OK
+C6-cm-8	Chaos Moon	At the beginning of each upkeep, if the number of permanents on the battlefield is odd, red creatures get +1/+1 until end of turn.	OK
+C6-cm-9	Chaos Moon	At the beginning of each upkeep, count the number of permanents. If the number is odd, draw a card.	FAIL
+C6-cm-10	Chaos Moon	At the beginning of each upkeep, red creatures get +1/+1 until end of turn.	OK
+C6-cm-11	Chaos Moon	At the beginning of each upkeep, until end of turn, whenever a player taps a Mountain for mana, that player adds an additional {R}.	OK
+C6-cm-12	Chaos Moon	At the beginning of each upkeep, until end of turn, if a player taps a Mountain for mana, it produces colorless mana instead of any other type.	OK
+C6-ts-4	Timesifter	At the beginning of each upkeep, each player reveals the top card of their library. The player who reveals the card with the greatest mana value takes an extra turn after this one.	FAIL
+C6-ts-5	Timesifter	At the beginning of each upkeep, each player reveals the top card of their library. The player who reveals the card with the greatest mana value draws a card.	FAIL
+C6-ts-6	Timesifter	At the beginning of each upkeep, each player exiles the top card of their library. The player who exiles the card with the greatest mana value draws a card.	FAIL
+C6-ck-9	Chef's Kiss	Gain control of target spell. Copy it. You may choose new targets for the copy.	OK
+C6-ck-10	Chef's Kiss	Gain control of target spell that targets only a single creature or player.	FAIL
+C6-ck-11	Chef's Kiss	Change the target of target spell that targets only a single permanent or player.	OK
+C6-ck-12	Chef's Kiss	Copy target spell. Reselect the targets of the copy at random.	FAIL
+C6-ck-13	Chef's Kiss	Choose new targets at random for target spell.	FAIL
+C6-toy-4	The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between 1 and 5. An opponent guesses which number you chose, then you reveal the number you chose.	FAIL
+C6-toy-5	The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between 1 and 5. An opponent guesses the number you chose.	FAIL
+C6-toy-6	The Toymaker's Trap	At the beginning of your upkeep, choose a number between 1 and 5 that hasn't been chosen.	FAIL
+C6-rw-4	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards. They each put those cards onto the battlefield tapped under your control.	FAIL
+C6-rw-5	Rootweaver Druid	When ~ enters, target opponent may search their library for up to three basic land cards. They put one of those cards onto the battlefield tapped under your control and the rest onto the battlefield tapped under their control.	FAIL
+C6-rw-6	Rootweaver Druid	When ~ enters, search your library for up to three basic land cards. Put one of those cards onto the battlefield tapped under target opponent's control and the rest onto the battlefield tapped.	OK
+C6-xan-7	Xanathar, Guild Kingpin	At the beginning of your upkeep, until end of turn, you may play the top card of each opponent's library.	FAIL
+C6-xan-8	Xanathar, Guild Kingpin	You may look at the top card of target opponent's library any time.	FAIL
+C6-xan-9	Xanathar, Guild Kingpin	You may play the top card of each opponent's library.	FAIL
+C6-xan-10	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, you may cast spells from the top of their library.	FAIL
+C6-lim-3	Divination	Look at the top five cards of your library. Put them back in any order.	OK
+C6-lim-4	Divination	As many times as you choose, pay 1 life and draw a card.	FAIL
+C6-bd-5	Backdraft	~ deals damage to target player equal to half the damage dealt by sorcery spells that player controlled this turn, rounded down.	FAIL
+C6-bd-6	Backdraft	~ deals damage to target player equal to the damage dealt this turn by sorcery spells that player cast.	FAIL
+C6-uld-5	Uldaros Theorix	When ~ enters, exile up to one target card of each card type from your graveyard.	FAIL
+C6-uld-6	Divination	Exile any number of target cards with different card types from your graveyard.	FAIL
+C6-ck-14	Chef's Kiss	Gain control of target spell. Copy it, then you may choose new targets for the spell and the copy.	FAIL
+C6-ck-15	Chef's Kiss	Gain control of target spell. Copy it. Choose new targets for the copy at random.	FAIL
+C6-ck-16	Chef's Kiss	Gain control of target instant or sorcery spell with a single target.	FAIL
+C6-lim-5	Divination	As many times as you choose, you may exile the top card of your library.	OK
+C6-lim-6	Divination	As many times as you choose, you may pay 1 life and mill a card.	FAIL
+C6-lim-7	Lim-Dûl's Vault	Look at the top five cards of your library. As many times as you choose, you may put those cards on the bottom of your library in any order, then look at the top five cards of your library. Then shuffle.	FAIL
+C6-lim-8	Divination	Look at the top five cards of your library. Then shuffle and put those cards on top in any order.	FAIL
+C6-rw-7	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards. They each put one of those cards onto the battlefield tapped under your control and the rest into their hand.	FAIL
+C6-rw-8	Rootweaver Druid	When ~ enters, each opponent may search their library for up to three basic land cards and put them onto the battlefield tapped under their control. Then each player who searched their library this way shuffles.	OK
+C6-rw-9	Rootweaver Druid	When ~ enters, each opponent may search their library for a basic land card and put it onto the battlefield tapped under your control. Then each player who searched their library this way shuffles.	OK
+C6-ts-7	Timesifter	At the beginning of each upkeep, each player exiles the top card of their library. If two or more players' cards are tied for greatest, the tied players repeat this process until the tie is broken.	FAIL
+C6-ts-8	Divination	Each player exiles the top card of their library. The player who exiled the card with the greatest mana value draws a card.	FAIL
+C6-ts-9	Divination	Each player reveals the top card of their library. Each player who revealed the card with the greatest mana value draws a card.	FAIL
+C6-toy-7	The Toymaker's Trap	At the beginning of your upkeep, secretly choose a number between 1 and 5. Target opponent guesses which number you chose.	FAIL
+C6-toy-8	The Toymaker's Trap	At the beginning of your upkeep, choose a number between 1 and 5. If you do, an opponent loses life equal to that number.	FAIL
+C6-xan-11	Xanathar, Guild Kingpin	At the beginning of your upkeep, choose target opponent. Until end of turn, that player can't cast spells and you may spend mana as though it were mana of any color to cast spells this way.	FAIL
+C6-xan-12	Xanathar, Guild Kingpin	At the beginning of your upkeep, exile the top card of target opponent's library. Until end of turn, you may play that card and you may spend mana as though it were mana of any color to cast spells this way.	OK
+C6-bd-7	Backdraft	~ deals damage to target player equal to half the damage dealt to you this turn, rounded down.	OK
+C6-bd-8	Backdraft	Choose an opponent who cast one or more sorcery spells this turn. ~ deals 2 damage to that player.	FAIL
+C6-bd-9	Backdraft	Choose a player. ~ deals 2 damage to that player.	OK
+C6-gr-6	Glyph of Reincarnation	Destroy all creatures that were blocked by target creature this turn.	FAIL
+C6-gr-7	Glyph of Reincarnation	Destroy target creature that was blocked by target Wall this turn.	FAIL
+C6-gd-4	Glyph of Delusion	Put X glyph counters on target creature that was blocked by a Wall this turn, where X is its power.	OK
+C6-tog-4	Toggo, Goblin Weaponsmith	Landfall — Whenever a land you control enters, create a colorless artifact token named Rock with "{1}, {T}, Sacrifice Rock: Draw a card."	FAIL
+C6-tog-5	Toggo, Goblin Weaponsmith	Landfall — Whenever a land you control enters, create a colorless artifact token named Rock with "{1}, {T}, Sacrifice this token: Draw a card."	OK
+C6-cap-10	Captain America, First Avenger	{3}, Unattach an Equipment from ~: ~ deals damage equal to the unattached Equipment's mana value divided as you choose among one, two, or three targets.	FAIL
+C6-uld-7	Uldaros Theorix	When ~ enters, exile up to one target creature card from your graveyard. Copy it. You may cast the copy without paying its mana cost.	OK
+C6-uld-8	Divination	Exile up to three target cards from your graveyard. Copy those cards. You may cast any number of the copies without paying their mana costs.	OK
+C6-uld-9	Divination	You may cast up to two instant and/or sorcery spells with total mana value 6 or less from your graveyard without paying their mana costs.	OK
+C6-ves-12	Vesuvan Shapeshifter	Morph {1}{U} / As ~ is turned face up, put a +1/+1 counter on it.	OK
+C6-gu-9	Guff Rewrites History	Each player exiles cards from the top of their library until they exile a nonland card. Until end of turn, each player may play the card they exiled this way.	FAIL
+C6-R-val-1	Divination	Count the number of creatures you control. If the number is even, draw a card.	FAIL
+C6-R-val-2	Divination	Count the number of cards in your hand. You gain life equal to that number.	OK
+C6-R-val-3	Glorious Anthem	At the beginning of your upkeep, until end of turn, creatures you control get +1/+1 and whenever a creature you control attacks, you gain 1 life.	FAIL
+C6-R-cost-1	Icy Manipulator	{1}, Unattach an Equipment from a creature you control: ~ deals damage equal to that Equipment's mana value divided as you choose among one or two targets.	FAIL
+C6-R-cost-2	Icy Manipulator	{1}, Exile a card from your graveyard: ~ deals damage equal to the exiled card's mana value divided as you choose among one or two targets.	OK
+C6-R-tok-1	Divination	Create a colorless artifact token named Gizmo with "{T}, Sacrifice Gizmo: Draw a card."	FAIL
+C6-R-tok-2	Divination	Create a colorless artifact token named Gizmo with "{T}, Sacrifice this artifact: Draw a card."	OK
+C6-R-st-1	Divination	Gain control of target instant spell that targets a creature.	FAIL
+C6-R-st-2	Divination	Change the targets of target spell at random.	FAIL
+C6-R-cp-1	Divination	Exile up to one target card of each card type from an opponent's graveyard.	FAIL
+C6-R-cp-2	Icy Manipulator	{1}, Exile two cards from your graveyard: Copy those exiled cards. You may cast the copies without paying their mana costs.	FAIL
+C6-R-cp-3	Divination	Exile up to two target instant cards from your graveyard. Copy those cards. You may cast one of the copies without paying its mana cost.	FAIL
+C6-R-cp-4	Divination	Exile up to two target instant cards from your graveyard. Copy those cards. You may cast any number of spells with total mana value 4 or less from among the copies without paying their mana costs.	FAIL
+C6-R-pp-1	Divination	Each player reveals the top card of their library. The player who revealed the card with the greatest mana value draws two cards.	FAIL
+C6-R-pp-2	Divination	Each player exiles cards from the top of their library until they exile a creature card. Each player may put the creature card they exiled onto the battlefield.	FAIL
+C6-R-pp-3	Divination	Each opponent may search their library for up to two basic land cards. They each put one of those cards into their hand and the rest into their graveyard. Then each player who searched their library this way shuffles.	FAIL
+C6-R-pp-4	Divination	Destroy all creatures. Each player who controlled one of those creatures draws a card.	FAIL
+C6-R-ch-1	Icy Manipulator	{T}: Choose a number between 1 and 3 that hasn't been chosen. Draw that many cards.	FAIL
+C6-R-ch-2	Icy Manipulator	{T}: Secretly choose a number between 1 and 3. Target opponent guesses the number. If they guessed wrong, draw a card.	FAIL
+C6-R-lp-1	Divination	As many times as you choose, you may pay 2 life. If you do, scry 1.	FAIL
+C6-R-lp-2	Divination	Look at the top three cards of your library. Then shuffle and put those cards on top in any order.	FAIL
+C6-R-bh-1	Divination	Destroy all creatures that were blocked by target creature this turn.	FAIL
+C6-R-bh-2	Divination	Tap target creature that target creature blocked this turn.	FAIL
+C6-R-dh-1	Divination	Choose a player who attacked this turn. That player loses 2 life.	FAIL
+C6-R-dh-2	Divination	You gain life equal to the damage dealt by instant spells this turn.	FAIL
+C6-R-pm-1	Glorious Anthem	You may look at the top card of each opponent's library any time.	FAIL
+C6-R-pm-2	Divination	Until end of turn, you may play the top card of target player's library.	FAIL
+C6-R-pm-ctl	Glorious Anthem	You may look at the top card of your library any time.	OK
+C6-R-oo-1	Grizzly Bears	As ~ is turned face up, you may choose a creature. If you do, ~ becomes a copy of that creature.	FAIL
+C6-R-oo-2	Grizzly Bears	Until ~ is turned face down, it gets +1/+1.	FAIL
+C6-R-oo-3	Grizzly Bears	Each player draws cards from the bottom of their library rather than the top.	FAIL
+C6-R-ctl-1	Divination	Draw a card.	OK
+C6-R-ctl-2	Divination	Gain control of target spell.	OK
