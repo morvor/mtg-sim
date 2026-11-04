@@ -208,3 +208,73 @@ fn its_mana_ability_and_a_countered_charge_keep_the_card() {
     assert_eq!(t.stack_len(), 0);
     assert_eq!(pool(&t, P0).len(), 2);
 }
+
+/// The exiled Grizzly Bears, if any.
+fn exiled_bears(t: &TestGame) -> Option<ObjectId> {
+    t.g.exile
+        .iter()
+        .copied()
+        .find(|o| t.obj(*o).chars.name == "Grizzly Bears")
+}
+
+#[test]
+fn a_charge_that_exiles_nothing_keeps_the_earlier_card_as_the_last() {
+    // The ruling ("the card that was exiled by the Cauldron when the most recent charge
+    // counter was put there") describes charges that each exile a card; a charge that
+    // exiles nothing (the exile has been optional since the Core Set 2020 Oracle change of
+    // 2019-07-03) leaves the earlier card "the last card exiled with this artifact".
+    cr!("607.2a");
+    interp!("ice-cauldron-last-exiled");
+    let mut t = TestGame::new(2);
+    let cauldron = t.battlefield(P0, "Ice Cauldron");
+    let bears = t.hand(P0, "Grizzly Bears");
+    charge(&mut t, cauldron, bears);
+    t.g.untap(cauldron);
+    t.activate(P0, cauldron, 1, &[]).unwrap();
+    t.g.players[P0.idx()].mana_pool.mana.clear();
+    // Charged again, exiling nothing although a nonland card is in hand.
+    t.g.untap(cauldron);
+    let elves = t.hand(P0, "Llanowar Elves");
+    t.lands(P0, "Forest", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_choose(P0, &[]);
+    t.activate(P0, cauldron, 0, &[]).unwrap();
+    t.resolve_all();
+    assert!(t.g.player(P0).hand.contains(&elves), "nothing was exiled");
+    assert_eq!(t.counters(cauldron, "charge"), 1);
+    t.g.untap(cauldron);
+    t.activate(P0, cauldron, 1, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::G, ManaType::G]);
+    // The mana can't pay for the card in hand, but it pays for the exiled Bears.
+    assert!(t.cast(P0, elves).try_go().is_err());
+    t.cast(P0, exiled_bears(&t).unwrap()).go();
+    assert!(pool(&t, P0).is_empty());
+}
+
+#[test]
+fn a_charge_counter_from_another_source_releases_mana_for_the_last_exiled_card() {
+    // Coretapper's charge counter isn't one the Cauldron put there: the mana is still the
+    // last noted mana and still pays only for the last card exiled with the Cauldron.
+    cr!("607.2a", "607.2e");
+    interp!("ice-cauldron-last-exiled");
+    ruling!("Ice Cauldron", "not via any other charge counters");
+    let mut t = TestGame::new(2);
+    let cauldron = t.battlefield(P0, "Ice Cauldron");
+    let coretapper = t.battlefield(P0, "Coretapper");
+    let bears = t.hand(P0, "Grizzly Bears");
+    charge(&mut t, cauldron, bears);
+    t.g.untap(cauldron);
+    t.activate(P0, cauldron, 1, &[]).unwrap();
+    t.g.players[P0.idx()].mana_pool.mana.clear();
+    t.g.untap(cauldron);
+    t.activate(P0, coretapper, 0, &[Entity::Object(cauldron)])
+        .unwrap();
+    t.resolve_all();
+    assert_eq!(t.counters(cauldron, "charge"), 1);
+    t.activate(P0, cauldron, 1, &[]).unwrap();
+    assert_eq!(pool(&t, P0), vec![ManaType::G, ManaType::G], "the noted mana");
+    let other = t.hand(P0, "Grizzly Bears");
+    assert!(t.cast(P0, other).try_go().is_err());
+    t.cast(P0, exiled_bears(&t).unwrap()).go();
+    assert!(pool(&t, P0).is_empty());
+}
