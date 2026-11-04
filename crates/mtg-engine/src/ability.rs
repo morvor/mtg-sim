@@ -733,6 +733,12 @@ pub struct Destination {
     /// for the single `position`.
     #[serde(default)]
     pub position_choice: Vec<LibraryPosition>,
+    /// Library: "in any order" — the player the text instructs to put the cards there
+    /// arranges those put into the same position at the same time, whoever owns them
+    /// (Misinformation's ruling; the card's instruction overrides CR 401.4's owner, CR
+    /// 101.1). `None`: their owner arranges them (CR 401.4).
+    #[serde(default)]
+    pub arranged_by: Option<PlayerRef>,
 }
 
 impl Destination {
@@ -749,6 +755,7 @@ impl Destination {
             with_mods: vec![],
             attached_to: None,
             position_choice: vec![],
+            arranged_by: None,
         }
     }
     pub fn battlefield() -> Destination {
@@ -4617,6 +4624,26 @@ pub enum Effect {
         /// default, to the left, is turn order).
         #[serde(default)]
         direction: SeatSide,
+    },
+    /// "For each opponent, tap up to one untapped creature you control. When you do, ...
+    /// that player ..." (Nihiloor's ruling: "you choose up to one creature for each
+    /// opponent, and tap them all at the same time. Then, a separate triggered ability is
+    /// put on the stack for each creature you tapped this way"): every choice is made
+    /// first — for each player matching `who`, in turn order starting with `first` (CR
+    /// 101.4b), `chooser` chooses up to one object matching `filter` that wasn't chosen
+    /// for an earlier player — then `act` is performed once, on all the chosen objects
+    /// (`vars::IT`), and then, for each chosen object in the same order, `each` is
+    /// performed with `PlayerRef::Iterated` the player it was chosen for, `vars::IT` that
+    /// object, and `done` that object if `act` stored it in `done` (what `act` was
+    /// performed on: `vars::TAPPED` for a tap), else nothing. See `turn_order_choices.rs`.
+    ChooseForEachPlayer {
+        first: TurnOrderStart,
+        who: PlayerFilter,
+        chooser: PlayerRef,
+        filter: Filter,
+        act: Box<Effect>,
+        done: Var,
+        each: Box<Effect>,
     },
     /// Adds `value` to each of `who`'s own running totals under `var` ("each player may
     /// pay any amount of life ... for each 1 life they paid this way"), read back with

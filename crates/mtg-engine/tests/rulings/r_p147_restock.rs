@@ -140,12 +140,25 @@ fn misinformation_targets_cards_not_the_opponent() {
     assert!(top2.contains(&"Grizzly Bears".to_string()) && top2.contains(&"Hill Giant".to_string()));
 }
 
+/// Who is asked to order the cards an effect put into a library at once, from `from` on.
+fn orderers(t: &TestGame, from: usize) -> Vec<PlayerId> {
+    t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::Order { .. }))
+        .map(|(p, _)| *p)
+        .collect()
+}
+
 #[test]
-fn misinformation_the_cards_owner_arranges_them() {
-    cr!("401.4");
-    interp!("library-arranged-by-owner-not-instructing-player");
-    // Current behavior (provisional): the owner of the cards (P1) orders them, not the
-    // caster, although Misinformation's ruling says the caster puts them in any order.
+fn misinformation_you_arrange_the_cards_on_their_library() {
+    // The card's "in any order" instructs its controller, overriding 401.4's owner
+    // (CR 101.1); decided by the user on Nov 4 to follow the ruling.
+    interp!("library-in-any-order-arranged-by-instructing-player");
+    cr!("401.4", "101.1");
+    ruling!(
+        "Misinformation",
+        "need to show the opponent what order you put the cards on top of their library"
+    );
     let cards = ["Grizzly Bears", "Hill Giant"];
     let mut tops = vec![];
     for order in [[0usize, 1], [1, 0]] {
@@ -153,19 +166,78 @@ fn misinformation_the_cards_owner_arranges_them() {
         let a = t.graveyard(P1, cards[0]);
         let b = t.graveyard(P1, cards[1]);
         let from = n_asked(&t);
-        t.answer(P1, DecisionKind::Order, Answer::Indices(order.to_vec()));
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order.to_vec()));
         let spell = cast_multi(&mut t, P0, "Misinformation", &[obj(a), obj(b)]);
         t.resolve_all();
         assert!(resolved(&t, spell));
-        let orders: Vec<PlayerId> = t.asked()[from..]
-            .iter()
-            .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::Order { .. }))
-            .map(|(p, _)| *p)
-            .collect();
-        assert_eq!(orders, vec![P1]);
+        // The caster orders them, not their owner.
+        assert_eq!(orderers(&t, from), vec![P0]);
         tops.push(top_name(&t, P1));
     }
     assert_ne!(tops[0], tops[1]);
+}
+
+#[test]
+fn drafnas_restoration_its_caster_arranges_the_cards_on_their_library() {
+    interp!("library-in-any-order-arranged-by-instructing-player");
+    cr!("401.4", "101.1");
+    let cards = ["Ornithopter", "Memnite"];
+    let mut tops = vec![];
+    for order in [[0usize, 1], [1, 0]] {
+        let mut t = TestGame::new(2);
+        let a = t.graveyard(P1, cards[0]);
+        let b = t.graveyard(P1, cards[1]);
+        let from = n_asked(&t);
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order.to_vec()));
+        lands_for_cost(&mut t, P0, "Drafna's Restoration");
+        let card = t.hand(P0, "Drafna's Restoration");
+        let spell = t
+            .cast(P0, card)
+            .targets(&[Entity::Player(P1)])
+            .targets(&[obj(a), obj(b)])
+            .go();
+        t.resolve_all();
+        assert!(resolved(&t, spell));
+        assert_eq!(orderers(&t, from), vec![P0]);
+        tops.push(top_name(&t, P1));
+    }
+    assert_ne!(tops[0], tops[1]);
+}
+
+#[test]
+fn agonizing_memories_its_caster_arranges_the_cards_on_their_library() {
+    interp!("library-in-any-order-arranged-by-instructing-player");
+    cr!("401.4", "101.1");
+    let cards = ["Grizzly Bears", "Hill Giant"];
+    let mut tops = vec![];
+    for order in [[0usize, 1], [1, 0]] {
+        let mut t = TestGame::new(2);
+        let a = t.hand(P1, cards[0]);
+        let b = t.hand(P1, cards[1]);
+        let from = n_asked(&t);
+        t.answer_choose(P0, &[obj(a), obj(b)]);
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order.to_vec()));
+        let spell = cast_new(&mut t, P0, "Agonizing Memories", &[Entity::Player(P1)]);
+        t.resolve_all();
+        assert!(resolved(&t, spell));
+        assert_eq!(orderers(&t, from), vec![P0]);
+        tops.push(top_name(&t, P1));
+    }
+    assert_ne!(tops[0], tops[1]);
+}
+
+#[test]
+fn hallowed_burial_without_in_any_order_the_owner_arranges() {
+    // No "in any order": each owner arranges their own cards (CR 401.4).
+    interp!("library-in-any-order-arranged-by-instructing-player");
+    cr!("401.4");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let from = n_asked(&t);
+    cast_new(&mut t, P0, "Hallowed Burial", &[]);
+    t.resolve_all();
+    assert_eq!(orderers(&t, from), vec![P1]);
 }
 
 // --- Dead Reckoning ------------------------------------------------------------------------

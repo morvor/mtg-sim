@@ -1354,6 +1354,28 @@ impl Renderer<'_> {
                 let n = self.noun_det(&f, Det::A);
                 Ev::new("you", format!("reveal {n} this way"))
             }
+            // "Whenever you reveal a card with mana value less than the result this way"
+            // (Priority Boarding): revealed by the linked ability
+            // (`kw/revealed_this_way.rs`).
+            TriggerCond::Custom(n) if n == crate::kw::revealed_this_way::REVEALED_THIS_WAY => {
+                Ev::new("you", "reveal a card this way".to_string())
+            }
+            TriggerCond::Where {
+                trigger,
+                cond: Condition::SelMatches(Sel::TriggerObject, f),
+            } if matches!(trigger.as_ref(), TriggerCond::Custom(n)
+                if n == crate::kw::revealed_this_way::REVEALED_THIS_WAY) =>
+            {
+                let n = match f {
+                    Filter::ManaValue(Cmp::Lt, v)
+                        if matches!(v.as_ref(), Value::Custom(c) if c == crate::dice::THE_RESULT) =>
+                    {
+                        "a card with mana value less than the result".to_string()
+                    }
+                    f => self.noun_det(f, Det::A),
+                };
+                Ev::new("you", format!("reveal {n} this way"))
+            }
             // "Whenever one or more creatures attack you": attacking you, not a
             // planeswalker or battle (the attacked permanent, CR 506.3, 508.1b).
             TriggerCond::Where {

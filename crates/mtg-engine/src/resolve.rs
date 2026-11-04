@@ -198,6 +198,17 @@ impl Game {
                 effect,
                 direction,
             } => crate::turn_order_choices::run(self, *first, *direction, who, effect, ctx),
+            Effect::ChooseForEachPlayer {
+                first,
+                who,
+                chooser,
+                filter,
+                act,
+                done,
+                each,
+            } => crate::turn_order_choices::choose_for_each_player(
+                self, *first, who, chooser, filter, act, *done, each, ctx,
+            ),
             Effect::AddToPlayerTally { var, who, value } => {
                 let n = self.eval_value(value, ctx);
                 for p in self.eval_players(who, ctx) {
