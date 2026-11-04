@@ -132,3 +132,35 @@ impl Renderer<'_> {
         })
     }
 }
+
+impl Renderer<'_> {
+    /// "You and permanents you control gain hexproof until end of turn." (the player's
+    /// hexproof and the permanents', CR 702.11), then the rest of the instructions.
+    pub(crate) fn you_and_yours_gain_hexproof(&mut self, v: &[Effect]) -> Option<String> {
+        let [Effect::AddPlayerEffect {
+            who: PlayerRef::You,
+            effect: PlayerModification::Hexproof,
+            duration: Duration::EndOfTurn,
+        }, Effect::Modify {
+            what: Sel::All(f),
+            mods,
+            duration: Duration::EndOfTurn,
+        }, rest @ ..] = v
+        else {
+            return None;
+        };
+        let [Modification::AddKeyword(k)] = mods.as_slice() else {
+            return None;
+        };
+        if k.kind != crate::keywords::KeywordKind::Hexproof || k.filter.is_some() {
+            return None;
+        }
+        let n = self.noun(f, Num::Many);
+        let first = format!("You and {n} gain hexproof until end of turn.");
+        if rest.is_empty() {
+            return Some(first);
+        }
+        let r = self.seq(rest);
+        Some(format!("{first} {}", r))
+    }
+}

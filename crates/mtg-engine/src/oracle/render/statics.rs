@@ -3936,6 +3936,24 @@ impl Renderer<'_> {
             Filter::In(s) if matches!(s.as_ref(), Sel::TriggerSpell) && self.trigger_is_self => {
                 "~it".into()
             }
+            // "Creatures and nonbasic lands your opponents control enter tapped.": the
+            // controller said once for both kinds.
+            Filter::And(v) if matches!(v.as_slice(), [Filter::Or(alts), Filter::ControlledBy(_)] if alts.len() == 2) =>
+            {
+                let old = self.noun_det(f, Det::Plural);
+                let (Filter::Or(alts), ctl) = (&v[0], &v[1]) else {
+                    return old;
+                };
+                let a = self.noun(&alts[0], Num::Many);
+                let b = self.noun(&alts[1], Num::Many);
+                let full_b = self.noun(&Filter::And(vec![alts[1].clone(), ctl.clone()]), Num::Many);
+                match full_b.strip_prefix(&b) {
+                    Some(c) if !c.is_empty() && !format!("{a}{b}{c}").contains('{') => {
+                        format!("{{alt:{old}|{a} and {b}{c}}}")
+                    }
+                    _ => old,
+                }
+            }
             other => self.noun_det(other, Det::Plural),
         }
     }

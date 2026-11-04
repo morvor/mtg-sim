@@ -1193,8 +1193,15 @@ impl Renderer<'_> {
                         Effect::Modify { mods, .. } => match &mods[0] {
                             Modification::AddKeyword(k) => Some(self.keyword_lower(k)),
                             Modification::ModifyPT(p, t) => {
-                                let p = self.value(p);
-                                let t = self.value(t);
+                                // "-X/-X": nothing minus the number.
+                                let neg = |me: &mut Self, v: &Value| match v {
+                                    Value::Diff(a, b) if matches!(a.as_ref(), Value::Const(0)) => {
+                                        format!("-{}", me.value(b))
+                                    }
+                                    other => me.value(other),
+                                };
+                                let p = neg(self, p);
+                                let t = neg(self, t);
                                 let sign = |s: String| {
                                     if s.starts_with('-') {
                                         s
@@ -4721,7 +4728,10 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
-        if let Some(s) = self.additional_pt(v) {
+        if let Some(s) = self
+            .additional_pt(v)
+            .or_else(|| self.you_and_yours_gain_hexproof(v))
+        {
             return s;
         }
         // "You may pay {X}. If you do, draw X cards. X can't be greater than the amount of
@@ -8838,6 +8848,25 @@ impl Renderer<'_> {
             Value::Diff(a, b) if matches!(a.as_ref(), Value::Const(0)) => {
                 let (s, w) = self.pt_amount(b);
                 (format!("-{s}"), w)
+            }
+            // "+2/+0 for every seven cards in your graveyard": a multiple of a count
+            // divided, rounded down.
+            Value::Mul(a, b) if matches!((a.as_ref(), b.as_ref()), (Value::Const(k), Value::Div(_, d, false)) if *k > 0 && *d > 1) =>
+            {
+                let (Value::Const(k), Value::Div(inner, d, _)) = (a.as_ref(), b.as_ref()) else {
+                    return ("X".into(), None);
+                };
+                let s = self.value(inner);
+                match s.strip_prefix("the number of ") {
+                    Some(r) if !r.contains('{') => (
+                        k.to_string(),
+                        Some(format!(" for every {} {r}", number_word(*d as i32))),
+                    ),
+                    _ => {
+                        let s = self.value(&Value::Mul(a.clone(), b.clone()));
+                        ("X".into(), Some(format!(", where X is {s}")))
+                    }
+                }
             }
             // "-4/-4 for each card in your hand": a negative multiple.
             Value::Mul(a, b) if matches!(a.as_ref(), Value::Const(k) if *k < -1) => {

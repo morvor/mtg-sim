@@ -28,3 +28,65 @@ fn the_deck_of_many_things_creature_owner_loses_when_it_dies() {
     assert!(t.has_lost(P1), "the Wurm's owner loses");
     assert!(!t.has_lost(P0));
 }
+
+/// Puts the real Aura or Equipment `name` onto the battlefield under `p`'s control attached
+/// to `to`.
+fn attach_new(t: &mut TestGame, p: PlayerId, name: &str, to: ObjectId) -> ObjectId {
+    let id = t.battlefield(p, name);
+    assert!(t.g.attach(id, Entity::Object(to)), "{name} couldn't be attached");
+    t.g.recompute();
+    id
+}
+
+#[test]
+fn pact_weapon_reveals_the_drawn_card_and_uses_its_mana_value() {
+    cr!("508.1m", "603.2");
+    // "Whenever equipped creature attacks, draw a card and reveal it. The creature gets
+    // +X/+X until end of turn and you lose X life, where X is that card's mana value."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Pact Weapon", bears);
+    t.library_top(P0, "Craw Wurm");
+    t.set_step(P0, Step::PrecombatMain);
+    let life = t.life(P0);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Craw Wurm"));
+    assert_eq!(t.pt(bears), (8, 8), "Craw Wurm's mana value is 6");
+    assert_eq!(t.life(P0), life - 6);
+}
+
+#[test]
+fn pact_weapon_gives_no_bonus_when_the_draw_is_replaced_by_draws() {
+    cr!("614.1a", "614.11");
+    ruling!(
+        "Pact Weapon",
+        "This is true even if the card draw is replaced by one or more card draws."
+    );
+    // Thought Reflection: "If you would draw a card, draw two cards instead." The card
+    // draw was replaced, so no card is "that card": no bonus, no life lost.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Pact Weapon", bears);
+    t.battlefield(P0, "Thought Reflection");
+    t.library_top(P0, "Craw Wurm");
+    t.library_top(P0, "Craw Wurm");
+    t.set_step(P0, Step::PrecombatMain);
+    let life = t.life(P0);
+    let hand = t.hand_size(P0);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2, "two cards drawn instead");
+    assert_eq!(t.pt(bears), (2, 2));
+    assert_eq!(t.life(P0), life);
+}
