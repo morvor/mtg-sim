@@ -90,7 +90,7 @@ fn tombstone_stairwell_creates_its_tokens_at_once_and_only_if_still_there() {
 
 #[test]
 fn tombstone_stairwell_destroys_its_tokens_even_if_renamed() {
-    cr!("603.7c", "201.2");
+    cr!("603.7c");
     ruling!(
         "Tombstone Stairwell",
         "If something changes the names of the tokens, then the \"at end of turn\" ability will still destroy them."
@@ -116,7 +116,7 @@ fn tombstone_stairwell_destroys_its_tokens_even_if_renamed() {
 
 #[test]
 fn braid_of_fires_mana_empties_before_the_draw_step() {
-    cr!("106.4", "500.4", "702.24a");
+    cr!("106.4", "500.5", "702.24a");
     ruling!(
         "Braid of Fire",
         "Any of this mana that isn't spent during your upkeep step will be removed before your draw step begins. You cannot save it to be spent on the card you will draw this turn."
@@ -340,7 +340,7 @@ fn herald_of_leshrac_returns_every_land_you_control_but_dont_own() {
 
 #[test]
 fn justice_adds_up_the_damage_of_one_source_dealt_at_once() {
-    cr!("120.2", "603.2c");
+    cr!("603.2c");
     ruling!(
         "Justice",
         "If a single source does damage to multiple targets at once, Justice will add up all the damage done and deal damage to the source’s controller at one time (not multiple separate damagings)."
@@ -365,7 +365,7 @@ fn justice_adds_up_the_damage_of_one_source_dealt_at_once() {
 
 #[test]
 fn karplusan_minotaur_triggers_on_any_won_or_lost_flip_but_not_heads_or_tails() {
-    cr!("705.2", "705.3");
+    cr!("705.2");
     ruling!(
         "Karplusan Minotaur",
         "The Minotaur’s last two abilities will trigger whenever you win or lose any coin flip. For example, if you cast Stitch in Time, one of the Minotaur’s abilities will trigger."
@@ -394,7 +394,7 @@ fn karplusan_minotaur_triggers_on_any_won_or_lost_flip_but_not_heads_or_tails() 
 
 #[test]
 fn varchilds_war_riders_tokens_can_go_to_different_opponents() {
-    cr!("702.24a", "800.4a");
+    cr!("702.24a");
     ruling!(
         "Varchild's War-Riders",
         "In a multiplayer game, you can put the Survivor tokens onto the battlefield under the control of different players."
@@ -446,7 +446,7 @@ fn survivor_of_the_unseen_puts_a_card_back_even_if_both_draws_were_replaced() {
 
 #[test]
 fn peacekeeper_doesnt_skip_the_combat_phase() {
-    cr!("506.1", "508.1");
+    cr!("506.1");
     ruling!(
         "Peacekeeper",
         "Peacekeeper’s ability doesn’t cause the combat phase or the declare attackers step to be skipped."

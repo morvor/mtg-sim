@@ -112,6 +112,14 @@ fn the_steps_overwrite_only_earlier_setting_effects_and_switching_is_last() {
         "The effects from the first and second abilities overwrite other effects that set power and/or toughness if and only if those effects existed before the ability resolved."
     );
     ruling!(
+        "Figure of Fable",
+        "They will not overwrite effects that modify power or toughness without setting it (whether from a static ability, counters, or a resolved spell or ability), nor will they overwrite effects that set power and toughness which come into existence after they resolve."
+    );
+    ruling!(
+        "Kellan, Planar Trailblazer",
+        "Effects that switch the creature's power and toughness are always applied after any other power or toughness changing effects, including these two, regardless of the order in which they are created."
+    );
+    ruling!(
         "Ascendant Spirit",
         "The first and second abilities overwrite any previous effects that set Ascendant Spirit's base power and toughness to specific values. Any effects that set Ascendant Spirit's base power and toughness that start to apply after one of these abilities will override the effect of that ability."
     );
@@ -157,11 +165,7 @@ fn the_switch_applies_after_these_effects_and_counters() {
     cr!("613.4d");
     ruling!(
         "Figure of Fable",
-        "nor will they overwrite effects that set power and toughness which come into existence after they resolve. Effects that switch a creature's power and toughness are always applied after any other power- or toughness-changing effects, regardless of the order in which they are created."
-    );
-    ruling!(
-        "Kellan, Planar Trailblazer",
-        "Effects that switch the creature's power and toughness are always applied after any other power or toughness changing effects, including these two, regardless of the order in which they are created."
+        "Effects that switch a creature's power and toughness are always applied after any other power- or toughness-changing effects, regardless of the order in which they are created."
     );
     ruling!(
         "Evolved Sleeper",
@@ -192,7 +196,7 @@ fn the_switch_applies_after_these_effects_and_counters() {
 
 #[test]
 fn ascendant_spirit_loses_its_other_creature_types_but_stays_snow() {
-    cr!("205.1b", "613.1d", "613.7");
+    cr!("613.1d", "613.7");
     ruling!(
         "Ascendant Spirit",
         "The first and second abilities cause Ascendant Spirit to lose any other creature types it may have. It retains any card types or supertypes it may have."

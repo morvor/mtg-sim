@@ -13,7 +13,7 @@ use mtg_engine::*;
 
 #[test]
 fn mirrorform_copies_only_the_copiable_values() {
-    cr!("707.2", "707.3");
+    cr!("707.2");
     ruling!(
         "Mirrorform",
         "The permanents copy exactly what was printed on the original permanent and nothing else (unless that permanent is copying something else; see below). They don't copy whether that permanent is tapped or untapped, whether it has any counters on it or Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, and so on."
@@ -66,7 +66,7 @@ fn opal_acrolith_stops_being_a_creature_when_it_becomes_an_enchantment() {
 
 #[test]
 fn evras_exchange_is_a_life_gain_or_loss() {
-    cr!("701.12g", "119.7", "119.8", "701.12a");
+    cr!("701.12g", "119.8", "701.12a");
     ruling!(
         "Evra, Halcyon Witness",
         "When its activated ability resolves, Evra's power will become your former life total and you will gain or lose an amount of life such that your life total equals Evra's former power. Other effects that interact with life gain or life loss will interact with this effect accordingly."
@@ -139,7 +139,7 @@ fn trench_gorger_is_a_6_6_while_its_ability_is_on_the_stack() {
 
 #[test]
 fn princess_yue_as_moon_doesnt_share_a_name_with_princess_yue() {
-    cr!("704.5j", "201.2");
+    cr!("704.5j");
     ruling!(
         "Princess Yue",
         "You cannot have multiple legendary permanents with the same name on the battlefield at the same time. However, Princess Yue's name becomes Moon when she returns to the battlefield as a land."
@@ -303,7 +303,7 @@ fn ascent_of_the_worthy_chooses_its_creature_on_resolution() {
 
 #[test]
 fn liliana_waker_of_the_deads_x_is_locked_in_on_resolution() {
-    cr!("608.2h", "611.2b");
+    cr!("608.2h");
     ruling!(
         "Liliana, Waker of the Dead",
         "The value of X is determined only as Liliana's second ability resolves. Once that happens, the value of X won't change later in the turn even if the number of cards in your graveyard changes."
@@ -381,7 +381,7 @@ fn glamerdye_chooses_two_different_color_words_on_resolution() {
 
 #[test]
 fn artificial_evolution_doesnt_change_names() {
-    cr!("612.2", "201.2");
+    cr!("612.2");
     ruling!(
         "Artificial Evolution",
         "You can't change proper nouns (i.e. card names) such as “Island Fish Jasconius”."

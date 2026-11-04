@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 #[test]
 fn demonic_taskmaster_sacrifices_even_if_it_left_and_two_sacrifice_each_other() {
-    cr!("603.4", "608.2b", "701.21a");
+    cr!("113.7a", "701.21a");
     ruling!(
         "Demonic Taskmaster",
         "If Demonic Taskmaster leaves the battlefield after its ability triggers but before it resolves, you’ll still have to sacrifice a creature. Notably, if you control two Demonic Taskmasters and no other creatures, each one will force you to sacrifice the other."
@@ -51,7 +51,7 @@ fn demonic_taskmaster_sacrifices_even_if_it_left_and_two_sacrifice_each_other() 
 
 #[test]
 fn lord_of_the_pits_can_sacrifice_each_other_and_lifelink_offsets_its_damage() {
-    cr!("701.21a", "702.15b", "120.3f", "119.3");
+    cr!("701.21a", "702.15b", "120.3f");
     ruling!(
         "Lord of the Pit",
         "If you have two Lords of the Pit, you can sacrifice them to each other."
@@ -101,7 +101,7 @@ fn liege_of_the_pit_must_sacrifice_another_creature_if_it_can() {
 
 #[test]
 fn two_xathrid_demons_sacrifice_each_other_or_you_lose_seven() {
-    cr!("701.21a", "603.4", "608.2b");
+    cr!("701.21a", "113.7a");
     ruling!(
         "Xathrid Demon",
         "If you have two Xathrid Demons, both abilities will trigger at the beginning of your upkeep. When the first Demon’s ability resolves, you can sacrifice the second Demon to satisfy the requirement (“Sacrifice a creature other than Xathrid Demon” really means “Sacrifice a creature other than this creature”). When the second Demon’s ability resolves, you must sacrifice another creature. If you can’t (because the first Demon has somehow left the battlefield and you control no other creatures), you lose 7 life, regardless of whether the second Demon is still on the battlefield at this time."
@@ -230,7 +230,7 @@ fn stampeding_serow_returns_without_targeting_and_itself_if_needed() {
 
 #[test]
 fn trusted_advisor_and_null_profusion_apply_in_timestamp_order() {
-    cr!("402.2", "613.7", "613.11");
+    cr!("402.2", "613.11");
     ruling!(
         "Trusted Advisor",
         "If multiple effects modify your hand size, apply them in timestamp order."
@@ -335,7 +335,7 @@ fn rogue_skycaptain_makes_its_choices_on_resolution() {
 
 #[test]
 fn child_of_gaea_stays_if_you_no_longer_control_it() {
-    cr!("701.21a", "608.2b");
+    cr!("701.21a");
     ruling!(
         "Child of Gaea",
         "If you do choose not to pay, but no longer control Child of Gaea, you cannot sacrifice. It will remain on the battlefield under its current controller’s control."
@@ -399,7 +399,7 @@ fn sheltering_ancient_is_sacrificed_if_no_opponent_controls_a_creature() {
 
 #[test]
 fn sacred_mesa_can_make_a_pegasus_in_the_upkeep_to_sacrifice() {
-    cr!("117.3a", "503.1");
+    cr!("503.1");
     ruling!(
         "Sacred Mesa",
         "It can be used during upkeep to create a Pegasus token in time for it to be sacrificed."
@@ -420,7 +420,7 @@ fn sacred_mesa_can_make_a_pegasus_in_the_upkeep_to_sacrifice() {
 
 #[test]
 fn gurzigosts_unblocked_damage_goes_to_the_planeswalker_it_attacks() {
-    cr!("510.1c", "506.4");
+    cr!("510.1b");
     ruling!(
         "Gurzigost",
         "If this creature is attacking a planeswalker, assigning its damage as though it weren’t blocked means the damage is assigned to the planeswalker, not to the defending player."
@@ -483,7 +483,7 @@ fn charnel_troll_can_use_untapped_lands_in_the_upkeep_before_the_draw() {
 
 #[test]
 fn breeding_pit_must_be_on_the_battlefield_at_the_end_step() {
-    cr!("603.2", "603.4");
+    cr!("603.2");
     ruling!(
         "Breeding Pit",
         "Breeding Pit must actually be on the battlefield at the beginning of the endstep in order for you to get a Thrull. The getting of the Thrull is not part of paying the upkeep, it is part of having the card on the battlefield."
@@ -511,7 +511,7 @@ fn breeding_pit_must_be_on_the_battlefield_at_the_end_step() {
 
 #[test]
 fn icy_prison_leaving_early_exiles_the_creature_forever() {
-    cr!("603.6a", "610.3c");
+    cr!("603.6c", "113.7a");
     ruling!(
         "Icy Prison",
         "If Icy Prison leaves the battlefield before its first ability has resolved, its third ability will trigger and do nothing. Then its first ability will resolve and exile the targeted creature forever."
@@ -532,7 +532,7 @@ fn icy_prison_leaving_early_exiles_the_creature_forever() {
 
 #[test]
 fn static_prison_leaving_early_exiles_nothing() {
-    cr!("610.3c");
+    cr!("610.3b");
     ruling!(
         "Static Prison",
         "If Static Prison leaves the battlefield before its first triggered ability resolves, the target permanent won't be exiled."

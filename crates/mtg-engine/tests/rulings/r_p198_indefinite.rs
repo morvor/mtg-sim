@@ -133,7 +133,7 @@ fn verdant_touch_land_stays_a_land_with_its_abilities() {
 
 #[test]
 fn beorns_hospitality_stays_a_bear_after_the_turn() {
-    cr!("611.2a", "613.4a");
+    cr!("611.2a", "613.1d");
     ruling!(
         "Beorn's Hospitality",
         "The type-changing and ability-granting effects last indefinitely. They don't wear off during the cleanup step."
@@ -404,7 +404,7 @@ fn kioras_chapter_two_keeps_them_tapped_after_the_saga_leaves_and_ignores_hexpro
 
 #[test]
 fn okos_elk_effect_lasts_and_its_exchange_survives_a_power_boost() {
-    cr!("611.2a", "613.1b", "613.4b");
+    cr!("611.2a", "613.1b");
     ruling!(
         "Oko, Thief of Crowns",
         "The effects of Oko's third ability lasts indefinitely. It doesn't expire during the cleanup step or if the creature you take has its power raised above 3 later."

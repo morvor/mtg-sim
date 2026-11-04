@@ -73,7 +73,7 @@ fn chromeshell_crab_exchange_fails_if_a_target_is_gone() {
 
 #[test]
 fn chromeshell_crab_exchange_fails_after_a_control_change() {
-    cr!("701.12a", "608.2b");
+    cr!("701.12a");
     ruling!(
         "Chromeshell Crab",
         "The exchange fails if either you no longer control your creature or the other creature is now controlled by you."
@@ -189,7 +189,7 @@ fn daring_thief_relevant_card_types_include_artifact() {
 
 #[test]
 fn dack_faydens_draw_and_discard_happen_in_one_resolution() {
-    cr!("608.2c", "117.3");
+    cr!("608.2c");
     ruling!(
         "Dack Fayden",
         "The targeted player draws two cards and discards two cards all while Dack's first ability is resolving. Nothing can happen between the two, and no player may choose to take actions."
@@ -215,7 +215,7 @@ fn dack_faydens_draw_and_discard_happen_in_one_resolution() {
 
 #[test]
 fn aminatous_draw_and_put_back_happen_in_one_resolution() {
-    cr!("608.2c", "117.3");
+    cr!("608.2c");
     ruling!(
         "Aminatou, the Fateshifter",
         "You draw a card and put one back all while Aminatou's first ability is resolving. Nothing can happen between the two, and no player may choose to take actions."
@@ -344,7 +344,7 @@ fn aura_graft_can_move_an_aura_you_already_control() {
 
 #[test]
 fn confiscation_coup_pays_energy_on_resolution_and_gets_none_if_it_fizzles() {
-    cr!("608.2b", "122.1");
+    cr!("608.2b");
     ruling!(
         "Confiscation Coup",
         "You choose the target artifact or creature as you cast Confiscation Coup. You don't choose whether or not to pay an amount of {E} until Confiscation Coup resolves. If the target becomes an illegal target, Confiscation Coup won't resolve and you won't get {E}{E}{E}{E}."
