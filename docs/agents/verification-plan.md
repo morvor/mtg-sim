@@ -162,6 +162,20 @@ The user resumed normal work, at the normal pace.
 - **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
 - **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
 
+### Worker roster
+
+The coordinator keeps this current. Every session is a cloud session tagged `mtg-sim-worker`. "Handing off" means the session lands its current item, stops, and is then replaced by a fresh session.
+
+| Role | Session | State (Nov 4, 23:35) | Queue for the next session |
+|---|---|---|---|
+| compile | session_011rMBWnWVZubEfnTBPyDyne | handing off after roundtrip-pairs-5 | verified-refresh-nov4, then rulings P001, P008 |
+| cards-1 | session_01JuEc757NG5yjUWzpG55Mo4 | handing off after its two current cards6 items | the remaining cards6 items, two at a time |
+| cards-2 | session_01UgktDvDn9k5EGhmSRYhCMB | keeps its session (compacted Nov 4) | register-fixes-1, then P025+P199, then P140+P027 |
+| structure | session_01HHSsZTga8NA52kpfwCvSFH | handing off after ruling-conflicts-1 | follow-up conflict cases, then rulings P110, P073 |
+| mutation | session_01HW8apRLHq3Lrn9uCc5uTbe | handing off after P198 | P034, P003 |
+| rulings-1 | session_016AqVwbbcGHLPnsbE5QiWBy | handing off after P128 | P124, P012 |
+| rulings-2 | session_01RkEWqFoqiD8uP1RitdLYc7 | handing off after P096 | P005, P195 |
+
 ### Effort and fresh sessions (user, Nov 4, late evening)
 
 The user decided:
