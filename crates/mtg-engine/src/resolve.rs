@@ -955,7 +955,9 @@ impl Game {
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
                 // for them).
-                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects)
+                    || crate::untap_choice::ended_before_it_began(self, duration, ctx)
+                {
                     return;
                 }
                 let id = self.new_effect_id();
