@@ -323,7 +323,11 @@ fn millikin_is_not_a_mana_ability() {
     );
     supported("Millikin");
     supported("Deranged Assistant");
-    // Deranged Assistant ("{T}, Mill a card: Add {C}.") is the same.
+    // Deranged Assistant ("{T}, Mill a card: Add {C}.") is the same. Its ruling (2025-01-24,
+    // the same content since 2018) treats the ability as a mana ability activated while
+    // casting a spell; it is outdated by the CR 605.1a update effective 2026-08-07 (revision
+    // 20260807: an ability whose cost or effect moves a card to or from a library isn't a
+    // mana ability) and exempt (rulings-P219.tsv).
     for name in ["Millikin", "Deranged Assistant"] {
         let mut t = TestGame::new(2);
         let c = t.battlefield(P0, name);
@@ -342,6 +346,40 @@ fn millikin_is_not_a_mana_ability() {
         assert!(t.cast(P0, ogre).try_go().is_err(), "{name}");
         assert_eq!(t.graveyard_size(P0), 0, "{name}");
     }
+}
+
+#[test]
+fn deranged_assistant_mana_survives_a_reversed_cast() {
+    // What remains of Deranged Assistant's (exempt, outdated) ruling under the current
+    // rules: activated with priority before a cast (CR 605.1a, 2026-08-07: not a mana
+    // ability), its mana and the milled card stay when that cast is reversed (733.1).
+    cr!("733.1", "605.1a");
+    supported("Deranged Assistant");
+    let mut t = TestGame::new(2);
+    let assistant = t.battlefield(P0, "Deranged Assistant");
+    activate_containing(&mut t, P0, assistant, "Add").expect("activated");
+    t.resolve();
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::C), 1);
+    assert_eq!(t.graveyard_size(P0), 1);
+    let library = t.library_size(P0);
+    // {1}, and an additional cost P0 can't pay (P0 controls no artifact); the floating {C}
+    // is the only mana.
+    let offering = custom_card(
+        "Hollow Offering",
+        "Instant",
+        "{1}",
+        None,
+        "As an additional cost to cast this spell, sacrifice an artifact.\nYou gain 1 life.",
+    );
+    let spell = t.custom(P0, offering, Zone::Hand(P0));
+    assert!(t.cast(P0, spell).try_go().is_err());
+    assert_eq!(t.zone(spell), Zone::Hand(P0), "the spell is back in hand");
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::C), 1, "the {{C}} is still there");
+    assert_eq!(t.graveyard_size(P0), 1, "the milled card stays in the graveyard");
+    assert_eq!(t.library_size(P0), library);
+    assert!(t.on_battlefield(assistant) && t.obj_now(assistant).tapped);
+    assert_eq!(t.life(P0), 20);
 }
 
 #[test]

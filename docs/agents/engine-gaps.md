@@ -821,10 +821,10 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
 - Deck legality (deck.rs, attraction deck checks) is an API callers use; interchangeable names (no Scryfall
   data).
 - Rulings the current CR supersedes: Wort, the Raidmother (CR 610.5 makes cast grants one-shot), Mossfire Egg
-  (CR 605.1a), MDFC "can't transform" rulings (CR 701.27g, 712.3).
-- Ambiguous/unsettled readings: ward on a copy that keeps its targets, deathtouch in 120.10 excess damage,
-  granted changeling vs layer 4, Panharmonicon on non-ETB triggers, Torpor Orb on leave-graveyard triggers,
-  tempting offer order when cast on another player's turn (engine follows CR 101.4), Grand Melee
+  and the other Eggs, Charmed Pendant and Deranged Assistant (CR 605.1a, revision effective 2026-08-07),
+  MDFC "can't transform" rulings (CR 701.27g, 712.3).
+- Ambiguous/unsettled readings: ward on a copy that keeps its targets, granted changeling vs layer 4,
+  Panharmonicon on non-ETB triggers, Torpor Orb on leave-graveyard triggers, Grand Melee
   planeswalking readings of 701.31a/b.
 - No current card affected: keyword-derived activated/triggered abilities added after layer 6, "can't have
   [keyword]" at the end of layer 6, `Filter::zone()` returning None for `Or`, `Value::DistinctNames` greed,
