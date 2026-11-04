@@ -395,6 +395,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         mtg_engine::kw::pay_any_amount_of_life::PAY_ANY_LIFE,
         "card:The Mimeoplasm:exile two creature cards and enter as a copy of one",
         "card:Vesuvan Doppelganger:enter as a copy, keeping its own color",
+        // Vesuvan Shapeshifter's copy effect gets a duration as it's put onto the
+        // battlefield (`cards/vesuvan_shapeshifter.rs`): no library.
+        "card:Vesuvan Shapeshifter:its copy effect lasts until it's turned face down",
         // Damage removed instead of a destruction (umbra armor, `kw/umbra_armor.rs`;
         // Pyramids, `cards/pyramids.rs`).
         "umbra armor:remove all damage from it",
@@ -565,6 +568,8 @@ fn custom_rule(name: &str) -> CustomRule {
         "reveal the first card you draw on each of your turns",
         "you may reveal the first card you draw each turn as you draw it",
         "card:Booby Trap:the chosen player reveals each card they draw",
+        // River Song: which card a draw takes (`draws_from_bottom`); still a draw.
+        "card:River Song:you draw from the bottom of your library",
         "you draw a card during each opponent's draw step",
         "control opponents while searching",
         "spells and abilities your opponents control can't cause their controller to search their library",
