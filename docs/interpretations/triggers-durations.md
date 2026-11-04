@@ -100,3 +100,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Code: `crates/mtg-engine/src/oracle/patterns/other_than_trigger_object.rs` (`rebind_other`), called from `crates/mtg-engine/src/oracle/triggers.rs`.
 - Tests: `tests/rulings/r_p039_creature_count.rs` (`portcullis_checks_the_creature_count_again_on_resolution`, `animated_portcullis_counts_itself_among_the_other_creatures`).
 
+
+## choose-for-each-player-distinct-objects: Nihiloor's choices "for each opponent" are of different creatures
+- Kind: interpretation
+- Status: decided
+- Rules: Nihiloor: "When Nihiloor enters, for each opponent, tap up to one untapped creature you control. When you do, gain control of target creature that player controls with power less than or equal to the tapped creature's power ..." / ruling: "As Nihiloor's first triggered ability resolves, you choose up to one creature for each opponent, and tap them all at the same time. Then, a separate triggered ability is put on the stack for each creature you tapped this way."
+- Question: Since every choice is made before anything is tapped, may the same untapped creature be chosen for two opponents (and give two reflexive abilities)?
+- Decision: No. The choices are made in turn order starting with the next opponent after you (CR 101.4b), and a creature already chosen for one opponent isn't offered for a later one; an answer naming it is invalid and falls back to choosing nothing for that opponent (`turn_order_choices::choose_for_each_player`). Each tapped creature gives one reflexive ability, about the opponent it was chosen for.
+- Alternatives: Allow repeats: a creature tapped once would then stand for several opponents, against "up to one creature for each opponent" and "a separate triggered ability ... for each creature you tapped".
+- Why: The instruction is to tap a creature for each opponent; one creature can be tapped only once, and the ruling counts the abilities by the creatures tapped.
+- Affects: Nihiloor (any "for each opponent, tap up to one ... When you do, ... that player" text).
+- Code: `crates/mtg-engine/src/turn_order_choices.rs` (`choose_for_each_player`); `crates/mtg-engine/src/oracle/patterns/players_5.rs` (`when_you_do_for_each_opponent`).
+- Tests: `tests/cards/cards5_choices_players.rs` (`nihiloor_chooses_a_creature_for_only_one_opponent`).

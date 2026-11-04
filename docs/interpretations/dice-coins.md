@@ -52,3 +52,15 @@ Format and kinds: `docs/agents/items/interpretation-register.md`; index:
 - Affects: Vedalken Squirrel-Whacker.
 - Code: `crates/mtg-engine/src/cards/vedalken_squirrel_whacker.rs`; `crates/mtg-engine/src/dice.rs` (`roll_dice`, the `dice_rolled` hook).
 - Tests: `tests/cards/m_vedalken_squirrel_whacker.rs` (`modifiers_apply_first_and_results_can_be_impossible_numbers`, `the_new_base_power_is_a_base_value_modifications_still_apply`).
+
+## linked-this-way-includes-copies: A card revealed by a copy of Priority Boarding's first ability is revealed "this way"
+- Kind: interpretation
+- Status: decided
+- Rules: 607.1 "... the second refers only to actions that were taken or objects or players that were affected by the first, and not by any other ability." / 607.3 "If, within a pair of linked abilities, one ability refers to a single object as “the exiled card,” ... and the other ability has exiled multiple cards (usually because it was copied), the ability refers to each of the exiled cards. ..." / 707.10b "A copy of an ability has the same source as the original ability. ..."
+- Question: "Whenever you reveal a card with mana value less than the result this way, ..." (Priority Boarding) is linked to "Whenever you roll a die, you may reveal the top card of your library." Does a reveal made by a copy of the first ability (Strionic Resonator) count as "this way", and what is "the result" then?
+- Decision: Yes. The linked trigger (`kw/revealed_this_way.rs`) triggers on a card its controller reveals while an ability with the same source and the same link resolves — the first ability or a copy of it — as long as the permanent has the linked triggered ability as the card is revealed. "The result" is the roll the revealing ability (or the copied original) triggered on.
+- Alternatives: Only the original ability's reveal counts: 607.1's "the first" read as excluding copies.
+- Why: 607.3 treats what a copy of a linked ability does as done by that ability ("usually because it was copied"), and a copy has the same source (707.10b); a copy copies the original's trigger event too, so it has the same result.
+- Affects: Priority Boarding.
+- Code: `crates/mtg-engine/src/kw/revealed_this_way.rs`; `crates/mtg-engine/src/oracle/patterns/attractions_5.rs` (`reveal_then_whenever_you_reveal`).
+- Tests: `tests/cards/c5_attractions.rs` (`priority_boarding_triggers_for_a_reveal_by_a_copy_of_its_first_ability`).

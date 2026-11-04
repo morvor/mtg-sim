@@ -350,6 +350,7 @@ fn priority_boarding_triggers_for_a_reveal_by_a_copy_of_its_first_ability() {
     // A copy of the first ability has the same source (CR 707.10b): its reveal is "this
     // way", and "the result" is the copied ability's roll.
     cr!("607.1", "707.10b");
+    interp!("linked-this-way-includes-copies");
     let (mut t, _pb) = boarding_trigger_on_stack();
     let resonator = t.battlefield(P0, "Strionic Resonator");
     t.lands(P0, "Wastes", 2);

@@ -1394,8 +1394,7 @@ fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     assert_eq!(t.obj_now(bears).controller, P0);
     assert_eq!(t.obj_now(thopter).controller, P0);
     assert_eq!(t.obj_now(wurm).controller, P2);
-    // Both choices were made before any reflexive ability's target, and each reflexive
-    // ability targeted only that opponent's creatures with low enough power.
+    // Each reflexive ability targeted only that opponent's creatures with low enough power.
     let asked = &t.asked()[from..];
     let cands: Vec<Vec<Entity>> = asked
         .iter()
@@ -1411,6 +1410,44 @@ fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     t.settle();
     t.g.recompute();
     assert_eq!(t.obj_now(bears).controller, P1);
+}
+
+#[test]
+fn nihiloor_chooses_a_creature_for_only_one_opponent() {
+    // A creature chosen for one opponent can't be chosen again for another.
+    cr!("603.12");
+    interp!("choose-for-each-player-distinct-objects");
+    ruling!(
+        "Nihiloor",
+        "As Nihiloor's first triggered ability resolves, you choose up to one creature for each opponent, and tap them all at the same time."
+    );
+    let mut t = TestGame::new(3);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P2, "Ornithopter");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    // An invalid answer for P2 (the Giant again) falls back to choosing nothing.
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let from = t.asked().len();
+    t.enter(P0, "Nihiloor");
+    t.g.flush_events();
+    t.settle();
+    t.resolve();
+    let choices: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(choices.len(), 2, "{choices:?}");
+    assert!(choices[0].contains(&Entity::Object(giant)));
+    assert!(!choices[1].contains(&Entity::Object(giant)), "already chosen for P1");
+    assert!(choices[1].contains(&Entity::Object(elves)));
+    // One creature tapped, one reflexive ability.
+    assert!(t.obj_now(giant).tapped);
+    assert_eq!(t.g.stack.len(), 1, "{:?}", t.g.stack);
 }
 
 #[test]
