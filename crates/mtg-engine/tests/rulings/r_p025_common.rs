@@ -90,3 +90,13 @@ pub fn is_creature(t: &TestGame, id: ObjectId) -> bool {
 pub fn name_of(t: &TestGame, id: ObjectId) -> String {
     t.obj_now(id).chars.name.to_string()
 }
+
+/// The number of activated abilities the object has whose text contains `s`.
+pub fn activated_with(t: &TestGame, id: ObjectId, s: &str) -> usize {
+    t.obj_now(id)
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)) && a.text.contains(s))
+        .count()
+}
