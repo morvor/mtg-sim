@@ -262,6 +262,73 @@ fn rith_excess_damage_to_creatures_and_planeswalkers() {
 }
 
 #[test]
+fn rith_counts_deathtouch_damage_beyond_1_as_excess_but_not_on_planeswalkers() {
+    cr!("120.4a", "120.10");
+    ruling!(
+        "Rith, Liberated Primeval",
+        "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage, so any amount greater than that will cause excess damage to be dealt"
+    );
+    supported("Rith, Liberated Primeval");
+    supported("Typhoid Rats");
+    let dragons = |t: &TestGame| crate::r_p108_common::tokens_with(t, P0, "Dragon");
+    // Typhoid Rats (deathtouch) deals `n` to P1's Hill Giant (3/3) or to a planeswalker
+    // (`n` more than 1 below its loyalty is never excess there).
+    let run = |n: u32, walker: bool| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rith, Liberated Primeval");
+        let rats = t.battlefield(P0, "Typhoid Rats");
+        let victim = if walker {
+            let pw = t.battlefield(P1, "Gideon, Ally of Zendikar");
+            assert_eq!(t.counters(pw, "loyalty"), 4);
+            pw
+        } else {
+            t.battlefield(P1, "Hill Giant")
+        };
+        t.g.deal_damage(rats, obj(victim), n, false);
+        t.settle();
+        crate::r_p108_common::end_step(&mut t, P0);
+        dragons(&t)
+    };
+    assert_eq!(run(2, false), 1, "2 deathtouch damage to a 3/3: 1 is excess");
+    assert_eq!(run(1, false), 0, "1 deathtouch damage is lethal, none excess");
+    // Deathtouch doesn't matter for a planeswalker: 2 or 4 damage to loyalty 4 isn't excess.
+    assert_eq!(run(2, true), 0);
+    assert_eq!(run(4, true), 0);
+}
+
+#[test]
+fn rith_counts_excess_damage_whoever_dealt_it() {
+    cr!("120.4a", "120.10");
+    ruling!(
+        "Rith, Liberated Primeval",
+        "For example, if a 4/4 creature an opponent controls is dealt 2 damage by a spell you control and later that turn is dealt 3 damage by a spell another player controls, Rith"
+    );
+    supported("Rith, Liberated Primeval");
+    let dragons = |t: &TestGame| crate::r_p108_common::tokens_with(t, P0, "Dragon");
+    // P1's Air Elemental (4/4): P0's Shock, then (with `bolt`) P1's own Lightning Bolt.
+    let run = |bolt: bool| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rith, Liberated Primeval");
+        let elemental = t.battlefield(P1, "Air Elemental");
+        t.lands(P0, "Mountain", 1);
+        let shock = t.hand(P0, "Shock");
+        t.cast(P0, shock).target(obj(elemental)).go();
+        t.resolve_all();
+        if bolt {
+            t.lands(P1, "Mountain", 1);
+            let b = t.hand(P1, "Lightning Bolt");
+            t.cast(P1, b).target(obj(elemental)).go();
+            t.resolve_all();
+            assert!(!t.on_battlefield(elemental));
+        }
+        crate::r_p108_common::end_step(&mut t, P0);
+        dragons(&t)
+    };
+    assert_eq!(run(true), 1, "5 damage to a 4/4: 1 excess, the last 3 from P1's spell");
+    assert_eq!(run(false), 0);
+}
+
+#[test]
 fn ready_willing_dont_affect_creatures_gained_later() {
     cr!("611.2c");
     ruling!(
