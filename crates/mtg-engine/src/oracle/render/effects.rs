@@ -7089,6 +7089,17 @@ impl Renderer<'_> {
             ZoneKind::Ante => "into the ante".into(),
             ZoneKind::Outside => "outside the game".into(),
         };
+        // "In any order" said by the text: the player it instructs arranges them.
+        if to.zone == ZoneKind::Library
+            && to.arranged_by.is_some()
+            && matches!(to.position, LibraryPosition::Top | LibraryPosition::Bottom)
+        {
+            if s.contains("{opt:in any order}") {
+                s = s.replace("{opt:in any order}", "in any order");
+            } else {
+                s.push_str(" in any order");
+            }
+        }
         if to.face_down {
             s.push_str(" face down");
         }
