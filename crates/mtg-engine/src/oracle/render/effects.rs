@@ -790,6 +790,38 @@ impl Renderer<'_> {
                 }
                 format!("for each {s}, {inner}")
             }
+            // "For each opponent, tap up to one untapped creature you control. When you do,
+            // ... that player ..." (Nihiloor).
+            Effect::ChooseForEachPlayer {
+                who,
+                chooser,
+                filter,
+                act,
+                each,
+                ..
+            } => {
+                let w = self.player_filter_noun(who, Num::One);
+                let choice = Sel::Choose {
+                    chooser: chooser.clone(),
+                    filter: filter.clone(),
+                    count: Value::c(1),
+                    up_to: true,
+                    store: None,
+                };
+                let a = match act.as_ref() {
+                    Effect::Tap { .. } => format!("tap {}", self.sel(&choice, Case::Obj)),
+                    other => self.effect_inner(other),
+                };
+                let then = match each.as_ref() {
+                    Effect::If { then, .. } => self.effect_inner(then),
+                    other => self.effect_inner(other),
+                };
+                if then.is_empty() {
+                    format!("for each {w}, {a}")
+                } else {
+                    format!("for each {w}, {a}. {then}")
+                }
+            }
             // "Starting with you, each player chooses a creature."
             Effect::InTurnOrder {
                 first,

@@ -6,6 +6,7 @@
 
 use crate::combat2_common::supported;
 use crate::td_next_turn_durations::mana;
+use mtg_engine::ability::{Duration, Effect, Modification, Sel};
 use mtg_engine::decision::Decision;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
@@ -280,26 +281,78 @@ fn priority_boarding_doesnt_exile_a_card_with_equal_or_greater_mana_value() {
     assert!(!t.in_exile("Hill Giant"));
 }
 
-#[test]
-fn priority_boarding_does_nothing_more_if_it_left_the_battlefield_before_the_reveal() {
-    cr!("603.2");
-    interp!("linked-reveal-trigger-as-reflexive");
+/// Priority Boarding and Hill Giant on top of P0's library; P0 rolls a 10 (answering yes
+/// to every "may") and Priority Boarding's first ability is on the stack.
+fn boarding_trigger_on_stack() -> (TestGame, ObjectId) {
     let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
     let pb = t.battlefield(P0, "Priority Boarding");
     t.library_top(P0, "Hill Giant");
     for _ in 0..3 {
         t.answer_yes(P0, true);
     }
-    let src = t.battlefield(P0, "Memnite");
-    let mut ctx = mtg_engine::eval::Ctx::new(Some(src), P0);
-    t.g.dice.loaded.push_back(10);
-    mtg_engine::dice::roll(&mut t.g, &mtg_engine::dice::DieRoll::new(20), &mut ctx);
-    t.g.flush_events();
-    t.settle();
-    // The trigger is on the stack; Priority Boarding leaves before it resolves.
+    roll_d20(&mut t, P0, 10);
+    assert_eq!(t.g.stack.len(), 1);
+    (t, pb)
+}
+
+#[test]
+fn priority_boarding_does_nothing_more_if_it_left_the_battlefield_before_the_reveal() {
+    // The second ability is Priority Boarding's own triggered ability: it triggers only if
+    // the permanent has it as the card is revealed (CR 603.2, 603.6).
+    cr!("603.2", "607.1");
+    let (mut t, pb) = boarding_trigger_on_stack();
+    // Priority Boarding leaves before its first ability resolves.
     t.g.move_object(pb, mtg_engine::object::Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
     t.resolve_all();
     assert!(!t.in_exile("Hill Giant"));
+}
+
+#[test]
+fn priority_boarding_doesnt_trigger_if_it_lost_its_abilities_before_the_reveal() {
+    // Decided by the user on Nov 4: the second ability is the permanent's own triggered
+    // ability linked to the first (CR 603.2, 607.1), not part of the first; a Priority
+    // Boarding without abilities as the card is revealed has nothing to trigger.
+    cr!("603.2", "607.1");
+    let (mut t, pb) = boarding_trigger_on_stack();
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    ctx.targets = vec![vec![Entity::Object(pb)]];
+    t.g.exec(
+        &Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::RemoveAllAbilities],
+            duration: Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    let lib = t.g.player(P0).library.len();
+    t.resolve_all();
+    // The first ability (independent of its source, CR 113.7a) revealed the card, but
+    // nothing exiled it.
+    assert!(!t.in_exile("Hill Giant"));
+    assert_eq!(t.g.player(P0).library.len(), lib);
+}
+
+#[test]
+fn priority_boarding_triggers_for_a_reveal_by_a_copy_of_its_first_ability() {
+    // A copy of the first ability has the same source (CR 707.10b): its reveal is "this
+    // way", and "the result" is the copied ability's roll.
+    cr!("607.1", "707.10b");
+    let (mut t, _pb) = boarding_trigger_on_stack();
+    let resonator = t.battlefield(P0, "Strionic Resonator");
+    t.lands(P0, "Wastes", 2);
+    let top = *t.g.stack.last().unwrap();
+    t.answer_targets(P0, &[Entity::Object(top)]);
+    t.activate(P0, resonator, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.g.stack.len(), 2, "the copy is on the stack");
+    // The copy resolves first: it reveals, and the linked ability triggers and resolves.
+    t.resolve();
+    assert_eq!(t.g.stack.len(), 2, "the linked ability triggered: {:?}", t.g.stack);
+    t.resolve();
+    assert!(t.in_exile("Hill Giant"));
+    t.resolve_all();
 }
 
 #[test]

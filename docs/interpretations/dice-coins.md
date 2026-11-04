@@ -29,18 +29,6 @@ Format and kinds: `docs/agents/items/interpretation-register.md`; index:
 - Code: `crates/mtg-engine/src/dice.rs` (`NEXT_ROLL_EXTRA`, `take_next_roll_extras`, `roll_dice`, `roll_planar_natural`).
 - Tests: `tests/cards/c5_dice.rs` (`two_bamboozling_beebles_both_apply_to_the_next_roll`).
 
-## linked-reveal-trigger-as-reflexive: Priority Boarding's "whenever you reveal a card ... this way" is checked as the first ability reveals
-- Kind: deviation
-- Status: provisional
-- Rules: 603.2 "Whenever a game event or game state matches a triggered ability’s trigger event, that ability automatically triggers. ..." / 603.3 "Once an ability has triggered, its controller puts it on the stack as an object that’s not a card the next time a player would receive priority. ..." / 603.12 "A resolving spell or ability may allow or instruct a player to take an action and create a triggered ability that triggers “when [a player] [does or doesn’t]” take that action ..."
-- Question: "Whenever you roll a die, you may reveal the top card of your library. Do this only once each turn. Whenever you reveal a card with mana value less than the result this way, you may exile it. If you do, you may play it this turn." The second triggered ability triggers on the first one's reveal, with "the result" the first ability's roll. How is it modeled?
-- Decision: The engine compiles the second ability into the first: after the reveal, if Priority Boarding is still on the battlefield and the revealed card's mana value is less than the result of the roll that triggered the first ability, a triggered ability triggers then (like a reflexive one, CR 603.12) and does the rest, chosen and resolved as usual.
-- Alternatives: A separate triggered ability of the permanent, triggered by a reveal event tagged with the first ability: the same results, except if Priority Boarding loses its abilities, or another effect copies the first ability, between the trigger and the reveal (the second ability then wouldn't trigger, or would trigger for the copy).
-- Why: The two abilities are linked (only this way's reveals count) and the second needs the first's result; the reflexive form keeps both in one place. The cases where they differ need an effect removing an enchantment's abilities mid-resolution.
-- Affects: Priority Boarding.
-- Code: `crates/mtg-engine/src/oracle/patterns/attractions_5.rs` (`reveal_then_whenever_you_reveal`).
-- Tests: `tests/cards/c5_attractions.rs` (`priority_boarding_does_nothing_more_if_it_left_the_battlefield_before_the_reveal`).
-
 ## canal-dredger-default-recipient: Without a choice, a booster pack's last card goes to the next Canal Dredger drafter in the passing direction
 - Kind: policy
 - Status: decided
