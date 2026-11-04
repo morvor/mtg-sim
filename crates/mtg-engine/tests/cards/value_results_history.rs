@@ -277,8 +277,10 @@ fn gnoll_war_band_counts_opponents_who_were_dealt_damage() {
     let (mut t, gwb) = setup(3);
     assert!(t.cast(P0, gwb).try_go().is_err());
     // One of them has since left the game: the damage dealt to them this turn still
-    // counts (CR 800.4i; Gnoll War Band's ruling saying otherwise is exempt as
-    // conflicting with it, see the interpretation).
+    // counts. Gnoll War Band's ruling saying otherwise is exempt as inconsistent with the
+    // other rulings on the question (about 15 cards' rulings, 2007-2024, count them); CR
+    // 800.4i supports counting only by its last-known-information sentence. See the
+    // interpretation.
     let (mut t, gwb) = setup(4);
     t.g.player_mut(P2).has_lost = true;
     t.g.player_mut(P2).left_game = true;

@@ -4,6 +4,7 @@
 
 use crate::r_s01_common::supported;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 #[test]
@@ -62,4 +63,123 @@ fn chandras_incinerator_counts_damage_to_an_opponent_who_lost() {
     assert!(t.cast(P0, ci).try_go().is_ok());
     let (mut t, ci) = setup(1);
     assert!(t.cast(P0, ci).try_go().is_err());
+}
+
+/// A three-player game in P0's precombat main phase: Grizzly Bears of P0's deals `damage`
+/// to P2 (combat damage if `combat`), then P2 concedes if `leave`.
+fn p2_damaged_then_left(card: &str, damage: u32, combat: bool, leave: bool) -> (TestGame, ObjectId) {
+    supported(card);
+    let mut t = TestGame::new(3);
+    let source = t.battlefield(P0, card);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    if damage > 0 {
+        t.g.deal_damage(bears, Entity::Player(P2), damage, combat);
+        t.g.flush_events();
+    }
+    if leave {
+        crate::r_p079_common::concede(&mut t, P2);
+        assert!(t.has_lost(P2));
+    }
+    (t, source)
+}
+
+#[test]
+fn sygg_counts_an_opponent_who_lost_3_life_then_left() {
+    cr!("800.4i", "603.4");
+    interp!("history-counts-players-who-left");
+    ruling!(
+        "Sygg, River Cutthroat",
+        "or a player who was your opponent at the time they left the game, has lost 3 or more life"
+    );
+    let drawn = |damage: u32, leave: bool| {
+        let (mut t, _) = p2_damaged_then_left("Sygg, River Cutthroat", damage, false, leave);
+        t.answer_yes(P0, true);
+        let hand = t.hand_size(P0);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        t.hand_size(P0) - hand
+    };
+    assert_eq!(drawn(3, false), 1);
+    assert_eq!(drawn(3, true), 1, "the opponent who left still counts");
+    // Control: 2 life lost isn't enough.
+    assert_eq!(drawn(2, true), 0);
+}
+
+#[test]
+fn ludevic_counts_a_player_who_lost_life_then_the_game() {
+    cr!("800.4i");
+    interp!("history-counts-players-who-left");
+    ruling!(
+        "Ludevic, Necro-Alchemist",
+        "If a player lost life and subsequently lost the game, the player whose turn it is may draw a card."
+    );
+    let drawn = |damage: u32| {
+        let (mut t, _) = p2_damaged_then_left("Ludevic, Necro-Alchemist", damage, false, true);
+        t.answer_yes(P0, true);
+        let hand = t.hand_size(P0);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        t.hand_size(P0) - hand
+    };
+    assert_eq!(drawn(1), 1, "P2 lost life, then the game");
+    // Control: nobody lost life.
+    assert_eq!(drawn(0), 0);
+}
+
+#[test]
+fn tymna_counts_an_opponent_dealt_combat_damage_who_then_lost() {
+    cr!("800.4i");
+    interp!("history-counts-players-who-left");
+    ruling!(
+        "Tymna the Weaver",
+        "If a player was dealt combat damage and subsequently lost the game, Tymna's triggered ability counts that player to determine the value of X."
+    );
+    // (cards drawn, life paid)
+    let run = |combat: bool| {
+        let (mut t, _) = p2_damaged_then_left("Tymna the Weaver", 1, combat, true);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.deal_damage(bears, Entity::Player(P1), 1, true);
+        t.g.flush_events();
+        t.answer_yes(P0, true);
+        let (hand, life) = (t.hand_size(P0), t.life(P0));
+        t.advance_to(P0, Step::PostcombatMain);
+        t.resolve_all();
+        (t.hand_size(P0) - hand, life - t.life(P0))
+    };
+    assert_eq!(run(true), (2, 2), "X counts P2, who has left");
+    // Control: P2 was dealt noncombat damage, so only P1 counts.
+    assert_eq!(run(false), (1, 1));
+}
+
+#[test]
+fn kaito_counts_an_opponent_who_lost_life_then_the_game() {
+    cr!("800.4i");
+    interp!("history-counts-players-who-left");
+    ruling!(
+        "Kaito, Bane of Nightmares",
+        "If an opponent lost life this turn and subsequently lost the game, Kaito's fourth ability still counts that player when determining how many cards to draw."
+    );
+    let drawn = |leave: bool| {
+        let (mut t, kaito) = p2_damaged_then_left("Kaito, Bane of Nightmares", 1, false, leave);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.g.deal_damage(bears, Entity::Player(P1), 1, false);
+        t.g.flush_events();
+        t.g.add_counters(Entity::Object(kaito), "loyalty", 3, None);
+        t.g.recompute();
+        let index = t
+            .g
+            .obj(kaito)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+            .position(|a| a.text.starts_with("0:"))
+            .expect("Kaito's 0 ability");
+        let hand = t.hand_size(P0);
+        t.activate(P0, kaito, index, &[]).expect("activated");
+        t.resolve_all();
+        t.hand_size(P0) - hand
+    };
+    assert_eq!(drawn(false), 2);
+    assert_eq!(drawn(true), 2, "the opponent who left still counts");
 }
