@@ -262,3 +262,90 @@ fn the_copy_effect_ends_for_good_when_it_is_turned_face_down() {
     t.settle();
     assert!(!t.on_battlefield(v));
 }
+
+#[test]
+fn copying_a_copy_it_copies_what_that_creature_is_copying() {
+    cr!("707.3");
+    ruling!(
+        "Vesuvan Shapeshifter",
+        "In most cases, Vesuvan Shapeshifter will copy whatever that creature is copying"
+    );
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    // P1's Clone enters as a copy of Hill Giant.
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Island", 4);
+    let clone = t.hand(P1, "Clone");
+    t.answer_choose(P1, &[Entity::Object(giant)]);
+    t.cast(P1, clone).go();
+    t.resolve();
+    let clone = t.g.current(clone);
+    assert_eq!(t.obj_now(clone).chars.name.as_str(), "Hill Giant");
+    // Entering as a copy of the Clone: a Hill Giant.
+    t.set_step(P0, Step::PrecombatMain);
+    let v = cast_choosing(&mut t, Some(clone));
+    t.resolve_all();
+    assert_eq!(t.obj_now(v).chars.name.as_str(), "Hill Giant");
+    assert_eq!(t.pt(v), (3, 3));
+    // Turned face up as a copy of the Clone: a Hill Giant again.
+    next_upkeep(&mut t, true);
+    assert!(t.obj_now(v).face_down);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Island", 2);
+    t.answer_choose(P0, &[Entity::Object(clone)]);
+    t.g.perform_action(P0, turn_up(t.g.current(v))).unwrap();
+    t.settle();
+    assert_eq!(t.obj_now(v).chars.name.as_str(), "Hill Giant");
+    assert_eq!(t.pt(v), (3, 3));
+}
+
+#[test]
+fn x_in_the_copied_mana_cost_is_0() {
+    cr!("707.2", "107.3g");
+    ruling!("Vesuvan Shapeshifter", "If a copied creature has {X} in its mana cost, X is 0.");
+    let mut t = TestGame::new(2);
+    // {X}{U}{U}{U} 3/3: "When Gadwick enters, draw X cards."
+    let gadwick = t.battlefield(P1, "Gadwick, the Wizened");
+    let hand = t.hand_size(P0);
+    let v = cast_choosing(&mut t, Some(gadwick));
+    t.resolve_all();
+    assert_eq!(t.obj_now(v).chars.name.as_str(), "Gadwick, the Wizened");
+    assert_eq!(t.g.mana_value_of(v), 3);
+    // Its enters ability triggered with X = 0: no cards drawn.
+    assert_eq!(t.hand_size(P0), hand);
+}
+
+#[test]
+fn copying_a_token_it_copies_the_tokens_original_characteristics() {
+    cr!("707.2", "111.3");
+    ruling!(
+        "Vesuvan Shapeshifter",
+        "Vesuvan Shapeshifter copies the original characteristics of that token"
+    );
+    let mut t = TestGame::new(2);
+    // "Create two 1/1 white Soldier creature tokens."
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Plains", 3);
+    let raise = t.hand(P1, "Raise the Alarm");
+    t.cast(P1, raise).go();
+    t.resolve();
+    let soldier = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .find(|&id| t.g.obj(id).is_token())
+        .expect("a Soldier token");
+    // A +1/+1 counter isn't copied.
+    t.g.add_counters(Entity::Object(soldier), counters::PLUS1, 1, None);
+    t.set_step(P0, Step::PrecombatMain);
+    let v = cast_choosing(&mut t, Some(soldier));
+    t.resolve_all();
+    let name = t.obj_now(soldier).chars.name.clone();
+    let o = t.obj_now(v);
+    assert_eq!(o.chars.name, name);
+    assert!(o.chars.subtypes.iter().any(|s| s.as_str() == "Soldier"));
+    assert!(o.chars.colors.contains(Color::White));
+    assert!(!o.is_token());
+    assert_eq!(t.pt(v), (1, 1));
+}
