@@ -297,6 +297,17 @@ fn boarding_trigger_on_stack() -> (TestGame, ObjectId) {
 }
 
 #[test]
+fn priority_boarding_has_two_linked_triggered_abilities_and_round_trips() {
+    cr!("607.1");
+    let def = mtg_engine::card::card("Priority Boarding");
+    let abilities = &def.faces[0].chars.abilities;
+    assert_eq!(abilities.len(), 2);
+    assert!(abilities[0].link != 0 && abilities[0].link == abilities[1].link);
+    let r = mtg_engine::oracle::render::compare::check_card(&def);
+    assert!(r.pass, "{r:?}");
+}
+
+#[test]
 fn priority_boarding_does_nothing_more_if_it_left_the_battlefield_before_the_reveal() {
     // The second ability is Priority Boarding's own triggered ability: it triggers only if
     // the permanent has it as the card is revealed (CR 603.2, 603.6).
