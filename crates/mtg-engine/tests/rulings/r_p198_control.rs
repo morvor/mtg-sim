@@ -116,10 +116,11 @@ fn role_reversal_needs_a_shared_permanent_type_not_a_supertype() {
     let pw = t.battlefield(P1, "Archangel Elspeth");
     lots(&mut t, P0);
     let c = t.hand(P0, "Role Reversal");
-    let r = t.cast(P0, c).targets(&[obj(legend), obj(pw)]).try_go();
-    if r.is_ok() {
-        t.resolve_all();
-    }
+    assert!(t
+        .cast(P0, c)
+        .targets(&[obj(legend), obj(pw)])
+        .try_go()
+        .is_err());
     assert_eq!(ctl(&t, legend), P0);
     assert_eq!(ctl(&t, pw), P1);
     // Two creatures share a permanent type: exchanged.

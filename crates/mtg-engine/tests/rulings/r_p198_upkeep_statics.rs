@@ -243,6 +243,29 @@ fn tourachs_chant_damages_the_player_whose_dryad_put_the_forest_onto_the_battlef
 }
 
 #[test]
+fn thelons_chant_damages_each_player_who_puts_a_swamp_with_show_and_tell() {
+    cr!("110.2a");
+    supported("Thelon's Chant");
+    supported("Show and Tell");
+    // P0 casts Show and Tell; P1 puts a Swamp from their hand onto the battlefield: P1 put
+    // it there, not the spell's controller.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thelon's Chant");
+    let sw = t.hand(P1, "Swamp");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[obj(sw)]);
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, false);
+    cast_at(&mut t, P0, "Show and Tell", &[]);
+    t.resolve_all();
+    let s = t.named_on_battlefield("Swamp");
+    assert_eq!(s.len(), 1);
+    assert_eq!(ctl(&t, s[0]), P1);
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
 fn stasis_skips_the_untap_step_but_not_other_untapping_and_stops_phasing() {
     cr!("502.1", "502.3", "702.26a");
     ruling!(

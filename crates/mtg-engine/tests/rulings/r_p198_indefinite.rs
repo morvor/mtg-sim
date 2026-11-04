@@ -155,7 +155,7 @@ fn beorns_hospitality_stays_a_bear_after_the_turn() {
 
 #[test]
 fn dranas_returned_creature_stays_a_vampire_after_drana_leaves() {
-    cr!("611.2a", "611.2c");
+    cr!("611.2a");
     ruling!(
         "Drana, the Last Bloodchief",
         "The returned creature remains a Vampire in addition to its other types even after Drana leaves the battlefield."
@@ -289,7 +289,7 @@ fn grimoire_of_the_dead_returns_artifact_creature_cards_too() {
 
 #[test]
 fn whip_of_erebos_creature_is_exiled_and_never_dies() {
-    cr!("614.1a", "700.4", "611.2a");
+    cr!("614.1a", "700.4");
     ruling!(
         "Whip of Erebos",
         "The exiled creature is never put into the graveyard. Any abilities the creature has that trigger when it dies won't trigger."

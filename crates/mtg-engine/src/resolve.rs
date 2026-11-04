@@ -3432,12 +3432,15 @@ impl Game {
         for o in &objs {
             let owner = self.obj(*o).owner;
             let etb = self.destination_etb(&dest, owner, ctx);
+            // "Each player may put a card from their hand onto the battlefield": each card
+            // is put there by the player who chose it (CR 101.4, 110.2a).
+            let by = crate::kw::each_player_collect::putter(ctx, *o).unwrap_or(ctx.controller);
             moves.push(MoveEv {
                 obj: *o,
                 to: dest.zone(owner),
                 pos: dest.position(),
                 cause: MoveCause::Effect,
-                by: Some(ctx.controller),
+                by: Some(by),
                 etb,
                 source: ctx.source,
             });
