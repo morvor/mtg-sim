@@ -456,7 +456,9 @@ pub fn move_forbidden(g: &Game, mv: &MoveEv) -> bool {
 }
 
 /// CR 401.4, 404.3: cards put into the same library position, or into the same
-/// graveyard, at the same time: their owner arranges them in any order. `finals` are the
+/// graveyard, at the same time: their owner arranges them in any order — or, for cards an
+/// effect puts into a library "in any order", the player it instructs
+/// ([`crate::replacement::EtbInfo::arranged_by`]). `finals` are the
 /// final (replaced) events of a simultaneous move, in the order they'll be performed;
 /// the moves of each such group are reordered as the owner chooses.
 pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
@@ -488,6 +490,24 @@ pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
             _ => continue,
         };
         let events: Vec<(usize, ReplEvent)> = slots.iter().map(|i| finals[*i].clone()).collect();
+        // "In any order": the player the effect instructs arranges them (Misinformation's
+        // ruling: the card's instruction overrides 401.4, CR 101.1), when all of them were
+        // put there by that instruction.
+        let arrangers: Vec<Option<PlayerId>> = events
+            .iter()
+            .map(|(_, e)| match e {
+                ReplEvent::Move(m) => m.etb.arranged_by,
+                _ => None,
+            })
+            .collect();
+        let chooser = match arrangers.first() {
+            Some(Some(p))
+                if matches!(zone, Zone::Library(_)) && arrangers.iter().all(|a| *a == Some(*p)) =>
+            {
+                *p
+            }
+            _ => owner,
+        };
         if pos == Some(LibraryPosition::BottomRandom) {
             // "In a random order": nobody chooses.
             use rand::seq::SliceRandom;
@@ -506,11 +526,12 @@ pub fn order_simultaneous(g: &mut Game, finals: &mut [(usize, ReplEvent)]) {
             })
             .collect();
         let what = match zone {
+            Zone::Library(_) if chooser != owner => "their library",
             Zone::Library(_) => "your library",
             _ => "your graveyard",
         };
         let order = g.ask_order(
-            owner,
+            chooser,
             &format!("Order the cards being put into {what} (in the order they're put there)"),
             names,
         );
