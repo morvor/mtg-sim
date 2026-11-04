@@ -219,3 +219,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Relentless Dead and any other "you may pay {X}. If you do, ... target ... with mana value X" trigger.
 - Code: `crates/mtg-engine/src/trigger_x.rs` (`choose_before_targets`); `crates/mtg-engine/src/triggers.rs` (`put_trigger_on_this_stack`).
 - Tests: `tests/rulings/r_p132_graveyard_triggers.rs` (`relentless_dead_both_abilities_trigger_and_each_payment_is_chosen_on_resolution`).
+
+## division-after-cost-amount: An amount to divide that a cost sets is divided right after the costs are paid
+- Kind: deviation
+- Status: decided
+- Rules: 601.2d "If the spell requires the player to divide or distribute an effect (such as damage or counters) among one or more targets, the player announces the division. Each of these targets must receive at least one of whatever is being divided." / 601.2h "The player pays the total cost. ..." (602.2b applies both to activated abilities)
+- Question: Captain America, First Avenger: "{3}, Unattach an Equipment from Captain America: He deals damage equal to that Equipment's mana value divided as you choose among one, two, or three targets." The division is announced (601.2d) before the costs are paid (601.2h), but the amount is the mana value of the Equipment chosen to pay the cost. When is it divided?
+- Decision: The targets are chosen as usual; an amount that refers to what a cost pays for (the unattached Equipment, the sacrificed permanent) and isn't known yet is divided as soon as the costs are paid, before the spell or ability becomes cast or activated, by the same player and with the same rules (each target at least one, a default even split). If the amount turns out smaller than the number of targets, the default division gives the extra targets nothing.
+- Alternatives: Have the player announce which object will pay the cost before the division (equivalent for a player who plans the payment, but the engine asks costs in 601.2h order); divide with the amount undefined (0), which makes the ability do nothing.
+- Why: A player announcing the division already knows which Equipment they'll unattach; dividing right after paying gives the same outcomes without reordering the payment, and it's the only reading in which the ability does what it says.
+- Affects: divided damage or counters whose amount is set by an activation's or a spell's cost (Captain America, First Avenger; "the sacrificed artifact's mana value divided as you choose" forms).
+- Code: `crates/mtg-engine/src/stack.rs` (`divide_after_costs`, `amount_awaits_costs`); `crates/mtg-engine/src/casting.rs` (both payment paths).
+- Tests: `tests/cards/captain_america_first_avenger.rs` (`the_unattached_equipments_mana_value_is_divided_among_the_targets`).

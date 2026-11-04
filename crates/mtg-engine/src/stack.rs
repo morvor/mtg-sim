@@ -934,7 +934,12 @@ impl Game {
             // CR 601.2d: damage divided among the targets gives each at least 1, so there
             // are never more targets than the amount ("8 damage divided as you choose
             // among X target creatures" can't have nine targets).
-            if let Some(d) = &spec.divide {
+            // (An amount the costs will set isn't known yet: see `divide_after_costs`.)
+            if let Some(d) = spec
+                .divide
+                .as_ref()
+                .filter(|d| !amount_awaits_costs(d, ctx))
+            {
                 let total = self.eval_value(d, ctx).max(0) as u32;
                 if min > total {
                     return None;
@@ -1130,6 +1135,11 @@ impl Game {
         let mut out = Vec::new();
         for (spec, slot) in specs.iter().zip(targets.iter()) {
             match &spec.divide {
+                // An amount set by what a cost will pay for ("that Equipment's mana
+                // value"): divided once the costs are paid (`divide_after_costs`).
+                Some(total) if !slot.is_empty() && amount_awaits_costs(total, ctx) => {
+                    out.push(vec![]);
+                }
                 Some(total) if !slot.is_empty() => {
                     let mut total = self.eval_value(total, ctx).max(0) as u32;
                     let n = slot.len() as u32;
@@ -1184,6 +1194,56 @@ impl Game {
             }
         }
         out
+    }
+
+    /// Divides the amounts a spell or ability left undivided as its targets were chosen
+    /// because what its costs pay set them ("{3}, Unattach an Equipment from ~: He deals
+    /// damage equal to that Equipment's mana value divided as you choose among one, two,
+    /// or three targets."): announced right after the costs are paid, once the amount is
+    /// known (CR 601.2d, 601.2h; interpretation `division-after-cost-amount`).
+    pub(crate) fn divide_after_costs(&mut self, id: ObjectId) {
+        let Some(chosen) = self.obj(id).stack.as_deref().map(|si| si.chosen.clone()) else {
+            return;
+        };
+        let body = self.stack_body(id);
+        let mut ctx = self.stack_ctx(id);
+        let mut changed = false;
+        let mut new = chosen.clone();
+        for (k, cm) in chosen.iter().enumerate() {
+            let specs: Vec<TargetSpec> = match (cm.mode, &body.modal) {
+                (Some(m), Some(modal)) => modal
+                    .modes
+                    .get(m)
+                    .map(|x| x.targets.clone())
+                    .unwrap_or_default(),
+                _ => body.targets.clone(),
+            };
+            let pending = specs.iter().enumerate().any(|(i, spec)| {
+                spec.divide.is_some()
+                    && cm.targets.get(i).is_some_and(|t| !t.is_empty())
+                    && cm.divided.get(i).is_none_or(|d| d.is_empty())
+            });
+            if !pending {
+                continue;
+            }
+            ctx.targets = cm.targets.clone();
+            let divided = self.choose_divisions(&specs, &cm.targets, &ctx, id);
+            for (i, d) in divided.into_iter().enumerate() {
+                let slot = &mut new[k].divided;
+                if slot.len() <= i {
+                    slot.resize(i + 1, vec![]);
+                }
+                if slot[i].is_empty() {
+                    slot[i] = d;
+                }
+            }
+            changed = true;
+        }
+        if changed {
+            if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                si.chosen = new;
+            }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1895,4 +1955,23 @@ fn target_zones(f: &Filter) -> Vec<ZoneKind> {
         }
         _ => vec![one(f)],
     }
+}
+
+/// Whether an amount to divide refers to an object or number the costs record ("the
+/// sacrificed artifact's mana value", "that Equipment's mana value") that isn't recorded
+/// yet: it's divided after the costs are paid (`Game::divide_after_costs`).
+fn amount_awaits_costs(v: &Value, ctx: &Ctx) -> bool {
+    let cost_vars = [
+        vars::SACRIFICED,
+        crate::zones::COST_UNATTACHED,
+        crate::zones::COST_UNATTACHED_FROM,
+    ];
+    let Ok(json) = serde_json::to_string(v) else {
+        return false;
+    };
+    cost_vars.iter().any(|var| {
+        json.contains(&format!("{{\"Var\":{var}}}"))
+            && !ctx.vars.contains_key(var)
+            && !ctx.nums.contains_key(var)
+    })
 }

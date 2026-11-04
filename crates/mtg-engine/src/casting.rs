@@ -2059,6 +2059,8 @@ impl Game {
         if !moved.is_empty() {
             self.saved_ctx.entry(id).or_default().vars.extend(moved);
         }
+        // Amounts to divide that the costs set (CR 601.2d, 601.2h).
+        self.divide_after_costs(id);
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
         if spent > 0 {
@@ -3044,6 +3046,8 @@ impl Game {
             si.cast.loyalty_removed = paid.loyalty_removed;
         }
         self.saved_ctx.insert(id, ctx.clone());
+        // Amounts to divide that the costs set (CR 601.2d, 601.2h).
+        self.divide_after_costs(id);
         self.record_activation(p, src, a.uid);
         // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
         if a.text == "Cycling"
