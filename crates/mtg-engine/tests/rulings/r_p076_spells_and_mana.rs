@@ -86,7 +86,8 @@ fn a_card_whose_halves_all_have_too_high_a_mana_value_cant_be_chosen() {
 #[test]
 fn krosan_adaptation_storm_copy_token_is_not_created() {
     // Krosan Adaptation's 2019 ruling ("the token copies ... are considered to have been
-    // “created” and those effects will apply") is superseded by CR 111.13 and 608.3f: a
+    // “created” and those effects will apply") predates the Comprehensive Rules change of
+    // 2020-09-22 (Zendikar Rising), which added what are now CR 111.13 and 608.3f: a
     // copy of a permanent spell becomes a token as it resolves, and that token isn't
     // "created" for replacement effects such as Parallel Lives.
     cr!("111.13", "608.3f", "702.40a");
