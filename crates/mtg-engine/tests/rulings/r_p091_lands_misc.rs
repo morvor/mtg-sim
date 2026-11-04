@@ -320,3 +320,41 @@ fn chocobo_doubled_hideaway_exiles_two_cards_for_the_linked_ability() {
     assert!(!t.named_on_battlefield("Grizzly Bears").is_empty(), "{}", t.dump_log());
     assert!(!t.named_on_battlefield("Hill Giant").is_empty(), "{}", t.dump_log());
 }
+
+#[test]
+fn withering_wisps_end_step_intervening_if() {
+    cr!("603.4", "513.1a");
+    ruling!(
+        "Withering Wisps",
+        "Withering Wisps's triggered ability has an \"intervening 'if' clause.\" That means (1) the ability won't trigger at all unless there are no creatures on the battlefield when a turn's end step begins, and (2) the ability will do nothing if there are any creatures on the battlefield by the time the ability resolves."
+    );
+    ruling!(
+        "Withering Wisps",
+        "If all creatures leave the battlefield during a turn's End step (after any \"at the beginning of the end step\" triggers would have triggered that turn), Withering Wisps will remain on the battlefield because the trigger condition has already passed."
+    );
+    supported("Withering Wisps");
+    // A creature as the end step begins: no trigger; it dies during the end step: Wisps
+    // stays.
+    let mut t = TestGame::new(2);
+    let wisps = t.battlefield(P0, "Withering Wisps");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(triggers_of(&t, wisps), 0);
+    crate::r_s02_common::destroy(&mut t, bears);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.on_battlefield(wisps));
+    // No creatures: it triggers; a creature arriving before it resolves: nothing.
+    t.advance_to(P1, Step::End);
+    t.settle();
+    assert_eq!(triggers_of(&t, wisps), 1);
+    t.battlefield(P1, "Grizzly Bears");
+    t.resolve_all();
+    assert!(t.on_battlefield(wisps));
+    // Positive control: no creatures at all: sacrificed.
+    let mut t = TestGame::new(2);
+    let wisps = t.battlefield(P0, "Withering Wisps");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(!t.on_battlefield(wisps));
+}
