@@ -80,7 +80,8 @@ fn join_same_subject(a: &str, b: &str) -> Option<String> {
     let combat = " during combat";
     if let (Some(x), Some(y)) = (a.strip_suffix(combat), b.strip_suffix(combat)) {
         if x == "Players can't activate abilities that aren't mana abilities"
-            && y.contains("players can't cast spells")
+            // (Exactly these two: a restriction with any other quality isn't joined.)
+            && y == "{alt:players can't cast spells|spells can't be cast}"
         {
             return Some(
                 "During combat, players can't cast spells or activate abilities that aren't mana abilities."

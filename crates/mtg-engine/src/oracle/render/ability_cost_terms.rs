@@ -75,12 +75,13 @@ impl Renderer<'_> {
         let StaticEffect::CostModifier(CostModifier {
             applies_to: CostTarget::ActivatedAbilities(scope),
             change: CostChange::ReduceGeneric(v),
-            ..
+            who,
         }) = &s.effect
         else {
             return None;
         };
         if !matches!(scope.sources, Filter::Source)
+            || !matches!(who, PlayerRel::Any)
             || !matches!(scope.class, AbilityClass::Keyword(c) if c == k.kind)
             || scope.nonmana
             || scope.targeting.is_some()

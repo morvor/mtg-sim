@@ -33,7 +33,10 @@ fn the_deck_of_many_things_creature_owner_loses_when_it_dies() {
 /// to `to`.
 fn attach_new(t: &mut TestGame, p: PlayerId, name: &str, to: ObjectId) -> ObjectId {
     let id = t.battlefield(p, name);
-    assert!(t.g.attach(id, Entity::Object(to)), "{name} couldn't be attached");
+    assert!(
+        t.g.attach(id, Entity::Object(to)),
+        "{name} couldn't be attached"
+    );
     t.g.recompute();
     id
 }
@@ -112,4 +115,68 @@ fn chain_of_vapor_asks_the_bounced_permanents_controller_not_its_owner() {
     assert!(t.in_hand(P1, "Grizzly Bears"));
     assert!(t.in_graveyard(P0, "Island"), "P0 sacrificed a land");
     assert!(!t.in_graveyard(P1, "Island"));
+}
+
+#[test]
+fn skyserpent_seeker_puts_only_the_land_cards_revealed_onto_the_battlefield() {
+    cr!("701.20a", "608.2c");
+    // "Exhaust — {4}: Reveal cards from the top of your library until you reveal two land
+    // cards. Put those land cards onto the battlefield tapped and the rest on the bottom of
+    // your library in a random order." The nonland cards revealed go to the bottom, not
+    // onto the battlefield.
+    let mut t = TestGame::new(2);
+    let seeker = t.battlefield(P0, "Skyserpent Seeker");
+    t.lands(P0, "Mountain", 4);
+    // From the top: Grizzly Bears, Forest, Lightning Bolt, Island, Plains.
+    let plains = t.library_top(P0, "Plains");
+    for n in ["Island", "Lightning Bolt", "Forest", "Grizzly Bears"] {
+        t.library_top(P0, n);
+    }
+    let before = t.library_size(P0);
+    t.set_step(P0, Step::PrecombatMain);
+    t.activate(P0, seeker, 0, &[]).unwrap();
+    t.resolve_all();
+    for n in ["Forest", "Island"] {
+        let l = t.named_on_battlefield(n);
+        assert_eq!(l.len(), 1, "{n}");
+        assert!(t.obj_now(l[0]).tapped, "{n} enters tapped");
+    }
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.named_on_battlefield("Plains").is_empty());
+    let lib = t.g.player(P0).library.clone();
+    assert_eq!(lib.len(), before - 2, "only the two lands left the library");
+    assert_eq!(
+        lib.last(),
+        Some(&plains),
+        "the unrevealed card stays on top"
+    );
+    let bottom: Vec<String> = lib[..2]
+        .iter()
+        .map(|id| t.obj_now(*id).chars.name.to_string())
+        .collect();
+    assert!(bottom.contains(&"Grizzly Bears".to_string()));
+    assert!(bottom.contains(&"Lightning Bolt".to_string()));
+    assert_eq!(t.counters(seeker, "+1/+1"), 1);
+}
+
+#[test]
+fn kaito_dancing_shadow_returns_only_one_of_the_creatures() {
+    cr!("608.2c");
+    // "Whenever one or more creatures you control deal combat damage to a player, you may
+    // return one of them to its owner's hand."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kaito, Dancing Shadow");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(elves)]);
+    t.attack(
+        &[(bears, Entity::Player(P1)), (elves, Entity::Player(P1))],
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_hand(P0, "Llanowar Elves"));
+    assert!(t.on_battlefield(bears), "the other creature stays");
 }
