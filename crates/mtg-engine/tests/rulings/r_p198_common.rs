@@ -98,3 +98,45 @@ pub fn creature_types(t: &TestGame, id: ObjectId) -> Vec<String> {
     v.sort();
     v
 }
+
+/// Wraps `p`'s agent: each "choose an option" decision is answered with the first of
+/// `words` (in order) that it offers, consuming it; other decisions go to the scripted
+/// agent. Returns the option lists offered.
+pub fn choose_words(
+    t: &mut TestGame,
+    p: PlayerId,
+    words: &[&str],
+) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> {
+    use mtg_engine::decision::{Agent, Answer, Decision, PassiveAgent};
+    struct Words {
+        inner: Box<dyn Agent>,
+        words: Vec<String>,
+        seen: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+    }
+    impl Agent for Words {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            if let Decision::ChooseOption { options, .. } = d {
+                self.seen.lock().unwrap().push(options.clone());
+                if let Some((wi, oi)) = self
+                    .words
+                    .iter()
+                    .enumerate()
+                    .find_map(|(wi, w)| options.iter().position(|o| o == w).map(|oi| (wi, oi)))
+                {
+                    self.words.remove(wi);
+                    return Answer::Index(oi);
+                }
+            }
+            self.inner.decide(g, p, d)
+        }
+    }
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+    let mut agents = t.g.agents.0.lock().unwrap();
+    let inner = std::mem::replace(&mut agents[p.idx()], Box::new(PassiveAgent));
+    agents[p.idx()] = Box::new(Words {
+        inner,
+        words: words.iter().map(|s| s.to_string()).collect(),
+        seen: seen.clone(),
+    });
+    seen
+}
