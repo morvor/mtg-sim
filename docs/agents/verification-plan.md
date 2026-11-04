@@ -149,7 +149,27 @@ The user resumed normal work, at the normal pace.
 - **rulings-2:** P096, P005. **rulings-1:** P091, P128. **mutation:** P198, P034.
 - **Next in the rulings pool:** P124 P012 P001 P008 P025 P199 P140 P027 P003 P195 ...
 
-**Still open with the user:** the verified-count refresh, and newer card data (Scryfall hosts in the network settings).
+**Still open with the user:** the verified-count refresh.
+
+### Priorities (user, Nov 4 evening)
+
+- **Deferred categories stay as they are.** The sticker sheets, Contraptions, dexterity cards, digital-only mechanics and the Conspiracy face-down draft cards stay deferred, so round 6 ends at about 99.8% of paper cards.
+- **First: resolve every case where the CR seems to contradict a ruling** (`ruling-conflicts-1`, the structure worker). Its conclusions go to the user. Any new case a rulings batch finds goes to the same investigation.
+- **Then: maximize rulings coverage.**
+  - cards-1 finishes round 6 (the five cards6 items).
+  - Every other worker moves to rulings batches when its current item lands: compile after roundtrip-pairs-5; cards-2 after register-fixes-1, two batches at a time; the structure worker after ruling-conflicts-1.
+  - The round-trip queue pauses after roundtrip-pairs-5.
+- **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
+- **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
+
+Rulings queues from Nov 4 22:55:
+- **rulings-1:** P128, P124, P012.
+- **rulings-2:** P096, P005, P195.
+- **mutation:** P198, P034, P003.
+- **compile:** P001, P008.
+- **cards-2:** P025, P199, P140, P027.
+- **structure, after ruling-conflicts-1:** P110, P073.
+- **Next in the pool:** P159 P131 P178 P192 P179 P026 P051 P169 P024 P087 ...
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
@@ -216,6 +236,11 @@ The coordinator marks them decided. The 733.1 deviation also gets a scan test ov
 - **Raising the verified count** (user, Oct 21: leave it as it is for now, verify later). About 10,000 cards pass the round trip and the fuzz sweep but have exactly one structure that no test exercises. Mostly these are structures no other card shares: `structure-tests-2` verified about 3 cards per test. Options for when we pick it up:
   1. Test whole shapes: about 3,000 tests.
   2. Compositional coverage: every AST component and combination, at depth about 1, is exercised by some test. This was the recommendation.
+- **New cards** (user, Nov 4). When everything works properly, the user updates the data stores (Scryfall bulk data, rulings, tags; possibly a newer CR). Then the cards from newer sets are planned and supported like a card-support round.
+- **Compile every hand-written card** (user, Nov 4). Eventually, every card with a hand-written ability must be supported by the compiler instead, so that no card depends on a `ManualAbility`. That is 151 cards on Nov 4, with River Song and Vesuvan Shapeshifter in flight (list: `rg -o 'card: *"[^"]+"' crates/mtg-engine/src/cards`).
+  - Plan it like a card-support round: probe each hand-written text, then group the texts by the grammar or engine construct each needs.
+  - The rules hooks the hand-written cards added (the `custom_*` hooks, `draws_from_bottom`, the loyalty-removal hook, ...) become compiled constructs any card can use.
+  - It comes after rulings coverage.
 
 ## Resuming (coordinator)
 
