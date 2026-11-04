@@ -142,6 +142,19 @@ impl Renderer<'_> {
         if let Some(l) = self.infinity_static(s) {
             return l;
         }
+        // "Creature spells you cast gain offspring {2} as you cast them." (CR 610.5)
+        if s.as_cast {
+            let mut inner = s.clone();
+            inner.as_cast = false;
+            let l = self.static_ability(&inner);
+            if let Some(at) = l.find(" you cast") {
+                let (head, tail) = l.split_at(at);
+                if let Some((before, after)) = tail.split_once(" have ") {
+                    return format!("{head}{before} gain {after} as you cast them");
+                }
+            }
+            return l;
+        }
         if matches!(&s.effect, StaticEffect::Continuous { affected: Filter::Or(v), .. } if v.len() > 6)
         {
             if let Some(l) = self.attempt(|r| r.off_battlefield_static(s)) {
@@ -507,7 +520,7 @@ impl Renderer<'_> {
             Filter::In(sel) => self.sel(sel, Case::Subj),
             other => {
                 let s = self.noun_det(other, Det::Plural);
-                // Abilities granted to spells are gained as they're cast (CR 610.5, see
+                // Abilities granted to spells are granted as they're cast (CR 601.2a, see
                 // `next_spell::is_cast_grant`): "spells you cast have convoke".
                 if filter_has(other, &|x| matches!(x, Filter::Spell)) {
                     s.replace("spells you control", "spells you cast")

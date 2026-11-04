@@ -820,8 +820,9 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   no current mana ability that moves, reveals or shuffles library cards.
 - Deck legality (deck.rs, attraction deck checks) is an API callers use; interchangeable names (no Scryfall
   data).
-- Rulings the current CR supersedes: Wort, the Raidmother (CR 610.5 makes cast grants one-shot), Mossfire Egg
-  (CR 605.1a), MDFC "can't transform" rulings (CR 701.27g, 712.3).
+- Rulings the current CR supersedes: Mossfire Egg
+  (CR 605.1a), MDFC "can't transform" rulings (CR 701.27g, 712.3; the Marvel's Spider-Man CR update effective
+  2025-09-19).
 - Ambiguous/unsettled readings: ward on a copy that keeps its targets, deathtouch in 120.10 excess damage,
   granted changeling vs layer 4, Panharmonicon on non-ETB triggers, Torpor Orb on leave-graveyard triggers,
   tempting offer order when cast on another player's turn (engine follows CR 101.4), Grand Melee

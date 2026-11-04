@@ -48,6 +48,7 @@ inventory::submit! { ManualAbility {
                 },
                 zone: FunctionZone::Battlefield,
                 is_cda: false,
+                as_cast: false,
             }),
             STATIC_TEXT,
         )]

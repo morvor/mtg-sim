@@ -193,7 +193,7 @@ fn casualty_is_an_optional_cost_sacrificing_a_creature_with_enough_power() {
 
 #[test]
 fn spells_given_casualty_by_silverquill_can_be_copied() {
-    cr!("702.153a", "610.5", "601.2b", "113.7a");
+    cr!("702.153a", "611.3a", "601.2b", "113.7a");
     ruling!(
         "Silverquill, the Disputant",
         "Casualty N means \"As an additional cost to cast this spell, you may sacrifice a creature with power N or greater.\" and \"When you cast this spell, if a casualty cost was paid for it, copy it."

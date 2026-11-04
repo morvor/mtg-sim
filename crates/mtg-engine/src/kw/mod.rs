@@ -872,7 +872,7 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         .cloned()
         .collect();
     // Keywords static abilities make it gain as it's cast ("Assassin spells you cast have
-    // freerunning {B}{B}", CR 610.5).
+    // freerunning {B}{B}", CR 611.3a, 601.3).
     for k in crate::next_spell::cast_grant_keywords(g, p, card) {
         if !kws.iter().any(|x| format!("{x:?}") == format!("{k:?}")) {
             kws.push(k);
