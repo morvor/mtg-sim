@@ -413,8 +413,8 @@ fn owners_of_spells_cast_lose_life(l: &str, prev: &mut Effect, _b: &mut Builder)
 inventory::submit! { FollowupPattern { name: "each player who owns a spell you cast this way loses life equal to its mana value", priority: 60, apply: owners_of_spells_cast_lose_life } }
 
 /// "for each opponent, tap up to one untapped creature you control" (Nihiloor): for each
-/// of them in turn (APNAP, CR 101.4), you may tap one; "when you do" after it is a
-/// reflexive ability for each tap (CR 603.12), about that player.
+/// of them in turn (APNAP, CR 101.4), you may tap one; with "when you do" after it, see
+/// `when_you_do_for_each_opponent`.
 fn for_each_opponent_tap_up_to_one(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     // (After "for each opponent, " the clause is read for each of them.)
@@ -457,8 +457,11 @@ fn for_each_opponent_tap_up_to_one(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "for each opponent, tap up to one untapped [creature] you control", priority: 90, parse: for_each_opponent_tap_up_to_one } }
 
 /// "When you do, gain control of target creature that player controls with power less than
-/// or equal to the tapped creature's power ..." after it: in each opponent's pass, the
-/// reflexive ability of that tap, "that player" being that opponent.
+/// or equal to the tapped creature's power ..." after it (Nihiloor): as its ruling says,
+/// "you choose up to one creature for each opponent, and tap them all at the same time.
+/// Then, a separate triggered ability is put on the stack for each creature you tapped
+/// this way" — each reflexive ability (CR 603.12) about its opponent ("that player") and
+/// its tapped creature ([`Effect::ChooseForEachPlayer`]).
 fn when_you_do_for_each_opponent(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let l = end(l);
     if !l.starts_with("when you do, ") || !l.contains("that player") {
@@ -471,29 +474,62 @@ fn when_you_do_for_each_opponent(l: &str, prev: &mut Effect, b: &mut Builder) ->
     else {
         return false;
     };
-    if !matches!(effect.as_ref(), Effect::Tap { what: Sel::Choose { up_to: true, .. } }) {
+    let Effect::Tap {
+        what:
+            Sel::Choose {
+                chooser,
+                filter,
+                count: Value::Const(1),
+                up_to: true,
+                ..
+            },
+    } = effect.as_ref()
+    else {
         return false;
-    }
+    };
+    let (chooser, filter) = (chooser.clone(), filter.clone());
+    // The reflexive ability, read as after a single tap, with "that player" the opponent.
     let saved = std::mem::replace(&mut b.it_player, PlayerRef::Iterated);
     let text = format!("you may tap an untapped creature you control. {l}.");
     let parsed = crate::oracle::effects::parse_effect_text(&text, b);
     b.it_player = saved;
-    let Some(body) = parsed else {
+    let Some(reflexive) = parsed.as_ref().and_then(find_reflexive) else {
         return false;
     };
     // The reflexive ability's target must be that player's.
-    if !serde_json::to_string(&body).is_ok_and(|j| j.contains("Iterated") && j.contains("Reflexive")) {
+    if !serde_json::to_string(&reflexive).is_ok_and(|j| j.contains("Iterated")) {
         return false;
     }
-    // Each opponent's part fully, one after another in turn order (APNAP, CR 101.4): the
-    // reflexive ability of each tap is about that tap and that player.
-    *prev = Effect::InTurnOrder {
+    *prev = Effect::ChooseForEachPlayer {
         first: TurnOrderStart::You,
         who: PlayerFilter::Opponent,
-        effect: Box::new(body),
-        direction: SeatSide::Left,
+        chooser,
+        filter,
+        act: Box::new(Effect::Tap {
+            what: Sel::Var(vars::IT),
+        }),
+        done: vars::TAPPED,
+        // "When you do": only for a creature that was tapped.
+        each: Box::new(Effect::If {
+            cond: Condition::SelNonEmpty(Sel::Var(vars::TAPPED)),
+            then: Box::new(reflexive),
+            otherwise: Box::new(Effect::Noop),
+        }),
     };
     true
+}
+
+/// The reflexive triggered ability in `e`.
+fn find_reflexive(e: &Effect) -> Option<Effect> {
+    match e {
+        Effect::Reflexive { .. } => Some(e.clone()),
+        Effect::Seq(v) => v.iter().find_map(find_reflexive),
+        Effect::If {
+            then, otherwise, ..
+        } => find_reflexive(then).or_else(|| find_reflexive(otherwise)),
+        Effect::May { effect, .. } => find_reflexive(effect),
+        _ => None,
+    }
 }
 
 inventory::submit! { FollowupPattern { name: "when you do, ... that player ... (after for each opponent, tap up to one)", priority: 60, apply: when_you_do_for_each_opponent } }

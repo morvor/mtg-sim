@@ -168,6 +168,43 @@ pub fn recipient_for_all(g: &Game, to: &Sel, objs: &[ObjectId], ctx: &Ctx) -> Se
     }
 }
 
+/// The one object or player `objs` become attached to when the recipient named by the
+/// effect is several objects ("create a token, then attach this Equipment to it" with the
+/// token created twice, as with Doubling Season): the effect's controller chooses one of
+/// those the objects can all be attached to (Field-Tested Frying Pan ruling: "one of them
+/// of your choice"). A single recipient (or none legal) is used as named, so an illegal
+/// one leaves the objects where they are (CR 701.3b).
+pub fn choose_recipient(
+    g: &mut Game,
+    named: Vec<Entity>,
+    objs: &[ObjectId],
+    ctx: &Ctx,
+) -> Option<Entity> {
+    if named.len() <= 1 {
+        return named.into_iter().next();
+    }
+    let legal: Vec<Entity> = named
+        .iter()
+        .copied()
+        .filter(|c| objs.iter().all(|o| can_attach(g, *o, *c)))
+        .collect();
+    if legal.len() <= 1 {
+        return legal.into_iter().next().or(named.first().copied());
+    }
+    let chosen = g.ask_entities(
+        ctx.controller,
+        ctx.source,
+        "Choose what to attach it to",
+        legal.clone(),
+        1,
+        1,
+    );
+    chosen
+        .into_iter()
+        .find(|c| legal.contains(c))
+        .or(legal.first().copied())
+}
+
 /// Whether `obj` (an Aura card) could enchant `to` as `to` most recently existed, for an
 /// object that has left the battlefield ("search your library for an Aura card that could
 /// enchant it" after it left: Auratouched Mage's ruling): its enchant ability and the

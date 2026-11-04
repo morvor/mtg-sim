@@ -1365,7 +1365,10 @@ fn elrond_gains_control_of_every_creature_chosen_for_a_fellowship_vote() {
 #[test]
 fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     cr!("603.12", "101.4");
-    interp!("nihiloor-taps-one-opponent-at-a-time");
+    ruling!(
+        "Nihiloor",
+        "you choose up to one creature for each opponent, and tap them all at the same time. Then, a separate triggered ability is put on the stack for each creature you tapped this way."
+    );
     compiles("Nihiloor");
     // "When Nihiloor enters, for each opponent, tap up to one untapped creature you
     // control. When you do, gain control of target creature that player controls with
@@ -1377,10 +1380,8 @@ fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let wurm = t.battlefield(P2, "Craw Wurm");
     let thopter = t.battlefield(P2, "Ornithopter");
-    // For P1: tap the Giant; for P2: tap the Elves.
-    t.answer_yes(P0, true);
+    // For P1: the Giant; for P2: the Elves.
     t.answer_choose(P0, &[Entity::Object(giant)]);
-    t.answer_yes(P0, true);
     t.answer_choose(P0, &[Entity::Object(elves)]);
     let from = t.asked().len();
     t.answer_targets(P0, &[Entity::Object(bears)]);
@@ -1394,19 +1395,100 @@ fn nihiloor_taps_a_creature_for_each_opponent_to_take_one_of_theirs() {
     assert_eq!(t.obj_now(thopter).controller, P0);
     assert_eq!(t.obj_now(wurm).controller, P2);
     // Each reflexive ability targeted only that opponent's creatures with low enough power.
-    let cands: Vec<Vec<Entity>> = t.asked()[from..]
+    let asked = &t.asked()[from..];
+    let cands: Vec<Vec<Entity>> = asked
         .iter()
         .filter_map(|(_, d)| match d {
             Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
             _ => None,
         })
         .collect();
+    assert_eq!(cands.len(), 2, "one reflexive ability per tapped creature");
     assert!(cands.iter().any(|c| c == &vec![Entity::Object(thopter)]));
     // Leaving Nihiloor: control returns.
     t.g.destroy(nihiloor, None);
     t.settle();
     t.g.recompute();
     assert_eq!(t.obj_now(bears).controller, P1);
+}
+
+#[test]
+fn nihiloor_chooses_a_creature_for_only_one_opponent() {
+    // A creature chosen for one opponent can't be chosen again for another.
+    cr!("603.12");
+    interp!("choose-for-each-player-distinct-objects");
+    ruling!(
+        "Nihiloor",
+        "As Nihiloor's first triggered ability resolves, you choose up to one creature for each opponent, and tap them all at the same time."
+    );
+    let mut t = TestGame::new(3);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P2, "Ornithopter");
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    // An invalid answer for P2 (the Giant again) falls back to choosing nothing.
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    let from = t.asked().len();
+    t.enter(P0, "Nihiloor");
+    t.g.flush_events();
+    t.settle();
+    t.resolve();
+    let choices: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(choices.len(), 2, "{choices:?}");
+    assert!(choices[0].contains(&Entity::Object(giant)));
+    assert!(!choices[1].contains(&Entity::Object(giant)), "already chosen for P1");
+    assert!(choices[1].contains(&Entity::Object(elves)));
+    // One creature tapped, one reflexive ability.
+    assert!(t.obj_now(giant).tapped);
+    assert_eq!(t.g.stack.len(), 1, "{:?}", t.g.stack);
+}
+
+#[test]
+fn nihiloor_taps_the_chosen_creatures_all_at_the_same_time() {
+    // Decided by the user on Nov 4, following the ruling: every choice first, then one tap
+    // of all of them — an ability that triggers whenever one or more creatures become
+    // tapped triggers once (CR 603.2c) — then a reflexive ability for each.
+    cr!("603.12", "603.2c");
+    ruling!(
+        "Nihiloor",
+        "As Nihiloor's first triggered ability resolves, you choose up to one creature for each opponent, and tap them all at the same time."
+    );
+    ruling!(
+        "Nihiloor",
+        "If tapping those creature caused any other abilities you control to trigger, those are also placed on the stack at this time."
+    );
+    compiles("Deeproot Pilgrimage");
+    // "Whenever one or more nontoken Merfolk you control become tapped, create a 1/1 blue
+    // Merfolk creature token with hexproof."
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Deeproot Pilgrimage");
+    let m1 = t.battlefield(P0, "Merfolk of the Pearl Trident");
+    let m2 = t.battlefield(P0, "Merfolk of the Pearl Trident");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let thopter = t.battlefield(P2, "Ornithopter");
+    t.answer_choose(P0, &[Entity::Object(m1)]);
+    t.answer_choose(P0, &[Entity::Object(m2)]);
+    t.answer_targets(P0, &[Entity::Object(elves)]);
+    t.answer_targets(P0, &[Entity::Object(thopter)]);
+    t.enter(P0, "Nihiloor");
+    t.g.flush_events();
+    t.settle();
+    t.resolve();
+    assert!(t.obj_now(m1).tapped && t.obj_now(m2).tapped);
+    // Two reflexive abilities and one Deeproot Pilgrimage trigger, put on the stack together.
+    assert_eq!(t.g.stack.len(), 3, "{:?}", t.g.stack);
+    t.resolve_all();
+    assert_eq!(t.obj_now(elves).controller, P0);
+    assert_eq!(t.obj_now(thopter).controller, P0);
+    let tokens = t.g.permanents().filter(|o| o.is_token()).count();
+    assert_eq!(tokens, 1, "one tap event");
 }
 
 #[test]

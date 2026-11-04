@@ -569,6 +569,8 @@ fn custom_rule(name: &str) -> CustomRule {
         "you may reveal the first card you draw each turn as you draw it",
         "card:Booby Trap:the chosen player reveals each card they draw",
         "you draw a card during each opponent's draw step",
+        // River Song: which card a draw takes (`draws_from_bottom`): the draw itself.
+        mtg_engine::cards::river_song::FROM_BOTTOM,
         "control opponents while searching",
         "spells and abilities your opponents control can't cause their controller to search their library",
         "spells and abilities your opponents control can't cause you to discard cards",
@@ -692,6 +694,10 @@ fn effect_now(e: &Effect, now: &mut Now) {
             now.payments.push(cost.clone());
             effect_now(then, now);
             effect_now(otherwise, now);
+        }
+        Effect::ChooseForEachPlayer { act, each, .. } => {
+            effect_now(act, now);
+            effect_now(each, now);
         }
         Effect::May { effect, .. }
         | Effect::ForEachPlayer { effect, .. }
