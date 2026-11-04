@@ -2309,6 +2309,31 @@ impl Renderer<'_> {
                     }
                     d => self.duration(d),
                 };
+                // "Artifact spells you cast this turn cost {1} less to cast.": the
+                // reduction lasts until end of turn, so it applies to the spells cast this
+                // turn.
+                // "You may activate loyalty abilities of ~ twice this turn rather than only
+                // once." (a permission that lasts until end of turn).
+                if matches!(
+                    (effect, duration),
+                    (PlayerModification::ActivationPermission(_), Duration::EndOfTurn)
+                ) && s.contains(" each turn rather than only once")
+                {
+                    let t = s.replacen(
+                        " each turn rather than only once",
+                        " this turn rather than only once",
+                        1,
+                    );
+                    return format!("{{alt:{}|{t}}}", join_words(&[s, d]));
+                }
+                if matches!(
+                    (effect, duration),
+                    (PlayerModification::CostModifier(_), Duration::EndOfTurn)
+                ) && s.contains(" you cast cost ")
+                {
+                    let t = s.replacen(" you cast cost ", " you cast this turn cost ", 1);
+                    return format!("{{alt:{}|{t}}}", join_words(&[s, d]));
+                }
                 join_words(&[s, d])
             }
             // "Prevent the next 1 damage that would be dealt to this creature by ~ this
@@ -2714,6 +2739,16 @@ impl Renderer<'_> {
                     (TargetChange::One, Some(t)) => {
                         let t = self.sel(t, Case::Obj);
                         format!("change {{alt:a|the}} target of {w} to {t}")
+                    }
+                    // "Change the target of target spell that targets only ~. The new target
+                    // must be a creature.": any object of that kind (or any player) may be
+                    // the new target.
+                    (TargetChange::All, Some(Sel::All(f))) => {
+                        let t = self.noun_det(f, Det::A);
+                        format!("change the target of {w}. The new target must be {t}")
+                    }
+                    (TargetChange::All, Some(Sel::Players(PlayerRef::EachPlayer))) => {
+                        format!("change the target of {w}. The new target must be a player")
                     }
                     (_, Some(t)) => {
                         let t = self.sel(t, Case::Obj);
@@ -4686,6 +4721,19 @@ impl Renderer<'_> {
     }
 
     pub(crate) fn seq(&mut self, v: &[Effect]) -> String {
+        if let Some(s) = self.additional_pt(v) {
+            return s;
+        }
+        // "You may pay {X}. If you do, draw X cards. X can't be greater than the amount of
+        // life you gained this turn.": the cap on the X chosen as the cost is paid (CR
+        // 107.3a), stated after the instructions it applies to.
+        if let [Effect::StoreValue { var, value }, rest @ ..] = v {
+            if *var == crate::oracle::patterns::value_results::X_MAX && !rest.is_empty() {
+                let cap = self.value(value);
+                let s = self.seq(rest);
+                return format!("{}. X can't be greater than {cap}", s.trim_end_matches('.'));
+            }
+        }
         // "[that player may pay any amount of mana.] ~ deals 2 damage to that player.
         // Prevent X of that damage, where X is the amount of mana that player paid this
         // way." (Errant Minion; `patterns/prevention_4.rs`).
@@ -5977,6 +6025,7 @@ impl Renderer<'_> {
             .is_some();
         let top = std::mem::take(&mut self.trigger_body_if);
         let s = self.if_effect_inner(cond, then, otherwise, top);
+        let s = self.unless_you_control(cond, then, otherwise, s);
         if pushed {
             self.compared.pop();
         }
@@ -6751,7 +6800,28 @@ impl Renderer<'_> {
                 costs.push(c);
                 otherwise = o;
             }
+            // "Counter target spell unless its controller pays {3}. If that spell is
+            // countered this way, exile it instead of putting it into its owner's
+            // graveyard.": the replacement of the countering's own event (CR 614.1a) is
+            // said after the payment.
+            let mut replaced = None;
+            if let Effect::SelfReplace {
+                replacement,
+                effect,
+            } = otherwise
+            {
+                if matches!(effect.as_ref(), Effect::CounterSpell { .. })
+                    && matches!(replacement.event, ReplacementEvent::ZoneChange { .. })
+                {
+                    replaced = Some(replacement);
+                    otherwise = effect;
+                }
+            }
             let o = self.effect(otherwise);
+            let after = match replaced {
+                Some(r) => format!(". {}", self.replacement(r, None)),
+                None => String::new(),
+            };
             // Any one of several players may pay ("unless any player pays {1}").
             let p = match who {
                 PlayerRef::EachPlayer => "{alt:any player|a player}".to_string(),
@@ -6801,7 +6871,7 @@ impl Renderer<'_> {
             } else {
                 p
             };
-            return format!("{o} unless {p} {}", pays.join(" or "));
+            return format!("{o} unless {p} {}{after}", pays.join(" or "));
         }
         let p = self.player(who, Case::Subj);
         let pays = self.cost_as_payment(cost);
@@ -7596,7 +7666,8 @@ impl Renderer<'_> {
             if take_up_to {
                 format!("put up to {count} of them {d}")
             } else {
-                format!("put {count} of them {d}")
+                // "Put one into your hand and the other into your graveyard."
+                format!("put {count} {{opt:of them}} {d}")
             }
         } else {
             let what = match take {
@@ -7830,7 +7901,11 @@ impl Renderer<'_> {
             let ps = self.value(p);
             if format!("{p:?}") == format!("{t:?}") {
                 words.push("X/X".into());
-                if ps != "X" {
+                // "You may pay one or more {E}. If you do, create an X/X ... token, where X
+                // is the amount of {E} paid this way."
+                if matches!(p, Value::X) && self.extra.x_paid && self.extra.x_energy {
+                    where_x = ", where X is the amount of {E} paid this way".into();
+                } else if ps != "X" {
                     where_x = format!(", where X is {ps}");
                 }
             } else {
@@ -8142,10 +8217,14 @@ impl Renderer<'_> {
                     let (mut ts, tw) = self.pt_amount(t);
                     match (pw, tw) {
                         // "+X/+Y, where X is ... and Y is ...": two different numbers.
+                        // (Also "-X/-Y": a negative amount of each.)
                         (Some(a), Some(b))
-                            if format!("{p:?}") != format!("{t:?}") && ps == "X" && ts == "X" =>
+                            if format!("{p:?}") != format!("{t:?}")
+                                && (a != b || ps == ts)
+                                && ps.trim_start_matches('-') == "X"
+                                && ts.trim_start_matches('-') == "X" =>
                         {
-                            ts = "Y".into();
+                            ts = ts.replace('X', "Y");
                             let y = b.trim_start_matches(", where X is ");
                             // "X is the exiled creature card's power and Y is its
                             // toughness": the same object's.
@@ -8759,6 +8838,14 @@ impl Renderer<'_> {
             Value::Diff(a, b) if matches!(a.as_ref(), Value::Const(0)) => {
                 let (s, w) = self.pt_amount(b);
                 (format!("-{s}"), w)
+            }
+            // "-4/-4 for each card in your hand": a negative multiple.
+            Value::Mul(a, b) if matches!(a.as_ref(), Value::Const(k) if *k < -1) => {
+                let Value::Const(k) = a.as_ref() else {
+                    return ("X".into(), None);
+                };
+                let s = self.value(&Value::Mul(Box::new(Value::Const(-k)), b.clone()));
+                ("-X".into(), Some(format!(", where X is {s}")))
             }
             other => {
                 let s = self.value(other);

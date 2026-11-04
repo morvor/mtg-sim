@@ -329,11 +329,12 @@ impl Renderer<'_> {
                         let main = format!("{s} the battlefield under {poss} control");
                         // "an opponent had a green creature enter the battlefield under
                         // their control".
-                        if q == Quant::Some && r != PlayerRel::You {
+                        let a = self.noun_det(&rest, Det::A);
+                        if q == Quant::Some && !(r == PlayerRel::You && a.contains('~')) {
                             let who = self.rel_subject(r);
-                            let a = self.noun_det(&rest, Det::A);
+                            let their = if r == PlayerRel::You { "your" } else { "their" };
                             Said::Clause(format!(
-                                "{{alt:{main}|{who} had {a} enter the battlefield under their control}}"
+                                "{{alt:{main}|{who} had {a} enter the battlefield under {their} control}}"
                             ))
                         } else {
                             Said::Clause(main)
@@ -1390,6 +1391,25 @@ impl Renderer<'_> {
             return None;
         }
         Some(match c {
+            // "if you created a token this turn" (the player who creates a token is its
+            // owner, CR 111.2).
+            TriggerCond::TokenCreated(Filter::And(v))
+                if matches!(
+                    v.as_slice(),
+                    [Filter::Token, Filter::OwnedBy(PlayerRel::You)]
+                ) && matches!(q, Quant::Some | Quant::No) =>
+            {
+                Said::Clause(if q == Quant::Some {
+                    "you created a token".into()
+                } else {
+                    "you didn't create a token".into()
+                })
+            }
+            // "if you sacrificed three or more Clues this turn".
+            TriggerCond::YouSacrifice(f) if matches!(q, Quant::Some | Quant::AtLeast(_)) => {
+                let n = self.quantified_object(f, q)?;
+                Said::Clause(format!("you sacrificed {n}"))
+            }
             // "that attacked you this turn", "if they were attacked this turn by an
             // Assassin you controlled".
             TriggerCond::AttacksRecipient {
