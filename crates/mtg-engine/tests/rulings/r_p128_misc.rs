@@ -611,7 +611,8 @@ fn jayas_phoenix_copy_resolves_first_even_if_the_ability_is_countered() {
         // The copy is on top: it resolves first.
         t.resolve();
         assert_eq!(t.life(P0), 22, "counter: {counter}");
-        assert_eq!(t.stack_len(), usize::from(!counter), "counter: {counter}");
+        let left: Vec<ObjectId> = if counter { vec![] } else { vec![original] };
+        assert_eq!(t.g.stack, left, "counter: {counter}");
         t.resolve_all();
         assert_eq!(t.life(P0), if counter { 22 } else { 24 });
     }
