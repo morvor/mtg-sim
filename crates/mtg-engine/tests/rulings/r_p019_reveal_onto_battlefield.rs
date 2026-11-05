@@ -158,17 +158,19 @@ fn selvalas_stampede_wild_cards_enter_together_then_free_cards() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     assert_eq!(t.life(P0), 21);
-    // One of each: Soul Warden (wild) is on the battlefield as the Bears (free) enter.
+    // One of each: Soul Warden, put onto the battlefield from P0's hand for the free vote,
+    // enters after Hill Giant (wild) and so doesn't see it enter (together, it would).
     let mut t = TestGame::new(2);
     vote(&mut t, P0, 0);
     vote(&mut t, P1, 1);
-    stack_library(&mut t, P0, &["Soul Warden"]);
-    let bears = t.hand(P0, "Grizzly Bears");
-    t.answer_choose(P0, &[Entity::Object(bears)]);
+    stack_library(&mut t, P0, &["Hill Giant"]);
+    let warden = t.hand(P0, "Soul Warden");
+    t.answer_choose(P0, &[Entity::Object(warden)]);
     cast_new(&mut t, P0, "Selvala's Stampede", &[]);
     t.resolve_all();
-    assert!(t.on_battlefield(bears));
-    assert_eq!(t.life(P0), 21);
+    assert!(t.on_battlefield(warden));
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    assert_eq!(t.life(P0), 20);
 }
 
 #[test]
@@ -270,7 +272,7 @@ fn reality_scramble_targets_a_permanent_you_own_that_another_player_controls() {
 
 #[test]
 fn reality_scramble_uses_the_targets_last_known_card_types() {
-    cr!("701.20a", "608.2h", "113.7a");
+    cr!("701.20a", "608.2h");
     ruling!(
         "Reality Scramble",
         "The target permanent’s last known existence on the battlefield is checked to determine its types."

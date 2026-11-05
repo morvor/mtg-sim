@@ -7,7 +7,7 @@
 use crate::r_s01_common::{stack_library, supported, triggers_on_stack};
 use crate::r_s18_common::ADVENTURE;
 use crate::r_s25_common::cast_new;
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
@@ -215,11 +215,61 @@ fn a_card_cast_by_its_cascade_pays_mandatory_additional_costs_but_no_alternative
     stack_library(&mut t, P0, &["Nyxborn Rollicker"]);
     giant_from_exile(&mut t, card);
     t.answer_yes(P0, true);
+    let from = t.asked().len();
     t.resolve();
+    // Bestow isn't even offered.
+    assert!(!t.asked()[from..].iter().any(|(_, d)| match d {
+        Decision::ChooseCastingMethod { options, .. } | Decision::ChooseOption { options, .. } =>
+            options.iter().any(|o| o.to_lowercase().contains("bestow")),
+        _ => false,
+    }));
     let top = *t.g.stack.last().unwrap();
     assert_eq!(t.obj(top).chars.name, "Nyxborn Rollicker");
     assert!(t.obj(top).is_creature());
     assert!(!t.obj(top).chars.has_subtype("Aura"));
+    // An optional additional cost may be paid: Burst Lightning ("Kicker {4} ... deals 2
+    // damage to any target. If this spell was kicked, it deals 4 damage instead."), kicked.
+    supported("Burst Lightning");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, SORCERER);
+    let card = stomp(&mut t);
+    assert_eq!(t.life(P1), 18);
+    stack_library(&mut t, P0, &["Burst Lightning"]);
+    giant_from_exile(&mut t, card);
+    t.lands(P0, "Wastes", 4);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve();
+    assert_eq!(
+        spell_names(&t),
+        vec!["Bonecrusher Giant", "Burst Lightning"]
+    );
+    t.resolve();
+    assert_eq!(t.life(P1), 14);
+}
+
+#[test]
+fn a_card_with_x_cast_by_cascade_has_x_zero() {
+    cr!("107.3b", "702.85a");
+    supported("Endless One");
+    // Endless One ({X}, mana value 0 in the library: "This creature enters with X +1/+1
+    // counters on it.") is cast with X = 0 and dies as a 0/0.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, SORCERER);
+    let card = stomp(&mut t);
+    stack_library(&mut t, P0, &["Endless One"]);
+    giant_from_exile(&mut t, card);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(spell_names(&t), vec!["Bonecrusher Giant", "Endless One"]);
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseX { .. })));
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Endless One"));
 }
 
 /// P0 activates Sloppity Bilepiper's "Jolly Gutpipes — {2}, {T}, Sacrifice a creature: The
@@ -233,7 +283,7 @@ fn gutpipes(t: &mut TestGame, piper: ObjectId) {
 
 #[test]
 fn bilepipers_effect_applies_only_to_a_creature_spell_cast_after_it_resolves() {
-    cr!("611.2c", "702.85a");
+    cr!("611.2f", "601.2a", "702.85a");
     ruling!(
         "Sloppity Bilepiper",
         "As Sloppity Bilepiper's activated ability resolves, it creates a continuous effect that won't begin to apply until you start casting a creature spell this turn. It applies to that spell and the timestamp of that effect is the time that the object was put on the stack."

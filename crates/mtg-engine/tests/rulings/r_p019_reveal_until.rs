@@ -24,7 +24,7 @@ fn top(t: &TestGame, p: PlayerId) -> String {
 
 #[test]
 fn a_creature_card_is_any_card_with_the_type_creature() {
-    cr!("205.2a", "109.2");
+    cr!("205.2a", "205.2b");
     ruling!(
         "Polymorph",
         "A “creature card” is any card with the type creature, even if it has other types such as artifact, enchantment, or land. Older cards of type summon are also creature cards."
@@ -327,7 +327,7 @@ fn thicket_elemental_shuffles_if_you_chose_to_reveal() {
 
 #[test]
 fn gamekeeper_gone_from_the_graveyard_cant_be_exiled_and_nothing_is_revealed() {
-    cr!("603.10a", "608.2c");
+    cr!("603.10a", "608.2c", "400.7");
     ruling!(
         "Gamekeeper",
         "If Gamekeeper is no longer in your graveyard as its triggered ability resolves, you can’t choose to exile it. You won’t reveal cards from your library."

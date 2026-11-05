@@ -117,7 +117,7 @@ fn virtue_of_knowledge_doesnt_affect_replacement_effects() {
 
 #[test]
 fn virtue_of_knowledge_doubles_the_entering_permanents_own_and_others_triggers() {
-    cr!("603.2d", "603.6a", "702.100a");
+    cr!("603.2d", "603.6a", "702.100a", "603.4");
     ruling!(
         "Virtue of Knowledge // Vantress Visions",
         "Virtue of Knowledge's ability affects a permanent's own enters-the-battlefield triggered abilities as well as other triggered abilities that trigger when that permanent enters the battlefield. Such triggered abilities start with \"when\" or \"whenever.\" Some keyword abilities also include a triggered ability that happens when a permanent enters the battlefield."

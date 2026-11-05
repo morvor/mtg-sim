@@ -60,18 +60,28 @@ fn a_reselected_creature_still_attacked_the_player_it_was_declared_attacking() {
     );
     supported("Capricopian");
     supported("Avenge");
-    // P1 sends it to P2. On P1's turn, Avenge ("This spell costs {2} less to cast if a
-    // player attacked you during their last turn.") costs P1 four mana.
+    // P1 sends it to P2, and it deals its combat damage to P2. On P1's turn, Avenge ("This
+    // spell costs {2} less to cast if a player attacked you during their last turn.")
+    // costs P1 four mana; on P2's turn, it still costs P2 six.
     let mut t = three_players();
     let goat = goat_attacks(&mut t, Entity::Player(P1));
     reselect(&mut t, P1, goat, P2);
     assert_eq!(attacking(&t, goat), Some(Entity::Player(P2)));
     t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(t.life(P2), 17);
+    assert_eq!(t.life(P1), 20);
     t.lands(P1, "Plains", 2);
     t.lands(P1, "Wastes", 2);
     let avenge = t.hand(P1, "Avenge");
     t.g.turn.priority = Some(P1);
     assert!(t.g.cast_spell(P1, avenge, CastMethod::Normal).is_ok());
+    t.resolve_all();
+    t.advance_to(P2, Step::PrecombatMain);
+    t.lands(P2, "Plains", 2);
+    t.lands(P2, "Wastes", 2);
+    let avenge = t.hand(P2, "Avenge");
+    t.g.turn.priority = Some(P2);
+    assert!(t.g.cast_spell(P2, avenge, CastMethod::Normal).is_err());
 }
 
 #[test]
@@ -89,7 +99,11 @@ fn reselecting_doesnt_trigger_attack_abilities_and_ignores_attack_costs() {
     supported("Ghostly Prison");
     // Armory of Iroas: "Whenever equipped creature attacks, put a +1/+1 counter on it."
     // P2's Ghostly Prison: "Creatures can't attack you unless their controller pays {2}
-    // for each creature they control that's attacking you."
+    // for each creature they control that's attacking you." The CR text covers the
+    // ruling's "costs": a "can't attack unless [a cost is paid]" effect is a restriction
+    // on the declaration of attackers (CR 508.1c, 508.1d), which doesn't affect
+    // reselecting (CR 508.7b), and costs to attack are determined and paid only while
+    // attackers are declared (CR 508.1g-j), which reselecting isn't (CR 508.7a).
     let mut t = three_players();
     t.battlefield(P2, "Ghostly Prison");
     let goat = t.battlefield(P0, "Capricopian");
@@ -110,7 +124,7 @@ fn reselecting_doesnt_trigger_attack_abilities_and_ignores_attack_costs() {
 
 #[test]
 fn the_new_defending_player_may_send_capricopian_back() {
-    cr!("508.7", "602.5");
+    cr!("508.7", "508.7a");
     ruling!(
         "Capricopian",
         "The player Capricopian becomes attacking may activate its ability, perhaps sending Capricopian right back towards its original destination."

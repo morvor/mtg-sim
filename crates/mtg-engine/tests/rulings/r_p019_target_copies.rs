@@ -250,6 +250,47 @@ fn strionic_resonator_copies_a_keyword_triggered_ability() {
 }
 
 #[test]
+fn a_copy_of_a_trigger_with_an_intervening_if_checks_it_again_as_it_resolves() {
+    cr!("603.4", "707.10", "702.100a");
+    // Cloudfin Raptor (0/1), evolve: "Whenever a creature you control enters, if that
+    // creature has greater power or toughness than this creature, put a +1/+1 counter on
+    // this creature." Llanowar Elves (1/1) enters; Strionic Resonator copies the trigger.
+    // The copy resolves (1/2), then the original finds the Elves no bigger: one counter.
+    let mut t = TestGame::new(2);
+    let resonator = t.battlefield(P0, "Strionic Resonator");
+    let raptor = t.battlefield(P0, "Cloudfin Raptor");
+    t.enter(P0, "Llanowar Elves");
+    t.settle();
+    t.lands(P0, "Wastes", 2);
+    copy_top(&mut t, resonator, "Copy target");
+    t.resolve();
+    assert_eq!(abilities_from(&t, raptor).len(), 2);
+    t.resolve_all();
+    assert_eq!(t.counters(raptor, counters::PLUS1), 1);
+    // The copy itself checks too: the Raptor gets +3/+3 before it resolves, and neither
+    // instance does anything.
+    let mut t = TestGame::new(2);
+    let resonator = t.battlefield(P0, "Strionic Resonator");
+    let raptor = t.battlefield(P0, "Cloudfin Raptor");
+    t.enter(P0, "Llanowar Elves");
+    t.settle();
+    t.lands(P0, "Wastes", 2);
+    copy_top(&mut t, resonator, "Copy target");
+    t.resolve();
+    assert_eq!(abilities_from(&t, raptor).len(), 2);
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        raptor,
+        vec![mtg_engine::ability::Modification::ModifyPT(
+            mtg_engine::ability::Value::c(3),
+            mtg_engine::ability::Value::c(3),
+        )],
+    );
+    t.resolve_all();
+    assert_eq!(t.counters(raptor, counters::PLUS1), 0);
+}
+
+#[test]
 fn defabricate_counters_a_keyword_triggered_ability() {
     cr!("603.1", "702.108a", "701.6a");
     ruling!(
@@ -384,7 +425,7 @@ fn tawnos_copy_keeps_the_distribution_of_counters() {
 
 #[test]
 fn tawnos_copy_of_an_imprint_trigger_makes_the_linked_ability_use_both_cards() {
-    cr!("707.10", "607.2a", "607.3", "107.3");
+    cr!("707.10", "607.2a", "607.3");
     ruling!(
         "Tawnos, Urza's Apprentice",
         "In some cases involving linked abilities, an ability requires information about \"the exiled card.\" When this happens, the ability gets multiple answers. If these answers are being used to determine the value of a variable, the sum is used. For example, if Soul Foundry's enters-the-battlefield ability is copied, two cards are exiled. The value of X in the activation cost of Soul Foundry's other ability is the sum of the two cards' mana values. As the ability resolves, you create a token copy of each card."
@@ -427,34 +468,51 @@ fn tawnos_copy_of_an_imprint_trigger_makes_the_linked_ability_use_both_cards() {
 }
 
 #[test]
-fn tawnos_copies_a_living_weapon_trigger() {
+fn tawnos_and_abstruse_archaic_copy_a_living_weapon_trigger() {
     cr!("603.1", "702.92a", "707.10");
     ruling!(
         "Tawnos, Urza's Apprentice",
         "Triggered abilities use the word \"when,\" \"whenever,\" or \"at.\" They're often written as \"[Trigger condition], [effect].\" Some keyword abilities are triggered abilities and will have \"when,\" \"whenever,\" or \"at the beginning of\" in their reminder text."
     );
+    ruling!(
+        "Abstruse Archaic",
+        "Triggered abilities use the word \"when,\" \"whenever,\" or \"at.\" They're often written as \"[Trigger condition], [effect].\" Some keyword abilities are triggered abilities and will have \"when,\" \"whenever,\" or \"at the beginning of\" in their reminder text."
+    );
     supported("Flayer Husk");
-    // Flayer Husk: "Living weapon (When this Equipment enters, create a 0/0 black
-    // Phyrexian Germ creature token, then attach this to it.)" The copy makes a Germ and
-    // attaches the Husk to it; then the original makes another and moves the Husk.
-    let mut t = TestGame::new(2);
-    let tawnos = t.battlefield(P0, "Tawnos, Urza's Apprentice");
-    let husk = t.enter(P0, "Flayer Husk");
-    t.settle();
-    t.lands(P0, "Island", 1);
-    t.lands(P0, "Mountain", 1);
-    copy_top(&mut t, tawnos, "Copy target");
-    t.resolve();
-    assert_eq!(abilities_from(&t, husk).len(), 2);
-    t.resolve();
-    let first = with_subtype(&t, P0, "Germ");
-    assert_eq!(first.len(), 1);
-    assert_eq!(attached_to(&t, husk), Some(Entity::Object(first[0])));
-    t.resolve_all();
-    let second = with_subtype(&t, P0, "Germ");
-    assert_eq!(second.len(), 1);
-    assert_ne!(second, first);
-    assert_eq!(attached_to(&t, husk), Some(Entity::Object(second[0])));
+    supported("Abstruse Archaic");
+    // Flayer Husk (a colorless artifact): "Living weapon (When this Equipment enters,
+    // create a 0/0 black Phyrexian Germ creature token, then attach this to it.)" Tawnos
+    // ("from an artifact source") and Abstruse Archaic ("{1}, {T}: Copy target activated
+    // or triggered ability you control from a colorless source.") copy it: the copy makes
+    // a Germ and attaches the Husk to it; then the original makes another and moves the
+    // Husk (the first Germ, a 0/0, dies).
+    for (copier, lands) in [
+        (
+            "Tawnos, Urza's Apprentice",
+            [("Island", 1), ("Mountain", 1)],
+        ),
+        ("Abstruse Archaic", [("Wastes", 1), ("Wastes", 0)]),
+    ] {
+        let mut t = TestGame::new(2);
+        let copier_id = t.battlefield(P0, copier);
+        let husk = t.enter(P0, "Flayer Husk");
+        t.settle();
+        for (land, n) in lands {
+            t.lands(P0, land, n);
+        }
+        copy_top(&mut t, copier_id, "Copy target");
+        t.resolve();
+        assert_eq!(abilities_from(&t, husk).len(), 2, "{copier}");
+        t.resolve();
+        let first = with_subtype(&t, P0, "Germ");
+        assert_eq!(first.len(), 1, "{copier}");
+        assert_eq!(attached_to(&t, husk), Some(Entity::Object(first[0])));
+        t.resolve_all();
+        let second = with_subtype(&t, P0, "Germ");
+        assert_eq!(second.len(), 1, "{copier}");
+        assert_ne!(second, first, "{copier}");
+        assert_eq!(attached_to(&t, husk), Some(Entity::Object(second[0])));
+    }
 }
 
 /// P0's `copier` copies Bow of Nylea's "{1}{G}, {T}: Choose one — ... • You gain 3 life.
@@ -618,7 +676,7 @@ fn vantress_visions_copy_keeps_the_division_and_mode() {
 
 #[test]
 fn vantress_visions_copy_uses_the_cost_choices_of_the_original() {
-    cr!("707.10", "601.2h");
+    cr!("707.10");
     ruling!(
         "Virtue of Knowledge // Vantress Visions",
         "If the activated ability's cost contains a choice, such as a creature to sacrifice or a number of counters to remove, the copy created by Vantress Visions uses that same information. You can't pay the cost again, even if you want to."
@@ -662,7 +720,7 @@ fn vantress_visions_copy_has_the_same_source() {
 
 #[test]
 fn strionic_resonator_copy_of_elite_arcanists_trigger_sums_the_exiled_cards() {
-    cr!("707.10", "607.2a", "607.3", "107.3");
+    cr!("707.10", "607.2a", "607.3");
     ruling!(
         "Strionic Resonator",
         "In some cases involving linked abilities, an ability requires information about \"the exiled card.\" When this happens, the ability gets multiple answers. If these answers are being used to determine the value of a variable, the sum is used. For example, if Elite Arcanist's enters-the-battlefield ability is copied, two cards are exiled. The value of X in the activation cost of Elite Arcanist's other ability is the sum of the two cards' mana values. As the ability resolves, you create copies of both cards and can cast none, one, or both of the copies in any order."

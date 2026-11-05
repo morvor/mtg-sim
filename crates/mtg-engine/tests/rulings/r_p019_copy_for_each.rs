@@ -162,7 +162,7 @@ fn radiant_performer_copies_a_spell_with_several_targets_all_the_same_creature()
 
 #[test]
 fn mirror_shield_hoplite_copy_on_the_same_other_creature_doubles_counters_and_abilities() {
-    cr!("702.165a", "707.10", "603.2c");
+    cr!("702.165a", "707.10", "113.2c");
     ruling!(
         "Mirror-Shield Hoplite",
         "If a creature other than the creature with backup ends up as the target of both the backup ability and the copy, it will end up with two +1/+1 counters and it will gain the non-backup abilities twice. In some cases, the duplicate abilities will be redundant (two instances of flying, for example). However, if it picks up two triggered abilities, for example, those abilities trigger independently."
@@ -250,7 +250,7 @@ fn chandra_minus_x(t: &mut TestGame, chandra: ObjectId, target: ObjectId) -> Obj
 
 #[test]
 fn jayas_phoenix_copy_of_a_minus_x_loyalty_ability_has_the_same_x() {
-    cr!("707.10", "606.4", "107.3");
+    cr!("707.10", "606.4");
     ruling!(
         "Jaya's Phoenix",
         "If the loyalty ability has -X in its cost, the copy uses the same value of X."
@@ -294,7 +294,7 @@ fn leori_hits(t: &mut TestGame) {
 
 #[test]
 fn leoris_copy_of_a_minus_x_loyalty_ability_has_the_same_x() {
-    cr!("707.10", "606.4", "107.3");
+    cr!("707.10", "606.4");
     ruling!(
         "Leori, Sparktouched Hunter",
         "If the loyalty ability has -X in its cost, the copy uses the same value of X."
@@ -345,4 +345,28 @@ fn leoris_copy_resolves_even_if_the_original_ability_is_countered() {
     crate::r_s25_common::keep_copy_targets(&mut t, P0);
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn a_copy_of_a_loyalty_ability_isnt_an_activation_of_one() {
+    cr!("707.10", "606.4");
+    supported("Keral Keep Disciples");
+    // Keral Keep Disciples: "Whenever you activate a loyalty ability of a Chandra
+    // planeswalker, this creature deals 1 damage to each opponent." Leori copies Chandra's
+    // +1 (1 damage to P1): the Disciples trigger once, for the activation only.
+    let mut t = TestGame::new(2);
+    let chandra = t.battlefield(P0, "Chandra Nalaar");
+    let disciples = t.battlefield(P0, "Keral Keep Disciples");
+    leori_hits(&mut t);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_containing(&mut t, P0, chandra, "1 damage")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    assert_eq!(abilities_from(&t, disciples).len(), 1);
+    crate::r_s25_common::keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    // Leori's 3, the Disciples' 1 (not 2), and 1 each from the ability and its copy.
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(t.counters(chandra, counters::LOYALTY), 7);
 }

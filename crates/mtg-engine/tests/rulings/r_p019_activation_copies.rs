@@ -21,7 +21,7 @@ use mtg_engine::*;
 
 #[test]
 fn battlemages_bracers_copy_keeps_x_and_the_mode() {
-    cr!("707.10", "107.3", "700.2g", "603.2");
+    cr!("707.10", "700.2g", "603.2");
     ruling!(
         "Battlemage's Bracers",
         "If the ability has {X} in its activation cost, the copy has the same value of X."
@@ -227,6 +227,48 @@ fn kurkesh_doesnt_copy_mana_abilities() {
     assert_eq!(t.counters(bomb, "charge"), 2);
 }
 
+/// The mana-ability rulings of Kurkesh (2014-07-18) and Illusionist's Bracers (2013-04-15)
+/// list three criteria; since the CR revision effective 2026-08-07 there is a fourth: an
+/// activated ability whose cost or effect moves a card to or from a library isn't a mana
+/// ability (CR 605.1a; logged as outdated in docs/RULING_DISCREPANCIES.md). Such an
+/// ability uses the stack, and abilities that copy non-mana abilities copy it.
+#[test]
+fn abilities_that_add_mana_and_draw_or_mill_are_copied_as_non_mana_abilities() {
+    cr!("605.1a", "603.2", "707.10");
+    supported("Chromatic Sphere");
+    supported("Deranged Assistant");
+    supported("Illusionist's Bracers");
+    // Chromatic Sphere: "{1}, {T}, Sacrifice this artifact: Add one mana of any color.
+    // Draw a card." Kurkesh copies it: two cards drawn.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Kurkesh, Onakke Ancient");
+    let sphere = t.battlefield(P0, "Chromatic Sphere");
+    t.lands(P0, "Mountain", 2);
+    let hand = t.hand_size(P0);
+    activate_containing(&mut t, P0, sphere, "Add one mana")
+        .unwrap()
+        .expect("on the stack");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "pay {R}"), 1);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    // Deranged Assistant: "{T}, Mill a card: Add {C}." Illusionist's Bracers ("Whenever an
+    // ability of equipped creature is activated, if it isn't a mana ability, copy that
+    // ability.") copies it: one card milled for the cost, and {C}{C}.
+    let mut t = TestGame::new(2);
+    let assistant = t.battlefield(P0, "Deranged Assistant");
+    crate::r_s06_common::attach_new(&mut t, P0, "Illusionist's Bracers", assistant);
+    activate_containing(&mut t, P0, assistant, "Add {C}")
+        .unwrap()
+        .expect("on the stack");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "copy that ability"), 1);
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 1);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2);
+}
+
 #[test]
 fn kurkesh_sacrificed_to_pay_a_cost_doesnt_copy_that_ability() {
     cr!("602.2b", "601.2i", "603.2");
@@ -280,6 +322,96 @@ fn rings_of_brighthearth_pays_once_per_trigger() {
     t.resolve_all();
     assert_eq!(t.counters(bomb, "charge"), 2);
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
+}
+
+#[test]
+fn rings_copies_dont_count_as_activations_but_count_as_resolutions_of_the_ability() {
+    cr!("707.10", "707.10b", "602.5");
+    supported("Roterothopter");
+    supported("Inner-Flame Igniter");
+    // Roterothopter (0/2): "{2}: This creature gets +1/+0 until end of turn. Activate no
+    // more than twice each turn." The Rings' copy of the first activation isn't an
+    // activation: a second activation is allowed, a third isn't.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rings of Brighthearth");
+    let thopter = t.battlefield(P0, "Roterothopter");
+    t.lands(P0, "Wastes", 8);
+    activate_containing(&mut t, P0, thopter, "+1/+0")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.pt(thopter), (2, 2));
+    activate_containing(&mut t, P0, thopter, "+1/+0")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.pt(thopter), (3, 2));
+    assert!(activate_containing(&mut t, P0, thopter, "+1/+0").is_err());
+    // Inner-Flame Igniter: "{2}{R}: Creatures you control get +1/+0 until end of turn. If
+    // this is the third time this ability has resolved this turn, creatures you control
+    // gain first strike until end of turn." The copy is the same ability for that count:
+    // the copy and the first activation resolve, then the second activation is the third.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rings of Brighthearth");
+    let igniter = t.battlefield(P0, "Inner-Flame Igniter");
+    t.lands(P0, "Mountain", 8);
+    activate_containing(&mut t, P0, igniter, "+1/+0")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    t.g.recompute();
+    assert!(!t
+        .obj_now(igniter)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
+    activate_containing(&mut t, P0, igniter, "+1/+0")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    t.g.recompute();
+    assert_eq!(t.pt(igniter), (5, 2));
+    assert!(t
+        .obj_now(igniter)
+        .chars
+        .has_keyword(mtg_engine::keywords::KeywordKind::FirstStrike));
+}
+
+#[test]
+fn rings_copy_of_an_ability_that_sacrificed_its_source_uses_its_last_known_power() {
+    cr!("707.10", "707.10b", "113.7a", "608.2h");
+    supported("Voldaren Thrillseeker");
+    // Voldaren Thrillseeker (3/3 with two +1/+1 counters): "{1}, Sacrifice this creature:
+    // It deals damage equal to its power to any target." The copy's source is the same
+    // sacrificed creature, as it last existed: 3 damage each.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rings of Brighthearth");
+    let seeker = t.battlefield(P0, "Voldaren Thrillseeker");
+    t.g.add_counters(
+        Entity::Object(seeker),
+        mtg_engine::types::counters::PLUS1,
+        2,
+        None,
+    );
+    t.g.recompute();
+    t.lands(P0, "Wastes", 3);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_containing(&mut t, P0, seeker, "Sacrifice")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    assert!(!t.on_battlefield(seeker));
+    t.answer_yes(P0, true);
+    crate::r_s25_common::keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
 }
 
 #[test]
