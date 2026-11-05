@@ -72,12 +72,39 @@ pub fn zone_size(g: &Game, p: PlayerId, zone: crate::ability::ZoneKind) -> usize
 pub fn turn_began(g: &mut Game, previous: Option<PlayerId>, active: PlayerId, extra: bool) {
     if let Some(prev) = previous.filter(|_| !extra) {
         for q in left_players_seated_between(g, prev, active) {
+            end_at_departed_players_turn(g, q);
             g.expire_until_next_turn(q);
         }
     }
     range::determine(g);
     // CR 807.4b: the turn markers are handed out as the first turn begins.
     grand_melee::ensure(g);
+}
+
+/// CR 800.4m: the effects of a player who left the game that last until a specific point
+/// in their next turn ("until the end of your next turn", "until your next upkeep",
+/// "until end of combat on your next turn") last until that turn would have begun: they
+/// end as it would have begun, rather than lasting through the turn being played then.
+fn end_at_departed_players_turn(g: &mut Game, q: PlayerId) {
+    use crate::ability::Duration;
+    let ends = |d: &Duration, c: PlayerId| {
+        c == q
+            && matches!(
+                d,
+                Duration::UntilEndOfYourNextTurn
+                    | Duration::UntilYourNextStep(_)
+                    | Duration::UntilEndOfCombatOnYourNextTurn
+                    | Duration::UntilEndOfYourNextStep(_)
+            )
+    };
+    g.effects.retain(|e| !ends(&e.duration, e.controller));
+    g.rule_effects.retain(|e| !ends(&e.duration, e.controller));
+    g.player_effects
+        .retain(|e| !ends(&e.duration, e.controller));
+    g.replacements.retain(|e| !ends(&e.duration, e.controller));
+    g.play_grants
+        .retain(|e| !ends(&e.duration, e.duration_player()));
+    g.dirty = true;
 }
 
 /// Players who have left the game seated after `after` and before `next` in turn order:
