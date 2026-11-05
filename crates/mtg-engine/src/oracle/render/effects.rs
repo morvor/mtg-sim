@@ -943,9 +943,10 @@ impl Renderer<'_> {
                 self.effect(&e)
             }
             // "~ deals damage to each opponent equal to the number of lands that player
-            // controls": the amount for each player (dealt one player at a time).
+            // controls", "it deals damage to each opponent equal to the number of cards in
+            // that player's hand": the amount for each player (dealt one player at a time).
             Effect::ForEachPlayer { who, effect }
-                if matches!(effect.as_ref(), Effect::DealDamage { source: Sel::This, to: Sel::Players(PlayerRef::Iterated), .. })
+                if matches!(effect.as_ref(), Effect::DealDamage { to: Sel::Players(PlayerRef::Iterated), .. })
                     && matches!(who, PlayerRef::EachOpponent | PlayerRef::EachPlayer) =>
             {
                 let inner = self.effect(effect);
@@ -4805,6 +4806,32 @@ impl Renderer<'_> {
                 let cap = self.value(value);
                 let s = self.seq(rest);
                 return format!("{}. X can't be greater than {cap}", s.trim_end_matches('.'));
+            }
+        }
+        // "~ deals damage to target player equal to ... and you gain that much life": the
+        // amount is noted once (`patterns/value_results.rs`), said as the damage dealt.
+        if let [Effect::StoreValue { var, value }, Effect::DealDamage {
+            source,
+            amount: Value::Var(a),
+            to,
+        }, Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::Var(b),
+        }] = v
+        {
+            let noted = crate::oracle::patterns::value_results::DAMAGE_AMOUNT;
+            if *var == noted && *a == noted && *b == noted {
+                return self.seq(&[
+                    Effect::DealDamage {
+                        source: source.clone(),
+                        amount: value.clone(),
+                        to: to.clone(),
+                    },
+                    Effect::GainLife {
+                        who: PlayerRef::You,
+                        n: Value::Prev,
+                    },
+                ]);
             }
         }
         // "[that player may pay any amount of mana.] ~ deals 2 damage to that player.

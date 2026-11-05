@@ -34,12 +34,12 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Status: decided
 - Rules: 607.1d "Abilities printed on two objects can be linked if one object is a token, emblem, or nontoken permanent and the second object was the source of the ability that either created the token or emblem or put that nontoken permanent onto the battlefield. ..." / Dance of Many's rulings: "Each Dance of Many is associated only with its token creature. If one Dance leaves the battlefield, only the corresponding token is affected, not all tokens from all instances of Dance of Many." and "If Dance of Many leaves the battlefield before its first ability has resolved, ... That token won't have any connection to a Dance of Many permanent".
 - Question: Dance of Many's "exile the token" and "When the token leaves the battlefield" are in abilities other than the one that creates it. Which token do they mean?
-- Decision: Only on a card with exactly one instruction that creates exactly one token ("create a token ..."), "the token" in its other abilities is the token that permanent's ability created (`Game::link_to_creator`): "exile the token" acts on it while it's on the battlefield, and "when the token leaves the battlefield" triggers for it, judged by its creator record as it left (look-back, CR 603.10a). A token created by the ability after the source left has no creator and isn't "the token".
+- Decision: Only on a card with exactly one instruction that creates exactly one token ("create a token ..."), "the token" in its other abilities is the token that permanent's ability created (`Game::link_to_creator`): "exile the token" acts on it while it's on the battlefield, and "when the token leaves the battlefield" triggers for it, judged by its creator record as it left (look-back, CR 603.10a). A token created by the ability after the source left is linked only to the source as it last existed (CR 607.1d; as Arcane Artisan's ruling has it), whose abilities no longer function: it isn't "the token" of any Dance of Many permanent.
 - Alternatives: Any token with the same name, or every token the card's abilities ever created: both contradict the rulings.
 - Why: The rulings; 607.1d's link between a token and the source of the ability that created it.
 - Affects: Dance of Many.
 - Code: `crates/mtg-engine/src/oracle/patterns/paper_referents.rs` (`act_on_the_token`, `the_token_leaves`); `crates/mtg-engine/src/kw/created_by_source.rs`.
-- Tests: `tests/cards/paper_cost_token_referents.rs` (`dance_of_many_exiles_its_token_when_it_leaves`, `dance_of_many_is_sacrificed_when_its_token_leaves`).
+- Tests: `tests/cards/paper_cost_token_referents.rs` (`dance_of_many_exiles_its_token_when_it_leaves`, `dance_of_many_is_sacrificed_when_its_token_leaves`, `dance_of_many_leaving_before_its_token_exists_leaves_the_token_alone`).
 
 ## alteration-host-of-two-types: "Another permanent of that type" for a host with both named types
 - Kind: interpretation

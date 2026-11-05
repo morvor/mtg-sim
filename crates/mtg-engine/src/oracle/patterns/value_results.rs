@@ -202,26 +202,37 @@ fn each_player_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { super::EffectPattern { name: "value results: each opponent ... that player ... this turn", priority: 5, parse: each_player_that_player } }
 
 /// "~ deals damage to each opponent equal to the number of cards that player has drawn
-/// this turn", "... equal to the number of tapped creatures that opponent controls": an
-/// amount for each player in turn (CR 608.2h), "that player" being that one.
+/// this turn", "... equal to the number of tapped creatures that opponent controls", "it
+/// deals damage to each opponent equal to the number of cards in that player's hand"
+/// (Stormbreath Dragon): an amount for each player in turn (CR 608.2h), "that player"
+/// being that one, even where "that player" could otherwise name a triggering player.
 fn damage_each_player_equal(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (head, v) = l.split_once(" equal to ")?;
-    let (source, who) = [
-        (
-            "~ deals damage to each opponent",
-            (Sel::This, PlayerRef::EachOpponent),
-        ),
-        (
-            "~ deals damage to each player",
-            (Sel::This, PlayerRef::EachPlayer),
-        ),
+    let (subject, who) = [
+        (" deals damage to each opponent", PlayerRef::EachOpponent),
+        (" deals damage to each player", PlayerRef::EachPlayer),
     ]
     .into_iter()
-    .find_map(|(p, x)| (head == p).then_some(x))?;
+    .find_map(|(p, x)| head.strip_suffix(p).map(|s| (s, x)))?;
     if !(v.contains("that player") || v.contains("that opponent")) {
         return None;
     }
+    // The source: "~", or an object reference naming no new target ("it").
+    let source = if subject == "~" {
+        Sel::This
+    } else {
+        let n = b.targets.len();
+        let read = crate::oracle::effects::object_ref(subject, b);
+        if b.targets.len() != n {
+            b.targets.truncate(n);
+            return None;
+        }
+        match read {
+            Some((sel, rest)) if rest.trim().is_empty() => sel,
+            _ => return None,
+        }
+    };
     let v = v.replace("that opponent", "that player");
     let saved = b.it_player.clone();
     b.it_player = PlayerRef::Iterated;
@@ -241,7 +252,9 @@ fn damage_each_player_equal(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { super::EffectPattern { name: "value results: ~ deals damage to each opponent equal to [amount for that player]", priority: 60, parse: damage_each_player_equal } }
+// Before the general damage grammar (priority 50), which would read "that player" as a
+// triggering player.
+inventory::submit! { super::EffectPattern { name: "value results: ~ deals damage to each opponent equal to [amount for that player]", priority: 45, parse: damage_each_player_equal } }
 
 /// "[player] [have|has|'ve] [verb]" (or the simple past "[player] [verb]"): the player
 /// and the rest after the auxiliary.
@@ -328,9 +341,7 @@ fn player_action(x: &str, f: Filter, card: bool, b: &Builder) -> Option<(Value, 
 fn target_player_action(x: &str, b: &mut Builder) -> Option<(Value, String)> {
     let saved = (b.targets.len(), b.it_player.clone());
     let found = target_player(x, b).and_then(|(who, r)| {
-        let r = r
-            .strip_prefix(" has ")
-            .or_else(|| r.strip_prefix(" "))?;
+        let r = r.strip_prefix(" has ").or_else(|| r.strip_prefix(" "))?;
         action_after(who, r, Filter::Any, true)
     });
     if found.is_none() {
@@ -410,7 +421,11 @@ fn object_history_cond(r: &str) -> Option<(TriggerCond, String)> {
             TriggerCond::LeavesBattlefield,
             you(),
         ),
-        (" that left the battlefield", TriggerCond::LeavesBattlefield, None),
+        (
+            " that left the battlefield",
+            TriggerCond::LeavesBattlefield,
+            None,
+        ),
         (" that died", TriggerCond::Dies, None),
         (
             " that were put into your graveyard from the battlefield",
@@ -470,7 +485,10 @@ fn object_history_cond(r: &str) -> Option<(TriggerCond, String)> {
 /// battlefield (CR 608.2h), each once.
 fn history_aggregate(op: AggOp, stat: Stat, r: &str) -> Option<(Value, String)> {
     let (cond, rest) = object_history_cond(r)?;
-    if !matches!(cond, TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)) {
+    if !matches!(
+        cond,
+        TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)
+    ) {
         return None;
     }
     let sel = Sel::Before(Box::new(Sel::ThisTurn(Box::new(cond))));
@@ -2631,19 +2649,32 @@ fn each_draws_then_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { super::EffectPattern { name: "value results: each opponent draws, then [instruction counting this way]", priority: 5, parse: each_draws_then_this_way } }
 
-/// "~ deals damage to target player equal to ... and you gain that much life": the life
-/// gained is the damage actually dealt (CR 120.4b, 608.2c).
+/// The amount of damage an instruction says to deal, for "and you gain that much life".
+pub(crate) const DAMAGE_AMOUNT: Var = vars::USER + 7525;
+
+/// "~ deals damage to target player equal to ... and you gain that much life": "that
+/// much" is the amount the instruction says to deal, determined once, even if an effect
+/// makes the source deal more or less damage than that (Kaya, Orzhov Usurper ruling;
+/// CR 608.2c, 614.1a, 615.1a).
 fn damage_and_gain_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
     let first = end(l).strip_suffix(" and you gain that much life")?;
     let e = crate::oracle::effects::parse_clause(first, b)?;
-    if !matches!(e, Effect::DealDamage { .. }) {
+    let Effect::DealDamage { source, amount, to } = e else {
         return None;
-    }
+    };
     Some(Effect::seq(vec![
-        e,
+        Effect::StoreValue {
+            var: DAMAGE_AMOUNT,
+            value: amount,
+        },
+        Effect::DealDamage {
+            source,
+            amount: Value::Var(DAMAGE_AMOUNT),
+            to,
+        },
         Effect::GainLife {
             who: PlayerRef::You,
-            n: Value::Prev,
+            n: Value::Var(DAMAGE_AMOUNT),
         },
     ]))
 }

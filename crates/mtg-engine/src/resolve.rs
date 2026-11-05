@@ -35,6 +35,12 @@ impl Game {
         // it, for the abilities linked to it (CR 607.2a): by its link, however they're
         // exiled ("search your library for seven cards, exile them", a dig).
         let prev_link = std::mem::replace(&mut self.current_link, ctx.link);
+        if !matches!(
+            e,
+            Effect::Seq(_) | Effect::If { .. } | Effect::Reflexive { .. }
+        ) {
+            ctx.reflexive_times = None;
+        }
         if crate::trigger_timing::is_sequencing(e) {
             self.exec_effect(e, ctx);
         } else {
@@ -713,6 +719,10 @@ impl Game {
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
                 // whether any counter was put.
                 ctx.prev_happened = placed > 0;
+                // "Put two quest counters on ~. When you do, ...": four put on it (Doubling
+                // Season) is putting two quest counters twice, so the reflexive ability
+                // triggers twice (Craig Boone, Novac Guard ruling; CR 603.12a).
+                ctx.reflexive_times = (got.len() == 1 && k > 0).then(|| placed / k);
                 // "Put a quest counter on this enchantment. When you do, if it has four or
                 // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
                 // the counters. A choice among "them" ("Put a deathtouch counter on either
@@ -1201,7 +1211,7 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let sources = crate::copy_rules::token_copy_sources(self, of, ctx);
                 let players = self.eval_players(controller, ctx);
-                let fixed = self.fix_mods(mods, ctx);
+                let fixed = self.fix_mods(&crate::granted_captures::confine_to_created(mods), ctx);
                 let mut created = Vec::new();
                 for p in players {
                     for s in &sources {
@@ -1219,6 +1229,8 @@ impl Game {
                 }
                 // "tokens created with ~" (CR 607.1d), as for other created tokens.
                 self.link_to_creator(ctx, &created);
+                // "the exiled card" of an ability the exceptions gave them.
+                crate::granted_captures::keep_created_exiled(self, ctx, &created);
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -2243,6 +2255,9 @@ impl Game {
                     .stack_obj
                     .filter(|s| self.obj(*s).is_spell())
                     .or(ctx.source);
+                // It triggers once for each time its event happened (CR 603.12a); the
+                // count is used up here, not carried into the ability's own resolution.
+                let times = ctx.reflexive_times.take().unwrap_or(1).max(1);
                 let mut saved = ctx.clone();
                 saved.resolving_controller = None;
                 if saved.reflexive_parent.is_none() {
@@ -2253,16 +2268,21 @@ impl Game {
                 if let Some(p) = performer {
                     body = performed_by(body, p);
                 }
-                self.pending_triggers.push(PendingTrigger {
-                    source: src.unwrap_or(ObjectId(0)),
-                    controller,
-                    ability,
-                    event: ctx.event.clone().unwrap_or_default(),
-                    source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
-                    saved: Some(saved),
-                    body: Some(body),
-                    order: self.trigger_order,
-                });
+                for i in 0..times {
+                    if i > 0 {
+                        self.trigger_order += 1;
+                    }
+                    self.pending_triggers.push(PendingTrigger {
+                        source: src.unwrap_or(ObjectId(0)),
+                        controller,
+                        ability: ability.clone(),
+                        event: ctx.event.clone().unwrap_or_default(),
+                        source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
+                        saved: Some(saved.clone()),
+                        body: Some(body.clone()),
+                        order: self.trigger_order,
+                    });
+                }
             }
             Effect::DuringNext { who, part, effect } => {
                 crate::next_turn::schedule(self, who, *part, effect, ctx);
@@ -3888,14 +3908,16 @@ impl Game {
 
     /// CR 607.2c, 607.1d: objects an ability created or put onto the battlefield are
     /// linked to that ability of its source ("created with ~", "put onto the battlefield
-    /// with ~").
+    /// with ~"), also when the source left the battlefield before the ability resolved: to
+    /// the source as it last existed, as the cards an ability exiles are (`move_objects`).
+    /// Arcane Artisan's ruling: "If Arcane Artisan leaves the battlefield before its
+    /// activated ability has resolved, the token that ability creates will still be exiled
+    /// at the beginning of the next end step." The source itself, put back onto the
+    /// battlefield, isn't linked to its old self.
     pub(crate) fn link_to_creator(&mut self, ctx: &Ctx, objs: &[ObjectId]) {
         let Some(src) = ctx.source else { return };
-        if !self.is_live(src) {
-            return;
-        }
         for o in objs {
-            if *o == src || !self.is_live(*o) {
+            if *o == src || self.current(src) == *o || !self.is_live(*o) {
                 continue;
             }
             self.objects[src.0 as usize]
