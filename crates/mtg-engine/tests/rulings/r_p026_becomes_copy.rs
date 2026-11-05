@@ -82,7 +82,7 @@ fn becoming_a_copy_copies_printed_values_plus_copy_effects() {
 
 #[test]
 fn permeating_mass_copy_copies_only_its_printed_values() {
-    cr!("707.2", "510.2", "603.2");
+    cr!("707.2");
     ruling!(
         "Permeating Mass",
         "The damaged creature copies the printed values of Permeating Mass. It won’t copy counters on Permeating Mass or effects that have changed its power, toughness, types, color, or so on. Notably, this means that a creature that becomes a copy of Permeating Mass has the ability to permeate other creatures as well."
@@ -199,13 +199,14 @@ fn the_animus_copies_only_the_exiled_card() {
     // "At the beginning of your end step, exile up to one target legendary creature card
     // from a graveyard with a memory counter on it. / {T}: Until your next turn, target
     // legendary creature you control becomes a copy of target creature card in exile with
-    // a memory counter on it." Isamaru (a legendary white 2/2) was dressed up before it
-    // died.
+    // a memory counter on it." Isamaru (a legendary white 2/2) was dressed up, and was a
+    // copy of Grizzly Bears, when it died.
     supported("The Animus");
     let mut t = TestGame::new(2);
     let animus = t.battlefield(P0, "The Animus");
     let isamaru = t.battlefield(P1, "Isamaru, Hound of Konda");
     dress(&mut t, P1, isamaru);
+    disguise_as_bears(&mut t, isamaru);
     kill(&mut t, isamaru);
     let card = t.g.current(isamaru);
     t.set_step(P0, Step::PostcombatMain);
@@ -234,7 +235,7 @@ fn the_animus_copies_only_the_exiled_card() {
 
 #[test]
 fn polymorphous_rush_chooses_the_copied_creature_on_resolution() {
-    cr!("608.2c", "115.1", "707.2");
+    cr!("608.2d", "115.1", "707.2");
     ruling!(
         "Polymorphous Rush",
         "The creature that's copied isn't targeted by Polymorphous Rush. You choose that creature as the spell resolves. It can be one of the targeted creatures. A creature can become a copy of itself this way, though this usually won't have any noticeable effect."
@@ -250,6 +251,17 @@ fn polymorphous_rush_chooses_the_copied_creature_on_resolution() {
     t.cast(P0, c).target(obj(bears)).go();
     t.resolve_all();
     assert_eq!(name_of(&t, bears), "Gladecover Scout");
+    // It's chosen as the spell resolves: Serra Angel, which entered after the spell was
+    // cast, can be chosen.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    lands_for(&mut t, P0, "{2}{U}");
+    let c = t.hand(P0, "Polymorphous Rush");
+    t.cast(P0, c).target(obj(bears)).go();
+    let angel = t.battlefield(P1, "Serra Angel");
+    t.answer_choose(P0, &[obj(angel)]);
+    t.resolve_all();
+    assert_eq!(name_of(&t, bears), "Serra Angel");
     // One of the targets is chosen: both become Grizzly Bears.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -292,7 +304,7 @@ fn shapesharer_can_make_a_creature_a_copy_of_itself() {
 
 #[test]
 fn sakashimas_will_second_mode_chooses_on_resolution() {
-    cr!("608.2c", "700.2", "115.1");
+    cr!("608.2c", "608.2d");
     ruling!(
         "Sakashima's Will",
         "The second mode doesn't target any creature. You choose the creature that will be copied as Sakashima's Will resolves. If you chose both modes, the creature you gained control of because of the first mode can be chosen for your other creatures to copy."
@@ -366,7 +378,7 @@ fn the_myriad_pools_target_copies_the_spells_casting_choices() {
 
 #[test]
 fn exiling_a_graveyard_card_with_counters_puts_them_on_it() {
-    cr!("122.2", "122.1", "702.62a");
+    cr!("122.2", "400.7");
     // Doom's Time Platform: "Whenever you attack, exile target nonland card from your
     // graveyard with two time counters on it. If it doesn't have suspend, it gains
     // suspend." (as The Animus's "exile ... from a graveyard with a memory counter on it"
@@ -389,4 +401,21 @@ fn exiling_a_graveyard_card_with_counters_puts_them_on_it() {
     assert_eq!(t.zone(exiled), Zone::Exile);
     assert_eq!(t.counters(exiled, counters::TIME), 2);
     assert!(has_kw(&t, exiled, KeywordKind::Suspend));
+    // Altaïr Ibn-La'Ahad: "Whenever Altaïr attacks, exile up to one target Assassin
+    // creature card from your graveyard with a memory counter on it. Then for each
+    // creature card you own in exile with a memory counter on it, create a tapped and
+    // attacking token that's a copy of it." Royal Assassin is a Human Assassin.
+    supported("Altaïr Ibn-La'Ahad");
+    let mut t = TestGame::new(2);
+    let altair = t.battlefield(P0, "Altaïr Ibn-La'Ahad");
+    let card = t.graveyard(P0, "Royal Assassin");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer_targets(P0, &[obj(card)]);
+    let before = t.g.battlefield.clone();
+    t.attack(&[(altair, Entity::Player(P1))], &[]);
+    let exiled = t.g.current(card);
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    assert_eq!(t.counters(exiled, "memory"), 1);
+    let tok = one(new_tokens(&t, P0, &before));
+    assert_eq!(name_of(&t, tok), "Royal Assassin");
 }

@@ -28,16 +28,6 @@ fn exiled_before_the_game(t: &mut TestGame, p: PlayerId, with: &str, name: &str)
     e
 }
 
-/// Casts Cytoshape for P0: `target` becomes a copy of `what` until end of turn.
-fn cytoshape(t: &mut TestGame, what: ObjectId, target: ObjectId) {
-    supported("Cytoshape");
-    lands_for(t, P0, "{1}{G}{U}");
-    let c = t.hand(P0, "Cytoshape");
-    t.answer_choose(P0, &[obj(what)]);
-    t.cast(P0, c).target(obj(target)).go();
-    t.resolve_all();
-}
-
 /// Advances to P0's next turn's precombat main phase (through P1's turn).
 fn next_turn(t: &mut TestGame) {
     t.advance_to(P1, Step::Upkeep);

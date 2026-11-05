@@ -12,9 +12,12 @@ use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-/// P0's dressed-up Hill Giant dies: returns its card in P0's graveyard.
+/// P0's dressed-up Hill Giant, a copy of Grizzly Bears until end of turn, dies: returns
+/// its card in P0's graveyard. A copy of the card is a printed Hill Giant, not a Grizzly
+/// Bears or anything else the permanent was.
 fn dead_dressed_giant(t: &mut TestGame) -> ObjectId {
     let giant = dressed_giant(t, P0);
+    disguise_as_bears(t, giant);
     kill(t, giant);
     let card = t.g.current(giant);
     assert_eq!(t.zone(card), Zone::Graveyard(P0));
@@ -133,6 +136,8 @@ fn mardu_siegebreaker_tokens_copy_only_the_printed_exiled_card() {
     supported("Mardu Siegebreaker");
     let mut t = TestGame::new(2);
     let giant = dressed_giant(&mut t, P0);
+    // It's a copy of Grizzly Bears as it's exiled: the token is still a Hill Giant.
+    disguise_as_bears(&mut t, giant);
     t.answer_targets(P0, &[obj(giant)]);
     let sb = t.enter(P0, "Mardu Siegebreaker");
     t.settle();
@@ -155,7 +160,7 @@ fn mardu_siegebreaker_tokens_copy_only_the_printed_exiled_card() {
 
 #[test]
 fn foggy_swamp_visions_tokens_copy_only_the_printed_cards() {
-    cr!("707.2", "400.7", "107.3a");
+    cr!("707.2", "400.7");
     ruling!(
         "Foggy Swamp Visions",
         "The tokens copy exactly what was printed on the original cards and nothing else."
@@ -381,7 +386,7 @@ fn nahiri_checks_her_loyalty_as_the_ability_resolves() {
 
 #[test]
 fn the_scarab_god_counts_zombies_as_its_upkeep_ability_resolves() {
-    cr!("608.2h", "603.3");
+    cr!("608.2h");
     ruling!(
         "The Scarab God",
         "The number of Zombies you control is counted as The Scarab God's first ability resolves. Players can try to change that number in response to the ability (perhaps by activating its second ability)."
@@ -407,7 +412,7 @@ fn the_scarab_god_counts_zombies_as_its_upkeep_ability_resolves() {
 
 #[test]
 fn the_mimeoplasms_cards_may_come_from_the_same_graveyard() {
-    cr!("614.1c", "707.9b");
+    cr!("614.1c");
     ruling!(
         "The Mimeoplasm",
         "The two creature cards may come from the same graveyard or different graveyards."

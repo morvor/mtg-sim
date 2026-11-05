@@ -92,7 +92,7 @@ fn copies_of_a_crewed_vehicle_arent_crewed() {
 
 #[test]
 fn copies_of_vehicles_and_equipment_arent_crewed_or_attached() {
-    cr!("707.2", "702.122a", "301.5c");
+    cr!("707.2", "702.122a");
     ruling!(
         "Season of Weaving",
         "If it is a Vehicle, it is not crewed. If it is an Equipment, it is not attached to any creature."
@@ -295,7 +295,7 @@ fn thief_attacks_copying(t: &mut TestGame, what: ObjectId) -> ObjectId {
 
 #[test]
 fn identity_thief_copying_a_defender_remains_attacking() {
-    cr!("506.4", "508.1c", "707.2");
+    cr!("506.4a", "707.2");
     ruling!(
         "Identity Thief",
         "This effect can cause Identity Thief to become a copy of a creature that can't normally attack, such as Lupine Prototype or a creature with defender. In these cases, it remains attacking."
@@ -310,7 +310,7 @@ fn identity_thief_copying_a_defender_remains_attacking() {
 
 #[test]
 fn identity_thief_copying_an_animated_planeswalker_leaves_combat_and_dies() {
-    cr!("506.4", "707.2", "704.5i", "306.5b");
+    cr!("707.2", "704.5i", "306.5b");
     ruling!(
         "Identity Thief",
         "This effect can cause Identity Thief to stop being a creature. For example, if you target an animated Gideon Jura (a planeswalker with a loyalty ability that turns him into a creature), only the printed wording will be copied; the “becomes a creature” effect won't. Identity Thief will become a noncreature Gideon with no loyalty, be removed from combat, and then be put into its owner's graveyard."

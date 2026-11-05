@@ -19,7 +19,7 @@ fn to_end_step(t: &mut TestGame) {
 
 #[test]
 fn minion_reflector_haste_and_sacrifice_trigger_are_copiable() {
-    cr!("707.9a", "707.3", "603.7");
+    cr!("707.9a", "707.3");
     ruling!(
         "Minion Reflector",
         "That means if something becomes a copy of the token, it will also have haste and it will also have to be sacrificed at the end of the turn."
@@ -48,7 +48,7 @@ fn minion_reflector_haste_and_sacrifice_trigger_are_copiable() {
 
 #[test]
 fn saheeli_sublime_artificer_artifact_exception_is_copiable() {
-    cr!("707.9b", "707.3", "606.3");
+    cr!("707.9b", "707.3");
     ruling!(
         "Saheeli, Sublime Artificer",
         "The target artifact is an artifact in addition to whatever types the second target has, and this exception is copiable. If something else copies the artifact later in the turn, that copy also will be an artifact."
@@ -215,6 +215,7 @@ fn sauron_wraith_exception_is_copiable() {
     let before = t.g.battlefield.clone();
     t.attack(&[(sauron, Entity::Player(P1))], &[]);
     let tok = one(new_tokens(&t, P0, &before));
+    assert!(t.obj_now(tok).tapped && t.g.is_attacking(tok));
     let c = clone_of(&mut t, P0, tok);
     for id in [tok, c] {
         assert_eq!(name_of(&t, id), "Serra Angel");
@@ -255,7 +256,7 @@ fn saheeli_rai_artifact_is_copiable_but_haste_and_exile_arent() {
 
 #[test]
 fn grist_insect_exception_is_copiable() {
-    cr!("707.9b", "707.3", "606.3");
+    cr!("707.9b", "707.3");
     ruling!(
         "Grist, Voracious Larva // Grist, the Plague Swarm",
         "The tokens are Insects instead of their other creature types, and they're black and green instead of their other colors. These are copiable values of the tokens that other effects may copy."
@@ -496,6 +497,8 @@ fn abyssal_harvester_exiles_the_other_nightmare_tokens_not_the_new_one() {
         &[obj(card)],
     ));
     assert_eq!(name_of(&t, tok), "Hill Giant");
+    // The new token is a Nightmare token P0 controls too, but not one of the "other" ones.
+    assert!(has_subtype(&t, tok, "Nightmare") && t.obj_now(tok).is_token());
     assert!(t.on_battlefield(tok));
     assert!(!t.on_battlefield(mine));
     assert!(t.on_battlefield(theirs));

@@ -77,6 +77,25 @@ pub fn activate_for_tokens(
     new_tokens(t, p, &before)
 }
 
+/// Casts Cytoshape for P0: `target` becomes a copy of `what` until end of turn.
+pub fn cytoshape(t: &mut TestGame, what: ObjectId, target: ObjectId) {
+    supported("Cytoshape");
+    lands_for(t, P0, "{1}{G}{U}");
+    let c = t.hand(P0, "Cytoshape");
+    t.answer_choose(P0, &[obj(what)]);
+    t.cast(P0, c).target(obj(target)).go();
+    t.resolve_all();
+}
+
+/// Makes `p`'s `id` a copy of P1's new Grizzly Bears until end of turn (Cytoshape): a
+/// copy effect that changed it, which a copy of its card after it changes zones mustn't
+/// see (CR 400.7).
+pub fn disguise_as_bears(t: &mut TestGame, id: ObjectId) {
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cytoshape(t, bears, id);
+    assert_eq!(name_of(t, id), "Grizzly Bears");
+}
+
 /// The only element of `v`.
 pub fn one(v: Vec<ObjectId>) -> ObjectId {
     assert_eq!(v.len(), 1, "expected one object, got {v:?}");

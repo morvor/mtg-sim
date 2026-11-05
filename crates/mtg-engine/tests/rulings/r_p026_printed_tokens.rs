@@ -395,7 +395,7 @@ fn command(
 
 #[test]
 fn command_tokens_copy_only_the_printed_permanent() {
-    cr!("707.2", "700.2");
+    cr!("707.2");
     ruling!(
         "Ashling's Command",
         "The token created by the first mode of Ashling's Command copies exactly what was printed on the original permanent and nothing else (unless that permanent is copying something else or is a token; see below)."
@@ -660,7 +660,7 @@ fn check_scenario(
 
 #[test]
 fn token_copy_triggers_copy_only_the_printed_permanent() {
-    cr!("707.2", "603.2", "603.3");
+    cr!("707.2");
     ruling!(
         "Cadric, Soul Kindler",
         "The token copies exactly what is printed on the permanent and nothing else (unless that creature is copying something else or is a token; see below)."
@@ -725,7 +725,7 @@ fn token_copy_triggers_copy_only_the_printed_permanent() {
 
 #[test]
 fn vesuvan_duplimancy_token_copies_only_the_printed_creature() {
-    cr!("707.2", "707.9b", "603.3");
+    cr!("707.2");
     ruling!(
         "Vesuvan Duplimancy",
         "The token copies exactly what was printed on the original artifact or creature and nothing else (unless that permanent is copying something else or is a token; see below)."
@@ -739,13 +739,12 @@ fn vesuvan_duplimancy_token_copies_only_the_printed_creature() {
     crate::r_p021_common::giant_growth(&mut t, P0, giant);
     let tok = one(new_tokens(&t, P0, &before));
     check_scenario("Vesuvan Duplimancy", &hill_giant(), (3, 3), false, tok, &t);
-    assert!(!legendary(&t, tok));
     assert_eq!(t.pt(giant), (13, 11));
 }
 
 #[test]
 fn benthic_anomaly_token_copies_only_the_printed_creature() {
-    cr!("707.2", "707.9b", "707.9d");
+    cr!("707.2", "707.9b");
     ruling!(
         "Benthic Anomaly",
         "The token copies exactly what was printed on the original card and nothing else, with the listed exceptions (unless that creature is itself copying something else; see below)."
@@ -811,7 +810,7 @@ fn felhide_spiritbinder_token_copies_only_the_printed_creature() {
 
 #[test]
 fn hofri_token_copies_only_the_printed_creature() {
-    cr!("707.2", "707.9b", "608.2h");
+    cr!("707.2", "707.9b");
     ruling!(
         "Hofri Ghostforge",
         "The token copies exactly what was printed on the original creature and nothing else (unless the creature was copying something else; see below)."
@@ -833,7 +832,7 @@ fn hofri_token_copies_only_the_printed_creature() {
 
 #[test]
 fn ashling_the_limitless_token_copies_only_the_printed_elemental() {
-    cr!("707.2", "608.2h");
+    cr!("707.2");
     ruling!(
         "Ashling, the Limitless",
         "The token created by Ashling's last ability copies exactly what was printed on the original permanent and nothing else (unless that creature was copying something else; see below)."
@@ -861,7 +860,7 @@ fn ashling_the_limitless_token_copies_only_the_printed_elemental() {
 
 #[test]
 fn twilight_diviner_token_copies_only_the_printed_permanent() {
-    cr!("707.2", "603.4");
+    cr!("707.2");
     ruling!(
         "Twilight Diviner",
         "The token created by Twilight Diviner's last ability copies exactly what was printed on the original permanent and nothing else (unless that permanent is copying something else; see below)."
@@ -888,7 +887,7 @@ fn twilight_diviner_token_copies_only_the_printed_permanent() {
 
 #[test]
 fn attacking_token_copies_copy_only_the_printed_creature() {
-    cr!("707.2", "508.4", "701.43a");
+    cr!("707.2", "508.4");
     ruling!(
         "Grub, Storied Matriarch // Grub, Notorious Auntie",
         "The token created by Grub, Notorious Auntie's second ability copies exactly what was printed on the original creature and nothing else, with the listed exception (unless that creature is copying something else or is a token; see below)."
@@ -920,6 +919,7 @@ fn attacking_token_copies_copy_only_the_printed_creature() {
         tok,
         &t,
     );
+    assert!(t.g.is_attacking(tok));
     // Sandstorm Crasher: exerted as it attacks, it copies the dressed-up Giant.
     supported("Sandstorm Crasher");
     let mut t = TestGame::new(2);
@@ -932,6 +932,7 @@ fn attacking_token_copies_copy_only_the_printed_creature() {
     t.attack(&[(crasher, Entity::Player(P1))], &[]);
     let tok = one(new_tokens(&t, P0, &before));
     check_scenario("Sandstorm Crasher", &hill_giant(), (3, 3), true, tok, &t);
+    assert!(t.g.is_attacking(tok));
 }
 
 #[test]
