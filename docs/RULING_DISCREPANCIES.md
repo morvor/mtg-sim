@@ -338,3 +338,8 @@ decides whether they become a conflict case.
 - **Work item ruling-conflicts-3** (separate): Run Out of Town (the ruling has the permanent's
   controller choose top or bottom, the Oracle text its owner) and Caller of the Untamed (the
   card to copy chosen during activation, against the decided `x-defined-by-target`).
+- **Araumi of the Dead Tide** (rulings-P024): its ruling (2020-11-10) lets any X be chosen
+  for the encore cost "equal to its mana cost", against CR 107.3h and the opposite rulings of
+  Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same
+  wording for scavenge. Left uncited; the texts are in `docs/agents/engine-gaps.md`,
+  "Apparent conflicts (Nov 5)".
