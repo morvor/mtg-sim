@@ -131,14 +131,17 @@ fn cast_triggers_resolve_even_if_the_spell_is_countered() {
         "April O'Neil, Human Element",
         "April's ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack."
     );
-    type Check = fn(&TestGame, ObjectId) -> bool;
-    let counter: Check = |t, src| t.counters(src, "+1/+1") == 1;
-    let mutagen: Check = |t, _| !tokens(t, P0).is_empty();
+    // (The check gets whether the spell was countered by P0's Counterspell, an instant
+    // that April O'Neil also triggers on.)
+    type Check = fn(&TestGame, ObjectId, bool) -> bool;
+    let counter: Check = |t, src, _| t.counters(src, "+1/+1") == 1;
+    let mutagen: Check = |t, _, _| tokens(t, P0).len() == 1;
+    let april: Check = |t, _, countered| tokens(t, P0).len() == if countered { 2 } else { 1 };
     let cases: Vec<(&str, &str, Check)> = vec![
         ("Mold Adder", "Opt", counter),
         ("Taurean Mauler", "Opt", counter),
         ("Mona Lisa, Ever Adaptable", "Grizzly Bears", mutagen),
-        ("April O'Neil, Human Element", "Opt", mutagen),
+        ("April O'Neil, Human Element", "Opt", april),
     ];
     for (perm, spell, check) in cases {
         for counter_first in [false, true] {
@@ -158,7 +161,7 @@ fn cast_triggers_resolve_even_if_the_spell_is_countered() {
                 t.resolve();
                 assert_eq!(t.zone(s), Zone::Stack, "{perm}: resolved first");
             }
-            assert!(check(&t, src), "{perm}");
+            assert!(check(&t, src, counter_first), "{perm}");
         }
     }
 }
@@ -263,6 +266,10 @@ fn soldier_of_the_pantheon_protection_from_multicolored() {
     t.answer_targets(P1, &[obj(soldier)]);
     let _ = t.cast_with(P1, helix, &[]);
     let candidates = crate::r_s02_common::target_candidates(&t, P1, from);
+    assert!(
+        candidates.iter().flatten().any(|e| *e == Entity::Player(P0)),
+        "P1 was asked for the Helix's target"
+    );
     assert!(!candidates.iter().flatten().any(|e| *e == obj(soldier)));
     assert!(t.on_battlefield(soldier));
 
@@ -274,9 +281,14 @@ fn soldier_of_the_pantheon_protection_from_multicolored() {
     attack_with(&mut t, &[(soldier, Entity::Player(P1))]);
     block_and_finish(&mut t, P1, &[(finks, soldier)]);
     assert_eq!(t.life(P1), 18, "unblocked");
-    t.advance_to(P1, Step::BeginningOfCombat);
+    // (A fresh game: the Soldier is still tapped from attacking.)
+    let mut t = TestGame::new(2);
+    let soldier = t.battlefield(P0, "Soldier of the Pantheon");
+    let finks = t.battlefield(P1, "Kitchen Finks");
+    t.set_step(P1, Step::BeginningOfCombat);
     attack_with(&mut t, &[(finks, Entity::Player(P0))]);
     block_and_finish(&mut t, P0, &[(soldier, finks)]);
+    assert_eq!(t.life(P0), 20, "the Soldier blocked the Finks");
     assert!(t.on_battlefield(soldier), "the Finks' damage was prevented");
     assert_eq!(t.obj_now(soldier).damage, 0);
 

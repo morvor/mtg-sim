@@ -475,19 +475,27 @@ fn harvestrite_host_a_countered_resolution_doesnt_count() {
     t.settle();
     destroy(&mut t, bears);
     t.resolve_all();
-    // Its second trigger this turn is the first to resolve: no card.
+    // A second Host enters: the first Host's ability triggers again (its first
+    // resolution this turn, as the fizzled one doesn't count), and so does the new
+    // Host's own (its first). Neither draws.
     let h = t.hand_size(P0);
     t.answer_targets(P0, &[obj(host)]);
-    t.enter(P0, "Harvestrite Host");
-    // (The new Host's own trigger targets the first Host too.)
     t.answer_targets(P0, &[obj(host)]);
+    let host2 = t.enter(P0, "Harvestrite Host");
     t.settle();
-    t.resolve();
-    assert_eq!(
-        t.hand_size(P0),
-        h,
-        "first resolution of the first Host's ability"
-    );
+    assert_eq!(triggers_from(&t, host) + triggers_from(&t, host2), 2);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), h, "no ability has resolved twice yet");
+    assert_eq!(t.pt(host), (5, 3), "both resolved, each giving +1/+0");
+    // A third Host: now the first Host's ability resolves for the second time (draw),
+    // the second Host's ability for the second time (draw), the third's for the first.
+    t.answer_targets(P0, &[obj(host)]);
+    t.answer_targets(P0, &[obj(host)]);
+    t.answer_targets(P0, &[obj(host)]);
+    t.enter(P0, "Harvestrite Host");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), h + 2);
 }
 
 #[test]
