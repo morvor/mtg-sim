@@ -1629,6 +1629,7 @@ Back in Town
 Back on Track
 Back to Basics
 Back to Nature
+Backdraft
 Backdraft Hellkite
 Backfire
 Backlash
@@ -9858,6 +9859,7 @@ Gluttonous Zombie
 Glyph Elemental
 Glyph Keeper
 Glyph of Destruction
+Glyph of Reincarnation
 Glóin the Mighty // Easy Pickings
 Glóin, Dwarf Emissary
 Gnarlback Rhino

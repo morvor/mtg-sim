@@ -820,6 +820,10 @@ impl Renderer<'_> {
                     (BlockRel::BlockedBy, false) => format!("blocked by {s}"),
                     (BlockRel::BlockingOrBlockedBy, false) => format!("blocking or blocked by {s}"),
                     (BlockRel::Blocking, true) => format!("that blocked {s}{w}"),
+                    // "that target Wall blocked this turn" (Glyph of Delusion).
+                    (BlockRel::BlockedBy, true) if matches!(other.as_ref(), Sel::Target(_)) => {
+                        format!("{{alt:that were blocked by {s}{w}|that {s} blocked{w}}}")
+                    }
                     (BlockRel::BlockedBy, true) => format!("that were blocked by {s}{w}"),
                     (BlockRel::BlockingOrBlockedBy, true) => {
                         format!("that blocked or were blocked by {s}{w}")
@@ -1158,6 +1162,26 @@ impl Renderer<'_> {
                 np.kind = Some("activated and triggered ability");
                 np.other = true;
                 np.zone_said = true;
+            }
+            // "from the graveyard of the player who controlled that creature the last time
+            // it became blocked by that Wall" (Glyph of Reincarnation, `kw/block_history.rs`).
+            Filter::Custom(name)
+                if name.starts_with(crate::kw::block_history::OWNED_BY_CONTROLLER_WHEN_BLOCKED) =>
+            {
+                let slot = name[crate::kw::block_history::OWNED_BY_CONTROLLER_WHEN_BLOCKED.len()..]
+                    .split(':')
+                    .next()
+                    .and_then(|x| x.parse::<usize>().ok());
+                let that = slot
+                    .and_then(|i| self.targets.get(i))
+                    .and_then(|t| t.text.strip_prefix("target "))
+                    .map(|n| format!("that {n}"))
+                    .unwrap_or_else(|| "that creature".into());
+                np.post.push(format!(
+                    "from the graveyard of the player who controlled that creature the last time it became blocked by {that}"
+                ));
+                // (The card is in that graveyard: the zone is said by the phrase.)
+                np.zone = None;
             }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {

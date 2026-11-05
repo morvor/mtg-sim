@@ -536,6 +536,11 @@ pub struct TurnHistory {
     /// Recorded by `kw/block_history.rs`.
     #[serde(default)]
     pub blocks: Vec<(ObjectId, ObjectId, PlayerId)>,
+    /// The pairs of `blocks` whose blocker was put onto the battlefield blocking that
+    /// attacker (and hasn't blocked it otherwise since): it's "blocking", but for effects
+    /// it never "blocked" (CR 509.4). Recorded by `kw/block_history.rs`.
+    #[serde(default)]
+    pub entered_blocking: Vec<(ObjectId, ObjectId)>,
     /// The timestamp as the turn began: a permanent whose `control_since` is earlier has
     /// been controlled continuously by its controller since the beginning of the turn.
     #[serde(default)]

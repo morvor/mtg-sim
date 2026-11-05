@@ -72,6 +72,18 @@ impl Renderer<'_> {
         }
         let s = self.condition(&c2);
         if let Some(r) = s.strip_prefix("you've ") {
+            // "who cast one or more sorcery spells this turn" (Backdraft).
+            if let Some(n) = r
+                .strip_prefix("cast a ")
+                .or_else(|| r.strip_prefix("cast an "))
+                .and_then(|n| n.strip_suffix(" this turn"))
+                .filter(|n| n.ends_with(" spell") && !n.contains('{'))
+            {
+                return format!(
+                    "{{alt:who has {r}|who cast one or more {} this turn}}",
+                    plural(n)
+                );
+            }
             return format!("who has {r}");
         }
         if let Some(r) = s.strip_prefix("you were ") {
