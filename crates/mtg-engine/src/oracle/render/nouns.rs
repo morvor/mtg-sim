@@ -820,6 +820,10 @@ impl Renderer<'_> {
                     (BlockRel::BlockedBy, false) => format!("blocked by {s}"),
                     (BlockRel::BlockingOrBlockedBy, false) => format!("blocking or blocked by {s}"),
                     (BlockRel::Blocking, true) => format!("that blocked {s}{w}"),
+                    // "that target Wall blocked this turn" (Glyph of Delusion).
+                    (BlockRel::BlockedBy, true) if matches!(other.as_ref(), Sel::Target(_)) => {
+                        format!("{{alt:that were blocked by {s}{w}|that {s} blocked{w}}}")
+                    }
                     (BlockRel::BlockedBy, true) => format!("that were blocked by {s}{w}"),
                     (BlockRel::BlockingOrBlockedBy, true) => {
                         format!("that blocked or were blocked by {s}{w}")

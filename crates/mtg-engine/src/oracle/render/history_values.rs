@@ -165,6 +165,19 @@ impl Renderer<'_> {
                     "the {{opt:amount of}} {combat}damage {{opt:already}} dealt to {p} this turn"
                 )
             }
+            // "the damage dealt by one of those sorcery spells this turn" (Backdraft): by
+            // an object remembered, to anything.
+            (
+                TriggerCond::DealsDamage {
+                    source: Filter::In(s),
+                    to: DamageRecipient::Any,
+                    combat_only: false,
+                },
+                Tally::Amount,
+            ) => {
+                let by = self.sel(s, Case::Obj);
+                format!("the {{opt:amount of}} damage dealt by {by} this turn")
+            }
             (TriggerCond::DealsDamage { source, to, .. }, Tally::Amount) => {
                 let to = match to {
                     DamageRecipient::Player(r) => self.rel_object(*r),
