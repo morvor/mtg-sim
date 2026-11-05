@@ -221,7 +221,7 @@ fn the_owner_chooses_top_or_bottom_for_aether_gust_desynchronize_and_unlucky_dro
 /// Run Out of Town's Oracle text has the owner choose top or bottom ("The owner of target
 /// nonland permanent puts it on their choice of the top or bottom of their library."). Its
 /// ruling (2022-04-29) says the permanent's controller chooses, where the same note in the
-/// Streets of New Capenna Release Notes (2022-04-20) says its owner: a transcription error,
+/// Streets of New Capenna Release Notes (2022-04-20) says its owner: a copying error,
 /// which gives way to the Oracle text (exempt in docs/rulings-exemptions/rulings-P140.tsv,
 /// logged in docs/RULING_DISCREPANCIES.md). The ruling's third sentence is cited below.
 #[test]

@@ -131,7 +131,7 @@ fn sanguine_spy_counts_mana_values_among_cards_in_your_graveyard() {
     // among cards in your graveyard, you may pay 2 life. If you do, draw a card." Its ruling
     // (2022-04-29) counts them "among cards you control", where the same note in the
     // Streets of New Capenna Release Notes (2022-04-20) says "among cards in your
-    // graveyard" (a transcription error; exempt in docs/rulings-exemptions/rulings-P093.tsv).
+    // graveyard" (a copying error; exempt in docs/rulings-exemptions/rulings-P093.tsv).
     // What it says of the check holds: it's made as the ability triggers and again as it
     // resolves.
     ruling!(
