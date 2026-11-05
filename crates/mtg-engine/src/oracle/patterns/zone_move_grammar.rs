@@ -1117,7 +1117,9 @@ fn item(s: &str, b: &mut Builder, subject: &Subject) -> Option<(Item, String)> {
                         && matches!(f.zone(), None)
                         && matches!(f, Filter::Or(_) | Filter::And(_))
                         && format!("{f:?}").matches("InZone").count() > 1
-                        && !rest.trim_start().starts_with("from your graveyard or from exile")
+                        && !rest
+                            .trim_start()
+                            .starts_with("from your graveyard or from exile")
                     {
                         return None;
                     }
@@ -1578,8 +1580,7 @@ fn modifiers<'a>(
         } else if let Some(r) = strip_word(t, "under your control") {
             to.controller = Some(PlayerRef::You);
             s = r;
-        } else if let Some(r) = strip_word(t, "face up")
-        {
+        } else if let Some(r) = strip_word(t, "face up") {
             // "Put a creature card ... onto the battlefield face up" (Dermoplasm): as
             // permanents normally enter.
             if to.zone != ZoneKind::Battlefield || to.face_down {
@@ -2139,8 +2140,11 @@ pub fn self_move_zone(effect: &str) -> Option<FunctionZone> {
             if let Some(list) = after.strip_prefix(" and ") {
                 // The zone named once for the list ("~ and up to one other target creature
                 // card from your graveyard").
+                // (Not the "to" of "up to one".)
                 let stop = list
-                    .find(" to ")
+                    .match_indices(" to ")
+                    .map(|(i, _)| i)
+                    .find(|i| !list[..*i].ends_with(" up") && !list[..*i].eq("up"))
                     .or_else(|| list.find(" onto "))
                     .unwrap_or(list.len());
                 if list[..stop].ends_with(" from your graveyard") {

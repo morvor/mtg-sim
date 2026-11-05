@@ -230,6 +230,7 @@ pub fn lock_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> PlayerFilter {
                 // "that planeswalker's controller", "that player": the players they are as
                 // the effect is created.
                 PlayerRef::TriggerPlayer
+                | PlayerRef::TriggerMover
                 | PlayerRef::Iterated
                 | PlayerRef::ControllerOf(_)
                 | PlayerRef::OwnerOf(_) => g.eval_players(r, ctx).into_iter().collect(),
