@@ -1033,7 +1033,15 @@ impl Game {
                     }
                 }
             }
-            self.exec(&e, &mut c);
+            // CR 614.5: the replacement effects that already applied to the event this
+            // effect replaced don't apply to the events it causes.
+            if c.repl_applied.is_empty() {
+                self.exec(&e, &mut c);
+            } else {
+                self.repl_context.push(std::mem::take(&mut c.repl_applied));
+                self.exec(&e, &mut c);
+                self.repl_context.pop();
+            }
         }
     }
 

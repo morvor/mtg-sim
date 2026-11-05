@@ -1238,6 +1238,8 @@ impl Game {
             (ReplacementEvent::LoseLife(pf), ReplEvent::LoseLife { player, amount, .. }) => {
                 *amount > 0 && self.player_filter_matches(pf, *player, ctx)
             }
+            // "Damage that would reduce your life total ...": with a shared team life
+            // total, damage dealt to a teammate reduces it too (CR 810.9a).
             (
                 ReplacementEvent::LifeLossFromDamage(pf),
                 ReplEvent::LoseLife {
@@ -1245,7 +1247,12 @@ impl Game {
                     amount,
                     from_damage: true,
                 },
-            ) => *amount > 0 && self.player_filter_matches(pf, *player, ctx),
+            ) => {
+                *amount > 0
+                    && crate::life_totals::life_scope(self, *player)
+                        .into_iter()
+                        .any(|q| self.player_filter_matches(pf, q, ctx))
+            }
             (
                 ReplacementEvent::PutCounters {
                     on_objects,
@@ -2354,6 +2361,7 @@ impl Game {
                 if !matches!(ev, ReplEvent::Draw { .. } | ReplEvent::Action { .. })
                     && crate::draw_rules::draws_cards(&effect)
                 {
+                    c.repl_applied = applied.to_vec();
                     self.post_replacement_effects.push((c, *effect));
                     return vec![];
                 }
