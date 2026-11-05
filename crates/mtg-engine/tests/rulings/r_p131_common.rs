@@ -45,3 +45,17 @@ pub fn cast(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> Ob
 pub fn in_yard(t: &TestGame, p: PlayerId, name: &str) -> ObjectId {
     t.g.find_in_zone(object::Zone::Graveyard(p), name)[0]
 }
+
+/// `p` answers every "Choose a creature type" choice with Vampire.
+pub fn choose_vampire(t: &mut TestGame, p: PlayerId) {
+    use mtg_engine::decision::{Answer, Decision};
+    crate::r_s03_common::respond(t, p, |_, d| match d {
+        Decision::ChooseOption {
+            prompt, options, ..
+        } if prompt == "Choose a creature type" => options
+            .iter()
+            .position(|o| o == "Vampire")
+            .map(Answer::Index),
+        _ => None,
+    });
+}
