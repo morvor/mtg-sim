@@ -464,7 +464,7 @@ fn primal_commands_modes_happen_in_order_so_the_tucked_card_is_shuffled_away() {
     let ev = &t.g.turn_events[mark..];
     let moved = ev
         .iter()
-        .position(|e| matches!(e, Event::ZoneChange { to: Zone::Library(_), .. }))
+        .position(|e| matches!(e, Event::ZoneChange { old, to: Zone::Library(_), .. } if *old == stone))
         .expect("tucked");
     let shuffled = ev
         .iter()
@@ -539,4 +539,44 @@ fn modal_charms_have_only_the_chosen_modes_targets() {
     assert_eq!(offered_modes(&mut t, bant), vec![0], "Bant Charm: only the artifact mode");
     let naya = t.hand(P0, "Naya Charm");
     assert_eq!(offered_modes(&mut t, naya), vec![2], "Naya Charm: only the player mode");
+}
+
+#[test]
+fn trial_of_a_time_lord_returns_the_cards_not_put_on_the_bottom() {
+    cr!("610.3", "714.4", "701.38a");
+    ruling!(
+        "Trial of a Time Lord",
+        "The cards that didn't get put on the bottom of their owners' libraries will return to the battlefield as Trial of a Time Lord leaves the battlefield."
+    );
+    supported("Trial of a Time Lord");
+    for guilty in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.answer_targets(P0, &[obj(bears)]);
+        let trial = t.enter(P0, "Trial of a Time Lord");
+        t.resolve_all();
+        assert_eq!(zone_of(&t, bears), Zone::Exile);
+        t.answer_targets(P0, &[obj(giant)]);
+        crate::r_s19_common::add_lore(&mut t, trial, 1);
+        t.resolve_all();
+        assert_eq!(zone_of(&t, giant), Zone::Exile);
+        crate::r_s19_common::add_lore(&mut t, trial, 1);
+        t.resolve_all();
+        for p in [P0, P1] {
+            t.answer(p, DecisionKind::Option, Answer::Index(guilty as usize));
+        }
+        crate::r_s19_common::add_lore(&mut t, trial, 1);
+        t.resolve_all();
+        assert!(t.in_graveyard(P0, "Trial of a Time Lord"), "sacrificed after IV");
+        for c in [bears, giant] {
+            let z = zone_of(&t, c);
+            if guilty {
+                assert_eq!(z, Zone::Library(P1), "guilty: on the bottom");
+                assert_eq!(from_top(&t, P1, c).map(|i| i + 2 >= t.library_size(P1)), Some(true));
+            } else {
+                assert_eq!(z, Zone::Battlefield, "innocent: back as the Saga leaves");
+            }
+        }
+    }
 }

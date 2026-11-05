@@ -516,21 +516,29 @@ fn golden_guardians_fight_needs_both() {
         "If the target of Golden Guardian's activated ability isn't a legal target as that ability resolves, or if Golden Guardian has left the battlefield, neither creature will deal or be dealt damage."
     );
     supported("Golden Guardian // Gold-Forge Garrison");
-    for gone in ["target", "guardian"] {
+    for gone in ["target", "guardian", "neither"] {
         let mut t = TestGame::new(2);
         let g = t.battlefield(P0, "Golden Guardian // Gold-Forge Garrison");
         let giant = t.battlefield(P0, "Hill Giant");
         activate_lots(&mut t, P0, g, 0, &[obj(giant)]);
-        if gone == "target" {
-            move_to(&mut t, giant, Zone::Hand(P0));
-        } else {
-            move_to(&mut t, g, Zone::Hand(P0));
+        match gone {
+            "target" => {
+                move_to(&mut t, giant, Zone::Hand(P0));
+            }
+            "guardian" => {
+                move_to(&mut t, g, Zone::Hand(P0));
+            }
+            _ => {}
         }
         t.resolve_all();
-        if gone == "target" {
-            assert_eq!(t.obj(g).damage, 0);
-        } else {
-            assert_eq!(t.obj(giant).damage, 0);
+        match gone {
+            "target" => assert_eq!(t.obj(g).damage, 0),
+            "guardian" => assert_eq!(t.obj(giant).damage, 0),
+            // Positive control: they fight (the Giant dies; the Guardian is dealt 3).
+            _ => {
+                assert!(t.in_graveyard(P0, "Hill Giant"));
+                assert_eq!(t.obj(g).damage, 3);
+            }
         }
     }
 }
