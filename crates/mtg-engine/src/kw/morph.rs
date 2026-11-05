@@ -36,11 +36,14 @@ impl KeywordRules for Morph {
         // morph ability of the card it is (CR 406.3a: "unless that card is being cast face
         // down"; Colfenor's Plans's ruling: "If an exiled card has morph, you may cast it
         // face down").
-        if (o.face_down && o.zone == Zone::Battlefield)
-            || !g
-                .characteristics_to_cast(card)
-                .has_keyword(KeywordKind::Morph)
-        {
+        let has_morph = if o.face_down {
+            o.zone != Zone::Battlefield
+                && g.characteristics_to_cast(card)
+                    .has_keyword(KeywordKind::Morph)
+        } else {
+            o.chars.has_keyword(KeywordKind::Morph)
+        };
+        if !has_morph {
             return vec![];
         }
         let mut opt = CastOption::normal(FaceState::Front);

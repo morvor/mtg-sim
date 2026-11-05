@@ -31,11 +31,14 @@ impl KeywordRules for Disguise {
         let o = g.obj(card);
         // A card exiled face down that may be played can be cast face down with the
         // disguise ability of the card it is (CR 406.3a, 702.168b), as in `kw/morph.rs`.
-        if (o.face_down && o.zone == Zone::Battlefield)
-            || !g
-                .characteristics_to_cast(card)
-                .has_keyword(KeywordKind::Disguise)
-        {
+        let has_disguise = if o.face_down {
+            o.zone != Zone::Battlefield
+                && g.characteristics_to_cast(card)
+                    .has_keyword(KeywordKind::Disguise)
+        } else {
+            o.chars.has_keyword(KeywordKind::Disguise)
+        };
+        if !has_disguise {
             return vec![];
         }
         let mut opt = CastOption::normal(FaceState::Front);
