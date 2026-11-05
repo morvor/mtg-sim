@@ -338,6 +338,7 @@ fn chronatog_can_be_activated_only_once_each_turn() {
 #[test]
 fn sacrificing_the_creature_to_its_own_ability_gives_no_bonus() {
     cr!("602.2", "701.21a", "608.2b");
+    interp!("cost-moved-source-found-only-by-own-cost");
     ruling!(
         "Bloodthrone Vampire",
         "You can sacrifice Bloodthrone Vampire to activate its own ability, but it won't be on the battlefield to get the bonus."
@@ -350,7 +351,11 @@ fn sacrificing_the_creature_to_its_own_ability_gives_no_bonus() {
         "Vampire Aristocrat",
         "You can sacrifice Vampire Aristocrat to activate its own ability, but it won't be around to get the bonus."
     );
-    for name in ["Bloodthrone Vampire", "Nantuko Husk", "Vampire Aristocrat"] {
+    for (name, printed) in [
+        ("Bloodthrone Vampire", (1, 1)),
+        ("Nantuko Husk", (2, 2)),
+        ("Vampire Aristocrat", (2, 2)),
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         let id = t.battlefield(P0, name);
@@ -360,6 +365,11 @@ fn sacrificing_the_creature_to_its_own_ability_gives_no_bonus() {
         assert!(t.in_graveyard(P0, name), "{name}");
         assert_eq!(t.pt(other), (2, 2), "{name}");
         assert!(t.stack.is_empty());
+        // The card it became in the graveyard gets no bonus either: "Sacrifice a
+        // creature" paid with the source doesn't make "~" in the effect mean that card
+        // (interpretation cost-moved-source-found-only-by-own-cost).
+        t.g.recompute();
+        assert_eq!(t.pt(id), printed, "{name} in the graveyard");
     }
 }
 
