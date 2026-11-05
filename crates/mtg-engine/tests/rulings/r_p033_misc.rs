@@ -65,7 +65,10 @@ fn council_of_the_absolute_reduces_generic_mana_only() {
 
 #[test]
 fn council_of_the_absolute_names_one_half_of_a_split_card() {
-    cr!("201.4", "709.3", "702.102c", "601.2f");
+    cr!("201.4", "201.4b", "709.3", "702.102c", "601.2f");
+    // Naming both halves isn't a choice the player may make: the answer is invalid, and
+    // an invalid card name names nothing.
+    interp!("default-card-name");
     ruling!(
         "Council of the Absolute",
         "If you name half of a split card with fuse, and then you cast both halves, the cost reduction will apply to the total cost of the spell. This is true even if the half with the chosen name requires only colored mana to cast."
@@ -104,7 +107,11 @@ fn council_of_the_absolute_names_one_half_of_a_split_card() {
     let stone = t.battlefield(P0, "Mind Stone");
     let anthem = t.battlefield(P0, "Glorious Anthem");
     t.set_step(P1, Step::PrecombatMain);
-    for (method, ok) in [(CastMethod::Half(1), false), (fused.clone(), false), (CastMethod::Half(0), true)] {
+    for (method, ok) in [
+        (CastMethod::Half(1), false),
+        (fused.clone(), false),
+        (CastMethod::Half(0), true),
+    ] {
         let wt = t.hand(P1, WT);
         t.clear_answers();
         t.answer_targets(P1, &[obj(stone)]);
@@ -166,7 +173,10 @@ fn cheering_fanatic_may_name_any_card() {
 #[test]
 fn seal_of_the_guildpact_two_different_colors_reduce_generic_mana_only() {
     cr!("105.4", "601.2f", "118.7a", "202.3");
-    ruling!("Seal of the Guildpact", "You must choose two different colors.");
+    ruling!(
+        "Seal of the Guildpact",
+        "You must choose two different colors."
+    );
     ruling!(
         "Seal of the Guildpact",
         "Seal of the Guildpact's last ability can't reduce the amount of colored mana you pay for a spell. It reduces only the generic component of that cost."
@@ -190,9 +200,11 @@ fn seal_of_the_guildpact_two_different_colors_reduce_generic_mana_only() {
         })
         .expect("asked for the colors");
     assert_eq!(options.len(), 10, "{options:?}");
+    let five = ["white", "blue", "black", "red", "green"];
     for o in &options {
         let words: Vec<&str> = o.split(" and ").collect();
         assert!(words.len() == 2 && words[0] != words[1], "{o}");
+        assert!(words.iter().all(|w| five.contains(w)), "{o}");
     }
     let colors = t.obj(seal).choices.colors.unwrap();
     assert!(colors.contains(Color::Red) && colors.contains(Color::Green));
@@ -226,13 +238,14 @@ fn gravebreaker_lamia_doesnt_let_you_cast_cards_from_your_graveyard() {
     // {1}{R}.
     let sc = t.graveyard(P0, "Satyr's Cunning");
     t.graveyard(P0, "Kird Ape");
-    let paid = cast_paying(&mut t, P0, sc, CastMethod::Keyword(KeywordKind::Escape)).expect("escape");
+    let paid =
+        cast_paying(&mut t, P0, sc, CastMethod::Keyword(KeywordKind::Escape)).expect("escape");
     assert_spent(&paid.spent, "{1}{R}", "escaped Satyr's Cunning");
     t.resolve_all();
     // Think Twice's flashback {2}{U}: {1}{U}.
     let tt = t.graveyard(P0, "Think Twice");
-    let paid =
-        cast_paying(&mut t, P0, tt, CastMethod::Keyword(KeywordKind::Flashback)).expect("flashback");
+    let paid = cast_paying(&mut t, P0, tt, CastMethod::Keyword(KeywordKind::Flashback))
+        .expect("flashback");
     assert_spent(&paid.spent, "{1}{U}", "Think Twice flashback");
 }
 
@@ -257,8 +270,8 @@ fn fortune_tellers_talent_reduces_generic_mana_of_spells_cast_from_elsewhere() {
     t.resolve_all();
     // From the graveyard: Think Twice's flashback {2}{U}: {U} (its {U} stays).
     let tt = t.graveyard(P0, "Think Twice");
-    let paid =
-        cast_paying(&mut t, P0, tt, CastMethod::Keyword(KeywordKind::Flashback)).expect("flashback");
+    let paid = cast_paying(&mut t, P0, tt, CastMethod::Keyword(KeywordKind::Flashback))
+        .expect("flashback");
     assert_spent(&paid.spent, "{U}", "Think Twice flashback");
     t.resolve_all();
     // From the top of the library: Hieroglyphic Illumination ({3}{U}): {1}{U}.
@@ -293,15 +306,14 @@ fn gavi_free_cycling_makes_x_zero_and_its_draw_trigger_is_once_a_turn() {
     cycle(&mut t, P0, shark, 0).expect("cycle for {0}");
     assert_eq!(crate::r_p046_common::pool(&t, P0), before, "mana was paid");
     t.resolve_all();
-    let created: Vec<ObjectId> = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::TokenCreated { obj, .. } => Some(*obj),
-            _ => None,
-        })
-        .collect();
+    let created: Vec<ObjectId> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::TokenCreated { obj, .. } => Some(*obj),
+                _ => None,
+            })
+            .collect();
     assert_eq!(created.len(), 1, "a Shark was created");
     assert!(with_subtype(&t, P0, "Shark").is_empty(), "a 0/0 Shark dies");
     // "Whenever you draw your second card each turn, create a 2/2 red and white Dinosaur
@@ -523,7 +535,10 @@ fn a_spell_is_historic_or_it_isnt() {
     // A legendary creature is historic too: Thalia ({1}{W}) costs {W}, one card. A Saga
     // as well: The Mirari Conjecture ({4}{U}) costs {3}{U}, one card.
     // (The Saga first: Thalia makes noncreature spells cost {1} more.)
-    for (name, cost) in [("The Mirari Conjecture", "{3}{U}"), ("Thalia, Guardian of Thraben", "{W}")] {
+    for (name, cost) in [
+        ("The Mirari Conjecture", "{3}{U}"),
+        ("Thalia, Guardian of Thraben", "{W}"),
+    ] {
         let hand = t.hand_size(P0);
         let paid = cast(&mut t, P0, name);
         assert_spent(&paid.spent, cost, name);
@@ -665,7 +680,10 @@ fn eye_of_ugin_has_no_mana_ability_and_finds_colorless_creature_cards() {
                 _ => None,
             })
             .unwrap_or_default();
-        assert!(offered.contains(&obj(thopter)), "Lattice {lattice}: {offered:?}");
+        assert!(
+            offered.contains(&obj(thopter)),
+            "Lattice {lattice}: {offered:?}"
+        );
         assert_eq!(offered.contains(&obj(bears)), lattice, "Lattice {lattice}");
         assert_eq!(t.in_hand(P0, "Grizzly Bears"), lattice);
     }
@@ -731,7 +749,10 @@ fn umori_ignores_the_types_of_land_cards() {
     // with Dryad Arbor (a land creature) and Seat of the Synod (an artifact land): Umori
     // can be the companion. With a Mind Stone (a nonland artifact) it can't.
     for (others, ok) in [
-        (&["Dryad Arbor", "Seat of the Synod", "Seat of the Synod"][..], true),
+        (
+            &["Dryad Arbor", "Seat of the Synod", "Seat of the Synod"][..],
+            true,
+        ),
         (&["Dryad Arbor", "Mind Stone"][..], false),
     ] {
         let mut t = crate::r_s12_common::pregame(
@@ -834,14 +855,20 @@ fn ferrafor_counts_counters_as_its_ability_resolves() {
     // it triggers, three as it resolves: three Saprolings.
     let mut t = main_phase(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    t.g.objects[bears.0 as usize].counters.insert("+1/+1".into(), 1);
+    t.g.objects[bears.0 as usize]
+        .counters
+        .insert("+1/+1".into(), 1);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.enter(P0, "Ferrafor, Young Yew");
     t.settle();
     assert_eq!(t.stack_len(), 1);
     let wurm = t.battlefield(P1, "Craw Wurm");
-    t.g.objects[wurm.0 as usize].counters.insert("-1/-1".into(), 1);
-    t.g.objects[bears.0 as usize].counters.insert("+1/+1".into(), 2);
+    t.g.objects[wurm.0 as usize]
+        .counters
+        .insert("-1/-1".into(), 1);
+    t.g.objects[bears.0 as usize]
+        .counters
+        .insert("+1/+1".into(), 2);
     t.g.recompute();
     t.resolve_all();
     assert_eq!(with_subtype(&t, P0, "Saproling").len(), 3);
@@ -857,7 +884,9 @@ fn umezawas_jitte_announces_the_target_of_its_minus_mode() {
     supported("Umezawa's Jitte");
     let mut t = main_phase(2);
     let jitte = t.battlefield(P0, "Umezawa's Jitte");
-    t.g.objects[jitte.0 as usize].counters.insert("charge".into(), 1);
+    t.g.objects[jitte.0 as usize]
+        .counters
+        .insert("charge".into(), 1);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
     t.answer_targets(P0, &[obj(bears)]);
@@ -875,7 +904,9 @@ fn umezawas_jitte_announces_the_target_of_its_minus_mode() {
     // With no creature to target, that mode can't be chosen: the queued mode isn't used.
     let mut t = main_phase(2);
     let jitte = t.battlefield(P0, "Umezawa's Jitte");
-    t.g.objects[jitte.0 as usize].counters.insert("charge".into(), 1);
+    t.g.objects[jitte.0 as usize]
+        .counters
+        .insert("charge".into(), 1);
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
     if let Ok(Some(ab)) = activate_containing(&mut t, P0, jitte, "Choose one") {
         let si = t.obj(ab).stack.as_ref().unwrap();
@@ -902,7 +933,9 @@ fn charge_counter_artifacts_stay_once_out_of_counters() {
     for name in ["Surge Node", "Tumble Magnet"] {
         let mut t = main_phase(2);
         let a = t.battlefield(P0, name);
-        t.g.objects[a.0 as usize].counters.insert("charge".into(), 1);
+        t.g.objects[a.0 as usize]
+            .counters
+            .insert("charge".into(), 1);
         let stone = t.battlefield(P0, "Mind Stone");
         t.lands(P0, "Wastes", 1);
         t.answer_targets(P0, &[obj(stone)]);

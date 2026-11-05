@@ -62,7 +62,10 @@ fn second_spell_reducers_count_spells_cast_before_they_entered_but_not_themselve
         "Raging Battle Mouse's cost-reduction ability doesn't change the mana cost or mana value of any spell. It changes only the total cost you pay."
     );
     // "The second spell you cast each turn costs {1} less to cast."
-    for (reducer, own) in [("Highspire Bell-Ringer", "{2}{U}"), ("Raging Battle Mouse", "{1}{R}")] {
+    for (reducer, own) in [
+        ("Highspire Bell-Ringer", "{2}{U}"),
+        ("Raging Battle Mouse", "{1}{R}"),
+    ] {
         supported(reducer);
         // Cast first: full cost; the next spell is the second: Divination ({2}{U}) costs
         // {1}{U}, mana value 3; the third costs {2}{U}.
@@ -77,7 +80,11 @@ fn second_spell_reducers_count_spells_cast_before_they_entered_but_not_themselve
         let mut t = main_phase(2);
         t.battlefield(P0, reducer);
         costs(&mut t, "Opt", "{U}", reducer);
-        let cheaper = if reducer == "Raging Battle Mouse" { "{R}" } else { "{1}{U}" };
+        let cheaper = if reducer == "Raging Battle Mouse" {
+            "{R}"
+        } else {
+            "{1}{U}"
+        };
         costs(&mut t, reducer, cheaper, reducer);
         // The second spell with only colored mana: Opt still costs {U}.
         let mut t = main_phase(2);
@@ -148,7 +155,12 @@ fn radagast_looks_at_the_whole_turn_and_reduces_only_generic_mana() {
     let mut t = main_phase(2);
     costs(&mut t, "Grizzly Bears", "{1}{G}", "before Radagast");
     t.battlefield(P0, "Radagast of Rhosgobel");
-    costs(&mut t, "Craw Wurm", "{4}{G}{G}", "the second creature spell");
+    costs(
+        &mut t,
+        "Craw Wurm",
+        "{4}{G}{G}",
+        "the second creature spell",
+    );
     // A noncreature spell doesn't count: the first creature spell costs {2} less, mana
     // value unchanged.
     let mut t = main_phase(2);
@@ -184,7 +196,12 @@ fn hardened_berserker_cant_reduce_colored_mana() {
     t.answer_targets(P0, &[Entity::Player(P1)]);
     costs(&mut t, "Lightning Bolt", "{R}", "Lightning Bolt");
     let mut t = attacked();
-    costs(&mut t, "Hieroglyphic Illumination", "{2}{U}", "Hieroglyphic Illumination");
+    costs(
+        &mut t,
+        "Hieroglyphic Illumination",
+        "{2}{U}",
+        "Hieroglyphic Illumination",
+    );
     // Without the attack: {3}{U}.
     let mut t = main_phase(2);
     t.battlefield(P0, "Hardened Berserker");

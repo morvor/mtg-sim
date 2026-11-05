@@ -1,7 +1,8 @@
 //! Rulings batch P033 — the total cost of a spell with cost reductions (CR 601.2f, 118.9d):
 //! start with the mana cost or the alternative cost being paid, add additional costs and
-//! cost increases, then apply the reductions; X has its value before the reductions apply
-//! (CR 107.3b); the mana value stays that of the mana cost (CR 202.3).
+//! cost increases, then apply the reductions; X is announced before the reductions apply
+//! (CR 601.2b), and a reduction, even to {0}, doesn't make it 0 (CR 107.3b); the mana value
+//! stays that of the mana cost (CR 202.3).
 //!
 //! Many tests use the same discriminating setup: P1's God-Pharaoh's Statue ("Spells your
 //! opponents cast cost {2} more to cast") and P0's Omniscience ("You may cast spells from
@@ -73,7 +74,11 @@ fn reductions_apply_after_increases_to_the_alternative_cost_being_paid() {
         supported(reducer);
         let paid = free_with_statue(&[reducer], spell);
         assert_spent(&paid.spent, free, reducer);
-        assert_eq!(paid.mv, printed_mv(spell), "{reducer}: {spell}'s mana value");
+        assert_eq!(
+            paid.mv,
+            printed_mv(spell),
+            "{reducer}: {spell}'s mana value"
+        );
         // Positive control: without the reducer it costs {2}.
         let paid = free_with_statue(&[], spell);
         assert_spent(&paid.spent, "{2}", spell);
@@ -83,7 +88,11 @@ fn reductions_apply_after_increases_to_the_alternative_cost_being_paid() {
         t.battlefield(P0, reducer);
         let card = t.hand(P0, spell);
         let paid = cast_normal(&mut t, P0, card);
-        assert_spent(&paid.spent, normal, &format!("{reducer}: {spell} for its mana cost"));
+        assert_spent(
+            &paid.spent,
+            normal,
+            &format!("{reducer}: {spell} for its mana cost"),
+        );
         assert_eq!(paid.mv, printed_mv(spell));
     }
 }
@@ -110,8 +119,8 @@ fn sage_of_the_beyond_reduces_an_escape_cost_after_the_increase() {
         for _ in 0..8 {
             t.graveyard(P0, "Grizzly Bears");
         }
-        let paid = cast_paying(&mut t, P0, ox, CastMethod::Keyword(KeywordKind::Escape))
-            .expect("escape");
+        let paid =
+            cast_paying(&mut t, P0, ox, CastMethod::Keyword(KeywordKind::Escape)).expect("escape");
         assert_spent(&paid.spent, cost, "Ox of Agonas");
         assert_eq!(paid.mv, 5);
     }
@@ -131,8 +140,8 @@ fn cloud_key_reduces_flashback_and_kicked_costs() {
     t.resolve_all();
     // Think Twice's flashback {2}{U}: {1}{U}; mana value 2.
     let tt = t.graveyard(P0, "Think Twice");
-    let paid =
-        cast_paying(&mut t, P0, tt, CastMethod::Keyword(KeywordKind::Flashback)).expect("flashback");
+    let paid = cast_paying(&mut t, P0, tt, CastMethod::Keyword(KeywordKind::Flashback))
+        .expect("flashback");
     assert_spent(&paid.spent, "{1}{U}", "Think Twice flashback");
     assert_eq!(paid.mv, 2);
     t.resolve_all();
@@ -205,7 +214,11 @@ fn kicker_and_thalias_increase_are_added_before_reductions() {
     let bolt = t.hand(P0, "Lightning Bolt");
     t.answer_targets(P0, &[Entity::Player(P1)]);
     let paid = cast_normal(&mut t, P0, bolt);
-    assert_spent(&paid.spent, "{R}", "Lightning Bolt, Arcane Melee and Thalia");
+    assert_spent(
+        &paid.spent,
+        "{R}",
+        "Lightning Bolt, Arcane Melee and Thalia",
+    );
     // Herald ("Enchantment spells you cast cost {1} less to cast"): Roost of Drakes ({U},
     // kicker {2}{U}) kicked: {2}{U}{U} - {1} = {1}{U}{U}.
     let mut t = main_phase(2);
@@ -213,7 +226,11 @@ fn kicker_and_thalias_increase_are_added_before_reductions() {
     let roost = t.hand(P0, "Roost of Drakes");
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
     let paid = cast_normal(&mut t, P0, roost);
-    assert_spent(&paid.spent, "{1}{U}{U}", "Herald and kicked Roost of Drakes");
+    assert_spent(
+        &paid.spent,
+        "{1}{U}{U}",
+        "Herald and kicked Roost of Drakes",
+    );
     assert_eq!(paid.mv, 1);
     t.resolve_all();
     assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Drake").len(), 1);
@@ -226,7 +243,10 @@ fn reductions_apply_to_alternative_costs() {
         "Killian, Ink Duelist",
         "Killian can reduce alternative costs. For example, if you choose to pay the {1}{B} alternative cost for Baleful Mastery while targeting a creature, that cost would be reduced to {B}."
     );
-    ruling!("Hardened Berserker", "The ability can apply to alternative costs to cast a spell.");
+    ruling!(
+        "Hardened Berserker",
+        "The ability can apply to alternative costs to cast a spell."
+    );
     ruling!(
         "Seal of the Guildpact",
         "The cost reduction can apply to alternative costs such as evoke costs."
@@ -296,7 +316,8 @@ fn reductions_apply_to_alternative_costs() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let satyr = t.hand(P0, "Boon Satyr");
     t.answer_targets(P0, &[obj(bears)]);
-    let paid = cast_paying(&mut t, P0, satyr, CastMethod::Keyword(KeywordKind::Bestow)).expect("bestow");
+    let paid =
+        cast_paying(&mut t, P0, satyr, CastMethod::Keyword(KeywordKind::Bestow)).expect("bestow");
     assert_spent(&paid.spent, "{2}{G}{G}", "Herald, bestowed Boon Satyr");
     assert_eq!(paid.mv, 3);
 
@@ -330,12 +351,15 @@ fn reductions_apply_to_alternative_costs() {
         t.g.flush_events();
         t.settle();
         t.resolve();
-        let cast = t
-            .g
-            .find_in_zone(mtg_engine::object::Zone::Stack, "Temporal Mastery")
-            .first()
-            .copied();
-        assert_eq!(cast.is_some(), melee, "miracle cast with one Island, Melee: {melee}");
+        let cast =
+            t.g.find_in_zone(mtg_engine::object::Zone::Stack, "Temporal Mastery")
+                .first()
+                .copied();
+        assert_eq!(
+            cast.is_some(),
+            melee,
+            "miracle cast with one Island, Melee: {melee}"
+        );
         if melee {
             assert_eq!(tapped_lands(&t, P0), 1);
         }
@@ -391,6 +415,20 @@ fn x_is_chosen_before_the_reductions_and_they_reduce_it() {
     assert_spent(&paid.spent, "{3}{R}", "Blaze X=5");
     t.resolve_all();
     assert_eq!(t.life(P1), 15);
+    // A reduction to {0} doesn't make X 0 (CR 107.3b): with a creature exiled, Walking
+    // Ballista ({X}{X}) with X = 1 costs {2} - {2} = {0}, has mana value 2 on the stack and
+    // enters with one +1/+1 counter.
+    let mut t = main_phase(2);
+    anvil(&mut t, "Grizzly Bears");
+    let wb = t.hand(P0, "Walking Ballista");
+    t.answer(P0, DecisionKind::X, Answer::Number(1));
+    let paid = cast_normal(&mut t, P0, wb);
+    assert_spent(&paid.spent, "{0}", "Walking Ballista X=1");
+    assert_eq!(paid.mv, 2);
+    t.resolve_all();
+    let wb = t.g.current(paid.spell);
+    assert!(t.on_battlefield(wb));
+    assert_eq!(t.counters(wb, "+1/+1"), 1);
     // Drain Life ({X}{1}{B}, "Spend only black mana on X.") with X = 3: {3}{1}{B} - {2},
     // paid with three black mana (the reduction applies to X's mana too), and it deals 3.
     let mut t = main_phase(2);
@@ -421,7 +459,10 @@ fn semblance_anvil_reduces_the_total_cost_including_kicker_evoke_and_increases()
         "Semblance Anvil",
         "Spells you cast that share multiple card types with the exiled card still cost just {2} less to cast. They don't get a greater cost reduction."
     );
-    ruling!("Semblance Anvil", "Semblance Anvil's cost reduction effect is mandatory.");
+    ruling!(
+        "Semblance Anvil",
+        "Semblance Anvil's cost reduction effect is mandatory."
+    );
     let anvil = |imprint: &str| {
         let mut t = main_phase(2);
         let card = t.hand(P0, imprint);
@@ -433,12 +474,18 @@ fn semblance_anvil_reduces_the_total_cost_including_kicker_evoke_and_increases()
         t
     };
     // A creature exiled (Grizzly Bears): Kavu Titan ({1}{G}, kicker {2}{G}) kicked:
-    // {3}{G}{G} - {2} = {1}{G}{G}.
+    // {3}{G}{G} - {2} = {1}{G}{G}, and it was kicked (three +1/+1 counters).
     let mut t = anvil("Grizzly Bears");
     let titan = t.hand(P0, "Kavu Titan");
     t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
     let paid = cast_normal(&mut t, P0, titan);
     assert_spent(&paid.spent, "{1}{G}{G}", "kicked Kavu Titan");
+    t.resolve_all();
+    assert_eq!(
+        t.counters(t.g.current(paid.spell), "+1/+1"),
+        3,
+        "kicked Kavu Titan"
+    );
     // Mulldrifter's evoke {2}{U}: {U}.
     let mut t = anvil("Grizzly Bears");
     let md = t.hand(P0, "Mulldrifter");
@@ -493,20 +540,24 @@ fn ragemonger_reduces_black_and_red_mana_of_minotaur_spells() {
         "Ragemonger",
         "You apply cost reduction effects after other cost modifiers, so Ragemonger can reduce additional costs or alternative costs of Minotaur spells if they include {B} and/or {R}."
     );
+    // The engine announces for the player the {R} half of the hybrid symbol the {R} of the
+    // reduction can reduce (the player can't announce {W} for it instead).
+    interp!("hybrid-half-for-a-reduction");
     supported("Ragemonger");
     // "Minotaur spells you cast cost {B}{R} less to cast. This effect reduces only the
     // amount of colored mana you pay."
     // Boros Reckoner ({R/W}{R/W}{R/W}): one hybrid symbol paid with {R} is reduced: two
-    // mana left, each red or white.
+    // mana left, each red or white; mana value 3.
     let mut t = main_phase(2);
     t.battlefield(P0, "Ragemonger");
     let reckoner = t.hand(P0, "Boros Reckoner");
     let paid = cast_normal(&mut t, P0, reckoner);
     assert_eq!(paid.spent.len(), 2, "{:?}", paid.spent);
-    assert!(paid
-        .spent
-        .iter()
-        .all(|m| matches!(m, mtg_engine::mana::ManaType::R | mtg_engine::mana::ManaType::W)));
+    assert!(paid.spent.iter().all(|m| matches!(
+        m,
+        mtg_engine::mana::ManaType::R | mtg_engine::mana::ManaType::W
+    )));
+    assert_eq!(paid.mv, 3);
     // Two Ragemongers: Oracle of Bones ({2}{R}{R}) costs {2}; one: {2}{R}.
     for (n, cost) in [(1, "{2}{R}"), (2, "{2}")] {
         let mut t = main_phase(2);
@@ -531,7 +582,11 @@ fn ragemonger_reduces_black_and_red_mana_of_minotaur_spells() {
         t.g.flush_events();
         t.answer_yes(P0, true);
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield("Skophos Reaver").len(), rage as usize, "{rage}");
+        assert_eq!(
+            t.named_on_battlefield("Skophos Reaver").len(),
+            rage as usize,
+            "{rage}"
+        );
         assert_eq!(tapped_lands(&t, P0), rage as usize);
     }
     // An additional cost: a Minotaur with "Kicker {B}{R}" ({2}) kicked: {2}{B}{R} - {B}{R}

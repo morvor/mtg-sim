@@ -24,13 +24,12 @@ fn trigger_targets(t: &TestGame) -> Vec<Vec<Entity>> {
         .filter_map(|id| {
             let o = t.g.obj(*id);
             let si = o.stack.as_ref()?;
-            matches!(si.kind, StackKind::Triggered { .. })
-                .then(|| {
-                    si.chosen
-                        .iter()
-                        .flat_map(|c| c.targets.iter().flatten().copied())
-                        .collect()
-                })
+            matches!(si.kind, StackKind::Triggered { .. }).then(|| {
+                si.chosen
+                    .iter()
+                    .flat_map(|c| c.targets.iter().flatten().copied())
+                    .collect()
+            })
         })
         .collect()
 }
@@ -98,17 +97,29 @@ fn panoptic_projektors_extra_trigger_has_its_own_targets_and_choices() {
     let top = targets[0][0].object().unwrap();
     let top_was_tapped = t.obj(top).tapped;
     t.answer_yes(P0, true);
-    t.answer(P0, DecisionKind::Option, Answer::Index(if top_was_tapped { 1 } else { 0 }));
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        Answer::Index(if top_was_tapped { 1 } else { 0 }),
+    );
     t.answer_yes(P0, false);
     t.resolve_all();
-    assert_eq!(t.obj(top).tapped, !top_was_tapped, "the top instance's choice");
+    assert_eq!(
+        t.obj(top).tapped,
+        !top_was_tapped,
+        "the top instance's choice"
+    );
     let other = if top == bears { wurm } else { bears };
-    assert_eq!(t.obj(other).tapped, other == wurm, "the other instance's choice");
+    assert_eq!(
+        t.obj(other).tapped,
+        other == wurm,
+        "the other instance's choice"
+    );
 }
 
 #[test]
 fn panoptic_projektor_doesnt_double_as_turned_face_up_effects() {
-    cr!("708.11", "603.2d", "614.1c");
+    cr!("708.11", "603.2d", "614.1e");
     ruling!(
         "Panoptic Projektor",
         "Replacement effects are unaffected by Panoptic Projektor’s last ability. For example, abilities that apply “as [this permanent] is turned face up,” such as that of Crowd-Control Warden, are unaffected."
@@ -160,11 +171,15 @@ fn obscuring_aether_cant_turn_itself_face_up_and_doesnt_reduce_manifesting() {
     let paid = cast_paying(&mut t, P0, card, MORPH).expect("morph");
     assert_spent(&paid.spent, "{2}", "face-down Coral Trickster");
     t.resolve_all();
-    // Soul Summons ({1}{W}: "Manifest the top card of your library.") costs {1}{W}.
+    // Soul Summons ({1}{W}: "Manifest the top card of your library.") costs {1}{W}, and
+    // it manifests that card: a face-down 2/2 creature.
+    let top = t.library_top(P0, "Grizzly Bears");
     let ss = t.hand(P0, "Soul Summons");
     let paid = cast_normal(&mut t, P0, ss);
     assert_spent(&paid.spent, "{1}{W}", "Soul Summons");
     t.resolve_all();
+    assert!(t.on_battlefield(top) && t.obj_now(top).face_down);
+    assert_eq!(t.pt(top), (2, 2));
     // "{1}{G}: Turn this enchantment face down." Then it's a face-down 2/2 that can't be
     // turned face up, even with mana to spare.
     t.lands(P0, "Forest", 2);

@@ -95,7 +95,10 @@ fn removing_thryx_or_nightbonder_doesnt_change_the_cost_but_lets_spells_be_count
         let from = t.asked().len();
         let paid = cast_normal(&mut t, P0, card);
         assert_spent(&paid.spent, cost, reducer);
-        assert!(others_asked_since(&t, from, P0).is_empty(), "{reducer}: asked during casting");
+        assert!(
+            others_asked_since(&t, from, P0).is_empty(),
+            "{reducer}: asked during casting"
+        );
         // With the reducer still there, Cancel doesn't counter it; once P1 has bounced
         // it, Cancel does.
         let mut t2 = main_phase(2);
@@ -103,15 +106,27 @@ fn removing_thryx_or_nightbonder_doesnt_change_the_cost_but_lets_spells_be_count
         let c2 = t2.hand(P0, spell);
         let s2 = cast_normal(&mut t2, P0, c2).spell;
         p1_cancels(&mut t2, s2);
-        assert!(t2.obj_now(s2).zone == mtg_engine::object::Zone::Stack, "{reducer}: countered");
+        assert!(
+            t2.obj_now(s2).zone == mtg_engine::object::Zone::Stack,
+            "{reducer}: countered"
+        );
         p1_unsummons(&mut t, r);
         assert!(t.in_hand(P0, reducer));
         // What was paid stays paid.
         assert_eq!(
-            t.obj(paid.spell).stack.as_ref().unwrap().cast.mana_spent.len(),
+            t.obj(paid.spell)
+                .stack
+                .as_ref()
+                .unwrap()
+                .cast
+                .mana_spent
+                .len(),
             paid.spent.len()
         );
         p1_cancels(&mut t, paid.spell);
-        assert!(t.in_graveyard(P0, spell), "{reducer}: not countered after it left");
+        assert!(
+            t.in_graveyard(P0, spell),
+            "{reducer}: not countered after it left"
+        );
     }
 }

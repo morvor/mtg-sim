@@ -38,19 +38,27 @@ pub struct Paid {
 /// pays everything). Targets, X, modes and optional costs are queued by the caller.
 /// Returns the mana spent and the spell's mana value on the stack, or `None` if the cast
 /// was refused.
-pub fn cast_paying(t: &mut TestGame, p: PlayerId, card: ObjectId, method: CastMethod) -> Option<Paid> {
+pub fn cast_paying(
+    t: &mut TestGame,
+    p: PlayerId,
+    card: ObjectId,
+    method: CastMethod,
+) -> Option<Paid> {
     tap_lands(t, p);
     fill_pool(t, p, 15);
     let before = pool(t, p);
     let spell = t.cast(p, card).method(method).try_go().ok()?;
-    let spent = t
-        .g
-        .obj(spell)
-        .stack
-        .as_ref()
-        .map(|si| si.cast.mana_spent.clone())
-        .unwrap_or_default();
-    assert_eq!(before - pool(t, p), spent.len(), "mana spent isn't recorded in full");
+    let spent =
+        t.g.obj(spell)
+            .stack
+            .as_ref()
+            .map(|si| si.cast.mana_spent.clone())
+            .unwrap_or_default();
+    assert_eq!(
+        before - pool(t, p),
+        spent.len(),
+        "mana spent isn't recorded in full"
+    );
     let mv = t.g.mana_value_of(spell) as i64;
     Some(Paid { spent, spell, mv })
 }
@@ -73,30 +81,23 @@ fn ty(c: char) -> ManaType {
     }
 }
 
-/// Asserts that `spent` is exactly a payment of `cost` (such as "{2}{U}" or "{0}"): as
-/// much mana in all, including a mana of each colored (or {C}) symbol's type.
+/// Asserts that `spent` is exactly a payment of `cost` (such as "{2}{U}" or "{0}"): a mana
+/// of each colored (or {C}) symbol's type, and colorless mana for the generic mana (the
+/// pool [`cast_paying`] fills pays generic mana with its colorless mana first). So a total
+/// cost with a colored symbol where generic mana was due (or the reverse) fails too, not
+/// only one with a different amount of mana.
 pub fn assert_spent(spent: &[ManaType], cost: &str, what: &str) {
-    let mut generic = 0usize;
-    let mut left: Vec<ManaType> = spent.to_vec();
-    let mut colored = 0usize;
+    let mut want: Vec<ManaType> = Vec::new();
     for sym in cost.split('}').filter_map(|s| s.strip_prefix('{')) {
-        if let Ok(n) = sym.parse::<usize>() {
-            generic += n;
-            continue;
+        match sym.parse::<usize>() {
+            Ok(n) => want.extend(std::iter::repeat_n(ManaType::C, n)),
+            Err(_) => want.push(ty(sym.chars().next().unwrap())),
         }
-        let want = ty(sym.chars().next().unwrap());
-        colored += 1;
-        let i = left
-            .iter()
-            .position(|m| *m == want)
-            .unwrap_or_else(|| panic!("{what}: paid {spent:?}, not {cost}"));
-        left.remove(i);
     }
-    assert_eq!(
-        spent.len(),
-        generic + colored,
-        "{what}: paid {spent:?}, not {cost}"
-    );
+    let mut got = spent.to_vec();
+    want.sort();
+    got.sort();
+    assert_eq!(got, want, "{what}: paid {spent:?}, not {cost}");
 }
 
 /// The printed mana value of the card `name`.
@@ -112,7 +113,6 @@ pub fn free_method(t: &mut TestGame, p: PlayerId, card: ObjectId) -> CastMethod 
         .find(|m| *m != CastMethod::Normal)
         .expect("a way to cast it without paying its mana cost")
 }
-
 
 /// Adds `n` mana of type `ty` to `p`'s pool.
 pub fn add(t: &mut TestGame, p: PlayerId, ty: ManaType, n: u32) {

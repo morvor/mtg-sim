@@ -72,22 +72,50 @@ fn static_generic_reducers_leave_colored_mana_and_mana_values_alone() {
     // mana and what it costs)
     let cases: &[(&str, (&str, &str), (&str, &str))] = &[
         // "Creature spells you cast cost {1} less to cast."
-        ("Marauding Raptor", ("Grizzly Bears", "{G}"), ("Kird Ape", "{R}")),
+        (
+            "Marauding Raptor",
+            ("Grizzly Bears", "{G}"),
+            ("Kird Ape", "{R}"),
+        ),
         // "Creature spells you cast cost {2} less to cast."
-        ("Heartless Summoning", ("Craw Wurm", "{2}{G}{G}"), ("Kird Ape", "{R}")),
+        (
+            "Heartless Summoning",
+            ("Craw Wurm", "{2}{G}{G}"),
+            ("Kird Ape", "{R}"),
+        ),
         // "Angel spells you cast cost {2} less to cast." Youthful Valkyrie ({1}{W}) has
         // only {1} to reduce.
-        ("Starnheim Aspirant", ("Serra Angel", "{1}{W}{W}"), ("Youthful Valkyrie", "{W}")),
+        (
+            "Starnheim Aspirant",
+            ("Serra Angel", "{1}{W}{W}"),
+            ("Youthful Valkyrie", "{W}"),
+        ),
         // "Enchantment spells you cast cost {1} less to cast."
-        ("Herald of the Pantheon", ("Glorious Anthem", "{W}{W}"), ("Seal of Fire", "{R}")),
+        (
+            "Herald of the Pantheon",
+            ("Glorious Anthem", "{W}{W}"),
+            ("Seal of Fire", "{R}"),
+        ),
         // "Instant and sorcery spells cost {2} less to cast."
         ("Arcane Melee", ("Divination", "{U}"), ("Opt", "{U}")),
         // "Instant and sorcery spells you cast cost {1} less to cast."
-        ("Archmage of Runes", ("Divination", "{1}{U}"), ("Opt", "{U}")),
-        ("Goblin Electromancer", ("Divination", "{1}{U}"), ("Opt", "{U}")),
+        (
+            "Archmage of Runes",
+            ("Divination", "{1}{U}"),
+            ("Opt", "{U}"),
+        ),
+        (
+            "Goblin Electromancer",
+            ("Divination", "{1}{U}"),
+            ("Opt", "{U}"),
+        ),
         ("Mocking Sprite", ("Divination", "{1}{U}"), ("Opt", "{U}")),
         // "Artifact, instant, and sorcery spells you cast cost {1} less to cast."
-        ("Urza, Lord Protector", ("Juggernaut", "{3}"), ("Opt", "{U}")),
+        (
+            "Urza, Lord Protector",
+            ("Juggernaut", "{3}"),
+            ("Opt", "{U}"),
+        ),
     ];
     for (reducer, (a, a_cost), (b, b_cost)) in cases {
         supported(reducer);
@@ -136,7 +164,13 @@ fn two_goblin_electromancers_reduce_by_two() {
         for _ in 0..n {
             t.battlefield(P0, "Goblin Electromancer");
         }
-        costs(&mut t, P0, "Hieroglyphic Illumination", cost, &format!("{n} Electromancers"));
+        costs(
+            &mut t,
+            P0,
+            "Hieroglyphic Illumination",
+            cost,
+            &format!("{n} Electromancers"),
+        );
     }
     let mut t = main_phase(2);
     t.battlefield(P0, "Goblin Electromancer");
@@ -151,7 +185,10 @@ fn planar_gate_and_mana_matrix_are_cumulative_and_only_for_their_controller() {
         "Planar Gate",
         "Multiple Gates are cumulative. Two will reduce the cost by up to {4}, and so on."
     );
-    ruling!("Planar Gate", "Only works for its controller, not all players.");
+    ruling!(
+        "Planar Gate",
+        "Only works for its controller, not all players."
+    );
     ruling!(
         "Planar Gate",
         "Works on all spells with the type Creature, even if the spell has another type like Artifact or Enchantment."
@@ -160,7 +197,10 @@ fn planar_gate_and_mana_matrix_are_cumulative_and_only_for_their_controller() {
         "Mana Matrix",
         "Multiple Matrices are cumulative. Two will reduce the cost by up to {4}, and so on."
     );
-    ruling!("Mana Matrix", "Only affects its controller, not all players.");
+    ruling!(
+        "Mana Matrix",
+        "Only affects its controller, not all players."
+    );
     ruling!(
         "Mana Matrix",
         "Only works on instants and enchantments. It does not work on sorceries."
@@ -183,7 +223,13 @@ fn planar_gate_and_mana_matrix_are_cumulative_and_only_for_their_controller() {
     costs(&mut t, P0, "Mind Stone", "{2}", "Gate");
     // P1's creature spells cost what they cost.
     t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
-    costs(&mut t, P1, "Craw Wurm", "{4}{G}{G}", "P0's Gate, P1's spell");
+    costs(
+        &mut t,
+        P1,
+        "Craw Wurm",
+        "{4}{G}{G}",
+        "P0's Gate, P1's spell",
+    );
 
     // Mana Matrix: "Instant and enchantment spells you cast cost {2} less to cast."
     let mut t = main_phase(2);
@@ -202,7 +248,13 @@ fn planar_gate_and_mana_matrix_are_cumulative_and_only_for_their_controller() {
     // Nor P1's instants.
     t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
     t.answer_targets(P1, &[Entity::Player(P1)]);
-    costs(&mut t, P1, "Inspiration", "{3}{U}", "P0's Matrices, P1's spell");
+    costs(
+        &mut t,
+        P1,
+        "Inspiration",
+        "{3}{U}",
+        "P0's Matrices, P1's spell",
+    );
 }
 
 #[test]
@@ -216,10 +268,20 @@ fn cloud_key_reduces_only_generic_mana_of_the_chosen_type() {
     // "As this artifact enters, choose artifact, creature, enchantment, instant, or
     // sorcery." Instant (index 3).
     let mut t = main_phase(2);
-    t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(3));
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(3),
+    );
     t.enter(P0, "Cloud Key");
     t.resolve_all();
-    costs(&mut t, P0, "Hieroglyphic Illumination", "{2}{U}", "Cloud Key");
+    costs(
+        &mut t,
+        P0,
+        "Hieroglyphic Illumination",
+        "{2}{U}",
+        "Cloud Key",
+    );
     costs(&mut t, P0, "Opt", "{U}", "Cloud Key");
     // Not a sorcery.
     costs(&mut t, P0, "Divination", "{2}{U}", "Cloud Key");
@@ -234,9 +296,9 @@ fn stone_calendar_reduces_what_you_pay_not_the_mana_cost() {
     );
     supported("Stone Calendar");
     // "Spells you cast cost {1} less to cast." Divination ({2}{U}): {1}{U}, mana value 3;
-    // Opt ({U}): {U}. (Its 2004 ruling that the reduction may be declined, from the
-    // printed "up to 1 less", isn't followed: the Oracle text has no "up to"; see the
-    // report of rulings-P033.)
+    // Opt ({U}): {U}. (Its 2004 ruling that the reduction may be declined, likely from the
+    // printed "up to 1 less", isn't cited: the Oracle text has no "up to", and the conflict
+    // is listed under "Not yet investigated" in docs/RULING_DISCREPANCIES.md.)
     let mut t = main_phase(2);
     t.battlefield(P0, "Stone Calendar");
     costs(&mut t, P0, "Divination", "{1}{U}", "Stone Calendar");

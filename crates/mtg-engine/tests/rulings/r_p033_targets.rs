@@ -4,8 +4,8 @@
 //! such an ability of a spell doesn't affect activated abilities.
 
 use crate::r_p033_common::*;
-use crate::r_s01_common::{supported, tapped_lands};
 use crate::r_p213_common::equip_nth;
+use crate::r_s01_common::{supported, tapped_lands};
 use crate::r_s04_common::activate_named;
 use crate::r_s06_common::{activate_containing, attach_new, attached_to};
 use mtg_engine::testing::*;
@@ -33,7 +33,10 @@ fn spellwild_ouphe_counts_each_ouphe_once_for_any_caster() {
         "Spellwild Ouphe",
         "The spell may have any number of other targets; that won’t affect the cost reduction unless the spell targets other Spellwild Ouphes as well. In that case, the spell costs {2} less to cast for each different Spellwild Ouphe it targets."
     );
-    ruling!("Spellwild Ouphe", "The cost reduction applies to spells cast by any player.");
+    ruling!(
+        "Spellwild Ouphe",
+        "The cost reduction applies to spells cast by any player."
+    );
     supported("Spellwild Ouphe");
     supported("Seeds of Strength");
     // Seeds of Strength ({G}{W}): "Target creature gets +1/+1 until end of turn." three
@@ -57,15 +60,30 @@ fn spellwild_ouphe_counts_each_ouphe_once_for_any_caster() {
     assert_eq!(t.pt(a), (p + 3, q + 3));
     // One Ouphe and the Bears twice: {2} less.
     let (mut t, a, _, bears) = setup();
-    let paid = cast_targeting(&mut t, P0, "Seeds of Strength", &[obj(a), obj(bears), obj(bears)]);
+    let paid = cast_targeting(
+        &mut t,
+        P0,
+        "Seeds of Strength",
+        &[obj(a), obj(bears), obj(bears)],
+    );
     assert_spent(&paid.spent, "{2}{G}{W}", "one Ouphe and other targets");
     // Two different Ouphes and the Bears: {4} less.
     let (mut t, a, b, bears) = setup();
-    let paid = cast_targeting(&mut t, P0, "Seeds of Strength", &[obj(a), obj(b), obj(bears)]);
+    let paid = cast_targeting(
+        &mut t,
+        P0,
+        "Seeds of Strength",
+        &[obj(a), obj(b), obj(bears)],
+    );
     assert_spent(&paid.spent, "{G}{W}", "two Ouphes");
     // No Ouphe: {4}{G}{W}.
     let (mut t, _, _, bears) = setup();
-    let paid = cast_targeting(&mut t, P0, "Seeds of Strength", &[obj(bears), obj(bears), obj(bears)]);
+    let paid = cast_targeting(
+        &mut t,
+        P0,
+        "Seeds of Strength",
+        &[obj(bears), obj(bears), obj(bears)],
+    );
     assert_spent(&paid.spent, "{4}{G}{W}", "no Ouphe");
     // P1's Murder ({1}{B}{B}) targeting P0's Ouphe: {B}{B}.
     let mut t = main_phase(2);
@@ -139,7 +157,10 @@ fn strong_back_reduces_equip_abilities_and_other_auras_but_not_reconfigure_or_it
         "Strong Back",
         "Some Equipment creature cards in other sets have reconfigure, a different ability that attaches them to a creature. Reconfigure is not an equip ability, and reconfigure costs are not reduced by Strong Back’s second ability. Equip variants or equip abilities with restrictions, like the “equip Citizen” ability of Ceremonial Groundbreaker from the Streets of New Capenna® set, are still equip abilities, and their costs will be reduced by Strong Back’s second ability."
     );
-    ruling!("Strong Back", "Strong Back’s third ability won’t reduce its own cost.");
+    ruling!(
+        "Strong Back",
+        "Strong Back’s third ability won’t reduce its own cost."
+    );
     supported("Strong Back");
     supported("Ceremonial Groundbreaker");
     supported("Lion Sash");
@@ -158,7 +179,11 @@ fn strong_back_reduces_equip_abilities_and_other_auras_but_not_reconfigure_or_it
         let gb = t.battlefield(P0, "Ceremonial Groundbreaker");
         equip_nth(&mut t, P0, gb, nth, citizen).expect("free equip");
         t.resolve_all();
-        assert_eq!(attached_to(&t, gb), Some(obj(citizen)), "equip ability {nth}");
+        assert_eq!(
+            attached_to(&t, gb),
+            Some(obj(citizen)),
+            "equip ability {nth}"
+        );
         // Not attached to another creature, it isn't reduced: {3} with no mana fails.
         let bears = t.battlefield(P0, "Grizzly Bears");
         assert!(equip_nth(&mut t, P0, gb, 1, bears).is_err());
