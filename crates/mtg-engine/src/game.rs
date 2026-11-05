@@ -506,6 +506,12 @@ pub struct TurnHistory {
     /// `replacement.rs`; read by `kw/paper_history.rs`.
     #[serde(default)]
     pub regenerated: Vec<ObjectId>,
+    /// Each damage event of this turn's events with what its source was as it dealt the
+    /// damage ("dealt combat damage by three or more Pirates this turn" counts a creature
+    /// that was a Pirate then). Recorded as the event is processed; read by
+    /// `kw/value_results.rs`.
+    #[serde(default)]
+    pub damage_as_dealt: Vec<crate::kw::value_results::DamageAsDealt>,
     /// Named actions players performed this turn, from [`Event::Custom`] events with a
     /// player ("surveil", "scry"): "as long as you've surveilled this turn". Recorded by
     /// `kw/grant_conditions.rs`.

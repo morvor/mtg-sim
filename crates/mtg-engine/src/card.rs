@@ -295,6 +295,7 @@ impl CardDef {
                     power,
                     toughness,
                     loyalty,
+                    loyalty_is_x: f.loyalty.as_deref().is_some_and(|l| l.trim() == "X"),
                     defense,
                     hand_modifier: if i == 0 { hand_modifier } else { None },
                     life_modifier: if i == 0 { life_modifier } else { None },

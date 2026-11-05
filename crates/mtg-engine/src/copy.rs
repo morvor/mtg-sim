@@ -20,13 +20,81 @@ pub fn additional_copies(g: &mut Game, spell: ObjectId, controller: PlayerId) ->
 }
 
 /// Puts a copy of a spell (or ability) on the stack under `controller`'s control,
-/// optionally letting them choose new targets (CR 707.10c). Returns the copy.
+/// optionally letting them choose new targets (CR 707.10c). Returns the copy. Each
+/// object or player the copy targets becomes its target: those whose target is changed
+/// as the copy's targets are changed, the others as the copy is created (a copy of a
+/// spell that targets you, its target unchanged, makes you the target of a spell).
 pub fn copy_spell(
     g: &mut Game,
     spell: ObjectId,
     controller: PlayerId,
     new_targets: bool,
 ) -> Option<ObjectId> {
+    let id = copy_spell_quiet(g, spell, controller)?;
+    let before = chosen_targets(g, id);
+    if new_targets && has_chosen_targets(g, id) {
+        let keep = g.ask(
+            controller,
+            Decision::YesNo {
+                source: Some(id),
+                prompt: "Choose new targets for the copy?".into(),
+            },
+        );
+        if matches!(keep, Answer::Bool(true)) {
+            // CR 707.10c, 115.7d: the copy's modes stay; any of its targets may be changed.
+            crate::target_rules::change_targets(
+                g,
+                controller,
+                id,
+                crate::ability::TargetChange::ChooseNew,
+                None,
+            );
+        }
+    }
+    announce_unchanged_targets(g, id, &before);
+    Some(id)
+}
+
+/// The targets of a spell or ability on the stack, in order (every mode and slot).
+pub fn chosen_targets(g: &Game, id: ObjectId) -> Vec<Entity> {
+    g.obj(id)
+        .stack
+        .as_deref()
+        .map(|si| {
+            si.chosen
+                .iter()
+                .flat_map(|m| m.targets.iter().flatten().copied())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The copy `copy` was put on the stack with the targets `before` (as
+/// [`chosen_targets`] lists them); each of them still targeted at the same place (not
+/// changed since) becomes a target of the copy now (emits `BecameTarget`, once per
+/// object or player). Changed targets were announced as they were changed.
+pub fn announce_unchanged_targets(g: &mut Game, copy: ObjectId, before: &[Entity]) {
+    let now = chosen_targets(g, copy);
+    if now.len() != before.len() {
+        return;
+    }
+    let controller = g.obj(copy).controller;
+    let mut seen: Vec<Entity> = Vec::new();
+    for (b, n) in before.iter().zip(&now) {
+        if b == n && !seen.contains(n) {
+            seen.push(*n);
+            g.emit(crate::events::Event::BecameTarget {
+                target: *n,
+                by: copy,
+                controller,
+            });
+        }
+    }
+}
+
+/// [`copy_spell`] without announcing the copy's targets: for a caller that changes them
+/// itself afterwards (and then calls [`announce_unchanged_targets`] or announces them).
+pub fn copy_spell_quiet(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Option<ObjectId> {
     // A spell that has left the stack (e.g. countered in response to storm's trigger) is
     // copied as it last existed there (CR 608.2h); its old object keeps that information.
     // So is an ability that has left it (countered in response to Rings of Brighthearth's
@@ -86,25 +154,6 @@ pub fn copy_spell(
             spell: id,
             player: controller,
         });
-    }
-    if new_targets && has_chosen_targets(g, id) {
-        let keep = g.ask(
-            controller,
-            Decision::YesNo {
-                source: Some(id),
-                prompt: "Choose new targets for the copy?".into(),
-            },
-        );
-        if matches!(keep, Answer::Bool(true)) {
-            // CR 707.10c, 115.7d: the copy's modes stay; any of its targets may be changed.
-            crate::target_rules::change_targets(
-                g,
-                controller,
-                id,
-                crate::ability::TargetChange::ChooseNew,
-                None,
-            );
-        }
     }
     Some(id)
 }

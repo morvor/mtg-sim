@@ -182,7 +182,10 @@ fn apply_copy_exceptions(g: &mut Game, copy: ObjectId, exceptions: &str, x: i32,
     for e in exceptions.split(',') {
         match e {
             NOT_LEGENDARY => values.supertypes.remove(Supertype::Legendary),
-            LOYALTY_X => values.loyalty = Some(x),
+            LOYALTY_X => {
+                values.loyalty = Some(x);
+                values.loyalty_is_x = false;
+            }
             _ => {}
         }
     }

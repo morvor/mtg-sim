@@ -83,7 +83,7 @@ impl KeywordRules for Awaken {
         let mut opt = CastOption::normal(FaceState::Front);
         opt.method = CastMethod::Keyword(KeywordKind::Awaken);
         if o.zone != Zone::Hand(p) {
-            let chars = g.option_characteristics(card, &opt);
+            let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
             if !g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false)
             {
                 return vec![];
