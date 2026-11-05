@@ -148,7 +148,11 @@ fn temple_altisaur_and_another_prevention_effect_in_the_controllers_order() {
             apply_first_not(&mut t, P0, "Temple Altisaur");
         }
         damage(&mut t, giant, obj(raptor), 5);
-        assert_eq!(damage_marked(&t, raptor), dealt, "Altisaur first: {altisaur_first}");
+        assert_eq!(
+            damage_marked(&t, raptor),
+            dealt,
+            "Altisaur first: {altisaur_first}"
+        );
         assert_eq!(replacement_choosers(&t, from), vec![P0]);
     }
 }
@@ -168,7 +172,11 @@ fn temple_altisaur_trample_damage_to_a_blocking_dinosaur() {
     let maw = t.battlefield(P1, "Colossal Dreadmaw");
     to_beginning_of_combat(&mut t, P1);
     t.attack(&[(maw, pl(P0))], &[(raptor, maw)]);
-    assert_eq!(combat_damage(&t, maw, pl(P0)), 3, "lethal (3) assigned to the Raptor");
+    assert_eq!(
+        combat_damage(&t, maw, pl(P0)),
+        3,
+        "lethal (3) assigned to the Raptor"
+    );
     assert_eq!(prevented_events(&t), vec![(maw, obj(raptor), 2)]);
     assert_eq!(damage_marked(&t, raptor), 1);
     assert!(t.on_battlefield(raptor));
@@ -468,6 +476,10 @@ fn wall_of_putrid_flesh_enchanted_creatures_are_those_with_an_aura() {
             t.g.recompute();
         }
         damage(&mut t, giant, obj(wall), 2);
-        assert_eq!(damage_marked(&t, wall), if aura { 0 } else { 2 }, "aura: {aura}");
+        assert_eq!(
+            damage_marked(&t, wall),
+            if aura { 0 } else { 2 },
+            "aura: {aura}"
+        );
     }
 }

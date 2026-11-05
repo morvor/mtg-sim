@@ -287,17 +287,16 @@ fn divine_deflection_deals_its_damage_right_after_the_excess_before_the_spell_co
     let helix = cast_resolve(&mut t, P1, "Lightning Helix", &[pl(P0)]);
     assert_eq!(t.life(P0), 19);
     assert_eq!(t.life(P1), 21);
-    let order: Vec<&str> = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage { source, .. } if *source == helix => Some("helix damage"),
-            Event::Damage { source, .. } if *source == spell => Some("deflection damage"),
-            Event::LifeGained { player, .. } if *player == P1 => Some("helix life"),
-            _ => None,
-        })
-        .collect();
+    let order: Vec<&str> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Damage { source, .. } if *source == helix => Some("helix damage"),
+                Event::Damage { source, .. } if *source == spell => Some("deflection damage"),
+                Event::LifeGained { player, .. } if *player == P1 => Some("helix life"),
+                _ => None,
+            })
+            .collect();
     assert_eq!(
         order,
         vec!["helix damage", "deflection damage", "helix life"]
@@ -315,6 +314,7 @@ fn divine_deflection_you_choose_which_damage_to_prevent_as_it_is_dealt() {
         "Divine Deflection",
         "If damage is dealt to multiple permanents you control, or is dealt to you and at least one permanent you control, you choose which of that damage to prevent if the chosen value for X won’t prevent all the damage."
     );
+    interp!("shield-divided-among-recipients");
     // X = 2. Two sources each deal 2 to P0 at once: P0 orders, so the Bears' damage is
     // prevented, then the Giant's.
     for first in [1usize, 0] {
@@ -379,7 +379,11 @@ fn refraction_trap_deals_no_damage_if_it_prevented_none() {
     apply_first(&mut t, P0, "Pay No Heed");
     damage(&mut t, giant, pl(P0), 3);
     assert_eq!(t.life(P0), 20);
-    assert_eq!(prevented_events(&t).len(), 1, "prevented once, by Pay No Heed");
+    assert_eq!(
+        prevented_events(&t).len(),
+        1,
+        "prevented once, by Pay No Heed"
+    );
     assert!(damage_by(&t, spell).is_empty());
     assert_eq!(t.life(P1), 20);
     // Unpreventable damage: Banefire with X = 5.

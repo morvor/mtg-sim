@@ -55,9 +55,10 @@ fn chosen_sources_arent_targeted_and_are_chosen_as_it_resolves() {
         }
         let asked_before: Vec<_> = t.asked()[from..].to_vec();
         assert!(
-            !asked_before
-                .iter()
-                .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. } | Decision::ChooseEntities { .. })),
+            !asked_before.iter().any(|(_, d)| matches!(
+                d,
+                Decision::ChooseTargets { .. } | Decision::ChooseEntities { .. }
+            )),
             "{card}: nothing targeted or chosen as it's put on the stack"
         );
         t.answer_choose(P0, &[obj(src)]);
@@ -83,7 +84,10 @@ fn burrenton_forge_tender_can_be_activated_with_no_source_to_choose() {
     let mut t = TestGame::new(2);
     let tender = t.battlefield(P0, "Burrenton Forge-Tender");
     activate_resolve(&mut t, P0, tender, 0, &[]);
-    assert!(t.in_graveyard(P0, "Burrenton Forge-Tender"), "the cost was paid");
+    assert!(
+        t.in_graveyard(P0, "Burrenton Forge-Tender"),
+        "the cost was paid"
+    );
     assert_eq!(t.stack_len(), 0, "it resolved, choosing nothing");
 }
 
@@ -161,7 +165,12 @@ fn draws_and_life_gain_happen_on_resolution_not_on_prevention() {
     );
     supported("Festival of the Guildpact");
     supported("Dazzling Reflection");
-    for card in ["Festival of the Guildpact", "Withstand", "Bandage", "Dazzling Reflection"] {
+    for card in [
+        "Festival of the Guildpact",
+        "Withstand",
+        "Bandage",
+        "Dazzling Reflection",
+    ] {
         let mut t = TestGame::new(2);
         let giant = t.battlefield(P1, "Hill Giant");
         let (hand, life) = (t.hand_size(P0), t.life(P0));
@@ -208,7 +217,11 @@ fn heal_draws_at_the_next_upkeep_whether_or_not_damage_was_prevented() {
     let hand = t.hand_size(P0);
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand + 1, "P0 drew in the next turn's upkeep");
+    assert_eq!(
+        t.hand_size(P0),
+        hand + 1,
+        "P0 drew in the next turn's upkeep"
+    );
 }
 
 #[test]
@@ -230,11 +243,19 @@ fn samite_censer_bearer_shields_each_creature_you_control_as_it_resolves() {
     // Each shield is separate: 1 prevented from each of a and b, none for the newcomer.
     damage_at_once(
         &mut t,
-        &[(giant, obj(a), 2), (giant, obj(b), 2), (giant, obj(later), 2)],
+        &[
+            (giant, obj(a), 2),
+            (giant, obj(b), 2),
+            (giant, obj(later), 2),
+        ],
         false,
     );
     assert_eq!(
-        (damage_marked(&t, a), damage_marked(&t, b), damage_marked(&t, later)),
+        (
+            damage_marked(&t, a),
+            damage_marked(&t, b),
+            damage_marked(&t, later)
+        ),
         (1, 1, 2)
     );
     // Each shield is used up.
@@ -288,12 +309,10 @@ fn serra_hymn_divides_on_activation_and_works_with_no_counters() {
     let from = t.asked().len();
     let src = t.g.current(hymn);
     t.activate(P0, src, 0, &[]).unwrap();
-    let divided = t.asked()[from..]
-        .iter()
-        .find_map(|(_, d)| match d {
-            Decision::Divide { total, .. } => Some(*total),
-            _ => None,
-        });
+    let divided = t.asked()[from..].iter().find_map(|(_, d)| match d {
+        Decision::Divide { total, .. } => Some(*total),
+        _ => None,
+    });
     assert_eq!(divided, Some(3), "divided as it was activated");
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
@@ -348,17 +367,15 @@ fn remedy_and_angel_of_salvation_divide_as_put_on_the_stack_at_least_1_each() {
             })
             .expect("targets chosen");
         assert_eq!(max_targets, 5, "Angel: {angel}");
-        let divide_asked = asked
-            .iter()
-            .find_map(|(_, d)| match d {
-                Decision::Divide {
-                    total,
-                    recipients,
-                    min_each,
-                    ..
-                } => Some((*total, recipients.len(), *min_each)),
-                _ => None,
-            });
+        let divide_asked = asked.iter().find_map(|(_, d)| match d {
+            Decision::Divide {
+                total,
+                recipients,
+                min_each,
+                ..
+            } => Some((*total, recipients.len(), *min_each)),
+            _ => None,
+        });
         assert_eq!(
             divide_asked,
             Some((5, 5, 1)),
@@ -407,7 +424,11 @@ fn guard_dogs_compares_colors_only_as_it_resolves() {
         cast_resolve(&mut t, P0, "Cerulean Wisps", &[obj(giant)]);
         assert!(t.obj_now(giant).chars.colors.contains(Color::Blue));
         damage_at_once(&mut t, &[(giant, pl(P0), 3)], true);
-        assert_eq!(t.life(P0), if prevented { 20 } else { 17 }, "goblin: {compare_goblin}");
+        assert_eq!(
+            t.life(P0),
+            if prevented { 20 } else { 17 },
+            "goblin: {compare_goblin}"
+        );
     }
 }
 
@@ -434,7 +455,12 @@ fn wandering_mage_checks_cleric_or_wizard_only_on_activation_and_resolution() {
             cast_resolve(&mut t, P1, "Turn to Frog", &[obj(wizard)]);
         }
         t.resolve_all();
-        assert!(!t.obj_now(wizard).chars.subtypes.iter().any(|s| s == "Wizard"));
+        assert!(!t
+            .obj_now(wizard)
+            .chars
+            .subtypes
+            .iter()
+            .any(|s| s == "Wizard"));
         let giant = t.battlefield(P1, "Hill Giant");
         damage(&mut t, giant, obj(wizard), 1);
         // (A 1/1 Frog: read the events, it may have died.)
@@ -470,7 +496,11 @@ fn wellgabber_apothecary_target_must_be_tapped_on_activation_and_resolution_only
         t.resolve_all();
         let giant = t.battlefield(P1, "Hill Giant");
         damage(&mut t, giant, obj(lord), 1);
-        assert_eq!(damage_marked(&t, lord), if case == 0 { 0 } else { 1 }, "case {case}");
+        assert_eq!(
+            damage_marked(&t, lord),
+            if case == 0 { 0 } else { 1 },
+            "case {case}"
+        );
     }
 }
 
@@ -494,7 +524,11 @@ fn inquisitors_snare_keeps_preventing_after_the_creature_leaves() {
     cast_resolve(&mut t, P0, "Inquisitor's Snare", &[obj(arsonist)]);
     assert!(t.in_graveyard(P1, "Goblin Arsonist"));
     assert_eq!(t.life(P0), 20);
-    assert_eq!(prevented_events(&t).len(), 1, "its dies-trigger damage was prevented");
+    assert_eq!(
+        prevented_events(&t).len(),
+        1,
+        "its dies-trigger damage was prevented"
+    );
 }
 
 #[test]
@@ -516,7 +550,11 @@ fn shadowbane_prevents_only_damage_to_you_and_your_creatures() {
     damage(&mut t, giant, obj(theirs), 1);
     damage(&mut t, giant, obj(pw), 1);
     assert_eq!(
-        (t.life(P1), damage_marked(&t, theirs), t.counters(pw, "loyalty")),
+        (
+            t.life(P1),
+            damage_marked(&t, theirs),
+            t.counters(pw, "loyalty")
+        ),
         (19, 1, 5)
     );
     assert!(prevented_events(&t).is_empty());
@@ -618,13 +656,21 @@ fn avacyn_prevents_all_damage_of_the_color_checked_as_it_is_dealt() {
     let sorcerer = t.battlefield(P1, "Prodigal Sorcerer");
     t.set_step(P1, Step::PrecombatMain);
     activate_resolve(&mut t, P1, sorcerer, 0, &[obj(wurm)]);
-    assert_eq!(damage_marked(&t, wurm), 0, "noncombat damage from a blue source");
+    assert_eq!(
+        damage_marked(&t, wurm),
+        0,
+        "noncombat damage from a blue source"
+    );
     damage(&mut t, giant, obj(wurm), 1);
     assert_eq!(damage_marked(&t, wurm), 1, "red: not prevented");
     cast_resolve(&mut t, P1, "Cerulean Wisps", &[obj(giant)]);
     to_beginning_of_combat(&mut t, P1);
     t.attack(&[(giant, pl(P0))], &[(wurm, giant)]);
-    assert_eq!(combat_damage(&t, giant, obj(wurm)), 0, "now blue: prevented");
+    assert_eq!(
+        combat_damage(&t, giant, obj(wurm)),
+        0,
+        "now blue: prevented"
+    );
     assert_eq!(damage_marked(&t, wurm), 1);
 }
 
@@ -715,7 +761,11 @@ fn hidden_retreat_damage_to_anything_and_only_spells() {
     activate(&mut t, P0, retreat, 0, &[obj(arc)]);
     t.resolve_all();
     assert_eq!(
-        (t.life(P0), damage_marked(&t, wurm), t.counters(pw, "loyalty")),
+        (
+            t.life(P0),
+            damage_marked(&t, wurm),
+            t.counters(pw, "loyalty")
+        ),
         (20, 0, 6)
     );
     // An ability (Prodigal Sorcerer's) on the stack isn't a legal target.
@@ -724,15 +774,18 @@ fn hidden_retreat_damage_to_anything_and_only_spells() {
     t.g.objects[sorcerer.0 as usize].summoning_sick = false;
     t.answer_targets(P1, &[pl(P0)]);
     t.g.turn.priority = Some(P1);
-    let _ = t.g.activate_ability(P1, sorcerer, t.obj_now(sorcerer).chars.abilities[0].uid);
+    let _ =
+        t.g.activate_ability(P1, sorcerer, t.obj_now(sorcerer).chars.abilities[0].uid);
     assert_eq!(t.stack_len(), 1);
     let ability = *t.g.stack.last().unwrap();
     let from2 = t.asked().len();
     let r = t.activate(P0, retreat, 0, &[Entity::Object(ability)]);
     let offered: Vec<Vec<Entity>> = crate::r_p016_common::target_choices(&t, P0, from2, "");
     assert!(
-        r.is_err() || offered.iter().all(|c| !c.contains(&Entity::Object(ability))),
+        r.is_err()
+            || offered
+                .iter()
+                .all(|c| !c.contains(&Entity::Object(ability))),
         "the ability isn't a legal target"
     );
 }
-

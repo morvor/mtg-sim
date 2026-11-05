@@ -482,9 +482,16 @@ fn sea_troll_cant_regenerate_after_blocking_a_creature_that_isnt_blue() {
     let mut t = TestGame::new(2);
     let troll = t.battlefield(P0, "Sea Troll");
     t.lands(P0, "Island", 2);
+    // Grizzly Bears (green, 2 power) can't kill the Troll pumped by Giant Growth, so the
+    // activation fails for the color, not because the Troll died.
+    t.lands(P0, "Forest", 1);
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(Entity::Object(troll)).go();
+    t.resolve_all();
     let green = t.battlefield(P1, "Grizzly Bears");
     t.set_step(P1, Step::BeginningOfCombat);
     t.attack(&[(green, Entity::Player(P0))], &[(troll, green)]);
+    assert!(t.on_battlefield(troll));
     assert!(t.activate(P0, troll, 0, &[]).is_err());
 }
 

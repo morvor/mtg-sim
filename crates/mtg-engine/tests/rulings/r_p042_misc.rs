@@ -39,8 +39,15 @@ fn guardian_archon_protection_from_a_player() {
     t.g.attach(splitter, obj(bears));
     t.g.recompute();
     t.settle();
-    assert!(!t.on_battlefield(rancor), "the Aura is put into the graveyard");
-    assert_eq!(t.obj_now(splitter).attached_to, None, "the Equipment is unattached");
+    assert!(
+        !t.on_battlefield(rancor),
+        "the Aura is put into the graveyard"
+    );
+    assert_eq!(
+        t.obj_now(splitter).attached_to,
+        None,
+        "the Equipment is unattached"
+    );
     // (3) Blocking: P1's creatures can't block the Bears.
     let blocker = t.battlefield(P1, "Hill Giant");
     t.set_step(P0, Step::PrecombatMain);
@@ -354,8 +361,8 @@ fn commands_modes_need_legal_targets_only_for_chosen_modes() {
     t.answer_targets(P0, &[]);
     let _ = t.cast_with(P0, card, &[]);
     assert_eq!(available(&t, from), vec![0, 1, 2]);
-    // Kolaghan's Command: an empty graveyard and no artifact, so modes 1 and 3 aren't
-    // available.
+    // Kolaghan's Command: an empty graveyard and no artifact, so its first and third
+    // modes (indices 0 and 2) aren't available.
     let mut t = TestGame::new(2);
     lands_for_cost(&mut t, P0, "Kolaghan's Command");
     let card = t.hand(P0, "Kolaghan's Command");
@@ -485,7 +492,11 @@ fn benalish_missionary_on_a_creature_blocked_by_an_effect() {
             activate_resolve(&mut t, P0, medic, 0, &[obj(maw)]);
         }
         t.advance_to(P1, Step::EndOfCombat);
-        assert_eq!(t.life(P0), if missionary { 20 } else { 14 }, "Missionary: {missionary}");
+        assert_eq!(
+            t.life(P0),
+            if missionary { 20 } else { 14 },
+            "Missionary: {missionary}"
+        );
     }
 }
 
@@ -506,7 +517,10 @@ fn flowering_field_the_lands_controller_activates() {
     t.g.recompute();
     t.g.turn.priority = Some(P1);
     // (Index 0 is the Plains' mana ability.)
-    assert!(t.activate(P1, plains, 1, &[pl(P1)]).is_err(), "not the Aura's controller");
+    assert!(
+        t.activate(P1, plains, 1, &[pl(P1)]).is_err(),
+        "not the Aura's controller"
+    );
     activate_resolve(&mut t, P0, plains, 1, &[pl(P0)]);
     let giant = t.battlefield(P1, "Hill Giant");
     damage(&mut t, giant, pl(P0), 2);
@@ -530,8 +544,14 @@ fn security_blockade_with_an_illegal_target_doesnt_enter() {
             exile_now(&mut t, plains);
         }
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield("Security Blockade").len(), usize::from(!destroyed));
-        assert_eq!(t.named_on_battlefield("Knight Token").len(), usize::from(!destroyed));
+        assert_eq!(
+            t.named_on_battlefield("Security Blockade").len(),
+            usize::from(!destroyed)
+        );
+        assert_eq!(
+            t.named_on_battlefield("Knight Token").len(),
+            usize::from(!destroyed)
+        );
     }
     // With no land on the battlefield, it can't be cast.
     let mut t = TestGame::new(2);
@@ -583,8 +603,14 @@ fn barrenton_medic_counter_is_a_cost_and_can_kill_it() {
     // in the graveyard.
     let card = t.g.current(medic);
     assert_ne!(card, medic);
-    assert!(t.activate(P0, medic, 1, &[]).is_err(), "the permanent is gone");
-    assert!(t.activate(P0, card, 1, &[]).is_err(), "the card can't pay the cost again");
+    assert!(
+        t.activate(P0, medic, 1, &[]).is_err(),
+        "the permanent is gone"
+    );
+    assert!(
+        t.activate(P0, card, 1, &[]).is_err(),
+        "the card can't pay the cost again"
+    );
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Barrenton Medic"));
 }
@@ -604,7 +630,10 @@ fn atalya_spends_only_white_mana_on_x_for_either_mode() {
         let targets = if mode == 0 { vec![obj(wurm)] } else { vec![] };
         t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![mode]));
         t.answer(P0, DecisionKind::X, Answer::Number(2));
-        assert!(t.activate(P0, atalya, 0, &targets).is_err(), "mode {mode}: blue");
+        assert!(
+            t.activate(P0, atalya, 0, &targets).is_err(),
+            "mode {mode}: blue"
+        );
         t.clear_answers();
         t.lands(P0, "Plains", 2);
         t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![mode]));
@@ -641,10 +670,16 @@ fn sevinne_copies_spells_without_targets_and_the_copy_isnt_cast() {
     let hand = t.hand_size(P0);
     let tt = t.graveyard(P0, "Think Twice");
     t.cast(P0, tt)
-        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+        .method(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
         .go();
     t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand + 2, "Think Twice and its copy each drew");
+    assert_eq!(
+        t.hand_size(P0),
+        hand + 2,
+        "Think Twice and its copy each drew"
+    );
     assert_eq!(
         t.named_on_battlefield("Elemental Token").len(),
         1,
@@ -679,14 +714,20 @@ fn kurbis_copies_put_onto_the_battlefield_without_being_cast_get_no_counters() {
             .count()
     };
     cast_resolve(&mut t, P0, "Cackling Counterpart", &[obj(kurbis)]);
-    assert_eq!(t.named_on_battlefield("Kurbis, Harvest Celebrant"), vec![kurbis]);
+    assert_eq!(
+        t.named_on_battlefield("Kurbis, Harvest Celebrant"),
+        vec![kurbis]
+    );
     assert_eq!(deaths(&t), 1, "the 0/0 token copy died");
     // A Clone put onto the battlefield (not cast).
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(kurbis)]);
     t.enter(P0, "Clone");
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Kurbis, Harvest Celebrant"), vec![kurbis]);
+    assert_eq!(
+        t.named_on_battlefield("Kurbis, Harvest Celebrant"),
+        vec![kurbis]
+    );
     assert_eq!(deaths(&t), 2, "the Clone died as a 0/0");
     assert!(t.in_graveyard(P0, "Clone"));
 }
@@ -743,10 +784,9 @@ fn magus_sisters_chapter_mode_is_chosen_at_random_as_it_goes_on_the_stack() {
         .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
 }
 
-
 #[test]
 fn palliation_accord_uses_palliation_counters_not_shield_counters() {
-    cr!("122.1", "122.1c");
+    cr!("122.1");
     ruling!(
         "Palliation Accord",
         "Palliation Accord has recieved an update to its original Oracle text. Notably, it now uses palliation counters instead of shield counters."

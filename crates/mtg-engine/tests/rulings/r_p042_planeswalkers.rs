@@ -59,16 +59,29 @@ fn a_gideon_creature_controlled_by_an_opponent_can_be_attacked_and_block() {
         let bears = t.battlefield(P1, "Grizzly Bears");
         let giant = t.battlefield(P1, "Hill Giant");
         to_beginning_of_combat(&mut t, P1);
-        assert!(crate::r_s09_common::legal_attack(
-            &mut t,
-            &[(bears, obj(gideon)), (giant, obj(gideon))]
-        ), "{name}");
-        t.attack(&[(bears, obj(gideon)), (giant, obj(gideon))], &[(gideon, bears)]);
-        assert!(!t.on_battlefield(bears), "{name}: he dealt damage to the creature he blocked");
+        assert!(
+            crate::r_s09_common::legal_attack(
+                &mut t,
+                &[(bears, obj(gideon)), (giant, obj(gideon))]
+            ),
+            "{name}"
+        );
+        t.attack(
+            &[(bears, obj(gideon)), (giant, obj(gideon))],
+            &[(gideon, bears)],
+        );
+        assert!(
+            !t.on_battlefield(bears),
+            "{name}: he dealt damage to the creature he blocked"
+        );
         let dealt = damage_by(&t, gideon);
         assert_eq!(dealt.len(), 1, "{name}");
         assert_eq!((dealt[0].0, dealt[0].2), (obj(bears), true), "{name}");
-        assert_eq!(damage_marked(&t, giant), 0, "{name}: none to the unblocked attacker");
+        assert_eq!(
+            damage_marked(&t, giant),
+            0,
+            "{name}: none to the unblocked attacker"
+        );
         // The unblocked Giant's damage to him (as an attacked planeswalker) and the
         // Bears' (as a blocked creature) were both prevented by his ability (one
         // prevention event for the simultaneous damage, CR 615.13).
@@ -97,7 +110,10 @@ fn gideon_jura_requirement_doesnt_apply_to_creatures_put_onto_the_battlefield_at
     let hero = t.battlefield(P1, "Hero of Bladehold");
     t.advance_to(P1, Step::BeginningOfCombat);
     // The Hero must attack Gideon.
-    assert!(!crate::r_s09_common::legal_attack(&mut t, &[(hero, pl(P0))]));
+    assert!(!crate::r_s09_common::legal_attack(
+        &mut t,
+        &[(hero, pl(P0))]
+    ));
     // Its tokens attack P0, as P1 chooses.
     t.answer_choose(P1, &[pl(P0)]);
     t.answer_choose(P1, &[pl(P0)]);
@@ -290,4 +306,3 @@ fn kiora_additional_land_is_cumulative() {
     let fourth = t.hand(P0, "Forest");
     assert!(t.play_land(P0, fourth).is_err());
 }
-

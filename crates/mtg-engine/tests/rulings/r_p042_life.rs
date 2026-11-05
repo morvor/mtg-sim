@@ -18,7 +18,10 @@ use mtg_engine::*;
 fn concede_and_lose(t: &mut TestGame, p: PlayerId) {
     t.g.players[p.idx()].life = 0;
     t.settle();
-    assert!(!t.has_lost(p), "the effect is in place: 0 life doesn't lose");
+    assert!(
+        !t.has_lost(p),
+        "the effect is in place: 0 life doesn't lose"
+    );
     t.take_action(p, Action::Concede);
     assert!(t.has_lost(p));
     assert_eq!(t.g.result, Some(GameResult::Win(vec![P1])));
@@ -362,7 +365,10 @@ fn immortal_coil_exiles_two_cards_as_a_cost() {
         "The first ability exiles two cards in your graveyard as a cost. You can’t activate this ability unless you have at least two cards in your graveyard. Exiling those two cards can’t be responded to."
     );
     let (mut t, coil) = coil(1);
-    assert!(t.activate(P0, coil, 0, &[]).is_err(), "one card isn't enough");
+    assert!(
+        t.activate(P0, coil, 0, &[]).is_err(),
+        "one card isn't enough"
+    );
     t.graveyard(P0, "Hill Giant");
     t.graveyard(P0, "Craw Wurm");
     let hand = t.hand_size(P0);
