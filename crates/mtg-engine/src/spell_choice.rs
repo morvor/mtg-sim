@@ -87,7 +87,11 @@ pub fn choose_cards_to_cast(
         .into_iter()
         .map(|o| {
             let mut f = matching_faces(g, o, filter, ctx);
-            f.retain(|face| g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face)));
+            f.retain(|face| {
+                let chars = g.face_characteristics(o, *face);
+                g.resolution_cast_allowed(p, o, &chars)
+                    && !g.resolution_cast_prohibited(p, o, &chars)
+            });
             (o, f)
         })
         .filter(|(_, f)| !f.is_empty())

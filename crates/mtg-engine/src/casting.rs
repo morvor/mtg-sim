@@ -1038,6 +1038,18 @@ impl Game {
             && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
     }
 
+    /// Whether an effect or rule prohibits `p` from casting the card as a spell with these
+    /// characteristics now (CR 601.3), as checked when choosing a card to cast while an
+    /// effect resolves (CR 608.2g): e.g. a card's own "Cast this spell only during combat".
+    pub(crate) fn resolution_cast_prohibited(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        self.cast_prohibited(p, card, chars) && !proposal_may_change_qualities(chars)
+    }
+
     pub(crate) fn timing_allows_cast(
         &self,
         p: PlayerId,
