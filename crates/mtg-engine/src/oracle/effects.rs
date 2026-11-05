@@ -2309,8 +2309,16 @@ fn p_cant(l: &str, b: &mut Builder) -> Option<Effect> {
     // creatures") are locked in as the effect begins.
     // "Other creatures can't attack this turn" is a class too: other than the source, or
     // (in an instant or sorcery) other than its target, see `other_than_sole_target`.
+    // A class of objects that a player the effect names controls ("creatures target player
+    // controls can't block this turn", Ember Gale's ruling) is a class too: the player is
+    // fixed as the effect begins (`fix_restriction`), the objects aren't.
     let f = match &what {
-        Sel::All(f) if is_class_filter(&without_other(f)) => f.clone(),
+        Sel::All(f)
+            if is_class_filter(&without_other(f))
+                || super::patterns::restriction_grammar::restriction_class(f) =>
+        {
+            f.clone()
+        }
         _ => Filter::In(Box::new(what)),
     };
     let r = match rest {

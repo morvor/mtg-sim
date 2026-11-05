@@ -202,26 +202,37 @@ fn each_player_that_player(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { super::EffectPattern { name: "value results: each opponent ... that player ... this turn", priority: 5, parse: each_player_that_player } }
 
 /// "~ deals damage to each opponent equal to the number of cards that player has drawn
-/// this turn", "... equal to the number of tapped creatures that opponent controls": an
-/// amount for each player in turn (CR 608.2h), "that player" being that one.
+/// this turn", "... equal to the number of tapped creatures that opponent controls", "it
+/// deals damage to each opponent equal to the number of cards in that player's hand"
+/// (Stormbreath Dragon): an amount for each player in turn (CR 608.2h), "that player"
+/// being that one, even where "that player" could otherwise name a triggering player.
 fn damage_each_player_equal(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let (head, v) = l.split_once(" equal to ")?;
-    let (source, who) = [
-        (
-            "~ deals damage to each opponent",
-            (Sel::This, PlayerRef::EachOpponent),
-        ),
-        (
-            "~ deals damage to each player",
-            (Sel::This, PlayerRef::EachPlayer),
-        ),
+    let (subject, who) = [
+        (" deals damage to each opponent", PlayerRef::EachOpponent),
+        (" deals damage to each player", PlayerRef::EachPlayer),
     ]
     .into_iter()
-    .find_map(|(p, x)| (head == p).then_some(x))?;
+    .find_map(|(p, x)| head.strip_suffix(p).map(|s| (s, x)))?;
     if !(v.contains("that player") || v.contains("that opponent")) {
         return None;
     }
+    // The source: "~", or an object reference naming no new target ("it").
+    let source = if subject == "~" {
+        Sel::This
+    } else {
+        let n = b.targets.len();
+        let read = crate::oracle::effects::object_ref(subject, b);
+        if b.targets.len() != n {
+            b.targets.truncate(n);
+            return None;
+        }
+        match read {
+            Some((sel, rest)) if rest.trim().is_empty() => sel,
+            _ => return None,
+        }
+    };
     let v = v.replace("that opponent", "that player");
     let saved = b.it_player.clone();
     b.it_player = PlayerRef::Iterated;
@@ -241,7 +252,9 @@ fn damage_each_player_equal(l: &str, b: &mut Builder) -> Option<Effect> {
     })
 }
 
-inventory::submit! { super::EffectPattern { name: "value results: ~ deals damage to each opponent equal to [amount for that player]", priority: 60, parse: damage_each_player_equal } }
+// Before the general damage grammar (priority 50), which would read "that player" as a
+// triggering player.
+inventory::submit! { super::EffectPattern { name: "value results: ~ deals damage to each opponent equal to [amount for that player]", priority: 45, parse: damage_each_player_equal } }
 
 /// "[player] [have|has|'ve] [verb]" (or the simple past "[player] [verb]"): the player
 /// and the rest after the auxiliary.

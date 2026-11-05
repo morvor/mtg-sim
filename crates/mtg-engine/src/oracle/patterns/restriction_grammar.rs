@@ -930,7 +930,7 @@ inventory::submit! { EffectPattern { name: "restriction grammar: objects [restri
 /// applying to (CR 611.2c): qualities, and players fixed as the effect begins
 /// ("creatures target player controls", "creatures the active player controls", see
 /// `bind_target_players` in `resolve.rs`).
-fn restriction_class(f: &Filter) -> bool {
+pub(crate) fn restriction_class(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(restriction_class),
         Filter::Not(x) => restriction_class(x),
