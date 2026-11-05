@@ -2622,6 +2622,10 @@ impl Game {
                 up_to,
                 store,
             } => {
+                // CR 601.2b: a choice that defines X was made as X was announced.
+                if let Some(chosen) = crate::kw::choice_defining_x::announced(*store, ctx) {
+                    return chosen;
+                }
                 let p = self.eval_player(chooser, ctx).unwrap_or(ctx.controller);
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 // CR 614.13a: objects entering the battlefield right now can't be chosen.

@@ -148,6 +148,7 @@ fn morophon_reduces_colored_mana_of_additional_and_alternative_costs() {
 #[test]
 fn morophon_reduces_both_hybrid_halves_once_they_are_chosen() {
     cr!("601.2f", "118.7e");
+    interp!("hybrid-half-for-a-reduction");
     ruling!(
         "Morophon, the Boundless",
         "If a spell has hybrid mana symbols in its mana cost, you choose which half you will be paying before determining the total cost. For example, if a spell of the chosen type costs {2}{W/U}{W/U}, you may choose for the cost to be {2}{W}{U} and then reduce it to {2}."
