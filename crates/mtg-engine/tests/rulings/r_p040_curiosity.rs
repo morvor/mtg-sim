@@ -73,7 +73,7 @@ fn jolrael_draws_for_any_land_creature() {
 
 #[test]
 fn keeper_of_fables_triggers_even_if_dealt_lethal_damage_at_the_same_time() {
-    cr!("510.2", "603.10a");
+    cr!("510.2", "603.2");
     ruling!(
         "Keeper of Fables",
         "Keeper of Fables's ability triggers even if it's dealt lethal damage at the same time that non-Humans you control deal combat damage to a player."
@@ -121,7 +121,7 @@ fn edric_lets_you_draw_when_your_creature_hits_an_opponent() {
 
 #[test]
 fn ohran_frostfang_is_a_snow_creature_with_no_extra_rules() {
-    cr!("205.4g", "205.4a");
+    cr!("205.4a");
     ruling!(
         "Ohran Frostfang",
         "Snow is a supertype, not a card type. It has no rules meaning or function by itself, but other cards and abilities may refer to it."
@@ -153,7 +153,7 @@ fn ohran_frostfang_is_a_snow_creature_with_no_extra_rules() {
 
 #[test]
 fn kutzil_compares_power_with_base_power() {
-    cr!("208.3", "208.2a", "613.4b");
+    cr!("604.3", "613.4a", "613.4c");
     ruling!(
         "Kutzil, Malamet Exemplar",
         "Some creatures have base power and toughness 0/0 and an ability that gives them a bonus based on some criteria. Those are not characteristic-defining abilities, and that ability doesn't change its base power and toughness. Such a creature will have power greater than its base power if the ability is raising its power above 0."
@@ -250,16 +250,17 @@ fn one_card_per_creature_no_matter_how_much_damage() {
         "Reconnaissance Mission's triggered ability triggers for each creature you control that deals combat damage to a player. You may draw one card each time the ability resolves, no matter how much damage was dealt."
     );
     // (card, the attacker with it, whether the draw is optional)
-    let cases: [(&str, &str, bool); 4] = [
-        ("Neurok Commando", "Neurok Commando", true),
-        ("Scroll Thief", "Scroll Thief", false),
-        ("Coastal Piracy", "Grizzly Bears", true),
-        ("Reconnaissance Mission", "Grizzly Bears", true),
+    // (card, the attacker with it, whether the draw is optional, damage dealt to P1)
+    let cases: [(&str, &str, bool, i32); 4] = [
+        ("Neurok Commando", "Neurok Commando", true, 3),
+        ("Scroll Thief", "Scroll Thief", false, 2),
+        ("Coastal Piracy", "Grizzly Bears", true, 3 + 4),
+        ("Reconnaissance Mission", "Grizzly Bears", true, 3 + 4),
     ];
-    for (name, attacker, optional) in cases {
+    for (name, attacker, optional, dealt) in cases {
         supported(name);
         let mut t = TestGame::new(2);
-        // Glorious Anthem and Giant Growth make the damage bigger than 1.
+        // Glorious Anthem makes the damage of each creature bigger than 1.
         t.battlefield(P0, "Glorious Anthem");
         let card = if name == attacker {
             old(&mut t, P0, name)
@@ -270,7 +271,7 @@ fn one_card_per_creature_no_matter_how_much_damage() {
         let other = old(&mut t, P0, "Hill Giant");
         let mut attackers = vec![(card, pl(P1))];
         if name != attacker {
-            // Two creatures: one card each.
+            // Two creatures: one trigger and one card each.
             attackers.push((other, pl(P1)));
         }
         attack_with(&mut t, &attackers);
@@ -279,12 +280,12 @@ fn one_card_per_creature_no_matter_how_much_damage() {
         }
         to_damage(&mut t);
         let n = attackers.len();
+        assert_eq!(20 - t.life(P1), dealt, "{name}");
+        assert_eq!(triggers_on_stack(&t, "draw a card"), n, "{name}");
         let from = mark(&t);
         let hand = t.hand_size(P0);
         t.resolve_all();
         assert_eq!(t.hand_size(P0), hand + n, "{name}");
-        let life_lost = 20 - t.life(P1);
-        assert!(life_lost as usize > n, "{name}: {life_lost}");
         // Optional draws ask; Scroll Thief's mandatory draw doesn't.
         let asked = yes_nos(&t, from).len();
         assert_eq!(asked, if optional { n } else { 0 }, "{name}");
@@ -790,7 +791,7 @@ fn family_s_favor_triggers_are_mandatory() {
 
 #[test]
 fn foot_chopper_uses_the_sacrificed_creatures_last_known_power() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Foot Chopper",
         "Use the sacrificed creature's power as it last existed on the battlefield to determine how many cards to draw with Foot Chopper's third ability."
@@ -978,7 +979,7 @@ fn korvold_counts_only_permanent_types() {
 
 #[test]
 fn mondo_gecko_becomes_only_the_chosen_color_and_keeps_earlier_hexproof() {
-    cr!("105.3", "702.11d", "611.2c");
+    cr!("105.3", "702.11d", "613.1e");
     ruling!(
         "Mondo Gecko",
         "Mondo Gecko's first ability causes it to become only the chosen color. It will no longer be the color or colors it was previously. (It will still have hexproof from any other colors chosen that turn.)"
@@ -1120,7 +1121,7 @@ fn arm_mounted_anchor_discards_a_pirate_or_two_cards() {
 
 #[test]
 fn the_ravens_warning_doesnt_reveal_the_card_from_outside_the_game() {
-    cr!("400.11a", "714.2c");
+    cr!("400.11a", "714.2b");
     ruling!(
         "The Raven's Warning",
         "You don't have to reveal the card you bring into the game via the chapter III ability."
@@ -1186,4 +1187,70 @@ fn tomebound_lich_draws_and_discards_with_nothing_in_between() {
     assert_eq!(t.life(P0), 23);
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.graveyard_size(P0), 1);
+}
+
+/// Whether P1's declaration of blockers `decl` would be legal now (CR 509.1b-c).
+fn legal_blocks(t: &mut TestGame, decl: &[(ObjectId, ObjectId)]) -> bool {
+    t.g.recompute();
+    let defenders =
+        t.g.combat
+            .as_ref()
+            .map(|c| c.defending_players.clone())
+            .unwrap_or_default();
+    let options = mtg_engine::combat::block_options(&t.g, &defenders);
+    mtg_engine::combat::block_declaration_legal(&t.g, &options, decl)
+}
+
+#[test]
+fn driven_and_despair_trample_and_menace_twice_are_redundant() {
+    cr!("702.19g", "702.111c", "702.19b", "702.111b");
+    ruling!(
+        "Driven // Despair",
+        "Multiple instances of trample or menace are redundant."
+    );
+    // War Mammoth (3/3 trample) gets a second trample from Driven: it still assigns lethal
+    // damage (2) to its blocker first and only the excess (1) to P1.
+    let mut t = TestGame::new(2);
+    let mammoth = old(&mut t, P0, "War Mammoth");
+    let bears = old(&mut t, P1, "Grizzly Bears");
+    let c = t.hand(P0, "Driven // Despair");
+    mana_all(&mut t, P0, 2);
+    let m = crate::r_p039_common::cast_methods(&mut t, P0, c);
+    assert_eq!(m.len(), 1);
+    t.cast(P0, c).method(m[0].clone()).go();
+    t.resolve_all();
+    let tramples = t
+        .obj_now(mammoth)
+        .chars
+        .keywords_of(mtg_engine::keywords::KeywordKind::Trample)
+        .count();
+    assert_eq!(tramples, 2);
+    attack_with(&mut t, &[(mammoth, pl(P1))]);
+    let from = mark(&t);
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![2, 1]));
+    crate::r_s01_common::block_and_finish(&mut t, P1, &[(bears, mammoth)]);
+    assert_eq!(lethal_offers(&t, from), vec![vec![2]]);
+    assert_eq!(t.life(P1), 19);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    // Boggart Brute (3/2 menace) gets a second menace from Despair: two blockers are
+    // still enough, one still isn't.
+    let mut t = TestGame::new(2);
+    let brute = old(&mut t, P0, "Boggart Brute");
+    let a = old(&mut t, P1, "Grizzly Bears");
+    let b = old(&mut t, P1, "Grizzly Bears");
+    let c = t.graveyard(P0, "Driven // Despair");
+    mana_all(&mut t, P0, 2);
+    let m = crate::r_p039_common::cast_methods(&mut t, P0, c);
+    assert_eq!(m.len(), 1);
+    t.cast(P0, c).method(m[0].clone()).go();
+    t.resolve_all();
+    let menaces = t
+        .obj_now(brute)
+        .chars
+        .keywords_of(mtg_engine::keywords::KeywordKind::Menace)
+        .count();
+    assert_eq!(menaces, 2);
+    attack_with(&mut t, &[(brute, pl(P1))]);
+    assert!(!legal_blocks(&mut t, &[(a, brute)]));
+    assert!(legal_blocks(&mut t, &[(a, brute), (b, brute)]));
 }

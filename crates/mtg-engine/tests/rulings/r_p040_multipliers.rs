@@ -110,7 +110,8 @@ fn trample_assigns_the_unmodified_damage() {
         assert_eq!(dealt(&t, mammoth, pl(P1)), k, "{card}");
         assert_eq!(t.life(P1), 20 - k as i32, "{card}");
         // An illegal one (only 1 to the Bears, as if its damage were already multiplied):
-        // not accepted, at most 1 is assigned to P1.
+        // not accepted; the default (lethal damage to the Bears, the rest to P1) is used,
+        // so still only 1 is assigned to P1.
         let mut t = TestGame::new(2);
         t.battlefield(P0, card);
         let mammoth = old(&mut t, P0, "War Mammoth");
@@ -118,8 +119,8 @@ fn trample_assigns_the_unmodified_damage() {
         attack_with(&mut t, &[(mammoth, pl(P1))]);
         t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![1, 2]));
         block_and_finish(&mut t, P1, &[(bears, mammoth)]);
-        assert!(dealt(&t, mammoth, pl(P1)) <= k, "{card}");
-        assert!(dealt(&t, mammoth, o(bears)) >= 2 * k, "{card}");
+        assert_eq!(dealt(&t, mammoth, pl(P1)), k, "{card}");
+        assert_eq!(dealt(&t, mammoth, o(bears)), 2 * k, "{card}");
     }
 }
 
@@ -551,7 +552,7 @@ fn isengard_unleashed_beats_protection_damage_but_not_its_targeting() {
 
 #[test]
 fn sawhorn_nemesis_doubles_damage_to_battles_the_chosen_player_controls_not_protects() {
-    cr!("310.8", "310.6", "120.3h");
+    cr!("310.9a", "310.6", "120.3h");
     ruling!(
         "Sawhorn Nemesis",
         "The protector of a battle with the Siege subtype is not that battle's controller."

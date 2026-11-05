@@ -6,7 +6,7 @@
 
 use crate::r_s01_common::*;
 use mtg_engine::ability::AbilityKind;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Decision;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -24,7 +24,11 @@ pub fn ability(t: &mut TestGame, id: ObjectId, prefix: &str) -> usize {
         .abilities
         .iter()
         .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
-        .position(|a| a.text.starts_with(prefix))
+        .position(|a| {
+            a.text
+                .replace('−', "-")
+                .starts_with(&prefix.replace('−', "-"))
+        })
         .unwrap_or_else(|| panic!("no ability starting with {prefix:?}"))
 }
 
@@ -63,25 +67,6 @@ pub fn lethal_offers(t: &TestGame, from: usize) -> Vec<Vec<u32>> {
             _ => None,
         })
         .collect()
-}
-
-/// The players asked to order replacement/prevention effects since `from`, with the
-/// options they were offered.
-pub fn replacement_choices(t: &TestGame, from: usize) -> Vec<(PlayerId, Vec<String>)> {
-    asked_since(t, from)
-        .into_iter()
-        .filter_map(|(p, d)| match d {
-            Decision::ChooseReplacement { options } => Some((p, options)),
-            _ => None,
-        })
-        .collect()
-}
-
-/// Scripts `p`'s next choice among replacement effects: the first offered option whose
-/// text contains `needle` (by index, since options are offered in a fixed order, the
-/// caller passes the index; see [`replacement_choices`] to check what was offered).
-pub fn pick_replacement(t: &mut TestGame, p: PlayerId, index: usize) {
-    t.answer(p, DecisionKind::Replacement, Answer::Index(index));
 }
 
 /// Goes to the beginning of combat of `p`'s turn (without passing through earlier steps).
