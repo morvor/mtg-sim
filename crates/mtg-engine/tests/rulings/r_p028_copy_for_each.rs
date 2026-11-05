@@ -267,6 +267,7 @@ fn precursor_golem_s_copies_keep_x_and_modes() {
 #[test]
 fn ink_treader_nephilim_s_copies_use_the_original_spell_s_perspective_and_then_fizzle() {
     cr!("707.10d", "608.2b", "115.9c", "603.4");
+    interp!("copy-target-legality-original-or-copy");
     ruling!(
         "Ink-Treader Nephilim",
         "Even though you control the copies, the ability cares about who cast the original spell when determining which other creatures that spell could target. If the original spell has a targeting restriction that refers to \"an opponent,\" the copies will see that from the perspective of the original spell's controller."

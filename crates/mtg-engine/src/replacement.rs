@@ -242,7 +242,7 @@ enum CandScope {
 }
 
 /// A replacement effect's key as a number (as `prevention::damage_prevented` keys them).
-fn numeric_key(k: ReplKey) -> u64 {
+pub(crate) fn numeric_key(k: ReplKey) -> u64 {
     match k {
         ReplKey::Static(o, u) => (o.0 as u64) << 32 ^ u,
         ReplKey::Instance(i) => (1u64 << 63) | i as u64,
@@ -1586,12 +1586,17 @@ impl Game {
                     }
                     _ => None,
                 };
+                // A shield divided among simultaneous damage to several of its recipients
+                // (`prevention::divide_shields`): the part put on this damage.
+                let cap = division
+                    .filter(|_| inst.is_some())
+                    .map_or(u32::MAX, |d| d.3);
                 let prevented = if unpreventable {
                     0
                 } else if let Some(p) = portion {
                     p.min(amount)
                 } else {
-                    shield.map_or(amount, |s| s.min(amount))
+                    shield.map_or(amount, |s| s.min(amount)).min(cap)
                 };
                 if let (Some(i), Some(s)) = (inst, shield) {
                     if !unpreventable {
@@ -1603,7 +1608,7 @@ impl Game {
                     }
                 }
                 if let (true, Some(i)) = (
-                    per_source && !unpreventable,
+                    (per_source || inst.is_some()) && !unpreventable,
                     self.per_source_division
                         .iter()
                         .position(|d| d.0 == key && d.1 == source && d.2 == target),
@@ -2296,7 +2301,19 @@ impl Game {
                     Some(r) => r,
                     None => self.eval_value(&n, &ctx).max(0) as u32,
                 };
-                let moved = shield.min(amount);
+                // A shield divided among simultaneous damage to several of its recipients
+                // (`prevention::divide_shields`): the part put on this damage.
+                let division = self
+                    .per_source_division
+                    .iter()
+                    .position(|d| d.0 == key && d.1 == source && d.2 == target)
+                    .filter(|_| inst.is_some());
+                let cap = division.map_or(u32::MAX, |i| self.per_source_division[i].3);
+                let moved = shield.min(amount).min(cap);
+                if let Some(d) = division {
+                    let d = &mut self.per_source_division[d].3;
+                    *d = d.saturating_sub(moved);
+                }
                 if let Some(i) = inst {
                     let rem = shield - moved;
                     self.replacements[i].remaining = Some(rem);

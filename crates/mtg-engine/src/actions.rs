@@ -1897,6 +1897,7 @@ impl Game {
         let outer_shared = std::mem::take(&mut self.prevented_per_source);
         let outer_division = std::mem::take(&mut self.per_source_division);
         self.divide_per_source_prevention(&events, combat);
+        crate::prevention::divide_shields(self, &events, combat);
         let recipients: Vec<ObjectId> = events.iter().filter_map(|(_, t, _)| t.object()).collect();
         let prev_batch_uses = std::mem::replace(&mut self.zones.damage_batch_uses, Some(vec![]));
         for (s, t, a) in events {
