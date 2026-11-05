@@ -304,4 +304,4 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Why: 608.2d gives the choices an effect offers to the player applying it, the controller; "Choose a player" in the same text is the controller's choice too.
 - Affects: Backdraft.
 - Code: `crates/mtg-engine/src/oracle/patterns/history_6.rs` (`damage_dealt_by_one_of_those`); `crates/mtg-engine/src/kw/damage_history_by.rs` (`CHOOSE_ONE_OF`); `crates/mtg-engine/src/oracle/patterns/choice_grammar_players.rs` (`cast_spells_referent`).
-- Tests: `tests/cards/c6_history_permissions.rs` (`backdraft_deals_half_the_damage_one_of_the_players_sorceries_dealt`).
+- Tests: `tests/cards/c6_history_permissions.rs` (`backdraft_deals_half_the_damage_one_of_the_players_sorceries_dealt`, `backdraft_counts_all_the_damage_the_sorcery_dealt`).

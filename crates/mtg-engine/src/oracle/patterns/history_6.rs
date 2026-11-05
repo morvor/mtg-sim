@@ -12,9 +12,11 @@
 //! * "For each creature that died this way, put a creature card from the graveyard of the
 //!   player who controlled that creature the last time it became blocked by that Wall onto
 //!   the battlefield under its owner's control." (Glyph of Reincarnation): the controller
-//!   recorded with each block (`kw/block_history::controller_when_blocked_by`); the cards
-//!   are chosen and put onto the battlefield after all the creatures are destroyed, and
-//!   they may be the creatures just destroyed (Glyph of Reincarnation rulings).
+//!   recorded with each block (`kw/block_history::controller_when_blocked_by`); after all
+//!   the creatures are destroyed, a card is chosen for each creature that died (each one
+//!   a card not chosen before) and then all of them are put onto the battlefield together
+//!   (CR 608.2f, [`REINCARNATED`]); they may be the creatures just destroyed (Glyph of
+//!   Reincarnation rulings).
 //! * "[~ deals damage to that player] equal to half the damage dealt by one of those
 //!   sorcery spells this turn, rounded down" (Backdraft): after "Choose a player who cast
 //!   one or more sorcery spells this turn" (`choice_grammar_players.rs`), "those sorcery
@@ -197,6 +199,18 @@ fn anchored_block_history(l: &str, b: &mut Builder) -> Option<Effect> {
         // The anchor itself is "that [noun]" for later sentences only.
         b.it = saved.1.clone();
         let e = parse_sentence(rewritten.trim(), b)?;
+        // A target described by the relation ("target creature that target Wall blocked
+        // this turn") is announced with the words of the text, not the stand-in.
+        let token = format!("{MARK}{}-{}-{slot}", rel_code(a.rel), when_code(a.when));
+        let phrase = padded[a.start..a.end].trim();
+        for t in b.targets.iter_mut().skip(saved.0) {
+            if t.text.contains(&token) {
+                t.text = t.text.replace(&token, phrase);
+            }
+        }
+        if b.targets.iter().any(|t| t.text.contains(MARK)) {
+            return None;
+        }
         let json = serde_json::to_string(&e).ok()?;
         let n = json.matches("BlockRelation").count()
             + b.targets
@@ -221,6 +235,11 @@ fn anchored_block_history(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "history 6: [instruction] [objects] blocked by target [creature] this turn", priority: 120, parse: anchored_block_history } }
 
 use crate::kw::block_history::OWNED_BY_CONTROLLER_WHEN_BLOCKED;
+
+/// The cards chosen by "for each creature that died this way, put a creature card from
+/// the graveyard of the player who controlled that creature ... onto the battlefield",
+/// put onto the battlefield together once all are chosen.
+pub const REINCARNATED: Var = vars::USER + 61_602;
 
 /// "For each creature that died this way, put a creature card from the graveyard of the
 /// player who controlled that creature the last time it became blocked by that Wall onto
@@ -300,20 +319,37 @@ fn for_each_died_put_from_blocked_controllers_graveyard(l: &str, b: &mut Builder
             // the player who puts it there (CR 110.2a).
             to.controller = Some(PlayerRef::You);
         }
-        Some(Effect::ForEach {
-            sel,
-            var,
-            effect: Box::new(Effect::Move {
-                what: Sel::Choose {
-                    chooser,
-                    filter: Filter::And(parts),
-                    count,
-                    up_to,
-                    store,
-                },
+        // The cards are chosen for each creature in turn, each one a card not chosen
+        // before, and then put onto the battlefield together (CR 608.2f; Glyph of
+        // Reincarnation's ruling: "choose the appropriate number of creatures from the
+        // attacker's graveyard and put them onto the battlefield").
+        let mut parts = parts;
+        parts.push(Filter::Not(Box::new(Filter::In(Box::new(Sel::Var(
+            REINCARNATED,
+        ))))));
+        Some(Effect::seq(vec![
+            Effect::ForEach {
+                sel,
+                var,
+                effect: Box::new(Effect::Store {
+                    var: REINCARNATED,
+                    sel: Sel::Union(vec![
+                        Sel::Var(REINCARNATED),
+                        Sel::Choose {
+                            chooser,
+                            filter: Filter::And(parts),
+                            count,
+                            up_to,
+                            store,
+                        },
+                    ]),
+                }),
+            },
+            Effect::Move {
+                what: Sel::Var(REINCARNATED),
                 to,
-            }),
-        })
+            },
+        ]))
     })();
     if ok.is_none() {
         b.targets.truncate(saved.0);

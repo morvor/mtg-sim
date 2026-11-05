@@ -730,6 +730,55 @@ impl Renderer<'_> {
         if let Some(r) = self.enters_with_if(v) {
             return Some(r);
         }
+        // "For each creature that died this way, put a creature card from the graveyard
+        // of the player who controlled that creature ... onto the battlefield" (Glyph of
+        // Reincarnation, `history_6.rs`): each card chosen in turn, then all put onto the
+        // battlefield together; said as the instruction done for each creature.
+        if let [Effect::ForEach { sel, var, effect }, Effect::Move {
+            what: Sel::Var(m),
+            to,
+        }, ..] = v
+        {
+            use crate::oracle::patterns::history_6::REINCARNATED;
+            if let Effect::Store {
+                var: s,
+                sel: Sel::Union(u),
+            } = effect.as_ref()
+            {
+                if let (
+                    [Sel::Var(a), Sel::Choose {
+                        chooser,
+                        filter: Filter::And(parts),
+                        count,
+                        up_to,
+                        store,
+                    }],
+                    true,
+                ) = (u.as_slice(), *s == REINCARNATED && *m == REINCARNATED)
+                {
+                    let not_chosen = matches!(parts.last(), Some(Filter::Not(x))
+                        if matches!(x.as_ref(), Filter::In(s)
+                            if matches!(s.as_ref(), Sel::Var(v) if *v == REINCARNATED)));
+                    if *a == REINCARNATED && not_chosen {
+                        let each = Effect::ForEach {
+                            sel: sel.clone(),
+                            var: *var,
+                            effect: Box::new(Effect::Move {
+                                what: Sel::Choose {
+                                    chooser: chooser.clone(),
+                                    filter: Filter::And(parts[..parts.len() - 1].to_vec()),
+                                    count: count.clone(),
+                                    up_to: *up_to,
+                                    store: *store,
+                                },
+                                to: to.clone(),
+                            }),
+                        };
+                        return Some((self.effect(&each), 2));
+                    }
+                }
+            }
+        }
         if let Some(r) = self.seq_more(v) {
             return Some(r);
         }
