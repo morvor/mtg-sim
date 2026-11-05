@@ -162,7 +162,7 @@ fn culmination_of_studies_exiles_everything_before_acting() {
 
 #[test]
 fn derevis_command_zone_ability_isnt_casting() {
-    cr!("903.8", "113.6", "602.1");
+    cr!("903.8", "113.6");
     ruling!(
         "Derevi, Empyrial Tactician",
         "When you activate Derevi's last ability, you're not casting Derevi as a spell. The ability can't be countered by something that counters only spells. The ability isn't subject to the commander tax, nor does it increase the tax if you cast Derevi from the command zone later in the game."
@@ -230,7 +230,7 @@ fn a_split_cards_mana_value_off_the_stack_is_both_halves() {
 
 #[test]
 fn lord_windgrace_makes_six_cats_unless_every_target_is_illegal() {
-    cr!("608.2b", "115.10");
+    cr!("608.2b");
     ruling!(
         "Lord Windgrace",
         "While resolving Lord Windgrace's last ability, you create six Cat Warrior tokens even if fewer than six nonland permanents are destroyed."

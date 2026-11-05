@@ -51,7 +51,7 @@ fn make_a_wish_cant_return_itself() {
 
 #[test]
 fn make_a_wish_chooses_the_cards_as_it_resolves() {
-    cr!("608.2c");
+    cr!("115.10");
     ruling!(
         "Make a Wish",
         "The cards aren’t randomly chosen until Make a Wish resolves."
@@ -70,7 +70,7 @@ fn make_a_wish_chooses_the_cards_as_it_resolves() {
 
 #[test]
 fn fossil_find_reordering_doesnt_make_new_objects() {
-    cr!("404.2", "400.7");
+    cr!("404.2");
     ruling!(
         "Fossil Find",
         "Except for the card that you return to your hand, reordering your graveyard won’t affect anything that’s currently targeting or enchanting a card in your graveyard."
@@ -104,7 +104,7 @@ fn fossil_find_reordering_doesnt_make_new_objects() {
 
 #[test]
 fn blood_for_bones_chooses_on_resolution_and_triggers_wait() {
-    cr!("608.2c", "603.3", "601.2h");
+    cr!("115.10", "603.3", "601.2h");
     ruling!(
         "Blood for Bones",
         "Blood for Bones doesn’t target the creature cards to return from your graveyard."
@@ -149,7 +149,7 @@ fn blood_for_bones_chooses_on_resolution_and_triggers_wait() {
 
 #[test]
 fn grim_captains_call_chooses_on_resolution_and_a_card_counts_for_one_type() {
-    cr!("608.2c", "205.3m");
+    cr!("115.10", "205.3m");
     ruling!(
         "Grim Captain's Call",
         "Grim Captain’s Call doesn’t target the cards to return. You choose them while it’s resolving."
@@ -240,7 +240,7 @@ fn the_underworld_cookbook_returns_any_creature_card() {
 
 #[test]
 fn soul_manipulation_cant_return_the_creature_spell_it_counters() {
-    cr!("601.2c", "115.1");
+    cr!("601.2c");
     ruling!(
         "Soul Manipulation",
         "If you choose both modes, you choose their targets at the same time. You can’t counter your own creature spell and then return that card from your graveyard to your hand."
@@ -271,7 +271,7 @@ fn soul_manipulation_cant_return_the_creature_spell_it_counters() {
 
 #[test]
 fn courier_bat_and_sanguine_indulgence_ignore_life_lost() {
-    cr!("119.3", "601.2f");
+    cr!("603.4", "601.2f");
     ruling!(
         "Courier Bat",
         "Courier Bat's ability will trigger if you gained any amount of life this turn. It doesn't matter if you also lost that much life or more."

@@ -103,7 +103,7 @@ fn an_unused_regeneration_shield_goes_away_as_the_turn_ends() {
 
 #[test]
 fn a_regeneration_shield_must_exist_before_the_destruction() {
-    cr!("701.19a", "608.2");
+    cr!("701.19a");
     ruling!(
         "Cudgel Troll",
         "To work, the regeneration shield must be created before Cudgel Troll is destroyed."

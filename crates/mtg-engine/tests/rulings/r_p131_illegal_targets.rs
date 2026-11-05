@@ -82,7 +82,7 @@ fn urborg_uprising_with_no_targets_still_draws() {
 
 #[test]
 fn morgue_burst_returning_nothing_deals_no_damage() {
-    cr!("608.2b", "608.2c");
+    cr!("608.2b");
     ruling!(
         "Morgue Burst",
         "If the creature card is an illegal target when Morgue Burst tried to resolve (most likely because it was exiled in response), it won’t be returned to your hand and no damage will be dealt to the target."
