@@ -194,6 +194,17 @@ pub fn own_move_replacements(
 /// The objects that paying the cost of the spell or ability being resolved moved to a
 /// public zone, as the new objects they became there (CR 400.7j).
 pub const COST_MOVED: Var = vars::USER + 130;
+/// The ability's source, as the new object it became in a public zone, when a cost part
+/// about the source itself moved it there ("Sacrifice ~", "Discard this card", "Exile ~
+/// from your hand"). Instructions about the source follow it there only then: "Discard
+/// two cards, Sacrifice Plague Reaver: ... Return Plague Reaver to the battlefield ..."
+/// returns it from the graveyard, but "{1}, Sacrifice a creature: Exile Ghost Council of
+/// Orzhova. ..." paid by sacrificing Ghost Council itself leaves it in the graveyard, and
+/// "Sacrifice a creature: Put a +1/+1 counter on ~" paid with ~ puts the counter on nothing
+/// (CR 400.7j; their rulings; interpretation `cost-moved-source-found-only-by-own-cost`).
+/// References to what the cost moved as such ([`COST_MOVED`]: "the sacrificed card") find
+/// it whatever the cost's wording.
+pub const COST_MOVED_SELF: Var = vars::USER + 133;
 /// The cards an exile cost of the spell or ability being resolved exiled, as the new
 /// objects they became in exile ("the exiled card", CR 400.7j). Other objects the cost
 /// moved (sacrificed permanents, discarded cards) aren't among them.
@@ -204,7 +215,8 @@ pub const COST_REVEALED: Var = vars::USER + 7522;
 
 /// CR 400.7j: if the cost of a spell or ability causes an object to move to a public zone,
 /// the spell or ability's effects can find that object. Records, for the objects used to
-/// pay the cost, the new objects they became in public zones ([`COST_MOVED`]), and the
+/// pay the cost, the new objects they became in public zones ([`COST_MOVED`]; the source,
+/// when a cost part about the source itself moved it, also [`COST_MOVED_SELF`]), and the
 /// cards the exile cost exiled ([`COST_EXILED`]).
 pub fn record_cost_moved(
     g: &Game,
@@ -222,6 +234,14 @@ pub fn record_cost_moved(
         .collect();
     if !moved.is_empty() {
         vars.insert(COST_MOVED, moved);
+    }
+    let moved_self: Vec<Entity> = paid
+        .moved_self
+        .iter()
+        .filter_map(|o| now_in(o, &|z| z.is_public()))
+        .collect();
+    if !moved_self.is_empty() {
+        vars.insert(COST_MOVED_SELF, moved_self);
     }
     // Cards discarded to pay the cost ("the discarded card"): cards that left a hand
     // for a public zone other than by being exiled.
