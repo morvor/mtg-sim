@@ -74,4 +74,4 @@ Format and kinds: `docs/agents/items/interpretation-register.md`; index:
 - Why: "The player" names one player; both cards with this wording state a tie rule that gives the instruction to no one directly.
 - Affects: Timesifter; Psychic Battle (hand-written, uses the same comparison).
 - Code: `crates/mtg-engine/src/oracle/patterns/per_player_results_6.rs` (`greatest_mana_value_comparison`, `tied_players_repeat`).
-- Tests: `tests/cards/cards6_per_player_results.rs` (`timesifter_tied_players_repeat_until_the_tie_is_broken`).
+- Tests: `tests/cards/cards6_per_player_results.rs` (`timesifter_tied_players_repeat_until_the_tie_is_broken`, `timesifter_tied_until_no_card_is_left_gives_no_extra_turn`).

@@ -262,13 +262,13 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Kind: interpretation
 - Status: decided
 - Rules: 601.7a "If there is more than one opponent who could make such a choice, the spell’s controller decides which of those opponents will make the choice." / 701.21a "To sacrifice a permanent, its controller moves it from the battlefield directly to its owner’s graveyard. ..."
-- Question: Demonic Hordes: "tap ~ and sacrifice a land of an opponent's choice." 601.7a is about targets chosen by an opponent; this choice is made on resolution and isn't a target. Which opponent chooses in multiplayer?
-- Decision: As the ability resolves, its controller chooses an opponent (`ChoiceKind::Opponent`), who then chooses which land the controller sacrifices among the lands the controller controls.
+- Question: Demonic Hordes: "tap ~ and sacrifice a land of an opponent's choice." 601.7a is about targets chosen by an opponent; this choice is made on resolution and isn't a target. Which opponent chooses in multiplayer? Likewise The Toymaker's Trap's "an opponent guesses which number you chose".
+- Decision: As the ability resolves, its controller chooses an opponent (`ChoiceKind::Opponent`), who then chooses which land the controller sacrifices among the lands the controller controls. For The Toymaker's Trap, the opponent the controller picks guesses (and is the "they" who loses life for a wrong guess).
 - Alternatives: (A) Each opponent in turn order picks one (more lands than the card says). (B) The next opponent in turn order chooses automatically.
 - Why: 601.7a gives the controller that decision for the same wording about targets; nothing suggests a different procedure on resolution.
-- Affects: Demonic Hordes.
-- Code: `crates/mtg-engine/src/oracle/patterns/paper_choices.rs` (`sacrifice_of_an_opponents_choice`).
-- Tests: `tests/cards/paper_choosers.rs` (`demonic_hordes_an_opponent_chooses_the_land_you_sacrifice`).
+- Affects: Demonic Hordes; The Toymaker's Trap.
+- Code: `crates/mtg-engine/src/oracle/patterns/paper_choices.rs` (`sacrifice_of_an_opponents_choice`); `crates/mtg-engine/src/oracle/patterns/choices_6.rs` (`guesses_which_number`).
+- Tests: `tests/cards/paper_choosers.rs` (`demonic_hordes_an_opponent_chooses_the_land_you_sacrifice`); `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_the_opponent_its_controller_picks_guesses_and_loses_the_life`).
 
 ## player-destroys-chosen-permanents: "[Player] destroys N lands they control": chosen by that player among those that can be destroyed
 - Kind: interpretation
@@ -306,14 +306,14 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Code: `crates/mtg-engine/src/choices.rs` (`ChoiceKind::NumberNotChosen`); `crates/mtg-engine/src/modal_history.rs` (`unchosen_numbers`, `record_number`); `crates/mtg-engine/src/oracle/patterns/choices_6.rs`.
 - Tests: `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_remembers_numbers_only_for_its_own_object`).
 
-## number-guess-range: A player guessing "which number you chose" names one of the numbers the choice allowed
+## number-guess-range: A player guessing "which number you chose" names one of the numbers of the choice's range
 - Kind: interpretation
-- Status: decided
-- Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / The Toymaker's Trap's ruling: "To secretly choose a number, write a number from 1 to 5 down without showing it to anyone else."
-- Question: "An opponent guesses which number you chose, ... they lose life equal to the number they guessed": which numbers may the opponent guess?
-- Decision: One of the numbers of the choice's range (1 to 5), including numbers chosen on earlier turns (a guess the opponent knows is wrong is still a guess of which number you chose).
-- Alternatives: (A) Any number (an opponent could guess 0 and lose no life); (B) only the numbers that haven't been chosen.
-- Why: A guess of "which number you chose" is a guess among the numbers you could have chosen; reading (A) would let the guesser escape the life loss with a number that can't be the answer.
+- Status: provisional
+- Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / The Toymaker's Trap's ruling: "To secretly choose a number, write a number from 1 to 5 down without showing it to anyone else." The CR has no rule for guesses.
+- Question: "An opponent guesses which number you chose, ... If they guessed wrong, they lose life equal to the number they guessed": which numbers may the opponent guess?
+- Decision: One of the numbers of the range the card names (1 to 5), including numbers chosen for it on earlier turns, which the opponent knows (they were revealed) can't be the answer: such a guess is wrong, and the guesser loses that much life.
+- Alternatives: (A) Any number at all (an opponent could guess 0 and lose no life). (B) Only the numbers that haven't been chosen, the ones the answer can be: an opponent couldn't then guess a low number chosen earlier, knowing it's wrong, to lose little life.
+- Why: The card states the range ("a number between 1 and 5"), and the guess is of a number in it; it doesn't say the guess must be one that can still be right. Reading (A) would let the guesser lose no life by guessing 0, outside the card's range. A judge could also rule (B), which is why this is provisional.
 - Affects: The Toymaker's Trap.
 - Code: `crates/mtg-engine/src/oracle/patterns/choices_6.rs` (`guesses_which_number`).
 - Tests: `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_wrong_guess_costs_the_guessed_life_and_draws`).

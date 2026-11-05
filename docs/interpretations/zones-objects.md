@@ -159,7 +159,7 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Why: "Controlled" names the controller, not the owner; the permanents are no longer on the battlefield, so their last known information is used (608.2h); "those permanents" are the ones the previous instruction shuffled.
 - Affects: Guff Rewrites History.
 - Code: `crates/mtg-engine/src/oracle/patterns/per_player_results_6.rs` (`each_player_who_controlled`).
-- Tests: `tests/cards/cards6_per_player_results.rs` (`guff_rewrites_history_each_controller_casts_the_card_they_exiled`).
+- Tests: `tests/cards/cards6_per_player_results.rs` (`guff_rewrites_history_each_controller_casts_the_card_they_exiled`, `guff_rewrites_history_a_player_whose_target_became_illegal_exiles_nothing`).
 
 ## cost-moved-source-found-only-by-own-cost: An ability's instructions about its own source follow the source to where the cost moved it only when a cost part about the source itself moved it
 - Kind: interpretation

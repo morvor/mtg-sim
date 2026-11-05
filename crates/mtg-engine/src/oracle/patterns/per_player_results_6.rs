@@ -153,9 +153,17 @@ fn the_player_with_the_greatest(l: &str, prev: &mut Effect, b: &mut Builder) -> 
     if !verbs.contains(&verb) {
         return false;
     }
+    // "It", "that card", "its mana value" in the instruction: that player's own card (the
+    // one compared), not every card the step moved.
+    let theirs = Sel::Matching(
+        Box::new(Sel::Var(COMPARED)),
+        Filter::OwnedBy(PlayerRel::Iterated),
+    );
     let saved = std::mem::replace(&mut b.it_player, PlayerRef::Iterated);
+    let saved_it = std::mem::replace(&mut b.it, theirs);
     let body = parse_sentence(&format!("that player {pred}"), b);
     b.it_player = saved;
+    b.it = saved_it;
     let Some(body) = body else {
         return false;
     };
@@ -394,24 +402,47 @@ fn each_player_who_controlled(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
         return false;
     };
     // The instruction for each of them: "each player [pred]", or "that player [pred]" for
-    // each of them ("each player draws a card" is one instruction for all players).
+    // each of them ("each player draws a card" is one instruction for all players). "It",
+    // "that creature" and "them" in it would mean the permanent (or permanents) that
+    // player controlled, which no referent of the builder says (the targets or the group
+    // are all of them): such an instruction isn't supported.
+    let saved_it = std::mem::replace(
+        &mut b.it,
+        super::oracle_hardening_referents::no_referent(),
+    );
+    let saved_group = b.group.take();
+    let saved_named = std::mem::take(&mut b.named);
+    let saved_chosen = b.chosen_creature.take();
+    let targets = b.targets.len();
     let effect = match parse_sentence(&format!("each player {pred}"), b) {
         Some(Effect::ForEachPlayer {
             who: PlayerRef::EachPlayer,
             effect,
-        }) => effect,
+        }) => Some(effect),
         _ => {
             let saved = std::mem::replace(&mut b.it_player, PlayerRef::Iterated);
             let e = parse_sentence(&format!("that player {pred}"), b);
             b.it_player = saved;
-            let Some(e) = e else {
-                return false;
-            };
-            if format!("{e:?}").contains("TriggerPlayer") {
-                return false;
-            }
-            Box::new(e)
+            e.filter(|e| !format!("{e:?}").contains("TriggerPlayer"))
+                .map(Box::new)
         }
+    };
+    b.it = saved_it;
+    b.group = saved_group;
+    b.named = saved_named;
+    b.chosen_creature = saved_chosen;
+    // No referent, and none of the targets ("those permanents" are all of them).
+    let refers = |e: &Effect| {
+        serde_json::to_string(e).is_ok_and(|j| {
+            j.contains(&format!(
+                "\"Var\":{}",
+                super::oracle_hardening_referents::NO_REFERENT
+            )) || j.contains("\"Target\":")
+        })
+    };
+    let Some(effect) = effect.filter(|e| b.targets.len() == targets && !refers(e)) else {
+        b.targets.truncate(targets);
+        return false;
     };
     // As they last existed on the battlefield (CR 608.2h): their controllers just before
     // they moved.
@@ -739,6 +770,10 @@ mod tests {
             ("Sorcery", "Draw a card. The player who exiled the card with the greatest mana value draws a card."),
             // A tie loop needs the comparison.
             ("Sorcery", "Each player exiles the top card of their library. If two or more players' cards are tied for greatest, the tied players repeat this process until the tie is broken."),
+            // "It" would be the permanent that player controlled, which no referent says.
+            ("Sorcery", "For each player, choose target creature that player controls. Exile those creatures. Each player who controlled one of those creatures returns it to the battlefield."),
+            ("Sorcery", "For each player, choose target creature that player controls. Exile those creatures. Each player who controlled one of those creatures gains life equal to its power."),
+            ("Sorcery", "For each player, choose target creature that player controls. Destroy those creatures. Each player who controlled one of those creatures creates a token that's a copy of that creature."),
         ] {
             assert!(compiled(ty, text).is_none(), "{text}");
         }

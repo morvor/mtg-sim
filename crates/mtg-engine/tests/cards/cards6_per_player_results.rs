@@ -67,7 +67,7 @@ fn cast_vault(t: &mut TestGame) {
 
 #[test]
 fn lim_duls_vault_without_paying_life_puts_the_five_back_on_top() {
-    cr!("608.2c", "701.24g");
+    cr!("608.2c", "701.24g", "401.4");
     ruling!(
         "Lim-Dûl's Vault",
         "If you pay no life, you shuffle the rest of your library and then put the top five cards back on top in any order."
@@ -76,10 +76,51 @@ fn lim_duls_vault_without_paying_life_puts_the_five_back_on_top() {
     let mut t = TestGame::new(2);
     stack_library(&mut t, P0, &FIRST);
     let lib = t.library_size(P0);
+    let rest: Vec<ObjectId> = t.g.player(P0).library[..lib - 5].to_vec();
     t.answer_yes(P0, false);
+    // The five go back in the order P0 chooses: the reverse of the order offered.
+    t.answer(P0, DecisionKind::Order, Answer::Indices(vec![4, 3, 2, 1, 0]));
+    let from = t.asked().len();
     cast_vault(&mut t);
     assert_eq!(t.life(P0), 20);
     assert_eq!(t.library_size(P0), lib);
+    let offered: Vec<String> = t.asked()[from..]
+        .iter()
+        .find_map(|(p, d)| match d {
+            Decision::Order { items, .. } if *p == P0 => Some(items.clone()),
+            _ => None,
+        })
+        .expect("P0 ordered the five cards");
+    let mut expected: Vec<String> = offered
+        .iter()
+        .map(|s| s.split(" #").next().unwrap_or(s).to_string())
+        .collect();
+    assert_eq!(sorted(expected.clone()), names(&FIRST));
+    expected.reverse();
+    assert_eq!(top_names(&t, P0, 5), expected);
+    // The rest of the library was shuffled (the same cards, in another order).
+    let now: Vec<ObjectId> = t.g.player(P0).library[..lib - 5].to_vec();
+    assert_ne!(now, rest, "the rest of the library was shuffled");
+    let (mut a, mut b) = (now, rest);
+    a.sort();
+    b.sort();
+    assert_eq!(a, b);
+}
+
+#[test]
+fn lim_duls_vault_cant_pay_life_while_its_life_total_cant_change() {
+    cr!("119.8");
+    compiles("Lim-Dûl's Vault");
+    let mut t = TestGame::new(2);
+    // "Your life total can't change": a cost of paying life can't be paid (CR 119.8).
+    t.battlefield(P0, "Platinum Emperion");
+    let mut cards: Vec<&str> = FIRST.to_vec();
+    cards.extend(SECOND);
+    stack_library(&mut t, P0, &cards);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    cast_vault(&mut t);
+    assert_eq!(t.life(P0), 20);
     assert_eq!(sorted(top_names(&t, P0, 5)), names(&FIRST));
 }
 
@@ -283,13 +324,76 @@ fn the_toymakers_trap_that_left_and_returned_has_no_memory_of_its_numbers() {
     assert_eq!(t.life(P1), 18);
 }
 
+#[test]
+fn the_toymakers_trap_the_opponent_its_controller_picks_guesses_and_loses_the_life() {
+    cr!("608.2c");
+    interp!("opponents-choice-untargeted");
+    compiles("The Toymaker's Trap");
+    let mut t = TestGame::new(3);
+    let trap = t.battlefield(P0, "The Toymaker's Trap");
+    // P0 chooses 4 and picks P2 to guess; P2 guesses 2 (P1 would have guessed right).
+    pick(&mut t, P0, &["1", "2", "3", "4", "5"], "4");
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    pick(&mut t, P2, &["1", "2", "3", "4", "5"], "2");
+    pick(&mut t, P1, &["1", "2", "3", "4", "5"], "4");
+    t.advance_to(P0, Step::Upkeep);
+    let hand = t.hand_size(P0);
+    let from = t.asked().len();
+    t.resolve_all();
+    // P0 was offered both opponents; only P2 guessed, and P2 loses the life.
+    let offered = t.asked()[from..]
+        .iter()
+        .find_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } if *p == P0 => Some(candidates.clone()),
+            _ => None,
+        })
+        .expect("P0 picked the opponent who guesses");
+    assert_eq!(offered, vec![Entity::Player(P1), Entity::Player(P2)]);
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseOption { .. })));
+    assert_eq!((t.life(P1), t.life(P2)), (20, 18));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(t.on_battlefield(trap));
+}
+
 // ---------------------------------------------------------------------------
 // Timesifter
 // ---------------------------------------------------------------------------
 
+/// Moves `id` to its owner's graveyard (it leaves the battlefield).
+fn to_graveyard(t: &mut TestGame, id: ObjectId) {
+    let owner = t.g.obj(id).owner;
+    t.g.move_object_ev(mtg_engine::replacement::MoveEv {
+        obj: id,
+        to: mtg_engine::object::Zone::Graveyard(owner),
+        pos: mtg_engine::ability::LibraryPosition::Top,
+        cause: mtg_engine::events::MoveCause::Effect,
+        by: Some(owner),
+        etb: Default::default(),
+        source: None,
+    })
+    .expect("moved");
+}
+
+/// The players who take the next `n` turns, starting with the turn after this one.
+fn next_turns(t: &mut TestGame, n: usize) -> Vec<PlayerId> {
+    let mut out = Vec::new();
+    for _ in 0..n {
+        let turn = t.g.turn.number;
+        assert!(t.g.run_until(10_000, |g| g.turn.number > turn));
+        out.push(t.g.turn.active);
+    }
+    out
+}
+
 #[test]
 fn timesifter_gives_the_extra_turn_to_the_player_with_the_greatest_mana_value() {
     cr!("500.7", "608.2c");
+    ruling!(
+        "Timesifter",
+        "Each player must exile the top card of their library at the start of each upkeep step."
+    );
     compiles("Timesifter");
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Timesifter");
@@ -310,7 +414,6 @@ fn timesifter_gives_the_extra_turn_to_the_player_with_the_greatest_mana_value() 
 fn timesifter_tied_players_repeat_until_the_tie_is_broken() {
     cr!("500.7", "608.2c");
     ruling!("Timesifter", "Each time there's a tie for the highest cost, only the players involved in the tie continue.");
-    ruling!("Timesifter", "A land card has a mana value of 0.");
     interp!("greatest-card-unique-player");
     compiles("Timesifter");
     let mut t = TestGame::new(3);
@@ -336,6 +439,7 @@ fn timesifter_a_player_who_exiles_no_card_cant_take_the_turn() {
         "Timesifter",
         "If a player fails to exile a card, they can't take the extra turn."
     );
+    ruling!("Timesifter", "A land card has a mana value of 0.");
     compiles("Timesifter");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Timesifter");
@@ -348,24 +452,117 @@ fn timesifter_a_player_who_exiles_no_card_cant_take_the_turn() {
 }
 
 #[test]
+fn timesifter_tied_players_go_on_until_one_of_them_has_no_card_left() {
+    cr!("500.7", "608.2c");
+    ruling!("Timesifter", "A land card has a mana value of 0.");
+    ruling!(
+        "Timesifter",
+        "If a player fails to exile a card, they can't take the extra turn."
+    );
+    ruling!("Timesifter", "Each time there's a tie for the highest cost, only the players involved in the tie continue.");
+    compiles("Timesifter");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Timesifter");
+    // Lands tie at 0 twice; then P0 has no card left and P1's third land is the only one.
+    set_library(&mut t, P0, &["Forest", "Forest"]);
+    set_library(&mut t, P1, &["Forest", "Forest", "Forest"]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!((t.library_size(P0), t.library_size(P1)), (0, 0));
+    assert_eq!(t.g.extra_turns, vec![P1]);
+}
+
+#[test]
+fn timesifter_tied_until_no_card_is_left_gives_no_extra_turn() {
+    cr!("608.2c");
+    interp!("greatest-card-unique-player");
+    compiles("Timesifter");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Timesifter");
+    // Every pass ties until both libraries are empty: the process ends, nobody takes it.
+    set_library(&mut t, P0, &["Forest", "Island"]);
+    set_library(&mut t, P1, &["Swamp", "Plains"]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!((t.library_size(P0), t.library_size(P1)), (0, 0));
+    assert!(t.g.extra_turns.is_empty());
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn timesifter_the_player_who_was_next_takes_the_turn_after_the_extra_turn() {
+    cr!("500.7");
+    ruling!("Timesifter", "Remember which player would have taken the next turn if Timesifter's ability hadn't triggered the first time. After Timesifter leaves the battlefield and all extra turns have been taken, that player takes the next turn.");
+    compiles("Timesifter");
+    let mut t = TestGame::new(3);
+    let sifter = t.battlefield(P0, "Timesifter");
+    // P1's upkeep: Bears (2) win, P0 takes an extra turn. Its upkeep: Divination (3) wins
+    // (P1 drew the Plains in between), P1 takes an extra turn after it.
+    stack_library(&mut t, P0, &["Grizzly Bears", "Forest"]);
+    stack_library(&mut t, P1, &["Shock", "Plains", "Divination"]);
+    stack_library(&mut t, P2, &["Forest", "Island"]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.g.extra_turns, vec![P0]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.in_exile("Divination"));
+    assert_eq!(t.g.extra_turns, vec![P1]);
+    // Timesifter leaves: P1's extra turn, then P2, who was next after P1's own turn.
+    to_graveyard(&mut t, sifter);
+    assert_eq!(next_turns(&mut t, 2), vec![P1, P2]);
+}
+
+#[test]
 fn two_timesifters_create_two_extra_turns() {
     cr!("500.7");
     ruling!(
         "Timesifter",
         "With two Timesifters on the battlefield, two extra turns are created for each turn taken."
     );
+    ruling!(
+        "Timesifter",
+        "If multiple extra turns are created in a game, the most recently created extra turn is taken first."
+    );
     compiles("Timesifter");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Timesifter");
-    t.battlefield(P1, "Timesifter");
+    let a = t.battlefield(P0, "Timesifter");
+    let b = t.battlefield(P1, "Timesifter");
     stack_library(&mut t, P0, &["Grizzly Bears", "Shock"]);
     stack_library(&mut t, P1, &["Forest", "Divination"]);
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
-    // P0's Bears (2) beat the Forest; then Divination (3) beats Shock.
-    let mut turns = t.g.extra_turns.clone();
-    turns.sort_by_key(|p| p.0);
-    assert_eq!(turns, vec![P0, P1]);
+    // P1's trigger was put on the stack first (APNAP), so P0's resolved first: P0's Bears
+    // (2) beat the Forest. Then P1's: Divination (3) beats Shock.
+    assert_eq!(t.g.extra_turns, vec![P0, P1]);
+    // Without the Timesifters, the turns after this one: P1's extra turn (created last),
+    // P0's, then P0's own.
+    to_graveyard(&mut t, a);
+    to_graveyard(&mut t, b);
+    assert_eq!(next_turns(&mut t, 3), vec![P1, P0, P0]);
+}
+
+#[test]
+fn the_player_who_exiled_the_greatest_card_puts_their_own_card_into_their_hand() {
+    cr!("608.2c");
+    // The comparison's "it" is that player's card, not every card exiled.
+    let mut def = crate::basic_effects_common::oracle_card(
+        "Sifting Test",
+        "Sorcery",
+        "Each player exiles the top card of their library. The player who exiled the card with the greatest mana value puts it into their hand.",
+    );
+    def.faces[0].chars.mana_cost = mtg_engine::mana::ManaCost::parse("{0}");
+    let mut t = TestGame::new(3);
+    t.library_top(P0, "Shock");
+    t.library_top(P1, "Divination");
+    t.library_top(P2, "Grizzly Bears");
+    let card = t.custom(P0, def, mtg_engine::object::Zone::Hand(P0));
+    t.cast(P0, card).go();
+    t.resolve_all();
+    // P1's Divination (3) is the greatest: P1 puts it into their hand.
+    assert!(t.in_hand(P1, "Divination"));
+    assert!(t.in_exile("Shock") && t.in_exile("Grizzly Bears"));
+    assert!(!t.in_hand(P0, "Shock") && !t.in_hand(P2, "Grizzly Bears"));
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +604,15 @@ fn guff_rewrites_history_each_controller_casts_the_card_they_exiled() {
     // The lands exiled before the nonland cards went to the bottom.
     assert_eq!(t.library_size(P0), 3);
     assert!(!t.in_exile("Plains"));
-    // P0 cast Divination for free, P1 a creature.
+    // P0 cast Divination for free, then P1 a creature (APNAP order: P1's spell is on top).
+    let on_stack: Vec<(PlayerId, String)> =
+        t.g.stack
+            .iter()
+            .map(|id| (t.g.obj(*id).controller, t.g.obj(*id).chars.name.to_string()))
+            .collect();
+    assert_eq!(on_stack.len(), 2, "{on_stack:?}");
+    assert_eq!(on_stack[0], (P0, "Divination".to_string()));
+    assert_eq!(on_stack[1].0, P1);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Divination"));
     assert_eq!(t.hand_size(P0), 2);
@@ -423,6 +628,37 @@ fn guff_rewrites_history_each_controller_casts_the_card_they_exiled() {
             })
             .count();
     assert_eq!(p1_creatures, 1);
+}
+
+#[test]
+fn guff_rewrites_history_a_player_whose_target_became_illegal_exiles_nothing() {
+    cr!("608.2b", "608.2h");
+    interp!("guff-players-who-controlled");
+    compiles("Guff Rewrites History");
+    let mut t = TestGame::new(3);
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P2, "Hill Giant");
+    set_library(&mut t, P0, &["Plains", "Divination"]);
+    set_library(&mut t, P1, &["Island", "Island"]);
+    set_library(&mut t, P2, &["Mountain", "Shock", "Mountain"]);
+    t.lands(P0, "Mountain", 3);
+    let guff = t.hand(P0, "Guff Rewrites History");
+    t.cast(P0, guff).target(elves).target(bears).target(giant).go();
+    // P2's Hill Giant leaves before Guff resolves: an illegal target (CR 608.2b).
+    to_graveyard(&mut t, giant);
+    t.resolve();
+    // P0 and P1 controlled a permanent the spell shuffled away; P2's was never moved, so
+    // P2 controlled none of those permanents and exiles nothing.
+    assert!(!t.on_battlefield(elves) && !t.on_battlefield(bears));
+    assert_eq!(t.library_size(P2), 3);
+    assert!(!t.in_exile("Shock"));
+    assert_eq!(t.g.stack.len(), 2);
+    assert!(t
+        .g
+        .stack
+        .iter()
+        .all(|id| t.g.obj(*id).controller != P2));
 }
 
 // ---------------------------------------------------------------------------

@@ -47,7 +47,7 @@ inventory::submit! { ManualAbility {
             TEXT,
         )]
     },
-    reason: "whenever targets are chosen, a reveal-off decides who may change them: only this card",
+    reason: "a trigger on choosing targets and a change of those targets by the reveal's winner: only this card (the reveal and the comparison are compiled)",
 } }
 
 fn has_targets(g: &Game, id: ObjectId) -> bool {

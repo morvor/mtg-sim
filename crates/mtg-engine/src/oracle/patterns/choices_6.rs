@@ -3,12 +3,15 @@
 //! - "secretly choose a number between 1 and 5 that hasn't been chosen" (The Toymaker's
 //!   Trap): a number of the range not chosen before for this object
 //!   ([`ChoiceKind::NumberNotChosen`], `modal_history.rs`), in secret (`choices.rs`). With
-//!   every number already chosen nothing is chosen, so "If you do" is false.
+//!   every number already chosen nothing is chosen, so "If you do" is false. The numbers
+//!   left are offered one by one, so the range is a small one.
 //! - "an opponent guesses which number you chose, then you reveal the number you chose":
-//!   the player names one of the numbers the choice could have been (the guess is theirs,
-//!   a decision of that player); then the secret choice is revealed. "If they guessed wrong" / "If they guessed right"
-//!   (`choice_grammar_hidden.rs`) compare the guess with the number chosen, and "the number
-//!   they guessed" is the guess.
+//!   the player names one of the numbers of the choice's range (the guess is theirs, a
+//!   decision of that player; "an opponent" is one the controller picks, as for "an
+//!   opponent's choice"); then the secret choice is revealed. "If they guessed wrong" /
+//!   "If they guessed right" (`choice_grammar_hidden.rs`) compare the guess with the
+//!   number chosen, and "the number they guessed" is the guess. "If you do, ..." before
+//!   the guess only follows a choice that can fail ("that hasn't been chosen").
 
 use super::choice_grammar_hidden::{GUESS, GUESSED_RIGHT};
 use super::FollowupPattern;
@@ -37,7 +40,10 @@ fn number_that_hasnt_been_chosen(l: &str, b: &mut Builder) -> Option<Effect> {
     }
     let mut n = 0;
     unchosen(&mut e, &mut n);
-    (n == 1).then_some(e)
+    // The numbers left are offered one by one: a bounded range ("a number greater than 0"
+    // would offer a million).
+    let bounded = chosen_range(&e).is_some_and(|(min, max, _)| min <= max && max - min < MAX_RANGE);
+    (n == 1 && bounded).then_some(e)
 }
 
 /// Makes the number choices of `e` choices of a number that hasn't been chosen.
@@ -60,13 +66,18 @@ fn unchosen(e: &mut Effect, n: &mut usize) {
 
 inventory::submit! { super::EffectPattern { name: "choices 6: choose a number between N and N that hasn't been chosen", priority: 55, parse: number_that_hasnt_been_chosen } }
 
-/// The range of the number choice `e` ends with, if it's your choice.
-fn chosen_range(e: &Effect) -> Option<(i32, i32)> {
+/// The range of the number choice `e` ends with, if it's your choice, and whether it's a
+/// choice of a number that hasn't been chosen (which may choose nothing: "If you do").
+fn chosen_range(e: &Effect) -> Option<(i32, i32, bool)> {
     match e {
         Effect::Choose {
             who: PlayerRef::You,
-            kind: ChoiceKind::Number { min, max } | ChoiceKind::NumberNotChosen { min, max },
-        } => Some((*min, *max)),
+            kind: ChoiceKind::Number { min, max },
+        } => Some((*min, *max, false)),
+        Effect::Choose {
+            who: PlayerRef::You,
+            kind: ChoiceKind::NumberNotChosen { min, max },
+        } => Some((*min, *max, true)),
         Effect::Seq(v) => v.last().and_then(chosen_range),
         _ => None,
     }
@@ -87,10 +98,11 @@ fn guesses_which_number(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(who_s) = r.strip_suffix(" guesses which number you chose") else {
         return false;
     };
-    let Some((min, max)) = chosen_range(prev) else {
+    let Some((min, max, may_fail)) = chosen_range(prev) else {
         return false;
     };
-    if max < min || max - min >= MAX_RANGE {
+    // "If you do": only a choice that can fail to be made says whether it was.
+    if max < min || max - min >= MAX_RANGE || (if_you_do && !may_fail) {
         return false;
     }
     let mut steps = Vec::new();
@@ -208,6 +220,10 @@ mod tests {
         for text in [
             // A guess of a number nobody chose.
             "At the beginning of your upkeep, an opponent guesses which number you chose.",
+            // "If you do" after a choice that is always made.
+            "At the beginning of your upkeep, secretly choose a number between 1 and 5. If you do, an opponent guesses which number you chose, then you reveal the number you chose. If they guessed right, sacrifice this enchantment.",
+            // Too many numbers to offer one by one.
+            "At the beginning of your upkeep, choose a number between 1 and 100 that hasn't been chosen. If you do, draw a card.",
         ] {
             assert!(compiled("Enchantment", text).is_none(), "{text}");
         }
