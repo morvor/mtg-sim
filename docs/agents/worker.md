@@ -158,7 +158,11 @@ reviewer reported, and remaining gaps.
 >   `ruling-contradicting-oracle-gives-way`). Exempt the part that contradicts the card,
 >   with a reason naming the policy, the date of the decision (Nov 5) and the ruling's
 >   likely origin; keep citing the parts that agree; pin the card's behavior with a test
->   citing `interp!("ruling-contradicting-oracle-gives-way")`.
+>   citing `interp!("ruling-contradicting-oracle-gives-way")`. Check the set's release notes
+>   (the ormos mirror of the Wizards archive, https://github.com/maxmakesmagic/ormos, has
+>   them up to 2022): when they have the same ruling in words that agree with the card
+>   (Run Out of Town's "owner", which the data has as "controller"), it's a transcription
+>   error, under the same policy.
 > - Misattached (the data files it under the wrong card; it describes another card): test
 >   it on the card it describes and cite it with `ruling!` under the card it is attached
 >   to (the macro looks rulings up by that card), with a comment naming the card it
@@ -167,8 +171,8 @@ reviewer reported, and remaining gaps.
 > - Outdated (older than a rules or Oracle change you can name and date, e.g. by
 >   comparing the archived CR texts at https://github.com/pit142857/mtg-cr): exempt the
 >   outdated part with the change named and dated; keep citing what still holds.
-> - Every such ruling (template error, misattached, inconsistent with other rulings,
->   outdated) gets an entry in `docs/RULING_DISCREPANCIES.md`, the log a human checks and
+> - Every such ruling (template error, transcription error, misattached, inconsistent with
+>   other rulings, outdated) gets an entry in `docs/RULING_DISCREPANCIES.md`, the log a human checks and
 >   reports to Wizards of the Coast; `cargo test -p mtg-data` fails if an exemption that
 >   says so has no entry, or if an entry's quote isn't verbatim.
 > - A contradiction with no clear explanation (no dated change, no evident copied ruling),

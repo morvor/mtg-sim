@@ -38,6 +38,9 @@ pub fn untap_step(g: &mut Game, active: PlayerId) {
         })
         .collect();
     phase_out(g, out);
+    // All at once (CR 502.1): each `phase_in` checks "can't phase in" against the statics
+    // as they were before this untap step (nothing here recomputes them), so a Disciple
+    // of Caelus Nin phasing in along with the others doesn't keep them out.
     for id in back {
         phase_in(g, id);
     }
@@ -84,7 +87,9 @@ pub fn phase_out(g: &mut Game, objs: Vec<ObjectId>) {
         .into_iter()
         .filter(|o| g.is_live(*o) && !g.obj(*o).phased_out)
         // "can't phase out" (directly; CR 702.26).
-        .filter(|o| !crate::prohibitions::object_cant(g, *o, crate::ability::ObjectAction::PhasedOut))
+        .filter(|o| {
+            !crate::prohibitions::object_cant(g, *o, crate::ability::ObjectAction::PhasedOut)
+        })
         .collect();
     let indirect = attached_closure(g, &objs);
     let direct: Vec<ObjectId> = objs

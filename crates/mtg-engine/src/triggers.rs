@@ -108,6 +108,27 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
     }
 }
 
+/// Whether a damage source description names objects by a subtype without saying
+/// "spell", "card", or "source" ("an Archer you control", "a Goblin or Orc you control"):
+/// it means a permanent (CR 109.2), so a kindred spell with that subtype dealing damage
+/// doesn't match it (Greatbow Doyen ruling).
+fn describes_permanents(f: &Filter) -> bool {
+    match f {
+        Filter::Subtype(_) => true,
+        Filter::Or(v) => !v.is_empty() && v.iter().all(describes_permanents),
+        Filter::And(v) => {
+            v.iter().any(describes_permanents)
+                && !v.iter().any(|x| {
+                    matches!(
+                        x,
+                        Filter::Spell | Filter::SpellOnStack | Filter::Card | Filter::InZone(_)
+                    )
+                })
+        }
+        _ => false,
+    }
+}
+
 /// Whether a trigger condition is a "phases out" trigger, which looks back in time
 /// (CR 603.10b).
 fn phase_out_trigger(cond: &TriggerCond) -> bool {
@@ -1425,6 +1446,24 @@ impl Game {
                 }
                 out
             }
+            // "Becomes blocked" by an effect that names no blocking creature (Curtain of
+            // Light, CR 509.1h): it triggers, as the attacker was unblocked (CR 509.3c; the
+            // event is emitted only then). Blockers being declared are handled above, and a
+            // creature that an effect makes block it or that's put onto the battlefield
+            // blocking it by its `BlockAdded` event (combat.rs), so only once.
+            (
+                TriggerCond::BlocksOrBecomesBlocked(f),
+                Event::BecameBlocked { attacker, blockers },
+            ) => {
+                if blockers.is_empty() && self.matches(*attacker, f, &ctx) {
+                    one(EventInfo {
+                        object: Some(*attacker),
+                        ..Default::default()
+                    })
+                } else {
+                    none()
+                }
+            }
             (
                 TriggerCond::DealsDamage {
                     source,
@@ -1438,7 +1477,10 @@ impl Game {
                     combat,
                 },
             ) => {
-                if (*combat_only && !combat) || !self.matches(*s, source, &ctx) {
+                if (*combat_only && !combat)
+                    || !self.matches(*s, source, &ctx)
+                    || (self.obj(*s).zone == Zone::Stack && describes_permanents(source))
+                {
                     return none();
                 }
                 let ok = match (to, target) {
