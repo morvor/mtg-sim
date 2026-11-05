@@ -836,6 +836,7 @@ impl Renderer<'_> {
                     }
                     (TurnOrderStart::You, SeatSide::Right) => "you and proceeding to the right",
                     (TurnOrderStart::NextOpponent, _) => "the next opponent in turn order",
+                    (TurnOrderStart::Active, _) => "the active player",
                 };
                 let w = self.player_filter_noun(who, Num::One);
                 // "Join forces — Starting with you, each player may pay any amount of mana."
@@ -9034,6 +9035,9 @@ impl Renderer<'_> {
                 None => format!("a {f} card name"),
             },
             ChoiceKind::Number { min, max } => self.number_choice(*min, *max),
+            ChoiceKind::NumberNotChosen { min, max } => {
+                format!("{} that hasn't been chosen", self.number_choice(*min, *max))
+            }
             ChoiceKind::Opponent => "an opponent".into(),
             ChoiceKind::Player => "a player".into(),
             ChoiceKind::BasicLandType => "a basic land type".into(),

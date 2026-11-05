@@ -1227,6 +1227,10 @@ pub enum TurnOrderStart {
     You,
     /// "starting with the next opponent in turn order".
     NextOpponent,
+    /// The active player first, then the others in turn order (APNAP order, CR 101.4):
+    /// players who decide and act one at a time, each knowing what those before did
+    /// (Rootweaver Druid's rulings).
+    Active,
 }
 
 /// A direction around the table (CR 101.4: the next player in turn order is usually the
@@ -5628,6 +5632,13 @@ pub enum ChoiceKind {
     /// A card name of a nonland card, etc.
     CardNameFiltered(String),
     Number {
+        min: i32,
+        max: i32,
+    },
+    /// "choose a number between 1 and 5 that hasn't been chosen": a number in the range
+    /// not chosen before for the source object (`modal_history::ModalHistory::numbers`);
+    /// with none left, nothing is chosen.
+    NumberNotChosen {
         min: i32,
         max: i32,
     },

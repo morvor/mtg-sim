@@ -293,3 +293,27 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: Helm of Obedience.
 - Code: `crates/mtg-engine/src/kw/mill_until.rs`.
 - Tests: `tests/cards/paper_loops.rs` (`helm_of_obedience_mills_the_whole_library_against_leyline_of_the_void`, `helm_of_obedience_stops_after_x_cards`).
+
+## toymakers-trap-every-number-chosen: With every number already chosen, "choose a number ... that hasn't been chosen" chooses nothing, so "If you do" fails
+- Kind: interpretation
+- Status: decided
+- Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / The Toymaker's Trap's ruling: "If The Toymaker's Trap leaves the battlefield and later returns to the battlefield, it has no memory of which numbers were chosen for its effect before. The same is true if you control a second copy of it."
+- Question: The Toymaker's Trap says "secretly choose a number between 1 and 5 that hasn't been chosen. If you do, ...". After all five numbers have been chosen for it, what happens?
+- Decision: No number can be chosen, so none is; "If you do" is false and nothing else happens (no guess, no life loss, no draw, no sacrifice). The numbers are remembered for that object only: a new object (it left and returned) or another copy starts with none chosen.
+- Alternatives: (A) Choose any number again (ignoring "that hasn't been chosen"); (B) sacrifice it as if the guess were right. Neither has a basis in the text.
+- Why: "If you do" asks whether the instruction was carried out (as for other optional or impossible instructions, CR 608.2c); the ruling ties the memory to the object.
+- Affects: The Toymaker's Trap (the only card with a number choice "that hasn't been chosen").
+- Code: `crates/mtg-engine/src/choices.rs` (`ChoiceKind::NumberNotChosen`); `crates/mtg-engine/src/modal_history.rs` (`unchosen_numbers`, `record_number`); `crates/mtg-engine/src/oracle/patterns/choices_6.rs`.
+- Tests: `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_remembers_numbers_only_for_its_own_object`).
+
+## number-guess-range: A player guessing "which number you chose" names one of the numbers the choice allowed
+- Kind: interpretation
+- Status: decided
+- Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / The Toymaker's Trap's ruling: "To secretly choose a number, write a number from 1 to 5 down without showing it to anyone else."
+- Question: "An opponent guesses which number you chose, ... they lose life equal to the number they guessed": which numbers may the opponent guess?
+- Decision: One of the numbers of the choice's range (1 to 5), including numbers chosen on earlier turns (a guess the opponent knows is wrong is still a guess of which number you chose).
+- Alternatives: (A) Any number (an opponent could guess 0 and lose no life); (B) only the numbers that haven't been chosen.
+- Why: A guess of "which number you chose" is a guess among the numbers you could have chosen; reading (A) would let the guesser escape the life loss with a number that can't be the answer.
+- Affects: The Toymaker's Trap.
+- Code: `crates/mtg-engine/src/oracle/patterns/choices_6.rs` (`guesses_which_number`).
+- Tests: `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_wrong_guess_costs_the_guessed_life_and_draws`).

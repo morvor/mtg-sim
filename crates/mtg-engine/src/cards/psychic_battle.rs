@@ -5,6 +5,11 @@
 //! permanents named Psychic Battle." It triggers as spells and abilities with targets are
 //! put onto the stack (CR 601.2c, 602.2b, 603.3d); a player with an empty library reveals
 //! nothing; any number of the targets may be changed, to legal ones (rulings).
+//!
+//! The reveal and the comparison are compiled constructs (parley's reveal,
+//! `kw/parley.rs`; "the player who reveals the card with the greatest mana value", the
+//! comparison Timesifter's text compiles to, `oracle/patterns/per_player_results_6.rs`):
+//! only the trigger and the change of targets are hand-written.
 
 use super::ManualAbility;
 use crate::ability::*;
@@ -17,7 +22,7 @@ use crate::object::{EventInfo, Zone};
 use crate::types::{ObjectId, PlayerId};
 
 const TARGETS_CHOSEN: &str = "card:Psychic Battle:a player chooses targets";
-const BATTLE: &str = "card:Psychic Battle:reveal-off for the targets";
+const CHANGE: &str = "card:Psychic Battle:that player may change the target or targets";
 const TEXT: &str = "Whenever a player chooses one or more targets, each player reveals the top card of their library. The player who reveals the card with the greatest mana value may change the target or targets. If two or more cards are tied for greatest, the target or targets remain unchanged. Changing targets this way doesn't trigger abilities of permanents named ~.";
 
 inventory::submit! { ManualAbility {
@@ -28,7 +33,16 @@ inventory::submit! { ManualAbility {
         vec![AbilityDef::new(
             AbilityKind::Triggered(TriggeredAbility::new(
                 TriggerCond::Custom(TARGETS_CHOSEN.into()),
-                Body::effect(Effect::Custom(BATTLE.into())),
+                Body::effect(Effect::seq(vec![
+                    Effect::Custom(crate::kw::parley::REVEAL_TOPS.into()),
+                    // With two or more cards tied for greatest, no player may change them.
+                    crate::oracle::patterns::per_player_results_6::greatest_mana_value_comparison(
+                        Sel::Var(crate::kw::parley::REVEALED),
+                        PlayerRef::EachPlayer,
+                        Effect::Custom(CHANGE.into()),
+                        true,
+                    ),
+                ])),
             )),
             TEXT,
         )]
@@ -37,10 +51,11 @@ inventory::submit! { ManualAbility {
 } }
 
 fn has_targets(g: &Game, id: ObjectId) -> bool {
-    g.obj(id)
-        .stack
-        .as_deref()
-        .is_some_and(|s| s.chosen.iter().any(|m| m.targets.iter().any(|v| !v.is_empty())))
+    g.obj(id).stack.as_deref().is_some_and(|s| {
+        s.chosen
+            .iter()
+            .any(|m| m.targets.iter().any(|v| !v.is_empty()))
+    })
 }
 
 struct Rules;
@@ -81,30 +96,19 @@ impl KeywordRules for Rules {
         })
     }
     fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
-        if name != BATTLE {
+        if name != CHANGE {
             return false;
         }
-        let Some(id) = ctx.event.as_ref().and_then(|e| e.object) else {
+        let (Some(id), Some(p)) = (ctx.event.as_ref().and_then(|e| e.object), ctx.iter_player)
+        else {
             return true;
         };
-        let mut best: Vec<(PlayerId, u32)> = Vec::new();
-        for p in g.apnap() {
-            let Some(top) = g.player(p).library.last().copied() else {
-                continue;
-            };
-            crate::reveal::reveal(g, p, &[top], ctx.source);
-            best.push((p, g.mana_value_of(top)));
-        }
-        let Some(max) = best.iter().map(|(_, v)| *v).max() else {
-            return true;
-        };
-        let top: Vec<PlayerId> = best.iter().filter(|(_, v)| *v == max).map(|(p, _)| *p).collect();
-        if top.len() != 1 || !g.is_live(id) || g.obj(id).zone != Zone::Stack {
+        if !g.is_live(id) || g.obj(id).zone != Zone::Stack {
             return true;
         }
         // Changing targets this way doesn't trigger Psychic Battle: no spell or ability is
         // put onto the stack.
-        crate::target_rules::change_targets(g, top[0], id, TargetChange::Any, None);
+        crate::target_rules::change_targets(g, p, id, TargetChange::Any, None);
         true
     }
 }
