@@ -1506,6 +1506,29 @@ fn sources_inner(
                         }
                         rank = rank.max(4);
                     }
+                    // "{T}, Exile a card from your graveyard: Add one mana of any color."
+                    // (Molt Tender): the cards it could exile, kept in the same pool as a
+                    // sacrifice so one card pays only one cost (CR 118.3).
+                    CostPart::Exile {
+                        filter,
+                        zone: ZoneKind::Graveyard,
+                        count,
+                    } if sac_pool.is_empty() => {
+                        let ctx = Ctx::new(Some(o.id), p);
+                        sac_count = g.eval_value(count, &ctx).max(0) as usize;
+                        sac_pool = g
+                            .exile_cost_cards(p, ZoneKind::Graveyard, filter, &ctx)
+                            .into_iter()
+                            .filter(|c| {
+                                Some(*c) != reserve
+                                    && crate::draw_rules::usable_for_cost(g, *c, filter, &ctx)
+                            })
+                            .collect();
+                        if sac_count == 0 || sac_pool.len() < sac_count {
+                            ok = false;
+                        }
+                        rank = rank.max(4);
+                    }
                     CostPart::PayLife(v) => {
                         let n = g.eval_value(v, &Ctx::new(Some(o.id), p)).max(0) as u32;
                         let mut c = Ctx::new(Some(o.id), p);
