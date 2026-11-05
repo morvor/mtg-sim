@@ -162,7 +162,12 @@ fn spiritmonger_becomes_only_the_chosen_color() {
     let mut t = TestGame::new(2);
     let sm = t.battlefield(P0, "Spiritmonger");
     t.lands(P0, "Forest", 1);
-    assert_eq!(t.obj(sm).chars.colors, [Color::Black, Color::Green].into_iter().collect::<ColorSet>());
+    assert_eq!(
+        t.obj(sm).chars.colors,
+        [Color::Black, Color::Green]
+            .into_iter()
+            .collect::<ColorSet>()
+    );
     t.answer(P0, DecisionKind::Any, Answer::Text("blue".into()));
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     activate_containing(&mut t, P0, sm, "color of your choice").unwrap();
@@ -400,7 +405,10 @@ fn ink_eyes_can_take_a_creature_that_died_in_the_same_combat_damage_step() {
     let theirs = t.battlefield(P1, "Grizzly Bears");
     let from = t.asked().len();
     t.answer_yes(P0, true);
-    attack_with(&mut t, &[(ink, Entity::Player(P1)), (mine, Entity::Player(P1))]);
+    attack_with(
+        &mut t,
+        &[(ink, Entity::Player(P1)), (mine, Entity::Player(P1))],
+    );
     block_and_finish(&mut t, P1, &[(theirs, mine)]);
     t.resolve_all();
     // The blocker that died in the same step was offered as a target and put onto the
