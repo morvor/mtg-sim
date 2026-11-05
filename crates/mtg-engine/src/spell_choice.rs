@@ -28,6 +28,14 @@ pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<Fa
             vec![]
         };
     }
+    let mut faces = faces;
+    // CR 702.102a: a split card with fuse in its caster's hand may also be cast as both
+    // halves, a spell with the combined characteristics (CR 702.102b).
+    if let crate::object::Zone::Hand(p) = g.obj(card).zone {
+        if crate::casting::fusable_from_hand(g, p, card) {
+            faces.push(FaceState::Fused);
+        }
+    }
     faces
         .into_iter()
         .filter(|face| {
@@ -71,10 +79,17 @@ pub fn choose_cards_to_cast(
     let zone = filter.zone().filter(|z| *z != ZoneKind::Battlefield)?;
     let p = g.eval_player(chooser, ctx).unwrap_or(ctx.controller);
     let n = g.eval_value(count, ctx).max(0) as u32;
+    // CR 601.3: only the faces the player could begin to cast now are choices; the
+    // spell's own timing restrictions ("Cast this spell only during combat") still apply
+    // while the effect resolves (CR 608.2g).
     let mut faces: Vec<(ObjectId, Vec<FaceState>)> = g
         .objects_in_zone_kind(zone)
         .into_iter()
-        .map(|o| (o, matching_faces(g, o, filter, ctx)))
+        .map(|o| {
+            let mut f = matching_faces(g, o, filter, ctx);
+            f.retain(|face| g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face)));
+            (o, f)
+        })
         .filter(|(_, f)| !f.is_empty())
         .collect();
     let mut cands: Vec<ObjectId> = faces.iter().map(|(o, _)| *o).collect();
