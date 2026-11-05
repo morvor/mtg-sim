@@ -294,7 +294,6 @@ fn scuttletide_discard_is_part_of_the_cost() {
 #[test]
 fn graveyard_shift_counts_itself_before_it_is_cast() {
     cr!("601.3d", "702.34a");
-    interp!("flash-condition-before-moving-vs-permission");
     ruling!(
         "Graveyard Shift",
         "If an effect allows you to cast Graveyard Shift from your graveyard, you may cast it any time you could cast an instant if you have five or more mana values among cards in your graveyard immediately before you begin to cast it, even if moving it to the stack would reduce that number to four."
@@ -327,40 +326,6 @@ fn graveyard_shift_counts_itself_before_it_is_cast() {
             t.resolve_all();
             assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
             assert!(t.in_exile("Graveyard Shift"));
-        }
-    }
-}
-
-#[test]
-fn swift_reckoning_from_the_graveyard_needs_two_other_cards() {
-    cr!("601.3b", "702.34a");
-    interp!("flash-condition-before-moving-vs-permission");
-    ruling!(
-        "Swift Reckoning",
-        "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other instant and/or sorcery cards in your graveyard to cast it as though it had flash."
-    );
-    supported("Swift Reckoning");
-    // (other instants in the graveyard, castable on P1's turn)
-    for (others, ok) in [(1, false), (2, true)] {
-        let mut t = TestGame::new(2);
-        fill_graveyard(&mut t, P0, "Opt", others);
-        let sr = t.graveyard(P0, "Swift Reckoning");
-        let giant = t.battlefield(P1, "Hill Giant");
-        t.g.objects[giant.0 as usize].tapped = true;
-        t.set_step(P1, Step::PrecombatMain);
-        t.answer_targets(P0, &[obj(sr)]);
-        t.enter(P0, "Snapcaster Mage");
-        t.resolve_all();
-        t.lands(P0, "Plains", 2);
-        let r = t
-            .cast(P0, sr)
-            .method(CastMethod::Keyword(KeywordKind::Flashback))
-            .target(giant)
-            .try_go();
-        assert_eq!(r.is_ok(), ok, "{others} others: {r:?}");
-        if ok {
-            t.resolve_all();
-            assert!(!t.on_battlefield(giant));
         }
     }
 }

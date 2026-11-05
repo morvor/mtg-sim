@@ -255,7 +255,7 @@ fn maximum_hand_size_is_checked_only_in_cleanup() {
         t.advance_to(P0, Step::End);
         t.resolve_all();
         // Steaming Sauna's end step draw (when unlocked) — still more than seven.
-        assert!(t.hand_size(P0) >= 10, "end step: nothing discarded yet");
+        assert_eq!(t.hand_size(P0), if sauna { 11 } else { 10 }, "end step: nothing discarded yet");
         t.advance_to(P1, Step::Upkeep);
         assert_eq!(t.hand_size(P0), if sauna { 11 } else { 7 }, "Sauna {sauna}");
     }
