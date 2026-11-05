@@ -96,6 +96,26 @@ impl Game {
                     self.exec(otherwise, ctx);
                 }
             }
+            // "You may cast the copies": with several cards, the player chooses for each
+            // whether to cast it (none, one, or all of them; Starfield Vocalist ruling).
+            Effect::May { effect, .. }
+                if matches!(&**effect, Effect::CastCard { what, optional: false, .. }
+                    if self.resolve_objects(what, ctx).len() > 1) =>
+            {
+                if let Effect::CastCard {
+                    who, what, free, ..
+                } = &**effect
+                {
+                    let each = Effect::CastCard {
+                        who: who.clone(),
+                        what: what.clone(),
+                        free: *free,
+                        optional: true,
+                    };
+                    self.exec(&each, ctx);
+                    ctx.prev_happened = true;
+                }
+            }
             Effect::May { who, effect } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
                 let text = format!("{effect:?}");
