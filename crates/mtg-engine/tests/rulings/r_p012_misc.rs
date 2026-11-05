@@ -6,7 +6,9 @@ use crate::r_p012_common::*;
 use crate::r_p127_common::move_to;
 use crate::r_s01_common::{asked_since, stack_library, supported};
 use mtg_engine::card::card;
-use mtg_engine::deck::{check_commander, check_constructed, check_limited, DeckProblem};
+use mtg_engine::deck::{
+    check_commander, check_constructed, check_format_legality, check_limited, DeckProblem,
+};
 use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -22,7 +24,7 @@ fn too_many_copies(problems: &[DeckProblem]) -> bool {
 
 #[test]
 fn any_number_of_cards_named_ignores_the_singleton_and_four_of_rules_only() {
-    cr!("100.2a", "100.2b", "903.5b");
+    cr!("100.2a", "100.2b", "100.6", "903.5b");
     ruling!(
         "Slime Against Humanity",
         "The last ability of Slime Against Humanity also lets you ignore the \"singleton\" rule in formats like Commander."
@@ -52,6 +54,15 @@ fn any_number_of_cards_named_ignores_the_singleton_and_four_of_rules_only() {
         };
         // Constructed: twenty copies are fine.
         assert!(!too_many_copies(&check_constructed(&many(20, 40))), "{name}");
+        // But not in a format the card isn't legal in (Old School).
+        let problems = check_format_legality(&many(20, 40), &[], "oldschool");
+        assert!(
+            problems
+                .iter()
+                .any(|p| matches!(p, DeckProblem::NotLegalInFormat { name: n, .. } if n == name)),
+            "{name}: {problems:?}"
+        );
+        assert!(!too_many_copies(&problems), "{name}");
         // Commander: 99 cards with the commander, thirty copies.
         let cmd = card(commander);
         let mut deck = many(30, 69);

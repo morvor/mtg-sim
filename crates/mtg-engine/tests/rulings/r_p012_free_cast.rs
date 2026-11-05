@@ -290,3 +290,77 @@ fn djinn_of_wishes_plays_the_card_only_as_its_ability_resolves() {
     t.lands(P0, "Mountain", 1);
     assert!(crate::r_s08_common::legal_cast_methods(&mut t, P0, bolt).is_empty());
 }
+
+/// The options P0 was offered since `from` when choosing what half of a card to cast.
+fn face_options(t: &TestGame, from: usize) -> Vec<String> {
+    asked_since(t, from)
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if p == P0 && prompt == "Choose what to cast" => Some(options),
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
+#[test]
+fn a_fused_spell_cast_by_an_effect_has_the_combined_mana_value() {
+    cr!("702.102a", "702.102b", "702.102c", "601.3e", "118.9");
+    // Electrodominance ("You may cast a spell with mana value X or less from your hand
+    // without paying its mana cost") with Wear ({1}{R}, 2) // Tear ({W}, 1) in hand: fused,
+    // it's a spell with mana value 3.
+    supported("Electrodominance");
+    for x in [2u32, 3] {
+        let mut t = TestGame::new(2);
+        let wt = t.hand(P0, "Wear // Tear");
+        let dom = t.hand(P0, "Electrodominance");
+        let thopter = t.battlefield(P1, "Ornithopter");
+        let anthem = t.battlefield(P1, "Glorious Anthem");
+        t.lands(P0, "Mountain", x as usize + 2);
+        t.answer(P0, DecisionKind::X, Answer::Number(x as i64));
+        t.answer_targets(P0, &[pl(P1)]);
+        t.answer_choose(P0, &[obj(wt)]);
+        // X = 2: Wear; X = 3: both halves (the third option).
+        t.answer(P0, DecisionKind::Option, Answer::Index(if x == 2 { 0 } else { 2 }));
+        t.answer_targets(P0, &[obj(thopter)]);
+        t.answer_targets(P0, &[obj(anthem)]);
+        let from = t.asked().len();
+        t.cast(P0, dom).go();
+        t.resolve_all();
+        let options = face_options(&t, from);
+        assert_eq!(t.life(P1), 20 - x as i32, "X = {x}");
+        assert!(!t.on_battlefield(thopter), "X = {x}: {options:?}");
+        assert_eq!(t.zone(t.g.current(wt)), Zone::Graveyard(P0), "X = {x}");
+        if x == 2 {
+            assert_eq!(options.len(), 2, "{options:?}");
+            assert!(options.iter().all(|o| !o.contains("//")), "{options:?}");
+            assert!(t.on_battlefield(anthem), "only Wear was cast");
+        } else {
+            assert!(options.iter().any(|o| o.contains("//")), "{options:?}");
+            assert!(!t.on_battlefield(anthem), "both halves were cast");
+        }
+        assert_eq!(tapped_lands(&t, P0), x as usize + 2, "Wear // Tear was free");
+    }
+}
+
+#[test]
+fn a_split_card_with_fuse_cast_from_outside_the_hand_isnt_fused() {
+    cr!("702.102a");
+    // Djinn of Wishes lets P0 play Wear // Tear from the top of the library: one half only.
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    let from = t.asked().len();
+    wish(&mut t, "Wear // Tear", |t| {
+        t.answer_yes(P0, true);
+        t.answer(P0, DecisionKind::Option, Answer::Index(0));
+        t.answer_targets(P0, &[obj(thopter)]);
+    });
+    let options = face_options(&t, from);
+    assert_eq!(options.len(), 2, "{options:?}");
+    assert!(options.iter().all(|o| !o.contains("//")), "{options:?}");
+    assert!(!t.on_battlefield(thopter));
+    assert!(t.on_battlefield(anthem));
+}
