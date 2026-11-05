@@ -574,3 +574,136 @@ fn finale_of_promise_casts_a_split_card_only_once() {
     assert_eq!(tokens(&t, P0).len(), 1);
     assert!(t.in_exile("Thrash // Threat"));
 }
+
+// --- Vesuvan Drifter, Vesuvan Doppelganger ------------------------------------------------------
+
+#[test]
+fn vesuvan_drifter_lets_you_look_at_the_top_card_any_time() {
+    cr!("401.5");
+    ruling!("Vesuvan Drifter", "Vesuvan Drifter lets you look at the top card of your library whenever you want (with one restriction—see below), even if you don't have priority. This action doesn't use the stack. Knowing what that card is becomes part of the information you have access to, just like you can look at the cards in your hand.");
+    supported("Vesuvan Drifter");
+    use mtg_engine::facedown::can_look_at;
+    let mut t = TestGame::new(2);
+    let top = t.library_top(P0, "Grizzly Bears");
+    assert!(!can_look_at(&t.g, P0, top));
+    t.battlefield(P0, "Vesuvan Drifter");
+    t.g.recompute();
+    // During P1's turn, with P1 holding priority, and without using the stack.
+    t.set_step(P1, Step::DeclareAttackers);
+    assert_eq!(t.g.turn.priority, Some(P1));
+    assert!(can_look_at(&t.g, P0, top));
+    assert!(!can_look_at(&t.g, P1, top));
+    assert_eq!(t.stack_len(), 0);
+    // Only the top card.
+    let next = t.library_top(P0, "Hill Giant");
+    assert!(can_look_at(&t.g, P0, next) && !can_look_at(&t.g, P0, top));
+}
+
+/// The landwalk filters of the object's landwalk abilities.
+fn landwalks(t: &TestGame, id: ObjectId) -> Vec<String> {
+    t.obj_now(id)
+        .chars
+        .keywords()
+        .filter(|k| k.kind == KeywordKind::Landwalk)
+        .map(|k| format!("{:?}", k.filter))
+        .collect()
+}
+
+#[test]
+fn vesuvan_doppelgangers_text_changes_apply_to_its_new_text() {
+    cr!("612.2", "613.1c", "613.2a", "707.2");
+    ruling!("Vesuvan Doppelganger", "When changing forms, any text changes that exist on the Doppelganger are applied to the new text, if appropriate.");
+    supported("Magical Hack");
+    let mut t = TestGame::new(2);
+    // Shanodin Dryads and Lynx have forestwalk; Hill Giant has no land type in its text.
+    let dryads = t.battlefield(P1, "Shanodin Dryads");
+    let lynx = t.battlefield(P1, "Lynx");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer_choose(P0, &[obj(dryads)]);
+    let dop = t.enter(P0, "Vesuvan Doppelganger");
+    t.settle();
+    assert_eq!(landwalks(&t, dop), vec!["Some(Subtype(\"Forest\"))"]);
+    // Magical Hack: "Forest" becomes "Island" on the Doppelganger.
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    cast_new(&mut t, P0, "Magical Hack", &[obj(dop)]);
+    t.resolve_all();
+    assert_eq!(landwalks(&t, dop), vec!["Some(Subtype(\"Island\"))"]);
+    // It becomes a Lynx: its forestwalk is islandwalk too.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(lynx)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(name_of(&t, dop), "Lynx");
+    assert_eq!(landwalks(&t, dop), vec!["Some(Subtype(\"Island\"))"]);
+    // A Hill Giant: nothing to change.
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(giant)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(name_of(&t, dop), "Hill Giant");
+    assert!(landwalks(&t, dop).is_empty());
+    assert_eq!(t.pt(dop), (3, 3));
+}
+
+// --- Copying abilities with {X} ---------------------------------------------------------------
+
+/// P0 discards Wren's Run Hydra for reinforce X ("Reinforce X—{X}{G}{G}: Put X +1/+1
+/// counters on target creature.") with X = 2, targeting `target`.
+fn reinforce(t: &mut TestGame, target: ObjectId) {
+    supported("Wren's Run Hydra");
+    let hydra = t.hand(P0, "Wren's Run Hydra");
+    t.lands(P0, "Forest", 2);
+    t.lands(P0, "Wastes", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_targets(P0, &[obj(target)]);
+    activate_containing(t, P0, hydra, "Reinforce").expect("reinforce");
+    keep_copy_targets(t, P0);
+    t.resolve_all();
+}
+
+#[test]
+fn x_copiers_copy_keyword_activated_abilities_but_not_triggers_that_pay_x() {
+    cr!("602.1", "702.77a", "107.3", "603.1");
+    ruling!("Magus Lucea Kane", "Activated abilities contain a colon. They're generally written \"[Cost]: [Effect].\" Some keyword abilities are activated abilities and will have a colon in their reminder text. Triggered abilities (starting with \"when,\" \"whenever,\" or \"at\") that ask a player to pay {X} aren't copied.");
+    ruling!("Unbound Flourishing", "Activated abilities contain a colon. They're generally written \"[Cost]: [Effect].\" Some keyword abilities are activated abilities and will have a colon in their reminder text. Triggered abilities (starting with \"when,\" \"whenever,\" or \"at\") that ask a player to pay {X} aren't copied.");
+    supported("Magus Lucea Kane");
+    // Unbound Flourishing copies reinforce X: four counters.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Unbound Flourishing");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    reinforce(&mut t, bears);
+    assert_eq!(t.counters(bears, counters::PLUS1), 4);
+    // So does Magus Lucea Kane's delayed trigger ("When you next ... activate an ability
+    // with {X} in its activation cost this turn, copy that spell or ability.").
+    let mut t = TestGame::new(2);
+    let magus = t.battlefield(P0, "Magus Lucea Kane");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    assert!(crate::r_s20_common::tap_for_mana(&mut t, P0, magus, "Add {C}{C}"));
+    t.g.players[0].mana_pool = Default::default();
+    reinforce(&mut t, bears);
+    assert_eq!(t.counters(bears, counters::PLUS1), 4);
+    // Vigil for the Lost ("Whenever a creature you control dies, you may pay {X}. If you
+    // do, you gain X life."): paying {X} for a triggered ability isn't copied.
+    supported("Vigil for the Lost");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Unbound Flourishing");
+    t.battlefield(P0, "Vigil for the Lost");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Wastes", 3);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.answer(P0, DecisionKind::Number, Answer::Number(3));
+    let from = t.asked().len();
+    kill(&mut t, bears);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    let pays = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { prompt, .. } if prompt.starts_with("Pay")))
+        .count();
+    assert_eq!(pays, 1, "the trigger was copied");
+}

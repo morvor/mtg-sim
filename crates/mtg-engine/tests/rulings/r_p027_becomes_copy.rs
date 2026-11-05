@@ -29,10 +29,20 @@ fn became_riftwatcher(t: &TestGame, id: ObjectId, life: i32) {
     assert_eq!(t.stack_len(), 0);
 }
 
-/// P0's Soul Warden ("Whenever another creature enters, you gain 1 life.").
+/// P0's Soul Warden ("Whenever another creature enters, you gain 1 life.") and an
+/// enchantment with "Whenever a creature leaves the battlefield, you gain 1 life.": a
+/// permanent that becomes a copy triggers neither.
 fn soul_warden(t: &mut TestGame) {
     supported("Soul Warden");
     t.battlefield(P0, "Soul Warden");
+    let watcher = crate::r_s01_common::custom_card(
+        "Departure Watch",
+        "Enchantment",
+        "{1}{W}",
+        None,
+        "Whenever a creature leaves the battlefield, you gain 1 life.",
+    );
+    t.custom(P0, watcher, Zone::Battlefield);
 }
 
 /// Advances to P1's upkeep: P0's "until end of turn" effects have ended (CR 514.2).
@@ -332,14 +342,17 @@ fn the_ever_changing_dane_doesnt_enter() {
     activate_containing(&mut t, P0, dane, "Sacrifice another").expect("activation");
     t.resolve_all();
     // Only the sacrificed Riftwatcher's own "leaves the battlefield" trigger.
-    became_riftwatcher(&t, dane, life + 2);
+    // (And the watcher: the Riftwatcher left.)
+    became_riftwatcher(&t, dane, life + 3);
     // As a Riftwatcher with the 'Dane's ability, it becomes a Grizzly Bears: the
     // Riftwatcher it was doesn't leave.
     t.answer_choose(P0, &[obj(bears)]);
     activate_containing(&mut t, P0, dane, "Sacrifice another").expect("activation");
     t.resolve_all();
     assert_eq!(name_of(&t, dane), "Grizzly Bears");
-    assert_eq!(t.life(P0), life + 2);
+    // Only the sacrificed Bears left (the watcher's 1 life); the 'Dane's Riftwatcher form
+    // didn't (no 2 life from its own ability, no second 1 from the watcher).
+    assert_eq!(t.life(P0), life + 4);
 }
 
 #[test]
