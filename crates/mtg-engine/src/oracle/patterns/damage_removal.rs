@@ -139,6 +139,16 @@ fn counted_targets(s: &str) -> Option<(TargetSpec, bool, &str)> {
     Some((spec, any_number, rest))
 }
 
+/// A characteristic of the object an "unattach" cost unattached
+/// (`zones::COST_UNATTACHED`).
+fn of_cost_unattached(v: &Value) -> bool {
+    matches!(
+        v,
+        Value::ManaValueOf(s) | Value::PowerOf(s) | Value::ToughnessOf(s)
+            if matches!(**s, Sel::Var(x) if x == crate::zones::COST_UNATTACHED)
+    )
+}
+
 /// Value phrases used in damage amounts, on top of the shared value grammar.
 fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     let s = s.trim_start();
@@ -162,7 +172,10 @@ fn value_phrase(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     // "that card"/"that creature" never names the source itself or a player; if the
     // referent is one of those, the antecedent wasn't tracked (e.g. a discarded card).
     if s.starts_with("that ") && !it_is_object(b) {
-        return None;
+        // ... unless the shared value grammar reads it as the object a cost unattached
+        // ("{3}, Unattach an Equipment from ~: ... that Equipment's mana value", CR
+        // 601.2h), which isn't "it".
+        return parse_value_phrase(s, b).filter(|(v, _)| of_cost_unattached(v));
     }
     let pairs: [(&str, Value); 12] = [
         (
