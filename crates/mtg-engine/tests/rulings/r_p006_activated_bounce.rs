@@ -499,8 +499,10 @@ fn aetherplasm_can_put_itself_back_but_deathgazer_sees_the_new_blocker() {
     interp!("put-onto-battlefield-blocking-retriggers-becomes-blocked-by");
     // Aetherplasm's ruling "The creature you put onto the battlefield may be the
     // Aetherplasm you just returned to your hand. This allows it to dodge abilities like
-    // Deathgazer's." is superseded by CR 509.3d (exempt, rulings-P006.tsv): the first
-    // sentence holds, the dodge doesn't.
+    // Deathgazer's." (2006-02-01) is outdated (exempt, rulings-P006.tsv): it was right under
+    // the old single once-per-combat "becoming blocked" rule, which the CR later split into
+    // the forms of what is now 509.3a-d (in place by February 2011, probably with the M10
+    // rules of July 2009); the first sentence holds, the dodge doesn't.
     supported("Deathgazer");
     let (mut t, gazer, plasm, _) = aetherplasm_blocks("Deathgazer", "Island");
     assert_eq!(
@@ -518,7 +520,7 @@ fn aetherplasm_can_put_itself_back_but_deathgazer_sees_the_new_blocker() {
     assert_ne!(plasm2, plasm, "a new object");
     assert_eq!(blockers_of(&t, gazer), vec![plasm2]);
     // CR 509.3d: a creature put onto the battlefield blocking it triggers "becomes blocked
-    // by a creature" again, so (unlike the 2005 ruling's claim) the dodge doesn't work.
+    // by a creature" again, so (unlike the 2006 ruling's claim) the dodge doesn't work.
     assert_eq!(triggers_from(&t, gazer), 2);
     t.lands(P1, "Forest", 1);
     let gg = t.hand(P1, "Giant Growth");

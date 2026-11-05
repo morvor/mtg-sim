@@ -77,6 +77,10 @@ pub struct Ctx {
     /// what they're paid for (see `rule_statics::payment`).
     #[serde(default)]
     pub cost_of: Option<crate::rule_statics::payment::CostOf>,
+    /// A card being considered for casting: it will be on the stack as its targets are
+    /// chosen (CR 601.2a, 601.2c), so it isn't a legal target where it is now.
+    #[serde(default)]
+    pub casting_card: Option<ObjectId>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -568,6 +572,12 @@ impl Game {
                 .and_then(|e| e.player)
                 .into_iter()
                 .collect(),
+            PlayerRef::TriggerMover => ctx
+                .event
+                .as_ref()
+                .and_then(|e| e.caused_by.or(e.player))
+                .into_iter()
+                .collect(),
             PlayerRef::TriggerPlayers => ctx
                 .event
                 .as_ref()
@@ -657,6 +667,38 @@ impl Game {
             Zone::Battlefield | Zone::Stack | Zone::Command => view.controller(self, id),
             _ => o.owner,
         }
+    }
+
+    /// Whether the permanent `id` matched `f` as it entered the battlefield this turn,
+    /// under the control it entered under, and that player (see
+    /// `TurnHistory::permanents_entered`): "if an artifact entered the battlefield under
+    /// your control this turn" looks at the event, not at what the permanent is now (it
+    /// may have changed, left, or come under another player's control since). `None` if
+    /// it didn't enter this turn.
+    pub fn matched_as_entered(
+        &self,
+        id: ObjectId,
+        f: &Filter,
+        ctx: &Ctx,
+    ) -> Option<(bool, PlayerId)> {
+        let e = self
+            .history
+            .permanents_entered
+            .iter()
+            .rev()
+            .find(|e| e.id == id)?;
+        let o = self.obj(id);
+        let (chars, face_down) = match &e.as_entered {
+            Some((c, fd)) => (&**c, *fd),
+            None => (&o.chars, o.face_down),
+        };
+        let view = AsEntered {
+            id,
+            chars,
+            face_down,
+            controller: e.controller,
+        };
+        Some((self.matches_view(&view, id, f, ctx), e.controller))
     }
 
     pub fn matches_view(&self, view: &dyn View, id: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
@@ -1485,11 +1527,7 @@ impl Game {
             Value::Count(f) => crate::relational::count(self, f, ctx)
                 .unwrap_or_else(|| self.objects_matching(f, ctx).len() as i64),
             Value::CountSel(s) => self.eval_sel(s, ctx).len() as i64,
-            Value::CountPlayers(f) => self
-                .players_in_game()
-                .into_iter()
-                .filter(|p| self.player_filter_matches(f, *p, ctx))
-                .count() as i64,
+            Value::CountPlayers(f) => crate::aggregates::count_players(self, f, ctx),
             Value::PowerOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .iter()

@@ -428,9 +428,11 @@ inventory::submit! { ConditionPattern { name: "k702.173 freerunning cost was pai
 
 /// "Assassin spells you cast have freerunning {B}{B}." (Ezio Auditore da Firenze),
 /// "Creature spells you cast gain offspring {2} as you cast them." (Zinnia, Valley's
-/// Voice): the spells gain the keyword as they're cast (CR 610.5; see `next_spell.rs`),
-/// so its cost can be paid as they're cast, and a permanent spell's offspring ability
-/// keeps working on the battlefield (CR 400.7b).
+/// Voice): the spells get the keyword as they're cast (see `next_spell.rs`), so its cost
+/// can be paid as they're cast, and a permanent spell's offspring ability keeps working on
+/// the battlefield (CR 400.7b). "Have" is a continuous effect that applies while its
+/// source applies to the spell (CR 611.3a-b); "gain ... as you cast them" is a one-shot
+/// effect the spell keeps (CR 610.5, `StaticAbility::as_cast`).
 fn spells_you_cast_gain_cost_keyword(
     l: &str,
     text: &str,
@@ -439,9 +441,13 @@ fn spells_you_cast_gain_cost_keyword(
     use crate::keywords::KeywordKind;
     let l = end(l);
     let (subject, rest) = l.split_once(" spells you cast ")?;
-    let kw_text = rest
-        .strip_prefix("have ")
-        .or_else(|| rest.strip_prefix("gain ")?.strip_suffix(" as you cast them"))?;
+    let (kw_text, as_cast) = match rest.strip_prefix("have ") {
+        Some(k) => (k, false),
+        None => (
+            rest.strip_prefix("gain ")?.strip_suffix(" as you cast them")?,
+            true,
+        ),
+    };
     let kws = crate::oracle::keywords::parse_keyword_line(kw_text, ctx)?;
     let [kw] = kws.as_slice() else {
         return None;
@@ -465,7 +471,7 @@ fn spells_you_cast_gain_cost_keyword(
             Filter::Subtype(SmolStr::new(name))
         }
     };
-    let s = StaticAbility::new(StaticEffect::Continuous {
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
         affected: Filter::and(vec![
             quality,
             Filter::Spell,
@@ -473,6 +479,7 @@ fn spells_you_cast_gain_cost_keyword(
         ]),
         mods: vec![Modification::AddKeyword(k.clone())],
     });
+    s.as_cast = as_cast;
     Some(vec![AbilityDef::new(AbilityKind::Static(s), text)])
 }
 

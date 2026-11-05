@@ -114,7 +114,7 @@ impl KeywordRules for Bestow {
         // (CR 702.103d): an effect letting its owner cast creature spells from elsewhere
         // doesn't let them cast it bestowed.
         if o.zone != Zone::Hand(p) && !castable_bestowed_from_graveyard(g, p, card) {
-            let chars = g.option_characteristics(card, &opt);
+            let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
             if !g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false)
             {
                 return vec![];

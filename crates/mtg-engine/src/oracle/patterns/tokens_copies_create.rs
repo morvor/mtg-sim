@@ -152,6 +152,12 @@ pub(crate) fn token_quote_abilities(
     // name ("Volo's Journal").
     let before_names = orig.clone();
     if let Some(name) = TOKEN_NAME.with(|t| t.borrow().clone()) {
+        // ... also in an ability it grants (a nested quote): see `token_names_6`.
+        if let Some(r) =
+            super::token_names_6::token_named_in_nested_quote(&orig, &name, types, ctx)
+        {
+            return r;
+        }
         // As printed, and as the card's text normalizes it ("~'s Journal" for "Volo's
         // Journal" on Volo, Itinerant Scholar).
         let lower_name = name.to_lowercase();
@@ -458,7 +464,14 @@ pub(crate) fn token_desc(s: &str, ctx: &CompileContext) -> Option<TokenDesc> {
             }
             seen_with = true;
             let i = next_bound(r);
-            abilities.extend(ability_list(&r[..i], &quotes, &types, ctx)?);
+            // "a ... token named Rock with "...Sacrifice Rock..."": its quotes call it by
+            // the name it was given (CR 111.4, 201.5).
+            let list = if name.is_empty() {
+                ability_list(&r[..i], &quotes, &types, ctx)
+            } else {
+                with_token_name(&name, || ability_list(&r[..i], &quotes, &types, ctx))
+            };
+            abilities.extend(list?);
             rest = r[i..].trim().to_string();
         } else if let Some(r) = padded.strip_prefix(" named ") {
             if seen_name {

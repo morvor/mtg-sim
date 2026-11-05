@@ -108,7 +108,11 @@ fn activation_instructions_are_not_part_of_the_effect() {
 
 #[test]
 fn activate_only_as_an_instant_means_instant_timing() {
-    cr!("602.5e", "605.1a", "605.5");
+    cr!("602.5e", "605.1a", "605.5", "601.2g");
+    ruling!(
+        "Chromatic Sphere",
+        "Chromatic Sphere’s ability is not a mana ability. Players can respond to it, and it can’t be activated in the middle of paying for a cost. A recent update to rule 605.1a has made any abilities that move cards to or from libraries no longer mana abilities."
+    );
     // Chromatic Sphere: "{1}, {T}, Sacrifice this artifact: Add one mana of any color.
     // Draw a card. (Activate only as an instant.)" — it draws, so it isn't a mana ability.
     let mut t = TestGame::new(2);
@@ -122,9 +126,19 @@ fn activate_only_as_an_instant_means_instant_timing() {
     // Any time the player has priority, even with a spell on the stack on another turn.
     let hand = t.hand_size(P0);
     t.activate(P0, sphere, 0, &[]).unwrap();
-    assert_eq!(t.stack.len(), 2);
+    assert_eq!(t.stack.len(), 2, "players can respond to it");
     t.resolve();
     assert_eq!(t.hand_size(P0), hand + 1);
+    // It can't be activated in the middle of paying for a cost: with a Mountain to pay its
+    // {1}, it would make the {U} for Opt if it were a mana ability.
+    let mut t = TestGame::new(2);
+    let sphere = t.battlefield(P0, "Chromatic Sphere");
+    t.lands(P0, "Mountain", 1);
+    let opt = t.hand(P0, "Opt");
+    let hand = t.hand_size(P0);
+    assert!(t.cast(P0, opt).try_go().is_err());
+    assert!(t.on_battlefield(sphere));
+    assert_eq!(t.hand_size(P0), hand);
 }
 
 #[test]

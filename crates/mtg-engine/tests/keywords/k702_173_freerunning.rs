@@ -183,7 +183,7 @@ fn if_this_spells_freerunning_cost_was_paid() {
 
 #[test]
 fn assassin_spells_you_cast_have_freerunning() {
-    cr!("702.173a", "610.5");
+    cr!("702.173a", "611.3a");
     assert_supported("Ezio Auditore da Firenze");
     ruling!(
         "Ezio Auditore da Firenze",

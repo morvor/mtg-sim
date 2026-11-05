@@ -296,7 +296,16 @@ impl Game {
                 face_down,
                 link,
             } => {
-                let objs = self.resolve_objects(what, ctx);
+                // As for moving it: what an earlier part of the effect moved (CR 400.7j).
+                let objs: Vec<ObjectId> = self
+                    .resolve_objects(what, ctx)
+                    .into_iter()
+                    .filter_map(|o| {
+                        let e = Entity::Object(o);
+                        let found = self.found_after_effect_move(e, ctx);
+                        crate::zones::target_not_source_moved(ctx, what, e, found).object()
+                    })
+                    .collect();
                 let prev_link = self.current_link;
                 self.current_link = ctx.link;
                 // "... can't cause you to sacrifice or exile [permanents]" (CR 701.21).
@@ -459,7 +468,9 @@ impl Game {
                         crate::zones::target_not_source_moved(ctx, what, e, found).object()
                     })
                     .collect();
-                let res = self.move_to_destination(objs, to, ctx);
+                let mut moves = self.destination_moves(objs, to, ctx);
+                self.put_by_chooser(what, to, ctx, &mut moves);
+                let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
                 crate::zones::note_source_moved(ctx, what, &res);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let mut res = crate::merge::found_all(self, res);
@@ -1399,6 +1410,17 @@ impl Game {
                 }
                 ctx.prev_happened = changed;
             }
+            Effect::ReselectTargetsAtRandom { what, except } => {
+                let except = except
+                    .as_ref()
+                    .map(|sel| self.resolve_sel(sel, ctx))
+                    .unwrap_or_default();
+                let mut changed = false;
+                for o in self.resolve_objects(what, ctx) {
+                    changed |= crate::target_rules::reselect_at_random(self, o, &except);
+                }
+                ctx.prev_happened = changed;
+            }
             Effect::BecomeCopy { what, of, duration } => {
                 crate::copy::become_copy(self, what, of, duration, &[], ctx);
             }
@@ -1706,12 +1728,17 @@ impl Game {
                     picks.push((p, pick));
                     vec![]
                 });
-                for (p, pick) in picks {
-                    for c in pick {
-                        if let Some(n) = self.discard(p, c, ctx.source) {
-                            discarded.push(Entity::Object(n));
-                        }
-                    }
+                // Discarded at the same time (CR 701.9a, 404.3).
+                let cards: Vec<(PlayerId, ObjectId)> = picks
+                    .into_iter()
+                    .flat_map(|(p, pick)| pick.into_iter().map(move |c| (p, c)))
+                    .collect();
+                for n in self
+                    .discard_together(&cards, ctx.source)
+                    .into_iter()
+                    .flatten()
+                {
+                    discarded.push(Entity::Object(n));
                 }
                 self.end_apnap_choices(round);
                 ctx.prev_value = discarded.len() as i64;
@@ -1721,14 +1748,18 @@ impl Game {
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {
-                let mut discarded = Vec::new();
-                for p in self.eval_players(who, ctx) {
-                    for c in self.player(p).hand.clone() {
-                        if let Some(n) = self.discard(p, c, ctx.source) {
-                            discarded.push(Entity::Object(n));
-                        }
-                    }
-                }
+                // The hands are discarded at the same time (CR 701.9a, 404.3).
+                let cards: Vec<(PlayerId, ObjectId)> = self
+                    .eval_players(who, ctx)
+                    .into_iter()
+                    .flat_map(|p| self.player(p).hand.iter().map(move |c| (p, *c)))
+                    .collect();
+                let discarded: Vec<Entity> = self
+                    .discard_together(&cards, ctx.source)
+                    .into_iter()
+                    .flatten()
+                    .map(Entity::Object)
+                    .collect();
                 // "for each card discarded this way". A hand of no cards is discarded too
                 // ("you may discard your hand. If you do, ..."): it still happened.
                 ctx.prev_value = discarded.len() as i64;
@@ -1952,7 +1983,7 @@ impl Game {
                             crate::reveal::reveal_in(self, p, &found, Some(&c));
                         }
                         let start = moves.len();
-                        moves.extend(self.destination_moves(found, to, &mut c));
+                        moves.extend(self.found_card_moves(p, found, to, &mut c));
                         movers.push((p, owner, start..moves.len()));
                     }
                 }
@@ -2737,6 +2768,17 @@ impl Game {
     /// be found by later parts of it ("Exile target creature and put two time counters on
     /// it"): the object it became, when that instruction recorded it.
     pub(crate) fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
+        self.found_moved(e, ctx, true)
+    }
+
+    /// [`Game::found_after_move`] for what an earlier part of the effect itself moved, not
+    /// its cost: "Exile ~" after ~ was sacrificed to pay for the ability leaves it in the
+    /// graveyard (Ghost Council of Orzhova's ruling).
+    pub(crate) fn found_after_effect_move(&self, e: Entity, ctx: &Ctx) -> Entity {
+        self.found_moved(e, ctx, false)
+    }
+
+    fn found_moved(&self, e: Entity, ctx: &Ctx, by_cost: bool) -> Entity {
         let Entity::Object(o) = e else {
             return e;
         };
@@ -2744,13 +2786,20 @@ impl Game {
             return e;
         }
         let now = self.current(o);
-        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
-        // ~: ... Return ~ to the battlefield ...", CR 400.7j).
-        let moved = [vars::IT, crate::zones::COST_MOVED].iter().any(|v| {
+        let recorded = |v: &Var| {
             ctx.vars
                 .get(v)
                 .is_some_and(|v| v.contains(&Entity::Object(now)))
-        });
+        };
+        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
+        // ~: ... Return ~ to the battlefield ...", CR 400.7j), and "~" after an earlier
+        // instruction about ~ itself moved it, even if later instructions acted on other
+        // objects ("Return this card from your graveyard to the battlefield. You may put an
+        // Aura card ... onto the battlefield attached to it. If you don't, exile this
+        // creature.").
+        let moved = recorded(&vars::IT)
+            || (by_cost && recorded(&crate::zones::COST_MOVED))
+            || (ctx.source == Some(o) && recorded(&crate::zones::SOURCE_MOVED));
         if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
             Entity::Object(now)
         } else {
@@ -3398,7 +3447,15 @@ impl Game {
             _ => return None,
         };
         if filter_references_specific(f) {
-            Some(self.eval_filter_specific(f, ctx))
+            // CR 400.7j: an object an earlier part of the effect moved to a public zone
+            // ("return target creature card ... If that creature would leave the
+            // battlefield, ...") is found as the object it became.
+            Some(
+                self.eval_filter_specific(f, ctx)
+                    .into_iter()
+                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
+                    .collect(),
+            )
         } else {
             None
         }
@@ -3446,17 +3503,75 @@ impl Game {
         for o in &objs {
             let owner = self.obj(*o).owner;
             let etb = self.destination_etb(&dest, owner, ctx);
+            // "Each player may put a card from their hand onto the battlefield": each card
+            // is put there by the player who chose it (CR 101.4, 110.2a).
+            let by = crate::kw::each_player_collect::putter(ctx, *o).unwrap_or(ctx.controller);
             moves.push(MoveEv {
                 obj: *o,
                 to: dest.zone(owner),
                 pos: dest.position(),
                 cause: MoveCause::Effect,
-                by: Some(ctx.controller),
+                by: Some(by),
                 etb,
                 source: ctx.source,
             });
         }
         moves
+    }
+
+    /// The moves that put the cards `searcher` found in a search into `to` (see
+    /// [`Self::destination_moves`]): the player who searches is the one the effect
+    /// instructs to put them there, so they put them there (CR 110.2a, 701.23a) even
+    /// when the search is part of another player's spell or ability ("Its controller may
+    /// search their library for a basic land card, put that card onto the battlefield",
+    /// Path to Exile; "each player searches their library for a basic land card, puts it
+    /// onto the battlefield").
+    pub fn found_card_moves(
+        &mut self,
+        searcher: PlayerId,
+        found: Vec<ObjectId>,
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
+        let mut moves = self.destination_moves(found, to, ctx);
+        for m in &mut moves {
+            m.by = Some(searcher);
+        }
+        moves
+    }
+
+    /// Who performs `moves`, an effect's moves of `what` onto the battlefield, when `what`
+    /// is a player's own choice put under that same player's control: in "[player] puts a
+    /// [card] of their choice onto the battlefield" ("each player puts a creature card from
+    /// their graveyard onto the battlefield", Exhume; "that player may put an artifact,
+    /// creature, or land card from their hand onto the battlefield", Braids, Conjurer
+    /// Adept) that player, not the effect's controller, is the one the effect instructs to
+    /// put it there (CR 110.2a), so the moves are theirs.
+    pub(crate) fn put_by_chooser(
+        &self,
+        what: &Sel,
+        to: &Destination,
+        ctx: &Ctx,
+        moves: &mut [MoveEv],
+    ) {
+        let Sel::Choose { chooser, .. } = what else {
+            return;
+        };
+        if to.zone != ZoneKind::Battlefield || matches!(chooser, PlayerRef::You) {
+            return;
+        }
+        let Some(p) = self.eval_player(chooser, ctx) else {
+            return;
+        };
+        let controller = to
+            .controller
+            .as_ref()
+            .and_then(|c| self.eval_player(c, ctx));
+        if controller == Some(p) {
+            for m in moves.iter_mut() {
+                m.by = Some(p);
+            }
+        }
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each

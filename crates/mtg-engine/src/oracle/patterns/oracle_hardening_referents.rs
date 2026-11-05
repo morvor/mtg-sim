@@ -129,6 +129,18 @@ pub fn note_object_last(prev: Option<&str>, sentence: &str, b: &mut Builder) {
     {
         b.it = Sel::This;
     }
+    // "You may sacrifice an artifact. If you don't, tap ~ and it deals 2 damage to you."
+    // (Yawgmoth Demon): after an instruction ending with "~", "it" is ~, not the
+    // permanent an earlier instruction sacrificed (which wasn't, in this branch). Not when
+    // "~" only qualifies what was sacrificed ("sacrifice a creature other than ~").
+    if prev.ends_with(" ~")
+        && !prev.contains(" or ~")
+        && !lower.ends_with(" other than ~")
+        && !names_trigger_object
+        && matches!(b.it, Sel::Var(v) if v == vars::SACRIFICED)
+    {
+        b.it = Sel::This;
+    }
 }
 
 /// "Whenever you cast a spell, put a verse counter on ~, then it deals damage equal to

@@ -395,6 +395,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         mtg_engine::kw::pay_any_amount_of_life::PAY_ANY_LIFE,
         "card:The Mimeoplasm:exile two creature cards and enter as a copy of one",
         "card:Vesuvan Doppelganger:enter as a copy, keeping its own color",
+        // Vesuvan Shapeshifter's copy effect gets a duration as it's put onto the
+        // battlefield (`cards/vesuvan_shapeshifter.rs`): no library.
+        "card:Vesuvan Shapeshifter:its copy effect lasts until it's turned face down",
         // Damage removed instead of a destruction (umbra armor, `kw/umbra_armor.rs`;
         // Pyramids, `cards/pyramids.rs`).
         "umbra armor:remove all damage from it",
@@ -938,6 +941,7 @@ fn effect_now(e: &Effect, now: &mut Now) {
         | Effect::PutSticker { .. }
         | Effect::SpendAnyTypeMana { .. }
         | Effect::ChangeTargets { .. }
+        | Effect::ReselectTargetsAtRandom { .. }
         | Effect::BecomeCopy { .. }
         | Effect::BecomeCopyExcept { .. }
         | Effect::Regenerate { .. }

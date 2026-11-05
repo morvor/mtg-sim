@@ -59,10 +59,15 @@ pub fn gives_flash(g: &Game, e: &NextSpellEffect) -> bool {
         })
 }
 
-/// Static abilities of the form "[filter] spells you cast have [ability]" create
-/// one-shot effects that make spells gain the ability as they're cast (CR 610.5), rather
-/// than applying continuously to spells on the stack ("[filter] spells you control have
-/// [ability]", `Filter::SpellOnStack`, CR 611.3a).
+/// Static abilities of the form "[filter] spells you cast have [ability]" or "...
+/// gain [ability] as you cast them": they grant the ability to a spell as it's put on the
+/// stack (CR 601.2a), rather than applying continuously to whichever spells are on the
+/// stack ("[filter] spells you control have [ability]", `Filter::SpellOnStack`, CR
+/// 611.3a). "Gain ... as you cast them" is a one-shot effect the spell keeps (CR 610.5,
+/// `StaticAbility::as_cast`); a "have" grant is lost if it stops applying while the spell
+/// is cast (CR 611.3b, `recheck_static_cast_grants`). Unlike the continuous effect CR
+/// 611.3a-b describe, a "have" grant stays on the spell after it's cast and doesn't reach
+/// spells already on the stack (interpretation `cast-grant-have-after-cast`).
 pub fn is_cast_grant(s: &StaticAbility) -> bool {
     if s.is_cda {
         return false;
@@ -237,7 +242,8 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
         });
         g.carried_effects.push(id);
     }
-    // CR 610.5: "spells you cast have ..." abilities of objects.
+    // "Spells you cast have ..." (CR 611.3a-b) and "... gain ... as you cast them" (CR
+    // 610.5) abilities of objects.
     for id in g.live_objects() {
         let o = g.obj(id);
         for a in &o.chars.abilities {
@@ -288,7 +294,7 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
 }
 
 /// Once the spell's total cost is paid (CR 601.2h-i): static abilities whose grants depend
-/// on the mana spent to cast it make it gain their abilities (CR 610.5).
+/// on the mana spent to cast it make it gain their abilities (CR 611.3a).
 pub fn grant_after_payment(g: &mut Game, spell: ObjectId) {
     g.recompute();
     let mut apply: Vec<(ObjectId, PlayerId, Vec<Modification>)> = Vec::new();
@@ -346,8 +352,10 @@ pub fn grant_after_payment(g: &mut Game, spell: ObjectId) {
 /// the spell gain as it was put on the stack ("Spells you cast with mana value 6 or
 /// greater have cascade") is lost if that static ability no longer applies to it — e.g.
 /// its source was sacrificed or changed control while the spell's costs were paid
-/// (Imoti, Celebrant of Bounty and Party Thrasher rulings). Abilities from effects
-/// waiting for "the next spell you cast" (CR 611.2f) aren't affected.
+/// (CR 611.3b; Imoti, Celebrant of Bounty and Party Thrasher rulings). Abilities from
+/// effects waiting for "the next spell you cast" (CR 611.2f) and one-shot grants ("...
+/// gain evoke {4} as you cast them", CR 610.5, 601.2a; `StaticAbility::as_cast`) aren't
+/// affected.
 pub fn recheck_static_cast_grants(g: &mut Game, spell: ObjectId) {
     g.recompute();
     let mut drop: Vec<u32> = Vec::new();
@@ -373,6 +381,10 @@ pub fn recheck_static_cast_grants(g: &mut Game, spell: ObjectId) {
         }) else {
             continue;
         };
+        // CR 610.5: a one-shot grant was applied as the spell was put on the stack.
+        if s.as_cast {
+            continue;
+        }
         let StaticEffect::Continuous { affected, .. } = &s.effect else {
             continue;
         };
@@ -407,8 +419,9 @@ fn functions_on_battlefield(m: &Modification) -> bool {
 }
 
 /// Keywords the static abilities of objects `p` controls would make `card` gain as `p`
-/// casts it (CR 610.5: "Assassin spells you cast have freerunning {B}{B}"). Those that
-/// offer a way to cast it (an alternative cost, CR 601.2b) must be known before it's cast.
+/// casts it ("Assassin spells you cast have freerunning {B}{B}", CR 611.3a; "... gain
+/// evoke {4} as you cast them", CR 610.5). Those that offer a way to cast it (an
+/// alternative cost, CR 601.2b, 601.3) must be known before it's cast.
 pub fn cast_grant_keywords(g: &Game, p: PlayerId, card: ObjectId) -> Vec<crate::keywords::Keyword> {
     let mut out = Vec::new();
     for id in g.live_objects() {

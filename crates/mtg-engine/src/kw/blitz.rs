@@ -128,7 +128,7 @@ impl KeywordRules for Blitz {
         if o.zone != Zone::Hand(p)
             && !super::cast_using_from_graveyard::allows(g, p, card, KeywordKind::Blitz)
         {
-            let chars = g.option_characteristics(card, &opt);
+            let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
             if !g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false)
             {
                 return vec![];

@@ -245,7 +245,7 @@ fn copy_targeting(
     controller: PlayerId,
     e: Entity,
 ) -> Option<ObjectId> {
-    let copy = crate::copy::copy_spell(g, spell, controller, false)?;
+    let copy = crate::copy::copy_spell_quiet(g, spell, controller)?;
     if let Some(si) = g.objects[copy.0 as usize].stack.as_mut() {
         for m in si.chosen.iter_mut() {
             for v in m.targets.iter_mut() {

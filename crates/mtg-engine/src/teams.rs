@@ -45,9 +45,9 @@ pub fn more_step_trigger_infos(
     {
         return vec![];
     }
-    let refers = |v: serde_json::Result<String>| v.is_ok_and(|j| j.contains("TriggerPlayer"));
-    if !refers(serde_json::to_string(&t.body)) && !refers(serde_json::to_string(&t.intervening_if))
-    {
+    let refers =
+        |v: serde_json::Result<serde_json::Value>| v.is_ok_and(|j| refers_to_trigger_player(&j));
+    if !refers(serde_json::to_value(&t.body)) && !refers(serde_json::to_value(&t.intervening_if)) {
         return vec![];
     }
     g.active_players()
@@ -62,6 +62,27 @@ pub fn more_step_trigger_infos(
             ..Default::default()
         })
         .collect()
+}
+
+/// Whether a serialized body or condition refers to the player of its trigger event
+/// ("that player"), leaving out the abilities in it that have trigger events of their own:
+/// a delayed triggered ability's ("until end of turn, ... whenever a player taps a
+/// Mountain for mana, that player adds an additional {R}" is the player who tapped it,
+/// Chaos Moon), the trigger of mana spent, and a triggered ability granted or given to a
+/// token.
+fn refers_to_trigger_player(v: &serde_json::Value) -> bool {
+    use serde_json::Value as J;
+    let named = |s: &str| s.starts_with("TriggerPlayer");
+    match v {
+        J::String(s) => named(s),
+        J::Array(a) => a.iter().any(refers_to_trigger_player),
+        J::Object(m) => m.iter().any(|(k, x)| match k.as_str() {
+            "DelayedTrigger" | "Triggered" => false,
+            "AddManaWithSpentTrigger" => x.get("add").is_some_and(refers_to_trigger_player),
+            k => named(k) || refers_to_trigger_player(x),
+        }),
+        _ => false,
+    }
 }
 
 /// CR 805.9: an ability that refers to "the active player" refers to one specific active

@@ -820,11 +820,11 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   no current mana ability that moves, reveals or shuffles library cards.
 - Deck legality (deck.rs, attraction deck checks) is an API callers use; interchangeable names (no Scryfall
   data).
-- Rulings the current CR supersedes: Wort, the Raidmother (CR 610.5 makes cast grants one-shot), Mossfire Egg
-  (CR 605.1a), MDFC "can't transform" rulings (CR 701.27g, 712.3).
-- Ambiguous/unsettled readings: ward on a copy that keeps its targets, deathtouch in 120.10 excess damage,
-  granted changeling vs layer 4, Panharmonicon on non-ETB triggers, Torpor Orb on leave-graveyard triggers,
-  tempting offer order when cast on another player's turn (engine follows CR 101.4), Grand Melee
+- Rulings the current CR supersedes: Mossfire Egg and the other Eggs, Charmed Pendant and Deranged Assistant
+  (CR 605.1a, revision effective 2026-08-07), MDFC "can't transform" rulings (CR 701.27g, 712.3; the Marvel's
+  Spider-Man CR update effective 2025-09-19).
+- Ambiguous/unsettled readings: ward on a copy that keeps its targets, granted changeling vs layer 4,
+  Panharmonicon on non-ETB triggers, Torpor Orb on leave-graveyard triggers, Grand Melee
   planeswalking readings of 701.31a/b.
 - No current card affected: keyword-derived activated/triggered abilities added after layer 6, "can't have
   [keyword]" at the end of layer 6, `Filter::zone()` returning None for `Or`, `Value::DistinctNames` greed,
@@ -832,3 +832,52 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   (stack.rs:1042 drops `saved_ctx`; no storm/epic/casualty card references it), bestowed Aura status ending at
   the next SBA check, Word of Command's resolution window.
 - UI-only: "discard up to N" asking twice, per-card dredge prompt, ordering identical tokens.
+
+---
+
+## Apparent conflicts (Nov 5)
+
+Rulings that rulings-2 left uncited (OPEN) because they seem to contradict the card's current Oracle text
+(data/oracle_cards.jsonl.gz, snapshot 2026-09-24); the engine follows the Oracle text. For
+ruling-conflicts-2.
+
+- **Homicide Investigator** (rulings-P005): see `docs/agents/items/ruling-conflicts-2.md`.
+- **Lich** (rulings-P096, landed `f21a66a1`). Oracle: "When this enchantment is put into a graveyard from the
+  battlefield, you lose the game." Two rulings say "leaves the battlefield":
+  - 2004-10-04: "If you have multiple Lich cards on the battlefield, you must sacrifice a permanent for each
+    damage done to you for each Lich. This is because the sacrifice is a triggered ability. But you only draw
+    one card for each life gained regardless of how many Liches you have. This is because the draw is a
+    replacement effect and not a triggered one. You lose if any one of the Liches leaves the battlefield."
+    Only the last sentence conflicts; the rest is tested in `tests/rulings/r_p096_lich.rs` (uncited).
+  - 2010-08-15: "The last ability will cause you to lose the game even if you somehow manage to have a life
+    total greater than 0 at the time the Lich leaves the battlefield or if some other effect would prevent you
+    from losing for having 0 life. If, on the other hand, some effect such as that from Platinum Angel says
+    that you can't lose the game then even the last ability of the Lich cannot cause you to do so. The ability
+    will just resolve and the game will continue as normal."
+  - The 2011-01-01 version of the second ruling ("... at the time the Lich is put into the graveyard ...")
+    agrees with the Oracle text and is cited. The "leaves the battlefield" wording probably comes from older
+    Oracle text (not verified: the repo has one Oracle snapshot).
+- **Rimescale Dragon** (rulings-P096). Oracle: "Creatures with ice counters on them don't untap during their
+  controllers' untap steps." Ruling 2006-07-15: "Rimescale Dragon’s last ability affects all permanents with
+  ice counters on them, whether or not it put the ice counters on them." Other cards put ice counters on
+  noncreature permanents (e.g. Rimefeather Owl), so "all permanents" and "creatures" give different results;
+  the engine lets a noncreature permanent with an ice counter untap.
+- **Run Out of Town** (rulings-P140). Oracle: "The owner of target nonland permanent puts it on their choice
+  of the top or bottom of their library." Ruling 2022-04-29: "That permanent's controller chooses whether to
+  put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to
+  mutate or meld, for example), that permanent's controller puts all of them on the top or all of them on the
+  bottom. They do not need to reveal the order those cards were put into the library this way." The Oracle
+  text has the owner choose, the ruling the controller; they differ for a permanent another player controls.
+  The engine follows the Oracle text (`run_out_of_town_follows_its_oracle_text` in
+  `tests/rulings/r_p140_tuck.rs`, which cites no ruling), as for Desynchronize, Unlucky Drop, Aether Gust and
+  Sudden Setback, whose rulings say the owner chooses. Left uncited.
+- **Caller of the Untamed** (rulings-P025, left uncited). Ruling 2016-08-23: "If you have more than one Caller
+  of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you
+  drafted that aren’t in your deck. You’ll choose which one to copy at the time you choose the value of X while
+  activating the ability." The decided interpretation `x-defined-by-target`
+  (`docs/interpretations/stack-casting-costs.md`, "Decided by the user, Nov 4") has, in its Affects line, "the
+  card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card
+  chosen is one with that mana value". The two differ only when two exiled cards share a mana value (which
+  one is copied: chosen during activation by the ruling, as the ability resolves by the interpretation). Not a
+  CR conflict: CR 107.3c and 607.3 support the ruling; following it needs a non-target choice made during
+  activation.

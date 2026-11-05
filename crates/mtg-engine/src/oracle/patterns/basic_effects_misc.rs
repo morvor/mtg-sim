@@ -529,7 +529,7 @@ fn destroy_any_of_them_that_are(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "destroy any of them that are [objects]", priority: 150, parse: destroy_any_of_them_that_are } }
 
 /// The number counted by "count the number of [objects]".
-const COUNTED: Var = vars::USER + 3340;
+pub(crate) const COUNTED: Var = vars::USER + 3340;
 
 /// "At the beginning of your upkeep, count the number of permanents you control. Your life
 /// total becomes that number." (Touch of the Eternal): the number is counted once, as the
