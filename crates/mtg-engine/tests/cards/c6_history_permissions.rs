@@ -667,6 +667,57 @@ fn a_wall_put_onto_the_battlefield_blocking_never_blocked() {
 }
 
 #[test]
+fn glyph_of_delusion_targets_creatures_switched_into_or_out_of_the_walls_block() {
+    cr!("509.1", "506.4", "115.1");
+    // The third case of the ruling: a block an ability switches (Sorrow's Path) counts, both
+    // for the attacker switched into the Wall's block and the one switched out of it. This
+    // is the case its "switched into or out of the block by an ability" is about, not a
+    // creature put onto the battlefield blocking, which never "blocked" (CR 509.4).
+    ruling!(
+        "Glyph of Delusion",
+        "or by being switched into or out of the block by an ability"
+    );
+    interp!("entered-blocker-never-blocked");
+    supported("Sorrow's Path");
+    let mut t = TestGame::new(2);
+    let path = t.battlefield(P0, "Sorrow's Path");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let stone = t.battlefield(P1, "Wall of Stone");
+    let wood = t.battlefield(P1, "Wall of Wood");
+    ready(&mut t, wurm);
+    ready(&mut t, giant);
+    // Wall of Stone blocks the Craw Wurm, Wall of Wood the Hill Giant; Sorrow's Path then
+    // switches them (and deals 2 damage to P0 and each creature P0 controls).
+    attack_and_block(&mut t, P0, &[wurm, giant], P1, &[(stone, wurm), (wood, giant)]);
+    t.answer_targets(P0, &[Entity::Object(stone), Entity::Object(wood)]);
+    t.activate(P0, path, 0, &[]).unwrap();
+    t.resolve_all();
+    let blocking = |t: &TestGame, b: ObjectId| {
+        t.g.combat
+            .as_ref()
+            .map(|c| c.blocking(b))
+            .unwrap_or_default()
+    };
+    assert_eq!(blocking(&t, stone), vec![giant]);
+    assert_eq!(blocking(&t, wood), vec![wurm]);
+    // Wall of Stone blocked both this turn: the Giant switched into its block, the Wurm
+    // switched out of it.
+    let glyph = t.hand(P1, "Glyph of Delusion");
+    mana(&mut t, P1);
+    t.cast_with(P1, glyph, &[Entity::Object(stone), Entity::Object(giant)])
+        .unwrap();
+    let mut offered =
+        target_candidates(&t, "target creature that target wall blocked this turn").unwrap();
+    offered.sort_by_key(|e| format!("{e:?}"));
+    let mut both = vec![Entity::Object(wurm), Entity::Object(giant)];
+    both.sort_by_key(|e| format!("{e:?}"));
+    assert_eq!(offered, both);
+    t.resolve_all();
+    assert_eq!(t.counters(giant, "glyph"), 3, "X is the Hill Giant's power");
+}
+
+#[test]
 fn glyph_of_delusion_needs_a_creature_that_wall_blocked() {
     cr!("115.1", "601.2c");
     let mut t = TestGame::new(2);

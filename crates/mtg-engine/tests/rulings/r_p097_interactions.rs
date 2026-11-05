@@ -407,8 +407,11 @@ fn tezzerets_emblem_animates_vehicles_as_0_0_without_crewing_them() {
     assert_eq!(t.pt(mech), (3, 3));
 }
 
-// Scryfall files Starting Town's rulings under Squall, SeeD Mercenary's oracle id, so they
-// are cited by that name.
+// Scryfall's data attaches Starting Town's rulings to Squall, SeeD Mercenary (misattached
+// rulings, logged in docs/RULING_DISCREPANCIES.md): they are cited under Squall and tested
+// on Starting Town. Squall takes part where it can (returning a Starting Town on its
+// controller's turn, `starting_town_counts_the_turns_you_have_taken` in r_p098_misc.rs);
+// it can't make one enter on another player's turn, and the restart test has no use for it.
 #[test]
 fn starting_town_enters_tapped_on_other_players_turns() {
     cr!("614.1c", "500.7");
