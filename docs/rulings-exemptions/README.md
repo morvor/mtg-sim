@@ -18,7 +18,7 @@ exempt only by a register decision about that question (Gnoll War Band's, by
 `history-counts-players-who-left`). A ruling the data attaches to the wrong card is never
 exempt: it is tested on the card it describes and cited under the card it is attached to.
 Every exemption whose reason calls the ruling outdated, superseded, overridden,
-inconsistent, misattached or a template error, or cites
+inconsistent, misattached, a template error or a transcription error, or cites
 `ruling-contradicting-oracle-gives-way`, needs an entry quoting that ruling in
 `docs/RULING_DISCREPANCIES.md` (`cargo test -p mtg-data` and `rulings-coverage --check`
 fail otherwise).

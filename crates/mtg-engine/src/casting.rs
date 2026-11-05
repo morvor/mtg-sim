@@ -1024,10 +1024,15 @@ impl Game {
         self.can_pay_spell_cost_with_terms(p, &cost, card, &chars, opt.permission.as_ref())
     }
 
-    /// Whether `p` may cast `card` while a spell or ability resolves (CR 608.2g): the
-    /// spell's own "cast this spell only ..." restrictions apply, and a player who "can
-    /// cast spells only any time they could cast a sorcery" can't, as nobody has priority
-    /// and the resolving object is on the stack (CR 307.5; Teferi, Mage of Zhalfir).
+    /// Whether `p` may cast `card` while a spell or ability resolves (CR 608.2g): only the
+    /// timing permissions based on its card type are ignored. The spell's own "cast this
+    /// spell only ..." restrictions apply (whether written as a condition or as "can't
+    /// cast" during a window, e.g. "Cast this spell only during combat"), as do every
+    /// other rule or effect that prohibits casting it (CR 601.3: "can't cast", "no more
+    /// than one spell each turn", split second), with the CR 601.3a allowance for choices
+    /// such as X; and a player who "can cast spells only any time they could cast a
+    /// sorcery" can't, as nobody has priority and the resolving object is on the stack
+    /// (CR 307.5; Teferi, Mage of Zhalfir).
     pub(crate) fn resolution_cast_allowed(
         &self,
         p: PlayerId,
@@ -1036,6 +1041,7 @@ impl Game {
     ) -> bool {
         crate::combat::spell_cast_restrictions_ok(self, p, card, chars)
             && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
+            && !(self.cast_prohibited(p, card, chars) && !proposal_may_change_qualities(chars))
     }
 
     pub(crate) fn timing_allows_cast(
