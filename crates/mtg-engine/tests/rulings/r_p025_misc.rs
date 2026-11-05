@@ -79,7 +79,7 @@ fn gyrus_counts_the_commander_tax_in_the_mana_spent() {
 
 #[test]
 fn sarkhans_reduction_doesnt_change_mana_value_or_colored_mana() {
-    cr!("601.2f", "202.3", "118.7c");
+    cr!("601.2f", "202.3", "118.7a");
     ruling!(
         "Sarkhan, Soul Aflame",
         "Sarkhan's first ability doesn't change the mana cost or mana value of any Dragon spell. It changes only the total cost you pay."
@@ -107,7 +107,7 @@ fn sarkhans_reduction_doesnt_change_mana_value_or_colored_mana() {
 
 #[test]
 fn nahiri_enters_with_loyalty_doubled_by_doubling_season() {
-    cr!("614.1c", "616.1", "306.5b");
+    cr!("614.1c", "122.6", "306.5b");
     ruling!(
         "Nahiri, the Unforgiving",
         "Other replacement effects that would change the number of loyalty counters Nahiri enters with will apply as normal."
@@ -124,7 +124,7 @@ fn nahiri_enters_with_loyalty_doubled_by_doubling_season() {
 
 #[test]
 fn cursecloth_wrappings_embalm_exiles_the_card_as_a_cost() {
-    cr!("702.128a", "602.2b", "118.3");
+    cr!("702.128a", "602.2b", "601.2h");
     ruling!(
         "Cursecloth Wrappings",
         "Once you’ve activated an embalm ability, the card is immediately exiled. Opponents can’t try to stop the ability by exiling the card."
@@ -313,7 +313,7 @@ fn the_eleventh_hour_finds_a_doctor_by_creature_type() {
 
 #[test]
 fn scion_of_the_ur_dragon_stays_a_copy_after_the_card_leaves_the_graveyard() {
-    cr!("707.2", "707.2b", "611.2c");
+    cr!("707.2", "707.2b", "611.2a");
     ruling!(
         "Scion of the Ur-Dragon",
         "Removing the other Dragon card from your graveyard has no effect on Scion of the Ur-Dragon."
@@ -333,6 +333,10 @@ fn scion_of_the_ur_dragon_stays_a_copy_after_the_card_leaves_the_graveyard() {
     t.g.recompute();
     assert_eq!(name_of(&t, scion), "Shivan Dragon");
     assert_eq!(t.pt(scion), (5, 5));
+    // Until end of turn.
+    t.advance_to(P1, Step::Upkeep);
+    t.g.recompute();
+    assert_eq!(name_of(&t, scion), "Scion of the Ur-Dragon");
 }
 
 #[test]
@@ -366,7 +370,7 @@ fn sakashimas_will_copies_printed_values_and_an_animated_land_makes_lands() {
 
 #[test]
 fn mirror_of_the_forebears_with_no_chosen_type_cant_be_activated() {
-    cr!("602.2", "707.2", "607.2d");
+    cr!("602.2", "707.2", "607.2d", "607.5a");
     ruling!(
         "Mirror of the Forebears",
         "If you somehow control a Mirror of the Forebears with no chosen creature type, its activated ability can’t be activated."
@@ -382,7 +386,8 @@ fn mirror_of_the_forebears_with_no_chosen_type_cant_be_activated() {
     // for it.
     let mirage = t.battlefield(P0, "Mirage Mirror");
     lands_for(&mut t, P0, "{2}");
-    t.activate(P0, mirage, 0, &[obj(forebears)]).expect("activate");
+    t.activate(P0, mirage, 0, &[obj(forebears)])
+        .expect("activate");
     t.resolve_all();
     assert_eq!(name_of(&t, mirage), "Mirror of the Forebears");
     lands_for(&mut t, P0, "{1}");
@@ -394,7 +399,6 @@ fn mirror_of_the_forebears_with_no_chosen_type_cant_be_activated() {
     assert_eq!(name_of(&t, mirage), "Mirror of the Forebears");
     let _ = giant;
 }
-
 
 #[test]
 fn the_mimeoplasm_copying_a_card_that_enters_with_counters_gets_both() {

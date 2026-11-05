@@ -6,17 +6,28 @@
 //! equipped, has two +1/+1 counters, +3/+3 and is green-blue too).
 
 use crate::r_p025_common::*;
+use mtg_engine::ability::Modification;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-/// `p`'s `copier` enters as a copy of a dressed-up Hill Giant controlled by `giant_p`.
+/// `p`'s `copier` enters as a copy of a dressed-up Hill Giant controlled by `giant_p`,
+/// which a type-changing effect has also made an Elf artifact.
 fn enters_copying_giant(copier: &str, p: PlayerId, giant_p: PlayerId) -> (TestGame, ObjectId) {
     supported(copier);
     let mut t = TestGame::new(2);
     let giant = dressed_giant(&mut t, giant_p);
+    modify(
+        &mut t,
+        giant,
+        vec![
+            Modification::AddTypes(vec![CardType::Artifact]),
+            Modification::AddSubtypes(vec!["Elf".into()]),
+        ],
+    );
+    assert!(t.obj_now(giant).is(CardType::Artifact) && has_subtype(&t, giant, "Elf"));
     let c = enter_copying(&mut t, p, copier, giant);
     assert!(!t.obj_now(c).is_token(), "{copier}");
     (t, c)
@@ -24,11 +35,16 @@ fn enters_copying_giant(copier: &str, p: PlayerId, giant_p: PlayerId) -> (TestGa
 
 /// One "enters as a copy" case: the copier, who controls the Giant, the copy's power and
 /// toughness and a check of its exceptions.
-type EnterCase = (&'static str, PlayerId, (i32, i32), fn(&TestGame, ObjectId) -> bool);
+type EnterCase = (
+    &'static str,
+    PlayerId,
+    (i32, i32),
+    fn(&TestGame, ObjectId) -> bool,
+);
 
 #[test]
 fn enter_as_a_copy_copies_only_the_printed_creature() {
-    cr!("707.2", "707.9a", "707.9b", "614.1c");
+    cr!("707.2", "707.9a", "707.9b", "614.1c", "613.1d");
     ruling!(
         "Mercurial Pretender",
         "Mercurial Pretender copies exactly what was printed on the original creature and nothing more (unless that creature is copying something else or is a token; see below)."
@@ -96,6 +112,8 @@ fn enter_as_a_copy_copies_only_the_printed_creature() {
         assert_eq!(name_of(&t, c), "Hill Giant", "{copier}");
         assert_eq!(t.obj_now(c).chars.colors, red(), "{copier}: colors");
         assert!(has_subtype(&t, c, "Giant"), "{copier}");
+        assert!(!has_subtype(&t, c, "Elf"), "{copier}: types");
+        assert!(!t.obj_now(c).is(CardType::Artifact), "{copier}: types");
         assert_eq!(t.pt(c), *pt, "{copier}: power and toughness");
         let o = t.obj_now(c);
         assert!(!o.tapped, "{copier}: tapped");
@@ -397,7 +415,10 @@ fn protean_thaumaturge_copies_printed_values_plus_copy_effects() {
     t.settle();
     t.resolve_all();
     assert_copied_printed_values_plus_copy_effects(&t, thaum);
-    assert_eq!(abilities_with(&t, thaum, "Whenever an enchantment you control enters"), 1);
+    assert_eq!(
+        abilities_with(&t, thaum, "Whenever an enchantment you control enters"),
+        1
+    );
     // An animated land: it becomes a land, not a creature.
     let land = t.battlefield(P1, "Forest");
     animate_land(&mut t, land);

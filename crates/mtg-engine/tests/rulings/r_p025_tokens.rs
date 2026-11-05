@@ -60,7 +60,7 @@ fn soul_separators_spirit_has_the_cards_mana_cost_and_enters_first() {
 
 #[test]
 fn soul_separators_spirit_copy_of_a_double_faced_card_is_double_faced() {
-    cr!("707.8", "712.2", "701.27a");
+    cr!("707.8a", "701.27a", "701.27c");
     ruling!(
         "Soul Separator",
         "If you copy a double-faced creature card with Soul Separator’s ability, the resulting Spirit token will be a double-faced token. The listed exceptions will apply to both the front and back faces of the Spirit token. The Zombie token will not be a double-faced token."
@@ -83,7 +83,7 @@ fn soul_separators_spirit_copy_of_a_double_faced_card_is_double_faced() {
 
 #[test]
 fn altered_ego_copies_the_face_thats_up_and_cant_transform() {
-    cr!("707.8", "712.14", "701.27c");
+    cr!("707.8", "712.14a", "701.27c");
     ruling!(
         "Altered Ego",
         "If you copy a double-faced creature, Altered Ego will be a copy of the face that's up when Altered Ego enters. Because Altered Ego is not a double-faced card, it won't be able to transform. If an effect instructs you to return it to the battlefield transformed when it leaves the battlefield, it won't return and will remain in its new zone."
@@ -109,12 +109,13 @@ fn supplant_form_copying_a_face_down_creature() {
     cr!("707.2", "708.2", "708.9");
     ruling!(
         "Supplant Form",
-        "If you return a face-down creature to its owner’s hand, the token will be a face-up colorless 2/2 creature with no name, no abilities, and no creature types."
+        "If you return a face-down creature to its owner’s hand, the token will be a face-up colorless 2/2 creature with no name, no abilities, and no creature types. (The face-down creature card will be revealed to all players as it leaves the battlefield.)"
     );
     let mut t = TestGame::new(2);
     let fd = crate::r_s12_common::morph(&mut t, P0, "Den Protector");
     let toks = cast_for_tokens(&mut t, P0, "Supplant Form", "{4}{U}{U}", &[obj(fd)]);
     assert!(t.in_hand(P0, "Den Protector"));
+    assert!(t.dump_log().contains("reveals face-down Den Protector"));
     assert_eq!(toks.len(), 1);
     let o = t.obj_now(toks[0]);
     assert!(!o.face_down);
@@ -126,7 +127,7 @@ fn supplant_form_copying_a_face_down_creature() {
 
 #[test]
 fn echoing_assault_copying_a_clone() {
-    cr!("707.3", "707.9b", "508.3a");
+    cr!("707.3", "707.9b", "508.3d", "508.4");
     ruling!(
         "Echoing Assault",
         "In the case where the target creature is copying something else when Echoing Assault's second ability resolves, then the token enters as whatever that creature copied, except it's a 1/1."
@@ -179,7 +180,7 @@ fn sarkhan_copies_what_the_dragon_is_copying_by_then() {
 
 #[test]
 fn miirym_token_copies_only_the_printed_dragon() {
-    cr!("707.2", "707.9b");
+    cr!("707.2");
     ruling!(
         "Miirym, Sentinel Wyrm",
         "Miirym, Sentinel Wyrm's triggered ability copies the printed values of the Dragon that entered the battlefield. It won't copy any counters on that creature or any effects that have changed its power, toughness, types, color, and so on."
@@ -202,7 +203,7 @@ fn miirym_token_copies_only_the_printed_dragon() {
 
 #[test]
 fn soul_foundry_token_has_the_cards_mana_cost() {
-    cr!("707.2", "202.3", "702.92a");
+    cr!("707.2", "202.3", "607.2a");
     ruling!(
         "Soul Foundry",
         "Most creature tokens have no mana cost and a mana value of 0, but a creature token put onto the battlefield by Soul Foundry has the same mana cost and mana value as the card it copies."
@@ -255,7 +256,10 @@ fn second_harvest_copies_every_token_as_it_was_created() {
     assert!(toks.iter().any(|x| has_subtype(&t, *x, "Treasure")));
     assert_eq!(t.pt(wolf_copy), (2, 2));
     assert!(fresh(&t, wolf_copy));
-    assert_eq!(t.obj_now(wolf_copy).chars.colors, ColorSet::single(Color::Green));
+    assert_eq!(
+        t.obj_now(wolf_copy).chars.colors,
+        ColorSet::single(Color::Green)
+    );
 }
 
 #[test]
@@ -279,26 +283,85 @@ fn shaun_exiles_every_synth_token_you_control() {
 }
 
 #[test]
-fn wire_surgeons_encore_ignores_opponents_who_left_the_game() {
+fn encore_ignores_opponents_who_left_the_game() {
     cr!("702.141a", "800.4a");
     ruling!(
         "Wire Surgeons",
         "Opponents who have left the game aren’t counted when determining how many tokens to create."
     );
+    ruling!(
+        "Eumidian Wastewaker",
+        "Opponents who have left the game aren’t counted when determining how many tokens to create."
+    );
+    // A four-player game in which P2 has left: P0 has two opponents.
+    let encore = |t: &mut TestGame, card: ObjectId, cost: &str| {
+        t.g.lose_game(PlayerId(2));
+        assert!(!t.g.player(PlayerId(2)).in_game());
+        lands_for(t, P0, cost);
+        let before = t.g.battlefield.clone();
+        activate_containing(t, P0, card, "ncore").expect("encore");
+        t.resolve_all();
+        new_tokens(t, P0, &before)
+            .into_iter()
+            .filter(|x| t.obj_now(*x).kind == ObjKind::Token)
+            .count()
+    };
+    // Wire Surgeons gives Bronze Sable ({2}) encore {2}.
     supported("Wire Surgeons");
     let mut t = TestGame::with_config(4, GameConfig::default());
     t.battlefield(P0, "Wire Surgeons");
-    t.g.lose_game(PlayerId(2));
-    assert!(!t.g.player(PlayerId(2)).in_game());
-    // Bronze Sable ({2}): encore {2}.
     let card = t.graveyard(P0, "Bronze Sable");
-    t.lands(P0, "Wastes", 2);
+    assert_eq!(encore(&mut t, card, "{2}"), 2);
+    // Eumidian Wastewaker's own encore {6}{B}{B}.
+    supported("Eumidian Wastewaker");
+    let mut t = TestGame::with_config(4, GameConfig::default());
+    let card = t.graveyard(P0, "Eumidian Wastewaker");
+    assert_eq!(encore(&mut t, card, "{6}{B}{B}"), 2);
+}
+
+#[test]
+fn dance_of_many_does_nothing_if_its_target_is_gone() {
+    cr!("608.2b", "115.1", "603.3d");
+    ruling!(
+        "Dance of Many",
+        "The ability is targeted and checks the validity of the target when put on the stack and when resolving. If the creature is not still there when the copy ability resolves, the ability doesn't resolve and no token is put onto the battlefield. This card remains on the battlefield as an enchantment with no token."
+    );
+    supported("Dance of Many");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // "Target nontoken creature": P1's Wolf token can't be chosen.
+    let wolf = wolf_token(&mut t, P1);
+    let from = t.asked().len();
+    t.answer_targets(P0, &[obj(bears)]);
     let before = t.g.battlefield.clone();
-    activate_containing(&mut t, P0, card, "ncore").expect("encore");
-    t.resolve_all();
-    let toks: Vec<_> = new_tokens(&t, P0, &before)
-        .into_iter()
-        .filter(|x| t.obj_now(*x).kind == ObjKind::Token)
+    let dance = t.enter(P0, "Dance of Many");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t).len(), 1);
+    let offered: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
         .collect();
-    assert_eq!(toks.len(), 2);
+    assert_eq!(offered.len(), 1);
+    assert!(offered[0].contains(&obj(bears)) && !offered[0].contains(&obj(wolf)));
+    // In response, the Bears is destroyed: the ability doesn't resolve.
+    t.g.destroy(bears, None);
+    t.settle();
+    t.resolve_all();
+    assert!(new_tokens(&t, P0, &before).is_empty());
+    assert!(t.on_battlefield(dance));
+    // With only a token creature, the ability has no legal target and leaves the stack.
+    let mut t = TestGame::new(2);
+    wolf_token(&mut t, P1);
+    let before = t.g.battlefield.clone();
+    let dance = t.enter(P0, "Dance of Many");
+    t.settle();
+    assert!(triggers_on_stack(&t).is_empty());
+    t.resolve_all();
+    assert!(new_tokens(&t, P0, &before).is_empty());
+    assert!(t.on_battlefield(dance));
 }

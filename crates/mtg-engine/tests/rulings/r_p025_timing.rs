@@ -97,7 +97,7 @@ fn riku_copies_an_instant_with_no_targets() {
 
 #[test]
 fn sublime_epiphany_counters_only_abilities_already_on_the_stack() {
-    cr!("701.6b", "113.7a", "602.1");
+    cr!("701.6a", "602.2");
     ruling!(
         "Sublime Epiphany",
         "Sublime Epiphany's second mode counters only activated and triggered abilities already on the stack. It doesn't prevent abilities from being activated or from triggering later in the turn, and it has no effect on static abilities."
@@ -123,7 +123,7 @@ fn sublime_epiphany_counters_only_abilities_already_on_the_stack() {
 
 #[test]
 fn sublime_epiphany_can_counter_a_loyalty_ability_that_adds_mana() {
-    cr!("605.1a", "606.3", "701.6b");
+    cr!("605.1a", "605.3b", "606.3", "701.6a");
     ruling!(
         "Sublime Epiphany",
         "Sublime Epiphany's second mode can't counter an activated or triggered mana ability. An activated mana ability is one that could add mana as it resolves, doesn't have a target, and isn't a loyalty ability."
@@ -155,7 +155,7 @@ fn sublime_epiphany_can_counter_a_loyalty_ability_that_adds_mana() {
 
 #[test]
 fn each_faerie_artisans_exiles_only_its_own_tokens() {
-    cr!("607.2a", "603.2");
+    cr!("607.1c", "607.2c", "603.2");
     ruling!(
         "Faerie Artisans",
         "If you control multiple Faerie Artisans, each one’s ability only exiles tokens created with the ability of that specific Faerie Artisans."
@@ -209,7 +209,7 @@ fn moonlit_meditation_counts_tokens_created_before_you_controlled_it() {
 
 #[test]
 fn see_double_both_modes_dont_care_about_the_graveyard_afterwards() {
-    cr!("700.2", "608.2b");
+    cr!("700.2a", "601.2b");
     ruling!(
         "See Double",
         "Once you’ve cast See Double and legally chosen both modes, it doesn’t matter what happens to the number of cards in opponents’ graveyards."
@@ -245,7 +245,7 @@ fn see_double_both_modes_dont_care_about_the_graveyard_afterwards() {
 
 #[test]
 fn season_of_weaving_chooses_what_to_copy_as_it_resolves() {
-    cr!("608.2d", "700.2h");
+    cr!("608.2d", "700.2i");
     ruling!(
         "Season of Weaving",
         "The choice made for the second mode of Season of Weaving isn't made until the spell is resolving."
@@ -264,7 +264,7 @@ fn season_of_weaving_chooses_what_to_copy_as_it_resolves() {
 
 #[test]
 fn wall_of_stolen_identity_taps_the_copied_creature_with_a_reflexive_trigger() {
-    cr!("603.12", "707.9a");
+    cr!("603.12", "707.9a", "707.9b");
     ruling!(
         "Wall of Stolen Identity",
         "Once Wall of Stolen Identity has entered the battlefield and stolen a creature’s identity, players can take actions before the creature is tapped."
@@ -274,6 +274,12 @@ fn wall_of_stolen_identity_taps_the_copied_creature_with_a_reflexive_trigger() {
     let giant = t.battlefield(P1, "Hill Giant");
     let wall = enter_copying(&mut t, P0, "Wall of Stolen Identity", giant);
     assert_eq!(name_of(&t, wall), "Hill Giant");
+    assert!(has_subtype(&t, wall, "Wall") && has_subtype(&t, wall, "Giant"));
+    assert!(has_kw(
+        &t,
+        wall,
+        mtg_engine::keywords::KeywordKind::Defender
+    ));
     // The tap is a triggered ability waiting on the stack.
     assert!(!t.obj_now(giant).tapped);
     assert_eq!(triggers_on_stack(&t).len(), 1);
@@ -350,7 +356,7 @@ fn mystic_reflection_uses_the_copiable_values_as_the_permanents_enter() {
 
 #[test]
 fn mystic_reflection_copies_dont_get_their_own_enters_replacements_but_get_external_ones() {
-    cr!("614.12", "616.1", "707.2");
+    cr!("614.12", "616.1c", "616.1e", "707.2");
     ruling!(
         "Mystic Reflection",
         "Other enters-the-battlefield replacement abilities printed on the creatures entering the battlefield won’t be applied because those permanents will already be copies of the target creature at that point (and therefore they won’t have those abilities). External abilities may still affect how those permanents enter the battlefield."
@@ -372,7 +378,7 @@ fn mystic_reflection_copies_dont_get_their_own_enters_replacements_but_get_exter
 
 #[test]
 fn control_changing_then_copy_then_other_enters_replacements() {
-    cr!("614.12", "616.1", "707.2");
+    cr!("614.12", "616.1b", "616.1c", "616.1e", "707.2");
     ruling!(
         "Mystic Reflection",
         "Replacement effects that modify how a creature enters the battlefield are applied in the following order: first, control-changing effects (such as Gather Specimens), then copy effects (such as the abilities of Mystic Reflection and Clone), then all other effects."
@@ -423,7 +429,7 @@ fn control_changing_then_copy_then_other_enters_replacements() {
 
 #[test]
 fn fractured_realm_doesnt_double_replacement_effects() {
-    cr!("614.1c", "709.5", "603.2d");
+    cr!("614.1c", "709.5d", "603.2d");
     ruling!(
         "Mirror Room // Fractured Realm",
         "Replacement effects are unaffected by Fractured Realm's ability. For example, a 1/1 creature that enters under your control \"with a +1/+1 counter on it\" won't receive an additional +1/+1 counter."
@@ -434,8 +440,15 @@ fn fractured_realm_doesnt_double_replacement_effects() {
     let card = t.hand(P0, "Mirror Room // Fractured Realm");
     t.cast(P0, card).method(CastMethod::Half(1)).go();
     t.resolve_all();
+    // Soul Warden: "Whenever another creature enters, you gain 1 life." Its trigger
+    // triggers an additional time; the Hydra's "enters with four +1/+1 counters" doesn't
+    // apply an additional time.
+    t.battlefield(P0, "Soul Warden");
+    let life = t.life(P0);
     let h = t.enter(P0, "Kalonian Hydra");
     t.settle();
+    assert_eq!(triggers_on_stack(&t).len(), 2);
     t.resolve_all();
+    assert_eq!(t.life(P0), life + 2);
     assert_eq!(t.counters(h, counters::PLUS1), 4);
 }

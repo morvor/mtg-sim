@@ -202,7 +202,8 @@ fn mirrors_lose_their_copy_ability_once_it_resolves() {
     let forebears = t.enter(P0, "Mirror of the Forebears");
     t.settle();
     lands_for(&mut t, P0, "{1}");
-    t.activate(P0, forebears, 0, &[obj(giant)]).expect("activate");
+    t.activate(P0, forebears, 0, &[obj(giant)])
+        .expect("activate");
     t.resolve_all();
     for m in [mirage, forebears] {
         assert_eq!(name_of(&t, m), "Hill Giant");
@@ -246,11 +247,7 @@ fn unstable_shapeshifters_granted_ability_is_removed_by_an_earlier_lose_all_abil
     assert_eq!(triggers_on_stack(&t).len(), 1);
     // In response, the Shapeshifter loses all abilities (an earlier timestamp than the
     // copy effect it's about to get).
-    modify(
-        &mut t,
-        shifter,
-        vec![Modification::RemoveAllAbilities],
-    );
+    modify(&mut t, shifter, vec![Modification::RemoveAllAbilities]);
     t.resolve_all();
     assert_eq!(name_of(&t, shifter), "Hill Giant");
     // The granted "this ability" is removed too: another creature entering doesn't make
@@ -301,7 +298,7 @@ fn skinshifter_attacks_with(t: &mut TestGame, other: ObjectId) -> ObjectId {
 
 #[test]
 fn tilonallis_skinshifter_keeps_its_new_characteristics() {
-    cr!("707.2", "611.2c");
+    cr!("707.2", "707.2b", "608.2h");
     ruling!(
         "Tilonalli's Skinshifter",
         "Once the ability of Tilonalli’s Skinshifter resolves, its new characteristics don’t change if the characteristics of the copied creature change or if the copied creature leaves the battlefield."
@@ -311,12 +308,21 @@ fn tilonallis_skinshifter_keeps_its_new_characteristics() {
     let skin = skinshifter_attacks_with(&mut t, giant);
     t.resolve_all();
     assert_eq!(name_of(&t, skin), "Hill Giant");
-    // The Giant becomes a blue 1/1 Frog with no abilities, then leaves.
+    // The Giant's copiable values change: it becomes a copy of a Grizzly Bears.
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    crate::r_s17_common::become_copy(&mut t, giant, bears);
+    assert_eq!(name_of(&t, giant), "Grizzly Bears");
+    assert_eq!(name_of(&t, skin), "Hill Giant");
+    assert_eq!(t.pt(skin), (3, 3));
+    // Its other characteristics change (a blue 1/1), then it leaves.
     modify(
         &mut t,
         giant,
         vec![
-            Modification::SetPT(Some(mtg_engine::ability::Value::c(1)), Some(mtg_engine::ability::Value::c(1))),
+            Modification::SetPT(
+                Some(mtg_engine::ability::Value::c(1)),
+                Some(mtg_engine::ability::Value::c(1)),
+            ),
             Modification::SetColors(ColorSet::single(Color::Blue)),
         ],
     );
@@ -402,4 +408,56 @@ fn gigantoplasms_ability_sets_base_power_and_toughness_in_timestamp_order() {
     // It lasts past the end of the turn (the 0/4 and the pump don't).
     next_turn(&mut t);
     assert_eq!(t.pt(g), (3, 3));
+}
+
+// --- A copy of itself ----------------------------------------------------------------------
+
+#[test]
+fn metamorphic_alteration_copy_of_itself_has_a_new_pair_of_linked_abilities() {
+    cr!("607.5", "607.2a", "613.1a", "603.10a");
+    ruling!(
+        "Metamorphic Alteration",
+        "Metamorphic Alteration can cause a creature to become a copy of itself. This generally has no effect, but if that creature has a pair of linked abilities, the new abilities it has from the copy effect aren't linked to the abilities it had before."
+    );
+    supported("Metamorphic Alteration");
+    supported("Fiend Hunter");
+    // Fiend Hunter exiles P1's Hill Giant ("When this creature enters, you may exile
+    // another target creature. When this creature leaves the battlefield, return the
+    // exiled card ..."), maybe becomes a copy of itself, then dies.
+    let hunt = |alter: bool| {
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[obj(giant)]);
+        let hunter = t.enter(P0, "Fiend Hunter");
+        t.settle();
+        t.resolve_all();
+        assert!(t.in_exile("Hill Giant"));
+        if alter {
+            lands_for(&mut t, P0, "{1}{U}");
+            let aura = t.hand(P0, "Metamorphic Alteration");
+            t.answer_choose(P0, &[obj(hunter)]);
+            t.cast(P0, aura).target(obj(hunter)).go();
+            t.resolve_all();
+            assert!(t.on_battlefield(aura));
+            assert_eq!(t.obj_now(aura).attached_to, Some(obj(t.g.current(hunter))));
+            assert_eq!(name_of(&t, hunter), "Fiend Hunter");
+            assert_eq!(t.pt(hunter), (1, 3));
+        }
+        t.g.destroy(hunter, None);
+        t.settle();
+        // Its leaves-the-battlefield ability triggers either way.
+        assert_eq!(triggers_on_stack(&t).len(), 1);
+        t.resolve_all();
+        assert!(t.in_graveyard(P0, "Fiend Hunter"));
+        t
+    };
+    // Itself: its leaves-the-battlefield ability returns the Giant.
+    let t = hunt(false);
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    // A copy of itself: that ability is the copy effect's, linked only to the copy
+    // effect's enters ability, which exiled nothing. The Giant stays in exile.
+    let t = hunt(true);
+    assert!(t.named_on_battlefield("Hill Giant").is_empty());
+    assert!(t.in_exile("Hill Giant"));
 }

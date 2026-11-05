@@ -30,7 +30,7 @@ fn tokens_named(t: &TestGame, name: &str) -> Vec<ObjectId> {
 
 #[test]
 fn a_clone_of_a_copy_has_the_abilities_the_copy_gained() {
-    cr!("707.9b", "707.3");
+    cr!("707.9a", "707.3");
     ruling!(
         "Gigantoplasm",
         "The activated ability Gigantoplasm gives itself becomes part of its copiable values. Unless the ability is overwritten by another copy effect, a creature that's a copy of Gigantoplasm will have that ability."
@@ -162,7 +162,7 @@ fn rikus_token_has_the_copiable_values_of_the_creature_it_copies() {
 
 #[test]
 fn irenicuss_vile_duplication_token_has_flying_whether_or_not_it_was_legendary() {
-    cr!("707.9b");
+    cr!("707.9a", "707.9b");
     ruling!(
         "Irenicus's Vile Duplication",
         "Irenicus's Vile Duplication has received an update to its Oracle text to clarify that the token still has flying even if the creature it's copying isn't legendary."
@@ -170,7 +170,13 @@ fn irenicuss_vile_duplication_token_has_flying_whether_or_not_it_was_legendary()
     for (what, pt) in [("Hill Giant", (3, 3)), ("Isamaru, Hound of Konda", (2, 2))] {
         let mut t = TestGame::new(2);
         let c = t.battlefield(P0, what);
-        let toks = cast_for_tokens(&mut t, P0, "Irenicus's Vile Duplication", "{3}{U}", &[obj(c)]);
+        let toks = cast_for_tokens(
+            &mut t,
+            P0,
+            "Irenicus's Vile Duplication",
+            "{3}{U}",
+            &[obj(c)],
+        );
         assert_eq!(toks.len(), 1, "{what}");
         assert_eq!(name_of(&t, toks[0]), what);
         assert!(has_kw(&t, toks[0], KeywordKind::Flying), "{what}");
@@ -189,7 +195,10 @@ fn entering_as_a_copy_doesnt_target() {
         "Mercurial Pretender",
         "Mercurial Pretender’s ability doesn’t target the chosen creature."
     );
-    ruling!("Pirated Copy", "Pirated Copy's ability doesn't target the creature.");
+    ruling!(
+        "Pirated Copy",
+        "Pirated Copy's ability doesn't target the creature."
+    );
     ruling!(
         "Dack's Duplicate",
         "The ability of Dack's Duplicate doesn't target the creature."
@@ -222,7 +231,9 @@ fn renegade_doppelganger_can_copy_a_creature_with_shroud_or_protection() {
         "Renegade Doppelganger's ability isn't targeted. It can copy a creature with shroud or protection."
     );
     supported("Renegade Doppelganger");
-    for what in ["Blastoderm", "White Knight"] {
+    // Blastoderm has shroud, Yavimaya Barbarian protection from blue (the Doppelganger is
+    // blue), Beloved Chaplain protection from creatures.
+    for what in ["Blastoderm", "Yavimaya Barbarian", "Beloved Chaplain"] {
         let mut t = TestGame::new(2);
         let dopp = t.battlefield(P0, "Renegade Doppelganger");
         t.answer_yes(P0, true);
@@ -268,7 +279,13 @@ fn clone_legion_copying_your_legendary_creature_and_the_legend_rule() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Isamaru, Hound of Konda");
     t.battlefield(P0, "Hill Giant");
-    cast_for_tokens(&mut t, P0, "Clone Legion", "{7}{U}{U}", &[Entity::Player(P0)]);
+    cast_for_tokens(
+        &mut t,
+        P0,
+        "Clone Legion",
+        "{7}{U}{U}",
+        &[Entity::Player(P0)],
+    );
     assert_eq!(named(&t, "Isamaru, Hound of Konda").len(), 1);
     assert_eq!(named(&t, "Hill Giant").len(), 2);
 }
@@ -344,8 +361,11 @@ fn sakashima_of_a_thousand_faces_partner_color_identity() {
     assert!(check_commander_deck(&d, &pair, &[], false).is_empty());
     d.pop();
     d.push(card("Mountain"));
-    assert!(check_commander_deck(&d, &pair, &[], false)
-        .contains(&DeckProblem::OutsideColorIdentity { name: "Mountain".into() }));
+    assert!(check_commander_deck(&d, &pair, &[], false).contains(
+        &DeckProblem::OutsideColorIdentity {
+            name: "Mountain".into()
+        }
+    ));
 }
 
 #[test]
@@ -431,5 +451,8 @@ fn shameless_charlatan_commander_that_becomes_a_copy_is_still_your_commander() {
     let o = t.obj_now(cmdr);
     assert_eq!(o.chars.name, "Hill Giant");
     assert!(o.is_commander);
-    assert_eq!(abilities_with(&t, cmdr, "becomes a copy of another target creature"), 1);
+    assert_eq!(
+        abilities_with(&t, cmdr, "becomes a copy of another target creature"),
+        1
+    );
 }

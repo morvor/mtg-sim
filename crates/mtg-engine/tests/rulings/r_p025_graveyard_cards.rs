@@ -61,6 +61,18 @@ fn lazav_the_multifarious_copies_only_the_printed_card() {
     assert_eq!(o.chars.colors, red());
     assert!(has_subtype(&t, lazav, "Giant") && legendary(&t, lazav));
     assert_eq!(t.pt(lazav), (3, 3));
+    // A Clone card that was a Serra Angel on the battlefield: Lazav becomes a 0/0 Clone
+    // (named Lazav, with its +1/+1 counter a 1/1), not a Serra Angel.
+    let mut t = TestGame::new(2);
+    let lazav = t.battlefield(P0, "Lazav, the Multifarious");
+    plus1(&mut t, lazav, 1);
+    let card = dead_clone(&mut t, P0);
+    x_copy(&mut t, P0, lazav, card, 4);
+    let o = t.obj_now(lazav);
+    assert_eq!(o.chars.name, "Lazav, the Multifarious");
+    assert!(legendary(&t, lazav) && !has_kw(&t, lazav, KeywordKind::Flying));
+    assert!(!has_subtype(&t, lazav, "Angel"));
+    assert_eq!(t.pt(lazav), (1, 1));
 }
 
 #[test]
@@ -169,7 +181,7 @@ fn lazav_dimir_mastermind_copies_the_card_not_what_the_clone_copied() {
 
 #[test]
 fn lazav_dimir_mastermind_uses_the_cards_last_known_information() {
-    cr!("707.2", "608.2h", "603.10");
+    cr!("707.2", "608.2h");
     ruling!(
         "Lazav, Dimir Mastermind",
         "If that card is no longer in the graveyard when Lazav's ability resolves, use the characteristics of that card as it last existed in the graveyard."
