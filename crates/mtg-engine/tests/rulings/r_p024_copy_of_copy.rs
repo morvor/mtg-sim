@@ -292,7 +292,8 @@ fn saheeli_sublime_artificer_copying_a_clone() {
     let saheeli = t.battlefield(P0, "Saheeli, Sublime Artificer");
     let mirror = t.battlefield(P0, "Mirage Mirror");
     let clone = cloned_angel(&mut t, P0);
-    t.answer_targets(P0, &[obj(mirror), obj(clone)]);
+    t.answer_targets(P0, &[obj(mirror)]);
+            t.answer_targets(P0, &[obj(clone)]);
     activate_containing(&mut t, P0, saheeli, "becomes a copy").expect("−2");
     t.resolve_all();
     assert_angel(&t, mirror, true);
