@@ -174,7 +174,9 @@ double-faced card, a flip card flipped):
   abilities about its controller's tokens don't apply; with the back face up for a
   double-faced card, CR 707.8a), a vanilla creature that becomes a copy of it, and a
   permanent that enters as a copy of it (Clone, Sculpting Steel, Copy Enchantment or Vesuva,
-  whichever can copy what the original is now) have the original's copiable values;
+  whichever can copy what the original is now) have the original's copiable values, as
+  modified by the copy's status (CR 707.3, 110.5b): the copy is unflipped, so a copy of a
+  flipped flip card has the card's normal characteristics;
 * cast with plenty of mana on a board with something to target, a copy of the spell
   (`copy::copy_spell`) has the spell's copiable values and every choice — modes and
   targets, X, times kicked, costs paid, the casting method, the objects that paid its
