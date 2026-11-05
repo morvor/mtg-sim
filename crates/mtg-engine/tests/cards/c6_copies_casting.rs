@@ -91,7 +91,12 @@ fn uldaros(t: &mut TestGame, targets: &[usize]) -> Vec<ObjectId> {
 
 /// The targets Uldaros' trigger was put on the stack with.
 fn trigger_targets(t: &TestGame) -> Vec<Entity> {
-    assert_eq!(names_on_stack(t), vec!["Uldaros Theorix ability"], "{}", t.dump_log());
+    assert_eq!(
+        names_on_stack(t),
+        vec!["Uldaros Theorix ability"],
+        "{}",
+        t.dump_log()
+    );
     targets_of(t, t.g.stack[0])
 }
 
@@ -116,7 +121,10 @@ fn uldaros_theorix_targets_one_card_of_each_card_type() {
     // The choice is fitted to the largest group of it, in choice order, that has the
     // relationship: Bears (creature) and Ornithopter (artifact).
     let chosen = trigger_targets(&t);
-    assert_eq!(chosen, vec![Entity::Object(cards[0]), Entity::Object(cards[2])]);
+    assert_eq!(
+        chosen,
+        vec![Entity::Object(cards[0]), Entity::Object(cards[2])]
+    );
     // Two creature cards alone can't both be targets either.
     let mut t = TestGame::new(2);
     let cards = uldaros_with(&mut t, &three, &[0, 1]);
@@ -124,6 +132,14 @@ fn uldaros_theorix_targets_one_card_of_each_card_type() {
     assert!(
         !(chosen.contains(&Entity::Object(cards[0])) && chosen.contains(&Entity::Object(cards[1]))),
         "two cards for creature: {chosen:?}"
+    );
+    // An artifact creature card chosen before an artifact card: it stands for creature, so
+    // both are targets.
+    let mut t = TestGame::new(2);
+    let cards = uldaros_with(&mut t, &["Ornithopter", "Sol Ring"], &[0, 1]);
+    assert_eq!(
+        trigger_targets(&t),
+        vec![Entity::Object(cards[0]), Entity::Object(cards[1])]
     );
     // A land card isn't a nonland card.
     let mut t = TestGame::new(2);
@@ -147,7 +163,13 @@ fn uldaros_theorix_casts_copies_with_total_mana_value_six_or_less() {
     assert_eq!(made.len(), 5, "{made:?}");
     // The copies not cast ceased to exist; the cards stay in exile.
     assert!(made.iter().all(|(_, c)| !t.g.is_live(*c)));
-    for c in ["Grizzly Bears", "Ornithopter", "Lightning Bolt", "Divination", "Pacifism"] {
+    for c in [
+        "Grizzly Bears",
+        "Ornithopter",
+        "Lightning Bolt",
+        "Divination",
+        "Pacifism",
+    ] {
         assert!(t.in_exile(c), "{c}");
     }
     assert!(t.in_graveyard(P0, "Forest"));
@@ -166,7 +188,12 @@ fn uldaros_theorix_casts_copies_with_total_mana_value_six_or_less() {
     t.resolve();
     assert_eq!(
         names_on_stack(&t),
-        vec!["Divination", "Lightning Bolt", "Grizzly Bears", "Ornithopter"],
+        vec![
+            "Divination",
+            "Lightning Bolt",
+            "Grizzly Bears",
+            "Ornithopter"
+        ],
         "{}",
         t.dump_log()
     );
@@ -256,9 +283,7 @@ fn baron_helmut_zemo_casts_up_to_three_copies_of_the_cards_its_boast_exiled() {
     let made = copies(&t);
     assert_eq!(made.len(), 6, "{made:?}");
     assert!(made.iter().all(|(_, c)| !t.g.is_live(*c)));
-    assert!(cards
-        .iter()
-        .all(|c| t.zone(t.g.current(*c)) == Zone::Exile));
+    assert!(cards.iter().all(|c| t.zone(t.g.current(*c)) == Zone::Exile));
     // Sign in Blood at P1, Dread Shade and Phyrexian Obliterator: three, and no fourth
     // is offered.
     let mut t = TestGame::new(2);
@@ -293,6 +318,158 @@ fn baron_helmut_zemo_casts_up_to_three_copies_of_the_cards_its_boast_exiled() {
         assert_eq!(t.g.obj(ps[0]).kind, ObjKind::Token, "{name}");
     }
     assert!(t.named_on_battlefield("Hypnotic Specter").is_empty());
+}
+
+/// The candidates of each choice of an object asked since `from`.
+fn offered_since(t: &TestGame, from: usize) -> Vec<Vec<Entity>> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn baron_helmut_zemo_a_copy_that_cant_be_cast_isnt_one_of_the_three() {
+    cr!("733.1", "733.2", "707.12a", "608.2g");
+    interp!("capped-casts-one-at-a-time");
+    // With a Doom Blade exiled too and no nonblack creature on the battlefield, its copy
+    // can't be cast (no legal target): trying to is reversed (CR 733.1), and three other
+    // copies may still be cast.
+    let setup = |t: &mut TestGame| {
+        let (zemo, mut cards) = self::zemo(t);
+        cards.push(t.graveyard(P0, "Doom Blade"));
+        assert!(boast(t, zemo, &cards, &[0, 1, 2, 3, 4, 5, 6]));
+    };
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    t.resolve();
+    let made = copies(&t);
+    assert_eq!(made.len(), 7, "{made:?}");
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    for name in [
+        "Doom Blade",
+        "Dread Shade",
+        "Phyrexian Obliterator",
+        "Hypnotic Specter",
+        "Necropotence",
+    ] {
+        t.answer_choose(P0, &[copy_named(&made, name)]);
+    }
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(
+        names_on_stack(&t),
+        vec!["Dread Shade", "Phyrexian Obliterator", "Hypnotic Specter"],
+        "{}",
+        t.dump_log()
+    );
+    // Doom Blade's copy was offered first; right after it was tried it isn't offered, and
+    // once another spell has been cast it is again (CR 733.2), still with no target.
+    let offered = offered_since(&t, from);
+    assert_eq!(offered.len(), 4, "{offered:?}");
+    let blade = copy_named(&made, "Doom Blade");
+    assert!(offered[0].contains(&blade));
+    assert!(!offered[1].contains(&blade));
+    assert!(offered[2].contains(&blade) && offered[3].contains(&blade));
+    assert!(!t.g.is_live(blade.object().unwrap()));
+    assert!(t.named_on_battlefield("Necropotence").is_empty());
+}
+
+#[test]
+fn uldaros_theorix_a_copy_tried_too_early_may_be_cast_after_another() {
+    cr!("733.1", "733.2", "608.2g");
+    interp!("capped-casts-one-at-a-time");
+    // Twincast ("Copy target instant or sorcery spell.") and Divination among the copies.
+    // Twincast's copy, tried first, has no spell to target, so trying is reversed (CR
+    // 733.1); once Divination's copy is cast, Twincast's may be cast targeting it: a total
+    // of 2 + 3.
+    let cards = ["Twincast", "Divination"];
+    let mut t = TestGame::new(2);
+    uldaros_with(&mut t, &cards, &[0, 1]);
+    t.resolve();
+    let made = copies(&t);
+    assert_eq!(made.len(), 2, "{made:?}");
+    let mut t = TestGame::new(2);
+    uldaros_with(&mut t, &cards, &[0, 1]);
+    for name in ["Twincast", "Divination", "Twincast"] {
+        t.answer_choose(P0, &[copy_named(&made, name)]);
+    }
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(
+        names_on_stack(&t),
+        vec!["Divination", "Twincast"],
+        "{}",
+        t.dump_log()
+    );
+    let (divination, twincast) = (t.g.stack[0], t.g.stack[1]);
+    assert_eq!(targets_of(&t, twincast), vec![Entity::Object(divination)]);
+    // Not offered again until another spell was cast.
+    let offered = offered_since(&t, from);
+    assert_eq!(offered.len(), 3, "{offered:?}");
+    assert_eq!(offered[1], vec![copy_named(&made, "Divination")]);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    // Divination and its copy.
+    assert_eq!(t.hand_size(P0), hand + 4);
+}
+
+#[test]
+fn uldaros_theorix_counts_the_mana_value_of_the_half_of_a_split_card_cast() {
+    cr!("709.3c", "709.3a", "202.3d", "702.102a");
+    interp!("capped-casts-one-at-a-time");
+    // Alive // Well ({3}{G} // {W}, mana value 5 in exile) among the copies: with 4 left
+    // after Grizzly Bears, its copy may be cast as Alive (4) or Well (1), but not fused
+    // (only from a hand). Cast as Alive, it leaves 0: only Ornithopter still fits.
+    let cards = [
+        "Grizzly Bears",
+        "Alive // Well",
+        "Ornithopter",
+        "Lightning Bolt",
+        "Pacifism",
+    ];
+    let targets = [0, 1, 2, 3, 4];
+    let mut t = TestGame::new(2);
+    uldaros_with(&mut t, &cards, &targets);
+    t.resolve();
+    let made = copies(&t);
+    assert_eq!(made.len(), 5, "{made:?}");
+    let mut t = TestGame::new(2);
+    uldaros_with(&mut t, &cards, &targets);
+    for name in ["Grizzly Bears", "Alive // Well", "Ornithopter"] {
+        t.answer_choose(P0, &[copy_named(&made, name)]);
+    }
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(
+        names_on_stack(&t),
+        vec!["Grizzly Bears", "Alive", "Ornithopter"],
+        "{}",
+        t.dump_log()
+    );
+    let offered = offered_since(&t, from);
+    assert_eq!(offered.len(), 3, "{offered:?}");
+    assert!(offered[1].contains(&copy_named(&made, "Alive // Well")));
+    assert_eq!(offered[2], vec![copy_named(&made, "Ornithopter")]);
+    let halves: Vec<Vec<String>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseOption { options, .. } => Some(options.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        halves,
+        vec![vec!["Cast Alive".to_string(), "Cast Well".to_string()]]
+    );
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Centaur Token").len(), 1);
+    assert_eq!(t.life(P1), 20);
 }
 
 /// Compiles `text` as the abilities of a custom card with type line `types`; the parts
@@ -336,7 +513,6 @@ fn compiled(text: &str, types: &str) -> Characteristics {
 
 #[test]
 fn the_grammar_of_capped_casts_from_among_copies() {
-    cr!("707.12", "707.12a");
     // The caps compose with any copy of cards, in other wordings too.
     for text in [
         "Exile up to three target cards from your graveyard. Copy those cards. You may cast up to two of the copies without paying their mana costs.",
@@ -391,7 +567,10 @@ fn a_count_cap_over_copies_on_a_neutral_card() {
     let mut t = TestGame::new(2);
     setup(&mut t);
     t.resolve();
-    let made: Vec<Entity> = copies(&t).into_iter().map(|(_, o)| Entity::Object(o)).collect();
+    let made: Vec<Entity> = copies(&t)
+        .into_iter()
+        .map(|(_, o)| Entity::Object(o))
+        .collect();
     assert_eq!(made.len(), 3);
     let mut t = TestGame::new(2);
     setup(&mut t);
@@ -403,6 +582,57 @@ fn a_count_cap_over_copies_on_a_neutral_card() {
     assert_eq!(names_on_stack(&t), vec!["Lightning Bolt", "Lightning Bolt"]);
     t.resolve_all();
     assert_eq!(t.life(P1), 14);
-    let Entity::Object(third) = made[2] else { unreachable!() };
+    let Entity::Object(third) = made[2] else {
+        unreachable!()
+    };
     assert!(!t.g.is_live(third));
+}
+
+#[test]
+fn a_land_cards_copy_isnt_offered_and_isnt_one_of_the_count() {
+    cr!("305.9", "707.12a", "704.5e");
+    // The same card with Dryad Arbor (a land creature card) and two Lightning Bolts: the
+    // Arbor's copy can't be cast (CR 305.9), so it's never offered, and both Bolts are.
+    let mut chars = compiled(
+        "Exile up to three target cards from your graveyard. Copy those cards. You may cast up to two of the copies without paying their mana costs.",
+        "Sorcery",
+    );
+    chars.mana_cost = mtg_engine::mana::ManaCost::parse("{0}");
+    let def = CardDef::custom(chars);
+    let setup = |t: &mut TestGame| {
+        t.set_step(P0, Step::PrecombatMain);
+        let mut cards = vec![t.graveyard(P0, "Dryad Arbor")];
+        cards.extend((0..2).map(|_| t.graveyard(P0, "Lightning Bolt")));
+        let probe = t.custom(P0, def.clone(), Zone::Hand(P0));
+        let ts: Vec<Entity> = cards.iter().map(|b| Entity::Object(*b)).collect();
+        t.cast(P0, probe).targets(&ts).go();
+    };
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    t.resolve();
+    let made = copies(&t);
+    assert_eq!(made.len(), 3, "{made:?}");
+    let arbor = copy_named(&made, "Dryad Arbor");
+    let bolts: Vec<Entity> = made
+        .iter()
+        .filter(|(n, _)| n == "Lightning Bolt")
+        .map(|(_, o)| Entity::Object(*o))
+        .collect();
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    for c in [bolts[0], bolts[1]] {
+        t.answer_choose(P0, &[c]);
+    }
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(names_on_stack(&t), vec!["Lightning Bolt", "Lightning Bolt"]);
+    let offered = offered_since(&t, from);
+    assert_eq!(offered.len(), 2, "{offered:?}");
+    assert!(offered.iter().all(|o| !o.contains(&arbor)), "{offered:?}");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 14);
+    assert!(!t.g.is_live(arbor.object().unwrap()));
+    assert!(t.named_on_battlefield("Dryad Arbor").is_empty());
 }

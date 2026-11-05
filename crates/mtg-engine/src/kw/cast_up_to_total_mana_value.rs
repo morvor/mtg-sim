@@ -19,8 +19,13 @@
 //! 707.12), capped by a total, a count or both (see [`copies_effect_name`]); each copy is
 //! cast or not individually (CR 707.12a), and those not cast cease to exist (CR 704.5e).
 //!
+//! A spell whose casting can't be completed (it has no legal target) is reversed (CR
+//! 733.1): it isn't one of the spells the count allows, and it may be tried again once
+//! another spell has been cast (CR 733.2).
+//!
 //! The effect is an `Effect::Custom` named by [`effect_name`]; the oracle phrase is parsed
-//! in `oracle/patterns/r601_cast_up_to_total_mana_value.rs`.
+//! in `oracle/patterns/r601_cast_up_to_total_mana_value.rs` (and, from among copies, in
+//! `oracle/patterns/copies_7.rs`).
 
 use super::{KeywordRegistration, KeywordRules};
 use crate::ability::{vars, ZoneKind};
@@ -57,7 +62,11 @@ pub fn effect_name_with(
         .collect();
     let types: Vec<String> = types.iter().map(|t| format!("{t:?}")).collect();
     let total = total.map_or("x".to_string(), |t| t.to_string());
-    format!("{PREFIX}{n}:{total}:{}:{}", zones.join(","), types.join(","))
+    format!(
+        "{PREFIX}{n}:{total}:{}:{}",
+        zones.join(","),
+        types.join(",")
+    )
 }
 
 /// The source token of the copies the previous instruction made.
@@ -135,7 +144,12 @@ impl KeywordRules for CastUpToTotalManaValue {
             .unwrap_or_default();
         let mut cast: Vec<Entity> = Vec::new();
         let mut used: Vec<ObjectId> = Vec::new();
-        for _ in 0..n {
+        // The ways to cast a card tried since the last spell was cast whose casting couldn't
+        // be completed (no legal target, say): reversed (CR 733.1), not one of the `n`, and
+        // not offered again until another spell is cast, which may give them a target
+        // (CR 733.2).
+        let mut tried: Vec<(ObjectId, smol_str::SmolStr)> = Vec::new();
+        while (cast.len() as u64) < u64::from(n) {
             // CR 702.61a: no spell can be cast while a spell with split second is on the
             // stack (including one cast just now).
             if g.split_second_on_stack() {
@@ -147,21 +161,27 @@ impl KeywordRules for CastUpToTotalManaValue {
                 match z {
                     Source::Graveyard => cards.extend(g.player(p).graveyard.iter().copied()),
                     // The copies that still exist (CR 704.5e).
-                    Source::Copies => cards.extend(copies.iter().copied().filter(|o| g.is_live(*o))),
+                    Source::Copies => {
+                        cards.extend(copies.iter().copied().filter(|o| g.is_live(*o)))
+                    }
                     // The cards exiled with the source that are still in exile.
                     Source::Linked => cards.extend(
                         g.eval_sel(&crate::ability::Sel::Linked, ctx)
                             .into_iter()
                             .filter_map(|e| e.object())
-                            .filter(|o| g.is_live(*o) && g.obj(*o).zone == crate::object::Zone::Exile),
+                            .filter(|o| {
+                                g.is_live(*o) && g.obj(*o).zone == crate::object::Zone::Exile
+                            }),
                     ),
                     _ => cards.extend(g.player(p).hand.iter().copied()),
                 }
             }
             let mut options = Vec::new();
             for card in cards.into_iter().filter(|c| !used.contains(c)) {
-                for (label, opt) in crate::casting::free_cast_options(g, p, card, |mv| mv <= left)
-                {
+                for (label, opt) in crate::casting::free_cast_options(g, p, card, |mv| mv <= left) {
+                    if tried.iter().any(|(c, l)| *c == card && *l == label) {
+                        continue;
+                    }
                     let chars = g.option_characteristics(card, &opt);
                     if !types.is_empty() && !types.iter().any(|t| chars.card_types.contains(*t)) {
                         continue;
@@ -211,11 +231,15 @@ impl KeywordRules for CastUpToTotalManaValue {
             } else {
                 0
             };
-            let (_, opt, mv) = ways.swap_remove(i.min(ways.len() - 1));
-            used.push(card);
-            if let Ok(spell) = g.cast_with_option(p, card, opt) {
-                left = left.saturating_sub(mv);
-                cast.push(Entity::Object(spell));
+            let (label, opt, mv) = ways.swap_remove(i.min(ways.len() - 1));
+            match g.cast_with_option(p, card, opt) {
+                Ok(spell) => {
+                    used.push(card);
+                    left = left.saturating_sub(mv);
+                    cast.push(Entity::Object(spell));
+                    tried.clear();
+                }
+                Err(_) => tried.push((card, label)),
             }
         }
         ctx.prev_happened = !cast.is_empty();
