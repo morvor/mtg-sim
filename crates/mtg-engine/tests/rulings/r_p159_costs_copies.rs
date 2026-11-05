@@ -291,6 +291,14 @@ fn entish_restoration_sacrifices_on_resolution() {
             .count()
     };
     let lands = p0_lands(&t);
+    let sacrificed = |t: &TestGame| {
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::Sacrificed { .. }))
+            .count()
+    };
+    // Nothing was sacrificed while casting it (it isn't a cost).
+    assert_eq!(sacrificed(&t), 0);
     t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
     give_mana_for(&mut t, P1, "Cancel");
     let cancel = t.hand(P1, "Cancel");
@@ -298,6 +306,7 @@ fn entish_restoration_sacrifices_on_resolution() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Entish Restoration"));
     assert_eq!(p0_lands(&t), lands);
+    assert_eq!(sacrificed(&t), 0);
     // Resolved: one land is sacrificed as it resolves and two basics are found.
     let mut t = TestGame::new(2);
     stack_library(&mut t, P0, &["Forest", "Forest"]);
@@ -367,6 +376,16 @@ fn targets_and_divisions_are_chosen_while_casting_or_activating() {
     t.answer_targets(P0, &[obj(mine)]);
     assert!(t.cast(P0, th).try_go().is_err());
     assert!(t.in_hand(P0, "Throw from the Saddle"));
+    // With a creature P0 doesn't control as well, it can be cast.
+    t.clear_answers();
+    let theirs = t.battlefield(P1, "Hill Giant");
+    t.answer_targets(P0, &[obj(mine)]);
+    t.answer_targets(P0, &[obj(theirs)]);
+    assert!(t.cast(P0, th).try_go().is_ok());
+    t.resolve_all();
+    // The 3/3 Bears deals 3 damage to the 3/3 Hill Giant.
+    assert_eq!(t.pt(mine), (3, 3));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
 
     // Once and Future: the first target goes to hand, the second on top of the library.
     let mut t = TestGame::new(2);

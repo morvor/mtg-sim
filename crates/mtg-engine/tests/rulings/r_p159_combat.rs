@@ -86,8 +86,10 @@ fn safewright_cavalry_with_menace_cant_be_blocked() {
     let cav = t.battlefield(P0, "Safewright Cavalry");
     attach_new(&mut t, P0, "Madcap Skills", cav);
     let a = t.battlefield(P1, "Grizzly Bears");
-    let b = t.battlefield(P1, "Grizzly Bears");
-    to_blockers(&mut t, &[(cav, opp())], &[(a, cav), (b, cav)]);
+    t.battlefield(P1, "Grizzly Bears");
+    // Menace forbids one blocker and the Cavalry's own ability forbids two or more: a
+    // single blocker (legal without menace) is rejected.
+    to_blockers(&mut t, &[(cav, opp())], &[(a, cav)]);
     assert!(!blocked(&t, cav));
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 13);

@@ -680,18 +680,29 @@ fn talent_of_the_telepath_ignores_type_timing_but_not_other_timing() {
         }
     }
     // (card picked, cards drawn): Divination (a sorcery) is cast while Talent resolves;
-    // Panic ("Cast this spell only during combat before blockers are declared") can't be.
+    // Panic ("Cast this spell only during combat before blockers are declared") can't be,
+    // so it isn't offered as a choice (CR 601.3).
     for (name, drawn) in [("Divination", 2), ("Panic", 0)] {
         let mut t = TestGame::new(2);
-        t.library_top(P1, "Divination");
-        t.library_top(P1, "Panic");
+        let div = t.library_top(P1, "Divination");
+        let panic = t.library_top(P1, "Panic");
         let bears = t.battlefield(P0, "Grizzly Bears");
         t.answer_targets(P0, &[obj(bears)]);
         crate::r_s03_common::respond(&mut t, P0, pick(name));
         let hand = t.hand_size(P0);
+        let from = t.asked().len();
         cast_spell(&mut t, P0, "Talent of the Telepath", &[Entity::Player(P1)]);
+        let cands: Vec<Vec<Entity>> = asked_since(&t, from)
+            .into_iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseEntities { candidates, .. } => Some(candidates),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cands, vec![vec![obj(div)]], "{name}");
+        assert!(!cands[0].contains(&obj(panic)));
         assert_eq!(t.hand_size(P0), hand + drawn, "{name}");
-        assert!(t.in_graveyard(P1, name), "{name}");
+        assert!(t.in_graveyard(P1, "Panic"), "{name}");
         let cast = t
             .g
             .history

@@ -51,6 +51,14 @@ fn instead_riders_check_what_you_control_as_they_resolve() {
         "Whether you control an appropriate planeswalker is checked only as the spell resolves."
     );
     ruling!(
+        "Gideon's Triumph",
+        "Whether you control an appropriate planeswalker is checked only as the spell resolves."
+    );
+    ruling!(
+        "Nissa's Triumph",
+        "Whether you control an appropriate planeswalker is checked only as the spell resolves."
+    );
+    ruling!(
         "Mine Worker",
         "You will gain 3 life instead of 1 if, at the time the ability resolves, you control at least one creature named Power Plant Worker and at least one creature named Tower Worker."
     );
@@ -66,6 +74,8 @@ fn instead_riders_check_what_you_control_as_they_resolve() {
         "Jace's Triumph",
         "Chandra's Triumph",
         "Liliana's Triumph",
+        "Gideon's Triumph",
+        "Nissa's Triumph",
         "Mine Worker",
         "Zimone, Quandrix Prodigy",
     ] {
@@ -131,6 +141,34 @@ fn instead_riders_check_what_you_control_as_they_resolve() {
     t.resolve_all();
     assert_eq!(t.hand_size(P1), 0);
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+
+    // Gideon's Triumph ("that player sacrifices two of those creatures ... instead"):
+    // Gideon arrives in response: both of P1's attackers are sacrificed.
+    let mut t = TestGame::new(2);
+    let attackers = [
+        t.battlefield(P1, "Grizzly Bears"),
+        t.battlefield(P1, "Grizzly Bears"),
+    ];
+    let idle = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(attackers[0], Entity::Player(P0)), (attackers[1], Entity::Player(P0))]);
+    cast_only(&mut t, P0, "Gideon's Triumph", &[Entity::Player(P1)]);
+    t.battlefield(P0, "Gideon Jura");
+    t.resolve_all();
+    assert!(attackers.iter().all(|a| !t.on_battlefield(*a)));
+    assert!(t.on_battlefield(idle));
+
+    // Nissa's Triumph ("instead search your library for up to three land cards"): Nissa
+    // arrives in response: three lands, an Island among them.
+    let mut t = TestGame::new(2);
+    let lands = stack_library(&mut t, P0, &["Forest", "Forest", "Island"]);
+    cast_only(&mut t, P0, "Nissa's Triumph", &[]);
+    t.battlefield(P0, "Nissa, Who Shakes the World");
+    t.answer_choose(P0, &lands.iter().map(|x| obj(*x)).collect::<Vec<_>>());
+    t.resolve_all();
+    for l in &lands {
+        assert!(matches!(t.zone(*l), Zone::Hand(p) if p == P0));
+    }
 
     // Mine Worker: Tower Worker arrives after activation (Power Plant Worker was there):
     // 3 life.
