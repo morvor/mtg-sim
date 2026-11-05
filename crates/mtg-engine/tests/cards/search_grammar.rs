@@ -30,7 +30,7 @@ fn shuffles(t: &TestGame, p: PlayerId) -> usize {
 fn searched(t: &TestGame, p: PlayerId) -> bool {
     t.g.turn_events
         .iter()
-        .any(|e| matches!(e, Event::Searched { player } if *player == p))
+        .any(|e| matches!(e, Event::Searched { player, .. } if *player == p))
 }
 
 /// Candidates offered by the `n`th "choose entities" decision (0 = the first).

@@ -205,7 +205,10 @@ pub fn search(
     };
     // CR 701.23h: searching a library again before it's shuffled is the same search.
     if crate::search_rules::begin(g, searcher, owner, ctx) {
-        g.emit(Event::Searched { player: searcher });
+        g.emit(Event::Searched {
+            player: searcher,
+            library: owner,
+        });
     }
     found
 }
