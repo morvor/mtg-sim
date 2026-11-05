@@ -32,13 +32,16 @@ how).
 with its `published_at` date (`- Ruling, <card> (<date>): "<text>"`, one line each); the
 source it conflicts with, quoted and dated; the evidence (the likely origin, release notes,
 rules changes); what the engine does; and where it is recorded (exemption files, tests and
-register ids, in backticks; test paths are relative to `crates/mtg-engine`). Rules text is
-quoted from `data/comprehensive-rules.txt` (effective 2026-09-25); earlier rules text from
-the archived Comprehensive Rules at https://github.com/pit142857/mtg-cr (commit 8351b94f;
-the files are named by upload date and state their own effective dates). Release notes and
-update bulletins were outside these sessions' allowed network hosts (magic.wizards.com,
-web.archive.org); where an entry cites one, it was read from a mirror of the Wizards
-article archive or from search results, as the work item named in the entry says.
+register ids, in backticks; test paths are relative to `crates/mtg-engine`). Oracle texts
+and rulings are quoted from Scryfall's bulk data in `data/` (`oracle_cards.jsonl.gz` and
+`rulings.jsonl.gz`, both updated 2026-09-24, per `data/manifest.json`); an Oracle text
+quoted without a date is the text of that snapshot. Rules text is quoted from
+`data/comprehensive-rules.txt` (effective 2026-09-25); earlier rules text from the archived
+Comprehensive Rules at https://github.com/pit142857/mtg-cr (commit 8351b94f; the files are
+named by upload date and state their own effective dates). Release notes and update
+bulletins were outside these sessions' allowed network hosts (magic.wizards.com,
+web.archive.org); where an entry cites one, it was read from a mirror of the Wizards article
+archive or from search results, as the work item named in the entry says.
 
 **Keeping it complete.** `cargo test -p mtg-data` (`ruling_discrepancies_log_is_complete`)
 and `cargo run --release -q -p mtg-tools -- rulings-coverage --check` fail when a rulings
