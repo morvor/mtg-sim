@@ -33,6 +33,23 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Whether the decks built around a card get Wastes: its text (lowercase) mentions {C}
+/// (an activation cost, say) or a face's mana cost has a {C} or {C/W}-style symbol.
+fn wants_wastes(def: &CardDef, text: &str) -> bool {
+    text.contains("{c}")
+        || def.faces.iter().any(|f| {
+            f.chars.mana_cost.as_ref().is_some_and(|m| {
+                m.symbols.iter().any(|s| {
+                    matches!(
+                        s,
+                        mtg_engine::mana::ManaSymbol::Colorless
+                            | mtg_engine::mana::ManaSymbol::ColorlessHybrid(_)
+                    )
+                })
+            })
+        })
+}
+
 /// A card of the pool.
 pub struct PoolCard {
     pub def: Arc<CardDef>,
@@ -486,13 +503,7 @@ impl<'a> Picker<'a> {
         }
         let snow = x.text.contains("{s}") || x.text.contains("snow");
         let basics = if snow { SNOW_BASICS } else { BASICS };
-        let wastes = x.text.contains("{c}")
-            || x.def.faces.iter().any(|f| {
-                f.chars
-                    .mana_cost
-                    .as_ref()
-                    .is_some_and(|m| format!("{m:?}").contains("Colorless"))
-            });
+        let wastes = wants_wastes(&x.def, &x.text);
         let mut commanders: Vec<Vec<SmolStr>> = vec![vec![], vec![]];
         // Copies of the card in each deck (none for a supplementary-deck card or a
         // commander), and cards for the players' supplementary decks.
@@ -1268,5 +1279,31 @@ fn summarize(pool: &[PoolCard], results: &[CardResult], o: &Options, el: Duratio
     }
     if n_fail > 0 {
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wastes_for(name: &str) -> bool {
+        let def = CardDb::global().get(name).expect(name);
+        let text = def
+            .faces
+            .iter()
+            .map(|f| f.chars.rules_text.to_lowercase())
+            .collect::<Vec<_>>()
+            .join("\n");
+        wants_wastes(&def, &text)
+    }
+
+    #[test]
+    fn a_colorless_symbol_in_the_mana_cost_alone_gets_wastes() {
+        // {6}{C}{C}, and no {C} in its text.
+        assert!(wastes_for("Breaker of Creation"));
+        // {C} only in the text (an activation cost).
+        assert!(wastes_for("Eldrazi Temple"));
+        assert!(!wastes_for("Grizzly Bears"));
+        assert!(!wastes_for("Ulamog's Crusher"));
     }
 }
