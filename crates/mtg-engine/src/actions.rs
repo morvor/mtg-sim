@@ -1890,6 +1890,7 @@ impl Game {
         let outer_division = std::mem::take(&mut self.per_source_division);
         self.divide_per_source_prevention(&events, combat);
         let recipients: Vec<ObjectId> = events.iter().filter_map(|(_, t, _)| t.object()).collect();
+        let prev_batch_uses = std::mem::replace(&mut self.zones.damage_batch_uses, Some(vec![]));
         for (s, t, a) in events {
             finals.extend(self.replace(ReplEvent::Damage {
                 source: s,
@@ -1898,6 +1899,7 @@ impl Game {
                 combat,
             }));
         }
+        self.zones.damage_batch_uses = prev_batch_uses;
         let followups = std::mem::replace(&mut self.prevention_followups, outer);
         self.prevented_per_source = outer_shared;
         self.per_source_division = outer_division;
