@@ -1760,11 +1760,19 @@ impl Renderer<'_> {
                 && np.with_on.is_empty()
                 && np.post.len() == 1
                 && np.post[0].starts_with("attacking ");
+        // "cards in your graveyard with four or more card types among them": a quality
+        // of the cards together, said after where they are.
+        let group_last = |p: &String| p.starts_with("with ") && p.ends_with(" among them");
+        let group_posts: Vec<String> = if np.zone.is_some_and(|z| z != ZoneKind::Battlefield) {
+            np.post.iter().filter(|p| group_last(p)).cloned().collect()
+        } else {
+            Vec::new()
+        };
         if !(chosen.len() == 1 && !ctrl.is_empty() && ctrl != " you control")
             && !attacking_after_without
             && !named_only
         {
-            for p in &np.post {
+            for p in np.post.iter().filter(|p| !group_posts.contains(p)) {
                 s.push(' ');
                 s.push_str(p);
             }
@@ -1839,6 +1847,10 @@ impl Renderer<'_> {
                 s.push_str(&self.owns_phrase(o));
             }
             _ => {}
+        }
+        for p in &group_posts {
+            s.push(' ');
+            s.push_str(p);
         }
         for r in &np.rel {
             s.push(' ');
@@ -2236,6 +2248,10 @@ impl Renderer<'_> {
                 }
                 if let Some(p) = players {
                     parts.push(self.player_filter_object(p));
+                }
+                // "that targets you or a creature you control": either order.
+                if let [a, b] = parts.as_slice() {
+                    return format!("that targets {{alt:{a} or {b}|{b} or {a}}}");
                 }
                 format!("that targets {}", join_list(&parts, "or"))
             }
