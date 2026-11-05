@@ -1,9 +1,7 @@
 //! Rulings batch P022 — effects that create token copies of cards and permanents: the
 //! copied "enters" abilities trigger and the "as enters" and "enters with" abilities apply
 //! (CR 707.5, 603.6a, 614.1c), {X} is 0 (CR 107.3, 202.3e), the legend rule (CR 704.5j,
-//! 603.3), tokens that leave cease to exist (CR 111.7, 111.8), copies of copies and tokens
-//! (CR 707.3, 111.3), delayed triggers (CR 603.7) and copied permanent spells (CR 707.10,
-//! 608.3f).
+//! 603.3) and copies of copies and tokens (CR 707.3, 111.3).
 
 use crate::r_p022_common::*;
 use mtg_engine::decision::Answer;
@@ -12,27 +10,43 @@ use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-/// Runs `make` (which gives P0 token copies of the card `card`, set up by `place`) twice:
-/// with Elvish Visionary ("When this creature enters, draw a card": the token's copy
-/// triggers) and Faithful Watchdog ("enters with three +1/+1 counters": the token gets
-/// them). `make` returns the new tokens.
+/// Runs `make` (which gives P0 token copies of the card `card`, set up by `place`) three
+/// times: with Wall of Omens ("When this creature enters, draw a card.": the token's copy
+/// triggers), Faithful Watchdog ("This creature enters with three +1/+1 counters on it.":
+/// the token gets them) and Voice of All ("As this creature enters, choose a color. This
+/// creature has protection from the chosen color.": the token's controller chooses).
+/// `make` returns the new tokens.
 fn enters_abilities_work(
     place: impl Fn(&mut TestGame, &str) -> ObjectId,
     make: impl Fn(&mut TestGame, ObjectId) -> Vec<ObjectId>,
 ) {
+    supported("Wall of Omens");
     supported("Faithful Watchdog");
+    supported("Voice of All");
     let mut t = TestGame::new(2);
-    let card = place(&mut t, "Elvish Visionary");
+    let card = place(&mut t, "Wall of Omens");
     let hand = t.hand_size(P0);
-    let toks = make(&mut t, card);
-    let tok = one(toks);
-    assert_eq!(name_of(&t, tok), "Elvish Visionary");
-    assert!(t.hand_size(P0) > hand, "the token's enters trigger drew: {}", t.dump_log());
+    let tok = one(make(&mut t, card));
+    assert_eq!(name_of(&t, tok), "Wall of Omens");
+    assert_eq!(
+        t.hand_size(P0),
+        hand + 1,
+        "the token's enters trigger drew: {}",
+        t.dump_log()
+    );
     let mut t = TestGame::new(2);
     let card = place(&mut t, "Faithful Watchdog");
     let tok = one(make(&mut t, card));
     assert_eq!(name_of(&t, tok), "Faithful Watchdog");
     assert_eq!(t.counters(tok, counters::PLUS1), 3);
+    // P0 chooses red for the token (not the default choice).
+    let mut t = TestGame::new(2);
+    let card = place(&mut t, "Voice of All");
+    let bolt = t.hand(P1, "Lightning Bolt");
+    choose_color(&mut t, P0, Color::Red);
+    let tok = one(make(&mut t, card));
+    assert_eq!(name_of(&t, tok), "Voice of All");
+    assert!(t.g.protected_from(tok, bolt), "{}", t.dump_log());
 }
 
 #[test]
@@ -130,6 +144,112 @@ fn token_copies_of_cards_have_working_enters_abilities() {
     );
 }
 
+#[test]
+fn token_copies_of_cards_have_working_enters_abilities_other_wordings() {
+    cr!("707.5", "603.6a", "614.1c");
+    ruling!("Espers to Magicite", "If a card copied by the token had any \"when [this permanent] enters\" abilities, the token also has those abilities, and they'll trigger when it's created.");
+    ruling!("Lorehold Archivist // Restore Relic", "If a card copied by the token had any \"when [this permanent] enters\" abilities, the token also has those abilities, and they'll trigger when it's created.");
+    ruling!("Sin, Spira's Punishment", "If a card copied by the token had any \"when [this permanent] enters\" abilities, the token also has those abilities, and they'll trigger when it's created.");
+    ruling!("The Cloning of Shredder", "If a card copied by the token had any \"when this creature enters\" abilities, the appropriate token also has those abilities and will trigger them when it's created.");
+    ruling!("Offspring's Revenge", "If the card copied by the token had any “when [this permanent] enters the battlefield” abilities, then the token also has those abilities and will trigger them when it’s created.");
+    ruling!("Séance", "If the card copied by the token had any “when [this permanent] enters the battlefield” abilities, then the token also has those abilities and will trigger them when it’s created.");
+    // Espers to Magicite: "Exile each opponent's graveyard. When you do, choose up to one
+    // target creature card exiled this way. Create a token that's a copy of that card,
+    // except it's an artifact and it loses all other card types."
+    supported("Espers to Magicite");
+    enters_abilities_work(
+        |t, n| t.graveyard(P1, n),
+        |t, card| {
+            lands_for(t, P0, "{3}{B}");
+            let e = t.hand(P0, "Espers to Magicite");
+            let before = t.g.battlefield.clone();
+            t.cast(P0, e).go();
+            // It resolves; its reflexive trigger targets the card as it is in exile.
+            t.g.settle();
+            t.g.resolve_top();
+            let exiled = t.g.current(card);
+            assert_eq!(t.zone(exiled), Zone::Exile);
+            t.answer_targets(P0, &[obj(exiled)]);
+            t.resolve_all();
+            new_tokens(t, P0, &before)
+        },
+    );
+    // Lorehold Archivist // Restore Relic, prepared: a copy of "Exile target artifact or
+    // creature card from your graveyard. Create a token that's a copy of it."
+    supported("Lorehold Archivist // Restore Relic");
+    enters_abilities_work(
+        |t, n| t.graveyard(P0, n),
+        |t, card| {
+            let a = t.battlefield(P0, "Lorehold Archivist // Restore Relic");
+            mtg_engine::designations::become_prepared(&mut t.g, a);
+            let spell = t.obj_now(a).prepared.expect("prepared");
+            lands_for(t, P0, "{2}{R}{W}");
+            let before = t.g.battlefield.clone();
+            t.cast(P0, spell).target(obj(card)).go();
+            t.resolve_all();
+            new_tokens(t, P0, &before)
+        },
+    );
+    // Sin, Spira's Punishment: "Whenever Sin enters or attacks, exile a permanent card
+    // from your graveyard at random, then create a tapped token that's a copy of that
+    // card." (The card is the only one there.)
+    supported("Sin, Spira's Punishment");
+    enters_abilities_work(
+        |t, n| t.graveyard(P0, n),
+        |t, _| {
+            let before = t.g.battlefield.clone();
+            t.enter(P0, "Sin, Spira's Punishment");
+            t.resolve_all();
+            new_tokens(t, P0, &before)
+        },
+    );
+    // The Cloning of Shredder: "I — Exile target creature card from your graveyard. Create
+    // a token that's a copy of it, except it isn't legendary and is a Mutant in addition
+    // to its other types."
+    supported("The Cloning of Shredder");
+    enters_abilities_work(
+        |t, n| t.graveyard(P0, n),
+        |t, card| {
+            t.answer_targets(P0, &[obj(card)]);
+            let before = t.g.battlefield.clone();
+            t.enter(P0, "The Cloning of Shredder");
+            t.resolve_all();
+            new_tokens(t, P0, &before)
+        },
+    );
+    // Offspring's Revenge: "At the beginning of combat on your turn, exile target red,
+    // white, or black creature card from your graveyard. Create a token that's a copy of
+    // that card, except it's 1/1." (The three cards are white.)
+    supported("Offspring's Revenge");
+    enters_abilities_work(
+        |t, n| t.graveyard(P0, n),
+        |t, card| {
+            t.battlefield(P0, "Offspring's Revenge");
+            t.answer_targets(P0, &[obj(card)]);
+            let before = t.g.battlefield.clone();
+            t.advance_to(P0, Step::BeginningOfCombat);
+            t.resolve_all();
+            new_tokens(t, P0, &before)
+        },
+    );
+    // Séance: "At the beginning of each upkeep, you may exile target creature card from
+    // your graveyard. If you do, create a token that's a copy of that card, except it's a
+    // Spirit in addition to its other types."
+    supported("Séance");
+    enters_abilities_work(
+        |t, n| t.graveyard(P0, n),
+        |t, card| {
+            t.battlefield(P0, "Séance");
+            t.answer_targets(P0, &[obj(card)]);
+            t.answer_yes(P0, true);
+            let before = t.g.battlefield.clone();
+            t.advance_to(P1, Step::Upkeep);
+            t.resolve_all();
+            new_tokens(t, P0, &before)
+        },
+    );
+}
+
 /// P0's Grist, the Plague Swarm with seven loyalty (it stays after its −6).
 fn grist_planeswalker(t: &mut TestGame) -> ObjectId {
     let g = t.battlefield(P0, "Grist, Voracious Larva // Grist, the Plague Swarm");
@@ -160,8 +280,14 @@ fn altair_attacks(t: &mut TestGame, _card: ObjectId) -> Vec<ObjectId> {
 #[test]
 fn token_copies_of_exiled_or_graveyard_cards_have_x_0() {
     cr!("107.3", "202.3e", "707.2");
-    ruling!("Altaïr Ibn-La'Ahad", "If an exiled card has {X} in its mana cost, X is 0.");
-    ruling!("Grist, Voracious Larva // Grist, the Plague Swarm", "If any of the copied cards have {X} in their mana costs, {X} is 0.");
+    ruling!(
+        "Altaïr Ibn-La'Ahad",
+        "If an exiled card has {X} in its mana cost, X is 0."
+    );
+    ruling!(
+        "Grist, Voracious Larva // Grist, the Plague Swarm",
+        "If any of the copied cards have {X} in their mana costs, {X} is 0."
+    );
     // Altaïr: a Benevolent Hydra card in exile with a memory counter.
     let mut t = TestGame::new(2);
     let h = t.exile(P0, HYDRA);
@@ -183,20 +309,25 @@ fn token_copies_of_exiled_or_graveyard_cards_have_x_0() {
 #[test]
 fn paleontologists_pick_axe_copy_has_x_0() {
     cr!("107.3", "202.3e", "707.2");
-    ruling!("Paleontologist's Pick-Axe // Dinosaur Headdress", "If the chosen card has {X} in its mana cost, X is 0.");
+    ruling!(
+        "Paleontologist's Pick-Axe // Dinosaur Headdress",
+        "If the chosen card has {X} in its mana cost, X is 0."
+    );
     supported("Paleontologist's Pick-Axe // Dinosaur Headdress");
     let mut t = TestGame::new(2);
     let axe = t.battlefield(P0, "Paleontologist's Pick-Axe // Dinosaur Headdress");
     let hydra = t.graveyard(P0, HYDRA);
-    let bears = t.battlefield(P0, "Grizzly Bears");
+    // Hill Giant (mana value 4) becomes a copy of the Hydra card ({X}{G}{G}): mana value 2.
+    let giant = t.battlefield(P0, "Hill Giant");
     t.lands(P0, "Wastes", 5);
     let craft = activated_index(&t, axe, "Craft");
     t.answer_choose(P0, &[obj(hydra)]);
-    t.answer_targets(P0, &[obj(bears)]);
+    t.answer_targets(P0, &[obj(giant)]);
     t.activate(P0, axe, craft, &[]).expect("craft");
     t.resolve_all();
-    assert_eq!(name_of(&t, bears), HYDRA);
-    assert_eq!(mv_now(&mut t, bears), 2);
+    assert_eq!(name_of(&t, giant), HYDRA);
+    assert_eq!(mv_now(&mut t, giant), 2);
+    assert_eq!(t.counters(giant, counters::PLUS1), 0);
 }
 
 // --- The legend rule ------------------------------------------------------------------------
@@ -220,7 +351,12 @@ fn inalla_token_copy_of_a_legend_triggers_before_the_legend_rule() {
     // The original's enters trigger, the token's enters trigger (it triggered although
     // the token may already be gone) and the dies trigger of the one that was put into
     // the graveyard.
-    assert_eq!(crate::r_s01_common::with_subtype(&t, P0, "Jellyfish").len(), 3, "{}", t.dump_log());
+    assert_eq!(
+        crate::r_s01_common::with_subtype(&t, P0, "Jellyfish").len(),
+        3,
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -236,7 +372,10 @@ fn dual_nature_token_of_a_legend_meets_the_legend_rule_at_once() {
     t.settle();
     t.resolve();
     // The token was created and is gone before anyone gets priority again.
-    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda"), vec![isamaru]);
+    assert_eq!(
+        t.named_on_battlefield("Isamaru, Hound of Konda"),
+        vec![isamaru]
+    );
     assert_eq!(t.stack_len(), 0);
 }
 
@@ -261,7 +400,7 @@ fn sarkhan_copying_a_legendary_dragon_keeps_its_own_name() {
 
 #[test]
 fn miirym_copies_what_the_entering_dragon_copies() {
-    cr!("707.3", "707.9b");
+    cr!("707.3");
     ruling!("Miirym, Sentinel Wyrm", "If the Dragon that entered the battlefield is copying something else as the triggered ability resolves, the token will be a copy of whatever that creature is a copy of.");
     supported("Miirym, Sentinel Wyrm");
     supported("Shivan Dragon");
@@ -289,7 +428,15 @@ fn march_of_progress_copies_what_a_copy_copies_and_a_tokens_original_values() {
     let giant = t.battlefield(P1, "Hill Giant");
     let m = enter_copying(&mut t, P0, "Phyrexian Metamorph", giant);
     assert_eq!(name_of(&t, m), "Hill Giant");
-    let tok = one(cast_spell(&mut t, P0, "March of Progress", "{2}{U}", &[obj(m)], None, None));
+    let tok = one(cast_spell(
+        &mut t,
+        P0,
+        "March of Progress",
+        "{2}{U}",
+        &[obj(m)],
+        None,
+        None,
+    ));
     assert_eq!(name_of(&t, tok), "Hill Giant");
     assert!(is_artifact(&t, tok));
     assert_eq!(t.pt(tok), (3, 3));
@@ -301,7 +448,15 @@ fn march_of_progress_copies_what_a_copy_copies_and_a_tokens_original_values() {
     let thopter = token_of(&mut t, P0, spec);
     dress_up(&mut t, thopter);
     assert_eq!(t.pt(thopter), (6, 6));
-    let tok = one(cast_spell(&mut t, P0, "March of Progress", "{2}{U}", &[obj(thopter)], None, None));
+    let tok = one(cast_spell(
+        &mut t,
+        P0,
+        "March of Progress",
+        "{2}{U}",
+        &[obj(thopter)],
+        None,
+        None,
+    ));
     assert_eq!(name_of(&t, tok), "Thopter");
     assert_eq!(t.pt(tok), (1, 1));
     assert_eq!(t.obj_now(tok).chars.colors, ColorSet::single(Color::Blue));

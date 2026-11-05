@@ -5,8 +5,8 @@
 //! sacrifice the original (CR 603.7, 611.2, 707.2).
 
 use crate::r_p022_common::*;
-use mtg_engine::keywords::KeywordKind;
 use mtg_engine::decision::Answer;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 #[test]
 fn a_copy_of_artisan_of_forms_copies_what_it_copies_with_heroic() {
-    cr!("707.3", "707.9b");
+    cr!("707.3", "707.9a");
     ruling!("Artisan of Forms", "If another creature becomes a copy of Artisan of Forms, it will become a copy of whatever Artisan of Forms is currently copying (if anything), plus it will have the triggered ability.");
     supported("Artisan of Forms");
     let mut t = TestGame::new(2);
@@ -35,7 +35,7 @@ fn a_copy_of_artisan_of_forms_copies_what_it_copies_with_heroic() {
 
 #[test]
 fn a_copy_of_cryptoplasm_copies_what_it_copies_with_its_trigger() {
-    cr!("707.3", "707.9b");
+    cr!("707.3", "707.9a");
     ruling!("Cryptoplasm", "If another creature becomes a copy of Cryptoplasm, it will become a copy of whatever Cryptoplasm is currently copying (if anything), plus it will have Cryptoplasm’s triggered ability.");
     supported("Cryptoplasm");
     let mut t = TestGame::new(2);
@@ -55,9 +55,15 @@ fn a_copy_of_cryptoplasm_copies_what_it_copies_with_its_trigger() {
 fn copies_of_mimics_have_their_extra_types() {
     cr!("707.3", "707.9b");
     ruling!("Glasspool Mimic // Glasspool Shore", "If another creature becomes a copy of Glasspool Mimic, that creature is also a Shapeshifter Rogue.");
-    ruling!("Mirrorhall Mimic // Ghastly Mimicry", "If another creature becomes a copy of Mirrorhall Mimic, that creature is also a Spirit.");
+    ruling!(
+        "Mirrorhall Mimic // Ghastly Mimicry",
+        "If another creature becomes a copy of Mirrorhall Mimic, that creature is also a Spirit."
+    );
     for (mimic, types) in [
-        ("Glasspool Mimic // Glasspool Shore", &["Shapeshifter", "Rogue"][..]),
+        (
+            "Glasspool Mimic // Glasspool Shore",
+            &["Shapeshifter", "Rogue"][..],
+        ),
         ("Mirrorhall Mimic // Ghastly Mimicry", &["Spirit"][..]),
     ] {
         supported(mimic);
@@ -76,7 +82,7 @@ fn copies_of_mimics_have_their_extra_types() {
 
 #[test]
 fn a_copy_of_sakashima_has_sakashimas_other_abilities() {
-    cr!("707.3", "707.9b");
+    cr!("707.3", "707.9a");
     ruling!("Sakashima of a Thousand Faces", "If another creature becomes a copy of Sakashima, that creature also has Sakashima's other abilities.");
     supported("Sakashima of a Thousand Faces");
     let mut t = TestGame::new(2);
@@ -90,7 +96,7 @@ fn a_copy_of_sakashima_has_sakashimas_other_abilities() {
 
 #[test]
 fn a_copy_of_the_ever_changing_dane_has_its_ability() {
-    cr!("707.3", "707.9b");
+    cr!("707.3", "707.9a");
     ruling!("The Ever-Changing 'Dane", "If another creature becomes a copy of The Ever-Changing ’Dane, it will become a copy of whatever The Ever-Changing ’Dane is currently copying (if anything), plus it will have the activated ability.");
     supported("The Ever-Changing 'Dane");
     let mut t = TestGame::new(2);
@@ -128,7 +134,7 @@ fn a_copy_of_zygon_infiltrator_copies_what_it_copies() {
 
 #[test]
 fn a_copy_of_vesuvan_doppelganger_keeps_its_color_and_trigger() {
-    cr!("707.3", "707.9b");
+    cr!("707.3", "707.9a", "707.9c");
     ruling!("Vesuvan Doppelganger", "If another creature copies Vesuvan Doppelganger, the new creature will become a copy of whatever Vesuvan Doppelganger is copying except for its color, will copy Vesuvan Doppelganger's color, and will gain Vesuvan Doppelganger's triggered ability.");
     supported("Vesuvan Doppelganger");
     let mut t = TestGame::new(2);
@@ -169,7 +175,7 @@ fn a_copy_of_nascent_metamorph_stays_a_copy_after_the_metamorphs_effect_ends() {
 
 #[test]
 fn a_copy_of_cursed_mirror_doesnt_copy_its_duration() {
-    cr!("707.2", "707.9b", "611.2a", "514.2");
+    cr!("707.2", "707.9a", "611.2a", "514.2");
     ruling!("Cursed Mirror", "If something else becomes a copy of Cursed Mirror while Cursed Mirror is a copy of a creature, the duration of the effect is not copied. The new copy will still be a creature (with haste) after Cursed Mirror stops being a copy at the end of the turn.");
     supported("Cursed Mirror");
     let mut t = TestGame::new(2);
@@ -218,7 +224,10 @@ fn clone_token(t: &mut TestGame, token: ObjectId) -> ObjectId {
 #[test]
 fn a_copy_of_a_nightmare_shepherd_token_is_a_1_1_nightmare() {
     cr!("707.9b", "707.3");
-    ruling!("Nightmare Shepherd", "If something becomes a copy of the token, the copy is also a 1/1 and a Nightmare.");
+    ruling!(
+        "Nightmare Shepherd",
+        "If something becomes a copy of the token, the copy is also a 1/1 and a Nightmare."
+    );
     supported("Nightmare Shepherd");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Nightmare Shepherd");
@@ -236,7 +245,7 @@ fn a_copy_of_a_nightmare_shepherd_token_is_a_1_1_nightmare() {
 
 #[test]
 fn a_copy_of_an_apprentices_folly_token_is_a_hasty_nonlegendary_reflection() {
-    cr!("707.9b", "707.3");
+    cr!("707.9a", "707.9b", "707.3");
     ruling!("The Apprentice's Folly", "If something becomes a copy of the token, the copy is also a Reflection in addition to its other types, has haste, and isn't legendary.");
     supported("The Apprentice's Folly");
     supported("Isamaru, Hound of Konda");
@@ -256,7 +265,9 @@ fn a_copy_of_an_apprentices_folly_token_is_a_hasty_nonlegendary_reflection() {
 
 /// `p` gets a token copy of P0's Hill Giant from `make`; P1's Clone then enters as a copy
 /// of the token. Returns the game, the token and the Clone.
-fn clone_of_token(make: impl FnOnce(&mut TestGame, ObjectId) -> ObjectId) -> (TestGame, ObjectId, ObjectId) {
+fn clone_of_token(
+    make: impl FnOnce(&mut TestGame, ObjectId) -> ObjectId,
+) -> (TestGame, ObjectId, ObjectId) {
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
     let tok = make(&mut t, giant);
@@ -276,10 +287,18 @@ fn token_gone_clone_stays(t: &mut TestGame, tok: ObjectId, clone: ObjectId) {
 
 #[test]
 fn a_copy_of_a_twinflame_token_has_haste_but_isnt_exiled() {
-    cr!("707.9b", "707.3", "603.7c");
+    cr!("707.9a", "707.3", "603.7c");
     ruling!("Twinflame", "If another creature becomes or enters the battlefield as a copy of the token, that creature will have haste, but you won't exile it.");
     let (mut t, tok, clone) = clone_of_token(|t, giant| {
-        one(cast_spell(t, P0, "Twinflame", "{1}{R}", &[obj(giant)], None, None))
+        one(cast_spell(
+            t,
+            P0,
+            "Twinflame",
+            "{1}{R}",
+            &[obj(giant)],
+            None,
+            None,
+        ))
     });
     assert!(has_kw(&t, clone, KeywordKind::Haste));
     token_gone_clone_stays(&mut t, tok, clone);
@@ -311,7 +330,15 @@ fn copies_of_tokens_that_gained_haste_have_no_haste_and_stay() {
     // the next end step." A copy of the token is a Hill Giant without haste that stays.
     let mut t = TestGame::new(2);
     t.graveyard(P0, "Hill Giant");
-    let toks = cast_spell(&mut t, P0, "Mordor on the March", "{3}{B}{R}", &[], None, None);
+    let toks = cast_spell(
+        &mut t,
+        P0,
+        "Mordor on the March",
+        "{3}{B}{R}",
+        &[],
+        None,
+        None,
+    );
     let tok = one(toks);
     assert!(has_kw(&t, tok, KeywordKind::Haste));
     let clone = clone_of(&mut t, P1, tok);
@@ -356,7 +383,10 @@ fn a_copy_of_a_flamerush_rider_token_isnt_exiled_at_end_of_combat() {
     t.answer(
         P0,
         DecisionKind::Attackers,
-        Answer::Attackers(vec![(rider, Entity::Player(P1)), (giant, Entity::Player(P1))]),
+        Answer::Attackers(vec![
+            (rider, Entity::Player(P1)),
+            (giant, Entity::Player(P1)),
+        ]),
     );
     t.advance_to(P0, Step::DeclareAttackers);
     let before = t.g.battlefield.clone();
@@ -385,7 +415,12 @@ fn copies_of_tokens_from_activated_abilities_that_grant_haste() {
     let tok = one(toks);
     assert!(is_artifact(&t, tok) && has_kw(&t, tok, KeywordKind::Haste));
     let card = t.g.current(card);
-    t.g.move_object(card, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        card,
+        Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     let clone = clone_of(&mut t, P1, tok);
     assert_eq!(name_of(&t, clone), "Hill Giant");
     assert!(is_artifact(&t, clone));
@@ -409,7 +444,7 @@ fn copies_of_tokens_from_activated_abilities_that_grant_haste() {
 
 #[test]
 fn a_copy_of_a_hofri_spirit_isnt_linked_to_hofri() {
-    cr!("707.9b", "607.1d", "707.3");
+    cr!("707.9a", "607.1d", "707.3");
     ruling!("Hofri Ghostforge", "If another creature enters the battlefield as a copy of the Spirit token or another effect creates a copy of the Spirit token, it will have the triggered ability granted by Hofri, but will not be linked to Hofri's ability and will not return the card to the graveyard when it leaves the battlefield.");
     supported("Hofri Ghostforge");
     let mut t = TestGame::new(2);

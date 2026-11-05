@@ -44,28 +44,50 @@ fn commands_with_an_illegal_copy_target_still_do_the_other_mode() {
     type Check = fn(&TestGame, usize, ObjectId) -> bool;
     let cases: [(&str, &str, &str, usize, Check); 5] = [
         // "Target player draws two cards."
-        ("Ashling's Command", "{3}{U}{R}", "Air Elemental", 1, |t, hand, _| {
-            t.hand_size(P0) == hand + 2
-        }),
+        (
+            "Ashling's Command",
+            "{3}{U}{R}",
+            "Air Elemental",
+            1,
+            |t, hand, _| t.hand_size(P0) == hand + 2,
+        ),
         // "Target player creates a 1/1 green and white Kithkin creature token."
-        ("Brigid's Command", "{1}{G}{W}", "Goldmeadow Harrier", 1, |t, _, _| {
-            t.g.battlefield
-                .iter()
-                .any(|o| t.obj(*o).is_token() && t.obj(*o).chars.has_subtype("Kithkin"))
-        }),
+        (
+            "Brigid's Command",
+            "{1}{G}{W}",
+            "Goldmeadow Harrier",
+            1,
+            |t, _, _| {
+                t.g.battlefield
+                    .iter()
+                    .any(|o| t.obj(*o).is_token() && t.obj(*o).chars.has_subtype("Kithkin"))
+            },
+        ),
         // "Target player mills five cards, then puts each Goblin card milled this way
         // into their hand."
-        ("Grub's Command", "{3}{B}{R}", "Raging Goblin", 3, |t, _, _| {
-            t.graveyard_size(P0) >= 5
-        }),
+        (
+            "Grub's Command",
+            "{3}{B}{R}",
+            "Raging Goblin",
+            3,
+            |t, _, _| t.graveyard_size(P0) >= 5,
+        ),
         // "Target player draws a card."
-        ("Sygg's Command", "{1}{W}{U}", "Merfolk of the Pearl Trident", 2, |t, hand, _| {
-            t.hand_size(P0) == hand + 1
-        }),
+        (
+            "Sygg's Command",
+            "{1}{W}{U}",
+            "Merfolk of the Pearl Trident",
+            2,
+            |t, hand, _| t.hand_size(P0) == hand + 1,
+        ),
         // "Destroy target creature or enchantment." (P1's Hill Giant)
-        ("Trystan's Command", "{4}{B}{G}", "Llanowar Elves", 2, |t, _, giant| {
-            !t.on_battlefield(giant)
-        }),
+        (
+            "Trystan's Command",
+            "{4}{B}{G}",
+            "Llanowar Elves",
+            2,
+            |t, _, giant| !t.on_battlefield(giant),
+        ),
     ];
     for (command, cost, creature, other, check) in cases {
         supported(creature);
@@ -111,7 +133,14 @@ fn season_with_every_target_illegal_doesnt_resolve() {
     // card." on P1's Hill Giant, which leaves: no Rabbit either.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
-    let toks = cast_then_kill(&mut t, "Season of the Burrow", "{3}{W}{W}", &[0, 1], &[obj(giant)], &[giant]);
+    let toks = cast_then_kill(
+        &mut t,
+        "Season of the Burrow",
+        "{3}{W}{W}",
+        &[0, 1],
+        &[obj(giant)],
+        &[giant],
+    );
     assert!(toks.is_empty());
     // {P}{P} on the Giant (which leaves) and {P}{P}{P} "Return target permanent card with
     // mana value 3 or less from your graveyard to the battlefield with an indestructible
@@ -137,7 +166,10 @@ fn season_with_every_target_illegal_doesnt_resolve() {
 #[test]
 fn sublime_epiphany_affects_the_remaining_targets() {
     cr!("608.2b", "700.2");
-    ruling!("Sublime Epiphany", "If any of the targets become illegal, the remaining targets are affected as appropriate.");
+    ruling!(
+        "Sublime Epiphany",
+        "If any of the targets become illegal, the remaining targets are affected as appropriate."
+    );
     supported("Sublime Epiphany");
     // "Return target nonland permanent to its owner's hand", "Create a token that's a copy
     // of target creature you control" and "Target player draws a card": the creature to

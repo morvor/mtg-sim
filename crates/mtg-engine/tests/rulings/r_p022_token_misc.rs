@@ -158,13 +158,15 @@ fn several_mystic_reflections_apply_in_the_order_the_controller_chooses() {
         let from = t.asked().len();
         let b = t.enter(P1, "Grizzly Bears");
         t.settle();
-        assert!(t.asked()[from..]
-            .iter()
-            .any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::ChooseReplacement { .. })));
+        assert!(t.asked()[from..].iter().any(|(p, d)| *p == P1
+            && matches!(d, mtg_engine::decision::Decision::ChooseReplacement { .. })));
         names.push(name_of(&t, b));
     }
     names.sort();
-    assert_eq!(names, vec!["Hill Giant".to_string(), "Serra Angel".to_string()]);
+    assert_eq!(
+        names,
+        vec!["Hill Giant".to_string(), "Serra Angel".to_string()]
+    );
 }
 
 #[test]

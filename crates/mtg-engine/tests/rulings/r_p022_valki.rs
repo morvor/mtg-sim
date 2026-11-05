@@ -97,7 +97,10 @@ fn skinshifter_attacks_with(t: &mut TestGame, skin: ObjectId, other: ObjectId) {
     t.answer(
         P0,
         DecisionKind::Attackers,
-        Answer::Attackers(vec![(skin, Entity::Player(P1)), (other, Entity::Player(P1))]),
+        Answer::Attackers(vec![
+            (skin, Entity::Player(P1)),
+            (other, Entity::Player(P1)),
+        ]),
     );
     t.advance_to(P0, Step::DeclareAttackers);
     t.resolve_all();

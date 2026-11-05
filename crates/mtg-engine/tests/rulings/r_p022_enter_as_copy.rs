@@ -37,15 +37,39 @@ fn clones_cant_copy_what_enters_with_them() {
 #[test]
 fn clones_copy_x_as_0() {
     cr!("107.3", "202.3e", "707.2");
-    ruling!("Mercurial Pretender", "If the chosen creature has {X} in its mana cost (such as Genesis Hydra), X is 0.");
+    ruling!(
+        "Mercurial Pretender",
+        "If the chosen creature has {X} in its mana cost (such as Genesis Hydra), X is 0."
+    );
     ruling!("Progenitor Mimic", "If the chosen creature has {X} in its mana cost (such as Protean Hydra), X is considered to be zero.");
-    ruling!("Evil Twin", "If the chosen creature has {X} in its mana cost, X is considered to be 0.");
-    ruling!("Mocking Doppelganger", "If the chosen creature has {X} in its mana cost, X is considered to be 0.");
-    ruling!("Phantasmal Image", "If the chosen creature has {X} in its mana cost, X is considered to be 0.");
-    ruling!("Sakashima of a Thousand Faces", "If the chosen creature has {X} in its mana cost, X is considered to be 0.");
-    ruling!("Vizier of Many Faces", "If the chosen creature has {X} in its mana cost, X is considered to be 0.");
-    ruling!("Sakashima's Student", "If the chosen creature has {X} in its mana cost, X is zero.");
-    ruling!("Copycrook", "If the chosen creature has {X} in its mana cost, X is 0.");
+    ruling!(
+        "Evil Twin",
+        "If the chosen creature has {X} in its mana cost, X is considered to be 0."
+    );
+    ruling!(
+        "Mocking Doppelganger",
+        "If the chosen creature has {X} in its mana cost, X is considered to be 0."
+    );
+    ruling!(
+        "Phantasmal Image",
+        "If the chosen creature has {X} in its mana cost, X is considered to be 0."
+    );
+    ruling!(
+        "Sakashima of a Thousand Faces",
+        "If the chosen creature has {X} in its mana cost, X is considered to be 0."
+    );
+    ruling!(
+        "Vizier of Many Faces",
+        "If the chosen creature has {X} in its mana cost, X is considered to be 0."
+    );
+    ruling!(
+        "Sakashima's Student",
+        "If the chosen creature has {X} in its mana cost, X is zero."
+    );
+    ruling!(
+        "Copycrook",
+        "If the chosen creature has {X} in its mana cost, X is 0."
+    );
     // (card, whether the Hydra must be an opponent's)
     for (name, opponents) in [
         ("Mercurial Pretender", false),
@@ -73,7 +97,10 @@ fn clones_copy_x_as_0() {
 #[test]
 fn protean_raider_copies_x_as_0() {
     cr!("107.3", "202.3e", "707.2");
-    ruling!("Protean Raider", "If the chosen creature has {X} in its mana cost, X is considered to be 0.");
+    ruling!(
+        "Protean Raider",
+        "If the chosen creature has {X} in its mana cost, X is considered to be 0."
+    );
     supported("Protean Raider");
     let mut t = TestGame::new(2);
     let hydra = hydra_cast_with_x3(&mut t, P0);
@@ -145,7 +172,10 @@ fn gigantoplasms_x_ability_doesnt_affect_x_in_its_mana_cost() {
 #[test]
 fn activated_sleeper_copies_x_as_0() {
     cr!("107.3", "202.3e", "707.2");
-    ruling!("Activated Sleeper", "If the chosen creature card has {X} in its mana cost, X is considered to be zero.");
+    ruling!(
+        "Activated Sleeper",
+        "If the chosen creature card has {X} in its mana cost, X is considered to be zero."
+    );
     supported("Activated Sleeper");
     let mut t = TestGame::new(2);
     let hydra = hydra_cast_with_x3(&mut t, P0);

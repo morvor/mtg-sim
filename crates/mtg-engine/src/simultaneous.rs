@@ -1556,8 +1556,10 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
         Plan::PayLife { .. } => ctx.prev_happened = true,
         Plan::Tokens { .. } => {
             // As `Effect::CreateTokenCopy` records them: "tokens created with ~" (CR
-            // 607.1d) and "those tokens".
+            // 607.1d), "the exiled card" of an ability the exceptions gave them, and
+            // "those tokens".
             g.link_to_creator(ctx, &outcome.created);
+            crate::granted_captures::keep_created_exiled(g, ctx, &outcome.created);
             ctx.set_var(
                 vars::CREATED,
                 outcome.created.into_iter().map(Entity::Object).collect(),

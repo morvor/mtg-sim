@@ -42,7 +42,10 @@ fn wall_of_stolen_identity_keeps_a_copied_animated_land_tapped() {
     assert!(!is_creature(&t, wall));
     t.advance_to(P1, Step::Upkeep);
     assert!(!is_creature(&t, land));
-    assert!(t.obj_now(land).tapped, "it doesn't untap during P1's untap step");
+    assert!(
+        t.obj_now(land).tapped,
+        "it doesn't untap during P1's untap step"
+    );
 }
 
 #[test]
@@ -199,11 +202,13 @@ fn mirage_mirror_keeps_the_effect_of_an_ability_it_had_as_an_earlier_copy() {
     t.lands(P0, "Forest", 2);
     let i = activated_index(&t, mirror, "becomes a copy");
     t.activate(P0, mirror, i, &[obj(hippo)]).expect("first");
-    t.activate(P0, mirror, i, &[obj(sandwalla)]).expect("second");
+    t.activate(P0, mirror, i, &[obj(sandwalla)])
+        .expect("second");
     t.resolve();
     assert_eq!(name_of(&t, mirror), "Frilled Sandwalla");
     let pump = activated_index(&t, mirror, "+2/+2");
-    t.activate(P0, mirror, pump, &[]).expect("Sandwalla's ability");
+    t.activate(P0, mirror, pump, &[])
+        .expect("Sandwalla's ability");
     t.resolve();
     assert_eq!(t.pt(mirror), (3, 3));
     t.resolve_all();
@@ -230,7 +235,8 @@ fn mirror_of_the_forebears_keeps_the_effect_of_an_ability_it_had_as_an_earlier_c
     t.lands(P0, "Forest", 1);
     let i = activated_index(&t, mirror, "becomes a copy");
     t.activate(P0, mirror, i, &[obj(spirit)]).expect("first");
-    t.activate(P0, mirror, i, &[obj(sabertooth)]).expect("second");
+    t.activate(P0, mirror, i, &[obj(sabertooth)])
+        .expect("second");
     t.resolve();
     assert_eq!(name_of(&t, mirror), "Temur Sabertooth");
     // "{1}{G}: You may return another creature you control to its owner's hand. If you
@@ -238,7 +244,8 @@ fn mirror_of_the_forebears_keeps_the_effect_of_an_ability_it_had_as_an_earlier_c
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(bears)]);
     let a = activated_index(&t, mirror, "indestructible");
-    t.activate(P0, mirror, a, &[]).expect("Sabertooth's ability");
+    t.activate(P0, mirror, a, &[])
+        .expect("Sabertooth's ability");
     t.resolve();
     assert!(t.in_hand(P0, "Grizzly Bears"));
     assert!(has_kw(&t, mirror, KeywordKind::Indestructible));
@@ -275,7 +282,10 @@ fn deceiver_of_form_copies_dont_enter_and_keep_counters_and_auras() {
     // A 1/1 with a +1/+1 counter and Holy Strength (+1/+2).
     assert_eq!(t.counters(bears, counters::PLUS1), 1);
     assert_eq!(t.pt(bears), (3, 4));
-    assert_eq!(crate::r_s06_common::attached_to(&t, t.g.attachments_of(obj(t.g.current(bears)))[0]), Some(obj(t.g.current(bears))));
+    assert_eq!(
+        crate::r_s06_common::attached_to(&t, t.g.attachments_of(obj(t.g.current(bears)))[0]),
+        Some(obj(t.g.current(bears)))
+    );
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.life(P1), 20);
 }
@@ -330,7 +340,15 @@ fn absorb_identity_copies_the_returned_creature_as_it_last_existed() {
     let sharer = t.battlefield(P0, "Shapesharer");
     let giant = dressed_giant(&mut t, P1);
     t.answer_yes(P0, true);
-    cast_spell(&mut t, P0, "Absorb Identity", "{1}{U}", &[obj(giant)], None, None);
+    cast_spell(
+        &mut t,
+        P0,
+        "Absorb Identity",
+        "{1}{U}",
+        &[obj(giant)],
+        None,
+        None,
+    );
     assert!(t.in_hand(P1, "Hill Giant"));
     assert_printed_giant(&t, sharer, Some((3, 3)), true);
 }
@@ -426,7 +444,22 @@ fn spirit_of_resilience_triggers_once_for_cards_leaving_together() {
     t.enter(P0, "Bojuka Bog");
     t.resolve_all();
     assert_eq!(t.graveyard_size(P0), 0);
+    // One trigger: one counter (put whether or not P0 has it become a copy; P0 declined).
     assert_eq!(t.counters(spirit, counters::PLUS1), 1, "{}", t.dump_log());
+    assert_eq!(name_of(&t, spirit), "Spirit of Resilience");
+    // Accepting: one counter, and it becomes a copy of the Hill Giant card.
+    let mut t = TestGame::new(2);
+    let spirit = t.battlefield(P0, "Spirit of Resilience");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Grizzly Bears");
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    t.answer_yes(P0, true);
+    t.answer_choose_moved(P0, &[obj(giant)]);
+    t.enter(P0, "Bojuka Bog");
+    t.resolve_all();
+    assert_eq!(t.counters(spirit, counters::PLUS1), 1);
+    assert_eq!(name_of(&t, spirit), "Hill Giant");
+    assert_eq!(t.pt(spirit), (4, 4));
 }
 
 // --- Illegal targets ----------------------------------------------------------------------
@@ -434,7 +467,10 @@ fn spirit_of_resilience_triggers_once_for_cards_leaving_together() {
 #[test]
 fn copy_abilities_with_an_illegal_target_do_nothing() {
     cr!("608.2b");
-    ruling!("Shapesharer", "If either target becomes an illegal target, the ability will resolve but have no effect.");
+    ruling!(
+        "Shapesharer",
+        "If either target becomes an illegal target, the ability will resolve but have no effect."
+    );
     ruling!("True Polymorph", "If either target is an illegal target for True Polymorph as it resolves, the spell will do nothing.");
     // Shapesharer targeting itself and a Hill Giant that leaves.
     let mut t = TestGame::new(2);
@@ -442,7 +478,8 @@ fn copy_abilities_with_an_illegal_target_do_nothing() {
     let giant = t.battlefield(P1, "Hill Giant");
     lands_for(&mut t, P0, "{2}{U}");
     let i = activated_index(&t, sharer, "becomes a copy");
-    t.activate(P0, sharer, i, &[obj(sharer), obj(giant)]).expect("activation");
+    t.activate(P0, sharer, i, &[obj(sharer), obj(giant)])
+        .expect("activation");
     kill(&mut t, giant);
     t.resolve_all();
     assert_eq!(name_of(&t, sharer), "Shapesharer");
@@ -479,13 +516,23 @@ fn the_animus_with_an_illegal_target_does_nothing() {
         let card = t.exile(P1, "Hill Giant");
         t.g.add_counters(Entity::Object(card), "memory", 1, None);
         let i = activated_index(&t, animus, "becomes a copy");
-        t.activate(P0, animus, i, &[obj(isamaru), obj(card)]).expect("activation");
+        t.activate(P0, animus, i, &[obj(isamaru), obj(card)])
+            .expect("activation");
         if remove {
             // The card leaves exile before the ability resolves.
-            t.g.move_object(card, Zone::Graveyard(P1), mtg_engine::events::MoveCause::Effect, None);
+            t.g.move_object(
+                card,
+                Zone::Graveyard(P1),
+                mtg_engine::events::MoveCause::Effect,
+                None,
+            );
         }
         t.resolve_all();
-        let name = if remove { "Isamaru, Hound of Konda" } else { "Hill Giant" };
+        let name = if remove {
+            "Isamaru, Hound of Konda"
+        } else {
+            "Hill Giant"
+        };
         assert_eq!(name_of(&t, isamaru), name);
     }
 }
@@ -539,13 +586,23 @@ fn kaya_cant_choose_a_card_no_longer_in_exile() {
         let wolf = wolf_token(&mut t, P0);
         let card = t.graveyard(P0, "Hill Giant");
         t.answer_targets(P0, &[obj(wolf)]);
-        let exiled = t.g.move_object(card, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+        let exiled = t.g.move_object(
+            card,
+            Zone::Exile,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        );
         t.g.flush_events();
         t.settle();
         assert_eq!(t.stack_len(), 1, "Kaya's trigger");
         if leaves {
             let e = exiled.unwrap();
-            t.g.move_object(e, Zone::Graveyard(P0), mtg_engine::events::MoveCause::Effect, None);
+            t.g.move_object(
+                e,
+                Zone::Graveyard(P0),
+                mtg_engine::events::MoveCause::Effect,
+                None,
+            );
         }
         let e = exiled.unwrap();
         t.answer_choose(P0, &[obj(e)]);

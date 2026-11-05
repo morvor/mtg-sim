@@ -131,6 +131,28 @@ fn arcane_artisans_each_exile_only_their_own_tokens() {
     assert!(t.on_battlefield(tb));
 }
 
+#[test]
+fn arcane_artisan_leaving_before_its_ability_resolves_still_exiles_the_token() {
+    cr!("607.1d", "607.2c", "603.7c");
+    ruling!("Arcane Artisan", "If Arcane Artisan leaves the battlefield before its activated ability has resolved, the token that ability creates will still be exiled at the beginning of the next end step.");
+    let mut t = TestGame::new(2);
+    let artisan = t.battlefield(P0, "Arcane Artisan");
+    let card = t.hand(P0, "Hill Giant");
+    lands_for(&mut t, P0, "{2}{U}");
+    t.answer_choose(P0, &[obj(card)]);
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    activate_containing(&mut t, P0, artisan, "draws a card").expect("activation");
+    // The Artisan dies in response: its leaves-the-battlefield trigger resolves first,
+    // then its ability creates the token.
+    let before = t.g.battlefield.clone();
+    kill(&mut t, artisan);
+    t.resolve_all();
+    let tok = one(new_tokens(&t, P0, &before));
+    assert_eq!(name_of(&t, tok), "Hill Giant");
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.on_battlefield(tok));
+}
+
 // --- Several tokens from Doubling Season ------------------------------------------------------
 
 #[test]
@@ -177,7 +199,10 @@ fn doubled_temporary_tokens_are_each_exiled() {
     t.answer(
         P0,
         DecisionKind::Attackers,
-        Answer::Attackers(vec![(rider, Entity::Player(P1)), (giant, Entity::Player(P1))]),
+        Answer::Attackers(vec![
+            (rider, Entity::Player(P1)),
+            (giant, Entity::Player(P1)),
+        ]),
     );
     t.advance_to(P0, Step::DeclareAttackers);
     let before = t.g.battlefield.clone();
@@ -206,7 +231,10 @@ fn tokens_made_during_an_end_step_are_exiled_at_the_next_turns_end_step() {
     let toks = activate_for_tokens(&mut t, P0, bears, "Create a token", &[]);
     let tok = one(toks);
     t.advance_to(P1, Step::Upkeep);
-    assert!(t.on_battlefield(tok), "not exiled in the end step it was made in");
+    assert!(
+        t.on_battlefield(tok),
+        "not exiled in the end step it was made in"
+    );
     t.advance_to(P1, Step::End);
     t.resolve_all();
     assert!(!t.on_battlefield(tok));
@@ -230,12 +258,21 @@ fn tokens_made_during_an_end_step_are_exiled_at_the_next_turns_end_step() {
 
 // --- Encore tokens ----------------------------------------------------------------------------
 
-/// P0 activates the encore ability of Eumidian Wastewaker in their graveyard (P0's main
-/// phase); returns the tokens.
-fn encore_wastewaker(t: &mut TestGame) -> Vec<ObjectId> {
-    supported("Eumidian Wastewaker");
-    let card = t.graveyard(P0, "Eumidian Wastewaker");
-    lands_for(t, P0, "{6}{B}{B}");
+/// P0 activates an encore ability of a card in their graveyard (P0's main phase): Eumidian
+/// Wastewaker's own (`surgeons` false), or the one Wire Surgeons gives an Ornithopter card
+/// ("Each artifact creature card in your graveyard has encore. Its encore cost is equal to
+/// its mana cost.", {0}). Returns the tokens.
+fn encore(t: &mut TestGame, surgeons: bool) -> Vec<ObjectId> {
+    let card = if surgeons {
+        supported("Wire Surgeons");
+        t.battlefield(P0, "Wire Surgeons");
+        t.graveyard(P0, "Ornithopter")
+    } else {
+        supported("Eumidian Wastewaker");
+        let c = t.graveyard(P0, "Eumidian Wastewaker");
+        lands_for(t, P0, "{6}{B}{B}");
+        c
+    };
     let before = t.g.battlefield.clone();
     activate_containing(t, P0, card, "Encore").expect("encore");
     t.resolve_all();
@@ -246,51 +283,59 @@ fn encore_wastewaker(t: &mut TestGame) -> Vec<ObjectId> {
 fn an_encore_token_another_player_controls_isnt_sacrificed() {
     cr!("701.21a", "603.7c");
     ruling!("Eumidian Wastewaker", "If one of the tokens somehow is under another player’s control as the delayed triggered ability resolves, you can’t sacrifice that token. It remains on the battlefield indefinitely, even if you regain control of it later.");
-    let mut t = TestGame::new(2);
-    let tok = one(encore_wastewaker(&mut t));
-    give_control(&mut t, tok, P1);
-    t.advance_to(P1, Step::Upkeep);
-    assert!(t.on_battlefield(tok));
-    give_control(&mut t, tok, P0);
-    t.advance_to(P0, Step::Upkeep);
-    t.advance_to(P1, Step::Upkeep);
-    assert!(t.on_battlefield(tok));
-    // Under P0's control it would have been sacrificed.
-    let mut t = TestGame::new(2);
-    let tok = one(encore_wastewaker(&mut t));
-    t.advance_to(P1, Step::Upkeep);
-    assert!(!t.on_battlefield(tok));
+    ruling!("Wire Surgeons", "If one of the tokens somehow is under another player’s control as the delayed triggered ability resolves, you can’t sacrifice that token. It remains on the battlefield indefinitely, even if you regain control of it later.");
+    for surgeons in [false, true] {
+        let mut t = TestGame::new(2);
+        let tok = one(encore(&mut t, surgeons));
+        give_control(&mut t, tok, P1);
+        t.advance_to(P1, Step::Upkeep);
+        assert!(t.on_battlefield(tok), "surgeons: {surgeons}");
+        give_control(&mut t, tok, P0);
+        t.advance_to(P0, Step::Upkeep);
+        t.advance_to(P1, Step::Upkeep);
+        assert!(t.on_battlefield(tok), "surgeons: {surgeons}");
+        // Under P0's control it would have been sacrificed.
+        let mut t = TestGame::new(2);
+        let tok = one(encore(&mut t, surgeons));
+        t.advance_to(P1, Step::Upkeep);
+        assert!(!t.on_battlefield(tok), "surgeons: {surgeons}");
+    }
 }
 
 #[test]
 fn an_encore_token_that_cant_attack_or_would_need_a_cost_doesnt_have_to() {
     cr!("508.1d", "508.1h");
     ruling!("Eumidian Wastewaker", "If one of the tokens can’t attack for any reason (such as being tapped), then it doesn’t attack. If there’s a cost associated with having it attack, you aren’t forced to pay that cost, so it doesn’t have to attack in that case either.");
-    // Untapped and with no cost, the requirement makes it attack even if P0 declares no
-    // attackers.
-    let mut t = TestGame::new(2);
-    let tok = one(encore_wastewaker(&mut t));
-    t.set_step(P0, Step::BeginningOfCombat);
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
-    t.advance_to(P0, Step::DeclareAttackers);
-    assert!(t.g.is_attacking(tok));
-    // Tapped: it doesn't attack.
-    let mut t = TestGame::new(2);
-    let tok = one(encore_wastewaker(&mut t));
-    t.g.tap(tok);
-    t.set_step(P0, Step::BeginningOfCombat);
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
-    t.advance_to(P0, Step::DeclareAttackers);
-    assert!(!t.g.is_attacking(tok));
-    // Ghostly Prison ("Creatures can't attack you unless their controller pays {2} for
-    // each creature they control that's attacking you"): it needn't attack.
-    let mut t = TestGame::new(2);
-    t.battlefield(P1, "Ghostly Prison");
-    let tok = one(encore_wastewaker(&mut t));
-    t.lands(P0, "Wastes", 2);
-    t.set_step(P0, Step::BeginningOfCombat);
-    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
-    t.advance_to(P0, Step::DeclareAttackers);
-    assert!(!t.g.is_attacking(tok));
-    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 8);
+    ruling!("Wire Surgeons", "If one of the tokens can’t attack for any reason (such as being tapped), then it doesn’t attack. If there’s a cost associated with having it attack, you aren’t forced to pay that cost, so it doesn’t have to attack in that case either.");
+    for surgeons in [false, true] {
+        // Untapped and with no cost, the requirement makes it attack even if P0 declares
+        // no attackers.
+        let mut t = TestGame::new(2);
+        let tok = one(encore(&mut t, surgeons));
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+        t.advance_to(P0, Step::DeclareAttackers);
+        assert!(t.g.is_attacking(tok), "surgeons: {surgeons}");
+        // Tapped: it doesn't attack.
+        let mut t = TestGame::new(2);
+        let tok = one(encore(&mut t, surgeons));
+        t.g.tap(tok);
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+        t.advance_to(P0, Step::DeclareAttackers);
+        assert!(!t.g.is_attacking(tok), "surgeons: {surgeons}");
+        // Ghostly Prison ("Creatures can't attack you unless their controller pays {2}
+        // for each creature they control that's attacking you"): it needn't attack, and
+        // P0 doesn't pay.
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Ghostly Prison");
+        let tok = one(encore(&mut t, surgeons));
+        t.lands(P0, "Wastes", 2);
+        let tapped = crate::r_s01_common::tapped_lands(&t, P0);
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+        t.advance_to(P0, Step::DeclareAttackers);
+        assert!(!t.g.is_attacking(tok), "surgeons: {surgeons}");
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), tapped);
+    }
 }

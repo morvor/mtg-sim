@@ -1,7 +1,7 @@
 //! Rulings batch P022 — being a commander isn't a copiable value (CR 903.3, 707.2), so a
 //! copy effect neither makes nor unmakes a commander; abilities lost to a copy effect stop
 //! granting (CR 613.1a, 613.1f); and a characteristic-defining ability counts toward a
-//! creature's base power (CR 604.3, 208.3, 613.4a).
+//! creature's base power (CR 604.3, 208.4b, 613.4a).
 
 use crate::r_p022_common::*;
 use mtg_engine::ability::{Modification, Value};
@@ -23,9 +23,13 @@ fn commander_onto_battlefield(t: &mut TestGame, name: &str, copy: Option<ObjectI
     if let Some(what) = copy {
         t.answer_choose(P0, &[obj(what)]);
     }
-    let id = t
-        .g
-        .move_object(c, Zone::Battlefield, mtg_engine::events::MoveCause::Effect, None)
+    let id =
+        t.g.move_object(
+            c,
+            Zone::Battlefield,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        )
         .unwrap();
     t.g.flush_events();
     t.settle();
@@ -54,7 +58,10 @@ fn sakashima_stays_or_stays_not_a_commander_whatever_it_copies() {
     let mut t = crate::r_s13_common::commander_game();
     t.battlefield(P0, CHARLATAN);
     let isamaru = commander_onto_battlefield(&mut t, "Isamaru, Hound of Konda", None);
-    assert_eq!(crate::r_p025_common::activated_with(&t, isamaru, GRANTED), 1);
+    assert_eq!(
+        crate::r_p025_common::activated_with(&t, isamaru, GRANTED),
+        1
+    );
     let s = enter_copying(&mut t, P0, SAKASHIMA, isamaru);
     assert_eq!(name_of(&t, s), "Isamaru, Hound of Konda");
     assert!(t.on_battlefield(s) && t.on_battlefield(isamaru));
@@ -79,30 +86,44 @@ fn shameless_charlatan_copying_something_stops_granting_its_ability() {
             Modification::SetPT(Some(Value::c(2)), Some(Value::c(2))),
         ],
     );
-    assert_eq!(crate::r_p025_common::activated_with(&t, charlatan, GRANTED), 1);
-    assert_eq!(crate::r_p025_common::activated_with(&t, isamaru, GRANTED), 1);
+    assert_eq!(
+        crate::r_p025_common::activated_with(&t, charlatan, GRANTED),
+        1
+    );
+    assert_eq!(
+        crate::r_p025_common::activated_with(&t, isamaru, GRANTED),
+        1
+    );
     let giant = t.battlefield(P1, "Hill Giant");
     lands_for(&mut t, P0, "{2}{U}");
     let i = activated_index(&t, charlatan, GRANTED);
-    t.activate(P0, charlatan, i, &[obj(giant)]).expect("activation");
+    t.activate(P0, charlatan, i, &[obj(giant)])
+        .expect("activation");
     t.resolve_all();
     assert_eq!(name_of(&t, charlatan), "Hill Giant");
-    assert_eq!(crate::r_p025_common::activated_with(&t, charlatan, GRANTED), 0);
-    assert_eq!(crate::r_p025_common::activated_with(&t, isamaru, GRANTED), 0);
+    assert_eq!(
+        crate::r_p025_common::activated_with(&t, charlatan, GRANTED),
+        0
+    );
+    assert_eq!(
+        crate::r_p025_common::activated_with(&t, isamaru, GRANTED),
+        0
+    );
 }
 
 // --- Base power ----------------------------------------------------------------------------------
 
 #[test]
 fn a_characteristic_defining_power_counts_as_base_power_for_curie_and_jason_bright() {
-    cr!("604.3", "208.3", "613.4a");
+    cr!("604.3", "208.4b", "613.4a");
     ruling!("Curie, Emergent Intelligence", "If a creature has a characteristic-defining ability that sets its power, indicated with a * or similar in the power and toughness box, that ability is taken into account when determining its base power.");
     ruling!("Jason Bright, Glowing Prophet", "If a creature has a characteristic-defining ability that sets its power, indicated with a * or similar in the power and toughness box, that ability is taken into account when determining its base power.");
     supported("Curie, Emergent Intelligence");
     supported("Jason Bright, Glowing Prophet");
     supported("Master of Etherium");
     // Curie becomes a copy of Master of Etherium ("power and toughness are each equal to
-    // the number of artifacts you control"): three artifacts, base power 3, three cards.
+    // the number of artifacts you control"): three artifacts, base power 3. With Giant
+    // Growth it deals 6 damage and draws three cards (its base power, not its power).
     let mut t = TestGame::new(2);
     let curie = t.battlefield(P0, "Curie, Emergent Intelligence");
     let master = t.battlefield(P0, "Master of Etherium");
@@ -115,11 +136,13 @@ fn a_characteristic_defining_power_counts_as_base_power_for_curie_and_jason_brig
     t.resolve_all();
     assert_eq!(name_of(&t, curie), "Master of Etherium");
     assert_eq!(t.pt(curie), (3, 3));
+    giant_growth(&mut t, P0, curie);
+    assert_eq!(t.pt(curie), (6, 6));
     let hand = t.hand_size(P0);
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(curie, Entity::Player(P1))], &[]);
     t.resolve_all();
-    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P1), 14);
     assert_eq!(t.hand_size(P0), hand + 3);
     // Jason Bright: a Zombie whose power is set by its characteristic-defining ability
     // (Squelching Leeches, made a Zombie) dies with power equal to its base power: no
@@ -138,13 +161,17 @@ fn a_characteristic_defining_power_counts_as_base_power_for_curie_and_jason_brig
         let hand = t.hand_size(P0);
         kill(&mut t, leeches);
         t.resolve_all();
-        assert_eq!(t.hand_size(P0), hand + usize::from(pumped), "pumped: {pumped}");
+        assert_eq!(
+            t.hand_size(P0),
+            hand + usize::from(pumped),
+            "pumped: {pumped}"
+        );
     }
 }
 
 #[test]
 fn a_characteristic_defining_power_counts_as_base_power_for_rapid_augmenter_and_zinnia() {
-    cr!("604.3", "208.3", "613.4a");
+    cr!("604.3", "208.4b", "613.4a");
     ruling!("Rapid Augmenter", "If a creature has a characteristic-defining ability that sets its power, indicated with a */* or similar in the power and toughness box, that ability is taken into account when determining its base power.");
     ruling!("Zinnia, Valley's Voice", "If a creature has a characteristic-defining ability that sets its power, indicated with a */* or similar in the power and toughness box, that ability is taken into account when determining its base power.");
     supported("Rapid Augmenter");

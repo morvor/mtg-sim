@@ -25,7 +25,8 @@ fn volrath(t: &mut TestGame, n: usize) -> ObjectId {
 /// Activates Volrath's copy ability targeting `what` and resolves it.
 fn volrath_copies(t: &mut TestGame, v: ObjectId, what: ObjectId) {
     let i = activated_index(t, v, "becomes a copy");
-    t.activate(P0, v, i, &[obj(what)]).expect("Volrath's ability");
+    t.activate(P0, v, i, &[obj(what)])
+        .expect("Volrath's ability");
     t.resolve_all();
 }
 
@@ -201,7 +202,7 @@ fn volrath_keeps_effects_that_applied_before_it_became_a_copy() {
 
 #[test]
 fn a_copy_of_volrath_has_its_ability_and_is_7_5() {
-    cr!("707.9b", "707.3");
+    cr!("707.9a", "707.9b", "707.3");
     ruling!("Volrath, the Shapestealer", "If another object becomes a copy of Volrath, it has the ability to become a copy of something else and it's 7/5.");
     let mut t = TestGame::new(2);
     let v = volrath(&mut t, 1);

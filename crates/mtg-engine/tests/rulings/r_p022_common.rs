@@ -8,17 +8,17 @@
 #![allow(dead_code)]
 
 pub use crate::r_p021_common::{
-    animate_land, assert_printed_giant, cant_copy_what_enters_with_it, dress, dressed_giant, giant_growth,
-    legendary, modify, untap,
+    animate_land, assert_printed_giant, cant_copy_what_enters_with_it, dress, dressed_giant,
+    giant_growth, legendary, modify, untap,
 };
 pub use crate::r_p023_common::{hydra_cast_with_x3, is_wolf};
 pub use crate::r_p024_common::*;
-pub use crate::r_s01_common::{asked_since, stack_library, with_subtype};
 pub use crate::r_p026_common::{activate_for_tokens, one, tokens_named};
+pub use crate::r_s01_common::{asked_since, stack_library, with_subtype};
 pub use crate::r_s06_common::{attach_new, give_control};
 pub use crate::r_s26_common::{dress_up, fresh};
-pub use mtg_engine::object::Zone;
 use mtg_engine::ability::AbilityKind;
+pub use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
@@ -36,7 +36,11 @@ pub fn hydra_with_x0(t: &mut TestGame, id: ObjectId) {
 /// Queues `p`'s answer to a "choose a color" decision.
 pub fn choose_color(t: &mut TestGame, p: PlayerId, c: Color) {
     let i = Color::ALL.iter().position(|x| *x == c).unwrap();
-    t.answer(p, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+    t.answer(
+        p,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(i),
+    );
 }
 
 /// Puts a -1/-1 counter on the permanent (as a resolving effect would).

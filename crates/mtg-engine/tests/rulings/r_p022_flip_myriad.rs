@@ -1,5 +1,6 @@
-//! Rulings batch P022 — Vesuvan Doppelganger copying flip cards (CR 707.3, 710.2, 710.4)
-//! and several myriad tokens for one player (CR 702.116a, 508.4, 614.1a).
+//! Rulings batch P022 — Vesuvan Doppelganger copying flip cards (CR 707.3, 710.2, 710.4),
+//! copies of a flipped flip card using its normal side (they're unflipped, CR 707.3,
+//! 110.5b), and several myriad tokens for one player (CR 702.116a, 508.4, 614.1a).
 
 use crate::r_p022_common::*;
 use mtg_engine::decision::Answer;
@@ -54,6 +55,17 @@ fn vesuvan_doppelganger_copies_a_flip_card_in_its_own_flip_state() {
     assert_eq!(name_of(&t, v), "Tomoya the Revealer");
     // Its color stays blue (it doesn't copy color).
     assert_eq!(t.obj_now(v).chars.colors, ColorSet::single(Color::Blue));
+    // Flipped, it copies a flipped Akki Lavarunner (Tok-Tok) at the next upkeep: the
+    // flipped side again.
+    let akki2 = t.battlefield(P1, LAVARUNNER);
+    assert!(mtg_engine::flip::flip(&mut t.g, akki2));
+    t.g.recompute();
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(akki2)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(name_of(&t, v), "Tok-Tok, Volcano Born", "{}", t.dump_log());
 }
 
 #[test]
@@ -79,45 +91,119 @@ fn a_token_copy_of_a_flipped_flip_card_is_unflipped() {
 }
 
 #[test]
+fn a_face_down_copy_of_a_flipped_flip_card_is_turned_up_unflipped() {
+    cr!("707.3", "110.5b", "708.2");
+    use mtg_engine::ability::{Duration, Effect, Filter, Sel};
+    supported(JUSHI);
+    let mut t = TestGame::new(2);
+    let jushi = t.battlefield(P1, JUSHI);
+    assert!(mtg_engine::flip::flip(&mut t.g, jushi));
+    t.g.recompute();
+    // P0's face-down Den Protector becomes a copy of the flipped Jushi Apprentice: it's
+    // still a face-down 2/2; turned face up, it's an unflipped Jushi Apprentice.
+    let fd = crate::r_s12_common::morph(&mut t, P0, "Den Protector");
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
+    t.g.exec(
+        &Effect::BecomeCopy {
+            what: Sel::All(Filter::Objects(vec![fd])),
+            of: Sel::All(Filter::Objects(vec![jushi])),
+            duration: Duration::Permanent,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    assert!(t.obj_now(fd).face_down);
+    assert_eq!(t.pt(fd), (2, 2));
+    assert!(mtg_engine::facedown::turn_face_up(&mut t.g, fd, false));
+    t.g.recompute();
+    assert!(!t.obj_now(fd).flipped);
+    assert_eq!(name_of(&t, fd), "Jushi Apprentice");
+}
+
+#[test]
 fn myriad_tokens_for_one_player_each_choose_what_they_attack() {
     cr!("702.116a", "508.4", "614.1a");
     ruling!("Mass of Mysteries", "If an instance of myriad creates more than one token for any given player (due to an effect such as the one Doubling Season creates), you may choose separately for each token whether it's attacking the player or a planeswalker they control.");
+    ruling!("Muddle, the Ever-Changing", "If an instance of myriad creates more than one token for any given player (due to an effect such as the one Doubling Season creates), you may choose separately for each token whether it's attacking the player or a planeswalker they control.");
+    ruling!("Scurry of Squirrels", "If an instance of myriad creates more than one token for any given player (due to an effect such as the one Doubling Season creates), you may choose separately for each token whether it's attacking the player or a planeswalker they control.");
     supported("Mass of Mysteries");
+    supported("Muddle, the Ever-Changing");
+    supported("Scurry of Squirrels");
     supported("Jace Beleren");
-    let mut t = TestGame::new(3);
-    t.battlefield(P0, "Mass of Mysteries");
-    t.battlefield(P0, "Doubling Season");
-    let air = t.battlefield(P0, "Air Elemental");
-    let jace = t.battlefield(P2, "Jace Beleren");
-    t.g.add_counters(Entity::Object(jace), counters::LOYALTY, 3, None);
-    // Mass of Mysteries' beginning-of-combat trigger gives the Air Elemental myriad; it
-    // attacks P1; myriad makes two tokens for P2: one attacks P2, one Jace.
-    t.answer_targets(P0, &[obj(air)]);
-    t.answer_yes(P0, true);
-    t.answer_choose(P0, &[Entity::Player(P2)]);
-    t.answer_choose(P0, &[obj(jace)]);
-    t.answer(
-        P0,
-        DecisionKind::Attackers,
-        Answer::Attackers(vec![(air, Entity::Player(P1))]),
-    );
-    let before = t.g.battlefield.clone();
-    t.advance_to(P0, Step::DeclareAttackers);
-    t.resolve_all();
-    let toks = new_tokens(&t, P0, &before);
-    assert_eq!(toks.len(), 2, "{}", t.dump_log());
-    let mut targets: Vec<Entity> = t
-        .g
-        .combat
-        .as_ref()
-        .unwrap()
-        .attackers
-        .iter()
-        .filter(|a| toks.contains(&a.id))
-        .filter_map(|a| a.target)
-        .collect();
-    targets.sort_by_key(|e| format!("{e:?}"));
-    let mut want = vec![Entity::Player(P2), obj(jace)];
-    want.sort_by_key(|e| format!("{e:?}"));
-    assert_eq!(targets, want);
+    // (card, how P0's attacker gets myriad, how many instances it has)
+    type Setup = fn(&mut TestGame) -> ObjectId;
+    let cases: [(&str, Setup, usize); 3] = [
+        // Mass of Mysteries' beginning-of-combat trigger gives the Air Elemental myriad.
+        (
+            "Mass of Mysteries",
+            |t| {
+                t.battlefield(P0, "Mass of Mysteries");
+                let air = t.battlefield(P0, "Air Elemental");
+                t.answer_targets(P0, &[obj(air)]);
+                air
+            },
+            1,
+        ),
+        // "Whenever you cast an instant or sorcery spell, Muddle becomes a copy of up to
+        // one target nonlegendary creature you control until end of turn, except it has
+        // myriad."
+        (
+            "Muddle, the Ever-Changing",
+            |t| {
+                let muddle = t.battlefield(P0, "Muddle, the Ever-Changing");
+                let air = t.battlefield(P0, "Air Elemental");
+                t.lands(P0, "Mountain", 1);
+                let bolt = t.hand(P0, "Lightning Bolt");
+                t.cast(P0, bolt).target(Entity::Player(P1)).go();
+                t.answer_targets(P0, &[obj(air)]);
+                t.resolve_all();
+                assert_eq!(name_of(t, muddle), "Air Elemental");
+                muddle
+            },
+            1,
+        ),
+        // "Myriad, myriad".
+        (
+            "Scurry of Squirrels",
+            |t| t.battlefield(P0, "Scurry of Squirrels"),
+            2,
+        ),
+    ];
+    for (name, setup, instances) in cases {
+        // Three players: P0's creature attacks P1; P2 controls Jace Beleren; with
+        // Doubling Season each instance of myriad makes two tokens for P2: one attacks P2,
+        // the other Jace.
+        let mut t = TestGame::new(3);
+        t.battlefield(P0, "Doubling Season");
+        let jace = t.battlefield(P2, "Jace Beleren");
+        t.g.add_counters(Entity::Object(jace), counters::LOYALTY, 3, None);
+        let attacker = setup(&mut t);
+        for _ in 0..instances {
+            t.answer_yes(P0, true);
+            t.answer_choose(P0, &[Entity::Player(P2)]);
+            t.answer_choose(P0, &[obj(jace)]);
+        }
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(vec![(attacker, Entity::Player(P1))]),
+        );
+        let before = t.g.battlefield.clone();
+        t.advance_to(P0, Step::DeclareAttackers);
+        t.resolve_all();
+        let toks = new_tokens(&t, P0, &before);
+        assert_eq!(toks.len(), 2 * instances, "{name}: {}", t.dump_log());
+        let targets: Vec<Entity> =
+            t.g.combat
+                .as_ref()
+                .unwrap()
+                .attackers
+                .iter()
+                .filter(|a| toks.contains(&a.id))
+                .filter_map(|a| a.target)
+                .collect();
+        let at = |e: Entity| targets.iter().filter(|x| **x == e).count();
+        assert_eq!(at(Entity::Player(P2)), instances, "{name}: {targets:?}");
+        assert_eq!(at(obj(jace)), instances, "{name}: {targets:?}");
+    }
 }
