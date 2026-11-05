@@ -322,13 +322,20 @@ pub fn is_nonlegendary_creature_name(n: &str) -> bool {
 
 /// Gives an object the full text of a card (CR 612.6): the text representing its name,
 /// mana cost, color indicator, type line, rules text, power, and toughness. Its color
-/// follows its new mana cost and color indicator (CR 202.2).
+/// follows its new mana cost and color indicator (CR 202.2). A characteristic the card
+/// doesn't define (no mana cost: Dryad Arbor) isn't acquired: the object keeps its own
+/// (Volrath's Shapeshifter ruling).
 pub fn take_full_text(c: &mut Characteristics, of: &Characteristics) {
     c.name = of.name.clone();
     c.all_creature_names = of.all_creature_names;
-    c.mana_cost = of.mana_cost.clone();
+    if of.mana_cost.is_some() {
+        c.mana_cost = of.mana_cost.clone();
+        c.colors = of.colors;
+    } else {
+        let own = c.mana_cost.as_ref().map_or(ColorSet::NONE, |m| m.colors());
+        c.colors = own.union(of.colors);
+    }
     c.color_indicator = of.color_indicator;
-    c.colors = of.colors;
     c.supertypes = of.supertypes;
     c.card_types = of.card_types;
     c.subtypes = of.subtypes.clone();

@@ -149,6 +149,21 @@ fn phase_out_trigger(cond: &TriggerCond) -> bool {
 }
 
 impl Game {
+    /// The objects a spell on the stack targets now, each once (`EventInfo::spell_targets`).
+    fn spell_object_targets(&self, spell: ObjectId) -> Vec<ObjectId> {
+        let mut out = Vec::new();
+        for cm in self.obj(spell).stack.iter().flat_map(|si| si.chosen.iter()) {
+            for e in cm.targets.iter().flatten() {
+                if let Entity::Object(o) = e {
+                    if !out.contains(o) {
+                        out.push(*o);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Processes pending events: records turn history and detects triggered abilities.
     /// Events emitted while this runs (by a triggered mana ability resolving right away,
     /// CR 605.4a) aren't processed in the middle of it but right after it, before this
@@ -1214,6 +1229,7 @@ impl Game {
                         object: Some(*spell),
                         spell: Some(*spell),
                         player: Some(*player),
+                        spell_targets: self.spell_object_targets(*spell),
                         ..Default::default()
                     })
                 } else {
