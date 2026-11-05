@@ -49,7 +49,7 @@ fn mana_abilities_with(t: &TestGame, id: ObjectId, needle: &str) -> usize {
 
 #[test]
 fn conspiracy_doesnt_offer_legend_as_a_creature_type() {
-    cr!("205.3m", "205.3i");
+    cr!("205.3m");
     ruling!(
         "Conspiracy",
         "\"Legend\" is no longer a creature type, and may not be chosen."
@@ -187,7 +187,7 @@ fn armed_with_proof_clue_creature_cant_become_attached() {
 
 #[test]
 fn armed_with_proof_leaving_unattaches_the_clues() {
-    cr!("704.5n", "611.3a");
+    cr!("704.5p", "611.3a");
     ruling!(
         "Armed with Proof",
         "Clues stop being Equipment if Armed with Proof leaves the battlefield. If any of them are attached to creatures at that time, they become unattached."
@@ -519,8 +519,9 @@ fn every_basic_land_type_adds_the_five_mana_abilities_and_keeps_the_rest() {
             vec!["Forest", "Gate", "Island", "Mountain", "Plains", "Swamp"],
             "{source}"
         );
-        for sym in ["{W}", "{U}", "{B}", "{R}", "{G}"] {
-            assert!(mana_abilities_with(&t, gate, sym) >= 1, "{source}: {sym}");
+        // Its own "{T}: Add {W} or {U}." plus one intrinsic ability per basic land type.
+        for (sym, n) in [("{W}", 2), ("{U}", 2), ("{B}", 1), ("{R}", 1), ("{G}", 1)] {
+            assert_eq!(mana_abilities_with(&t, gate, sym), n, "{source}: {sym}");
         }
         assert_eq!(mana_abilities_with(&t, theirs, "{G}"), 0, "{source}");
         assert!(tap_for_mana(&mut t, P0, gate, "{G}"), "{source}");
@@ -570,7 +571,7 @@ fn dryad_of_the_ilysian_grove_additional_land_plays_are_cumulative() {
 
 #[test]
 fn encroaching_mycosynth_aura_animated_by_march_of_the_machines_falls_off() {
-    cr!("303.4d", "704.5m", "704.5n");
+    cr!("303.4d", "704.5m", "704.5p");
     ruling!(
         "Encroaching Mycosynth",
         "An Aura that's also a creature can't enchant anything. It's unattached the next time state-based actions are checked, and then immediately put into its owner's graveyard as a second state-based action."
@@ -597,7 +598,13 @@ fn encroaching_mycosynth_aura_animated_by_march_of_the_machines_falls_off() {
     t.battlefield(P1, "March of the Machines");
     t.g.recompute();
     assert!(t.obj_now(aura).is(CardType::Creature));
-    t.settle();
+    // First state-based action check: unattached, still on the battlefield.
+    assert!(t.g.check_sbas());
+    assert!(t.on_battlefield(aura));
+    assert_eq!(attached_to(&t, aura), None);
+    // Second check: put into its owner's graveyard.
+    assert!(t.g.check_sbas());
+    assert!(!t.on_battlefield(aura));
     assert!(t.in_graveyard(P0, "Holy Strength"));
     assert_eq!(t.pt(bears), (2, 2));
 }

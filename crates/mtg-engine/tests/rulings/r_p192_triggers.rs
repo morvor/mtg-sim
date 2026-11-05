@@ -193,7 +193,7 @@ fn wardens_of_the_cycle_doesnt_trigger_if_nothing_died() {
 
 #[test]
 fn worldspine_wurm_shuffle_is_a_trigger_that_can_be_responded_to() {
-    cr!("603.2", "603.6c");
+    cr!("603.2");
     ruling!(
         "Worldspine Wurm",
         "Players can respond to this ability, for example, by trying to exile Worldspine Wurm from the graveyard before it's shuffled into a library."
@@ -247,7 +247,7 @@ fn iname_as_one_returns_nothing_unless_it_is_exiled() {
 
 #[test]
 fn tolsimir_wolf_trigger_with_no_target_or_an_illegal_target() {
-    cr!("608.2b", "115.10a", "701.14a");
+    cr!("608.2b", "701.14a");
     ruling!(
         "Tolsimir, Friend to Wolves",
         "You may put Tolsimir's last ability onto the stack without choosing any target. You'll just gain 3 life."

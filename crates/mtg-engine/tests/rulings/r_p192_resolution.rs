@@ -47,7 +47,11 @@ fn clarion_ultimatum_chooses_on_resolution_and_searches_once() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P0, "Llanowar Elves");
-    stack_library(&mut t, P0, &["Grizzly Bears", "Llanowar Elves", "Shock"]);
+    stack_library(
+        &mut t,
+        P0,
+        &["Grizzly Bears", "Llanowar Elves", "Shock Troops", "Shock"],
+    );
     let card = t.hand(P0, "Clarion Ultimatum");
     mana(&mut t, P0, ManaType::G, 2);
     mana(&mut t, P0, ManaType::W, 3);
@@ -80,6 +84,7 @@ fn clarion_ultimatum_chooses_on_resolution_and_searches_once() {
     );
     assert_eq!(named_on_bf(&t, P0, "Grizzly Bears").len(), 2);
     assert_eq!(named_on_bf(&t, P0, "Llanowar Elves").len(), 2);
+    assert_eq!(named_on_bf(&t, P0, "Shock Troops").len(), 2);
     let searches =
         t.g.turn_events
             .iter()
@@ -131,7 +136,7 @@ fn time_wipe_chooses_the_creature_to_return_as_it_resolves() {
 
 #[test]
 fn genesis_ultimatum_may_put_no_permanent_cards_onto_the_battlefield() {
-    cr!("608.2c", "701.20a");
+    cr!("608.2c");
     ruling!(
         "Genesis Ultimatum",
         "You can choose to not put a permanent card onto the battlefield this way."
@@ -487,7 +492,7 @@ fn dawnglow_infusion_x_doesnt_depend_on_how_the_hybrid_was_paid() {
 
 #[test]
 fn vish_kal_uses_the_sacrificed_creatures_last_known_power() {
-    cr!("608.2h", "118.3", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Vish Kal, Blood Arbiter",
         "Use the sacrificed creature's power as it last existed on the battlefield"

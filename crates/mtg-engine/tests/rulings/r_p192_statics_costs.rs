@@ -232,7 +232,7 @@ fn karador_reduction_applies_after_cost_increases() {
 
 #[test]
 fn maelstrom_muse_reduction_applies_after_cost_increases() {
-    cr!("601.2f", "202.3", "608.2h");
+    cr!("601.2f", "202.3");
     ruling!(
         "Maelstrom Muse",
         "add any cost increases, then apply any cost reductions (such as that of Maelstrom Muse’s triggered ability). The mana value of the spell is determined only by its mana cost"
@@ -267,7 +267,7 @@ fn maelstrom_muse_reduction_applies_after_cost_increases() {
 
 #[test]
 fn etherium_sculptor_reduces_only_generic_mana_and_not_mana_value() {
-    cr!("601.2f", "118.7c", "202.3");
+    cr!("601.2f", "202.3");
     ruling!(
         "Etherium Sculptor",
         "This effect can reduce only the generic portion of the artifact spell's total cost."
