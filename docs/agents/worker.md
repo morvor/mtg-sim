@@ -141,11 +141,34 @@ reviewer reported, and remaining gaps.
 >     (qualifiers, durations, targets, structure), test each wording.
 > (b) EXEMPT: listed in `docs/rulings-exemptions/rulings-PNNN.tsv` as
 >     `Card<TAB>substring<TAB>reason`, only when it has no engine-testable content
->     (release or Oracle-wording history, printing or presentation, tournament policy).
->     Any statement about how the game plays is testable.
->     A ruling that seems to contradict the current CR or the card's Oracle text is never
->     exempt. Leave it uncited and name it in the report with the quoted texts (the user's
->     rule, Nov 4: the CR and the rulings should not contradict).
+>     (release or Oracle-wording history, printing or presentation, tournament policy),
+>     or when one of the policies below sets part of it aside. Any statement about how the
+>     game plays is testable.
+> RULINGS THAT DISAGREE WITH THE CARD, THE CR OR EACH OTHER (the user's rules of Nov 4 and
+> Nov 5: the CR and the rulings should not contradict; when they do, keep a record):
+> - Contradicts the card's own Oracle text, with no dated rules or Oracle change to
+>   explain it (typically a similar card's ruling copied with the name swapped: Homicide
+>   Investigator has Midnight Reaper's): the Oracle text wins (CR 108.1; register
+>   `ruling-contradicting-oracle-gives-way`). Exempt the part that contradicts the card,
+>   with a reason naming the policy, the date of the decision (Nov 5) and the ruling's
+>   likely origin; keep citing the parts that agree; pin the card's behavior with a test
+>   citing `interp!("ruling-contradicting-oracle-gives-way")`.
+> - Misattached (the data files it under the wrong card; it describes another card): test
+>   it on the card it describes and cite it with `ruling!` under the card it is attached
+>   to (the macro looks rulings up by that card), with a comment naming the card it
+>   describes; set the attached card up in the test when it can take part. Being
+>   misattached is never a reason to exempt.
+> - Outdated (older than a rules or Oracle change you can name and date, e.g. by
+>   comparing the archived CR texts at https://github.com/pit142857/mtg-cr): exempt the
+>   outdated part with the change named and dated; keep citing what still holds.
+> - Every such ruling (template error, misattached, inconsistent with other rulings,
+>   outdated) gets an entry in `docs/RULING_DISCREPANCIES.md`, the log a human checks and
+>   reports to Wizards of the Coast; `cargo test -p mtg-data` fails if an exemption that
+>   says so has no entry, or if an entry's quote isn't verbatim.
+> - A contradiction with no clear explanation (no dated change, no evident copied ruling),
+>   or a ruling that contradicts other rulings on a question the CR leaves open, is never
+>   exempted on your own: leave it uncited, name it in the report with the quoted texts,
+>   and the coordinator takes it up as a conflict case.
 > (c) UNCOVERED: every card it applies to is unsupported by the compiler, or the engine
 >     lacks the behavior and the fix is not small. List each in remaining_gaps with its
 >     reason. When the fix IS small and general (a missing compositional phrase pattern,
