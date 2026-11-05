@@ -28,13 +28,16 @@ fn liquimetal_coating_targets_any_permanent_and_keeps_colors() {
     activate_resolve(&mut t, P0, coating, "artifact", "", &[obj(bear)]);
     assert!(is_type(&t, bear, CardType::Artifact) && is_creature(&t, bear));
     assert_eq!(t.obj_now(bear).chars.colors, ColorSet::single(Color::Green));
-    // Untapped on a later turn, it can target an artifact (itself among them).
+    // Untapped on a later turn, it can target an artifact.
     t.advance_to(P1, Step::Upkeep);
     let stone = t.battlefield(P1, "Mind Stone");
     t.set_step(P0, Step::PrecombatMain);
     t.g.untap(coating);
-    activate_resolve(&mut t, P0, coating, "artifact", "", &[obj(stone)]);
-    assert!(t.obj_now(coating).tapped, "it resolved targeting an artifact");
+    activate(&mut t, P0, coating, "artifact", "", &[obj(stone)]);
+    let ab = *t.g.stack.last().expect("the ability");
+    assert_eq!(crate::r_s25_common::targets_of(&t, ab), [obj(stone)]);
+    t.resolve_all();
+    assert!(!t.g.stack.contains(&ab));
     assert!(is_type(&t, stone, CardType::Artifact));
 }
 

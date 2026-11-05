@@ -186,7 +186,13 @@ pub fn dmg(t: &TestGame, id: ObjectId) -> u32 {
 
 /// Whether `p` may activate the ability of `src` whose text contains `needle` now (with
 /// the mana of `cost`): tries it, undoing nothing on failure.
-pub fn can_activate(t: &mut TestGame, p: PlayerId, src: ObjectId, needle: &str, cost: &str) -> bool {
+pub fn can_activate(
+    t: &mut TestGame,
+    p: PlayerId,
+    src: ObjectId,
+    needle: &str,
+    cost: &str,
+) -> bool {
     mana(t, p, cost);
     crate::r_s06_common::activate_containing(t, p, src, needle).is_ok()
 }

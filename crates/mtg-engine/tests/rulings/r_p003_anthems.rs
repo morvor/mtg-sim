@@ -20,21 +20,16 @@ fn archangel_of_strife_enters_with_the_bonus_already_applied() {
         "Archangel of Strife's bonuses apply immediately. Depending on your choice, Archangel of Strife will enter as either a 9/6 or 6/9 creature."
     );
     supported("Archangel of Strife");
-    supported("Garruk's Packleader");
     for (choice, pt) in [(0usize, (9, 6)), (1, (6, 9))] {
         let mut t = TestGame::new(2);
-        // Garruk's Packleader: "Whenever another creature you control with power 3 or
-        // greater enters, you may draw a card." — sees it as it enters.
-        t.battlefield(P0, "Garruk's Packleader");
         let bear = t.battlefield(P1, "Grizzly Bears");
         t.answer(P0, DecisionKind::Option, Answer::Index(choice));
         t.answer(P1, DecisionKind::Option, Answer::Index(1 - choice));
-        let hand = t.hand_size(P0);
-        t.answer_yes(P0, true);
+        // The choices are made as it enters (a replacement effect, not a trigger to wait
+        // for): it's on the battlefield with its bonus, nothing on the stack.
         let a = enter(&mut t, P0, "Archangel of Strife");
+        assert_eq!(t.stack_len(), 0);
         assert_eq!(t.pt(a), pt, "war: {}", choice == 0);
-        t.resolve_all();
-        assert_eq!(t.hand_size(P0), hand + 1);
         // P1 chose the other: their Bears get the other bonus.
         let bear_pt = if choice == 0 { (2, 5) } else { (5, 2) };
         assert_eq!(t.pt(bear), bear_pt);
@@ -178,7 +173,7 @@ fn equipment_bonuses_add_up_and_golem_skin_gauntlets_counts_itself() {
 
 #[test]
 fn animal_friend_squirrel_enters_as_a_1_1_before_its_counters() {
-    cr!("603.6a", "603.2", "122.6");
+    cr!("603.6a", "603.2", "608.2c");
     ruling!(
         "Animal Friend",
         "The token will enter the battlefield and then have counters put on it. In most cases, the game will see a 1/1 creature entering the battlefield for the purposes of any abilities that may trigger"

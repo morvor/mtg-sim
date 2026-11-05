@@ -30,15 +30,22 @@ fn mimics_are_still_treasures_and_treasure_is_never_a_creature_type() {
     supported("Maskwood Nexus");
     for (name, cost, n) in [("Dire Mimic", "3", 5), ("Mimic", "2", 3)] {
         let mut t = TestGame::new(2);
-        // Maskwood Nexus: "Creatures you control are every creature type."
-        t.battlefield(P0, "Maskwood Nexus");
         let m = t.battlefield(P0, name);
         activate_resolve(&mut t, P0, m, "Shapeshifter", cost, &[]);
         let o = t.obj_now(m);
-        assert!(o.is(CardType::Creature) && o.is(CardType::Artifact), "{name}");
+        assert!(
+            o.is(CardType::Creature) && o.is(CardType::Artifact),
+            "{name}"
+        );
+        // Its creature type is Shapeshifter; Treasure, an artifact type, stays.
         assert!(o.chars.has_subtype("Treasure") && o.chars.has_subtype("Shapeshifter"));
-        assert!(o.chars.has_subtype("Elf"), "{name}: every creature type");
         assert_eq!(t.pt(m), (n, n), "{name}");
+        // Maskwood Nexus: "Creatures you control are every creature type." It's an Elf
+        // now, but a Grizzly Bears isn't a Treasure: Treasure is no creature type.
+        t.battlefield(P0, "Maskwood Nexus");
+        let bear = t.battlefield(P0, "Grizzly Bears");
+        assert!(has_subtype(&t, m, "Elf"), "{name}: every creature type");
+        assert!(has_subtype(&t, bear, "Elf") && !has_subtype(&t, bear, "Treasure"));
         // Still sacrificed for mana as a Treasure.
         assert!(tap_for_mana(&mut t, P0, m, "Add one mana"), "{name}");
         assert!(!t.on_battlefield(m));
@@ -91,7 +98,7 @@ fn an_effect_that_refers_to_a_treasure_means_any_treasure_artifact() {
 
 #[test]
 fn glint_hawk_idol_sets_its_base_2_2_over_other_setters_and_is_a_bird() {
-    cr!("613.4b", "613.4c", "613.7a");
+    cr!("613.4b", "613.4c", "613.7b");
     ruling!(
         "Glint Hawk Idol",
         "For example, say one of Glint Hawk Idol's abilities has resolved and it's a 2/2 creature. You cast Giant Growth targeting it. It's now 5/5. Then Diminish (\"Target creature becomes 1/1 until end of turn\") is cast targeting it. Once Diminish resolves, Glint Hawk Idol would be 4/4. Activating Glint Hawk Idol's last ability at this point would make it 5/5 again until end of turn."
@@ -184,7 +191,11 @@ fn rusted_relic_removed_from_combat_doesnt_return_and_its_sickness_is_about_cont
         DecisionKind::Attackers,
         Answer::Attackers(vec![(giant, pl(P0))]),
     );
-    t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![(relic, giant)]));
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(relic, giant)]),
+    );
     t.advance_to(P1, Step::DeclareBlockers);
     kill(&mut t, stone);
     assert!(!is_creature(&t, relic));

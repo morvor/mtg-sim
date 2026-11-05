@@ -96,20 +96,23 @@ fn hydroform_keeps_name_types_and_abilities_and_modifications_still_apply() {
         "If the target land hasn’t been under its controller’s control continuously since the beginning of their most recent turn, that land won’t be able to attack and its {T} abilities won’t be able to be activated. In most cases, that means it will no longer be able to be tapped for mana that turn."
     );
     supported("Hydroform");
+    supported("Sure Strike");
     // "Target land becomes a 3/3 Elemental creature with flying until end of turn. It's
     // still a land."
     let mut t = TestGame::new(2);
-    // Dryad Arbor (a 1/1 Land Creature — Forest Dryad) with a +1/+1 counter and Giant
-    // Growth: 5/5.
+    // Dryad Arbor (a 1/1 Land Creature — Forest Dryad), already a creature, with a +1/+1
+    // counter, Sure Strike (+3/+0) and its power and toughness switched: 2/5.
     let arbor = t.battlefield(P0, "Dryad Arbor");
     put(&mut t, arbor, counters::PLUS1, 1);
-    giant_growth(&mut t, arbor);
-    assert_eq!(t.pt(arbor), (5, 5));
-    cast_resolve(&mut t, P0, "Hydroform", "GU", &[obj(arbor)]);
-    assert_eq!(t.pt(arbor), (7, 7));
+    cast_resolve(&mut t, P0, "Sure Strike", "1R", &[obj(arbor)]);
     switch_pt(&mut t, arbor);
+    assert_eq!(t.pt(arbor), (2, 5));
+    // Base 3/3, then the counter and +3/+0 (7/4), then the switch.
+    cast_resolve(&mut t, P0, "Hydroform", "GU", &[obj(arbor)]);
+    assert_eq!(t.pt(arbor), (4, 7));
+    // Two -1/-1 counters: one is left once the +1/+1 counter is gone (3/3 to 2/2, 5/2).
     put(&mut t, arbor, counters::MINUS1, 2);
-    assert_eq!(t.pt(arbor), (5, 5));
+    assert_eq!(t.pt(arbor), (2, 5));
     assert!(has_subtype(&t, arbor, "Dryad") && has_subtype(&t, arbor, "Elemental"));
     // A basic Island that entered this turn: still a basic Island named Island with its
     // mana ability, a 3/3 flier that can't attack or tap for mana.
@@ -126,14 +129,17 @@ fn hydroform_keeps_name_types_and_abilities_and_modifications_still_apply() {
     t.set_step(P0, Step::DeclareAttackers);
     assert!(!can_attack(&mut t, island));
     assert!(!tap_for_mana(&mut t, P0, island, "{U}"));
-    assert!(can_attack(&mut t, arbor), "control: the Arbor was there all turn");
+    assert!(
+        can_attack(&mut t, arbor),
+        "control: the Arbor was there all turn"
+    );
 }
 
 // --- Three +1/+1 counters, a 0/0 Elemental ---------------------------------------------------
 
 #[test]
 fn cyclone_sire_and_wall_of_resurgence_set_an_animated_land_to_base_0_0() {
-    cr!("613.4b", "613.4c", "613.7a");
+    cr!("613.4b", "613.4c", "613.7b");
     ruling!(
         "Cyclone Sire",
         "If you target a land that’s already a creature with Cyclone Sire’s triggered ability, that land creature’s base power and toughness will become 0/0, overwriting its previous base power and toughness. Other effects that modify its power and/or toughness (including the new and any previously-existing +1/+1 counters) will continue to apply."
@@ -231,14 +237,17 @@ fn rootwise_survivor_land_remains_a_creature_indefinitely() {
     assert!(is_creature(&t, forest));
     assert!(kw(&t, forest, KeywordKind::Haste));
     t.advance_to(P0, Step::Upkeep);
-    assert!(is_creature(&t, forest), "still a creature on your next turn");
+    assert!(
+        is_creature(&t, forest),
+        "still a creature on your next turn"
+    );
     assert_eq!(t.pt(forest), (3, 3));
     assert!(!kw(&t, forest, KeywordKind::Haste), "the haste has ended");
 }
 
 #[test]
 fn wakeroot_elemental_untaps_and_overwrites_setting_effects() {
-    cr!("613.4b", "613.4c", "613.7a", "611.2a");
+    cr!("613.4b", "613.4c", "613.7b", "611.2a");
     ruling!(
         "Wakeroot Elemental",
         "Wakeroot Elemental’s ability can target a land that’s already a creature or a land that’s already untapped. The ability will untap it if possible and set its base power and toughness to 5/5. Any counters or effects modifying that creature’s power and toughness will continue to apply, and any effects that set the creature’s power and toughness will be overwritten."
@@ -269,7 +278,7 @@ fn wakeroot_elemental_untaps_and_overwrites_setting_effects() {
 
 #[test]
 fn awakening_of_vitu_ghazi_names_the_land_doesnt_untap_it_and_lasts() {
-    cr!("613.1d", "611.2a");
+    cr!("612.8", "613.1d", "611.2a");
     ruling!(
         "Awakening of Vitu-Ghazi",
         "Awakening of Vitu-Ghazi doesn’t untap the land that becomes a creature."
@@ -327,7 +336,10 @@ fn relive_the_past_returns_5_5_elementals_keeping_their_creature_types() {
     for (id, ty) in [(thopter, "Thopter"), (arbor, "Dryad"), (satyr, "Satyr")] {
         assert!(t.on_battlefield(id), "{ty}");
         assert_eq!(t.pt(id), (5, 5), "{ty}");
-        assert!(has_subtype(&t, id, ty) && has_subtype(&t, id, "Elemental"), "{ty}");
+        assert!(
+            has_subtype(&t, id, ty) && has_subtype(&t, id, "Elemental"),
+            "{ty}"
+        );
     }
     assert!(has_subtype(&t, arbor, "Forest"));
     assert!(t.obj_now(thopter).has_keyword(KeywordKind::Flying));

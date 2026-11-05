@@ -165,7 +165,13 @@ fn assault_formation_changes_only_combat_damage_not_power() {
     // Hunt the Weak: +1/+1 counter, then it fights a Hill Giant (3/3) with power 2.
     t.advance_to(P0, Step::PostcombatMain);
     let giant = t.battlefield(P1, "Hill Giant");
-    cast_resolve(&mut t, P0, "Hunt the Weak", "3G", &[obj(turtle), obj(giant)]);
+    cast_resolve(
+        &mut t,
+        P0,
+        "Hunt the Weak",
+        "3G",
+        &[obj(turtle), obj(giant)],
+    );
     assert!(t.on_battlefield(giant));
     assert_eq!(dmg(&t, giant), 2);
 }
@@ -251,13 +257,19 @@ fn magus_of_the_arena_second_target_changes_only_to_the_chosen_opponents_creatur
         t.answer_targets(P1, &[obj(theirs)]);
         activate(&mut t, P0, magus, "fight", "3", &[]);
         let ab = *t.g.stack.last().unwrap();
-        assert_eq!(crate::r_s25_common::targets_of(&t, ab), [obj(mine), obj(theirs)]);
+        assert_eq!(
+            crate::r_s25_common::targets_of(&t, ab),
+            [obj(mine), obj(theirs)]
+        );
         mana(&mut t, owner, "U");
         t.answer_targets(owner, &[obj(ab)]);
         activate(&mut t, owner, skite, "Change a target", "", &[]);
         t.resolve();
         let second = if owner == P1 { skite } else { theirs };
-        assert_eq!(crate::r_s25_common::targets_of(&t, ab), [obj(mine), obj(second)]);
+        assert_eq!(
+            crate::r_s25_common::targets_of(&t, ab),
+            [obj(mine), obj(second)]
+        );
         t.resolve_all();
         if owner == P1 {
             assert_eq!(dmg(&t, mine), 0, "fought Spellskite (0/4)");

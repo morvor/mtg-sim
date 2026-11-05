@@ -168,7 +168,11 @@ fn verazol_copies_kicked_spells_with_or_without_targets_kicked_and_with_the_same
     let life = t.life(P0);
     let ins = t.hand(P0, "Inscription of Abundance");
     mana(&mut t, P0, "1G2G");
-    t.cast(P0, ins).kicked(true).modes(&[0]).target(obj(bear)).go();
+    t.cast(P0, ins)
+        .kicked(true)
+        .modes(&[0])
+        .target(obj(bear))
+        .go();
     t.answer_yes(P0, true);
     t.answer_yes(P0, false);
     t.resolve_all();
@@ -341,15 +345,14 @@ fn ambitious_augmenter_killed_by_minus_counters_moves_both_kinds() {
     // The Fractal got two +1/+1 and four -1/-1 counters (not none: the annihilation of
     // +1/+1 and -1/-1 counters happened at the same time as the death), and then died as
     // a -2/-2.
-    let token = t
-        .g
-        .turn_events
-        .iter()
-        .find_map(|e| match e {
-            mtg_engine::events::Event::TokenCreated { obj, .. } => Some(*obj),
-            _ => None,
-        })
-        .expect("a Fractal was created");
+    let token =
+        t.g.turn_events
+            .iter()
+            .find_map(|e| match e {
+                mtg_engine::events::Event::TokenCreated { obj, .. } => Some(*obj),
+                _ => None,
+            })
+            .expect("a Fractal was created");
     assert_eq!(put_this_turn(&t, token, counters::PLUS1), 2);
     assert_eq!(put_this_turn(&t, token, counters::MINUS1), 4);
 }

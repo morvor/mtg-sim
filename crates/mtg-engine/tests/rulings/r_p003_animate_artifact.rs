@@ -131,7 +131,7 @@ fn modifications_counters_and_switches_apply_to_animated_artifacts_whenever_they
     supported("Tezzeret, Cruel Machinist");
     supported("The Mechanist, Aerial Artisan");
     supported("Ensoul Artifact");
-    supported("Giant Growth");
+    supported("Sure Strike");
     supported("Twisted Image");
     // Each animator: the base power and toughness it sets.
     for (who, base) in [
@@ -141,23 +141,27 @@ fn modifications_counters_and_switches_apply_to_animated_artifacts_whenever_they
         ("Ensoul Artifact", (5, 5)),
     ] {
         let mut t = TestGame::new(2);
-        // An artifact creature (Ornithopter, 0/2; an artifact token for The Mechanist)
-        // with a +1/+1 counter and Giant Growth from before it's animated.
-        let thing = if who == "The Mechanist" {
+        // An artifact with a +1/+1 counter put on it before it's animated: Ornithopter (an
+        // artifact creature, 0/2), or a Clue token for The Mechanist.
+        let mech = (who == "The Mechanist").then(|| {
             let mech = t.battlefield(P0, "The Mechanist, Aerial Artisan");
             // Its first ability creates a Clue token for a noncreature spell.
             cast_resolve(&mut t, P0, "Opt", "U", &[]);
-            let clue = *crate::r_s01_common::with_subtype(&t, P0, "Clue")
+            mech
+        });
+        let art = match mech {
+            Some(_) => *crate::r_s01_common::with_subtype(&t, P0, "Clue")
                 .first()
-                .expect("a Clue");
-            (clue, Some(mech))
-        } else {
-            (t.battlefield(P0, "Ornithopter"), None)
+                .expect("a Clue"),
+            None => t.battlefield(P0, "Ornithopter"),
         };
-        let (art, mech) = thing;
         put(&mut t, art, counters::PLUS1, 1);
+        // Sure Strike (+3/+0) and Twisted Image (switch) on the Ornithopter before it's
+        // animated: 1/3, 4/3, then 3/4.
         if mech.is_none() {
-            giant_growth(&mut t, art);
+            cast_resolve(&mut t, P0, "Sure Strike", "1R", &[obj(art)]);
+            switch_pt(&mut t, art);
+            assert_eq!(t.pt(art), (3, 4), "{who}");
         }
         match who {
             "Skilled Animator" => {
@@ -172,21 +176,22 @@ fn modifications_counters_and_switches_apply_to_animated_artifacts_whenever_they
             }
             "The Mechanist" => {
                 activate_resolve(&mut t, P0, mech.unwrap(), "Construct", "", &[obj(art)]);
-                giant_growth(&mut t, art);
+                // The Clue is a creature only now: Sure Strike and the switch come after.
+                cast_resolve(&mut t, P0, "Sure Strike", "1R", &[obj(art)]);
+                switch_pt(&mut t, art);
             }
             _ => ensoul(&mut t, art, "Ensoul Artifact"),
         }
-        let want = (base.0 + 4, base.1 + 4);
+        // The new base, then the counter and +3/+0 (layer 7c), then the switch (7d),
+        // whenever each began.
+        let want = (base.1 + 1, base.0 + 4);
         assert_eq!(t.pt(art), want, "{who}");
-        // A switch, whenever it began, applies last.
-        switch_pt(&mut t, art);
-        assert_eq!(t.pt(art), (want.1, want.0), "{who}");
     }
 }
 
 #[test]
 fn an_aura_or_tezzeret_overwrites_earlier_setting_effects_and_later_ones_overwrite_it() {
-    cr!("613.4b", "613.7a", "613.7e");
+    cr!("613.4b", "613.7a", "613.7b", "613.7e");
     ruling!(
         "Mightstone's Animation",
         "If the artifact was already a creature, its base power and toughness will each become 4. This overwrites any previous effects that set the creature's base power and toughness to specific values. Any power- or toughness-setting effects that start to apply after Mightstone's Animation becomes attached to the artifact will overwrite this effect."

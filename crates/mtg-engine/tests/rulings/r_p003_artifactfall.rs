@@ -80,7 +80,9 @@ fn gandalf_the_white_doesnt_double_as_enters_choices_or_replacement_effects() {
     t.resolve_all();
     let color_choices = t.asked()[from..]
         .iter()
-        .filter(|(_, d)| matches!(d, Decision::ChooseOption { prompt, .. } if prompt.contains("color")))
+        .filter(
+            |(_, d)| matches!(d, Decision::ChooseOption { prompt, .. } if prompt.contains("color")),
+        )
         .count();
     assert_eq!(color_choices, 1);
     assert!(t.on_battlefield(gauntlet));

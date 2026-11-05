@@ -47,6 +47,20 @@ fn assert_face_down_5_5(t: &TestGame, id: ObjectId) {
     assert!(o.chars.abilities.is_empty());
 }
 
+/// How many times the Vehicle became crewed this turn (CR 702.122e: a crew ability of it
+/// resolved), and how many of its triggered abilities were put on the stack.
+fn crewed_and_triggered(t: &TestGame, id: ObjectId) -> (usize, usize) {
+    let crewed = t.g.turn_events.iter().filter(|e| {
+        matches!(e, Event::Custom { name, obj: Some(o), .. }
+            if name == mtg_engine::kw::crew::CREWED && *o == id)
+    });
+    let triggered =
+        t.g.turn_events.iter().filter(
+            |e| matches!(e, Event::AbilityTriggeredOnStack { source, .. } if *source == id),
+        );
+    (crewed.count(), triggered.count())
+}
+
 fn revealed(t: &TestGame, id: ObjectId) -> bool {
     t.g.turn_events.iter().any(|e| {
         matches!(e, Event::Custom { name, obj: Some(o), .. }
@@ -155,7 +169,10 @@ fn a_returned_face_down_card_returns_face_up_and_an_instant_stays_in_exile() {
 
 #[test]
 fn turning_a_tezzeret_card_face_up_ends_the_5_5_effect_but_an_instant_stays_face_down() {
-    cr!("708.8");
+    cr!("708.2", "708.8", "110.4");
+    // The CR says this only for manifested, cloaked and merged permanents (701.40g,
+    // 701.58g, 730.2g); Tezzeret's face-down cards follow the same rule.
+    interp!("face-down-instant-or-sorcery-stays-face-down");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "If an effect from cards outside of this set does turn one face up, the effect causing it to be a 5/5 artifact creature ends. If such an effect tries to turn an instant or sorcery card face up, reveal that card and it stays face down. In that case, it remains a 5/5 artifact creature."
@@ -206,7 +223,7 @@ fn you_may_look_at_face_down_permanents_you_control() {
 
 #[test]
 fn depthshaker_titan_doesnt_crew_and_its_3_3_survives_crew_and_station() {
-    cr!("702.122a", "702.184a", "613.4b", "613.7a");
+    cr!("702.122a", "702.122e", "721.2b", "613.4b", "613.7a", "613.7b");
     ruling!(
         "Depthshaker Titan",
         "If Depthshaker Titan’s first ability causes a Vehicle to become an artifact creature, it doesn’t count as “crewing” that Vehicle for any ability that would trigger due to a Vehicle becoming crewed."
@@ -229,18 +246,28 @@ fn depthshaker_titan_doesnt_crew_and_its_3_3_survives_crew_and_station() {
     t.resolve_all();
     assert_eq!(t.pt(mech), (3, 3));
     assert_eq!(t.pt(ship), (3, 3));
-    // Mobilizer Mech's trigger didn't trigger: Smuggler's Copter isn't a creature.
-    assert!(!is_creature(&t, copter), "becoming a creature isn't crewing");
+    // The Mech didn't become crewed, so its trigger didn't trigger: the Copter isn't a
+    // creature.
+    assert_eq!(
+        crewed_and_triggered(&t, mech),
+        (0, 0),
+        "becoming a creature isn't crewing"
+    );
+    assert!(!is_creature(&t, copter));
     // Crewing it (with Hill Giant): it becomes crewed and animates the Copter, and it's
     // still 3/3.
     let giant = t.battlefield(P0, "Hill Giant");
     assert!(crew(&mut t, P0, mech, &[giant]));
     t.answer_targets(P0, &[obj(copter)]);
     t.resolve_all();
+    assert_eq!(crewed_and_triggered(&t, mech), (1, 1));
     assert!(is_creature(&t, copter), "control: crewing triggers it");
     assert_eq!(t.pt(mech), (3, 3));
     // Eight charge counters on the Scanship: its base power and toughness stay 3/3.
     put(&mut t, ship, counters::CHARGE, 8);
-    assert!(t.obj_now(ship).has_keyword(keywords::KeywordKind::Flying), "8+ applies");
+    assert!(
+        t.obj_now(ship).has_keyword(keywords::KeywordKind::Flying),
+        "8+ applies"
+    );
     assert_eq!(t.pt(ship), (3, 3));
 }

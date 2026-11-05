@@ -55,7 +55,9 @@ fn on_stack(t: &mut TestGame, name: &str, how: How, targets: &[Entity], div: &[i
 
 /// Three Colossal Dreadmaws (6/6) for P1.
 fn wurms(t: &mut TestGame) -> Vec<ObjectId> {
-    (0..3).map(|_| t.battlefield(P1, "Colossal Dreadmaw")).collect()
+    (0..3)
+        .map(|_| t.battlefield(P1, "Colossal Dreadmaw"))
+        .collect()
 }
 
 fn dmgs(t: &TestGame, ws: &[ObjectId]) -> Vec<u32> {
