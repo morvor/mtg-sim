@@ -867,8 +867,11 @@ ruling-conflicts-2.
   bottom. They do not need to reveal the order those cards were put into the library this way." The Oracle
   text has the owner choose, the ruling the controller; they differ for a permanent another player controls.
   The engine follows the Oracle text (`run_out_of_town_follows_its_oracle_text` in
-  `tests/rulings/r_p140_tuck.rs`, which cites no ruling), as for Desynchronize, Unlucky Drop, Aether Gust and
-  Sudden Setback, whose rulings say the owner chooses. Left uncited.
+  `tests/rulings/r_p140_tuck.rs`), as for Desynchronize, Unlucky Drop, Aether Gust and
+  Sudden Setback, whose rulings say the owner chooses. Resolved by ruling-conflicts-3, case 1: the Streets of
+  New Capenna Release Notes (2022-04-20) have the same note with "owner" for "controller" (twice); a
+  transcription error, set aside under `ruling-contradicting-oracle-gives-way` (`rulings-P140.tsv`, logged in
+  `docs/RULING_DISCREPANCIES.md`); its third sentence is cited.
 - **Caller of the Untamed** (rulings-P025, left uncited). Ruling 2016-08-23: "If you have more than one Caller
   of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you
   drafted that aren’t in your deck. You’ll choose which one to copy at the time you choose the value of X while
@@ -878,4 +881,6 @@ ruling-conflicts-2.
   chosen is one with that mana value". The two differ only when two exiled cards share a mana value (which
   one is copied: chosen during activation by the ruling, as the ability resolves by the interpretation). Not a
   CR conflict: CR 107.3c and 607.3 support the ruling; following it needs a non-target choice made during
-  activation.
+  activation. Resolved by ruling-conflicts-3, case 2 (A): 601.2b's sentence for an X defined by a later choice
+  (CR effective 2016-09-30, explained with Caller of the Untamed in the Kaladesh Update Bulletin) has the card
+  chosen as X is announced; the engine now does so (`kw/choice_defining_x.rs`), and the ruling is cited.

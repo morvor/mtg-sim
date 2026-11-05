@@ -322,14 +322,16 @@ fn spirit_of_resilience_copies_only_the_printed_card() {
 // --- Caller of the Untamed -------------------------------------------------------------------
 
 /// Two Callers of the Untamed in P0's deck each exile a creature card P0 drafted before
-/// the game (CR 607.2n); a Caller copies either. (Its ruling's "You'll choose which one to
-/// copy at the time you choose the value of X" isn't cited: with two such cards of the
-/// same mana value the engine has the card chosen as the ability resolves, see the
-/// interpretation `x-defined-by-target`.)
+/// the game (CR 607.2n); a Caller copies either. (The ruling's second sentence, about when
+/// the card to copy is chosen, is tested below.)
 #[test]
 fn each_caller_of_the_untamed_in_the_deck_exiles_a_card_before_the_game() {
     cr!("607.2n", "607.3", "107.3c");
     interp!("x-defined-by-target");
+    ruling!(
+        "Caller of the Untamed",
+        "If you have more than one Caller of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you drafted that aren’t in your deck."
+    );
     supported("Caller of the Untamed");
     let mut t = TestGame::new(2);
     t.library_top(P0, "Caller of the Untamed");
@@ -367,4 +369,82 @@ fn each_caller_of_the_untamed_in_the_deck_exiles_a_card_before_the_game() {
     assert!(new_tokens(&t, P0, &before)
         .iter()
         .all(|x| name_of(&t, *x) != "Craw Wurm"));
+    // Any number of them: revealing one of the two Callers exiles one card.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Caller of the Untamed");
+    t.library_top(P0, "Caller of the Untamed");
+    let side = t.g.add_to_sideboard(P0, vec![card("Hill Giant"), card("Grizzly Bears")]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(side[0])]);
+    t.answer_yes(P0, false);
+    mtg_engine::opening_hand::before_shuffle_actions(&mut t.g);
+    assert!(t.in_exile("Hill Giant"));
+    assert!(!t.in_exile("Grizzly Bears"));
+    assert_eq!(t.g.named_exiles.len(), 1);
+}
+
+/// "{X}, {T}: Create a token that's a copy of a card you exiled with cards named Caller of
+/// the Untamed. X is the mana value of that card.": X is defined by the card, a choice the
+/// player would otherwise make as the ability resolves, so the card is chosen as X is
+/// announced (CR 601.2b, 602.2b; the sentence was added for cards like this one in the CR
+/// effective 2016-09-30, after the Conspiracy: Take the Crown release notes of 2016-08-22
+/// had the card chosen as the ability resolves). With two exiled cards of mana value 2,
+/// P0 chooses one while activating, among those two only; nothing is chosen as it
+/// resolves, and the token is a copy of the card chosen.
+#[test]
+fn caller_of_the_untamed_chooses_the_card_to_copy_as_x_is_announced() {
+    cr!("601.2b", "602.2b", "107.3c");
+    interp!("x-defined-by-target");
+    ruling!(
+        "Caller of the Untamed",
+        "You’ll choose which one to copy at the time you choose the value of X while activating the ability."
+    );
+    supported("Caller of the Untamed");
+    for pick in ["Grizzly Bears", "Runeclaw Bear"] {
+        let mut t = TestGame::new(2);
+        let caller = t.battlefield(P0, "Caller of the Untamed");
+        let bears = exiled_before_the_game(&mut t, P0, "Caller of the Untamed", "Grizzly Bears");
+        let runeclaw = exiled_before_the_game(&mut t, P0, "Caller of the Untamed", "Runeclaw Bear");
+        exiled_before_the_game(&mut t, P0, "Caller of the Untamed", "Hill Giant");
+        t.lands(P0, "Forest", 2);
+        t.answer(P0, DecisionKind::X, Answer::Number(2));
+        let chosen = if pick == "Grizzly Bears" { bears } else { runeclaw };
+        t.answer_choose(P0, &[obj(chosen)]);
+        // If P0 were asked again as the ability resolves, it would pick the other one.
+        let other = if chosen == bears { runeclaw } else { bears };
+        t.answer_choose(P0, &[obj(other)]);
+        let from = t.asked().len();
+        let ability = t
+            .activate(P0, caller, 0, &[])
+            .expect("activates")
+            .expect("on the stack");
+        // While activating: X first, then the card, among the two with mana value 2.
+        let asked = t.asked()[from..].to_vec();
+        let x_at = asked
+            .iter()
+            .position(|(p, d)| *p == P0 && matches!(d, Decision::ChooseX { .. }))
+            .expect("X announced");
+        let choice_at = asked
+            .iter()
+            .position(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
+            .expect("the card is chosen while activating");
+        assert!(x_at < choice_at, "{pick}");
+        assert_eq!(
+            choice_candidates(&t, from),
+            vec![vec![obj(bears), obj(runeclaw)]],
+            "{pick}: only the cards with mana value X"
+        );
+        assert_eq!(t.stack_len(), 1);
+        assert!(t.g.obj(ability).stack.is_some());
+        let before = t.g.battlefield.clone();
+        let resolving = t.asked().len();
+        t.resolve_all();
+        assert!(
+            choice_candidates(&t, resolving).is_empty(),
+            "{pick}: nothing is chosen as it resolves"
+        );
+        let toks = new_tokens(&t, P0, &before);
+        assert_eq!(toks.len(), 1, "{pick}");
+        assert_eq!(name_of(&t, toks[0]), pick);
+    }
 }
