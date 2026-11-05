@@ -59,3 +59,14 @@ pub fn hand_cards(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
 pub fn fill_hand(t: &mut TestGame, p: PlayerId, name: &str, n: usize) -> Vec<ObjectId> {
     (0..n).map(|_| t.hand(p, name)).collect()
 }
+
+/// Puts `id` into its owner's graveyard (not a discard, not dying).
+pub fn to_graveyard(t: &mut TestGame, id: ObjectId) {
+    let owner = t.g.obj(id).owner;
+    t.g.move_object(
+        id,
+        mtg_engine::object::Zone::Graveyard(owner),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+}
