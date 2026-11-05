@@ -1009,7 +1009,7 @@ impl Game {
     /// spell's own "cast this spell only ..." restrictions apply, and a player who "can
     /// cast spells only any time they could cast a sorcery" can't, as nobody has priority
     /// and the resolving object is on the stack (CR 307.5; Teferi, Mage of Zhalfir).
-    fn resolution_cast_allowed(
+    pub(crate) fn resolution_cast_allowed(
         &self,
         p: PlayerId,
         card: ObjectId,
