@@ -1906,8 +1906,10 @@ impl Game {
                     none()
                 }
             }
-            (TriggerCond::Searched(rel), Event::Searched { player }) => {
-                if self.player_rel_matches(*rel, *player, &ctx) {
+            // "Whenever [a player] searches their library" / "you search your library":
+            // searching another player's library doesn't count.
+            (TriggerCond::Searched(rel), Event::Searched { player, library }) => {
+                if player == library && self.player_rel_matches(*rel, *player, &ctx) {
                     one(EventInfo {
                         player: Some(*player),
                         ..Default::default()

@@ -136,6 +136,19 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             let n = g.ask_number(p, Some(src), "Choose a number", *min as i64, *max as i64);
             g.objects[src.0 as usize].choices.number = Some(n as i32);
         }
+        ChoiceKind::NumberNotChosen { min, max } => {
+            // "If you do": whether a number was left to choose.
+            let left = crate::modal_history::unchosen_numbers(g, src, *min, *max);
+            ctx.prev_happened = !left.is_empty();
+            if left.is_empty() {
+                return;
+            }
+            let opts = left.iter().map(|n| n.to_string()).collect();
+            let i = g.ask_option(p, Some(src), "Choose a number", opts);
+            let n = left[i.min(left.len() - 1)];
+            crate::modal_history::record_number(g, src, n);
+            g.objects[src.0 as usize].choices.number = Some(n);
+        }
         ChoiceKind::Opponent | ChoiceKind::Player => {
             let cands: Vec<Entity> = if *kind == ChoiceKind::Opponent {
                 g.opponents(p)
@@ -280,7 +293,7 @@ fn copy_choice(kind: &ChoiceKind, made: &crate::object::Choices, to: &mut crate:
         ChoiceKind::CardName | ChoiceKind::CardNameFiltered(_) => {
             to.card_name = made.card_name.clone()
         }
-        ChoiceKind::Number { .. } => to.number = made.number,
+        ChoiceKind::Number { .. } | ChoiceKind::NumberNotChosen { .. } => to.number = made.number,
         ChoiceKind::Opponent | ChoiceKind::Player => to.player = made.player,
         ChoiceKind::OddOrEven | ChoiceKind::Word(_) => to.text = made.text.clone(),
         ChoiceKind::Distinct(..) => to.text = made.text.clone(),

@@ -52,7 +52,10 @@ impl KeywordRules for Rules {
         let lib: Vec<ObjectId> = g.player(them).library.clone();
         let found = g.ask_objects(you, src, "Search their library for a card", lib, 0, 1);
         if crate::search_rules::begin(g, you, them, ctx) {
-            g.emit(crate::events::Event::Searched { player: you });
+            g.emit(crate::events::Event::Searched {
+                player: you,
+                library: them,
+            });
         }
         let named = match g.ask(
             them,

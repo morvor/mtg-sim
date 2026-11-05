@@ -306,7 +306,10 @@ fn search_one(
     };
     // CR 701.23h: searching a library again before it's shuffled is the same search.
     if library_searched && begin(g, p, owner, ctx) {
-        g.emit(crate::events::Event::Searched { player: p });
+        g.emit(crate::events::Event::Searched {
+            player: p,
+            library: owner,
+        });
     }
     Some(Found {
         searcher: p,

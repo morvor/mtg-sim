@@ -1343,6 +1343,33 @@ fn put_dests<'a>(
     Some(r)
 }
 
+/// "[them / N of those cards] [destination] (and the rest [destination])" for the cards
+/// each of several searchers found (`per_player_results_6`: "They each put one of those
+/// cards onto the battlefield tapped under your control and the rest onto the battlefield
+/// tapped under their control."): "your" is the controller's, "their" each searcher's.
+pub(crate) fn each_searchers_dests(x: &str, b: &mut Builder) -> Option<Vec<SearchDest>> {
+    let sr = Searcher {
+        who: PlayerRef::EachOpponent,
+        their: PlayerRef::Iterated,
+        optional: true,
+        third: true,
+    };
+    let mut spec = SearchSpec {
+        who: PlayerRef::EachOpponent,
+        whose: PlayerRef::Iterated,
+        zones: vec![ZoneKind::Library],
+        zones_optional: false,
+        parts: vec![],
+        distinct_names: false,
+        optional: true,
+        reveal: false,
+        dests: vec![],
+        shuffle: SearchShuffle::No,
+    };
+    let rest = put_dests(x, &mut spec, &sr, b)?;
+    (rest.trim().is_empty() && !spec.dests.is_empty()).then_some(spec.dests)
+}
+
 /// The action markers that end the card specs.
 const ACTIONS: [&str; 14] = [
     ", where x is ",

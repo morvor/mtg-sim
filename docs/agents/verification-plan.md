@@ -166,15 +166,27 @@ The user resumed normal work, at the normal pace.
 
 The coordinator keeps this current. Every session is a cloud session tagged `mtg-sim-worker`. "Handing off" means the session lands its current item, stops, and is then replaced by a fresh session.
 
-| Role | Session | State (Nov 5, 02:45) | Queue for the next session |
+| Role | Session | State (Nov 5, 08:00) | Queue for the next session |
 |---|---|---|---|
 | compile | session_011rMBWnWVZubEfnTBPyDyne | keeps its session (compacted Nov 4, 23:40) | roundtrip-pairs-5, then verified-refresh-nov4, rulings P001, P008 |
 | cards-1 | session_01JuEc757NG5yjUWzpG55Mo4 | keeps its session (compacted to 88k Nov 5); manual-defs and referents-grammar landed | cards6-copies-casting, cards6-history-permissions, cards6-per-player-results, two at a time |
 | cards-2 | session_01UgktDvDn9k5EGhmSRYhCMB | keeps its session (compacted Nov 4) | register-fixes-1, then P025+P199, then P140+P027 |
-| structure | session_01HHSsZTga8NA52kpfwCvSFH | keeps its session (compacted Nov 5); ruling-conflicts-1 done (8de2525e) | P110, then ruling-conflicts-2, then P073 |
+| structure | session_019p6sq1QYmQYJv7NuQZDt2A (new Nov 5 08:00); old session_01HHSsZTga8NA52kpfwCvSFH lands P073, then is archived | register-decisions-nov5, ruling-conflicts-3, P087, P010 |
 | mutation | session_01HW8apRLHq3Lrn9uCc5uTbe | keeps its session (compacted Nov 4, 23:40) | P198, then P034, P003 |
 | rulings-1 | session_019p6spxfiVy5mFUashMDSDX (new Nov 5 01:44; old session_016AqVwbbcGHLPnsbE5QiWBy archived after P128, P091) | P124, P012 |
 | rulings-2 | session_019p6sq1M5uLvZMf7G2RJ9mB (new Nov 5 01:44; old session archived 02:45 after f3ca81bb) | P195, p005-flagged-bugs, P159 |
+
+### Decisions (user, Nov 5, morning)
+
+The user accepted every recommendation from ruling-conflicts-1 and ruling-conflicts-2, and the Grip of Chaos reading:
+
+> "It looks like some rulings are applied as a template, and are therefore occasionally incorrect. This is the case for Homicide Investigator and the similar cases you mentioned. I agree with all of your recommendations. We should still keep a detailed account of all of the instances though, so they can be checked by a human, and reported to Wizards of the Coast if erroneous. For the Grip of Chaos question, I believe you are correct in that it does not trigger ward and 'whenever this becomes the target' abilities again."
+
+Item `register-decisions-nov5` records this:
+- the register entries become decided;
+- the policy "the card's text wins over a ruling that contradicts it" is recorded and applied;
+- so is the policy for misattached rulings;
+- `docs/RULING_DISCREPANCIES.md` starts as a log of every erroneous ruling, for human review and reporting to Wizards. Every worker adds to it from now on.
 
 ### Effort and fresh sessions (user, Nov 4, late evening)
 
@@ -202,7 +214,7 @@ Rulings queues from Nov 4 22:55:
 - **compile:** P001, P008.
 - **cards-2:** P025, P199, P140, P027.
 - **structure, after ruling-conflicts-1:** P110, P073.
-- **Next in the pool:** P159 P131 P178 P192 P179 P026 P051 P169 P024 P087 ...
+- **Next in the pool (Nov 5, 08:45):** the old lists are done; take open batches in id order: P014 P018 P019 P022 P029 P033 P036 P040 P041 P042 ... (rulings-2 has P002, P011).
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
