@@ -33,6 +33,7 @@ pub fn cast_opt(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 /// P1 casts Counterspell targeting `spell` and it resolves (only Counterspell).
 pub fn counterspell(t: &mut TestGame, spell: ObjectId) {
+    t.settle();
     mana(t, P1, ManaType::U, 2);
     let cs = t.hand(P1, "Counterspell");
     t.cast(P1, cs).target(spell).go();
