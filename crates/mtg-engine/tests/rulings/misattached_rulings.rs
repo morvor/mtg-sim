@@ -30,8 +30,9 @@ fn astarions_thirst_counts_the_exiled_creatures_last_known_power() {
     // Scryfall's data attaches this ruling to Astarion, the Decadent, which has no X; it
     // belongs to Astarion's Thirst ("Exile target creature. Put X +1/+1 counters on a
     // commander creature you control, where X is the power of the creature exiled this
-    // way."), whose flavor text quotes Astarion and which has no rulings of its own (CLB
-    // release notes, 2022-06-01). Astarion is the commander creature that gets the counters.
+    // way."), under which the CLB release notes (2022-06-01) list it; Astarion's Thirst,
+    // whose flavor text quotes Astarion, has no rulings of its own in the data. Astarion
+    // takes part as the commander creature that gets the counters.
     ruling!(
         "Astarion, the Decadent",
         "Use the creature's power as it last existed on the battlefield to determine the value of X."

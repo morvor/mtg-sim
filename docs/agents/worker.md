@@ -98,7 +98,11 @@ reviewer reported, and remaining gaps.
 >    - Shared rulings: when cards sharing a ruling word the relevant ability differently,
 >      each wording needs a test.
 >    - Exemptions (docs/cr-exemptions, docs/rulings-exemptions): only for content with no
->      game behavior (history, presentation, policy); otherwise write the test.
+>      game behavior (history, presentation, policy), or a ruling's part that is outdated (the
+>      change named and dated) or contradicts the card's Oracle text under
+>      `ruling-contradicting-oracle-gives-way` (see the rulings brief); otherwise write the
+>      test. A misattached ruling is never exempt. Each such ruling has an entry in
+>      `docs/RULING_DISCREPANCIES.md`; check its evidence.
 >      `cargo run --release -q -p mtg-tools -- rulings-coverage --check` must pass.
 >    - Judgment calls: every new reading of an ambiguous or silent rule, deviation from the
 >      CR, or policy for a player's choice (including new defaults for `Answer::Default`) has
