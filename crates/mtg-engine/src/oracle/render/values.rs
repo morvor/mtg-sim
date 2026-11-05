@@ -38,6 +38,11 @@ impl Renderer<'_> {
                     format!("the number of {{alt:them|{d}}}")
                 }
             }
+            // "the total number of cards in all players' hands" (every hand, CR 402.1).
+            Value::Count(Filter::InZone(ZoneKind::Hand)) => {
+                "{alt:the number of cards in hands|the total number of cards in all players' hands}"
+                    .into()
+            }
             Value::Count(f) => {
                 let saved = (self.alt_and, self.plural_alts);
                 (self.alt_and, self.plural_alts) = (true, true);
@@ -114,6 +119,16 @@ impl Renderer<'_> {
             Value::PowerOf(s) if matches!(s.as_ref(), Sel::Var(crate::kwa::kvars::AMASSED)) => {
                 let p = self.sel(s, Case::Poss);
                 format!("{{alt:the amassed Army's|{p}}} power")
+            }
+            // "equal to the power of target creature you control".
+            Value::PowerOf(s) if matches!(s.as_ref(), Sel::Target(_)) => {
+                let p = self.sel(s, Case::Poss);
+                match p.strip_suffix("'s") {
+                    Some(o) if o.starts_with("target ") => {
+                        format!("{{alt:{p} power|the power of {o}}}")
+                    }
+                    _ => format!("{p} power"),
+                }
             }
             Value::PowerOf(s) => {
                 let s = self.sel(s, Case::Poss);
@@ -1345,6 +1360,12 @@ impl Renderer<'_> {
             Condition::Custom(n) if n == "you_were_the_starting_player" => {
                 "you weren't the starting player".into()
             }
+            // "if there is no monarch" (CR 724.1: no player is the monarch).
+            Condition::PlayerMatches(PlayerRef::EachPlayer, PlayerFilter::Monarch) => {
+                "there is no monarch".into()
+            }
+            // "if you didn't attack with a creature this turn": you declared no attackers
+            // (CR 508.1).
             other => {
                 let s = self.condition(other);
                 format!("it's not true that {s}")
@@ -1499,6 +1520,12 @@ impl Renderer<'_> {
                     format!("there are no {n}{on_bf}")
                 } else {
                     let n = self.noun_det(f, Det::A);
+                    // "if you own a card in exile": a card you own is there.
+                    if zone == Some(ZoneKind::Exile) && !n.contains('{') {
+                        if let Some((a, b)) = n.split_once(" you own ") {
+                            return format!("{{alt:there is {n}|you own {a} {b}}}");
+                        }
+                    }
                     format!("there is {n}{on_bf}")
                 }
             }
@@ -2123,6 +2150,16 @@ impl Renderer<'_> {
                 return format!("{n} {are} attached to {{alt:it|{o}}}");
             }
         }
+        // "you control three or more lands with the same name": the largest group of them
+        // sharing a name has that many.
+        if let (Value::LargestSameNameGroup(f), Cmp::Ge) = (a, cmp) {
+            if let (Some(PlayerRel::You), rest) = split_controller(f) {
+                if f.zone().is_none_or(|z| z == ZoneKind::Battlefield) {
+                    let n = self.count_phrase(&rest, cmp, b);
+                    return format!("you control {n} with the same name");
+                }
+            }
+        }
         // "you control three or more creatures".
         if let Value::Count(f) = a {
             if let Some((r, rest)) = split_controller(f).0.map(|r| (r, split_controller(f).1)) {
@@ -2343,12 +2380,18 @@ impl Renderer<'_> {
                 let poss = self.player(p, Case::Poss);
                 let noun = self.noun(f, if min <= 1 { Num::One } else { Num::Many });
                 let c = if min <= 1 {
-                    with_article(&noun)
+                    self.noun_det(f, super::nouns::Det::A)
                 } else {
                     format!("{} or more {noun}", number_word(min))
                 };
-                let v = if min <= 1 { "entered" } else { "entered" };
-                format!("{c} {v} the battlefield under {poss} control this turn")
+                // "if you had another creature enter the battlefield under your control
+                // this turn".
+                if poss == "your" && min <= 1 && !c.contains('~') {
+                    return Some(format!(
+                        "{{alt:{c} entered the battlefield under your control|you had {c} enter the battlefield under your control}} this turn"
+                    ));
+                }
+                format!("{c} entered the battlefield under {poss} control this turn")
             }
             _ => return None,
         })

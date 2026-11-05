@@ -198,6 +198,17 @@ impl Game {
                 effect,
                 direction,
             } => crate::turn_order_choices::run(self, *first, *direction, who, effect, ctx),
+            Effect::ChooseForEachPlayer {
+                first,
+                who,
+                chooser,
+                filter,
+                act,
+                done,
+                each,
+            } => crate::turn_order_choices::choose_for_each_player(
+                self, *first, who, chooser, filter, act, *done, each, ctx,
+            ),
             Effect::AddToPlayerTally { var, who, value } => {
                 let n = self.eval_value(value, ctx);
                 for p in self.eval_players(who, ctx) {
@@ -964,7 +975,9 @@ impl Game {
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
                 // for them).
-                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects)
+                    || crate::untap_choice::ended_before_it_began(self, duration, ctx)
+                {
                     return;
                 }
                 let id = self.new_effect_id();
@@ -1423,7 +1436,8 @@ impl Game {
                 // became attached.
                 let mut any = false;
                 let to = &crate::attach::recipient_for_all(self, to, &objs, ctx);
-                if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
+                let named = self.resolve_sel(to, ctx);
+                if let Some(t) = crate::attach::choose_recipient(self, named, &objs, ctx) {
                     for o in objs {
                         any |= self.attach(o, t);
                     }

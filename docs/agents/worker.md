@@ -38,6 +38,10 @@ Keep your own context small: don't read engine code yourself, delegate. Never pu
 anything yourself except through `scripts/land.sh` (the reviewer runs it); never push
 another branch, force-push, or open pull requests.
 
+**Effort (user, Nov 4).** Launch implementer subagents with `effort: "high"` and reviewer
+subagents with `effort: "max"`. An investigation of a rules question, such as a ruling that
+seems to contradict the CR, runs at `max` throughout.
+
 When the queue is done, report per item: landed commit (or why not), the counts the
 reviewer reported, and remaining gaps.
 
@@ -139,6 +143,9 @@ reviewer reported, and remaining gaps.
 >     `Card<TAB>substring<TAB>reason`, only when it has no engine-testable content
 >     (release or Oracle-wording history, printing or presentation, tournament policy).
 >     Any statement about how the game plays is testable.
+>     A ruling that seems to contradict the current CR or the card's Oracle text is never
+>     exempt. Leave it uncited and name it in the report with the quoted texts (the user's
+>     rule, Nov 4: the CR and the rulings should not contradict).
 > (c) UNCOVERED: every card it applies to is unsupported by the compiler, or the engine
 >     lacks the behavior and the fix is not small. List each in remaining_gaps with its
 >     reason. When the fix IS small and general (a missing compositional phrase pattern,

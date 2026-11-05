@@ -10,6 +10,11 @@ pub(super) fn event_amount_words(t: &TriggerCond) -> Option<&'static str> {
         TriggerCond::PlayerAction { name, .. } if name == "scry" => {
             Some("the number of cards looked at while scrying this way")
         }
+        // "When ~ becomes monstrous, goad up to X target creatures": X is the monstrosity
+        // ability's X (CR 701.37c).
+        TriggerCond::Where { trigger, .. } if matches!(trigger.as_ref(), TriggerCond::PlayerAction { name, .. } if name == "monstrous") => {
+            Some("X")
+        }
         TriggerCond::DealsDamage {
             source: Filter::Source | Filter::AttachedToSource,
             to: DamageRecipient::Player(_),
