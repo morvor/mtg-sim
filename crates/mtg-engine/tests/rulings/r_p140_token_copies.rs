@@ -324,10 +324,15 @@ fn copying_a_token_uses_the_original_characteristics_of_that_token() {
         "Mechanized Production",
         "If the copied artifact is a token, the token that's created copies the original characteristics of that token as stated by the effect that created it."
     );
+    ruling!(
+        "Chrome Dome",
+        "If the copied artifact is a token, the new token that's created copies the original characteristics of that token as stated by the effect that created the token."
+    );
     for how in [
         "Schema Thief",
         "Donatello, Gadget Master",
         "Mechanized Production",
+        "Chrome Dome",
     ] {
         let mut t = TestGame::new(2);
         let owner = if how == "Schema Thief" { P1 } else { P0 };
@@ -337,6 +342,13 @@ fn copying_a_token_uses_the_original_characteristics_of_that_token() {
             "Mechanized Production" => {
                 produce(&mut t, P0, th);
                 t.resolve_all();
+            }
+            "Chrome Dome" => {
+                let dome = t.battlefield(P0, how);
+                activate_lots(&mut t, P0, dome, 0, &[obj(th)]);
+                t.resolve_all();
+                // Its "+1/+0" for other artifact creatures aside.
+                move_to(&mut t, dome, Zone::Graveyard(P0));
             }
             _ => {
                 let c = t.battlefield(P0, how);

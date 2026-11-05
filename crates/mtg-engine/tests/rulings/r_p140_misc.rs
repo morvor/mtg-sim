@@ -42,7 +42,7 @@ fn teferi_ultimate(t: &mut TestGame, target: PlayerId) {
 
 #[test]
 fn teferi_a_stolen_creature_phases_in_under_its_owner_in_the_thiefs_untap_step() {
-    cr!("702.26a", "702.26f", "702.26n", "800.4a");
+    cr!("702.26a", "702.26f", "702.26n");
     ruling!(
         "Teferi, Timeless Voyager",
         "If an opponent gains control of your creature and it phases out and the duration of the control-change effect expires before it phases in, that permanent phases in under your control as that opponent's appropriate untap step begins."

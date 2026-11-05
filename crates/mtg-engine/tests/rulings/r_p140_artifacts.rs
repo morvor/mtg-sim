@@ -389,6 +389,14 @@ fn stridehangars_thopter_shares_the_creation_instructions_but_not_the_abilities(
         "Stridehangar Automaton",
         "The additional Thopter token won’t have any abilities the other tokens were created with."
     );
+    ruling!(
+        "Stridehangar Automaton",
+        "applies to both the original tokens and the Thopter"
+    );
+    ruling!(
+        "Stridehangar Automaton",
+        "that effect will also apply to the Thopter"
+    );
     supported("Roxanne, Starfall Savant");
     // Roxanne's tapped Meteorite: the Thopter is tapped too, without Meteorite's abilities.
     let mut t = TestGame::new(2);
@@ -442,6 +450,34 @@ fn stridehangars_thopter_shares_the_creation_instructions_but_not_the_abilities(
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert!(tokens_of(&t, P0).is_empty(), "both sacrificed");
+    // Kavaron Harrier's Robot, "tapped and attacking. Sacrifice that token at end of
+    // combat.": the Thopter is created tapped and attacking too, and sacrificed with it.
+    supported("Kavaron Harrier");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stridehangar Automaton");
+    let harrier = t.battlefield(P0, "Kavaron Harrier");
+    // Lands, as mana in the pool empties before combat.
+    t.lands(P0, "Wastes", 2);
+    yes(&mut t, P0);
+    crate::r_s09_common::declare(&mut t, P0, &[(harrier, Entity::Player(P1))]);
+    t.resolve_all();
+    let robot = tokens_typed(&t, P0, "Robot");
+    let th = tokens_typed(&t, P0, "Thopter");
+    assert_eq!((robot.len(), th.len()), (1, 1));
+    let attacking: Vec<ObjectId> = crate::r_s09_common::attacks_now(&t)
+        .into_iter()
+        .map(|(a, _)| a)
+        .collect();
+    for x in [robot[0], th[0]] {
+        assert!(t.obj(x).tapped, "{}", t.obj(x).chars.name);
+        assert!(attacking.contains(&x), "{} attacking", t.obj(x).chars.name);
+    }
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert!(
+        tokens_of(&t, P0).is_empty(),
+        "both sacrificed at end of combat"
+    );
 }
 
 #[test]
