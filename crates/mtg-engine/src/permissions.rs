@@ -179,6 +179,12 @@ fn static_terms(perm: &PlayPermission) -> (bool, PlayTerms) {
 fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermission) -> bool {
     let o = g.obj(card);
     match perm.zone {
+        // "you may play the top card of their library" (Xanathar, Guild Kingpin): the top
+        // card of another player's library, whose owner the permission's qualities name.
+        ZoneKind::Library if perm.top_only && perm.terms.any_owner => match o.zone {
+            Zone::Library(q) => g.library_top(q) == Some(card),
+            _ => false,
+        },
         ZoneKind::Library => {
             if perm.top_only {
                 g.library_top(p) == Some(card)
@@ -398,6 +404,11 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             continue;
         }
         let cards: Vec<ObjectId> = match perm.zone {
+            ZoneKind::Library if perm.top_only && perm.terms.any_owner => g
+                .player_ids()
+                .into_iter()
+                .filter_map(|q| g.library_top(q))
+                .collect(),
             ZoneKind::Library => {
                 if perm.top_only {
                     g.library_top(p).into_iter().collect()
@@ -874,6 +885,13 @@ pub fn spell_cast_with(g: &mut Game, perm: Option<&CastPermission>, spell: Objec
 /// creature spell from that player's graveyard this turn"): that player is the one the
 /// effect means as it begins (CR 608.2h), not whoever "that player" might be later.
 pub fn lock_permission_players(g: &Game, effect: &mut PlayerModification, ctx: &Ctx) {
+    // "you may look at the top card of their library any time": that player's library.
+    if let PlayerModification::LookAtTopCardOf(r) = effect {
+        if let Some(p) = g.eval_player(r, ctx) {
+            *r = PlayerRef::Player(p);
+        }
+        return;
+    }
     let PlayerModification::PlayPermission(pp) = effect else {
         return;
     };
