@@ -899,4 +899,9 @@ ruling-conflicts-2.
   107.3h for both (X is 0 for the cost: `a_scavenged_card_s_x_is_0` in `tests/rulings/r_s27_mana_value_x.rs`
   and `araumi_encore_cost_and_tokens_have_x_0` in `tests/rulings/r_p024_x_values.rs`, which cites no
   ruling); the Araumi ruling's second sentence (the tokens' X is 0) holds either way. Undecided: the user
-  decides with ruling-conflicts-2.
+  decides with ruling-conflicts-2. Investigated in ruling-conflicts-3, case 6 (D): the ruling is in the Commander
+  Legends Release Notes as is (2020-11-06), 107.3h dates from the CR effective 2015-01-23 (the Fate Reforged
+  Update Bulletin: "Any other time, X is 0."), and no change since explains it; the engine keeps X 0
+  (provisional `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`), the second sentence is cited, and the ruling is
+  logged in `docs/RULING_DISCREPANCIES.md` as inconsistent; the user decides whether its first clause is set
+  aside.

@@ -175,16 +175,23 @@ fn caller_of_the_untamed_copy_of_an_x_card_has_x_0() {
 
 /// Araumi's ruling "If the creature card has {X} in its mana cost, you can choose any value
 /// for X, but the value you choose won't apply to the tokens that are created. X will be 0
-/// for those tokens." isn't cited: its first clause disagrees with CR 107.3h ("If an
-/// effect instructs a player to pay an object's mana cost that includes {X}, the value of
-/// X is treated as 0 unless the object is a spell on the stack.") and with Young
-/// Deathclaws' ruling on the same wording ("The scavenge cost is equal to its mana cost":
-/// "If the creature card you scavenge has {X} in its mana cost, X is 0."). See
-/// docs/agents/engine-gaps.md, "Apparent conflicts (Nov 5)". The engine follows the CR: X
-/// is 0 for the encore cost and for the tokens.
+/// for those tokens." is cited only for the tokens: its "you can choose any value for X"
+/// disagrees with CR 107.3h ("If an effect instructs a player to pay an object's mana cost
+/// that includes {X}, the value of X is treated as 0 unless the object is a spell on the
+/// stack.", since the CR effective 2015-01-23) and with the rulings of Varolz and Young
+/// Deathclaws on the same wording ("The scavenge cost is equal to its mana cost": "If the
+/// creature card you scavenge has {X} in its mana cost, X is 0."). The engine follows the
+/// CR (provisional register entry `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`, for the
+/// user to decide; work item ruling-conflicts-3, case 6): X is 0 for the encore cost and
+/// for the tokens.
 #[test]
 fn araumi_encore_cost_and_tokens_have_x_0() {
     cr!("107.3h", "202.3e", "702.141a", "707.2");
+    interp!("x-in-a-cost-equal-to-a-cards-mana-cost-is-0");
+    ruling!(
+        "Araumi of the Dead Tide",
+        "the value you choose won't apply to the tokens that are created. X will be 0 for those tokens."
+    );
     supported("Araumi of the Dead Tide");
     let mut t = TestGame::new(2);
     let araumi = t.battlefield(P0, "Araumi of the Dead Tide");

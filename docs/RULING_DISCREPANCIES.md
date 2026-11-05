@@ -129,6 +129,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: counts every opponent who was dealt damage this turn, including those who have since left the game, as for every "for each opponent who ... this turn" count.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P186.tsv`; register `history-counts-players-who-left`; test `tests/cards/value_results_history.rs` (`gnoll_war_band_counts_opponents_who_were_dealt_damage`).
 
+### Araumi of the Dead Tide: "you can choose any value for X"
+- Kind: inconsistent
+- Status: open for review
+- Ruling, Araumi of the Dead Tide (2020-11-10): "If the creature card has {X} in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are created. X will be 0 for those tokens."
+- Conflicts with: the rulings on cards that give scavenge in the same words ("The scavenge cost is equal to its mana cost."): Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08), "If the creature card you scavenge has {X} in its mana cost, X is 0."; and CR 107.3h: "If an effect instructs a player to pay an object’s mana cost that includes {X}, the value of X is treated as 0 unless the object is a spell on the stack. In that case, the value of X is the value chosen or determined for it as the spell was cast." The card: "{T}, Exile cards from your graveyard equal to the number of opponents you have: Target creature card in your graveyard gains encore until end of turn. The encore cost is equal to its mana cost. (Exile the creature card and pay its mana cost: ...)".
+- Evidence: the ruling is in the Commander Legends Release Notes as the data has it (Eli Shiffrin, 2020-11-06; ormos mirror, Wayback capture 2020-11-07). 107.3h was added, as 107.3g, in the CR effective 2015-01-23, before the ruling, and hasn't changed since but for its number (107.3h from the CR effective 2020-09-25); the Fate Reforged Update Bulletin (Matt Tabak, 2015-01-15) explains it: "Essentially, if the object is a spell on the stack, you pay the actual value of X. Any other time, X is 0.", with manifest's cost to turn a card face up as its first use. CR 702.1a's example (since the CR effective 2018-04-27) calls the scavenge cost Varolz gives "an amount of mana equal to its mana cost", and 107.3g has a card's X be 0 off the stack. Likely origin (an inference): the ruling on cards that give flashback "equal to its mana cost" (Past in Flames, Snapcaster Mage: "If you cast an instant or sorcery with {X} in its mana cost this way, you still choose the value of X as part of casting the spell and pay that cost."), right there because the card is cast and is a spell on the stack, applied to encore, whose card is never cast. Its second sentence (the tokens' X is 0) agrees with the CR and is cited. Investigated in work item ruling-conflicts-3, case 6 (conclusion D: the user decides; recommended: set the first clause aside as inconsistent, as Gnoll War Band's ruling was).
+- Engine: X is 0 for the encore cost Araumi gives (no X is announced) and for the tokens, as for scavenge.
+- Recorded: no exemption until the user decides; register `x-in-a-cost-equal-to-a-cards-mana-cost-is-0` (provisional); tests `tests/rulings/r_p024_x_values.rs` (`araumi_encore_cost_and_tokens_have_x_0`), `tests/rulings/r_s27_mana_value_x.rs` (`a_scavenged_card_s_x_is_0`).
+
 ## Narrower than stated
 
 ### Tempt with Glory and the other tempting offers: "starting with the opponent on your left"
@@ -361,21 +370,15 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- **The craft copy ruling** (24 cards with craft, 2023-11-10, e.g. Oteclan Landmark //
-  Oteclan Levitator): "If a card that isn't a transforming double-faced card becomes a copy
-  of a card with craft, it'll stay in exile if you activate the craft ability. It won't
-  return to the battlefield." Since the Marvel's Spider-Man CR (effective 2025-09-19) a modal
-  double-faced card can be put onto the battlefield transformed (712.14a), so a modal
-  double-faced permanent that became a copy of a craft card would return as its own back
-  face, as the Siege rulings' case does (above). The ruling is cited for a single-faced copy
-  (Phyrexian Metamorph: `tests/keywords/k702_167_craft.rs`, `tests/rulings/r_s03_craft.rs`);
-  the engine's craft return (`kw/craft.rs`) puts any double-faced card back face up, untested
-  for a modal one.
-- **Work item ruling-conflicts-3** (separate): Run Out of Town (the ruling has the permanent's
-  controller choose top or bottom, the Oracle text its owner) and Caller of the Untamed (the
-  card to copy chosen during activation, against the decided `x-defined-by-target`).
-- **Araumi of the Dead Tide** (rulings-P024): its ruling (2020-11-10) lets any X be chosen
-  for the encore cost "equal to its mana cost", against CR 107.3h and the opposite rulings of
-  Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same
-  wording for scavenge. Left uncited; the texts are in `docs/agents/engine-gaps.md`,
-  "Apparent conflicts (Nov 5)".
+- None at the moment. Work item ruling-conflicts-3 took up the craft copy ruling (now an
+  outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
+  the Untamed (the ruling agrees with CR 601.2b; the engine was changed) and Araumi of the
+  Dead Tide (an inconsistent entry above, for the user to decide). It also compared the 69
+  release-notes files in the ormos mirror (2013 to 2022) with the data, card by card, for
+  notes the data has with at most four words changed (about 1,100, most for grammar such as
+  "they" for "he or she", or later rules updates). Of the 25 or so whose changed words are
+  about who, where or what (owner, controller, opponent, graveyard, library, can or can't),
+  read by hand, the others are rewordings or corrections that bring the note in line with
+  the card (Failure // Comply's "Opponents" for "Players", Choose Your Demise's "library"
+  for "graveyard"); only Run Out of Town's and Sanguine Spy's contradict it. The rest weren't
+  read one by one.
