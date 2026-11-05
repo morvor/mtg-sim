@@ -16,7 +16,7 @@ fn searches_and_shuffles(t: &TestGame, from: usize) -> Vec<String> {
     t.g.turn_events[from..]
         .iter()
         .filter_map(|e| match e {
-            Event::Searched { player } => Some(format!("search {player}")),
+            Event::Searched { player, .. } => Some(format!("search {player}")),
             Event::Shuffled { player } => Some(format!("shuffle {player}")),
             _ => None,
         })
