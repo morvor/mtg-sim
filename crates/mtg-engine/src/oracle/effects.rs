@@ -1775,6 +1775,20 @@ fn p_destroy(l: &str, b: &mut Builder) -> Option<Effect> {
 /// "exile target creature", "exile all graveyards"...
 fn p_exile(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = l.strip_prefix("exile ")?;
+    // "exile target card from a graveyard with a memory counter on it" (The Animus): a
+    // card that moves to a graveyard has no counters (CR 122.2), so the counters are put
+    // on it as it's exiled — the registry's "exile [object] with N counters on it".
+    if let Some((head, tail)) = r.rsplit_once(" with ") {
+        // "[a | N] [kind] counter(s) on it", nothing more.
+        let words: Vec<&str> = end(tail).split(' ').collect();
+        let counters = words.len() == 5
+            && parse_number(words[0]).is_some_and(|(_, r)| r.trim().is_empty())
+            && matches!(words[2], "counter" | "counters")
+            && words[3..] == ["on", "it"];
+        if head.contains(" graveyard") && counters {
+            return None;
+        }
+    }
     let (what, tail) = object_ref(r, b)?;
     if !end(&tail).is_empty() {
         return None;
