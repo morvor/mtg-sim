@@ -25,7 +25,7 @@ fn battle_forged(t: &mut TestGame, p: PlayerId, loyalty: u32) -> ObjectId {
 
 #[test]
 fn a_gideon_that_entered_this_turn_and_becomes_a_creature_cant_attack() {
-    cr!("302.6", "306.5b");
+    cr!("302.6");
     ruling!(
         "Gideon Jura",
         "Note that summoning sickness cares about when Gideon Jura came under your control, not when he became a creature."
@@ -258,7 +258,7 @@ fn gideon_blackblade_sheds_equipment_on_other_players_turns() {
 
 #[test]
 fn gideon_blackblade_losing_all_abilities_is_still_a_creature() {
-    cr!("613.1d", "613.1f", "613.8a");
+    cr!("613.1d", "613.1f");
     ruling!(
         "Gideon Blackblade",
         "If an effect causes Gideon to lose all abilities during your turn, he's still a Human Soldier creature and a Gideon planeswalker."
@@ -304,7 +304,7 @@ fn gideon_champion_of_justice_whose_plus_one_doesnt_resolve() {
 
 #[test]
 fn kytheon_counts_attackers_that_died_but_not_creatures_put_onto_the_battlefield_attacking() {
-    cr!("506.3", "508.3a", "603.4");
+    cr!("508.4", "603.4");
     ruling!(
         "Kytheon, Hero of Akros // Gideon, Battle-Forged",
         "Kytheon's first ability will count creatures that attacked but are no longer on the battlefield (perhaps because they didn't survive combat damage being dealt). It will not count any creatures that were put onto the battlefield attacking"

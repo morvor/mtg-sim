@@ -226,7 +226,7 @@ fn stormwild_capridor_gets_counters_before_lethal_damage_is_checked() {
 
 #[test]
 fn prevention_for_others_applies_even_if_its_source_is_dealt_lethal_damage_at_once() {
-    cr!("120.2", "704.3", "615.1a");
+    cr!("704.3", "615.1a");
     ruling!(
         "Crystal Barricade",
         "If Crystal Barricade and other creatures you control would be dealt noncombat damage at the same time, the damage that would be dealt to your other creatures is prevented even if the damage being dealt to Crystal Barricade is lethal damage."
@@ -275,7 +275,7 @@ fn prevention_for_others_applies_even_if_its_source_is_dealt_lethal_damage_at_on
 
 #[test]
 fn elderscale_wurm_and_damage_dealt_at_once_to_you_and_it() {
-    cr!("120.2", "704.3", "614.1a");
+    cr!("704.3", "614.1a");
     ruling!(
         "Elderscale Wurm",
         "For example, if you have 10 life and a spell deals 10 damage to you and 10 damage to Elderscale Wurm, you’ll end up at 7 life and Elderscale Wurm will be destroyed."
@@ -330,7 +330,7 @@ fn jared_prevents_damage_before_the_monarch_trigger_resolves() {
 
 #[test]
 fn swans_of_bryn_argoll_and_the_source_of_damage() {
-    cr!("120.1", "609.7a", "615.5", "702.80c");
+    cr!("120.1", "615.5", "615.6");
     ruling!(
         "Swans of Bryn Argoll",
         "If a creature with wither would deal damage to Swans of Bryn Argoll, that damage is treated just like any other damage. It’s prevented, and the creature’s controller draws cards. Swans of Bryn Argoll doesn’t get any -1/-1 counters."

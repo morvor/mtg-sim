@@ -54,7 +54,7 @@ fn sustaining_spirit_doesnt_let_you_pay_more_life_than_you_have() {
 
 #[test]
 fn courageous_resolve_life_total_cant_be_set_or_exchanged_lower() {
-    cr!("119.7", "119.5", "701.12b");
+    cr!("119.7", "119.5", "701.12c");
     ruling!(
         "Courageous Resolve",
         "If an effect says to set your life total to a certain number and that number is less than your current life total, that part of the effect won't do anything."
@@ -220,7 +220,7 @@ fn fortune_thief_does_nothing_below_1_life() {
 
 #[test]
 fn damage_to_either_teammate_cant_take_the_team_below_1() {
-    cr!("810.9a", "810.9e", "120.3a");
+    cr!("810.9a", "120.3a", "614.1a");
     ruling!(
         "Angel of Grace",
         "In a Two-Headed Giant game, after resolving Angel of Grace's triggered ability, damage dealt to you and/or your teammate that would reduce your team's life total to less than 1 reduces it to 1 instead."
@@ -254,7 +254,7 @@ fn damage_to_either_teammate_cant_take_the_team_below_1() {
 
 #[test]
 fn angel_of_grace_sets_the_team_life_total_to_10() {
-    cr!("810.9f", "119.5");
+    cr!("810.9c", "119.5");
     ruling!(
         "Angel of Grace",
         "In a Two-Headed Giant game, the activated ability of Angel of Grace causes you to gain or lose life so that your team's life total becomes 10."

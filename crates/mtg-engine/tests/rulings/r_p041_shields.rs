@@ -57,7 +57,7 @@ fn kavu_hits_wurm(respond: impl FnOnce(&mut TestGame, ObjectId)) -> bool {
 
 #[test]
 fn a_permanent_spell_chosen_as_the_source_keeps_being_prevented_as_a_permanent() {
-    cr!("609.7b", "615.9");
+    cr!("609.7a", "615.9");
     ruling!(
         "Burrenton Forge-Tender",
         "If a permanent spell is chosen as the source of damage, Burrenton Forge-Tender’s prevention effect continues to apply for the rest of the turn to the permanent that spell becomes once it has entered the battlefield."
@@ -102,7 +102,7 @@ fn a_permanent_spell_chosen_as_the_source_keeps_being_prevented_as_a_permanent()
 
 #[test]
 fn burrenton_forge_tender_checks_the_sources_color_as_it_deals_damage() {
-    cr!("609.7a", "615.9");
+    cr!("609.7b", "615.9");
     ruling!(
         "Burrenton Forge-Tender",
         "If the red source you chose changes colors before it deals damage, the damage-prevention effect doesn’t apply."
@@ -373,7 +373,7 @@ fn two_dark_spheres_apply_one_after_the_other() {
 
 #[test]
 fn zealot_il_vec_prevents_its_combat_damage_even_if_its_damage_was_prevented() {
-    cr!("603.12", "615.1a");
+    cr!("608.2c", "615.1a");
     ruling!(
         "Zealot il-Vec",
         "If you choose to have Zealot il-Vec deal 1 damage to a creature and that damage is prevented or replaced, Zealot il-Vec’s combat damage will still be prevented."
@@ -570,7 +570,7 @@ fn shields_on_a_permanent_outlast_their_source_and_its_changes() {
 
 #[test]
 fn wellgabber_apothecary_keeps_preventing_after_the_creature_untaps() {
-    cr!("608.2h", "615.1a");
+    cr!("611.2a", "615.1a");
     ruling!(
         "Wellgabber Apothecary",
         "Once the ability has resolved, all damage that would be dealt to that creature for the rest of the turn will be prevented, regardless of whether it’s tapped or untapped at the time that damage would be dealt."
@@ -591,7 +591,7 @@ fn wellgabber_apothecary_keeps_preventing_after_the_creature_untaps() {
 
 #[test]
 fn kurbis_keeps_preventing_after_the_creature_loses_its_counters() {
-    cr!("608.2h", "615.1a");
+    cr!("611.2a", "615.1a");
     ruling!(
         "Kurbis, Harvest Celebrant",
         "Once the activated ability resolves, damage will be prevented even if the creature later loses all of its +1/+1 counters."
@@ -675,7 +675,7 @@ fn woolly_razorbacks_ice_doesnt_prevent_damage_dealt_to_it() {
 
 #[test]
 fn camel_prevents_damage_from_an_animated_desert_in_combat() {
-    cr!("615.1a", "506.4");
+    cr!("615.1a");
     ruling!("Camel", "It does prevent damage from animated Deserts in combat.");
     supported("Camel");
     supported("Hostile Desert");
@@ -696,7 +696,7 @@ fn camel_prevents_damage_from_an_animated_desert_in_combat() {
 
 #[test]
 fn cautery_slivers_prevention_targets_only_players_planeswalkers_and_slivers() {
-    cr!("115.1", "115.2");
+    cr!("115.1", "601.2c");
     ruling!(
         "Cautery Sliver",
         "Note that the first ability can affect any kind of creature, but the second ability can affect only Slivers. Both abilities can affect players."

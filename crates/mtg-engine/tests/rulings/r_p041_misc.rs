@@ -200,7 +200,7 @@ fn seraph_of_the_sword_still_needs_lethal_damage_assigned_from_a_trampler() {
 
 #[test]
 fn loafing_giant_blocking_two_creatures_triggers_once() {
-    cr!("509.3c", "603.2c");
+    cr!("509.3a", "603.2c");
     ruling!(
         "Loafing Giant",
         "If it somehow blocks multiple creatures in a single combat, the triggered ability only triggers once."
@@ -291,7 +291,7 @@ fn kurbis_enters_with_counters_equal_to_the_mana_spent() {
 
 #[test]
 fn kurbis_copies_and_mana_spent() {
-    cr!("707.10", "601.2h", "707.12");
+    cr!("707.10", "601.2h", "614.1c");
     ruling!(
         "Kurbis, Harvest Celebrant",
         "If a resolving spell enters the battlefield as a copy of Kurbis, it will enter the battlefield with a number of +1/+1 counters equal to the mana spent to cast the spell."
