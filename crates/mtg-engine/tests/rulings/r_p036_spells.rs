@@ -36,7 +36,7 @@ fn arc_lightning(t: &mut TestGame) -> (ObjectId, ObjectId) {
 
 #[test]
 fn invert_polarity_changes_targets_but_not_the_division() {
-    cr!("115.7d", "601.2d", "705.2");
+    cr!("115.7d", "601.2d");
     ruling!(
         "Invert Polarity",
         "If the target spell has damage divided as it was cast, the division can't be changed although the targets receiving that damage still can. The same is true of spells that distribute counters."
@@ -88,7 +88,7 @@ fn invert_polarity_changes_targets_but_not_the_division() {
 
 #[test]
 fn invert_polarity_asks_about_new_targets_only_after_winning() {
-    cr!("705.2", "608.2c", "701.6a");
+    cr!("608.2c", "701.6a");
     ruling!(
         "Invert Polarity",
         "You don't make any decisions about new targets for the spell until you win the flip."
@@ -309,7 +309,7 @@ fn counterlash_ignores_type_timing_but_not_other_restrictions() {
 
 #[test]
 fn arcane_denial_draw_count_is_chosen_when_the_delayed_trigger_resolves() {
-    cr!("603.7a", "608.2c", "121.2");
+    cr!("603.7a", "608.2c");
     ruling!(
         "Arcane Denial",
         "The controller of the countered spell doesn't choose how many cards to draw until the relevant ability resolves. The player may draw 0, 1, or 2 cards. They choose the number before drawing any cards."
@@ -544,7 +544,7 @@ fn castable_instant(t: &mut TestGame, p: PlayerId) -> bool {
 
 #[test]
 fn repel_intruders_target_and_mana_are_independent() {
-    cr!("601.2c", "601.2h", "106.6");
+    cr!("601.2c", "601.2h");
     ruling!(
         "Repel Intruders",
         "You choose whether or not to target a creature spell before you decide whether or not to spend {U} on Repel Intruders. You may target a creature spell and then not spend {U} to cast Repel Intruders; if you do, Repel Intruders simply won’t affect that creature spell. Similarly, if you don’t target a creature spell but then you spend {U} to cast Repel Intruders, that part of Repel Intruders has no effect."
@@ -670,7 +670,7 @@ fn equinox_ignores_random_destruction() {
 
 #[test]
 fn equinox_ignores_land_sacrifices() {
-    cr!("701.21a", "118.3");
+    cr!("701.21a", "118.8");
     ruling!(
         "Equinox",
         "Equinox will not counter a spell which requires sacrificing land when it enters or one that requires sacrificing land as part of the cost to cast it."

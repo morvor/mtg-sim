@@ -85,7 +85,7 @@ fn check(o: &Outcome, name: &str) {
 
 #[test]
 fn counterspells_with_a_rider_still_apply_it_to_an_uncounterable_spell() {
-    cr!("101.2", "701.6b", "608.2c");
+    cr!("101.2", "701.6a", "608.2c");
     ruling!(
         "Absorb",
         "A spell that can't be countered is a legal target for Absorb. The spell won't be countered when Absorb resolves, but you'll still gain 3 life."
@@ -131,7 +131,7 @@ fn counterspells_with_a_rider_still_apply_it_to_an_uncounterable_spell() {
 
 #[test]
 fn spell_snuff_draws_at_five_life_even_if_the_spell_cant_be_countered() {
-    cr!("101.2", "701.6b", "608.2c");
+    cr!("101.2", "701.6a", "608.2c");
     ruling!(
         "Spell Snuff",
         "A spell that can’t be countered is a legal target for Spell Snuff. The spell won’t be countered when Spell Snuff resolves, but if you have 5 or less life, you’ll still draw a card."
@@ -149,7 +149,7 @@ fn spell_snuff_draws_at_five_life_even_if_the_spell_cant_be_countered() {
 
 #[test]
 fn creature_counterspells_with_a_rider_still_apply_it_to_an_uncounterable_creature() {
-    cr!("101.2", "701.6b", "608.2c");
+    cr!("101.2", "701.6a", "608.2c");
     ruling!(
         "Bone to Ash",
         "A creature spell that can’t be countered is a legal target for Bone to Ash. The creature spell won’t be countered when Bone to Ash resolves, but you’ll still draw a card."
@@ -176,7 +176,7 @@ fn creature_counterspells_with_a_rider_still_apply_it_to_an_uncounterable_creatu
 
 #[test]
 fn essence_capture_still_puts_the_counter_on_your_creature() {
-    cr!("101.2", "701.6b", "608.2c", "115.1b");
+    cr!("101.2", "701.6a", "608.2c", "115.1");
     ruling!(
         "Essence Capture",
         "A creature spell that can't be countered is a legal target for Essence Capture. The spell won't be countered when Essence Capture resolves, but you'll still put a +1/+1 counter on the target creature."
@@ -193,7 +193,7 @@ fn essence_capture_still_puts_the_counter_on_your_creature() {
 
 #[test]
 fn put_away_still_shuffles_the_graveyard_card_in() {
-    cr!("101.2", "701.6b", "608.2c");
+    cr!("101.2", "701.6a", "608.2c");
     ruling!(
         "Put Away",
         "If the targeted spell can’t be countered, that spell will remain on the stack. Put Away will continue to resolve. If you targeted a card in your graveyard, you still get to shuffle it into your library."
@@ -212,7 +212,7 @@ fn put_away_still_shuffles_the_graveyard_card_in() {
 
 #[test]
 fn fold_into_aether_does_nothing_if_the_spell_isnt_countered() {
-    cr!("101.2", "701.6b", "608.2c");
+    cr!("101.2", "701.6a", "608.2c");
     ruling!(
         "Fold into Aether",
         "If the spell isn’t countered (because it’s a spell that can’t be countered, for example), nothing happens."
@@ -481,7 +481,7 @@ fn repel_intruders_with_an_illegal_target_makes_no_tokens() {
 
 #[test]
 fn render_silent_doesnt_stop_responses_or_abilities_or_lands() {
-    cr!("608.2c", "117.3c", "305.1", "702.86a");
+    cr!("608.2c", "117.3c", "305.1");
     ruling!(
         "Render Silent",
         "Render Silent doesn’t stop any player from casting spells in response to Render Silent before it resolves."

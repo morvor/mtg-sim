@@ -69,16 +69,15 @@ fn disdainful_stroke_cant_target_a_face_down_spell() {
     supported("Disdainful Stroke");
     let mut t = TestGame::new(2);
     turn_of(&mut t, P1);
-    // Hooded Hydra ({3}{G}{G}) cast face down with morph for {3}, and Hill Giant ({3}{R}).
+    // Hystrodon ({4}{G}, mana value 5) cast face down with morph for {3}.
     t.lands(P1, "Wastes", 3);
-    let hydra = t.hand(P1, "Hooded Hydra");
-    let fd = t.cast(P1, hydra).method(crate::r_s12_common::MORPH).go();
-    let (c, _) = offered_for(&mut t, P0, "Disdainful Stroke", None, &[]);
-    assert!(!c.contains(&obj(fd)));
-    t.resolve_all();
-    let giant = cast_new(&mut t, P1, "Hill Giant", &[]);
-    let (c, s) = offered_for(&mut t, P0, "Disdainful Stroke", None, &[obj(giant)]);
-    assert_eq!(c, vec![obj(giant)]);
+    let hystrodon = t.hand(P1, "Hystrodon");
+    let fd = t.cast(P1, hystrodon).method(crate::r_s12_common::MORPH).go();
+    assert!(t.obj(fd).face_down);
+    // In response, P1's Volcanic Geyser with X = 2 (mana value 4).
+    let g = geyser(&mut t, 2);
+    let (c, s) = offered_for(&mut t, P0, "Disdainful Stroke", None, &[obj(g)]);
+    assert_eq!(c, vec![obj(g)]);
     assert!(s.is_some());
 }
 
@@ -208,7 +207,7 @@ fn spell_blast_ignores_alternative_and_additional_costs_and_reductions() {
 
 #[test]
 fn intervene_needs_a_spell_targeting_at_least_one_creature() {
-    cr!("115.1", "115.10");
+    cr!("115.1");
     ruling!(
         "Intervene",
         "Intervene can only target a spell that is currently targeting a creature."
@@ -255,7 +254,7 @@ fn intervene_uses_only_the_chosen_mode_of_a_modal_spell() {
 
 #[test]
 fn confound_needs_a_creature_target_still_there_and_still_a_creature() {
-    cr!("608.2b", "115.10");
+    cr!("608.2b");
     ruling!(
         "Confound",
         "Confound doesn’t resolve if the targeted spell has been countered or does not still target one or more permanents that are still creatures and are still on the battlefield. Confound is different from other such spells in that it actually specifies that the spell must target a creature, not just be able to target a creature or that the spell has a certain number of targets."
@@ -299,7 +298,7 @@ fn confound_needs_a_creature_target_still_there_and_still_a_creature() {
 
 #[test]
 fn spell_that_targets_you_or_your_permanent_can_have_other_targets() {
-    cr!("115.1", "115.10");
+    cr!("115.1");
     ruling!(
         "Hindering Light",
         "Hindering Light can target a spell that has multiple targets, as long as at least one of those targets is you or a permanent you control."
@@ -397,7 +396,7 @@ fn protect_then(name: &str, leave: bool) -> (bool, bool) {
 
 #[test]
 fn keep_safe_and_rebuff_need_the_permanent_still_on_the_battlefield() {
-    cr!("608.2b", "115.10", "702.11b");
+    cr!("608.2b", "702.11b");
     ruling!(
         "Keep Safe",
         "If the permanent you control targeted by the target spell leaves the battlefield, that spell is no longer a legal target for Keep Safe. On the other hand, if that target permanent becomes an illegal target for the target spell but remains on the battlefield under your control, the target spell is still a legal target for Keep Safe."
@@ -424,7 +423,7 @@ fn stormtamer(t: &mut TestGame, target: ObjectId) -> Option<ObjectId> {
 
 #[test]
 fn siren_stormtamer_needs_the_creature_still_there() {
-    cr!("608.2b", "115.10", "702.11b");
+    cr!("608.2b", "702.11b");
     ruling!(
         "Siren Stormtamer",
         "If the creature you control targeted by the target spell or ability leaves the battlefield, that spell or ability is no longer a legal target for Siren Stormtamer's ability. On the other hand, if that targeted creature becomes an illegal target for the target spell but remains on the battlefield under your control, the target spell or ability is still a legal target for Siren Stormtamer's ability."
@@ -464,7 +463,7 @@ fn siren_stormtamer_needs_the_creature_still_there() {
 
 #[test]
 fn siren_stormtamer_targets_a_spell_with_several_targets() {
-    cr!("115.1", "115.10");
+    cr!("115.1");
     ruling!(
         "Siren Stormtamer",
         "Siren Stormtamer's activated ability can target a spell or ability that has multiple targets, as long as at least one of those targets is you or a creature you control."
@@ -488,7 +487,7 @@ fn siren_stormtamer_targets_a_spell_with_several_targets() {
 
 #[test]
 fn second_guess_only_needs_the_second_spell_on_the_stack() {
-    cr!("115.1", "601.2");
+    cr!("115.1");
     ruling!(
         "Second Guess",
         "It doesn’t matter if the first spell cast that turn has resolved yet or not. It also doesn’t matter how many spells have been cast after the second one, as long as the second spell cast is still on the stack."
@@ -592,7 +591,7 @@ fn nix_targets_any_spell_and_checks_on_resolution() {
 
 #[test]
 fn nix_checks_whether_the_caster_spent_mana_not_the_controller() {
-    cr!("608.2b", "601.2h", "110.2");
+    cr!("608.2b", "601.2h");
     ruling!(
         "Nix",
         "Nix checks whether any player paid mana to cast the spell, not whether its current controller did. If Commandeer is cast on a spell, then Nix is cast on that spell, Nix won’t counter it unless the player who originally cast that spell spent no mana to cast it."
@@ -621,7 +620,7 @@ fn nix_checks_whether_the_caster_spent_mana_not_the_controller() {
 
 #[test]
 fn jaded_response_checks_colors_on_resolution() {
-    cr!("115.1", "608.2b", "105.4");
+    cr!("115.1", "608.2c");
     ruling!("Jaded Response", "It does not check colors until it resolves.");
     supported("Jaded Response");
     // P0 controls no red creature when it casts Jaded Response at a red spell, and one
@@ -652,7 +651,7 @@ fn jaded_response_checks_colors_on_resolution() {
 
 #[test]
 fn artifact_creature_spells_are_creature_spells() {
-    cr!("115.1", "205.2a", "302.1");
+    cr!("115.1", "205.2a");
     ruling!(
         "Essence Scatter",
         "A \"creature spell\" is any spell with the card type creature, even if it has other types such as artifact or enchantment."
@@ -755,7 +754,7 @@ fn double_negative_holding_priority_versus_passing() {
 
 #[test]
 fn double_negative_takes_zero_one_or_two_targets() {
-    cr!("601.2c", "115.1d");
+    cr!("601.2c", "115.1a");
     ruling!(
         "Double Negative",
         "You may cast Double Negative with no targets, one target, or two targets."
@@ -784,7 +783,7 @@ fn double_negative_takes_zero_one_or_two_targets() {
 
 #[test]
 fn trap_essence_needs_a_creature_spell_but_not_a_creature() {
-    cr!("601.2c", "115.1d");
+    cr!("601.2c", "115.1a");
     ruling!(
         "Trap Essence",
         "You don’t have to target a creature to cast Trap Essence, although you must target a creature spell on the stack."

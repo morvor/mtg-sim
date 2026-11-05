@@ -125,7 +125,7 @@ fn rotisserie_elemental_sacrifices_as_its_trigger_resolves() {
 
 #[test]
 fn rotisserie_elemental_cards_follow_normal_timing_and_costs() {
-    cr!("305.1", "305.2", "601.2h", "307.1");
+    cr!("305.1", "601.2h", "302.1");
     ruling!(
         "Rotisserie Elemental",
         "You pay all costs and follow all normal timing rules for cards played from exile this way. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty."
@@ -225,7 +225,7 @@ fn wakka_needs_no_target_but_an_illegal_one_stops_the_counter() {
 
 #[test]
 fn malcolm_cant_play_a_discarded_land() {
-    cr!("305.9", "601.1", "608.2c");
+    cr!("305.9", "608.2c");
     ruling!(
         "Malcolm, Alluring Scoundrel",
         "You may not play land cards discarded with Malcolm, Alluring Scoundrel's last ability."
@@ -277,7 +277,7 @@ fn altar_of_shadows_gets_its_counter_even_if_the_creature_regenerates() {
 
 #[test]
 fn nils_attack_tax_versus_attacks_if_able() {
-    cr!("508.1d", "508.1h", "506.4");
+    cr!("508.1d", "508.1h");
     ruling!(
         "Nils, Discipline Enforcer",
         "Your opponents can choose not to pay to attack with a creature with one or more counters on it that attacks \"if able.\" If there's no other player or planeswalker to attack, the creature simply doesn't attack."

@@ -60,7 +60,7 @@ fn prowess_trigger(t: &mut TestGame) -> (ObjectId, ObjectId) {
 
 #[test]
 fn trickbind_counters_echo_and_echo_never_triggers_again() {
-    cr!("702.30a", "701.6b", "603.4");
+    cr!("702.30a", "701.6a", "603.4");
     ruling!(
         "Trickbind",
         "Trickbind can be used to counter the echo triggered ability. If so, the echo ability won’t trigger again so the echo cost is never paid."
@@ -99,7 +99,7 @@ fn trickbind_counters_echo_and_echo_never_triggers_again() {
 
 #[test]
 fn trickbind_counters_flanking() {
-    cr!("702.25a", "701.6b");
+    cr!("702.25a", "701.6a");
     ruling!(
         "Trickbind",
         "Trickbind can be used to counter the flanking triggered ability."
@@ -125,7 +125,7 @@ fn trickbind_counters_flanking() {
 
 #[test]
 fn trickbind_counters_madness_and_the_card_stays_exiled() {
-    cr!("702.35a", "701.6b");
+    cr!("702.35a", "701.6a");
     ruling!(
         "Trickbind",
         "Trickbind can be used to counter the madness triggered ability. The affected card will remain exiled."
@@ -148,7 +148,7 @@ fn trickbind_counters_madness_and_the_card_stays_exiled() {
 
 #[test]
 fn trickbind_counters_storm_but_not_the_original() {
-    cr!("702.40a", "701.6b");
+    cr!("702.40a", "701.6a");
     ruling!(
         "Trickbind",
         "Trickbind can be used to counter the storm triggered ability. Doing so prevents the copies from being created, but doesn’t counter the original storm spell."
@@ -182,7 +182,7 @@ fn suspend_rift_bolt(t: &mut TestGame, time: u32) -> ObjectId {
 
 #[test]
 fn trickbind_and_suspend() {
-    cr!("702.62a", "702.62b", "701.6b", "116.2f");
+    cr!("702.62a", "702.62b", "701.6a", "116.2f");
     ruling!(
         "Trickbind",
         "Trickbind can be used to counter the suspend “remove a counter” ability. If so, the counter won’t get removed, but the ability will trigger again as normal later on. Trickbind can also be used to counter the suspend “play this card” ability. If so, the card stays exiled (the ability won’t trigger again). Using suspend to exile a card in your hand is neither an activated nor a triggered ability, so it can’t be countered this way."
@@ -234,7 +234,7 @@ fn trickbind_and_suspend() {
 
 #[test]
 fn trickbind_cant_stop_turning_a_morph_face_up() {
-    cr!("116.2b", "702.37e", "701.6b");
+    cr!("116.2b", "702.37e", "701.6a");
     ruling!(
         "Trickbind",
         "Trickbind can’t counter or prevent paying the morph cost to turn a face-down creature face up, since that action doesn’t use the stack."
@@ -267,7 +267,7 @@ fn journey(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn countered_next_end_step_delayed_trigger_doesnt_trigger_again() {
-    cr!("603.7a", "603.7b", "603.7c", "701.6b");
+    cr!("603.7a", "603.7b", "603.7c", "701.6a");
     ruling!(
         "Tale's End",
         "If you counter a delayed triggered ability that triggered at the beginning of the \"next\" occurrence of a specified step or phase, that ability won't trigger again the following time that step or phase occurs."
@@ -309,7 +309,7 @@ fn countered_next_end_step_delayed_trigger_doesnt_trigger_again() {
 
 #[test]
 fn stifle_cant_target_the_draw_combat_damage_or_turning_face_up() {
-    cr!("703.4c", "510.2", "116.2b", "115.1");
+    cr!("504.1", "510.2", "116.2b", "115.1");
     ruling!(
         "Stifle",
         "Turn-based actions and special actions like the normal card draw, combat damage, or turning a face-down creature face up can't be targeted."
@@ -354,7 +354,7 @@ fn stifle_cant_target_the_draw_combat_damage_or_turning_face_up() {
 
 #[test]
 fn keyword_activated_and_triggered_abilities_can_be_countered() {
-    cr!("602.1", "603.1", "702.6a", "702.122a", "702.108a", "701.6b");
+    cr!("602.1", "603.1", "702.6a", "702.122a", "702.108a", "701.6a");
     ruling!(
         "Stifle",
         "An activated ability has a \"Cost: Effect\" format. Look for the colon. A triggered ability starts with \"when\", \"whenever\", or \"at\"."
@@ -475,7 +475,7 @@ fn overcharged_amalgam_cant_target_replacement_effects() {
 
 #[test]
 fn nimble_obstructionist_counters_keyword_abilities_of_others() {
-    cr!("702.29a", "602.1", "603.1", "702.128a", "702.130a", "701.6b");
+    cr!("702.29a", "602.1", "603.1", "702.129a", "702.130a", "701.6a");
     ruling!(
         "Nimble Obstructionist",
         "Activated abilities are written in the form \"Cost: Effect.\" Some keyword abilities, such as equip and eternalize, are activated abilities and will have colons in their reminder texts."

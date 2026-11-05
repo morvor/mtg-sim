@@ -63,7 +63,7 @@ fn mana_scene() -> ManaScene {
 
 #[test]
 fn counters_of_abilities_cant_target_mana_abilities() {
-    cr!("605.1a", "605.1b", "605.3b", "606.3", "115.1");
+    cr!("605.1a", "605.1b", "605.3b", "115.1");
     ruling!(
         "Tale's End",
         "Tale's End can't target an activated or triggered mana ability. An activated mana ability is one that could add mana as it resolves, doesn't have a target, and isn't a loyalty ability. A triggered mana ability is one that could add mana as it resolves and triggers on an activated mana ability."
@@ -118,7 +118,7 @@ fn counters_of_abilities_cant_target_mana_abilities() {
 
 #[test]
 fn kadenas_silencer_counters_loyalty_and_targeted_mana_producers_but_not_mana_abilities() {
-    cr!("605.1a", "605.1b", "605.3b", "701.6b", "702.37e");
+    cr!("605.1a", "605.1b", "605.3b", "701.6a", "702.37e");
     ruling!(
         "Kadena's Silencer",
         "Kadena's Silencer can't counter an activated or triggered mana ability. An activated mana ability is one that could add mana as it resolves, doesn't have a target, and isn't a loyalty ability. A triggered mana ability is one that could add mana as it resolves and triggers on an activated mana ability."
@@ -172,7 +172,7 @@ fn turn_up(t: &mut TestGame, silencer: ObjectId) {
 
 #[test]
 fn kadenas_silencer_counters_abilities_on_the_stack_only() {
-    cr!("701.6b", "702.6a", "702.35a", "116.2b", "702.37e", "604.1");
+    cr!("701.6a", "702.6a", "702.35a", "116.2b", "702.37e", "604.1");
     ruling!(
         "Kadena's Silencer",
         "Kadena's Silencer counters only activated and triggered abilities already on the stack. It doesn't prevent abilities from being activated or from triggering later in the turn, and it has no effect on static abilities."
@@ -249,7 +249,7 @@ fn kadenas_silencer_counters_abilities_on_the_stack_only() {
 
 #[test]
 fn summary_dismissal_leaves_static_abilities_and_resolved_effects() {
-    cr!("701.6b", "604.1", "608.2c");
+    cr!("701.6a", "604.1", "608.2c");
     ruling!(
         "Summary Dismissal",
         "Only activated and triggered abilities on the stack are countered. Static abilities of objects remain unaffected, and activated and triggered abilities of objects may be activated or may trigger again later in the turn. Spells and abilities that have already resolved aren’t affected."
@@ -292,7 +292,7 @@ fn summary_dismissal_leaves_static_abilities_and_resolved_effects() {
 
 #[test]
 fn prowess_is_a_triggered_ability_to_copy_or_counter() {
-    cr!("702.108a", "707.10", "701.6b");
+    cr!("702.108a", "707.10", "701.6a");
     ruling!(
         "Peter Parker's Camera",
         "Triggered abilities use the words \"when,\" \"whenever,\" or \"at.\" They're often written as \"[Trigger condition], [effect].\" Some keyword abilities (such as prowess) are triggered abilities and will have \"when,\" \"whenever,\" or \"at the beginning of\" in their reminder text."
@@ -333,7 +333,7 @@ fn prowess_is_a_triggered_ability_to_copy_or_counter() {
 
 #[test]
 fn voracious_greatshark_can_be_cast_with_nothing_to_counter() {
-    cr!("603.3d", "608.3");
+    cr!("603.3d");
     ruling!(
         "Voracious Greatshark",
         "You can cast Voracious Greatshark without a target for its enters-the-battlefield triggered ability. That ability will simply not happen. It won't cause Voracious Greatshark to counter itself. It's not that hungry."
