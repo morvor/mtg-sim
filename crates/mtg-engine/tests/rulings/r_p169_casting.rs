@@ -7,7 +7,7 @@ use crate::r_p169_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
-use mtg_engine::object::CastMethod;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -46,7 +46,7 @@ fn raiding_schemes_conspire_instances_are_paid_individually() {
 
 #[test]
 fn sudden_substitution_without_an_exchange_still_lets_the_controller_retarget() {
-    cr!("701.12b", "115.7");
+    cr!("701.12b", "115.7", "608.2b");
     ruling!(
         "Sudden Substitution",
         "If the exchange doesn't happen but the spell is still a legal target, its controller may choose new targets for it."
@@ -74,6 +74,29 @@ fn sudden_substitution_without_an_exchange_still_lets_the_controller_retarget() 
     assert!(t.asked()[from..]
         .iter()
         .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseTargets { .. })));
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.life(P0), 18);
+    // The creature target is gone (an illegal target): no exchange, and P1 may still
+    // choose new targets for Shock.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    mana(&mut t, P1, ManaType::R, 1);
+    let shock = t.hand(P1, "Shock");
+    let spell = t.cast(P1, shock).target(bears).go();
+    mana(&mut t, P0, ManaType::U, 4);
+    let ss = t.hand(P0, "Sudden Substitution");
+    t.answer_targets(P0, &[obj(spell)]);
+    t.answer_targets(P0, &[obj(giant)]);
+    t.answer_yes(P1, true);
+    t.answer_targets(P1, &[Entity::Player(P0)]);
+    t.cast(P0, ss).go();
+    let g = t.g.current(giant);
+    t.g.move_object(g, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.flush_events();
+    t.resolve();
+    assert_eq!(t.obj_now(spell).controller, P1);
     t.resolve_all();
     assert!(t.on_battlefield(bears));
     assert_eq!(t.life(P0), 18);
