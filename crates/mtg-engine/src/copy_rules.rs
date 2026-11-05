@@ -238,13 +238,21 @@ pub(crate) fn legal_for_each_target(g: &Game, id: ObjectId, e: Entity) -> bool {
 }
 
 /// Puts a copy of `spell` onto the stack under `controller`'s control with each of its
-/// targets changed to `e`.
+/// targets changed to `e`. With `copy_must_target`, a copy that can't itself target `e`
+/// isn't created (CR 707.10e; Beamsplitter Mage's ruling: an effect that changed the
+/// original on the stack, such as its color, doesn't apply to the copy, so the original
+/// could target `e` while the copy can't). Copies "for each [object] that spell could
+/// target" (CR 707.10d) are decided from the original's point of view instead (Ink-Treader
+/// Nephilim's ruling), and such a copy may be countered on resolution. Interpretation
+/// `copy-target-legality-original-or-copy`.
 fn copy_targeting(
     g: &mut Game,
     spell: ObjectId,
     controller: PlayerId,
     e: Entity,
+    copy_must_target: bool,
 ) -> Option<ObjectId> {
+    let events_before = g.events.len();
     let copy = crate::copy::copy_spell_quiet(g, spell, controller)?;
     if let Some(si) = g.objects[copy.0 as usize].stack.as_mut() {
         for m in si.chosen.iter_mut() {
@@ -253,6 +261,14 @@ fn copy_targeting(
                     *t = e;
                 }
             }
+        }
+    }
+    if copy_must_target {
+        g.dirty = true;
+        g.recompute();
+        if !legal_for_each_target(g, copy, e) {
+            crate::copy::uncreate_copy(g, copy, events_before);
+            return None;
         }
     }
     g.emit(crate::events::Event::BecameTarget {
@@ -336,7 +352,7 @@ pub fn copy_for_each_target(
     }
     cands
         .into_iter()
-        .filter_map(|e| copy_targeting(g, spell, controller, e))
+        .filter_map(|e| copy_targeting(g, spell, controller, e, false))
         .collect()
 }
 
@@ -377,7 +393,7 @@ pub fn copy_with_target(
             .filter(|e| legal.contains(e))
             .unwrap_or(legal[0]),
     };
-    copy_targeting(g, spell, controller, e)
+    copy_targeting(g, spell, controller, e, true)
 }
 
 /// CR 707.8a: a token that's a copy of a double-faced permanent or card is a

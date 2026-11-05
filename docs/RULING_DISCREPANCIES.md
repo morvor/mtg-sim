@@ -163,6 +163,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the opponents decide in APNAP order (CR 101.4): on the caster's turn the next player in turn order first, on another player's turn the active player first if it's an opponent; each knows the earlier decisions (101.4b).
 - Recorded: no exemption: the rulings stay cited for the caster's own turn; tests `tests/rulings/r_s16_tempting_offer.rs` (`opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices`, `off_turn_the_active_opponent_decides_first`, `tempt_with_bunnies_draws_and_makes_rabbits_for_each_player`).
 
+### Lightning, Army of One: "a source you control" for Stagger's "a source"
+- Kind: narrower than stated
+- Status: open for review
+- Ruling, Lightning, Army of One (2025-06-06): "If another effect (or effects) modifies how much damage a source you control would deal—by preventing some of it, for example—the player being dealt damage or the controller of the permanent being dealt damage chooses the order in which any such effects (including Lightning's) apply. If all of the damage is prevented, Lightning's effect no longer applies."
+- Ruling, Lightning, Army of One (2025-06-06): "If damage dealt by a source you control is being divided or assigned among multiple permanents and/or players, that damage is divided or assigned before doubling. For example, if you attack with a 5/5 creature with trample and it's blocked by a 2/2 creature, you can assign 2 damage to the blocker and 3 damage to the defending player. Those amounts are then doubled to 4 and 6, respectively."
+- Conflicts with: nothing they say: both are right for sources Lightning's controller controls. But the card's Oracle text doubles damage from any source: "Stagger — Whenever Lightning deals combat damage to a player, until your next turn, if a source would deal damage to that player or a permanent that player controls, it deals double that damage instead." The rulings' "a source you control" reads as if it applied only to those.
+- Evidence: both are Twinflame Tyrant's rulings (Foundations, 2024-11-08), word for word with the name swapped, right for its "If a source you control would deal damage to an opponent or a permanent an opponent controls, it deals double that damage instead."; Lightning's third ruling of the same day ("The damage is dealt by the same source as the original source of damage. ...") is Twinflame Tyrant's too. The same holds for other players' sources: CR 616.1 has the affected player or controller choose the order whoever controls the source, and CR 601.2d and 510.1 divide or assign damage before any replacement applies. Found in work item rulings-P040 (Nov 5); not a contradiction, so nothing is exempted.
+- Engine: Stagger doubles damage from any source, including the damaged player's own and a third player's, to that player and their permanents until Lightning's controller's next turn; the damaged player orders it with prevention effects whoever controls the source.
+- Recorded: no exemption: the rulings stay cited; tests `tests/rulings/r_p040_multipliers.rs` (`the_player_dealt_damage_orders_multipliers_and_prevention`, `lightning_stagger_doubles_damage_from_any_source_to_that_player_until_your_next_turn`).
+
 ## Misattached rulings
 
 ### Astarion, the Decadent: Astarion's Thirst's ruling about X
@@ -392,6 +402,33 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: only a Lich put into a graveyard from the battlefield makes you lose; exiled, bounced or under Rest in Peace, it doesn't.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P096.tsv`; tests `tests/rulings/r_p096_lich.rs` (`lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability`, `multiple_liches_sacrifice_for_each_but_draw_only_once`, `lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose`).
 
+### Sarkhan the Mad: "whether or not to redirect the damage dealt by that Dragon"
+- Kind: outdated
+- Status: open for review
+- Ruling, Sarkhan the Mad (2010-06-15): "If you target an opponent with the third ability, you choose separately for each Dragon creature you control whether or not to redirect the damage dealt by that Dragon to a planeswalker that player controls."
+- Conflicts with: CR 306.7: "Previously, planeswalkers were subject to a redirection effect that allowed a player to have noncombat damage that would be dealt to an opponent be dealt to a planeswalker under that opponent’s control instead. This rule has been removed and certain cards have received errata in the Oracle card reference to deal damage directly to planeswalkers." The card's Oracle text: "−4: Each Dragon creature you control deals damage equal to its power to target player or planeswalker."
+- Evidence: the ruling applied 306.7 of the CRs from 2010 to early 2018 (CR effective 2010-04-23 and still in the CR effective 2018-01-19: "If noncombat damage would be dealt to a player by a source controlled by an opponent, that opponent may have that source deal that damage to a planeswalker the first player controls instead. This is a redirection effect ..."). The Dominaria CR (effective 2018-04-27) replaced it with today's text (all from the archived CR texts). Work item rulings-P008.
+- Engine: the Dragons deal their damage to the target, the player or the planeswalker; no redirection choice is asked.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; test `tests/rulings/r_p008_planeswalkers.rs` (`sarkhan_the_mad_dragons_damage_the_target_with_no_redirection`).
+
+### Manticore of the Gauntlet: "If you can't choose a target opponent"
+- Kind: outdated
+- Status: open for review
+- Ruling, Manticore of the Gauntlet (2017-04-18): "If you can't choose a target opponent when you put Manticore of the Gauntlet's triggered ability on the stack (most likely because your opponents have hexproof), the ability is removed from the stack and you won't put a -1/-1 counter on any creature."
+- Conflicts with: the card's Oracle text: "When this creature enters, put a -1/-1 counter on target creature you control. This creature deals 3 damage to target opponent or planeswalker." With its opponents hexproof, a planeswalker can still be targeted (one its controller controls too), and CR 603.3d removes a triggered ability from the stack only "If a choice is required when the triggered ability goes on the stack but no legal choices can be made for it".
+- Evidence: the ruling is the Amonkhet release notes' (2017-04-14), written for the printed text they quote: "When Manticore of the Gauntlet enters the battlefield, put a -1/-1 counter on target creature you control. Manticore of the Gauntlet deals 3 damage to target opponent." The Dominaria Oracle Changes (Eli Shiffrin, 2018-04-13; the Oracle update that went with the Comprehensive Rules effective 2018-04-27, which removed planeswalker damage redirection, see the Sarkhan the Mad entry) list Manticore of the Gauntlet among the cards given errata to deal damage to planeswalkers: "Abilities that damage “target opponent” have been changed to “target opponent or planeswalker” with the same exception listed above. These spells and abilities can target a planeswalker you control." (both from the ormos mirror). Found in the review of work item rulings-P008. What the ruling says happens when the ability has no legal target (removed from the stack, no -1/-1 counter) still holds and is cited.
+- Engine: with P1 hexproof, the ability targets a planeswalker of P1's, or P0's own when it's the only one, and is put on the stack; with no planeswalker on the battlefield either, it's removed from the stack and no -1/-1 counter is put on a creature.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; tests `tests/rulings/r_p008_targets.rs` (`etb_burn_with_no_legal_opponent_isnt_put_on_the_stack`, `manticore_of_the_gauntlet_targets_a_planeswalker_when_its_opponents_have_hexproof`).
+
+### The Fallen: "only to opponents of its current controller"
+- Kind: outdated
+- Status: open for review
+- Ruling, The Fallen (2007-09-16): "The Fallen’s ability causes it to deal damage only to opponents of its current controller. If The Fallen has dealt damage to you, and then you gain control of it, you won’t be damaged during your upkeep."
+- Conflicts with: the card's Oracle text: "At the beginning of your upkeep, this creature deals 1 damage to each opponent and planeswalker it has dealt damage to this game." A planeswalker it has dealt damage to is dealt damage whoever controls it, The Fallen's controller included.
+- Evidence: the ruling is older than planeswalkers (Lorwyn, 2007-10-12) and was written for an ability that dealt damage only to opponents; the Dominaria Oracle Changes (Eli Shiffrin, 2018-04-13; the Oracle update that went with the Comprehensive Rules effective 2018-04-27, which removed planeswalker damage redirection) list The Fallen among the cards given errata for that change (ormos mirror), which gave it today's "each opponent and planeswalker". Found in the review of work item rulings-P008. The second sentence still holds and is cited, and so does the first among players.
+- Engine: under P1's control, The Fallen deals 1 damage at P1's upkeep to P1's own planeswalker it dealt damage to earlier, and none to P0, whom it has never dealt damage to.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; tests `tests/rulings/r_p008_combat_lki.rs` (`the_fallen_damages_only_its_current_controllers_opponents`, `the_fallen_damages_the_planeswalkers_it_has_dealt_damage_to`).
+
 ### Ronom Hulk: "though there are no snow instants or sorceries"
 - Kind: outdated
 - Status: open for review
@@ -407,7 +444,25 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- None at the moment. Work item ruling-conflicts-3 took up the craft copy ruling (now an
+- **Fiery Annihilation** (rulings-P047): its ruling (2024-11-08) that the target Equipment
+  isn't exiled whenever the target creature is an illegal target, against Searing Blaze's
+  (2010-03-01) and Memory's Journey's (2011-09-22) that a target described by another illegal
+  target ("target creature that player ... controls", "target cards from their graveyard") is
+  still affected or still legal. The two readings of CR 608.2b's last sentences ("If part of the
+  effect requires information about an illegal target, it fails to determine any such
+  information. ...") and a lead to check against the archived rules (whether that sentence
+  replaced one that said the opposite after 2011, which would make the older rulings
+  outdated) are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)". Left uncited.
+- **Stone Calendar** (rulings-P033): its ruling "You may choose not to apply Stone Calendar’s
+  cost reduction effect." (2004-10-04) against its Oracle text "Spells you cast cost {1}
+  less to cast." (no "up to"; a reduction is part of the total cost, CR 601.2f, with no
+  choice to decline it, and Semblance Anvil's "Semblance Anvil's cost reduction effect is
+  mandatory." (2011-01-01) says so for the same wording). Likely origin: the printed text
+  "Your spells cost up to 1 less to cast" (as other databases and Scryfall's Italian
+  printing still show it), which the English Oracle text no longer has; the date of that
+  Oracle change wasn't found. Left uncited; the engine always applies the reduction
+  (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
+- Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
   Dead Tide and Arbiter of Knollridge (inconsistent entries above, for the user to decide).

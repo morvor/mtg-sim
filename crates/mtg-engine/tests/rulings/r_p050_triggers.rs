@@ -482,9 +482,9 @@ fn faerie_bladecrafter_triggers_once_per_player_per_damage_step() {
         None,
         Effect::Modify {
             what: Sel::All(Filter::Objects(vec![f1])),
-            mods: vec![Modification::AddKeyword(mtg_engine::keywords::Keyword::new(
-                mtg_engine::keywords::KeywordKind::DoubleStrike,
-            ))],
+            mods: vec![Modification::AddKeyword(
+                mtg_engine::keywords::Keyword::new(mtg_engine::keywords::KeywordKind::DoubleStrike),
+            )],
             duration: Duration::EndOfTurn,
         },
         &[],

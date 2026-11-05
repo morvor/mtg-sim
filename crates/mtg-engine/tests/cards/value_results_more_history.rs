@@ -311,8 +311,11 @@ fn smugglers_share_counts_opponents_over_a_threshold() {
 }
 
 #[test]
-fn kaya_orzhov_usurper_gains_the_damage_dealt() {
-    cr!("120.4b", "608.2c");
+fn kaya_orzhov_usurper_drains_the_number_of_cards_in_exile() {
+    // With no effect changing the damage, the damage dealt and the life gained are both
+    // the number of cards P1 owns in exile (with such an effect, the life gained is still that
+    // number: `rulings/r_p050_interactions.rs`).
+    cr!("608.2c", "608.2h");
     let c = card("Kaya, Orzhov Usurper");
     assert!(
         c.unsupported_text().is_empty(),

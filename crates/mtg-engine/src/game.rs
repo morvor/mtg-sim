@@ -727,7 +727,9 @@ pub struct Game {
     pub prevented_per_source: Vec<(u64, ObjectId, u32)>,
     /// While simultaneous damage events are being replaced: how the controller of each
     /// [`ReplacementAction::PreventPerSource`] effect divided X of a source's damage among
-    /// its recipients (effect key, source, recipient, damage still to prevent).
+    /// its recipients, and how the controller of a shield applying to damage to several of
+    /// its recipients divided what's left of it (`prevention::divide_shields`): (effect
+    /// key, source, recipient, damage still to prevent or redirect).
     pub per_source_division: Vec<(u64, ObjectId, Entity, u32)>,
     /// While the results of simultaneous damage events are being applied: the life each
     /// player gains as part of that damage event and hasn't gained yet (lifelink, and

@@ -2844,9 +2844,19 @@ impl Game {
         let mut ctx = Ctx::new(Some(src), p);
         ctx.ability_uid = a.uid;
         ctx.link = a.link;
-        // X in the cost.
-        let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
-            || act.cost.parts.iter().any(|c| cost_part_has_x(c));
+        // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the activation
+        // cost (at most one) is announced, before the value of X.
+        let alt = self.announce_alternative_activation_cost(p, src, a, act);
+        // X in the cost that will be paid: the activation cost, or the alternative cost
+        // with the parts a keyword adds to it. With an alternative cost that has no {X}
+        // paid rather than a cost with {X}, X is 0 (Gavi, Nest Warden's ruling; the
+        // abilities' counterpart of CR 107.3b).
+        let alt_cost = alt
+            .as_ref()
+            .map(|c| crate::activation_costs::with_alternative(self, src, a, act, c));
+        let paid_cost = alt_cost.as_ref().unwrap_or(&act.cost);
+        let has_x = paid_cost.mana.as_ref().is_some_and(|m| m.has_x())
+            || paid_cost.parts.iter().any(cost_part_has_x);
         let mut x = 0i64;
         if has_x {
             let mut max = crate::activation_costs::x_bound(self, p, act);
@@ -2898,7 +2908,6 @@ impl Game {
         ctx.x = x as i32;
         if act.is_mana_ability {
             // CR 605.3: pay costs, then resolve immediately without using the stack.
-            let alt = self.announce_alternative_activation_cost(p, src, a, act);
             let (cost, x_left) =
                 self.ability_total_cost_and_x(p, src, a, act, None, x as u32, alt.as_ref());
             let spend = SpendContext {
@@ -3015,9 +3024,6 @@ impl Game {
                 stack_obj: Some(id),
             });
         }
-        // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
-        // activation cost (at most one) is announced.
-        let alt = self.announce_alternative_activation_cost(p, src, a, act);
         // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost that will be paid
         // (the activation cost or the alternative cost) will be paid.
         let announced = match &alt {
@@ -3939,6 +3945,12 @@ impl Game {
         paid: &mut PaidCost,
     ) -> Result<(), Illegal> {
         let bad = |s: &str| Err(Illegal(s.to_string()));
+        // CR 601.2h: the parts of a cost are paid one after another; what paying one
+        // changed (a +1/+1 counter removed) is seen by the next ("sacrifice a creature
+        // with power 1 or greater", Falco Spara's ruling).
+        if self.dirty {
+            self.recompute();
+        }
         match part {
             CostPart::Tap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;

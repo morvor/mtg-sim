@@ -724,7 +724,7 @@ pub fn can_pay_mana_cost_of_less(
                 &g.player(p).mana_pool.mana,
                 &m,
                 &SpendContext::default(),
-                g.player(p).life.max(0) as u32,
+                payable_life(g, p),
                 &usable_pool(g, p, &SpendContext::default()),
             )
             .is_some()
@@ -1674,7 +1674,7 @@ const MAX_OFFER_USES: u32 = 99;
 /// activating a mana ability (CR 601.2g).
 fn offer_sources(g: &Game, p: PlayerId) -> Vec<ManaSource> {
     let mut out = Vec::new();
-    let life = g.player(p).life.max(0) as u32;
+    let life = payable_life(g, p);
     for (id, ctx, life_each, effect) in crate::special_actions::mana_offers(g, p) {
         let Some(obj) = ctx.source else {
             continue;
@@ -1772,7 +1772,7 @@ pub fn potential_mana_count(g: &Game, p: PlayerId, reserve: Option<ObjectId>) ->
             })
         })
         .collect();
-    let life = g.player(p).life.max(0) as u32;
+    let life = payable_life(g, p);
     Planner::new(&[], &units, &sources, life).capacity(&|_| true) as u32
 }
 
@@ -2090,7 +2090,7 @@ fn solve_payment(
             });
         }
     }
-    let life = g.player(p).life.max(0) as u32;
+    let life = payable_life(g, p);
     let mut planner = Planner::new(reqs, &units, sources, life);
     planner.life_for = crate::payment_rules::life_for_mana(g, p);
     planner.x_distinct = spend.x_spend.is_some_and(|x| x.distinct);
@@ -2667,12 +2667,11 @@ pub fn pay_mana(
         }
     }
     // The life left after any life paid for mana (CR 119.4).
-    let max_life =
-        if g.cant_lose_life(p) || crate::rule_statics::payment::forbids_life(g, p, spend.cost_of) {
-            0
-        } else {
-            g.player(p).life.max(0) as u32
-        };
+    let max_life = if crate::rule_statics::payment::forbids_life(g, p, spend.cost_of) {
+        0
+    } else {
+        payable_life(g, p)
+    };
     let plan = try_pool(g, 0).or_else(|| try_pool(g, max_life))?;
     if plan.life > 0 && !g.pay_life(p, plan.life) {
         return None;
@@ -2782,4 +2781,15 @@ pub fn pay_mana(
         }
     }
     Some(spent)
+}
+
+/// The most life `p` can pay toward a cost (CR 119.4): their life total, or none if they
+/// can't lose life (CR 119.8: "a cost that involves having that player pay life can't be
+/// paid").
+fn payable_life(g: &Game, p: PlayerId) -> u32 {
+    if g.cant_lose_life(p) {
+        0
+    } else {
+        g.player(p).life.max(0) as u32
+    }
 }

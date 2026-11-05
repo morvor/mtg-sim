@@ -357,6 +357,7 @@ fn fieldmist_borderpost_a_cost_reduction_applies_to_its_alternative_cost() {
 #[test]
 fn spectral_procession_a_generic_reduction_applies_only_to_generic_halves() {
     cr!("601.2b", "601.2f", "118.7a", "107.4e");
+    interp!("hybrid-half-for-a-reduction");
     ruling!(
         "Spectral Procession",
         "If an effect reduces the cost to cast a spell by an amount of generic mana, it applies to a monocolored hybrid spell only if you've chosen a method of paying for it that includes generic mana."
