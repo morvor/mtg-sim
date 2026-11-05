@@ -15,13 +15,11 @@ use mtg_engine::*;
 fn flicker(t: &mut TestGame, id: ObjectId) -> ObjectId {
     let id = t.g.current(id);
     let owner = t.obj_now(id).owner;
-    let e = t
-        .g
-        .move_object(id, Zone::Exile, mtg_engine::events::MoveCause::Effect, None)
-        .expect("exiled");
-    let new = t
-        .g
-        .move_object_ev(mtg_engine::replacement::MoveEv {
+    let e =
+        t.g.move_object(id, Zone::Exile, mtg_engine::events::MoveCause::Effect, None)
+            .expect("exiled");
+    let new =
+        t.g.move_object_ev(mtg_engine::replacement::MoveEv {
             obj: e,
             to: Zone::Battlefield,
             pos: mtg_engine::ability::LibraryPosition::Top,
@@ -71,7 +69,10 @@ fn guardian_archon_returning_is_a_new_object_with_a_new_choice() {
     assert!(!damaged_by(&mut t, P1, pl(P0)), "protection from P1");
     assert!(damaged_by(&mut t, P2, pl(P0)));
 
-    assert!(t.activate(P0, archon, 0, &[obj(archon)]).is_err(), "only once");
+    assert!(
+        t.activate(P0, archon, 0, &[obj(archon)]).is_err(),
+        "only once"
+    );
     t.clear_answers();
     // It returns: a new object, a new opponent, a new activation.
     t.answer_choose(P0, &[pl(P2)]);
@@ -323,7 +324,10 @@ fn kurbis_copies_and_mana_spent() {
     assert_eq!(t.counters(k[0], "+1/+1"), 2);
     assert!(t.g.turn_events.iter().any(|e| matches!(
         e,
-        mtg_engine::events::Event::ZoneChange { from: Zone::Battlefield, .. }
+        mtg_engine::events::Event::ZoneChange {
+            from: Zone::Battlefield,
+            ..
+        }
     )));
 }
 
@@ -454,17 +458,25 @@ fn sevinne_doesnt_trigger_after_an_earlier_graveyard_spell_that_turn() {
         if earlier {
             let tt = t.graveyard(P0, "Think Twice");
             t.cast(P0, tt)
-                .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+                .method(CastMethod::Keyword(
+                    mtg_engine::keywords::KeywordKind::Flashback,
+                ))
                 .go();
             t.resolve_all();
         }
         t.battlefield(P0, "Sevinne, the Chronoclasm");
         let tt = t.graveyard(P0, "Think Twice");
         t.cast(P0, tt)
-            .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+            .method(CastMethod::Keyword(
+                mtg_engine::keywords::KeywordKind::Flashback,
+            ))
             .go();
         t.settle();
-        assert_eq!(t.stack_len(), if earlier { 1 } else { 2 }, "earlier: {earlier}");
+        assert_eq!(
+            t.stack_len(),
+            if earlier { 1 } else { 2 },
+            "earlier: {earlier}"
+        );
     }
 }
 
@@ -515,7 +527,11 @@ fn kharn_dealt_damage_several_times_by_one_spell() {
     assert_eq!(damage_marked(&t, kharn), 0);
     assert_eq!(t.stack_len(), 3, "three triggers");
     let controllers: Vec<PlayerId> = t.g.stack.iter().map(|s| t.g.obj(*s).controller).collect();
-    assert_eq!(controllers, vec![P0, P1, P2], "APNAP: P0's first, P2's on top");
+    assert_eq!(
+        controllers,
+        vec![P0, P1, P2],
+        "APNAP: P0's first, P2's on top"
+    );
     t.resolve_all();
     assert_eq!(
         [t.hand_size(P0), t.hand_size(P1), t.hand_size(P2)],

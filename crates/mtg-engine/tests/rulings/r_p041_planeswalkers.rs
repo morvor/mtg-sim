@@ -83,7 +83,11 @@ fn a_gideon_that_entered_this_turn_and_becomes_a_creature_cant_attack() {
             activate_resolve(&mut t, P0, pw, ability, &targets);
             assert!(t.obj_now(pw).is_creature(), "{name}");
             t.set_step(P0, Step::BeginningOfCombat);
-            assert_eq!(can_attack(&mut t, pw), !sick, "{name}, entered this turn: {sick}");
+            assert_eq!(
+                can_attack(&mut t, pw),
+                !sick,
+                "{name}, entered this turn: {sick}"
+            );
         }
     }
 }
@@ -109,13 +113,7 @@ fn a_gideon_becoming_a_creature_doesnt_enter_the_battlefield() {
         } else {
             battle_forged(&mut t, P0, 3)
         };
-        activate_resolve(
-            &mut t,
-            P0,
-            gideon,
-            if champion { 1 } else { 2 },
-            &[],
-        );
+        activate_resolve(&mut t, P0, gideon, if champion { 1 } else { 2 }, &[]);
         assert!(t.obj_now(gideon).is_creature());
         assert_eq!(t.stack_len(), 0, "Soul Warden didn't trigger");
         assert_eq!(t.life(P0), 20);
@@ -153,7 +151,11 @@ fn creatures_told_to_attack_a_gideon_that_left_may_attack_anyone_or_not_at_all()
         let ctx = format!("Jura: {jura}, left: {leaves}");
         assert_eq!(legal_attack(&mut t, &[]), leaves, "{ctx}");
         assert_eq!(legal_attack(&mut t, &[(bears, pl(P0))]), leaves, "{ctx}");
-        assert_eq!(legal_attack(&mut t, &[(bears, obj(other))]), leaves, "{ctx}");
+        assert_eq!(
+            legal_attack(&mut t, &[(bears, obj(other))]),
+            leaves,
+            "{ctx}"
+        );
         if !leaves {
             assert!(legal_attack(&mut t, &[(bears, obj(gideon))]), "{ctx}");
         }
@@ -178,7 +180,7 @@ fn gideon_the_oathsworn_with_nine_loyalty_goes_to_the_graveyard() {
 
 #[test]
 fn gideon_of_the_trials_emblem_stays_and_works_with_any_gideon() {
-    cr!("114.4", "104.3b", "104.3c", "104.3h");
+    cr!("114.4", "104.3b", "104.3c", "104.3d");
     ruling!(
         "Gideon of the Trials",
         "If Gideon leaves the battlefield after giving you his emblem, you'll keep the emblem. Its effect will apply again later if another Gideon comes under your control."
@@ -236,7 +238,7 @@ fn gideon_of_the_trials_emblem_in_two_headed_giant() {
 
 #[test]
 fn gideon_blackblade_sheds_equipment_on_other_players_turns() {
-    cr!("301.5c", "704.5n");
+    cr!("301.5", "704.5n");
     ruling!(
         "Gideon Blackblade",
         "If an Equipment becomes attached to Gideon while he's a creature, it'll become unattached during the next upkeep that isn't yours."

@@ -218,7 +218,11 @@ fn phytohydra_controller_orders_its_replacement_and_a_prevention_shield() {
             apply_first(&mut t, P0, "Phytohydra");
         }
         damage(&mut t, giant, obj(hydra), 3);
-        assert_eq!(t.counters(hydra, "+1/+1"), counters, "shield first: {shield_first}");
+        assert_eq!(
+            t.counters(hydra, "+1/+1"),
+            counters,
+            "shield first: {shield_first}"
+        );
         assert_eq!(damage_marked(&t, hydra), 0);
         assert_eq!(replacement_choosers(&t, from), vec![P0]);
     }
@@ -246,7 +250,11 @@ fn phyrexian_hydra_controller_chooses_among_prevention_effects() {
             apply_first(&mut t, P0, "Phyrexian Hydra");
         }
         damage(&mut t, giant, obj(hydra), 3);
-        assert_eq!(t.counters(hydra, "-1/-1"), counters, "shield first: {shield_first}");
+        assert_eq!(
+            t.counters(hydra, "-1/-1"),
+            counters,
+            "shield first: {shield_first}"
+        );
         assert_eq!(damage_marked(&t, hydra), 0);
         assert_eq!(replacement_choosers(&t, from), vec![P0]);
     }

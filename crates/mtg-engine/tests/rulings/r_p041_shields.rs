@@ -436,7 +436,10 @@ fn force_bubbles_one_choice_for_damage_dealt_at_once() {
     damage_at_once(&mut t, &[(giant, pl(P0), 1), (bears, pl(P0), 1)], true);
     let both = (t.counters(a, "depletion"), t.counters(b, "depletion"));
     assert_eq!(both.0 + both.1, 4, "{both:?}");
-    assert!(both.0 == first.0 + 2 || both.1 == first.1 + 2, "not split: {both:?}");
+    assert!(
+        both.0 == first.0 + 2 || both.1 == first.1 + 2,
+        "not split: {both:?}"
+    );
     assert_eq!(t.life(P0), 20);
 }
 
@@ -670,13 +673,20 @@ fn woolly_razorbacks_ice_doesnt_prevent_damage_dealt_to_it() {
     fight_it_out(&mut t, &[wurm], &[(razorback, wurm)]);
     assert_eq!(t.counters(razorback, "ice"), 2);
     assert_eq!(damage_marked(&t, razorback), 6);
-    assert_eq!(damage_marked(&t, wurm), 0, "the Razorback's own damage is prevented");
+    assert_eq!(
+        damage_marked(&t, wurm),
+        0,
+        "the Razorback's own damage is prevented"
+    );
 }
 
 #[test]
 fn camel_prevents_damage_from_an_animated_desert_in_combat() {
     cr!("615.1a");
-    ruling!("Camel", "It does prevent damage from animated Deserts in combat.");
+    ruling!(
+        "Camel",
+        "It does prevent damage from animated Deserts in combat."
+    );
     supported("Camel");
     supported("Hostile Desert");
     let mut t = TestGame::new(2);
@@ -722,6 +732,7 @@ fn cautery_slivers_prevention_targets_only_players_planeswalkers_and_slivers() {
     let _ = t.activate(P0, sliver, 1, &[pl(P0)]);
     let prevent_targets = crate::r_p016_common::target_choices(&t, P0, from, "");
     assert!(!prevent_targets[0].contains(&obj(bears)), "not a Sliver");
+    assert!(prevent_targets[0].contains(&obj(sliver)), "a Sliver");
     assert!(prevent_targets[0].contains(&pl(P0)));
     assert!(prevent_targets[0].contains(&pl(P1)));
 }

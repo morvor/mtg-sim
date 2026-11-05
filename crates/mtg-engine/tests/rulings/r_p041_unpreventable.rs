@@ -3,10 +3,10 @@
 //! (CR 120.2, 704.3), and the source of damage (CR 120.1, 609.7).
 
 use crate::r_p041_common::*;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
-use mtg_engine::object::Zone;
 
 /// A game where P1 controls Leyline of Punishment ("Damage can't be prevented.") and a
 /// Hill Giant (the usual source of damage).
@@ -22,7 +22,7 @@ fn unpreventable() -> (TestGame, ObjectId) {
 
 #[test]
 fn unpreventable_damage_to_an_animated_gideon_is_marked_and_removes_loyalty() {
-    cr!("615.12", "120.3c", "120.3e", "704.5i", "702.12b");
+    cr!("615.12", "120.3c", "120.3e", "704.5i");
     ruling!(
         "Gideon, Ally of Zendikar",
         "If damage that can't be prevented is dealt to Gideon after his first ability has resolved, that damage will have all applicable results"
@@ -84,7 +84,11 @@ fn unpreventable_damage_to_an_animated_gideon_is_marked_and_removes_loyalty() {
         set_loyalty(&mut t, gideon, 3);
         damage(&mut t, giant, obj(gideon), 2);
         assert_eq!(damage_marked(&t, gideon), 2, "{name}: the damage is marked");
-        assert_eq!(t.counters(gideon, "loyalty"), 1, "{name}: and removes loyalty");
+        assert_eq!(
+            t.counters(gideon, "loyalty"),
+            1,
+            "{name}: and removes loyalty"
+        );
         assert!(t.on_battlefield(gideon), "{name}");
         damage(&mut t, giant, obj(gideon), 1);
         assert!(!t.on_battlefield(gideon), "{name}: no loyalty");
@@ -104,7 +108,10 @@ fn gideon_jura_dealt_lethal_unpreventable_damage_is_destroyed() {
     activate_resolve(&mut t, P0, gideon, 2, &[]);
     set_loyalty(&mut t, gideon, 10);
     damage(&mut t, giant, obj(gideon), 6);
-    assert!(t.in_graveyard(P0, "Gideon Jura"), "6 damage on a 6/6 with 4 loyalty");
+    assert!(
+        t.in_graveyard(P0, "Gideon Jura"),
+        "6 damage on a 6/6 with 4 loyalty"
+    );
 }
 
 // --- Prevent and put counters / exile cards ---------------------------------------------------
@@ -266,7 +273,10 @@ fn prevention_for_others_applies_even_if_its_source_is_dealt_lethal_damage_at_on
             events.push((src, pl(P0), 3));
         }
         damage_at_once(&mut t, &events, false);
-        assert!(!t.on_battlefield(protector), "{name} was dealt lethal damage");
+        assert!(
+            !t.on_battlefield(protector),
+            "{name} was dealt lethal damage"
+        );
         assert!(t.on_battlefield(other), "{name}");
         assert_eq!(damage_marked(&t, other), 0, "{name}");
         assert_eq!(t.life(P0), 20, "{name}");

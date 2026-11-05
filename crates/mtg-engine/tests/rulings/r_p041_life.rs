@@ -54,7 +54,7 @@ fn sustaining_spirit_doesnt_let_you_pay_more_life_than_you_have() {
 
 #[test]
 fn courageous_resolve_life_total_cant_be_set_or_exchanged_lower() {
-    cr!("119.7", "119.5", "701.12c");
+    cr!("119.8", "119.5", "701.12c");
     ruling!(
         "Courageous Resolve",
         "If an effect says to set your life total to a certain number and that number is less than your current life total, that part of the effect won't do anything."
@@ -87,7 +87,7 @@ fn courageous_resolve_life_total_cant_be_set_or_exchanged_lower() {
 
 #[test]
 fn courageous_resolve_fateful_hour_you_cant_lose() {
-    cr!("104.3b", "104.3c", "104.3d", "104.3h");
+    cr!("104.3b", "104.3c", "104.3d");
     ruling!(
         "Courageous Resolve",
         "If you cast Courageous Resolve and your life total is 5 or less when it resolves, for the rest of that turn, no game effect can cause you to lose the game or cause any opponent to win the game. It doesn't matter whether you have 0 or less life, you're forced to draw a card while your library is empty, you have ten or more poison counters"
@@ -109,7 +109,7 @@ fn courageous_resolve_fateful_hour_you_cant_lose() {
 
 #[test]
 fn courageous_resolve_in_two_headed_giant() {
-    cr!("810.8a", "810.9h");
+    cr!("810.8a", "810.8c", "810.9h");
     ruling!(
         "Courageous Resolve",
         "If you cast Courageous Resolve in a Two-Headed Giant game and your team's life total is 5 or less when it resolves, your team can't lose the game that turn and the opposing team can't win the game that turn."
@@ -118,6 +118,10 @@ fn courageous_resolve_in_two_headed_giant() {
     t.g.players[0].life = 5;
     t.g.players[1].life = 5;
     resolve_fateful(&mut t, P0);
+    // "You can't lose life this turn": P0's teammate can't either (CR 810.9h).
+    let src = t.battlefield(P2, "Hill Giant");
+    damage(&mut t, src, pl(P1), 3);
+    assert_eq!((t.life(P0), t.life(P1)), (5, 5));
     t.g.players[0].life = 0;
     t.g.players[1].life = 0;
     t.settle();
@@ -127,7 +131,7 @@ fn courageous_resolve_in_two_headed_giant() {
 
 #[test]
 fn commander_damage_is_tracked_even_if_life_doesnt_change() {
-    cr!("903.10a", "119.7", "120.3a");
+    cr!("903.10a", "119.8", "120.3a");
     ruling!(
         "Courageous Resolve",
         "In a Commander game, combat damage you're dealt by a commander is still tracked, even if you don't lose life as a result."
@@ -165,7 +169,9 @@ fn commander_damage_is_tracked_even_if_life_doesnt_change() {
         };
         let giant = t.battlefield(P1, "Hill Giant");
         t.g.objects[giant.0 as usize].is_commander = true;
-        t.g.players[P1.idx()].commander_names.push("Hill Giant".into());
+        t.g.players[P1.idx()]
+            .commander_names
+            .push("Hill Giant".into());
         to_beginning_of_combat(&mut t, P1);
         attack_with(&mut t, &[(giant, pl(P0))]);
         block_and_finish(&mut t, P0, &[]);
@@ -347,13 +353,30 @@ fn soul_echo_targets_an_opponent_each_upkeep() {
     assert_eq!(offered.len(), 1);
     assert!(offered[0].contains(&pl(P1)) && offered[0].contains(&pl(P2)));
     assert!(!offered[0].contains(&pl(P0)));
+    // The chosen opponent is the one who may choose.
+    let choosers = |t: &TestGame, from: usize| -> Vec<PlayerId> {
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+            .map(|(p, _)| *p)
+            .collect()
+    };
+    t.resolve_all();
+    assert_eq!(choosers(&t, from), vec![P2]);
+    // The next upkeep: a new target, P1.
+    let from = t.asked().len();
+    t.answer_targets(P0, &[pl(P1)]);
+    t.set_step(P2, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(choosers(&t, from), vec![P1]);
 }
 
 // --- Dovin, a player leaving the game -------------------------------------------------------
 
 #[test]
 fn dovin_until_your_next_turn_after_you_left_the_game() {
-    cr!("800.4m", "611.2b");
+    cr!("800.4m");
     ruling!(
         "Dovin, Hand of Control",
         "In a multiplayer game, if you leave the game after Dovin’s last ability resolves but before your next turn begins, its effect lasts until your next turn would have begun. It neither expires immediately nor lasts indefinitely."
