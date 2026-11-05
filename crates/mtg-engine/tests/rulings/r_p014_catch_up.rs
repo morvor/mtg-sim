@@ -15,6 +15,7 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
+use rand::SeedableRng;
 
 // ---------------------------------------------------------------------------
 // Life totals that become a number
@@ -61,7 +62,7 @@ fn arbiter_of_knollridge_life_gain_triggers_lifegain_abilities() {
 
 #[test]
 fn repay_in_kind_in_two_headed_giant_one_member_loses_the_difference() {
-    cr!("810.9d", "810.9c");
+    cr!("810.9a", "810.9d", "810.9c");
     ruling!(
         "Repay in Kind",
         "In a Two-Headed Giant game, anything that cares about a player’s life total checks the life total of that player’s team."
@@ -84,7 +85,7 @@ fn repay_in_kind_in_two_headed_giant_one_member_loses_the_difference() {
 
 #[test]
 fn arbiter_of_knollridge_in_two_headed_giant_one_member_gains() {
-    cr!("810.9d", "810.9c");
+    cr!("810.9a", "810.9d", "810.9c");
     ruling!(
         "Arbiter of Knollridge",
         "In a Two-Headed Giant game, each team chooses one person on that team to gain the appropriate amount of life."
@@ -107,7 +108,8 @@ fn arbiter_of_knollridge_in_two_headed_giant_one_member_gains() {
 /// become 8 and Barry and Doug's life totals will each become 11" isn't cited: under CR
 /// 801.10 and 801.11 the ability affects and sees only what is within its controller's
 /// range of influence (see 801.11's Coat of Arms example), so with Alice controlling
-/// Arbiter, Barry and Doug become 8 and Carrie, out of range, keeps 11.
+/// Arbiter, Barry and Doug become 8 and Carrie, out of range, keeps 11. See
+/// docs/agents/engine-gaps.md, "Apparent conflicts (Nov 5)".
 #[test]
 fn arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range() {
     cr!("801.10", "801.11", "119.5");
@@ -254,7 +256,7 @@ fn gift_of_estates_needs_an_opponent_with_more_lands_and_finds_nonbasic_plains()
 
 #[test]
 fn oreskos_explorer_searches_on_resolution_even_for_zero() {
-    cr!("608.2h", "701.23a", "107.3a");
+    cr!("608.2h", "701.23a");
     ruling!(
         "Oreskos Explorer",
         "If no player controls more lands than you do, you'll still search and shuffle your library, although you can't find any cards."
@@ -550,17 +552,20 @@ fn damping_engine_sacrifice_needs_the_most_permanents_and_works_once_a_turn() {
         .add_type(mtg_engine::mana::ManaType::G, 2);
     t.cast(P0, bears).go();
     t.resolve_all();
-    // Now P0 controls the most (five) and may sacrifice once.
+    // Now P0 controls the most (five): it can't cast creature spells, and may sacrifice
+    // once to ignore that.
     t.lands(P0, "Forest", 1);
+    let more = t.hand(P0, "Grizzly Bears");
+    t.g.players[0]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::G, 2);
+    assert!(t.cast(P0, more).try_go().is_err());
+    t.clear_answers();
     let sa = specials(&mut t, P0);
     assert_eq!(sa.len(), 1);
     assert!(specials(&mut t, P2).is_empty());
     t.g.take_action(P0, Action::Special(sa[0].clone()));
     assert!(specials(&mut t, P0).is_empty());
-    let more = t.hand(P0, "Grizzly Bears");
-    t.g.players[0]
-        .mana_pool
-        .add_type(mtg_engine::mana::ManaType::G, 2);
     t.cast(P0, more).go();
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
@@ -705,9 +710,7 @@ fn verge_rangers_next_card_is_hidden_while_the_land_is_played() {
         p0_sees_hill_giant,
     );
     t.answer_yes(P0, true);
-    t.g.turn.priority = Some(P0);
-    t.g.perform_action(P0, Action::PlayLand { card: garden })
-        .unwrap();
+    t.play_land(P0, garden).unwrap();
     assert_eq!(*seen.lock().unwrap(), vec![false]);
     assert_eq!(t.named_on_battlefield("Temple Garden").len(), 1);
     assert!(p0_sees_hill_giant(&t.g));
@@ -727,21 +730,38 @@ fn p0_sees_hill_giant(g: &Game) -> bool {
 
 #[test]
 fn desperate_ravings_draws_then_discards_at_random_in_one_resolution() {
-    cr!("608.2c", "701.9a");
+    cr!("608.2c", "701.9a", "701.9b");
     ruling!(
         "Desperate Ravings",
         "You draw two cards and discard one randomly all while Desperate Ravings is resolving."
     );
     supported("Desperate Ravings");
+    // Psychosis Crawler: "Whenever you draw a card, each opponent loses 1 life." Its
+    // triggers for the two draws wait until the spell has finished resolving: when they
+    // are put on the stack, the card is already discarded, and nobody chose it.
     let mut t = TestGame::new(2);
+    t.battlefield(P0, "Psychosis Crawler");
     t.hand(P0, "Grizzly Bears");
     let from = t.asked().len();
-    cast_resolve(&mut t, P0, "Desperate Ravings", &[]);
-    // Two drawn, one discarded at random (nobody chose it), no priority in between.
+    cast_only(&mut t, P0, "Desperate Ravings", &[]);
+    t.resolve();
     assert_eq!(t.hand_size(P0), 2);
     assert_eq!(t.graveyard_size(P0), 2);
+    assert_eq!(triggers_on_stack(&t, "loses 1 life"), 2);
+    assert_eq!(t.life(P1), 20);
     assert!(!asked_since(&t, from).iter().any(|(_, d)| matches!(
         d,
         Decision::ChooseEntities { prompt, .. } if prompt.contains("discard")
     )));
+    // At random: over several games, the Bears (one of the three cards) is sometimes the
+    // one discarded and sometimes not.
+    let mut seen = [false; 2];
+    for seed in 0..16 {
+        let mut t = TestGame::new(2);
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        t.hand(P0, "Grizzly Bears");
+        cast_resolve(&mut t, P0, "Desperate Ravings", &[]);
+        seen[usize::from(t.in_graveyard(P0, "Grizzly Bears"))] = true;
+    }
+    assert_eq!(seen, [true, true]);
 }

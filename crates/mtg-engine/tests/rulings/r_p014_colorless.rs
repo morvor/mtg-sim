@@ -18,6 +18,7 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
+use rand::SeedableRng;
 use std::sync::Arc;
 
 fn colors(t: &TestGame, id: ObjectId) -> ColorSet {
@@ -34,7 +35,7 @@ fn add(t: &mut TestGame, p: PlayerId, ty: ManaType, n: u32) {
 
 #[test]
 fn all_colors_abilities_apply_in_every_zone() {
-    cr!("604.3", "105.2a", "105.4");
+    cr!("604.3", "105.2", "105.2b");
     ruling!(
         "Sphinx of the Guildpact",
         "The ability that makes Sphinx of the Guildpact all colors applies in all zones, not just the battlefield."
@@ -104,7 +105,7 @@ fn fallaji_wayfarers_color_identity_is_green() {
 
 #[test]
 fn ghostfire_is_colorless_and_so_is_its_damage() {
-    cr!("105.2c", "604.3", "702.16a");
+    cr!("105.2c", "604.3", "702.16b", "702.16e");
     ruling!(
         "Ghostfire",
         "Ghostfire is colorless in all zones. Its damage comes from a colorless source."
@@ -124,7 +125,7 @@ fn ghostfire_is_colorless_and_so_is_its_damage() {
 
 #[test]
 fn sphinx_of_the_guildpact_colorless_spells_arent_monocolored() {
-    cr!("105.2c", "702.11d");
+    cr!("105.2a", "105.2c", "702.11d");
     ruling!(
         "Sphinx of the Guildpact",
         "An object is monocolored if it has exactly one color. A colorless object isn't monocolored."
@@ -181,7 +182,7 @@ fn dominator_drone_intervening_if_another_colorless_creature() {
 
 #[test]
 fn reaver_drone_checks_on_resolution_even_if_it_has_left() {
-    cr!("608.2h", "603.4");
+    cr!("608.2h");
     ruling!(
         "Reaver Drone",
         "Whether you control another colorless creature is checked as the ability resolves. This check will happen even if Reaver Drone leaves the battlefield in response to the ability."
@@ -211,7 +212,7 @@ fn reaver_drone_checks_on_resolution_even_if_it_has_left() {
 
 #[test]
 fn barrage_tyrant_deals_the_damage_not_the_sacrificed_creature() {
-    cr!("609.7", "702.15b", "118.3");
+    cr!("120.1", "702.15b");
     ruling!(
         "Barrage Tyrant",
         "Barrage Tyrant deals the damage, not the sacrificed creature. For example, if the sacrificed creature had lifelink, you won't gain life."
@@ -236,7 +237,7 @@ fn barrage_tyrant_deals_the_damage_not_the_sacrificed_creature() {
 
 #[test]
 fn herald_of_kozilek_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Herald of Kozilek",
         "Herald of Kozilek's last ability can't reduce the amount of colored mana you pay for a spell. It reduces only the generic component of that mana cost."
@@ -348,7 +349,7 @@ fn kozileks_unsealing_uses_the_chosen_x_and_resolves_before_the_spell() {
 
 #[test]
 fn murk_strider_does_nothing_if_its_target_is_illegal() {
-    cr!("608.2b", "603.3d");
+    cr!("608.2b", "603.3");
     ruling!(
         "Murk Strider",
         "If the target creature becomes illegal before the triggered ability resolves, it won’t resolve and none of its effects will happen."
@@ -476,6 +477,26 @@ fn inverter_of_truth_exiles_face_down_and_processors_take_one_at_random() {
             .filter(|c| t.g.obj(**c).owner == P0)
             .count();
     assert_eq!(exiled_now, n - 1);
+    // At random: over several games, the card of the pile that goes to the graveyard isn't
+    // always the same one.
+    let mut picked = std::collections::BTreeSet::new();
+    for seed in 0..8 {
+        let mut t = TestGame::new(2);
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        let lib: Vec<ObjectId> = t.g.player(P0).library.clone();
+        enter(&mut t, P0, "Inverter of Truth");
+        t.resolve_all();
+        let va = t.battlefield(P1, "Void Attendant");
+        t.set_step(P1, Step::PrecombatMain);
+        mana_all(&mut t, P1, 2);
+        activate_containing(&mut t, P1, va, "Eldrazi Scion").unwrap();
+        let gone: Vec<usize> = (0..lib.len())
+            .filter(|i| t.zone(lib[*i]) == Zone::Graveyard(P0))
+            .collect();
+        assert_eq!(gone.len(), 1, "seed {seed}");
+        picked.insert(gone[0]);
+    }
+    assert!(picked.len() > 1, "{picked:?}");
 }
 
 // ---------------------------------------------------------------------------

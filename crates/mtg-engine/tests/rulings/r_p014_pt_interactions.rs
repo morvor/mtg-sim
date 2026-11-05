@@ -279,7 +279,7 @@ fn revenant_and_another_creature_dealt_lethal_damage_die_together() {
 
 #[test]
 fn entering_at_the_same_time_isnt_affected_by_as_enters_or_enters_with_effects() {
-    cr!("614.12", "614.1c", "603.6a");
+    cr!("614.12", "614.1c");
     ruling!(
         "Renata, Called to the Hunt",
         "A creature entering the battlefield at the same time as Renata won't get an additional +1/+1 counter."
@@ -461,7 +461,7 @@ fn callaphe_tax_is_per_permanent_targeted_and_one_instance_each() {
 
 #[test]
 fn eluge_flood_counters_and_cost_reduction() {
-    cr!("611.3a", "601.2f", "118.7d");
+    cr!("611.2a", "611.2b", "601.2f", "118.7b");
     ruling!(
         "Eluge, the Shoreless Sea",
         "A land affected by Eluge’s second ability stays an Island until the flood counter is removed, even if Eluge leaves the battlefield."

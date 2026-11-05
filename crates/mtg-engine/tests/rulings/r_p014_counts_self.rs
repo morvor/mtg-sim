@@ -122,6 +122,15 @@ fn defined_pt_counts_the_object_itself() {
             setup: none,
             pt: (0, 2),
         },
+        // Itself (a Cleric) and Merfolk Looter (a Rogue).
+        Case {
+            name: "Archpriest of Iona",
+            zone: Z::Bf,
+            setup: |t| {
+                t.battlefield(P0, "Merfolk Looter");
+            },
+            pt: (2, 2),
+        },
         Case {
             name: "Abominable Treefolk",
             zone: Z::Bf,
