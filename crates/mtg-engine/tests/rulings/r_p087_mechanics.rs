@@ -133,17 +133,14 @@ fn renounce_the_guilds_doesnt_target_and_sacrifices_simultaneously_in_apnap_orde
     assert_eq!(*seen.lock().unwrap(), vec![2]);
     assert!(!t.on_battlefield(wolf0) && t.on_battlefield(blade0));
     assert!(t.on_battlefield(wolf1) && !t.on_battlefield(blade1));
-    // P2's only multicolored permanent goes without a choice.
+    // P2 (asked last, by default) sacrifices its only multicolored permanent.
     assert!(!t.on_battlefield(wolf2));
 }
 
 #[test]
 fn ronom_hulk_protection_from_snow() {
     cr!("702.16b", "702.16c", "702.16d", "702.16e", "702.16f", "205.4g");
-    ruling!(
-        "Ronom Hulk",
-        "Ronom Hulk can’t be targeted by snow spells"
-    );
+    ruling!("Ronom Hulk", "Ronom Hulk can’t be targeted by snow spells");
     ruling!(
         "Ronom Hulk",
         "or abilities of snow sources, it can’t be enchanted by snow Auras, it can’t be equipped by snow Equipment (though there are none), it can’t be blocked by snow creatures, and all damage that would be dealt to it by snow sources is prevented."
@@ -222,7 +219,7 @@ fn rust_tick_targets_tapped_artifacts_and_doesnt_track_the_controller() {
 
 #[test]
 fn aven_interrupter_exiles_a_spell_that_cant_be_countered() {
-    cr!("701.5a", "702.170a", "608.2c");
+    cr!("701.6a", "702.170a", "608.2c");
     ruling!(
         "Aven Interrupter",
         "Spells that can't be countered can still be exiled by Aven Interrupter's triggered ability. They won't resolve."
@@ -281,7 +278,7 @@ fn nine_ringed_bo_exile_works_without_the_bo() {
 
 #[test]
 fn consulate_crackdown_returns_the_artifacts_together_immediately() {
-    cr!("610.3a", "610.3", "603.2c");
+    cr!("610.3", "603.2c");
     ruling!(
         "Consulate Crackdown",
         "The exiled cards return to the battlefield immediately after Consulate Crackdown leaves the battlefield. Nothing happens between the two events, including state-based actions. If Consulate Crackdown exiles multiple artifacts, those cards all return to the battlefield at the same time."
@@ -312,7 +309,7 @@ fn consulate_crackdown_returns_the_artifacts_together_immediately() {
 
 #[test]
 fn sentinel_of_lost_lore_adventure_modes_and_the_graveyard_mode() {
-    cr!("700.2a", "700.2b", "715.3", "603.3c", "115.4");
+    cr!("700.2b", "715.2a", "603.3c");
     ruling!(
         "Sentinel of Lost Lore",
         "The first and second modes of Sentinel of Lost Lore's ability can target any face-up exiled card that has an Adventure as long as it's owned by an appropriate player. It doesn't matter whether the card was cast as an Adventure."
@@ -345,7 +342,10 @@ fn sentinel_of_lost_lore_adventure_modes_and_the_graveyard_mode() {
     assert_eq!(t.stack_len(), 1);
     let trig = t.g.stack[0];
     assert_eq!(crate::r_s07_common::chosen_modes(&t, trig), vec![2]);
-    assert_eq!(crate::r_s25_common::targets_of(&t, trig), vec![Entity::Player(P1)]);
+    assert_eq!(
+        crate::r_s25_common::targets_of(&t, trig),
+        vec![Entity::Player(P1)]
+    );
     let _ = from;
     t.resolve_all();
     // No player can be targeted (both have shroud from True Believer): removed.
@@ -360,7 +360,7 @@ fn sentinel_of_lost_lore_adventure_modes_and_the_graveyard_mode() {
 
 #[test]
 fn ground_seal_works_only_on_the_battlefield() {
-    cr!("115.4", "113.6");
+    cr!("113.6");
     ruling!(
         "Ground Seal",
         "The last ability only works when Ground Seal is on the battlefield."
@@ -409,7 +409,7 @@ fn blade_of_the_swarm_targets_any_exiled_warp_card() {
 
 #[test]
 fn unravel_compares_mana_spent_with_the_unchanged_mana_value() {
-    cr!("202.3", "202.3d", "601.2f", "702.41a");
+    cr!("202.3", "601.2f", "702.41a");
     ruling!(
         "Unravel",
         "The mana value of a spell isn’t changed by alternative costs, cost increases, or cost reductions. For example, if you cast Thrumming Hivepool (an artifact with affinity for Slivers), its mana value is 6 no matter how many Slivers you controlled when you cast it."
@@ -429,7 +429,10 @@ fn unravel_compares_mana_spent_with_the_unchanged_mana_value() {
             t.lands(P0, "Forest", 1);
         }
         let s = t.cast(P0, card).go();
-        assert_eq!(crate::r_s26_common::mv(&mut t, s), if slivers > 0 { 6 } else { 2 });
+        assert_eq!(
+            crate::r_s26_common::mv(&mut t, s),
+            if slivers > 0 { 6 } else { 2 }
+        );
         let hand = t.hand_size(P1);
         cast_new(&mut t, P1, "Unravel", &[obj(s)]);
         t.resolve_all();
@@ -462,15 +465,16 @@ fn timebender_mode_and_target_are_chosen_as_the_trigger_is_put_on_the_stack() {
     assert_eq!(crate::r_s25_common::targets_of(&t, trig), vec![obj(clock)]);
     let from = t.asked().len();
     t.resolve_all();
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::ChooseModes { .. } | Decision::ChooseTargets { .. })));
+    assert!(!t.asked()[from..].iter().any(|(_, d)| matches!(
+        d,
+        Decision::ChooseModes { .. } | Decision::ChooseTargets { .. }
+    )));
     assert_eq!(t.counters(clock, counters::TIME), 5);
 }
 
 #[test]
 fn break_open_turns_a_creature_face_up_without_its_morph_cost() {
-    cr!("701.40a", "708.8");
+    cr!("708.8");
     ruling!(
         "Break Open",
         "The player does not have to pay the Morph cost (if any) of the creature."
@@ -503,7 +507,9 @@ fn conduct_electricity_can_target_one_token_twice() {
     // A nontoken creature isn't a legal second target.
     let offered = crate::r_s02_common::target_candidates(&t, P0, from);
     assert!(offered.iter().any(|c| c.contains(&obj(colossus))));
-    assert!(offered.iter().any(|c| c.contains(&obj(tok)) && !c.contains(&obj(colossus))));
+    assert!(offered
+        .iter()
+        .any(|c| c.contains(&obj(tok)) && !c.contains(&obj(colossus))));
     t.resolve_all();
     assert_eq!(damage_marked(&t, tok), 8);
     assert_eq!(damage_marked(&t, colossus), 0);

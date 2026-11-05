@@ -40,7 +40,12 @@ fn bonecrusher_giant_triggers_once_for_a_spell_targeting_it_several_times() {
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, GIANT);
     // Seeds of Strength: "Target creature gets +1/+1 until end of turn." three times.
-    cast_new(&mut t, P1, "Seeds of Strength", &[obj(giant), obj(giant), obj(giant)]);
+    cast_new(
+        &mut t,
+        P1,
+        "Seeds of Strength",
+        &[obj(giant), obj(giant), obj(giant)],
+    );
     t.settle();
     assert_eq!(t.stack_len(), 2);
     t.resolve_all();
@@ -95,7 +100,7 @@ fn after_stomp_protection_cant_prevent_damage_but_still_stops_targeting() {
 
 #[test]
 fn stomp_stops_only_effects_that_say_prevent() {
-    cr!("615.12", "614.1b", "122.1c");
+    cr!("615.12", "614.9", "122.1c");
     ruling!(
         "Bonecrusher Giant // Stomp",
         "Stomp only stops damage from being prevented by effects that specifically use the word \"prevent.\""
@@ -165,7 +170,7 @@ fn forsaken_wastes_and_setting_a_life_total() {
 
 #[test]
 fn forsaken_wastes_can_be_countered_without_losing_life() {
-    cr!("603.6d", "113.6");
+    cr!("113.6");
     ruling!(
         "Forsaken Wastes",
         "The loss of life from targeting this card does not work until after this card enters, so you can counter it without losing life."
@@ -194,7 +199,7 @@ fn stylus(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn tel_jilad_stylus_tokens_and_permanents_you_own() {
-    cr!("111.7", "111.8", "108.3", "110.2");
+    cr!("111.7", "111.2", "108.3", "110.2");
     ruling!(
         "Tel-Jilad Stylus",
         "Tel-Jilad Stylus's ability can put tokens on the bottom of your library (where they then cease to exist)."
@@ -203,7 +208,10 @@ fn tel_jilad_stylus_tokens_and_permanents_you_own() {
         "Tel-Jilad Stylus",
         "Tel-Jilad Stylus's ability may target a permanent you own but do not control."
     );
-    ruling!("Tel-Jilad Stylus", "You own a token if it entered under your control.");
+    ruling!(
+        "Tel-Jilad Stylus",
+        "You own a token if it entered under your control."
+    );
     supported("Tel-Jilad Stylus");
     // A token: bottom of the library, then gone.
     let mut t = TestGame::new(2);
@@ -283,7 +291,7 @@ fn tel_jilad_stylus_cards_from_your_deck_and_wished_cards_are_yours() {
 
 #[test]
 fn hallowed_moonlight_exiles_creature_tokens_even_from_cast_spells() {
-    cr!("111.7", "614.1c", "601.1");
+    cr!("111.7", "614.1a");
     ruling!(
         "Hallowed Moonlight",
         "After Hallowed Moonlight resolves, if a creature token would be put onto the battlefield, it’s put into exile instead and then ceases to exist. Creature tokens are never cast, even if the spell that created them was."
@@ -291,11 +299,20 @@ fn hallowed_moonlight_exiles_creature_tokens_even_from_cast_spells() {
     let mut t = TestGame::new(2);
     cast_new(&mut t, P0, "Hallowed Moonlight", &[]);
     t.resolve_all();
-    // Raise the Alarm, a cast spell, creates two Soldiers: exiled.
+    // Raise the Alarm, a cast spell, creates two Soldiers: they're put into exile instead
+    // of onto the battlefield (and then cease to exist).
+    let from = t.g.turn_events.len();
     cast_new(&mut t, P1, "Raise the Alarm", &[]);
     t.resolve_all();
+    let exiled = t.g.turn_events[from..]
+        .iter()
+        .filter(|e| {
+            matches!(e, mtg_engine::events::Event::ZoneChange { new, to: Zone::Exile, .. }
+                if t.g.obj(*new).is_token())
+        })
+        .count();
+    assert_eq!(exiled, 2);
     assert!(t.g.permanents().all(|o| !o.is_token()));
-    assert!(t.g.objects.iter().all(|o| !o.is_token() || o.zone != Zone::Battlefield));
     // A creature spell still enters.
     t.set_step(P1, Step::PrecombatMain);
     cast_new(&mut t, P1, "Grizzly Bears", &[]);
@@ -455,7 +472,7 @@ fn cosis_trickster_sees_shuffle_instructions_but_not_cascade() {
 
 #[test]
 fn leonin_arbiter_payer_may_search_any_library() {
-    cr!("116.2f", "701.23a");
+    cr!("116.2d", "701.23a");
     ruling!(
         "Leonin Arbiter",
         "A player who has paid {2} may search any library when instructed to do so that turn, not just their own library."
@@ -564,7 +581,13 @@ fn witchs_vengeance_creature_type_choice_and_affected_creatures() {
     for ok in ["Human", "Knight", "Goat"] {
         assert!(options.iter().any(|o| o == ok), "{ok}");
     }
-    for bad in ["Artifact", "Legendary", "Vehicle", "Human Knight", "Equipment"] {
+    for bad in [
+        "Artifact",
+        "Legendary",
+        "Vehicle",
+        "Human Knight",
+        "Equipment",
+    ] {
         assert!(!options.iter().any(|o| o == bad), "{bad}");
     }
     // Every Human, including P0's, the hexproof one and the one with protection from
@@ -754,7 +777,7 @@ fn ember_gale_damages_at_resolution_but_stops_every_later_blocker() {
 
 #[test]
 fn stormbreath_dragon_counts_each_hand_on_resolution() {
-    cr!("608.2h", "701.37c");
+    cr!("608.2h", "701.37b");
     ruling!(
         "Stormbreath Dragon",
         "For each opponent, count the number of cards in that player's hand when the last ability resolves to determine how much damage Stormbreath Dragon does to them."
@@ -802,7 +825,8 @@ fn tourach_and_madness_triggers_go_on_the_stack_in_apnap_order() {
         t.g.flush_events();
         t.settle();
         let items = crate::r_s04_common::stack_items(&t);
-        let tourach_text = "ability: Whenever an opponent discards a card, put a +1/+1 counter on ~";
+        let tourach_text =
+            "ability: Whenever an opponent discards a card, put a +1/+1 counter on ~";
         let expected = if p1_turn {
             // P1's madness trigger first (bottom), P0's Tourach trigger on top.
             vec!["ability: Madness".to_string(), tourach_text.to_string()]
@@ -857,7 +881,7 @@ fn blasphemous_act_cost_is_locked_in_before_mana_abilities_sacrifice_a_creature(
 
 #[test]
 fn frenzied_baloth_can_be_targeted_by_counterspells_whose_other_effects_happen() {
-    cr!("101.2", "701.6b", "608.2c");
+    cr!("101.2", "101.3", "608.2c");
     ruling!(
         "Frenzied Baloth",
         "A spell or ability that counters spells can still target Frenzied Baloth. When that spell or ability resolves, Frenzied Baloth won’t be countered, but any additional effects of the countering spell or ability will still happen. The same is true for creature spells you control while you control Frenzied Baloth."
@@ -872,7 +896,8 @@ fn frenzied_baloth_can_be_targeted_by_counterspells_whose_other_effects_happen()
         let hand = t.hand_size(P1);
         lands_for_cost(&mut t, P1, "Exclude");
         let ex = t.hand(P1, "Exclude");
-        t.cast_with(P1, ex, &[obj(s)]).expect("Exclude can target it");
+        t.cast_with(P1, ex, &[obj(s)])
+            .expect("Exclude can target it");
         t.resolve_all();
         assert_eq!(t.named_on_battlefield(name).len(), 1, "{name}");
         assert_eq!(t.hand_size(P1), hand + 1, "{name}");

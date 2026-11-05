@@ -86,7 +86,13 @@ fn tamiyo_minus_two_counts_tapped_creatures_on_resolution() {
     let b = t.battlefield(P1, "Grizzly Bears");
     t.battlefield(P1, "Grizzly Bears");
     tap(&mut t, a);
-    activate(&mut t, P0, tam, "Draw a card for each", &[Entity::Player(P1)]);
+    activate(
+        &mut t,
+        P0,
+        tam,
+        "Draw a card for each",
+        &[Entity::Player(P1)],
+    );
     // In response, a second creature becomes tapped.
     tap(&mut t, b);
     let hand = t.hand_size(P0);
@@ -96,7 +102,7 @@ fn tamiyo_minus_two_counts_tapped_creatures_on_resolution() {
 
 #[test]
 fn tamiyo_emblem_is_one_emblem_and_returns_cards_never_in_hand() {
-    cr!("114.1", "114.2", "603.6a");
+    cr!("114.1", "114.2", "603.6");
     ruling!(
         "Tamiyo, the Moon Sage",
         "Tamiyo’s third ability creates one emblem with two abilities."
@@ -214,7 +220,7 @@ fn tapped_creature_spells_with_an_illegal_target_do_nothing() {
 
 #[test]
 fn dovins_dismissal_with_an_illegal_target_doesnt_search() {
-    cr!("608.2b", "115.4");
+    cr!("608.2b");
     ruling!(
         "Dovin's Dismissal",
         "If you choose a target tapped creature and it becomes an illegal target for Dovin’s Dismissal, the spell doesn’t resolve. You don’t search for Dovin."
@@ -239,7 +245,7 @@ fn dovins_dismissal_with_an_illegal_target_doesnt_search() {
 
 #[test]
 fn until_leaves_exile_of_a_tapped_creature_does_nothing_if_the_source_left() {
-    cr!("610.3c", "603.2");
+    cr!("610.3b", "603.2");
     ruling!(
         "Henchbots",
         "If Henchbots leaves the battlefield before its triggered ability resolves, the target creature won't be exiled."
@@ -269,7 +275,7 @@ fn until_leaves_exile_of_a_tapped_creature_does_nothing_if_the_source_left() {
 
 #[test]
 fn banishing_slash_targets_and_its_token() {
-    cr!("608.2b", "115.10", "205.2a");
+    cr!("608.2b", "115.6", "205.2b");
     ruling!(
         "Banishing Slash",
         "If you control an artifact that is also an enchantment as Banishing Slash resolves, you will create a Samurai token."
@@ -311,7 +317,7 @@ fn banishing_slash_targets_and_its_token() {
 
 #[test]
 fn gideons_avenger_doesnt_see_a_creature_entering_tapped() {
-    cr!("603.2", "110.5b");
+    cr!("603.2", "603.2e", "110.5b");
     ruling!(
         "Gideon's Avenger",
         "If an opponent's creature enters tapped, Gideon's Avenger's ability doesn't trigger."
@@ -320,6 +326,8 @@ fn gideons_avenger_doesnt_see_a_creature_entering_tapped() {
     let mut t = TestGame::new(2);
     let av = t.battlefield(P0, "Gideon's Avenger");
     let ghoul = t.enter(P1, "Diregraf Ghoul");
+    t.g.flush_events();
+    t.settle();
     assert!(is_tapped(&t, ghoul));
     assert_eq!(t.stack_len(), 0);
     // Becoming tapped later does trigger.
@@ -394,8 +402,11 @@ fn psychic_venom_triggers_whenever_the_land_is_tapped_for_any_reason() {
 
 #[test]
 fn roots_of_life_counts_lands_of_every_opponent() {
-    cr!("603.2", "102.2");
-    ruling!("Roots of Life", "It affects all opponents in a multiplayer game.");
+    cr!("603.2", "806.1");
+    ruling!(
+        "Roots of Life",
+        "It affects all opponents in a multiplayer game."
+    );
     supported("Roots of Life");
     let mut t = TestGame::new(3);
     let from = t.asked().len();

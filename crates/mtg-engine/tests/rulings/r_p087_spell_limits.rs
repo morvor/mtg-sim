@@ -44,7 +44,11 @@ fn the_limit_counts_spells_cast_before_it_entered_including_itself() {
         assert_eq!(t.named_on_battlefield(name).len(), 1, "{name}");
         assert!(!could_cast(&mut t, P0, "Lightning Bolt"), "{name}");
         // Deafening Silence counts only noncreature spells: a creature spell is fine.
-        assert_eq!(could_cast(&mut t, P0, "Grizzly Bears"), noncreature_only, "{name}");
+        assert_eq!(
+            could_cast(&mut t, P0, "Grizzly Bears"),
+            noncreature_only,
+            "{name}"
+        );
         // P1 hasn't cast a spell this turn.
         assert!(could_cast(&mut t, P1, "Lightning Bolt"), "{name}");
 

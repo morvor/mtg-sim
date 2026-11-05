@@ -126,7 +126,7 @@ fn unable_to_scream_overwrites_earlier_setting_effects_and_later_ones_overwrite_
 
 #[test]
 fn valkmira_prevents_one_damage_from_each_opposing_source_each_time() {
-    cr!("615.7", "120.1");
+    cr!("615.1a", "120.1");
     ruling!(
         "Reidane, God of the Worthy // Valkmira, Protector's Shield",
         "Valkmira's first ability prevents 1 damage from each source an opponent controls each time that source would deal damage to you. It prevents 1 of any kind of damage, not just combat damage."
@@ -421,7 +421,7 @@ fn dramatists_puppet_chooses_per_kind_on_resolution() {
 
 #[test]
 fn memory_theft_adventure_choice_after_seeing_the_hand_even_if_empty() {
-    cr!("608.2c", "715.4");
+    cr!("608.2c", "715.2a");
     ruling!(
         "Memory Theft",
         "You choose which exiled adventurer card, if any, to put into that player's graveyard after seeing their hand. You may do this even if that player has no nonland cards in hand, or even no cards at all."
@@ -455,7 +455,14 @@ fn zombie_musher_snow_landwalk() {
         let mut t = TestGame::new(2);
         let musher = t.battlefield(P0, "Zombie Musher");
         let bears = t.battlefield(P1, "Grizzly Bears");
-        t.battlefield(P1, if snow { "Snow-Covered Forest" } else { "Forest" });
+        t.battlefield(
+            P1,
+            if snow {
+                "Snow-Covered Forest"
+            } else {
+                "Forest"
+            },
+        );
         attack_with(&mut t, &[(musher, Entity::Player(P1))]);
         assert_eq!(legal_blocks(&mut t, P1, &[(bears, musher)]), !snow);
     }

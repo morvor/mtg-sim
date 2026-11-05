@@ -484,7 +484,11 @@ impl TestGame {
     }
 
     /// Advances the game (both players passing by default) until the given step of the
-    /// given player's turn begins and that player has priority.
+    /// given player's turn begins and that player is about to receive priority: the step's
+    /// turn-based actions are done (in the combat damage step, the damage is dealt), but
+    /// state-based actions haven't been checked and triggered abilities aren't on the
+    /// stack yet (CR 117.5). `settle()` (or `resolve`/`resolve_all`, which settle first)
+    /// does that, so answers for those triggers can still be queued after this returns.
     pub fn advance_to(&mut self, active: PlayerId, step: Step) {
         let ok = self.g.run_until(10_000, |g| {
             g.turn.active == active
@@ -495,7 +499,8 @@ impl TestGame {
         assert!(ok, "did not reach {step:?} of {active}'s turn");
     }
 
-    /// Advances to the next occurrence of `step` (in any turn).
+    /// Advances to the next occurrence of `step` (in any turn), stopping where
+    /// [`TestGame::advance_to`] does (before state-based actions and triggers).
     pub fn advance_to_step(&mut self, step: Step) {
         let ok = self.g.run_until(10_000, |g| {
             g.turn.step == step && g.turn.stage == Stage::Priority
