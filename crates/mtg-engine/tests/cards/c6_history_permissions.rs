@@ -346,3 +346,110 @@ fn glyph_of_reincarnation_creatures_cant_be_regenerated() {
     assert_ne!(t.g.current(boa), boa, "the shield doesn't apply");
     assert!(t.on_battlefield(t.g.current(boa)));
 }
+
+/// Whether `text` compiles fully for a card named `name` with the type line `type_line`.
+fn compiles(name: &str, type_line: &str, text: &str) -> bool {
+    use mtg_engine::card::Layout;
+    use mtg_engine::oracle::{self, CompileContext};
+    let tl = mtg_engine::types::TypeLine::parse(type_line);
+    let ctx = CompileContext {
+        card_name: name,
+        full_name: name,
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    oracle::compile(text, &ctx).unsupported.is_empty()
+}
+
+#[test]
+fn anchored_history_and_permission_wordings_compile() {
+    for text in [
+        "Destroy all creatures that were blocked by target Wall this turn. They can't be regenerated.",
+        "Destroy all creatures blocked by target Wall this turn.",
+        "Destroy all creatures that were blocked by target creature this turn.",
+        "Destroy target creature that was blocked by target Wall this turn.",
+        "Put X glyph counters on target creature blocked by target Wall this turn, where X is its power.",
+        "Tap all creatures that blocked target creature this turn.",
+        "Choose a player who cast one or more sorcery spells this turn. Backdraft deals 2 damage to that player.",
+        "Choose an opponent who cast one or more sorcery spells this turn. Backdraft deals 2 damage to that player.",
+        "Choose a player who cast one or more instant spells this turn. Backdraft deals damage to that player equal to the damage dealt by one of those instant spells this turn.",
+    ] {
+        assert!(compiles("Backdraft", "Instant", text), "{text}");
+    }
+    for text in [
+        "At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of their library.",
+        "At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time.",
+        "At the beginning of your upkeep, choose target opponent. Until end of turn, you may play the top card of that player's library.",
+        "At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time and you may play the top card of their library.",
+        "At the beginning of your upkeep, choose target opponent. Until end of turn, you may cast spells from the top of their library.",
+    ] {
+        assert!(
+            compiles("Xanathar, Guild Kingpin", "Legendary Creature — Beholder", text),
+            "{text}"
+        );
+    }
+    // A spending rider needs a permission it's about ("this way").
+    assert!(!compiles(
+        "Xanathar, Guild Kingpin",
+        "Legendary Creature — Beholder",
+        "At the beginning of your upkeep, choose target opponent. Until end of turn, you may look at the top card of their library any time and you may spend mana as though it were mana of any color to cast spells this way."
+    ));
+    // "Half" needs its rounding.
+    assert!(!compiles(
+        "Backdraft",
+        "Instant",
+        "Choose a player who cast one or more sorcery spells this turn. Backdraft deals damage to that player equal to half the damage dealt by one of those sorcery spells this turn."
+    ));
+}
+
+#[test]
+fn tap_all_creatures_that_blocked_target_creature_this_turn() {
+    cr!("509.1", "115.1");
+    use mtg_engine::card::{CardDef, Layout};
+    use mtg_engine::object::Characteristics;
+    use mtg_engine::oracle::{self, CompileContext};
+    let text = "Tap all creatures that blocked target creature this turn.";
+    let tl = mtg_engine::types::TypeLine::parse("Instant");
+    let ctx = CompileContext {
+        card_name: "Probe",
+        full_name: "Probe",
+        type_line: &tl,
+        layout: Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    let compiled = oracle::compile(text, &ctx);
+    assert!(compiled.unsupported.is_empty());
+    let def = CardDef::custom(Characteristics {
+        name: "Probe".into(),
+        mana_cost: mtg_engine::mana::ManaCost::parse("{U}"),
+        card_types: tl.card_types,
+        abilities: compiled.abilities,
+        ..Default::default()
+    });
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    ready(&mut t, bears);
+    ready(&mut t, giant);
+    let wall = t.battlefield(P0, "Wall of Stone");
+    let wood = t.battlefield(P0, "Wall of Wood");
+    let idle = t.battlefield(P0, "Wall of Wood");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    attack_and_block(&mut t, P1, &[bears, giant], P0, &[(wall, bears), (wood, giant)]);
+    t.advance_to(P1, Step::PostcombatMain);
+    let probe = t.custom(P0, def, mtg_engine::object::Zone::Hand(P0));
+    mana(&mut t, P0);
+    t.cast_with(P0, probe, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    // Only the creature that blocked the target, after combat.
+    assert!(t.obj_now(wall).tapped);
+    assert!(!t.obj_now(wood).tapped);
+    assert!(!t.obj_now(idle).tapped);
+}
