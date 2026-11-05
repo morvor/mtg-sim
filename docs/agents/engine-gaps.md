@@ -841,27 +841,24 @@ Rulings that rulings-2 left uncited (OPEN) because they seem to contradict the c
 (data/oracle_cards.jsonl.gz, snapshot 2026-09-24); the engine follows the Oracle text. For
 ruling-conflicts-2.
 
-- **Homicide Investigator** (rulings-P005): see `docs/agents/items/ruling-conflicts-2.md`.
-- **Lich** (rulings-P096, landed `f21a66a1`). Oracle: "When this enchantment is put into a graveyard from the
-  battlefield, you lose the game." Two rulings say "leaves the battlefield":
-  - 2004-10-04: "If you have multiple Lich cards on the battlefield, you must sacrifice a permanent for each
-    damage done to you for each Lich. This is because the sacrifice is a triggered ability. But you only draw
-    one card for each life gained regardless of how many Liches you have. This is because the draw is a
-    replacement effect and not a triggered one. You lose if any one of the Liches leaves the battlefield."
-    Only the last sentence conflicts; the rest is tested in `tests/rulings/r_p096_lich.rs` (uncited).
-  - 2010-08-15: "The last ability will cause you to lose the game even if you somehow manage to have a life
-    total greater than 0 at the time the Lich leaves the battlefield or if some other effect would prevent you
-    from losing for having 0 life. If, on the other hand, some effect such as that from Platinum Angel says
-    that you can't lose the game then even the last ability of the Lich cannot cause you to do so. The ability
-    will just resolve and the game will continue as normal."
-  - The 2011-01-01 version of the second ruling ("... at the time the Lich is put into the graveyard ...")
-    agrees with the Oracle text and is cited. The "leaves the battlefield" wording probably comes from older
-    Oracle text (not verified: the repo has one Oracle snapshot).
-- **Rimescale Dragon** (rulings-P096). Oracle: "Creatures with ice counters on them don't untap during their
-  controllers' untap steps." Ruling 2006-07-15: "Rimescale Dragon’s last ability affects all permanents with
-  ice counters on them, whether or not it put the ice counters on them." Other cards put ice counters on
-  noncreature permanents (e.g. Rimefeather Owl), so "all permanents" and "creatures" give different results;
-  the engine lets a noncreature permanent with an ice counter untap.
+- **Homicide Investigator** (rulings-P005): ruling-conflicts-2 case 2, conclusion D (no reading reconciles
+  them, nothing dated makes either outdated). The 2024-04-12 ruling "... Homicide Investigator's ability triggers
+  for each of them." is Midnight Reaper's per-creature ruling (2018-09-20) with the name swapped, against both
+  sentences of the Oracle text ("one or more ... die"; "triggers only once each turn"). The engine follows the
+  Oracle text (register `homicide-investigator-triggers-once`, provisional); the ruling stays OPEN, not exempt,
+  until the user decides (with Rimescale Dragon below).
+- **Lich** (rulings-P096): resolved, ruling-conflicts-2 case 3, conclusion B in part. The September 2010 Update
+  Bulletin (Matt Tabak, 2010-09-22; Oracle update announced to go live 2010-09-24) changed "When Lich leaves the
+  battlefield, you lose the game" to "When Lich is put into a graveyard from the battlefield, you lose the game";
+  the 2011-01-01 ruling is the rewrite of the 2010-08-15 one. The outdated clauses ("You lose if any one of the
+  Liches leaves the battlefield", "greater than 0 at the time the Lich leaves the battlefield") are exempt with
+  the change named and dated in `docs/rulings-exemptions/rulings-P096.tsv`; the rest of both rulings is cited in
+  `tests/rulings/r_p096_lich.rs`, which also tests exile, bounce and Rest in Peace not triggering it.
+- **Rimescale Dragon** (rulings-P096): ruling-conflicts-2 case 4, conclusion D in part. The ruling is Rimefeather
+  Owl's same-day ruling (2006-07-15) with the name swapped. Its "whether or not it put the ice counters on them"
+  is cited; its "all permanents" contradicts the Oracle (and printed) "Creatures", which the engine follows
+  (register `rimescale-dragon-creatures-only`, provisional). The user decides together with Homicide
+  Investigator; no exemption until then.
 - **Run Out of Town** (rulings-P140). Oracle: "The owner of target nonland permanent puts it on their choice
   of the top or bottom of their library." Ruling 2022-04-29: "That permanent's controller chooses whether to
   put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to

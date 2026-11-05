@@ -6043,14 +6043,17 @@ impl Renderer<'_> {
                         && matches!(&v[i - 1], Effect::Custom(n)
                             if crate::kw::game_rules::is_pay_energy(n)),
             );
-            let s = self.effect(&v[i]);
+            // Two instructions said as one (Glyph of Reincarnation's cards chosen, then
+            // moved together), with the earlier instructions' "this way".
+            let together = self.chosen_then_moved_together(&v[i..]);
+            let s = self.effect(together.as_ref().unwrap_or(&v[i]));
             self.prev_mandatory = saved_mandatory;
             self.this_way = saved_this_way;
             self.after_exile = saved_exile;
             if !s.is_empty() {
                 parts.push(s);
             }
-            i += 1;
+            i += if together.is_some() { 2 } else { 1 };
         }
         // "Until end of turn, target creature gets +0/+2 and another target creature gets
         // -2/-0": the duration of consecutive effects said once, after the last.

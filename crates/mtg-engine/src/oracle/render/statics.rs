@@ -1066,6 +1066,10 @@ impl Renderer<'_> {
                     number_word(*life as i32)
                 )
             }
+            PlayerModification::LookAtTopCardOf(who) => {
+                let whose = self.player(who, Case::Poss);
+                format!("{subj} may look at the top card of {whose} library any time")
+            }
             PlayerModification::Custom(name) => self.custom_player_mod(name, &subj, &poss),
         }
     }
@@ -1139,6 +1143,38 @@ impl Renderer<'_> {
                 };
                 let p = self.player(&p, Case::Poss);
                 return self.play_permission_from(&q, Some(format!("from {p} hand")));
+            }
+        }
+        // "you may play the top card of their library" (Xanathar, Guild Kingpin): the top
+        // card of another player's library.
+        if pp.terms.any_owner && pp.zone == ZoneKind::Library && pp.top_only {
+            let parts: Vec<Filter> = match &pp.what {
+                Filter::And(v) => v.clone(),
+                other => vec![other.clone()],
+            };
+            let whose = parts.iter().find_map(|x| match x {
+                Filter::OwnedByPlayer(p) => Some(self.player(p, Case::Poss)),
+                Filter::OwnedBy(PlayerRel::Opponent) => Some("each opponent's".to_string()),
+                _ => None,
+            });
+            let rest_any = parts.iter().all(|x| {
+                matches!(
+                    x,
+                    Filter::Card | Filter::OwnedByPlayer(_) | Filter::OwnedBy(_)
+                )
+            });
+            if let (Some(whose), true) = (whose, rest_any) {
+                let mut s = match (pp.lands, pp.spells) {
+                    (true, true) => format!("you may play the top card of {whose} library"),
+                    (false, true) => format!("you may cast spells from the top of {whose} library"),
+                    _ => return self.gap("a land permission over another player's library"),
+                };
+                if pp.terms.spend_as_any_color {
+                    s.push_str(
+                        ", and you may spend mana as though it were mana of any color to cast spells this way",
+                    );
+                }
+                return s;
             }
         }
         if pp.terms.any_owner && pp.zone == ZoneKind::Graveyard {

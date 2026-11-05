@@ -54,7 +54,12 @@ fn lampad_can_be_sacrificed_to_its_own_ability() {
 
 #[test]
 fn ghost_council_sacrificed_to_its_own_ability_stays_in_the_graveyard() {
-    cr!("602.2b", "400.7");
+    cr!("602.2b", "400.7", "400.7j");
+    // "{1}, Sacrifice a creature: Exile Ghost Council of Orzhova. ...": the generic cost
+    // paid with Ghost Council doesn't let "Exile Ghost Council of Orzhova" find the card it
+    // became in the graveyard (CR 400.7j's cost clause reaches the source only through a
+    // cost part about the source itself, as Plague Reaver's "Sacrifice this creature").
+    interp!("cost-moved-source-found-only-by-own-cost");
     ruling!(
         "Ghost Council of Orzhova",
         "Sacrificing Ghost Council of Orzhova to its own ability means it will wind up in the graveyard, not exiled."
@@ -69,7 +74,9 @@ fn ghost_council_sacrificed_to_its_own_ability_stays_in_the_graveyard() {
     t.advance_to(P1, Step::Upkeep);
     assert!(t.in_graveyard(P0, "Ghost Council of Orzhova"));
     assert!(!t.in_exile("Ghost Council of Orzhova"));
-    assert!(t.named_on_battlefield("Ghost Council of Orzhova").is_empty());
+    assert!(t
+        .named_on_battlefield("Ghost Council of Orzhova")
+        .is_empty());
 }
 
 #[test]
@@ -265,10 +272,7 @@ fn needlebite_trap_checks_only_that_life_was_gained() {
     assert_eq!(t.life(P1), 18);
     let methods = alt_methods(&mut t, trap);
     assert_eq!(methods.len(), 1);
-    t.cast(P0, trap)
-        .method(methods[0].clone())
-        .target(P1)
-        .go();
+    t.cast(P0, trap).method(methods[0].clone()).target(P1).go();
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (25, 13));
 }
@@ -389,7 +393,11 @@ fn dee_kay_triggers_after_the_rolling_spell_finishes() {
     t.g.dice.loaded.push_back(2);
     t.resolve();
     assert_eq!(t.hand_size(P0), 2, "the result's effect happened");
-    assert_eq!(triggers_on_stack(&t, "loses 1 life"), 1, "then Dee Kay triggered");
+    assert_eq!(
+        triggers_on_stack(&t, "loses 1 life"),
+        1,
+        "then Dee Kay triggered"
+    );
     assert_eq!(t.life(P0), 20);
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (21, 19));
@@ -520,10 +528,7 @@ fn brutal_hordechief_block_costs_may_be_declined() {
         t.resolve_all();
         attack_with(
             &mut t,
-            &[
-                (archangel, Entity::Player(P1)),
-                (bears, Entity::Player(P1)),
-            ],
+            &[(archangel, Entity::Player(P1)), (bears, Entity::Player(P1))],
         );
         t.resolve_all();
         // P0 has the Ogre block the Bears; P1 decides whether to pay {1}. If P1 doesn't,
