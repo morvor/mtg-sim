@@ -175,8 +175,10 @@ fn caller_of_the_untamed_copy_of_an_x_card_has_x_0() {
 
 /// Araumi's ruling "If the creature card has {X} in its mana cost, you can choose any value
 /// for X, but the value you choose won't apply to the tokens that are created. X will be 0
-/// for those tokens." is cited only for the tokens: its "you can choose any value for X"
-/// disagrees with CR 107.3h ("If an effect instructs a player to pay an object's mana cost
+/// for those tokens." is cited only for its second sentence, the tokens' X: its first
+/// sentence ("you can choose any value for X, but the value you choose won't apply to the
+/// tokens") presupposes an X choice the engine doesn't make, and its "you can choose any
+/// value for X" disagrees with CR 107.3h ("If an effect instructs a player to pay an object's mana cost
 /// that includes {X}, the value of X is treated as 0 unless the object is a spell on the
 /// stack.", since the CR effective 2015-01-23) and with the rulings of Varolz and Young
 /// Deathclaws on the same wording ("The scavenge cost is equal to its mana cost": "If the
@@ -188,10 +190,7 @@ fn caller_of_the_untamed_copy_of_an_x_card_has_x_0() {
 fn araumi_encore_cost_and_tokens_have_x_0() {
     cr!("107.3h", "202.3e", "702.141a", "707.2");
     interp!("x-in-a-cost-equal-to-a-cards-mana-cost-is-0");
-    ruling!(
-        "Araumi of the Dead Tide",
-        "the value you choose won't apply to the tokens that are created. X will be 0 for those tokens."
-    );
+    ruling!("Araumi of the Dead Tide", "X will be 0 for those tokens.");
     supported("Araumi of the Dead Tide");
     let mut t = TestGame::new(2);
     let araumi = t.battlefield(P0, "Araumi of the Dead Tide");
