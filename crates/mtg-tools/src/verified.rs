@@ -26,7 +26,7 @@
 //! rm -rf target/structlog
 //! MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace          # structure log
 //! # The every-card sweep: about 2.5 hours with 3 threads, so four chunks of ~40 min each
-//! # (they cover 34,000 cards; the pool is 32,656)
+//! # (they cover 34,000 cards; the pool is 32,672)
 //! cargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 8500 --report target/every-card-0.tsv
 //! cargo run --release -p mtg-sim -- --every-card --threads 3 --from 8500 --count 8500 --report target/every-card-1.tsv
 //! cargo run --release -p mtg-sim -- --every-card --threads 3 --from 17000 --count 8500 --report target/every-card-2.tsv

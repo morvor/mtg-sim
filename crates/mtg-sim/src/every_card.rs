@@ -1301,7 +1301,10 @@ mod tests {
     fn a_colorless_symbol_in_the_mana_cost_alone_gets_wastes() {
         // {6}{C}{C}, and no {C} in its text.
         assert!(wastes_for("Breaker of Creation"));
-        // {C} only in the text (an activation cost).
+        // {C} only in the text: an activation cost ("{3}{C}: Target creature can't be
+        // blocked this turn.").
+        assert!(wastes_for("Deepfathom Skulker"));
+        // {C} only in the text: the mana it adds.
         assert!(wastes_for("Eldrazi Temple"));
         assert!(!wastes_for("Grizzly Bears"));
         assert!(!wastes_for("Ulamog's Crusher"));

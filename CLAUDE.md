@@ -171,7 +171,7 @@ cargo run --release -p mtg-sim -- --properties --games 200 --jobs 3   # metamorp
 cargo run --release -p mtg-tools -- verified --card "Shock"      # a card's tier and failed checks
 # Regenerate docs/verified-cards.tsv and docs/CARD_COVERAGE.md (before each milestone, after a
 # new card set or CR update). The sweep takes ~2.5 hours with 3 threads, so run it in four
-# chunks (one command each, ~40 min; they cover 34,000 cards, the pool is 32,656) and run
+# chunks (one command each, ~40 min; they cover 34,000 cards, the pool is 32,672) and run
 # nothing else heavy alongside:
 rm -rf target/structlog && MTG_STRUCTURE_LOG=$PWD/target/structlog cargo test --workspace
 cargo run --release -p mtg-sim -- --every-card --threads 3 --from 0 --count 8500 --report target/every-card-0.tsv
