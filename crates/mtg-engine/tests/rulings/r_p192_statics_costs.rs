@@ -338,6 +338,7 @@ fn wastes_are_basic_lands_for_constructed_decks() {
 #[test]
 fn wastes_must_come_from_the_limited_card_pool() {
     cr!("100.2b");
+    interp!("limited-free-basics-have-a-basic-land-type");
     ruling!(
         "Wastes",
         "In Limited events (including Sealed Deck and Booster Draft), Wastes must be in your card pool to be included in your deck."
