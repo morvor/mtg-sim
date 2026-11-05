@@ -207,4 +207,4 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Why: 110.4 rules out instant and sorcery permanents, the CR's three specific rules give this answer for every face-down permanent they cover, and the rulings of both cards that put such cards onto the battlefield face down otherwise say the same. The CR is silent here rather than contradicted by the rulings.
 - Affects: Tezzeret, Cruel Machinist (−7) and Magar of the Magic Strings, with any effect that turns a face-down permanent face up (such as Break Open); manifested, cloaked and merged permanents follow their own rules, which say the same.
 - Code: `crates/mtg-engine/src/facedown.rs` (`turn_face_up_by`).
-- Tests: `tests/rulings/r_p003_face_down.rs` (`turning_a_tezzeret_card_face_up_ends_the_5_5_effect_but_an_instant_stays_face_down`).
+- Tests: `tests/rulings/r_p003_face_down.rs` (`turning_a_tezzeret_card_face_up_ends_the_5_5_effect_but_an_instant_stays_face_down`), `tests/rulings/r_p029_misc.rs` (`turning_magar_s_face_down_instant_face_up_reveals_it_and_it_stays_face_down`).
