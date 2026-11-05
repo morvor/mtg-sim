@@ -1201,7 +1201,7 @@ fn plan(
             let sources =
                 crate::copy_rules::token_copy_sources(g, &Sel::Var(PLANNED_TOKEN_COPIES), ctx);
             let players = g.eval_players(controller, ctx);
-            let fixed = g.fix_mods(mods, ctx);
+            let fixed = g.fix_mods(&crate::granted_captures::confine_to_created(mods), ctx);
             let mut tokens = Vec::new();
             for q in players {
                 for s in &sources {

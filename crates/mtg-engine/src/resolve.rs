@@ -1201,7 +1201,7 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let sources = crate::copy_rules::token_copy_sources(self, of, ctx);
                 let players = self.eval_players(controller, ctx);
-                let fixed = self.fix_mods(mods, ctx);
+                let fixed = self.fix_mods(&crate::granted_captures::confine_to_created(mods), ctx);
                 let mut created = Vec::new();
                 for p in players {
                     for s in &sources {

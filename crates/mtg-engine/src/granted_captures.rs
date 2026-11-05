@@ -103,6 +103,60 @@ fn last_linked_exile(g: &Game, ctx: &Ctx) -> Option<ObjectId> {
         .find(|o| g.is_live(*o) && g.obj(*o).zone == crate::object::Zone::Exile)
 }
 
+/// The exceptions of an effect that creates token copies ("create a token that's a copy
+/// of that creature, except ... it has "When this token leaves the battlefield, return
+/// the exiled card to its owner's graveyard."", Hofri Ghostforge), before they're bound:
+/// a granted ability's "the exiled card" refers to the card only on a token that ability
+/// created, the two abilities being linked across objects (CR 607.1d). The exception is
+/// part of the token's copiable values (CR 707.9b), so another object that becomes or
+/// enters as a copy of the token has the ability too, but unlinked: for it, "the exiled
+/// card" is nothing (Hofri Ghostforge ruling: it "will not return the card to the
+/// graveyard").
+pub fn confine_to_created(mods: &[Modification]) -> Vec<Modification> {
+    use serde_json::Value as J;
+    fn walk(v: &mut J, with: &J) {
+        match v {
+            J::Object(m) => {
+                if m.len() == 1
+                    && m.get("Var")
+                        .and_then(|n| n.as_u64())
+                        .is_some_and(|n| n as Var == CAPTURED_EXILED)
+                {
+                    *v = with.clone();
+                    return;
+                }
+                m.values_mut().for_each(|x| walk(x, with));
+            }
+            J::Array(a) => a.iter_mut().for_each(|x| walk(x, with)),
+            _ => {}
+        }
+    }
+    let confined = Sel::All(Filter::and(vec![
+        Filter::In(Box::new(Sel::Var(CAPTURED_EXILED))),
+        Filter::In(Box::new(Sel::CreatorLinked)),
+    ]));
+    let Ok(with) = serde_json::to_value(&confined) else {
+        return mods.to_vec();
+    };
+    mods.iter()
+        .map(|m| match m {
+            Modification::AddAbility(a) if mentions(a) => {
+                let Ok(mut kind) = serde_json::to_value(&a.kind) else {
+                    return m.clone();
+                };
+                walk(&mut kind, &with);
+                match serde_json::from_value::<AbilityKind>(kind) {
+                    Ok(k) => {
+                        Modification::AddAbility(AbilityDef::with_link(k, a.text.clone(), a.link))
+                    }
+                    Err(_) => m.clone(),
+                }
+            }
+            _ => m.clone(),
+        })
+        .collect()
+}
+
 /// `a` with its captured referents bound for the effect being created in `ctx`.
 pub fn bind(g: &Game, a: &Ability, ctx: &Ctx) -> Ability {
     let Ok(mut kind) = serde_json::to_value(&a.kind) else {
