@@ -16,18 +16,6 @@ use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-/// Ral's −8 has resolved: P0 has the emblem.
-fn ral_emblem(t: &mut TestGame) {
-    supported("Ral, Izzet Viceroy");
-    let ral = t.battlefield(P0, "Ral, Izzet Viceroy");
-    t.g.objects[ral.0 as usize]
-        .counters
-        .insert("loyalty".into(), 8);
-    t.activate(P0, ral, 2, &[]).unwrap();
-    t.resolve_all();
-    assert_eq!(t.g.command.len(), 1, "the emblem");
-}
-
 /// Puts Curse of Wizardry onto the battlefield for P0 choosing blue.
 fn curse_of_wizardry_blue(t: &mut TestGame) -> ObjectId {
     supported("Curse of Wizardry");

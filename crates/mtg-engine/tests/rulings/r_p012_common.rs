@@ -59,3 +59,16 @@ pub fn to_library(t: &mut TestGame, id: ObjectId) {
     crate::r_p127_common::move_to(t, id, mtg_engine::object::Zone::Library(owner));
     t.g.recompute();
 }
+
+/// Ral's −8 has resolved: P0 has the emblem.
+pub fn ral_emblem(t: &mut TestGame) {
+    supported("Ral, Izzet Viceroy");
+    let ral = t.battlefield(P0, "Ral, Izzet Viceroy");
+    t.g.objects[ral.0 as usize]
+        .counters
+        .insert("loyalty".into(), 8);
+    t.activate(P0, ral, 2, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.g.command.len(), 1, "the emblem");
+}
+
