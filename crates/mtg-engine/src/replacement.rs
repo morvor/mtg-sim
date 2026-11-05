@@ -461,7 +461,7 @@ impl Game {
         let pick = if cands.len() == 1 {
             0
         } else {
-            let options = cands.iter().map(|c| c.text.clone()).collect();
+            let options = self.replacement_options(&cands);
             match self.ask(chooser, Decision::ChooseReplacement { options }) {
                 Answer::Index(i) if i < cands.len() => i,
                 _ => 0,
@@ -489,6 +489,27 @@ impl Game {
             out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only, snap.clone()));
         }
         out
+    }
+
+    /// The options of a choice among replacement effects (CR 616.1): their texts, with the
+    /// source's controller and id added to texts that would otherwise be identical (two
+    /// Ravenous Slimes controlled by different players), so the player can tell them apart.
+    fn replacement_options(&self, cands: &[Candidate]) -> Vec<String> {
+        cands
+            .iter()
+            .map(|c| {
+                if cands.iter().filter(|o| o.text == c.text).count() < 2 {
+                    return c.text.clone();
+                }
+                match c.source {
+                    Some(s) => format!(
+                        "{} (controlled by player {}, #{})",
+                        c.text, c.controller.0, s.0
+                    ),
+                    None => format!("{} (player {})", c.text, c.controller.0),
+                }
+            })
+            .collect()
     }
 
     /// Descriptions of the replacement effects that would apply to the proposed event
@@ -1382,13 +1403,14 @@ impl Game {
     /// Whether the limited-use replacement effect `id` was used up by another object
     /// entering the battlefield at the same time as the one `ev` moves there (see
     /// `ZoneState::entry_batch_uses`).
+    /// The same holds for damage dealt at the same time (`ZoneState::damage_batch_uses`).
     fn used_by_this_entry(&self, id: u32, ev: &ReplEvent) -> bool {
-        matches!(ev, ReplEvent::Move(m) if m.to == Zone::Battlefield)
-            && self
-                .zones
-                .entry_batch_uses
-                .as_ref()
-                .is_some_and(|v| v.contains(&id))
+        let batch = match ev {
+            ReplEvent::Move(m) if m.to == Zone::Battlefield => &self.zones.entry_batch_uses,
+            ReplEvent::Damage { .. } => &self.zones.damage_batch_uses,
+            _ => return false,
+        };
+        batch.as_ref().is_some_and(|v| v.contains(&id))
     }
 
     fn apply_replacement(
@@ -1420,8 +1442,13 @@ impl Game {
         // Use up one application of limited-use effects: once for all the objects
         // entering the battlefield at the same time.
         if let Some(id) = cand.instance {
-            let entering = matches!(&ev, ReplEvent::Move(m) if m.to == Zone::Battlefield);
-            let batch = self.zones.entry_batch_uses.as_mut().filter(|_| entering);
+            let batch = match &ev {
+                ReplEvent::Move(m) if m.to == Zone::Battlefield => {
+                    self.zones.entry_batch_uses.as_mut()
+                }
+                ReplEvent::Damage { .. } => self.zones.damage_batch_uses.as_mut(),
+                _ => None,
+            };
             let again = match batch {
                 Some(used) if used.contains(&id) => true,
                 Some(used) => {

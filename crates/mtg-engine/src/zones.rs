@@ -74,6 +74,13 @@ pub struct ZoneState {
     /// (see [`Game::move_objects`]).
     #[serde(skip)]
     pub entry_batch_uses: Option<Vec<u32>>,
+    /// While damage events dealt at the same time are being replaced (see
+    /// [`Game::deal_damage_batch`]): the limited-use replacement effects used up by one of
+    /// them. "The next time damage would be dealt ..." applies to all the damage dealt at
+    /// once, from one or several sources to one or several recipients (Glarecaster rulings;
+    /// CR 615.8: "the next instance of damage").
+    #[serde(skip)]
+    pub damage_batch_uses: Option<Vec<u32>>,
     /// The zone moves of the state-based actions being performed while replaced losses of
     /// the game are applied (CR 704.3; see [`contradictory_moves`]).
     #[serde(skip)]
