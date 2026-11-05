@@ -395,3 +395,24 @@ fn mirror_of_the_forebears_with_no_chosen_type_cant_be_activated() {
     let _ = giant;
 }
 
+
+#[test]
+fn the_mimeoplasm_copying_a_card_that_enters_with_counters_gets_both() {
+    cr!("707.9b", "614.1c", "614.12");
+    ruling!(
+        "The Mimeoplasm",
+        "Specifically, if The Mimeoplasm as a copy of a creature card that enters the battlefield with a number of +1/+1 counters, The Mimeoplasm will enter with those +1/+1 counters and +1/+1 counters equal to the power of the other exiled card."
+    );
+    let mut t = TestGame::new(2);
+    // Kalonian Hydra: a 0/0 that "enters with four +1/+1 counters"; Hill Giant: power 3.
+    let hydra = t.graveyard(P1, "Kalonian Hydra");
+    let giant = t.graveyard(P0, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(hydra), obj(giant)]);
+    t.answer_choose(P0, &[obj(hydra)]);
+    let m = t.enter(P0, "The Mimeoplasm");
+    t.resolve_all();
+    assert_eq!(name_of(&t, m), "Kalonian Hydra");
+    assert_eq!(t.counters(m, counters::PLUS1), 4 + 3);
+    assert_eq!(t.pt(m), (7, 7));
+}
