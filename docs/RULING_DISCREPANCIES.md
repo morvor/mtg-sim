@@ -352,3 +352,9 @@ decides whether they become a conflict case.
   Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same
   wording for scavenge. Left uncited; the texts are in `docs/agents/engine-gaps.md`,
   "Apparent conflicts (Nov 5)".
+- **Arbiter of Knollridge** (rulings-P014): its ruling (2007-10-01) sets each player's life
+  total to the highest life total within that player's own range of influence (its example
+  has Alice become 8 and Barry and Doug 11), against CR 801.10 and 801.11, under which the
+  ability affects and sees only what is within its controller's range (801.11's second Coat
+  of Arms example), as the Imperial Mask and Benediction of Moons rulings say. Left uncited;
+  the texts are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
