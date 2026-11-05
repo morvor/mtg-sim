@@ -176,6 +176,18 @@ The coordinator keeps this current. Every session is a cloud session tagged `mtg
 | rulings-1 | session_019p6spxfiVy5mFUashMDSDX (new Nov 5 01:44; old session_016AqVwbbcGHLPnsbE5QiWBy archived after P128, P091) | P124, P012 |
 | rulings-2 | session_019p6sq1M5uLvZMf7G2RJ9mB (new Nov 5 01:44; old session archived 02:45 after f3ca81bb) | P195, p005-flagged-bugs, P159 |
 
+### Decisions (user, Nov 5, morning)
+
+The user accepted every recommendation from ruling-conflicts-1 and ruling-conflicts-2, and the Grip of Chaos reading:
+
+> "It looks like some rulings are applied as a template, and are therefore occasionally incorrect. This is the case for Homicide Investigator and the similar cases you mentioned. I agree with all of your recommendations. We should still keep a detailed account of all of the instances though, so they can be checked by a human, and reported to Wizards of the Coast if erroneous. For the Grip of Chaos question, I believe you are correct in that it does not trigger ward and 'whenever this becomes the target' abilities again."
+
+Item `register-decisions-nov5` records this:
+- the register entries become decided;
+- the policy "the card's text wins over a ruling that contradicts it" is recorded and applied;
+- so is the policy for misattached rulings;
+- `docs/RULING_DISCREPANCIES.md` starts as a log of every erroneous ruling, for human review and reporting to Wizards. Every worker adds to it from now on.
+
 ### Effort and fresh sessions (user, Nov 4, late evening)
 
 The user decided:
