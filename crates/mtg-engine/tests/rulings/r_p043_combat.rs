@@ -50,7 +50,7 @@ fn blocked_by(t: &TestGame, attacker: ObjectId) -> Vec<ObjectId> {
 
 #[test]
 fn a_block_by_a_bigger_creature_stays_when_its_power_drops() {
-    cr!("509.1b", "506.4", "613.4c");
+    cr!("509.1b", "509.1h", "613.4c");
     ruling!(
         "Chomping Kavu",
         "Once Chomping Kavu has been legally blocked by a creature, changing that creature’s power to 2 or less won’t undo that block."
@@ -125,7 +125,7 @@ fn a_block_by_a_bigger_creature_stays_when_its_power_drops() {
 
 #[test]
 fn verdant_outrider_activating_after_blocks_doesnt_unblock_it() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Verdant Outrider",
         "Activating Verdant Outrider's ability after it has become blocked by a creature with power 2 or less won't cause it to become unblocked."
@@ -267,7 +267,7 @@ fn butcher_orgg_blocked_with_no_blockers_left_deals_no_damage() {
 
 #[test]
 fn butcher_orgg_must_assign_all_of_its_damage() {
-    cr!("510.1b", "510.1c");
+    cr!("510.1a", "510.1b");
     ruling!(
         "Butcher Orgg",
         "If you choose to use the ability to divide up the damage (and there is at least one point of damage to be assigned), you must choose at least one creature or the defending player, and can't choose more total creatures and players than the amount of damage being assigned (minimum 1 point per player or creature)."
@@ -275,7 +275,7 @@ fn butcher_orgg_must_assign_all_of_its_damage() {
     // Dividing 6 as 3 and 0 isn't accepted: all 6 is assigned among the recipients.
     let mut t = TestGame::new(2);
     let orgg = t.battlefield(P0, "Butcher Orgg");
-    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
     t.answer_yes(P0, true);
     t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![3, 0]));
     t.set_step(P0, Step::BeginningOfCombat);
@@ -289,30 +289,35 @@ fn butcher_orgg_must_assign_all_of_its_damage() {
             })
             .sum();
     assert_eq!(dealt, 6, "{}", t.dump_log());
-    let _ = bears;
-    // Each recipient chosen gets at least 1: with 1 power (Orgg gets -5/-0), only one.
+    // Each recipient chosen gets at least 1, so with 1 power (Orgg gets -5/-0) only one can
+    // be chosen: 1 each to the Bears and P1 isn't accepted.
     let mut t = TestGame::new(2);
     let orgg = t.battlefield(P0, "Butcher Orgg");
-    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
     modify_until_eot(
         &mut t,
         orgg,
         vec![Modification::ModifyPT(Value::Const(-5), Value::Const(0))],
     );
     t.answer_yes(P0, true);
-    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![0, 1]));
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![1, 1]));
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(orgg, pl(P1))], &[]);
-    let recipients: Vec<Entity> =
+    let dealt: Vec<(Entity, u32)> =
         t.g.turn_events
             .iter()
             .filter_map(|e| match e {
-                Event::Damage { source, target, .. } if *source == orgg => Some(*target),
+                Event::Damage {
+                    source,
+                    target,
+                    amount,
+                    ..
+                } if *source == orgg => Some((*target, *amount)),
                 _ => None,
             })
             .collect();
-    assert_eq!(recipients.len(), 1);
-    let _ = bears;
+    assert_eq!(dealt.len(), 1, "{dealt:?}");
+    assert_eq!(dealt[0].1, 1);
 }
 
 #[test]
@@ -428,7 +433,7 @@ fn simian_sling_the_blocked_creature_deals_the_damage() {
 
 #[test]
 fn chainflail_centipede_pumps_the_creature_that_attacked() {
-    cr!("603.2", "608.2h", "301.5c");
+    cr!("603.2", "702.151b", "301.5c");
     ruling!(
         "Chainflail Centipede",
         "If the equipped creature is the one that attacks, it gets +2/+0 until end of turn, not Chainflail Centipede. This is true even if Chainflail Centipede is no longer attached to it by the time the ability resolves."
@@ -475,7 +480,7 @@ fn a_licid_ending_its_effect_makes_an_enchantment_spell_fizzle() {
 
 #[test]
 fn cloudsteel_kirin_you_cant_lose_and_opponents_cant_win() {
-    cr!("104.3b", "104.3c", "104.3d", "104.3e", "810.8a");
+    cr!("104.2b", "104.3b", "104.3c", "104.3d", "104.3e", "810.8a");
     ruling!(
         "Cloudsteel Kirin",
         "No game effect can cause you to lose the game or cause any opponent to win the game while you control a creature equipped with Cloudsteel Kirin. It doesn't matter whether you have 0 or less life, you're forced to draw a card while your library is empty, you have ten or more poison counters, you're at the end of your Nine Lives, your opponent is a Triskaidekaphile, or so on. You keep playing."
@@ -497,6 +502,16 @@ fn cloudsteel_kirin_you_cant_lose_and_opponents_cant_win() {
     t.g.draw_cards(P0, n + 1);
     t.settle();
     assert!(!t.has_lost(P0));
+    // The end of P0's Nine Lives ("When this enchantment leaves the battlefield, you lose
+    // the game").
+    supported("Nine Lives");
+    let nine = t.battlefield(P0, "Nine Lives");
+    destroy(&mut t, nine);
+    assert_eq!(t.stack_len(), 1, "Nine Lives's trigger");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Nine Lives"));
+    assert!(!t.has_lost(P0));
+    assert!(t.g.result.is_none(), "{:?}", t.g.result);
     // Azor's Elocutors with five filibuster counters: P1 doesn't win.
     let elo = t.battlefield(P1, "Azor's Elocutors");
     t.g.add_counters(obj(elo), "filibuster", 4, None);
@@ -522,7 +537,7 @@ fn cloudsteel_kirin_you_cant_lose_and_opponents_cant_win() {
 
 #[test]
 fn the_reality_chip_unattaching_doesnt_affect_a_spell_cast_from_the_library() {
-    cr!("601.2", "601.3", "305.1");
+    cr!("601.2", "601.3");
     ruling!(
         "The Reality Chip",
         "Once you cast a spell from the top of your library, causing The Reality Chip to no longer be attached to a creature will have no effect on that spell."

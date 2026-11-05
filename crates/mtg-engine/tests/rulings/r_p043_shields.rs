@@ -73,7 +73,9 @@ fn refraction_trap_deals_its_damage_within_the_prevention() {
     trap(&mut t, giant, pl(P1));
     t.g.deal_damage(giant, pl(P0), 5, false);
     assert_eq!((t.life(P0), t.life(P1)), (18, 17));
-    assert_eq!(t.stack_len(), 0, "no trigger");
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "not a triggered ability");
     // P1, at 3 life, casts Lightning Helix at P0. The Trap (source: the Helix) deals 3 to
     // P1 during the Helix's resolution; the Helix then gains P1 3 life before SBAs.
     let mut t = TestGame::new(2);
@@ -120,7 +122,7 @@ fn refraction_trap_and_divine_deflection_fizzle_with_an_illegal_target() {
 
 #[test]
 fn refraction_trap_and_divine_deflection_dont_recheck_their_target() {
-    cr!("608.2b", "614.9", "615.5");
+    cr!("608.2b", "615.5");
     ruling!(
         "Refraction Trap",
         "Whether the targeted permanent or player is still a legal target is no longer checked after Refraction Trap resolves. For example, if a creature targeted by Refraction Trap gains shroud after Refraction Trap resolves but before it prevents damage, Refraction Trap will still prevent damage and still deal damage to that creature. If Refraction Trap can’t deal damage to the targeted permanent or player (because the creature is no longer on the battlefield, or is no longer a creature, or the player is no longer in the game, for example), it will still prevent damage. It just won’t deal any damage itself."
@@ -355,7 +357,7 @@ fn captains_maneuver_does_nothing_if_its_second_target_cant_be_dealt_the_damage(
 
 #[test]
 fn martyrdom_redirects_only_to_its_creature_while_it_is_one() {
-    cr!("614.9", "609.7b");
+    cr!("614.9");
     ruling!(
         "Martyrdom",
         "If the target creature is not still on the battlefield when the damage is to be redirected, the damage stays where it is."
@@ -434,6 +436,7 @@ fn kor_dirge_redirected_damage_is_still_dealt_by_the_original_source() {
     supported("Kor Dirge");
     let mut t = TestGame::new(2);
     let rats = t.battlefield(P1, "Typhoid Rats");
+    let goblin = t.battlefield(P1, "Raging Goblin");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let wurm = t.battlefield(P1, "Craw Wurm");
     let from = t.asked().len();
@@ -444,9 +447,16 @@ fn kor_dirge_redirected_damage_is_still_dealt_by_the_original_source() {
         .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. })));
     t.answer_choose(P0, &[obj(rats)]);
     t.resolve_all();
+    assert!(t.asked()[from..].iter().any(|(p, d)| *p == P0
+        && matches!(d, Decision::ChooseEntities { candidates, .. }
+            if candidates.contains(&obj(rats)))));
+    // Another source's damage isn't redirected.
+    hit(&mut t, goblin, obj(bears), 1);
+    assert_eq!((dmg(&t, bears), dmg(&t, wurm)), (1, 0));
     hit(&mut t, rats, obj(bears), 1);
     // Dealt by the Rats (deathtouch): the Wurm dies.
     assert!(t.on_battlefield(bears));
+    assert_eq!(dmg(&t, bears), 1);
     assert!(!t.on_battlefield(wurm));
     assert_eq!(damage_by(&t, rats), vec![(obj(wurm), 1, false)]);
     assert!(damage_by(&t, spell).is_empty());
@@ -529,7 +539,7 @@ fn avacyns_abilities_dont_undo_damage_and_dont_recheck_targets() {
 
 #[test]
 fn safe_passage_covers_creatures_entering_later_but_not_damage_already_dealt() {
-    cr!("615.1", "611.2c");
+    cr!("615.1");
     ruling!(
         "Safe Passage",
         "Safe Passage has no effect on damage that’s already been dealt."
@@ -722,6 +732,69 @@ fn refraction_trap_you_choose_which_simultaneous_damage_it_prevents_as_it_is_dea
     assert!(t.on_battlefield(bears));
     assert_eq!(dmg(&t, bears), 1);
     assert_eq!(t.life(P1), 15, "2 from Earthquake, 3 from the Trap");
+}
+
+#[test]
+fn a_divided_shield_is_divided_among_recipients_then_ordered_by_source() {
+    cr!("615.7", "615.12", "615.5");
+    interp!("shield-divided-among-recipients");
+    // P0's Divine Deflection (X = 3, at P1); at the same time Hill Giant deals 2 and
+    // Raging Goblin 1 to P0, and Grizzly Bears 2 to P0's Craw Wurm. P0 divides the shield
+    // between the two recipients (2 to P0, 1 to the Wurm), and orders the damage to P0
+    // (CR 615.7): the 2 prevented to P0 are the first source's.
+    for goblin_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let wurm = t.battlefield(P0, "Craw Wurm");
+        let giant = t.battlefield(P1, "Hill Giant");
+        let goblin = t.battlefield(P1, "Raging Goblin");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        deflection(&mut t, 3, pl(P1));
+        t.resolve_all();
+        divide_by_recipient(&mut t, P0, vec![(pl(P0), 2), (obj(wurm), 1)]);
+        let order = if goblin_first { vec![1, 0] } else { vec![0, 1] };
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order));
+        let from = t.asked().len();
+        t.g.deal_damage_batch(
+            vec![(giant, pl(P0), 2), (goblin, pl(P0), 1), (bears, obj(wurm), 2)],
+            true,
+        );
+        t.g.flush_events();
+        t.settle();
+        assert_eq!(
+            divisions_since(&t, P0, from),
+            vec![(3, vec![pl(P0), obj(wurm)])],
+            "one division, between the recipients"
+        );
+        assert_eq!((t.life(P0), dmg(&t, wurm), t.life(P1)), (19, 1, 17));
+        let to_p0: Vec<ObjectId> =
+            t.g.turn_events
+                .iter()
+                .filter_map(|e| match e {
+                    Event::Damage { source, target, .. } if *target == pl(P0) => Some(*source),
+                    _ => None,
+                })
+                .collect();
+        assert_eq!(
+            to_p0,
+            vec![if goblin_first { giant } else { goblin }],
+            "goblin first: {goblin_first}"
+        );
+    }
+    // Excruciator's damage can't be prevented (CR 615.12): it takes no part of the shield,
+    // so with only one other recipient, nothing is asked.
+    supported("Excruciator");
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let exc = t.battlefield(P1, "Excruciator");
+    let giant = t.battlefield(P1, "Hill Giant");
+    deflection(&mut t, 2, pl(P1));
+    t.resolve_all();
+    let from = t.asked().len();
+    t.g.deal_damage_batch(vec![(exc, pl(P0), 7), (giant, obj(wurm), 3)], true);
+    t.g.flush_events();
+    t.settle();
+    assert!(divisions_since(&t, P0, from).is_empty());
+    assert_eq!((t.life(P0), dmg(&t, wurm), t.life(P1)), (13, 1, 18));
 }
 
 /// P0 activates Nova Pentacle: P0 picks `chooser`, who picks `target`. Returns the

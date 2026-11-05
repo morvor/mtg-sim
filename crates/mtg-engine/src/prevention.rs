@@ -698,24 +698,33 @@ pub fn merge_prevention_events(g: &mut Game, start: usize) {
 /// A shield from a resolved spell or ability ("the next 2 damage that a source of your
 /// choice would deal to you and/or permanents you control this turn", Harm's Way,
 /// Refraction Trap; CR 615.7, 614.9) that would apply to simultaneous damage dealt to two
-/// or more of its recipients, more damage than is left of it: its controller chooses which
-/// of that damage it applies to, dividing what's left among those damage events (Harm's
-/// Way's ruling: "You choose which 2 damage is redirected. ... you can choose to redirect
-/// 1 damage ... to each of two different recipients"). Recorded in
-/// `Game::per_source_division` under the shield's key; an invalid answer applies the
-/// shield in the order the events are replaced. (Damage from several sources to one
-/// recipient is ordered by its controller instead: [`order_for_shields`].)
+/// or more of its recipients, more damage than is left of it: its controller divides
+/// what's left of it among those recipients, at most the damage each would be dealt
+/// (Harm's Way's ruling: "You choose which 2 damage is redirected. ... you can choose to
+/// redirect 1 damage ... to each of two different recipients"; Refraction Trap's: "You
+/// don't decide until the point at which the source would deal its damage"). Damage the
+/// shield can't be applied to (it can't be prevented, or redirected) takes no part of it
+/// (CR 615.12, 614.9). A recipient's part goes to the damage dealt to it in the order its
+/// controller put that damage in ([`order_for_shields`], CR 615.7). Recorded in
+/// `Game::per_source_division` under the shield's key, for each damage event; an invalid
+/// answer applies the shield in the order the events are replaced.
 pub fn divide_shields(g: &mut Game, events: &[(ObjectId, Entity, u32)], combat: bool) {
-    let shields: Vec<(u32, PlayerId, Option<ObjectId>, u32)> = g
+    let shields: Vec<(u32, PlayerId, Option<ObjectId>, u32, bool)> = g
         .replacements
         .iter()
         .filter_map(|r| {
-            r.remaining
-                .filter(|n| *n > 0)
-                .map(|n| (r.id, r.controller, r.source, n))
+            r.remaining.filter(|n| *n > 0).map(|n| {
+                (
+                    r.id,
+                    r.controller,
+                    r.source,
+                    n,
+                    is_prevention(&r.def.action),
+                )
+            })
         })
         .collect();
-    for (id, chooser, effect_source, left) in shields {
+    for (id, chooser, effect_source, left, prevention) in shields {
         let idx: Vec<usize> = (0..events.len())
             .filter(|i| {
                 let (source, target, amount) = events[*i];
@@ -727,17 +736,21 @@ pub fn divide_shields(g: &mut Game, events: &[(ObjectId, Entity, u32)], combat: 
                         amount,
                         combat,
                     },
-                )
+                ) && !damage_cant_be_prevented_or_redirected(g, source, target)
+                    && !(prevention && damage_event_cant_be_prevented(g, source, combat))
             })
             .collect();
-        let recipients: Vec<Entity> = idx.iter().map(|i| events[*i].1).collect();
-        let distinct = recipients
-            .iter()
-            .enumerate()
-            .filter(|(k, r)| !recipients[..*k].contains(r))
-            .count();
-        let total: u32 = idx.iter().map(|i| events[*i].2).sum();
-        if distinct < 2 || total <= left {
+        // Each recipient, with the damage the shield could apply to.
+        let mut recipients: Vec<(Entity, u32)> = Vec::new();
+        for i in &idx {
+            let (_, target, amount) = events[*i];
+            match recipients.iter_mut().find(|r| r.0 == target) {
+                Some(r) => r.1 += amount,
+                None => recipients.push((target, amount)),
+            }
+        }
+        let total: u32 = recipients.iter().map(|r| r.1).sum();
+        if recipients.len() < 2 || total <= left {
             continue;
         }
         let ans = g.ask(
@@ -745,25 +758,36 @@ pub fn divide_shields(g: &mut Game, events: &[(ObjectId, Entity, u32)], combat: 
             crate::decision::Decision::Divide {
                 source: effect_source.unwrap_or(events[idx[0]].0),
                 total: left,
-                recipients: recipients.clone(),
+                recipients: recipients.iter().map(|r| r.0).collect(),
                 min_each: 0,
             },
         );
         let div: Vec<u32> = match ans {
             crate::decision::Answer::Numbers(v)
-                if v.len() == idx.len()
+                if v.len() == recipients.len()
                     && v.iter().all(|n| *n >= 0)
                     && v.iter().sum::<i64>() == left as i64
-                    && v.iter().zip(&idx).all(|(n, i)| *n <= events[*i].2 as i64) =>
+                    && v.iter().zip(&recipients).all(|(n, r)| *n <= r.1 as i64) =>
             {
                 v.into_iter().map(|n| n as u32).collect()
             }
             _ => continue,
         };
         let key = crate::replacement::numeric_key(crate::replacement::ReplKey::Instance(id));
-        for (i, n) in idx.into_iter().zip(div) {
-            let (source, target, _) = events[i];
-            g.per_source_division.push((key, source, target, n));
+        for ((recipient, _), mut part) in recipients.into_iter().zip(div) {
+            for i in idx.iter().filter(|i| events[**i].1 == recipient) {
+                let (source, _, amount) = events[*i];
+                let n = part.min(amount);
+                part -= n;
+                match g
+                    .per_source_division
+                    .iter_mut()
+                    .find(|d| d.0 == key && d.1 == source && d.2 == recipient)
+                {
+                    Some(d) => d.3 += n,
+                    None => g.per_source_division.push((key, source, recipient, n)),
+                }
+            }
         }
     }
 }

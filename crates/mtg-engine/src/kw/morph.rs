@@ -31,9 +31,11 @@ impl KeywordRules for Morph {
 
     fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let o = g.obj(card);
-        // CR 702.37d: only a morph ability lets a card be cast face down. A face-down
-        // card outside the battlefield that may be cast (exiled face down by Colfenor's
-        // Plans) has the abilities of its front face (CR 406.3a).
+        // CR 702.37d: only a morph ability lets a card be cast face down. A card exiled
+        // face down that may be played (Colfenor's Plans) can be cast face down with the
+        // morph ability of the card it is (CR 406.3a: "unless that card is being cast face
+        // down"; Colfenor's Plans's ruling: "If an exiled card has morph, you may cast it
+        // face down").
         if (o.face_down && o.zone == Zone::Battlefield)
             || !g
                 .characteristics_to_cast(card)

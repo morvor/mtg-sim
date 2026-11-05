@@ -62,7 +62,7 @@ fn platinum_emperion_damage_is_still_dealt() {
 
 #[test]
 fn platinum_emperion_replacements_with_life_gain_and_life_gain_replacements() {
-    cr!("119.7", "614.1a", "614.6", "614.12");
+    cr!("119.7", "614.1a", "614.6");
     ruling!(
         "Platinum Emperion",
         "Effects that replace an event with having you gain life (like Words of Worship’s effect does) or having you lose life will end up replacing the event with nothing."
@@ -104,7 +104,7 @@ fn platinum_emperion_replacements_with_life_gain_and_life_gain_replacements() {
 
 #[test]
 fn platinum_emperion_life_costs() {
-    cr!("119.4", "119.8", "601.2h", "107.4f", "118.3");
+    cr!("119.4", "119.4b", "119.8", "601.2h", "107.4f", "118.3");
     ruling!(
         "Platinum Emperion",
         "If a cost would include causing you to gain life (like the alternative cost of an opponent’s Invigorate does), that cost can’t be paid."
@@ -128,7 +128,7 @@ fn platinum_emperion_life_costs() {
             .any(|m| matches!(m, CastMethod::Alternative(_)));
         assert_eq!(alt, !with, "Invigorate's alternative cost");
     }
-    // Gitaxian Probe ({U/P}) with no mana: 2 life can't be paid.
+    // Gitaxian Probe ({U/P}) with no mana: 2 life can't be paid. With an Island, {U} can.
     for with in [false, true] {
         let mut t = TestGame::new(2);
         if with {
@@ -136,6 +136,27 @@ fn platinum_emperion_life_costs() {
         }
         let probe = t.hand(P0, "Gitaxian Probe");
         assert_eq!(can_cast(&mut t, P0, probe, CastMethod::Normal), !with);
+        if with {
+            t.lands(P0, "Island", 1);
+            t.library_top(P0, "Island");
+            assert!(can_cast(&mut t, P0, probe, CastMethod::Normal));
+            t.cast(P0, probe).target(P1).go();
+            t.resolve_all();
+            assert_eq!(t.life(P0), 20);
+            assert!(t.in_graveyard(P0, "Gitaxian Probe"));
+        }
+    }
+    // Toxic Deluge ("As an additional cost to cast this spell, pay X life."): X = 0 can be
+    // paid (CR 119.4b), X = 1 can't.
+    supported("Toxic Deluge");
+    for (x, ok) in [(0, true), (1, false)] {
+        let mut t = TestGame::new(2);
+        emperion(&mut t, P0);
+        t.lands(P0, "Swamp", 1);
+        t.lands(P0, "Wastes", 2);
+        let deluge = t.hand(P0, "Toxic Deluge");
+        assert_eq!(t.cast(P0, deluge).x(x).try_go().is_ok(), ok, "X = {x}");
+        assert_eq!(t.life(P0), 20);
     }
     // Shivan Reef's colored mana ability deals 1 damage to P0: still usable.
     let mut t = TestGame::new(2);

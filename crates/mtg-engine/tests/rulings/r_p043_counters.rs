@@ -109,7 +109,7 @@ fn oathsworn_knight_attacks_only_if_able_without_paying() {
 
 #[test]
 fn oathsworn_knight_unpreventable_and_simultaneous_damage() {
-    cr!("615.12", "615.5", "615.7");
+    cr!("615.12", "615.5");
     ruling!(
         "Oathsworn Knight",
         "If damage that can't be prevented is dealt to Oathsworn Knight, one counter is still removed from it."
@@ -191,7 +191,7 @@ fn ugins_conjurant_enters_with_x_counters_whatever_was_paid() {
 
 #[test]
 fn rock_hydra_counters_and_x() {
-    cr!("615.12", "107.3f", "107.3g", "202.3e", "615.7");
+    cr!("615.12", "107.3m", "107.3g", "202.3e", "615.7");
     ruling!(
         "Rock Hydra",
         "If damage that would be dealt to Rock Hydra can't be prevented, you still remove a +1/+1 counter from it for each 1 damage dealt."
@@ -209,13 +209,14 @@ fn rock_hydra_counters_and_x() {
         "You can activate the activated ability that prevents damage any time, even if no source seems likely to deal damage to you in the near future. It will prevent the next 1 damage that would be dealt this turn, even if that turns out to be much later in the turn."
     );
     supported("Rock Hydra");
-    // Unpreventable: 2 damage dealt, 2 counters removed.
+    // Unpreventable: 2 damage dealt, 2 counters removed (one for each 1 damage).
     let mut t = TestGame::new(2);
-    let hydra = with_counters(&mut t, "Rock Hydra", 4);
+    let hydra = with_counters(&mut t, "Rock Hydra", 5);
     let giant = t.battlefield(P1, "Hill Giant");
     skullcrack(&mut t);
-    hit(&mut t, giant, obj(hydra), 1);
-    assert_eq!((t.counters(hydra, "+1/+1"), dmg(&t, hydra)), (3, 1));
+    hit(&mut t, giant, obj(hydra), 2);
+    assert_eq!((t.counters(hydra, "+1/+1"), dmg(&t, hydra)), (3, 2));
+    assert!(t.on_battlefield(hydra));
     assert_eq!(mv(&t, hydra), 2);
     // Put onto the battlefield: no counters, so it dies.
     let mut t = TestGame::new(2);
@@ -275,7 +276,7 @@ fn nomads_en_kor_can_redirect_more_than_the_creatures_toughness() {
 
 #[test]
 fn slumbering_trudge_x_is_0_unless_cast_with_x() {
-    cr!("107.3f", "107.3m", "122.1d");
+    cr!("107.3m");
     ruling!(
         "Slumbering Trudge",
         "If Slumbering Trudge enters the battlefield without being cast, X is 0. The same is true if an effect lets you cast Slumbering Trudge without paying its mana cost."
@@ -315,17 +316,19 @@ fn leonardo_cost_reductions_apply_after_increases_and_keep_its_mana_value() {
         "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions (such as that of Leonardo's first ability). The mana value of the spell remains unchanged, no matter what the total cost to cast it was."
     );
     supported("Leonardo, Worldly Warrior");
-    // {7}{W}, plus {1} (Lodestone Golem), minus {3} (three creatures): six mana.
-    for (lands, ok) in [(5, false), (6, true)] {
+    // {7}{W}, plus {1} (Lodestone Golem), minus {3} (three creatures): six mana. With eight
+    // creatures, {8}{W} minus {8}: just {W} (the reduction applied first would leave
+    // {1}{W}).
+    for (creatures, lands, ok) in [(3, 5, false), (3, 6, true), (8, 1, true)] {
         let mut t = TestGame::new(2);
         t.battlefield(P1, "Lodestone Golem");
-        for _ in 0..3 {
+        for _ in 0..creatures {
             t.battlefield(P0, "Grizzly Bears");
         }
         t.lands(P0, "Plains", lands);
         let card = t.hand(P0, "Leonardo, Worldly Warrior");
         let r = t.cast(P0, card).try_go();
-        assert_eq!(r.is_ok(), ok, "{lands} lands");
+        assert_eq!(r.is_ok(), ok, "{creatures} creatures, {lands} lands");
         if let Ok(spell) = r {
             assert_eq!(mv(&t, spell), 8);
         }

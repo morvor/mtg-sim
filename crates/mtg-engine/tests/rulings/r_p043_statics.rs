@@ -12,7 +12,6 @@ use crate::r_s02_common::destroy;
 use crate::r_s25_common::cast_new;
 use mtg_engine::decision::Answer;
 use mtg_engine::events::Event;
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -71,11 +70,21 @@ fn temple_altisaur_leaves_1_damage_from_each_source() {
         true,
     );
     assert_eq!(dmg(&t, dino), 2, "1 from each source");
-    // Two Altisaurs: still 1.
+    // Two Altisaurs: both effects apply to the damage to a third Dinosaur, which is still
+    // dealt 1.
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Temple Altisaur");
     t.battlefield(P0, "Temple Altisaur");
+    let dino = t.battlefield(P0, "Ancient Brontodon");
     let giant = t.battlefield(P1, "Hill Giant");
+    let from = t.asked().len();
+    hit(&mut t, giant, obj(dino), 3, false);
+    assert_eq!(dmg(&t, dino), 1);
+    assert!(
+        !replacement_choices_since(&t, P0, from).is_empty(),
+        "two prevention effects to order"
+    );
+    // (An Altisaur itself is protected by the other one only.)
     hit(&mut t, giant, obj(a), 3, false);
     assert_eq!(dmg(&t, a), 1);
 }
@@ -199,7 +208,7 @@ fn purists(t: &mut TestGame, level: u32) -> ObjectId {
 
 #[test]
 fn hedron_field_purists_prevent_1_or_2_from_each_source_any_damage() {
-    cr!("711.2a", "711.2b", "615.1a", "615.7");
+    cr!("711.2a", "711.2b", "615.1a");
     ruling!(
         "Hedron-Field Purists",
         "The prevention effects prevent 1 or 2 damage, as applicable, from each source (regardless of who controls it) each time that source would deal damage to you or a creature you control. They prevent damage of any kind, not just combat damage."
@@ -258,7 +267,7 @@ fn hedron_field_purists_prevent_1_or_2_from_each_source_any_damage() {
 
 #[test]
 fn pack_leaders_prevention_outlasts_it() {
-    cr!("611.2a", "615.1", "506.4");
+    cr!("611.2a", "615.1");
     ruling!(
         "Pack Leader",
         "Once Pack Leader attacks, its effect prevents damage that would be dealt to Dogs you control even if Pack Leader leaves the battlefield."
@@ -346,7 +355,7 @@ fn guardian_seraph_prevents_1_of_each_opposing_sources_damage() {
 
 #[test]
 fn protection_of_the_hekma_prevents_1_from_each_source_to_you_only() {
-    cr!("615.1a", "615.7");
+    cr!("615.1a");
     ruling!(
         "Protection of the Hekma",
         "If multiple sources would deal damage to you at once (for example, several attacking creatures), 1 damage from each of those sources is prevented."
@@ -469,5 +478,4 @@ fn the_stasis_coffin_protection_from_everything() {
     t.cast(P1, quake).x(2).go();
     t.resolve_all();
     assert_eq!(t.life(P0), 18);
-    let _ = Zone::Battlefield;
 }

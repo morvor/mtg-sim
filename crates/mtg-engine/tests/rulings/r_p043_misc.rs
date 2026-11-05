@@ -91,7 +91,6 @@ fn magus_sisters_random_mode_needs_a_legal_target_and_comes_before_targets() {
             .filter(|(_, d)| matches!(d, Decision::ChooseTargets { .. }))
             .count();
         assert_eq!(target_choices, 1, "seed {seed}");
-        let _ = saga;
     }
 }
 
@@ -155,7 +154,7 @@ fn invent_finds_an_instant_and_or_a_sorcery() {
 
 #[test]
 fn day_night_triggers_dont_trigger_when_it_first_becomes_day() {
-    cr!("731.1a", "731.2b", "603.2");
+    cr!("731.1", "731.1a", "603.2");
     ruling!(
         "Brimstone Vandal",
         "It does not trigger when the game becomes day or night for the first time."
@@ -255,7 +254,7 @@ const SEVEN: [&str; 7] = [
     "Divination",
     "Island",
     "Island",
-    "Island",
+    "Crowd-Control Warden",
 ];
 
 #[test]
@@ -279,7 +278,7 @@ fn colfenors_plans_no_more_spells_the_turn_it_was_cast() {
 
 #[test]
 fn colfenors_plans_cards_are_played_normally_and_only_while_it_remains() {
-    cr!("601.3", "702.37c", "406.3", "307.1");
+    cr!("601.3", "702.37c", "702.168a", "406.3a", "406.3", "307.1");
     ruling!(
         "Colfenor's Plans",
         "Playing a card exiled with Colfenor's Plans follows all the normal rules for playing that card. You must pay its costs, and you must follow all timing restrictions, for example."
@@ -292,6 +291,7 @@ fn colfenors_plans_cards_are_played_normally_and_only_while_it_remains() {
         "Colfenor's Plans",
         "If Colfenor's Plans leaves the battlefield, you can continue to look at cards exiled by it, but you can no longer play them."
     );
+    supported("Crowd-Control Warden");
     let mut t = TestGame::new(2);
     let (p, exiled) = plans(&mut t, &SEVEN);
     t.set_step(P1, Step::End);
@@ -308,8 +308,10 @@ fn colfenors_plans_cards_are_played_normally_and_only_while_it_remains() {
         !can_cast(&mut t, P0, exiled[2], CastMethod::Normal),
         "{{R}} unpaid"
     );
-    // Exalted Angel face down for {3}.
+    // Exalted Angel face down for {3} (or Crowd-Control Warden, with disguise).
     let morph = CastMethod::FaceDown(KeywordKind::Morph);
+    let disguise = CastMethod::FaceDown(KeywordKind::Disguise);
+    assert!(can_cast(&mut t, P0, exiled[6], disguise.clone()));
     assert!(can_cast(&mut t, P0, exiled[1], morph.clone()));
     t.cast(P0, exiled[1]).method(morph).go();
     t.resolve_all();
@@ -323,11 +325,13 @@ fn colfenors_plans_cards_are_played_normally_and_only_while_it_remains() {
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::PrecombatMain);
     t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
     for c in [exiled[0], exiled[2], exiled[3]] {
         assert!(mtg_engine::facedown::can_look_at(&t.g, P0, t.g.current(c)));
         assert!(!mtg_engine::facedown::can_look_at(&t.g, P1, t.g.current(c)));
         assert!(!can_cast(&mut t, P0, c, CastMethod::Normal));
     }
+    assert!(!can_cast(&mut t, P0, exiled[6], disguise));
     let island = t.g.current(exiled[5]);
     assert!(t.play_land(P0, island).is_err());
 }
