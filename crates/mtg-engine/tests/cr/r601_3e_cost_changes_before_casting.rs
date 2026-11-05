@@ -1,12 +1,14 @@
-//! CR 601.3e (709.3a, 712.11c, 715.3a, 718.3b, 702.37c): whether a card can be cast (the
-//! legal actions a player is offered) is judged with the characteristics it would have as
-//! the spell cast that way, including the cost increases and reductions that would then
-//! apply to it — the same ones that apply once it is being cast (CR 601.2f).
+//! CR 601.3e (709.3a, 712.11c, 715.3a, 718.3b, 702.37c, 406.3a): whether a card can be
+//! cast (the legal actions a player is offered) is judged with the characteristics it would
+//! have as the spell cast that way, including the cost increases and reductions that would
+//! then apply to it — the same ones that apply once it is being cast (CR 601.2f).
 
-use mtg_engine::decision::Action;
+use mtg_engine::decision::{Action, SpecialAction};
 use mtg_engine::keywords::KeywordKind;
+use mtg_engine::mana::ManaType;
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 /// Whether `p` is offered casting `card` with `method` now.
@@ -127,4 +129,42 @@ fn a_prototyped_spell_gets_the_cost_changes_of_its_color() {
     let spell = t.cast(P0, card).method(PROTOTYPE).go();
     t.resolve_all();
     assert_eq!(t.pt(spell), (3, 3));
+}
+
+#[test]
+fn a_foretold_card_gets_the_cost_changes_of_the_face_up_spell() {
+    cr!("601.3e", "406.3a", "702.143a", "601.2f");
+    const FORETELL: CastMethod = CastMethod::Keyword(KeywordKind::Foretell);
+    // Doomskar ({3}{W}{W} sorcery, foretell {1}{W}{W}) foretold: exiled face down, it has no
+    // characteristics, but it's turned face up as it's cast, a white sorcery spell. Goblin
+    // Electromancer ("Instant and sorcery spells you cast cost {1} less to cast.") reduces
+    // its foretell cost to {W}{W}; Ugin, the Ineffable ("Colorless spells you cast cost {2}
+    // less to cast.") doesn't reduce it.
+    for (modifier, reduced) in [
+        ("Goblin Electromancer", true),
+        ("Ugin, the Ineffable", false),
+    ] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, modifier);
+        let card = t.hand(P0, "Doomskar");
+        t.g.players[0].mana_pool.add_type(ManaType::C, 2);
+        t.g.turn.priority = Some(P0);
+        t.g.take_action(P0, Action::Special(SpecialAction::Foretell { card }));
+        t.g.flush_events();
+        let card = t.g.current(card);
+        assert!(t.g.obj(card).face_down);
+        // It may be cast on a later turn.
+        t.advance_to(P1, Step::Upkeep);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.lands(P0, "Plains", 2);
+        assert_eq!(offered(&mut t, P0, card, FORETELL), reduced, "{modifier}");
+        if !reduced {
+            assert!(t.cast(P0, card).method(FORETELL).try_go().is_err());
+            t.lands(P0, "Plains", 1);
+            assert!(offered(&mut t, P0, card, FORETELL), "{modifier}");
+        }
+        t.cast(P0, card).method(FORETELL).go();
+        t.resolve_all();
+        assert!(t.in_graveyard(P0, "Doomskar"), "{modifier}");
+    }
 }
