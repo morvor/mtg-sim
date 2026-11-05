@@ -2262,13 +2262,21 @@ impl Game {
                 player: Some(p),
                 ..Default::default()
             });
-            // (A card being considered for casting is judged as the spell it would be.)
+            // (A card being considered for casting is judged as the spell it would be: with
+            // the characteristics of the face, half or way it would be cast, CR 601.3e,
+            // 702.103b. A spell being cast has those already.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
                     self.player_rel_matches(cm.who, p, &ctx)
-                        && crate::spell_costs::spells_change_applies(
-                            self, card, f, &cm.change, &ctx,
-                        )
+                        && if self.obj(card).zone == Zone::Stack {
+                            crate::spell_costs::spells_change_applies(
+                                self, card, f, &cm.change, &ctx,
+                            )
+                        } else {
+                            crate::spell_costs::spells_change_applies_as(
+                                self, card, chars, f, &cm.change, &ctx,
+                            )
+                        }
                 }
                 _ => false,
             };

@@ -53,3 +53,53 @@ These rulings were exempted earlier as superseded by the current CR, without the
    - what the user needs to decide.
 
 DONE when every case has a conclusion backed by quoted sources (or a D write-up), the engine and tests follow the A, B and C conclusions, the register entries and exemptions say why, INTERPRETATIONS.md is regenerated, and `cargo test --workspace` passes.
+
+## STATUS
+
+Done (Nov 5). Conclusion types: A reconciled, B outdated, C settled by the ruling, D unresolved.
+Every new or rewritten register entry is provisional for the user.
+
+| # | Case | Conclusion | Commit(s) |
+|---|---|---|---|
+| 1 | Aetherplasm vs Deathgazer (`put-onto-battlefield-blocking-retriggers-becomes-blocked-by`) | B: old single CR 309 "becomes blocked" rule, split into 509.3a-d by Feb 2011 (probably M10, 2009-07-10) | ea261eab |
+| 2 | Players who left the game (`history-counts-players-who-left`) | C: ~15 rulings 2007-2024 count them; Gnoll War Band the outlier; history counts fixed to include them | 785d9ef1, 12748b8f |
+| 3 | Blitz Hellion shuffle (`self-shuffle-gone-library-still-shuffled`) | B: Magic Origins CR update 2015-07-16 | 785d9ef1 |
+| 4 | Room door timestamp (`room-door-unlock-timestamp`) | D (leaning C): rulings kept as a provisional deviation from 613.7a; user decides | 6d149a6f |
+| 5 | Ice Cauldron (`ice-cauldron-last-exiled`) | A | c92b1d57 |
+| 6 | Cyclopean Tomb (`cyclopean-tomb-land-choice`) | B in part: Update Bulletins 2008-07-09 / 2008-09-24 | dd67c8ca |
+| 7 | Krosan Adaptation, token copies "created" | B: Zendikar Rising CR changes 2020-09-22 | e6421907 |
+| 8 | Jade Statue, "in addition to those creature types" | B: Throne of Eldraine CR update 2019-09-27 (effective 2019-10-04) | f57418e2 |
+| 9 | Deranged Assistant, "can't be reversed" | B: 605.1a revision effective 2026-08-07 | 906ffd16 |
+| 10 | Mossfire Egg and the other Eggs, "This is a mana ability" | B: 605.1a revision effective 2026-08-07 | a2c501b6 |
+| 11 | Oculus Whelp / Mutagen Connoisseur / Invasion of Pyrulea, MDFCs "never transformed" | B: Marvel's Spider-Man CR update 2025-09-19 | 86f1fb6d |
+| 12 | Corruption of Towashi, MDFCs "can't enter transformed" | B: CR update 2025-09-19; provisional `mdfc-back-face-up-enters-transformed` | 86f1fb6d |
+| 13 | Cast grants when the source leaves (Wort/Imoti/Party Thrasher vs 610.5) | A: 610.5 (CR 2026-01-16) covers only "gain ... as you cast them"; engine fix; provisional `cast-grant-have-after-cast` | ccb59166, 924f907b, 60501ff1 |
+| 14 | Dance of the Dead, two on one creature | B: Masters Edition Update Bulletin 2007-08-29 | 63d820ca |
+| 15 | Library arranged by owner vs instructing player (see below) | A: resolved by the user's register decision of Nov 4, applied in item register-fixes-1 | 178596b8 (register-fixes-1) |
+| 16 | Tempting offer order off-turn (CR 101.4) | A: the 2013 rulings describe the caster's own turn; Tempt with Mayhem 2024-06-07 starts with the active player | 4a626295 |
+| 17 | Jailbreak (`when-that-permanent-enters-as-it-is-created`) | A: 603.12 since the CR of 2019-01-25 | 80061407 |
+| 18 | Astarion, the Decadent, ruling about X | A (not applicable): the ruling is misattached; it belongs to Astarion's Thirst (CLB release notes 2022-06-01) | d909f382 |
+| 19 | Deathtouch noncombat excess damage | A: CR 120.4a | d909f382 |
+| 20 | Charmed Pendant, "still a mana ability" (folded into case 10) | B: 605.1a revision effective 2026-08-07 | a2c501b6 |
+| 21 | Two Siege rulings on MDFCs | B in part: CR update 2025-09-19 | 86f1fb6d, 60501ff1 |
+
+**Case 15 in full.** Register entry `library-arranged-by-owner-not-instructing-player` (zones-objects.md,
+then provisional, Kind: deviation), now `library-in-any-order-arranged-by-instructing-player`.
+- Question: when a spell puts cards another player owns into that player's library "in any order"
+  (Misinformation, Drafna's Restoration, Lodestone Bauble, Agonizing Memories), who arranges them?
+- Sources: CR 401.4 "If an effect puts two or more cards in a specific position in a library at the same
+  time, the owner of those cards may arrange them in any order." CR 101.1 "Whenever a card’s text directly
+  contradicts these rules, the card takes precedence." Misinformation ruling (2008-10-01): "You don’t need to
+  show the opponent what order you put the cards on top of their library." Sealed Fate ruling (2004-10-04):
+  "The controller of this spell decides the order of the cards on the library." Oracle, Misinformation: "Put
+  up to three target cards from an opponent's graveyard on top of their library in any order."
+- The engine had let the owner arrange such cards (401.4), against the rulings.
+- docs/agents/verification-plan.md (Nov 4) assigned the entry to item register-fixes-1, so this item's
+  investigator/skeptic pipeline did not take it up separately. The user decided it on Nov 4 (register
+  decisions): the player the text instructs arranges them.
+- Conclusion **A, reconciled**: "in any order" in the card's text instructs its controller to arrange the cards,
+  which takes precedence over 401.4's default (101.1); 401.4 still applies without that wording (Hallowed
+  Burial) and to cards a replacement effect sends there.
+- Change (register-fixes-1, 178596b8): `Destination::arranged_by` / `EtbInfo::arranged_by` carry the
+  instructed player to `zones::order_simultaneous`; the entry was rewritten and marked decided; tests in
+  `tests/rulings/r_p147_restock.rs` and `tests/cards/m_lodestone_bauble.rs`. Both rulings are CITED.

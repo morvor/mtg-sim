@@ -204,7 +204,7 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
             all.extend(cards.iter().copied());
         } else {
             for (objs, to) in split(g, f.searcher, &cards, spec, &c) {
-                moves.extend(g.destination_moves(objs, &to, &mut c));
+                moves.extend(g.found_card_moves(f.searcher, objs, &to, &mut c));
             }
         }
         if shuffle && !shuffles.contains(&f.owner) {

@@ -1081,6 +1081,7 @@ impl Game {
                     new,
                     to: Zone::Battlefield,
                     cause,
+                    by,
                     ..
                 },
             ) => {
@@ -1089,6 +1090,8 @@ impl Game {
                         object: Some(*new),
                         player: Some(self.obj(*new).controller),
                         cause: Some(*cause),
+                        // The player who put it onto the battlefield (CR 110.2a).
+                        caused_by: *by,
                         ..Default::default()
                     })
                 } else {
