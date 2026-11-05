@@ -121,7 +121,7 @@ fn mogg_bombers_damage_doesnt_depend_on_the_sacrifice() {
 
 #[test]
 fn mogg_bombers_sees_creatures_entering_with_it() {
-    cr!("603.6a", "603.10a");
+    cr!("603.6a");
     ruling!(
         "Mogg Bombers",
         "The Mogg Bombers do trigger on any creatures that enter at the same time they do."
@@ -141,7 +141,7 @@ fn mogg_bombers_sees_creatures_entering_with_it() {
 
 #[test]
 fn spiteful_sliver_triggers_when_dealt_lethal_damage() {
-    cr!("603.10a", "603.2", "510.2");
+    cr!("603.2", "113.7a", "704.5g", "510.2");
     ruling!(
         "Spiteful Sliver",
         "The ability granted by Spiteful Sliver will trigger even if the Sliver is dealt lethal damage. For example, if a 2/2 Sliver blocks a 7/7 creature, the Sliver’s ability will trigger and it will deal 7 damage."
@@ -304,6 +304,11 @@ fn the_fallen_damages_only_its_current_controllers_opponents() {
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (20, 18));
+    // Back under P0's control, it damages P1 again (it still remembers P1).
+    give_control(&mut t, fallen, P0);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (20, 17));
 }
 
 #[test]

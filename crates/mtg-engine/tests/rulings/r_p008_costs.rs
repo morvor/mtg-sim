@@ -216,7 +216,7 @@ fn nahiris_wrath_copy_has_the_same_targets_and_damage() {
 
 #[test]
 fn cost_reductions_reduce_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Chandra's Incinerator",
         "The cost reduction applies only to generic mana in the cost of Chandra's Incinerator. It can't reduce the {R} requirement."

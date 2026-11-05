@@ -13,6 +13,8 @@ use crate::r_s06_common::give_control;
 use crate::r_s07_common::chosen_modes;
 use crate::r_s25_common::spell_copies;
 use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::events::Event;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -22,7 +24,7 @@ const NORMAL: CastMethod = CastMethod::Normal;
 
 #[test]
 fn chandra_pyromaster_copies_of_an_x_spell_have_x_zero() {
-    cr!("107.3b", "118.9c", "707.10");
+    cr!("107.3b", "707.12");
     ruling!(
         "Chandra, Pyromaster",
         "If the copied card has {X} in its mana cost, you must choose 0 as its value when casting the copies."
@@ -38,8 +40,14 @@ fn chandra_pyromaster_copies_of_an_x_spell_have_x_zero() {
         t.answer(P0, DecisionKind::X, Answer::Number(5));
         t.answer_targets(P0, &[obj(wurm)]);
     }
+    let from = t.g.turn_events.len();
     loyalty(&mut t, P0, c, 2, &[]);
     t.resolve_all();
+    let copies_cast = t.g.turn_events[from..]
+        .iter()
+        .filter(|e| matches!(e, Event::SpellCast { spell, .. } if t.g.obj(*spell).chars.name.to_string() == "Fireball"))
+        .count();
+    assert_eq!(copies_cast, 3, "the three copies were cast");
     assert_eq!(dmg(&t, wurm), 0, "X = 0 for each copy");
     assert!(t.on_battlefield(wurm));
 }
@@ -88,7 +96,7 @@ fn chandra_pyromaster_chooses_only_among_the_cards_just_exiled() {
 
 #[test]
 fn chandra_pyromaster_exiled_card_follows_the_normal_timing_rules() {
-    cr!("305.2", "305.3", "307.1", "601.3");
+    cr!("305.2", "302.1", "601.3");
     ruling!(
         "Chandra, Pyromaster",
         "If you exile a land card using the second ability, you may play that land only if you have any available land plays. Normally, this means you can play the land only if you haven't played a land yet that turn."
@@ -149,7 +157,7 @@ fn sarkhan_the_mad_damages_himself_as_the_ability_resolves() {
 
 #[test]
 fn nicol_bolas_control_change_has_no_duration() {
-    cr!("611.2b", "613.1b", "613.7");
+    cr!("611.2a", "613.1b", "613.7");
     ruling!(
         "Nicol Bolas, Planeswalker",
         "The control-change effect has no duration. It will last until the game ends or the affected creature leaves the battlefield. It may be superseded by a later control-change effect."
@@ -183,6 +191,7 @@ fn indestructible_planeswalkers_still_lose_loyalty_and_die_at_zero() {
     cast_x(&mut t, P0, "Shock", NORMAL, None, &[obj(theirs)]);
     t.resolve_all();
     assert_eq!(t.counters(theirs, "loyalty"), 2);
+    assert!(t.obj_now(theirs).has_keyword(KeywordKind::Indestructible));
     cast_x(&mut t, P0, "Shock", NORMAL, None, &[obj(theirs)]);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Chandra, Torch of Defiance"));
@@ -190,7 +199,7 @@ fn indestructible_planeswalkers_still_lose_loyalty_and_die_at_zero() {
 
 #[test]
 fn lukka_enters_with_loyalty_modified_by_other_replacement_effects() {
-    cr!("122.6", "614.1c", "702.150a");
+    cr!("122.6", "614.1c", "702.150a", "616.1");
     ruling!(
         "Lukka, Bound to Ruin",
         "Other replacement effects that would change the number of loyalty counters Lukka enters with will apply as normal."
@@ -211,6 +220,47 @@ fn lukka_enters_with_loyalty_modified_by_other_replacement_effects() {
     let l = t.g.current(l);
     assert!(t.on_battlefield(l));
     assert_eq!(t.counters(l, "loyalty"), 10);
+    // 2 life paid for {R/G/P}: compleated (two fewer) and Vorinclex both apply, in the order
+    // P0 chooses (CR 616.1): doubling first, 5 × 2 − 2 = 8; compleated first,
+    // (5 − 2) × 2 = 6. Without Vorinclex: 3.
+    fn twice_first(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+        crate::r_s30_common::pick_replacement(g, d, "twice")
+    }
+    fn compleated_first(_: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+        match d {
+            Decision::ChooseReplacement { options } => options
+                .iter()
+                .position(|o| !o.contains("twice"))
+                .map(Answer::Index),
+            _ => None,
+        }
+    }
+    type Order = fn(&mtg_engine::game::Game, &Decision) -> Option<Answer>;
+    for (vorinclex, order, loyalty) in [
+        (false, None, 3),
+        (true, Some(twice_first as Order), 8),
+        (true, Some(compleated_first as Order), 6),
+    ] {
+        let mut t = TestGame::new(2);
+        if vorinclex {
+            t.battlefield(P0, "Vorinclex, Monstrous Raider");
+        }
+        if let Some(f) = order {
+            crate::r_s03_common::respond(&mut t, P0, f);
+        }
+        let l = cast_paying(
+            &mut t,
+            P0,
+            "Lukka, Bound to Ruin",
+            &["Wastes", "Wastes", "Mountain", "Forest"],
+            NORMAL,
+            &[],
+        );
+        t.resolve_all();
+        let l = t.g.current(l);
+        assert_eq!(t.life(P0), 18, "2 life paid");
+        assert_eq!(t.counters(l, "loyalty"), loyalty, "Vorinclex {vorinclex}");
+    }
 }
 
 #[test]
@@ -273,7 +323,7 @@ fn lands_for(t: &mut TestGame, name: &str) {
 
 #[test]
 fn goblin_bomb_losing_a_flip_with_no_fuse_counters_does_nothing() {
-    cr!("122.8", "705.2");
+    cr!("609.3", "705.2");
     ruling!(
         "Goblin Bomb",
         "Nothing happens if you are instructed to remove a fuse counter from an empty card."

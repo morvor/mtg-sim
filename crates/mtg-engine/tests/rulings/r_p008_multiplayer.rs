@@ -16,7 +16,7 @@ const NORMAL: CastMethod = CastMethod::Normal;
 
 #[test]
 fn two_headed_giant_each_opponent_effects_hit_the_team_twice() {
-    cr!("810.9", "810.7", "102.3");
+    cr!("810.9", "810.4", "102.3");
     ruling!(
         "Aria of Flame",
         "In a Two-Headed Giant game, Aria of Flame’s first ability causes the opposing team to gain 20 life."
@@ -79,7 +79,7 @@ fn two_headed_giant_each_opponent_effects_hit_the_team_twice() {
 
 #[test]
 fn two_headed_giant_cavalier_and_chandra_emblems() {
-    cr!("810.9", "114.2", "810.7");
+    cr!("810.9", "114.2", "810.2");
     ruling!(
         "Cavalier of Flame",
         "In a Two-Headed Giant game, Cavalier of Flame’s last ability causes the opposing team to be dealt X damage twice."

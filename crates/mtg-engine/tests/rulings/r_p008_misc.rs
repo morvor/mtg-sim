@@ -26,7 +26,7 @@ fn before_first_main(t: &mut TestGame) {
 
 #[test]
 fn sanctums_count_only_shrines() {
-    cr!("205.3g", "109.2");
+    cr!("205.3h", "109.2");
     ruling!(
         "Sanctum of Calm Waters",
         "Shrines count only enchantments with the subtype Shrine. Other cards with “shrine” in their name (such as Jungle Shrine, Luxa River Shrine, and Nantuko Shrine) don't count."

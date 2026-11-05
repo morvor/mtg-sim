@@ -29,7 +29,7 @@ fn annie(t: &mut TestGame) {
 
 #[test]
 fn annie_joins_up_checks_legendary_as_the_ability_triggers() {
-    cr!("603.2", "603.3", "205.4d");
+    cr!("603.2", "603.3");
     ruling!(
         "Annie Joins Up",
         "Once an ability of a creature you control has triggered, making it legendary won’t cause that ability to trigger an additional time. Similarly, once an ability of a legendary creature you control has triggered an additional time due to Annie Joins Up’s last ability, turning it into a nonlegendary creature won’t remove that additional triggered ability from the stack."
@@ -151,7 +151,7 @@ fn ral_and_the_implicit_maze_makes_a_spellgorger_weird() {
 
 #[test]
 fn bears_of_littjara_base_power_and_toughness_in_timestamp_order() {
-    cr!("613.4b", "613.7a");
+    cr!("613.4b", "613.7");
     ruling!(
         "The Bears of Littjara",
         "The chapter II ability overwrites any previous effects that set any of the Shapeshifters’ base power and toughness to specific values. Any effects that set a Shapeshifter’s base power and toughness that start to apply after the chapter II ability will override the effect of that ability."

@@ -233,7 +233,7 @@ fn cant_be_prevented_doesnt_stop_effects_that_dont_say_prevent() {
     );
     // Impractical Joke resolved; Divine Presence ("If a source would deal 4 or more damage
     // to a permanent or player, it deals 3 damage to that permanent or player instead.")
-    // still reduces Lava Axe's 5 to 3; Healing Salve's shield on P0 prevents nothing.
+    // still reduces Lava Axe's 5 to 3.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Divine Presence");
     cast_x(&mut t, P0, "Impractical Joke", NORMAL, None, &[]);
@@ -424,7 +424,7 @@ fn exile_instead_of_dying_applies_for_any_reason_this_turn() {
 
 #[test]
 fn stensia_bloodhall_deals_colorless_damage() {
-    cr!("105.2c", "609.7a");
+    cr!("105.2c");
     ruling!(
         "Stensia Bloodhall",
         "Like other lands, Stensia Bloodhall is colorless. The damage it deals is from a colorless source, even though activating its ability requires colored mana."
