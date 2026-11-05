@@ -737,6 +737,7 @@ impl Renderer<'_> {
             Sel::TriggerObject
             | Sel::TriggerLki
             | Sel::TriggerSpell
+            | Sel::TriggerSpellTargets
             | Sel::TriggerOtherObject
             | Sel::TriggerObjects
             | Sel::TriggerPlayer
@@ -763,6 +764,9 @@ impl Renderer<'_> {
                 it(case)
             }
             Sel::TriggerOtherObject => it(case),
+            // "that creature" of "whenever you cast a spell that targets only a single
+            // creature" (normalized to "it").
+            Sel::TriggerSpellTargets => it(case),
             Sel::TriggerObjects => them(case),
             Sel::TriggerPlayer => decline("that player".into(), case),
             Sel::AttachedTo => {
