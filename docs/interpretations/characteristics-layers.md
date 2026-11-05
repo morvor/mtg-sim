@@ -51,6 +51,18 @@ Judgment calls about how characteristics are determined (CR 604.3, 613). Format 
 - Code: `crates/mtg-engine/src/layers.rs` (`apply_mod_to`, `CONTROL_BEFORE`); `crates/mtg-engine/src/prohibitions.rs` (`control_gain_prohibited`).
 - Tests: `tests/cards/paper_statics.rs` (`guardian_beast_stops_other_players_gaining_control_but_not_sacrifices`, `guardian_beast_does_nothing_while_tapped_and_leaves_auras_attached`).
 
+## full-text-undefined-mana-cost: An object given the "full text" of a card with no mana cost keeps its own mana cost, and its color comes from that mana cost and the card's color indicator
+- Kind: interpretation
+- Status: provisional
+- Rules: 612.6 "One card (Volrath’s Shapeshifter) states that an object has the “full text” of another object. This changes not just the text that appears in the object’s text box and type line, but also changes the text that represents its name, mana cost, color indicator, power, and toughness." / 202.2 "An object is the color or colors of the mana symbols in its mana cost, regardless of the color of its frame. An object’s color or colors may also be defined by a color indicator or a characteristic-defining ability." / Volrath's Shapeshifter ruling: "If the top card in the graveyard has any other undefined characteristics, then those characteristics are not acquired and the shapeshifter uses the characteristic from its own card."
+- Question: Volrath's Shapeshifter ({1}{U}{U}) with a creature card that has no mana cost on top of the graveyard (Dryad Arbor, green by its color indicator): the ruling keeps the Shapeshifter's own mana cost, but what color is it?
+- Decision: It keeps {1}{U}{U} (mana value 3) and takes the card's color indicator, so it's the colors of both: blue (its mana cost) and green (the indicator).
+- Alternatives: (A) Only the card's colors (green), as if the color came with the full text: but color isn't text, it's derived from the mana cost and color indicator the object has (202.2). (B) Only blue, ignoring the indicator: but 612.6 says the color indicator is taken.
+- Why: 612.6 replaces the text of the mana cost and the color indicator; the ruling says a characteristic the card doesn't define isn't acquired, so the Shapeshifter's mana cost text stays, and 202.2 derives color from the mana cost and the color indicator it then has.
+- Affects: Volrath's Shapeshifter with a creature card with no mana cost on top of the graveyard (Dryad Arbor, Ancestral Vision-like creatures with suspend, Evermind-like cards are noncreature).
+- Code: `crates/mtg-engine/src/text_change.rs` (`take_full_text`).
+- Tests: `tests/rulings/r_p024_misc.rs` (`volraths_shapeshifter_keeps_its_own_undefined_characteristics`).
+
 ## name-setting-in-layer-3: An effect that sets a permanent's name applies in layer 3
 - Kind: interpretation
 - Status: decided
