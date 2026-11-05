@@ -2344,6 +2344,7 @@ impl Game {
                 if !matches!(ev, ReplEvent::Draw { .. } | ReplEvent::Action { .. })
                     && crate::draw_rules::draws_cards(&effect)
                 {
+                    c.repl_applied = applied.to_vec();
                     self.post_replacement_effects.push((c, *effect));
                     return vec![];
                 }
