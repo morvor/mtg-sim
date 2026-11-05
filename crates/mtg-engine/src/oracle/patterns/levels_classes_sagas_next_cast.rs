@@ -60,9 +60,20 @@ fn p_next_cast(l: &str, b: &mut Builder) -> Option<Effect> {
     if !ok {
         return None;
     }
-    let body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
+    let mut body = crate::oracle::effects::parse_trigger_body(eff, b.ctx, it, it_player)?;
     if body.modal.is_some() {
         return None;
+    }
+    // "When you next cast a spell with {X} in its mana cost this turn, ... gain half X
+    // life" (Brass Infiniscope): the triggered ability has no X of its own; X is that
+    // spell's (CR 107.3e), as it is on the stack when the ability resolves.
+    let cast_trigger = match &trigger {
+        TriggerCond::Where { trigger: t, .. } => t.as_ref(),
+        t => t,
+    };
+    if crate::oracle::triggers::casts_spell_with_x(cast_trigger) {
+        let x = Value::XOf(Box::new(Sel::TriggerSpell));
+        body.effect = super::r107_numbers::substitute_x(&body.effect, &x)?;
     }
     Some(Effect::DelayedTrigger {
         trigger: TriggerCond::ThisTurn(Box::new(trigger)),

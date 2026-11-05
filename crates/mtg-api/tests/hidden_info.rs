@@ -691,3 +691,40 @@ fn expert_level_safe_cards_stay_hidden_and_choices_secret_until_revealed() {
     // No match (2 and 3): a third card exiled face down, still hidden.
     assert_eq!(hidden(&t), 3);
 }
+
+#[test]
+fn a_card_returned_at_random_by_a_spell_is_seen_by_everyone() {
+    cr!("400.2");
+    ruling!(
+        "Fossil Find",
+        "All players get to see which card you chose at random."
+    );
+    ruling!(
+        "Surreal Memoir",
+        "All players get to see which card you chose at random."
+    );
+    for (spell, land) in [("Fossil Find", "Mountain"), ("Surreal Memoir", "Mountain")] {
+        let mut t = TestGame::new(2);
+        t.g.event_feed.enable();
+        t.lands(P0, land, 1);
+        t.lands(P0, "Wastes", 3);
+        t.graveyard(P0, "Opt");
+        t.graveyard(P0, "Lightning Bolt");
+        let card = t.hand(P0, spell);
+        let before = t.g.event_feed.len();
+        t.cast(P0, card).go();
+        t.resolve_all();
+        t.g.flush_events();
+        let returned = t.g.players[0].hand[0];
+        let name = t.g.obj(returned).chars.name.to_string();
+        assert!(name == "Opt" || name == "Lightning Bolt", "{spell}");
+        let events = t.g.event_feed.since(before);
+        let p1_events = describe_events(&t.g, Some(P1), &events);
+        let seen = p1_events.iter().any(|e| {
+            e.kind == "zone_change"
+                && e.text.contains(name.as_str())
+                && e.text.contains("graveyard to P0's hand")
+        });
+        assert!(seen, "{spell}: P1 saw the returned card: {p1_events:?}");
+    }
+}
