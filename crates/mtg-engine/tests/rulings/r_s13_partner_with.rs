@@ -142,7 +142,7 @@ fn the_target_player_searches_and_reveals_the_card() {
     let t = partner_trigger("Okaun, Eye of Chaos", "Zndrsplt, Eye of Wisdom", P0, true);
     assert!(t.in_hand(P0, "Zndrsplt, Eye of Wisdom"));
     assert_eq!(revealed_names(&t), vec!["Zndrsplt, Eye of Wisdom"]);
-    assert!(t.g.turn_events.iter().any(|e| matches!(e, Event::Searched { player } if *player == P0)));
+    assert!(t.g.turn_events.iter().any(|e| matches!(e, Event::Searched { player, .. } if *player == P0)));
 }
 
 #[test]
