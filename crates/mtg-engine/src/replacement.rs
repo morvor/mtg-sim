@@ -494,6 +494,9 @@ impl Game {
     /// The options of a choice among replacement effects (CR 616.1): their texts, with the
     /// source's controller and id added to texts that would otherwise be identical (two
     /// Ravenous Slimes controlled by different players), so the player can tell them apart.
+    /// The player is named and the object numbered as the agent protocol does (`P1`, the
+    /// object id of observations), so the answer is the same in a replay or a restored
+    /// snapshot.
     fn replacement_options(&self, cands: &[Candidate]) -> Vec<String> {
         cands
             .iter()
@@ -503,10 +506,10 @@ impl Game {
                 }
                 match c.source {
                     Some(s) => format!(
-                        "{} (controlled by player {}, #{})",
+                        "{} (controlled by P{}, object {})",
                         c.text, c.controller.0, s.0
                     ),
-                    None => format!("{} (player {})", c.text, c.controller.0),
+                    None => format!("{} (controlled by P{})", c.text, c.controller.0),
                 }
             })
             .collect()
@@ -1449,13 +1452,15 @@ impl Game {
                 ReplEvent::Damage { .. } => self.zones.damage_batch_uses.as_mut(),
                 _ => None,
             };
+            // (Damage that can't be prevented doesn't use up a prevention effect, so it
+            // doesn't count as the event of the batch that used it, CR 615.12.)
             let again = match batch {
                 Some(used) if used.contains(&id) => true,
-                Some(used) => {
+                Some(used) if !unpreventable => {
                     used.push(id);
                     false
                 }
-                None => false,
+                _ => false,
             };
             if !unpreventable && !again {
                 if let Some(inst) = self.replacements.iter_mut().find(|r| r.id == id) {

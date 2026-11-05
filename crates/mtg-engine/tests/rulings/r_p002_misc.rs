@@ -28,7 +28,7 @@ fn sin(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn sin_puts_the_counters_it_had_on_the_target() {
-    cr!("603.10a", "608.2h", "122.6");
+    cr!("603.10a", "608.2h");
     ruling!(
         "Sin, Unending Cataclysm",
         "Sin's last ability doesn't cause you to move counters from Sin onto the target creature. Rather, you put the same number of each kind of counter Sin had when it died onto the target creature."
@@ -259,7 +259,7 @@ fn balance_of_power_and_wheel_of_torture_count_cards_on_resolution() {
 
 #[test]
 fn hone_counters_apply_only_while_the_equipment_is_attached() {
-    cr!("122.1", "301.5c", "613.4c");
+    cr!("122.1", "613.4c");
     ruling!(
         "Sting, Bilbo's Sword",
         "The power boost applies only while the Equipment with hone counters is attached to a creature. If an Equipment with hone counters on it becomes unattached from a creature, leaves the battlefield, or has its hone counters removed, the power of the creature changes immediately."
@@ -318,7 +318,7 @@ fn hone_counters_apply_only_while_the_equipment_is_attached() {
 
 #[test]
 fn slithermuse_chooses_the_opponent_on_resolution_and_locks_the_number() {
-    cr!("608.2h", "603.3d");
+    cr!("608.2h", "608.2d");
     ruling!(
         "Slithermuse",
         "You choose an opponent when the ability resolves. Once you determine how many more cards than you that player has, that number is locked in"
@@ -403,7 +403,8 @@ fn reign_of_the_pit_choices_in_turn_order_then_all_at_once() {
 
 #[test]
 fn mutiny_with_either_target_illegal_deals_no_damage() {
-    cr!("608.2b", "115.1");
+    cr!("608.2b");
+    interp!("target-player-reference-rechecked");
     ruling!(
         "Mutiny",
         "If either or both targets are illegal when Mutiny resolves, no creature will deal or be dealt damage."
@@ -411,8 +412,9 @@ fn mutiny_with_either_target_illegal_deals_no_damage() {
     supported("Mutiny");
     // 0: both legal (the Giant deals 3 to the Craw Wurm); 1: the Giant leaves; 2: the Wurm
     // leaves; 3: P2 gains control of the Wurm (no longer a creature "that player"
-    // controls).
-    for case in 0..4 {
+    // controls); 4: P2 gains control of the Giant (still a creature an opponent controls,
+    // but the Wurm is no longer controlled by "that player", the Giant's controller).
+    for case in 0..5 {
         let mut t = TestGame::new(3);
         let giant = add(&mut t, P1, "Hill Giant");
         let wurm = add(&mut t, P1, "Craw Wurm");
@@ -422,6 +424,7 @@ fn mutiny_with_either_target_illegal_deals_no_damage() {
             1 => kill(&mut t, giant),
             2 => kill(&mut t, wurm),
             3 => crate::r_s06_common::give_control(&mut t, wurm, P2),
+            4 => crate::r_s06_common::give_control(&mut t, giant, P2),
             _ => {}
         }
         t.resolve_all();

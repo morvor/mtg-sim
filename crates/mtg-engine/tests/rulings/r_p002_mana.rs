@@ -178,7 +178,7 @@ fn augmenter_dies(t: &mut TestGame, cs: &[(&str, u32)]) -> ObjectId {
 
 #[test]
 fn ambitious_augmenter_puts_each_kind_of_counter_it_had_on_the_fractal() {
-    cr!("603.10a", "122.6");
+    cr!("603.10a");
     ruling!(
         "Ambitious Augmenter",
         "Ambitious Augmenter's last ability doesn't cause you to move counters from Ambitious Augmenter onto the Fractal token. Rather, you put the same number of each kind of counter"

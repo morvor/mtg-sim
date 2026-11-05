@@ -37,8 +37,8 @@ const PICKERS: &[(&str, Responder)] = &[
     ("New Way Forward", |_, d| pick(d, "New Way Forward")),
     ("Healing Salve", |_, d| pick(d, "Healing Salve")),
     ("Inkshield", |_, d| pick(d, "Inkshield")),
-    ("player 1", |_, d| pick(d, "player 1")),
-    ("player 0", |_, d| pick(d, "player 0")),
+    ("controlled by P1", |_, d| pick(d, "controlled by P1")),
+    ("controlled by P0", |_, d| pick(d, "controlled by P0")),
 ];
 
 /// The replacement-order choices asked since decision `from`: (chooser, options).

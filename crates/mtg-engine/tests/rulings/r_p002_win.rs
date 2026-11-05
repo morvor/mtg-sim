@@ -123,7 +123,7 @@ fn triggers_from(t: &TestGame, text: &str) -> usize {
 
 #[test]
 fn biovisionary_checks_four_on_trigger_and_resolution_and_token_copies_count() {
-    cr!("603.4", "104.2b", "111.10");
+    cr!("603.4", "104.2b", "707.2");
     ruling!(
         "Biovisionary",
         "If the ability does trigger, but you don’t control four or more creatures named Biovisionary when the ability tries to resolve, the ability will do nothing."
@@ -191,7 +191,7 @@ fn hellkite_tyrant_checks_twenty_artifacts_on_trigger_and_resolution() {
 
 #[test]
 fn near_death_experience_intervening_if_and_two_headed_giant() {
-    cr!("603.4", "810.9", "104.2b");
+    cr!("603.4", "810.9a", "810.8a", "104.2b");
     ruling!(
         "Near-Death Experience",
         "This ability has an “intervening ‘if’ clause.” That means (1) the ability triggers only if you have exactly 1 life as your upkeep begins, and (2) the ability does nothing if your life total is anything other than 1 by the time it resolves."
@@ -258,7 +258,7 @@ fn coalition_victory_counts_every_type_and_color_of_each_permanent() {
 
 #[test]
 fn bayou_groff_and_lash_of_the_balrog_sacrifice_as_a_cost_no_response_possible() {
-    cr!("601.2h", "601.2i", "117.1c");
+    cr!("601.2h", "601.2i");
     ruling!(
         "Bayou Groff",
         "Players can respond to Bayou Groff only after it’s been cast and all its costs have been paid."

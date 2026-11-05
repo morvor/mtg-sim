@@ -21,7 +21,7 @@ use mtg_engine::*;
 
 #[test]
 fn ravenous_slime_exiles_creatures_dying_with_it_and_uses_their_last_known_power() {
-    cr!("614.6", "603.10a", "608.2h");
+    cr!("614.6", "608.2h");
     ruling!(
         "Ravenous Slime",
         "If Ravenous Slime dies at the same time as an opponent's creatures, the opponent's creatures are exiled."
@@ -97,7 +97,11 @@ fn two_ravenous_slimes_the_dying_creature_s_controller_picks_one() {
         prefer(
             &mut t,
             P2,
-            if chosen == P0 { "player 0" } else { "player 1" },
+            if chosen == P0 {
+                "controlled by P0"
+            } else {
+                "controlled by P1"
+            },
         );
         let from = t.asked().len();
         kill(&mut t, giant);
@@ -217,7 +221,7 @@ fn inkshield_and_another_prevention_effect_you_choose_the_order() {
 
 #[test]
 fn glarecaster_redirects_every_chunk_dealt_at_the_same_time() {
-    cr!("615.12", "614.9", "510.2");
+    cr!("614.9", "510.2");
     interp!("next-time-damage-batch");
     ruling!(
         "Glarecaster",
@@ -305,7 +309,7 @@ fn channel_harm_keeps_preventing_after_its_target_leaves() {
 
 #[test]
 fn channel_harm_on_your_own_creature_deals_it_the_damage() {
-    cr!("615.1", "609.3");
+    cr!("615.1", "615.5");
     ruling!(
         "Channel Harm",
         "You can choose a creature you control as the target. If you do, the damage Channel Harm deals to that creature won’t be prevented."
@@ -323,7 +327,7 @@ fn channel_harm_on_your_own_creature_deals_it_the_damage() {
 
 #[test]
 fn two_channel_harms_loop_until_a_player_declines() {
-    cr!("615.1", "609.3", "603.12");
+    cr!("615.1", "615.5");
     ruling!(
         "Channel Harm",
         "This forms a loop that either player can break by choosing to not have Channel Harm try to deal damage. It doesn’t matter which player breaks the loop"
@@ -376,7 +380,7 @@ fn two_channel_harms_loop_until_a_player_declines() {
 
 #[test]
 fn reverberation_sends_all_of_a_sorcery_s_damage_to_its_controller() {
-    cr!("614.9", "615.12");
+    cr!("614.9");
     ruling!(
         "Reverberation",
         "If used on a sorcery which does damage to multiple creatures and/or players, it will cause that player to take damage equal to the sum of all damage inflicted by the spell."
@@ -447,7 +451,7 @@ fn selfless_squire_s_prevention_outlasts_it() {
 
 #[test]
 fn a_next_time_prevention_covers_all_of_a_source_s_simultaneous_damage() {
-    cr!("615.8", "510.2", "702.19c");
+    cr!("615.8", "615.5", "510.2", "702.19b");
     interp!("next-time-damage-batch");
     supported("Awe Strike");
     // Awe Strike ("The next time target creature would deal damage this turn, prevent
@@ -468,4 +472,28 @@ fn a_next_time_prevention_covers_all_of_a_source_s_simultaneous_damage() {
     t.g.deal_damage(maw, pl(P0), 6, false);
     t.settle();
     assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn a_next_time_prevention_is_used_up_by_a_batch_part_of_which_can_t_be_prevented() {
+    cr!("615.8", "615.12");
+    interp!("next-time-damage-batch");
+    supported("Whippoorwill");
+    // As above, but the Bears were targeted by Whippoorwill ("Damage that would be dealt
+    // to that creature this turn can't be prevented ..."): the 2 to the Bears are dealt,
+    // the 4 to P0 prevented, and Awe Strike is used up all the same.
+    let mut t = TestGame::new(2);
+    let maw = add(&mut t, P1, "Colossal Dreadmaw");
+    let bears = add(&mut t, P0, "Grizzly Bears");
+    let whip = add(&mut t, P0, "Whippoorwill");
+    t.set_step(P1, Step::BeginningOfCombat);
+    activate_resolve(&mut t, P0, whip, "can't be prevented", "GG", &[obj(bears)]);
+    cast_resolve(&mut t, P0, "Awe Strike", "W", &[obj(maw)]);
+    t.attack(&[(maw, pl(P0))], &[(bears, maw)]);
+    assert!(!t.on_battlefield(bears), "the 2 to the Bears can't be prevented");
+    assert_eq!(t.life(P0), 24, "4 prevented, 4 gained");
+    t.set_step(P1, Step::PostcombatMain);
+    t.g.deal_damage(maw, pl(P0), 6, false);
+    t.settle();
+    assert_eq!(t.life(P0), 18, "Awe Strike was used up");
 }

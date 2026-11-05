@@ -45,7 +45,7 @@ fn bishop_attacks(t: &mut TestGame, bishop: ObjectId, vampire: ObjectId) {
 
 #[test]
 fn bishop_of_binding_leaving_before_its_enter_trigger_resolves_exiles_nothing() {
-    cr!("610.3c");
+    cr!("610.3b");
     ruling!(
         "Bishop of Binding",
         "If Bishop of Binding leaves the battlefield before its first triggered ability tries to resolve, the target creature won’t be exiled."
@@ -66,7 +66,7 @@ fn bishop_of_binding_leaving_before_its_enter_trigger_resolves_exiles_nothing() 
 
 #[test]
 fn bishop_of_binding_uses_a_vehicle_s_printed_power_and_x_is_locked_in() {
-    cr!("208.3", "608.2h", "611.2c");
+    cr!("208.3", "608.2h");
     ruling!(
         "Bishop of Binding",
         "If a Vehicle is exiled with Bishop of Binding, use its printed power to determine the value of X."
@@ -98,7 +98,7 @@ fn bishop_of_binding_uses_a_vehicle_s_printed_power_and_x_is_locked_in() {
 
 #[test]
 fn bishop_of_binding_x_is_0_with_no_exiled_card_or_one_without_power() {
-    cr!("208.3", "610.3a", "608.2h");
+    cr!("208.3", "610.3", "608.2h");
     ruling!(
         "Bishop of Binding",
         "If there is no exiled card as Bishop of Binding’s last ability resolves, most likely because Bishop of Binding left the battlefield while that ability was on the stack, X is 0."
@@ -314,7 +314,7 @@ fn infernal_reckoning_negative_power_gains_nothing_and_uses_last_known_power() {
 
 #[test]
 fn impetuous_protege_x_is_0_for_negative_or_no_tapped_creatures_and_is_locked_in() {
-    cr!("107.1b", "608.2h", "611.2c");
+    cr!("107.1b", "608.2h");
     ruling!(
         "Impetuous Protege",
         "If the greatest power among tapped creatures your opponents control is negative, X is considered to be 0. The same is true if your opponents control no tapped creatures."
