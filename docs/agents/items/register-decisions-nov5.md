@@ -27,7 +27,9 @@ The entries:
 - `cost-moved-source-found-only-by-own-cost` (Ghost Council of Orzhova): accept the rulings' reading.
 - `homicide-investigator-triggers-once` and `rimescale-dragon-creatures-only`: decided under the policy in part 2.
 
-Don't touch `entered-blocker-never-blocked` or any other provisional entry the user hasn't seen. The coordinator takes those to the user.
+- `entered-blocker-never-blocked` (Glyph of Delusion, Glyph of Reincarnation): no. A creature put onto the battlefield blocking never "blocked" for effects (509.4). The user asked whether the Glyph of Delusion ruling ("... or by being switched into or out of the block by an ability") covers it. It doesn't: that phrase is about an effect making a creature already on the battlefield block, as Sorrow's Path does (509.3d lists the two cases separately), and the ruling predates the cards that put creatures onto the battlefield blocking. Add this to the entry's Why. The ruling stays cited for its three cases.
+
+Don't touch any other provisional entry the user hasn't seen. The coordinator takes those to the user.
 
 ## 2. Policy: the card's text wins over a ruling that contradicts it
 
