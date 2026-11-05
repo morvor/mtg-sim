@@ -509,6 +509,22 @@ fn avacyns_abilities_dont_undo_damage_and_dont_recheck_targets() {
     assert_eq!(dmg(&t, wurm), 1, "red damage prevented");
     damage(&mut t, golem, 2, wurm);
     assert_eq!(dmg(&t, wurm), 3, "colorless damage isn't");
+    // The second ability (red, at P0, already dealt 3): P0's life stays at 17, and the
+    // next red damage is prevented.
+    let mut t = TestGame::new(2);
+    let avacyn = t.battlefield(P0, "Avacyn, Guardian Angel");
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    t.g.deal_damage(goblin, pl(P0), 3, false);
+    t.settle();
+    t.lands(P0, "Plains", 2);
+    t.lands(P0, "Wastes", 5);
+    t.answer(P0, DecisionKind::Option, Answer::Index(3));
+    t.activate(P0, avacyn, 1, &[pl(P0)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17, "already dealt");
+    t.g.deal_damage(goblin, pl(P0), 3, false);
+    t.settle();
+    assert_eq!(t.life(P0), 17);
 }
 
 #[test]
