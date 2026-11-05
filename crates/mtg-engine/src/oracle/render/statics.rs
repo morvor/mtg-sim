@@ -1066,6 +1066,10 @@ impl Renderer<'_> {
                     number_word(*life as i32)
                 )
             }
+            PlayerModification::LookAtTopCardOf(who) => {
+                let whose = self.player(who, Case::Poss);
+                format!("{subj} may look at the top card of {whose} library any time")
+            }
             PlayerModification::Custom(name) => self.custom_player_mod(name, &subj, &poss),
         }
     }

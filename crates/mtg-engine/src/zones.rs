@@ -40,6 +40,11 @@ pub struct ZoneState {
     /// The top card of each library its owner may currently look at because of an effect
     /// ("you may look at the top card of your library any time", CR 401.5).
     pub looked_top: Vec<(PlayerId, ObjectId)>,
+    /// The top cards of other players' libraries a player may currently look at because
+    /// of an effect, as (viewer, card) ("you may look at the top card of their library
+    /// any time", CR 401.5).
+    #[serde(default)]
+    pub looked_top_by: Vec<(PlayerId, ObjectId)>,
     /// How many special actions are being taken right now (CR 401.5).
     #[serde(default)]
     pub special_actions: u32,
@@ -721,6 +726,21 @@ fn looks_at_top(g: &Game, p: PlayerId) -> bool {
         .has_mod(|m| matches!(m, PlayerModification::Custom(n) if n == LOOK_AT_TOP_CARD))
 }
 
+/// The players whose library's top card an effect lets `viewer` look at any time
+/// ("you may look at the top card of their library any time", CR 401.5), other than
+/// `viewer`.
+fn looks_at_others_top(g: &Game, viewer: PlayerId) -> Vec<PlayerId> {
+    let mut out = Vec::new();
+    for m in &g.player(viewer).mods {
+        if let PlayerModification::LookAtTopCardOf(PlayerRef::Player(q)) = m {
+            if *q != viewer && !out.contains(q) {
+                out.push(*q);
+            }
+        }
+    }
+    out
+}
+
 /// The card on top of `p`'s library that's revealed because of an effect, if any.
 pub fn revealed_top(g: &Game, p: PlayerId) -> Option<ObjectId> {
     g.zones
@@ -742,6 +762,7 @@ pub fn can_see_in_library(g: &Game, viewer: PlayerId, id: ObjectId) -> bool {
     }
     revealed_top(g, owner) == Some(id)
         || (viewer == owner && g.zones.looked_top.contains(&(owner, id)))
+        || g.zones.looked_top_by.contains(&(viewer, id))
 }
 
 /// Runs a special action (CR 116): while it's being taken, a new top card of a library
@@ -768,6 +789,16 @@ pub fn update_revealed_tops(g: &mut Game) {
     if g.special.casting > 0 || g.zones.special_actions > 0 {
         return;
     }
+    // Other players' top cards a player may look at (CR 401.5).
+    let mut by = Vec::new();
+    for viewer in g.player_ids() {
+        for q in looks_at_others_top(g, viewer) {
+            if let Some(t) = g.library_top(q) {
+                by.push((viewer, t));
+            }
+        }
+    }
+    g.zones.looked_top_by = by;
     for p in g.player_ids() {
         let lib_top = g.library_top(p);
         let looked = if looks_at_top(g, p) { lib_top } else { None };
@@ -796,6 +827,9 @@ pub fn update_revealed_tops(g: &mut Game) {
                 *slot = new;
             }
             for (_, t) in g.zones.looked_top.iter_mut().filter(|(_, t)| *t == top) {
+                *t = new;
+            }
+            for (_, t) in g.zones.looked_top_by.iter_mut().filter(|(_, t)| *t == top) {
                 *t = new;
             }
             g.dirty = true;
