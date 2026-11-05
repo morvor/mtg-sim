@@ -25,7 +25,10 @@ fn spell_fizzles_on_creature(name: &str, method: CastMethod, setup: fn(&mut Test
     t.resolve_all();
     assert_eq!(t.life(P0), 20, "{name}: you don't gain life");
     assert_eq!(t.life(P1), 20, "{name}");
-    assert!(t.in_graveyard(P0, name) || t.in_exile(name), "{name}: left the stack");
+    assert!(
+        t.in_graveyard(P0, name) || t.in_exile(name),
+        "{name}: left the stack"
+    );
     // With the target still there, it would have dealt damage and gained life.
     let mut t = TestGame::new(2);
     setup(&mut t);
@@ -253,7 +256,10 @@ fn vampires_kiss_makes_no_blood_tokens() {
     t.cast(P0, spell).target(P1).go();
     t.battlefield(P1, "Leyline of Sanctity");
     t.resolve_all();
-    assert!(tokens_with_subtype(&t, P0, "Blood").is_empty(), "no Blood tokens");
+    assert!(
+        tokens_with_subtype(&t, P0, "Blood").is_empty(),
+        "no Blood tokens"
+    );
     // A legal target: 2 life and two Blood tokens.
     let mut t = TestGame::new(2);
     mana(&mut t, "Vampire's Kiss");
@@ -466,7 +472,11 @@ fn dread_presence_second_mode_fizzles() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Dread Presence");
     let bears = t.battlefield(P1, BEARS);
-    t.answer(P0, DecisionKind::Modes, mtg_engine::decision::Answer::Indices(vec![1]));
+    t.answer(
+        P0,
+        DecisionKind::Modes,
+        mtg_engine::decision::Answer::Indices(vec![1]),
+    );
     t.answer_targets(P0, &[Entity::Object(bears)]);
     let hand = t.hand_size(P0);
     enter(&mut t, P0, "Swamp");
