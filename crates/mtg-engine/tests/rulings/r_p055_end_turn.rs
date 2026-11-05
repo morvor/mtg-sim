@@ -447,13 +447,31 @@ fn stunning_reversal_does_nothing_if_you_concede() {
     );
     let mut t = TestGame::new(3);
     reversal(&mut t);
-    let hand = t.hand_size(P0);
+    let from = t.g.turn_events.len();
     t.g.take_action(P0, Action::Concede);
+    t.settle();
+    // P0 lost and left the game; the replacement didn't apply: no cards drawn, no life
+    // total change.
     assert!(t.has_lost(P0));
     assert!(t.g.player(P0).left_game);
     assert_eq!(t.life(P0), 20);
-    assert!(t.g.player(P0).hand.len() <= hand);
+    assert!(!t.g.turn_events[from..].iter().any(|e| matches!(e,
+        mtg_engine::events::Event::Drew { player, .. }
+        | mtg_engine::events::Event::LifeGained { player, .. }
+        | mtg_engine::events::Event::LifeLost { player, .. } if *player == P0)));
     assert!(!t.g.is_over());
+    // Positive control: a loss by a state-based action is replaced.
+    let mut t = TestGame::new(3);
+    reversal(&mut t);
+    let hand = t.hand_size(P0);
+    t.g.players[P0.idx()].life = 2;
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    t.cast(P1, bolt).target(P0).go();
+    t.resolve_all();
+    assert!(!t.has_lost(P0));
+    assert_eq!(t.life(P0), 1);
+    assert_eq!(t.hand_size(P0), hand + 7);
 }
 
 #[test]

@@ -333,10 +333,14 @@ fn hellkite_charger_pays_on_resolution_and_adds_a_combat_right_after() {
     for _ in 0..3 {
         declare(&mut t, P0, &[charger], P1);
     }
+    let from = t.asked().len();
     to_nth(&mut t, Step::DeclareAttackers, 1);
     t.settle();
     assert_eq!(t.stack_len(), 1);
-    // Nothing has been asked about paying while the ability waits on the stack.
+    // Nothing has been asked about paying while the ability was put on the stack.
+    assert!(t.asked()[from..]
+        .iter()
+        .all(|(_, d)| !matches!(d, Decision::YesNo { .. } | Decision::OptionalCost { .. })));
     let from = t.asked().len();
     t.answer_yes(P0, true);
     t.resolve();
