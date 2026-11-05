@@ -134,7 +134,7 @@ fn only_creatures_you_control_as_it_resolves_are_affected() {
 
 #[test]
 fn locked_in_effects_stay_once_the_condition_changes() {
-    cr!("611.2c", "611.2a", "608.2h", "108.4");
+    cr!("611.2c", "611.2a", "608.2h");
     ruling!(
         "Break of Day",
         "Break of Day checks your life total only at the time it resolves. Any creatures that gain indestructible will continue to be indestructible that turn even if you gain life."

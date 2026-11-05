@@ -39,7 +39,7 @@ const fn case(lord: &'static str, victim: &'static str, damage: u32, removal: Re
 
 #[test]
 fn lethal_damage_stays_marked_until_the_indestructible_is_lost() {
-    cr!("120.6", "702.12b", "704.5g", "514.2");
+    cr!("120.6", "702.12b", "704.5g");
     ruling!(
         "Call the Spirit Dragons",
         "nonlethal damage dealt to a Dragon you control may become lethal if Call the Spirit Dragons leaves the battlefield during that turn"
@@ -321,7 +321,7 @@ fn indestructible_doesnt_stop_sacrifice_legend_rule_or_zero_toughness() {
 
 #[test]
 fn indestructible_lords_edge_cases() {
-    cr!("702.12b", "205.3a", "611.3a", "613.1f");
+    cr!("702.12b", "611.3a", "613.1f");
     ruling!(
         "Timber Protector",
         "If Timber Protector somehow becomes a Forest, it doesn’t give itself indestructible."

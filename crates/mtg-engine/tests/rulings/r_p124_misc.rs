@@ -24,7 +24,7 @@ fn is_creature(t: &mut TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn bello_animated_permanents_keep_counters_and_shed_attachments() {
-    cr!("122.1", "704.5m", "704.5n", "301.5c", "303.4d");
+    cr!("122.1", "704.5m", "704.5n");
     ruling!(
         "Bello, Bard of the Brambles",
         "Any counters that are put on an artifact or enchantment while it's a creature because of Bello's ability remain on that artifact or enchantment while it's not a creature"
@@ -326,7 +326,7 @@ fn veil_of_summer_draws_one_card_however_many_spells() {
 
 #[test]
 fn gallifrey_falls_a_name_chosen_matches_either_half() {
-    cr!("709.3a", "201.3", "701.9b");
+    cr!("709.4", "709.4a", "701.9b");
     ruling!(
         "Gallifrey Falls // No More",
         "A split card has the chosen name if one of its two names matches the chosen name."

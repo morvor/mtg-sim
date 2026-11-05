@@ -120,7 +120,7 @@ fn for_as_long_as_durations_end_when_the_permanent_phases_out() {
 
 #[test]
 fn for_as_long_as_you_control_ends_when_the_source_phases_out() {
-    cr!("702.26f", "611.2b", "702.26e");
+    cr!("702.26f", "611.2b");
     // Mind Flayer: "When Mind Flayer enters, gain control of target creature for as long
     // as you control Mind Flayer." P0's Mind Flayer phases out (Clever Concealment): P1
     // gets the Bears back for good.
@@ -222,7 +222,7 @@ fn phasing_doesnt_trigger_leaves_or_enters_abilities() {
 
 #[test]
 fn perch_protection_tokens_and_entry_choices_phase_back_in() {
-    cr!("702.26d", "702.26a", "607.2a", "111.1");
+    cr!("702.26d", "702.26a", "111.1");
     ruling!(
         "Perch Protection",
         "If a token is phased out, it will phase in as your next untap step begins."

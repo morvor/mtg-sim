@@ -106,7 +106,7 @@ fn mikaeus_destroys_any_human_that_deals_damage_to_you() {
 
 #[test]
 fn domri_emblem_double_strike_and_trample() {
-    cr!("702.19c", "702.4c", "510.1c", "510.4");
+    cr!("702.19b", "702.4b", "510.1c", "510.4");
     ruling!(
         "Domri Rade",
         "If a creature has both double strike and trample, the combat damage it assigned during the first combat damage step will be considered when determining how much damage can trample through in the second combat damage step."

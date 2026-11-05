@@ -92,7 +92,7 @@ fn the_wills_modes_are_locked_in_once_chosen() {
 
 #[test]
 fn modes_happen_in_the_listed_order() {
-    cr!("700.2g", "608.2c", "613.4b");
+    cr!("608.2c", "613.4b");
     ruling!(
         "Kamahl's Will",
         "If you choose both modes, the effects happen in the listed order. The lands will become 1/1 creatures in time to deal damage to the target of the second mode."
@@ -216,7 +216,9 @@ fn kathril_resolves_all_at_once() {
     t.resolve();
     let counters_now = (t.counters(kathril, PLUS1), t.stack_len());
     assert_eq!(counters_now, (2, 0));
-    assert!(has_kw(&mut t, bears, KeywordKind::Flying) || has_kw(&mut t, kathril, KeywordKind::Flying));
+    assert_eq!((t.counters(bears, "flying"), t.counters(bears, "vigilance")), (1, 1));
+    assert!(has_kw(&mut t, bears, KeywordKind::Flying));
+    assert!(has_kw(&mut t, bears, KeywordKind::Vigilance));
 }
 
 /// P0 with Linvala, Shield of Sea Gate (an Angel Wizard) and three changelings: a full
@@ -295,7 +297,7 @@ fn linvala_effect_lasts_until_your_next_turn_would_have_begun() {
 
 #[test]
 fn cards_that_work_as_written() {
-    cr!("614.1c", "702.21a", "701.24a", "122.1");
+    cr!("614.1c", "122.1");
     ruling!(
         "Dragon's Disciple",
         "If you choose to reveal a Dragon card from your hand and also control a Dragon, Dragon's Disciple still only gets a single +1/+1 counter."
@@ -359,7 +361,7 @@ fn cards_that_work_as_written() {
 
 #[test]
 fn onakke_oathkeeper_doesnt_tax_attacks_on_a_teammates_planeswalkers() {
-    cr!("810.4", "508.1d", "508.1h");
+    cr!("810.7", "805.10b", "508.1h");
     ruling!(
         "Onakke Oathkeeper",
         "In a Two-Headed Giant game, creatures can attack planeswalkers your teammate controls without requiring a mana payment."

@@ -216,7 +216,7 @@ fn yarus_returns_face_down_creatures() {
 
 #[test]
 fn yarus_returned_card_that_cant_be_turned_face_up_stays_face_down() {
-    cr!("708.2a", "708.2", "702.168a");
+    cr!("708.2a", "708.2");
     ruling!(
         "Yarus, Roar of the Old Gods",
         "If a permanent card that would be returned to the battlefield face down by Yarus, Roar of the Old Gods's last ability can't be turned face up for some reason, it'll still be returned to the battlefield, but it will stay face down."
