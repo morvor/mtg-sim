@@ -75,7 +75,7 @@ impl KeywordRules for Sneak {
         opt.method = CastMethod::Keyword(KeywordKind::Sneak);
         // From its owner's hand, or a zone an effect lets it be cast from.
         if g.obj(card).zone != Zone::Hand(p) {
-            let chars = g.option_characteristics(card, &opt);
+            let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
             if !g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false)
             {
                 return vec![];

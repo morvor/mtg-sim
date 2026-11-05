@@ -27,12 +27,14 @@ pub fn spell_characteristics(
         return printed;
     }
     let mut h = g.clone();
+    // CR 601.2a, as `cast_inner` does: the card moves to the stack (a new object).
     let from = h.obj(card).zone;
     if let Some(list) = h.zone_list_mut(from) {
         list.retain(|x| *x != card);
     }
+    let id = h.create_incarnation(card, Zone::Stack);
     {
-        let o = &mut h.objects[card.0 as usize];
+        let o = &mut h.objects[id.0 as usize];
         o.zone = Zone::Stack;
         o.controller = p;
         o.base_controller = p;
@@ -63,11 +65,11 @@ pub fn spell_characteristics(
             chosen_values: Default::default(),
         }));
     }
-    h.stack.push(card);
+    h.stack.push(id);
     // Effects waiting for the next spell apply to it as it's put on the stack (CR 601.2a).
-    crate::next_spell::spell_put_on_stack(&mut h, card, p);
+    crate::next_spell::spell_put_on_stack(&mut h, id, p);
     h.recompute();
-    h.obj(card).chars.clone()
+    h.obj(id).chars.clone()
 }
 
 /// Whether a continuous effect that may apply to spells is in play: a static ability of a
