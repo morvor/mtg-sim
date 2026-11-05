@@ -16,6 +16,15 @@ pub fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
     crate::r_s02_common::can_cast(t, p, card, CastMethod::Normal)
 }
 
+/// `p` tries to cast `card` (no targets scripted); whether it was cast. A spell that is
+/// cast must also have been offered as a legal action.
+pub fn try_cast(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    let offered = castable(t, p, card);
+    let cast = t.cast(p, card).try_go().is_ok();
+    assert!(!cast || offered, "cast without being offered");
+    cast
+}
+
 /// The players asked for priority since decision `from`.
 pub fn priority_since(t: &TestGame, from: usize) -> Vec<PlayerId> {
     crate::r_p006_common::priority_since(t, from)

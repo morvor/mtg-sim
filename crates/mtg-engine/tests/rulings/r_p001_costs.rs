@@ -113,7 +113,7 @@ fn cost_reductions_for_each_dont_reduce_colored_mana() {
         (case.setup)(&mut t);
         t.lands(P0, "Wastes", 10);
         let card = t.hand(P0, case.card);
-        assert!(!castable(&mut t, P0, card), "{}", case.card);
+        assert!(!try_cast(&mut t, P0, card), "{}", case.card);
         // Only the colored mana: it's cast for exactly that, and its mana value (in hand
         // and on the stack) is unchanged.
         let mut t = TestGame::new(2);
@@ -152,9 +152,9 @@ fn yavimaya_sojourners_domain_reduction_leaves_the_green_mana() {
             t.g.tap(forest);
         }
         let card = t.hand(P0, "Yavimaya Sojourner");
-        assert_eq!(castable(&mut t, P0, card), forest_untapped);
+        assert_eq!(try_cast(&mut t, P0, card), forest_untapped);
         if forest_untapped {
-            let spell = t.cast(P0, card).go();
+            let spell = t.g.stack[0];
             assert!(t.obj_now(forest).tapped);
             assert_eq!(untapped_lands(&t, P0), 2);
             assert_eq!(mv(&t, spell), 8);
@@ -263,7 +263,7 @@ fn herald_of_slaanesh_reduces_only_generic_mana() {
     t.battlefield(P0, "Herald of Slaanesh");
     t.lands(P0, "Wastes", 5);
     let second = t.hand(P0, "Herald of Slaanesh");
-    assert!(!castable(&mut t, P0, second));
+    assert!(!try_cast(&mut t, P0, second));
     let mountain = t.battlefield(P0, "Mountain");
     assert!(castable(&mut t, P0, second));
     t.cast(P0, second).go();
@@ -288,7 +288,7 @@ fn a_split_card_counts_once_for_cryptic_serpent() {
         graveyard_n(&mut t, P0, "Shock", 3);
         t.lands(P0, "Island", islands);
         let card = t.hand(P0, "Cryptic Serpent");
-        assert_eq!(castable(&mut t, P0, card), ok, "{islands} Islands");
+        assert_eq!(try_cast(&mut t, P0, card), ok, "{islands} Islands");
     }
 }
 
@@ -307,7 +307,7 @@ fn an_artifact_creature_card_counts_once_for_chitin_gravestalker() {
         t.lands(P0, "Swamp", 1);
         t.lands(P0, "Wastes", wastes);
         let card = t.hand(P0, "Chitin Gravestalker");
-        assert_eq!(castable(&mut t, P0, card), ok, "{wastes} Wastes");
+        assert_eq!(try_cast(&mut t, P0, card), ok, "{wastes} Wastes");
     }
 }
 
@@ -462,6 +462,11 @@ fn the_sacrifice_is_exactly_one_creature() {
         let victim = t.battlefield(P1, "Hill Giant");
         t.g.recompute();
         assert!(!castable(&mut t, P0, card), "{name}");
+        for e in &targets {
+            t.answer_targets(P0, &[*e]);
+        }
+        assert!(t.cast(P0, card).try_go().is_err(), "{name}");
+        t.clear_answers();
         // With two, exactly one is chosen (an answer naming both isn't taken).
         let a = t.battlefield(P0, "Grizzly Bears");
         let b = t.battlefield(P0, "Grizzly Bears");
