@@ -626,6 +626,7 @@ fn divisions_since(t: &TestGame, p: PlayerId, from: usize) -> Vec<(u32, Vec<Enti
 #[test]
 fn harms_way_redirects_just_2_of_simultaneous_damage_as_you_choose() {
     cr!("614.9", "615.7", "609.7a");
+    interp!("shield-divided-among-recipients");
     ruling!(
         "Harm's Way",
         "If the chosen source would simultaneously deal damage to multiple permanents you control (like Pyroclasm could) or to you and at least one permanent you control (like Earthquake could), Harm’s Way will redirect just 2 of that damage. It won’t redirect the next 2 damage that would be dealt to each recipient. You choose which 2 damage is redirected. If you like, you can choose to redirect 1 damage that would be dealt by the chosen source to each of two different recipients."
@@ -679,6 +680,7 @@ fn harms_way_redirects_just_2_of_simultaneous_damage_as_you_choose() {
 #[test]
 fn refraction_trap_you_choose_which_simultaneous_damage_it_prevents_as_it_is_dealt() {
     cr!("615.7", "615.5", "609.7a");
+    interp!("shield-divided-among-recipients");
     ruling!(
         "Refraction Trap",
         "If the chosen source would simultaneously deal damage to multiple permanents you control, or would simultaneously deal damage to you and at least one permanent you control, you choose which of that damage to prevent. For example, if the chosen source is Earthquake, you might choose to prevent the next 2 damage it would deal to you and the next 1 damage it would deal to a creature you control. You don’t decide until the point at which the source would deal its damage."
