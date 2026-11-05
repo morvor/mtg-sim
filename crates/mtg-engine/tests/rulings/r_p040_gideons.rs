@@ -254,7 +254,7 @@ fn damage_dealt_by(t: &TestGame, source: ObjectId) -> u32 {
 
 #[test]
 fn gideon_blackblade_keeps_counters_while_not_a_creature() {
-    cr!("122.1a", "122.2", "306.5c");
+    cr!("122.1a", "306.5c");
     ruling!(
         "Gideon Blackblade",
         "Any counters that are put on Gideon remain on him while he's not a creature, even if they have no effect on a noncreature planeswalker."
@@ -440,6 +440,12 @@ fn gideon_battle_forged_requirement_has_the_usual_exceptions() {
         if what == "attack tax" {
             t.battlefield(P0, "Baird, Steward of Argive");
         }
+        // P0 takes the Bears with Control Magic ("You control enchanted creature").
+        let magic = (what == "control change")
+            .then(|| crate::r_s06_common::attach_new(&mut t, P0, "Control Magic", o(bears)));
+        if magic.is_some() {
+            assert_eq!(t.obj_now(bears).controller, P0);
+        }
         next_combat(&mut t, P1);
         match what {
             "tapped" => t.g.objects[bears.0 as usize].tapped = true,
@@ -447,19 +453,20 @@ fn gideon_battle_forged_requirement_has_the_usual_exceptions() {
                 crate::r_s06_common::attach_new(&mut t, P0, "Pacifism", o(bears));
             }
             "control change" => {
-                // P1 lost control of it and got it back during this turn.
-                for p in [P0, P1] {
-                    t.g.objects[bears.0 as usize].base_controller = p;
-                    t.g.recompute();
-                }
+                // P1 destroys Control Magic in their beginning of combat step: they get
+                // the Bears back, but haven't controlled them since their turn began.
+                assert_eq!(t.obj_now(bears).controller, P0);
+                cast_new(&mut t, P1, "Disenchant", &[o(magic.unwrap())]);
+                t.resolve_all();
+                assert!(t.in_graveyard(P0, "Control Magic"));
                 assert_eq!(t.obj_now(bears).controller, P1);
             }
             _ => {}
         }
         assert_eq!(legal_attack(&mut t, &[]), !must, "{what}");
-        if what != "tapped" && what != "pacifism" && what != "control change" {
-            assert!(legal_attack(&mut t, &[(bears, o(g))]), "{what}");
-        }
+        // It can attack Gideon unless it's tapped, can't attack, or is "summoning sick".
+        let can = !matches!(what, "tapped" | "pacifism" | "control change");
+        assert_eq!(legal_attack(&mut t, &[(bears, o(g))]), can, "{what}");
     }
 }
 

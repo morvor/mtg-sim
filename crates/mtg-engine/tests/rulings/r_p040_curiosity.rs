@@ -441,7 +441,7 @@ fn jolrael_locks_in_x_as_its_first_ability_resolves() {
 
 #[test]
 fn subira_checks_power_right_after_damage() {
-    cr!("603.4", "510.2");
+    cr!("603.7a", "603.2", "510.2");
     ruling!(
         "Subira, Tulzidi Caravanner",
         "Once Subira's last ability resolves, check to see if the delayed triggered ability should trigger based on the power of the creatures immediately after damage is dealt, not based on their power as the ability resolves."
@@ -689,7 +689,7 @@ fn tamiyo_delayed_trigger_works_after_she_leaves() {
 
 #[test]
 fn nimble_trapfinder_grants_only_to_creatures_controlled_as_it_resolves() {
-    cr!("611.2c", "603.4");
+    cr!("611.2c", "603.4", "700.8");
     ruling!(
         "Nimble Trapfinder",
         "Nimble Trapfinder’s second ability affects only creatures you control at the time it resolves. Creatures you begin to control later in the turn won’t get the triggered ability."
@@ -723,7 +723,7 @@ fn nimble_trapfinder_grants_only_to_creatures_controlled_as_it_resolves() {
 
 #[test]
 fn nimble_trapfinder_checks_the_types_entering_permanents_had_as_they_entered() {
-    cr!("509.1b", "700.8");
+    cr!("509.1b");
     ruling!(
         "Nimble Trapfinder",
         "Nimble Trapfinder’s first ability checks only whether a permanent entered the battlefield under your control earlier in the turn and had one of the party creature types as it entered. It doesn’t apply if an entering object gained the type later in the turn. It does apply if the entering object left your control since. It doesn’t matter whether Nimble Trapfinder was under your control as that object entered."
@@ -1253,4 +1253,54 @@ fn driven_and_despair_trample_and_menace_twice_are_redundant() {
     attack_with(&mut t, &[(brute, pl(P1))]);
     assert!(!legal_blocks(&mut t, &[(a, brute)]));
     assert!(legal_blocks(&mut t, &[(a, brute), (b, brute)]));
+}
+
+#[test]
+fn thopter_spy_network_triggers_once_per_player_dealt_damage() {
+    cr!("510.2", "603.2c");
+    ruling!(
+        "Thopter Spy Network",
+        "The last ability will trigger, at most, once per combat damage step per player."
+    );
+    // Three players: two artifact creatures hit P1, one hits P2: two triggers, two cards.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Thopter Spy Network");
+    let a = old(&mut t, P0, "Esper Sentinel");
+    let b = old(&mut t, P0, "Esper Sentinel");
+    let c = old(&mut t, P0, "Esper Sentinel");
+    let hand = t.hand_size(P0);
+    attack_with(&mut t, &[(a, pl(P1)), (b, pl(P1)), (c, pl(P2))]);
+    to_damage(&mut t);
+    assert_eq!((t.life(P1), t.life(P2)), (18, 19));
+    assert_eq!(triggers_on_stack(&t, "draw a card"), 2);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+}
+
+#[test]
+fn edric_lets_each_creatures_controller_draw_in_multiplayer() {
+    cr!("510.2", "603.2");
+    ruling!(
+        "Edric, Spymaster of Trest",
+        "When a creature you control deals combat damage to one of your opponents, you may draw a card."
+    );
+    // Four players, P0's Edric. P0's creature hitting P2 lets P0 draw; on P1's turn, P1's
+    // creature hitting P2 (P0's opponent) lets P1 draw; P1's creature hitting P0 doesn't.
+    let mut t = TestGame::new(4);
+    old(&mut t, P0, "Edric, Spymaster of Trest");
+    let mine = old(&mut t, P0, "Grizzly Bears");
+    yes(&mut t, P0, true);
+    let hand = t.hand_size(P0);
+    combat(&mut t, &[(mine, pl(P2))], &[]);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    t.advance_to(P1, Step::PrecombatMain);
+    let a = old(&mut t, P1, "Grizzly Bears");
+    let b = old(&mut t, P1, "Hill Giant");
+    for _ in 0..2 {
+        yes(&mut t, P1, true);
+    }
+    let (h0, h1) = (t.hand_size(P0), t.hand_size(P1));
+    combat(&mut t, &[(a, pl(P2)), (b, pl(P0))], &[]);
+    assert_eq!((t.life(P0), t.life(P2)), (17, 16));
+    assert_eq!((t.hand_size(P0), t.hand_size(P1)), (h0, h1 + 1));
 }

@@ -583,3 +583,78 @@ fn sawhorn_nemesis_doubles_damage_to_battles_the_chosen_player_controls_not_prot
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Lightning, Army of One: any source, not only sources Lightning's controller controls
+// ---------------------------------------------------------------------------
+
+#[test]
+fn lightning_stagger_doubles_damage_from_any_source_to_that_player_until_your_next_turn() {
+    cr!("701.10g", "614.1a", "611.2a");
+    // Stagger: "if a source would deal damage to that player or a permanent that player
+    // controls, it deals double that damage instead": a source, whoever controls it. (Its
+    // rulings say "a source you control", copied from Twinflame Tyrant's; see
+    // docs/RULING_DISCREPANCIES.md.)
+    ruling!(
+        "Lightning, Army of One",
+        "If another effect (or effects) modifies how much damage a source you control would deal"
+    );
+    supported("Lightning, Army of One");
+    // Three players: P0's Lightning (3/2 first strike, trample, lifelink) hits P1.
+    let mut t = TestGame::new(3);
+    let l = old(&mut t, P0, "Lightning, Army of One");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let p2_bears = t.battlefield(P2, "Grizzly Bears");
+    to_combat(&mut t, P0);
+    attack_with(&mut t, &[(l, pl(P1))]);
+    block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    t.set_step(P0, Step::PostcombatMain);
+    // P2's Shock at P1: doubled.
+    let shock = cast_new(&mut t, P2, "Shock", &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!(dealt(&t, shock, pl(P1)), 4);
+    assert_eq!(t.life(P1), 13);
+    // P1's own Shock at P1's Hill Giant (3/3): doubled, it dies.
+    let shock = cast_new(&mut t, P1, "Shock", &[o(giant)]);
+    t.resolve_all();
+    assert_eq!(dealt(&t, shock, o(giant)), 4);
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    // Control: damage to other players and their permanents isn't doubled.
+    let shock = cast_new(&mut t, P1, "Shock", &[pl(P0)]);
+    t.resolve_all();
+    assert_eq!(dealt(&t, shock, pl(P0)), 2);
+    let shock = cast_new(&mut t, P0, "Shock", &[o(p2_bears)]);
+    t.resolve_all();
+    assert_eq!(dealt(&t, shock, o(p2_bears)), 2);
+    // Still on during the other players' turns, over at P0's next turn. On P2's turn,
+    // P1 orders it and Healing Salve's shield (prevent 3) for P2's Shock: doubled first,
+    // 4 - 3 = 1; prevented first, nothing to double.
+    t.advance_to(P2, Step::PrecombatMain);
+    let shock = cast_new(&mut t, P2, "Shock", &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!(dealt(&t, shock, pl(P1)), 4);
+    for prevent_first in [false, true] {
+        salve(&mut t, P1, pl(P1));
+        respond(
+            &mut t,
+            P1,
+            if prevent_first {
+                prevention_first
+            } else {
+                not_prevention
+            },
+        );
+        let from = mark(&t);
+        let shock = cast_new(&mut t, P2, "Shock", &[pl(P1)]);
+        t.resolve_all();
+        assert_eq!(replacement_choosers(&t, from), vec![P1]);
+        assert_eq!(dealt(&t, shock, pl(P1)), if prevent_first { 0 } else { 1 });
+    }
+    // (The last shield's leftover point ends with P2's turn.)
+    t.advance_to(P0, Step::PrecombatMain);
+    let shock = cast_new(&mut t, P2, "Shock", &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!(dealt(&t, shock, pl(P1)), 2);
+}

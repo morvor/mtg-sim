@@ -395,7 +395,7 @@ fn prevention_of_all_damage_covers_noncombat_damage() {
 
 #[test]
 fn tresserhorn_skyknight_prevents_all_damage_from_first_strikers() {
-    cr!("615.1a", "702.7b", "702.4b", "701.14b");
+    cr!("615.1a", "702.7b", "702.4b", "701.14a");
     ruling!(
         "Tresserhorn Skyknight",
         "All damage (not just combat damage and not just first-strike combat damage) that would be dealt to Tresserhorn Skyknight by creatures with first strike is prevented."
@@ -686,7 +686,7 @@ fn atalyas_x_needs_white_mana_but_an_added_cost_doesnt() {
 
 #[test]
 fn cover_of_winter_prevents_combat_damage_to_you_and_your_combatants() {
-    cr!("615.1a", "510.2", "702.24a");
+    cr!("615.1a", "510.2");
     ruling!(
         "Cover of Winter",
         "Cover of Winter's replacement effect prevents combat damage creatures would deal to you and to attacking or blocking creatures you control."
