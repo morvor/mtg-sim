@@ -12,6 +12,13 @@
 //! number of them (`u32::MAX`), from the cards linked to the source (CR 607), with a total
 //! of the ability's X (see [`effect_name_with`]).
 //!
+//! "Copy those cards. You may cast any number of spells with total mana value 6 or less
+//! from among the copies without paying their mana costs." (Uldaros Theorix), "Copy those
+//! exiled cards. You may cast up to three of the copies without paying their mana costs."
+//! (Baron Helmut Zemo): the copies the previous instruction made (`vars::CREATED`, CR
+//! 707.12), capped by a total, a count or both (see [`copies_effect_name`]); each copy is
+//! cast or not individually (CR 707.12a), and those not cast cease to exist (CR 704.5e).
+//!
 //! The effect is an `Effect::Custom` named by [`effect_name`]; the oracle phrase is parsed
 //! in `oracle/patterns/r601_cast_up_to_total_mana_value.rs`.
 
@@ -53,7 +60,31 @@ pub fn effect_name_with(
     format!("{PREFIX}{n}:{total}:{}:{}", zones.join(","), types.join(","))
 }
 
-type Parsed = (u32, Option<u32>, Vec<ZoneKind>, Vec<CardType>);
+/// The source token of the copies the previous instruction made.
+const COPIES: &str = "copies";
+
+/// The `Effect::Custom` name of "you may cast up to `n` of the copies" (`total` `None`)
+/// or "any number of spells with total mana value `total` or less from among the copies"
+/// (`n` `u32::MAX`): the copies of cards the previous instruction made (`vars::CREATED`);
+/// `types` as for [`effect_name`].
+pub fn copies_effect_name(n: u32, total: Option<u32>, types: &[CardType]) -> String {
+    let total = total.unwrap_or(u32::MAX);
+    let types: Vec<String> = types.iter().map(|t| format!("{t:?}")).collect();
+    format!("{PREFIX}{n}:{total}:{COPIES}:{}", types.join(","))
+}
+
+/// Where the spells are cast from.
+#[derive(Clone, Copy, PartialEq)]
+enum Source {
+    Hand,
+    Graveyard,
+    /// The cards exiled with the source (CR 607).
+    Linked,
+    /// The copies the previous instruction made (`vars::CREATED`).
+    Copies,
+}
+
+type Parsed = (u32, Option<u32>, Vec<Source>, Vec<CardType>);
 
 fn parse_name(name: &str) -> Option<Parsed> {
     let mut parts = name.strip_prefix(PREFIX)?.split(':');
@@ -66,9 +97,10 @@ fn parse_name(name: &str) -> Option<Parsed> {
         .next()?
         .split(',')
         .map(|z| match z {
-            "graveyard" => ZoneKind::Graveyard,
-            "linked" => ZoneKind::Exile,
-            _ => ZoneKind::Hand,
+            "graveyard" => Source::Graveyard,
+            "linked" => Source::Linked,
+            COPIES => Source::Copies,
+            _ => Source::Hand,
         })
         .collect();
     let types = parts
@@ -93,6 +125,14 @@ impl KeywordRules for CastUpToTotalManaValue {
         };
         let p = ctx.controller;
         let mut left = total.unwrap_or(ctx.x.max(0) as u32);
+        // No total: only a count ("up to three of the copies").
+        let capped = left != u32::MAX;
+        // The copies, as the instruction begins (the spells cast don't change them).
+        let copies: Vec<ObjectId> = ctx
+            .vars
+            .get(&vars::CREATED)
+            .map(|v| v.iter().filter_map(|e| e.object()).collect())
+            .unwrap_or_default();
         let mut cast: Vec<Entity> = Vec::new();
         let mut used: Vec<ObjectId> = Vec::new();
         for _ in 0..n {
@@ -105,9 +145,11 @@ impl KeywordRules for CastUpToTotalManaValue {
             let mut cards: Vec<ObjectId> = Vec::new();
             for z in &zones {
                 match z {
-                    ZoneKind::Graveyard => cards.extend(g.player(p).graveyard.iter().copied()),
+                    Source::Graveyard => cards.extend(g.player(p).graveyard.iter().copied()),
+                    // The copies that still exist (CR 704.5e).
+                    Source::Copies => cards.extend(copies.iter().copied().filter(|o| g.is_live(*o))),
                     // The cards exiled with the source that are still in exile.
-                    ZoneKind::Exile => cards.extend(
+                    Source::Linked => cards.extend(
                         g.eval_sel(&crate::ability::Sel::Linked, ctx)
                             .into_iter()
                             .filter_map(|e| e.object())
@@ -138,9 +180,13 @@ impl KeywordRules for CastUpToTotalManaValue {
                 }
             }
             // Choosing none (the default) is casting no more: it's "up to".
-            let prompt = format!(
-                "Cast a spell with mana value {left} or less without paying its mana cost (or none)"
-            );
+            let prompt = if capped {
+                format!(
+                    "Cast a spell with mana value {left} or less without paying its mana cost (or none)"
+                )
+            } else {
+                "Cast a spell without paying its mana cost (or none)".to_string()
+            };
             let Some(card) = g
                 .ask_objects(p, ctx.source, &prompt, castable, 0, 1)
                 .into_iter()
