@@ -186,7 +186,7 @@ fn volrath_counters_annihilate() {
 
 #[test]
 fn volrath_keeps_effects_that_applied_before_it_became_a_copy() {
-    cr!("613.1", "707.2");
+    cr!("613.1a", "613.4c", "707.2");
     ruling!("Volrath, the Shapestealer", "If an effect begins to apply to Volrath before it becomes a copy of another creature, that effect will continue to apply.");
     let mut t = TestGame::new(2);
     let v = volrath(&mut t, 1);

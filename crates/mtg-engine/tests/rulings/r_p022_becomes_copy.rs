@@ -86,7 +86,7 @@ fn wall_of_stolen_identity_changing_control_ends_the_lock() {
 
 #[test]
 fn mindlink_mech_keeps_noncopy_effects_after_it_becomes_a_copy() {
-    cr!("613.1", "707.2", "702.122a");
+    cr!("613.1a", "613.1d", "613.4c", "707.2", "702.122a");
     ruling!("Mindlink Mech", "If a continuous effect that isn't a copy effect is modifying Mindlink Mech's power, toughness, or types, that effect will continue to apply to it after it becomes a copy.");
     supported("Mindlink Mech");
     let mut t = TestGame::new(2);
@@ -114,7 +114,7 @@ fn mindlink_mech_keeps_noncopy_effects_after_it_becomes_a_copy() {
 
 #[test]
 fn effects_that_applied_before_becoming_a_copy_still_apply() {
-    cr!("613.1", "611.2c", "707.2");
+    cr!("613.1a", "613.4c", "611.2c", "707.2");
     ruling!("Nascent Metamorph", "If an effect begins to apply to Nascent Metamorph before it becomes a copy, that effect will continue to apply.");
     ruling!("Protean Thaumaturge", "If an effect begins to apply to Protean Thaumaturge before it becomes a copy of another creature, that effect will continue to apply.");
     ruling!("True Polymorph", "If an effect begins to apply to the first target permanent before it becomes a copy of another permanent, that effect will continue to apply.");
@@ -186,7 +186,7 @@ fn effects_that_applied_before_becoming_a_copy_still_apply() {
 
 #[test]
 fn mirage_mirror_keeps_the_effect_of_an_ability_it_had_as_an_earlier_copy() {
-    cr!("613.1", "611.2c", "707.2");
+    cr!("613.1a", "613.4c", "611.2c", "707.2");
     ruling!("Mirage Mirror", "If an effect begins to apply to Mirage Mirror before it becomes a copy of another permanent, that effect will continue to apply. For example, if Mirage Mirror is activated twice in response to itself targeting first Rampaging Hippo then Frilled Sandwalla, the ability it has while it's a copy of Frilled Sandwalla can be activated and its effect will continue to apply while Mirage Mirror is a copy of Rampaging Hippo.");
     supported("Mirage Mirror");
     supported("Rampaging Hippo");
@@ -214,7 +214,7 @@ fn mirage_mirror_keeps_the_effect_of_an_ability_it_had_as_an_earlier_copy() {
 
 #[test]
 fn mirror_of_the_forebears_keeps_the_effect_of_an_ability_it_had_as_an_earlier_copy() {
-    cr!("613.1", "611.2c", "707.2");
+    cr!("613.1a", "613.1f", "611.2c", "707.2");
     ruling!("Mirror of the Forebears", "If an effect begins to apply to Mirror of the Forebears before it becomes a copy of another permanent, that effect will continue to apply. For example, if Mirror of the Forebears is activated twice in response to itself targeting first Spirit of the Hearth then Temur Sabertooth, the ability it has while it’s a copy of Temur Sabertooth can be activated and its effect will continue to apply while Mirror of the Forebears is a copy of Spirit of the Hearth.");
     supported("Mirror of the Forebears");
     supported("Spirit of the Hearth");
@@ -252,7 +252,7 @@ fn mirror_of_the_forebears_keeps_the_effect_of_an_ability_it_had_as_an_earlier_c
 
 #[test]
 fn deceiver_of_form_copies_dont_enter_and_keep_counters_and_auras() {
-    cr!("603.6a", "707.2", "613.1");
+    cr!("603.6a", "707.2", "613.1a", "613.4c");
     ruling!("Deceiver of Form", "If a creature you control becomes a copy of the revealed creature card, it’s neither entering nor leaving the battlefield. Any enters-the-battlefield or leaves-the-battlefield abilities won’t trigger.");
     ruling!("Deceiver of Form", "If applicable, creatures you control copy the printed values of the revealed creature card. They will retain any counters they had on them. Any Auras and/or Equipment that were attached with them will remain so.");
     supported("Deceiver of Form");
@@ -530,7 +530,7 @@ fn protean_thaumaturge_can_target_the_enchantment_creature_that_entered() {
 
 #[test]
 fn kaya_cant_choose_a_card_no_longer_in_exile() {
-    cr!("608.2b", "400.7");
+    cr!("400.7");
     ruling!("Kaya, Spirits' Justice", "If a creature card that was exiled is no longer in exile when Kaya, Spirits' Justice's first ability resolves (perhaps because of Pull from Eternity or a similar effect), you can't choose that creature card with that ability.");
     supported("Kaya, Spirits' Justice");
     for leaves in [false, true] {

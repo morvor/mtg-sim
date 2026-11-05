@@ -65,7 +65,7 @@ fn copies_of_mimics_have_their_extra_types() {
         let giant = t.battlefield(P0, "Hill Giant");
         let m = enter_copying(&mut t, P0, mimic, giant);
         assert_eq!(name_of(&t, m), "Hill Giant");
-        // P1's Cytoshape-like copy: a Clone entering as a copy of the Mimic.
+        // P1's Clone enters as a copy of the Mimic.
         let clone = clone_of(&mut t, P1, m);
         for ty in types {
             assert!(has_subtype(&t, clone, ty), "{mimic}: {ty}");
@@ -169,7 +169,7 @@ fn a_copy_of_nascent_metamorph_stays_a_copy_after_the_metamorphs_effect_ends() {
 
 #[test]
 fn a_copy_of_cursed_mirror_doesnt_copy_its_duration() {
-    cr!("707.2", "707.9b", "611.2a");
+    cr!("707.2", "707.9b", "611.2a", "514.2");
     ruling!("Cursed Mirror", "If something else becomes a copy of Cursed Mirror while Cursed Mirror is a copy of a creature, the duration of the effect is not copied. The new copy will still be a creature (with haste) after Cursed Mirror stops being a copy at the end of the turn.");
     supported("Cursed Mirror");
     let mut t = TestGame::new(2);
@@ -308,8 +308,7 @@ fn copies_of_tokens_that_gained_haste_have_no_haste_and_stay() {
     token_gone_clone_stays(&mut t, tok, clone);
     // Mordor on the March: "Exile a creature card from your graveyard. Create a token
     // that's a copy of it. It gains haste until end of turn. Exile it at the beginning of
-    // the next end step." The copy is of the card even after the card left exile... it's
-    // a Hill Giant without haste.
+    // the next end step." A copy of the token is a Hill Giant without haste that stays.
     let mut t = TestGame::new(2);
     t.graveyard(P0, "Hill Giant");
     let toks = cast_spell(&mut t, P0, "Mordor on the March", "{3}{B}{R}", &[], None, None);
@@ -410,7 +409,7 @@ fn copies_of_tokens_from_activated_abilities_that_grant_haste() {
 
 #[test]
 fn a_copy_of_a_hofri_spirit_isnt_linked_to_hofri() {
-    cr!("707.9b", "607.2a", "707.3");
+    cr!("707.9b", "607.1d", "707.3");
     ruling!("Hofri Ghostforge", "If another creature enters the battlefield as a copy of the Spirit token or another effect creates a copy of the Spirit token, it will have the triggered ability granted by Hofri, but will not be linked to Hofri's ability and will not return the card to the graveyard when it leaves the battlefield.");
     supported("Hofri Ghostforge");
     let mut t = TestGame::new(2);

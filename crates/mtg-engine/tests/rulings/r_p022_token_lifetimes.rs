@@ -16,7 +16,7 @@ use mtg_engine::*;
 
 #[test]
 fn an_exiled_token_doesnt_come_back_or_get_copied() {
-    cr!("111.7", "111.8", "610.3c");
+    cr!("111.7", "111.8");
     ruling!("Phantom Steed", "If a token is exiled this way, it will cease to exist and won't return to the battlefield. Phantom Steed's last ability won't create any tokens.");
     ruling!("Mardu Siegebreaker", "If a token is exiled with Mardu Siegebreaker’s third ability, it will cease to exist and won’t return to the battlefield. Mardu Siegebreaker’s last ability won’t create copies of that token.");
     for name in ["Phantom Steed", "Mardu Siegebreaker"] {
@@ -89,7 +89,7 @@ fn arcane_artisan_exiles_all_its_tokens_but_not_copies_of_them() {
 
 #[test]
 fn arcane_artisan_tokens_end_step_triggers_resolve_after_theyre_exiled() {
-    cr!("603.3b", "603.10a", "113.7a");
+    cr!("603.3b", "113.7a");
     ruling!("Arcane Artisan", "If any of those tokens have an ability that triggers at the beginning of the end step, that ability will trigger and resolve even if the token is exiled during the end step before that ability resolves.");
     supported("Alert Heedbonder");
     // Alert Heedbonder: "At the beginning of your end step, you gain 1 life for each
@@ -192,7 +192,7 @@ fn doubled_temporary_tokens_are_each_exiled() {
 
 #[test]
 fn tokens_made_during_an_end_step_are_exiled_at_the_next_turns_end_step() {
-    cr!("603.7c", "513.1a");
+    cr!("513.2");
     ruling!("Splinter Twin", "If the ability is activated during a turn's end step, the token will be exiled at the beginning of the following turn's end step.");
     ruling!("Flameshadow Conjuring", "If the ability resolves during a turn's end step, the token will be exiled at the beginning of the next turn's end step.");
     supported("Splinter Twin");

@@ -66,7 +66,7 @@ fn valki_copying_the_turn_it_entered_cant_attack_or_tap() {
 
 #[test]
 fn valki_keeps_effects_that_applied_before_it_became_a_copy() {
-    cr!("613.1", "611.2c", "707.2");
+    cr!("613.1a", "613.4c", "611.2c", "707.2");
     ruling!("Valki, God of Lies // Tibalt, Cosmic Impostor", "If an effect begins to apply to Valki before it becomes a copy, that effect will continue to apply.");
     supported(VALKI);
     let mut t = TestGame::new(2);
@@ -119,7 +119,7 @@ fn tilonallis_skinshifter_copying_a_clone_copies_what_it_copies() {
 
 #[test]
 fn tilonallis_skinshifter_keeps_effects_that_applied_before_it_became_a_copy() {
-    cr!("613.1", "611.2c", "707.2");
+    cr!("613.1a", "613.4c", "611.2c", "707.2");
     ruling!("Tilonalli's Skinshifter", "If an effect from a resolving spell or ability, such as that of Rallying Roar, begins to apply to Tilonalli’s Skinshifter before it becomes a copy of another creature, that effect will continue to apply.");
     supported(SKINSHIFTER);
     supported("Rallying Roar");

@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 #[test]
 fn mimic_vat_exiles_both_halves_of_a_melded_creature_and_copies_one() {
-    cr!("712.4c", "701.42", "607.2a");
+    cr!("712.21", "712.21c", "607.2a");
     ruling!("Mimic Vat", "If a melded permanent dies and triggers Mimic Vat's triggered ability, both of its component cards are exiled. As Mimic Vat's second ability resolves, its controller chooses one of those cards to make a token copy of.");
     supported("Mimic Vat");
     let mut t = TestGame::new(2);
