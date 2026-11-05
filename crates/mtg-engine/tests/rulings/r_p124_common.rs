@@ -18,6 +18,7 @@ pub use crate::r_s25_common::cast_new;
 pub use crate::r_s26_common::modify_until_eot;
 pub use crate::r_p108_common::put_counters;
 pub use crate::r_s02_common::create_token;
+pub use crate::r_s30_common::set_life;
 
 /// Whether the permanent (followed across zone changes) is phased out.
 pub fn phased_out(t: &TestGame, id: ObjectId) -> bool {
