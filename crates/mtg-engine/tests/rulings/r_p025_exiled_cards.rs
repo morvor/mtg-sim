@@ -359,12 +359,16 @@ fn each_caller_of_the_untamed_in_the_deck_exiles_a_card_before_the_game() {
         assert_eq!(toks.len(), 1, "{name}");
         assert_eq!(name_of(&t, toks[0]), name);
     }
-    // X = 6 (the Craw Wurm wasn't exiled) can't be announced.
+    // X = 6 (the Craw Wurm wasn't exiled) can't be announced: the answer is refused, and
+    // the ability, if activated, has the mana value of an exiled card as its X.
     let caller = t.battlefield(P0, "Caller of the Untamed");
     t.lands(P0, "Forest", 6);
     t.answer(P0, DecisionKind::X, Answer::Number(6));
     let before = t.g.battlefield.clone();
-    let _ = t.activate(P0, caller, 0, &[]);
+    if let Ok(Some(ability)) = t.activate(P0, caller, 0, &[]) {
+        let x = t.g.obj(ability).stack.as_ref().and_then(|s| s.x);
+        assert!(matches!(x, Some(2) | Some(4)), "X = {x:?}");
+    }
     t.resolve_all();
     assert!(new_tokens(&t, P0, &before)
         .iter()
