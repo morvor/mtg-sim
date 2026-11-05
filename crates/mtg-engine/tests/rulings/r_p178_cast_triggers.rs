@@ -309,10 +309,6 @@ fn warmth_powerleech_and_citanul_druid_trigger_for_every_opponent() {
         "Powerleech",
         "In a multi-player game it affects all opponents."
     );
-    ruling!(
-        "Citanul Druid",
-        "In multiplayer games it affects all players."
-    );
     // Warmth: each opponent's red spell.
     let mut t = ffa(3);
     supported("Warmth");
@@ -323,7 +319,9 @@ fn warmth_powerleech_and_citanul_druid_trigger_for_every_opponent() {
         t.resolve_all();
     }
     assert_eq!(t.life(P0), 20 - 6 + 4);
-    // Citanul Druid: each opponent's artifact spell.
+    // Citanul Druid: each opponent's artifact spell. (Its ruling "In multiplayer games it
+    // affects all players." contradicts the Oracle text and is exempted in
+    // docs/rulings-exemptions/rulings-P178.tsv; see ruling_contradicting_oracle.rs.)
     let mut t = ffa(3);
     supported("Citanul Druid");
     let druid = t.battlefield(P0, "Citanul Druid");
