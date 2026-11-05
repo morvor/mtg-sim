@@ -35,8 +35,7 @@ fn has_name(s: &str, name: &str) -> bool {
         let end = start + name.len();
         let before = s[..start].chars().next_back();
         let after = s[end..].chars().next();
-        if before.is_none_or(|c| !c.is_alphanumeric())
-            && after.is_none_or(|c| !c.is_alphanumeric())
+        if before.is_none_or(|c| !c.is_alphanumeric()) && after.is_none_or(|c| !c.is_alphanumeric())
         {
             return true;
         }

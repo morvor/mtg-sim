@@ -31,6 +31,10 @@ fn kiss(t: &mut TestGame, name: &str, mana: &[&str], targets: &[Entity]) -> Obje
 #[test]
 fn the_spell_and_its_copy_get_new_targets_that_arent_you_or_yours() {
     cr!("115.7d", "707.10");
+    ruling!(
+        "Chef's Kiss",
+        "If there are any legal targets that are not you or permanents you control, you must reselect the targets at random."
+    );
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Grizzly Bears");
     let spell = kiss(
@@ -143,4 +147,30 @@ fn each_instance_of_target_is_reselected() {
     t.resolve_all();
     assert_eq!(t.pt(mine), (3, 3));
     assert!(!t.on_battlefield(theirs));
+}
+
+#[test]
+fn copying_and_reselecting_isnt_casting() {
+    cr!("707.10");
+    ruling!(
+        "Chef's Kiss",
+        "Neither copying a spell nor reselecting its targets counts as casting a spell."
+    );
+    let mut t = TestGame::new(2);
+    // Young Pyromancer: "Whenever you cast an instant or sorcery spell, create a 1/1 red
+    // Elemental creature token." P0 cast only Chef's Kiss: the stolen Lightning Bolt, its
+    // copy and their new targets don't make P0 cast anything else.
+    t.battlefield(P0, "Young Pyromancer");
+    kiss(
+        &mut t,
+        "Lightning Bolt",
+        &["Mountain"],
+        &[Entity::Player(P0)],
+    );
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Elemental Token").len(), 1);
+    // Both Lightning Bolts were dealt to P1, the only target that isn't P0 or one of P0's
+    // permanents (the Elemental token included).
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(t.life(P0), 20);
 }

@@ -57,3 +57,35 @@ fn the_equipped_creature_is_the_source_of_the_damage() {
     t.resolve_all();
     assert!(!t.on_battlefield(chosen));
 }
+
+#[test]
+fn each_rock_is_the_one_its_own_ability_sacrifices() {
+    cr!("201.5a");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Toggo, Goblin Weaponsmith");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    // Two lands enter: two Rocks, one for each Grizzly Bears.
+    t.enter(P0, "Mountain");
+    t.enter(P0, "Mountain");
+    t.settle();
+    t.resolve_all();
+    let rocks = t.named_on_battlefield("Rock");
+    assert_eq!(rocks.len(), 2);
+    assert!(t.g.attach(rocks[0], Entity::Object(a)));
+    assert!(t.g.attach(rocks[1], Entity::Object(b)));
+    // "Sacrifice Rock" in the ability the second Rock grants means that Rock only.
+    t.activate(P0, b, 0, &[Entity::Player(P1)])
+        .expect("activates");
+    assert!(t.on_battlefield(rocks[0]));
+    assert!(!t.on_battlefield(rocks[1]));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // The first Rock still grants its ability to the other Grizzly Bears.
+    t.activate(P0, a, 0, &[Entity::Player(P1)])
+        .expect("activates");
+    assert!(!t.on_battlefield(rocks[0]));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+}

@@ -9,10 +9,10 @@
 //! * "if a player taps a Mountain for mana, that Mountain produces colorless mana instead
 //!   of any other type": "that Mountain" is the tapped land, as "it" is (CR 106.12a).
 
+use super::basic_effects_misc::COUNTED;
 use super::FollowupPattern;
 use crate::ability::*;
 use crate::oracle::effects::{parse_sentence, Builder};
-use super::basic_effects_misc::COUNTED;
 use crate::oracle::phrases::*;
 
 /// "If the number is odd, ..." after "count the number of [objects]": the counted number
@@ -37,9 +37,7 @@ fn if_the_number(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         return false;
     };
     // The body must not have an X of its own.
-    if r.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x")
-        || r.contains("the number")
-    {
+    if r.split(|c: char| !c.is_alphanumeric()).any(|w| w == "x") || r.contains("the number") {
         return false;
     }
     let text = format!("if x is {r}");
@@ -77,7 +75,14 @@ fn tapped_referent(s: &str) -> Option<String> {
         .strip_prefix("a ")
         .or_else(|| noun.strip_prefix("an "))?;
     let after = rest.strip_prefix(&format!("that {noun} "))?;
-    Some(format!("if a player taps a{} {noun} for mana, it {after}", if noun.starts_with(['a', 'e', 'i', 'o', 'u']) { "n" } else { "" }))
+    Some(format!(
+        "if a player taps a{} {noun} for mana, it {after}",
+        if noun.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            "n"
+        } else {
+            ""
+        }
+    ))
 }
 
 /// "until end of turn, [effect] and [whenever ... | if ...]": two continuous effects

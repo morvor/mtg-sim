@@ -65,3 +65,30 @@ fn the_effects_last_until_end_of_turn() {
     t.resolve_all();
     assert_eq!(t.pt(ogre), (1, 1));
 }
+
+#[test]
+fn in_two_headed_giant_it_triggers_once_per_upkeep() {
+    cr!("805.4");
+    ruling!(
+        "Chaos Moon",
+        "In Two-Headed Giant, triggers only once per upkeep, not once for each player."
+    );
+    // P0 and P1 against P2 and P3; on P2 and P3's turn, one upkeep: Chaos Moon, Gray Ogre
+    // and a Mountain are 3 permanents (odd), so the Ogre gets +1/+1 once (twice would
+    // make it 4/4).
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig::two_headed_giant(vec![0, 0, 1, 1]),
+    );
+    for p in [P0, P1, P2, P3] {
+        for _ in 0..3 {
+            t.library_top(p, "Island");
+        }
+    }
+    t.battlefield(P0, "Chaos Moon");
+    let ogre = t.battlefield(P0, "Gray Ogre");
+    t.battlefield(P2, "Mountain");
+    t.set_step(P1, Step::End);
+    t.advance_to(P2, Step::PrecombatMain);
+    assert_eq!(t.pt(ogre), (3, 3));
+}

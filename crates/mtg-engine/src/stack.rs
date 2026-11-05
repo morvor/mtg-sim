@@ -1200,10 +1200,16 @@ impl Game {
     /// because what its costs pay set them ("{3}, Unattach an Equipment from ~: He deals
     /// damage equal to that Equipment's mana value divided as you choose among one, two,
     /// or three targets."): announced right after the costs are paid, once the amount is
-    /// known (CR 601.2d, 601.2h; interpretation `division-after-cost-amount`).
-    pub(crate) fn divide_after_costs(&mut self, id: ObjectId) {
+    /// known (CR 601.2d, 601.2h; interpretation `division-after-cost-amount`). Each target
+    /// must receive at least one (CR 601.2d): with an amount smaller than the number of
+    /// targets, the division can't be announced, so casting or activating the spell or
+    /// ability this way is illegal, and it's reversed (CR 601.2, 733).
+    pub(crate) fn divide_after_costs(
+        &mut self,
+        id: ObjectId,
+    ) -> Result<(), crate::casting::Illegal> {
         let Some(chosen) = self.obj(id).stack.as_deref().map(|si| si.chosen.clone()) else {
-            return;
+            return Ok(());
         };
         let body = self.stack_body(id);
         let mut ctx = self.stack_ctx(id);
@@ -1218,32 +1224,49 @@ impl Game {
                     .unwrap_or_default(),
                 _ => body.targets.clone(),
             };
-            let pending = specs.iter().enumerate().any(|(i, spec)| {
-                spec.divide.is_some()
-                    && cm.targets.get(i).is_some_and(|t| !t.is_empty())
-                    && cm.divided.get(i).is_none_or(|d| d.is_empty())
-            });
-            if !pending {
+            // Only the slots left undivided (the others were divided as their targets
+            // were chosen).
+            let pending: Vec<usize> = (0..specs.len())
+                .filter(|i| {
+                    specs[*i].divide.is_some()
+                        && cm.targets.get(*i).is_some_and(|t| !t.is_empty())
+                        && cm.divided.get(*i).is_none_or(|d| d.is_empty())
+                })
+                .collect();
+            if pending.is_empty() {
                 continue;
             }
             ctx.targets = cm.targets.clone();
-            let divided = self.choose_divisions(&specs, &cm.targets, &ctx, id);
-            for (i, d) in divided.into_iter().enumerate() {
+            for i in pending {
+                let n = cm.targets[i].len();
+                let total = specs[i]
+                    .divide
+                    .as_ref()
+                    .map_or(0, |v| self.eval_value(v, &ctx).max(0) as usize);
+                if total < n {
+                    return Err(crate::casting::Illegal(format!(
+                        "{total} can't be divided among {n} targets, at least one each \
+                         (CR 601.2d)"
+                    )));
+                }
+                let d = self
+                    .choose_divisions(&specs[i..=i], &cm.targets[i..=i], &ctx, id)
+                    .pop()
+                    .unwrap_or_default();
                 let slot = &mut new[k].divided;
                 if slot.len() <= i {
                     slot.resize(i + 1, vec![]);
                 }
-                if slot[i].is_empty() {
-                    slot[i] = d;
-                }
+                slot[i] = d;
+                changed = true;
             }
-            changed = true;
         }
         if changed {
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.chosen = new;
             }
         }
+        Ok(())
     }
 
     // ------------------------------------------------------------------
