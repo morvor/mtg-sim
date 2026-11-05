@@ -109,9 +109,11 @@ fn berserkers_frenzy_blocks_must_be_legal_and_costs_can_be_declined() {
     // illegal declaration is undone.
     let mut t = TestGame::new(2);
     let angel = t.battlefield(P0, "Serra Angel");
+    let bears = t.battlefield(P0, "Grizzly Bears");
     let ogre = t.battlefield(P1, "Gray Ogre");
-    frenzied_attack(&mut t, &[angel]);
+    frenzied_attack(&mut t, &[angel, bears]);
     assert!(!legal_blocks(&mut t, P1, &[(ogre, angel)]));
+    assert!(legal_blocks(&mut t, P1, &[(ogre, bears)]));
     t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![(ogre, angel)]));
     let from = t.asked().len();
     to_blocks(&mut t);
@@ -421,7 +423,9 @@ fn green_dragons_poison_breath_outlasts_it_and_isnt_deathtouch() {
     destroy(&mut t, dragon);
     assert!(!t.on_battlefield(dragon));
     let wurm = t.battlefield(P1, "Craw Wurm");
-    damage(&mut t, wurm, 1);
+    // Lightning Bolt deals 3 damage to the Craw Wurm (6/4).
+    cast_new(&mut t, P0, "Lightning Bolt", &[obj(wurm)]);
+    t.resolve_all();
     assert!(!t.on_battlefield(wurm), "destroyed by Poison Breath");
     // P0's Colossal Dreadmaw (6/6 trample) is blocked by P1's Hill Giant (3/3): lethal
     // damage to the Giant is still 3, not 1.
@@ -594,6 +598,8 @@ fn several_zariel_emblems_give_several_combats_with_no_untap_between_them() {
     assert!(t.obj_now(bears).tapped);
     assert!(!legal_attack(&mut t, &[(bears, Entity::Player(P1))]));
     assert_eq!(t.life(P1), 16);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
     assert_eq!(next_combat_or_main(&mut t), Step::PostcombatMain);
 }
 
