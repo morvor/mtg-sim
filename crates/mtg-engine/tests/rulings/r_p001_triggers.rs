@@ -124,7 +124,7 @@ fn capricious_efreet_chooses_at_random_among_the_targets_still_legal() {
 
 #[test]
 fn capricious_efreet_regeneration_must_be_set_up_before_it_resolves() {
-    cr!("608.2", "701.19a", "701.19c");
+    cr!("608.2", "701.19a");
     ruling!(
         "Capricious Efreet",
         "As the ability resolves, there is no time to react between the time a permanent is chosen at random and the time it’s destroyed."

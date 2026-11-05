@@ -6,11 +6,9 @@
 use crate::r_p001_common::*;
 use crate::r_p006_common::old;
 use crate::r_s01_common::{attack_with, stack_library, supported, tokens};
-use crate::r_s04_common::add_mana;
 use crate::r_s25_common::lands_for_cost;
 use mtg_engine::combat;
 use mtg_engine::decision::Answer;
-use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -235,11 +233,26 @@ fn furygale_tokens_with_a_cost_to_attack_that_player_or_to_attack_at_all() {
     assert!(legal(&mut t, &not_attacking));
     crate::r_s02_common::destroy(&mut t, prison);
     // Declared that way, it's refused and the token attacks P1 (paying {3}) or not at all.
-    add_mana(&mut t, P0, ManaType::R, 3);
+    t.lands(P0, "Mountain", 3);
     t.answer(P0, DecisionKind::Attackers, Answer::Attackers(to_p2));
     t.advance_to(P0, Step::DeclareAttackers);
     let c = t.g.combat.as_ref().unwrap();
     assert_ne!(c.attack_target(p1s[0]), Some(pl(P2)));
+    // Declared attacking P1, it attacks, and the {3} is paid.
+    let mut t = TestGame::new(3);
+    let (p1s, p2s) = furygale(&mut t);
+    let brainwash = t.battlefield(P0, "Brainwash");
+    t.g.attach(brainwash, obj(p1s[0]));
+    let mut decl: Vec<(ObjectId, Entity)> = p2s.iter().map(|c| (*c, pl(P2))).collect();
+    decl.push((p1s[1], pl(P1)));
+    decl.push((p1s[0], pl(P1)));
+    let mountains = t.lands(P0, "Mountain", 3);
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(decl));
+    t.advance_to(P0, Step::DeclareAttackers);
+    let c = t.g.combat.as_ref().unwrap();
+    assert_eq!(c.attack_target(p1s[0]), Some(pl(P1)));
+    assert_eq!(c.attackers.len(), 4);
+    assert!(mountains.iter().all(|m| t.obj_now(*m).tapped));
     // P1 and P2 each control Ghostly Prison: every attack has a cost, but each is a cost
     // to attack one player. A P1 token may attack P2 paying P2's cost: P0 needn't pay
     // P1's instead.
