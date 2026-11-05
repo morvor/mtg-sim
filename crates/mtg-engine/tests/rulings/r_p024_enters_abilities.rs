@@ -57,7 +57,9 @@ fn here_comes_a_new_hero(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
 
 fn tempestra(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
     let tempestra = t.battlefield(P0, "Tempestra, Dame of Games");
-    t.battlefield(P0, "Ornithopter");
+    // (Adaptive Automaton is an artifact too: sacrifice the Ornithopter.)
+    let orni = t.battlefield(P0, "Ornithopter");
+    t.answer_choose(P0, &[obj(orni)]);
     lands_for(t, P0, "{2}{R}");
     let before = t.g.battlefield.clone();
     t.activate(P0, tempestra, 0, &[obj(what)]).expect("activation");

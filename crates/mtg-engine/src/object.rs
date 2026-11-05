@@ -372,6 +372,12 @@ pub struct EventInfo {
     /// dice"), each event's amount (the results of those dice), in order.
     #[serde(default)]
     pub amounts: Vec<i32>,
+    /// For a spell being cast, the objects it targeted as the ability triggered: "that
+    /// creature" of "whenever you cast a spell that targets only a single creature" is
+    /// that target even if the spell's targets change later or it leaves its zone (then
+    /// as it last existed, CR 608.2h).
+    #[serde(default)]
+    pub spell_targets: Vec<ObjectId>,
 }
 
 /// The kind of object on the stack.

@@ -62,7 +62,7 @@ fn minion_reflector_copies_a_creature_that_left_as_it_last_existed() {
     assert_eq!(toks.len(), 1, "{}", t.dump_log());
     assert_eq!(name_of(&t, toks[0]), "Hill Giant");
     assert!(has_kw(&t, toks[0], KeywordKind::Haste));
-    assert_eq!(abilities_with(&t, toks[0], "sacrifice this permanent"), 1);
+    assert_eq!(abilities_with(&t, toks[0], "At the beginning of the end step, sacrifice"), 1);
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
 }
 

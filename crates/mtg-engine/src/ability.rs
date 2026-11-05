@@ -1181,6 +1181,10 @@ pub enum Sel {
     ExiledWithCardsNamed(SmolStr),
     /// The spell this ability resolves for (for "copy that spell").
     TriggerSpell,
+    /// The objects the triggering spell targeted as the ability triggered ("whenever you
+    /// cast a spell that targets only a single creature, create a token that's a copy of
+    /// that creature"), each as it last existed if it has since left its zone (CR 608.2h).
+    TriggerSpellTargets,
     /// Union of selections.
     Union(Vec<Sel>),
     /// The top card of a player's graveyard.
