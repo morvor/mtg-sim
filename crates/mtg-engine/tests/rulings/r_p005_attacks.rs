@@ -177,7 +177,7 @@ fn raubahn_cant_attach_equipment_to_a_creature_it_cant_equip() {
 
 #[test]
 fn ogre_head_helm_sacrifices_the_equipped_creature() {
-    cr!("702.151b");
+    cr!("702.151a", "702.151b");
     ruling!(
         "Ogre-Head Helm",
         "If the equipped creature deals combat damage, you may sacrifice the equipped creature, not Ogre-Head Helm."
@@ -190,6 +190,10 @@ fn ogre_head_helm_sacrifices_the_equipped_creature() {
     t.activate(P0, helm, 0, &[obj(bears)]).unwrap();
     t.resolve_all();
     assert_eq!(t.obj_now(helm).attached_to, Some(obj(bears)));
+    assert!(
+        !t.obj_now(helm).is(mtg_engine::types::CardType::Creature),
+        "attached by reconfigure, the Helm isn't a creature"
+    );
     t.hand(P0, "Shock");
     t.answer_yes(P0, true);
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);

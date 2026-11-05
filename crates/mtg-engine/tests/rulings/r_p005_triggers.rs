@@ -321,16 +321,20 @@ fn throne_warden_checks_the_monarch_as_the_end_step_begins_and_on_resolution() {
     for lose_it in [false, true] {
         let mut t = TestGame::new(2);
         let warden = t.battlefield(P0, "Throne Warden");
+        // The Jailer's exile takes this Grizzly Bears, not the Warden.
+        let bears = t.battlefield(P0, "Grizzly Bears");
         mtg_engine::designations::become_monarch(&mut t.g, P0);
         t.advance_to(P0, Step::End);
         t.settle();
         assert_eq!(triggers_from(&t, warden), 1);
         if lose_it {
-            t.answer_targets(P1, &[]);
+            t.answer_targets(P1, &[obj(bears)]);
             t.enter(P1, "Palace Jailer");
             t.settle();
         }
         t.resolve_all();
+        assert!(t.on_battlefield(warden), "{lose_it}");
+        assert_eq!(t.g.monarch, Some(if lose_it { P1 } else { P0 }));
         let expected = if lose_it { 0 } else { 1 };
         assert_eq!(t.counters(warden, counters::PLUS1), expected, "{lose_it}");
     }
@@ -380,7 +384,7 @@ fn regal_leosaur_affects_only_creatures_there_as_it_resolves() {
 
 #[test]
 fn essence_symbiote_gains_life_even_without_the_creature() {
-    cr!("608.2c", "702.140d");
+    cr!("609.3", "702.140d");
     ruling!(
         "Essence Symbiote",
         "You gain 2 life when Essence Symbiote’s ability resolves, even if you can’t put a +1/+1 counter on the mutated creature (most likely because it’s left the battlefield)."

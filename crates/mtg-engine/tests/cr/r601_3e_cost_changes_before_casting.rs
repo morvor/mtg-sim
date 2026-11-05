@@ -80,6 +80,25 @@ fn a_split_half_or_back_face_gets_the_cost_changes_of_that_half_or_face() {
     t.battlefield(P1, "Grizzly Bears");
     let card = t.hand(P0, "Fire // Ice");
     assert!(!offered(&mut t, P0, card, CastMethod::Half(1)));
+    assert!(t
+        .cast(P0, card)
+        .method(CastMethod::Half(1))
+        .try_go()
+        .is_err());
+    t.lands(P0, "Island", 1);
+    assert!(offered(&mut t, P0, card, CastMethod::Half(1)));
+    // Fire ({1}{R}) is a red spell: reduced to {R}, one Mountain is enough.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ruby Medallion");
+    t.lands(P0, "Mountain", 1);
+    let card = t.hand(P0, "Fire // Ice");
+    assert!(offered(&mut t, P0, card, CastMethod::Half(0)));
+    t.cast(P0, card)
+        .method(CastMethod::Half(0))
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
     // Sword of the Realms ({1}{W} legendary artifact, the back face of Halvar, God of
     // Battle) is an artifact spell: Etherium Sculptor ("Artifact spells you cast cost {1}
     // less to cast.") reduces it.

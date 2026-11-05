@@ -94,7 +94,7 @@ fn taigams_copy_resolves_and_the_original_never_does() {
 
 #[test]
 fn taigams_copy_has_the_originals_targets_modes_and_division() {
-    cr!("707.10", "707.10c");
+    cr!("707.10");
     ruling!(
         "Taigam, Master Opportunist",
         "The copy will have the same targets and modes as the original spell. If the spell divides damage or distributes counters among a number of targets, those choices apply to the copy."

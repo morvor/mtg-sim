@@ -204,7 +204,7 @@ fn stolen_goodies_loses_the_counters_of_an_illegal_target() {
 
 #[test]
 fn rhys_persist_doesnt_return_a_card_that_left_the_graveyard() {
-    cr!("400.7", "702.79a", "608.2b");
+    cr!("400.7", "702.79a", "603.6c");
     ruling!(
         "Rhys, the Evermore",
         "If the target creature dies but that card leaves the graveyard before the persist ability resolves, it won't be returned to the battlefield."

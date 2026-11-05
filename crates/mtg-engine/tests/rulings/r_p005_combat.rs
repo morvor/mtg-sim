@@ -232,7 +232,7 @@ fn trap_runner_triggers_becomes_blocked_abilities() {
 
 #[test]
 fn trap_runner_works_after_blockers_in_each_combat_phase() {
-    cr!("506.1", "500.8");
+    cr!("506.8b", "506.8c", "506.8g", "500.8");
     ruling!(
         "Trap Runner",
         "If a turn has multiple combat phases, the ability can be activated during any of them as long as it’s after the beginning of that phase’s Declare Blockers Step."
@@ -279,7 +279,7 @@ fn ascend(t: &mut TestGame) {
 
 #[test]
 fn storm_fleet_swashbuckler_gaining_double_strike_mid_combat() {
-    cr!("702.4c", "702.4d", "510.4");
+    cr!("702.4d", "510.4");
     ruling!(
         "Storm Fleet Swashbuckler",
         "If Storm Fleet Swashbuckler gains double strike after it has dealt regular combat damage, it won't go back and deal first-strike combat damage. On the other hand, if it gains first strike somehow and then it gains double strike after dealing first-strike combat damage, it will also deal regular combat damage."
@@ -312,7 +312,7 @@ fn storm_fleet_swashbuckler_gaining_double_strike_mid_combat() {
 
 #[test]
 fn streetwise_negotiator_only_assigns_combat_damage_by_toughness() {
-    cr!("510.1a", "701.14b");
+    cr!("510.1a", "701.14a");
     ruling!(
         "Streetwise Negotiator",
         "Streetwise Negotiator’s ability doesn’t actually change any creature’s power. It changes only the amount of combat damage the creature assigns. All other rules and effects that check power or toughness use the real values, even if they cause damage “equal to a creature’s power” to be dealt. Notably, if Streetwise Negotiator (or the creature that gains its ability) fights, it uses its actual power to determine how much damage it deals."
@@ -436,7 +436,7 @@ fn attacks_by_requirement(t: &mut TestGame, ap: PlayerId, id: ObjectId) -> bool 
 
 #[test]
 fn mogis_warhound_attacks_only_if_able_and_without_a_cost() {
-    cr!("508.1d", "508.1h");
+    cr!("508.1a", "508.1d");
     ruling!(
         "Mogis's Warhound",
         "If, during your declare attackers step, Mogis's Warhound (or the creature it enchants) is tapped, is affected by a spell or ability that says it can't attack, or hasn't been under its controller's control continuously since the turn began (and doesn't have haste), then it doesn't attack. If there's a cost associated with having a creature attack, its controller isn't forced to pay that cost, so it doesn't have to attack in that case either."

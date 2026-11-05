@@ -34,8 +34,8 @@ fn lore_seekers_drafter_provides_a_booster_pack_from_any_set() {
     // nothing is generated for them (an empty "pack" isn't one).
     assert!(d.add_booster(P1, pack(&["Divination"])).is_err());
     assert!(d.add_booster(P0, vec![]).is_err());
-    // Cards from sets of any era (Alpha, Kaladesh, Dominaria United, Bloomburrow) and
-    // none of the draft's own packs.
+    // Cards first printed in sets of any era (Alpha, Fallout, Dominaria United, Outlaws of
+    // Thunder Junction), none of them from the draft's own packs.
     let added = pack(&[
         "Lightning Bolt",
         "Electrosiphon",
