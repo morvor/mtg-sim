@@ -1,6 +1,6 @@
 //! Rulings batch P169 — "power 2 or less" abilities: casting from the top of the library
 //! (Assemble the Players), searching (Imperial Recruiter), and "whenever a creature with
-//! power 2 or less enters" triggers (CR 603.2, 603.6a, 603.4).
+//! power 2 or less enters" triggers (CR 603.2, 603.6a, 603.10).
 
 use crate::r_p169_common::*;
 use mtg_engine::decision::{Action, Decision};
@@ -94,26 +94,32 @@ fn each_assemble_the_players_grants_its_own_once_each_turn_permission() {
 }
 
 #[test]
-fn assemble_the_players_casts_a_morph_face_down_from_the_top() {
-    cr!("708.4", "702.37c");
+fn assemble_the_players_casts_a_morph_or_disguise_face_down_from_the_top() {
+    cr!("708.4", "702.37c", "702.168b");
     ruling!(
         "Assemble the Players",
         "If the top card of your library has a disguise or morph ability, you can cast it face down from the top of your library, even if it doesn't normally have power 2 or less."
     );
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Assemble the Players");
-    t.lands(P0, "Wastes", 3);
-    let abom = t.library_top(P0, "Abomination of Gudul");
-    let (methods, _) = cast_methods(&mut t, P0, abom);
-    // Only face down (as a 2/2); a 3/4 creature spell can't be cast this way.
-    assert_eq!(methods, vec![CastMethod::FaceDown(KeywordKind::Morph)]);
-    t.cast(P0, abom)
-        .method(CastMethod::FaceDown(KeywordKind::Morph))
-        .go();
-    t.resolve_all();
-    assert!(t.on_battlefield(abom));
-    assert!(t.obj_now(abom).face_down);
-    assert_eq!(t.pt(abom), (2, 2));
+    // A 3/4 with morph and a 6/7 with disguise.
+    for (name, kw) in [
+        ("Abomination of Gudul", KeywordKind::Morph),
+        ("Riftburst Hellion", KeywordKind::Disguise),
+    ] {
+        supported(name);
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Assemble the Players");
+        t.lands(P0, "Wastes", 3);
+        let card = t.library_top(P0, name);
+        let (methods, _) = cast_methods(&mut t, P0, card);
+        // Only face down (as a 2/2): the face-up creature spell can't be cast this way.
+        assert_eq!(methods, vec![CastMethod::FaceDown(kw)], "{name}");
+        assert!(t.cast(P0, card).try_go().is_err(), "{name}");
+        t.cast(P0, card).method(CastMethod::FaceDown(kw)).go();
+        t.resolve_all();
+        assert!(t.on_battlefield(card), "{name}");
+        assert!(t.obj_now(card).face_down);
+        assert_eq!(t.pt(card), (2, 2));
+    }
 }
 
 #[test]
@@ -156,7 +162,7 @@ fn hand(t: &TestGame) -> usize {
 
 #[test]
 fn welcoming_vampire_sees_counters_and_static_effects_as_creatures_enter() {
-    cr!("603.6a", "613.1");
+    cr!("603.6a", "603.10");
     ruling!(
         "Welcoming Vampire",
         "If creatures enter the battlefield with +1/+1 counters or a continuous effect such as that of Wedding Festivity will apply to the creatures on the battlefield, those effects apply when checking to see if Welcoming Vampire's ability will trigger."
@@ -186,7 +192,7 @@ fn welcoming_vampire_sees_counters_and_static_effects_as_creatures_enter() {
 
 #[test]
 fn welcoming_vampire_checks_power_only_as_creatures_enter() {
-    cr!("603.2", "603.4");
+    cr!("603.2", "603.10");
     ruling!(
         "Welcoming Vampire",
         "Welcoming Vampire's ability checks the power of the other creatures only as they enter the battlefield. If one of those creatures has power 2 or less, the ability will trigger. Once the ability triggers, raising that creature's power above 2 won't affect that ability. Similarly, reducing a creature's power to 2 or less after it enters the battlefield won't cause the ability to trigger."
@@ -221,7 +227,7 @@ type Check = fn(&TestGame, ObjectId, ObjectId) -> bool;
 
 #[test]
 fn power_two_or_less_enter_triggers_check_only_as_the_creature_enters() {
-    cr!("603.2", "603.6a", "603.4");
+    cr!("603.2", "603.6a", "603.10");
     ruling!(
         "Neighborhood Guardian",
         "Neighborhood Guardian's ability checks the power of a creature only at the moment it enters the battlefield. If it enters with counters, those counters are included. If that creature's power is 2 or less when it enters the battlefield but becomes greater than 2 after the ability triggers, the target creature will still get +1/+1 until end of turn."
@@ -261,7 +267,11 @@ fn power_two_or_less_enter_triggers_check_only_as_the_creature_enters() {
         t.resolve();
         assert_eq!(t.pt(bears).0, 5);
         t.resolve_all();
-        assert!(check(&t, src, bears), "{card}: {:?} {:?}", t.pt(src), t.pt(bears));
+        assert!(
+            check(&t, src, bears),
+            "{card}: {:?} {:?}",
+            t.pt(src),
+            t.pt(bears)
+        );
     }
 }
-

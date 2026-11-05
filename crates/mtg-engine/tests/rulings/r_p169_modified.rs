@@ -96,6 +96,186 @@ fn a_creature_equipped_by_an_opponents_equipment_is_modified() {
 }
 
 #[test]
+fn an_opponents_equipment_makes_it_modified_for_triggers_targets_and_casting() {
+    cr!("700.9", "301.5d", "603.10a");
+    ruling!(
+        "Guardian of the Forgotten",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Costume Closet",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Ondu Knotmaster // Throw a Line",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Kami of Celebration",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Expanding Ooze",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Flame Discharge",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Lethal Exploit",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Walking Skyscraper",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Towashi Guide-Bot",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Goro-Goro, Disciple of Ryusei",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "SP//dr, Piloted by Peni",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Heir of the Ancient Fang",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    ruling!(
+        "Intermediate Chirography",
+        "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
+    );
+    // Each wording, without and with P1's Bonesplitter on P0's Grizzly Bears.
+    for equipped in [false, true] {
+        let equip = |t: &mut TestGame, bears: ObjectId| {
+            if equipped {
+                opponents_equipment_on(t, bears);
+            }
+        };
+        // "Whenever a modified creature you control dies / leaves the battlefield",
+        // "another modified creature": as it last existed, equipped.
+        for card in [
+            "Guardian of the Forgotten",
+            "Costume Closet",
+            "Ondu Knotmaster // Throw a Line",
+        ] {
+            supported(card);
+            let mut t = TestGame::new(2);
+            let src = t.battlefield(P0, card);
+            t.library_top(P0, "Hill Giant");
+            let bears = t.battlefield(P0, "Grizzly Bears");
+            equip(&mut t, bears);
+            destroy(&mut t, bears);
+            assert_eq!(triggers_of(&t, src), equipped as usize, "{card}");
+            t.resolve_all();
+        }
+        // "Whenever a modified creature you control attacks".
+        supported("Kami of Celebration");
+        let mut t = TestGame::new(2);
+        let kami = t.battlefield(P0, "Kami of Celebration");
+        t.library_top(P0, "Hill Giant");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+        assert_eq!(triggers_of(&t, kami), equipped as usize);
+        // "target modified creature you control".
+        supported("Expanding Ooze");
+        let mut t = TestGame::new(2);
+        let ooze = t.battlefield(P0, "Expanding Ooze");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        t.answer_targets(P0, &[obj(bears)]);
+        attack_with(&mut t, &[(ooze, Entity::Player(P1))]);
+        t.resolve_all();
+        assert_eq!(t.counters(bears, counters::PLUS1), equipped as u32);
+        // "If you controlled a modified creature as you cast this spell": X plus 2.
+        supported("Flame Discharge");
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        let maw = t.battlefield(P1, "Colossal Dreadmaw");
+        mana(&mut t, P0, ManaType::R, 2);
+        let card = t.hand(P0, "Flame Discharge");
+        t.cast(P0, card).target(maw).x(1).go();
+        t.resolve_all();
+        assert_eq!(marked(&t, maw), if equipped { 3 } else { 1 });
+        // "for each modified creature you controlled as you cast this spell".
+        supported("Lethal Exploit");
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        let maw = t.battlefield(P1, "Colossal Dreadmaw");
+        mana(&mut t, P0, ManaType::B, 2);
+        let card = t.hand(P0, "Lethal Exploit");
+        t.cast(P0, card).target(maw).go();
+        t.resolve_all();
+        assert_eq!(t.pt(maw), if equipped { (3, 3) } else { (4, 4) });
+        // "This spell costs {1} less to cast for each modified creature you control".
+        supported("Walking Skyscraper");
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        mana(&mut t, P0, ManaType::C, 7);
+        let card = t.hand(P0, "Walking Skyscraper");
+        assert_eq!(t.cast(P0, card).try_go().is_ok(), equipped);
+        // "This ability costs {1} less to activate for each modified creature you control".
+        supported("Towashi Guide-Bot");
+        let mut t = TestGame::new(2);
+        let bot = t.battlefield(P0, "Towashi Guide-Bot");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        mana(&mut t, P0, ManaType::C, 3);
+        assert_eq!(t.activate(P0, bot, 0, &[]).is_ok(), equipped);
+        // "Activate only if you control an attacking modified creature".
+        supported("Goro-Goro, Disciple of Ryusei");
+        let mut t = TestGame::new(2);
+        let goro = t.battlefield(P0, "Goro-Goro, Disciple of Ryusei");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+        mana(&mut t, P0, ManaType::R, 5);
+        assert_eq!(t.activate(P0, goro, 1, &[]).is_ok(), equipped);
+        // "Whenever a modified creature you control deals combat damage to a player".
+        supported("SP//dr, Piloted by Peni");
+        let mut t = TestGame::new(2);
+        let spdr = t.battlefield(P0, "SP//dr, Piloted by Peni");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        t.attack(&[(bears, Entity::Player(P1))], &[]);
+        assert_eq!(triggers_of(&t, spdr), equipped as usize);
+        assert_eq!(t.hand_size(P0), equipped as usize);
+        // "enters with a +1/+1 counter on it if you control a modified creature".
+        supported("Heir of the Ancient Fang");
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        let heir = t.enter(P0, "Heir of the Ancient Fang");
+        assert_eq!(t.counters(heir, counters::PLUS1), equipped as u32);
+        // "if a modified creature died under your control this turn" (Class level 3).
+        supported("Intermediate Chirography");
+        let mut t = TestGame::new(2);
+        let class = t.battlefield(P0, "Intermediate Chirography");
+        for level in 0..2 {
+            mana(&mut t, P0, ManaType::B, 3);
+            t.activate(P0, class, level, &[]).unwrap();
+            t.resolve_all();
+        }
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        equip(&mut t, bears);
+        destroy(&mut t, bears);
+        t.resolve_all();
+        assert!(tokens(&t, P0).is_empty());
+        end_step(&mut t, P0);
+        assert_eq!(tokens(&t, P0).len(), equipped as usize);
+    }
+}
+
+#[test]
 fn ondu_knotmaster_is_a_creature_card_in_the_graveyard() {
     cr!("715.4", "115.1");
     ruling!(
@@ -138,19 +318,31 @@ fn eladamri_can_cast_ondu_knotmaster_but_not_throw_a_line_from_the_top() {
     let knot = t.library_top(P0, "Ondu Knotmaster // Throw a Line");
     t.g.turn.priority = Some(P0);
     t.g.recompute();
-    let methods: Vec<CastMethod> = t
-        .g
-        .legal_actions(P0)
-        .into_iter()
-        .filter_map(|a| match a {
-            Action::Cast { card, method } if card == knot => Some(method),
-            _ => None,
-        })
-        .collect();
+    let methods: Vec<CastMethod> =
+        t.g.legal_actions(P0)
+            .into_iter()
+            .filter_map(|a| match a {
+                Action::Cast { card, method } if card == knot => Some(method),
+                _ => None,
+            })
+            .collect();
     assert_eq!(methods, vec![CastMethod::Normal]);
-    // Positive control: from the hand, Throw a Line can be cast.
-    let in_hand = t.hand(P0, "Ondu Knotmaster // Throw a Line");
     let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    t.answer_targets(P0, &[obj(bears)]);
+    assert!(t
+        .cast(P0, knot)
+        .method(CastMethod::Half(1))
+        .try_go()
+        .is_err());
+    t.clear_answers();
+    // Ondu Knotmaster itself is cast from the top.
+    t.cast(P0, knot).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(knot));
+    // Positive control: from the hand, Throw a Line can be cast.
+    mana(&mut t, P0, ManaType::W, 1);
+    mana(&mut t, P0, ManaType::B, 1);
+    let in_hand = t.hand(P0, "Ondu Knotmaster // Throw a Line");
     t.answer_targets(P0, &[obj(bears)]);
     t.cast(P0, in_hand).method(CastMethod::Half(1)).go();
 }
@@ -232,7 +424,12 @@ fn groves_bounty_keeps_the_original_distribution_when_a_target_is_illegal() {
     t.cast(P0, card).method(CastMethod::Half(1)).x(3).go();
     // The Giant (to get two) leaves the battlefield.
     let g = t.g.current(giant);
-    t.g.move_object(g, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        g,
+        Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.flush_events();
     t.resolve_all();
     assert_eq!(t.counters(bears, counters::PLUS1), 1);

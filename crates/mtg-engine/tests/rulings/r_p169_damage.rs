@@ -61,7 +61,7 @@ fn shock_p1(t: &mut TestGame) {
 
 #[test]
 fn the_player_dealt_damage_orders_damage_increases_and_prevention() {
-    cr!("616.1", "615.1a");
+    cr!("616.1", "616.1f", "615.1a");
     ruling!(
         "Invasion of Regatha // Disciples of the Inferno",
         "If another effect modifies how much damage a source would deal, including preventing some of it, the player being dealt damage or the controller of the permanent being dealt damage chooses an order in which to apply those effects. If all of the damage is prevented, Disciples of the Inferno’s effect no longer applies."
@@ -119,7 +119,11 @@ fn disciples_of_the_inferno_adds_two_after_dividing() {
         "If damage dealt by a source is being divided or assigned among multiple permanents an opponent controls or among an opponent and one or more permanents they control, divide the original amount before adding 2. For example, if you cast a sorcery spell that deals 4 damage divided as you choose among any number of targets, you could have it deal 3 damage to one creature and 1 damage to a battle. Those amounts would then be modified to 5 damage and 3 damage, respectively."
     );
     let mut t = TestGame::new(2);
-    back_face(&mut t, P0, "Invasion of Regatha // Disciples of the Inferno");
+    back_face(
+        &mut t,
+        P0,
+        "Invasion of Regatha // Disciples of the Inferno",
+    );
     let maw = t.battlefield(P1, "Colossal Dreadmaw");
     t.lands(P0, "Mountain", 3);
     let arc = t.hand(P0, "Arc Lightning");
@@ -146,7 +150,11 @@ fn disciples_of_the_inferno_hits_any_creature_and_battle_but_not_teammates() {
     };
     // Two-Headed Giant: P0 and P1 against P2 and P3.
     let mut t = two_headed_giant();
-    back_face(&mut t, P0, "Invasion of Regatha // Disciples of the Inferno");
+    back_face(
+        &mut t,
+        P0,
+        "Invasion of Regatha // Disciples of the Inferno",
+    );
     let mine = t.battlefield(P0, "Colossal Dreadmaw");
     let theirs = t.battlefield(P2, "Colossal Dreadmaw");
     shock(&mut t, obj(mine));
@@ -216,7 +224,7 @@ fn soul_scar_mage_fight_damage_is_simultaneous() {
 
 #[test]
 fn soul_scar_mage_the_damaged_creatures_controller_orders_the_effects() {
-    cr!("616.1", "616.1e");
+    cr!("616.1", "616.1e", "616.1f");
     ruling!(
         "Soul-Scar Mage",
         "If multiple prevention and/or replacement effects are trying to apply to the same damage, the controller of the creature that would be dealt damage chooses the order in which to apply them. As examples, an opponent could choose to apply the effect of Djeru’s Resolve and prevent the damage rather than put -1/-1 counters on it; or an opponent could choose to convert the damage to -1/-1 counters before Insult could double it, and then Insult’s effect won’t apply anymore."

@@ -87,6 +87,24 @@ fn arena_of_glory_mana_on_a_noncreature_spell_gives_no_haste() {
     t.resolve_all();
     t.set_step(P0, Step::BeginningOfCombat);
     assert!(can_attack(&mut t, riddle));
+    // One that entered this turn can attack once it has haste (Fervor).
+    supported("Fervor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fervor");
+    mana(&mut t, P0, ManaType::U, 2);
+    let card = t.hand(P0, "Riddleform");
+    t.cast(P0, card).go();
+    t.resolve_all();
+    let riddle = t.g.current(card);
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(!can_attack(&mut t, riddle));
+    t.set_step(P0, Step::PrecombatMain);
+    t.answer_yes(P0, true);
+    cast_opt(&mut t, P0);
+    t.resolve_all();
+    assert!(t.obj_now(riddle).is(CardType::Creature));
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(can_attack(&mut t, riddle));
 }
 
 #[test]
@@ -137,7 +155,10 @@ fn arena_of_glory_mana_on_any_part_of_a_creature_spells_cost_gives_haste() {
     mana(&mut t, P0, ManaType::G, 1);
     let card = t.hand(P0, "Grizzly Bears");
     let spell = t.cast(P0, card).go();
-    assert!(has_kw(&mut t, spell, KeywordKind::Haste), "the spell has haste");
+    assert!(
+        has_kw(&mut t, spell, KeywordKind::Haste),
+        "the spell has haste"
+    );
     t.resolve_all();
     let bears = t.g.current(card);
     t.set_step(P0, Step::BeginningOfCombat);
@@ -168,7 +189,7 @@ fn arena_of_glory_mana_on_any_part_of_a_creature_spells_cost_gives_haste() {
 
 #[test]
 fn arena_of_glory_enters_tapped_alongside_a_mountain() {
-    cr!("614.12", "614.1c");
+    cr!("614.12", "614.1d");
     ruling!(
         "Arena of Glory",
         "You must already control a Mountain as Arena of Glory enters the battlefield for it to enter untapped. If it enters the battlefield at the same time as a Mountain when you control no other Mountains, it will enter tapped."
@@ -261,6 +282,26 @@ fn jaws_of_stone_locks_in_and_divides_as_it_is_cast() {
     t.resolve_all();
     assert_eq!(marked(&t, giant), 2);
     assert_eq!(t.life(P1), 19);
+    // A division that leaves a target without damage isn't accepted (P0 asks for 3 and 0):
+    // each target is assigned at least 1.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Wastes", 3);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let card = t.hand(P0, "Jaws of Stone");
+    t.answer_targets(P0, &[obj(giant), Entity::Player(P1)]);
+    t.answer(
+        P0,
+        DecisionKind::Divide,
+        mtg_engine::decision::Answer::Numbers(vec![3, 0]),
+    );
+    t.cast(P0, card).go();
+    t.resolve_all();
+    let to_giant = marked(&t, giant) as i32;
+    let to_p1 = 20 - t.life(P1);
+    assert!(t.on_battlefield(giant));
+    assert!(to_giant >= 1 && to_p1 >= 1, "{to_giant} and {to_p1}");
+    assert_eq!(to_giant + to_p1, 3);
 }
 
 #[test]

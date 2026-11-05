@@ -1,15 +1,17 @@
 //! Rulings batch P169 — the rest: level counters on non-levelers, life-payment triggers,
-//! cards exiled and not cast, "the next noncreature spell has cascade/affinity" (several
-//! instances), discard-for-value triggers, draw-count triggers, looking at the top card
-//! any time (CR 401.5), convoke and mana abilities (CR 702.51a, 605.3), conspire
-//! instances (CR 702.78), exchanging control of a spell (CR 701.12b), casting without
-//! paying the mana cost (CR 118.9), and casting during resolution (CR 608.2g).
+//! cards exiled and not cast, "the next noncreature spell has cascade" (when it begins to
+//! apply, its timestamp, several instances; CR 611.2f, 613.7, 702.85c), discard-for-value
+//! triggers, draw-count triggers, looking at the top card any time (CR 401.5), and convoke
+//! and mana abilities (CR 702.51a, 605.3).
 
 use crate::r_p169_common::*;
+use mtg_engine::ability::*;
+use mtg_engine::card::CardDef;
 use mtg_engine::decision::Answer;
 use mtg_engine::facedown::can_look_at;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
-use mtg_engine::object::Zone;
+use mtg_engine::object::{Characteristics, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -55,14 +57,13 @@ fn font_of_agonies_needs_another_way_to_pay_life() {
     let font = t.battlefield(P0, "Font of Agonies");
     t.lands(P0, "Swamp", 2);
     // Its only activated ability is the destroy ability, which can't be paid for yet.
-    let acts = t
-        .g
-        .obj(font)
-        .chars
-        .abilities
-        .iter()
-        .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
-        .count();
+    let acts =
+        t.g.obj(font)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+            .count();
     assert_eq!(acts, 1);
     assert!(!can_activate(&mut t, P0, font));
     // Blood Crypt's "you may pay 2 life".
@@ -104,9 +105,35 @@ fn cascades(t: &TestGame) -> usize {
     triggers_on_stack(t, "ascade")
 }
 
+/// A custom enchantment, "Spells you control lose all abilities." (no real card affects
+/// the abilities of spells this way): it makes the timestamp of an effect that gives a
+/// spell an ability observable (CR 613.1f, 613.7).
+fn silencer() -> CardDef {
+    let ab = AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Continuous {
+            affected: Filter::and(vec![
+                Filter::SpellOnStack,
+                Filter::ControlledBy(PlayerRel::You),
+            ]),
+            mods: vec![Modification::RemoveAllAbilities],
+        })),
+        "Spells you control lose all abilities.",
+    );
+    CardDef::custom(Characteristics {
+        name: "Silencer".into(),
+        card_types: [CardType::Enchantment].into_iter().collect(),
+        abilities: vec![ab],
+        ..Default::default()
+    })
+}
+
 #[test]
 fn dark_apostle_waits_for_the_next_noncreature_spell() {
-    cr!("611.2c", "702.85a");
+    cr!("611.2f", "611.2c", "613.7", "613.1f", "702.85a");
+    ruling!(
+        "Dark Apostle",
+        "As Dark Apostle's activated ability resolves, it creates a continuous effect that won't begin to apply until you start casting a noncreature spell this turn. It applies to that spell and the timestamp of that effect is the time that the spell was put on the stack."
+    );
     supported("Dark Apostle");
     let mut t = TestGame::new(2);
     let apostle = t.battlefield(P0, "Dark Apostle");
@@ -129,6 +156,35 @@ fn dark_apostle_waits_for_the_next_noncreature_spell() {
     // And only that one.
     cast_opt(&mut t, P0);
     t.settle();
+    assert_eq!(cascades(&t), 0);
+
+    // Its timestamp is the time the spell was put on the stack: the Silencer's effect,
+    // which began after the activation resolved but before the spell was cast, applies
+    // first, and the spell keeps cascade.
+    let mut t = TestGame::new(2);
+    let apostle = t.battlefield(P0, "Dark Apostle");
+    stack_library(&mut t, P0, &["Opt", "Opt", "Opt"]);
+    mana(&mut t, P0, ManaType::C, 3);
+    t.activate(P0, apostle, 0, &[]).unwrap();
+    t.resolve_all();
+    t.custom(P0, silencer(), Zone::Battlefield);
+    mana(&mut t, P0, ManaType::U, 4);
+    let c = t.hand(P0, "Concentrate");
+    let spell = t.cast(P0, c).go();
+    t.settle();
+    assert!(has_kw(&mut t, spell, KeywordKind::Cascade));
+    assert_eq!(cascades(&t), 1);
+    // Positive control: the Silencer removes a printed cascade (Violent Outburst's).
+    let mut t = TestGame::new(2);
+    t.custom(P0, silencer(), Zone::Battlefield);
+    stack_library(&mut t, P0, &["Opt", "Opt", "Opt"]);
+    mana(&mut t, P0, ManaType::R, 1);
+    mana(&mut t, P0, ManaType::G, 1);
+    mana(&mut t, P0, ManaType::C, 1);
+    let c = t.hand(P0, "Violent Outburst");
+    let spell = t.cast(P0, c).go();
+    t.settle();
+    assert!(!has_kw(&mut t, spell, KeywordKind::Cascade));
     assert_eq!(cascades(&t), 0);
 }
 
@@ -163,7 +219,8 @@ fn mog_makes_one_token_and_one_round_of_counters() {
         "As long as at least one creature card was discarded this way, you'll create a Moogle token, and as long as at least one noncreature card was discarded this way, you'll put a +1/+1 counter on each Moogle you control. Additional creature cards discarded beyond the first won't result in additional Moogle tokens, and additional noncreature cards discarded beyond the first won't result in additional counters."
     );
     supported("Mog, Moogle Warrior");
-    // (P0's discard, P1's discard) -> (Moogle tokens, counters on Mog).
+    // (P0's discard, P1's discard) -> (Moogle tokens, counters on Mog, counters on each
+    // token).
     let run = |mine: &str, theirs: &str| {
         let mut t = TestGame::new(2);
         let mog = t.battlefield(P0, "Mog, Moogle Warrior");
@@ -175,14 +232,17 @@ fn mog_makes_one_token_and_one_round_of_counters() {
         }
         end_step(&mut t, P0);
         assert!(t.in_graveyard(P0, mine) && t.in_graveyard(P1, theirs));
-        (tokens(&t, P0).len(), t.counters(mog, counters::PLUS1))
+        let moogles = tokens(&t, P0);
+        let on_tokens: Vec<u32> = moogles
+            .iter()
+            .map(|m| t.counters(*m, counters::PLUS1))
+            .collect();
+        (moogles.len(), t.counters(mog, counters::PLUS1), on_tokens)
     };
-    assert_eq!(run("Grizzly Bears", "Hill Giant"), (1, 0));
-    assert_eq!(run("Opt", "Shock"), (0, 1));
-    let mut t = TestGame::new(2);
-    let _ = &mut t;
+    assert_eq!(run("Grizzly Bears", "Hill Giant"), (1, 0, vec![0]));
+    assert_eq!(run("Opt", "Shock"), (0, 1, vec![]));
     // One of each: the new token gets a counter too.
-    assert_eq!(run("Grizzly Bears", "Shock"), (1, 1));
+    assert_eq!(run("Grizzly Bears", "Shock"), (1, 1, vec![1]));
 }
 
 #[test]
@@ -289,4 +349,3 @@ fn party_thrasher_convoke_cant_tap_a_creature_that_paid_for_mana() {
     assert!(!run(&[], true));
     assert!(run(&["Grizzly Bears"], true));
 }
-

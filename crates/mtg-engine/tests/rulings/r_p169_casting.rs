@@ -130,17 +130,24 @@ fn yue_free_casts_pay_additional_but_not_alternative_costs() {
         t.answer_targets(P0, &[Entity::Player(P1)]);
     });
     assert_eq!(t.life(P1), 16);
-    // Force of Will's alternative cost isn't used: no life paid, no card exiled.
+    // Force of Will's alternative cost isn't offered (P0 would take it), so it isn't used:
+    // no life paid, no card exiled.
     let mut t = TestGame::new(2);
     mana(&mut t, P1, ManaType::R, 1);
     let shock = t.hand(P1, "Shock");
     let spell = t.cast(P1, shock).target(Entity::Player(P0)).go();
     let fow = t.hand(P0, "Force of Will");
     t.hand(P0, "Opt");
+    let from = t.asked().len();
     yue(&mut t, 5, |t| {
         t.answer_choose(P0, &[obj(fow)]);
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
         t.answer_targets(P0, &[obj(spell)]);
     });
+    assert!(!t.asked()[from..].iter().any(|(_, d)| matches!(
+        d,
+        Decision::ChooseOption { .. } | Decision::ChooseCastingMethod { .. }
+    )));
     assert!(t.in_graveyard(P1, "Shock"));
     assert_eq!(t.life(P0), 20);
     assert!(t.in_hand(P0, "Opt"));
@@ -149,7 +156,7 @@ fn yue_free_casts_pay_additional_but_not_alternative_costs() {
 
 #[test]
 fn vadrok_casts_the_card_while_its_ability_resolves() {
-    cr!("608.2g", "702.140d", "307.1");
+    cr!("608.2g", "702.140d");
     ruling!(
         "Vadrok, Apex of Thunder",
         "If you wish to cast the target card, you do so as part of the resolution of Vadrok’s ability. You can’t wait to cast it later. Timing permissions based on a card’s type are ignored."
@@ -207,11 +214,7 @@ fn don_and_raph_affinity_instances_are_cumulative() {
             let worm = t.battlefield(P0, "Desert Were-Worm");
             decl.push((worm, Entity::Player(P1)));
         }
-        t.answer(
-            P0,
-            DecisionKind::Attackers,
-            Answer::Attackers(decl.clone()),
-        );
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(decl.clone()));
         if attacks == 2 {
             t.answer(
                 P0,
@@ -223,17 +226,12 @@ fn don_and_raph_affinity_instances_are_cumulative() {
         let attack_triggers = triggers_of(&t, dr);
         mana(&mut t, P0, ManaType::U, 2);
         let opp = t.hand(P0, "Opportunity");
-        let ok = t
-            .cast(P0, opp)
-            .target(Entity::Player(P0))
-            .try_go()
-            .is_ok();
+        let ok = t.cast(P0, opp).target(Entity::Player(P0)).try_go().is_ok();
         (attack_triggers, ok)
     };
     assert_eq!(run(1), (1, false));
     assert_eq!(run(2), (2, true));
 }
-
 
 #[test]
 fn sudden_substitution_control_ends_when_its_controller_leaves() {
@@ -260,19 +258,24 @@ fn sudden_substitution_control_ends_when_its_controller_leaves() {
     t.resolve();
     assert_eq!(t.obj_now(spell).controller, P2);
     assert_eq!(t.obj_now(wurm).controller, P1);
-    // P2 leaves the game: P1 controls Shock again and isn't asked for new targets.
+    // P2 leaves the game (and P2's Dreadmaw with it): P1 controls Shock again and isn't
+    // offered new targets (P1 would aim it at P0).
+    t.answer_yes(P1, true);
+    t.answer_targets(P1, &[Entity::Player(P0)]);
     let from = t.asked().len();
     t.g.lose_game(P2);
     t.g.flush_events();
     t.settle();
     assert!(t.g.stack.contains(&spell));
     assert_eq!(t.obj_now(spell).controller, P1);
+    assert!(t.named_on_battlefield("Colossal Dreadmaw").is_empty());
+    t.resolve_all();
     assert!(!t.asked()[from..]
         .iter()
-        .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })));
-    t.resolve_all();
+        .any(|(p, d)| *p == P1
+            && matches!(d, Decision::ChooseTargets { .. } | Decision::YesNo { .. })));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
-    assert_eq!(t.obj_now(wurm).controller, P1);
+    assert_eq!(t.life(P0), 20);
 
     // The other one leaves: P1 (controlling P2's Dreadmaw) leaves, and the Dreadmaw goes
     // back to P2 (P1's own Shock leaves the game with P1).

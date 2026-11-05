@@ -1,5 +1,5 @@
 //! Rulings batch P169 — "whenever a card is put into an opponent's graveyard from
-//! anywhere" (CR 603.6c, 603.10a, 111.7), Laboratory Maniac (CR 614.1a, 101.2),
+//! anywhere" (CR 603.6c, 603.10, 108.2b), Laboratory Maniac (CR 614.1a, 101.2, 121.2c),
 //! "a library has twenty or fewer cards", mill triggers, and a creature gaining menace
 //! after it was blocked (CR 509.1h).
 
@@ -21,7 +21,12 @@ fn empty_library(t: &mut TestGame, p: PlayerId) {
 fn library_down_to(t: &mut TestGame, p: PlayerId, n: usize) {
     while t.library_size(p) > n {
         let top = *t.g.player(p).library.last().unwrap();
-        t.g.move_object(top, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+        t.g.move_object(
+            top,
+            Zone::Exile,
+            mtg_engine::events::MoveCause::Effect,
+            None,
+        );
     }
     t.g.flush_events();
     t.g.recompute();
@@ -54,7 +59,7 @@ fn profane_memento_doesnt_see_a_creature_card_going_to_a_graveyard_with_it() {
 
 #[test]
 fn profane_memento_ownership_and_tokens() {
-    cr!("404.1", "111.7", "603.2");
+    cr!("404.1", "108.2b", "603.2");
     ruling!(
         "Profane Memento",
         "Profane Memento’s ability will trigger when a nontoken creature you control but an opponent owns dies."
@@ -83,7 +88,7 @@ fn profane_memento_ownership_and_tokens() {
 
 #[test]
 fn the_haunt_of_hightower_attacking_a_planeswalker_and_tokens() {
-    cr!("506.2", "508.5", "111.7");
+    cr!("508.5", "108.2b");
     ruling!(
         "The Haunt of Hightower",
         "If The Haunt of Hightower is attacking a planeswalker, the controller of the planeswalker is the defending player."
@@ -93,17 +98,19 @@ fn the_haunt_of_hightower_attacking_a_planeswalker_and_tokens() {
         "The Haunt of Hightower's last ability won't trigger when a token is put into an opponent's graveyard."
     );
     supported("The Haunt of Hightower");
-    let mut t = TestGame::new(2);
+    // Three players: the Haunt attacks P2's planeswalker, so P2 (not P1) discards.
+    let mut t = TestGame::new(3);
     let haunt = t.battlefield(P0, "The Haunt of Hightower");
-    let jace = t.battlefield(P1, "Jace Beleren");
-    t.hand(P1, "Grizzly Bears");
+    let jace = t.battlefield(P2, "Jace Beleren");
+    t.hand(P1, "Hill Giant");
+    t.hand(P2, "Grizzly Bears");
     attack_with(&mut t, &[(haunt, obj(jace))]);
     t.resolve_all();
-    assert_eq!(t.hand_size(P1), 0);
-    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!((t.hand_size(P1), t.hand_size(P2)), (1, 0));
+    assert!(t.in_graveyard(P2, "Grizzly Bears"));
     assert_eq!(t.counters(haunt, counters::PLUS1), 1);
     // A token: no counter.
-    let token = crate::r_s02_common::create_token(&mut t, P1, "Soldier");
+    let token = crate::r_s02_common::create_token(&mut t, P2, "Soldier");
     destroy(&mut t, token);
     t.resolve_all();
     assert_eq!(t.counters(haunt, counters::PLUS1), 1);
@@ -111,7 +118,7 @@ fn the_haunt_of_hightower_attacking_a_planeswalker_and_tokens() {
 
 #[test]
 fn vulturous_zombie_sees_cards_from_every_zone_but_not_tokens() {
-    cr!("603.6c", "111.7", "404.1");
+    cr!("603.6c", "108.2b", "404.1");
     ruling!(
         "Vulturous Zombie",
         "The ability doesn’t care why a card goes to your opponent’s graveyard — only that it does. The ability triggers when a card is put into your opponent’s graveyard from the stack (a spell resolves, fails to resolve, or is countered), from the battlefield (a permanent is destroyed or sacrificed), from the player’s hand (a card is discarded), from the player’s library (from a Millstone-like effect), or from any other zone."
@@ -143,7 +150,12 @@ fn vulturous_zombie_sees_cards_from_every_zone_but_not_tokens() {
     let shock = t.hand(P1, "Shock");
     t.cast(P1, shock).target(bears).go();
     let gone = t.g.current(bears);
-    t.g.move_object(gone, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        gone,
+        Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.flush_events();
     step(&mut t, "failed to resolve");
     // From the battlefield: destroyed, and sacrificed.
@@ -165,7 +177,12 @@ fn vulturous_zombie_sees_cards_from_every_zone_but_not_tokens() {
     step(&mut t, "milled");
     // From exile.
     let d = t.exile(P1, "Grizzly Bears");
-    t.g.move_object(d, Zone::Graveyard(P1), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        d,
+        Zone::Graveyard(P1),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.flush_events();
     step(&mut t, "from exile");
     // A token: no trigger.
@@ -216,7 +233,7 @@ fn laboratory_maniac_cant_win_but_the_draw_is_still_replaced() {
 
 #[test]
 fn two_laboratory_maniacs_and_each_player_drawing() {
-    cr!("101.4", "104.2b", "121.6");
+    cr!("121.2c", "104.2b", "121.6");
     ruling!(
         "Laboratory Maniac",
         "If two or more players each control a Laboratory Maniac and each player is instructed to draw a number of cards, first the player whose turn it is draws that many cards. If this causes that player to win the game instead, the game is immediately over. If the game isn't over yet, repeat this process for each other player in turn order."
@@ -232,19 +249,19 @@ fn two_laboratory_maniacs_and_each_player_drawing() {
     t.cast(P0, pros).x(1).go();
     t.resolve_all();
     assert!(matches!(&t.g.result, Some(GameResult::Win(w)) if w == &vec![P0]));
-    // It's P1's turn and only P0's library is empty: P1 draws first without winning,
-    // then P0 wins.
+    // It's P1's turn and only P0's library is empty: P1 draws both of its cards first
+    // without winning, then P0 wins.
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
     t.battlefield(P0, "Laboratory Maniac");
     t.battlefield(P1, "Laboratory Maniac");
     empty_library(&mut t, P0);
     let p1_library = t.library_size(P1);
-    mana(&mut t, P1, ManaType::U, 2);
+    mana(&mut t, P1, ManaType::U, 3);
     let pros = t.hand(P1, "Prosperity");
-    t.cast(P1, pros).x(1).go();
+    t.cast(P1, pros).x(2).go();
     t.resolve_all();
-    assert_eq!(t.library_size(P1), p1_library - 1);
+    assert_eq!(t.library_size(P1), p1_library - 2);
     assert!(matches!(&t.g.result, Some(GameResult::Win(w)) if w == &vec![P0]));
 }
 

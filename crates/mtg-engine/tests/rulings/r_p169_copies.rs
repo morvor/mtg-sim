@@ -75,12 +75,11 @@ fn feather_copies_of_an_aura_become_tokens() {
     t.resolve_all();
     assert_eq!(t.pt(b), (3, 4));
     assert_eq!(t.pt(f), (5, 5));
-    let auras: Vec<ObjectId> = t
-        .g
-        .permanents()
-        .filter(|o| o.chars.name == "Holy Strength")
-        .map(|o| o.id)
-        .collect();
+    let auras: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.chars.name == "Holy Strength")
+            .map(|o| o.id)
+            .collect();
     assert_eq!(auras.len(), 2);
     let token = auras
         .iter()
@@ -92,7 +91,7 @@ fn feather_copies_of_an_aura_become_tokens() {
 
 #[test]
 fn feather_copies_keep_x_and_modes() {
-    cr!("707.10", "707.10c");
+    cr!("707.10", "707.10e");
     ruling!(
         "Feather, Radiant Arbiter",
         "If the spell that's copied has an X whose value was determined as it was cast, the copies have the same value of X."
@@ -121,11 +120,20 @@ fn feather_copies_keep_x_and_modes() {
     assert_eq!(marked(&t, giant), 2);
     assert_eq!(marked(&t, f), 2);
     // Selesnya Charm's first mode on Feather: the copy has the same mode.
+    // (Were P0 asked for the copy's mode, P0 would choose the Knight.)
     let mut t = TestGame::new(2);
     let (f, b) = feather(&mut t);
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
+    let from = t.asked().len();
     cast_new(&mut t, P0, "Selesnya Charm", &[obj(f)]);
     t.resolve_all();
+    assert_eq!(triggers_of(&t, f), 1);
+    let modes_asked = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseModes { .. }))
+        .count();
+    assert_eq!(modes_asked, 1);
     assert_eq!(t.pt(b), (4, 4));
     assert!(has_kw(&mut t, b, KeywordKind::Trample));
     assert_eq!(creature_tokens(&t, P0), 0);
@@ -133,7 +141,7 @@ fn feather_copies_keep_x_and_modes() {
 
 #[test]
 fn feather_triggers_for_several_targets_that_are_all_feather() {
-    cr!("115.3", "707.10c");
+    cr!("115.3", "707.10e");
     ruling!(
         "Feather, Radiant Arbiter",
         "If you cast a noncreature spell that has multiple targets, but it's targeting Feather, Radiant Arbiter with all of them, Feather's last ability will trigger. In that case, each of those copies will also only target one of the chosen creatures."
@@ -295,10 +303,17 @@ fn cori_steel_cutter_attaches_to_one_of_several_monks() {
     cast_opt(&mut t, P0);
     t.resolve_all();
     t.answer_yes(P0, true);
+    let from = t.asked().len();
     cast_opt(&mut t, P0);
     t.resolve_all();
     let monks = crate::r_s01_common::with_subtype(&t, P0, "Monk");
     assert_eq!(monks.len(), 2);
+    // P0 chose which of the two to attach it to.
+    let mut both: Vec<Entity> = monks.iter().map(|m| obj(*m)).collect();
+    both.sort();
+    assert!(t.asked()[from..].iter().any(|(p, d)| *p == P0
+        && matches!(d, mtg_engine::decision::Decision::ChooseEntities { candidates, max: 1, .. }
+            if { let mut c = candidates.clone(); c.sort(); c == both })));
     let on: Vec<ObjectId> = monks
         .iter()
         .copied()
@@ -338,7 +353,7 @@ fn fae_offerings_clue_isnt_investigating() {
 
 #[test]
 fn fae_offering_with_academy_manufactor_makes_three_of_each() {
-    cr!("614.1a", "616.1");
+    cr!("614.1a", "614.5");
     ruling!(
         "Fae Offering",
         "If an effect replaces the number or type of tokens you would create, it applies to each of these tokens individually. For example, if you control Fae Offering and Academy Manufactor, you will create three of each type when the triggered ability resolves."
@@ -383,6 +398,24 @@ fn fae_offering_counts_spells_whatever_happened_to_them() {
     assert!(t.in_graveyard(P0, "Shock"));
     end_step(&mut t, P0);
     assert_eq!(tokens(&t, P0).len(), 3);
+    // The noncreature spell is now controlled by P1 (Sudden Substitution) when it
+    // resolves; the creature spell resolved.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fae Offering");
+    cast_new(&mut t, P0, "Grizzly Bears", &[]);
+    t.resolve_all();
+    let opt = cast_opt(&mut t, P0);
+    let giant = t.battlefield(P1, "Hill Giant");
+    mana(&mut t, P1, ManaType::U, 4);
+    let ss = t.hand(P1, "Sudden Substitution");
+    t.answer_targets(P1, &[obj(opt)]);
+    t.answer_targets(P1, &[obj(giant)]);
+    t.cast(P1, ss).go();
+    t.resolve();
+    assert_eq!(t.obj_now(opt).controller, P1);
+    t.resolve_all();
+    end_step(&mut t, P0);
+    assert_eq!(tokens(&t, P0).len(), 3);
     // Positive control: only a creature spell: nothing.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Fae Offering");
@@ -391,4 +424,3 @@ fn fae_offering_counts_spells_whatever_happened_to_them() {
     end_step(&mut t, P0);
     assert_eq!(tokens(&t, P0).len(), 0);
 }
-

@@ -71,7 +71,11 @@ fn run(c: &Case) {
     assert!(!mine.is_empty(), "{}: no trigger", c.card);
     let at = t.g.stack.iter().position(|x| *x == spell).unwrap();
     let above: Vec<ObjectId> = t.g.stack[at + 1..].to_vec();
-    assert_eq!(above, mine, "{}: the triggers aren't above the spell", c.card);
+    assert_eq!(
+        above, mine,
+        "{}: the triggers aren't above the spell",
+        c.card
+    );
     counterspell(&mut t, spell);
     t.resolve_all();
     assert!(!resolved(&t, spell), "{}", c.card);
@@ -80,7 +84,7 @@ fn run(c: &Case) {
 
 #[test]
 fn spell_cast_triggers_resolve_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "603.3b", "601.2i");
+    cr!("603.3", "601.2i", "405.2");
     ruling!(
         "Mage Tower Referee",
         "Mage Tower Referee's ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack."

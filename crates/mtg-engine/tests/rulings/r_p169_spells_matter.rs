@@ -204,7 +204,7 @@ fn ojutai_exemplars_returns_as_a_new_object() {
 
 #[test]
 fn ojutai_exemplars_that_left_in_response_doesnt_return() {
-    cr!("400.7", "608.2b");
+    cr!("400.7");
     ruling!(
         "Ojutai Exemplars",
         "If Ojutai Exemplars leaves the battlefield in response to its ability with the third mode chosen, that ability won't return Ojutai Exemplars to the battlefield. It will stay wherever it is."
@@ -400,7 +400,10 @@ fn ty_lee_effect_lasts_only_while_you_control_her() {
     // Positive control: she stays.
     assert!(ty_lee(none, none));
     // Control lost before the ability resolves.
-    assert!(!ty_lee(|t, ty| crate::r_p117_common::gain_control(t, P1, ty), none));
+    assert!(!ty_lee(
+        |t, ty| crate::r_p117_common::gain_control(t, P1, ty),
+        none
+    ));
     // She leaves afterwards.
     assert!(!ty_lee(none, bounce));
     // Another player gains control, then P0 regains it.
@@ -659,14 +662,26 @@ fn a_noncreature_spell_cast_this_turn_counts_whatever_happened_to_it() {
     );
     supported("Seeker of Insight");
     supported("Silburlind Snapper");
+    // Seeker: activated (draw, then discard) while the Opt is still on the stack.
     let mut t = TestGame::new(2);
     let seeker = t.battlefield(P0, "Seeker of Insight");
     assert!(!can_activate(&mut t, P0, seeker));
+    assert!(t.activate(P0, seeker, 0, &[]).is_err());
     let spell = cast_opt(&mut t, P0);
-    // Still on the stack.
     assert!(can_activate(&mut t, P0, seeker));
+    t.activate(P0, seeker, 0, &[]).unwrap();
+    t.resolve();
+    assert_eq!(t.graveyard_size(P0), 1);
+    assert!(t.g.stack.contains(&spell));
+    // After the spell was countered.
+    let mut t = TestGame::new(2);
+    let seeker = t.battlefield(P0, "Seeker of Insight");
+    let spell = cast_opt(&mut t, P0);
     counterspell(&mut t, spell);
-    assert!(can_activate(&mut t, P0, seeker));
+    assert!(t.in_graveyard(P0, "Opt"));
+    t.activate(P0, seeker, 0, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 2);
     // Snapper: the countered spell lets it attack.
     let mut t = TestGame::new(2);
     let snapper = t.battlefield(P0, "Silburlind Snapper");
