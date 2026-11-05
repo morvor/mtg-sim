@@ -819,3 +819,71 @@ fn the_toymakers_trap_number_is_hidden_from_the_guesser_until_revealed() {
     );
     assert_eq!(t.life(P1), 18);
 }
+
+#[test]
+fn reap_the_pasts_random_cards_are_seen_by_everyone() {
+    cr!("400.2");
+    ruling!(
+        "Reap the Past",
+        "All players get to see which cards you chose at random as they’re returned to your hand."
+    );
+    // Reap the Past with X=1: one of Opt and Lightning Bolt returns at random.
+    let mut t = TestGame::new(2);
+    t.g.event_feed.enable();
+    t.graveyard(P0, "Opt");
+    t.graveyard(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Forest", 1);
+    let reap = t.hand(P0, "Reap the Past");
+    t.cast(P0, reap).x(1).go();
+    let before = t.g.event_feed.len();
+    t.resolve_all();
+    t.g.flush_events();
+    let hand = &t.g.players[0].hand;
+    assert_eq!(hand.len(), 1);
+    let name = t.g.obj(hand[0]).chars.name.to_string();
+    let events = t.g.event_feed.since(before);
+    let p1_events = describe_events(&t.g, Some(P1), &events);
+    assert!(
+        p1_events.iter().any(|e| e.kind == "zone_change"
+            && e.text.contains(name.as_str())
+            && e.text.contains("graveyard to P0's hand")),
+        "P1 saw {name} returned: {p1_events:?}"
+    );
+}
+
+#[test]
+fn emissary_of_grudges_chosen_opponent_is_secret_until_revealed() {
+    cr!("607.2d");
+    ruling!(
+        "Emissary of Grudges",
+        "There are several ways to secretly choose an opponent, including writing that player’s name on a piece of paper that’s kept with Emissary of Grudges."
+    );
+    let mut t = TestGame::new(3);
+    t.answer_choose(P0, &[Entity::Player(P2)]);
+    let emissary = t.enter(P0, "Emissary of Grudges");
+    t.settle();
+    let view = |t: &TestGame, v: PlayerId| {
+        observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == emissary.0)
+            .unwrap()
+            .choices
+    };
+    assert_eq!(view(&t, P0), vec!["P0 chose P2".to_string()]);
+    for v in [P1, P2] {
+        assert_eq!(view(&t, v), vec!["P0 chose secretly".to_string()], "{v:?}");
+        let j = json(&observe(&t.g, Some(v)));
+        assert!(!j.contains("chose P2"), "{v:?}: {j}");
+    }
+    // Revealing it is the cost of its ability: P2's Lightning Bolt at P0 is redirected.
+    t.lands(P2, "Mountain", 1);
+    let bolt = t.hand(P2, "Lightning Bolt");
+    let spell = t.cast(P2, bolt).target(P0).go();
+    t.activate(P0, emissary, 0, &[Entity::Object(spell)])
+        .unwrap();
+    for v in [P1, P2] {
+        assert_eq!(view(&t, v), vec!["P0 chose P2".to_string()], "{v:?}");
+    }
+}

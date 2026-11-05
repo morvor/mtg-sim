@@ -541,6 +541,27 @@ impl Draft {
         picks: &[usize],
         opt: Option<DraftOption>,
     ) -> Result<(), DraftError> {
+        self.pick_with_options(p, picks, opt.into_iter().collect())
+    }
+
+    /// Like [`Draft::pick_with`], with several "draft an additional card" options at once,
+    /// each with a different face-up card (more than one Cogwork Librarian or Leovold's
+    /// Operative used while drafting from one booster pack). Other options are used one
+    /// at a time.
+    pub fn pick_with_options(
+        &mut self,
+        p: PlayerId,
+        picks: &[usize],
+        opts: Vec<DraftOption>,
+    ) -> Result<(), DraftError> {
+        if opts.len() > 1
+            && opts
+                .iter()
+                .any(|o| !matches!(o, DraftOption::Additional { .. }))
+        {
+            return Err(DraftError::InvalidOption);
+        }
+        let opt = opts.first().cloned();
         if self.is_complete() {
             return Err(DraftError::DraftComplete);
         }
@@ -594,25 +615,37 @@ impl Draft {
                 }
                 Some(k)
             }
-            Some(DraftOption::Additional { with, extra }) => {
-                if *extra >= self.packs[i].len() || idx.contains(extra) {
+            Some(DraftOption::Additional { .. }) => None,
+        };
+        // "Draft an additional card": each with its own face-up card, each additional card
+        // a different one.
+        let mut additional: Vec<(usize, usize)> = Vec::new();
+        for o in &opts {
+            if let DraftOption::Additional { with, extra } = o {
+                if *extra >= self.packs[i].len()
+                    || idx.contains(extra)
+                    || additional.iter().any(|(_, e)| e == extra)
+                {
                     return Err(DraftError::InvalidOption);
                 }
-                Some(
-                    self.face_up_with(
-                        p,
-                        with,
-                        &[DRAFT_ADDITIONAL_PUT_BACK, DRAFT_ADDITIONAL_SKIP_NEXT],
-                    )
-                    .ok_or(DraftError::InvalidOption)?,
-                )
+                let k = self.drafted[i]
+                    .iter()
+                    .enumerate()
+                    .position(|(k, d)| {
+                        d.face_up
+                            && d.card.name == *with
+                            && !additional.iter().any(|(a, _)| *a == k)
+                            && [DRAFT_ADDITIONAL_PUT_BACK, DRAFT_ADDITIONAL_SKIP_NEXT]
+                                .iter()
+                                .any(|a| has_draft_ability_kind(&d.card, a))
+                    })
+                    .ok_or(DraftError::InvalidOption)?;
+                additional.push((k, *extra));
             }
-        };
-        // The cards drafted, one at a time: the picks, then an additional card.
-        let mut order: Vec<usize> = idx.clone();
-        if let Some(DraftOption::Additional { extra, .. }) = &opt {
-            order.push(*extra);
         }
+        // The cards drafted, one at a time: the picks, then the additional cards.
+        let mut order: Vec<usize> = idx.clone();
+        order.extend(additional.iter().map(|(_, e)| *e));
         let mut cards: Vec<Option<Arc<CardDef>>> =
             self.packs[i].iter().cloned().map(Some).collect();
         let drafted: Vec<Arc<CardDef>> = order.iter().filter_map(|k| cards[*k].take()).collect();
@@ -657,19 +690,23 @@ impl Draft {
                 _ => {}
             }
         }
-        if let Some(DraftOption::Additional { .. }) = &opt {
-            let k = ability_card.unwrap_or(0);
+        // Each card whose ability was used, latest in the pile first so that removing one
+        // doesn't move the others.
+        let mut used: Vec<usize> = additional.iter().map(|(k, _)| *k).collect();
+        used.sort_unstable_by(|a, b| b.cmp(a));
+        let mut put_back = Vec::new();
+        for k in used {
             if has_draft_ability(&self.drafted[i][k].card, DRAFT_ADDITIONAL_PUT_BACK) {
                 // "Put [this card] into that booster pack."
-                let d = self.drafted[i].remove(k);
-                self.packs[i].push(d.card);
+                put_back.push(self.drafted[i].remove(k).card);
             } else {
                 // "Turn [this card] face down, then pass the next booster pack without
-                // drafting a card from it."
+                // drafting a card from it": one more pack for each.
                 self.drafted[i][k].face_up = false;
                 self.skip_next.push(p);
             }
         }
+        self.packs[i].extend(put_back.into_iter().rev());
         self.finish_pick(p);
         Ok(())
     }

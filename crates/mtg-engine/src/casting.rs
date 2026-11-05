@@ -2789,6 +2789,11 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // An object that has left its zone is gone (CR 400.7): what's left of it is last
+        // known information, whose abilities can't be activated.
+        if !self.is_live(src) {
+            return Err(Illegal("that object no longer exists".into()));
+        }
         let a = self
             .obj(src)
             .chars

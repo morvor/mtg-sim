@@ -36,6 +36,13 @@ pub struct Ctx {
     pub iter_player: Option<PlayerId>,
     pub prev_happened: bool,
     pub prev_value: i64,
+    /// How many times the event of a reflexive triggered ability that follows happened,
+    /// set by an instruction that can happen "several times over": putting N counters on
+    /// one object puts N counters once for every N counters put (a replacement such as
+    /// Doubling Season's putting more; Craig Boone, Novac Guard ruling; CR 603.12a).
+    /// Cleared by every other instruction.
+    #[serde(default)]
+    pub reflexive_times: Option<u32>,
     pub prev_affected: Vec<Entity>,
     pub cast: Option<CastInfo>,
     pub ability_uid: u64,

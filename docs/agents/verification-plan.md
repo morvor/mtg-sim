@@ -162,6 +162,39 @@ The user resumed normal work, at the normal pace.
 - **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
 - **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
 
+**Small round (user, Nov 5, ~21:00 UTC):** "I accept all of these as recommended, and we still have 14% usage left, so we can run at least one more small round of tasks." Four workers, one item each, then they stop again:
+- structure: register-decisions-nov5b, then ruling-conflicts-4;
+- compile: the P048 it had begun;
+- rulings-1: P059;
+- rulings-2: P060.
+
+mutation, cards-1 and cards-2 stay held. After the round, everyone waits for the user's go.
+
+### Standard updates (user, Nov 5, late evening)
+
+After each round, or when the user asks, give the user a "standard update":
+1. **Cards that compile:** fully supported paper cards / all counted paper cards, as a %. Use docs/CARD_COVERAGE.md, or the round's result note if newer.
+2. **Rules covered:**
+   - CR rules covered (cited, covered via subrules, or exempt), as a %, from docs/CR_COVERAGE.md; regenerate it if stale;
+   - rulings cited, as a %, from `scripts/rulings_batches.py summary`.
+3. **Cards that reverse compile:** round-trip passes / fully supported cards, as a %, from docs/ROUNDTRIP.md.
+4. **Engine bugs fixed in the round:** a count, with a one-line list taken from the landed items' reports and commits.
+5. **Open decisions:** each with enough to decide it, the CR rules and rulings quoted verbatim with dates. Print each open only once; after that, refer to it by number and name.
+6. **Status:** a short overview in plain, simple language: where we are and what's next.
+
+### Presenting decisions (user, Nov 5, evening)
+
+"When you print opens that reference a CR section or a ruling, print that CR section or ruling as well, so I can make a reasoned judgement." Every decision taken to the user quotes, verbatim from `data/`, the CR rules, rulings (with dates) and Oracle texts it turns on. The script `scratchpad/opens/src.py` (coordinator scratchpad) prints them.
+
+### Hold (user, Nov 5, 17:45 UTC)
+
+The weekly usage window showed a warning from about 15:40 (reset Fri Nov 6, 09:00 UTC). The user: "Each worker should land its batch then stop, but wait on my go ahead to resume them."
+
+- Each worker lands the item it is on, then stops.
+- cards-1 and cards-2 had already finished their queues, so they get nothing new.
+- **Don't resume or top up any worker until the user says go**, even after the reset. Check-ins during the hold only confirm the landings and log them.
+- On the user's go, resume each worker with its remaining queue: compile P048, P049; rulings-2 P055; rulings-1 after P042; mutation and structure after their current items; cards-1 and cards-2 from the pool (P059 P060 P061 P067 ...).
+
 ### Worker roster
 
 The coordinator keeps this current. Every session is a cloud session tagged `mtg-sim-worker`. "Handing off" means the session lands its current item, stops, and is then replaced by a fresh session.
