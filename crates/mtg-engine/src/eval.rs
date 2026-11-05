@@ -1965,6 +1965,21 @@ pub(crate) fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
     }
 }
 
+/// Like [`alternative_zones`], but an alternative that names no zone stands for the
+/// battlefield when another alternative names one ("Noble creatures you control and Lesson
+/// spells you control have lifelink": the battlefield and the stack).
+pub(crate) fn alternative_zones_or_battlefield(f: &Filter) -> Option<Vec<ZoneKind>> {
+    match f {
+        Filter::Or(v) if v.iter().any(|x| x.zone().is_some()) => Some(
+            v.iter()
+                .map(|x| x.zone().unwrap_or(ZoneKind::Battlefield))
+                .collect(),
+        ),
+        Filter::And(v) => v.iter().find_map(alternative_zones_or_battlefield),
+        _ => None,
+    }
+}
+
 impl Game {
     /// Whether `gone`, a permanent that has left the battlefield during this combat, was
     /// part of the block of `blocker` and `attacker` as it last existed on the battlefield

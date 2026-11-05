@@ -1206,9 +1206,10 @@ impl Game {
         // CR 604.3; "this spell has flash as long as ...", CR 601.3d).
         let self_only = filter_is_self(affected);
         // Alternatives in several zones ("creatures you control and creature cards you own
-        // that aren't on the battlefield"): each alternative's zone.
+        // that aren't on the battlefield", "Noble creatures you control and Lesson spells
+        // you control"): each alternative's zone, the battlefield if it names none.
         let zones = match zone {
-            None => crate::eval::alternative_zones(affected),
+            None => crate::eval::alternative_zones_or_battlefield(affected),
             Some(_) => None,
         };
         live.iter()
