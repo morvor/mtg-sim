@@ -219,8 +219,10 @@ impl KeywordRules for ActivatedAbilityKind {
         if name == BACKUP_ABILITY {
             return Some(matches!(
                 g.obj(id).stack.as_deref().map(|s| &s.kind),
+                // Backup is compiled from the card's text, as triggered abilities labeled
+                // "Backup N" (see `k702_165_backup`).
                 Some(StackKind::Triggered { ability, .. })
-                    if crate::keyword_impls::ability_from_keyword(ability) == Some(KeywordKind::Backup)
+                    if crate::oracle::patterns::k702_165_backup::is_backup(ability)
             ));
         }
         if name != ACTIVATED_ABILITY {
