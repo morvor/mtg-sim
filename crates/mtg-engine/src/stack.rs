@@ -1882,6 +1882,16 @@ fn distinct(v: &[Entity]) -> bool {
 /// and/or creature cards from graveyards".
 fn target_zones(f: &Filter) -> Vec<ZoneKind> {
     let one = |f: &Filter| f.zone().unwrap_or(ZoneKind::Battlefield);
+    // Objects an earlier instruction acted on, wherever that put them ("up to one target
+    // creature card exiled this way"): the public zones they can be in.
+    let among_selected = |f: &Filter| match f {
+        Filter::In(_) => true,
+        Filter::And(v) => v.iter().any(|x| matches!(x, Filter::In(_))),
+        _ => false,
+    };
+    if f.zone().is_none() && among_selected(f) {
+        return vec![ZoneKind::Battlefield, ZoneKind::Graveyard, ZoneKind::Exile];
+    }
     match f {
         Filter::Or(parts) if !parts.is_empty() && parts.iter().all(|p| p.zone().is_some()) => {
             let mut zones: Vec<ZoneKind> = Vec::new();
