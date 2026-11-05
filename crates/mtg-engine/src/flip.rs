@@ -61,6 +61,24 @@ pub fn flipped_copy_values(values: &Characteristics) -> Option<Characteristics> 
     Some(c)
 }
 
+/// The copiable values an unflipped permanent gets from a copy effect copying `values`,
+/// the values of a flipped flip card (CR 707.3, 110.5b): the flip card's normal
+/// characteristics, since the copy's status is unflipped (an unflipped Vesuvan
+/// Doppelganger that copies a flipped flip card "will copy both "sides" of that card but
+/// use the unflipped side", its ruling). `None` if `values` aren't a flipped flip card's.
+pub fn unflipped_copy_values(values: &Characteristics) -> Option<Characteristics> {
+    let card = &values.printed.as_ref()?.0;
+    if card.layout != Layout::Flip || card.faces.len() < 2 {
+        return None;
+    }
+    if values.name != card.characteristics(FaceState::Flipped).name {
+        return None;
+    }
+    let mut c = card.characteristics(FaceState::Front);
+    c.printed = values.printed.clone();
+    Some(c)
+}
+
 /// Flips the permanent `id` (CR 710): it keeps being the same object with the flipped
 /// status, and has its alternative characteristics from now on. Returns false if it
 /// can't flip (not a flip card, or already flipped: CR 710.4). A permanent that's a copy

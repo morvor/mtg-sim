@@ -44,7 +44,7 @@ pub fn valki_copying_giant() -> (TestGame, ObjectId) {
 
 #[test]
 fn valki_copying_the_turn_it_entered_cant_attack_or_tap() {
-    cr!("302.6", "707.2");
+    cr!("302.6", "707.2", "702.10b");
     ruling!("Valki, God of Lies // Tibalt, Cosmic Impostor", "If Valki becomes a copy of a creature during the same turn Valki enters the battlefield, you can't attack with him or use any {T} abilities he gains.");
     supported("Llanowar Elves");
     let mut t = TestGame::new(2);
@@ -54,6 +54,14 @@ fn valki_copying_the_turn_it_entered_cant_attack_or_tap() {
     t.set_step(P0, Step::PrecombatMain);
     let i = activated_index(&t, valki, "Add {G}");
     assert!(t.activate(P0, valki, i, &[]).is_err());
+    // The ruling is narrower than stated: a copy of a creature with haste has haste and
+    // can attack (CR 702.10b; Volrath, the Shapestealer's ruling says "unless the copied
+    // creature has haste"). See docs/RULING_DISCREPANCIES.md.
+    supported("Raging Goblin");
+    let mut t = TestGame::new(2);
+    let valki = valki_copying(&mut t, "Raging Goblin", 1, true);
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(crate::r_s02_common::can_attack(&mut t, valki));
 }
 
 #[test]

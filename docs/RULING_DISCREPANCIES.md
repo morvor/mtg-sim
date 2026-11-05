@@ -118,6 +118,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the opponents decide in APNAP order (CR 101.4): on the caster's turn the next player in turn order first, on another player's turn the active player first if it's an opponent; each knows the earlier decisions (101.4b).
 - Recorded: no exemption: the rulings stay cited for the caster's own turn; tests `tests/rulings/r_s16_tempting_offer.rs` (`opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices`, `off_turn_the_active_opponent_decides_first`, `tempt_with_bunnies_draws_and_makes_rabbits_for_each_player`).
 
+### Valki, God of Lies: "you can't attack with him" after he becomes a copy
+- Kind: narrower than stated
+- Status: open for review
+- Ruling, Valki, God of Lies // Tibalt, Cosmic Impostor (2021-02-05): "If Valki becomes a copy of a creature during the same turn Valki enters the battlefield, you can't attack with him or use any {T} abilities he gains."
+- Conflicts with: CR 702.10b: "If a creature has haste, it can attack even if it hasn't been controlled by its controller continuously since their most recent turn began. (See rule 302.6.)" Volrath, the Shapestealer's ruling on the same situation (2019-08-23): "If Volrath copies a creature the same turn Volrath enters the battlefield, you can't attack with it or use any of its {T} abilities (if it gains any) unless the copied creature has haste."
+- Evidence: Valki's copy ability ("{X}: Choose a creature card exiled with Valki with mana value X. Valki becomes a copy of that card.") copies the card's haste like any other ability (CR 707.2), and a creature with haste can attack and use its {T} abilities the turn it comes under its controller's control (CR 302.6, 702.10b). The ruling is right for a copied creature without haste, the usual case; it leaves out the exception the older Volrath ruling states. Found in work item rulings-P022.
+- Engine: summoning sickness applies to Valki after it becomes a copy (it can't attack or use {T} abilities the turn it entered) unless the copy has haste.
+- Recorded: no exemption: the ruling stays cited for a copied creature without haste; test `tests/rulings/r_p022_valki.rs` (`valki_copying_the_turn_it_entered_cant_attack_or_tap`, which also pins the haste case).
+
 ## Misattached rulings
 
 ### Astarion, the Decadent: Astarion's Thirst's ruling about X
