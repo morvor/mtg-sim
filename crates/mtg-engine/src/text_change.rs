@@ -337,6 +337,7 @@ pub fn take_full_text(c: &mut Characteristics, of: &Characteristics) {
     c.power = of.power;
     c.toughness = of.toughness;
     c.loyalty = of.loyalty;
+    c.loyalty_is_x = of.loyalty_is_x;
     c.defense = of.defense;
 }
 

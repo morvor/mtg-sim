@@ -27,6 +27,11 @@ pub struct Characteristics {
     pub power: Option<i32>,
     pub toughness: Option<i32>,
     pub loyalty: Option<i32>,
+    /// The printed loyalty is X (Nissa, Steward of Elements): it enters with as many
+    /// loyalty counters as the X chosen for the spell it was (CR 306.5b, 107.3m), none
+    /// otherwise.
+    #[serde(default)]
+    pub loyalty_is_x: bool,
     pub defense: Option<i32>,
     pub hand_modifier: Option<i32>,
     pub life_modifier: Option<i32>,
