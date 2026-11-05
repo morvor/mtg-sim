@@ -1355,6 +1355,7 @@ impl Game {
             let mut new_divided = cm.divided.clone();
             let mut c2 = ctx.clone();
             c2.targets = cm.targets.clone();
+            c2.target_legality = true;
             for (i, slot) in cm.targets.iter().enumerate() {
                 let Some(spec) = specs.get(i.min(specs.len().saturating_sub(1))) else {
                     new_targets.push(slot.clone());
