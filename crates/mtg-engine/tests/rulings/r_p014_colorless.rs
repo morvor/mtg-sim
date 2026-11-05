@@ -546,6 +546,16 @@ fn flaying_tendrils_exiles_any_creature_that_would_die_this_turn() {
     kill(&mut t, late);
     assert_eq!(t.zone(late), Zone::Exile);
     assert!(!t.in_graveyard(P1, "Hill Giant"));
+    // A Vehicle that wasn't a creature as it resolved, crewed and destroyed later: exiled.
+    let copter = t.battlefield(P0, "Smuggler's Copter");
+    let crew = t.battlefield(P0, "Hill Giant");
+    t.g.recompute();
+    assert_eq!(t.pt(crew), (3, 3));
+    assert!(crate::r_s04_common::crew(&mut t, P0, copter, &[crew]));
+    t.resolve_all();
+    assert!(t.obj_now(copter).is(CardType::Creature));
+    kill(&mut t, copter);
+    assert_eq!(t.zone(copter), Zone::Exile);
 }
 
 #[test]

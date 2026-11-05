@@ -572,7 +572,7 @@ fn ward_of_bones_compares_each_type_separately() {
     cr!("101.2", "601.3");
     ruling!(
         "Ward of Bones",
-        "Spelling this out completely: — Each opponent who controls more creatures than you can’t play creature cards."
+        "Spelling this out completely: — Each opponent who controls more creatures than you can’t play creature cards. — Each opponent who controls more artifacts than you can’t play artifact cards. — Each opponent who controls more enchantments than you can’t play enchantment cards. — Each opponent who controls more lands than you can’t play land cards."
     );
     supported("Ward of Bones");
     let try_cast = |t: &mut TestGame, name: &str| -> bool {
