@@ -162,6 +162,14 @@ The user resumed normal work, at the normal pace.
 - **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
 - **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
 
+**Small round (user, Nov 5, ~21:00 UTC):** "I accept all of these as recommended, and we still have 14% usage left, so we can run at least one more small round of tasks." Four workers, one item each, then they stop again:
+- structure: register-decisions-nov5b, then ruling-conflicts-4;
+- compile: the P048 it had begun;
+- rulings-1: P059;
+- rulings-2: P060.
+
+mutation, cards-1 and cards-2 stay held. After the round, everyone waits for the user's go.
+
 ### Presenting decisions (user, Nov 5, evening)
 
 "When you print opens that reference a CR section or a ruling, print that CR section or ruling as well, so I can make a reasoned judgement." Every decision taken to the user quotes, verbatim from `data/`, the CR rules, rulings (with dates) and Oracle texts it turns on. The script `scratchpad/opens/src.py` (coordinator scratchpad) prints them.
