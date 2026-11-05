@@ -195,6 +195,10 @@ fn crater_elemental_keeps_modifications_whenever_they_began() {
 fn porcelain_gallery_unlocked_later_sets_base_pt_after_earlier_effects() {
     cr!("613.4b", "613.7", "709.5g");
     interp!("room-door-unlock-timestamp");
+    ruling!(
+        "Dollmaker's Shop // Porcelain Gallery",
+        "Any power- or toughness-setting effects that start to apply to a creature you control after Porcelain Gallery is unlocked will overwrite this effect on that creature."
+    );
     supported("Dollmaker's Shop // Porcelain Gallery");
     supported("Humility");
     let mut t = TestGame::new(2);
