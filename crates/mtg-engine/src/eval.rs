@@ -77,6 +77,10 @@ pub struct Ctx {
     /// what they're paid for (see `rule_statics::payment`).
     #[serde(default)]
     pub cost_of: Option<crate::rule_statics::payment::CostOf>,
+    /// A card being considered for casting: it will be on the stack as its targets are
+    /// chosen (CR 601.2a, 601.2c), so it isn't a legal target where it is now.
+    #[serde(default)]
+    pub casting_card: Option<ObjectId>,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
