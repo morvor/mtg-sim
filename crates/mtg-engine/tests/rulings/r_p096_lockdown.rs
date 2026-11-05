@@ -628,3 +628,126 @@ fn remains_tapped_control_effect_survives_an_untap_before_a_later_activation() {
     assert_eq!(t.pt(courser), (5, 1));
     assert_eq!(t.pt(bears), (2, 2));
 }
+
+// ---------------------------------------------------------------------------------------
+// Rimescale Dragon: "Creatures with ice counters on them don't untap during their
+// controllers' untap steps."
+// ---------------------------------------------------------------------------------------
+
+/// Index among `src`'s activated abilities of the one whose text contains `needle` (for
+/// `TestGame::activate`).
+fn activated_index(t: &mut TestGame, src: ObjectId, needle: &str) -> usize {
+    use mtg_engine::ability::AbilityKind;
+    t.g.recompute();
+    t.g.obj(t.g.current(src))
+        .chars
+        .abilities
+        .iter()
+        .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+        .position(|a| a.text.contains(needle))
+        .unwrap_or_else(|| panic!("no activated ability {needle:?}"))
+}
+
+fn is_snow(t: &TestGame, id: ObjectId) -> bool {
+    t.obj_now(id)
+        .chars
+        .supertypes
+        .contains(mtg_engine::types::Supertype::Snow)
+}
+
+#[test]
+fn rimescale_dragon_freezes_creatures_with_ice_counters_from_any_source_but_not_other_permanents() {
+    cr!("502.3", "109.2", "122.1", "611.3a");
+    // Its ruling (2006-07-15) "Rimescale Dragon’s last ability affects all permanents with
+    // ice counters on them, whether or not it put the ice counters on them." is Rimefeather
+    // Owl's ruling of the same day word for word. Its holding, "whether or not it put the
+    // ice counters on them", agrees with the card and is cited; its "all permanents"
+    // contradicts the card's "Creatures" (CR 109.2), which the engine follows: a Forest with
+    // an ice counter untaps (register rimescale-dragon-creatures-only, provisional, pending
+    // the user's decision).
+    ruling!(
+        "Rimescale Dragon",
+        "whether or not it put the ice counters on them"
+    );
+    ruling!(
+        "Rimefeather Owl",
+        "Rimefeather Owl’s last ability affects all permanents with ice counters on them, whether or not it put the ice counters on them."
+    );
+    interp!("rimescale-dragon-creatures-only");
+    supported("Rimescale Dragon");
+    supported("Rimefeather Owl");
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P0, "Rimescale Dragon");
+    let owl = t.battlefield(P0, "Rimefeather Owl");
+    t.lands(P0, "Snow-Covered Mountain", 7);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let forest = t.battlefield(P1, "Forest");
+    // The Dragon taps the Hill Giant and puts an ice counter on it; the Owl puts one on
+    // the Grizzly Bears and one on the Forest, which are then tapped.
+    let d = activated_index(&mut t, dragon, "Tap target creature");
+    t.activate(P0, dragon, d, &[Entity::Object(giant)]).unwrap();
+    t.resolve_all();
+    let w = activated_index(&mut t, owl, "ice counter");
+    t.activate(P0, owl, w, &[Entity::Object(bears)]).unwrap();
+    t.resolve_all();
+    t.activate(P0, owl, w, &[Entity::Object(forest)]).unwrap();
+    t.resolve_all();
+    t.g.tap(bears);
+    t.g.tap(forest);
+    t.g.recompute();
+    for (id, what) in [
+        (giant, "Hill Giant"),
+        (bears, "Grizzly Bears"),
+        (forest, "Forest"),
+    ] {
+        assert!(tapped(&t, id), "{what} is tapped");
+        assert_eq!(t.counters(id, "ice"), 1, "{what} has an ice counter");
+    }
+    // The Owl's static applies to the Dragon's counter too ("whether or not it put the ice
+    // counters on them", for the Owl).
+    assert!(is_snow(&t, giant));
+    to_p1_upkeep(&mut t);
+    // Its own counter, and a counter the Owl put: both creatures stay tapped.
+    assert!(tapped(&t, giant));
+    assert!(tapped(&t, bears));
+    // A noncreature permanent with an ice counter untaps.
+    assert!(!tapped(&t, forest));
+}
+
+#[test]
+fn rimescale_dragon_lets_a_land_iced_while_animated_untap_once_its_not_a_creature() {
+    cr!("611.3a", "514.2", "502.3");
+    interp!("rimescale-dragon-creatures-only");
+    // P1 animates Mishra's Factory ("{1}: This land becomes a 2/2 Assembly-Worker artifact
+    // creature until end of turn. It's still a land.") on P0's turn, and the Dragon taps it
+    // and puts an ice counter on it. At P1's untap step the effect has ended (CR 514.2):
+    // it's a land with an ice counter, not a creature, and it untaps.
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P0, "Rimescale Dragon");
+    t.lands(P0, "Snow-Covered Mountain", 3);
+    let factory = t.battlefield(P1, "Mishra's Factory");
+    t.lands(P1, "Wastes", 1);
+    let f = activated_index(&mut t, factory, "becomes a 2/2");
+    t.activate(P1, factory, f, &[]).unwrap();
+    t.resolve_all();
+    assert!(t
+        .obj_now(factory)
+        .chars
+        .card_types
+        .contains(mtg_engine::types::CardType::Creature));
+    let d = activated_index(&mut t, dragon, "Tap target creature");
+    t.activate(P0, dragon, d, &[Entity::Object(factory)])
+        .unwrap();
+    t.resolve_all();
+    assert!(tapped(&t, factory));
+    assert_eq!(t.counters(factory, "ice"), 1);
+    to_p1_upkeep(&mut t);
+    assert!(!t
+        .obj_now(factory)
+        .chars
+        .card_types
+        .contains(mtg_engine::types::CardType::Creature));
+    assert_eq!(t.counters(factory, "ice"), 1);
+    assert!(!tapped(&t, factory));
+}

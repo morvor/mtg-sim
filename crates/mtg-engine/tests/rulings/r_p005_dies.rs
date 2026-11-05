@@ -293,12 +293,16 @@ fn homicide_investigator_triggers_on_its_own_death_unless_its_a_token() {
 #[test]
 fn homicide_investigator_investigates_once_for_creatures_dying_together() {
     cr!("603.2c", "603.10a");
+    interp!("homicide-investigator-triggers-once");
     // Oracle: "Whenever one or more nontoken creatures you control die, investigate. This
     // ability triggers only once each turn." Creatures dying together are one event: one
-    // trigger, also when the Investigator dies with them. (Its 2024-04-12 ruling "If
+    // trigger, also when the Investigator dies with them. Its 2024-04-12 ruling "If
     // Homicide Investigator dies at the same time as one or more other nontoken creatures
     // you control, Homicide Investigator's ability triggers for each of them." contradicts
-    // this text; it's left uncited.)
+    // both sentences of this text: it is Midnight Reaper's per-creature ruling (Guilds of
+    // Ravnica release notes, 2018-09-20) with the name swapped. It's left uncited, and not
+    // exempt, pending the user's decision (register homicide-investigator-triggers-once,
+    // provisional).
     supported("Homicide Investigator");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Homicide Investigator");
@@ -324,6 +328,22 @@ fn homicide_investigator_investigates_once_for_creatures_dying_together() {
     kill(&mut t, lions);
     t.resolve_all();
     assert_eq!(clues(&t, P0), 2);
+    // The ruling's own situation after the ability already triggered this turn: the
+    // Investigator and two other nontoken creatures die together, and no Clue is made
+    // (the ruling would give one for each of them).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Homicide Investigator");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    t.battlefield(P0, "Savannah Lions");
+    kill(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(clues(&t, P0), 1);
+    wrath(&mut t, P0);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Homicide Investigator").is_empty());
+    assert!(t.named_on_battlefield("Savannah Lions").is_empty());
+    assert_eq!(clues(&t, P0), 1);
 }
 
 #[test]

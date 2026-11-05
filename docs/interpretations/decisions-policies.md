@@ -317,3 +317,15 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Affects: The Toymaker's Trap.
 - Code: `crates/mtg-engine/src/oracle/patterns/choices_6.rs` (`guesses_which_number`).
 - Tests: `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_wrong_guess_costs_the_guessed_life_and_draws`).
+
+## backdraft-controller-chooses-the-spell: "One of those sorcery spells" is chosen by the controller as the effect happens
+- Kind: interpretation
+- Status: decided
+- Rules: 608.2d "If an effect of a spell or ability offers any choices other than choices already made as part of casting the spell, activating the ability, or otherwise putting the spell or ability on the stack, the player announces these while applying the effect. ..." / 120.1 "... An object that deals damage is the source of that damage."
+- Question: Backdraft: "Choose a player who cast one or more sorcery spells this turn. Backdraft deals damage to that player equal to half the damage dealt by one of those sorcery spells this turn, rounded down." Who chooses which of that player's sorcery spells counts, and what damage did a spell deal? The card has no rulings and the CR is silent about the first.
+- Decision: Backdraft's controller chooses, as the effect happens (after choosing the player), among the sorcery spells the chosen player cast this turn (copies weren't cast and don't count; spells that were countered count and dealt no damage). The spell's damage is all the damage it dealt this turn as the source of that damage, to any players and objects.
+- Alternatives: The chosen player chooses (no text says so); the spell that dealt the most damage is used automatically (the text says "one of", a choice).
+- Why: 608.2d gives the choices an effect offers to the player applying it, the controller; "Choose a player" in the same text is the controller's choice too.
+- Affects: Backdraft.
+- Code: `crates/mtg-engine/src/oracle/patterns/history_6.rs` (`damage_dealt_by_one_of_those`); `crates/mtg-engine/src/kw/damage_history_by.rs` (`CHOOSE_ONE_OF`); `crates/mtg-engine/src/oracle/patterns/choice_grammar_players.rs` (`cast_spells_referent`).
+- Tests: `tests/cards/c6_history_permissions.rs` (`backdraft_deals_half_the_damage_one_of_the_players_sorceries_dealt`, `backdraft_counts_all_the_damage_the_sorcery_dealt`).

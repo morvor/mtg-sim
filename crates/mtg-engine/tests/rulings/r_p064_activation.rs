@@ -145,7 +145,10 @@ fn celestial_colonnade_taps_itself_for_mana_to_pay_its_attack_cost() {
     activate_and_resolve(&mut t, P0, c, "becomes");
     let attacks = crate::r_s09_common::declare(&mut t, P0, &[(c, Entity::Player(P1))]);
     assert_eq!(attacks, vec![(c, Entity::Player(P1))], "it attacks");
-    assert!(t.obj_now(c).tapped, "tapped for mana to pay Propaganda's {{2}}");
+    assert!(
+        t.obj_now(c).tapped,
+        "tapped for mana to pay Propaganda's {{2}}"
+    );
     assert!(t.obj_now(plains).tapped);
 }
 
@@ -226,6 +229,7 @@ fn shao_jun_taps_summoning_sick_artifact_creatures() {
 #[test]
 fn sacrificing_the_source_itself_to_its_own_ability() {
     cr!("602.2b", "608.2b");
+    interp!("cost-moved-source-found-only-by-own-cost");
     ruling!(
         "Falkenrath Torturer",
         "You can sacrifice Falkenrath Torturer itself to activate its ability."
@@ -244,6 +248,11 @@ fn sacrificing_the_source_itself_to_its_own_ability() {
         assert_eq!(t.stack_len(), 1);
         t.resolve_all();
         assert!(t.in_graveyard(P0, name));
+        // The card it became in the graveyard doesn't gain flying (or a counter): the
+        // generic cost paid with the source doesn't make "~" in the effect mean that card
+        // (interpretation cost-moved-source-found-only-by-own-cost).
+        assert!(!flies(&mut t, c), "{name} in the graveyard");
+        assert_eq!(t.counters(c, "+1/+1"), 0, "{name}");
     }
 }
 
@@ -400,7 +409,10 @@ fn choice_on_resolution(t: &mut TestGame, source: ObjectId, needle: &str, pick: 
     let from = t.asked().len();
     activate_containing(t, P0, source, needle).unwrap();
     assert_eq!(
-        t.asked()[from..].iter().filter(|(_, d)| is_choice(d)).count(),
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| is_choice(d))
+            .count(),
         0,
         "the keyword was chosen on activation"
     );
@@ -408,7 +420,10 @@ fn choice_on_resolution(t: &mut TestGame, source: ObjectId, needle: &str, pick: 
     let from = t.asked().len();
     t.resolve_all();
     assert_eq!(
-        t.asked()[from..].iter().filter(|(_, d)| is_choice(d)).count(),
+        t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| is_choice(d))
+            .count(),
         1,
         "no choice as it resolved"
     );

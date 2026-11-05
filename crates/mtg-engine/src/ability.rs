@@ -3930,6 +3930,11 @@ pub enum PlayerModification {
         color: Color,
         life: u32,
     },
+    /// "Until end of turn, you may look at the top card of their library any time"
+    /// (Xanathar, Guild Kingpin): the player may look at the top card of that player's
+    /// library (CR 401.5); the player is the one the effect means as it begins (locked to
+    /// `PlayerRef::Player` then, see `permissions::lock_permission_players`).
+    LookAtTopCardOf(PlayerRef),
     /// "Spells you cast have ..." etc. are handled elsewhere.
     /// Skip draw step etc. handled via replacements.
     /// "You can't be attacked", etc.
