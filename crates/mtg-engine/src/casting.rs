@@ -3306,6 +3306,15 @@ impl Game {
         for part in &cost.parts {
             if !crate::x_cost_filters::part_has_x_filter(part)
                 && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx)
+                && !(cost.mana.is_some()
+                    && crate::cost_rules::untap_part_payable_with_mana(
+                        self,
+                        p,
+                        part,
+                        src,
+                        cost.has_untap(),
+                        ctx,
+                    ))
             {
                 return false;
             }
@@ -3798,6 +3807,25 @@ impl Game {
                 .parts
                 .iter()
                 .any(|c| matches!(c, CostPart::TapUntapped { .. }));
+        // "Untap a tapped creature you control" with a mana payment: if the tapped
+        // creatures don't suffice, tap untapped ones for mana first (Halo Fountain
+        // rulings, CR 601.2g).
+        let has_untap_tapped = cost.mana.is_some()
+            && cost
+                .parts
+                .iter()
+                .any(|c| matches!(c, CostPart::UntapTapped { .. }));
+        if has_untap_tapped && !has_tap_untapped {
+            let snapshot = self.clone();
+            return match self.pay_total_cost_ordered(p, cost, src, spend, ctx, false) {
+                Ok(paid) => Ok(paid),
+                Err(_) => {
+                    self.roll_back(snapshot);
+                    crate::cost_rules::tap_untap_candidates_for_mana(self, p, cost, src, ctx);
+                    self.pay_total_cost_ordered(p, cost, src, spend, ctx, false)
+                }
+            };
+        }
         if !has_tap_untapped {
             return self.pay_total_cost_ordered(p, cost, src, spend, ctx, false);
         }

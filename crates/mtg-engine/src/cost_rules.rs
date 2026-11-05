@@ -630,3 +630,92 @@ pub(crate) fn sacrifices_jointly_payable(
     let mut owner = std::collections::HashMap::new();
     (0..slots.len()).all(|i| augment(i, &slots, &mut owner, &mut std::collections::HashSet::new()))
 }
+
+/// "Untap a tapped [permanent] you control" in a cost that also has a mana payment: mana
+/// abilities are activated before the costs are paid (CR 601.2g–h, 602.2b), so an
+/// untapped permanent the filter matches can first be tapped for mana and then untapped
+/// for the cost (Halo Fountain rulings). The untapped candidates with a mana ability that
+/// taps them, which the payer could activate now.
+pub(crate) fn untap_candidates_tappable_for_mana(
+    g: &Game,
+    p: PlayerId,
+    filter: &Filter,
+    src: Option<ObjectId>,
+    untaps_src: bool,
+    ctx: &Ctx,
+) -> Vec<ObjectId> {
+    let sources = crate::mana_abilities::mana_sources(g, p, None);
+    g.objects_matching(filter, ctx)
+        .into_iter()
+        .filter(|o| {
+            let ob = g.obj(*o);
+            !ob.tapped
+                && !(untaps_src && Some(*o) == src)
+                && Some(*o) != src
+                && crate::counter_rules::can_untap_for_cost(g, *o)
+                && sources.iter().any(|s| s.obj == *o && s.taps())
+        })
+        .collect()
+}
+
+/// Whether the "Untap a tapped [permanent] you control" `part` of a cost with a mana
+/// payment could be paid, counting permanents that could be tapped for mana first (see
+/// [`untap_candidates_tappable_for_mana`]).
+pub(crate) fn untap_part_payable_with_mana(
+    g: &Game,
+    p: PlayerId,
+    part: &CostPart,
+    src: Option<ObjectId>,
+    untaps_src: bool,
+    ctx: &Ctx,
+) -> bool {
+    let CostPart::UntapTapped { filter, count } = part else {
+        return false;
+    };
+    let n = g.eval_value(count, ctx).max(0) as usize;
+    let tapped = g
+        .objects_matching(filter, ctx)
+        .into_iter()
+        .filter(|o| {
+            g.obj(*o).tapped
+                && !(untaps_src && Some(*o) == src)
+                && crate::counter_rules::can_untap_for_cost(g, *o)
+        })
+        .count();
+    tapped + untap_candidates_tappable_for_mana(g, p, filter, src, untaps_src, ctx).len() >= n
+}
+
+/// Before paying a cost with a mana payment and "Untap N tapped [permanents] you control"
+/// parts that the tapped permanents can't cover, taps untapped candidates for mana (the
+/// mana stays in the pool for the payment, CR 601.2g) until they can.
+pub(crate) fn tap_untap_candidates_for_mana(
+    g: &mut Game,
+    p: PlayerId,
+    cost: &Cost,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+) {
+    let untaps_src = cost.has_untap();
+    for part in &cost.parts {
+        let CostPart::UntapTapped { filter, count } = part else {
+            continue;
+        };
+        let n = g.eval_value(count, ctx).max(0) as usize;
+        let tapped = g
+            .objects_matching(filter, ctx)
+            .into_iter()
+            .filter(|o| g.obj(*o).tapped && !(untaps_src && Some(*o) == src))
+            .count();
+        let short = n.saturating_sub(tapped);
+        let cands = untap_candidates_tappable_for_mana(g, p, filter, src, untaps_src, ctx);
+        for o in cands.into_iter().take(short) {
+            let uid = crate::mana_abilities::mana_sources(g, p, None)
+                .into_iter()
+                .find(|s| s.obj == o && s.taps())
+                .map(|s| s.ability.uid);
+            if let Some(uid) = uid {
+                let _ = g.activate_ability(p, o, uid);
+            }
+        }
+    }
+}
