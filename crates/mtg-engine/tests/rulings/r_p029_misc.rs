@@ -1,5 +1,5 @@
 //! Rulings batch P029 — Fork's copy (red, same mana cost; no card; buyback, CR 707.10,
-//! 707.10b, 702.27a), a copy of a spliced Arcane spell (CR 702.47e), copies of extra-turn
+//! 707.10b, 702.27a), a copy of a spliced Arcane spell (CR 702.47c), copies of extra-turn
 //! spells (CR 500.7), Tempt with Mayhem's target (CR 115.5), Lithoform Engine's copies of
 //! abilities (CR 707.10, 113.7, 603.1, 702.108a), Myra the Magnificent's target (CR 115.1),
 //! Unbound Flourishing and {X} in additional costs (CR 107.3, 202.1), and turning a face-down
@@ -137,7 +137,10 @@ fn uyo_s_copy_of_a_spliced_arcane_spell_has_the_spliced_text() {
             .count()
     };
     assert_eq!(spell_abilities(&t, copies[0]), 2);
-    assert_eq!(targets_of(&t, copies[0]), vec![obj(bears), Entity::Player(P1)]);
+    assert_eq!(
+        targets_of(&t, copies[0]),
+        vec![obj(bears), Entity::Player(P1)]
+    );
     t.resolve_all();
     assert_eq!(t.pt(bears), (6, 6));
     assert_eq!(t.life(P1), 16);
@@ -147,7 +150,7 @@ fn uyo_s_copy_of_a_spliced_arcane_spell_has_the_spliced_text() {
 
 #[test]
 fn copies_of_an_extra_turn_spell_add_turns_one_at_a_time_most_recent_first() {
-    cr!("500.7", "707.10", "608.2");
+    cr!("500.7", "707.10");
     ruling!(
         "Tempt with Mayhem",
         "In the case where the spell being copied grants one or more players extra turns, those extra turns are added one at a time. When the current turn ends, the most recently created turn will be taken first."
@@ -180,7 +183,9 @@ fn copies_of_an_extra_turn_spell_add_turns_one_at_a_time_most_recent_first() {
     let mut taken = vec![];
     for _ in 0..4 {
         let turn = t.g.turn.number;
-        let ok = t.g.run_until(10_000, |g| g.turn.number > turn && g.turn.step == Step::Upkeep);
+        let ok = t.g.run_until(10_000, |g| {
+            g.turn.number > turn && g.turn.step == Step::Upkeep
+        });
         assert!(ok);
         taken.push(t.g.turn.active);
     }
@@ -247,12 +252,16 @@ fn lithoform_engine_copies_an_ability_on_the_stack_with_the_same_source() {
     modify_until_eot(
         &mut t,
         pyro,
-        vec![Modification::AddKeyword(Keyword::new(KeywordKind::Lifelink))],
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Lifelink,
+        ))],
     );
     let count = |t: &TestGame, id: ObjectId| t.obj_now(id).chars.abilities.len();
     let (n_engine, n_pyro) = (count(&t, engine), count(&t, pyro));
     t.answer_targets(P0, &[Entity::Player(P1)]);
-    let ping = activate_containing(&mut t, P0, pyro, "damage").unwrap().unwrap();
+    let ping = activate_containing(&mut t, P0, pyro, "damage")
+        .unwrap()
+        .unwrap();
     t.lands(P0, "Wastes", 2);
     t.answer_targets(P0, &[obj(ping)]);
     activate_containing(&mut t, P0, engine, "activated or triggered ability").unwrap();
@@ -317,7 +326,9 @@ fn myra_targets_only_the_card_and_chooses_the_attraction_on_resolution() {
     t.answer_targets(P0, &[obj(div)]);
     t.answer_choose(P0, &[obj(wheel)]);
     let from = t.asked().len();
-    let ability = activate_containing(&mut t, P0, myra, "Exile target").unwrap().unwrap();
+    let ability = activate_containing(&mut t, P0, myra, "Exile target")
+        .unwrap()
+        .unwrap();
     assert_eq!(targets_of(&t, ability), vec![obj(div)]);
     let choices = |t: &TestGame| {
         t.asked()[from..]
@@ -425,9 +436,11 @@ fn turning_magar_s_face_down_instant_face_up_reveals_it_and_it_stays_face_down()
     assert!(t.on_battlefield(fd) && t.obj(fd).face_down);
     assert_eq!(t.pt(fd), (3, 4));
     assert_eq!(t.hand_size(P0), hand, "Secret Plans didn't trigger");
-    // The Angel turns face up: Secret Plans triggers.
+    // The Angel turns face up, with its own characteristics again: Secret Plans triggers.
     cast_new(&mut t, P1, "Break Open", &[obj(angel)]);
     t.resolve_all();
     assert!(!t.obj_now(angel).face_down);
+    assert_eq!(t.obj_now(angel).chars.name, "Exalted Angel");
+    assert_eq!(t.pt(angel), (4, 5));
     assert_eq!(t.hand_size(P0), hand + 1);
 }

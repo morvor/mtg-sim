@@ -243,7 +243,8 @@ pub(crate) fn legal_for_each_target(g: &Game, id: ObjectId, e: Entity) -> bool {
 /// original on the stack, such as its color, doesn't apply to the copy, so the original
 /// could target `e` while the copy can't). Copies "for each [object] that spell could
 /// target" (CR 707.10d) are decided from the original's point of view instead (Ink-Treader
-/// Nephilim's ruling), and such a copy may be countered on resolution.
+/// Nephilim's ruling), and such a copy may be countered on resolution. Interpretation
+/// `copy-target-legality-original-or-copy`.
 fn copy_targeting(
     g: &mut Game,
     spell: ObjectId,
@@ -262,19 +263,13 @@ fn copy_targeting(
             }
         }
     }
-    g.dirty = true;
-    g.recompute();
-    if copy_must_target && !legal_for_each_target(g, copy, e) {
-        // Never created: undo putting it on the stack, and what that announced.
-        g.stack.retain(|x| *x != copy);
-        g.saved_ctx.remove(&copy);
-        g.effects.retain(|ef| ef.source != Some(copy));
-        g.special.prepare_spells.retain(|x| *x != copy);
-        g.objects[copy.0 as usize].zone = Zone::Nowhere;
-        g.events.truncate(events_before);
+    if copy_must_target {
         g.dirty = true;
         g.recompute();
-        return None;
+        if !legal_for_each_target(g, copy, e) {
+            crate::copy::uncreate_copy(g, copy, events_before);
+            return None;
+        }
     }
     g.emit(crate::events::Event::BecameTarget {
         target: e,

@@ -1,8 +1,9 @@
 //! Rulings batch P029 — when the copying abilities trigger: spells that target only one
-//! object, even several times (CR 115.9c), "could target" (CR 115.10b), intervening "if"
-//! clauses (CR 603.4), abilities that trigger once each turn or once per spell (CR 603.2h),
-//! "first instant spell each turn" (CR 603.2), triggering after casting is complete
-//! (CR 601.2i), and delayed triggers from mana (CR 106.6, 603.7).
+//! object, even several times (CR 115.9c), "could target" and a copy with a specified
+//! target (CR 707.10d, 707.10e), intervening "if" clauses (CR 603.4), abilities that
+//! trigger once each turn or once per spell (CR 603.2, 603.2c), "first instant spell each
+//! turn" (CR 603.2), triggering after casting is complete (CR 601.2i), and delayed triggers
+//! from mana (CR 106.6, 603.7).
 
 use crate::r_p028_common::*;
 use crate::r_p029_common::*;
@@ -13,6 +14,7 @@ use crate::r_s17_common::{enter_transformed, put_onto_battlefield};
 use crate::r_s20_common::tap_for_mana;
 use crate::r_s25_common::*;
 use mtg_engine::decision::Answer;
+use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -132,7 +134,7 @@ fn beamsplitter_mage_triggers_on_your_spell_targeting_only_it_with_another_creat
 
 #[test]
 fn beamsplitter_mage_doesnt_copy_without_another_creature_on_resolution() {
-    cr!("603.4", "707.10e");
+    cr!("603.4");
     ruling!(
         "Beamsplitter Mage",
         "If you don’t control another creature the spell could target as Beamsplitter Mage’s triggered ability resolves, you don’t copy that spell."
@@ -154,7 +156,8 @@ fn beamsplitter_mage_doesnt_copy_without_another_creature_on_resolution() {
 
 #[test]
 fn beamsplitter_mage_s_copy_isnt_created_if_it_cant_target_the_chosen_creature() {
-    cr!("707.10e", "707.10");
+    cr!("707.10e", "707.10", "707.2");
+    interp!("copy-target-legality-original-or-copy");
     ruling!(
         "Beamsplitter Mage",
         "In some rare cases, the original spell can target another creature but the copy can’t (most likely because an effect modified the characteristics of the original spell on the stack and won’t modify the copy). If the copy can’t target the chosen creature, the copy isn’t created."
@@ -162,15 +165,20 @@ fn beamsplitter_mage_s_copy_isnt_created_if_it_cant_target_the_chosen_creature()
     supported("Blind Seer");
     supported("Paladin en-Vec");
     supported("Brute Force");
+    supported("Kalamax, the Stormsire");
     // P0's Brute Force (red: "Target creature gets +3/+3 until end of turn.") at the Mage;
     // Blind Seer ("{1}{U}: Target spell or permanent becomes the color of your choice until
     // end of turn.") makes the spell green. Paladin en-Vec (protection from black and from
     // red) can be targeted by the green original but not by the red copy: choosing it
-    // creates no copy.
+    // creates no copy. A copy that isn't created was never copied and never targeted
+    // anything: Kalamax ("Whenever you copy an instant spell, put a +1/+1 counter on
+    // Kalamax."; untapped, so its first ability copies nothing) doesn't trigger.
     for seer in [true, false] {
         let (mut t, mage, bears) = mage_game(true);
+        let bears = bears.unwrap();
         let paladin = t.battlefield(P0, "Paladin en-Vec");
         let blind = t.battlefield(P0, "Blind Seer");
+        let kalamax = t.battlefield(P0, "Kalamax, the Stormsire");
         let force = cast_new(&mut t, P0, "Brute Force", &[obj(mage)]);
         t.settle();
         assert_eq!(triggered_from(&t, mage), 1);
@@ -181,12 +189,16 @@ fn beamsplitter_mage_s_copy_isnt_created_if_it_cant_target_the_chosen_creature()
             t.answer(P0, DecisionKind::Option, Answer::Index(4)); // green
             activate_containing(&mut t, P0, blind, "becomes the color").unwrap();
             t.resolve();
-            assert!(t.obj(force).chars.colors.contains(Color::Green), "the spell is green");
+            assert!(
+                t.obj(force).chars.colors.contains(Color::Green),
+                "the spell is green"
+            );
             assert!(!t.obj(force).chars.colors.contains(Color::Red));
         }
         let from = t.asked().len();
-        t.answer_choose(P0, &[obj(paladin)]);
+        t.answer_choose(P0, &[obj(if seer { paladin } else { bears })]);
         t.resolve();
+        t.settle();
         let offered: Vec<Vec<Entity>> = t.asked()[from..]
             .iter()
             .filter_map(|(_, d)| match d {
@@ -196,19 +208,43 @@ fn beamsplitter_mage_s_copy_isnt_created_if_it_cant_target_the_chosen_creature()
                 _ => None,
             })
             .collect();
+        let copied =
+            t.g.turn_events
+                .iter()
+                .filter(|e| matches!(e, Event::SpellCopied { .. }))
+                .count();
+        let paladin_targeted =
+            t.g.turn_events.iter().any(
+                |e| matches!(e, Event::BecameTarget { target, .. } if *target == obj(paladin)),
+            );
         if seer {
             // The Paladin could be chosen; the copy couldn't target it.
-            assert!(offered.iter().any(|c| c.contains(&obj(paladin))), "{offered:?}");
+            assert!(
+                offered.iter().any(|c| c.contains(&obj(paladin))),
+                "{offered:?}"
+            );
             assert!(spell_copies(&t).is_empty());
+            assert_eq!((copied, paladin_targeted), (0, false));
+            assert_eq!(t.g.stack, vec![force]);
         } else {
-            // The red spell couldn't target the Paladin: only the Bears.
-            assert!(offered.iter().all(|c| !c.contains(&obj(paladin))), "{offered:?}");
+            // The red spell couldn't target the Paladin: it isn't offered.
+            assert!(
+                offered.iter().all(|c| !c.contains(&obj(paladin))),
+                "{offered:?}"
+            );
             let copies = spell_copies(&t);
             assert_eq!(copies.len(), 1);
-            assert_eq!(targets_of(&t, copies[0]), vec![obj(bears.unwrap())]);
+            assert_eq!(targets_of(&t, copies[0]), vec![obj(bears)]);
+            assert_eq!(copied, 1);
         }
         t.resolve_all();
         assert_eq!(t.pt(paladin), (2, 2));
+        assert_eq!(t.pt(bears), if seer { (2, 2) } else { (5, 5) });
+        assert_eq!(
+            t.counters(kalamax, "+1/+1"),
+            if seer { 0 } else { 1 },
+            "seer {seer}"
+        );
     }
 }
 
@@ -259,12 +295,11 @@ fn precursor_golem_triggers_on_a_spell_targeting_any_single_golem() {
         let mut t = TestGame::new(2);
         let golem = t.enter(P0, "Precursor Golem");
         t.resolve_all();
-        let token = t
-            .g
-            .permanents()
-            .find(|o| o.is_token())
-            .map(|o| o.id)
-            .unwrap();
+        let token =
+            t.g.permanents()
+                .find(|o| o.is_token())
+                .map(|o| o.id)
+                .unwrap();
         let glass = t.battlefield(P1, "Glass Golem");
         (t, golem, token, glass)
     }

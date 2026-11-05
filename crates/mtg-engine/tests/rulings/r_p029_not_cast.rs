@@ -64,7 +64,11 @@ fn bolt_copies_arent_cast(k: &Case) {
     let all = resolve_collecting_copies(&mut t);
     assert_eq!(all.len(), k.copies, "{name}: copies");
     assert_eq!(t.life(P1), 20 - 3 * (1 + k.copies as i32), "{name}");
-    assert_eq!(t.g.history.spells_cast.len(), k.casts, "{name}: spells cast");
+    assert_eq!(
+        t.g.history.spells_cast.len(),
+        k.casts,
+        "{name}: spells cast"
+    );
     assert_eq!(
         t.life(P0),
         20 - 2 * k.casts as i32 - k.activations,
@@ -244,12 +248,11 @@ fn copies_made_for_each_other_creature_arent_cast_and_dont_retrigger() {
             // the other two Golems.
             let golem = t.enter(P0, "Precursor Golem");
             t.resolve_all();
-            let token = t
-                .g
-                .permanents()
-                .find(|o| o.is_token() && o.chars.subtypes.iter().any(|s| s == "Golem"))
-                .map(|o| o.id)
-                .unwrap();
+            let token =
+                t.g.permanents()
+                    .find(|o| o.is_token() && o.chars.subtypes.iter().any(|s| s == "Golem"))
+                    .map(|o| o.id)
+                    .unwrap();
             assert_ne!(token, golem);
             (token, 2)
         }),
@@ -280,7 +283,11 @@ fn copies_made_for_each_other_creature_arent_cast_and_dont_retrigger() {
         let mut t = TestGame::new(2);
         observers(&mut t);
         let (target, want) = setup(&mut t);
-        assert_eq!(t.named_on_battlefield(name).len(), if name == "Precursor Golem" { 1 } else { 2 }, "{name}");
+        assert_eq!(
+            t.named_on_battlefield(name).len(),
+            if name == "Precursor Golem" { 1 } else { 2 },
+            "{name}"
+        );
         cast_new(&mut t, P0, "Giant Growth", &[obj(target)]);
         let copies = resolve_collecting_copies(&mut t);
         assert_eq!(copies.len(), want, "{name}: copies");
@@ -348,7 +355,7 @@ fn lithoform_engine_s_copies_arent_cast_or_activated_or_triggered_additional_tim
 
 #[test]
 fn return_the_favor_s_copy_isnt_cast_or_activated() {
-    cr!("707.10", "603.2", "602.2", "702.172a");
+    cr!("707.10", "603.2", "602.2");
     ruling!(
         "Return the Favor",
         "The copy made by the effect of Return the Favor's first mode is created on the stack, so it's not \"cast\" or \"activated.\""

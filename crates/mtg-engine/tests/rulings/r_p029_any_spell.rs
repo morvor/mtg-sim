@@ -1,6 +1,6 @@
 //! Rulings batch P029 — any instant or sorcery spell can be copied, whether it has targets
 //! or not (CR 707.10, 115.1), and whoever controls it when the copying card doesn't say
-//! "you control"; the copy's controller (CR 707.10, 110.2).
+//! "you control"; the copy's controller (CR 707.10).
 
 use crate::r_p028_common::*;
 use crate::r_p029_common::*;
@@ -63,7 +63,7 @@ fn copies_of_a_spell_without_targets() {
 
 #[test]
 fn copies_of_another_player_s_spell_without_targets() {
-    cr!("707.10", "115.1", "110.2");
+    cr!("707.10", "115.1");
     // Reverberate and Twincast: the copy of P1's spell is P0's.
     ruling!(
         "Reverberate",
@@ -81,7 +81,10 @@ fn copies_of_another_player_s_spell_without_targets() {
         "Insidious Will",
         "The third mode can copy any instant or sorcery spell, not just one with targets."
     );
-    ruling!("Insidious Will", "If you copy a spell, you control the copy.");
+    ruling!(
+        "Insidious Will",
+        "If you copy a spell, you control the copy."
+    );
     copies_divination(&INSIDIOUS_WILL, P0, P0, 1);
     copies_divination(&INSIDIOUS_WILL, P1, P0, 1);
     // Meletis Charlatan: "The controller of target instant or sorcery spell copies it."

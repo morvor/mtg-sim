@@ -44,7 +44,11 @@ fn melek_copies_a_spell_without_targets_cast_from_the_library() {
 
 /// Whether P0's queued attempt to cast `card` (normally) from the priority loop leads to
 /// it being cast before `until` holds.
-fn tries_to_cast(t: &mut TestGame, card: ObjectId, until: impl FnMut(&mtg_engine::game::Game) -> bool) -> bool {
+fn tries_to_cast(
+    t: &mut TestGame,
+    card: ObjectId,
+    until: impl FnMut(&mtg_engine::game::Game) -> bool,
+) -> bool {
     let before = t.g.history.spells_cast.len();
     t.answer(
         P0,
@@ -91,8 +95,8 @@ fn melek_doesnt_change_when_a_sorcery_can_be_cast() {
         .any(|(p, d)| *p == P0 && matches!(d, Decision::Priority { .. })));
     assert_eq!(t.zone(div), Zone::Library(P0));
     assert_eq!(t.g.turn.step, Step::PrecombatMain);
-    assert!(castable(&mut t, div));
     assert!(tries_to_cast(&mut t, div, |g| !g.stack.is_empty()));
+    assert_eq!(t.g.obj(t.g.stack[0]).chars.name, "Divination");
     // On P1's turn, it can't be cast at all.
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
@@ -106,19 +110,21 @@ fn melek_doesnt_change_when_a_sorcery_can_be_cast() {
     assert!(t.asked()[from..]
         .iter()
         .any(|(p, d)| *p == P0 && matches!(d, Decision::Priority { .. })));
-    // An instant on top of the library can be cast then.
+    // An instant on top of the library can be cast then (through the priority loop).
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
     t.battlefield(P0, "Melek, Izzet Paragon");
     let bolt = t.library_top(P0, "Lightning Bolt");
     t.lands(P0, "Mountain", 1);
-    t.g.turn.priority = Some(P0);
-    assert!(castable(&mut t, bolt));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(tries_to_cast(&mut t, bolt, |g| !g.stack.is_empty()));
+    assert_eq!((t.g.turn.active, t.g.turn.step), (P1, Step::PrecombatMain));
+    assert_eq!(t.g.obj(t.g.stack[0]).chars.name, "Lightning Bolt");
 }
 
 #[test]
 fn melek_doesnt_copy_a_miracle_cast_from_the_hand() {
-    cr!("702.94a", "707.10");
+    cr!("702.94a", "601.2a");
     ruling!(
         "Melek, Izzet Paragon",
         "Instant and sorcery cards with miracle allow a player to cast a card immediately upon drawing it. If you cast a spell this way, you’re casting it from your hand, not your library. Melek’s ability won’t trigger."
@@ -217,7 +223,10 @@ fn only_the_first_of_several_cards_drawn_at_once_may_be_revealed_for_kefnet() {
     t.settle();
     assert_eq!(reveal_prompts(&t, from), 1);
     assert!(t.g.stack.is_empty());
-    // The Bolt first: it is revealed and copied.
+    let bolt = t.g.find_in_zone(Zone::Hand(P0), "Lightning Bolt")[0];
+    assert!(!is_revealed(&t.g, bolt));
+    // The Bolt first: it is revealed (and stays revealed while Kefnet's ability, which
+    // copies it, is on the stack).
     let mut t = TestGame::new(2);
     t.battlefield(P0, "God-Eternal Kefnet");
     t.library_top(P0, "Island");
@@ -230,12 +239,17 @@ fn only_the_first_of_several_cards_drawn_at_once_may_be_revealed_for_kefnet() {
     t.settle();
     assert_eq!(reveal_prompts(&t, from), 1);
     assert_eq!(t.stack_len(), 1);
+    let bolt = t.g.find_in_zone(Zone::Hand(P0), "Lightning Bolt")[0];
+    assert!(is_revealed(&t.g, bolt));
 }
 
 #[test]
 fn kefnet_s_copy_is_created_in_and_cast_from_the_hand() {
     cr!("707.12", "601.2a", "603.2");
-    ruling!("God-Eternal Kefnet", "The copy is created in and cast from your hand.");
+    ruling!(
+        "God-Eternal Kefnet",
+        "The copy is created in and cast from your hand."
+    );
     supported("Young Pyromancer");
     let (mut t, _) = kefnet_game(&["Lightning Bolt"]);
     t.battlefield(P0, "Young Pyromancer");
@@ -246,7 +260,11 @@ fn kefnet_s_copy_is_created_in_and_cast_from_the_hand() {
     t.advance_to_step(Step::Draw);
     t.settle();
     t.resolve();
-    let copy = *t.g.stack.iter().find(|id| t.g.obj(**id).chars.name == "Lightning Bolt").unwrap();
+    let copy =
+        *t.g.stack
+            .iter()
+            .find(|id| t.g.obj(**id).chars.name == "Lightning Bolt")
+            .unwrap();
     assert_eq!(
         t.g.obj(copy).stack.as_ref().unwrap().cast.from,
         Some(ZoneKind::Hand)
@@ -266,25 +284,45 @@ fn kefnet_s_reduction_applies_after_increases_and_the_mana_value_is_unchanged() 
         "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions (such as that of Kefnet's ability). The mana value of the spell remains unchanged, no matter what the total cost to cast it was."
     );
     supported("Thalia, Guardian of Thraben");
-    // Thalia: "Noncreature spells cost {1} more to cast." Divination ({2}{U}) costs
-    // {2}{U} + {1} - {2} = {1}{U}: two lands, both tapped.
+    // Thalia: "Noncreature spells cost {1} more to cast." The increase is added before the
+    // reduction: Lightning Bolt ({R}) costs {R} + {1} - {2} = {R}, one Mountain. (Reduced
+    // first, {R} - {2} would stay {R} and then cost {1}{R}.)
+    let (mut t, _) = kefnet_game(&["Lightning Bolt"]);
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    let mountain = t.lands(P0, "Mountain", 1)[0];
+    t.answer_yes(P0, true); // reveal
+    t.answer_yes(P0, true); // cast the copy
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.advance_to_step(Step::Draw);
+    t.settle();
+    t.resolve();
+    let copy =
+        t.g.stack
+            .iter()
+            .copied()
+            .find(|id| t.g.obj(*id).chars.name == "Lightning Bolt")
+            .expect("cast for {R}");
+    assert_eq!(t.g.mana_value_of(copy), 1);
+    assert!(t.obj_now(mountain).tapped);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    // Divination ({2}{U}) costs {2}{U} + {1} - {2} = {1}{U}: two lands, both tapped; its
+    // mana value stays 3. One Island isn't enough.
     for lands in [2, 1] {
         let (mut t, _) = kefnet_game(&["Divination"]);
         t.battlefield(P1, "Thalia, Guardian of Thraben");
         let mut ls = t.lands(P0, "Island", 1);
         ls.extend(t.lands(P0, "Wastes", lands - 1));
-        // Another land P0 can't use (summoning-sick creature lands don't matter): none.
         t.answer_yes(P0, true); // reveal
         t.answer_yes(P0, true); // cast the copy
         t.advance_to_step(Step::Draw);
         t.settle();
         t.resolve();
-        let copy = t
-            .g
-            .stack
-            .iter()
-            .copied()
-            .find(|id| t.g.obj(*id).chars.name == "Divination");
+        let copy =
+            t.g.stack
+                .iter()
+                .copied()
+                .find(|id| t.g.obj(*id).chars.name == "Divination");
         if lands == 2 {
             let copy = copy.expect("cast for {1}{U}");
             assert_eq!(t.g.mana_value_of(copy), 3);
@@ -301,7 +339,7 @@ fn kefnet_s_reduction_applies_after_increases_and_the_mana_value_is_unchanged() 
 
 #[test]
 fn two_kefnets_copy_the_card_one_at_a_time_each_reducing_by_two() {
-    cr!("603.3b", "707.12", "601.2f", "608.2");
+    cr!("603.3b", "707.12", "601.2f", "608.2g");
     ruling!(
         "God-Eternal Kefnet",
         "If you somehow control more than one God-Eternal Kefnet (perhaps because one is a Spark Double), you may reveal a card you draw for any number of their abilities. One at a time, each will copy the card if it's an instant or sorcery, and you may cast each of them. Each copy resolves before you cast the next, and each copy's cost is reduced by only {2}."

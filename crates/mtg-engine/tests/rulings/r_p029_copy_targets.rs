@@ -151,9 +151,14 @@ fn change_any_number_of_targets(r: &Retarget) {
     // One: the copy's second target is the Wurm.
     let (t, [a, _, c, d], targets) = warp(r, Some(&[None, Some(Pick::Creature(2))]));
     assert_eq!(targets, vec![obj(a), obj(c)], "{name}");
-    assert_eq!((t.pt(a).0, t.pt(c), t.pt(d)), (-3, (6, 1), (3, 3)), "{name}");
+    assert_eq!(
+        (t.pt(a).0, t.pt(c), t.pt(d)),
+        (-3, (6, 1), (3, 3)),
+        "{name}"
+    );
     // All: D and the Wurm.
-    let (t, [a, _, c, d], targets) = warp(r, Some(&[Some(Pick::Creature(3)), Some(Pick::Creature(2))]));
+    let (t, [a, _, c, d], targets) =
+        warp(r, Some(&[Some(Pick::Creature(3)), Some(Pick::Creature(2))]));
     assert_eq!(targets, vec![obj(d), obj(c)], "{name}");
     assert_eq!((t.pt(a).0, t.pt(c), t.pt(d)), (0, (6, 1), (0, 3)), "{name}");
 }
@@ -190,22 +195,31 @@ fn copies_may_change_any_number_of_targets_to_legal_ones() {
     }
 }
 
-/// P0's Giant Growth at P0's Bears; `r` copies it after the Bears died, with no other
-/// creature to choose: the copy keeps the (illegal) Bears and is countered on resolution.
+/// P0's Plummet ("Destroy target creature with flying.") at P1's Wind Drake; `r` copies it
+/// after the Drake died, when no creature with flying is left to choose (Meletis Charlatan
+/// doesn't fly), and P0 asks for P1 (not a creature) as the new target: the copy keeps the
+/// (illegal) Drake and is countered on resolution.
 fn keeps_an_illegal_target(r: &Retarget) {
+    supported("Plummet");
     let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
+    let drake = t.battlefield(P1, "Wind Drake");
     (r.setup)(&mut t);
-    let growth = cast_new(&mut t, P0, "Giant Growth", &[obj(bears)]);
-    t.g.destroy(bears, None);
+    let plummet = cast_new(&mut t, P0, "Plummet", &[obj(drake)]);
+    t.g.destroy(drake, None);
     t.g.flush_events();
     t.settle();
-    (r.start)(&mut t, growth, Some(&[Some(Entity::Player(P1))]));
+    let creatures: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.is(CardType::Creature))
+            .map(|o| o.id)
+            .collect();
+    (r.start)(&mut t, plummet, Some(&[Some(Entity::Player(P1))]));
     let copies = resolve_until_copies(&mut t);
     assert_eq!(copies.len(), 1, "{}", r.name);
-    assert_eq!(targets_of(&t, copies[0]), vec![obj(bears)], "{}", r.name);
+    assert_eq!(targets_of(&t, copies[0]), vec![obj(drake)], "{}", r.name);
     t.resolve_all();
     assert!(t.g.stack.is_empty());
+    assert!(creatures.iter().all(|c| t.on_battlefield(*c)), "{}", r.name);
 }
 
 #[test]
@@ -488,7 +502,10 @@ fn copies_keep_the_paid_additional_costs(c: &Copier) {
     assert_eq!(resolve_until_copies(&mut t).len(), 1, "{name}");
     t.resolve_all();
     assert_eq!(t.life(P1), 14, "{name}");
-    assert!(t.on_battlefield(bears), "{name}: nothing more was sacrificed");
+    assert!(
+        t.on_battlefield(bears),
+        "{name}: nothing more was sacrificed"
+    );
     // Burst Lightning ("Kicker {4}. Burst Lightning deals 2 damage to any target. If this
     // spell was kicked, it deals 4 damage instead."), kicked or not.
     for kicked in [true, false] {
@@ -504,7 +521,11 @@ fn copies_keep_the_paid_additional_costs(c: &Copier) {
         t.resolve_all();
         let d = if kicked { 4 } else { 2 };
         assert_eq!(t.life(P1), 20 - 2 * d, "{name}: kicked {kicked}");
-        assert_eq!(optional_costs_asked(&t, from), 1, "{name}: kicker offered once");
+        assert_eq!(
+            optional_costs_asked(&t, from),
+            1,
+            "{name}: kicker offered once"
+        );
     }
 }
 

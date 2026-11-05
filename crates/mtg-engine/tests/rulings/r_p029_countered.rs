@@ -89,7 +89,12 @@ fn copying_triggers_resolve_first_and_copy_a_countered_spell() {
         "Storm King's Thunder",
         "Storm King's Thunder will create copies of the spell that caused its delayed triggered ability to trigger even if that spell has been countered by the time that ability resolves."
     );
-    for c in [MICA, ADAPTIVE_TRAINING_POST, SWARM_INTELLIGENCE, STORM_KINGS_THUNDER] {
+    for c in [
+        MICA,
+        ADAPTIVE_TRAINING_POST,
+        SWARM_INTELLIGENCE,
+        STORM_KINGS_THUNDER,
+    ] {
         copies_divination_countered_or_not(&c, true);
         copies_divination_countered_or_not(&c, false);
     }
