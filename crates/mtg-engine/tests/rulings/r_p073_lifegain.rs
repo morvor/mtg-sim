@@ -310,6 +310,10 @@ fn deathtouch_and_lifelink_spells_must_deal_the_damage_themselves() {
     t.battlefield(P0, "Lo and Li, Twin Tutors");
     let elves = t.battlefield(P0, "Llanowar Elves");
     let bears = t.battlefield(P1, "Grizzly Bears");
+    // Both halves of "Noble creatures you control and Lesson spells you control" apply
+    // (the Lesson half used to be dropped: regression).
+    let noble = t.battlefield(P0, "Arwen, Mortal Queen");
+    assert!(kw(&t, noble, LIFELINK) && !kw(&t, elves, LIFELINK));
     let c = t.hand(P0, "Start from Scratch");
     t.lands(P0, "Mountain", 3);
     t.cast(P0, c).modes(&[0]).target(pl(P1)).go();
