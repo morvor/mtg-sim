@@ -149,6 +149,7 @@ pub mod skip;
 pub mod special_actions;
 pub mod spell_choice;
 pub mod spell_costs;
+pub mod spell_preview;
 pub mod spells_cast_before;
 pub mod splice;
 pub mod stack;

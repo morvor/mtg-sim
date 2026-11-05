@@ -813,7 +813,7 @@ impl Game {
             // the terms of the permission it uses, see `permissions.rs`).
             if !in_hand {
                 out.retain(|opt| {
-                    let chars = self.option_characteristics(card, opt);
+                    let chars = crate::spell_preview::spell_characteristics(self, p, card, opt);
                     self.permission_allows_with(p, card, &chars, false, true)
                 });
             }
@@ -823,7 +823,7 @@ impl Game {
         // prohibits, whatever choices its proposal would make (e.g. aftermath,
         // CR 702.127a).
         out.retain(|opt| {
-            let chars = self.option_characteristics(card, opt);
+            let chars = crate::spell_preview::spell_characteristics(self, p, card, opt);
             !chars.is_land() && !crate::kw::cast_prohibited(self, p, card, &chars)
         });
         out
@@ -920,7 +920,8 @@ impl Game {
     /// Whether the player could begin casting the card this way right now (timing,
     /// permissions, targets, and an optimistic cost check).
     pub fn can_begin_cast(&self, p: PlayerId, card: ObjectId, opt: &CastOption) -> bool {
-        let chars = self.option_characteristics(card, opt);
+        // Judged as the spell it would be on the stack (CR 601.3e).
+        let chars = crate::spell_preview::spell_characteristics(self, p, card, opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
             return false;
         }
@@ -933,8 +934,12 @@ impl Game {
         if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
             return false;
         }
-        // Targets must be available.
-        let ctx = Ctx::new(Some(card), p);
+        // Targets must be available. The card itself isn't among them: it's on the stack
+        // as they're chosen (CR 601.2a, 601.2c).
+        let mut ctx = Ctx::new(Some(card), p);
+        if self.obj(card).zone != Zone::Stack {
+            ctx.casting_card = Some(card);
+        }
         let bodies: Vec<&Body> = chars
             .abilities
             .iter()
@@ -1450,7 +1455,7 @@ impl Game {
         // announces which one they're using.
         let way = ways.swap_remove(i);
         let opt = crate::permissions::choose_cast_permission(self, p, card, way);
-        let chars = self.option_characteristics(card, &opt);
+        let chars = crate::spell_preview::spell_characteristics(self, p, card, &opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, &opt) {
             return Err(Illegal("timing".into()));
         }
