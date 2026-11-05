@@ -170,7 +170,18 @@ impl Renderer<'_> {
                     filter.clone().in_zone(*zone).and_owner_you()
                 };
                 let det = self.det_for(count);
-                let n = self.noun_det(&f, det);
+                let mut n = self.noun_det(&f, det);
+                // "Exile any number of historic cards from your graveyard with total mana
+                // value 30 or greater" (The Capitoline Triad): the total after the zone.
+                if let Some((head, tail)) = n.split_once(" with total ") {
+                    let zone = [" in your graveyard", " in your hand"]
+                        .into_iter()
+                        .find(|z| tail.ends_with(z));
+                    if let Some(z) = zone {
+                        let total = &tail[..tail.len() - z.len()];
+                        n = format!("{head}{z} with total {total}");
+                    }
+                }
                 format!("exile {n}")
             }
             CostPart::ReturnToHand { filter, count } => {
@@ -500,6 +511,21 @@ impl Renderer<'_> {
         let saved = self.zone;
         self.zone = a.zone;
         let mut cost = self.cost(&a.cost);
+        // "Exile any number of historic cards from your graveyard with total mana value 30
+        // or greater: ..." (the amount chosen as X, `cost_parts::amount_as_x`): an X
+        // nothing else in the ability uses is "any number of".
+        if !a.is_loyalty && !x_used_beyond_cost(a) {
+            for (from, to) in [
+                ("Exile X ", "Exile any number of "),
+                ("exile X ", "exile any number of "),
+                ("Sacrifice X ", "Sacrifice any number of "),
+                ("sacrifice X ", "sacrifice any number of "),
+            ] {
+                if cost.matches(from).count() == 1 {
+                    cost = cost.replacen(from, to, 1);
+                }
+            }
+        }
         // CR 606.4: a loyalty ability's "−X" cost removes X loyalty counters.
         if a.is_loyalty
             && a.cost.mana.is_none()
@@ -834,4 +860,21 @@ impl OwnerYou for Filter {
             Filter::and(vec![self, Filter::OwnedBy(PlayerRel::You)])
         }
     }
+}
+
+/// Whether an activated ability uses its X anywhere but in a cost part's count: in its mana
+/// cost, its effect, its targets or its condition.
+fn x_used_beyond_cost(a: &ActivatedAbility) -> bool {
+    fn walk(v: &serde_json::Value) -> bool {
+        match v {
+            serde_json::Value::String(s) => s == "X",
+            serde_json::Value::Object(m) => m.values().any(walk),
+            serde_json::Value::Array(a) => a.iter().any(walk),
+            _ => false,
+        }
+    }
+    let uses = |v: Result<serde_json::Value, _>| v.is_ok_and(|v| walk(&v));
+    a.cost.mana.as_ref().is_some_and(|m| m.has_x())
+        || uses(serde_json::to_value(&a.body))
+        || uses(serde_json::to_value(&a.condition))
 }

@@ -2022,6 +2022,14 @@ pub fn parse_target(s: &str) -> Option<(TargetSpec, &str)> {
         }
         (_, w) => (w, rest),
     };
+    // "up to one target [card] of each card type": as many targets as there are card
+    // types, none of which stands for the same card type as another.
+    if matches!(together, Some(TargetGroup::OnePerCardType)) {
+        if !(matches!(min, Value::Const(0)) && matches!(max, Value::Const(1))) {
+            return None;
+        }
+        max = Value::c(CardType::ALL.len() as i32);
+    }
     let spec = TargetSpec {
         what,
         min,
@@ -2119,7 +2127,14 @@ fn target_group_suffix<'a>(
             rest,
         ));
     }
-    let Some((rest, grp)) = group_phrase(t) else {
+    // "up to one target nonland card of each card type" (Uldaros Theorix): one target for
+    // each card type (CR 205.2a), each standing for a different card type it has (see
+    // `parse_target`).
+    let one_per_type = t
+        .strip_prefix("of each card type")
+        .filter(|r| r.is_empty() || r.starts_with([' ', ',', '.']))
+        .map(|r| (r, TargetGroup::OnePerCardType));
+    let Some((rest, grp)) = one_per_type.or_else(|| group_phrase(t)) else {
         return Some((f, r));
     };
     // "... a different mana value X or less": each also has mana value X or less.
