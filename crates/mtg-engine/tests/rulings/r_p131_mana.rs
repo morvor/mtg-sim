@@ -49,7 +49,7 @@ fn quirion_sentinels_mana_trigger_uses_the_stack() {
 
 #[test]
 fn virtue_of_strength_triples_a_basic_lands_intrinsic_mana_ability() {
-    cr!("305.6", "106.6");
+    cr!("305.6", "106.6a");
     ruling!(
         "Virtue of Strength // Garenbrig Growth",
         "An object with the land card type and a basic land type has the intrinsic ability \"{T}: Add [mana symbol],\" even if the text box doesn't actually contain that text or the object has no text box."
@@ -67,7 +67,7 @@ fn virtue_of_strength_triples_a_basic_lands_intrinsic_mana_ability() {
 
 #[test]
 fn virtue_of_strength_doesnt_triple_a_triggered_mana_ability() {
-    cr!("106.6", "605.1b");
+    cr!("605.1b", "605.4a");
     ruling!(
         "Virtue of Strength // Garenbrig Growth",
         "If an ability triggers \"whenever you tap\" a basic land for mana and produces mana, that triggered mana ability won't be affected by Virtue of Strength."
@@ -282,7 +282,7 @@ fn infiniscope(spell: &str, x: i64, pool: &[(ManaType, u32)]) -> TestGame {
 
 #[test]
 fn brass_infiniscope_uses_the_spells_x() {
-    cr!("107.3f", "603.7");
+    cr!("107.3e", "603.7");
     ruling!(
         "Brass Infiniscope",
         "The value of X in the delayed triggered ability created by Brass Infiniscope's ability is the value of X of the spell you cast as it exists on the stack when that ability resolves."
@@ -296,7 +296,7 @@ fn brass_infiniscope_uses_the_spells_x() {
 
 #[test]
 fn brass_infiniscope_gains_half_x_once_however_many_x_symbols() {
-    cr!("107.3", "603.7");
+    cr!("107.3e", "603.7");
     ruling!(
         "Brass Infiniscope",
         "You'll only gain half X life no matter how many instances of {X} are in the mana cost of the spell you cast."

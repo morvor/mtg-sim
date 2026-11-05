@@ -289,7 +289,7 @@ fn reality_spasm_chooses_its_mode_on_cast_and_targets_any_permanents() {
 
 #[test]
 fn jaya_ballard_may_discard_and_draw_zero_cards() {
-    cr!("606.3", "608.2c");
+    cr!("608.2c");
     ruling!(
         "Jaya Ballard",
         "You choose how many cards to discard while Jaya’s second ability is resolving. You can choose to discard zero cards this way (and then draw zero cards) if you wish."
@@ -411,8 +411,15 @@ fn toils_of_night_and_day_has_two_different_targets_and_chooses_later() {
     assert!(t.asked()[from..]
         .iter()
         .all(|(_, d)| !matches!(d, Decision::ChooseOption { .. } | Decision::YesNo { .. })));
+    // On resolution: untap the Forest, tap the Bears.
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
     t.resolve_all();
     assert!(t.asked()[during_cast..]
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseOption { .. } | Decision::YesNo { .. })));
+    assert!(!t.obj(land).tapped);
+    assert!(t.obj(bears).tapped);
 }

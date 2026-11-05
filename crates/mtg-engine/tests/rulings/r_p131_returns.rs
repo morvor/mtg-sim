@@ -100,6 +100,61 @@ fn fossil_find_reordering_doesnt_make_new_objects() {
     }
 }
 
+#[test]
+fn fossil_find_picks_the_card_at_random_and_may_reorder_the_graveyard() {
+    cr!("404.2");
+    ruling!(
+        "Fossil Find",
+        "The easiest way to choose a card at random from your graveyard is to turn your graveyard face down, shuffle it, and pick a card. You’re not normally allowed to reorder your graveyard, but since this card lets you do it anyway"
+    );
+    use rand::SeedableRng;
+    let mut returned = std::collections::BTreeSet::new();
+    for seed in 0..24u64 {
+        let mut t = TestGame::new(2);
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        for n in ["Grizzly Bears", "Hill Giant", "Craw Wurm"] {
+            t.graveyard(P0, n);
+        }
+        // P0 puts the graveyard in reverse order (top first: the bottom card first).
+        t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
+        cast(&mut t, P0, "Fossil Find", &[]);
+        let from = t.asked().len();
+        t.resolve_all();
+        let hand = names_in(&t, Zone::Hand(P0));
+        assert_eq!(hand.len(), 1);
+        returned.insert(hand[0].clone());
+        // Nobody chose the card: the only choice asked on resolution was the graveyard's new order.
+        let asked: Vec<Decision> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| !matches!(d, Decision::Priority { .. }))
+            .map(|(_, d)| d.clone())
+            .collect();
+        assert!(
+            asked
+                .iter()
+                .all(|d| matches!(d, Decision::Order { .. })),
+            "{asked:?}"
+        );
+        assert_eq!(asked.len(), 1, "{asked:?}");
+        // The two cards left (bottom first) were swapped, then Fossil Find went on top.
+        let yard: Vec<String> = t
+            .g
+            .player(P0)
+            .graveyard
+            .iter()
+            .map(|c| t.g.obj(*c).chars.name.to_string())
+            .collect();
+        let mut left: Vec<&str> = ["Grizzly Bears", "Hill Giant", "Craw Wurm"]
+            .into_iter()
+            .filter(|n| *n != hand[0])
+            .collect();
+        left.reverse();
+        left.push("Fossil Find");
+        assert_eq!(yard, left, "seed {seed}");
+    }
+    assert_eq!(returned.len(), 3, "every card can be the one returned: {returned:?}");
+}
+
 // --- Untargeted returns -----------------------------------------------------------------------
 
 #[test]
