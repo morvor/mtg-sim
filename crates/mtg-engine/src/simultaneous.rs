@@ -683,6 +683,10 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
         // (Orzhov Advokist): the players choose in turn, then the counters are put on all
         // the chosen objects (CR 101.4, 608.2e, 608.2f).
         Effect::AddCounters { what, .. } => chosen_by(g, &[what], ctx, p),
+        // "Each friend creates a token that's a copy of a creature they control"
+        // (Zndrsplt's Judgment): the players choose in turn, then the tokens are created
+        // (CR 101.4, 608.2e).
+        Effect::CreateTokenCopy { of, .. } => has_choice(of) && chosen_by(g, &[of], ctx, p),
         // Whoever makes the choices: no control changes until all are made.
         Effect::GainControl { .. } => true,
         // "For each creature, its controller sacrifices it unless they pay X life" (Killing
@@ -798,6 +802,8 @@ fn plan_choice_cost(
 
 /// The objects a player chose to put counters on, until the counters are put on them.
 const PLANNED_COUNTERS: Var = vars::USER + 10_141;
+/// The objects a player chose to create token copies of, until the tokens are created.
+const PLANNED_TOKEN_COPIES: Var = vars::USER + 10_142;
 
 /// Makes `p`'s choices for `e` (CR 101.4) and returns what they'll do.
 fn plan(
@@ -1151,6 +1157,32 @@ fn plan(
                 what: Sel::Var(PLANNED_COUNTERS),
                 kind: kind.clone(),
                 n: Value::Const(g.eval_value(n, ctx) as i32),
+            })
+        }
+        // "Each friend creates a token that's a copy of a creature they control": the
+        // creature is chosen now, the token is created once every player has chosen
+        // (Zndrsplt's Judgment's rulings; CR 101.4).
+        Effect::CreateTokenCopy {
+            of,
+            count,
+            controller,
+            tapped,
+            attacking,
+            mods,
+        } if plannable(g, e, ctx, p) => {
+            let chosen = g.resolve_sel(of, ctx);
+            if let Some(p) = p {
+                let objs = chosen.iter().filter_map(|e| e.object()).collect();
+                g.record_apnap_choice(p, objs);
+            }
+            ctx.vars.insert(PLANNED_TOKEN_COPIES, chosen);
+            Plan::Exec(Effect::CreateTokenCopy {
+                of: Sel::Var(PLANNED_TOKEN_COPIES),
+                count: count.clone(),
+                controller: controller.clone(),
+                tapped: *tapped,
+                attacking: *attacking,
+                mods: mods.clone(),
             })
         }
         Effect::LoseLife { who, n } => Plan::Exec(Effect::LoseLife {
