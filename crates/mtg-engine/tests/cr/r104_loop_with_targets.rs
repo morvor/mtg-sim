@@ -63,3 +63,40 @@ fn a_loop_whose_trigger_has_several_targets_is_a_draw_after_a_forced_choice() {
         .count();
     assert!(two_targets >= 3, "the looping trigger had two targets each time");
 }
+
+#[test]
+fn a_hostage_taker_chain_with_two_targets_each_time_is_a_draw() {
+    cr!("104.4b", "732.4", "732.5");
+    interp!("mandatory-loop-detection");
+    // The every-card sweep's slow Hostage Taker game: "When Hostage Taker enters, exile
+    // another target artifact or creature until Hostage Taker leaves the battlefield."
+    // Every Hostage Taker on the battlefield holds another, so whichever one the entering
+    // one exiles returns its own, which must exile another.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 9);
+    t.lands(P0, "Swamp", 9);
+    let a = t.battlefield(P0, "Hostage Taker");
+    // A single possible target (A) first.
+    let b = t.hand(P0, "Hostage Taker");
+    t.cast(P0, b).go();
+    t.resolve_all();
+    assert!(!t.on_battlefield(a));
+    let c = t.battlefield(P0, "Hostage Taker");
+    let d = t.hand(P0, "Hostage Taker");
+    t.cast(P0, d).go();
+    t.answer_targets(P0, &[Entity::Object(c)]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hostage Taker").len(), 2);
+    let e = t.hand(P0, "Hostage Taker");
+    let before = t.asked().len();
+    t.cast(P0, e).go();
+    t.g.run_until(4000, |g| g.is_over());
+    assert_eq!(t.g.result, Some(GameResult::Draw));
+    let two_targets = t.asked()[before..]
+        .iter()
+        .filter(|(_, d)| {
+            matches!(d, Decision::ChooseTargets { candidates, .. } if candidates.len() == 2)
+        })
+        .count();
+    assert!(two_targets >= 3, "the looping trigger had two targets each time");
+}
