@@ -18,12 +18,15 @@ pub fn become_monarch(g: &mut Game, p: PlayerId) {
     }
     if g.monarch != Some(p) {
         g.monarch = Some(p);
+        // Static abilities that apply "while you're the monarch" change (CR 611.3a).
+        g.dirty = true;
         g.emit(Event::BecameMonarch { player: p });
     }
 }
 
 pub fn take_initiative(g: &mut Game, p: PlayerId) {
     g.initiative = Some(p);
+    g.dirty = true;
     g.players[p.idx()].initiative_count += 1;
     g.emit(Event::TookInitiative { player: p });
 }
