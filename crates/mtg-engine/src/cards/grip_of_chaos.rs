@@ -11,7 +11,7 @@ use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::kw::{KeywordRegistration, KeywordRules};
 use crate::object::{EventInfo, Zone};
-use crate::types::{Entity, ObjectId, PlayerId};
+use crate::types::{ObjectId, PlayerId};
 
 const PUT_ON_STACK: &str = "card:Grip of Chaos:a spell or ability is put onto the stack";
 const SINGLE: &str = "card:Grip of Chaos:it has a single target";
@@ -99,42 +99,14 @@ impl KeywordRules for Rules {
         if name != RESELECT {
             return false;
         }
-        let Some(id) = ctx.event.as_ref().and_then(|e| e.object) else {
-            return true;
-        };
-        let Some((cm, slot)) = single_target(g, id) else {
-            return true;
-        };
-        if g.dirty {
-            g.recompute();
+        // The shared compiled reselection ("reselect the targets at random", also Chef's
+        // Kiss), on the spell or ability this ability triggered on, if it still has a
+        // single target.
+        if let Some(id) = ctx.event.as_ref().and_then(|e| e.object) {
+            if single_target(g, id).is_some() {
+                ctx.prev_happened = crate::target_rules::reselect_at_random(g, id, &[]);
+            }
         }
-        let body = g.stack_body(id);
-        let si = g.obj(id).stack.as_deref().cloned().expect("on the stack");
-        let mode = si.chosen[cm].mode;
-        let spec = match (mode, &body.modal) {
-            (Some(m), Some(modal)) => modal.modes.get(m).and_then(|x| x.targets.get(slot)),
-            _ => body.targets.get(slot),
-        };
-        let Some(spec) = spec.cloned() else {
-            return true;
-        };
-        let mut sctx = g.stack_ctx(id);
-        sctx.targets = si.chosen[cm].targets.clone();
-        let cands: Vec<Entity> = g.legal_target_candidates(&spec, &sctx, id);
-        if cands.is_empty() {
-            return true;
-        }
-        let k = g.random_range(0, cands.len() as u32 - 1) as usize;
-        let new = cands[k];
-        if let Some(si) = g.objects[id.0 as usize].stack.as_mut() {
-            si.chosen[cm].targets[slot] = vec![new];
-        }
-        let controller = g.obj(id).controller;
-        g.emit(Event::BecameTarget {
-            target: new,
-            by: id,
-            controller,
-        });
         true
     }
 }

@@ -1410,6 +1410,17 @@ impl Game {
                 }
                 ctx.prev_happened = changed;
             }
+            Effect::ReselectTargetsAtRandom { what, except } => {
+                let except = except
+                    .as_ref()
+                    .map(|sel| self.resolve_sel(sel, ctx))
+                    .unwrap_or_default();
+                let mut changed = false;
+                for o in self.resolve_objects(what, ctx) {
+                    changed |= crate::target_rules::reselect_at_random(self, o, &except);
+                }
+                ctx.prev_happened = changed;
+            }
             Effect::BecomeCopy { what, of, duration } => {
                 crate::copy::become_copy(self, what, of, duration, &[], ctx);
             }
