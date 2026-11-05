@@ -209,6 +209,42 @@ fn tallies_history(v: &Value) -> bool {
     }
 }
 
+/// Whether a player filter selects players by what they did or what happened to them
+/// (a [`PlayerFilter::History`] tally such as "who lost life this turn", or "was dealt
+/// damage this turn"), outside any negation, so that a player who has since left the game
+/// can still match it (CR 800.4i; interpretation history-counts-players-who-left).
+/// Under `Or` every branch must be one, so that a player who left can match only through
+/// what they did.
+pub(crate) fn filter_tallies_history(f: &PlayerFilter) -> bool {
+    match f {
+        PlayerFilter::History(c) => match c.as_ref() {
+            Condition::Compare(x, _, y) => tallies_history(x) || tallies_history(y),
+            _ => false,
+        },
+        PlayerFilter::DealtDamageThisTurn => true,
+        PlayerFilter::And(v) => v.iter().any(filter_tallies_history),
+        PlayerFilter::Or(v) => !v.is_empty() && v.iter().all(filter_tallies_history),
+        _ => false,
+    }
+}
+
+/// [`Value::CountPlayers`]: the players matching `f`. A count of players by what they did
+/// ("if a player other than you lost life this turn", "for each opponent who was dealt
+/// damage this turn") also counts players who have since left the game (CR 800.4i: last
+/// known information; interpretation history-counts-players-who-left); any other count
+/// sees only players still in the game (CR 800.4a).
+pub fn count_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> i64 {
+    let players: Vec<PlayerId> = if filter_tallies_history(f) {
+        g.players.iter().map(|p| p.id).collect()
+    } else {
+        g.players_in_game()
+    };
+    players
+        .into_iter()
+        .filter(|p| g.player_filter_matches(f, *p, ctx))
+        .count() as i64
+}
+
 /// [`Value::OverPlayers`].
 pub fn over_players(g: &Game, op: AggOp, f: &PlayerFilter, v: &Value, ctx: &Ctx) -> i64 {
     // A tally of what players did ("the greatest number of cards an opponent has drawn
