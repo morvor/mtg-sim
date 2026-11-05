@@ -146,6 +146,13 @@ impl Renderer<'_> {
             }
             (_, Some(m)) => Some(m.to_string()),
         };
+        // "up to one target nonland card of each card type" (one target per card type).
+        let per_type = matches!(t.together, Some(TargetGroup::OnePerCardType));
+        let count = if per_type {
+            Some("up to one".to_string())
+        } else {
+            count
+        };
         // Cards say either.
         let count = match count {
             Some(c) if divided_any && c != "any number of" => {
@@ -326,6 +333,7 @@ impl Renderer<'_> {
             }
             Some(g) => {
                 let w = match g {
+                    TargetGroup::OnePerCardType => "of each card type".to_string(),
                     TargetGroup::ShareCreatureType => "that share a creature type".to_string(),
                     TargetGroup::ShareCardType => "that share a card type".to_string(),
                     TargetGroup::SharePermanentType => "that share a permanent type".to_string(),
@@ -338,6 +346,11 @@ impl Renderer<'_> {
                     .into_iter()
                     .find(|z| s.ends_with(z));
                 match zone {
+                    // "up to one target nonland card of each card type from your graveyard".
+                    Some(z) if per_type => {
+                        let head = &s[..s.len() - z.len()];
+                        s = format!("{head} {w}{z}");
+                    }
                     Some(z) if !w.contains(['{', '|']) => {
                         let head = &s[..s.len() - z.len()];
                         s = format!("{{alt:{head} {w}{z}|{s} {w}}}");
