@@ -54,6 +54,7 @@ impl KeywordRules for CopyExceptionMods {
         if let Some(n) = name.strip_prefix(STARTING_LOYALTY) {
             if let Ok(n) = n.parse::<i32>() {
                 chars.loyalty = Some(n);
+                chars.loyalty_is_x = false;
             }
             return true;
         }

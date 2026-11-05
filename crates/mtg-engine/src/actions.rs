@@ -712,7 +712,15 @@ impl Game {
                 );
                 let o = self.obj(new_id);
                 if o.is(CardType::Planeswalker) {
-                    if let Some(l) = o.chars.loyalty {
+                    // A printed loyalty of X: the X of the spell that became it (CR
+                    // 107.3m; a copy of a spell has the original's, 707.10), 0 if it
+                    // didn't enter as a spell resolving.
+                    let loyalty = if o.chars.loyalty_is_x {
+                        Some(o.cast.as_ref().and_then(|c| c.x).unwrap_or(0))
+                    } else {
+                        o.chars.loyalty
+                    };
+                    if let Some(l) = loyalty {
                         if l > 0 {
                             counters_to_add.insert(0, (counters::LOYALTY.into(), l as u32));
                         }
