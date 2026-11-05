@@ -17,7 +17,7 @@ const KYTHEON: &str = "Kytheon, Hero of Akros // Gideon, Battle-Forged";
 
 #[test]
 fn a_gideon_creature_controlled_by_an_opponent_can_be_attacked_and_block() {
-    cr!("506.4", "509.1a", "510.1a", "510.1c", "306.4");
+    cr!("508.1b", "509.1a", "510.1a", "510.1c");
     ruling!(
         "Gideon Jura",
         "Say you activate Gideon Jura's third ability, then an opponent gains control of him before combat. You may have any of your creatures attack Gideon Jura (since he's still a planeswalker). Then Gideon Jura may block (since he's a creature). He may block any eligible attacking creature, including one that's attacking him! During combat, he behaves as an attacked planeswalker and/or a blocking creature, as appropriate. For example, he deals combat damage to any creatures he's blocking, but he doesn't deal combat damage to any unblocked creatures that are attacking him."
@@ -199,7 +199,7 @@ fn ajani_steadfast_plus_one_with_no_target() {
 
 #[test]
 fn oko_as_a_creature_copy_isnt_a_planeswalker() {
-    cr!("707.2", "306.8", "120.3c");
+    cr!("707.2", "120.3e");
     ruling!(
         "Oko, the Trickster",
         "While Oko is a creature, he isn't a planeswalker. Damage dealt to him won't cause him to lose loyalty."

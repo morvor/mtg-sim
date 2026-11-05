@@ -33,8 +33,8 @@ fn chosen_sources_arent_targeted_and_are_chosen_as_it_resolves() {
     );
     supported("Ajani's Aid");
     supported("Auriok Replica");
-    // (card, P1's source, whether the prevention is a spell). Slippery Bogle has
-    // hexproof; Tel-Jilad Chosen has protection from artifacts; Raging Goblin is red.
+    // (card, P1's source). Slippery Bogle has hexproof; Tel-Jilad Chosen has protection
+    // from artifacts; Raging Goblin is red.
     for (card, source) in [
         ("Pay No Heed", "Slippery Bogle"),
         ("Auriok Replica", "Tel-Jilad Chosen"),
@@ -89,7 +89,7 @@ fn burrenton_forge_tender_can_be_activated_with_no_source_to_choose() {
 
 #[test]
 fn ajanis_aid_with_no_creature_enables_revolt() {
-    cr!("609.7a", "702.2");
+    cr!("609.7a", "701.21a");
     ruling!(
         "Ajani's Aid",
         "You can activate the last ability even if there is no creature about to deal combat damage, or even no creature at all. No damage will be prevented, but it will enable your revolt abilities."
@@ -197,7 +197,7 @@ fn draws_and_life_gain_happen_on_resolution_not_on_prevention() {
 
 #[test]
 fn heal_draws_at_the_next_upkeep_whether_or_not_damage_was_prevented() {
-    cr!("603.7a", "603.7c");
+    cr!("603.7a");
     ruling!(
         "Heal",
         "You draw a card at the beginning of the next turn’s upkeep after Heal resolves, regardless of whether 1 damage was actually prevented."
@@ -213,7 +213,7 @@ fn heal_draws_at_the_next_upkeep_whether_or_not_damage_was_prevented() {
 
 #[test]
 fn samite_censer_bearer_shields_each_creature_you_control_as_it_resolves() {
-    cr!("611.2c", "615.7");
+    cr!("608.2h", "615.7");
     ruling!(
         "Samite Censer-Bearer",
         "This ability sets up a separate 1-point damage prevention shield on each creature you control at the time the ability resolves."
@@ -314,7 +314,7 @@ fn serra_hymn_divides_on_activation_and_works_with_no_counters() {
 
 #[test]
 fn remedy_and_angel_of_salvation_divide_as_put_on_the_stack_at_least_1_each() {
-    cr!("601.2d", "603.3d", "115.4");
+    cr!("601.2d", "603.3d");
     ruling!(
         "Remedy",
         "You divide the prevention effects as you cast Remedy, not as it resolves. Each target must be assigned at least 1 prevention “shield.” You can’t choose more than five targets and assign none to a target."
@@ -377,7 +377,7 @@ fn remedy_and_angel_of_salvation_divide_as_put_on_the_stack_at_least_1_each() {
 
 #[test]
 fn guard_dogs_compares_colors_only_as_it_resolves() {
-    cr!("608.2h", "105.2");
+    cr!("608.2h");
     ruling!(
         "Guard Dogs",
         "You choose the target on activation and choose the permanent which is compared for color on resolution."
@@ -413,7 +413,7 @@ fn guard_dogs_compares_colors_only_as_it_resolves() {
 
 #[test]
 fn wandering_mage_checks_cleric_or_wizard_only_on_activation_and_resolution() {
-    cr!("608.2b", "115.1");
+    cr!("608.2b");
     ruling!(
         "Wandering Mage",
         "The second ability checks that the targeted creature is a Cleric or Wizard only at the time the ability is activated and at the time it resolves. It doesn’t check at the time the damage is actually prevented."
@@ -449,7 +449,7 @@ fn wandering_mage_checks_cleric_or_wizard_only_on_activation_and_resolution() {
 
 #[test]
 fn wellgabber_apothecary_target_must_be_tapped_on_activation_and_resolution_only() {
-    cr!("608.2b", "115.1");
+    cr!("608.2b");
     ruling!(
         "Wellgabber Apothecary",
         "The targeted creature must be tapped when the ability is activated and when it resolves. It doesn’t need to remain tapped in between."
@@ -476,7 +476,7 @@ fn wellgabber_apothecary_target_must_be_tapped_on_activation_and_resolution_only
 
 #[test]
 fn inquisitors_snare_keeps_preventing_after_the_creature_leaves() {
-    cr!("615.1a", "608.2h", "113.7a");
+    cr!("615.1a", "113.7a");
     ruling!(
         "Inquisitor's Snare",
         "The prevention effect applies even after the creature leaves the battlefield."
@@ -527,7 +527,7 @@ fn shadowbane_prevents_only_damage_to_you_and_your_creatures() {
 
 #[test]
 fn ethersworn_shieldmage_checks_artifact_creatures_as_damage_would_be_dealt() {
-    cr!("611.2c", "615.1a");
+    cr!("615.1");
     ruling!(
         "Ethersworn Shieldmage",
         "When Ethersworn Shieldmage’s triggered ability resolves, it doesn’t lock in which permanents will be affected. For the rest of the turn, any time damage would be dealt to a permanent, check whether it’s an artifact creature at that time. If it is, that damage is prevented."
@@ -540,7 +540,7 @@ fn ethersworn_shieldmage_checks_artifact_creatures_as_damage_would_be_dealt() {
     t.enter(P0, "Ethersworn Shieldmage");
     t.resolve_all();
     // After it resolves: an artifact creature that arrives, and an artifact that becomes
-    // a creature, are covered; a creature that becomes an artifact too.
+    // a creature, are covered; a creature that isn't an artifact isn't.
     let memnite = t.battlefield(P1, "Memnite");
     let giant = t.battlefield(P1, "Hill Giant");
     let touch = t.battlefield(P0, "Tezzeret's Touch");
@@ -562,7 +562,7 @@ fn ethersworn_shieldmage_checks_artifact_creatures_as_damage_would_be_dealt() {
 
 #[test]
 fn surge_of_salvation_hexproof_is_locked_in_the_prevention_isnt() {
-    cr!("611.2c", "611.2a");
+    cr!("611.2c", "615.1");
     ruling!(
         "Surge of Salvation",
         "The set of permanents that gain hexproof is determined as Surge of Salvation resolves. Permanents you begin to control later in the turn won't gain hexproof. However, the damage prevention effect will apply to all creatures you control throughout the turn, even if you didn't control them (or they weren't creatures) as Surge of Salvation resolved."
@@ -589,7 +589,7 @@ fn hexproof(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn avacyn_prevents_all_damage_of_the_color_checked_as_it_is_dealt() {
-    cr!("609.7b", "615.1a", "105.2");
+    cr!("609.7b", "615.1a");
     ruling!(
         "Avacyn, Guardian Angel",
         "Both activated abilities prevent all damage of the chosen color, not just combat damage."

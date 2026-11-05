@@ -467,9 +467,12 @@ fn sea_troll_regenerates_only_after_blocking_or_being_blocked_by_a_blue_creature
     t.lands(P0, "Island", 2);
     assert!(t.activate(P0, troll, 0, &[]).is_err());
     t.clear_answers();
-    let blue = t.battlefield(P1, "Coral Merfolk");
+    // Wall of Frost (a blue 0/7) blocks it, so the Troll survives combat (an ability of
+    // a creature that died can't be activated).
+    let blue = t.battlefield(P1, "Wall of Frost");
     t.set_step(P0, Step::BeginningOfCombat);
     t.attack(&[(troll, Entity::Player(P1))], &[(blue, troll)]);
+    assert!(t.on_battlefield(troll));
     t.activate(P0, troll, 0, &[]).unwrap();
 }
 

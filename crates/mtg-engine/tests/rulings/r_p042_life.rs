@@ -65,7 +65,7 @@ fn you_can_still_concede_while_you_cant_lose_the_game() {
 
 #[test]
 fn courageous_resolve_life_loss_parts_of_spells_do_nothing() {
-    cr!("119.8", "608.2b");
+    cr!("101.2", "608.2c");
     ruling!(
         "Courageous Resolve",
         "Spells and abilities that would normally cause you to lose life still resolve, but the life-loss part simply has no effect."
@@ -86,7 +86,7 @@ fn courageous_resolve_life_loss_parts_of_spells_do_nothing() {
 
 #[test]
 fn courageous_resolve_you_can_pay_only_0_life_but_can_be_dealt_damage() {
-    cr!("119.4", "119.8", "120.3a");
+    cr!("119.8", "120.3a", "101.2");
     ruling!(
         "Courageous Resolve",
         "You can't pay a cost that includes the payment of any amount of life other than 0 life. However, you can choose to be dealt damage, even though that damage won't result in your life total changing."
@@ -181,7 +181,7 @@ fn worship_damage_is_dealt_and_counted_and_life_loss_bypasses_it() {
 
 #[test]
 fn sustaining_spirit_spirit_link_sees_the_full_damage() {
-    cr!("120.3a", "120.3");
+    cr!("120.3a");
     ruling!(
         "Sustaining Spirit",
         "The ability doesn’t change how much damage is dealt; it just changes how much life that damage makes you lose. An effect such as Spirit Link will see the full amount of damage being dealt."
@@ -270,7 +270,7 @@ fn sustaining_spirit_stops_unpreventable_damage_from_going_below_1() {
 
 #[test]
 fn ali_from_cairo_applies_to_damage_dealt_at_the_same_time_as_its_own() {
-    cr!("120.3a", "704.5g", "614.12");
+    cr!("120.3a", "704.5g", "614.1a");
     ruling!(
         "Ali from Cairo",
         "The ability works up until Ali enters the graveyard, so if he takes lethal damage or is destroyed at the same time you take damage, the ability helps you. If the damage occurs after it goes to the graveyard, however, it is not affected by the Ali which is no longer on the battlefield."
@@ -340,7 +340,7 @@ fn immortal_coil_prevents_all_damage_whatever_the_graveyard() {
 
 #[test]
 fn immortal_coil_loses_even_if_a_card_is_put_into_the_graveyard_in_response() {
-    cr!("603.8", "603.4");
+    cr!("603.8");
     ruling!(
         "Immortal Coil",
         "The third ability checks whether your graveyard is empty only at the time it triggers. Putting a card into your graveyard after that doesn’t help. You’ll lose the game when the ability resolves."
@@ -469,7 +469,7 @@ fn force_bubble_damage_is_neither_dealt_nor_prevented() {
 
 #[test]
 fn intervention_pact_upkeep_trigger_whether_or_not_damage_was_prevented() {
-    cr!("603.7a", "603.7c");
+    cr!("603.7a");
     ruling!(
         "Intervention Pact",
         "The delayed triggered ability will trigger regardless of whether any damage is actually prevented."

@@ -54,7 +54,7 @@ fn harms_way_target_on_cast_source_on_resolution_any_of_your_recipients() {
 
 #[test]
 fn harms_way_redirects_to_a_target_that_became_illegal_but_not_one_that_cant_be_dealt_damage() {
-    cr!("614.9", "608.2b", "120.4a");
+    cr!("614.9");
     ruling!(
         "Harm's Way",
         "After Harm’s Way resolves, it no longer checks to see if the target is a legal target. However, if that permanent or player can’t be dealt damage at the time the chosen source would deal damage (perhaps because the creature is no longer on the battlefield or is no longer a creature, or because the player is no longer in the game), the damage can’t be redirected. It’s dealt to the original recipient."
@@ -84,7 +84,7 @@ fn harms_way_redirects_to_a_target_that_became_illegal_but_not_one_that_cant_be_
 
 #[test]
 fn harms_way_doesnt_affect_damage_already_dealt() {
-    cr!("614.9", "609.3");
+    cr!("614.1", "614.9");
     ruling!(
         "Harm's Way",
         "Harm’s Way has no effect on damage that’s already been dealt."
@@ -256,7 +256,7 @@ fn divine_deflection_is_the_source_of_its_noncombat_damage() {
 
 #[test]
 fn divine_deflection_still_prevents_if_its_target_is_gone() {
-    cr!("615.5", "120.4a");
+    cr!("615.5", "609.3");
     ruling!(
         "Divine Deflection",
         "If Divine Deflection can’t deal damage to the targeted permanent or player (because the creature is no longer on the battlefield, or is no longer a creature, or the player is no longer in the game, for example), it will still prevent damage. It just won’t deal any damage itself."
@@ -306,7 +306,7 @@ fn divine_deflection_deals_its_damage_right_after_the_excess_before_the_spell_co
 
 #[test]
 fn divine_deflection_you_choose_which_damage_to_prevent_as_it_is_dealt() {
-    cr!("615.7", "616.1");
+    cr!("615.7");
     ruling!(
         "Divine Deflection",
         "Divine Deflection can prevent damage from multiple sources dealing damage simultaneously (such as during combat). If the chosen value for X won’t prevent all the damage, you choose which sources to prevent damage from."

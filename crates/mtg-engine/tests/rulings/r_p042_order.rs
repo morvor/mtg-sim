@@ -126,7 +126,7 @@ fn divine_presence_and_ghosts_reduce_damage_that_cant_be_prevented() {
 
 #[test]
 fn temple_altisaur_and_another_prevention_effect_in_the_controllers_order() {
-    cr!("616.1", "616.1a", "615.7");
+    cr!("616.1", "616.1e", "615.7");
     ruling!(
         "Temple Altisaur",
         "If multiple replacement and/or prevention effects could apply to a Dinosaur you control, you choose the order in which to apply those effects. For example, if another effect will prevent 1 damage that would be dealt to a Dinosaur, you may apply Temple Altisaur's effect to prevent all but 1 of that damage and then apply the other effect to prevent that 1 damage."
@@ -155,7 +155,7 @@ fn temple_altisaur_and_another_prevention_effect_in_the_controllers_order() {
 
 #[test]
 fn temple_altisaur_trample_damage_to_a_blocking_dinosaur() {
-    cr!("510.1c", "702.19c", "615.1a");
+    cr!("702.19b", "615.1a");
     ruling!(
         "Temple Altisaur",
         "Combat damage can be assigned to other Dinosaurs you control as normal, but most of that damage will be prevented. For example, if a 3/3 Dinosaur you control blocks a 5/5 creature with trample, the attacking player may assign 2 of that creature's combat damage to the player or planeswalker it's attacking and Temple Altisaur will prevent 2 of the 3 damage assigned to the defending Dinosaur."
@@ -177,7 +177,7 @@ fn temple_altisaur_trample_damage_to_a_blocking_dinosaur() {
 
 #[test]
 fn absorb_and_shield_of_the_realm_ordered_by_the_damaged_creatures_controller() {
-    cr!("616.1", "616.1a", "616.1e", "702.64a");
+    cr!("616.1", "616.1e", "702.64a");
     ruling!(
         "Lymph Sliver",
         "If multiple replacement effects apply to a creature being dealt damage, the controller of the creature chooses the order to apply them, not the controller of the source of damage."
@@ -232,7 +232,7 @@ fn absorb_and_shield_of_the_realm_ordered_by_the_damaged_creatures_controller() 
 
 #[test]
 fn hedron_field_purists_applies_to_each_recipient_separately() {
-    cr!("615.1a", "615.6");
+    cr!("615.1a");
     ruling!(
         "Hedron-Field Purists",
         "If a source would deal damage to multiple applicable recipients, the prevention effects apply to each of those recipients separately. For example, if Hedron-Field Purists is level 1 and you cast Earthquake (“Earthquake deals X damage to each creature without flying and each player”) with X equal to 3, that Earthquake will deal 2 damage to you, 2 damage to each creature without flying you control, 3 damage to each other player, and 3 damage to each creature without flying other players control."
@@ -259,7 +259,7 @@ fn hedron_field_purists_applies_to_each_recipient_separately() {
 
 #[test]
 fn rem_karolus_extra_damage_is_dealt_by_the_original_source() {
-    cr!("614.1a", "120.3");
+    cr!("614.1a");
     ruling!(
         "Rem Karolus, Stalwart Slayer",
         "The additional 1 damage is dealt by the original source of damage. The additional damage isn't dealt by Rem Karolus."
@@ -274,7 +274,7 @@ fn rem_karolus_extra_damage_is_dealt_by_the_original_source() {
 
 #[test]
 fn rem_karolus_doesnt_apply_to_fight_damage() {
-    cr!("701.14b", "120.2");
+    cr!("701.14a", "614.1a", "615.1a");
     ruling!(
         "Rem Karolus, Stalwart Slayer",
         "Some spells cause other objects to deal damage, such as spells that cause two creatures to fight. Rem Karolus, Stalwart Slayer's last two abilities don't apply to damage from such effects."
@@ -383,7 +383,7 @@ fn goldbug_dying_to_first_strike_stops_preventing_regular_combat_damage() {
 
 #[test]
 fn woolly_razorback_deals_damage_once_its_last_ice_counter_is_removed() {
-    cr!("510.2", "603.2", "122.1");
+    cr!("510.2", "603.2");
     ruling!(
         "Woolly Razorback",
         "The third time Woolly Razorback blocks, its last ice counter will be removed, meaning the combat damage it deals that combat won't be prevented."

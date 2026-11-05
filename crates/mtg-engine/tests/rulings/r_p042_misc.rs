@@ -117,7 +117,7 @@ fn courageous_resolve_with_an_illegal_target_does_nothing_at_all() {
 
 #[test]
 fn runed_halo_protects_only_from_the_chosen_one_of_a_split_cards_names() {
-    cr!("702.16a", "709.3b", "201.2");
+    cr!("702.16a", "709.3b", "201.4b");
     ruling!(
         "Runed Halo",
         "Some cards can have alternative names, such as split cards, adventurer cards, double-faced cards, and so on. You may choose one of the two names the card can have; Runed Halo won't protect you from the other name."
@@ -152,7 +152,7 @@ fn runed_halo_protects_only_from_the_chosen_one_of_a_split_cards_names() {
 
 #[test]
 fn gideons_intervention_land_names_and_token_names() {
-    cr!("201.3", "305.1", "111.4");
+    cr!("201.4", "305.1", "111.4");
     ruling!(
         "Gideon's Intervention",
         "You may choose the name of a land card. Cards with that name can still be played (since lands are never cast), but damage they would deal to you and your permanents will be prevented."
@@ -462,7 +462,7 @@ fn zealot_il_vec_chooses_a_target_even_if_you_dont_have_it_deal_damage() {
 
 #[test]
 fn benalish_missionary_on_a_creature_blocked_by_an_effect() {
-    cr!("509.1h", "702.19e", "506.4");
+    cr!("509.1h", "702.19d");
     ruling!(
         "Benalish Missionary",
         "Works even if the creature is “blocked” by an effect rather than actual creatures."
@@ -493,7 +493,7 @@ fn benalish_missionary_on_a_creature_blocked_by_an_effect() {
 
 #[test]
 fn flowering_field_the_lands_controller_activates() {
-    cr!("602.2", "113.6");
+    cr!("602.2");
     ruling!(
         "Flowering Field",
         "The land’s controller gets to activate the ability."
@@ -558,7 +558,7 @@ fn glacial_chasm_with_no_other_land_sacrifices_itself() {
 
 #[test]
 fn barrenton_medic_counter_is_a_cost_and_can_kill_it() {
-    cr!("602.2b", "118.3", "704.5f");
+    cr!("602.2b", "118.3", "704.5f", "400.7");
     ruling!(
         "Barrenton Medic",
         "You put the -1/-1 counter on Barrenton Medic as a cost. That means it happens when you activate the ability, not when it resolves. If paying the cost causes the creature to have 0 toughness, it’s put into the graveyard before you can untap it and before you can even pay the cost again."
@@ -579,8 +579,12 @@ fn barrenton_medic_counter_is_a_cost_and_can_kill_it() {
     t.settle();
     assert!(t.in_graveyard(P0, "Barrenton Medic"));
     assert_eq!(t.stack_len(), 1, "its ability is still on the stack");
+    // It can't be activated again: not the permanent that left (CR 400.7), nor the card
+    // in the graveyard.
     let card = t.g.current(medic);
-    assert!(t.activate(P0, card, 1, &[]).is_err(), "it can't pay the cost again");
+    assert_ne!(card, medic);
+    assert!(t.activate(P0, medic, 1, &[]).is_err(), "the permanent is gone");
+    assert!(t.activate(P0, card, 1, &[]).is_err(), "the card can't pay the cost again");
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Barrenton Medic"));
 }
@@ -620,7 +624,7 @@ fn atalya_spends_only_white_mana_on_x_for_either_mode() {
 
 #[test]
 fn sevinne_copies_spells_without_targets_and_the_copy_isnt_cast() {
-    cr!("707.10", "707.12", "601.2i");
+    cr!("707.10");
     ruling!(
         "Sevinne, the Chronoclasm",
         "Sevinne's ability will copy any instant or sorcery spell, not just one with targets."
@@ -650,7 +654,7 @@ fn sevinne_copies_spells_without_targets_and_the_copy_isnt_cast() {
 
 #[test]
 fn kurbis_copies_put_onto_the_battlefield_without_being_cast_get_no_counters() {
-    cr!("707.9", "614.1c", "704.5f");
+    cr!("707.2", "614.1c", "704.5f");
     ruling!(
         "Kurbis, Harvest Celebrant",
         "Similarly, if you create a token that's a copy of Kurbis, or if a card enters the battlefield as a copy of Kurbis without being cast, it enters with zero +1/+1 counters on it."
@@ -739,3 +743,26 @@ fn magus_sisters_chapter_mode_is_chosen_at_random_as_it_goes_on_the_stack() {
         .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
 }
 
+
+#[test]
+fn palliation_accord_uses_palliation_counters_not_shield_counters() {
+    cr!("122.1", "122.1c");
+    ruling!(
+        "Palliation Accord",
+        "Palliation Accord has recieved an update to its original Oracle text. Notably, it now uses palliation counters instead of shield counters."
+    );
+    supported("Palliation Accord");
+    let mut t = TestGame::new(2);
+    let accord = t.battlefield(P0, "Palliation Accord");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.g.tap(giant);
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(accord, "palliation"), 1);
+    assert_eq!(t.counters(accord, "shield"), 0);
+    // Removing it prevents the next 1 damage to P0 (not damage to the enchantment).
+    activate_resolve(&mut t, P0, accord, 0, &[]);
+    assert_eq!(t.counters(accord, "palliation"), 0);
+    damage(&mut t, giant, pl(P0), 3);
+    assert_eq!(t.life(P0), 18);
+}
