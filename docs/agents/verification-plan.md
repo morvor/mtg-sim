@@ -162,6 +162,10 @@ The user resumed normal work, at the normal pace.
 - **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
 - **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
 
+### Presenting decisions (user, Nov 5, evening)
+
+"When you print opens that reference a CR section or a ruling, print that CR section or ruling as well, so I can make a reasoned judgement." Every decision taken to the user quotes, verbatim from `data/`, the CR rules, rulings (with dates) and Oracle texts it turns on. The script `scratchpad/opens/src.py` (coordinator scratchpad) prints them.
+
 ### Hold (user, Nov 5, 17:45 UTC)
 
 The weekly usage window showed a warning from about 15:40 (reset Fri Nov 6, 09:00 UTC). The user: "Each worker should land its batch then stop, but wait on my go ahead to resume them."
