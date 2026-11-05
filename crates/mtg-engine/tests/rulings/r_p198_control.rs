@@ -190,52 +190,62 @@ fn daring_thief_relevant_card_types_include_artifact() {
 
 #[test]
 fn dack_faydens_draw_and_discard_happen_in_one_resolution() {
-    cr!("608.2c");
+    cr!("608.2c", "603.3");
     ruling!(
         "Dack Fayden",
         "The targeted player draws two cards and discards two cards all while Dack's first ability is resolving. Nothing can happen between the two, and no player may choose to take actions."
     );
     supported("Dack Fayden");
+    supported("Underworld Dreams");
     let mut t = TestGame::new(2);
     let dack = t.battlefield(P0, "Dack Fayden");
+    // "Whenever an opponent draws a card, Underworld Dreams deals 1 damage to that player."
+    t.battlefield(P0, "Underworld Dreams");
     t.hand(P1, "Island");
     let drawn = stack_library(&mut t, P1, &["Hill Giant", "Grizzly Bears"]);
     // The two cards just drawn can be discarded by that same resolution.
     t.answer_choose_moved(P1, &[obj(drawn[0]), obj(drawn[1])]);
-    let asked = t.asked().len();
-    act(&mut t, P0, dack, 0, &[pl(P1)]);
+    act_only(&mut t, P0, dack, 0, &[pl(P1)]);
+    t.resolve();
     assert!(t.in_graveyard(P1, "Hill Giant"));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.in_hand(P1, "Island"));
     assert_eq!(t.hand_size(P1), 1);
-    // No player received priority during the resolution.
-    assert!(!t.asked()[asked..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+    // Nothing happened between the draws and the discards: the abilities that triggered
+    // on the draws are put on the stack only now.
+    assert_eq!(t.stack_len(), 2);
+    assert_eq!(t.life(P1), 20);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
 }
 
 #[test]
 fn aminatous_draw_and_put_back_happen_in_one_resolution() {
-    cr!("608.2c");
+    cr!("608.2c", "603.3");
     ruling!(
         "Aminatou, the Fateshifter",
         "You draw a card and put one back all while Aminatou's first ability is resolving. Nothing can happen between the two, and no player may choose to take actions."
     );
     supported("Aminatou, the Fateshifter");
+    supported("Psychosis Crawler");
     let mut t = TestGame::new(2);
     let am = t.battlefield(P0, "Aminatou, the Fateshifter");
+    // "Whenever you draw a card, each opponent loses 1 life."
+    t.battlefield(P0, "Psychosis Crawler");
     t.hand(P0, "Island");
     let drawn = stack_library(&mut t, P0, &["Hill Giant"]);
     t.answer_choose_moved(P0, &[obj(drawn[0])]);
-    let asked = t.asked().len();
-    act(&mut t, P0, am, 0, &[]);
+    act_only(&mut t, P0, am, 0, &[]);
+    t.resolve();
     assert_eq!(t.hand_size(P0), 1);
     assert!(t.in_hand(P0, "Island"));
     let top = *t.g.player(P0).library.last().unwrap();
     assert_eq!(t.g.obj(top).chars.name, "Hill Giant");
-    assert!(!t.asked()[asked..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+    // The ability that triggered on the draw waited until the card was put back.
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.life(P1), 20);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
 }
 
 #[test]
@@ -378,7 +388,12 @@ fn confiscation_coup_pays_energy_on_resolution_and_gets_none_if_it_fizzles() {
 fn switcheroo_exchanges_two_creatures_you_dont_control() {
     cr!("701.12b", "115.1");
     ruling!("Switcheroo", "You don’t have to control either target.");
+    ruling!(
+        "Djinn of Infinite Deceits",
+        "You don’t have to control either target."
+    );
     supported("Switcheroo");
+    supported("Djinn of Infinite Deceits");
     let mut t = TestGame::new(3);
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P2, "Hill Giant");
@@ -386,4 +401,15 @@ fn switcheroo_exchanges_two_creatures_you_dont_control() {
     t.resolve_all();
     assert_eq!(ctl(&t, a), P2);
     assert_eq!(ctl(&t, b), P1);
+    // Djinn of Infinite Deceits' activated ability: "{T}: Exchange control of two target
+    // nonlegendary creatures."
+    let mut t = TestGame::new(3);
+    let djinn = t.battlefield(P0, "Djinn of Infinite Deceits");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P2, "Hill Giant");
+    t.answer_targets(P0, &[obj(a), obj(b)]);
+    act(&mut t, P0, djinn, 0, &[]);
+    assert_eq!(ctl(&t, a), P2);
+    assert_eq!(ctl(&t, b), P1);
+    assert_eq!(ctl(&t, djinn), P0);
 }

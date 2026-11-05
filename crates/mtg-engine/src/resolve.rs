@@ -459,7 +459,9 @@ impl Game {
                         crate::zones::target_not_source_moved(ctx, what, e, found).object()
                     })
                     .collect();
-                let res = self.move_to_destination(objs, to, ctx);
+                let mut moves = self.destination_moves(objs, to, ctx);
+                self.put_by_chooser(what, to, ctx, &mut moves);
+                let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
                 crate::zones::note_source_moved(ctx, what, &res);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let mut res = crate::merge::found_all(self, res);
@@ -1952,7 +1954,7 @@ impl Game {
                             crate::reveal::reveal_in(self, p, &found, Some(&c));
                         }
                         let start = moves.len();
-                        moves.extend(self.destination_moves(found, to, &mut c));
+                        moves.extend(self.found_card_moves(p, found, to, &mut c));
                         movers.push((p, owner, start..moves.len()));
                     }
                 }
@@ -3460,6 +3462,61 @@ impl Game {
             });
         }
         moves
+    }
+
+    /// The moves that put the cards `searcher` found in a search into `to` (see
+    /// [`Self::destination_moves`]): the player who searches is the one the effect
+    /// instructs to put them there, so they put them there (CR 110.2a, 701.23a) even
+    /// when the search is part of another player's spell or ability ("Its controller may
+    /// search their library for a basic land card, put that card onto the battlefield",
+    /// Path to Exile; "each player searches their library for a basic land card, puts it
+    /// onto the battlefield").
+    pub fn found_card_moves(
+        &mut self,
+        searcher: PlayerId,
+        found: Vec<ObjectId>,
+        to: &Destination,
+        ctx: &mut Ctx,
+    ) -> Vec<MoveEv> {
+        let mut moves = self.destination_moves(found, to, ctx);
+        for m in &mut moves {
+            m.by = Some(searcher);
+        }
+        moves
+    }
+
+    /// Who performs `moves`, an effect's moves of `what` onto the battlefield, when `what`
+    /// is a player's own choice put under that same player's control: in "[player] puts a
+    /// [card] of their choice onto the battlefield" ("each player puts a creature card from
+    /// their graveyard onto the battlefield", Exhume; "that player may put an artifact,
+    /// creature, or land card from their hand onto the battlefield", Braids, Conjurer
+    /// Adept) that player, not the effect's controller, is the one the effect instructs to
+    /// put it there (CR 110.2a), so the moves are theirs.
+    pub(crate) fn put_by_chooser(
+        &self,
+        what: &Sel,
+        to: &Destination,
+        ctx: &Ctx,
+        moves: &mut [MoveEv],
+    ) {
+        let Sel::Choose { chooser, .. } = what else {
+            return;
+        };
+        if to.zone != ZoneKind::Battlefield || matches!(chooser, PlayerRef::You) {
+            return;
+        }
+        let Some(p) = self.eval_player(chooser, ctx) else {
+            return;
+        };
+        let controller = to
+            .controller
+            .as_ref()
+            .and_then(|c| self.eval_player(c, ctx));
+        if controller == Some(p) {
+            for m in moves.iter_mut() {
+                m.by = Some(p);
+            }
+        }
     }
 
     /// Creates `n` tokens for `p` (`spec`), "tapped and attacking" if `attacking`: as each

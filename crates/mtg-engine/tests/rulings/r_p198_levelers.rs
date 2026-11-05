@@ -125,6 +125,7 @@ fn the_steps_overwrite_only_earlier_setting_effects_and_switching_is_last() {
     );
     supported("Diminish");
     supported("Twisted Image");
+    supported("Glorious Anthem");
     for (name, _, _, pt) in LADDERS {
         // Diminish (1/1) before the step: overwritten.
         let mut t = TestGame::new(2);
@@ -148,8 +149,18 @@ fn the_steps_overwrite_only_earlier_setting_effects_and_switching_is_last() {
         t.resolve_all();
         act(&mut t, P0, c, 0, &[]);
         assert_eq!(t.pt(c), (pt.1 + 1, pt.0 + 1), "{name}");
+        // Effects that modify power and toughness without setting them, from before the
+        // step, still apply: a static ability, a resolved spell, a counter.
+        let mut t = TestGame::new(2);
+        let c = leveler(&mut t, name);
+        t.battlefield(P0, "Glorious Anthem");
+        cast_at(&mut t, P0, "Giant Growth", &[obj(c)]);
+        t.resolve_all();
+        t.g.add_counters(obj(c), "+1/+1", 1, None);
+        act(&mut t, P0, c, 0, &[]);
+        assert_eq!(t.pt(c), (pt.0 + 5, pt.1 + 5), "{name}");
     }
-    // Kellan's 3/2 step.
+    // Kellan's 3/2 step overwrites an earlier Diminish, under an earlier switch.
     let mut t = TestGame::new(2);
     let k = t.battlefield(P0, "Kellan, Planar Trailblazer");
     act(&mut t, P0, k, 0, &[]);
@@ -158,6 +169,19 @@ fn the_steps_overwrite_only_earlier_setting_effects_and_switching_is_last() {
     t.resolve_all();
     act(&mut t, P0, k, 1, &[]);
     assert_eq!(t.pt(k), (2, 3));
+    // A counter and a pump from before still apply on top of it; a Diminish after it
+    // overwrites it.
+    let mut t = TestGame::new(2);
+    let k = t.battlefield(P0, "Kellan, Planar Trailblazer");
+    act(&mut t, P0, k, 0, &[]);
+    t.g.add_counters(obj(k), "+1/+1", 1, None);
+    cast_at(&mut t, P0, "Giant Growth", &[obj(k)]);
+    t.resolve_all();
+    act(&mut t, P0, k, 1, &[]);
+    assert_eq!(t.pt(k), (7, 6));
+    cast_at(&mut t, P0, "Diminish", &[obj(k)]);
+    t.resolve_all();
+    assert_eq!(t.pt(k), (5, 5));
 }
 
 #[test]

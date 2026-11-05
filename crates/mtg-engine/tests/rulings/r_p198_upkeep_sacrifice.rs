@@ -550,7 +550,7 @@ fn static_prison_leaving_early_exiles_nothing() {
 
 #[test]
 fn illusions_of_grandeurs_life_loss_goes_with_its_controller() {
-    cr!("603.3a", "603.10a");
+    cr!("603.3a", "603.10a", "702.24a");
     ruling!(
         "Illusions of Grandeur",
         "If a player takes control of this card away from you, you do not lose 20 life because the loss of 20 life is a separate ability. That player is now subject to the loss."
@@ -564,8 +564,16 @@ fn illusions_of_grandeurs_life_loss_goes_with_its_controller() {
     cast_at(&mut t, P1, "Confiscate", &[obj(iog)]);
     t.resolve_all();
     assert_eq!(ctl(&t, iog), P1);
-    kill(&mut t, iog);
+    // Its cumulative upkeep is now its new controller's: nothing in P0's upkeep.
+    to_upkeep(&mut t, P0);
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.counters(iog, "age"), 0);
+    // In P1's upkeep P1 doesn't pay, so P1 sacrifices it and loses the 20 life.
+    t.answer_yes(P1, false);
+    to_upkeep(&mut t, P1);
+    assert_eq!(t.stack_len(), 1);
     t.resolve_all();
+    assert!(!t.on_battlefield(iog));
     assert_eq!(t.life(P0), 40);
     assert_eq!(t.life(P1), 0);
 }

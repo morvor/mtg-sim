@@ -218,9 +218,10 @@ inventory::submit! { TriggerPattern { name: "[event] during your turn / for the 
 // ---------------------------------------------------------------------------
 
 /// "[objects] enter(s) under an opponent's control" is "[objects] an opponent controls
-/// enter(s)" (who controls a permanent is seen as it enters, CR 603.6a); "[player] puts
-/// [object] onto the battlefield" is "[object] enters under [player]'s control" ("that
-/// player" is its controller).
+/// enter(s)" (who controls a permanent is seen as it enters, CR 603.6a); "a player puts
+/// [object] onto the battlefield" is "[object] enters", and "that player" is the player
+/// who put it there (`PlayerRef::TriggerMover`), who needn't control it (CR 110.2a;
+/// Thelon's Chant's ruling).
 fn rewritten(r: &str) -> Option<Parsed> {
     let r = end(r);
     for (p, rep) in [

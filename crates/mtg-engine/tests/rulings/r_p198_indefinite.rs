@@ -360,7 +360,9 @@ fn kheru_lich_lord_pays_on_resolution_and_its_creature_never_dies() {
     lots(&mut t, P0);
     t.answer_yes(P0, true);
     t.resolve();
-    assert!(t.asked()[asked..].iter().any(|(p, _)| *p == P0));
+    assert!(t.asked()[asked..]
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::YesNo { .. })));
     let dt = t.named_on_battlefield("Doomed Traveler")[0];
     let o = t.obj_now(dt);
     assert!(o.has_keyword(KeywordKind::Flying) && o.has_keyword(KeywordKind::Trample));

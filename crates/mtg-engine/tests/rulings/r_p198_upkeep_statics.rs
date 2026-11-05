@@ -6,11 +6,8 @@
 use crate::r_p194_common::damage_events;
 use crate::r_p198_common::*;
 use crate::r_s01_common::stack_library;
-use mtg_engine::ability::LibraryPosition;
-use mtg_engine::events::{Event, MoveCause};
+use mtg_engine::events::Event;
 use mtg_engine::mana::ManaType;
-use mtg_engine::object::Zone;
-use mtg_engine::replacement::{EtbInfo, MoveEv};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -90,7 +87,7 @@ fn tombstone_stairwell_creates_its_tokens_at_once_and_only_if_still_there() {
 
 #[test]
 fn tombstone_stairwell_destroys_its_tokens_even_if_renamed() {
-    cr!("603.7c");
+    cr!("607.2c");
     ruling!(
         "Tombstone Stairwell",
         "If something changes the names of the tokens, then the \"at end of turn\" ability will still destroy them."
@@ -165,28 +162,16 @@ fn illusionary_presence_offers_only_existing_land_subtypes() {
         .any(|k| k.kind == mtg_engine::keywords::KeywordKind::Landwalk));
 }
 
-/// `by` puts a Swamp onto the battlefield under `controller`'s control (as an effect
-/// would), then everything resolves.
-fn put_swamp(t: &mut TestGame, by: PlayerId, controller: PlayerId) -> ObjectId {
-    let swamp =
-        t.g.create_card_object(mtg_engine::card::card("Swamp"), by, Zone::Nowhere);
-    let s =
-        t.g.move_object_ev(MoveEv {
-            obj: swamp,
-            to: Zone::Battlefield,
-            pos: LibraryPosition::Top,
-            cause: MoveCause::Effect,
-            by: Some(by),
-            etb: EtbInfo {
-                controller: Some(controller),
-                ..Default::default()
-            },
-            source: None,
-        })
-        .unwrap();
-    t.g.flush_events();
+/// P0's Flickerwisp exiles `target` (a permanent P1 owns); at the beginning of the next
+/// end step P0's delayed trigger returns it to the battlefield under its owner's control:
+/// P0 puts it there, P1 controls it. Returns the Flickerwisp.
+fn flicker(t: &mut TestGame, target: ObjectId) -> ObjectId {
+    supported("Flickerwisp");
+    t.answer_targets(P0, &[obj(target)]);
+    let fw = t.enter(P0, "Flickerwisp");
     t.resolve_all();
-    s
+    assert!(!t.on_battlefield(target));
+    fw
 }
 
 #[test]
@@ -197,24 +182,164 @@ fn thelons_chant_damages_the_player_who_put_the_swamp_onto_the_battlefield() {
         "Damages the player putting the land onto the battlefield, even if they are not the controller of the land after it is on the battlefield."
     );
     supported("Thelon's Chant");
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Thelon's Chant");
-    let s = put_swamp(&mut t, P0, P1);
-    assert_eq!(ctl(&t, s), P1);
-    assert_eq!(t.life(P0), 17);
-    assert_eq!(t.life(P1), 20);
-    // That player may instead put a -1/-1 counter on a creature they control (the
-    // Chant's controller here is the other player).
+    // P0 returns P1's Swamp under P1's control: P0 is dealt the damage.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Thelon's Chant");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    let giant = t.battlefield(P1, "Hill Giant");
+    let swamp = t.battlefield(P1, "Swamp");
+    flicker(&mut t, swamp);
+    // P0 declines to put a -1/-1 counter on Flickerwisp.
+    t.answer_yes(P0, false);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let s = t.named_on_battlefield("Swamp");
+    assert_eq!(s.len(), 1);
+    assert_eq!(ctl(&t, s[0]), P1);
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.life(P1), 20);
+    // That player, not the Swamp's controller, may instead put a -1/-1 counter on a
+    // creature they control.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Thelon's Chant");
+    let swamp = t.battlefield(P1, "Swamp");
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Hill Giant");
+    flicker(&mut t, swamp);
     t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(bears)]);
-    put_swamp(&mut t, P0, P1);
+    t.answer_choose(P0, &[obj(mine)]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
     assert_eq!(t.life(P0), 20);
-    assert_eq!(t.counters(bears, "-1/-1"), 1);
-    assert_eq!(t.counters(giant, "-1/-1"), 0);
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.counters(mine, "-1/-1"), 1);
+    assert_eq!(t.counters(theirs, "-1/-1"), 0);
+}
+
+#[test]
+fn thelons_chant_damages_the_player_who_searched_for_the_swamp() {
+    cr!("110.2a", "701.23a");
+    supported("Thelon's Chant");
+    supported("Path to Exile");
+    // P0's Path to Exile: P1, its target's controller, searches for a Swamp and puts it
+    // onto the battlefield, so P1 is dealt the damage, not the spell's controller.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thelon's Chant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let swamp = stack_library(&mut t, P1, &["Swamp"])[0];
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[obj(swamp)]);
+    cast_at(&mut t, P0, "Path to Exile", &[obj(bears)]);
+    t.resolve_all();
+    let s = t.named_on_battlefield("Swamp");
+    assert_eq!(s.len(), 1);
+    assert_eq!(ctl(&t, s[0]), P1);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn thelons_chant_damages_each_player_who_searched_for_a_swamp() {
+    cr!("110.2a", "701.23a");
+    supported("Thelon's Chant");
+    supported("Veteran Explorer");
+    // Veteran Explorer's "each player may search ...": each player puts their own Swamp
+    // onto the battlefield and is dealt damage for it, not the ability's controller.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Thelon's Chant");
+    let ve = t.battlefield(P0, "Veteran Explorer");
+    let mine = stack_library(&mut t, P0, &["Swamp"])[0];
+    let theirs = stack_library(&mut t, P1, &["Swamp"])[0];
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.answer_choose(P0, &[obj(mine)]);
+    t.answer_choose(P1, &[obj(theirs)]);
+    kill(&mut t, ve);
+    t.resolve_all();
+    let s = t.named_on_battlefield("Swamp");
+    assert_eq!(s.len(), 2);
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn overburden_has_the_player_who_put_the_creature_there_return_a_land() {
+    cr!("110.2a", "603.2");
+    supported("Overburden");
+    // P0 returns P1's Grizzly Bears under P1's control: P0 returns one of P0's lands.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P0, "Forest");
+    let island = t.battlefield(P1, "Island");
+    flicker(&mut t, bears);
+    t.battlefield(P1, "Overburden");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let b = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(b.len(), 1);
+    assert_eq!(ctl(&t, b[0]), P1);
+    assert!(t.in_hand(P0, "Forest"));
+    assert!(t.on_battlefield(island));
+}
+
+#[test]
+fn each_player_who_puts_a_card_of_their_choice_onto_the_battlefield_is_that_player() {
+    cr!("110.2a", "603.2");
+    supported("Overburden");
+    supported("Exhume");
+    // P0's Exhume: "Each player puts a creature card from their graveyard onto the
+    // battlefield." P1 puts the Grizzly Bears there, so P1 returns a land.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Overburden");
+    t.graveyard(P1, "Grizzly Bears");
+    let forest = t.battlefield(P0, "Forest");
+    t.battlefield(P1, "Island");
+    cast_at(&mut t, P0, "Exhume", &[]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert!(t.in_hand(P1, "Island"));
+    assert!(t.on_battlefield(forest));
+}
+
+#[test]
+fn that_player_who_puts_a_card_of_their_choice_onto_the_battlefield_is_that_player() {
+    cr!("110.2a", "603.2");
+    supported("Braids, Conjurer Adept");
+    supported("Thelon's Chant");
+    // P0's Braids, Conjurer Adept: "At the beginning of each player's upkeep, that player
+    // may put an artifact, creature, or land card from their hand onto the battlefield."
+    // P1 puts a Swamp there in their upkeep, so P1 is dealt the damage.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Braids, Conjurer Adept");
+    t.battlefield(P0, "Thelon's Chant");
+    let sw = t.hand(P1, "Swamp");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[obj(sw)]);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Swamp").len(), 1);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn natures_wrath_has_the_player_who_put_the_island_there_sacrifice() {
+    cr!("110.2a", "603.2", "701.21a");
+    ruling!(
+        "Nature's Wrath",
+        "Nature's Wrath cares about who puts the permanent onto the battlefield, not under whose control the permanent enters."
+    );
+    supported("Nature's Wrath");
+    // P0 returns P1's Island under P1's control: P0 sacrifices an Island of theirs.
+    let mut t = TestGame::new(2);
+    let theirs = t.battlefield(P1, "Island");
+    t.battlefield(P0, "Island");
+    flicker(&mut t, theirs);
+    t.battlefield(P1, "Nature's Wrath");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    let islands = t.named_on_battlefield("Island");
+    assert_eq!(islands.len(), 1);
+    assert_eq!(ctl(&t, islands[0]), P1);
+    assert!(t.in_graveyard(P0, "Island"));
 }
 
 #[test]
@@ -483,7 +608,10 @@ fn peacekeeper_doesnt_skip_the_combat_phase() {
     let gob = with_subtype(&t, P0, "Goblin");
     assert_eq!(gob.len(), 2);
     assert!(gob.iter().all(|g| !t.g.can_attack(*g)));
+    // The declare attackers step of this same turn still happens.
+    let turn = t.g.turn.number;
     t.advance_to(P0, Step::DeclareAttackers);
+    assert_eq!(t.g.turn.number, turn);
 }
 
 #[test]
