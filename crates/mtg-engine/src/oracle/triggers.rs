@@ -952,7 +952,7 @@ fn spell_caster(r: &str) -> Option<(PlayerRel, &str)> {
 }
 
 /// A trigger on casting a spell with {X} in its mana cost.
-fn casts_spell_with_x(t: &TriggerCond) -> bool {
+pub(crate) fn casts_spell_with_x(t: &TriggerCond) -> bool {
     fn has_x(f: &Filter) -> bool {
         match f {
             Filter::HasX => true,
