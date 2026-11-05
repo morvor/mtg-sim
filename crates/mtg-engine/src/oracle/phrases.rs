@@ -548,7 +548,30 @@ fn adjective_first_in_list(s: &str) -> Option<(Filter, bool, &str)> {
     Some((Filter::Or(vec![f_adj, f_rest]), plural, rest))
 }
 
+/// "Adventure instant or sorcery spell": a spell type (CR 205.3k) before a list of the card
+/// types it goes with describes each of them (not "(Adventure instant) or sorcery spell").
+fn spell_type_before_types(s: &str) -> Option<(Filter, bool, &str)> {
+    let s = s.trim_start();
+    let (w, rest) = split_word(s);
+    let (next, after) = split_word(rest);
+    if !matches!(next, "instant" | "sorcery") || !matches!(split_word(after).0, "or" | "and/or")
+    {
+        return None;
+    }
+    let st @ Filter::Subtype(_) = head_noun(w)? else {
+        return None;
+    };
+    if !matches!(&st, Filter::Subtype(n) if subtype_kind(n) == Some(SubtypeKind::Spell)) {
+        return None;
+    }
+    let (f, plural, r) = parse_object_phrase(rest)?;
+    Some((Filter::and(vec![st, f]), plural, r))
+}
+
 pub fn parse_object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
+    if let Some(r) = spell_type_before_types(s) {
+        return Some(r);
+    }
     if let Some(r) = two_phrases_same_head(s) {
         return Some(r);
     }
