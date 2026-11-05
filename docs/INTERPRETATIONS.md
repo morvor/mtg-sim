@@ -10,7 +10,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 |---|---:|---:|
 | interpretation | 73 | 7 |
 | deviation | 8 | 1 |
-| policy | 31 | 1 |
+| policy | 32 | 1 |
 
 ## Provisional entries
 
@@ -110,6 +110,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `per-source-prevention-division` | A shared "prevent X of that damage" is divided by its controller only when one source's damage exceeds X | policy | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `runesword-damage-this-turn` | Runesword's effects cover every creature its target has dealt damage to this turn, from the moment the damage is dealt | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `shared-color-source-locked` | "A source of your choice that shares a color with X" compares with X's colors as the effect is created | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
+| `shield-divided-among-recipients` | A damage shield applying to simultaneous damage to several of its recipients is divided by its controller | policy | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `words-target-on-activation` | A next-draw replacement's "any target" is chosen as the ability is activated; if it's gone, the draw is still replaced and nothing is dealt damage | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `ruling-contradicting-oracle-gives-way` | A ruling whose words contradict the card's own Oracle text gives way to the Oracle text | policy | decided | [sources](interpretations/sources.md) |
 | `anchor-target-chosen-first` | A target that another target is described by ("target creature that target Wall blocked this turn") is chosen first | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
