@@ -1342,7 +1342,13 @@ impl Game {
             Sel::TriggerSpellTargets => ctx
                 .event
                 .as_ref()
-                .map(|e| e.spell_targets.iter().copied().map(Entity::Object).collect())
+                .map(|e| {
+                    e.spell_targets
+                        .iter()
+                        .copied()
+                        .map(Entity::Object)
+                        .collect()
+                })
                 .unwrap_or_default(),
             Sel::TriggerSpell => ctx
                 .event

@@ -687,7 +687,34 @@ pub fn mana_cost_to_pay(g: &Game, sel: &Sel, ctx: &Ctx) -> Option<ManaCost> {
     let o = g.eval_sel_objects(sel, ctx).first().copied()?;
     let obj = g.obj(o);
     let mc = obj.chars.mana_cost.clone()?;
-    Some(mc.with_x(crate::object::x_value_of(obj) as u32))
+    // An activated ability's cost "equal to its mana cost" with {X} in it ("Encore. The
+    // encore cost is equal to its mana cost."): X is the value announced as the ability
+    // was activated (CR 107.3a, 602.2b). A spell on the stack has its own X.
+    let x = if obj.zone != crate::object::Zone::Stack
+        && ctx.cost_of == Some(crate::rule_statics::payment::CostOf::Ability)
+    {
+        ctx.x.max(0)
+    } else {
+        crate::object::x_value_of(obj) as i32
+    };
+    Some(mc.with_x(x as u32))
+}
+
+/// Whether one of the cost's "pay [its] mana cost" parts names an object with {X} in its
+/// mana cost: the activating player announces X (CR 107.3a, 602.2b).
+pub fn pays_mana_cost_with_x(g: &Game, cost: &Cost, ctx: &Ctx) -> bool {
+    cost.parts.iter().any(|c| match c {
+        CostPart::PayManaCostOf(s) | CostPart::PayManaCostOfLess(s, _) => {
+            g.eval_sel_objects(s, ctx).first().is_some_and(|o| {
+                g.obj(*o)
+                    .chars
+                    .mana_cost
+                    .as_ref()
+                    .is_some_and(|m| m.has_x())
+            })
+        }
+        _ => false,
+    })
 }
 
 /// [`mana_cost_to_pay`] with its generic mana reduced by `less` (CR 118.7d).
