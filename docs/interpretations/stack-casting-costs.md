@@ -303,3 +303,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Uldaros Theorix, Baron Helmut Zemo (and, with the same mechanism from other zones, Invoke Calamity and Rod of Absorption).
 - Code: `crates/mtg-engine/src/kw/cast_up_to_total_mana_value.rs` (`copies_effect_name`, `custom_effect`); `crates/mtg-engine/src/oracle/patterns/copies_7.rs`.
 - Tests: `tests/cards/c6_copies_casting.rs` (`uldaros_theorix_casts_copies_with_total_mana_value_six_or_less`, `baron_helmut_zemo_casts_up_to_three_copies_of_the_cards_its_boast_exiled`, `baron_helmut_zemo_a_copy_that_cant_be_cast_isnt_one_of_the_three`, `uldaros_theorix_a_copy_tried_too_early_may_be_cast_after_another`, `uldaros_theorix_counts_the_mana_value_of_the_half_of_a_split_card_cast`).
+
+## target-player-reference-rechecked: A target restriction naming "that player" (another target's controller) is checked against that target's controller as the spell resolves
+- Kind: interpretation
+- Status: provisional
+- Rules: 608.2b "If the spell or ability specifies targets, it checks whether the targets are still legal. ... Other changes to the game state may cause a target to no longer be legal; for example, its characteristics may have changed ..." / Mutiny ruling: "If either or both targets are illegal when Mutiny resolves, no creature will deal or be dealt damage."
+- Question: Mutiny ("Target creature an opponent controls deals damage equal to its power to another target creature that player controls") is cast in a multiplayer game; before it resolves, a third player (also an opponent) gains control of the first target. The first target is still a creature an opponent controls. Is the second target, still controlled by the original player, a creature "that player" controls?
+- Decision: No. "That player" is the first target's controller as the targets are checked on resolution, so the second target is illegal and, per the ruling, no damage is dealt.
+- Alternatives: "That player" stays the player who controlled the first target as the spell was cast, so both targets are legal and the first deals its damage to the second.
+- Why: 608.2b checks each target against the current game state, and the restriction's referent is part of that state; nothing in the rules locks the referent in when targets are chosen. No ruling addresses the case. Provisional because the reading of the referent is ours.
+- Affects: Mutiny and other spells whose second target is restricted by the first target's controller ("another target creature that player controls").
+- Code: target legality on resolution (`crates/mtg-engine/src/stack.rs`).
+- Tests: `tests/rulings/r_p002_misc.rs` (`mutiny_with_either_target_illegal_deals_no_damage`, case 4).
