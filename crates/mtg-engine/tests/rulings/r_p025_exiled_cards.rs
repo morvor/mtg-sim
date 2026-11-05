@@ -448,3 +448,44 @@ fn caller_of_the_untamed_chooses_the_card_to_copy_as_x_is_announced() {
         assert_eq!(name_of(&t, toks[0]), pick);
     }
 }
+
+/// A copy of Caller of the Untamed's ability copies the decisions made for it as it was
+/// activated (CR 707.10): its X and the card chosen with X (CR 601.2b). Neither the copy
+/// nor the original chooses again as it resolves; both tokens copy the card chosen.
+#[test]
+fn a_copy_of_caller_of_the_untamed_s_ability_copies_the_card_chosen_with_x() {
+    cr!("707.10", "601.2b");
+    interp!("x-defined-by-target");
+    supported("Caller of the Untamed");
+    for pick in ["Grizzly Bears", "Runeclaw Bear"] {
+        let mut t = TestGame::new(2);
+        let caller = t.battlefield(P0, "Caller of the Untamed");
+        let bears = exiled_before_the_game(&mut t, P0, "Caller of the Untamed", "Grizzly Bears");
+        let runeclaw = exiled_before_the_game(&mut t, P0, "Caller of the Untamed", "Runeclaw Bear");
+        t.lands(P0, "Forest", 2);
+        t.answer(P0, DecisionKind::X, Answer::Number(2));
+        let chosen = if pick == "Grizzly Bears" { bears } else { runeclaw };
+        let other = if chosen == bears { runeclaw } else { bears };
+        t.answer_choose(P0, &[obj(chosen)]);
+        // Were P0 asked again (for the copy or the original), it would pick the other one.
+        t.answer_choose(P0, &[obj(other)]);
+        t.answer_choose(P0, &[obj(other)]);
+        let ability = t
+            .activate(P0, caller, 0, &[])
+            .expect("activates")
+            .expect("on the stack");
+        let copy = mtg_engine::copy::copy_spell(&mut t.g, ability, P0, false).expect("copied");
+        assert_eq!(t.stack_len(), 2, "{pick}");
+        assert_eq!(t.g.obj(copy).stack.as_ref().and_then(|s| s.x), Some(2));
+        let before = t.g.battlefield.clone();
+        let resolving = t.asked().len();
+        t.resolve_all();
+        assert!(
+            choice_candidates(&t, resolving).is_empty(),
+            "{pick}: nothing is chosen as the copy or the original resolves"
+        );
+        let toks = new_tokens(&t, P0, &before);
+        assert_eq!(toks.len(), 2, "{pick}");
+        assert!(toks.iter().all(|x| name_of(&t, *x) == pick), "{pick}");
+    }
+}
