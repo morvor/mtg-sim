@@ -75,6 +75,12 @@ pub struct Ctx {
     /// [`crate::event_causes::Cause::of`].
     #[serde(default)]
     pub cause: Option<crate::event_causes::Cause>,
+    /// For an effect a replacement effect deferred until after the event ("draw that many
+    /// cards instead", run after the rest of the event, CR 121.7): the replacement effects
+    /// already applied to the event it replaced, which don't apply again to the events it
+    /// causes (CR 614.5).
+    #[serde(skip)]
+    pub repl_applied: Vec<crate::replacement::ReplKey>,
     /// The effects performed with this context are paying a cost (CR 118, 602.2b): counters
     /// they put aren't put by an effect ([`crate::events::CounterOrigin::Cost`]).
     #[serde(default)]
@@ -88,6 +94,14 @@ pub struct Ctx {
     /// chosen (CR 601.2a, 601.2c), so it isn't a legal target where it is now.
     #[serde(default)]
     pub casting_card: Option<ObjectId>,
+    /// Filters are evaluated to judge a target's legality, as it's chosen (CR 601.2c,
+    /// 603.3d), changed (CR 115.7, 707.10c-e) or rechecked (CR 608.2b): a requirement
+    /// about the target's current state ("Equipment attached to that creature") isn't
+    /// met through what it was attached to before its host left (CR 608.2h is about
+    /// effects, not targets). Set by `Game::is_legal_target` and
+    /// `Game::legal_target_candidates` on their own copy of the context.
+    #[serde(default)]
+    pub target_legality: bool,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -747,7 +761,8 @@ impl Game {
                 // attached to it as it last existed there (it became unattached then).
                 let left = |e: &Entity| matches!(e, Entity::Object(h) if !self.is_live(*h));
                 o.attached_to.is_some_and(|e| hosts.contains(&e))
-                    || (o.attached_to.is_none()
+                    || (!ctx.target_legality
+                        && o.attached_to.is_none()
                         && o.last_attached_to
                             .is_some_and(|e| left(&e) && hosts.contains(&e)))
             }
