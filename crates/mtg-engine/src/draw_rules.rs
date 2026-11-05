@@ -76,7 +76,9 @@ pub fn draws_cards(e: &Effect) -> bool {
 /// that includes drawing cards): not if it would have a player draw more cards than an
 /// effect lets them draw — including any card at all for a player who can't draw cards
 /// (CR 121.2b, 121.3, 121.3a). A player with no cards in their library may still choose
-/// to draw (CR 121.3).
+/// to draw (CR 121.3). The same goes for the other actions a player can't choose unless
+/// they can perform them in full (CR 118.3, 118.12): milling, discarding, exiling or
+/// moving chosen cards, beholding, putting or removing counters.
 pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
     match e {
         Effect::Draw { who, n } => {
@@ -177,6 +179,23 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 },
             ..
         } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // "You may remove two +1/+1 counters from it. If you do, ...": the removal is a cost
+        // (CR 118.12) that can't be paid in part (CR 118.3): each object or player must
+        // have that many such counters, and an object that has left its zone has none
+        // (CR 400.7; Verazol, the Split Current rulings). "Remove all [kind] counters"
+        // (`i32::MAX`, see `counter_grammar::remove_effect`) is however many there are.
+        Effect::RemoveCounters { what, kind, n } => {
+            let all = matches!(n, Value::Const(i32::MAX));
+            let n = g.eval_value(n, ctx).max(0) as u32;
+            let count = |c: &std::collections::BTreeMap<CounterKind, u32>| match kind {
+                Some(k) => c.get(k.as_str()).copied().unwrap_or(0),
+                None => c.values().sum(),
+            };
+            g.eval_sel(what, ctx).into_iter().all(|e| match e {
+                Entity::Object(o) => g.is_live(o) && (all || count(&g.obj(o).counters) >= n),
+                Entity::Player(p) => all || count(&g.player(p).counters) >= n,
+            })
+        }
         // Named effects a keyword implements (e.g. exiling craft materials, CR 702.167a).
         Effect::Custom(name) => crate::kw::custom_effect_possible(g, name, ctx).unwrap_or(true),
         // "You may search ...": a player who can't search libraries can't choose to (so

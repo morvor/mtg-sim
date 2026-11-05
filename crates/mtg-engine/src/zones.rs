@@ -407,6 +407,15 @@ pub fn cost_exiled_text(cost: &Cost, effect: &str) -> Option<String> {
         text = text.replace('\u{1}', "the exiled cards");
         changed = true;
     }
+    // "Exile any number of black cards from your graveyard ...: Copy those exiled cards."
+    // (Baron Helmut Zemo): the cards the cost exiled; also "Copy those cards.", the first
+    // instruction's object before the effect names anything else.
+    let first_object_is_those_cards = text
+        .split_once(' ')
+        .is_some_and(|(verb, r)| !verb.contains(',') && r.starts_with("those cards"));
+    if !changed && (text.contains("those exiled cards") || first_object_is_those_cards) {
+        changed = true;
+    }
     // "Exile a face-down permanent you control face up: You may play that card this
     // turn." (Primordial Mist): "that card", before the effect names anything else.
     if !changed
