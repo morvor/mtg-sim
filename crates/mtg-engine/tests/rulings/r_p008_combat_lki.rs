@@ -292,9 +292,13 @@ fn scuttling_doom_engine_block_stays_after_the_blockers_power_drops() {
 #[test]
 fn the_fallen_damages_only_its_current_controllers_opponents() {
     cr!("109.5", "102.2");
+    // (The ruling's first sentence, "deal damage only to opponents of its current
+    // controller", predates the Dominaria Oracle update that gave The Fallen "each opponent
+    // and planeswalker": the_fallen_damages_the_planeswalkers_it_has_dealt_damage_to,
+    // docs/rulings-exemptions/rulings-P008.tsv. Among players, it still holds.)
     ruling!(
         "The Fallen",
-        "The Fallen’s ability causes it to deal damage only to opponents of its current controller. If The Fallen has dealt damage to you, and then you gain control of it, you won’t be damaged during your upkeep."
+        "If The Fallen has dealt damage to you, and then you gain control of it, you won’t be damaged during your upkeep."
     );
     let mut t = TestGame::new(2);
     let fallen = t.battlefield(P0, "The Fallen");
@@ -309,6 +313,33 @@ fn the_fallen_damages_only_its_current_controllers_opponents() {
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (20, 17));
+}
+
+/// The Fallen under its current Oracle text ("At the beginning of your upkeep, this
+/// creature deals 1 damage to each opponent and planeswalker it has dealt damage to this
+/// game", errata of the Dominaria Oracle update, 2018): a planeswalker it has dealt damage
+/// to is dealt 1 whoever controls it, the controller of The Fallen included. Its 2007
+/// ruling's "only to opponents of its current controller" is outdated for planeswalkers
+/// (`docs/rulings-exemptions/rulings-P008.tsv`, `docs/RULING_DISCREPANCIES.md`).
+#[test]
+fn the_fallen_damages_the_planeswalkers_it_has_dealt_damage_to() {
+    cr!("306.8", "109.5");
+    let mut t = TestGame::new(2);
+    let fallen = t.battlefield(P0, "The Fallen");
+    let theirs = pw(&mut t, P1, "Chandra, Torch of Defiance", 6);
+    hit(&mut t, fallen, obj(theirs), 1);
+    assert_eq!(t.counters(theirs, "loyalty"), 5);
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.counters(theirs, "loyalty"), 4, "P0's upkeep");
+    // Under P1's control: P1's own planeswalker is still dealt 1; no player is (it has
+    // never dealt damage to P0, P1's opponent).
+    give_control(&mut t, fallen, P1);
+    t.advance_to(P1, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.counters(theirs, "loyalty"), 3, "P1's upkeep");
+    assert_eq!((t.life(P0), t.life(P1)), (20, 20));
 }
 
 #[test]

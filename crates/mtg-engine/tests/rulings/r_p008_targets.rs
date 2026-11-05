@@ -421,9 +421,15 @@ fn sarkhan_the_mad_gives_a_dragon_even_if_the_sacrifice_cant_happen() {
 #[test]
 fn etb_burn_with_no_legal_opponent_isnt_put_on_the_stack() {
     cr!("603.3d", "608.2b");
+    // (Manticore of the Gauntlet's ruling was written for "deals 3 damage to target
+    // opponent"; since the Dominaria Oracle update it says "target opponent or
+    // planeswalker", so "If you can't choose a target opponent" no longer decides it:
+    // manticore_of_the_gauntlet_targets_a_planeswalker_when_its_opponents_have_hexproof,
+    // docs/rulings-exemptions/rulings-P008.tsv. What it says happens when the ability has
+    // no legal target still holds, tested here with no planeswalker on the battlefield.)
     ruling!(
         "Manticore of the Gauntlet",
-        "If you can't choose a target opponent when you put Manticore of the Gauntlet's triggered ability on the stack (most likely because your opponents have hexproof), the ability is removed from the stack and you won't put a -1/-1 counter on any creature."
+        "the ability is removed from the stack and you won't put a -1/-1 counter on any creature."
     );
     ruling!(
         "Rakdos Firewheeler",
@@ -431,7 +437,7 @@ fn etb_burn_with_no_legal_opponent_isnt_put_on_the_stack() {
     );
     supported("Manticore of the Gauntlet");
     supported("Rakdos Firewheeler");
-    // Manticore: P1 has hexproof (and no planeswalkers).
+    // Manticore: P1 has hexproof, and there's no planeswalker.
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Hill Giant");
     player_hexproof(&mut t, P1);
@@ -475,6 +481,45 @@ fn etb_burn_with_no_legal_opponent_isnt_put_on_the_stack() {
     player_hexproof(&mut t, P1);
     t.resolve_all();
     assert_eq!((t.life(P1), dmg(&t, wurm)), (20, 2));
+}
+
+/// Manticore of the Gauntlet under its current Oracle text ("This creature deals 3 damage
+/// to target opponent or planeswalker", errata of the Dominaria Oracle update, 2018): with
+/// its opponents hexproof, the ability can still target a planeswalker, an opponent's or,
+/// with no other choice, its controller's own, so it's put on the stack (CR 603.3d). Its
+/// 2017 ruling's "If you can't choose a target opponent" is outdated
+/// (`docs/rulings-exemptions/rulings-P008.tsv`, `docs/RULING_DISCREPANCIES.md`).
+#[test]
+fn manticore_of_the_gauntlet_targets_a_planeswalker_when_its_opponents_have_hexproof() {
+    cr!("603.3d", "601.2c");
+    supported("Manticore of the Gauntlet");
+    // P1 has hexproof and a planeswalker: the planeswalker is the target.
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = pw(&mut t, P1, "Chandra, Torch of Defiance", 4);
+    player_hexproof(&mut t, P1);
+    t.answer_targets(P0, &[obj(mine)]);
+    t.answer_targets(P0, &[obj(theirs)]);
+    t.enter(P0, "Manticore of the Gauntlet");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(
+        (t.counters(mine, "-1/-1"), t.counters(theirs, "loyalty")),
+        (1, 1)
+    );
+    // P1 has hexproof and no planeswalker: P0's own planeswalker is the only choice.
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Hill Giant");
+    let own = pw(&mut t, P0, "Chandra, Pyrogenius", 5);
+    player_hexproof(&mut t, P1);
+    t.answer_targets(P0, &[obj(mine)]);
+    t.answer_targets(P0, &[obj(own)]);
+    t.enter(P0, "Manticore of the Gauntlet");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!((t.counters(mine, "-1/-1"), t.counters(own, "loyalty")), (1, 2));
 }
 
 #[test]
