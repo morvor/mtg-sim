@@ -2827,8 +2827,7 @@ impl Game {
         ctx.link = a.link;
         // X in the cost.
         let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
-            || act.cost.parts.iter().any(|c| cost_part_has_x(c))
-            || crate::mana_abilities::pays_mana_cost_with_x(self, &act.cost, &ctx);
+            || act.cost.parts.iter().any(|c| cost_part_has_x(c));
         let mut x = 0i64;
         if has_x {
             let mut max = crate::activation_costs::x_bound(self, p, act);

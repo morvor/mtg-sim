@@ -149,10 +149,18 @@ fn caller_of_the_untamed_copy_of_an_x_card_has_x_0() {
     hydra_with_x0(&mut t, toks[0]);
 }
 
+/// Araumi's ruling "If the creature card has {X} in its mana cost, you can choose any value
+/// for X, but the value you choose won't apply to the tokens that are created. X will be 0
+/// for those tokens." isn't cited: its first clause disagrees with CR 107.3h ("If an
+/// effect instructs a player to pay an object's mana cost that includes {X}, the value of
+/// X is treated as 0 unless the object is a spell on the stack.") and with Young
+/// Deathclaws' ruling on the same wording ("The scavenge cost is equal to its mana cost":
+/// "If the creature card you scavenge has {X} in its mana cost, X is 0."). See
+/// docs/agents/engine-gaps.md, "Apparent conflicts (Nov 5)". The engine follows the CR: X
+/// is 0 for the encore cost and for the tokens.
 #[test]
-fn araumi_encore_tokens_have_x_0_whatever_x_was_paid() {
-    cr!("107.3a", "602.2b", "202.3e", "702.141a", "707.2");
-    ruling!("Araumi of the Dead Tide", "If the creature card has {X} in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are created. X will be 0 for those tokens.");
+fn araumi_encore_cost_and_tokens_have_x_0() {
+    cr!("107.3h", "202.3e", "702.141a", "707.2");
     supported("Araumi of the Dead Tide");
     let mut t = TestGame::new(2);
     let araumi = t.battlefield(P0, "Araumi of the Dead Tide");
@@ -161,7 +169,7 @@ fn araumi_encore_tokens_have_x_0_whatever_x_was_paid() {
     t.answer_choose(P0, &[obj(fodder)]);
     t.activate(P0, araumi, 0, &[obj(hydra)]).expect("activation");
     t.resolve_all();
-    // Encore {X}{G}{G} with X = 3.
+    // Encore {X}{G}{G}: X is 0, so {G}{G}, though P0 would announce 3.
     t.lands(P0, "Forest", 5);
     t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(3));
     t.g.recompute();
@@ -178,7 +186,7 @@ fn araumi_encore_tokens_have_x_0_whatever_x_was_paid() {
     t.g.turn.priority = Some(P0);
     t.g.activate_ability(P0, hydra, uid).expect("encore");
     t.resolve_all();
-    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 5, "X = 3 was paid");
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
     let toks = new_tokens(&t, P0, &before);
     assert_eq!(toks.len(), 1, "{}", t.dump_log());
     hydra_with_x0(&mut t, toks[0]);
