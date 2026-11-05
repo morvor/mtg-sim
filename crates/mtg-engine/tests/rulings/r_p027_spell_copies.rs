@@ -3,7 +3,7 @@
 //! spell was countered, and it's put on the stack above it (CR 608.2h, 707.10); copies
 //! aren't cast (CR 707.10, 601.2i); what a copy copies (additional costs paid, CR 707.10)
 //! and what it doesn't (choices made on resolution, CR 707.10); which objects get a copy
-//! for "each other creature that spell could target" (CR 115.10, 707.10c).
+//! for "each other creature that spell could target" (CR 707.10d).
 
 use crate::r_p027_common::*;
 use crate::r_p028_common::{self as p028, Copier};
@@ -17,6 +17,7 @@ use crate::r_s26_common::modify_until_eot;
 use mtg_engine::ability::Modification;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::{Keyword, KeywordKind};
+use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -62,7 +63,12 @@ fn copies_even_if_countered(c: &Copier, cast: fn(&mut TestGame) -> ObjectId) {
     t.settle();
     assert!(!t.g.stack.contains(&s));
     let copies = resolve_until_copies(&mut t);
-    assert_eq!(copies.len(), 1, "{}: no copy of the countered spell", c.name);
+    assert_eq!(
+        copies.len(),
+        1,
+        "{}: no copy of the countered spell",
+        c.name
+    );
     t.resolve_all();
     assert_eq!(t.life(P1), 17, "{}", c.name);
     // Not countered: the copy is put on the stack above the original.
@@ -245,7 +251,10 @@ fn ether_copies_the_next_spell_even_without_its_mana() {
     assert!(tap_for_mana(&mut t, P0, ether, "Add {U}"));
     // The {U} empties from P0's pool at the end of the main phase.
     t.advance_to(P0, Step::BeginningOfCombat);
-    assert_eq!(crate::r_s24_common::pool(&t, P0, mtg_engine::mana::ManaType::U), 0);
+    assert_eq!(
+        crate::r_s24_common::pool(&t, P0, mtg_engine::mana::ManaType::U),
+        0
+    );
     // Think Twice (an instant, no targets: "Draw a card."), paid with Islands.
     t.lands(P0, "Island", 2);
     let tt = t.hand(P0, "Think Twice");
@@ -278,7 +287,10 @@ fn primal_wellspring_copies_any_spell_its_mana_is_spent_on() {
 #[test]
 fn unbound_flourishing_doesnt_copy_an_x_cost_without_the_x_symbol() {
     cr!("107.3", "602.2b");
-    ruling!("Unbound Flourishing", "An ability with a cost that includes X, but not the mana symbol {X}, won't be copied.");
+    ruling!(
+        "Unbound Flourishing",
+        "An ability with a cost that includes X, but not the mana symbol {X}, won't be copied."
+    );
     // Krav, the Unredeemed: "{B}, Sacrifice X creatures: Target player draws X cards and
     // gains X life. Put X +1/+1 counters on Krav."
     supported("Krav, the Unredeemed");
@@ -321,7 +333,10 @@ fn ricochet_copies_keep_additional_costs_paid_for_the_original() {
         t.lands(P0, "Mountain", 5);
         let card = t.hand(P0, "Burst Lightning");
         let from = t.asked().len();
-        t.cast(P0, card).kicked(kicked).target(Entity::Player(P1)).go();
+        t.cast(P0, card)
+            .kicked(kicked)
+            .target(Entity::Player(P1))
+            .go();
         // {U}{R} for Riku's trigger.
         t.lands(P0, "Island", 1);
         t.lands(P0, "Mountain", 1);
@@ -349,7 +364,11 @@ fn see_doubles_copy_keeps_the_originals_kicker() {
     t.lands(P0, "Wastes", 4);
     let card = t.hand(P0, "Burst Lightning");
     let from = t.asked().len();
-    let burst = t.cast(P0, card).kicked(true).target(Entity::Player(P1)).go();
+    let burst = t
+        .cast(P0, card)
+        .kicked(true)
+        .target(Entity::Player(P1))
+        .go();
     lands_for_cost(&mut t, P0, "See Double");
     let sd = t.hand(P0, "See Double");
     t.cast(P0, sd).modes(&[0]).target(obj(burst)).go();
@@ -365,7 +384,7 @@ fn see_doubles_copy_keeps_the_originals_kicker() {
 
 #[test]
 fn see_double_both_modes_if_any_opponent_has_eight_cards_in_their_graveyard() {
-    cr!("700.2", "700.2d");
+    cr!("700.2", "700.2a");
     ruling!("See Double", "You may choose both modes if any opponent has eight or more cards in their graveyard, not necessarily all of them.");
     for (cards, both) in [(8, true), (7, false)] {
         let mut t = TestGame::new(3);
@@ -378,11 +397,16 @@ fn see_double_both_modes_if_any_opponent_has_eight_cards_in_their_graveyard() {
         lands_for_cost(&mut t, P0, "See Double");
         let sd = t.hand(P0, "See Double");
         let before = tokens(&t, P0);
-        t.cast(P0, sd)
+        // P1 has `cards` cards in their graveyard, P2 none.
+        assert_eq!(t.graveyard_size(P2), 0);
+        let id = t
+            .cast(P0, sd)
             .modes(&[0, 1])
             .targets(&[obj(s)])
             .target(obj(bears))
             .go();
+        let modes = crate::r_s26_common::modes_on_stack(&t, id);
+        assert_eq!(modes.len(), if both { 2 } else { 1 }, "{cards} cards: {modes:?}");
         keep_copy_targets(&mut t, P0);
         t.resolve_all();
         let new = tokens(&t, P0).len() - before.len();
@@ -393,7 +417,7 @@ fn see_double_both_modes_if_any_opponent_has_eight_cards_in_their_graveyard() {
 
 #[test]
 fn sublime_epiphany_counters_a_keyword_trigger() {
-    cr!("113.3c", "702.108a", "701.6b");
+    cr!("113.3c", "702.108a", "701.6a");
     ruling!("Sublime Epiphany", "Triggered abilities use the word \"when,\" \"whenever,\" or \"at.\" They're often written as \"[Trigger condition], [effect].\" Some keyword abilities (such as prowess) are triggered abilities and will have \"when,\" \"whenever,\" or \"at\" in their reminder text.");
     supported("Sublime Epiphany");
     // P1 casts Shock with a prowess creature (Monastery Swiftspear): P0 counters the
@@ -409,7 +433,10 @@ fn sublime_epiphany_counters_a_keyword_trigger() {
     let se = t.hand(P0, "Sublime Epiphany");
     t.cast(P0, se).modes(&[1]).target(obj(trig)).go();
     t.resolve();
-    assert!(!t.g.stack.contains(&trig), "the prowess trigger wasn't countered");
+    assert!(
+        !t.g.stack.contains(&trig),
+        "the prowess trigger wasn't countered"
+    );
     t.resolve_all();
     assert_eq!(t.pt(swift), (1, 2));
     assert_eq!(t.life(P0), 18);
@@ -418,7 +445,10 @@ fn sublime_epiphany_counters_a_keyword_trigger() {
 #[test]
 fn sublime_epiphany_chooses_each_mode_at_most_once() {
     cr!("700.2", "700.2d");
-    ruling!("Sublime Epiphany", "You can't choose any one mode more than once.");
+    ruling!(
+        "Sublime Epiphany",
+        "You can't choose any one mode more than once."
+    );
     // Choosing "Target player draws a card." twice: not a legal choice. P0 draws once.
     let mut t = TestGame::new(2);
     lands_for_cost(&mut t, P0, "Sublime Epiphany");
@@ -493,17 +523,29 @@ fn lithoform_engines_copy_pays_the_triggers_cost_separately() {
     t.answer_targets(P0, &[obj(trig)]);
     activate_containing(&mut t, P0, engine, "activated or triggered").expect("copy");
     // Mana for both {1}{G} payments.
-    t.lands(P0, "Forest", 2);
-    t.lands(P0, "Wastes", 2);
+    t.lands(P0, "Forest", 4);
     t.resolve();
-    // Nothing paid yet.
-    assert_eq!(choices_since(&t, from).len(), 0);
+    // The copy is on the stack above the trigger; no payment has been offered yet.
+    let pay_prompts = |t: &TestGame| {
+        t.asked()[from..]
+            .iter()
+            .filter(|(p, d)| {
+                *p == P0 && matches!(d, Decision::YesNo { prompt, .. } if prompt.starts_with("Pay"))
+            })
+            .count()
+    };
+    assert_eq!(t.stack_len(), 2);
+    assert_eq!(pay_prompts(&t), 0);
     let paid_before = crate::r_s01_common::tapped_lands(&t, P0);
+    // The copy resolves: P0 pays for it.
     t.answer_yes(P0, true);
     t.resolve();
+    assert_eq!(pay_prompts(&t), 1);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
+    // The original asks again: P0 declines.
     t.answer_yes(P0, false);
     t.resolve_all();
+    assert_eq!(pay_prompts(&t), 2);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 2);
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), paid_before + 2);
 }
@@ -532,7 +574,7 @@ fn damaged(t: &TestGame, creatures: &[ObjectId]) -> Vec<bool> {
 
 #[test]
 fn precursor_golem_ignores_golems_the_spell_couldnt_target() {
-    cr!("707.10", "707.10c", "702.18a");
+    cr!("707.10", "707.10d", "702.18a");
     ruling!("Precursor Golem", "Any Golem that couldn't be targeted by the original spell (due to shroud, protection abilities, targeting restrictions, or any other reason) is just ignored by Precursor Golem's second ability.");
     supported("Precursor Golem");
     let mut t = TestGame::new(2);
@@ -544,12 +586,15 @@ fn precursor_golem_ignores_golems_the_spell_couldnt_target() {
     shroud(&mut t, others[1]);
     shock_at(&mut t, pg);
     t.resolve_all();
-    assert_eq!(damaged(&t, &[pg, others[0], others[1]]), vec![true, true, false]);
+    assert_eq!(
+        damaged(&t, &[pg, others[0], others[1]]),
+        vec![true, true, false]
+    );
 }
 
 #[test]
 fn zada_ignores_creatures_the_spell_couldnt_target() {
-    cr!("707.10", "707.10c", "702.18a");
+    cr!("707.10", "707.10d", "702.18a");
     ruling!("Zada, Hedron Grinder", "Any creature you control that couldn't be targeted by the original spell (due to shroud, protection abilities, targeting restrictions, or any other reason) is just ignored by Zada's ability.");
     supported("Zada, Hedron Grinder");
     let mut t = TestGame::new(2);
@@ -560,12 +605,16 @@ fn zada_ignores_creatures_the_spell_couldnt_target() {
     shroud(&mut t, b);
     shock_at(&mut t, zada);
     t.resolve_all();
-    assert_eq!(damaged(&t, &[zada, a, b, p1]), vec![true, true, false, false]);
+    assert_eq!(
+        damaged(&t, &[zada, a, b, p1]),
+        vec![true, true, false, false]
+    );
 }
 
 #[test]
 fn mirrorwing_dragon_ignores_creatures_the_spell_couldnt_target() {
-    cr!("707.10", "707.10c", "702.18a");
+    cr!("707.10", "707.10d", "702.18a", "115.3");
+    ruling!("Mirrorwing Dragon", "Any creature the player controls that couldn't be targeted by the original spell (due to shroud, protection abilities, targeting restrictions, or any other reason) is just ignored by Mirrorwing Dragon's ability. If the spell has multiple targets, a given creature must be a legal target for all of them or else a copy won't be created for that creature.");
     supported("Mirrorwing Dragon");
     let mut t = TestGame::new(2);
     let dragon = t.battlefield(P0, "Mirrorwing Dragon");
@@ -575,4 +624,58 @@ fn mirrorwing_dragon_ignores_creatures_the_spell_couldnt_target() {
     shock_at(&mut t, dragon);
     t.resolve_all();
     assert_eq!(damaged(&t, &[dragon, a, b]), vec![true, true, false]);
+    // A spell with two targets, both the Dragon: Getaway Glamer with both modes ("Exile
+    // target nontoken creature. ..." and "Destroy target creature if no other creature
+    // has greater power."). P0's Wolf token is a legal target for the second only: no
+    // copy for it. The Grizzly Bears gets one, targeting it twice.
+    supported("Getaway Glamer");
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P0, "Mirrorwing Dragon");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wolf = crate::r_p023_common::wolf_token(&mut t, P0);
+    t.g.players[0].mana_pool.add_type(ManaType::W, 4);
+    let glamer = t.hand(P0, "Getaway Glamer");
+    let spell = t
+        .cast(P0, glamer)
+        .modes(&[0, 1])
+        .target(dragon)
+        .target(dragon)
+        .go();
+    assert_eq!(targets_of(&t, spell), vec![obj(dragon), obj(dragon)]);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(targets_of(&t, copies[0]), vec![obj(bears), obj(bears)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(wolf));
+    assert_eq!(t.zone(t.g.current(bears)), mtg_engine::object::Zone::Exile);
+    assert_eq!(t.zone(t.g.current(dragon)), mtg_engine::object::Zone::Exile);
+    // The narrower target second: Deadly Complication with both modes ("Destroy target
+    // creature." and "Put a +1/+1 counter on target suspected creature you control.").
+    // The Wolf token (not suspected) gets no copy; the suspected Bears does.
+    supported("Deadly Complication");
+    let mut t = TestGame::new(2);
+    let dragon = t.battlefield(P0, "Mirrorwing Dragon");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wolf = crate::r_p023_common::wolf_token(&mut t, P0);
+    for c in [dragon, bears] {
+        assert!(mtg_engine::kwa::suspect_detain::suspect(&mut t.g, c));
+    }
+    t.g.recompute();
+    for m in [ManaType::B, ManaType::R, ManaType::C] {
+        t.g.players[0].mana_pool.add_type(m, 1);
+    }
+    let dc = t.hand(P0, "Deadly Complication");
+    let spell = t
+        .cast(P0, dc)
+        .modes(&[0, 1])
+        .target(dragon)
+        .target(dragon)
+        .go();
+    assert_eq!(targets_of(&t, spell), vec![obj(dragon), obj(dragon)]);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(targets_of(&t, copies[0]), vec![obj(bears), obj(bears)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(wolf));
+    assert!(!t.on_battlefield(bears) && !t.on_battlefield(dragon));
 }

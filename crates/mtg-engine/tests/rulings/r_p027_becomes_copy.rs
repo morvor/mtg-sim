@@ -9,8 +9,8 @@ use crate::r_p027_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, supported};
 use crate::r_s06_common::activate_containing;
 use crate::r_s25_common::{cast_new, targets_of};
-use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::ability::AbilityKind;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::events::MoveCause;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
@@ -24,7 +24,11 @@ use mtg_engine::*;
 /// "enters" trigger (2 life) nor Soul Warden (1 life) gained P0 life since `life`.
 fn became_riftwatcher(t: &TestGame, id: ObjectId, life: i32) {
     assert_eq!(name_of(t, id), RIFTWATCHER, "{id:?} isn't a copy");
-    assert_eq!(t.counters(id, counters::TIME), 0, "it 'entered' with counters");
+    assert_eq!(
+        t.counters(id, counters::TIME),
+        0,
+        "it 'entered' with counters"
+    );
     assert_eq!(t.life(P0), life, "an enters ability triggered");
     assert_eq!(t.stack_len(), 0);
 }
@@ -96,7 +100,7 @@ fn artisan_of_forms_doesnt_enter_or_leave_as_it_changes() {
 
 #[test]
 fn artisan_of_forms_targets_on_the_stack_and_chooses_on_resolution() {
-    cr!("603.3d", "608.2b", "603.5");
+    cr!("603.3d", "603.5");
     ruling!("Artisan of Forms", "You choose the target for the triggered ability when the ability is put onto the stack. You choose whether or not Artisan of Forms becomes a copy of that creature when the ability resolves.");
     for yes in [false, true] {
         let mut t = TestGame::new(2);
@@ -111,14 +115,18 @@ fn artisan_of_forms_targets_on_the_stack_and_chooses_on_resolution() {
         t.answer_yes(P0, yes);
         t.resolve();
         assert_eq!(yes_no_asked(&t, from), 1);
-        let want = if yes { "Hill Giant" } else { "Artisan of Forms" };
+        let want = if yes {
+            "Hill Giant"
+        } else {
+            "Artisan of Forms"
+        };
         assert_eq!(name_of(&t, artisan), want);
     }
 }
 
 #[test]
 fn cryptoplasm_targets_on_the_stack_and_chooses_on_resolution() {
-    cr!("603.3d", "608.2b", "603.5", "503.1a");
+    cr!("603.3d", "603.5", "503.1a");
     ruling!("Cryptoplasm", "You choose the target for the triggered ability when the ability is put onto the stack. You choose whether or not Cryptoplasm becomes a copy of that creature when the ability resolves.");
     // "At the beginning of your upkeep, you may have this creature become a copy of
     // another target creature, except it has this ability."
@@ -164,7 +172,7 @@ fn fleeting_reflection_target_doesnt_enter_or_leave() {
 
 #[test]
 fn lazav_familiar_stranger_doesnt_enter_or_leave() {
-    cr!("707.2", "603.6a", "603.6c", "614.1c", "701.47a");
+    cr!("707.2", "603.6a", "603.6c", "614.1c", "700.13");
     ruling!("Lazav, Familiar Stranger", "When Lazav becomes a copy of an exiled creature card, it's neither entering nor leaving the battlefield. Any enters-the-battlefield or leaves-the-battlefield abilities won't trigger.");
     // "Whenever you commit a crime, put a +1/+1 counter on Lazav. Then you may exile a
     // card from a graveyard. If a creature card was exiled this way, you may have Lazav
@@ -219,7 +227,7 @@ fn muddle_doesnt_enter_or_leave() {
 
 #[test]
 fn muddle_as_a_copy_has_no_trigger_but_its_waiting_triggers_resolve() {
-    cr!("707.2", "113.7a", "702.116a");
+    cr!("707.2", "113.7a", "707.9a");
     ruling!("Muddle, the Ever-Changing", "While Muddle is a copy of something else, it won't have its own triggered ability. However, if Muddle still has abilities on the stack waiting to resolve, they will do so. (It won't get multiple instances of myriad this way.)");
     let mut t = TestGame::new(2);
     let muddle = t.battlefield(P0, "Muddle, the Ever-Changing");
@@ -262,7 +270,7 @@ fn hallcreeper_copies(t: &mut TestGame, creeper: ObjectId, what: ObjectId) {
 
 #[test]
 fn silent_hallcreeper_doesnt_enter_or_leave() {
-    cr!("707.2", "603.6a", "614.1c", "510.3a");
+    cr!("707.2", "603.6a", "603.6c", "614.1c");
     ruling!("Silent Hallcreeper", "When Silent Hallcreeper becomes a copy of the target creature, it's neither entering nor leaving the battlefield. Any enters-the-battlefield or leaves-the-battlefield abilities won't trigger.");
     supported("Silent Hallcreeper");
     let mut t = TestGame::new(2);
@@ -286,16 +294,26 @@ fn silent_hallcreeper_as_a_copy_has_none_of_its_previous_abilities() {
     hallcreeper_copies(&mut t, creeper, bears);
     assert_eq!(name_of(&t, creeper), "Grizzly Bears");
     assert!(t.obj_now(creeper).chars.abilities.is_empty());
-    // It can be blocked now, and dealing combat damage triggers nothing.
+    // Dealing combat damage to a player triggers nothing now: no counters, no card
+    // drawn, still a Grizzly Bears.
     let creeper = t.g.current(creeper);
+    t.advance_to(P0, Step::PrecombatMain);
+    let hand = t.hand_size(P0);
+    attack_with(&mut t, &[(creeper, Entity::Player(P1))]);
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.counters(creeper, counters::PLUS1), 0);
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(name_of(&t, creeper), "Grizzly Bears");
+    // And it can be blocked: they trade.
     t.advance_to(P0, Step::PrecombatMain);
     let wall = t.battlefield(P1, "Grizzly Bears");
     attack_with(&mut t, &[(creeper, Entity::Player(P1))]);
     block_and_finish(&mut t, P1, &[(wall, creeper)]);
-    // They trade; no trigger.
     assert!(!t.on_battlefield(wall));
     assert!(!t.on_battlefield(creeper));
-    assert_eq!(t.life(P1), 19);
+    assert_eq!(t.life(P1), 17);
 }
 
 #[test]
@@ -326,7 +344,7 @@ fn spirit_of_resilience_doesnt_enter_or_leave() {
 
 #[test]
 fn the_ever_changing_dane_doesnt_enter() {
-    cr!("707.2", "603.6a", "614.1c", "603.10a");
+    cr!("707.2", "603.6a", "603.6c", "614.1c", "603.10a");
     ruling!("The Ever-Changing 'Dane", "When The Ever-Changing ’Dane becomes a copy of a creature, it’s neither entering nor leaving the battlefield. Any enters-the-battlefield or leaves-the-battlefield abilities won’t trigger.");
     // "{1}, Sacrifice another creature: The Ever-Changing 'Dane becomes a copy of the
     // sacrificed creature, except it has this ability."
@@ -445,7 +463,7 @@ fn assimilation_aegis_creature_doesnt_enter_or_leave() {
 
 #[test]
 fn vesuvan_doppelganger_switching_isnt_leaving_the_battlefield() {
-    cr!("707.2", "603.6c", "610.3a", "611.2b");
+    cr!("707.2", "603.6c", "610.3");
     ruling!("Vesuvan Doppelganger", "When the Doppelganger switches creatures, the creature it used to be is not considered to have left the battlefield. Such effects will consider the creature to have left the battlefield when the Doppelganger leaves the battlefield.");
     // Banisher Priest: "When this creature enters, exile target creature an opponent
     // controls until this creature leaves the battlefield."
@@ -478,7 +496,7 @@ fn vesuvan_doppelganger_switching_isnt_leaving_the_battlefield() {
 
 #[test]
 fn vesuvan_doppelganger_copying_isnt_a_shapeshifter() {
-    cr!("707.2", "707.9b");
+    cr!("707.2", "707.9c");
     ruling!("Vesuvan Doppelganger", "When it takes on the characteristics of the other card, it is no longer of creature type Shapeshifter.");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -493,7 +511,7 @@ fn vesuvan_doppelganger_copying_isnt_a_shapeshifter() {
 
 #[test]
 fn vesuvan_doppelganger_targets_on_the_stack_and_chooses_on_resolution() {
-    cr!("603.3d", "608.2b", "603.5");
+    cr!("603.3d", "603.5");
     ruling!("Vesuvan Doppelganger", "When Vesuvan Doppelganger's triggered ability triggers, you must choose a target for it. You determine whether to have the Doppelganger become a copy of that target when the ability resolves.");
     for yes in [false, true] {
         let mut t = TestGame::new(2);
@@ -520,7 +538,7 @@ fn vesuvan_doppelganger_targets_on_the_stack_and_chooses_on_resolution() {
 
 #[test]
 fn vesuvan_doppelganger_copying_itself_gets_another_instance() {
-    cr!("707.2", "707.9b", "603.3b", "113.7a");
+    cr!("707.2", "707.9a", "603.3b", "113.7a");
     ruling!("Vesuvan Doppelganger", "Vesuvan Doppelganger's triggered ability may cause it to become a copy of itself. A Vesuvan Doppelganger that becomes a copy of a Vesuvan Doppelganger (either itself or a different one) will gain another instance of its triggered ability. Each instance of that ability will trigger during its controller's upkeep. They'll all be put on the stack and resolve one at a time. The last one to resolve determines the Doppelganger's characteristics for the rest of the turn.");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -617,7 +635,10 @@ fn tilonallis_skinshifter_stays_a_copy_until_damage_wears_off() {
     let skin = t.battlefield(P0, "Tilonalli's Skinshifter");
     let giant = t.battlefield(P0, "Hill Giant");
     t.answer_targets(P0, &[obj(giant)]);
-    attack_with(&mut t, &[(skin, Entity::Player(P1)), (giant, Entity::Player(P1))]);
+    attack_with(
+        &mut t,
+        &[(skin, Entity::Player(P1)), (giant, Entity::Player(P1))],
+    );
     t.resolve_all();
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(name_of(&t, skin), "Hill Giant");

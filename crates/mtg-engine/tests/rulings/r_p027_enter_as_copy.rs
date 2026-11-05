@@ -111,7 +111,7 @@ fn the_mimeoplasm_has_the_copied_cards_enters_abilities() {
 
 #[test]
 fn dance_of_many_token_gets_its_enters_with_counters() {
-    cr!("707.2", "614.1c", "111.10");
+    cr!("707.2", "614.1c", "614.12");
     ruling!("Dance of Many", "Treat the token as entering as a copy of the chosen creature. If that creature normally gets counters when entering, the token creature gets counters.");
     supported("Dance of Many");
     let mut t = TestGame::new(2);
@@ -130,7 +130,7 @@ fn dance_of_many_token_gets_its_enters_with_counters() {
 
 #[test]
 fn sakashima_of_a_thousand_faces_turns_off_the_legend_rule() {
-    cr!("704.5j", "707.9b");
+    cr!("704.5j", "707.9a");
     ruling!("Sakashima of a Thousand Faces", "While the \"legend rule\" doesn't apply to permanents you control, you can control any number of legendary permanents with the same name and none of them will be put into the graveyard.");
     let mut t = TestGame::new(2);
     let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
@@ -151,7 +151,10 @@ fn sakashima_of_a_thousand_faces_turns_off_the_legend_rule() {
 #[test]
 fn metamorphic_alteration_chooses_only_a_creature_on_the_battlefield() {
     cr!("614.12", "707.2");
-    ruling!("Metamorphic Alteration", "You can choose only a creature on the battlefield.");
+    ruling!(
+        "Metamorphic Alteration",
+        "You can choose only a creature on the battlefield."
+    );
     // "Enchant creature. As this Aura enters, choose a creature. Enchanted creature is a
     // copy of the chosen creature."
     supported("Metamorphic Alteration");

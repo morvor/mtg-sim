@@ -7,6 +7,7 @@
 use crate::r_p027_common::*;
 use crate::r_s01_common::supported;
 use crate::r_s25_common::lands_for_cost;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
@@ -69,18 +70,68 @@ fn enter_copying_nothing(name: &str, o: Offer, anthem: bool) -> (TestGame, Objec
 /// The cases of the 0/0 creatures that copy nothing: the card, what it could copy, its
 /// printed creature types, and text only the copy effect's exception would give it.
 const ZEROS: &[(&str, Offer, &[&str], Option<&str>)] = &[
-    ("Evil Twin", Offer::Bears, &["Shapeshifter"], Some("Destroy target creature")),
-    ("Gigantoplasm", Offer::Bears, &["Shapeshifter"], Some("base power and toughness X/X")),
-    ("Jwari Shapeshifter", Offer::Ally, &["Shapeshifter", "Ally"], None),
-    ("Malleable Impostor", Offer::Bears, &["Faerie", "Shapeshifter"], None),
-    ("Mercurial Pretender", Offer::Bears, &["Shapeshifter"], Some("Return this creature")),
-    ("Progenitor Mimic", Offer::Bears, &["Shapeshifter"], Some("create a token")),
-    ("Sakashima's Student", Offer::Bears, &["Human", "Ninja"], None),
+    (
+        "Evil Twin",
+        Offer::Bears,
+        &["Shapeshifter"],
+        Some("Destroy target creature"),
+    ),
+    (
+        "Gigantoplasm",
+        Offer::Bears,
+        &["Shapeshifter"],
+        Some("base power and toughness X/X"),
+    ),
+    (
+        "Jwari Shapeshifter",
+        Offer::Ally,
+        &["Shapeshifter", "Ally"],
+        None,
+    ),
+    (
+        "Malleable Impostor",
+        Offer::Bears,
+        &["Faerie", "Shapeshifter"],
+        None,
+    ),
+    (
+        "Mercurial Pretender",
+        Offer::Bears,
+        &["Shapeshifter"],
+        Some("Return this creature"),
+    ),
+    (
+        "Progenitor Mimic",
+        Offer::Bears,
+        &["Shapeshifter"],
+        Some("create a token"),
+    ),
+    (
+        "Sakashima's Student",
+        Offer::Bears,
+        &["Human", "Ninja"],
+        None,
+    ),
     ("Stunt Double", Offer::Bears, &["Shapeshifter"], None),
     ("Synth Infiltrator", Offer::Bears, &["Synth"], None),
-    ("Dack's Duplicate", Offer::Bears, &["Shapeshifter"], Some("Dethrone")),
-    ("Pirated Copy", Offer::Bears, &["Shapeshifter", "Pirate"], Some("you draw a card")),
-    ("Activated Sleeper", Offer::DeadBears, &["Phyrexian", "Shapeshifter"], None),
+    (
+        "Dack's Duplicate",
+        Offer::Bears,
+        &["Shapeshifter"],
+        Some("Dethrone"),
+    ),
+    (
+        "Pirated Copy",
+        Offer::Bears,
+        &["Shapeshifter", "Pirate"],
+        Some("you draw a card"),
+    ),
+    (
+        "Activated Sleeper",
+        Offer::DeadBears,
+        &["Phyrexian", "Shapeshifter"],
+        None,
+    ),
     ("Body Double", Offer::DeadBears, &["Shapeshifter"], None),
 ];
 
@@ -121,9 +172,12 @@ fn zero_zero_creatures_that_copy_nothing() {
         let n = t.obj_now(printed).chars.abilities.len();
         assert_eq!(t.obj_now(c).chars.abilities.len(), n, "{name}: abilities");
         if let Some(text) = exception {
-            let granted = t.obj_now(c).chars.abilities.iter().filter(|a| {
-                a.text.contains(text) && !a.text.contains("enter as a copy")
-            });
+            let granted = t
+                .obj_now(c)
+                .chars
+                .abilities
+                .iter()
+                .filter(|a| a.text.contains(text) && !a.text.contains("enter as a copy"));
             assert_eq!(granted.count(), 0, "{name} has the exception");
         }
         assert_eq!(t.counters(c, counters::PLUS1), 0, "{name}");
@@ -132,11 +186,45 @@ fn zero_zero_creatures_that_copy_nothing() {
 
 #[test]
 fn dacks_duplicate_copying_nothing_has_no_haste_or_dethrone() {
-    cr!("707.9", "702.10b");
+    cr!("707.9", "707.9a", "614.12");
     ruling!("Dack's Duplicate", "You can choose to not copy anything. In that case, Dack's Duplicate enters the battlefield as a 0/0 Shapeshifter creature, and will probably die almost immediately, when state-based actions are next performed.");
-    let (t, c) = enter_copying_nothing("Dack's Duplicate", Offer::Bears, true);
+    let (mut t, c) = enter_copying_nothing("Dack's Duplicate", Offer::Bears, true);
     assert!(!t.obj_now(c).has_keyword(KeywordKind::Haste));
     assert!(!t.obj_now(c).has_keyword(KeywordKind::Dethrone));
+    // A token copy of it enters as a copy of Dack's Duplicate (the token's copy effect),
+    // and its copied ability may make it a copy of something else (CR 614.12): copying
+    // nothing, it's a Dack's Duplicate with none of that ability's exceptions either.
+    t.lands(P0, "Island", 3);
+    let cc = t.hand(P0, "Cackling Counterpart");
+    let before = crate::r_s01_common::tokens(&t, P0);
+    t.answer_choose(P0, &[]);
+    t.cast(P0, cc).target(obj(c)).go();
+    t.resolve_all();
+    let toks: Vec<ObjectId> = crate::r_s01_common::tokens(&t, P0)
+        .into_iter()
+        .filter(|x| !before.contains(x))
+        .collect();
+    assert_eq!(toks.len(), 1);
+    let tok = toks[0];
+    assert_eq!(name_of(&t, tok), "Dack's Duplicate");
+    assert_eq!(t.pt(tok), (1, 1));
+    assert!(!t.obj_now(tok).has_keyword(KeywordKind::Haste));
+    assert!(!t.obj_now(tok).has_keyword(KeywordKind::Dethrone));
+    // Positive control: copying the Bears, it has both.
+    t.lands(P0, "Island", 3);
+    let cc = t.hand(P0, "Cackling Counterpart");
+    let before = crate::r_s01_common::tokens(&t, P0);
+    let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    t.answer_choose(P0, &[obj(bears)]);
+    t.cast(P0, cc).target(obj(c)).go();
+    t.resolve_all();
+    let tok = crate::r_s01_common::tokens(&t, P0)
+        .into_iter()
+        .find(|x| !before.contains(x))
+        .expect("the second token");
+    assert_eq!(name_of(&t, tok), "Grizzly Bears");
+    assert!(t.obj_now(tok).has_keyword(KeywordKind::Haste));
+    assert!(t.obj_now(tok).has_keyword(KeywordKind::Dethrone));
 }
 
 #[test]
@@ -214,12 +302,15 @@ fn altered_ego(x: i64, copy: bool) -> (TestGame, ObjectId) {
 
 #[test]
 fn altered_ego_with_x_0_is_just_a_copy() {
-    cr!("707.9", "707.9b", "107.3");
+    cr!("707.9", "614.1c", "107.3");
     ruling!("Altered Ego", "X can be 0. Altered Ego won't enter with any additional +1/+1 counters, and it will just be a copy of the chosen creature.");
     let (t, _) = altered_ego(0, true);
     let ego = t.named_on_battlefield("Grizzly Bears");
     assert_eq!(ego.len(), 2);
-    let mine = *ego.iter().find(|id| t.obj_now(**id).controller == P0).unwrap();
+    let mine = *ego
+        .iter()
+        .find(|id| t.obj_now(**id).controller == P0)
+        .unwrap();
     assert_eq!(t.counters(mine, counters::PLUS1), 0);
     assert_eq!(t.pt(mine), (2, 2));
     // Positive control: with X = 2 it gets two.
@@ -254,4 +345,69 @@ fn altered_ego_copying_nothing_gets_no_counters_and_dies() {
     assert_eq!(ego.len(), 1);
     assert_eq!(t.counters(ego[0], counters::PLUS1), 0);
     assert_eq!(t.pt(ego[0]), (1, 1));
+}
+
+/// P0 casts Altered Ego with X = 3 while P0 controls Essence of the Wild ("Creatures you
+/// control enter as a copy of this creature."), answering the choice of which copy
+/// effect to apply first with `first`, and the choice of what Altered Ego copies (if its
+/// own copy effect still applies) with `copy` (P1's Grizzly Bears) or nothing. Returns
+/// the game, the permanent, and whether Essence's copy effect was applied first.
+fn altered_ego_with_essence(first: usize, copy: bool) -> (TestGame, ObjectId, bool) {
+    supported("Altered Ego");
+    supported("Essence of the Wild");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Essence of the Wild");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    lands_for_cost(&mut t, P0, "Altered Ego");
+    t.lands(P0, "Wastes", 3);
+    let card = t.hand(P0, "Altered Ego");
+    t.cast(P0, card).x(3).go();
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Replacement, Answer::Index(first));
+    t.answer_choose(P0, if copy { vec![obj(bears)] } else { vec![] }.as_slice());
+    t.resolve_all();
+    let options = t.asked()[from..]
+        .iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseReplacement { options } => Some(options.clone()),
+            _ => None,
+        })
+        .expect("P0 chooses which copy effect to apply first");
+    assert_eq!(options.len(), 2, "{options:?}");
+    let essence_first = options[first].contains("Creatures you control");
+    let ego = t.g.current(card);
+    assert!(t.on_battlefield(ego));
+    (t, ego, essence_first)
+}
+
+#[test]
+fn altered_ego_entering_as_an_essence_of_the_wild_gets_no_counters() {
+    cr!("707.9", "707.9e", "616.1c");
+    ruling!("Essence of the Wild", "If a creature such as Clone is entering under your control, there will be two copy effects to apply: the creature's own and Essence of the Wild's. No matter what order these effects are applied, the creature will be a copy of Essence of the Wild when it enters.");
+    // Whichever copy effect is applied first, and whether Altered Ego's own copies
+    // something or nothing, it's a plain Essence of the Wild: the counters are an
+    // exception of Altered Ego's own copy effect only (CR 707.9), which copied nothing,
+    // was followed by Essence's copy effect (CR 707.9e), or no longer applied.
+    let mut orders = vec![];
+    for first in [0, 1] {
+        for copy in [false, true] {
+            let (t, ego, essence_first) = altered_ego_with_essence(first, copy);
+            let case = format!(
+                "{} first, Altered Ego copying {}",
+                if essence_first {
+                    "Essence"
+                } else {
+                    "Altered Ego"
+                },
+                if copy { "the Bears" } else { "nothing" }
+            );
+            assert_eq!(name_of(&t, ego), "Essence of the Wild", "{case}");
+            assert_eq!(t.pt(ego), (6, 6), "{case}");
+            assert_eq!(t.counters(ego, counters::PLUS1), 0, "{case}");
+            orders.push(essence_first);
+        }
+    }
+    orders.sort();
+    orders.dedup();
+    assert_eq!(orders, vec![false, true], "both orders");
 }

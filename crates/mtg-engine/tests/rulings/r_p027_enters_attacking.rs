@@ -1,7 +1,7 @@
 //! Rulings batch P027 — a token put onto the battlefield attacking: its controller
 //! chooses which player, planeswalker or battle it attacks as it enters, which needn't be
 //! what the creature that made it is attacking, nor what other such tokens attack (CR
-//! 508.4, 508.4a). Played in a three-player game: P0 attacks P1; P1 controls a
+//! 508.4). Played in a three-player game: P0 attacks P1; P1 controls a
 //! planeswalker; P0 controls a battle P2 protects.
 
 use crate::r_p027_common::*;
@@ -116,7 +116,7 @@ fn run_choosing(
 
 #[test]
 fn flamerush_rider_token_attacks_another_opponent_or_planeswalker() {
-    cr!("508.4", "508.4a");
+    cr!("508.4");
     ruling!("Flamerush Rider", "You choose which opponent or opposing planeswalker the token is attacking as you put it onto the battlefield. It doesn't have to be the same player or planeswalker Flamerush Rider is attacking.");
     supported("Flamerush Rider");
     for choice in [0, 1] {
@@ -134,7 +134,7 @@ fn flamerush_rider_token_attacks_another_opponent_or_planeswalker() {
 
 #[test]
 fn gyrus_token_attacks_another_player_or_planeswalker() {
-    cr!("508.4", "508.4a");
+    cr!("508.4");
     ruling!("Gyrus, Waker of Corpses", "You choose which player or planeswalker the token is attacking. It doesn't have to be attacking the same player or planeswalker that Gyrus is attacking.");
     // "Whenever Gyrus attacks, you may exile target creature card with lesser power from
     // your graveyard. If you do, create a token that's a copy of that card and that's
@@ -157,7 +157,7 @@ fn gyrus_token_attacks_another_player_or_planeswalker() {
 
 #[test]
 fn delina_token_attacks_another_player_or_planeswalker() {
-    cr!("508.4", "508.4a", "706.2");
+    cr!("508.4");
     ruling!("Delina, Wild Mage", "You declare which player or planeswalker the token is attacking as you put it onto the battlefield. It doesn't have to be the same player or planeswalker Delina, Wild Mage is attacking.");
     supported("Delina, Wild Mage");
     for choice in [0, 1] {
@@ -176,7 +176,7 @@ fn delina_token_attacks_another_player_or_planeswalker() {
 
 #[test]
 fn phantom_steed_token_attacks_another_player_or_planeswalker() {
-    cr!("508.4", "508.4a");
+    cr!("508.4");
     ruling!("Phantom Steed", "You declare which player or planeswalker the token is attacking as you put it onto the battlefield. It doesn't have to be the same player or planeswalker Phantom Steed is attacking.");
     // "When this creature enters, exile another target creature you control until this
     // creature leaves the battlefield. Whenever this creature attacks, create a tapped and
@@ -200,7 +200,7 @@ fn phantom_steed_token_attacks_another_player_or_planeswalker() {
 
 #[test]
 fn shaun_token_attacks_another_player_planeswalker_or_battle() {
-    cr!("508.4", "508.4a", "310.5");
+    cr!("508.4", "310.5");
     ruling!("Shaun, Father of Synths", "You declare which player, planeswalker, or battle the token is attacking as you put it onto the battlefield. It doesn’t have to be attacking the same player, planeswalker, or battle that Shaun is attacking.");
     // "Whenever you attack, you may create a tapped and attacking token that's a copy of
     // target attacking legendary creature you control other than Shaun, except ..."
@@ -221,7 +221,7 @@ fn shaun_token_attacks_another_player_planeswalker_or_battle() {
 
 #[test]
 fn calamity_tokens_attack_whatever_each_chooses() {
-    cr!("508.4", "508.4a", "310.5", "702.171a");
+    cr!("508.4", "310.5", "702.171a");
     ruling!("Calamity, Galloping Inferno", "You choose which player, planeswalker, or battle each of the tokens is attacking as it enters the battlefield. They don't have to attack the same player, planeswalker, or battle that Calamity is attacking, nor do they have to attack the same player, planeswalker, or battle as each other.");
     supported("Calamity, Galloping Inferno");
     for choice in [[0, 1], [2, 0], [3, 2]] {
@@ -243,7 +243,7 @@ fn calamity_tokens_attack_whatever_each_chooses() {
 
 #[test]
 fn altair_tokens_attack_whatever_each_chooses() {
-    cr!("508.4", "508.4a", "310.5");
+    cr!("508.4", "310.5");
     ruling!("Altaïr Ibn-La'Ahad", "You choose which player, planeswalker, or battle the tokens are attacking. Each token can enter attacking a different player, planeswalker, or battle, and they don't need to be the same one that Altaïr is attacking.");
     // "Whenever Altaïr attacks, exile up to one target Assassin creature card from your
     // graveyard with a memory counter on it. Then for each creature card you own in exile

@@ -56,7 +56,9 @@ fn inalla_taps_any_untapped_wizards_even_summoning_sick_ones() {
 fn pay_prompts(t: &TestGame, from: usize) -> usize {
     t.asked()[from..]
         .iter()
-        .filter(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { prompt, .. } if prompt.starts_with("Pay")))
+        .filter(|(p, d)| {
+            *p == P0 && matches!(d, Decision::YesNo { prompt, .. } if prompt.starts_with("Pay"))
+        })
         .count()
 }
 
@@ -66,7 +68,12 @@ fn inalla_and_bramble_sovereign_pay_only_once_for_one_token() {
     ruling!("Inalla, Archmage Ritualist", "You can pay {1} only once each time Inalla's first ability resolves. You can't pay more to get more than one token.");
     ruling!("Bramble Sovereign", "While resolving the triggered ability of Bramble Sovereign, you can't pay {1}{G} multiple times to have a player create more tokens.");
     for (source, cost_land, entering, paid) in [
-        ("Inalla, Archmage Ritualist", "Wastes", "Prodigal Sorcerer", 1),
+        (
+            "Inalla, Archmage Ritualist",
+            "Wastes",
+            "Prodigal Sorcerer",
+            1,
+        ),
         ("Bramble Sovereign", "Forest", "Grizzly Bears", 2),
     ] {
         supported(source);
@@ -89,7 +96,7 @@ fn inalla_and_bramble_sovereign_pay_only_once_for_one_token() {
 
 #[test]
 fn the_fire_crystal_reduces_the_total_cost_not_the_mana_value() {
-    cr!("601.2f", "118.7", "202.3b", "702.34a", "702.33d");
+    cr!("601.2f", "118.7", "118.9d", "202.3", "702.34a", "702.33d");
     ruling!("The Fire Crystal", "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying (such as a flashback cost), add any cost increases (such as kicker costs), then apply any cost reductions (such as that of The Fire Crystal's first ability). The mana value of the spell is determined by only its mana cost, no matter what the total cost to cast that spell was.");
     supported("The Fire Crystal");
     // Firebolt's flashback cost {4}{R} costs {3}{R}: four lands, not three.
@@ -141,8 +148,11 @@ fn the_fire_crystal_reduces_the_total_cost_not_the_mana_value() {
 
 #[test]
 fn lazav_doesnt_trigger_for_dying_tokens() {
-    cr!("603.2", "111.7", "704.5d");
-    ruling!("Lazav, Dimir Mastermind", "Token creatures dying won't cause Lazav's triggered ability to trigger.");
+    cr!("603.2", "111.6");
+    ruling!(
+        "Lazav, Dimir Mastermind",
+        "Token creatures dying won't cause Lazav's triggered ability to trigger."
+    );
     // "Whenever a creature card is put into an opponent's graveyard from anywhere, you may
     // have Lazav become a copy of that card, except ..."
     supported("Lazav, Dimir Mastermind");
@@ -165,7 +175,7 @@ fn lazav_doesnt_trigger_for_dying_tokens() {
 
 #[test]
 fn trostani_uses_the_toughness_as_it_resolves() {
-    cr!("608.2h", "603.10", "119.3");
+    cr!("608.2h", "107.1b", "119.3");
     ruling!("Trostani, Selesnya's Voice", "Trostani's first ability checks the creature's toughness as it resolves. If that creature has left the battlefield, use its toughness from when it was last on the battlefield. You can't lose life this way if that creature's toughness was less than 0.");
     // "Whenever another creature you control enters, you gain life equal to that
     // creature's toughness."
@@ -175,7 +185,11 @@ fn trostani_uses_the_toughness_as_it_resolves() {
     t.battlefield(P0, "Trostani, Selesnya's Voice");
     let bears = t.enter(P0, "Grizzly Bears");
     t.settle();
-    modify_until_eot(&mut t, bears, vec![Modification::ModifyPT(Value::c(0), Value::c(3))]);
+    modify_until_eot(
+        &mut t,
+        bears,
+        vec![Modification::ModifyPT(Value::c(0), Value::c(3))],
+    );
     t.resolve_all();
     assert_eq!(t.life(P0), 25);
     // Left the battlefield (after a +0/+1 pump): its last toughness, 3.
@@ -183,9 +197,18 @@ fn trostani_uses_the_toughness_as_it_resolves() {
     t.battlefield(P0, "Trostani, Selesnya's Voice");
     let bears = t.enter(P0, "Grizzly Bears");
     t.settle();
-    modify_until_eot(&mut t, bears, vec![Modification::ModifyPT(Value::c(0), Value::c(1))]);
+    modify_until_eot(
+        &mut t,
+        bears,
+        vec![Modification::ModifyPT(Value::c(0), Value::c(1))],
+    );
     let b = t.g.current(bears);
-    t.g.move_object(b, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        b,
+        Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.flush_events();
     t.resolve_all();
     assert_eq!(t.life(P0), 23);
@@ -194,7 +217,11 @@ fn trostani_uses_the_toughness_as_it_resolves() {
     t.battlefield(P0, "Trostani, Selesnya's Voice");
     let bears = t.enter(P0, "Grizzly Bears");
     t.settle();
-    modify_until_eot(&mut t, bears, vec![Modification::ModifyPT(Value::c(-5), Value::c(-5))]);
+    modify_until_eot(
+        &mut t,
+        bears,
+        vec![Modification::ModifyPT(Value::c(-5), Value::c(-5))],
+    );
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     t.resolve_all();
     assert_eq!(t.life(P0), 20);
@@ -203,25 +230,17 @@ fn trostani_uses_the_toughness_as_it_resolves() {
 // --- Zndrsplt's Judgment ---------------------------------------------------------------------
 
 /// P0 casts Zndrsplt's Judgment in a four-player game, calling each player friend (0)
-/// or foe (1) as given; each player chooses their only creature.
-fn judgment(calls: [usize; 4], creatures: bool) -> (TestGame, Vec<ObjectId>) {
-    supported("Zndrsplt's Judgment");
-    let mut t = TestGame::new(4);
-    let mut cs = vec![];
-    if creatures {
-        for p in 0..4 {
-            let c = t.battlefield(PlayerId(p), "Grizzly Bears");
-            t.answer_choose(PlayerId(p), &[obj(c)]);
-            cs.push(c);
-        }
-    }
-    for c in calls {
-        t.answer(P0, DecisionKind::Option, Answer::Index(c));
-    }
-    lands_for(&mut t, P0, "{4}{U}");
-    let j = t.hand(P0, "Zndrsplt's Judgment");
-    t.cast(P0, j).go();
-    (t, cs)
+/// or foe (1) as given; each player chooses their only creature, a Grizzly Bears.
+fn judgment(calls: [usize; 4]) -> (TestGame, Vec<ObjectId>) {
+    let (t, cs) = judgment_with(&calls, &[Some(grizzly as Creature); 4]);
+    (t, cs.into_iter().flatten().collect())
+}
+
+/// Puts a creature onto the battlefield under a player's control.
+type Creature = fn(&mut TestGame, PlayerId) -> ObjectId;
+
+fn grizzly(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    t.battlefield(p, "Grizzly Bears")
 }
 
 /// Whether the decision is a choice among objects (a friend's or foe's choice).
@@ -229,13 +248,46 @@ fn is_choice(d: &Decision) -> bool {
     matches!(d, Decision::ChooseEntities { .. })
 }
 
+/// P0 casts Zndrsplt's Judgment in a game of `calls.len()` players, calling each player
+/// friend (0) or foe (1) as given; `creatures` puts each player's only creature onto the
+/// battlefield (none for `None`), which that player chooses. Returns the game and the
+/// creatures.
+fn judgment_with(
+    calls: &[usize],
+    creatures: &[Option<Creature>],
+) -> (TestGame, Vec<Option<ObjectId>>) {
+    supported("Zndrsplt's Judgment");
+    let mut t = TestGame::new(calls.len());
+    let mut cs = vec![];
+    for (p, c) in creatures.iter().enumerate() {
+        let p = PlayerId(p as u8);
+        let c = c.map(|f| f(&mut t, p));
+        if let Some(c) = c {
+            t.answer_choose(p, &[obj(c)]);
+        }
+        cs.push(c);
+    }
+    for c in calls {
+        t.answer(P0, DecisionKind::Option, Answer::Index(*c));
+    }
+    lands_for(&mut t, P0, "{4}{U}");
+    let j = t.hand(P0, "Zndrsplt's Judgment");
+    t.cast(P0, j).go();
+    (t, cs)
+}
+
+/// The choices made earlier in the current round of simultaneous choices, as `p` knows
+/// them (CR 101.4b).
+type Known = Vec<(PlayerId, Option<Vec<ObjectId>>)>;
+
 #[test]
-fn zndrsplts_judgment_friends_then_foes_choose_in_turn_order() {
-    cr!("101.4", "608.2e", "101.4a");
+fn zndrsplts_judgment_choices_in_turn_order_then_actions_at_the_same_time() {
+    cr!("101.4", "101.4b", "608.2e", "614.12", "603.10a");
     ruling!("Zndrsplt's Judgment", "When Zndrsplt's Judgment resolves and you choose friend or foe, first the next friend in turn order (or, if it's a friend's turn, that friend) chooses a creature they control, then each other friend in turn order does the same, then each of those players create a token at the same time. Friends will know choices made by earlier players when making their choices. Repeat this process for foes, who choose a creature one at a time and then return them all to their owners' hands at the same time.");
     // P0 (whose turn it is) and P3 are foes; P1 and P2 are friends.
-    let (mut t, cs) = judgment([1, 0, 0, 1], true);
-    // When each player chooses: the number of Grizzly Bears on the battlefield.
+    let (mut t, cs) = judgment([1, 0, 0, 1]);
+    // When each player chooses: the number of Grizzly Bears on the battlefield, and what
+    // they know of the choices made before theirs.
     let count = |g: &mtg_engine::game::Game| {
         g.battlefield
             .iter()
@@ -245,6 +297,12 @@ fn zndrsplts_judgment_friends_then_foes_choose_in_turn_order() {
     let seen: Vec<_> = (0..4)
         .map(|p| watch(&mut t, PlayerId(p), is_choice, count))
         .collect();
+    let known: [crate::r_s01_common::Seen<Known>; 4] = [
+        watch(&mut t, P0, is_choice, |g| g.known_apnap_choices(P0)),
+        watch(&mut t, P1, is_choice, |g| g.known_apnap_choices(P1)),
+        watch(&mut t, P2, is_choice, |g| g.known_apnap_choices(P2)),
+        watch(&mut t, P3, is_choice, |g| g.known_apnap_choices(P3)),
+    ];
     let from = t.asked().len();
     t.resolve_all();
     let order: Vec<PlayerId> = t.asked()[from..]
@@ -262,28 +320,90 @@ fn zndrsplts_judgment_friends_then_foes_choose_in_turn_order() {
     assert_eq!(n(2), vec![4]);
     assert_eq!(n(0), vec![6]);
     assert_eq!(n(3), vec![6]);
+    // Each friend (and each foe) knew the choices made before theirs in that round.
+    let k = |p: usize| known[p].lock().unwrap().clone();
+    assert_eq!(k(1), vec![vec![]]);
+    assert_eq!(k(2), vec![vec![(P1, Some(vec![cs[1]]))]]);
+    assert_eq!(k(0), vec![vec![]]);
+    assert_eq!(k(3), vec![vec![(P0, Some(vec![cs[0]]))]]);
     assert!(t.in_hand(P0, "Grizzly Bears") && t.in_hand(P3, "Grizzly Bears"));
     assert_eq!(tokens(&t, P1).len(), 1);
     assert_eq!(tokens(&t, P2).len(), 1);
     assert!(t.on_battlefield(cs[1]) && t.on_battlefield(cs[2]));
+
+    // The friends' tokens are created at the same time: P1's token copy of Kinjalli's
+    // Sunwing ("Creatures your opponents control enter tapped.", an ability P1's Sunwing
+    // has lost until end of turn) doesn't make P2's token enter tapped (CR 614.12).
+    supported("Kinjalli's Sunwing");
+    fn sunwing(t: &mut TestGame, p: PlayerId) -> ObjectId {
+        let s = t.battlefield(p, "Kinjalli's Sunwing");
+        modify_until_eot(t, s, vec![Modification::RemoveAllAbilities]);
+        s
+    }
+    let (mut t, _) = judgment_with(&[1, 0, 0], &[None, Some(sunwing), Some(grizzly)]);
+    t.resolve_all();
+    let (p1, p2) = (tokens(&t, P1), tokens(&t, P2));
+    assert_eq!((p1.len(), p2.len()), (1, 1));
+    assert_eq!(name_of(&t, p1[0]), "Kinjalli's Sunwing");
+    assert_eq!(name_of(&t, p2[0]), "Grizzly Bears");
+    assert!(!t.obj_now(p2[0]).tapped, "P2's token entered after P1's");
+    // Positive control: a creature entering under P2's control now enters tapped.
+    let giant = t.enter(P2, "Hill Giant");
+    t.settle();
+    assert!(t.obj_now(giant).tapped);
+
+    // The foes' creatures are returned at the same time: P1's creature ("Whenever
+    // another creature leaves the battlefield, you gain 1 life.") sees P2's leave with it
+    // (CR 603.10a).
+    fn hound(t: &mut TestGame, p: PlayerId) -> ObjectId {
+        let def = crate::r_s01_common::custom_card(
+            "Departure Hound",
+            "Creature — Dog",
+            "{1}{W}",
+            Some((1, 1)),
+            "Whenever another creature leaves the battlefield, you gain 1 life.",
+        );
+        t.custom(p, def, Zone::Battlefield)
+    }
+    let (mut t, cs) = judgment_with(&[0, 1, 1], &[None, Some(hound), Some(grizzly)]);
+    t.resolve_all();
+    assert!(t.in_hand(P1, "Departure Hound") && t.in_hand(P2, "Grizzly Bears"));
+    assert_eq!(t.zone(t.g.current(cs[2].unwrap())), Zone::Hand(P2));
+    assert_eq!(t.life(P1), 21, "P1's creature left before P2's");
 }
 
 #[test]
 fn zndrsplts_judgment_can_call_players_who_cant_comply() {
     cr!("101.3", "608.2e");
     ruling!("Zndrsplt's Judgment", "You may call a player a friend or a foe even if that player will be instructed to perform an impossible action. For example, for Regna's Sanction, a foe may control no untapped creatures.");
-    // No one controls a creature: friends and foes alike do nothing.
-    let (mut t, _) = judgment([0, 1, 0, 1], false);
+    // P0 (a foe) and P1 (a friend) control a creature; P2 (a foe) and P3 (a friend)
+    // don't, and are called anyway: they do nothing, the others act.
+    let (mut t, cs) = judgment_with(&[1, 0, 1, 0], &[Some(grizzly), Some(grizzly), None, None]);
+    let from = t.asked().len();
     t.resolve_all();
+    let calls: Vec<Vec<String>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseOption { options, .. } if *p == P0 => Some(options.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        calls,
+        vec![vec!["Friend".to_string(), "Foe".to_string()]; 4]
+    );
     assert!(t.in_graveyard(P0, "Zndrsplt's Judgment"));
-    assert!(tokens(&t, P0).is_empty() && tokens(&t, P2).is_empty());
+    assert_eq!(tokens(&t, P1).len(), 1);
+    assert!(t.on_battlefield(cs[1].unwrap()));
+    assert!(t.in_hand(P0, "Grizzly Bears"));
+    assert!(tokens(&t, P3).is_empty() && tokens(&t, P0).is_empty());
 }
 
 // --- Grist, the Plague Swarm -----------------------------------------------------------------
 
 #[test]
 fn grist_can_activate_a_loyalty_ability_the_turn_it_enters_at_sorcery_speed() {
-    cr!("606.3", "307.1");
+    cr!("606.3");
     ruling!("Grist, Voracious Larva // Grist, the Plague Swarm", "You can activate one of Grist, the Plague Swarm's loyalty abilities the turn it enters the battlefield. However, you may do so only during one of your main phases when the stack is empty. For example, if Grist, the Plague Swarm enters the battlefield during combat, there will be an opportunity for your opponent to remove it before you can activate one of its abilities.");
     const GRIST: &str = "Grist, Voracious Larva // Grist, the Plague Swarm";
     supported(GRIST);
@@ -336,7 +456,13 @@ fn a_chosen_creature_type_is_one_existing_creature_type() {
         for ok in ["Bird", "Wizard", "Human", "Warrior", "Vampire", "Cat"] {
             assert!(o.iter().any(|x| x == ok), "{name}: {ok}");
         }
-        for bad in ["Artifact", "Legendary", "Cat Warrior", "Creature", "Equipment"] {
+        for bad in [
+            "Artifact",
+            "Legendary",
+            "Cat Warrior",
+            "Creature",
+            "Equipment",
+        ] {
             assert!(!o.iter().any(|x| x == bad), "{name}: {bad}");
         }
     }
@@ -357,6 +483,17 @@ fn a_chosen_creature_type_is_one_existing_creature_type() {
     assert_eq!(name_of(&t, mirror), "Qasali Pridemage");
     // It's a Cat Wizard too: Instruments of War pumps it.
     assert_eq!(t.pt(mirror), (3, 3));
+    // And things that affect non-Cat creatures don't affect it: Crippling Fear choosing
+    // Cat ("Creatures that aren't of the chosen type get -3/-3 until end of turn.") kills
+    // the Grizzly Bears, not the Cat Wizards.
+    supported("Crippling Fear");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    choose_creature_type(&mut t, P0, "Cat");
+    cast_new(&mut t, P0, "Crippling Fear", &[]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.pt(cat), (3, 3));
+    assert_eq!(t.pt(mirror), (3, 3));
 }
 
 /// Lands for the mana cost of the front face of `name` (generic as Wastes).
@@ -369,7 +506,10 @@ fn give_mana_for(t: &mut TestGame, name: &str) {
 #[test]
 fn kaya_chooses_all_the_targets_of_her_last_ability() {
     cr!("115.1", "601.2c", "602.2b");
-    ruling!("Kaya, Spirits' Justice", "You choose all targets for Kaya, Spirits' Justice's last ability.");
+    ruling!(
+        "Kaya, Spirits' Justice",
+        "You choose all targets for Kaya, Spirits' Justice's last ability."
+    );
     supported("Kaya, Spirits' Justice");
     let mut t = TestGame::new(3);
     let kaya = t.battlefield(P0, "Kaya, Spirits' Justice");
@@ -430,7 +570,7 @@ fn seasons_needn_t_choose_five_pawprints() {
 
 #[test]
 fn mimic_vat_with_nothing_exiled_makes_no_token() {
-    cr!("602.2", "607.2a", "608.2");
+    cr!("111.12", "602.2", "607.2a");
     ruling!("Mimic Vat", "You may activate the second ability even if no card has been exiled with Mimic Vat. If no card has been exiled with Mimic Vat by the time the ability resolves, no token will be created.");
     supported("Mimic Vat");
     let mut t = TestGame::new(2);
@@ -469,10 +609,14 @@ fn mimic_vat_can_exile_a_noncreature_card() {
 
 #[test]
 fn deceiver_of_form_may_put_the_card_on_the_bottom_either_way() {
-    cr!("701.20a", "401.4");
+    cr!("608.2d");
     ruling!("Deceiver of Form", "You may put the card on the bottom of your library in any of the possible scenarios that could occur with this card. It doesn’t matter whether the card is a creature card or not. If it is a creature card, it doesn’t matter whether you chose to have the copy effect apply.");
     supported("Deceiver of Form");
-    for (top, copy) in [("Lightning Bolt", false), ("Hill Giant", false), ("Hill Giant", true)] {
+    for (top, copy) in [
+        ("Lightning Bolt", false),
+        ("Hill Giant", false),
+        ("Hill Giant", true),
+    ] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Deceiver of Form");
         let bears = t.battlefield(P0, "Grizzly Bears");
@@ -484,7 +628,11 @@ fn deceiver_of_form_may_put_the_card_on_the_bottom_either_way() {
         t.advance_to(P0, Step::BeginningOfCombat);
         t.resolve_all();
         let lib = &t.g.player(P0).library;
-        assert_eq!(*lib.first().unwrap(), t.g.current(card), "{top}: not on the bottom");
+        assert_eq!(
+            *lib.first().unwrap(),
+            t.g.current(card),
+            "{top}: not on the bottom"
+        );
         let want = if copy { "Hill Giant" } else { "Grizzly Bears" };
         assert_eq!(name_of(&t, bears), want, "{top}");
     }
@@ -523,13 +671,12 @@ fn finale_of_promise_casts_then_copies_each_twice() {
     // Both cast, and four copies above them.
     let copies = spell_copies(&t);
     assert_eq!(copies.len(), 4);
-    let originals: Vec<ObjectId> = t
-        .g
-        .stack
-        .iter()
-        .copied()
-        .filter(|s| !copies.contains(s))
-        .collect();
+    let originals: Vec<ObjectId> =
+        t.g.stack
+            .iter()
+            .copied()
+            .filter(|s| !copies.contains(s))
+            .collect();
     assert_eq!(originals.len(), 2);
     let pos = |id: &ObjectId| t.g.stack.iter().position(|x| x == id).unwrap();
     for c in &copies {
@@ -562,13 +709,12 @@ fn finale_of_promise_casts_a_split_card_only_once() {
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.resolve();
     // It was cast once.
-    let spells: Vec<ObjectId> = t
-        .g
-        .stack
-        .iter()
-        .copied()
-        .filter(|s| t.g.obj(*s).kind == mtg_engine::object::ObjKind::Card)
-        .collect();
+    let spells: Vec<ObjectId> =
+        t.g.stack
+            .iter()
+            .copied()
+            .filter(|s| t.g.obj(*s).kind == mtg_engine::object::ObjKind::Card)
+            .collect();
     assert_eq!(spells.len(), 1);
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 1);
@@ -611,7 +757,7 @@ fn landwalks(t: &TestGame, id: ObjectId) -> Vec<String> {
 
 #[test]
 fn vesuvan_doppelgangers_text_changes_apply_to_its_new_text() {
-    cr!("612.2", "613.1c", "613.2a", "707.2");
+    cr!("612.1", "612.2", "613.1c", "613.2a", "707.2");
     ruling!("Vesuvan Doppelganger", "When changing forms, any text changes that exist on the Doppelganger are applied to the new text, if appropriate.");
     supported("Magical Hack");
     let mut t = TestGame::new(2);
@@ -681,7 +827,12 @@ fn x_copiers_copy_keyword_activated_abilities_but_not_triggers_that_pay_x() {
     let mut t = TestGame::new(2);
     let magus = t.battlefield(P0, "Magus Lucea Kane");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    assert!(crate::r_s20_common::tap_for_mana(&mut t, P0, magus, "Add {C}{C}"));
+    assert!(crate::r_s20_common::tap_for_mana(
+        &mut t,
+        P0,
+        magus,
+        "Add {C}{C}"
+    ));
     t.g.players[0].mana_pool = Default::default();
     reinforce(&mut t, bears);
     assert_eq!(t.counters(bears, counters::PLUS1), 4);

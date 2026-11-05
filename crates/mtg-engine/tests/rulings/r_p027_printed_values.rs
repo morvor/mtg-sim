@@ -36,7 +36,11 @@ fn tilonallis_skinshifter_copies_only_the_printed_values() {
     t.answer_targets(P0, &[obj(giant)]);
     attack_with(
         &mut t,
-        &[(skin, Entity::Player(P1)), (giant, Entity::Player(P1)), (elves, Entity::Player(P1))],
+        &[
+            (skin, Entity::Player(P1)),
+            (giant, Entity::Player(P1)),
+            (elves, Entity::Player(P1)),
+        ],
     );
     t.resolve_all();
     assert_printed_giant(&t, skin, Some((3, 3)), false);
@@ -49,14 +53,17 @@ fn tilonallis_skinshifter_copies_only_the_printed_values() {
     t.settle();
     crate::r_p023_common::unsick(&mut t, clone);
     t.answer_targets(P0, &[obj(clone)]);
-    attack_with(&mut t, &[(skin, Entity::Player(P1)), (clone, Entity::Player(P1))]);
+    attack_with(
+        &mut t,
+        &[(skin, Entity::Player(P1)), (clone, Entity::Player(P1))],
+    );
     t.resolve_all();
     assert_printed_giant(&t, skin, Some((3, 3)), false);
 }
 
 #[test]
 fn true_polymorph_copies_printed_values_copy_and_mutate_effects() {
-    cr!("707.2", "707.3", "721.2", "613.1a");
+    cr!("707.2", "707.3", "730.2a", "702.140e", "613.1a");
     ruling!("True Polymorph", "True Polymorph causes the first target permanent to copy the printed values of the second target permanent, including any copy and mutate effects that have been applied to it. It won't copy counters on that permanent or effects that have changed its power, toughness, types, color, and so on.");
     supported("True Polymorph");
     // A dressed-up Hill Giant: just a Hill Giant.
@@ -101,7 +108,7 @@ fn true_polymorph_copies_printed_values_copy_and_mutate_effects() {
 
 #[test]
 fn true_polymorph_has_no_duration() {
-    cr!("611.2a", "611.2b", "707.2");
+    cr!("611.2a", "400.7", "707.2");
     ruling!("True Polymorph", "True Polymorph's effect does not have a duration. The copy effect it creates lasts as long as the first target remains on the battlefield.");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -147,7 +154,7 @@ fn vizier_of_many_faces_copies_only_what_was_printed() {
 
 #[test]
 fn wall_of_stolen_identity_copies_only_what_was_printed() {
-    cr!("707.2", "707.9b", "613.1a");
+    cr!("707.2", "707.9a", "707.9b", "613.1a");
     ruling!("Wall of Stolen Identity", "Wall of Stolen Identity copies exactly what was printed on the original creature (unless that creature is copying something else or is a token; see below). It doesn’t copy whether that creature is tapped or untapped, whether it has any counters on it or any Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, or so on.");
     let (t, c, _) = enters_copying_dressed_giant("Wall of Stolen Identity");
     // A Wall with defender in addition (the copy effect's exception).
@@ -158,7 +165,7 @@ fn wall_of_stolen_identity_copies_only_what_was_printed() {
 
 #[test]
 fn volrath_copies_printed_values_not_counters_or_animation() {
-    cr!("707.2", "707.9b", "613.1a", "613.4b");
+    cr!("707.2", "707.9b", "613.1a");
     ruling!("Volrath, the Shapestealer", "Volrath copies the printed values of the target creature, plus any copy effects that have been applied to it. It won't copy counters on that creature. It also won't copy any effects that have changed its power, toughness, types, color, or so on. Notably, it won't copy effects that made the target become a creature if it's not normally a creature.");
     // "{1}: Until your next turn, Volrath becomes a copy of target creature with a counter
     // on it, except it's 7/5 and it has this ability."
@@ -194,7 +201,7 @@ fn volrath_copies_printed_values_not_counters_or_animation() {
 
 #[test]
 fn vesuvan_doppelganger_copying_a_face_down_creature() {
-    cr!("707.2", "708.2a", "707.9b");
+    cr!("707.2", "708.2a", "707.9a", "707.9c");
     ruling!("Vesuvan Doppelganger", "Vesuvan Doppelganger copies a face-down creature, it becomes a face-up 2/2 blue creature with no name and no abilities other than the one it gives itself.");
     let mut t = TestGame::new(2);
     let fd = manifest_card(&mut t, P1, "Serra Angel");
@@ -257,8 +264,7 @@ fn valki_copies_the_printed_card_and_loses_his_ability() {
 
 #[test]
 fn valki_chooses_the_card_as_the_ability_resolves() {
-    cr!("607.2a", "608.2", "107.3c");
-    interp!("x-defined-by-target");
+    cr!("607.2a", "608.2d");
     ruling!("Valki, God of Lies // Tibalt, Cosmic Impostor", "You don't choose which creature card exiled with Valki that Valki will become a copy of until that ability is resolving.");
     let (mut t, valki, exiled) = valki_exiling(3, &["Grizzly Bears", "Runeclaw Bear"]);
     let from = t.asked().len();
@@ -303,7 +309,7 @@ fn tibalt(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn lands_exiled_with_tibalt_use_the_land_play() {
-    cr!("305.2", "305.3", "607.2a");
+    cr!("305.2", "607.2a");
     ruling!("Valki, God of Lies // Tibalt, Cosmic Impostor", "Unless an effect allows you to play additional lands that turn, you can play land cards exiled with Tibalt only if you haven't played a land yet that turn.");
     let mut t = TestGame::new(2);
     let tib = tibalt(&mut t);
@@ -352,15 +358,25 @@ fn tibalts_last_ability_adds_rrr_with_no_cards_exiled() {
 
 #[test]
 fn volatile_chimeras_reveal_one_or_three_each() {
-    cr!("607.2n", "103.2");
+    cr!("607.2n", "707.9a");
     ruling!("Volatile Chimera", "Unlike the other two cards with this style of ability (Arcane Savant and Caller of the Untamed), if you have more than one Volatile Chimera in your deck, you need only reveal one of them because you can exile as many creature cards that aren't in your deck as you want, with a minimum of three. If you do reveal more than one Volatile Chimera before shuffling, you'll have to exile at least three creature cards for each of them.");
     supported("Volatile Chimera");
-    let side = ["Hill Giant", "Grizzly Bears", "Craw Wurm", "Llanowar Elves", "Serra Angel", "Runeclaw Bear"];
+    let side = [
+        "Hill Giant",
+        "Grizzly Bears",
+        "Craw Wurm",
+        "Llanowar Elves",
+        "Serra Angel",
+        "Runeclaw Bear",
+    ];
     // Revealing one: P0 exiles five, and the other Chimera can copy them too.
     let mut t = TestGame::new(2);
-    t.library_top(P0, "Volatile Chimera");
-    t.library_top(P0, "Volatile Chimera");
-    let cards = t.g.add_to_sideboard(P0, side.iter().map(|n| card(n)).collect());
+    let chimeras = [
+        t.library_top(P0, "Volatile Chimera"),
+        t.library_top(P0, "Volatile Chimera"),
+    ];
+    let cards =
+        t.g.add_to_sideboard(P0, side.iter().map(|n| card(n)).collect());
     let from = t.asked().len();
     t.answer_yes(P0, true);
     t.answer_choose(P0, &cards[..5].iter().map(|c| obj(*c)).collect::<Vec<_>>());
@@ -371,11 +387,29 @@ fn volatile_chimeras_reveal_one_or_three_each() {
     let exiled = side[..5].iter().filter(|n| t.in_exile(n)).count();
     assert_eq!(exiled, 5);
     assert!(!t.in_exile("Runeclaw Bear"));
+    // Each Chimera, the revealed one and the other, can become a copy of a card exiled
+    // with cards named Volatile Chimera (CR 607.2n): "{1}{R}: Choose a card at random you
+    // exiled with cards named Volatile Chimera. This creature becomes a copy of that card,
+    // except it has this ability."
+    for c in chimeras {
+        let c =
+            t.g.move_object(c, Zone::Battlefield, MoveCause::Effect, None)
+                .expect("onto the battlefield");
+        t.g.flush_events();
+        t.settle();
+        lands_for(&mut t, P0, "{1}{R}");
+        t.activate(P0, c, 0, &[]).expect("activation");
+        t.resolve_all();
+        let now = name_of(&t, c);
+        assert!(side[..5].contains(&now.as_str()), "it became {now}");
+        assert_eq!(abilities_with(&t, c, "exiled with cards named"), 1);
+    }
     // Revealing both: at least three for each.
     let mut t = TestGame::new(2);
     t.library_top(P0, "Volatile Chimera");
     t.library_top(P0, "Volatile Chimera");
-    let cards = t.g.add_to_sideboard(P0, side.iter().map(|n| card(n)).collect());
+    let cards =
+        t.g.add_to_sideboard(P0, side.iter().map(|n| card(n)).collect());
     let from = t.asked().len();
     t.answer_yes(P0, true);
     t.answer_choose(P0, &cards[..3].iter().map(|c| obj(*c)).collect::<Vec<_>>());
@@ -389,7 +423,8 @@ fn volatile_chimeras_reveal_one_or_three_each() {
     let mut t = TestGame::new(2);
     t.library_top(P0, "Volatile Chimera");
     t.library_top(P0, "Volatile Chimera");
-    let cards = t.g.add_to_sideboard(P0, side.iter().map(|n| card(n)).collect());
+    let cards =
+        t.g.add_to_sideboard(P0, side.iter().map(|n| card(n)).collect());
     t.answer_yes(P0, true);
     t.answer_choose(P0, &cards[..4].iter().map(|c| obj(*c)).collect::<Vec<_>>());
     t.answer_yes(P0, true);
