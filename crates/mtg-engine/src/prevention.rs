@@ -695,6 +695,79 @@ pub fn merge_prevention_events(g: &mut Game, start: usize) {
     g.events.extend(out);
 }
 
+/// A shield from a resolved spell or ability ("the next 2 damage that a source of your
+/// choice would deal to you and/or permanents you control this turn", Harm's Way,
+/// Refraction Trap; CR 615.7, 614.9) that would apply to simultaneous damage dealt to two
+/// or more of its recipients, more damage than is left of it: its controller chooses which
+/// of that damage it applies to, dividing what's left among those damage events (Harm's
+/// Way's ruling: "You choose which 2 damage is redirected. ... you can choose to redirect
+/// 1 damage ... to each of two different recipients"). Recorded in
+/// `Game::per_source_division` under the shield's key; an invalid answer applies the
+/// shield in the order the events are replaced. (Damage from several sources to one
+/// recipient is ordered by its controller instead: [`order_for_shields`].)
+pub fn divide_shields(g: &mut Game, events: &[(ObjectId, Entity, u32)], combat: bool) {
+    let shields: Vec<(u32, PlayerId, Option<ObjectId>, u32)> = g
+        .replacements
+        .iter()
+        .filter_map(|r| {
+            r.remaining
+                .filter(|n| *n > 0)
+                .map(|n| (r.id, r.controller, r.source, n))
+        })
+        .collect();
+    for (id, chooser, effect_source, left) in shields {
+        let idx: Vec<usize> = (0..events.len())
+            .filter(|i| {
+                let (source, target, amount) = events[*i];
+                g.instance_matches(
+                    id,
+                    &ReplEvent::Damage {
+                        source,
+                        target,
+                        amount,
+                        combat,
+                    },
+                )
+            })
+            .collect();
+        let recipients: Vec<Entity> = idx.iter().map(|i| events[*i].1).collect();
+        let distinct = recipients
+            .iter()
+            .enumerate()
+            .filter(|(k, r)| !recipients[..*k].contains(r))
+            .count();
+        let total: u32 = idx.iter().map(|i| events[*i].2).sum();
+        if distinct < 2 || total <= left {
+            continue;
+        }
+        let ans = g.ask(
+            chooser,
+            crate::decision::Decision::Divide {
+                source: effect_source.unwrap_or(events[idx[0]].0),
+                total: left,
+                recipients: recipients.clone(),
+                min_each: 0,
+            },
+        );
+        let div: Vec<u32> = match ans {
+            crate::decision::Answer::Numbers(v)
+                if v.len() == idx.len()
+                    && v.iter().all(|n| *n >= 0)
+                    && v.iter().sum::<i64>() == left as i64
+                    && v.iter().zip(&idx).all(|(n, i)| *n <= events[*i].2 as i64) =>
+            {
+                v.into_iter().map(|n| n as u32).collect()
+            }
+            _ => continue,
+        };
+        let key = crate::replacement::numeric_key(crate::replacement::ReplKey::Instance(id));
+        for (i, n) in idx.into_iter().zip(div) {
+            let (source, target, _) = events[i];
+            g.per_source_division.push((key, source, target, n));
+        }
+    }
+}
+
 /// CR 615.7: when a prevention shield would apply to damage from two or more sources
 /// dealt to the same permanent or player at the same time, that player or the
 /// permanent's controller chooses which damage the shield prevents (by ordering the

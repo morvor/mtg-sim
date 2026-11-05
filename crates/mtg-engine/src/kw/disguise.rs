@@ -29,7 +29,13 @@ impl KeywordRules for Disguise {
 
     fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let o = g.obj(card);
-        if o.face_down || !o.chars.has_keyword(KeywordKind::Disguise) {
+        // A face-down card outside the battlefield has the abilities of its front face
+        // (CR 406.3a), as in `kw/morph.rs`.
+        if (o.face_down && o.zone == Zone::Battlefield)
+            || !g
+                .characteristics_to_cast(card)
+                .has_keyword(KeywordKind::Disguise)
+        {
             return vec![];
         }
         let mut opt = CastOption::normal(FaceState::Front);

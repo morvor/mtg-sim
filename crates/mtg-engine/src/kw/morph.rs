@@ -31,8 +31,14 @@ impl KeywordRules for Morph {
 
     fn global_cast_options(&self, g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
         let o = g.obj(card);
-        // CR 702.37d: only a morph ability lets a card be cast face down.
-        if o.face_down || !o.chars.has_keyword(KeywordKind::Morph) {
+        // CR 702.37d: only a morph ability lets a card be cast face down. A face-down
+        // card outside the battlefield that may be cast (exiled face down by Colfenor's
+        // Plans) has the abilities of its front face (CR 406.3a).
+        if (o.face_down && o.zone == Zone::Battlefield)
+            || !g
+                .characteristics_to_cast(card)
+                .has_keyword(KeywordKind::Morph)
+        {
             return vec![];
         }
         let mut opt = CastOption::normal(FaceState::Front);
