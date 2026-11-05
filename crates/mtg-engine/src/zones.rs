@@ -251,14 +251,18 @@ pub fn record_cost_moved(
         vars.insert(COST_MOVED_SELF, moved_self);
     }
     // Cards discarded to pay the cost ("the discarded card"): cards that left a hand
-    // for a public zone other than by an exile cost, wherever the discard put them (a
-    // graveyard, or exile for a card with madness, CR 702.35a; Nahiri's Wrath's ruling:
-    // "the mana values of the discarded cards in whatever zone they were put into").
+    // other than by an exile cost, wherever the discard put them. In a public zone (a
+    // graveyard, or exile for a card with madness, CR 702.35a) the effect finds the object
+    // the card became (CR 400.7j); put into a hidden zone instead (Darksteel Colossus,
+    // shuffled into its owner's library) it can't be found there, and the card as it last
+    // existed is used (CR 608.2h). Nahiri's Wrath's ruling: "the mana values of the
+    // discarded cards in whatever zone they were put into as a result of being discarded".
     let discarded: Vec<Entity> = paid
         .objects
         .iter()
         .filter(|o| matches!(g.obj(**o).zone, Zone::Hand(_)) && !paid.exiled.contains(o))
-        .filter_map(|o| now_in(o, &|z| z.is_public()))
+        .filter(|o| g.current(**o) != **o)
+        .map(|o| now_in(o, &|z| z.is_public()).unwrap_or(Entity::Object(*o)))
         .collect();
     if !discarded.is_empty() {
         vars.insert(crate::discard_rules::DISCARDED, discarded);

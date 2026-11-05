@@ -101,7 +101,7 @@ fn discard_x_spells_cast_without_paying_their_mana_cost_still_choose_x() {
 
 #[test]
 fn nahiris_wrath_mana_values_of_the_discarded_cards() {
-    cr!("202.3e", "107.3", "702.35a");
+    cr!("202.3e", "107.3", "702.35a", "400.7j", "608.2h");
     ruling!(
         "Nahiri's Wrath",
         "If you discard a card with {X} in its mana cost, X is considered to be 0."
@@ -159,6 +159,41 @@ fn nahiris_wrath_mana_values_of_the_discarded_cards() {
     move_to(&mut t, gone, Zone::Exile);
     t.resolve_all();
     assert_eq!(dmg(&t, target), 6, "2 + 4");
+    // A replacement puts a discarded card into a hidden zone instead: Darksteel Colossus is
+    // shuffled into its owner's library. Its mana value 11 still counts, as it last existed
+    // (CR 608.2h).
+    supported("Darksteel Colossus");
+    let mut t = TestGame::new(2);
+    let target = t.battlefield(P1, "Indomitable Ancients");
+    let colossus = t.hand(P0, "Darksteel Colossus");
+    let bears = t.hand(P0, "Grizzly Bears");
+    let from = t.g.turn_events.len();
+    nahiris_wrath(&mut t, &[colossus, bears], NORMAL, &[obj(target)]);
+    assert_eq!(t.zone(t.g.current(colossus)), Zone::Library(P0));
+    t.resolve_all();
+    assert_eq!(damage_to(&t, from, obj(target)).0, 13, "11 + 2");
+}
+
+/// A card a discard cost put into exile instead of a graveyard is still "the discarded
+/// card" (CR 400.7j: "If the cost of a spell or ability causes an object to move to a public
+/// zone, that spell or ability's effects can find that object."): with Rest in Peace, Land's
+/// Edge still sees whether the card it discarded was a land card.
+#[test]
+fn lands_edge_sees_a_card_discarded_into_exile() {
+    cr!("400.7j", "614.1a");
+    supported("Land's Edge");
+    supported("Rest in Peace");
+    for (card, life) in [("Forest", 18), ("Grizzly Bears", 20)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rest in Peace");
+        let edge = t.battlefield(P0, "Land's Edge");
+        let c = t.hand(P0, card);
+        t.answer_choose(P0, &[obj(c)]);
+        t.activate(P0, edge, 0, &[pl(P1)]).expect("Land's Edge");
+        t.resolve_all();
+        assert!(t.in_exile(card), "{card}");
+        assert_eq!(t.life(P1), life, "{card}");
+    }
 }
 
 #[test]
