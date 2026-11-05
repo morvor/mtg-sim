@@ -347,6 +347,15 @@ decides whether they become a conflict case.
 - **Work item ruling-conflicts-3** (separate): Run Out of Town (the ruling has the permanent's
   controller choose top or bottom, the Oracle text its owner) and Caller of the Untamed (the
   card to copy chosen during activation, against the decided `x-defined-by-target`).
+- **Stone Calendar** (rulings-P033): its ruling "You may choose not to apply Stone Calendar’s
+  cost reduction effect." (2004-10-04) against its Oracle text "Spells you cast cost {1}
+  less to cast." (no "up to"; a reduction is part of the total cost, CR 601.2f, with no
+  choice to decline it, and Semblance Anvil's "Semblance Anvil's cost reduction effect is
+  mandatory." (2011-01-01) says so for the same wording). Likely origin: the printed text
+  "Your spells cost up to 1 less to cast" (as other databases and Scryfall's Italian
+  printing still show it), which the English Oracle text no longer has; the date of that
+  Oracle change wasn't found. Left uncited; the engine always applies the reduction
+  (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
 - **Araumi of the Dead Tide** (rulings-P024): its ruling (2020-11-10) lets any X be chosen
   for the encore cost "equal to its mana cost", against CR 107.3h and the opposite rulings of
   Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same

@@ -28,7 +28,7 @@ fn costs(t: &mut TestGame, name: &str, cost: &str, what: &str) {
 
 #[test]
 fn second_spell_reducers_count_spells_cast_before_they_entered_but_not_themselves() {
-    cr!("601.2f", "118.7a", "202.3", "601.2a");
+    cr!("601.2f", "118.7a", "202.3", "113.6");
     ruling!(
         "Highspire Bell-Ringer",
         "Spells that were cast before Highspire Bell-Ringer entered the battlefield count. If Highspire Bell-Ringer was the first spell you cast this turn, the next spell you cast this turn is your second spell."

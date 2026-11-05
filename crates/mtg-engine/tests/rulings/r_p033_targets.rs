@@ -79,7 +79,7 @@ fn spellwild_ouphe_counts_each_ouphe_once_for_any_caster() {
 
 #[test]
 fn elderwood_scion_changes_spells_with_other_targets_but_not_abilities() {
-    cr!("601.2f", "602.2b", "113.3b");
+    cr!("601.2f", "602.2b");
     ruling!(
         "Elderwood Scion",
         "Spells you cast that target Elderwood Scion will cost {2} less to cast even if those spells have additional targets. The same is true for spells your opponents cast costing {2} more."

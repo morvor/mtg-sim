@@ -53,28 +53,38 @@ fn reductions_apply_after_increases_to_the_alternative_cost_being_paid() {
         "Starnheim Aspirant",
         "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions (such as that of Starnheim Aspirant). The mana value of the spell is determined only by its mana cost, no matter what the total cost to cast the spell was."
     );
-    // (reducer, spell, what it costs for Omniscience's {0} plus the Statue's {2})
+    // (reducer, spell, what it costs for Omniscience's {0} plus the Statue's {2}, what it
+    // costs for its mana cost plus the Statue's {2})
     let cases = [
         // "Spells with flash you cast cost {1} less to cast and can't be countered."
-        // Spectral Sailor ({U}, flash).
-        ("Cunning Nightbonder", "Spectral Sailor", "{1}"),
+        // Spectral Sailor ({U}, flash): {2}{U} - {1} (reducing {U} first would leave
+        // {2}{U}).
+        ("Cunning Nightbonder", "Spectral Sailor", "{1}", "{1}{U}"),
         // "Colorless spells you cast with mana value 7 or greater cost {1} less to cast."
         // Ulamog's Crusher ({8}).
-        ("It That Heralds the End", "Ulamog's Crusher", "{1}"),
+        ("It That Heralds the End", "Ulamog's Crusher", "{1}", "{9}"),
         // "Spells you cast with mana value 5 or greater cost {1} less to cast and can't be
         // countered." Craw Wurm ({4}{G}{G}).
-        ("Thryx, the Sudden Storm", "Craw Wurm", "{1}"),
+        ("Thryx, the Sudden Storm", "Craw Wurm", "{1}", "{5}{G}{G}"),
         // "Angel spells you cast cost {2} less to cast." Serra Angel ({3}{W}{W}).
-        ("Starnheim Aspirant", "Serra Angel", "{0}"),
+        ("Starnheim Aspirant", "Serra Angel", "{0}", "{3}{W}{W}"),
     ];
-    for (reducer, spell, cost) in cases {
+    for (reducer, spell, free, normal) in cases {
         supported(reducer);
         let paid = free_with_statue(&[reducer], spell);
-        assert_spent(&paid.spent, cost, reducer);
+        assert_spent(&paid.spent, free, reducer);
         assert_eq!(paid.mv, printed_mv(spell), "{reducer}: {spell}'s mana value");
         // Positive control: without the reducer it costs {2}.
         let paid = free_with_statue(&[], spell);
         assert_spent(&paid.spent, "{2}", spell);
+        // Its mana cost with the Statue's {2}.
+        let mut t = main_phase(2);
+        t.battlefield(P1, "God-Pharaoh's Statue");
+        t.battlefield(P0, reducer);
+        let card = t.hand(P0, spell);
+        let paid = cast_normal(&mut t, P0, card);
+        assert_spent(&paid.spent, normal, &format!("{reducer}: {spell} for its mana cost"));
+        assert_eq!(paid.mv, printed_mv(spell));
     }
 }
 
@@ -470,7 +480,7 @@ fn semblance_anvil_reduces_the_total_cost_including_kicker_evoke_and_increases()
 
 #[test]
 fn ragemonger_reduces_black_and_red_mana_of_minotaur_spells() {
-    cr!("601.2f", "118.7c", "601.2b", "702.35a");
+    cr!("601.2f", "601.2b", "702.35a", "702.33d");
     ruling!(
         "Ragemonger",
         "If a spell has hybrid mana symbols in its mana cost, you choose which half you will be paying before determining the total cost. If you choose to pay such a cost with {B} or {R}, Ragemonger can reduce that part of the cost."

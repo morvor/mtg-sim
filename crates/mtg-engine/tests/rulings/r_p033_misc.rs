@@ -165,7 +165,7 @@ fn cheering_fanatic_may_name_any_card() {
 
 #[test]
 fn seal_of_the_guildpact_two_different_colors_reduce_generic_mana_only() {
-    cr!("105.1", "601.2f", "118.7a", "202.3");
+    cr!("105.4", "601.2f", "118.7a", "202.3");
     ruling!("Seal of the Guildpact", "You must choose two different colors.");
     ruling!(
         "Seal of the Guildpact",
@@ -238,7 +238,7 @@ fn gravebreaker_lamia_doesnt_let_you_cast_cards_from_your_graveyard() {
 
 #[test]
 fn fortune_tellers_talent_reduces_generic_mana_of_spells_cast_from_elsewhere() {
-    cr!("601.2f", "118.7a", "716.2a");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Fortune Teller's Talent",
         "The cost reduction applies only to generic mana in the total cost of spells you cast from anywhere other than your hand."
@@ -269,7 +269,7 @@ fn fortune_tellers_talent_reduces_generic_mana_of_spells_cast_from_elsewhere() {
 
 #[test]
 fn gavi_free_cycling_makes_x_zero_and_its_draw_trigger_is_once_a_turn() {
-    cr!("107.3b", "118.9", "702.29a", "603.2");
+    cr!("602.2b", "118.9", "702.29a", "603.2");
     ruling!(
         "Gavi, Nest Warden",
         "If a cycling cost includes {X} and you pay an alternative activation cost of {0} instead, X is 0."
@@ -349,7 +349,7 @@ fn spirits(t: &TestGame) -> usize {
 
 #[test]
 fn ranar_triggers_once_for_each_exile_from_your_hand_or_by_your_spells() {
-    cr!("603.2c", "603.2", "406.3", "702.143a");
+    cr!("603.2c", "603.2", "603.10a", "702.143a");
     ruling!(
         "Ranar the Ever-Watchful",
         "Ranar has recieved an update to its Oracle text. Specifically, its triggered ability doesn't care which player is exiling cards and permanents. Cards put into exile from your hand for any reason, such as the foretell ability, cause the ability to trigger, and permanents exiled from the battlefield cause it to trigger if you controlled the spell or ability that exiled them."
@@ -465,7 +465,7 @@ fn starnheim_aspirant_reduces_only_angel_creature_spells() {
 
 #[test]
 fn marauding_raptor_and_jhoiras_familiar_dont_reduce_themselves() {
-    cr!("601.2f", "601.2a", "700.6");
+    cr!("601.2f", "113.6", "700.6");
     ruling!(
         "Marauding Raptor",
         "Marauding Raptor's cost reduction doesn't affect itself."
@@ -575,7 +575,7 @@ fn archmage_of_runes_draw_resolves_first_even_if_the_spell_is_countered() {
 
 #[test]
 fn urza_planeswalker_activates_loyalty_abilities_twice_each_turn() {
-    cr!("606.3", "712.4", "701.42a");
+    cr!("606.3", "701.42a");
     ruling!(
         "Urza, Lord Protector",
         "During each of your turns, you may activate Urza, Planeswalker's loyalty abilities twice, whether that's activating the same ability two times, or activating two different abilities once each."
@@ -885,7 +885,7 @@ fn umezawas_jitte_announces_the_target_of_its_minus_mode() {
 
 #[test]
 fn charge_counter_artifacts_stay_once_out_of_counters() {
-    cr!("122.1", "704.5");
+    cr!("704.5");
     ruling!(
         "Surge Node",
         "Once Surge Node has run out of charge counters, it remains on the battlefield."

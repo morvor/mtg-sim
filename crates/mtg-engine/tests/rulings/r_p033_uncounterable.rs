@@ -32,7 +32,7 @@ fn p1_unsummons(t: &mut TestGame, creature: ObjectId) {
 
 #[test]
 fn thryx_makes_a_spell_already_on_the_stack_uncounterable_without_a_discount() {
-    cr!("611.3a", "601.2f", "701.6a");
+    cr!("611.3a", "601.2f", "701.6a", "113.6");
     ruling!(
         "Thryx, the Sudden Storm",
         "If Thryx enters the battlefield while a spell with mana value 5 or greater that you cast is on the stack, that spell can't be countered, even though you don't get the {1} discount."

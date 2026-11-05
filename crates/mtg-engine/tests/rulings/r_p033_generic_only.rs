@@ -224,3 +224,21 @@ fn cloud_key_reduces_only_generic_mana_of_the_chosen_type() {
     // Not a sorcery.
     costs(&mut t, P0, "Divination", "{2}{U}", "Cloud Key");
 }
+
+#[test]
+fn stone_calendar_reduces_what_you_pay_not_the_mana_cost() {
+    cr!("601.2f", "118.7a", "202.3");
+    ruling!(
+        "Stone Calendar",
+        "Does not change the mana cost of the spell, it just reduces what you pay for it."
+    );
+    supported("Stone Calendar");
+    // "Spells you cast cost {1} less to cast." Divination ({2}{U}): {1}{U}, mana value 3;
+    // Opt ({U}): {U}. (Its 2004 ruling that the reduction may be declined, from the
+    // printed "up to 1 less", isn't followed: the Oracle text has no "up to"; see the
+    // report of rulings-P033.)
+    let mut t = main_phase(2);
+    t.battlefield(P0, "Stone Calendar");
+    costs(&mut t, P0, "Divination", "{1}{U}", "Stone Calendar");
+    costs(&mut t, P0, "Opt", "{U}", "Stone Calendar");
+}
