@@ -13,14 +13,14 @@ pub use crate::r_p124_common::*;
 pub use crate::r_p127_common::{move_to, named_by, tap};
 pub use crate::r_p053_common::concede;
 
-/// The creature tokens `p` controls with the creature type `subtype`.
+/// The tokens `p` controls with the subtype `subtype`.
 pub fn tokens_of(t: &TestGame, p: PlayerId, subtype: &str) -> usize {
     t.g.permanents()
         .filter(|o| o.controller == p && o.is_token() && o.chars.has_subtype(subtype))
         .count()
 }
 
-/// The tokens with the creature type `subtype` every player controls, by player.
+/// The tokens with the subtype `subtype` every player controls, by player.
 pub fn tokens_by_player(t: &TestGame, subtype: &str) -> Vec<usize> {
     (0..t.g.players.len())
         .map(|i| tokens_of(t, PlayerId(i as u8), subtype))
