@@ -13,6 +13,10 @@ Wizards of the Coast if erroneous."
   (most likely) a copy of a similar card's ruling. Policy `ruling-contradicting-oracle-gives-way`
   (`docs/interpretations/sources.md`, decided by the user Nov 5): the Oracle text wins
   (CR 108.1); the parts of the ruling that agree with it stay cited.
+- **transcription error**: the ruling's words contradict the card's own Oracle text, and
+  the same ruling as Wizards first published it (in the set's release notes) has words that
+  agree with the card: the data's text differs from its own source. The same policy
+  applies.
 - **misattached**: the ruling describes another card. Policy (decided by the user Nov 5):
   it is tested on the card it describes and cited under the card it is attached to (the
   `ruling!` macro needs that), with a comment naming the card it describes; the attached
@@ -41,12 +45,15 @@ Comprehensive Rules at https://github.com/pit142857/mtg-cr (commit 8351b94f; the
 named by upload date and state their own effective dates). Release notes and update
 bulletins were outside these sessions' allowed network hosts (magic.wizards.com,
 web.archive.org); where an entry cites one, it was read from a mirror of the Wizards article
-archive or from search results, as the work item named in the entry says.
+archive or from search results, as the work item named in the entry says. The mirror is
+ormos (https://github.com/maxmakesmagic/ormos, Markdown made from Wayback Machine captures,
+each file naming its capture; commit bd11dee2), whose archive ends in 2022.
 
 **Keeping it complete.** `cargo test -p mtg-data` (`ruling_discrepancies_log_is_complete`)
 and `cargo run --release -q -p mtg-tools -- rulings-coverage --check` fail when a rulings
 exemption whose reason calls the ruling outdated, superseded, overridden, inconsistent,
-misattached or a template error, or cites `ruling-contradicting-oracle-gives-way`, has no
+misattached, a template error or a transcription error, or cites
+`ruling-contradicting-oracle-gives-way`, has no
 entry here quoting that ruling under that card; when a quoted ruling isn't word for word one
 of that card's rulings, or has another date; and when a file, test or register id an entry
 names doesn't exist (`crates/mtg-data/src/discrepancies.rs`). To add an instance, add an
@@ -91,6 +98,26 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: every opponent's artifact spells put a counter on it, in free-for-all and team games; its controller's and teammates' don't.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P178.tsv`; register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/ruling_contradicting_oracle.rs` (`citanul_druid_grows_for_each_opponents_artifact_spells_but_not_its_controllers`).
 
+## Transcription errors
+
+### Run Out of Town: "controller" for "owner"
+- Kind: transcription error
+- Status: open for review
+- Ruling, Run Out of Town (2022-04-29): "That permanent's controller chooses whether to put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to mutate or meld, for example), that permanent's controller puts all of them on the top or all of them on the bottom. They do not need to reveal the order those cards were put into the library this way."
+- Conflicts with: the card's Oracle text, "The owner of target nonland permanent puts it on their choice of the top or bottom of their library." (printed in Streets of New Capenna, 2022-04-29, as "The owner of target nonland permanent puts it on the top or bottom of their library.", per the set's release notes). The two differ when a player other than its owner controls the permanent.
+- Evidence: the ruling is the card's own note in the Streets of New Capenna Release Notes (compiled by Jess Dunks, posted 2022-04-20; read from the ormos mirror, Wayback capture 2022-04-23), word for word except that the notes say "owner" where the data says "controller", twice: "That permanent's owner chooses whether to put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to mutate or meld, for example), that permanent's owner puts all of them on the top or all of them on the bottom. They do not need to reveal the order those cards were put into the library this way." Of the notes on that set's cards in those release notes, 277 are in the data word for word, 36 have no close counterpart among the card's rulings, and 11 differ: by later updates (Grime Gorger's list of card types, with battle and kindred; Cemetery Tampering's hideaway reminder, to the hideaway rule of the set's own CR, effective 2022-04-29; Lethal Scheme's two convoke notes, reworded and dated 2024-01-12), by rewording or formatting (Determined Iteration twice, Aven Heartstabber, Evolving Door, an added sentence on Witness Protection), and by two word changes that contradict the card, this one and Sanguine Spy's (below). An edited ruling sometimes keeps its first date (Grime Gorger's 2022-04-29 ruling names battle and kindred, card types of 2023 and 2024) and sometimes gets a new one (Lethal Scheme's, 2024-01-12), so its date doesn't show when "controller" came in. Every other ruling on a card with the same instruction has the owner choose: Aether Gust (2019-07-12), Moonsnare Prototype (2022-02-18), Desynchronize (2022-10-14), Misleading Motes (2023-09-01), Unlucky Drop (2023-11-10), Sudden Setback (2024-02-02), Deem Inferior (2024-06-07), Dire Downdraft (2024-07-26), Lost Days (2025-10-02), Uneasy Partings (2026-06-29); and the Oracle text's "their choice of", added after printing, makes the owner's choice explicit. No rule gives the choice to the controller. Investigated in work item ruling-conflicts-3, case 1.
+- Engine: the permanent's owner chooses top or bottom, as for Aether Gust, Desynchronize and Unlucky Drop; a melded permanent's owner puts both cards on top or both on the bottom, in the order they choose, without revealing it. The controller isn't asked.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P140.tsv` (the two sentences with "controller"; the third stays cited); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_p140_tuck.rs` (`run_out_of_town_follows_its_oracle_text`, `run_out_of_town_puts_a_melded_permanent_all_on_top_or_all_on_the_bottom`).
+
+### Sanguine Spy: "cards you control" for "cards in your graveyard"
+- Kind: transcription error
+- Status: open for review
+- Ruling, Sanguine Spy (2022-04-29): "Sanguine Spy's triggered ability checks the number of mana values among cards you control both when the ability triggers and when it resolves. If you no longer have five or more mana values among those cards when the ability resolves, you may not pay 2 life."
+- Conflicts with: the card's Oracle text: "At the beginning of your end step, if there are five or more mana values among cards in your graveyard, you may pay 2 life. If you do, draw a card." (an intervening "if" clause, CR 603.4: checked as the ability triggers and again as it resolves).
+- Evidence: the ruling is the card's own note in the Streets of New Capenna Release Notes (2022-04-20; ormos mirror, as for Run Out of Town above), word for word except for "cards in your graveyard" where the data says "cards you control": "Sanguine Spy's triggered ability checks the number of mana values among cards in your graveyard both when the ability triggers and when it resolves. If you no longer have five or more mana values among those cards when the ability resolves, you may not pay 2 life." The card's other rulings (2022-04-29) and those of the set's other cards with the same condition (Aven Heartstabber, Graveyard Shift, Sewer Crocodile, Snooping Newsie, Syndicate Infiltrator, Tainted Indulgence) all say "cards in your graveyard". Found in work item ruling-conflicts-3 while comparing that set's release notes with the data for case 1 (added as case 5).
+- Engine: counts the mana values among the cards in its controller's graveyard, as the ability triggers and as it resolves; permanents with five mana values don't make it trigger, and a graveyard that drops below five mana values before it resolves means no life is paid and no card drawn.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P093.tsv` (its "among cards you control"; the rest stays cited); register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/ruling_contradicting_oracle.rs` (`sanguine_spy_counts_mana_values_among_cards_in_your_graveyard`).
+
 ## Inconsistent rulings
 
 ### Gnoll War Band: opponents who have left the game aren't counted
@@ -101,6 +128,24 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Evidence: no wording sets the card apart from the others (any damage or combat damage, a cost reduction or a count; see the register entry), and the rulings before and after it agree with each other, so no rules change explains it: 800.4i's first sentence dates from the CR of 2007-10-01 (as 600.4e) and its second from the CR effective 2019-08-23 (as 800.4h), both before this ruling (archived CR texts). Likely origin (an inference): the template for counts of opponents a player has now, "Opponents who have left the game aren't counted when determining how many tokens to create." (encore cards such as Phyrexian Triniform, 2020-11-10), applied to a count of what happened this turn. Investigated in work item ruling-conflicts-1, case 2 (conclusion C); set aside by the user's decision of Nov 5.
 - Engine: counts every opponent who was dealt damage this turn, including those who have since left the game, as for every "for each opponent who ... this turn" count.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P186.tsv`; register `history-counts-players-who-left`; test `tests/cards/value_results_history.rs` (`gnoll_war_band_counts_opponents_who_were_dealt_damage`).
+
+### Araumi of the Dead Tide: "you can choose any value for X"
+- Kind: inconsistent
+- Status: open for review
+- Ruling, Araumi of the Dead Tide (2020-11-10): "If the creature card has {X} in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are created. X will be 0 for those tokens."
+- Conflicts with: the rulings on cards that give scavenge in the same words ("The scavenge cost is equal to its mana cost."): Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08), "If the creature card you scavenge has {X} in its mana cost, X is 0."; and CR 107.3h: "If an effect instructs a player to pay an object’s mana cost that includes {X}, the value of X is treated as 0 unless the object is a spell on the stack. In that case, the value of X is the value chosen or determined for it as the spell was cast." The card: "{T}, Exile cards from your graveyard equal to the number of opponents you have: Target creature card in your graveyard gains encore until end of turn. The encore cost is equal to its mana cost. (Exile the creature card and pay its mana cost: ...)".
+- Evidence: the ruling is in the Commander Legends Release Notes as the data has it (Eli Shiffrin, 2020-11-06; ormos mirror, Wayback capture 2020-11-07). 107.3h was added, as 107.3g, in the CR effective 2015-01-23, before the ruling, and hasn't changed since but for its number (107.3h from the CR effective 2020-09-25); the Fate Reforged Update Bulletin (Matt Tabak, 2015-01-15) explains it: "Essentially, if the object is a spell on the stack, you pay the actual value of X. Any other time, X is 0.", with manifest's cost to turn a card face up as its first use. CR 702.1a's example (since the CR effective 2016-09-30, the Kaladesh update) calls the scavenge cost Varolz gives "an amount of mana equal to its mana cost", and 107.3g has a card's X be 0 off the stack. Likely origin (an inference): the ruling on cards that give flashback "equal to its mana cost" (Past in Flames, Snapcaster Mage: "If you cast an instant or sorcery with {X} in its mana cost this way, you still choose the value of X as part of casting the spell and pay that cost."), right there because the card is cast and is a spell on the stack, applied to encore, whose card is never cast. Its second sentence (the tokens' X is 0) agrees with the CR and is cited. Investigated in work item ruling-conflicts-3, case 6 (conclusion D: the user decides; recommended: set the first clause aside as inconsistent, as Gnoll War Band's ruling was).
+- Engine: X is 0 for the encore cost Araumi gives (no X is announced) and for the tokens, as for scavenge.
+- Recorded: no exemption until the user decides; register `x-in-a-cost-equal-to-a-cards-mana-cost-is-0` (provisional); tests `tests/rulings/r_p024_x_values.rs` (`araumi_encore_cost_and_tokens_have_x_0`), `tests/rulings/r_s27_mana_value_x.rs` (`a_scavenged_card_s_x_is_0`).
+
+### Arbiter of Knollridge: each player's own range of influence
+- Kind: inconsistent
+- Status: open for review
+- Ruling, Arbiter of Knollridge (2007-10-01): "In other multiplayer formats, each player's life total is set to the highest life total within their range of influence. These changes happen at the same time. For example, if each player has a range of influence of one, and the players in the game are Alice (4 life), Barry (8 life), Carrie (11 life), and Doug (7 life), in that order, then Alice's life total will become 8 and Barry and Doug's life totals will each become 11."
+- Conflicts with: CR 801.10: "Spells and abilities can’t affect objects or players outside their controller’s range of influence. The parts of the effect that attempt to affect an out-of-range object or player will do nothing. The rest of the effect will work normally." CR 801.11: "If a spell or ability requires information from the game, it gets only information from within its controller’s range of influence. It doesn’t see objects or events outside its controller’s range of influence." The other rulings on range of influence, which use the controller's: Imperial Mask (2007-05-01) "Only teammates within the range of influence of Imperial Mask's controller will get a token. ..."; Benediction of Moons (2006-02-01) "... In a Free-for-All multiplayer game, players who have been eliminated or who are outside your range of influence don't count toward the total." The card: "When this creature enters, each player's life total becomes the highest life total among all players."
+- Evidence: the example uses each affected player's own range: Alice's {Doug, Alice, Barry} gives 8, Barry's {Alice, Barry, Carrie} and Doug's {Carrie, Doug, Alice} give Carrie's 11. No controller fits it under the CR: only Alice has Alice, Barry and Doug in range, and Carrie, whose 11 they get, is outside Alice's range. The CR said the same when the ruling was written (Lorwyn, 2007-10-01; archived CR texts): the CR current as of 2007-10-01 had 801.10 and 801.11 word for word as 601.10 and 601.11, and 601.11's second example then narrowed what an affected player's object sees to "players within range of both Rob and the controller of Coat of Arms" (changed to the controller's whole range in the CR effective 2011-05-01), which gives Barry 8 and Doug 7, not 11; so no rules change explains the ruling. Read alone, its first sentence could mean the controller's range ("their" for the Arbiter's controller), but the example rules that out. Found by work item rulings-P014; investigated in work item ruling-conflicts-3, case 7 (conclusion D: the user decides; recommended: set it aside as inconsistent with 801.10, 801.11 and the other rulings, as Gnoll War Band's was). Its other two rulings (life-gain triggers; Two-Headed Giant teams, 2010-06-15) are cited.
+- Engine: with a limited range of influence, the ability affects only the players within its controller's range and sets each to the highest life total among the players within that range (Alice controlling it: Alice, Barry and Doug become 8; Carrie, out of range, keeps 11).
+- Recorded: no exemption until the user decides (the ruling stays uncited); test `tests/rulings/r_p014_catch_up.rs` (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`).
 
 ## Narrower than stated
 
@@ -117,6 +162,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Evidence: the rulings describe the caster's own turn: every one of these cards is a sorcery, so its caster is normally the active player, and the opponent on the left (the next player in turn order) decides first. Cast on another player's turn (with an effect such as Leyline of Anticipation's "You may cast spells as though they had flash."), 101.4 has the active player decide first, as Tempt with Mayhem's ruling says for the one tempting offer that is an instant; Extract a Confession (2024-02-02) and Flare of Malice (2024-06-07) add the same qualification for their sacrifices ("or, if you cast ... on an opponent's turn, starting with the opponent whose turn it is"). The 2013 text (Commander 2013, 2013-10-17) is on five cards; Tempt with Bunnies (2024-07-26) words it "starting with the next opponent in turn order", with the same gap. Investigated in work item ruling-conflicts-1, case 16 (conclusion A: the sources agree for the caster's own turn).
 - Engine: the opponents decide in APNAP order (CR 101.4): on the caster's turn the next player in turn order first, on another player's turn the active player first if it's an opponent; each knows the earlier decisions (101.4b).
 - Recorded: no exemption: the rulings stay cited for the caster's own turn; tests `tests/rulings/r_s16_tempting_offer.rs` (`opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices`, `off_turn_the_active_opponent_decides_first`, `tempt_with_bunnies_draws_and_makes_rabbits_for_each_player`).
+
+### Lightning, Army of One: "a source you control" for Stagger's "a source"
+- Kind: narrower than stated
+- Status: open for review
+- Ruling, Lightning, Army of One (2025-06-06): "If another effect (or effects) modifies how much damage a source you control would deal—by preventing some of it, for example—the player being dealt damage or the controller of the permanent being dealt damage chooses the order in which any such effects (including Lightning's) apply. If all of the damage is prevented, Lightning's effect no longer applies."
+- Ruling, Lightning, Army of One (2025-06-06): "If damage dealt by a source you control is being divided or assigned among multiple permanents and/or players, that damage is divided or assigned before doubling. For example, if you attack with a 5/5 creature with trample and it's blocked by a 2/2 creature, you can assign 2 damage to the blocker and 3 damage to the defending player. Those amounts are then doubled to 4 and 6, respectively."
+- Conflicts with: nothing they say: both are right for sources Lightning's controller controls. But the card's Oracle text doubles damage from any source: "Stagger — Whenever Lightning deals combat damage to a player, until your next turn, if a source would deal damage to that player or a permanent that player controls, it deals double that damage instead." The rulings' "a source you control" reads as if it applied only to those.
+- Evidence: both are Twinflame Tyrant's rulings (Foundations, 2024-11-08), word for word with the name swapped, right for its "If a source you control would deal damage to an opponent or a permanent an opponent controls, it deals double that damage instead."; Lightning's third ruling of the same day ("The damage is dealt by the same source as the original source of damage. ...") is Twinflame Tyrant's too. The same holds for other players' sources: CR 616.1 has the affected player or controller choose the order whoever controls the source, and CR 601.2d and 510.1 divide or assign damage before any replacement applies. Found in work item rulings-P040 (Nov 5); not a contradiction, so nothing is exempted.
+- Engine: Stagger doubles damage from any source, including the damaged player's own and a third player's, to that player and their permanents until Lightning's controller's next turn; the damaged player orders it with prevention effects whoever controls the source.
+- Recorded: no exemption: the rulings stay cited; tests `tests/rulings/r_p040_multipliers.rs` (`the_player_dealt_damage_orders_multipliers_and_prevention`, `lightning_stagger_doubles_damage_from_any_source_to_that_player_until_your_next_turn`).
 
 ## Misattached rulings
 
@@ -300,6 +355,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: a modal double-faced card that became a copy of a Siege is exiled and cast transformed (as its own back face) when the Siege is defeated.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P225.tsv`; tests `tests/rulings/r_s17_transform_battles.rs` (`a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed`, `a_copy_of_a_siege_thats_not_a_transforming_double_faced_card_stays_in_exile`).
 
+### Craft: copies that aren't transforming double-faced cards
+- Kind: outdated
+- Status: open for review
+- Ruling, Oteclan Landmark // Oteclan Levitator (2023-11-10): "If a card that isn't a transforming double-faced card becomes a copy of a card with craft, it'll stay in exile if you activate the craft ability. It won't return to the battlefield."
+- Conflicts with: CR 712.14a: "If a spell or ability puts a double-faced card onto the battlefield “transformed” or “converted,” it enters the battlefield with its back face up. If a player is instructed to put a card that isn’t a double-faced card onto the battlefield transformed or converted, that card stays in its current zone." Craft's ability ends "Return this card to the battlefield transformed under its owner’s control." (702.167a).
+- Evidence: the ruling (2023-11-10, The Lost Caverns of Ixalan; the same text on all 24 cards with craft) restates 712.14a of its day: "If a spell or ability puts a transforming double-faced card onto the battlefield “transformed” or “converted,” it enters the battlefield with its back face up. If a player is instructed to put a card that isn’t a transforming double-faced card onto the battlefield transformed or converted, that card stays in its current zone." (the CR effective 2023-09-01, in force when the ruling was written, and unchanged through the CR effective 2025-07-25; archived CR texts). The Marvel's Spider-Man CR update (effective 2025-09-19) dropped "transforming" from both sentences, as dated in the entry for the modal double-faced cards' "can't be transformed" above; Wizards' ruling of 2025-09-19 on five Spider-Man cards (Gwen Stacy // Ghost-Spider and others): "Similarly, if an effect attempts to put a modal double-faced card onto the battlefield transformed, it will enter transformed if its back face has a permanent type. If it doesn't, it will simply stay in its current zone." So a modal double-faced permanent that became a copy of a card with craft returns to the battlefield as its own back face, unless that face is an instant or sorcery, as the Sieges' copies are now cast transformed (above). The ruling is outdated only for modal double-faced cards: a card that isn't double-faced at all (Phyrexian Metamorph) still stays in exile, and the ruling stays cited for it. Work item ruling-conflicts-3, case 4 (conclusion B in part).
+- Engine: craft returns the exiled card with its back face up if it's a double-faced card whose back face is a permanent face, modal or not; a modal double-faced card with an instant or sorcery back face and a card that isn't double-faced stay in exile (712.14a, 304.4, 307.4).
+- Recorded: exemption `docs/rulings-exemptions/rulings-P204.tsv`; tests `tests/rulings/r_s03_craft.rs` (`a_modal_double_faced_card_that_became_a_copy_of_a_craft_card_returns_as_its_own_back_face`, `a_copy_of_a_craft_card_that_isnt_double_faced_stays_in_exile`), `tests/keywords/k702_167_craft.rs` (`a_copy_that_isnt_a_double_faced_card_stays_in_exile`).
+
 ### Norn's Inquisitor and Corruption of Towashi: "Only transforming double-faced permanents ... can transform"
 - Kind: outdated
 - Status: open for review
@@ -344,27 +408,24 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- **The craft copy ruling** (24 cards with craft, 2023-11-10, e.g. Oteclan Landmark //
-  Oteclan Levitator): "If a card that isn't a transforming double-faced card becomes a copy
-  of a card with craft, it'll stay in exile if you activate the craft ability. It won't
-  return to the battlefield." Since the Marvel's Spider-Man CR (effective 2025-09-19) a modal
-  double-faced card can be put onto the battlefield transformed (712.14a), so a modal
-  double-faced permanent that became a copy of a craft card would return as its own back
-  face, as the Siege rulings' case does (above). The ruling is cited for a single-faced copy
-  (Phyrexian Metamorph: `tests/keywords/k702_167_craft.rs`, `tests/rulings/r_s03_craft.rs`);
-  the engine's craft return (`kw/craft.rs`) puts any double-faced card back face up, untested
-  for a modal one.
-- **Work item ruling-conflicts-3** (separate): Run Out of Town (the ruling has the permanent's
-  controller choose top or bottom, the Oracle text its owner) and Caller of the Untamed (the
-  card to copy chosen during activation, against the decided `x-defined-by-target`).
-- **Araumi of the Dead Tide** (rulings-P024): its ruling (2020-11-10) lets any X be chosen
-  for the encore cost "equal to its mana cost", against CR 107.3h and the opposite rulings of
-  Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same
-  wording for scavenge. Left uncited; the texts are in `docs/agents/engine-gaps.md`,
-  "Apparent conflicts (Nov 5)".
-- **Arbiter of Knollridge** (rulings-P014): its ruling (2007-10-01) sets each player's life
-  total to the highest life total within that player's own range of influence (its example
-  has Alice become 8 and Barry and Doug 11), against CR 801.10 and 801.11, under which the
-  ability affects and sees only what is within its controller's range (801.11's second Coat
-  of Arms example), as the Imperial Mask and Benediction of Moons rulings say. Left uncited;
-  the texts are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
+- **Stone Calendar** (rulings-P033): its ruling "You may choose not to apply Stone Calendar’s
+  cost reduction effect." (2004-10-04) against its Oracle text "Spells you cast cost {1}
+  less to cast." (no "up to"; a reduction is part of the total cost, CR 601.2f, with no
+  choice to decline it, and Semblance Anvil's "Semblance Anvil's cost reduction effect is
+  mandatory." (2011-01-01) says so for the same wording). Likely origin: the printed text
+  "Your spells cost up to 1 less to cast" (as other databases and Scryfall's Italian
+  printing still show it), which the English Oracle text no longer has; the date of that
+  Oracle change wasn't found. Left uncited; the engine always applies the reduction
+  (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
+- Work item ruling-conflicts-3 took up the craft copy ruling (now an
+  outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
+  the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
+  Dead Tide and Arbiter of Knollridge (inconsistent entries above, for the user to decide).
+  It also compared the 69 release-notes files in the ormos mirror (2013 to 2022) with the
+  data, card by card, for notes the data has with at most four words changed (about 1,100,
+  most for grammar such as "they" for "he or she", or later rules updates). Of the 25 or so
+  whose changed words are about who, where or what (owner, controller, opponent, graveyard,
+  library, can or can't), read by hand, the others are rewordings or corrections that bring
+  the note in line with the card (Failure // Comply's "Opponents" for "Players", Choose Your
+  Demise's "library" for "graveyard"); only Run Out of Town's and Sanguine Spy's contradict
+  it. The rest weren't read one by one.

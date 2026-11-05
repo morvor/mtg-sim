@@ -91,7 +91,9 @@ fn that_copy_costs_less(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
 
 inventory::submit! { FollowupPattern { name: "copies 6: that copy costs {N} less to cast, it costs {N} less to cast this way", priority: 50, apply: that_copy_costs_less } }
 
-/// "{X}, [cost]: [effect choosing one card]. X is the mana value of that card."
+/// "{X}, [cost]: [effect choosing one card]. X is the mana value of that card." The card
+/// is chosen among those with mana value X (interpretation `x-defined-by-target`), as X is
+/// announced (CR 601.2b, `kw::choice_defining_x`).
 fn x_is_mana_value_of_chosen(block: &str, ctx: &crate::oracle::CompileContext) -> Option<Vec<Ability>> {
     let text = block.trim();
     let (cost, _) = text.split_once(": ")?;
@@ -132,6 +134,11 @@ fn x_is_mana_value_of_chosen(block: &str, ctx: &crate::oracle::CompileContext) -
                                 *f = w;
                             }
                         }
+                    }
+                    // The card is chosen as X is announced, not as the ability resolves
+                    // (CR 601.2b; see `kw::choice_defining_x`).
+                    if let Some(s) = c.get_mut("store").filter(|s| s.is_null()) {
+                        *s = serde_json::json!(crate::kw::choice_defining_x::CHOSEN_DEFINING_X);
                     }
                     return;
                 }
