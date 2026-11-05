@@ -60,6 +60,7 @@ mod off_battlefield;
 mod once_each_turn;
 mod opt_in;
 mod outcomes;
+mod pairs5_terms;
 mod pairs_terms;
 mod play_terms;
 mod players;

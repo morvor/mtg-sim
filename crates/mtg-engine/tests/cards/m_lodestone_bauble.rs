@@ -154,3 +154,36 @@ fn choosing_yourself_targets_your_own_graveyard() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand, "one draw only");
 }
+
+#[test]
+fn its_controller_arranges_the_cards_on_the_players_library() {
+    // "In any order" instructs the ability's controller, not the cards' owner (CR 401.4,
+    // 101.1; as Misinformation's ruling says for the same wording).
+    interp!("library-in-any-order-arranged-by-instructing-player");
+    cr!("401.4", "101.1");
+    let mut tops = vec![];
+    for order in [[0usize, 1], [1, 0]] {
+        let (mut t, b) = setup();
+        let f1 = t.graveyard(P1, "Forest");
+        let f2 = t.graveyard(P1, "Island");
+        t.answer_choose(P0, &[Entity::Player(P1)]);
+        t.answer_targets(P0, &[Entity::Object(f1), Entity::Object(f2)]);
+        t.answer(
+            P0,
+            DecisionKind::Order,
+            mtg_engine::decision::Answer::Indices(order.to_vec()),
+        );
+        let from = t.asked().len();
+        t.activate(P0, b, 0, &[]).unwrap();
+        t.resolve_all();
+        let orderers: Vec<PlayerId> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, Decision::Order { .. }))
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(orderers, vec![P0]);
+        let top = *t.g.player(P1).library.last().unwrap();
+        tops.push(t.obj_now(top).chars.name.clone());
+    }
+    assert_ne!(tops[0], tops[1]);
+}

@@ -193,10 +193,6 @@ fn animate_dead_cant_be_moved_to_another_creature() {
         "Animate Dead",
         "Once the creature is returned to the battlefield, Animate Dead can't be attached to anything other than it"
     );
-    ruling!(
-        "Dance of the Dead",
-        "Once the creature is returned to the battlefield, Dance of the Dead can't be attached to anything other than it"
-    );
     let mut t = TestGame::new(2);
     let other = t.battlefield(P0, "Grizzly Bears");
     let bears = t.graveyard(P0, "Grizzly Bears");
@@ -205,6 +201,37 @@ fn animate_dead_cant_be_moved_to_another_creature() {
     let now = t.g.current(bears);
     assert!(!t.g.attach(ad, Entity::Object(other)));
     assert_eq!(t.obj_now(ad).attached_to, Some(Entity::Object(now)));
+}
+
+#[test]
+fn a_second_dance_of_the_dead_cant_join_the_first_on_its_creature() {
+    // Dance of the Dead's 2004 ruling "If more than one Dance of the Dead ends up on a
+    // creature, each contributes a +1/+1" was written for the old generic "enchant
+    // creature" wording; since the Masters Edition Update Bulletin (2007-08-29) each Dance
+    // can enchant only the creature it put onto the battlefield, so two can't share one
+    // (exempt as outdated, gap-zone-moves.tsv).
+    cr!("303.4j", "607.1a", "607.2c");
+    ruling!(
+        "Dance of the Dead",
+        "Once the creature is returned to the battlefield, Dance of the Dead can't be attached to anything other than it"
+    );
+    let mut t = TestGame::new(2);
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    let giant = t.graveyard(P0, "Hill Giant");
+    let dance_a = cast_aura_on(&mut t, "Dance of the Dead", 2, bears);
+    t.resolve_all();
+    let dance_b = cast_aura_on(&mut t, "Dance of the Dead", 2, giant);
+    t.resolve_all();
+    let (bears, giant) = (t.g.current(bears), t.g.current(giant));
+    assert!(t.on_battlefield(bears) && t.on_battlefield(giant));
+    assert_eq!(t.obj_now(dance_a).attached_to, Some(Entity::Object(bears)));
+    assert_eq!(t.pt(bears), (3, 3));
+    // Moving the second Dance onto the first one's creature doesn't work.
+    assert!(!t.g.attach(dance_b, Entity::Object(bears)));
+    t.g.recompute();
+    assert_eq!(t.obj_now(dance_b).attached_to, Some(Entity::Object(giant)));
+    assert_eq!(t.pt(bears), (3, 3), "only its own Dance's +1/+1");
+    assert_eq!(t.pt(giant), (4, 4));
 }
 
 #[test]

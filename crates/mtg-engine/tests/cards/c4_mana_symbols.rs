@@ -44,7 +44,9 @@ fn charmed_pendant_adds_one_mana_for_each_colored_symbol_of_the_milled_card() {
     let pendant = t.battlefield(P0, "Charmed Pendant");
     t.library_top(P0, "Recoil");
     activate_first(&mut t, P0, pendant);
-    // Milling is a library action: not a mana ability, it uses the stack (CR 605.1a).
+    // Milling is a library action: not a mana ability, it uses the stack (CR 605.1a, revision
+    // effective 2026-08-07; the 2004 ruling "still a mana ability" is exempt as outdated,
+    // rulings-S22.tsv).
     assert_eq!(t.stack_len(), 1);
     t.resolve();
     assert!(t.in_graveyard(P0, "Recoil"));

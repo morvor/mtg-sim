@@ -445,8 +445,10 @@ impl Renderer<'_> {
                     format!("{{{l}}} was spent to cast {}", self.me())
                 } else {
                     let c = color_of_letter(l).unwrap_or(l);
+                    // "if {W}{W} was spent to cast it": that much mana of the color.
+                    let syms = format!("{{{l}}}").repeat(min as usize);
                     format!(
-                        "at least {} {c} mana was spent to cast {}",
+                        "{{alt:at least {} {c} mana|{syms}}} was spent to cast {}",
                         number_word(min),
                         self.me()
                     )

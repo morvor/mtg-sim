@@ -38,7 +38,10 @@ fn windswift_slice_creates_a_token_for_each_excess_damage() {
 
 #[test]
 fn with_deathtouch_any_damage_beyond_1_is_excess() {
-    cr!("120.10");
+    // CR 120.4a: "Any amount of damage greater than 1 is excess damage if the source dealing
+    // that damage to a creature has deathtouch." (in the CR since at least 2020-04-17,
+    // briefly dropped 2021-02-05 and restored 2021-02-15); it defines the term 120.10 uses.
+    cr!("120.10", "120.4a");
     ruling!(
         "Windswift Slice",
         "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage, so any amount greater than that will cause excess damage to be dealt, even if the total amount of damage isn't greater than the creature's toughness."
