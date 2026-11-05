@@ -31,14 +31,13 @@ fn hive_mind_copies_are_not_cast() {
     let hive = t.battlefield(P0, "Hive Mind");
     let spider = t.battlefield(P0, "Dragonlair Spider");
     // P1 casts Lightning Bolt at P0: Hive Mind and Dragonlair Spider both trigger.
-    let bolt = p1_casts_on_p0s_turn(&mut t, "Lightning Bolt", &[Entity::Player(P0)]);
+    p1_casts_on_p0s_turn(&mut t, "Lightning Bolt", &[Entity::Player(P0)]);
     assert_eq!(triggers_from(&t, hive), 1);
     assert_eq!(triggers_from(&t, spider), 1);
     t.resolve_all();
     // P0's copy (keeping its target, P0) wasn't cast: Hive Mind didn't trigger again
     // (that would have given P1 a third Bolt) and the Spider made only one Insect.
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
-    let _ = bolt;
     assert_eq!(t.life(P0), 14);
     assert_eq!(t.life(P1), 20);
     assert_eq!(tokens(&t, P0).len(), 1);
@@ -458,10 +457,10 @@ fn wan_shi_tong_librarian_ignores_searches_of_other_players_libraries() {
     let mut t = ffa(3);
     let wst = t.battlefield(P0, "Wan Shi Tong, Librarian");
     let bears = t.library_top(P1, "Grizzly Bears");
-    let bribery = cast_targeting(&mut t, P0, "Bribery", &[Entity::Player(P1)]);
+    cast_targeting(&mut t, P0, "Bribery", &[Entity::Player(P1)]);
     t.answer_choose(P0, &[obj(bears)]);
     t.resolve();
-    assert!(t.on_battlefield(bears), "{}", t.zone(bribery) == Zone::Stack);
+    assert!(t.on_battlefield(bears));
     assert_eq!(triggers_from(&t, wst), 0);
     // P1 (an opponent) searches P2's library with Bribery: no trigger.
     let ogre = t.library_top(P2, "Gray Ogre");

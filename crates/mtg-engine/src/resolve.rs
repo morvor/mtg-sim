@@ -99,7 +99,7 @@ impl Game {
             // "You may cast the copies": with several cards, the player chooses for each
             // whether to cast it (none, one, or all of them; Starfield Vocalist ruling).
             Effect::May { effect, .. }
-                if matches!(&**effect, Effect::CastCard { what, optional: false, .. }
+                if matches!(&**effect, Effect::CastCard { what: what @ Sel::Var(_), optional: false, .. }
                     if self.resolve_objects(what, ctx).len() > 1) =>
             {
                 if let Effect::CastCard {

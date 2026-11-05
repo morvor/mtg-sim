@@ -193,12 +193,11 @@ fn relic_vial_leaving_with_the_clerics_triggers_for_each_creature() {
     );
     supported("Akroma's Vengeance");
     let mut t = TestGame::new(2);
-    let vial = t.battlefield(P0, "Relic Vial");
+    t.battlefield(P0, "Relic Vial");
     t.battlefield(P0, "Shrine Keeper");
     t.battlefield(P0, "Grizzly Bears");
     cast_resolve(&mut t, P0, "Akroma's Vengeance", &[]);
     assert!(t.in_graveyard(P0, "Relic Vial"));
-    let _ = vial;
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.life(P0), 22);
 }
