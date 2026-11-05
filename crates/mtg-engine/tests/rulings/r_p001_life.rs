@@ -18,7 +18,7 @@ fn p1_gains(t: &mut TestGame, n: u32) {
 
 #[test]
 fn two_life_gain_to_loss_replacements_dont_stack() {
-    cr!("614.1a", "616.1e", "614.5");
+    cr!("614.1a", "616.1f");
     ruling!(
         "Plague Drone",
         "Having more than one Plague Drone on the battlefield doesn't have any noticeable effect on life gain. Once the effect of one Plague Drone applies, there is no life gain for the others to apply to."
@@ -43,7 +43,7 @@ fn two_life_gain_to_loss_replacements_dont_stack() {
 
 #[test]
 fn the_gaining_player_orders_plague_drone_and_alhammarrets_archive() {
-    cr!("616.1", "616.1e", "614.5");
+    cr!("616.1", "616.1e", "616.1f");
     ruling!(
         "Plague Drone",
         "If more than one replacement effect tries to apply to a life gain event, the player who would gain life chooses the order in which they apply."

@@ -95,7 +95,7 @@ fn capricious_efreet_may_target_no_permanents_you_dont_control() {
 
 #[test]
 fn capricious_efreet_chooses_at_random_among_the_targets_still_legal() {
-    cr!("608.2b", "706.1");
+    cr!("608.2b");
     ruling!(
         "Capricious Efreet",
         "You target between one and three permanents as you put the ability on the stack. You don’t randomly choose which one will be destroyed until the ability resolves. If one of those permanents has become an illegal target by then, you randomly choose between the remaining ones."
@@ -398,7 +398,7 @@ fn refurbished_familiars_opponents_choose_in_turn_order_then_discard_together() 
 
 #[test]
 fn exiled_until_leaves_auras_fall_off_equipment_stays_counters_vanish() {
-    cr!("400.7", "704.5m", "704.5n", "122.2", "610.3a");
+    cr!("400.7", "704.5m", "704.5n", "122.2", "610.3");
     ruling!(
         "Bishop of Binding",
         "Auras attached to the exiled creature will be put into their owners’ graveyards. Any Equipment will become unattached and remain on the battlefield. Any counters on the exiled creature will cease to exist."
@@ -471,7 +471,7 @@ fn ravenous_slime_exiles_a_dying_token() {
 
 #[test]
 fn hone_counters_grant_power_whatever_the_equipment_says() {
-    cr!("122.1", "301.5c");
+    cr!("122.1j");
     ruling!(
         "Dwalin, Weaponmaster",
         "Hone counters can be put on any Equipment and each one will grant +1/+0 to that Equipment's equipped creature, even if the Equipment the hone counters are on doesn't reference hone counters or have an ability that puts them on itself."
@@ -493,7 +493,7 @@ fn hone_counters_grant_power_whatever_the_equipment_says() {
 
 #[test]
 fn hone_counters_grant_power_even_if_the_equipment_loses_its_abilities() {
-    cr!("122.1", "613.1f");
+    cr!("122.1j", "613.1f");
     ruling!(
         "Sting, Bilbo's Sword",
         "A creature equipped by an Equipment with hone counters on it gets +1/+0 for each hone counter on that Equipment. This effect is from the counter itself rather than an ability on the Equipment, so even if the Equipment loses some of its abilities, each hone counter will still grant +1/+0 to the creature."

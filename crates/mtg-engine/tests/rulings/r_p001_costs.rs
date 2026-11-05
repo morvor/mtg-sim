@@ -31,8 +31,8 @@ fn spells_in_graveyard_9(t: &mut TestGame) {
 fn creature_cards_8(t: &mut TestGame) {
     graveyard_n(t, P0, "Grizzly Bears", 8);
 }
-fn artifact_creature_cards_5(t: &mut TestGame) {
-    graveyard_n(t, P0, "Ornithopter", 5);
+fn artifact_creature_cards_7(t: &mut TestGame) {
+    graveyard_n(t, P0, "Ornithopter", 7);
 }
 
 const COLORED_ONLY: &[Reduced] = &[
@@ -62,7 +62,7 @@ const COLORED_ONLY: &[Reduced] = &[
     },
     Reduced {
         card: "Chitin Gravestalker",
-        setup: artifact_creature_cards_5,
+        setup: artifact_creature_cards_7,
         colored: &["Swamp"],
         mana_value: 6,
     },
@@ -269,6 +269,18 @@ fn herald_of_slaanesh_reduces_only_generic_mana() {
     t.cast(P0, second).go();
     assert!(t.obj_now(mountain).tapped);
     assert_eq!(untapped_lands(&t, P0), 5);
+    // Immersturm Raider ({1}{R}, a Demon) has less generic mana than the reduction: it
+    // still costs {R}, not nothing.
+    supported("Immersturm Raider");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Herald of Slaanesh");
+    t.lands(P0, "Wastes", 5);
+    let raider = t.hand(P0, "Immersturm Raider");
+    assert!(!try_cast(&mut t, P0, raider));
+    let mountain = t.battlefield(P0, "Mountain");
+    t.cast(P0, raider).go();
+    assert!(t.obj_now(mountain).tapped);
+    assert_eq!(untapped_lands(&t, P0), 5);
 }
 
 #[test]
@@ -313,7 +325,7 @@ fn an_artifact_creature_card_counts_once_for_chitin_gravestalker() {
 
 #[test]
 fn thwart_the_graves_first_target_neednt_be_a_party_type() {
-    cr!("115.1", "700.8");
+    cr!("115.1a");
     ruling!(
         "Thwart the Grave",
         "Thwart the Grave's first target doesn't have to be one of the party creature types."
@@ -442,6 +454,14 @@ fn the_sacrifice_is_exactly_one_creature() {
     );
     ruling!(
         "Bone Splinters",
+        "You must sacrifice exactly one creature to cast this spell; you can’t cast it without sacrificing a creature, and you can’t sacrifice additional creatures."
+    );
+    ruling!(
+        "Blood for Bones",
+        "You must sacrifice exactly one creature to cast this spell; you can’t cast it without sacrificing a creature, and you can’t sacrifice additional creatures."
+    );
+    ruling!(
+        "Collateral Damage",
         "You must sacrifice exactly one creature to cast this spell; you can’t cast it without sacrificing a creature, and you can’t sacrifice additional creatures."
     );
     for name in [

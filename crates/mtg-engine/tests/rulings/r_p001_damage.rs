@@ -221,7 +221,7 @@ fn deadly_tempest_counts_only_creatures_destroyed_this_way() {
 
 #[test]
 fn essence_backlash_uses_the_creature_spells_own_power() {
-    cr!("109.2", "208.3", "608.2h");
+    cr!("109.2", "208.1", "608.2h");
     ruling!(
         "Essence Backlash",
         "Abilities that change the power of a creature (such as the one of Collective Blessing) affect only creatures on the battlefield. They won’t change a creature spell’s power on the stack."

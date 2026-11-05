@@ -130,7 +130,7 @@ fn launch_party_does_nothing_if_its_target_is_illegal() {
 
 #[test]
 fn champion_of_stray_souls_returns_itself_only_from_the_graveyard() {
-    cr!("602.1", "113.6k");
+    cr!("602.1", "113.6m");
     ruling!(
         "Champion of Stray Souls",
         "The last ability can be activated only if Champion of Stray Souls is in your graveyard."
@@ -181,7 +181,7 @@ fn champion_of_stray_souls_cant_target_the_creatures_it_sacrifices() {
 
 #[test]
 fn bookwurm_isnt_put_into_the_library_if_it_left_the_graveyard() {
-    cr!("400.7", "608.2b");
+    cr!("400.7");
     ruling!(
         "Bookwurm",
         "If Bookwurm is removed from your graveyard in response to its last ability, it won't be put into your library."
@@ -224,7 +224,7 @@ fn screaming_swarm_can_target_its_controller() {
 
 #[test]
 fn biophagus_mana_doubled_gives_each_creature_a_counter() {
-    cr!("106.6", "106.12");
+    cr!("106.6", "106.6a", "106.12");
     ruling!(
         "Biophagus",
         "If Biophagus's ability produces more than one mana, perhaps due to an effect such as that of Mana Reflection, each creature cast with that mana will enter the battlefield with an additional +1/+1 counter."
@@ -260,6 +260,22 @@ fn a_storage_land_is_tapped_for_mana_only_if_it_makes_mana() {
     cr!("106.12", "106.12a");
     ruling!(
         "Bottomless Vault",
+        "It is only considered “tapped for mana” if you activate its mana ability and generate mana from it."
+    );
+    ruling!(
+        "Dwarven Hold",
+        "It is only considered “tapped for mana” if you activate its mana ability and generate mana from it."
+    );
+    ruling!(
+        "Hollow Trees",
+        "It is only considered “tapped for mana” if you activate its mana ability and generate mana from it."
+    );
+    ruling!(
+        "Icatian Store",
+        "It is only considered “tapped for mana” if you activate its mana ability and generate mana from it."
+    );
+    ruling!(
+        "Sand Silos",
         "It is only considered “tapped for mana” if you activate its mana ability and generate mana from it."
     );
     supported("Manabarbs");
