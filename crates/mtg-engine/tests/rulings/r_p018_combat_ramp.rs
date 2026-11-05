@@ -85,7 +85,7 @@ fn kaldring(t: &mut TestGame, card: ObjectId) -> ObjectId {
 
 #[test]
 fn kaldring_lets_you_play_the_card_but_it_stays_in_the_graveyard() {
-    cr!("601.2", "601.3", "305.1");
+    cr!("601.2", "601.3", "118.8", "118.9");
     ruling!(
         "Jorn, God of Winter // Kaldring, the Rimestaff",
         "Even though you may play the card, it isn't in your hand, so you can't, for example, discard it or foretell it."
@@ -116,6 +116,42 @@ fn kaldring_lets_you_play_the_card_but_it_stays_in_the_graveyard() {
     t.resolve_all();
     assert!(t.on_battlefield(troll));
     assert!(t.obj_now(troll).tapped);
+    // An additional cost (kicker) can be paid, and so can an alternative cost (evoke).
+    let kicked = crate::r_s01_common::custom_card(
+        "Rime Kicker",
+        "Snow Creature — Elemental",
+        "{1}{G}",
+        Some((2, 2)),
+        "Kicker {2}\nIf this creature was kicked, it enters with two +1/+1 counters on it.",
+    );
+    let mut t = TestGame::new(2);
+    let card = t.custom(P0, kicked, Zone::Graveyard(P0));
+    kaldring(&mut t, card);
+    add_mana(&mut t, P0, ManaType::G, 4);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.cast(P0, card).go();
+    assert_eq!(t.g.players[P0.idx()].mana_pool.total(), 0);
+    t.resolve_all();
+    assert_eq!(t.counters(card, counters::PLUS1), 2);
+    let evoker = crate::r_s01_common::custom_card(
+        "Rime Evoker",
+        "Snow Creature — Elemental",
+        "{4}{G}",
+        Some((3, 3)),
+        "Evoke {G}",
+    );
+    let mut t = TestGame::new(2);
+    let card = t.custom(P0, evoker, Zone::Graveyard(P0));
+    kaldring(&mut t, card);
+    add_mana(&mut t, P0, ManaType::G, 1);
+    let evoke = CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Evoke);
+    assert!(can_cast(&mut t, P0, card, evoke.clone()));
+    t.cast(P0, card).method(evoke).go();
+    assert_eq!(t.g.players[P0.idx()].mana_pool.total(), 0);
+    t.resolve_all();
+    // Evoked: it entered and was sacrificed.
+    assert_ne!(t.g.current(card), card);
+    assert_eq!(t.zone(card), Zone::Graveyard(P0));
 }
 
 #[test]

@@ -12,6 +12,7 @@ use crate::r_s04_common::add_mana;
 use crate::r_s06_common::{activate_containing, attach_new, give_control};
 use crate::r_s09_common::legal_attack;
 use crate::r_s20_common::{tap_for_mana, to_beginning_of_combat};
+use mtg_engine::ability::{Modification, Value};
 use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
@@ -146,7 +147,7 @@ fn a_manland_animated_the_turn_you_gained_control_of_it_cant_tap_or_attack() {
 
 #[test]
 fn a_manland_animation_overwrites_earlier_pt_setting_but_not_counters() {
-    cr!("613.4b", "613.4c", "613.7a");
+    cr!("613.4b", "613.4c", "613.4d", "613.7a");
     ruling!(
         "Hissing Quagmire",
         "For example, if Hissing Quagmire has been made a 0/0 creature with three +1/+1 counters on it, activating its last ability will turn it into a 5/5 creature that's still a land."
@@ -170,32 +171,29 @@ fn a_manland_animation_overwrites_earlier_pt_setting_but_not_counters() {
         ("Wandering Fumarole", (4, 7)),
     ] {
         supported(name);
-        let mut t = TestGame::new(2);
-        let land = t.battlefield(P0, name);
-        // As an awaken spell would: a 0/0 creature with three +1/+1 counters.
-        put_counters(&mut t, land, counters::PLUS1, 3);
-        make_zero_zero_creature(&mut t, land);
-        assert_eq!(t.pt(land), (3, 3));
-        // A modification from before the animation still applies: -1/-0 and +1/+0.
-        modify(
-            &mut t,
-            land,
-            vec![mtg_engine::ability::Modification::ModifyPT(
-                mtg_engine::ability::Value::Const(-1),
-                mtg_engine::ability::Value::Const(0),
-            )],
-        );
-        modify(
-            &mut t,
-            land,
-            vec![mtg_engine::ability::Modification::ModifyPT(
-                mtg_engine::ability::Value::Const(1),
-                mtg_engine::ability::Value::Const(0),
-            )],
-        );
-        animate(&mut t, P0, land);
-        assert_eq!(t.pt(land), pt, "{name}");
-        assert!(t.obj_now(land).is(CardType::Land));
+        for switched in [false, true] {
+            let mut t = TestGame::new(2);
+            let land = t.battlefield(P0, name);
+            // As an awaken spell would: a 0/0 creature with three +1/+1 counters.
+            put_counters(&mut t, land, counters::PLUS1, 3);
+            make_zero_zero_creature(&mut t, land);
+            assert_eq!(t.pt(land), (3, 3));
+            // A modification from before the animation still applies (+2/+0), and so
+            // does a switch.
+            let mut mods = vec![Modification::ModifyPT(Value::Const(2), Value::Const(0))];
+            if switched {
+                mods.push(Modification::SwitchPT);
+            }
+            modify(&mut t, land, mods);
+            animate(&mut t, P0, land);
+            let expected = if switched {
+                (pt.1, pt.0 + 2)
+            } else {
+                (pt.0 + 2, pt.1)
+            };
+            assert_eq!(t.pt(land), expected, "{name}, switched: {switched}");
+            assert!(t.obj_now(land).is(CardType::Land));
+        }
     }
 }
 
@@ -382,11 +380,7 @@ fn staff_of_titanias_dryad_keeps_its_creature_types_when_its_land_type_changes()
     assert!(o.is(CardType::Creature) && o.is(CardType::Land));
     assert!(o.chars.colors.contains(Color::Green));
     // Vice versa: losing its creature types doesn't touch its land type.
-    modify(
-        &mut t,
-        dryad,
-        vec![mtg_engine::ability::Modification::RemoveAllCreatureTypes],
-    );
+    modify(&mut t, dryad, vec![Modification::RemoveAllCreatureTypes]);
     let o = t.obj_now(dryad);
     assert!(!o.chars.has_subtype("Dryad"));
     assert!(o.chars.has_subtype("Island"));
