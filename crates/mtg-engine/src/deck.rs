@@ -179,10 +179,15 @@ fn is_basic_land(card: &CardDef) -> bool {
 }
 
 /// A basic land card a limited deck may add beyond its card pool (CR 100.2b). Basic snow
-/// lands aren't: a player plays with them only if they're in the pool they opened or
-/// drafted.
+/// lands aren't, and neither are basic lands with no basic land type (Wastes): a player
+/// plays with them only if they're in the pool they opened or drafted.
 fn is_free_limited_basic(card: &CardDef) -> bool {
-    is_basic_land(card) && !card.front().chars.supertypes.contains(Supertype::Snow)
+    let c = &card.front().chars;
+    is_basic_land(card)
+        && !c.supertypes.contains(Supertype::Snow)
+        && ["Plains", "Island", "Swamp", "Mountain", "Forest"]
+            .iter()
+            .any(|t| c.has_subtype(t))
 }
 
 /// The name a card counts as for deck construction: cards with interchangeable names
