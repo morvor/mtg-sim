@@ -1038,9 +1038,22 @@ fn min_others(
 /// (CR 118.5), so requirements don't force the creature to attack (508.1d), and attacking
 /// with it acknowledges paying {0} (508.1h).
 pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Option<Cost> {
+    let costs = attack_costs(g, creature, target);
+    if costs.is_empty() {
+        return None;
+    }
     let mut total = Cost::default();
-    let mut any = false;
-    for (s, c, r, locked) in g.all_restrictions() {
+    for (_, cost) in &costs {
+        crate::casting::add_cost(&mut total, cost);
+    }
+    Some(total)
+}
+
+/// The restrictions that make `creature` pay a cost to attack `target` (CR 508.1d,
+/// 508.1h): each one's index in [`Game::all_restrictions`], with its cost.
+fn attack_costs(g: &Game, creature: ObjectId, target: Entity) -> Vec<(usize, Cost)> {
+    let mut out = Vec::new();
+    for (i, (s, c, r, locked)) in g.all_restrictions().into_iter().enumerate() {
         if let Restriction::AttackCost {
             attackers,
             defender,
@@ -1071,13 +1084,23 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
                 // "{1} for each +1/+1 counter on it", "{X}, where X is the number of
                 // enchantments you control": counted from the restriction's point of view
                 // as the cost is determined (CR 508.1h).
-                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
-                crate::casting::add_cost(&mut total, &cost);
-                any = true;
+                out.push((
+                    i,
+                    crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx),
+                ));
             }
         }
     }
-    any.then_some(total)
+    out
+}
+
+/// The restrictions (indices in [`Game::all_restrictions`]) that make `creature` pay a
+/// cost to attack `target`.
+fn attack_cost_sources(g: &Game, creature: ObjectId, target: Entity) -> Vec<usize> {
+    attack_costs(g, creature, target)
+        .into_iter()
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// Whether attacking as `decl` declares requires paying a cost (CR 508.1h), even one of
@@ -1106,32 +1129,38 @@ pub fn best_attack(
     options: &[(ObjectId, Vec<Entity>)],
     reqs: &[AttackRequirement],
 ) -> (u32, Vec<(ObjectId, Entity)>) {
-    best_attack_paying(g, options, reqs, &[], &[])
+    best_attack_paying(g, options, reqs, &[])
 }
 
-/// [`best_attack`], with the creatures of `paying` free to attack whatever they could
-/// attack paying its cost, and each (creature, target) of `paid` an attack it may make
-/// paying its cost.
+/// A creature declared attacking for a cost (CR 508.1h), as [`best_attack_paying`]
+/// counts it: what it attacks, and the restrictions it pays whatever it attacks (its
+/// costs to attack at all), as indices in [`Game::all_restrictions`].
+type PaidAttack = (ObjectId, Entity, Vec<usize>);
+
+/// [`best_attack`], with each creature of `paid` also free to make its paid attack, or to
+/// attack whatever needs no cost beyond its costs to attack at all.
 fn best_attack_paying(
     g: &Game,
     options: &[(ObjectId, Vec<Entity>)],
     reqs: &[AttackRequirement],
-    paying: &[ObjectId],
-    paid: &[(ObjectId, Entity)],
+    paid: &[PaidAttack],
 ) -> (u32, Vec<(ObjectId, Entity)>) {
     let rules = attack_rules(g, options);
     // Creatures that can't attack without paying a cost aren't required to (CR 508.1d).
     let free: Vec<(ObjectId, Vec<Entity>)> = options
         .iter()
         .map(|(c, ts)| {
+            let paying = paid.iter().find(|(p, _, _)| p == c);
             (
                 *c,
                 ts.iter()
                     .copied()
                     .filter(|t| {
-                        paying.contains(c)
-                            || paid.contains(&(*c, *t))
-                            || required_attack_cost(g, *c, *t).is_none()
+                        let costs = attack_cost_sources(g, *c, *t);
+                        costs.is_empty()
+                            || paying.is_some_and(|(_, paid_target, at_all)| {
+                                paid_target == t || costs.iter().all(|i| at_all.contains(i))
+                            })
                     })
                     .collect::<Vec<_>>(),
             )
@@ -1240,31 +1269,35 @@ pub(crate) fn attack_declaration_legal_with(
     if obeyed < max {
         return false;
     }
-    // A creature that can't attack at all without paying a cost isn't required to attack
-    // (CR 508.1d), but once it attacks, paying that cost, its requirements are obeyed as
-    // far as possible: it can attack whatever it could attack for a cost (Furygale
-    // Flocking rulings). A creature with a cost only to attack some players or
-    // planeswalkers may attack another one for free, or the one it pays for, instead.
-    // And a requirement obeyed by paying a cost doesn't excuse disobeying another one
-    // that could be obeyed for free.
-    let paid: Vec<(ObjectId, Entity)> = decl
-        .iter()
-        .copied()
-        .filter(|(a, t)| required_attack_cost(g, *a, *t).is_some())
-        .collect();
-    if paid.is_empty() {
-        return true;
+    // A player isn't required to pay a cost to obey a requirement (CR 508.1d), so `max`
+    // counts only attacks needing no cost. A declaration that pays costs to attack must
+    // also obey as many requirements as it could paying only those costs (Furygale
+    // Flocking, Territorial Hellkite rulings): a requirement obeyed by paying doesn't
+    // excuse another one that could be obeyed for free, and a creature attacking for a
+    // cost to attack at all (one it pays whatever it attacks, as for Brainwash) attacks
+    // as its requirements say, unless that needs another cost too. A cost only to attack
+    // some players or planeswalkers (Ghostly Prison) binds nothing else: a creature
+    // paying it may attack something else instead, paying that one's cost if any.
+    let mut paid: Vec<PaidAttack> = Vec::new();
+    for (a, t) in decl {
+        if attack_cost_sources(g, *a, *t).is_empty() {
+            continue;
+        }
+        let mut at_all: Option<Vec<usize>> = None;
+        for other in options
+            .iter()
+            .filter(|(c, _)| c == a)
+            .flat_map(|(_, ts)| ts)
+        {
+            let costs = attack_cost_sources(g, *a, *other);
+            at_all = Some(match at_all {
+                None => costs,
+                Some(u) => u.into_iter().filter(|i| costs.contains(i)).collect(),
+            });
+        }
+        paid.push((*a, *t, at_all.unwrap_or_default()));
     }
-    let paying: Vec<ObjectId> = paid
-        .iter()
-        .filter(|(a, _)| {
-            options.iter().any(|(c, ts)| {
-                c == a && ts.iter().all(|t| required_attack_cost(g, *a, *t).is_some())
-            })
-        })
-        .map(|(a, _)| *a)
-        .collect();
-    obeyed >= best_attack_paying(g, options, reqs, &paying, &paid).0
+    paid.is_empty() || obeyed >= best_attack_paying(g, options, reqs, &paid).0
 }
 
 /// Declare attackers step turn-based action (CR 508.1).

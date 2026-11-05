@@ -225,10 +225,10 @@ fn furygale_tokens_with_a_cost_to_attack_that_player_or_to_attack_at_all() {
     let mut to_p2 = base.clone();
     to_p2.push((p1s[0], pl(P2)));
     assert!(!legal(&mut t, &to_p2));
-    // Also when attacking P1 costs more (Ghostly Prison's {2} on top): there's a cost to
-    // attack at all, so it attacks P1 or doesn't attack (provisional).
+    // When attacking P1 costs more (Ghostly Prison's {2} on top), P0 needn't pay that
+    // cost: paying only Brainwash's, the token may attack P2 (provisional).
     let prison = t.battlefield(P1, "Ghostly Prison");
-    assert!(!legal(&mut t, &to_p2));
+    assert!(legal(&mut t, &to_p2));
     assert!(legal(&mut t, &to_p1));
     let mut not_attacking = base.clone();
     not_attacking.retain(|(c, _)| *c != p1s[1]);
@@ -240,4 +240,96 @@ fn furygale_tokens_with_a_cost_to_attack_that_player_or_to_attack_at_all() {
     t.advance_to(P0, Step::DeclareAttackers);
     let c = t.g.combat.as_ref().unwrap();
     assert_ne!(c.attack_target(p1s[0]), Some(pl(P2)));
+    // P1 and P2 each control Ghostly Prison: every attack has a cost, but each is a cost
+    // to attack one player. A P1 token may attack P2 paying P2's cost: P0 needn't pay
+    // P1's instead.
+    let mut t = TestGame::new(3);
+    let (p1s, p2s) = furygale(&mut t);
+    t.battlefield(P1, "Ghostly Prison");
+    t.battlefield(P2, "Ghostly Prison");
+    assert!(legal(&mut t, &[]));
+    assert!(legal(&mut t, &[(p1s[0], pl(P2))]));
+    assert!(legal(&mut t, &[(p1s[0], pl(P2)), (p2s[0], pl(P1))]));
+    // A cost to attack P1 and the planeswalkers P1 controls (Baird), with P2 free to
+    // attack: a P1 token may attack P1's planeswalker paying it, but a P2 token must still
+    // attack P2.
+    supported("Baird, Steward of Argive");
+    let mut t = TestGame::new(3);
+    let (p1s, p2s) = furygale(&mut t);
+    t.battlefield(P1, "Baird, Steward of Argive");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    let p2_attack: Vec<(ObjectId, Entity)> = p2s.iter().map(|c| (*c, pl(P2))).collect();
+    let mut decl = p2_attack.clone();
+    decl.push((p1s[0], obj(jace)));
+    assert!(legal(&mut t, &decl));
+    decl.push((p1s[1], pl(P1)));
+    assert!(legal(&mut t, &decl));
+    decl.retain(|d| *d != p2_attack[1]);
+    assert!(!legal(&mut t, &decl));
+    // In a two-player game Baird's cost is one to attack at all: paying it, a token
+    // attacks P1, not P1's planeswalker (provisional).
+    let mut t = TestGame::new(2);
+    graveyard_n(&mut t, P0, "Shock", 9);
+    t.lands(P0, "Mountain", 2);
+    let card = t.hand(P0, "Furygale Flocking");
+    t.cast(P0, card).go();
+    t.resolve_all();
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 2);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.battlefield(P1, "Baird, Steward of Argive");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    assert!(legal(&mut t, &[]));
+    assert!(legal(&mut t, &[(toks[0], pl(P1))]));
+    assert!(!legal(&mut t, &[(toks[0], obj(jace))]));
+}
+
+/// P2 casts Disrupt Decorum ("Goad all creatures you don't control.") in a three-player
+/// game; P0's Grizzly Bears, goaded by P2, are at P0's beginning of combat.
+fn bears_goaded_by_p2(t: &mut TestGame) -> ObjectId {
+    supported("Disrupt Decorum");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P2, Step::PrecombatMain);
+    t.lands(P2, "Mountain", 4);
+    let dd = t.hand(P2, "Disrupt Decorum");
+    t.cast(P2, dd).go();
+    t.resolve_all();
+    assert_eq!(t.g.goaders(bears), vec![P2]);
+    crate::r_s09_common::to_combat(t, P0);
+    bears
+}
+
+#[test]
+fn a_goaded_creature_paying_one_players_cost_isnt_forced_to_pay_anothers() {
+    cr!("701.15b", "508.1d");
+    interp!("attack-requirements-once-a-cost-is-paid");
+    ruling!(
+        "Disrupt Decorum",
+        "If there's a cost associated with having a creature attack a player, its controller isn't forced to pay that cost, so it doesn't have to attack that player."
+    );
+    supported("Propaganda");
+    supported("Brainwash");
+    // Attacking P1 costs {2} (P1's Propaganda): the Bears attack P2 for free, or P1
+    // paying; they can't stay home.
+    let mut t = TestGame::new(3);
+    let bears = bears_goaded_by_p2(&mut t);
+    let p1_prop = t.battlefield(P1, "Propaganda");
+    assert!(legal(&mut t, &[(bears, pl(P2))]));
+    assert!(legal(&mut t, &[(bears, pl(P1))]));
+    assert!(!legal(&mut t, &[]));
+    // P2 has Propaganda too: no attack is free, so they needn't attack, and paying P2's
+    // cost to attack P2 doesn't oblige P0 to pay P1's and attack P1 instead.
+    let p2_prop = t.battlefield(P2, "Propaganda");
+    assert!(legal(&mut t, &[]));
+    assert!(legal(&mut t, &[(bears, pl(P2))]));
+    assert!(legal(&mut t, &[(bears, pl(P1))]));
+    // A cost to attack at all (Brainwash) is the same whatever they attack: they needn't
+    // attack, but attacking, paying it, they attack a player other than P2.
+    crate::r_s02_common::destroy(&mut t, p1_prop);
+    crate::r_s02_common::destroy(&mut t, p2_prop);
+    let brainwash = t.battlefield(P1, "Brainwash");
+    t.g.attach(brainwash, obj(bears));
+    assert!(legal(&mut t, &[]));
+    assert!(legal(&mut t, &[(bears, pl(P1))]));
+    assert!(!legal(&mut t, &[(bears, pl(P2))]));
 }
