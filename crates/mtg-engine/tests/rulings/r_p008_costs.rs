@@ -35,11 +35,24 @@ fn nahiris_wrath(
         Answer::Entities(cards.iter().map(|c| obj(*c)).collect()),
     );
     t.answer_targets(P0, targets);
+    if method == CastMethod::Free {
+        t.answer(P0, DecisionKind::X, Answer::Number(cards.len() as i64));
+        return free_cast(t, card);
+    }
     t.cast(P0, card)
         .method(method)
         .x(cards.len() as i64)
         .try_go()
         .expect("Nahiri's Wrath")
+}
+
+/// P0 casts `card` without paying its mana cost, as a resolving effect would let them
+/// (choices are answered from the queue).
+fn free_cast(t: &mut TestGame, card: ObjectId) -> ObjectId {
+    let s = mtg_engine::casting::cast_during_resolution(&mut t.g, P0, card, CastMethod::Free)
+        .expect("cast without paying its mana cost");
+    t.g.flush_events();
+    s
 }
 
 #[test]
@@ -66,13 +79,10 @@ fn discard_x_spells_cast_without_paying_their_mana_cost_still_choose_x() {
         Answer::Entities(vec![obj(a), obj(b)]),
     );
     let card = t.hand(P0, "Channeled Force");
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
     t.answer_targets(P0, &[pl(P1)]);
     t.answer_targets(P0, &[obj(wurm)]);
-    t.cast(P0, card)
-        .method(CastMethod::Free)
-        .x(2)
-        .try_go()
-        .expect("Channeled Force");
+    free_cast(&mut t, card);
     let hand = t.hand_size(P1);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P0, "Hill Giant"));
@@ -120,9 +130,10 @@ fn nahiris_wrath_mana_values_of_the_discarded_cards() {
         let temper = t.hand(P0, "Fiery Temper");
         let bears = t.hand(P0, "Grizzly Bears");
         t.lands(P0, "Mountain", 1);
+        nahiris_wrath(&mut t, &[temper, bears], NORMAL, &[obj(a), obj(b)]);
+        // Fiery Temper's madness trigger: cast it (at P1) or not.
         t.answer_yes(P0, cast_it);
         t.answer_targets(P0, &[pl(P1)]);
-        nahiris_wrath(&mut t, &[temper, bears], NORMAL, &[obj(a), obj(b)]);
         t.resolve_all();
         assert_eq!(
             (dmg(&t, a), dmg(&t, b)),
@@ -292,7 +303,7 @@ fn animists_might_mana_value_is_always_three() {
     supported("Animist's Might");
     let mut t = TestGame::new(2);
     let legend = t.battlefield(P0, "Isamaru, Hound of Konda");
-    let wurm = t.battlefield(P1, "Craw Wurm");
+    let wurm = t.battlefield(P1, "Indomitable Ancients");
     t.lands(P0, "Forest", 1);
     let card = t.hand(P0, "Animist's Might");
     assert_eq!(t.g.mana_value_of(card), 3);

@@ -268,12 +268,24 @@ fn impractical_joke_protection_still_stops_targeting() {
     let fw = t.battlefield(P1, "Kor Firewalker");
     cast_x(&mut t, P0, "Impractical Joke", NORMAL, None, &[]);
     t.resolve_all();
-    // Can't target it.
+    // Lightning Bolt can't target it.
     t.lands(P0, "Mountain", 1);
     let bolt = t.hand(P0, "Lightning Bolt");
-    t.answer_targets(P0, &[obj(fw)]);
-    assert!(t.cast(P0, bolt).target(fw).try_go().is_err());
-    t.clear_answers();
+    let from = t.asked().len();
+    t.cast(P0, bolt).target(P1).go();
+    let offered: Vec<Entity> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseTargets { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert!(offered.contains(&pl(P1)));
+    assert!(!offered.contains(&obj(fw)), "protection from red");
+    t.resolve_all();
     // Earthquake doesn't target: the red damage isn't prevented.
     t.answer_yes(P1, false);
     cast_x(&mut t, P0, "Earthquake", NORMAL, Some(2), &[]);
@@ -378,15 +390,15 @@ fn exile_instead_of_dying_applies_for_any_reason_this_turn() {
         "Scorching Dragonfire's replacement effect will exile the target creature or planeswalker if it would die this turn for any reason, not just due to lethal damage. It applies to the target creature or planeswalker even if Scorching Dragonfire deals no damage to it (most likely due to a prevention effect)."
     );
     for name in ["Obliterating Bolt", "Scorching Dragonfire"] {
-        // Craw Wurm (6/4) survives the damage; it's destroyed later this turn.
+        // Indomitable Ancients (2/10) survives the damage; it's destroyed later this turn.
         let mut t = TestGame::new(2);
-        let wurm = t.battlefield(P1, "Craw Wurm");
-        cast_x(&mut t, P0, name, NORMAL, None, &[obj(wurm)]);
+        let wall = t.battlefield(P1, "Indomitable Ancients");
+        cast_x(&mut t, P0, name, NORMAL, None, &[obj(wall)]);
         t.resolve_all();
-        assert!(t.on_battlefield(wurm), "{name}");
-        destroy(&mut t, wurm);
-        assert!(t.in_exile("Craw Wurm"), "{name}");
-        assert!(!t.in_graveyard(P1, "Craw Wurm"), "{name}");
+        assert!(t.on_battlefield(wall), "{name}");
+        destroy(&mut t, wall);
+        assert!(t.in_exile("Indomitable Ancients"), "{name}");
+        assert!(!t.in_graveyard(P1, "Indomitable Ancients"), "{name}");
     }
     // Scorching Dragonfire's damage is all prevented; the planeswalker still dies later
     // (0 loyalty) and is exiled.

@@ -140,7 +140,7 @@ fn sarkhan_the_mad_damages_himself_as_the_ability_resolves() {
     t.resolve();
     assert_eq!(t.stack_len(), 0, "nothing in between");
     assert!(t.in_hand(P0, "Craw Wurm"));
-    assert_eq!(t.counters(s, "loyalty"), 2, "dealt 5 damage");
+    assert_eq!(t.counters(s, "loyalty"), 1, "dealt 6 damage (Craw Wurm's mana value)");
 }
 
 #[test]
@@ -233,6 +233,10 @@ fn ral_storm_conduit_copies_keep_modes_and_arent_cast() {
     t.answer_yes(P0, false);
     let s = cast_modes(&mut t, P0, "Boros Charm", &[0], &[pl(P1)]);
     t.settle();
+    // Resolve the triggers above the spell until Ral's delayed trigger has copied it.
+    while spell_copies(&t).is_empty() && t.stack_len() > 1 {
+        t.resolve();
+    }
     let copies = spell_copies(&t);
     assert_eq!(copies.len(), 1);
     assert_eq!(chosen_modes(&t, copies[0]), chosen_modes(&t, s));
@@ -280,6 +284,7 @@ fn goblin_bomb_losing_a_flip_with_no_fuse_counters_does_nothing() {
     assert!(t.on_battlefield(bomb));
     assert_eq!(t.counters(bomb, "fuse"), 0);
     // Then a win puts one on.
+    t.advance_to(P1, Step::Upkeep);
     t.g.dice.loaded_coins.push_back(true);
     t.answer_yes(P0, true);
     t.advance_to(P0, Step::Upkeep);
