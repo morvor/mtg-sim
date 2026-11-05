@@ -57,14 +57,15 @@ pub const FIELDS: &[&str] = &[
     "Recorded",
 ];
 
-/// Words in a rulings exemption's reason that make it a discrepancy the log must record
-/// (matched as whole words, ignoring case).
+/// Words in a rulings exemption's reason that make it a discrepancy the log must record,
+/// as word beginnings (ignoring case): "supersed" matches "superseded" and "supersedes",
+/// "overrid" "overridden" and "overrides", "misattach" "misattached" and "misattachment".
 pub const LOGGED_REASONS: &[&str] = &[
     "outdated",
-    "superseded",
-    "overridden",
+    "supersed",
+    "overrid",
     "inconsistent",
-    "misattached",
+    "misattach",
     "template error",
     "ruling-contradicting-oracle-gives-way",
 ];
@@ -215,19 +216,20 @@ pub fn exemptions(root: &Path) -> Vec<Exemption> {
     out
 }
 
-/// Whether an exemption's reason makes it a discrepancy the log must record: it contains
-/// one of [`LOGGED_REASONS`] as a whole word (ignoring case).
+/// Whether an exemption's reason makes it a discrepancy the log must record: a word in it
+/// begins with one of [`LOGGED_REASONS`] (ignoring case).
 pub fn needs_log(reason: &str) -> bool {
     let r = reason.to_lowercase();
-    LOGGED_REASONS.iter().any(|w| contains_word(&r, w))
+    LOGGED_REASONS.iter().any(|w| starts_a_word(&r, w))
 }
 
-fn contains_word(hay: &str, word: &str) -> bool {
-    let is_word = |c: char| c.is_alphanumeric() || c == '-';
-    hay.match_indices(word).any(|(i, _)| {
-        let before = hay[..i].chars().next_back();
-        let after = hay[i + word.len()..].chars().next();
-        !before.is_some_and(is_word) && !after.is_some_and(is_word)
+/// Whether `stem` occurs in `hay` at the start of a word.
+fn starts_a_word(hay: &str, stem: &str) -> bool {
+    hay.match_indices(stem).any(|(i, _)| {
+        !hay[..i]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '-')
     })
 }
 
@@ -471,6 +473,9 @@ mod tests {
             "policy ruling-contradicting-oracle-gives-way, ..."
         ));
         assert!(needs_log("Contradicts the card (template error; ...)"));
+        assert!(needs_log("the CR 605.1a update supersedes it"));
+        assert!(needs_log("Misattachment in Scryfall data"));
+        assert!(!needs_log("a non-outdated note"));
         assert!(!needs_log(
             "Oracle-wording history: an errata note, no game behavior"
         ));
