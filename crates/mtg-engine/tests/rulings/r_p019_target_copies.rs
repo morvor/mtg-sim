@@ -659,3 +659,51 @@ fn vantress_visions_copy_has_the_same_source() {
     t.resolve_all();
     assert_eq!(t.counters(pridemate, counters::PLUS1), 2);
 }
+
+#[test]
+fn strionic_resonator_copy_of_elite_arcanists_trigger_sums_the_exiled_cards() {
+    cr!("707.10", "607.2a", "607.3", "107.3");
+    ruling!(
+        "Strionic Resonator",
+        "In some cases involving linked abilities, an ability requires information about \"the exiled card.\" When this happens, the ability gets multiple answers. If these answers are being used to determine the value of a variable, the sum is used. For example, if Elite Arcanist's enters-the-battlefield ability is copied, two cards are exiled. The value of X in the activation cost of Elite Arcanist's other ability is the sum of the two cards' mana values. As the ability resolves, you create copies of both cards and can cast none, one, or both of the copies in any order."
+    );
+    supported("Elite Arcanist");
+    // Elite Arcanist: "When this creature enters, you may exile an instant card from your
+    // hand. {X}, {T}: Copy the exiled card. You may cast the copy without paying its mana
+    // cost. X is the mana value of the exiled card." Shock (1) and Opt (1): X is 2. P0
+    // casts the Shock copy at P1 and not the Opt copy.
+    let mut t = TestGame::new(2);
+    let resonator = t.battlefield(P0, "Strionic Resonator");
+    let shock = t.hand(P0, "Shock");
+    let opt = t.hand(P0, "Opt");
+    let arcanist = t.enter(P0, "Elite Arcanist");
+    t.settle();
+    t.lands(P0, "Wastes", 2);
+    copy_top(&mut t, resonator, "Copy target");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(shock)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(opt)]);
+    t.resolve_all();
+    assert_eq!(t.zone(shock), Zone::Exile);
+    assert_eq!(t.zone(opt), Zone::Exile);
+    let arcanist = t.g.current(arcanist);
+    t.g.objects[arcanist.0 as usize].summoning_sick = false;
+    t.lands(P0, "Wastes", 1);
+    assert!(activate_containing(&mut t, P0, arcanist, "Copy the exiled").is_err());
+    t.lands(P0, "Wastes", 1);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_yes(P0, false);
+    activate_containing(&mut t, P0, arcanist, "Copy the exiled")
+        .unwrap()
+        .unwrap();
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 4);
+    let hand = t.hand_size(P0);
+    let from = t.asked().len();
+    t.resolve_all();
+    // Offered both copies.
+    assert_eq!(yes_nos(&t, from), 2);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.hand_size(P0), hand);
+}
