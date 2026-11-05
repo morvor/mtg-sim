@@ -116,7 +116,7 @@ fn yshtola_cast_trigger_resolves_first_even_if_the_spell_is_countered() {
 
 #[test]
 fn gontis_machinations_gives_one_energy_each_turn() {
-    cr!("603.2", "122.1");
+    cr!("603.2");
     ruling!(
         "Gonti's Machinations",
         "The triggered ability gives you at most one energy counter each turn, regardless of how much life you lost."
@@ -247,7 +247,7 @@ fn wispdrinker_vampire_checks_power_as_the_creature_enters() {
 
 #[test]
 fn wispdrinker_vampire_grants_only_to_creatures_controlled_on_resolution() {
-    cr!("611.2c", "608.2h");
+    cr!("611.2c");
     ruling!(
         "Wispdrinker Vampire",
         "Wispdrinker Vampire's activated ability affects only creatures you control at the time it resolves. Creatures you begin to control later in the turn won't get deathtouch or lifelink."
@@ -317,7 +317,7 @@ fn may_pay_one_drains_can_be_paid_only_once() {
 
 #[test]
 fn sinister_monolith_triggers_with_no_creatures_on_the_battlefield() {
-    cr!("506.1", "507.1");
+    cr!("506.1");
     ruling!(
         "Sinister Monolith",
         "The beginning of combat step happens every turn, even if there are no creatures on the battlefield that could attack."

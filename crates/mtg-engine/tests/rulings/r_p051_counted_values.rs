@@ -39,7 +39,7 @@ fn rin_and_seri_counts_dogs_and_cats_on_resolution_including_itself() {
 
 #[test]
 fn tezzeret_agent_of_bolas_counts_artifacts_on_resolution() {
-    cr!("608.2h", "606.4");
+    cr!("608.2h");
     ruling!(
         "Tezzeret, Agent of Bolas",
         "The number of artifacts you control is counted when the last ability resolves, not when it is activated."
@@ -57,7 +57,7 @@ fn tezzeret_agent_of_bolas_counts_artifacts_on_resolution() {
 
 #[test]
 fn underhanded_designs_checks_artifacts_only_on_activation() {
-    cr!("602.5b");
+    cr!("602.1b", "602.5");
     ruling!(
         "Underhanded Designs",
         "The number of artifacts you control is checked only as you activate Underhanded Designs's last ability. It's not checked again as it resolves."
@@ -188,16 +188,21 @@ fn liliana_untouched_by_death_locks_in_x() {
     let mut t = TestGame::new(2);
     let lili = t.battlefield(P0, "Liliana, Untouched by Death");
     t.battlefield(P0, "Walking Corpse");
-    let ogre = t.battlefield(P1, "Craw Wurm");
-    t.activate(P0, lili, 1, &[obj(ogre)]).unwrap();
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    t.activate(P0, lili, 1, &[obj(wurm)]).unwrap();
     // A second Zombie in response.
     let z = t.battlefield(P0, "Walking Corpse");
     t.resolve_all();
-    assert_eq!(t.pt(ogre), (4, 2));
-    // A third one later, and one leaving: no change.
+    assert_eq!(t.pt(wurm), (4, 2));
+    // A third one later: still -2/-2.
     t.battlefield(P0, "Walking Corpse");
+    t.g.recompute();
+    assert_eq!(t.pt(wurm), (4, 2));
+    // Then two leave: still -2/-2.
     move_to(&mut t, z, Zone::Graveyard(P0));
-    assert_eq!(t.pt(ogre), (4, 2));
+    let z1 = t.named_on_battlefield("Walking Corpse")[0];
+    move_to(&mut t, z1, Zone::Graveyard(P0));
+    assert_eq!(t.pt(wurm), (4, 2));
 }
 
 #[test]
@@ -282,7 +287,7 @@ fn sword_of_war_and_peace_counts_hands_on_resolution() {
 
 #[test]
 fn power_of_a_creature_that_left_is_its_last_known_power() {
-    cr!("608.2h", "603.10a");
+    cr!("608.2h", "603.10a", "107.1b");
     // Dying Wish: "When enchanted creature dies, target player loses X life and you gain X
     // life, where X is its power."
     ruling!(
@@ -382,4 +387,29 @@ fn monoist_circuit_feeder_counts_artifacts_once() {
     t.battlefield(P0, "Ornithopter");
     t.battlefield(P0, "Ornithopter");
     assert_eq!((t.pt(mine), t.pt(theirs)), ((4, 2), (6, 2)));
+}
+
+#[test]
+fn blood_chin_fanatic_uses_the_sacrificed_warriors_last_known_power() {
+    cr!("608.2h", "122.1a");
+    // Blood-Chin Fanatic: "{1}{B}, Sacrifice another Warrior creature: Target player loses
+    // X life and you gain X life, where X is the sacrificed creature's power."
+    ruling!(
+        "Blood-Chin Fanatic",
+        "Use the creature’s power as it last existed on the battlefield, including any +1/+1 counters it had, when determining the value of X."
+    );
+    supported("Blood-Chin Fanatic");
+    let mut t = TestGame::new(2);
+    let fanatic = t.battlefield(P0, "Blood-Chin Fanatic");
+    // Elvish Warrior (2/3) with two +1/+1 counters and +1/+0 until end of turn: power 5
+    // on the battlefield, 2 in the graveyard.
+    let warrior = t.battlefield(P0, "Elvish Warrior");
+    t.g.add_counters(obj(warrior), "+1/+1", 2, None);
+    pump(&mut t, warrior, 1, 0);
+    assert_eq!(t.pt(warrior), (5, 5));
+    t.answer_choose(P0, &[obj(warrior)]);
+    assert!(activate_text(&mut t, P0, fanatic, "Sacrifice", &[pl(P1)]));
+    assert!(t.in_graveyard(P0, "Elvish Warrior"));
+    t.resolve_all();
+    assert_eq!(lives(&t, 2), vec![25, 15]);
 }

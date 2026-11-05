@@ -1,14 +1,17 @@
 //! Rulings batch P051 — drain and draw interactions the rulings imply without spelling
-//! out: a player who left the game loses no life (CR 800.4a), losing and gaining life in
+//! out: a player who left the game loses no life (CR 800.4), losing and gaining life in
 //! one effect before state-based actions are checked (CR 704.3, 608.2c), "your second card
 //! each turn" with a draw replaced by dredge (CR 121.6, 614.6) or a draw-step draw
 //! (CR 504.1), draw triggers under a "can't draw more than one card" effect (CR 121.2b) and
-//! under draw doubling (CR 121.6).
+//! under draw doubling (CR 121.6), drains in Two-Headed Giant (CR 810.9), a drain trigger
+//! whose source changed control (CR 603.3a), and a drain whose only target became illegal
+//! (CR 608.2b).
 
 use crate::r_p051_common::*;
 use crate::r_p057_common::into_upkeep;
 use crate::r_s01_common::*;
 use mtg_engine::decision::Action;
+use mtg_engine::game::GameConfig;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -21,7 +24,7 @@ fn draw(t: &mut TestGame, p: PlayerId, n: u32) {
 
 #[test]
 fn a_player_who_left_the_game_loses_no_life_to_a_drain() {
-    cr!("800.4a", "119.3");
+    cr!("104.3a", "800.4", "119.3");
     supported("Subversion");
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Subversion");
@@ -50,11 +53,9 @@ fn losing_then_gaining_life_in_one_effect_happens_before_state_based_actions() {
 
 #[test]
 fn second_card_each_turn_ignores_a_draw_replaced_by_dredge() {
-    cr!("121.6", "614.6", "121.2");
-    ruling!(
-        "Zimone and Dina",
-        "Zimone and Dina doesn’t need to have been under your control when the first card is drawn for its ability to trigger. As long as you control it when you draw your second card in a turn, that ability will trigger."
-    );
+    cr!("121.6", "614.6", "121.2", "702.52a");
+    // Zimone and Dina: "Whenever you draw your second card each turn, target opponent
+    // loses 2 life and you gain 2 life."
     supported("Zimone and Dina");
     supported("Golgari Brownscale");
     let mut t = TestGame::new(2);
@@ -78,10 +79,8 @@ fn second_card_each_turn_ignores_a_draw_replaced_by_dredge() {
 #[test]
 fn the_draw_step_draw_is_the_first_card_drawn() {
     cr!("504.1", "121.2");
-    ruling!(
-        "Raven Eagle",
-        "The second triggered ability can trigger only once each turn. It doesn't matter whether Raven Eagle was on the battlefield when the first card was drawn. If it's not on the battlefield when the second card is drawn, the ability can't trigger at all that turn. It won't trigger when the third or fourth card is drawn."
-    );
+    // Raven Eagle: "Whenever you draw your second card each turn, each opponent loses 1
+    // life and you gain 1 life."
     supported("Raven Eagle");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Raven Eagle");
@@ -127,7 +126,7 @@ fn draw_triggers_count_only_the_draws_that_happen() {
 
 #[test]
 fn a_fixed_gain_doesnt_depend_on_the_loss_but_life_lost_this_way_does() {
-    cr!("119.3", "119.8", "702.101a");
+    cr!("119.3", "101.2", "702.101a");
     // Night Market Lookout ("each opponent loses 1 life and you gain 1 life") and Suffer
     // the Past ("For each card exiled this way, that player loses 1 life and you gain 1
     // life") against Platinum Emperion ("Your life total can't change."): you gain anyway.
@@ -164,7 +163,7 @@ fn a_fixed_gain_doesnt_depend_on_the_loss_but_life_lost_this_way_does() {
 
 #[test]
 fn life_lost_this_turn_adds_up_over_separate_losses() {
-    cr!("603.4", "119.3");
+    cr!("603.4", "119.3", "101.2");
     supported("Y'shtola, Night's Blessed");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Y'shtola, Night's Blessed");
@@ -185,4 +184,78 @@ fn life_lost_this_turn_adds_up_over_separate_losses() {
     t.g.flush_events();
     t.resolve_all();
     assert_eq!(crate::r_p044_common::player_counters(&t, P0, "energy"), 0);
+}
+
+/// P0 and P1 against P2 and P3, sharing team life totals of 30.
+fn two_headed_giant() -> TestGame {
+    TestGame::with_config(4, GameConfig::two_headed_giant(vec![0, 0, 1, 1]))
+}
+
+#[test]
+fn drains_in_two_headed_giant_affect_each_opponent_and_the_team_total() {
+    cr!("810.9", "810.9h", "119.3");
+    // Subversion: each opponent (P2 and P3) loses 1 life, so their team loses 2; P0
+    // gains the 2 life lost this way, and so does P0's team.
+    supported("Subversion");
+    let mut t = two_headed_giant();
+    t.battlefield(P0, "Subversion");
+    into_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(lives(&t, 4), vec![32, 32, 28, 28]);
+    // Lampad of Death's Vigil: each opponent loses 1 life and you gain (only) 1 life.
+    supported("Lampad of Death's Vigil");
+    let mut t = two_headed_giant();
+    let lampad = t.battlefield(P0, "Lampad of Death's Vigil");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[obj(bears)]);
+    assert!(activate_text(&mut t, P0, lampad, "Sacrifice", &[]));
+    t.resolve_all();
+    assert_eq!(lives(&t, 4), vec![31, 31, 28, 28]);
+    // Platinum Emperion ("Your life total can't change.") under P3 protects P2 too:
+    // nobody on that team loses life, so no life is lost this way and P0 gains none.
+    let mut t = two_headed_giant();
+    t.battlefield(P0, "Subversion");
+    t.battlefield(P3, "Platinum Emperion");
+    into_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(lives(&t, 4), vec![30, 30, 30, 30]);
+}
+
+#[test]
+fn a_drain_trigger_stays_its_controllers_after_the_source_changes_control() {
+    cr!("603.3a");
+    // Subversion's upkeep trigger is P0's; P1 gains control of Subversion before it
+    // resolves: P0's opponents (P1 and P2) lose life and P0 gains it.
+    supported("Subversion");
+    let mut t = TestGame::new(3);
+    let s = t.battlefield(P0, "Subversion");
+    into_upkeep(&mut t, P0);
+    assert_eq!(triggers_on_stack(&t, "loses 1 life"), 1);
+    crate::r_s06_common::give_control(&mut t, s, P1);
+    assert_eq!(t.obj_now(s).controller, P1);
+    t.resolve_all();
+    assert_eq!(lives(&t, 3), vec![22, 19, 19]);
+}
+
+#[test]
+fn a_drain_whose_only_target_became_illegal_gains_nothing() {
+    cr!("608.2b");
+    // Archon of Cruelty: "Whenever this creature enters or attacks, target opponent
+    // sacrifices a creature or planeswalker, discards a card, and loses 3 life. You draw a
+    // card and gain 3 life." P1 gets hexproof (Leyline of Sanctity) in response.
+    supported("Archon of Cruelty");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.hand(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[pl(P1)]);
+    let hand = t.hand_size(P0);
+    t.enter(P0, "Archon of Cruelty");
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "loses 3 life"), 1);
+    t.battlefield(P1, "Leyline of Sanctity");
+    t.resolve_all();
+    assert_eq!(lives(&t, 2), vec![20, 20]);
+    assert_eq!(t.hand_size(P0), hand);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.hand_size(P1), 1);
 }

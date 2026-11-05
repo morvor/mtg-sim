@@ -198,7 +198,7 @@ fn draw_triggers_trigger_once_for_each_card_drawn() {
 
 #[test]
 fn underworld_dreams_and_lifeblood_affect_all_opponents() {
-    cr!("102.2", "102.3");
+    cr!("806.1");
     ruling!(
         "Underworld Dreams",
         "In a multi-player game, it affects all opponents."
@@ -344,7 +344,7 @@ fn burlfist_oak_ignores_cards_put_into_hand_without_drawing() {
 
 #[test]
 fn nadir_kraken_pays_for_a_tentacle_after_leaving() {
-    cr!("603.4", "608.2h");
+    cr!("113.7a", "603.5");
     ruling!(
         "Nadir Kraken",
         "If Nadir Kraken leaves the battlefield after its ability has triggered, you can still pay {1} and get a Tentacle, even though you won't put a +1/+1 counter on Nadir Kraken."
@@ -410,7 +410,7 @@ fn watcher_in_the_water_untaps_itself_by_removing_a_stun_counter() {
 
 #[test]
 fn omen_machine_puts_a_land_onto_the_battlefield_or_must_cast_the_spell() {
-    cr!("121.3", "608.2g");
+    cr!("101.2", "504.1", "608.2g");
     ruling!(
         "Omen Machine",
         "Putting the land onto the battlefield or casting the card is not optional."

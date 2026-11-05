@@ -37,7 +37,7 @@ fn subversion_life_loss_isnt_damage_and_cant_be_prevented() {
 /// as much when the loss is doubled, and none when you can't gain life.
 #[test]
 fn subversion_gains_the_life_actually_lost() {
-    cr!("119.3", "119.8", "614.1a", "608.2c");
+    cr!("119.3", "101.2", "614.1a", "608.2c");
     supported("Subversion");
     // Three opponents; one of them (P2) has Platinum Emperion ("Your life total can't
     // change.").
@@ -66,7 +66,7 @@ fn subversion_gains_the_life_actually_lost() {
 
 #[test]
 fn corrupt_gains_the_damage_dealt_unbounded_by_toughness_or_life() {
-    cr!("120.3a", "120.3e", "120.4");
+    cr!("120.3a", "120.3e");
     ruling!(
         "Corrupt",
         "The amount of damage dealt to a creature is not bounded by its toughness, and the amount of damage dealt to a player is not bounded by that player's life total. For example, if Corrupt deals 6 damage to a 2/2 creature, you'll gain 6 life."
@@ -91,7 +91,7 @@ fn corrupt_gains_the_damage_dealt_unbounded_by_toughness_or_life() {
 
 #[test]
 fn corrupt_gains_the_damage_actually_dealt() {
-    cr!("615.1a", "614.1a", "120.3a");
+    cr!("615.1a", "614.1a", "120.3a", "120.4b");
     ruling!(
         "Corrupt",
         "The life you gain is equal to the damage dealt by Corrupt, not necessarily to the number of Swamps you control (if some or all of the damage is prevented, for example)."
@@ -125,6 +125,15 @@ fn corrupt_gains_the_damage_actually_dealt() {
     cast_pool(&mut t, P0, "Corrupt", &[pl(P1)]);
     t.resolve_all();
     assert_eq!(lives(&t, 2), vec![26, 14]);
+    // The damage, not the life it makes the player lose: Bloodletter of Aclazotz ("If an
+    // opponent would lose life during your turn, they lose twice that much life
+    // instead.") doubles the 2 life P1 loses from 2 damage; P0 gains 2.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 2);
+    t.battlefield(P0, "Bloodletter of Aclazotz");
+    cast_pool(&mut t, P0, "Corrupt", &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!(lives(&t, 2), vec![22, 16]);
 }
 
 #[test]
@@ -188,7 +197,7 @@ fn lampad_gains_one_life_however_many_opponents_lose_life() {
 
 #[test]
 fn brutal_hordechief_drains_each_attackers_defending_player() {
-    cr!("506.2", "508.5a", "603.2c");
+    cr!("508.5a", "603.2c");
     ruling!(
         "Brutal Hordechief",
         "The defending player affected by Brutal Hordechief’s triggered ability is determined relative to the creature that attacked. For example, if Brutal Hordechief attacked one opponent and two other creatures you control attacked another opponent, the first opponent would lose 1 life and the second opponent would lose 2 life. You’d gain a total of 3 life."

@@ -85,8 +85,71 @@ fn sorin_markov_cant_make_the_player_concede() {
     t.answer(P0, DecisionKind::Priority, Answer::Action(Action::Concede));
     t.g.advance();
     assert!(!t.has_lost(P1));
+    assert!(!t.has_lost(P0));
     t.take_action(P1, Action::Concede);
     assert!(t.has_lost(P1));
+}
+
+/// A 3-player game in which P0 controls P1 during P1's turn (Sorin Markov) and P2 casts
+/// Master Warcraft ("Cast this spell only before attackers are declared. You choose which
+/// creatures attack this turn. You choose which creatures block this turn and how those
+/// creatures block.") in P1's beginning of combat step: P2, not P0, chooses whether P1's
+/// Bears attack.
+#[test]
+fn sorin_markov_controller_cant_make_illegal_decisions_and_yields_to_master_warcraft() {
+    cr!("723.5", "723.5a", "508.1");
+    ruling!(
+        "Sorin Markov",
+        "You can’t make any illegal decisions or illegal choices — you can’t do anything that player couldn’t do."
+    );
+    // P1 has no mana: P0 can't have P1 cast P1's Lightning Bolt, not even with P0's own
+    // untapped Mountains.
+    let mut t = TestGame::new(2);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let mine = t.lands(P0, "Mountain", 2);
+    sorin_markov(&mut t, P0, P1);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(decider(&t.g, P1), P0);
+    t.answer(
+        P0,
+        DecisionKind::Priority,
+        Answer::Action(Action::Cast {
+            card: bolt,
+            method: CastMethod::Normal,
+        }),
+    );
+    t.answer_targets(P0, &[pl(P1)]);
+    t.g.advance();
+    t.clear_answers();
+    assert!(t.g.stack.is_empty());
+    assert!(t.in_hand(P1, "Lightning Bolt"));
+    assert!(mine.iter().all(|m| !t.obj_now(*m).tapped));
+    assert_eq!(t.life(P1), 20);
+    // Master Warcraft takes precedence over controlling the player.
+    supported("Master Warcraft");
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P1, BEARS);
+    t.lands(P2, "Mountain", 4);
+    let mw = t.hand(P2, "Master Warcraft");
+    sorin_markov(&mut t, P0, P1);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    assert_eq!(decider(&t.g, P1), P0);
+    t.cast(P2, mw).go();
+    t.resolve_all();
+    // P0 (deciding for P1) would declare no attackers; P2 makes the Bears attack P0.
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+    t.answer(
+        P2,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, pl(P0))]),
+    );
+    let turn = t.g.turn.number;
+    assert!(t.g.run_until(10_000, |g| {
+        (g.turn.step == Step::DeclareAttackers && g.turn.stage == mtg_engine::turn::Stage::Priority)
+            || g.turn.number != turn
+    }));
+    t.settle();
+    assert_eq!(crate::r_p015_common::attacking(&t, bears), Some(pl(P0)));
 }
 
 #[test]
@@ -119,7 +182,7 @@ fn sorin_markov_on_yourself_only_overwrites_another_control_effect() {
 
 #[test]
 fn sorin_ravenous_neonate_control_lasts_indefinitely() {
-    cr!("611.2a", "611.2b");
+    cr!("611.2a");
     ruling!(
         "Sorin of House Markov // Sorin, Ravenous Neonate",
         "The control effect created by Sorin, Ravenous Neonate's last ability lasts indefinitely. It doesn't wear off during the cleanup step or if Sorin, Ravenous Neonate leaves the battlefield."
@@ -133,7 +196,7 @@ fn sorin_ravenous_neonate_control_lasts_indefinitely() {
     );
     t.g.objects[sorin.0 as usize]
         .counters
-        .insert(counters::LOYALTY.into(), 6);
+        .insert(counters::LOYALTY.into(), 7);
     let bears = t.battlefield(P1, BEARS);
     assert!(activate_text(
         &mut t,
@@ -145,11 +208,12 @@ fn sorin_ravenous_neonate_control_lasts_indefinitely() {
     t.resolve_all();
     assert_eq!(t.obj_now(bears).controller, P0);
     assert!(t.obj_now(bears).chars.has_subtype("Vampire"));
+    // Past the cleanup step.
     t.advance_to(P1, Step::Upkeep);
     assert_eq!(t.obj_now(bears).controller, P0);
-    if t.on_battlefield(sorin) {
-        move_to(&mut t, sorin, Zone::Graveyard(P0));
-    }
+    // Sorin leaves the battlefield.
+    assert!(t.on_battlefield(sorin));
+    move_to(&mut t, sorin, Zone::Graveyard(P0));
     t.advance_to(P0, Step::Upkeep);
     assert_eq!(t.obj_now(bears).controller, P0);
 }
@@ -195,7 +259,7 @@ fn sorin_vampire_lord_granted_control_lasts_until_you_leave_the_game() {
 
 #[test]
 fn sorin_ravenous_neonate_can_activate_the_turn_he_transforms_at_sorcery_speed() {
-    cr!("606.3", "712.18");
+    cr!("606.3");
     ruling!(
         "Sorin of House Markov // Sorin, Ravenous Neonate",
         "You can activate one of Sorin, Ravenous Neonate's loyalty abilities the turn he enters the battlefield. However, you may do so only during one of your main phases when the stack is empty."

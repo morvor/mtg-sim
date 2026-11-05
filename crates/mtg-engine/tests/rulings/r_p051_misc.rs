@@ -152,7 +152,7 @@ fn bontu_counts_a_creature_that_died_even_if_it_left_the_graveyard() {
 
 #[test]
 fn maccready_gives_skulk_whatever_the_power_on_resolution() {
-    cr!("603.2", "603.4", "702.120a");
+    cr!("603.2");
     ruling!(
         "MacCready, Lamplight Mayor",
         "The power of your attacking creature is checked only when MacCready’s first ability triggers. Once it triggers, the creature will gain skulk until end of turn when the ability resolves, regardless of whether or not its power is still 2 or less at that time."
@@ -190,7 +190,7 @@ fn lobelia_forest(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn lobelia_lands_follow_the_normal_timing_and_land_play_rules() {
-    cr!("305.2", "305.3", "601.3");
+    cr!("305.2", "116.2a");
     ruling!(
         "Lobelia, Defender of Bag End",
         "To play a card using the permission granted by the first mode of Lobelia, Defender of Bag End's activated ability, you must still follow any timing restrictions and permissions, including those based on the card's type. For instance, you can play a land from exile this way only during your main phase while the stack is empty, and only if you have an available land play remaining for the turn."
@@ -216,7 +216,7 @@ fn lobelia_lands_follow_the_normal_timing_and_land_play_rules() {
 
 #[test]
 fn lobelias_face_down_cards_are_seen_only_by_you() {
-    cr!("406.3", "708.2");
+    cr!("406.3");
     ruling!(
         "Lobelia, Defender of Bag End",
         "You may look at these face-down exiled cards any time you wish. No other player may look at the face-down cards you exiled with Lobelia, Defender of Bag End, even if another player takes control of it."
@@ -289,7 +289,7 @@ fn cards_cast_with_a_permission_follow_timing_rules_and_costs() {
 
 #[test]
 fn tor_wauki_trigger_resolves_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "701.6a");
+    cr!("603.3", "701.6a", "702.15b");
     ruling!(
         "Tor Wauki the Younger",
         "Tor Wauki the Younger's triggered ability resolves before the spell that caused it to trigger. The ability will resolve even if that spell is countered."
@@ -473,7 +473,7 @@ fn papalymo_opponents_who_lost_life_choose_in_turn_order_then_sacrifice_together
 
 #[test]
 fn archon_of_cruelty_follows_its_instructions_in_order() {
-    cr!("608.2c", "603.3", "104.3b", "800.4a");
+    cr!("608.2c", "603.3", "104.3b", "800.4d");
     ruling!(
         "Archon of Cruelty",
         "You and the opponent you target take all the actions in the order listed. Notably, the creature or planeswalker they sacrifice won't be on the battlefield as they discard a card or lose life. If any abilities trigger, they will wait to be put on the stack until after the spell resolves. If any abilities controlled by that opponent trigger but losing 3 life causes them to lose the game, none of those abilities will be put on the stack."
@@ -507,7 +507,7 @@ fn archon_of_cruelty_follows_its_instructions_in_order() {
 
 #[test]
 fn joshua_discarding_no_cards_draws_none() {
-    cr!("107.1c", "701.9a");
+    cr!("701.9a");
     ruling!(
         "Joshua, Phoenix's Dominant // Phoenix, Warden of Fire",
         "You can choose to discard no cards when Joshua's first ability resolves. If you do, you won't draw any cards."
@@ -554,7 +554,7 @@ fn sling_gang_lieutenant_can_sacrifice_any_goblin_including_itself() {
 
 #[test]
 fn treacherous_greed_sacrifices_a_creature_whose_damage_recipient_is_gone() {
-    cr!("601.2b", "601.2h", "800.4a");
+    cr!("601.2b", "601.2h");
     ruling!(
         "Treacherous Greed",
         "You can sacrifice any creature you control that dealt damage this turn to pay Treacherous Greed's additional cost, even if the permanent it dealt damage to is no longer on the battlefield or the player it dealt damage to is no longer in the game."
@@ -616,7 +616,7 @@ fn lathril_taps_ten_other_elves_even_summoning_sick_ones() {
 
 #[test]
 fn cauldron_familiar_returns_only_from_the_graveyard() {
-    cr!("113.6", "602.1");
+    cr!("113.6m");
     ruling!(
         "Cauldron Familiar",
         "You can't activate Cauldron Familiar's last ability unless it's in your graveyard."
@@ -668,7 +668,7 @@ fn thrull_parasite_cant_stop_a_loyalty_cost_already_paid() {
 
 #[test]
 fn vizkopa_confessor_paying_zero_life_reveals_nothing() {
-    cr!("119.4b", "107.1b");
+    cr!("119.4b");
     ruling!(
         "Vizkopa Confessor",
         "You may pay 0 life when Vizkopa Confessor's \"enters\" ability resolves. If you do, no cards are revealed or exiled."

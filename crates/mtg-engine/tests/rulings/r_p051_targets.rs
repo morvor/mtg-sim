@@ -196,7 +196,7 @@ fn hazels_nocturne_with_no_targets_drains_and_with_illegal_targets_does_nothing(
 
 #[test]
 fn punish_ignorance_drains_even_if_the_spell_cant_be_countered() {
-    cr!("101.1", "608.2c");
+    cr!("101.2", "608.2c");
     ruling!(
         "Punish Ignorance",
         "You may target a spell that “can’t be countered” with Punish Ignorance. If you do, the first part of Punish Ignorance’s effect won’t do anything, but the life-loss and life-gain effects will still work."
