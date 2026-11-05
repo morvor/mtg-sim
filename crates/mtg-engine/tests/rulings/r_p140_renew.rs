@@ -5,11 +5,15 @@ use crate::r_p140_common::*;
 use mtg_engine::ability::{Modification, Value};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
-use mtg_engine::types::counters;
+use mtg_engine::types::{counters, CardType, Color, ColorSet};
 use mtg_engine::*;
 
 fn pump(t: &mut TestGame, id: ObjectId, n: i32) {
-    modify(t, id, vec![Modification::ModifyPT(Value::c(n), Value::c(n))]);
+    modify(
+        t,
+        id,
+        vec![Modification::ModifyPT(Value::c(n), Value::c(n))],
+    );
 }
 
 fn tap(t: &mut TestGame, id: ObjectId) {
@@ -24,14 +28,28 @@ fn naga_fleshcrafter_copies_only_the_printed_values() {
         "Naga Fleshcrafter",
         "Both of Naga Fleshcrafter’s abilities copy exactly what was printed on the original creature and nothing else"
     );
+    ruling!(
+        "Naga Fleshcrafter",
+        "They don’t copy whether that creature is tapped or untapped, whether it has any counters on it or Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, and so on."
+    );
     supported("Naga Fleshcrafter");
-    // Entering as a copy of a tapped, pumped Hill Giant with a counter.
+    // Entering as a copy of a tapped Hill Giant with a counter, equipped, pumped, turned
+    // blue and made an artifact by non-copy effects.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
     put_counters(&mut t, giant, counters::PLUS1, 1);
     pump(&mut t, giant, 2);
+    modify(
+        &mut t,
+        giant,
+        vec![
+            Modification::SetColors(ColorSet::single(Color::Blue)),
+            Modification::AddTypes(vec![CardType::Artifact]),
+        ],
+    );
+    let splitter = crate::r_s06_common::attach_new(&mut t, P1, "Bonesplitter", obj(giant));
     tap(&mut t, giant);
-    assert_eq!(t.pt(giant), (6, 6));
+    assert_eq!(t.pt(giant), (8, 6));
     t.answer_choose(P0, &[obj(giant)]);
     let naga = t.enter(P0, "Naga Fleshcrafter");
     t.settle();
@@ -40,6 +58,25 @@ fn naga_fleshcrafter_copies_only_the_printed_values() {
     assert_eq!(t.pt(naga), (3, 3));
     assert!(!t.obj(naga).tapped);
     assert_eq!(t.counters(naga, counters::PLUS1), 0);
+    assert_eq!(
+        t.obj(naga).chars.colors,
+        ColorSet::single(Color::Red),
+        "its printed color"
+    );
+    assert!(
+        !t.obj(naga).chars.is(CardType::Artifact),
+        "its printed types"
+    );
+    assert_eq!(
+        t.obj(splitter).attached_to,
+        Some(obj(giant)),
+        "the Equipment stays"
+    );
+    assert!(t
+        .g
+        .battlefield
+        .iter()
+        .all(|a| t.obj(*a).attached_to != Some(obj(naga))));
     // Renew: the other creatures become copies of the (countered, pumped) target.
     let mut t = TestGame::new(2);
     let naga = t.graveyard(P0, "Naga Fleshcrafter");
@@ -58,10 +95,10 @@ fn naga_fleshcrafter_copies_only_the_printed_values() {
 
 #[test]
 fn naga_fleshcrafter_not_copying_is_a_0_0_that_dies() {
-    cr!("704.5f");
+    cr!("704.5f", "613.4c");
     ruling!(
         "Naga Fleshcrafter",
-        "You can choose not to have Naga Fleshcrafter enter as a copy of another creature. If you do, it will just be a 0/0 Snake Shapeshifter"
+        "You can choose not to have Naga Fleshcrafter enter as a copy of another creature. If you do, it will just be a 0/0 Snake Shapeshifter, and unless another effect is increasing its toughness, it will be put into your graveyard."
     );
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Hill Giant");
@@ -69,6 +106,19 @@ fn naga_fleshcrafter_not_copying_is_a_0_0_that_dies() {
     t.enter(P0, "Naga Fleshcrafter");
     t.settle();
     assert!(t.in_graveyard(P0, "Naga Fleshcrafter"));
+    // With an effect increasing its toughness, it stays: a 1/1 Snake Shapeshifter.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Hill Giant");
+    t.battlefield(P0, "Glorious Anthem");
+    t.answer_choose(P0, &[]);
+    let naga = t.enter(P0, "Naga Fleshcrafter");
+    t.settle();
+    let naga = t.g.current(naga);
+    assert!(t.on_battlefield(naga));
+    let o = t.obj(naga);
+    assert_eq!(o.chars.name.as_str(), "Naga Fleshcrafter");
+    assert!(o.chars.has_subtype("Snake") && o.chars.has_subtype("Shapeshifter"));
+    assert_eq!(t.pt(naga), (1, 1));
 }
 
 #[test]
@@ -81,13 +131,19 @@ fn fairgrounds_patrol_is_exiled_as_a_cost() {
     supported("Fairgrounds Patrol");
     let mut t = TestGame::new(2);
     let patrol = t.graveyard(P0, "Fairgrounds Patrol");
+    let crypt = t.battlefield(P1, "Tormod's Crypt");
     activate_lots(&mut t, P0, patrol, 0, &[]);
     assert_eq!(zone_of(&t, patrol), Zone::Exile, "exiled on activation");
     assert_eq!(t.stack_len(), 1);
-    // Exiling the graveyard now finds nothing to stop.
-    assert!(t.g.player(P0).graveyard.is_empty());
+    // In response, P1 exiles P0's graveyard: it finds nothing to stop.
+    activate_lots(&mut t, P1, crypt, 0, &[Entity::Player(P0)]);
+    assert_eq!(t.stack_len(), 2);
     t.resolve_all();
-    assert_eq!(tokens_typed(&t, P0, "Thopter").len(), 1);
+    assert_eq!(
+        tokens_typed(&t, P0, "Thopter").len(),
+        1,
+        "the ability still resolves"
+    );
 }
 
 #[test]

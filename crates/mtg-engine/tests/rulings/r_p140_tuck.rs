@@ -36,6 +36,26 @@ fn a_lone_dismisser_or_colossus_must_target_itself() {
         t.resolve_all();
         assert_eq!(zone_of(&t, c), Zone::Library(P0), "{name}");
     }
+    // You control the only creatures: one of yours must be the target, either of them.
+    for pick_bears in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let from = t.asked().len();
+        let c = t.enter(P0, "Quarry Colossus");
+        t.answer_targets(P0, &[obj(if pick_bears { bears } else { c })]);
+        t.settle();
+        assert_eq!(t.stack_len(), 1, "mandatory");
+        let offered = target_candidates(&t, P0, from).concat();
+        assert_eq!(offered.len(), 2, "{offered:?}");
+        assert!(offered.contains(&obj(c)) && offered.contains(&obj(bears)));
+        t.resolve_all();
+        let tucked = if pick_bears { bears } else { c };
+        assert_eq!(
+            zone_of(&t, tucked),
+            Zone::Library(P0),
+            "pick_bears={pick_bears}"
+        );
+    }
 }
 
 #[test]
@@ -54,7 +74,9 @@ fn void_stalker_gone_still_shuffles_the_target_away_and_stays_where_it_is() {
     t.resolve_all();
     assert_eq!(zone_of(&t, bears), Zone::Library(P1));
     assert_eq!(zone_of(&t, vs), Zone::Hand(P0), "the Stalker stays in hand");
-    assert!(shuffles(&t).contains(&P1));
+    // Both owners shuffle, P0 even though the Stalker didn't go into P0's library.
+    let s = shuffles(&t);
+    assert!(s.contains(&P1) && s.contains(&P0), "{s:?}");
 }
 
 #[test]
@@ -137,7 +159,7 @@ fn spells_put_into_or_returned_from_the_stack_are_not_countered() {
 
 #[test]
 fn the_owner_chooses_top_or_bottom_for_aether_gust_desynchronize_and_unlucky_drop() {
-    cr!("608.2d", "400.3");
+    cr!("608.2d");
     ruling!(
         "Aether Gust",
         "The owner of the target spell or permanent chooses to put it either on the top or bottom of their library."
@@ -165,7 +187,11 @@ fn the_owner_chooses_top_or_bottom_for_aether_gust_desynchronize_and_unlucky_dro
             t.resolve_all();
             let pos = from_top(&t, P1, ape).expect("in its owner's library");
             let len = t.library_size(P1);
-            assert_eq!(pos, if bottom { len - 1 } else { 0 }, "{name} bottom={bottom}");
+            assert_eq!(
+                pos,
+                if bottom { len - 1 } else { 0 },
+                "{name} bottom={bottom}"
+            );
             assert!(
                 !asked_since(&t, from)
                     .iter()
@@ -173,6 +199,46 @@ fn the_owner_chooses_top_or_bottom_for_aether_gust_desynchronize_and_unlucky_dro
                 "{name}: the controller isn't asked"
             );
         }
+    }
+    // Aether Gust on a spell: its owner chooses.
+    for bottom in [false, true] {
+        let mut t = TestGame::new(2);
+        let bolt = cast_lots(&mut t, P1, "Lightning Bolt", &[Entity::Player(P0)]);
+        t.answer(P1, DecisionKind::Option, Answer::Index(bottom as usize));
+        cast_lots(&mut t, P0, "Aether Gust", &[obj(bolt)]);
+        t.resolve_all();
+        let pos = from_top(&t, P1, bolt).expect("in its owner's library");
+        let len = t.library_size(P1);
+        assert_eq!(
+            pos,
+            if bottom { len - 1 } else { 0 },
+            "a spell, bottom={bottom}"
+        );
+        assert_eq!(t.life(P0), 20);
+    }
+}
+
+/// Run Out of Town's Oracle text has the owner choose top or bottom; its ruling (left
+/// uncited) says the controller chooses. The engine follows the Oracle text (see
+/// "Apparent conflicts (Nov 5)" in docs/agents/engine-gaps.md).
+#[test]
+fn run_out_of_town_follows_its_oracle_text() {
+    cr!("608.2d");
+    for bottom in [false, true] {
+        let mut t = TestGame::new(2);
+        let goblin = t.battlefield(P1, "Raging Goblin");
+        give_control(&mut t, goblin, P0);
+        t.answer(P1, DecisionKind::Option, Answer::Index(bottom as usize));
+        t.answer(P0, DecisionKind::Option, Answer::Index(!bottom as usize));
+        let from = t.asked().len();
+        cast_lots(&mut t, P0, "Run Out of Town", &[obj(goblin)]);
+        t.resolve_all();
+        let pos = from_top(&t, P1, goblin).expect("in its owner's library");
+        let len = t.library_size(P1);
+        assert_eq!(pos, if bottom { len - 1 } else { 0 }, "bottom={bottom}");
+        assert!(!asked_since(&t, from)
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseOption { .. })));
     }
 }
 
@@ -187,35 +253,59 @@ fn a_melded_permanent_goes_all_on_top_or_all_on_the_bottom() {
         "Unlucky Drop",
         "If multiple cards are put into the library this way (such as when the spell targets a melded permanent), that permanent's owner puts all the cards on top or all the cards on the bottom."
     );
+    ruling!(
+        "Desynchronize",
+        "They put them in whatever order they wish, and do not need to reveal the order."
+    );
+    ruling!(
+        "Unlucky Drop",
+        "They put them in whatever order they wish, and do not need to reveal the order."
+    );
     for name in ["Desynchronize", "Unlucky Drop"] {
         for bottom in [false, true] {
-            let mut t = TestGame::new(2);
-            let rats = t.exile(P1, "Graf Rats");
-            let scav = t.exile(P1, "Midnight Scavengers");
-            let host =
-                mtg_engine::merge::meld(&mut t.g, rats, scav, card("Chittering Host"), P1)
-                    .expect("meld");
-            t.g.recompute();
-            t.answer(P1, DecisionKind::Option, Answer::Index(bottom as usize));
-            cast_lots(&mut t, P0, name, &[obj(host)]);
-            t.resolve_all();
-            let len = t.library_size(P1);
-            let mut pos: Vec<usize> = t
-                .g
-                .player(P1)
-                .library
-                .iter()
-                .rev()
-                .enumerate()
-                .filter(|(_, c)| {
-                    let n = t.obj(**c).chars.name.as_str();
-                    n == "Graf Rats" || n == "Midnight Scavengers"
-                })
-                .map(|(i, _)| i)
-                .collect();
-            pos.sort();
-            let want = if bottom { vec![len - 2, len - 1] } else { vec![0, 1] };
-            assert_eq!(pos, want, "{name} bottom={bottom}");
+            // The owner's two orders put the two cards the two ways round.
+            let mut uppers = vec![];
+            for flip in [false, true] {
+                let mut t = TestGame::new(2);
+                let rats = t.exile(P1, "Graf Rats");
+                let scav = t.exile(P1, "Midnight Scavengers");
+                let host =
+                    mtg_engine::merge::meld(&mut t.g, rats, scav, card("Chittering Host"), P1)
+                        .expect("meld");
+                t.g.recompute();
+                t.answer(P1, DecisionKind::Option, Answer::Index(bottom as usize));
+                let order = if flip { vec![1, 0] } else { vec![0, 1] };
+                t.answer(P1, DecisionKind::Order, Answer::Indices(order));
+                let from = t.asked().len();
+                cast_lots(&mut t, P0, name, &[obj(host)]);
+                t.resolve_all();
+                let len = t.library_size(P1);
+                let melded: Vec<(usize, String)> =
+                    t.g.player(P1)
+                        .library
+                        .iter()
+                        .rev()
+                        .enumerate()
+                        .map(|(i, c)| (i, t.obj(*c).chars.name.to_string()))
+                        .filter(|(_, n)| n == "Graf Rats" || n == "Midnight Scavengers")
+                        .collect();
+                let pos: Vec<usize> = melded.iter().map(|(i, _)| *i).collect();
+                let want = if bottom {
+                    vec![len - 2, len - 1]
+                } else {
+                    vec![0, 1]
+                };
+                assert_eq!(pos, want, "{name} bottom={bottom}");
+                uppers.push(melded[0].1.clone());
+                let orderers: Vec<PlayerId> = asked_since(&t, from)
+                    .iter()
+                    .filter(|(_, d)| matches!(d, Decision::Order { .. }))
+                    .map(|(p, _)| *p)
+                    .collect();
+                assert_eq!(orderers, vec![P1], "{name}: the owner orders them");
+                assert!(t.g.reveals.revealed.is_empty(), "{name}: nothing revealed");
+            }
+            assert_ne!(uppers[0], uppers[1], "{name} bottom={bottom}: {uppers:?}");
         }
     }
 }
@@ -264,9 +354,14 @@ fn hunting_drake_works_if_the_target_turns_from_red_to_green() {
         "If the target changes color from red to green or green to red between triggering and resolution, the ability still works."
     );
     supported("Hunting Drake");
-    for (to, works) in [(Color::Green, true), (Color::Blue, false)] {
+    // Raging Goblin is red, Grizzly Bears green.
+    for (start, to, works) in [
+        ("Raging Goblin", Color::Green, true),
+        ("Grizzly Bears", Color::Red, true),
+        ("Raging Goblin", Color::Blue, false),
+    ] {
         let mut t = TestGame::new(2);
-        let goblin = t.battlefield(P1, "Raging Goblin");
+        let goblin = t.battlefield(P1, start);
         t.answer_targets(P0, &[obj(goblin)]);
         t.enter(P0, "Hunting Drake");
         t.settle();
@@ -274,12 +369,18 @@ fn hunting_drake_works_if_the_target_turns_from_red_to_green() {
         modify(
             &mut t,
             goblin,
-            vec![mtg_engine::ability::Modification::SetColors(ColorSet::single(to))],
+            vec![mtg_engine::ability::Modification::SetColors(
+                ColorSet::single(to),
+            )],
         );
         t.resolve_all();
         let z = zone_of(&t, goblin);
         if works {
-            assert_eq!(z, Zone::Library(P1), "now green: still a legal target");
+            assert_eq!(
+                z,
+                Zone::Library(P1),
+                "{start} now {to:?}: still a legal target"
+            );
         } else {
             assert_eq!(z, Zone::Battlefield, "now blue: an illegal target");
         }
@@ -357,7 +458,11 @@ fn oust_a_token_ceases_to_exist_its_controller_gains_the_life() {
     give_control(&mut t, bears, P1);
     cast_lots(&mut t, P0, "Oust", &[obj(bears)]);
     t.resolve_all();
-    assert_eq!(from_top(&t, P0, bears), Some(1), "second from the top of P0's");
+    assert_eq!(
+        from_top(&t, P0, bears),
+        Some(1),
+        "second from the top of P0's"
+    );
     assert_eq!((t.life(P0), t.life(P1)), (20, 23));
 }
 
@@ -392,7 +497,10 @@ fn only_dramatic_accusations_controller_may_activate_it() {
     let aura = t.g.current(aura);
     assert!(t.on_battlefield(aura));
     lots(&mut t, P1);
-    assert!(!can_activate(&mut t, P1, aura), "the enchanted creature's controller can't");
+    assert!(
+        !can_activate(&mut t, P1, aura),
+        "the enchanted creature's controller can't"
+    );
     lots(&mut t, P0);
     assert!(can_activate(&mut t, P0, aura), "the Aura's controller can");
     activate_lots(&mut t, P0, aura, 0, &[]);
@@ -444,7 +552,7 @@ fn primal_command_is_not_shuffled_in_by_its_own_third_mode() {
 
 #[test]
 fn primal_commands_modes_happen_in_order_so_the_tucked_card_is_shuffled_away() {
-    cr!("700.2", "608.2c");
+    cr!("608.2c");
     ruling!(
         "Primal Command",
         "Primal Command's modes are performed in the order listed. If you put a noncreature permanent on top of its owner's library and have that player shuffle their graveyard into their library, that card is shuffled away."
@@ -464,7 +572,9 @@ fn primal_commands_modes_happen_in_order_so_the_tucked_card_is_shuffled_away() {
     let ev = &t.g.turn_events[mark..];
     let moved = ev
         .iter()
-        .position(|e| matches!(e, Event::ZoneChange { old, to: Zone::Library(_), .. } if *old == stone))
+        .position(
+            |e| matches!(e, Event::ZoneChange { old, to: Zone::Library(_), .. } if *old == stone),
+        )
         .expect("tucked");
     let shuffled = ev
         .iter()
@@ -488,7 +598,7 @@ fn offered_modes(t: &mut TestGame, card: ObjectId) -> Vec<usize> {
 
 #[test]
 fn modal_charms_have_only_the_chosen_modes_targets() {
-    cr!("700.2a", "601.2b", "601.2c");
+    cr!("700.2a", "700.2c", "601.2b", "601.2c");
     ruling!(
         "Bant Charm",
         "While the spell is on the stack, treat it as though its only text is the chosen mode. The other two modes are treated as though they don't exist. You don't choose targets for those modes."
@@ -505,7 +615,10 @@ fn modal_charms_have_only_the_chosen_modes_targets() {
         "Naya Charm",
         "You can choose a mode only if you can choose legal targets for that mode. If you can't choose legal targets for any of the modes, you can't cast the spell."
     );
-    for (name, mode, target) in [("Bant Charm", 1usize, "Grizzly Bears"), ("Naya Charm", 0, "Grizzly Bears")] {
+    for (name, mode, target) in [
+        ("Bant Charm", 1usize, "Grizzly Bears"),
+        ("Naya Charm", 0, "Grizzly Bears"),
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P1, target);
@@ -517,11 +630,18 @@ fn modal_charms_have_only_the_chosen_modes_targets() {
         t.answer_targets(P0, &[obj(bears)]);
         let spell = t.cast(P0, card_).modes(&[mode]).go();
         let n_target_choices = target_candidates(&t, P0, from).len();
-        assert_eq!(n_target_choices, 1, "{name}: one target, for the chosen mode");
+        assert_eq!(
+            n_target_choices, 1,
+            "{name}: one target, for the chosen mode"
+        );
         let chosen = &t.obj(spell).stack.as_ref().unwrap().chosen;
         assert_eq!(chosen.len(), 1, "{name}: one mode");
         assert_eq!(chosen[0].mode, Some(mode));
-        let n: usize = chosen.iter().flat_map(|c| c.targets.iter()).map(|v| v.len()).sum();
+        let n: usize = chosen
+            .iter()
+            .flat_map(|c| c.targets.iter())
+            .map(|v| v.len())
+            .sum();
         assert_eq!(n, 1, "{name}: {chosen:?}");
         t.resolve_all();
         assert!(!t.on_battlefield(bears), "{name}");
@@ -531,14 +651,32 @@ fn modal_charms_have_only_the_chosen_modes_targets() {
     let mut t = TestGame::new(2);
     lots(&mut t, P0);
     let bant = t.hand(P0, "Bant Charm");
-    assert!(!can_cast(&mut t, P0, bant, mtg_engine::object::CastMethod::Normal));
+    assert!(!can_cast(
+        &mut t,
+        P0,
+        bant,
+        mtg_engine::object::CastMethod::Normal
+    ));
     // A mode without legal targets can't be chosen: only an artifact, no creature, no
     // card in a graveyard.
     t.battlefield(P1, "Millstone");
-    assert!(can_cast(&mut t, P0, bant, mtg_engine::object::CastMethod::Normal));
-    assert_eq!(offered_modes(&mut t, bant), vec![0], "Bant Charm: only the artifact mode");
+    assert!(can_cast(
+        &mut t,
+        P0,
+        bant,
+        mtg_engine::object::CastMethod::Normal
+    ));
+    assert_eq!(
+        offered_modes(&mut t, bant),
+        vec![0],
+        "Bant Charm: only the artifact mode"
+    );
     let naya = t.hand(P0, "Naya Charm");
-    assert_eq!(offered_modes(&mut t, naya), vec![2], "Naya Charm: only the player mode");
+    assert_eq!(
+        offered_modes(&mut t, naya),
+        vec![2],
+        "Naya Charm: only the player mode"
+    );
 }
 
 #[test]
@@ -568,12 +706,18 @@ fn trial_of_a_time_lord_returns_the_cards_not_put_on_the_bottom() {
         }
         crate::r_s19_common::add_lore(&mut t, trial, 1);
         t.resolve_all();
-        assert!(t.in_graveyard(P0, "Trial of a Time Lord"), "sacrificed after IV");
+        assert!(
+            t.in_graveyard(P0, "Trial of a Time Lord"),
+            "sacrificed after IV"
+        );
         for c in [bears, giant] {
             let z = zone_of(&t, c);
             if guilty {
                 assert_eq!(z, Zone::Library(P1), "guilty: on the bottom");
-                assert_eq!(from_top(&t, P1, c).map(|i| i + 2 >= t.library_size(P1)), Some(true));
+                assert_eq!(
+                    from_top(&t, P1, c).map(|i| i + 2 >= t.library_size(P1)),
+                    Some(true)
+                );
             } else {
                 assert_eq!(z, Zone::Battlefield, "innocent: back as the Saga leaves");
             }

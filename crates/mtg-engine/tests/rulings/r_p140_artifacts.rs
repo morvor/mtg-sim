@@ -17,7 +17,7 @@ use mtg_engine::*;
 
 #[test]
 fn master_trinketeer_a_servo_thopter_gets_plus_one_once() {
-    cr!("613.4c", "205.3m");
+    cr!("613.4c", "702.73a");
     ruling!(
         "Master Trinketeer",
         "A creature that is both a Servo and a Thopter gets +1/+1, not +2/+2."
@@ -31,7 +31,7 @@ fn master_trinketeer_a_servo_thopter_gets_plus_one_once() {
 
 #[test]
 fn karns_construct_counts_itself_but_not_karn() {
-    cr!("111.3", "306.4");
+    cr!("111.3", "613.4c");
     ruling!(
         "Karn, Scion of Urza",
         "A token created by Karn's last ability will count itself, so it'll be at least 1/1."
@@ -55,7 +55,7 @@ fn karns_construct_counts_itself_but_not_karn() {
 
 #[test]
 fn artificer_class_levels_and_class_abilities() {
-    cr!("716.2a", "716.2b", "716.2c", "716.3");
+    cr!("716.2a", "716.3");
     ruling!(
         "Artificer Class",
         "Class is a returning enchantment type. Each Class has five abilities. The three in the major sections of its text box are class abilities."
@@ -118,7 +118,11 @@ fn spell_cast_triggers_resolve_first_even_if_the_spell_is_countered() {
     ];
     for (name, sub, bounce) in cases {
         supported(name);
-        for leave in if bounce { vec![false, true] } else { vec![false] } {
+        for leave in if bounce {
+            vec![false, true]
+        } else {
+            vec![false]
+        } {
             let mut t = TestGame::new(2);
             t.battlefield(P0, name);
             if name == "Station Monitor" {
@@ -128,7 +132,11 @@ fn spell_cast_triggers_resolve_first_even_if_the_spell_is_countered() {
             let spell = cast_lots(&mut t, P0, "Ornithopter", &[]);
             t.settle();
             let top = *t.stack.last().unwrap();
-            assert_eq!(t.obj(top).kind, ObjKind::StackAbility, "{name}: on top of it");
+            assert_eq!(
+                t.obj(top).kind,
+                ObjKind::StackAbility,
+                "{name}: on top of it"
+            );
             if leave {
                 move_to(&mut t, spell, Zone::Hand(P0));
             } else {
@@ -146,9 +154,9 @@ fn station_monitor_counts_every_spell_cast_this_turn_including_itself() {
     cr!("603.2", "601.2i");
     ruling!(
         "Station Monitor",
-        "Station Monitor’s ability will count any spells you’ve cast this turn, which may include Station Monitor itself."
+        "Station Monitor’s ability will count any spells you’ve cast this turn, which may include Station Monitor itself. It doesn’t matter if the other spells resolved, didn’t resolve, were countered, or are still on the stack. If Station Monitor was the first spell you cast this turn, the next spell you cast this turn is your second spell."
     );
-    // Station Monitor first: the next spell is the second.
+    // Station Monitor first (it resolved): the next spell is the second.
     let mut t = TestGame::new(2);
     cast_lots(&mut t, P0, "Station Monitor", &[]);
     t.resolve_all();
@@ -164,11 +172,22 @@ fn station_monitor_counts_every_spell_cast_this_turn_including_itself() {
     cast_lots(&mut t, P0, "Ornithopter", &[]);
     t.resolve_all();
     assert!(tokens_typed(&t, P0, "Drone").is_empty(), "the third spell");
+    // The first spell still on the stack as the second is cast.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Station Monitor");
+    cast_lots(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "no trigger for the first spell");
+    cast_lots(&mut t, P0, "Shock", &[Entity::Player(P1)]);
+    t.settle();
+    assert_eq!(t.stack_len(), 3, "the Bolt, the Shock and the trigger");
+    t.resolve_all();
+    assert_eq!(tokens_typed(&t, P0, "Drone").len(), 1);
 }
 
 #[test]
 fn saheeli_chooses_the_artifact_to_tap_on_resolution() {
-    cr!("608.2d", "606.3");
+    cr!("608.2d");
     ruling!(
         "Saheeli, Filigree Master",
         "For the first ability, you don't choose which artifact to tap until the ability resolves."
@@ -241,7 +260,7 @@ fn dies_together_triggers_see_each_other() {
 
 #[test]
 fn hidden_stockpile_counts_a_permanent_that_left_before_it_arrived() {
-    cr!("603.4", "207.2c");
+    cr!("603.4");
     ruling!(
         "Hidden Stockpile",
         "If a permanent you controlled didn't leave the battlefield before your end step begins, Hidden Stockpile's first ability doesn't trigger at all. The permanent may have left before Hidden Stockpile entered the battlefield, however."
@@ -283,7 +302,8 @@ fn etherium_spinner_counts_x_in_the_mana_value() {
     }
 }
 
-/// Indices of the replacement options offered whose description contains `needle`.
+/// Makes `p` choose, among the replacement effects offered, the first whose description
+/// contains `needle` (other decisions are answered as before).
 fn pick_replacement(t: &mut TestGame, p: PlayerId, needle: &'static str) {
     use mtg_engine::decision::Agent;
     struct Pick {
@@ -313,9 +333,11 @@ fn stridehangar_and_anointed_procession_apply_in_the_order_you_choose() {
     cr!("616.1", "616.1e", "614.1a");
     ruling!(
         "Stridehangar Automaton",
-        "If another effect modifies which or how many tokens you create, you choose the order to apply those effects."
+        "If another effect modifies which or how many tokens you create, you choose the order to apply those effects. For example, if you control this creature and Anointed Procession (“If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.”), each time you create tokens, you can choose to apply Anointed Procession’s effect to double those tokens first, then apply this creature’s effect to create an additional Thopter token. Or you can choose to apply this creature’s effect first followed by Anointed Procession’s effect, allowing you to create double the original tokens plus two additional Thopter tokens."
     );
     supported("Stridehangar Automaton");
+    supported("Divine Visitation");
+    // How many: Anointed Procession.
     for (first, want) in [("Anointed", 3usize), ("Stridehangar", 4)] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Stridehangar Automaton");
@@ -326,11 +348,25 @@ fn stridehangar_and_anointed_procession_apply_in_the_order_you_choose() {
         t.resolve_all();
         assert_eq!(tokens_typed(&t, P0, "Thopter").len(), want, "{first} first");
     }
+    // Which: Divine Visitation turns creature tokens into 4/4 Angels, which aren't
+    // artifacts. First, it leaves no artifact token for the Automaton; after the
+    // Automaton, both Thopters become Angels.
+    for (first, angels) in [("Divine Visitation", 1usize), ("Stridehangar", 2)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Stridehangar Automaton");
+        t.battlefield(P0, "Divine Visitation");
+        pick_replacement(&mut t, P0, first);
+        let patrol = t.graveyard(P0, "Fairgrounds Patrol");
+        activate_lots(&mut t, P0, patrol, 0, &[]);
+        t.resolve_all();
+        assert_eq!(tokens_typed(&t, P0, "Angel").len(), angels, "{first} first");
+        assert!(tokens_typed(&t, P0, "Thopter").is_empty(), "{first} first");
+    }
 }
 
 #[test]
 fn stridehangar_ignores_copies_of_permanent_spells() {
-    cr!("707.10f", "111.1");
+    cr!("707.10f", "111.13");
     ruling!(
         "Stridehangar Automaton",
         "If you copy a permanent spell, that copy becomes a token on the battlefield, but that’s not the same as creating a token. You won’t get an additional Thopter token that way."
@@ -348,7 +384,7 @@ fn stridehangar_ignores_copies_of_permanent_spells() {
 
 #[test]
 fn stridehangars_thopter_shares_the_creation_instructions_but_not_the_abilities() {
-    cr!("614.1a", "111.2");
+    cr!("614.1a", "614.6");
     ruling!(
         "Stridehangar Automaton",
         "The additional Thopter token won’t have any abilities the other tokens were created with."
@@ -397,7 +433,11 @@ fn stridehangars_thopter_shares_the_creation_instructions_but_not_the_abilities(
     let toks = tokens_of(&t, P0);
     assert_eq!(toks.len(), 2);
     for x in &toks {
-        assert!(t.obj(*x).has_keyword(KeywordKind::Haste), "{}", t.obj(*x).chars.name);
+        assert!(
+            t.obj(*x).has_keyword(KeywordKind::Haste),
+            "{}",
+            t.obj(*x).chars.name
+        );
     }
     t.advance_to(P0, Step::End);
     t.resolve_all();
@@ -472,7 +512,7 @@ fn tetravites(t: &mut TestGame, tv: ObjectId, n: i64) -> Vec<ObjectId> {
 
 #[test]
 fn tetravites_outlive_their_tetravus_and_only_return_to_it() {
-    cr!("607.2a", "113.7a");
+    cr!("607.2c");
     ruling!(
         "Tetravus",
         "If the Tetravus is destroyed when the Tetravites are off the card, they are not destroyed, they are just orphaned."
@@ -499,7 +539,11 @@ fn tetravites_outlive_their_tetravus_and_only_return_to_it() {
     t.answer(P0, DecisionKind::Order, Answer::Indices(vec![1, 0]));
     t.answer(P0, DecisionKind::YesNo, Answer::Bool(false));
     t.answer(P0, DecisionKind::YesNo, Answer::Bool(true));
-    t.answer(P0, DecisionKind::Entities, Answer::Entities(made.iter().map(|x| obj(*x)).collect()));
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        Answer::Entities(made.iter().map(|x| obj(*x)).collect()),
+    );
     into_upkeep(&mut t, P0);
     t.resolve_all();
     for x in &made {
@@ -545,7 +589,7 @@ fn golden_guardians_fight_needs_both() {
 
 #[test]
 fn dovin_with_a_short_library_takes_three_or_all() {
-    cr!("401.5", "608.2c");
+    cr!("609.3", "608.2c");
     ruling!(
         "Dovin, Grand Arbiter",
         "If you have fewer than ten cards in your library as Dovin's last ability resolves, look at however many cards you have, put three of them into your hand (or all of them if you have fewer than three cards in your library), and then put the rest back in a random order."
@@ -568,20 +612,35 @@ fn myrel_doesnt_stop_abilities_of_cards_in_other_zones() {
     cr!("602.5", "113.6");
     ruling!(
         "Myrel, Shield of Argive",
-        "It doesn't prevent activated abilities from cards in any zone other than the battlefield."
+        "Myrel, Shield of Argive's first ability prevents opponents from activating abilities of permanents on the battlefield that are artifacts, creatures, and/or enchantments. It doesn't prevent activated abilities from cards in any zone other than the battlefield. Notably, this means that your opponents may still activate abilities of cards in their graveyard (such as unearth)."
     );
     supported("Myrel, Shield of Argive");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Myrel, Shield of Argive");
     let skel = t.graveyard(P1, "Reassembling Skeleton");
     let vs = t.battlefield(P1, "Void Stalker");
+    let stone = t.battlefield(P1, "Millstone");
+    let bonds = t.battlefield(P1, "Bonds of Mortality");
+    let tower = t.battlefield(P1, "Detection Tower");
     lots(&mut t, P1);
-    assert!(!can_activate(&mut t, P1, vs), "a creature on the battlefield");
+    for (id, what) in [
+        (vs, "a creature"),
+        (stone, "an artifact"),
+        (bonds, "an enchantment"),
+    ] {
+        assert!(!can_activate(&mut t, P1, id), "{what} on the battlefield");
+    }
+    assert!(
+        can_activate(&mut t, P1, tower),
+        "a land on the battlefield isn't covered"
+    );
     assert!(can_activate(&mut t, P1, skel), "a card in a graveyard");
-    // On P1's turn, the battlefield one works again.
+    // On P1's turn, the battlefield ones work again.
     t.set_step(P1, Step::PrecombatMain);
     lots(&mut t, P1);
-    assert!(can_activate(&mut t, P1, vs));
+    for id in [vs, stone, bonds] {
+        assert!(can_activate(&mut t, P1, id));
+    }
 }
 
 #[test]
@@ -592,7 +651,11 @@ fn blinks_chapters_trigger_out_of_order() {
         "The first ability triggers when the first and third lore counters are added. The last ability triggers when the second and fourth lore counters are placed on it."
     );
     let def = card("Blink");
-    assert!(def.unsupported_text().is_empty(), "{:?}", def.unsupported_text());
+    assert!(
+        def.unsupported_text().is_empty(),
+        "{:?}",
+        def.unsupported_text()
+    );
     let mut t = TestGame::new(2);
     let saga = t.battlefield(P0, "Blink");
     let mut seen = vec![];
@@ -614,7 +677,12 @@ fn blinks_chapters_trigger_out_of_order() {
     }
     assert_eq!(
         seen,
-        vec![(1, true, false), (2, false, true), (3, true, false), (4, false, true)]
+        vec![
+            (1, true, false),
+            (2, false, true),
+            (3, true, false),
+            (4, false, true)
+        ]
     );
 }
 
@@ -639,34 +707,66 @@ fn roxannes_extra_mana_is_hers_and_unrestricted() {
     let from_stone: Vec<_> = pool.iter().filter(|m| m.source == Some(stone)).collect();
     let from_rox: Vec<_> = pool.iter().filter(|m| m.source == Some(rox)).collect();
     assert_eq!(from_stone.len(), 1);
-    assert!(from_stone[0].restriction.is_some(), "Powerstone mana is restricted");
+    assert!(
+        from_stone[0].restriction.is_some(),
+        "Powerstone mana is restricted"
+    );
     assert_eq!(from_rox.len(), 1, "Roxanne produced the extra mana");
     assert!(from_rox[0].restriction.is_none() && from_rox[0].rider.is_none());
 }
 
 #[test]
 fn masters_manufactory_only_needs_the_artifact_to_have_entered() {
-    cr!("602.5b", "603.10");
+    cr!("602.5");
     ruling!(
         "Master's Guide-Mural // Master's Manufactory",
-        "The ability of Master's Manufactory can be activated no matter what happened to the artifact after it entered under your control."
+        "The ability of Master's Manufactory can be activated no matter what happened to the artifact after it entered under your control. It may have left the battlefield, stopped being an artifact, or another player may have gained control of it."
     );
     supported("Master's Guide-Mural // Master's Manufactory");
-    for what in ["left", "control", "none"] {
+    // What counts is an artifact entering under P0's control: not one that entered under
+    // another player's control and was taken afterwards, nor no artifact at all.
+    for (what, can) in [
+        ("left", true),
+        ("not an artifact", true),
+        ("control", true),
+        ("none", false),
+        ("taken", false),
+    ] {
         let mut t = TestGame::new(2);
         let m = t.battlefield(P0, "Master's Guide-Mural // Master's Manufactory");
         crate::r_s17_common::transform(&mut t, m);
         let m = t.g.current(m);
         assert_eq!(t.obj(m).chars.name.as_str(), "Master's Manufactory");
-        if what != "none" {
-            let o = t.enter(P0, "Ornithopter");
-            t.settle();
-            if what == "left" {
-                destroy(&mut t, o);
-            } else {
-                give_control(&mut t, o, P1);
+        match what {
+            "none" => {}
+            "taken" => {
+                let o = t.enter(P1, "Ornithopter");
+                t.settle();
+                give_control(&mut t, o, P0);
+                assert_eq!(t.obj(t.g.current(o)).controller, P0);
+            }
+            _ => {
+                let o = t.enter(P0, "Ornithopter");
+                t.settle();
+                match what {
+                    "left" => destroy(&mut t, o),
+                    "control" => give_control(&mut t, o, P1),
+                    _ => {
+                        modify(
+                            &mut t,
+                            o,
+                            vec![mtg_engine::ability::Modification::RemoveTypes(vec![
+                                mtg_engine::types::CardType::Artifact,
+                            ])],
+                        );
+                        assert!(!t
+                            .obj(t.g.current(o))
+                            .chars
+                            .is(mtg_engine::types::CardType::Artifact));
+                    }
+                }
             }
         }
-        assert_eq!(can_activate(&mut t, P0, m), what != "none", "{what}");
+        assert_eq!(can_activate(&mut t, P0, m), can, "{what}");
     }
 }

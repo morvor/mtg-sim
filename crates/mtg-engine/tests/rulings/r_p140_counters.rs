@@ -13,7 +13,7 @@ fn total_counters(t: &TestGame, id: ObjectId) -> u32 {
 
 #[test]
 fn aether_snap_removes_every_kind_of_counter_from_permanents_only() {
-    cr!("122.1", "702.62b");
+    cr!("122.1");
     ruling!(
         "Aether Snap",
         "Aether Snap removes all counters from permanents, no matter what kind they are."
@@ -39,7 +39,12 @@ fn aether_snap_removes_every_kind_of_counter_from_permanents_only() {
     cast_lots(&mut t, P0, "Aether Snap", &[]);
     t.resolve_all();
     for id in [bears, giant, stone] {
-        assert_eq!(total_counters(&t, id), 0, "{}", t.obj(t.g.current(id)).chars.name);
+        assert_eq!(
+            total_counters(&t, id),
+            0,
+            "{}",
+            t.obj(t.g.current(id)).chars.name
+        );
     }
     assert_eq!(t.pt(t.g.current(bears)), (2, 2));
     assert_eq!(t.pt(t.g.current(giant)), (3, 3));
@@ -96,7 +101,11 @@ fn fury_charm_removes_a_lone_time_counter() {
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.cast(P0, charm).modes(&[2]).go();
     t.resolve_all();
-    assert_eq!(t.life(P1), 17, "the last counter came off: Rift Bolt was cast");
+    assert_eq!(
+        t.life(P1),
+        17,
+        "the last counter came off: Rift Bolt was cast"
+    );
     // A permanent with one time counter.
     let mut t = TestGame::new(2);
     let stone = t.battlefield(P1, "Millstone");

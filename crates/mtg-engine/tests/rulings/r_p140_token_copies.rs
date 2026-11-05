@@ -7,7 +7,7 @@ use crate::r_p141_common::{into_upkeep, pump, yes};
 use mtg_engine::designations::become_monarch;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
-use mtg_engine::types::{counters, CardType};
+use mtg_engine::types::{counters, CardType, Color, ColorSet};
 use mtg_engine::*;
 
 /// A 1/1 colorless Thopter artifact creature token with flying for `p`, made by a real
@@ -88,7 +88,9 @@ fn mechanized_production_wins_only_while_its_trigger_resolves_before_token_trigg
     supported("Mechanized Production");
     // Eight Ichor Wellsprings: no win yet.
     let mut t = TestGame::new(2);
-    let mut wells: Vec<ObjectId> = (0..8).map(|_| t.battlefield(P0, "Ichor Wellspring")).collect();
+    let mut wells: Vec<ObjectId> = (0..8)
+        .map(|_| t.battlefield(P0, "Ichor Wellspring"))
+        .collect();
     cast_lots(&mut t, P0, "Mechanized Production", &[obj(wells[0])]);
     t.resolve_all();
     assert!(!t.has_lost(P1) && t.g.result.is_none(), "not yet");
@@ -101,7 +103,11 @@ fn mechanized_production_wins_only_while_its_trigger_resolves_before_token_trigg
     let hand = t.hand_size(P0);
     t.g.resolve_top();
     assert!(t.has_lost(P1), "won while resolving");
-    assert_eq!(t.hand_size(P0), hand, "the token's enters trigger hasn't resolved");
+    assert_eq!(
+        t.hand_size(P0),
+        hand,
+        "the token's enters trigger hasn't resolved"
+    );
 }
 
 #[test]
@@ -123,11 +129,31 @@ fn enters_abilities_work_for_copied_artifact_tokens() {
         "Donatello, Gadget Master",
         "If the artifact copied by the token had any \"when [this artifact] enters\" abilities, the token also has those abilities, and they'll trigger when it's created. Similarly, any \"as [this artifact] enters\" or \"[this artifact] enters with\" abilities that the token has copied will also work."
     );
-    for how in ["Mechanized Production", "Court of Vantress", "Chrome Dome", "Donatello, Gadget Master"] {
+    supported("Pithing Needle");
+    // Ichor Wellspring: "When this artifact enters ..., draw a card." Tetravus: "enters with
+    // three +1/+1 counters". Pithing Needle: "As this artifact enters, choose a card name."
+    for how in [
+        "Mechanized Production",
+        "Court of Vantress",
+        "Chrome Dome",
+        "Donatello, Gadget Master",
+    ] {
         supported(how);
-        for what in ["Ichor Wellspring", "Tetravus"] {
+        for what in ["Ichor Wellspring", "Tetravus", "Pithing Needle"] {
             let mut t = TestGame::new(2);
             let orig = t.battlefield(P0, what);
+            let stone = t.battlefield(P1, "Millstone");
+            lots(&mut t, P1);
+            assert!(
+                can_activate(&mut t, P1, stone),
+                "no name chosen for the original"
+            );
+            t.g.turn.priority = Some(P0);
+            t.answer(
+                P0,
+                DecisionKind::Name,
+                mtg_engine::decision::Answer::Text("Millstone".into()),
+            );
             let before = tokens_of(&t, P0);
             let hand = t.hand_size(P0);
             match how {
@@ -152,16 +178,28 @@ fn enters_abilities_work_for_copied_artifact_tokens() {
                 }
             }
             // Decline Tetravus's own upkeep options.
-            t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(false));
+            t.answer(
+                P0,
+                DecisionKind::YesNo,
+                mtg_engine::decision::Answer::Bool(false),
+            );
             t.resolve_all();
             let tok = *new_tokens(&t, P0, &before)
                 .iter()
                 .find(|x| t.obj(**x).chars.name.as_str() == what)
                 .unwrap_or_else(|| panic!("{how}: no token copy of {what}"));
-            if what == "Tetravus" {
-                assert_eq!(t.counters(tok, counters::PLUS1), 3, "{how}: enters with");
-            } else {
-                assert_eq!(t.hand_size(P0), hand + 1, "{how}: its enters trigger");
+            match what {
+                "Tetravus" => {
+                    assert_eq!(t.counters(tok, counters::PLUS1), 3, "{how}: enters with")
+                }
+                "Pithing Needle" => {
+                    lots(&mut t, P1);
+                    assert!(
+                        !can_activate(&mut t, P1, stone),
+                        "{how}: a name chosen as it entered"
+                    );
+                }
+                _ => assert_eq!(t.hand_size(P0), hand + 1, "{how}: its enters trigger"),
             }
         }
     }
@@ -181,6 +219,10 @@ fn token_copies_use_the_printed_values_plus_copy_effects() {
     ruling!(
         "Schema Thief",
         "Each of the tokens copy exactly what was printed on the original artifact and nothing else"
+    );
+    ruling!(
+        "Schema Thief",
+        "It doesn’t copy whether that artifact is tapped or untapped, whether it has any counters on it or Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, and so on."
     );
     supported("Schema Thief");
     // Court: Sculpting Steel copying Ornithopter, with counters and a pump.
@@ -209,19 +251,38 @@ fn token_copies_use_the_printed_values_plus_copy_effects() {
     t.answer_choose(P0, &[obj(bears)]);
     yes(&mut t, P0);
     let before = tokens_of(&t, P0);
-    t.enter(P0, "Phyrexian Metamorph");
+    let meta = t.enter(P0, "Phyrexian Metamorph");
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "Mirrorworks's trigger");
+    // A non-copy effect on it before the token is created isn't copied.
+    pump(&mut t, meta, 2, 2);
     t.resolve_all();
     let tok = one_new_token(&t, P0, &before);
     let o = t.obj(tok);
     assert_eq!(o.chars.name.as_str(), "Grizzly Bears");
-    assert!(o.chars.is(CardType::Artifact), "the Metamorph's exception is copied too");
+    assert!(
+        o.chars.is(CardType::Artifact),
+        "the Metamorph's exception is copied too"
+    );
     assert_eq!(t.pt(tok), (2, 2));
-    // Schema Thief: a tapped Ornithopter with counters.
+    // Schema Thief: a tapped Ornithopter with counters and Equipment, pumped, turned blue
+    // and made an enchantment by non-copy effects.
     let mut t = TestGame::new(2);
     let thief = t.battlefield(P0, "Schema Thief");
     let o = t.battlefield(P1, "Ornithopter");
     put_counters(&mut t, o, counters::PLUS1, 2);
+    pump(&mut t, o, 1, 1);
+    crate::r_p117_common::modify(
+        &mut t,
+        o,
+        vec![
+            mtg_engine::ability::Modification::SetColors(ColorSet::single(Color::Blue)),
+            mtg_engine::ability::Modification::AddTypes(vec![CardType::Enchantment]),
+        ],
+    );
+    crate::r_s06_common::attach_new(&mut t, P1, "Bonesplitter", obj(o));
     t.g.objects[o.0 as usize].tapped = true;
+    assert_eq!(t.pt(o), (5, 5));
     let before = tokens_of(&t, P0);
     t.answer_targets(P0, &[obj(o)]);
     t.attack(&[(thief, Entity::Player(P1))], &[]);
@@ -231,6 +292,21 @@ fn token_copies_use_the_printed_values_plus_copy_effects() {
     assert!(!t.obj(tok).tapped);
     assert_eq!(t.counters(tok, counters::PLUS1), 0);
     assert_eq!(t.pt(tok), (0, 2));
+    assert_eq!(
+        t.obj(tok).chars.colors,
+        ColorSet::NONE,
+        "colorless as printed"
+    );
+    assert!(
+        !t.obj(tok).chars.is(CardType::Enchantment),
+        "its printed types"
+    );
+    assert!(
+        t.g.battlefield
+            .iter()
+            .all(|a| t.obj(*a).attached_to != Some(obj(tok))),
+        "nothing attached to it"
+    );
 }
 
 #[test]
@@ -248,7 +324,11 @@ fn copying_a_token_uses_the_original_characteristics_of_that_token() {
         "Mechanized Production",
         "If the copied artifact is a token, the token that's created copies the original characteristics of that token as stated by the effect that created it."
     );
-    for how in ["Schema Thief", "Donatello, Gadget Master", "Mechanized Production"] {
+    for how in [
+        "Schema Thief",
+        "Donatello, Gadget Master",
+        "Mechanized Production",
+    ] {
         let mut t = TestGame::new(2);
         let owner = if how == "Schema Thief" { P1 } else { P0 };
         let th = changed_thopter(&mut t, owner);
@@ -272,7 +352,7 @@ fn copying_a_token_uses_the_original_characteristics_of_that_token() {
 
 #[test]
 fn copying_x_costs_uses_zero() {
-    cr!("107.3m", "707.2");
+    cr!("107.3g", "107.3m", "707.2");
     ruling!(
         "Mechanized Production",
         "If the copied artifact has {X} in its mana cost, X is considered to be zero."
@@ -340,7 +420,11 @@ fn prototype_portal_gone_still_makes_the_token_but_not_without_an_exiled_card() 
         }
         t.resolve_all();
         let n = t.named_on_battlefield("Ornithopter").len();
-        assert_eq!(n, if remove_card { 0 } else { 1 }, "remove_card={remove_card}");
+        assert_eq!(
+            n,
+            if remove_card { 0 } else { 1 },
+            "remove_card={remove_card}"
+        );
     }
 }
 
@@ -362,17 +446,19 @@ fn court_of_vantress_becoming_a_copy_of_a_token_isnt_a_token() {
     assert!(t.obj(c).chars.has_subtype("Thopter"));
     assert!(!t.obj(c).is_token());
     assert_eq!(t.pt(c), (1, 1));
-    assert!(t
-        .obj(c)
-        .chars
-        .abilities
-        .iter()
-        .any(|a| a.text.contains("monarch")), "it has this ability");
+    assert!(
+        t.obj(c)
+            .chars
+            .abilities
+            .iter()
+            .any(|a| a.text.contains("monarch")),
+        "it has this ability"
+    );
 }
 
 #[test]
 fn court_of_vantress_as_an_aura_or_equipment_follows_the_attachment_rules() {
-    cr!("704.5m", "704.5n", "707.9a");
+    cr!("704.5m", "704.5p", "707.9a");
     ruling!(
         "Court of Vantress",
         "If Court of Vantress becomes a copy of an Aura, it's put into its owner's graveyard unless it's somehow attached to an appropriate object or player already. If it becomes a copy of an Equipment and is attached to a creature, it'll become unattached when it becomes a non-Equipment, non-Aura permanent."
@@ -387,7 +473,10 @@ fn court_of_vantress_as_an_aura_or_equipment_follows_the_attachment_rules() {
     yes(&mut t, P0);
     into_upkeep(&mut t, P0);
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Court of Vantress"), "an unattached Aura");
+    assert!(
+        t.in_graveyard(P0, "Court of Vantress"),
+        "an unattached Aura"
+    );
     let _ = court;
     // An Equipment, attached, then a copy of Ornithopter: it becomes unattached.
     let mut t = TestGame::new(2);
@@ -414,11 +503,36 @@ fn court_of_vantress_as_an_aura_or_equipment_follows_the_attachment_rules() {
     assert_eq!(t.obj(c).chars.name.as_str(), "Ornithopter");
     assert_eq!(t.obj(c).attached_to, None, "unattached");
     assert_eq!(t.pt(bears), (2, 2));
+    // An equipped Equipment that becomes a copy of an Aura ("Enchant creature"): it's
+    // already attached to an appropriate object, so it stays, enchanting it.
+    let mut t = TestGame::new(2);
+    let court = t.battlefield(P0, "Court of Vantress");
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let drake = t.battlefield(P1, "Wind Drake");
+    let grounded = crate::r_s06_common::attach_new(&mut t, P1, "Grounded", obj(drake));
+    t.answer_targets(P0, &[obj(splitter)]);
+    yes(&mut t, P0);
+    into_upkeep(&mut t, P0);
+    t.resolve_all();
+    t.advance_to(P0, mtg_engine::turn::Step::PrecombatMain);
+    let c = t.g.current(court);
+    activate_lots(&mut t, P0, c, 0, &[obj(bears)]);
+    t.resolve_all();
+    assert_eq!(t.obj(c).attached_to, Some(obj(bears)));
+    t.answer_targets(P0, &[obj(grounded)]);
+    yes(&mut t, P0);
+    into_upkeep(&mut t, P0);
+    t.resolve_all();
+    let c = t.g.current(court);
+    assert!(t.on_battlefield(c), "an Aura attached to a creature stays");
+    assert_eq!(t.obj(c).chars.name.as_str(), "Grounded");
+    assert_eq!(t.obj(c).attached_to, Some(obj(bears)));
 }
 
 #[test]
 fn copying_court_of_vantress_copies_what_it_is_copying_with_its_ability() {
-    cr!("707.9b", "707.3");
+    cr!("707.9a", "707.3");
     ruling!(
         "Court of Vantress",
         "If another permanent becomes a copy of Court of Vantress, it will become a copy of whatever Court of Vantress is currently copying (if anything) that also has Court of Vantress's last ability."
@@ -442,42 +556,55 @@ fn copying_court_of_vantress_copies_what_it_is_copying_with_its_ability() {
         .abilities
         .iter()
         .any(|a| a.text.contains("monarch")));
-    assert!(!t
-        .obj(b)
-        .chars
-        .abilities
-        .iter()
-        .any(|a| a.text.contains("you become the monarch")), "not Court's first ability");
+    assert!(
+        !t.obj(b)
+            .chars
+            .abilities
+            .iter()
+            .any(|a| a.text.contains("you become the monarch")),
+        "not Court's first ability"
+    );
 }
 
 #[test]
 fn mirrorworks_one_payment_one_token_and_it_uses_last_known_information() {
-    cr!("603.10", "608.2h", "118.12");
+    cr!("608.2h", "118.12", "707.2");
     ruling!(
         "Mirrorworks",
         "Each time the ability triggers, you can pay {2} only one time to get one token."
     );
     ruling!(
         "Mirrorworks",
-        "If the artifact that caused Mirrorworks's ability to trigger has already left the battlefield by the time the ability resolves, you can still pay {2}. If you do, you'll still put a token onto the battlefield."
+        "If the artifact that caused Mirrorworks's ability to trigger has already left the battlefield by the time the ability resolves, you can still pay {2}. If you do, you'll still put a token onto the battlefield. That token has the copiable values of the characteristics of that nontoken artifact as it last existed on the battlefield."
     );
     supported("Mirrorworks");
+    // Sculpting Steel enters as a copy of Millstone; it may leave the battlefield (back
+    // to being a Sculpting Steel card) before the ability resolves.
     for leave in [false, true] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Mirrorworks");
+        let model = t.battlefield(P1, "Millstone");
         lots(&mut t, P0);
-        let stone = t.enter(P0, "Millstone");
+        t.answer_choose(P0, &[obj(model)]);
+        let steel = t.enter(P0, "Sculpting Steel");
         t.settle();
+        assert_eq!(t.obj(t.g.current(steel)).chars.name.as_str(), "Millstone");
         assert_eq!(t.stack_len(), 1);
         if leave {
-            move_to(&mut t, stone, Zone::Exile);
+            move_to(&mut t, steel, Zone::Exile);
+            assert!(t.in_exile("Sculpting Steel"));
         }
+        // Two yeses queued: only one payment is offered.
         yes(&mut t, P0);
         yes(&mut t, P0);
         t.resolve_all();
         let toks = tokens_of(&t, P0);
         assert_eq!(toks.len(), 1, "leave={leave}");
-        assert_eq!(t.obj(toks[0]).chars.name.as_str(), "Millstone");
+        assert_eq!(
+            t.obj(toks[0]).chars.name.as_str(),
+            "Millstone",
+            "leave={leave}"
+        );
     }
 }
 
