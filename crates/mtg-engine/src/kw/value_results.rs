@@ -10,8 +10,45 @@
 
 use crate::ability::{Tally, TriggerCond};
 use crate::eval::Ctx;
+use crate::events::Event;
+use crate::object::EventInfo;
 use crate::game::Game;
+use crate::object::Zone;
 use std::collections::BTreeSet;
+
+/// The matches of this turn's event `ev` for `cond`. A permanent's entering the
+/// battlefield is matched as the permanent entered, under the control it entered under
+/// (it may have changed or come under another player's control since: "Activate only if
+/// another artifact entered the battlefield under your control this turn"); other events
+/// as [`Game::trigger_matches_ctx`] matches them.
+fn matches_of(g: &Game, cond: &TriggerCond, ctx: &Ctx, ev: &Event) -> Vec<EventInfo> {
+    if let (
+        TriggerCond::EntersBattlefield(f),
+        Event::ZoneChange {
+            new,
+            to: Zone::Battlefield,
+            cause,
+            by,
+            ..
+        },
+    ) = (cond, ev)
+    {
+        if let Some((matched, controller)) = g.matched_as_entered(*new, f, ctx) {
+            return if matched {
+                vec![EventInfo {
+                    object: Some(*new),
+                    player: Some(controller),
+                    cause: Some(*cause),
+                    caused_by: *by,
+                    ..Default::default()
+                }]
+            } else {
+                vec![]
+            };
+        }
+    }
+    g.trigger_matches_ctx(cond, ctx, ev)
+}
 
 /// The permanents the latest destroy instruction destroyed, as they last existed on the
 /// battlefield ("the number of creatures they controlled that were destroyed this way",
@@ -27,7 +64,7 @@ pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -
         _ => &[],
     };
     for ev in g.turn_events.iter().chain(g.events.iter()).chain(ahead) {
-        for info in g.trigger_matches_ctx(cond, ctx, ev) {
+        for info in matches_of(g, cond, ctx, ev) {
             match tally {
                 Tally::Events => n += 1,
                 Tally::Amount => n += info.amount.max(0) as i64,
@@ -58,7 +95,7 @@ pub fn event_objects_this_turn(
 ) -> Vec<crate::types::ObjectId> {
     let mut out = Vec::new();
     for ev in g.turn_events.iter().chain(g.events.iter()) {
-        for info in g.trigger_matches_ctx(cond, ctx, ev) {
+        for info in matches_of(g, cond, ctx, ev) {
             let o = match cond {
                 TriggerCond::DealsDamage { .. } => info.other.or(info.object),
                 _ => info.spell.or(info.object),

@@ -665,6 +665,38 @@ impl Game {
         }
     }
 
+    /// Whether the permanent `id` matched `f` as it entered the battlefield this turn,
+    /// under the control it entered under, and that player (see
+    /// `TurnHistory::permanents_entered`): "if an artifact entered the battlefield under
+    /// your control this turn" looks at the event, not at what the permanent is now (it
+    /// may have changed, left, or come under another player's control since). `None` if
+    /// it didn't enter this turn.
+    pub fn matched_as_entered(
+        &self,
+        id: ObjectId,
+        f: &Filter,
+        ctx: &Ctx,
+    ) -> Option<(bool, PlayerId)> {
+        let e = self
+            .history
+            .permanents_entered
+            .iter()
+            .rev()
+            .find(|e| e.id == id)?;
+        let o = self.obj(id);
+        let (chars, face_down) = match &e.as_entered {
+            Some((c, fd)) => (&**c, *fd),
+            None => (&o.chars, o.face_down),
+        };
+        let view = AsEntered {
+            id,
+            chars,
+            face_down,
+            controller: e.controller,
+        };
+        Some((self.matches_view(&view, id, f, ctx), e.controller))
+    }
+
     pub fn matches_view(&self, view: &dyn View, id: ObjectId, f: &Filter, ctx: &Ctx) -> bool {
         let o = self.obj(id);
         let c = view.chars(self, id);
