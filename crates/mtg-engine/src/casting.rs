@@ -1772,6 +1772,24 @@ impl Game {
             if let Some(cap) = x_cap {
                 max = max.min(cap);
             }
+            // The greatest X the spell could be cast with: its total cost, the parts that use
+            // X included, could be paid and it would have enough legal targets (CR 601.2b,
+            // 601.2c, 601.2h). A greater one isn't offered, and it's the default.
+            let greatest = (x_min..=max).rev().find(|n| {
+                x_ok(*n)
+                    && match (&x_values, &opt.alt_cost) {
+                        (Some(_), Some(c)) => {
+                            crate::x_cost_filters::payable_with_x(self, p, Some(id), c, *n)
+                        }
+                        _ => true,
+                    }
+                    && crate::default_x::spell_x_feasible(
+                        self, p, id, &chars, opt, &extra, &cast_info, *n,
+                    )
+            });
+            if let Some(n) = greatest {
+                max = n;
+            }
             // (A value the alternative cost can't be paid with isn't a legal choice, nor is
             // one the spell's text forbids: "X can't be 0", CR 107.3a.)
             let answer = self.ask(
@@ -1794,16 +1812,8 @@ impl Game {
                 {
                     n
                 }
-                // Otherwise the greatest legal value whose total cost could be paid.
-                _ => (x_min..=max)
-                    .rev()
-                    .find(|n| {
-                        payable(*n) && x_ok(*n) && {
-                            let c = self.total_cost_with(p, id, &chars, opt, *n as u32, &extra);
-                            self.can_pay_cost_optimistic(p, &c, Some(id), &chars)
-                        }
-                    })
-                    .unwrap_or(max.max(x_min)),
+                // Otherwise the greatest value the spell could be cast with.
+                _ => greatest.unwrap_or(max.max(x_min)),
             };
         }
         // CR 107.3a, 107.3b: "X can't be 0" leaves no legal value for an X that must be 0
