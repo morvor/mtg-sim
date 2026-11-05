@@ -150,7 +150,7 @@ fn identity_thief_is_too_late_for_attack_triggers() {
 
 #[test]
 fn identity_thief_copies_the_face_shown_of_a_double_faced_permanent() {
-    cr!("707.8", "712.14a", "202.3b", "701.27c");
+    cr!("707.8", "712.8e", "712.8g", "202.3b", "202.3c", "701.27c", "712.14", "712.21c");
     ruling!("Identity Thief", "If the targeted creature is a double-faced or melded permanent, Identity Thief copies the face shown. Because Identity Thief is not a double-faced card or meld card, it won't be able to transform or meld. If it copies a melded permanent or the back face of a double-faced card, its mana value will be 0. Exiled double-faced cards and exiled meld cards will return with their front faces up.");
     let mut t = TestGame::new(2);
     let delver = t.battlefield(P1, "Delver of Secrets // Insectile Aberration");
@@ -223,7 +223,7 @@ fn identity_thief_copying_a_hamlet_captain_that_became_a_permeating_mass() {
 
 #[test]
 fn volraths_shapeshifter_keeps_its_own_undefined_characteristics() {
-    cr!("707.2", "202.1a");
+    cr!("612.6", "202.2", "202.3");
     ruling!("Volrath's Shapeshifter", "If the top card in the graveyard has any other undefined characteristics, then those characteristics are not acquired and the shapeshifter uses the characteristic from its own card.");
     supported("Volrath's Shapeshifter");
     let mut t = TestGame::new(2);
@@ -326,7 +326,7 @@ fn auton_soldier_that_copies_nothing_has_no_myriad_and_dies() {
 
 #[test]
 fn mirage_mirrors_last_resolved_copy_wins_and_all_wear_off_together() {
-    cr!("613.2a", "613.7a", "514.2", "405.5");
+    cr!("613.2a", "613.7b", "514.2", "405.5");
     ruling!("Mirage Mirror", "If you activate Mirage Mirror's ability multiple times in a turn in response to itself, then each time one of those abilities resolves, it will overwrite whatever Mirage Mirror is copying. Mirage Mirror will wind up as a copy of the permanent targeted by the last ability to resolve. When the turn ends, all instances of the ability will wear off at the same time.");
     supported("Mirage Mirror");
     let mut t = TestGame::new(2);
@@ -346,7 +346,7 @@ fn mirage_mirrors_last_resolved_copy_wins_and_all_wear_off_together() {
 
 #[test]
 fn mirror_of_the_forebears_last_resolved_copy_wins_and_all_wear_off_together() {
-    cr!("613.2a", "613.7a", "514.2", "607.2a");
+    cr!("613.2a", "613.7b", "514.2", "607.2d");
     ruling!("Mirror of the Forebears", "If you activate the second ability of Mirror of the Forebears multiple times in a turn in response to itself, then each time one of those abilities resolves, it will overwrite whatever Mirror of the Forebears is copying. Mirror of the Forebears will wind up as a copy of the permanent targeted by the last ability to resolve. When the turn ends, all instances of the ability will wear off at the same time.");
     supported("Mirror of the Forebears");
     let mut t = TestGame::new(2);
@@ -637,7 +637,7 @@ fn saheelis_artistry_artifact_exception_is_copiable() {
 
 #[test]
 fn moonlit_meditation_declined_isnt_offered_again_that_turn() {
-    cr!("614.1a", "614.5");
+    cr!("614.1a");
     ruling!("Moonlit Meditation", "If you choose not to apply the replacement effect, you will not get the choice to apply it again until the next turn.");
     supported("Moonlit Meditation");
     supported("Raise the Alarm");
@@ -760,7 +760,7 @@ fn progenitor_mimics_gained_trigger_is_copiable() {
 
 #[test]
 fn stolen_identity_can_be_encoded_on_its_new_token_if_its_a_creature() {
-    cr!("702.99a", "608.2c");
+    cr!("702.99a");
     ruling!("Stolen Identity", "If the token you create is a copy of a creature, you can exile Stolen Identity encoded on that token.");
     use mtg_engine::kw::cipher::encoded_on;
     // A copy of P1's Hill Giant: P0's only creature, the token, is offered and chosen.

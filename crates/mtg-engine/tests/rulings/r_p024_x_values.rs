@@ -151,7 +151,7 @@ fn caller_of_the_untamed_copy_of_an_x_card_has_x_0() {
 
 #[test]
 fn araumi_encore_tokens_have_x_0_whatever_x_was_paid() {
-    cr!("107.3", "202.3e", "702.141a", "707.2");
+    cr!("107.3a", "602.2b", "202.3e", "702.141a", "707.2");
     ruling!("Araumi of the Dead Tide", "If the creature card has {X} in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are created. X will be 0 for those tokens.");
     supported("Araumi of the Dead Tide");
     let mut t = TestGame::new(2);
@@ -186,7 +186,7 @@ fn araumi_encore_tokens_have_x_0_whatever_x_was_paid() {
 
 #[test]
 fn the_myriad_pools_copy_of_an_x_spell_has_x_0_on_the_battlefield() {
-    cr!("107.3", "202.3e", "707.2", "106.3");
+    cr!("107.3", "202.3e", "707.2");
     ruling!("The Everflowing Well // The Myriad Pools", "If the copied spell has {X} in its mana cost, X is still 0 for the purposes of determining the mana value of the permanent on the battlefield.");
     supported("The Everflowing Well // The Myriad Pools");
     let mut t = TestGame::new(2);

@@ -213,7 +213,7 @@ fn stifle_the_delayed_trigger(t: &mut TestGame) {
 
 #[test]
 fn mimic_vat_token_isnt_exiled_if_the_delayed_trigger_is_countered() {
-    cr!("603.7c", "611.2a", "701.6b");
+    cr!("603.7a", "611.2a", "701.6a");
     ruling!("Mimic Vat", "If the token isn't exiled when the delayed triggered ability resolves (due to Stifle, perhaps), it remains on the battlefield indefinitely. It continues to have haste.");
     supported("Mimic Vat");
     let mut t = TestGame::new(2);
@@ -236,7 +236,7 @@ fn mimic_vat_token_isnt_exiled_if_the_delayed_trigger_is_countered() {
 
 #[test]
 fn splinter_twin_token_isnt_exiled_if_the_delayed_trigger_is_countered() {
-    cr!("603.7c", "707.9a", "701.6b");
+    cr!("603.7a", "707.9a", "701.6a");
     ruling!("Splinter Twin", "If the token isn't exiled when the delayed triggered ability resolves (due to Stifle, perhaps), it remains on the battlefield indefinitely. It continues to have haste.");
     supported("Splinter Twin");
     let mut t = TestGame::new(2);
@@ -254,7 +254,7 @@ fn splinter_twin_token_isnt_exiled_if_the_delayed_trigger_is_countered() {
 
 #[test]
 fn flameshadow_conjuring_token_isnt_exiled_if_the_delayed_trigger_is_countered() {
-    cr!("603.7c", "611.2a", "701.6b");
+    cr!("603.7a", "611.2a", "701.6a");
     ruling!("Flameshadow Conjuring", "If the token isn't exiled at the beginning of the next end step (perhaps because the delayed triggered ability is countered), it remains on the battlefield indefinitely. It continues to have haste.");
     supported("Flameshadow Conjuring");
     let mut t = TestGame::new(2);
@@ -274,7 +274,7 @@ fn flameshadow_conjuring_token_isnt_exiled_if_the_delayed_trigger_is_countered()
 
 #[test]
 fn mimic_vat_token_copy_of_a_noncreature_card_has_haste() {
-    cr!("707.2", "611.2a", "702.10a");
+    cr!("707.2", "611.2a", "702.10b", "302.6");
     ruling!("Mimic Vat", "If the token is a copy of a noncreature card, it will still have haste, though that won't matter unless that token somehow becomes a creature.");
     supported("Mimic Vat");
     supported("Mutavault");

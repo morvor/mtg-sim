@@ -53,7 +53,7 @@ fn spark_double_uses_its_own_characteristics_as_it_enters_for_its_counters() {
 
 #[test]
 fn renegade_doppelganger_copys_end_step_trigger_resolves_before_the_copy_ends() {
-    cr!("514.2", "513.1a", "611.2a", "707.2");
+    cr!("514.2", "513.1", "611.2a", "707.2");
     ruling!("Renegade Doppelganger", "If the creature Renegade Doppelganger copies has an ability that triggers at the beginning of the end step, that ability will trigger and resolve before Renegade Doppelganger's copy effect wears off.");
     supported("Renegade Doppelganger");
     supported("Alert Heedbonder");
@@ -89,7 +89,7 @@ fn blank_2_2(t: &TestGame, id: ObjectId) {
 
 #[test]
 fn becoming_a_copy_of_a_face_down_creature_makes_a_blank_2_2() {
-    cr!("707.2", "708.2", "702.37e");
+    cr!("707.2", "708.2");
     ruling!("Cytoshape", "If the creature becomes a copy of a face-down creature, it will become a 2/2 creature with no name, creature type, abilities, mana cost, or color. It will not become face-down and thus can’t be turned face up.");
     ruling!("Shapesharer", "If the targeted Shapeshifter becomes a copy of a face-down creature, it will become a 2/2 creature with no name, creature type, abilities, mana cost, or color. It will not become face down and thus can’t be turned face up.");
     supported("Shapesharer");

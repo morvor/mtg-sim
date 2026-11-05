@@ -128,7 +128,7 @@ fn devastating_onslaught_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn season_of_weaving_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.3", "702.172a");
+    cr!("707.2", "111.3", "700.2i");
     ruling!("Season of Weaving", "If the copied permanent is a token, the token that's created copies the original characteristics of that token as stated by the effect that created the token.");
     // "{P}{P} — Choose an artifact or creature you control. Create a token that's a copy of
     // it." Chosen once (and "{P} — Draw a card" for the rest isn't chosen).
@@ -179,7 +179,7 @@ fn saheeli_the_suns_brilliance_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn saheeli_rai_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "707.9b", "111.3", "606.3");
+    cr!("707.2", "707.9b", "111.3");
     ruling!("Saheeli Rai", "If the copied permanent is a token, the token created with Saheeli copies the original characteristics of that token as stated by the effect that created that token.");
     supported("Saheeli Rai");
     let mut t = TestGame::new(2);
@@ -198,7 +198,7 @@ fn saheeli_rai_copies_a_tokens_original_characteristics() {
 
 #[test]
 fn oko_the_ringleader_copies_a_tokens_original_characteristics() {
-    cr!("707.2", "111.3", "606.3");
+    cr!("707.2", "111.3");
     // "−5: For each other nonland permanent you control, create a token that's a copy of
     // that permanent." (The ruling is shared with the Commands above; Oko words it
     // differently.)

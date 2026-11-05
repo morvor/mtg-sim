@@ -284,7 +284,7 @@ fn shapesharer_copying_a_clone() {
 
 #[test]
 fn saheeli_sublime_artificer_copying_a_clone() {
-    cr!("707.3", "707.9b", "606.3");
+    cr!("707.3", "707.9b");
     ruling!("Saheeli, Sublime Artificer", "If the target artifact copies a permanent that's copying something else, it will become whatever the target is copying.");
     supported("Saheeli, Sublime Artificer");
     let mut t = TestGame::new(2);
