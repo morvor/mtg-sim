@@ -140,6 +140,17 @@ pub fn castable_faces(g: &Game, card: ObjectId) -> Vec<FaceState> {
         .collect()
 }
 
+/// Whether `p` could cast `card` as a fused split spell: a split card with fuse in `p`'s
+/// hand (CR 702.102a).
+pub fn fusable_from_hand(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    let o = g.obj(card);
+    o.zone == Zone::Hand(p)
+        && o.chars.has_keyword(KeywordKind::Fuse)
+        && o.card
+            .as_ref()
+            .is_some_and(|d| d.layout == crate::card::Layout::Split)
+}
+
 /// The casting method that names the face or half a card is cast with: one half of a
 /// split card, an Adventure or Omen (CR 709.3, 715.3, 720.3), or the back face of a modal
 /// double-faced card (CR 712.11b) is `CastMethod::Half(index of the face)`.
@@ -159,6 +170,11 @@ fn choose_face_to_cast(
     only: Option<&[FaceState]>,
 ) -> FaceState {
     let mut faces = castable_faces(g, card);
+    // CR 702.102a: a split card with fuse cast from its caster's hand may be cast as both
+    // halves, also while an effect lets them cast it (CR 608.2g).
+    if fusable_from_hand(g, p, card) {
+        faces.push(FaceState::Fused);
+    }
     // Only the faces an effect lets the player cast (CR 601.3e).
     if let Some(only) = only {
         faces.retain(|f| only.contains(f));
@@ -220,8 +236,11 @@ pub fn cast_during_resolution_as(
     let mut opt = CastOption::normal(face);
     opt.method = face_method(face);
     // Ways to cast it that aren't alternative costs (e.g. prototyped, CR 718.3), which
-    // keep their own method.
-    let mut keyword_way = false;
+    // keep their own method; fused (CR 702.102a) too.
+    let mut keyword_way = face == FaceState::Fused;
+    if keyword_way {
+        opt.method = CastMethod::Keyword(KeywordKind::Fuse);
+    }
     if face == FaceState::Front {
         let mut others = crate::kw::cast_options_with_any_cost(g, p, card);
         if !others.is_empty() {
