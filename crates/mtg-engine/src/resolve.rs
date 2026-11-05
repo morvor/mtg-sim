@@ -35,6 +35,12 @@ impl Game {
         // it, for the abilities linked to it (CR 607.2a): by its link, however they're
         // exiled ("search your library for seven cards, exile them", a dig).
         let prev_link = std::mem::replace(&mut self.current_link, ctx.link);
+        if !matches!(
+            e,
+            Effect::Seq(_) | Effect::If { .. } | Effect::Reflexive { .. }
+        ) {
+            ctx.reflexive_times = None;
+        }
         if crate::trigger_timing::is_sequencing(e) {
             self.exec_effect(e, ctx);
         } else {
@@ -713,6 +719,10 @@ impl Game {
                 // "Put a coin counter on this artifact. When you do, ..." (CR 603.12):
                 // whether any counter was put.
                 ctx.prev_happened = placed > 0;
+                // "Put two quest counters on ~. When you do, ...": four put on it (Doubling
+                // Season) is putting two quest counters twice, so the reflexive ability
+                // triggers twice (Craig Boone, Novac Guard ruling; CR 603.12a).
+                ctx.reflexive_times = (got.len() == 1 && k > 0).then_some(placed / k);
                 // "Put a quest counter on this enchantment. When you do, if it has four or
                 // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
                 // the counters. A choice among "them" ("Put a deathtouch counter on either
@@ -2253,16 +2263,23 @@ impl Game {
                 if let Some(p) = performer {
                     body = performed_by(body, p);
                 }
-                self.pending_triggers.push(PendingTrigger {
-                    source: src.unwrap_or(ObjectId(0)),
-                    controller,
-                    ability,
-                    event: ctx.event.clone().unwrap_or_default(),
-                    source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
-                    saved: Some(saved),
-                    body: Some(body),
-                    order: self.trigger_order,
-                });
+                // It triggers once for each time its event happened (CR 603.12a).
+                let times = ctx.reflexive_times.take().unwrap_or(1).max(1);
+                for i in 0..times {
+                    if i > 0 {
+                        self.trigger_order += 1;
+                    }
+                    self.pending_triggers.push(PendingTrigger {
+                        source: src.unwrap_or(ObjectId(0)),
+                        controller,
+                        ability: ability.clone(),
+                        event: ctx.event.clone().unwrap_or_default(),
+                        source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
+                        saved: Some(saved.clone()),
+                        body: Some(body.clone()),
+                        order: self.trigger_order,
+                    });
+                }
             }
             Effect::DuringNext { who, part, effect } => {
                 crate::next_turn::schedule(self, who, *part, effect, ctx);
