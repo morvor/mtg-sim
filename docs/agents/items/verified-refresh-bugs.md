@@ -33,4 +33,54 @@ Queued by the coordinator (Nov 5) before rulings P008. Details of both bugs are 
    Report before/after counts (before: 17,468 verified, 32,060 fully supported).
 
 ## Result
-(filled in by the implementer)
+Done Nov 5 (implementer), on 9edfc568 merged with origin 19888498.
+
+1. **Wastes for {C} costs** (`every_card.rs`, `wants_wastes`): the cost's symbols are checked
+   (`ManaSymbol::Colorless`, `ColorlessHybrid`) instead of the Debug text. Unit test
+   `every_card::tests::a_colorless_symbol_in_the_mana_cost_alone_gets_wastes` (Breaker of
+   Creation yes, Eldrazi Temple yes, Grizzly Bears and Ulamog's Crusher no) fails on the old
+   check. 18 cards in the data have {C} in a cost and not in their text (16 in the pool).
+2. **Loop detection after a forced choice** (`game_end.rs`, `note_decision`): compares
+   `loop_mark` with `actions_taken - forced_asks`, the units `check_mandatory_loop` keeps it in,
+   and leaves single-answer decisions to `forced_asks` (bumping both would count them twice; the
+   existing one-candidate test pins that). New tests in `tests/cr/r104_loop_with_targets.rs`
+   (cite 104.4b, 732.4, 732.5 and `mandatory-loop-detection`): a five-Faceless-Devourer chain and
+   a five-Hostage-Taker chain, each with a single-target choice first and two targets every time
+   around; both are draws now and both run past 4,000 decisions without a result on the old code.
+   **Charismatic Conqueror** is a different cause: no target choices are involved; with two
+   Conquerors on each side every Vampire token triggers both opposing Conquerors, only one can
+   tap it, so each token makes another and the state grows (about 1,500 tokens in 60 s, turn 10).
+   That is the known deviation `growing-loops-run-to-the-limit` (the state never repeats, so the
+   game runs to the action limit), not this bug; still slow after the fix, left as is.
+3. **Recipe**: four chunks `--from 0|8500|17000|25500 --count 8500` (34,000 cards, ~40 min each;
+   the pool is 32,672 now), `cat target/every-card-[0123].tsv`, in CLAUDE.md, `TIER_RECIPE` and
+   `verified.rs`; CARD_COVERAGE.md regenerated (its note now says a pool past 34,000 needs a
+   fifth chunk).
+4. **Incremental refresh**: fresh structure log (`cargo test --workspace`, 15 log files, all
+   passing), `--names` sweep of 28 names (the 18 {C}-cost cards, Hostage Taker, Charismatic
+   Conqueror, the reviewer's 8; Colorless Ultimatum and Wowzer, the Aspirational aren't in the
+   pool), 26 cards / 52 games, then `verified --fuzz-from` and `card-coverage`.
+
+| Tier | Before | After |
+|---|---:|---:|
+| verified | 17,468 | **17,994** (+526) |
+| round-trip | 11,085 | 10,565 |
+| compiled | 3,507 | 3,517 |
+| unsupported | 51 | 35 |
+| fully supported | 32,060 | **32,076** (+16) |
+
+Most of the gain is the fresh structure log (525 round-trip -> verified from tests landed since
+the nov4 log); 1 verified -> round-trip (Veil of Assimilation: a structure no test exercises now).
+Swept cards that changed tier: Breaker of Creation round-trip -> verified; Hostage Taker
+round-trip -> verified (its games are clean); The Capitoline Triad compiled -> verified;
+Uldaros Theorix unsupported -> verified; Baron Helmut Zemo, Chef's Kiss unsupported -> round-trip;
+Captain America First Avenger, Chaos Moon, Toggo Goblin Weaponsmith, Vesuvan Shapeshifter
+unsupported -> compiled. fuzz-cast cleared (same tier, other checks remain) for Devourer of
+Destiny, Echoes of Eternity, Flayer of Loyalties, Kozilek the Great Distortion, Wastescape
+Battlemage, Zhulodok Void Gorger. Still never cast, not the Wastes bug: Calamity of the Titans
+(needs a colorless creature card in hand to reveal), Null Elemental Blast (needs a multicolored
+spell or permanent), Chef's Kiss (needs a spell with a single target). Charismatic Conqueror
+stays compiled with fuzz-clean (slow) (both games). fuzz-swept 9: cards that compile now but
+weren't in the nov4 sweep (Backdraft, Glyph of Delusion, Glyph of Reincarnation, Guff Rewrites
+History, Lim-Dûl's Vault, Rootweaver Druid, The Toymaker's Trap, Timesifter, Xanathar Guild
+Kingpin); not swept here (outside this item's list), a `--names` sweep of them would settle them.
