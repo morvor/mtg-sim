@@ -1138,39 +1138,63 @@ impl Game {
         card: ObjectId,
         source: Option<ObjectId>,
     ) -> Option<ObjectId> {
-        if self.obj(card).zone != Zone::Hand(p) {
-            return None;
-        }
-        // "Spells and abilities your opponents control can't cause you to discard cards."
+        self.discard_together(&[(p, card)], source)
+            .into_iter()
+            .next()
+            .flatten()
+    }
+
+    /// Discards cards from players' hands at the same time (CR 701.9a): the cards one
+    /// instruction has players discard move together, so the owner arranges those put
+    /// into the same graveyard, or into the same position in a library instead (CR 404.3,
+    /// 401.4; Library of Leng's ruling). Returns, for each `(player, card)`, the card's
+    /// new object.
+    pub fn discard_together(
+        &mut self,
+        cards: &[(PlayerId, ObjectId)],
+        source: Option<ObjectId>,
+    ) -> Vec<Option<ObjectId>> {
+        let mut out = vec![None; cards.len()];
+        // The player whose spell or ability makes them discard: none when discarding pays a
+        // cost of casting a spell or activating an ability. "Spells and abilities your
+        // opponents control can't cause you to discard cards."
         let cause = crate::rule_statics::caused_actions::discard_cause(self, source);
-        if crate::rule_statics::caused_actions::discard_forbidden(self, p, cause) {
-            return None;
-        }
-        let owner = self.obj(card).owner;
-        let new = self.move_object_ev(MoveEv {
-            obj: card,
-            to: Zone::Graveyard(owner),
-            pos: LibraryPosition::Top,
-            cause: MoveCause::Discard,
-            by: Some(p),
-            etb: EtbInfo::default(),
-            source,
-        });
-        // The card is discarded even if a replacement effect puts it elsewhere (madness).
-        if let Some(n) = new {
-            // Discarding to pay a cost, while a spell is cast or an ability activated,
-            // isn't caused by a spell or ability's effect.
-            let by = match source {
-                Some(s) if self.special.casting == 0 => Some(self.obj(s).controller),
-                _ => None,
-            };
-            self.emit(Event::Discarded {
-                player: p,
-                card: n,
-                by,
+        let mut moves = Vec::new();
+        let mut moved = Vec::new();
+        for (i, &(p, card)) in cards.iter().enumerate() {
+            if self.obj(card).zone != Zone::Hand(p)
+                || crate::rule_statics::caused_actions::discard_forbidden(self, p, cause)
+            {
+                continue;
+            }
+            moves.push(MoveEv {
+                obj: card,
+                to: Zone::Graveyard(self.obj(card).owner),
+                pos: LibraryPosition::Top,
+                cause: MoveCause::Discard,
+                by: Some(p),
+                etb: EtbInfo::default(),
+                source,
             });
+            moved.push(i);
         }
-        new
+        if moves.is_empty() {
+            return out;
+        }
+        let news = self.move_objects(moves);
+        for (i, new) in moved.into_iter().zip(news) {
+            // The card is discarded even if a replacement effect puts it elsewhere
+            // (madness).
+            if let Some(n) = new {
+                self.emit(Event::Discarded {
+                    player: cards[i].0,
+                    card: n,
+                    by: cause,
+                });
+            }
+            out[i] = new;
+        }
+        out
     }
 
     /// Mills `n` cards (CR 701.17): puts the top N cards into the graveyard simultaneously.

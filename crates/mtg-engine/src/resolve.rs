@@ -1728,12 +1728,17 @@ impl Game {
                     picks.push((p, pick));
                     vec![]
                 });
-                for (p, pick) in picks {
-                    for c in pick {
-                        if let Some(n) = self.discard(p, c, ctx.source) {
-                            discarded.push(Entity::Object(n));
-                        }
-                    }
+                // Discarded at the same time (CR 701.9a, 404.3).
+                let cards: Vec<(PlayerId, ObjectId)> = picks
+                    .into_iter()
+                    .flat_map(|(p, pick)| pick.into_iter().map(move |c| (p, c)))
+                    .collect();
+                for n in self
+                    .discard_together(&cards, ctx.source)
+                    .into_iter()
+                    .flatten()
+                {
+                    discarded.push(Entity::Object(n));
                 }
                 self.end_apnap_choices(round);
                 ctx.prev_value = discarded.len() as i64;
@@ -1743,14 +1748,18 @@ impl Game {
                 ctx.set_var(vars::IT, discarded);
             }
             Effect::DiscardHand { who } => {
-                let mut discarded = Vec::new();
-                for p in self.eval_players(who, ctx) {
-                    for c in self.player(p).hand.clone() {
-                        if let Some(n) = self.discard(p, c, ctx.source) {
-                            discarded.push(Entity::Object(n));
-                        }
-                    }
-                }
+                // The hands are discarded at the same time (CR 701.9a, 404.3).
+                let cards: Vec<(PlayerId, ObjectId)> = self
+                    .eval_players(who, ctx)
+                    .into_iter()
+                    .flat_map(|p| self.player(p).hand.iter().map(move |c| (p, *c)))
+                    .collect();
+                let discarded: Vec<Entity> = self
+                    .discard_together(&cards, ctx.source)
+                    .into_iter()
+                    .flatten()
+                    .map(Entity::Object)
+                    .collect();
                 // "for each card discarded this way". A hand of no cards is discarded too
                 // ("you may discard your hand. If you do, ..."): it still happened.
                 ctx.prev_value = discarded.len() as i64;
