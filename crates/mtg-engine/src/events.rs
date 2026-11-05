@@ -303,8 +303,10 @@ pub enum Event {
     PlayerWon {
         player: PlayerId,
     },
+    /// `player` searched the library of `library` (its owner: CR 701.23a).
     Searched {
         player: PlayerId,
+        library: PlayerId,
     },
     Shuffled {
         player: PlayerId,

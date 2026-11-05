@@ -88,7 +88,7 @@ fn clarion_ultimatum_chooses_on_resolution_and_searches_once() {
     let searches =
         t.g.turn_events
             .iter()
-            .filter(|e| matches!(e, Event::Searched { player } if *player == P0))
+            .filter(|e| matches!(e, Event::Searched { player, .. } if *player == P0))
             .count();
     assert_eq!(searches, 1);
 }
