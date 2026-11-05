@@ -88,6 +88,7 @@ fn shikos_copy_may_change_any_number_of_targets() {
     let copy = spell_copies(&t)[0];
     assert_eq!(targets_of(&t, copy), vec![obj(bear)]);
     let offered = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(!offered.is_empty() && offered.iter().all(|c| c.contains(&obj(bear))));
     assert!(offered.iter().all(|c| !c.contains(&obj(enchantment))));
     t.resolve_all();
     assert!(!t.on_battlefield(bear));

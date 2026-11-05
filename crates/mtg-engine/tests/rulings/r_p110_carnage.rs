@@ -31,7 +31,7 @@ fn p1_attacks(t: &mut TestGame, creatures: &[ObjectId]) -> Vec<Option<Entity>> {
 
 #[test]
 fn maximum_carnage_affects_creatures_that_arrive_later() {
-    cr!("508.1d", "611.2c", "508.1c");
+    cr!("508.1d", "611.2c");
     ruling!(
         "Maximum Carnage",
         "Maximum Carnage's first chapter ability affects all creatures until your next turn, regardless of whether or not they were on the battlefield at the time the ability resolved."
@@ -109,4 +109,15 @@ fn maximum_carnage_doesnt_goad() {
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
     assert!(t.g.pending_triggers.is_empty());
+    // A goaded Bears (goaded by the Ancestor's enters ability) is dealt that 1 damage.
+    let mut t = TestGame::new(2);
+    carnage(&mut t);
+    let bear = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(bear)]);
+    t.enter(P0, "Vengeful Ancestor");
+    t.resolve_all();
+    assert_eq!(t.g.goaders(bear), vec![P0]);
+    assert_eq!(p1_attacks(&mut t, &[bear]), vec![Some(Entity::Player(P0))]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
 }

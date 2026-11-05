@@ -1,7 +1,8 @@
 //! Rulings batch P110 — abilities that add mana but aren't mana abilities: triggered
 //! abilities that don't trigger from a mana ability, abilities with a target, and loyalty
-//! abilities use the stack and can be responded to (CR 605.1a, 605.1b, 605.5a, 606.3);
-//! mandatory triggered abilities (CR 603.5).
+//! abilities use the stack and can be responded to (CR 605.1a, 605.1b, 605.5a, 606.3), and
+//! their unspent mana empties as the step ends (CR 106.4, 500.5); mandatory triggered
+//! abilities (CR 603.5).
 
 use crate::r_p110_common::*;
 use crate::r_s01_common::attack_with;
@@ -139,6 +140,21 @@ fn cases() -> Vec<(&'static str, Setup, u32)> {
             },
             1,
         ),
+        // "At the beginning of your precombat main phase, add mana equal to enchanted
+        // permanent's mana cost.", on a Grizzly Bears ({1}{G}).
+        (
+            "Elemental Resonance",
+            |t| {
+                let res = t.battlefield(P0, "Elemental Resonance");
+                let b = t.battlefield(P0, "Grizzly Bears");
+                assert!(t.g.attach(res, Entity::Object(b)));
+                t.set_step(P0, Step::Upkeep);
+                t.advance_to(P0, Step::PrecombatMain);
+                t.settle();
+                res
+            },
+            2,
+        ),
         (
             "Bone Miser",
             |t| {
@@ -174,9 +190,21 @@ pub fn cycle(t: &mut TestGame, card: ObjectId) {
     t.g.flush_events();
 }
 
+/// The cards whose ability isn't optional: "You get the mana whether you want it or not."
+const MANDATORY: [&str; 8] = [
+    "Akki Rockspeaker",
+    "Cathodion",
+    "Elemental Resonance",
+    "Myr Moonvessel",
+    "Priest of Gix",
+    "Priest of Urabrask",
+    "Quirion Sentinel",
+    "Su-Chi",
+];
+
 #[test]
 fn mana_adding_triggered_abilities_use_the_stack() {
-    cr!("605.1b", "605.5a", "603.3", "117.7");
+    cr!("605.1b", "605.5a", "603.3", "117.7", "106.4", "500.5");
     ruling!(
         "Akki Rockspeaker",
         "The triggered ability isn't a mana ability. It uses the stack and can be responded to."
@@ -201,7 +229,6 @@ fn mana_adding_triggered_abilities_use_the_stack() {
         "Quirion Sentinel",
         "The triggered ability isn't a mana ability. It uses the stack and can be responded to."
     );
-    ruling!("Cathodion", "The ability is never a mana ability.");
     ruling!(
         "Burning-Tree Emissary",
         "Burning-Tree Emissary's ability isn't a mana ability. It uses the stack and can be responded to."
@@ -221,6 +248,34 @@ fn mana_adding_triggered_abilities_use_the_stack() {
     ruling!(
         "Su-Chi",
         "You get the mana whether you want it or not. If you don’t spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Akki Rockspeaker",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Cathodion",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Elemental Resonance",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Myr Moonvessel",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Priest of Gix",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Priest of Urabrask",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
+    );
+    ruling!(
+        "Quirion Sentinel",
+        "You get the mana whether you want it or not. If you don't spend it, it will disappear at the end of the current step (or phase)."
     );
     ruling!(
         "Rodeo Pyromancers",
@@ -246,6 +301,7 @@ fn mana_adding_triggered_abilities_use_the_stack() {
     for (card, setup, amount) in cases() {
         supported(card);
         let mut t = TestGame::new(2);
+        let from = t.asked().len();
         let src = setup(&mut t);
         assert!(ability_on_stack(&t, src), "{card}: on the stack");
         assert_eq!(pool_total(&t, P0), 0, "{card}: no mana yet");
@@ -261,8 +317,21 @@ fn mana_adding_triggered_abilities_use_the_stack() {
             amount,
             "{card}: mana added on resolution"
         );
-        // The mana empties from the pool as the step ends.
-        mtg_engine::mana_abilities::empty_pool(&mut t.g, P0);
+        if MANDATORY.contains(&card) {
+            assert!(
+                t.asked()[from..]
+                    .iter()
+                    .all(|(_, d)| !matches!(d, Decision::YesNo { .. })),
+                "{card}: not optional"
+            );
+        }
+        // Unspent, the mana empties from the pool as the step ends.
+        let next = match t.g.turn.step {
+            Step::PrecombatMain => Step::BeginningOfCombat,
+            Step::DeclareAttackers => Step::DeclareBlockers,
+            s => panic!("{card}: {s:?}"),
+        };
+        t.advance_to(P0, next);
         assert_eq!(pool_total(&t, P0), 0, "{card}");
     }
 }

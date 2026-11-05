@@ -1,7 +1,7 @@
 //! Rulings batch P110 — Saga chapters with optional targets (CR 714.2b, 603.3d, 608.2b),
 //! values computed as an ability resolves (CR 608.2h), and "exile the top card ... you may
 //! play that card": the card is played following the normal timing rules and paying its
-//! costs (CR 601.2, 305.1, 305.2, 116.2a), even after the source is gone (CR 610.3).
+//! costs (CR 116.2a, 302.1, 305.2, 601.2h), even after the source is gone (CR 611.2a).
 
 use crate::r_p110_common::*;
 use crate::r_s02_common::can_play_land;
@@ -70,7 +70,7 @@ fn plays_follow_the_normal_rules(t: &mut TestGame, land: ObjectId, bears: Object
 
 #[test]
 fn the_flux_plays_follow_the_normal_rules() {
-    cr!("305.2", "305.1", "307.1", "601.2f");
+    cr!("116.2a", "305.2", "302.1", "601.2h");
     ruling!(
         "The Flux",
         "You must pay all costs and follow all normal timing rules to play a card with The Flux's middle chapter abilities. For example, you can play a land exiled this way only during your main phase while the stack is empty."
@@ -79,6 +79,8 @@ fn the_flux_plays_follow_the_normal_rules() {
     let land = t.library_top(P0, "Forest");
     chapter(&mut t, "The Flux", 2);
     // While the chapter ability is still on the stack, nothing is exiled yet.
+    t.settle();
+    assert_eq!(t.zone(land), Zone::Library(P0));
     t.resolve_all();
     let bears = t.library_top(P0, "Grizzly Bears");
     let saga = t.named_on_battlefield("The Flux")[0];
@@ -89,7 +91,7 @@ fn the_flux_plays_follow_the_normal_rules() {
 
 #[test]
 fn zukos_plays_follow_the_normal_rules() {
-    cr!("305.2", "307.1", "601.2f");
+    cr!("116.2a", "305.2", "302.1", "601.2h");
     ruling!(
         "Zuko, Exiled Prince",
         "You must follow all normal timing rules for a card you play using Zuko, Exiled Prince's last ability and, if it's a spell, you must pay its costs to cast it."
@@ -110,7 +112,7 @@ fn zukos_plays_follow_the_normal_rules() {
 
 #[test]
 fn chandras_exiled_cards_follow_the_normal_rules() {
-    cr!("305.2", "307.1", "601.2f", "606.3");
+    cr!("116.2a", "305.2", "302.1", "601.2h");
     ruling!(
         "Chandra, Heart of Fire",
         "You must follow the normal timing permissions and restrictions for the exiled cards for Chandra's first and last abilities. If one is a land, you can't play it unless you have land plays available."
@@ -133,7 +135,7 @@ fn chandras_exiled_cards_follow_the_normal_rules() {
 
 #[test]
 fn chandras_unplayed_cards_remain_exiled() {
-    cr!("611.2a", "400.7");
+    cr!("611.2a");
     ruling!(
         "Chandra, Heart of Fire",
         "If you don't play the exiled cards, they remain exiled."
@@ -152,7 +154,7 @@ fn chandras_unplayed_cards_remain_exiled() {
 
 #[test]
 fn chandras_ultimate_is_a_loyalty_ability() {
-    cr!("606.3", "605.1a", "606.6");
+    cr!("606.3", "605.1a");
     ruling!(
         "Chandra, Heart of Fire",
         "Because it's a loyalty ability, Chandra's last ability isn't a mana ability. It can be activated only any time you could cast a sorcery. It uses the stack and can be responded to."
@@ -177,7 +179,7 @@ fn chandras_ultimate_is_a_loyalty_ability() {
 
 #[test]
 fn the_legend_of_roku_cards_can_be_played_without_the_saga() {
-    cr!("305.2", "601.2f", "610.3", "714.2b");
+    cr!("116.2a", "305.2", "302.1", "601.2h", "611.2a", "714.2b");
     ruling!(
         "The Legend of Roku // Avatar Roku",
         "You pay all costs and follow all timing rules for cards played from exile using The Legend of Roku's first chapter ability. For example, if one of the exiled cards is a land card, you may play it only during your main phase while the stack is empty. You may play those exiled cards even if you no longer control The Legend of Roku."
@@ -223,6 +225,16 @@ fn arni_chapter_one_with_an_illegal_target_no_fight() {
         assert_eq!(t.obj_now(staying).damage, 0, "gone={gone}");
         assert!(t.on_battlefield(staying));
     }
+    // Both targets legal: they fight (the Giant deals 3 to the Bears, the Bears 2 to it).
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Hill Giant");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(mine)]);
+    t.answer_targets(P0, &[obj(theirs)]);
+    chapter(&mut t, "Arni Slays the Troll", 1);
+    t.resolve_all();
+    assert!(!t.on_battlefield(theirs));
+    assert_eq!(t.obj_now(mine).damage, 2);
 }
 
 #[test]

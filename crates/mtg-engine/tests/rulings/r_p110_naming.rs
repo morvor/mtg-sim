@@ -3,7 +3,7 @@
 //! window before the prohibition applies; the prohibition stops casting only (CR 601.3,
 //! 101.2), not spells already on the stack or putting cards onto the battlefield; it ends
 //! when the permanent leaves (CR 611.3a). Split cards and modal double-faced cards have
-//! each face's name (CR 709.4a, 712.8).
+//! each face's name (CR 709.4a, 712.8); a fused split spell has both (CR 702.102b).
 
 use crate::r_p110_common::*;
 use crate::r_s08_common::legal_cast_methods;
@@ -48,7 +48,7 @@ fn nevermore_doesnt_stop_putting_the_card_onto_the_battlefield() {
 
 #[test]
 fn nevermore_naming_one_face_of_a_modal_double_faced_card() {
-    cr!("712.8", "601.3");
+    cr!("712.8", "712.12", "601.3");
     ruling!(
         "Nevermore",
         "If you name one of the faces of a modal double-faced card, players may still play the face you didn't name."
@@ -68,7 +68,7 @@ fn nevermore_naming_one_face_of_a_modal_double_faced_card() {
 
 #[test]
 fn null_chamber_doesnt_counter_spells_on_the_stack() {
-    cr!("601.3", "101.2", "702.8a");
+    cr!("601.3", "101.2");
     ruling!(
         "Null Chamber",
         "If you somehow manage to cast this while other spells are on the stack, those spells won't be countered."
@@ -98,29 +98,32 @@ fn null_chamber_doesnt_counter_spells_on_the_stack() {
 
 #[test]
 fn nevermore_applies_as_soon_as_the_name_is_chosen() {
-    cr!("614.12", "614.1c", "117.3b");
+    cr!("614.12", "614.1c");
     ruling!(
         "Nevermore",
         "No one can cast spells or activate abilities between the time a card is named and the time that Nevermore's ability starts to work."
     );
-    // P0 casts Nevermore naming Lightning Bolt and the game runs on: at every priority
-    // P1 gets after the name was chosen, Bolt can't be cast.
+    // P0 casts Nevermore naming Lightning Bolt and the game runs on. The name is chosen as
+    // Nevermore enters (not by a trigger that could be responded to): at every priority
+    // P1 gets while Nevermore is on the battlefield, it is named and Bolt can't be cast.
     let mut t = TestGame::new(2);
     t.lands(P1, "Mountain", 1);
-    let bolt = t.hand(P1, "Lightning Bolt");
+    t.hand(P1, "Lightning Bolt");
     let seen = watch(
         &mut t,
         P1,
         |d| matches!(d, Decision::Priority { .. }),
         |g| {
-            let named = g
+            let nevermore: Vec<_> = g
                 .permanents()
-                .any(|o| o.chars.name == "Nevermore" && o.choices.card_name.is_some());
+                .filter(|o| o.chars.name == "Nevermore")
+                .map(|o| o.choices.card_name.clone())
+                .collect();
             let bolt_castable = g.clone().legal_actions(P1).iter().any(|a| {
                 matches!(a, mtg_engine::decision::Action::Cast { card, .. }
                     if g.obj(*card).chars.name == "Lightning Bolt")
             });
-            (named, bolt_castable)
+            (nevermore, bolt_castable)
         },
     );
     t.answer(
@@ -131,10 +134,15 @@ fn nevermore_applies_as_soon_as_the_name_is_chosen() {
     cast_new(&mut t, P0, "Nevermore", &[]);
     t.advance_to(P0, Step::End);
     let seen = seen.lock().unwrap().clone();
-    assert!(seen.contains(&(false, true)), "Bolt castable before");
-    assert!(seen.contains(&(true, false)), "priority after");
-    assert!(seen.iter().all(|(named, castable)| !(named & castable)));
-    let _ = bolt;
+    assert!(
+        seen.contains(&(vec![], true)),
+        "Bolt castable while Nevermore is on the stack"
+    );
+    let named = vec![Some("Lightning Bolt".into())];
+    assert!(seen.contains(&(named.clone(), false)), "priority after");
+    assert!(seen
+        .iter()
+        .all(|(nevermore, castable)| nevermore.is_empty() || (*nevermore == named && !castable)));
 }
 
 #[test]
@@ -171,7 +179,7 @@ fn nevermores_name_can_be_cast_again_once_it_leaves() {
 
 #[test]
 fn nevermore_naming_half_of_a_split_card() {
-    cr!("709.4a", "702.102d", "601.3");
+    cr!("709.4a", "702.102b", "601.3");
     ruling!(
         "Nevermore",
         "You can name either half of a split card, but not both. If you do so, that half (and both halves, if the split card has fuse) can't be cast. The other half is unaffected."

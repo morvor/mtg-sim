@@ -159,7 +159,7 @@ fn with_too_few_creatures_a_player_sacrifices_all_of_them() {
 
 #[test]
 fn by_invitation_only_numbers_include_zero_and_thirteen() {
-    cr!("107.1", "701.21a");
+    cr!("701.21a");
     ruling!(
         "By Invitation Only",
         "The numbers you may choose include 0 and 13."
@@ -373,7 +373,7 @@ fn necrotic_hex_sacrifices_then_creates_six_zombies() {
         "You'll create six tapped Zombies no matter how many creatures you sacrifice."
     );
     supported("Necrotic Hex");
-    // P0 controls seven creatures, P1 eight (with Blood Artist).
+    // P0 controls seven creatures (with Blood Artist, which it keeps), P1 eight.
     let (t, mine, _, seen, from) =
         each_player_sacrifices("Necrotic Hex", P0, 7, 8, &[1, 2, 3, 4, 5, 6]);
     assert_eq!(sacrifice_choosers(&t, from), vec![P0, P1]);
@@ -395,7 +395,7 @@ fn necrotic_hex_sacrifices_then_creates_six_zombies() {
 
 #[test]
 fn doomsday_confluence_copies_keep_the_modes() {
-    cr!("707.10", "700.2h");
+    cr!("707.10", "700.2d", "700.2g");
     ruling!(
         "Doomsday Confluence",
         "If an effect copies Doomsday Confluence, the copy will have the same modes chosen the same number of times."

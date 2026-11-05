@@ -1,7 +1,8 @@
 //! Rulings batch P110 — more abilities that add mana: "the third time this ability has
 //! resolved this turn" (CR 707.10b, 608.2b), first main phases (CR 505.1a, 505.1b),
-//! delayed mana (CR 603.7), triggered mana abilities (CR 605.1b, 605.4a), mana emptying
-//! (CR 106.4, 500.5), and the conditions of a few mana triggers.
+//! delayed mana (CR 603.7), mana-adding triggers on paying a mana ability's cost that
+//! aren't mana abilities (CR 605.1b, 605.5a), mana emptying (CR 106.4, 500.5), and the
+//! conditions of a few mana triggers.
 
 use crate::r_p110_common::*;
 use crate::r_s01_common::attack_with;
@@ -30,7 +31,7 @@ fn trample(t: &mut TestGame, src: ObjectId, cost: (ManaType, u32), target: Objec
 
 #[test]
 fn soulbright_abilities_use_the_stack_and_pay_off_the_third_time_only() {
-    cr!("605.5a", "608.2h", "117.7");
+    cr!("605.5a", "608.2h");
     ruling!(
         "Soulbright Flamekin",
         "Soulbright Flamekin's ability uses the stack and can be responded to. Because it has a target, it's not a mana ability, even if you know that it will produce mana."
@@ -168,7 +169,7 @@ fn first_main_phase_abilities_trigger_once_a_turn() {
 
 #[test]
 fn conduit_of_storms_mana_comes_even_if_it_left() {
-    cr!("603.7", "603.7c");
+    cr!("603.7", "603.7a");
     ruling!(
         "Conduit of Storms // Conduit of Emrakul",
         "You’ll add mana at the beginning of the next main phase whether or not Conduit of Storms (or Conduit of Emrakul) is still on the battlefield."
@@ -233,40 +234,34 @@ fn mana_sculpts_delayed_mana() {
 
 #[test]
 fn rose_triggers_for_any_junk_sacrifice() {
-    cr!("605.1b", "605.4a", "603.2", "605.5a");
-    interp!("mana-trigger-from-a-mana-ability-cost");
+    cr!("603.2", "603.3", "605.1b", "605.5a");
+    interp!("mana-ability-cost-trigger-uses-the-stack");
     ruling!(
         "Rose, Cutthroat Raider",
         "Rose's last ability triggers when you sacrifice a Junk for any reason, not just to activate a Junk's activated ability."
     );
     supported("Rose, Cutthroat Raider");
     supported("Krark-Clan Ironworks");
-    // Sacrificed to Krark-Clan Ironworks' mana ability ("Sacrifice an artifact: Add
-    // {C}{C}."): Rose's ability triggers from a mana ability, so it is one and adds {R}
-    // at once (CR 605.1b).
+    supported("Kuldotha Rebirth");
+    // Sacrificed for its own ability: the trigger uses the stack.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Rose, Cutthroat Raider");
-    let kci = t.battlefield(P0, "Krark-Clan Ironworks");
+    let rose = t.battlefield(P0, "Rose, Cutthroat Raider");
     let junk = create_token(&mut t, P0, "Junk");
-    t.answer_choose(P0, &[obj(junk)]);
-    assert!(crate::r_s20_common::tap_for_mana(
-        &mut t,
-        P0,
-        kci,
-        "Sacrifice"
-    ));
-    assert!(t.g.pending_triggers.is_empty());
+    t.library_top(P0, "Grizzly Bears");
+    act(&mut t, P0, junk, "Exile the top card", &[]).unwrap();
     t.settle();
-    assert!(t.g.stack.is_empty());
-    assert_eq!(pool_of(&t, P0, ManaType::C), 2);
+    assert_eq!(abilities_from(&t, rose).len(), 1);
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve();
     assert_eq!(pool_of(&t, P0, ManaType::R), 1);
-    // The same mana, while paying for a spell: Rose's {R} and the Ironworks' {C}{C} cast
-    // Hill Giant ({3}{R}).
+    // Sacrificed to pay for Krark-Clan Ironworks' mana ability ("Sacrifice an artifact:
+    // Add {C}{C}."): it triggers too. Its trigger event is the sacrifice, not the mana
+    // ability, so it isn't a mana ability: the Ironworks' {C}{C} comes at once, Rose's
+    // {R} from the stack, and P1 may respond before it's added.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Rose, Cutthroat Raider");
+    let rose = t.battlefield(P0, "Rose, Cutthroat Raider");
     let kci = t.battlefield(P0, "Krark-Clan Ironworks");
     let junk = create_token(&mut t, P0, "Junk");
-    t.lands(P0, "Wastes", 1);
     t.answer_choose(P0, &[obj(junk)]);
     assert!(crate::r_s20_common::tap_for_mana(
         &mut t,
@@ -274,12 +269,139 @@ fn rose_triggers_for_any_junk_sacrifice() {
         kci,
         "Sacrifice"
     ));
-    let giant = t.hand(P0, "Hill Giant");
-    t.cast(P0, giant).go();
+    assert!(!t.is_live(junk));
+    assert!(t.on_battlefield(kci));
+    assert_eq!(pool_of(&t, P0, ManaType::C), 2);
+    assert_eq!(pool_of(&t, P0, ManaType::R), 0);
+    t.settle();
+    assert!(ability_on_stack(&t, rose));
+    let life = t.life(P0);
+    cast_new(&mut t, P1, "Shock", &[Entity::Player(P0)]);
+    t.resolve();
+    assert_eq!(t.life(P0), life - 2);
+    assert_eq!(pool_of(&t, P0, ManaType::R), 0);
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
-    // A trigger with a target isn't a mana ability, even from a mana ability's cost:
-    // Blood Artist's, when a creature is sacrificed to Ashnod's Altar.
+    assert_eq!(pool_of(&t, P0, ManaType::R), 1);
+    // Sacrificed to cast a spell (Kuldotha Rebirth: "As an additional cost to cast this
+    // spell, sacrifice an artifact."): Rose's ability goes on the stack above the spell.
+    let mut t = TestGame::new(2);
+    let rose = t.battlefield(P0, "Rose, Cutthroat Raider");
+    let junk = create_token(&mut t, P0, "Junk");
+    t.answer_choose(P0, &[obj(junk)]);
+    let spell = cast_new(&mut t, P0, "Kuldotha Rebirth", &[]);
+    assert!(!t.is_live(junk));
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    assert_eq!(abilities_from(&t, rose), vec![*t.g.stack.last().unwrap()]);
+    t.resolve();
+    assert_eq!(pool_of(&t, P0, ManaType::R), 1);
+    assert_eq!(t.g.stack, vec![spell], "the spell hasn't resolved yet");
+}
+
+/// What makes a mana-adding trigger trigger on paying an activated mana ability's cost:
+/// the trigger's source, and the mana ability's source and needle (the mana ability's
+/// sacrifice or discard choice is queued).
+type CostTrigger = fn(&mut TestGame) -> (ObjectId, ObjectId, &'static str);
+
+#[test]
+fn mana_triggers_on_a_mana_abilitys_cost_use_the_stack() {
+    cr!("605.1b", "605.5a", "603.3", "117.7");
+    interp!("mana-ability-cost-trigger-uses-the-stack");
+    ruling!("Cathodion", "The ability is never a mana ability.");
+    ruling!(
+        "Myr Moonvessel",
+        "The triggered ability isn't a mana ability. It uses the stack and can be responded to."
+    );
+    ruling!(
+        "Bone Miser",
+        "This creature’s second ability isn’t a mana ability. It uses the stack and can be responded to."
+    );
+    // (card, setup, the mana ability's mana, the trigger's mana)
+    let cases: Vec<(&str, CostTrigger, u32, u32)> = vec![
+        // Sacrificed to Ashnod's Altar: "Sacrifice a creature: Add {C}{C}."
+        (
+            "Cathodion",
+            |t| {
+                let altar = t.battlefield(P0, "Ashnod's Altar");
+                let c = t.battlefield(P0, "Cathodion");
+                t.answer_choose(P0, &[obj(c)]);
+                (c, altar, "Sacrifice")
+            },
+            2,
+            3,
+        ),
+        // Sacrificed to Krark-Clan Ironworks: "Sacrifice an artifact: Add {C}{C}."
+        (
+            "Myr Moonvessel",
+            |t| {
+                let kci = t.battlefield(P0, "Krark-Clan Ironworks");
+                let m = t.battlefield(P0, "Myr Moonvessel");
+                t.answer_choose(P0, &[obj(m)]);
+                (m, kci, "Sacrifice")
+            },
+            2,
+            1,
+        ),
+        (
+            "Su-Chi",
+            |t| {
+                let kci = t.battlefield(P0, "Krark-Clan Ironworks");
+                let s = t.battlefield(P0, "Su-Chi");
+                t.answer_choose(P0, &[obj(s)]);
+                (s, kci, "Sacrifice")
+            },
+            2,
+            4,
+        ),
+        // "Whenever you sacrifice an artifact, put a +1/+1 counter on this creature and add
+        // {R}.": a Treasure sacrificed for its own mana.
+        (
+            "Crime Novelist",
+            |t| {
+                let n = t.battlefield(P0, "Crime Novelist");
+                let treasure = create_token(t, P0, "Treasure");
+                (n, treasure, "Sacrifice")
+            },
+            1,
+            1,
+        ),
+        // "Whenever you discard a land card, add {B}{B}.": a Forest discarded to Lion's
+        // Eye Diamond ("Discard your hand, Sacrifice Lion's Eye Diamond: Add three mana of
+        // any one color.").
+        (
+            "Bone Miser",
+            |t| {
+                let m = t.battlefield(P0, "Bone Miser");
+                let led = t.battlefield(P0, "Lion's Eye Diamond");
+                t.hand(P0, "Forest");
+                (m, led, "Discard your hand")
+            },
+            3,
+            2,
+        ),
+    ];
+    for (card, setup, first, then) in cases {
+        supported(card);
+        let mut t = TestGame::new(2);
+        let (src, mana_source, needle) = setup(&mut t);
+        assert!(
+            crate::r_s20_common::tap_for_mana(&mut t, P0, mana_source, needle),
+            "{card}"
+        );
+        assert_eq!(pool_total(&t, P0), first, "{card}: only the mana ability's mana");
+        t.settle();
+        assert!(ability_on_stack(&t, src), "{card}: on the stack");
+        // P1 responds: Shock resolves before the trigger adds its mana.
+        let life = t.life(P0);
+        cast_new(&mut t, P1, "Shock", &[Entity::Player(P0)]);
+        t.resolve();
+        assert_eq!(t.life(P0), life - 2, "{card}");
+        assert_eq!(pool_total(&t, P0), first, "{card}");
+        t.resolve_all();
+        assert_eq!(pool_total(&t, P0), first + then, "{card}");
+    }
+    // A trigger with a target isn't a mana ability either: Blood Artist's, when a creature
+    // is sacrificed to Ashnod's Altar.
     let mut t = TestGame::new(2);
     let artist = t.battlefield(P0, "Blood Artist");
     let altar = t.battlefield(P0, "Ashnod's Altar");
@@ -293,22 +415,11 @@ fn rose_triggers_for_any_junk_sacrifice() {
     ));
     t.settle();
     assert!(ability_on_stack(&t, artist));
-    // Sacrificed for its own ability: the trigger uses the stack.
-    let mut t = TestGame::new(2);
-    let rose = t.battlefield(P0, "Rose, Cutthroat Raider");
-    let junk = create_token(&mut t, P0, "Junk");
-    t.library_top(P0, "Grizzly Bears");
-    act(&mut t, P0, junk, "Exile the top card", &[]).unwrap();
-    t.settle();
-    assert!(ability_on_stack(&t, rose));
-    assert_eq!(pool_total(&t, P0), 0);
-    t.resolve();
-    assert_eq!(pool_of(&t, P0, ManaType::R), 1);
 }
 
 #[test]
 fn rodeo_pyromancers_doesnt_trigger_on_the_turn_its_cast() {
-    cr!("603.2", "603.6a");
+    cr!("603.2", "113.6");
     ruling!(
         "Rodeo Pyromancers",
         "That ability triggers only while Rodeo Pyromancers is on the battlefield. Notably, it won’t trigger on a turn you cast Rodeo Pyromancers, no matter which spell it was."

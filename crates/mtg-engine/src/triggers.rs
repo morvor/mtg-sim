@@ -536,7 +536,7 @@ impl Game {
         // CR 801.7: only events entirely within the controller's range of influence.
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
-            if self.is_mana_ability_trigger(&t) {
+            if t.ability.is_mana_ability() {
                 self.resolve_trigger_immediately(t);
             } else {
                 self.pending_triggers.push(t);
@@ -921,7 +921,7 @@ impl Game {
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
             // CR 605.1b / 605.4a: triggered mana abilities resolve immediately.
-            if self.is_mana_ability_trigger(&t) {
+            if t.ability.is_mana_ability() {
                 self.resolve_trigger_immediately(t);
             } else {
                 self.pending_triggers.push(t);
@@ -2527,29 +2527,6 @@ impl Game {
             source: t.source,
         });
         self.flush_events();
-    }
-
-    /// Whether a triggered ability that just triggered is a mana ability (CR 605.1b): one
-    /// recognized from its trigger ("is tapped for mana"), or one without targets that
-    /// could add mana and triggered from activating an activated mana ability (an event
-    /// of paying its costs, such as "whenever you sacrifice a Junk" when a Junk is
-    /// sacrificed to pay for one).
-    fn is_mana_ability_trigger(&self, t: &PendingTrigger) -> bool {
-        if t.ability.is_mana_ability() {
-            return true;
-        }
-        let Some(&(_, src, uid)) = self.special.activating.last() else {
-            return false;
-        };
-        let activating_mana_ability = self.obj(src).chars.abilities.iter().any(|a| {
-            a.uid == uid && matches!(&a.kind, AbilityKind::Activated(x) if x.is_mana_ability)
-        });
-        let body = match (&t.body, &t.ability.kind) {
-            (Some(b), _) => b,
-            (None, AbilityKind::Triggered(tr)) => &tr.body,
-            _ => return false,
-        };
-        activating_mana_ability && crate::ability::could_be_triggered_mana_ability(body)
     }
 
     fn resolve_trigger_immediately(&mut self, t: PendingTrigger) {

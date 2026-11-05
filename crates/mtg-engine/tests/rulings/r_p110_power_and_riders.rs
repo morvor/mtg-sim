@@ -165,7 +165,7 @@ fn block_then(
 
 #[test]
 fn changing_a_blockers_power_doesnt_unblock() {
-    cr!("509.1h", "506.4", "509.1b");
+    cr!("509.1h", "509.1b");
     ruling!(
         "Stormkeld Vanguard // Bear Down",
         "Once Stormkeld Vanguard has become blocked, reducing the power of a creature blocking it to 2 or less won't cause it to become unblocked."
@@ -500,7 +500,7 @@ fn sacellum_godspeaker_is_a_mana_ability() {
 
 #[test]
 fn sacellum_godspeaker_cant_reveal_the_spell_being_cast() {
-    cr!("601.2a", "601.2g", "605.3a");
+    cr!("601.2a", "605.3a");
     ruling!(
         "Sacellum Godspeaker",
         "While you’re casting a creature spell, that card is on the stack, so you can’t reveal it with Sacellum Godspeaker’s ability to produce mana. You can, however, activate this mana ability and reveal that creature card from your hand before you begin to cast the card as a spell."
