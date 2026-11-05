@@ -218,6 +218,7 @@ fn inkshield_and_another_prevention_effect_you_choose_the_order() {
 #[test]
 fn glarecaster_redirects_every_chunk_dealt_at_the_same_time() {
     cr!("615.12", "614.9", "510.2");
+    interp!("next-time-damage-batch");
     ruling!(
         "Glarecaster",
         "If both you and this card would be dealt damage at the same time, or if either you or this card would be dealt damage from multiple sources at the same time, the redirection will apply to both chunks of damage."
@@ -442,4 +443,29 @@ fn selfless_squire_s_prevention_outlasts_it() {
     kill(&mut t, squire);
     bolt(&mut t, P1, pl(P0));
     assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn a_next_time_prevention_covers_all_of_a_source_s_simultaneous_damage() {
+    cr!("615.8", "510.2", "702.19c");
+    interp!("next-time-damage-batch");
+    supported("Awe Strike");
+    // Awe Strike ("The next time target creature would deal damage this turn, prevent
+    // that damage. You gain life equal to the damage prevented this way.") on a trampling
+    // Colossal Dreadmaw (6/6) blocked by Grizzly Bears: 2 to the Bears and 4 to P0, all
+    // prevented; P0 gains 6.
+    let mut t = TestGame::new(2);
+    let maw = add(&mut t, P1, "Colossal Dreadmaw");
+    let bears = add(&mut t, P0, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    cast_resolve(&mut t, P0, "Awe Strike", "W", &[obj(maw)]);
+    t.attack(&[(maw, pl(P0))], &[(bears, maw)]);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(dmg(&t, bears), 0);
+    assert_eq!(t.life(P0), 26);
+    // It's used up: the next damage is dealt.
+    t.set_step(P1, Step::PostcombatMain);
+    t.g.deal_damage(maw, pl(P0), 6, false);
+    t.settle();
+    assert_eq!(t.life(P0), 20);
 }

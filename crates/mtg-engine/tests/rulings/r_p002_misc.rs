@@ -395,3 +395,41 @@ fn reign_of_the_pit_choices_in_turn_order_then_all_at_once() {
     assert_eq!(demons.len(), 1);
     assert_eq!(t.pt(demons[0]), (5, 5), "2 + 1 + 2");
 }
+
+// ---------------------------------------------------------------------------------------
+// Mutiny: "Target creature an opponent controls deals damage equal to its power to another
+// target creature that player controls."
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn mutiny_with_either_target_illegal_deals_no_damage() {
+    cr!("608.2b", "115.1");
+    ruling!(
+        "Mutiny",
+        "If either or both targets are illegal when Mutiny resolves, no creature will deal or be dealt damage."
+    );
+    supported("Mutiny");
+    // 0: both legal (the Giant deals 3 to the Craw Wurm); 1: the Giant leaves; 2: the Wurm
+    // leaves; 3: P2 gains control of the Wurm (no longer a creature "that player"
+    // controls).
+    for case in 0..4 {
+        let mut t = TestGame::new(3);
+        let giant = add(&mut t, P1, "Hill Giant");
+        let wurm = add(&mut t, P1, "Craw Wurm");
+        let spell = cast(&mut t, P0, "Mutiny", "R", &[obj(giant), obj(wurm)]);
+        assert_eq!(crate::r_s25_common::targets_of(&t, spell), vec![obj(giant), obj(wurm)]);
+        match case {
+            1 => kill(&mut t, giant),
+            2 => kill(&mut t, wurm),
+            3 => crate::r_s06_common::give_control(&mut t, wurm, P2),
+            _ => {}
+        }
+        t.resolve_all();
+        let dealt = crate::r_s30_common::damage_events(&t);
+        if case == 0 {
+            assert_eq!(dealt, vec![(giant, obj(wurm), 3, false)]);
+        } else {
+            assert!(dealt.is_empty(), "case {case}: {dealt:?}");
+        }
+    }
+}
