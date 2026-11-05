@@ -76,16 +76,16 @@ fn winotas_human_enters_attacking_without_attack_triggers() {
 
 #[test]
 fn winotas_human_enters_attacking_despite_cant_attack_effects() {
-    cr!("508.4", "508.1d");
+    cr!("508.4", "508.4c");
     ruling!(
         "Winota, Joiner of Forces",
         "Any effects that say that the Human can’t attack (such as that of Propaganda, or if you get a Human with defender) affect only the declaration of attackers. They won’t stop the Human you find from entering the battlefield attacking."
     );
     supported("Propaganda");
-    // A Human with defender (Wall of Hope? no: Sentinel... a Human Wall), and Propaganda.
+    // A Human with defender on top of the library (the other cards Winota looks at aren't
+    // Humans), and Propaganda: the two lands pay only for the attacking Bears.
     let mut t = TestGame::new(2);
-    let (_, bears, human) = winota(&mut t, "Grizzly Bears");
-    let _ = human;
+    let (_, bears, _) = winota(&mut t, "Grizzly Bears");
     let def = crate::r_s01_common::custom_card(
         "Human Pikeman",
         "Creature — Human Soldier",
@@ -103,11 +103,12 @@ fn winotas_human_enters_attacking_despite_cant_attack_effects() {
     assert_eq!(t.zone(pikeman), Zone::Battlefield);
     assert!(attacking(&t, pikeman));
     assert_eq!(attacks(&t, pikeman), Some(pl(P1)));
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
 }
 
 #[test]
 fn winota_triggers_separately_for_each_attacker() {
-    cr!("603.2", "508.3a");
+    cr!("603.2", "603.2c", "508.3a");
     ruling!(
         "Winota, Joiner of Forces",
         "If more than one non-Human creature you control attacks, Winota’s ability triggers separately for each of them. For example, if three non-Human creatures attack, you won’t look at the top eighteen cards of your library at once"
@@ -150,8 +151,7 @@ fn winotas_human_may_attack_a_different_player() {
 // Basri Ket
 // ---------------------------------------------------------------------------
 
-/// P0's Basri Ket with `loyalty` loyalty, its −2 activated (and resolved) in P0's main
-/// phase.
+/// P0's Basri Ket (three loyalty), its −2 activated (and resolved) in P0's main phase.
 fn basri_minus_two(t: &mut TestGame) -> ObjectId {
     let basri = t.battlefield(P0, "Basri Ket");
     activate_containing(t, P0, basri, "nontoken creatures attack").unwrap();
@@ -161,7 +161,7 @@ fn basri_minus_two(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn basri_soldiers_enter_attacking_without_attack_triggers_and_despite_propaganda() {
-    cr!("508.4", "508.3a", "508.1d", "603.7a");
+    cr!("508.4", "508.3a", "508.4c", "603.7a");
     ruling!(
         "Basri Ket",
         "Although the Soldiers are attacking creatures, they were never declared as attacking creatures. This means that abilities that trigger whenever a creature attacks won't trigger when the Soldiers enter the battlefield attacking."
@@ -324,11 +324,17 @@ fn akiri_unattaches_the_chosen_equipment_on_resolution() {
     let second = attach_new(&mut t, P0, "Bonesplitter", obj(bears));
     t.g.tap(bears);
     t.lands(P0, "Plains", 1);
+    let from = t.asked().len();
     activate_containing(&mut t, P0, akiri, "unattach").unwrap();
-    // Chosen while it resolves.
+    // Chosen while it resolves, not as it's activated.
+    let chosen = |t: &TestGame| {
+        crate::r_s07_common::count_asked(t, from, |d| matches!(d, Decision::ChooseEntities { .. }))
+    };
+    assert_eq!(chosen(&t), 0);
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(second)]);
     t.resolve_all();
+    assert_eq!(chosen(&t), 1);
     assert_eq!(t.obj_now(second).attached_to, None);
     assert_eq!(t.obj_now(first).attached_to, Some(obj(bears)));
     assert!(t.obj_now(bears).tapped);

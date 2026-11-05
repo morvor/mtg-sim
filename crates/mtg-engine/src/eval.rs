@@ -1967,7 +1967,7 @@ pub(crate) fn alternative_zones(f: &Filter) -> Option<Vec<ZoneKind>> {
 
 /// Like [`alternative_zones`], but an alternative that names no zone stands for the
 /// battlefield when another alternative names one ("Noble creatures you control and Lesson
-/// spells you control have lifelink": the battlefield and the stack).
+/// spells you control have lifelink": the battlefield and the stack; CR 109.2).
 pub(crate) fn alternative_zones_or_battlefield(f: &Filter) -> Option<Vec<ZoneKind>> {
     match f {
         Filter::Or(v) if v.iter().any(|x| x.zone().is_some()) => Some(
@@ -1977,6 +1977,33 @@ pub(crate) fn alternative_zones_or_battlefield(f: &Filter) -> Option<Vec<ZoneKin
         ),
         Filter::And(v) => v.iter().find_map(alternative_zones_or_battlefield),
         _ => None,
+    }
+}
+
+impl Game {
+    /// For the alternatives of [`alternative_zones_or_battlefield`]: whether `id` matches
+    /// an alternative of the zone it's in, each alternative in its own zone and one that
+    /// names no zone on the battlefield (CR 109.2): a Noble creature spell isn't one of
+    /// "Noble creatures you control and Lesson spells you control".
+    pub(crate) fn matches_alternative_of_its_zone(
+        &self,
+        id: ObjectId,
+        f: &Filter,
+        ctx: &Ctx,
+    ) -> bool {
+        match f {
+            Filter::Or(v) if v.iter().any(|x| x.zone().is_some()) => {
+                let here = self.obj(id).zone.kind();
+                v.iter().any(|x| {
+                    here == Some(x.zone().unwrap_or(ZoneKind::Battlefield))
+                        && self.matches(id, x, ctx)
+                })
+            }
+            Filter::And(v) => v
+                .iter()
+                .all(|x| self.matches_alternative_of_its_zone(id, x, ctx)),
+            _ => true,
+        }
     }
 }
 

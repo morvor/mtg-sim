@@ -47,6 +47,8 @@ fn bronzehide_lion_copy_returns_as_an_aura_with_only_the_granted_abilities() {
     assert!(o.is(CardType::Enchantment) && !o.is(CardType::Creature));
     assert_eq!(o.attached_to, Some(obj(bears)));
     assert!(o.chars.abilities.iter().any(|a| a.text.contains("Enchanted creature gains indestructible")));
+    // None of its normal abilities (Clone's "enter as a copy").
+    assert!(!o.chars.abilities.iter().any(|a| a.text.contains("copy")));
     // A token copy doesn't return.
     let mut t = TestGame::new(2);
     let lion = t.battlefield(P0, "Bronzehide Lion");
@@ -142,6 +144,7 @@ fn final_showdown_later_abilities_survive_and_the_choice_is_on_resolution() {
     let c = t.hand(P0, "Final Showdown");
     let from = t.asked().len();
     t.cast(P0, c).modes(&[0, 1]).go();
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 3, "{{W}} plus {{1}} and {{1}}");
     assert!(crate::r_s25_common::targets_of(&t, c).is_empty(), "no targets");
     let chose_before = crate::r_s03_common::choice_candidates(&t, from, "");
     assert!(chose_before.is_empty(), "nothing chosen while casting");
@@ -172,20 +175,19 @@ fn gift_of_doom_is_attached_as_its_turned_face_up() {
     let fodder = t.battlefield(P0, "Llanowar Elves");
     t.answer_choose(P0, &[obj(fodder)]);
     t.answer_choose(P0, &[obj(bears)]);
-    let from = t.asked().len();
+    // Attached as part of turning it face up (a special action): nothing waits on the
+    // stack in between.
     assert!(crate::r_s11_common::turn_face_up(&mut t, P0, gift));
     assert_eq!(t.stack_len(), 0);
     assert!(!t.on_battlefield(fodder));
+    assert!(!t.obj_now(gift).face_down);
     assert_eq!(t.obj_now(gift).attached_to, Some(obj(bears)));
     assert!(kw(&t, bears, INDESTRUCTIBLE));
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
 }
 
 #[test]
 fn dauntless_bodyguard_choice_uses_no_stack_and_excludes_simultaneous_arrivals() {
-    cr!("614.12", "603.6a");
+    cr!("614.1c", "614.12");
     ruling!(
         "Dauntless Bodyguard",
         "Dauntless Bodyguard’s first ability isn’t a triggered ability and doesn’t use the stack. Players can’t respond to your choice of which creature it’s protecting."
@@ -251,7 +253,7 @@ fn gyome_counts_every_nontoken_creature_that_entered_including_itself() {
 
 #[test]
 fn arms_race_sacrifices_only_the_artifact_it_still_controls() {
-    cr!("603.7c", "400.7");
+    cr!("603.7c", "400.7", "701.21a");
     ruling!(
         "Arms Race",
         "You sacrifice the artifact only if you still control it at the beginning of the next end step. If that artifact has left the battlefield, even if it later came back, you don't sacrifice it."

@@ -8,6 +8,7 @@ use crate::r_p073_common::*;
 use crate::r_s01_common::supported;
 use crate::r_s06_common::{activate_containing, damage, give_control};
 use crate::r_s13_common::add;
+use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -268,7 +269,7 @@ fn oath_of_eorl_monarch_needs_its_target_only_if_one_was_chosen() {
 
 #[test]
 fn sheltered_by_ghosts_leaving_first_exiles_nothing() {
-    cr!("610.3c", "603.4");
+    cr!("610.3b");
     ruling!(
         "Sheltered by Ghosts",
         "If Sheltered by Ghosts leaves the battlefield before its triggered ability resolves, the target permanent won't be exiled at all."
@@ -313,6 +314,8 @@ fn collective_resistance_modes_with_illegal_targets() {
         .target(obj(ench))
         .target(obj(bears))
         .go();
+    // {1}{G} plus escalate {G} for each of the two extra modes.
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 4);
     t.g.move_object(relic, Zone::Hand(P1), mtg_engine::events::MoveCause::Effect, None);
     t.g.flush_events();
     t.resolve_all();
@@ -331,6 +334,7 @@ fn collective_resistance_modes_with_illegal_targets() {
         .target(obj(relic))
         .target(obj(bears))
         .go();
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 3);
     t.g.move_object(relic, Zone::Hand(P1), mtg_engine::events::MoveCause::Effect, None);
     t.g.move_object(bears, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
     t.g.flush_events();
@@ -355,10 +359,20 @@ fn collective_resistance_copy_keeps_its_modes() {
     let spell = t.cast(P0, c).modes(&[2]).target(obj(bears)).go();
     crate::r_p079_common::cast_card(&mut t, P0, "Twincast", &[obj(spell)]).unwrap();
     crate::r_s25_common::change_copy_targets(&mut t, P0, &[Some(obj(giant))]);
+    let from = t.asked().len();
     t.resolve();
     let copies = crate::r_s25_common::spell_copies(&t);
     assert_eq!(copies.len(), 1);
     assert_eq!(crate::r_s26_common::modes_on_stack(&t, copies[0]), vec![2]);
+    // New targets were offered, new modes weren't.
+    assert_eq!(
+        crate::r_s07_common::count_asked(&t, from, |d| matches!(d, Decision::ChooseModes { .. })),
+        0
+    );
+    assert_eq!(
+        crate::r_s07_common::count_asked(&t, from, |d| matches!(d, Decision::ChooseTargets { .. })),
+        1
+    );
     t.resolve_all();
     assert!(kw(&t, bears, INDESTRUCTIBLE) && kw(&t, giant, INDESTRUCTIBLE));
     assert!(t.on_battlefield(t.named_on_battlefield("Ornithopter")[0]));

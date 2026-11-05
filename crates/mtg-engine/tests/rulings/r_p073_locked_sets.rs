@@ -77,7 +77,7 @@ fn burst_of_speed_and_deafening_clarion_affect_only_creatures_controlled_on_reso
 
 #[test]
 fn deafening_clarion_lethally_damaged_creature_still_gains_lifelink() {
-    cr!("608.2h", "704.3", "704.5g");
+    cr!("608.2c", "704.3", "704.5g");
     ruling!(
         "Deafening Clarion",
         "A creature you control that’s dealt lethal damage by Deafening Clarion’s first mode will still be on the battlefield to gain lifelink from the spell’s second mode before that creature dies."
@@ -131,7 +131,7 @@ fn goblin_bushwhacker_includes_itself_unless_it_left() {
 
 #[test]
 fn victorys_herald_bonuses_last_for_the_turn() {
-    cr!("611.2c", "506.4");
+    cr!("611.2c", "511.3");
     ruling!(
         "Victory's Herald",
         "Even though the triggered ability affects only attacking creatures, the bonuses will remain for the rest of the turn."
@@ -145,6 +145,12 @@ fn victorys_herald_bonuses_last_for_the_turn() {
     t.resolve_all();
     t.advance_to(P0, Step::PostcombatMain);
     assert_eq!(t.life(P0), 26, "lifelink from both attackers");
+    // Combat is over: the Bears is no longer an attacking creature, and keeps the bonuses.
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .is_none_or(|c| c.attackers.iter().all(|a| a.id != bears)));
     assert!(kw(&t, bears, FLYING) && kw(&t, bears, LIFELINK), "after combat");
     assert!(!kw(&t, home, FLYING) && !kw(&t, home, LIFELINK));
 }

@@ -141,12 +141,13 @@ fn heliod_counter_cant_save_a_creature_dealt_lethal_damage_as_life_is_gained() {
     assert_eq!(t.life(P0), 22);
     assert!(!t.on_battlefield(child), "died before the trigger could target it");
     let cands = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert_eq!(cands.len(), 1, "one trigger, its target chosen after the Child died");
     assert!(cands.iter().all(|c| !c.contains(&obj(child))));
 }
 
 #[test]
 fn firesong_triggers_for_lifelink_damage_a_white_spell_causes() {
-    cr!("702.15b", "119.10");
+    cr!("702.15b", "119.9");
     ruling!(
         "Firesong and Sunspeaker",
         "If a spell's cost or effect instructs a source with lifelink you control to deal damage, that spell causes that life gain as well."
@@ -238,7 +239,7 @@ fn firesong_counts_each_instance_of_deals() {
 
 #[test]
 fn lifelink_spell_damaging_you_leaves_your_life_unchanged() {
-    cr!("702.15b", "119.9");
+    cr!("702.15b", "120.3a", "120.3f");
     ruling!(
         "Firesong and Sunspeaker",
         "If a source you control with lifelink deals damage to you, you gain and lose that much life simultaneously. Your life total doesn't change."
@@ -270,7 +271,7 @@ fn firesong_triggers_for_an_opponents_white_spell() {
 
 #[test]
 fn deathtouch_and_lifelink_spells_must_deal_the_damage_themselves() {
-    cr!("702.2b", "702.15b", "120.1a");
+    cr!("702.2b", "702.15b", "120.8");
     ruling!(
         "Judith, Carnage Connoisseur",
         "An instant or sorcery spell with deathtouch must actually deal damage to a creature for it to be destroyed. If the spell instructs another object to deal damage (for example, Hard-Hitting Question), the spell doesn't deal any damage itself and its instance of deathtouch doesn't apply. Dealing 0 damage isn't dealing damage."
@@ -335,6 +336,30 @@ fn deathtouch_and_lifelink_spells_must_deal_the_damage_themselves() {
 }
 
 #[test]
+fn lo_and_li_noble_creature_spells_dont_have_lifelink() {
+    cr!("109.2", "109.2b", "611.3a");
+    // "Noble creatures you control" are permanents: a Noble creature spell gets lifelink
+    // only once it's on the battlefield; a Lesson spell has it on the stack.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lo and Li, Twin Tutors");
+    let arwen = crate::r_p079_common::cast_card(&mut t, P0, "Arwen, Mortal Queen", &[]).unwrap();
+    assert_eq!(t.zone(arwen), Zone::Stack);
+    assert!(!kw(&t, arwen, LIFELINK), "a Noble creature spell");
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(arwen)));
+    assert!(kw(&t, arwen, LIFELINK), "a Noble creature");
+    let c = t.hand(P0, "Start from Scratch");
+    t.lands(P0, "Mountain", 3);
+    let lesson = t.cast(P0, c).modes(&[0]).target(pl(P1)).go();
+    assert_eq!(t.zone(lesson), Zone::Stack);
+    assert!(kw(&t, lesson, LIFELINK), "a Lesson spell");
+    // A Noble creature card in a graveyard isn't affected either.
+    let gy = t.graveyard(P0, "Arwen, Mortal Queen");
+    t.g.recompute();
+    assert!(!kw(&t, gy, LIFELINK));
+}
+
+#[test]
 fn prepare_lifelink_applies_to_fight_damage() {
     cr!("702.15b", "701.14a", "702.127a");
     ruling!(
@@ -390,7 +415,7 @@ fn vito_with_lifelink_doesnt_gain_from_its_life_loss_trigger() {
 
 #[test]
 fn vizkopa_guildmage_delayed_triggers_stack_up() {
-    cr!("603.7a", "603.7c");
+    cr!("603.7a", "603.7b");
     ruling!(
         "Vizkopa Guildmage",
         "Each time Vizkopa Guildmage’s second ability resolves, a delayed triggered ability is created. Whenever you gain life that turn, each of those abilities will trigger."

@@ -51,9 +51,14 @@ fn consecrate_land_stops_destroy_but_not_sacrifice() {
     assert!(t.in_exile("Plains"));
 }
 
+/// Indestructibility's ruling (2013-07-01) also names "if it's a planeswalker and another
+/// planeswalker with the same subtype is controlled by the same player": that planeswalker
+/// uniqueness rule was removed from the Comprehensive Rules (CR 306.4), so the ruling isn't
+/// cited (a conflict left open); the rest of it is checked here, and that two planeswalkers
+/// sharing a planeswalker type now stay.
 #[test]
 fn indestructible_permanents_still_go_to_the_graveyard_for_other_reasons() {
-    cr!("702.12b", "704.5f", "704.5g", "704.5h", "704.5j", "704.5m");
+    cr!("702.12b", "704.5f", "704.5g", "704.5h", "704.5j", "704.5m", "306.4");
     supported("Indestructibility");
     // Lethal damage, deathtouch damage and "destroy" don't put it into the graveyard.
     let mut t = TestGame::new(2);
@@ -96,6 +101,15 @@ fn indestructible_permanents_still_go_to_the_graveyard_for_other_reasons() {
     assert!(kw(&t, hs, INDESTRUCTIBLE));
     destroy_now(&mut t, bears);
     assert!(!t.on_battlefield(hs));
+    // Two planeswalkers with the same planeswalker type (and different names): no
+    // uniqueness rule any more, both stay.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Jace Beleren");
+    attach_new(&mut t, P0, "Indestructibility", obj(a));
+    let b = t.battlefield(P0, "Jace, the Mind Sculptor");
+    t.g.dirty = true;
+    t.settle();
+    assert!(t.on_battlefield(a) && t.on_battlefield(b));
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +118,7 @@ fn indestructible_permanents_still_go_to_the_graveyard_for_other_reasons() {
 
 #[test]
 fn accursed_horde_can_target_itself_and_it_lasts_after_combat() {
-    cr!("115.1", "611.2a", "506.4");
+    cr!("115.1", "611.2a", "511.3");
     ruling!(
         "Accursed Horde",
         "Accursed Horde's ability can target itself while it's attacking."
@@ -127,6 +141,11 @@ fn accursed_horde_can_target_itself_and_it_lasts_after_combat() {
     activate_containing(&mut t, P0, horde, "indestructible").unwrap();
     t.resolve_all();
     t.advance_to(P0, Step::PostcombatMain);
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .is_none_or(|c| c.attackers.iter().all(|a| a.id != horde)));
     assert!(kw(&t, horde, INDESTRUCTIBLE));
     assert!(!destroy_now(&mut t, horde));
 }
@@ -211,7 +230,7 @@ fn taranika_trigger_is_mandatory_and_other_modifiers_still_apply() {
 
 #[test]
 fn almost_perfect_sets_base_power_and_toughness_in_timestamp_order() {
-    cr!("613.4b", "613.4c", "613.7");
+    cr!("613.4b", "613.4c", "613.4d", "613.7");
     ruling!(
         "Almost Perfect",
         "Almost Perfect overwrites all previous effects that set the creature’s base power and toughness to specific values. Any power- or toughness-setting effects that start to apply after the ability resolves will overwrite this effect."
@@ -354,7 +373,24 @@ fn resolute_watchdog_can_target_itself_and_does_nothing() {
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert_eq!(t.stack_len(), 0);
-    assert!(t.in_graveyard(P0, "Resolute Watchdog"));
+    assert!(!ability_resolved(&t), "its only target is gone: it doesn't resolve");
+    // Targeting another creature, it resolves.
+    let mut t = TestGame::new(2);
+    let dog = t.battlefield(P0, "Resolute Watchdog");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Wastes", 1);
+    t.answer_targets(P0, &[obj(bears)]);
+    activate_containing(&mut t, P0, dog, "indestructible").unwrap();
+    t.resolve_all();
+    assert!(ability_resolved(&t));
+    assert!(kw(&t, bears, INDESTRUCTIBLE));
+}
+
+/// Whether an activated or triggered ability resolved this turn.
+fn ability_resolved(t: &TestGame) -> bool {
+    t.g.turn_events
+        .iter()
+        .any(|e| matches!(e, mtg_engine::events::Event::AbilityResolved { .. }))
 }
 
 #[test]
@@ -596,5 +632,5 @@ fn darksteel_garrison_trigger_must_target_an_opponents_creature_if_needed() {
     t.resolve_all();
     assert_eq!(t.pt(theirs), (3, 3));
     let cands = crate::r_s02_common::target_candidates(&t, P0, from);
-    assert!(cands.iter().all(|c| !c.is_empty()));
+    assert_eq!(cands, vec![vec![obj(theirs)]]);
 }

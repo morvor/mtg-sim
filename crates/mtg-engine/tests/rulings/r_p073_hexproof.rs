@@ -47,7 +47,7 @@ fn hexproof_in_response_makes_the_only_target_illegal() {
 
 #[test]
 fn celestial_armor_doesnt_unblock_an_already_blocked_creature() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Celestial Armor",
         "Attaching Celestial Armor to a creature that has already been blocked won't cause it to become unblocked, even if one or more of the blocking creatures don't have flying or reach."
@@ -67,7 +67,7 @@ fn celestial_armor_doesnt_unblock_an_already_blocked_creature() {
 
 #[test]
 fn mask_of_avacyn_on_an_opponents_creature_stops_your_targeting() {
-    cr!("702.11b", "303.4e");
+    cr!("702.11b", "301.5d");
     ruling!(
         "Mask of Avacyn",
         "If Mask of Avacyn somehow becomes attached to a creature an opponent controls, that creature can't be the target of spells or abilities you control."
