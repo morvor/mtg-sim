@@ -1,6 +1,6 @@
 //! Rulings batch P047 — Duplicity's face-down cards and lose-control trigger (CR 406.3,
-//! 603.2), Umaro's random mode without a legal target (CR 700.2), and The Book of Vile
-//! Darkness's Vecna looking at the exiled cards (CR 607.2).
+//! 603.2), Umaro's random mode without a legal target (CR 700.2b, 603.3c), and The Book of
+//! Vile Darkness's Vecna looking at the exiled cards (CR 400.7, 608.2h).
 
 use crate::r_p047_common::*;
 use crate::r_s01_common::*;
@@ -11,7 +11,7 @@ use mtg_engine::*;
 
 #[test]
 fn duplicity_lose_control_puts_the_cards_into_the_graveyard() {
-    cr!("603.2", "613.1b", "406.3");
+    cr!("603.2", "613.1b");
     ruling!(
         "Duplicity",
         "Taking control of another player’s Duplicity will trigger the ability that causes the cards they exiled to be put into their owner’s graveyard."
@@ -64,7 +64,7 @@ fn duplicity_cards_are_face_down_and_unseen() {
 
 #[test]
 fn umaro_last_mode_without_a_legal_target_is_never_chosen() {
-    cr!("700.2", "700.2a", "115.1");
+    cr!("700.2", "700.2b", "603.3c");
     ruling!(
         "Umaro, Raging Yeti",
         "In the incredibly rare case where there is no legal target for the last mode, that mode can't be chosen. The first two modes are always eligible to be chosen."
@@ -102,7 +102,7 @@ fn umaro_last_mode_without_a_legal_target_is_never_chosen() {
 
 #[test]
 fn book_of_vile_darkness_vecna_gets_the_exiled_cards_abilities() {
-    cr!("607.2", "707.2", "406.6");
+    cr!("400.7", "707.2", "608.2h");
     ruling!(
         "The Book of Vile Darkness",
         "In some strange cases, you might make something into a copy of the Eye and/or Hand of Vecna and then exile that copy to activate The Book of Vile Darkness's ability. The ability that creates Vecna will look at the cards in exile, not the permanents on the battlefield, so it's possible to have Vecna gain different triggered abilities."

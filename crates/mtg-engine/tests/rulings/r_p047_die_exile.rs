@@ -359,10 +359,12 @@ fn fiery_annihilation_equipment_target() {
     cast_at(&mut t, "Fiery Annihilation", None, big);
     assert_eq!(t.g.obj(big).damage, 5);
     // The creature leaves in response: the Equipment is no longer attached to it, so it's
-    // no longer a legal target and stays (CR 608.2b: target legality is about what it's
-    // attached to now, not as its host last existed). (Fiery Annihilation's ruling that the Equipment isn't exiled whenever the
-    // creature is an illegal target — even still on the battlefield, with protection from
-    // red — disagrees with Searing Blaze's on a dependent target and isn't cited here.)
+    // no longer a legal target either (CR 608.2b: target legality is about what it's
+    // attached to now, not as its host last existed), and with both targets illegal the
+    // spell doesn't resolve. (Fiery Annihilation's ruling that the Equipment isn't exiled
+    // whenever the creature is an illegal target, even one still on the battlefield with
+    // protection from red, disagrees with Searing Blaze's on a dependent target and isn't
+    // cited here; see "Not yet investigated" in docs/RULING_DISCREPANCIES.md.)
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let sword = t.battlefield(P1, "Bonesplitter");
@@ -377,6 +379,7 @@ fn fiery_annihilation_equipment_target() {
     t.cast(P1, u).target(bears).go();
     t.resolve_all();
     assert!(t.on_battlefield(sword));
+    assert_eq!(t.g.obj(sword).attached_to, None);
     // Control: both legal, the Equipment is exiled.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -387,9 +390,39 @@ fn fiery_annihilation_equipment_target() {
     assert_eq!(t.zone(bears), Zone::Exile);
 }
 
+/// Targets are chosen against the game as it is (as for the recheck in
+/// `fiery_annihilation_equipment_target`): Equipment attached to nothing isn't "attached to
+/// it" through the creature it was attached to before that creature left.
+#[test]
+fn a_trigger_finds_no_equipment_attached_to_its_dead_source() {
+    cr!("603.3d", "115.1d");
+    // Shackles of Treachery: "... Until end of turn, it gains haste and "Whenever this
+    // creature deals damage, destroy target Equipment attached to it."" The shackled Bears
+    // wear Bonesplitter (4/2) and trade with a Hill Giant: by the time the trigger is put
+    // on the stack, the Bears have died and the Bonesplitter is attached to nothing, so the
+    // trigger has no legal target and is removed from the stack.
+    supported("Shackles of Treachery");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let splitter = t.battlefield(P1, "Bonesplitter");
+    t.g.attach(splitter, obj(bears));
+    let giant = t.battlefield(P1, "Hill Giant");
+    spell(&mut t, P0, "Shackles of Treachery", &[obj(bears)]);
+    assert_eq!(t.g.obj(bears).controller, P0);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    block_and_finish(&mut t, P1, &[(giant, bears)]);
+    assert_eq!(t.zone(giant), Zone::Graveyard(P1));
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
+    assert!(t.on_battlefield(splitter));
+    let targeted = t.g.turn_events.iter().any(|e| {
+        matches!(e, mtg_engine::events::Event::BecameTarget { target, .. } if *target == obj(splitter))
+    });
+    assert!(!targeted, "the Bonesplitter was never a legal target");
+}
+
 #[test]
 fn static_exilers_need_their_source_on_the_battlefield() {
-    cr!("614.1a", "611.3a", "603.10a");
+    cr!("614.1a", "611.3a", "611.3b");
     ruling!(
         "Frostwielder",
         "Frostwielder must be on the battlefield when the creature would be put into a graveyard in order to exile it."
@@ -424,7 +457,7 @@ fn static_exilers_need_their_source_on_the_battlefield() {
 
 #[test]
 fn kumano_exiles_creatures_dying_at_the_same_time_as_it() {
-    cr!("614.1a", "614.6", "616.1");
+    cr!("614.1a", "614.6", "611.3b");
     ruling!(
         "Kumano, Master Yamabushi",
         "If a creature dealt damage by Kumano this turn would be put into a graveyard, exile it, even if it's going to the graveyard at the same time as Kumano."

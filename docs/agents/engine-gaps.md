@@ -939,10 +939,27 @@ ruling-conflicts-2.
   same structure (a second target described by the first: "target creature that player or that planeswalker's
   controller controls") goes the other way: "If either target is illegal by the time Searing Blaze resolves, it
   still deals damage to the other target." (cited in `tests/rulings/r_p007_targets.rs` with the player given
-  hexproof). CR 608.2b says only that "If part of the effect requires information about an illegal target, it
-  fails to determine any such information", which is about effects, not about a later target's requirement. The
-  engine agrees with Fiery Annihilation's ruling when the creature has left the battlefield (the Equipment is no
-  longer attached to it, so it's no longer a legal target: fixed in rulings-P047, `target_legality` in
-  `eval.rs`; `fiery_annihilation_equipment_target` in `tests/rulings/r_p047_die_exile.rs`), and with Searing
-  Blaze's when the creature is still there but illegal (protection from red): the Equipment, still attached to
-  it, is still a legal target and is exiled.
+  hexproof). So does Memory's Journey's (2011-09-22, "Target player shuffles up to three target cards from their
+  graveyard into their library", uncited): "If the player is an illegal target by the time Memory's Journey
+  resolves, the spell will have no effect, even if the cards are still legal targets." CR 608.2b ends: "If part of
+  the effect requires information about an illegal target, it fails to determine any such information. Any part
+  of the effect that requires that information won't happen." Read as being about the effect's instructions, it
+  doesn't touch a later target's requirement, which is checked in its first part ("it checks whether the targets
+  are still legal"), and an Equipment still attached to a creature with protection from red is still "attached
+  to that creature" (Searing Blaze's ruling; the engine). Read as covering what a target's requirement needs
+  ("that creature", "that player", "that planeswalker's controller"), the Equipment's legality needs information
+  about the illegal creature and the exile doesn't happen (Fiery Annihilation's ruling); that reading would also
+  reverse Searing Blaze's and Memory's Journey's rulings and the engine's `anchor-target-chosen-first` decision
+  (Glyph of Delusion: a creature that a Wall which has left the battlefield blocked stays a legal target). A lead
+  for the conflict case, not checked here (the archive at https://github.com/pit142857/mtg-cr wasn't reachable
+  from this session): as recalled, not verified, the 608.2b of the Comprehensive Rules of Searing Blaze's time said
+  the opposite of the present sentence ("The effect may still determine information about illegal targets, though,
+  and other parts of the effect for which those targets are not illegal may still affect them."). If the archive
+  confirms it and dates the change,
+  Searing Blaze's and Memory's Journey's rulings would be outdated on this point and Fiery Annihilation's would
+  follow the present rule. The engine agrees with Fiery Annihilation's ruling when the creature has left the
+  battlefield (the Equipment is no longer attached to it, so it's no longer a legal target: fixed in rulings-P047,
+  `target_legality` in `eval.rs`, set by `Game::is_legal_target` for every way a target is chosen or checked;
+  `fiery_annihilation_equipment_target` and `a_trigger_finds_no_equipment_attached_to_its_dead_source` in
+  `tests/rulings/r_p047_die_exile.rs`), and with Searing Blaze's when the creature is still there but illegal
+  (protection from red): the Equipment, still attached to it, is still a legal target and is exiled.

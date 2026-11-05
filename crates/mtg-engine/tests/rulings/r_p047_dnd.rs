@@ -32,7 +32,7 @@ fn zevlor() -> TestGame {
 
 #[test]
 fn zevlor_copies_are_not_cast_and_resolve_normally() {
-    cr!("707.10", "707.10c", "601.2");
+    cr!("707.10", "707.10e", "601.2");
     ruling!(
         "Zevlor, Elturel Exile",
         "When the delayed triggered ability of Zevlor, Elturel Exile resolves, it may create one or more copies of a spell. You control each of the copies. Those copies are created on the stack, so they're not “cast.” Abilities that trigger when a player casts a spell won't trigger. The copies will then resolve like normal spells, after players get a chance to cast spells and activate abilities."
@@ -62,7 +62,7 @@ fn zevlor_copies_are_not_cast_and_resolve_normally() {
 
 #[test]
 fn zevlor_copy_needs_a_legal_target() {
-    cr!("707.10c", "115.1");
+    cr!("707.10e", "115.1");
     ruling!(
         "Zevlor, Elturel Exile",
         "As you make your choices for each other opponent, you can choose that opponent or any permanent they control, but if the chosen player or permanent isn't a legal target for the spell, the copy won't be created."
@@ -133,7 +133,7 @@ fn zevlor_copies_keep_x_modes_and_additional_costs() {
 
 #[test]
 fn zevlor_one_target_chosen_and_multiple_targets() {
-    cr!("707.10c", "115.1", "603.7");
+    cr!("707.10e", "115.1", "603.7");
     ruling!(
         "Zevlor, Elturel Exile",
         "If instant or sorcery spell could have multiple targets but only one target is chosen as it is cast, that spell will cause Zevlor's delayed triggered ability to trigger. The copies will similarly have only one target."
@@ -151,6 +151,23 @@ fn zevlor_one_target_chosen_and_multiple_targets() {
     t.cast(P0, fb).go();
     t.resolve_all();
     assert_eq!((t.life(P1), t.life(P2)), (18, 18));
+    // The ruling's example: Explosive Entry ("Destroy up to one target artifact. Put a
+    // +1/+1 counter on up to one target creature.") targeting only P1's Bears: it triggers,
+    // and the copy's one target is P2's Ornithopter, as the creature only: it gets the
+    // counter and isn't destroyed.
+    let mut t = zevlor();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let thopter = t.battlefield(P2, "Ornithopter");
+    t.answer_choose(P0, &[obj(thopter)]);
+    let ee = t.hand(P0, "Explosive Entry");
+    give_mana_for(&mut t, P0, "Explosive Entry");
+    t.answer_targets(P0, &[]);
+    t.answer_targets(P0, &[obj(bears)]);
+    t.cast(P0, ee).go();
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert!(t.on_battlefield(thopter));
+    assert_eq!(t.counters(thopter, "+1/+1"), 1);
     // Forked Bolt at P1 and P0's own Bears: no copy.
     let mut t = zevlor();
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -175,19 +192,25 @@ fn zevlor_copies_check_their_targets_and_survive_a_countered_original() {
         "Zevlor, Elturel Exile",
         "The delayed triggered ability can copy the spell that caused it to trigger even if that spell has been countered by the time that ability resolves."
     );
-    // The copy's target leaves: the copy doesn't resolve; the original still does.
+    // The copy's target gains hexproof (Ranger's Guile, +1/+1): the copy doesn't resolve
+    // and the Bears are dealt no damage; the original still resolves.
     let mut t = zevlor();
     let bears = t.battlefield(P2, "Grizzly Bears");
     t.answer_choose(P0, &[obj(bears)]);
     cast_x(&mut t, P0, "Lightning Strike", None, &[pl(P1)]);
     t.resolve();
     assert_eq!(t.stack_len(), 2);
-    let copy = *t.g.stack.last().unwrap();
-    to_hand(&mut t, bears);
-    t.resolve();
-    assert!(!t.g.is_live(copy));
-    t.resolve_all();
+    spell(&mut t, P2, "Ranger's Guile", &[obj(bears)]);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.g.obj(bears).damage, 0);
     assert_eq!(t.life(P1), 17);
+    // Without the response, the copy kills them.
+    let mut t = zevlor();
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.answer_choose(P0, &[obj(bears)]);
+    cast_x(&mut t, P0, "Lightning Strike", None, &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Graveyard(P2));
     // The original is countered while the trigger waits: it's still copied.
     let mut t = zevlor();
     t.answer_choose(P0, &[pl(P2)]);
@@ -276,7 +299,7 @@ fn nalia_checks_on_trigger_and_resolution_and_keeps_deathtouch() {
 
 #[test]
 fn nalia_doesnt_change_when_spells_can_be_cast() {
-    cr!("601.3", "307.1", "401.5");
+    cr!("601.3", "302.1");
     ruling!(
         "Nalia de'Arnise",
         "Nalia doesn't change when you can cast spells. Normally, this means during your main phase when the stack is empty, although flash may change this."
@@ -330,7 +353,7 @@ fn gorion_triggers_only_on_adventure_spells() {
 
 #[test]
 fn trelasarra_triggers_once_per_life_gain_event() {
-    cr!("119.10", "603.2c");
+    cr!("119.9", "603.2c");
     ruling!(
         "Trelasarra, Moon Dancer",
         "An ability that triggers \"whenever you gain life\" triggers just once for each life gain event, no matter how much life you gain."
@@ -386,7 +409,7 @@ fn drizzt_checks_power_on_death_and_resolution() {
 
 #[test]
 fn dynaheir_ignores_mana_abilities() {
-    cr!("605.1a", "603.7c", "707.10");
+    cr!("605.1a", "603.7", "707.10");
     ruling!(
         "Dynaheir, Invoker Adept",
         "Specifically, the delayed triggered ability doesn't trigger if you activate a mana ability that costs four or more mana to activate."
@@ -459,7 +482,7 @@ fn gretchen_puts_a_land_without_playing_it() {
 
 #[test]
 fn mordenkainen_exchange_isnt_drawing_and_dog_tracks_hand() {
-    cr!("121.1", "701.12a", "613.4a");
+    cr!("121.5", "701.12a", "613.4a");
     ruling!(
         "Mordenkainen",
         "The cards put into your hand due to Mordenkainen's last ability aren't \"drawn.\" Anything that cares about you drawing cards won't notice your hand suddenly becoming very, very well-stocked."
@@ -567,7 +590,7 @@ fn nine_fingers_keene_hand_with_nine_gates_already() {
 
 #[test]
 fn mazzy_exiles_a_non_aura_card_and_its_cast_follows_the_rules() {
-    cr!("702.103e", "608.2h", "601.3");
+    cr!("702.103b", "400.7", "601.3", "302.1", "601.2h");
     ruling!(
         "Mazzy, Truesword Paladin",
         "In some unusual cases, the Aura put into your graveyard isn't an Aura card. This may happen due to copy effects, for example. In these cases, you'll still exile the card and you may cast it."
@@ -688,15 +711,18 @@ fn asmodeus_face_down_exile_and_empty_library() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), 2);
     assert_eq!(t.life(P0), 18);
-    // It leaves and comes back: no connection to the earlier cards.
+    // It leaves and the same card comes back: no connection to the earlier cards.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Asmodeus the Archfiend");
+    let a = t.battlefield(P0, "Asmodeus the Archfiend");
     t.g.draw_cards(P0, 2);
-    let a = t.g.battlefield.iter().copied().find(|o| t.g.obj(*o).chars.name == "Asmodeus the Archfiend").unwrap();
-    to_hand(&mut t, a);
+    to_graveyard(&mut t, a);
     let card = t.g.current(a);
-    to_graveyard(&mut t, card);
-    let a2 = t.enter(P0, "Asmodeus the Archfiend");
+    assert_eq!(t.zone(card), Zone::Graveyard(P0));
+    let a2 = t
+        .g
+        .move_object(card, Zone::Battlefield, mtg_engine::events::MoveCause::Effect, Some(P0))
+        .unwrap();
+    assert_eq!(t.g.obj(a2).chars.name, "Asmodeus the Archfiend");
     t.lands(P0, "Swamp", 1);
     t.activate(P0, a2, 1, &[]).unwrap();
     t.resolve_all();
@@ -717,7 +743,7 @@ fn asmodeus_face_down_exile_and_empty_library() {
 
 #[test]
 fn commander_liara_portyr_reduction_and_players_attacked() {
-    cr!("508.1", "601.2f", "506.2");
+    cr!("508.1", "601.2f", "715.3d");
     ruling!(
         "Commander Liara Portyr",
         "Commander Liara Portyr doesn't have to be among the attacking creatures."

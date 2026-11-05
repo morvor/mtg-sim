@@ -89,7 +89,7 @@ fn storm_the_citadel_affects_only_creatures_there_on_resolution() {
 
 #[test]
 fn heliod_s_intervention_gains_twice_x_once() {
-    cr!("119.9", "119.10", "603.2");
+    cr!("119.9", "603.2");
     ruling!(
         "Heliod's Intervention",
         "The second mode of Heliod's Intervention causes the player to gain one amount of life equal to twice X. It doesn't cause the player to gain X life then gain X life again."
@@ -173,7 +173,7 @@ fn broken_bond_needs_a_target() {
         "You can’t cast Broken Bond unless you choose an artifact or enchantment as a target."
     );
     let mut t = TestGame::new(2);
-    t.hand(P0, "Forest");
+    let forest = t.hand(P0, "Forest");
     let s = t.hand(P0, "Broken Bond");
     give_mana_for(&mut t, P0, "Broken Bond");
     assert!(t.cast(P0, s).try_go().is_err());
@@ -183,11 +183,12 @@ fn broken_bond_needs_a_target() {
     t.cast(P0, s).target(a).go();
     t.resolve_all();
     assert_eq!(t.zone(a), Zone::Graveyard(P1));
+    assert!(t.on_battlefield(forest));
 }
 
 #[test]
 fn cathartic_parting_shuffles_with_zero_targets() {
-    cr!("601.2c", "115.1d", "701.24a");
+    cr!("601.2c", "701.24a");
     ruling!(
         "Cathartic Parting",
         "You may target zero cards in your graveyard and still choose to shuffle your library."

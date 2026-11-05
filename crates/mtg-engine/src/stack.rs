@@ -542,6 +542,12 @@ impl Game {
         ctx: &Ctx,
         stack_obj: ObjectId,
     ) -> Vec<Entity> {
+        // Each candidate is judged as a target (see `Ctx::target_legality`).
+        if !ctx.target_legality {
+            let mut c = ctx.clone();
+            c.target_legality = true;
+            return self.legal_target_candidates(spec, &c, stack_obj);
+        }
         let mut out = Vec::new();
         match &spec.what {
             TargetKind::Object(f) => {
@@ -604,6 +610,14 @@ impl Game {
         ctx: &Ctx,
         stack_obj: ObjectId,
     ) -> bool {
+        // Whether it's a legal target is a question about the game as it is now, however
+        // the target is chosen or checked (CR 601.2c, 603.3d, 608.2b, 115.7, 707.10c-e):
+        // see `Ctx::target_legality`.
+        if !ctx.target_legality {
+            let mut c = ctx.clone();
+            c.target_legality = true;
+            return self.is_legal_target(spec, e, &c, stack_obj);
+        }
         // A target chosen for each player, with no particular player meant: legal if
         // it's legal for one of them.
         if spec.per_player.is_some() && ctx.iter_player.is_none() {

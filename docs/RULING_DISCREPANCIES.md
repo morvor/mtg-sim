@@ -410,9 +410,13 @@ decides whether they become a conflict case.
 
 - **Fiery Annihilation** (rulings-P047): its ruling (2024-11-08) that the target Equipment
   isn't exiled whenever the target creature is an illegal target, against Searing Blaze's
-  (2010-03-01) that a target described by another illegal target ("target creature that
-  player ... controls") is still affected. Left uncited; the texts are in
-  `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
+  (2010-03-01) and Memory's Journey's (2011-09-22) that a target described by another illegal
+  target ("target creature that player ... controls", "target cards from their graveyard") is
+  still affected or still legal. The two readings of CR 608.2b's last sentences ("If part of the
+  effect requires information about an illegal target, it fails to determine any such
+  information. ...") and a lead to check against the archived rules (whether that sentence
+  replaced one that said the opposite after 2011, which would make the older rulings
+  outdated) are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)". Left uncited.
 - (Earlier candidates.) Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

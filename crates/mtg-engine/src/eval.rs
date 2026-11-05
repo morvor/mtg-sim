@@ -81,10 +81,12 @@ pub struct Ctx {
     /// chosen (CR 601.2a, 601.2c), so it isn't a legal target where it is now.
     #[serde(default)]
     pub casting_card: Option<ObjectId>,
-    /// Filters are evaluated to recheck a target's legality (CR 608.2b): a requirement
+    /// Filters are evaluated to judge a target's legality, as it's chosen (CR 601.2c,
+    /// 603.3d), changed (CR 115.7, 707.10c-e) or rechecked (CR 608.2b): a requirement
     /// about the target's current state ("Equipment attached to that creature") isn't
     /// met through what it was attached to before its host left (CR 608.2h is about
-    /// effects, not targets).
+    /// effects, not targets). Set by `Game::is_legal_target` and
+    /// `Game::legal_target_candidates` on their own copy of the context.
     #[serde(default)]
     pub target_legality: bool,
 }

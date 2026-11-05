@@ -56,7 +56,7 @@ fn snort_discarding_an_empty_hand_still_deals_damage() {
 
 #[test]
 fn step_between_worlds_empty_zones_and_turn_order() {
-    cr!("101.4", "101.4a", "118.12");
+    cr!("101.4", "118.12");
     ruling!(
         "Step Between Worlds",
         "A player whose hand and/or graveyard contain no cards can still choose to shuffle their hand and graveyard into their library. If they do, they’ll still draw seven cards."
@@ -206,21 +206,45 @@ fn moonveil_regent_empty_hands_and_colorless_spells() {
 
 #[test]
 fn moonveil_regent_disturb_colors_from_the_color_indicator() {
-    cr!("702.146b", "204.1", "105.2");
+    cr!("702.146a", "712.8c", "105.2");
     ruling!(
         "Moonveil Regent",
         "The colors of a nonmodal double-faced card that was cast with the disturb keyword ability are determined by its color indicator, not the mana cost on the front face of the card."
     );
+    use mtg_engine::types::{Color, ColorSet};
+    let disturb = || CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Disturb);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Moonveil Regent");
     let vet = t.graveyard(P0, "Lunarch Veteran // Luminous Phantom");
     t.lands(P0, "Plains", 2);
     yes(&mut t, P0, true);
-    t.cast(P0, vet)
-        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Disturb))
-        .go();
+    t.cast(P0, vet).method(disturb()).go();
     t.resolve_all();
     // Luminous Phantom's color indicator is white: one card.
+    assert_eq!(t.hand_size(P0), 1);
+    // Both faces of every printed disturb card have the same colors, so here the front
+    // face costs {U}{R} instead of {W} (blue and red): cast from the hand, two cards.
+    let mut def = (*card("Lunarch Veteran // Luminous Phantom")).clone();
+    def.faces[0].chars.mana_cost = mtg_engine::mana::ManaCost::parse("{U}{R}");
+    def.faces[0].chars.colors = ColorSet::single(Color::Blue).union(ColorSet::single(Color::Red));
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Moonveil Regent");
+    let vet = t.custom(P0, def.clone(), Zone::Hand(P0));
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 1);
+    yes(&mut t, P0, true);
+    t.cast(P0, vet).go();
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), 2, "the front face is blue and red");
+    // Cast with disturb, the spell is white only (the back face's color indicator): one.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Moonveil Regent");
+    let vet = t.custom(P0, def, Zone::Graveyard(P0));
+    t.lands(P0, "Plains", 2);
+    yes(&mut t, P0, true);
+    t.cast(P0, vet).method(disturb()).go();
+    assert_eq!(t.g.obj(t.g.current(vet)).chars.colors, ColorSet::single(Color::White));
+    t.resolve_all();
     assert_eq!(t.hand_size(P0), 1);
 }
 
@@ -423,7 +447,7 @@ fn drastic_revelation_small_library_and_replaced_draws() {
 
 #[test]
 fn diminishing_returns_choices_and_draws_in_turn_order() {
-    cr!("101.4", "608.2c", "406.3");
+    cr!("121.2c", "608.2c", "406.3");
     ruling!(
         "Diminishing Returns",
         "Each player chooses to draw any number of cards from zero to seven. First the player whose turn it is chooses how many cards to draw, then draws those cards, then each other player in turn order does the same."
@@ -466,6 +490,68 @@ fn diminishing_returns_choices_and_draws_in_turn_order() {
         .map(|(p, _)| p)
         .collect();
     assert_eq!(numbers, vec![P0, P1]);
+}
+
+/// The same wheels with shared team turns (Two-Headed Giant): the active team's players
+/// go first, then the other team's (CR 805.6, 805.6a).
+#[test]
+fn wheels_in_two_headed_giant_go_team_by_team() {
+    cr!("805.6", "805.6a", "121.2d");
+    let thg = || {
+        let mut t = TestGame::with_config(
+            4,
+            mtg_engine::game::GameConfig::two_headed_giant(vec![0, 0, 1, 1]),
+        );
+        t.set_step(P2, Step::PrecombatMain);
+        t
+    };
+    let asked_of = |t: &TestGame, f: fn(&Decision) -> bool| -> Vec<PlayerId> {
+        t.asked()
+            .into_iter()
+            .filter(|(_, d)| f(d))
+            .map(|(p, _)| p)
+            .collect()
+    };
+    let drawers = |t: &TestGame| -> Vec<PlayerId> {
+        let mut v: Vec<PlayerId> = Vec::new();
+        for e in &t.g.turn_events {
+            if let Event::Drew { player, .. } = e {
+                if v.last() != Some(player) {
+                    v.push(*player);
+                }
+            }
+        }
+        v
+    };
+    let team_by_team = |v: &[PlayerId]| {
+        v.len() == 4
+            && v[..2].contains(&P2)
+            && v[..2].contains(&P3)
+            && v[2..].contains(&P0)
+            && v[2..].contains(&P1)
+    };
+    // Diminishing Returns: each player chooses and draws in turn, the active team first.
+    let mut t = thg();
+    for p in [P0, P1, P2, P3] {
+        t.answer(p, DecisionKind::Number, Answer::Number(1));
+    }
+    spell(&mut t, P2, "Diminishing Returns", &[]);
+    let numbers = asked_of(&t, |d| matches!(d, Decision::ChooseNumber { .. }));
+    assert!(team_by_team(&numbers), "{numbers:?}");
+    let drew = drawers(&t);
+    assert_eq!(drew, numbers, "each player draws right after choosing");
+    // Step Between Worlds: all choose (the active team first), then all draw seven.
+    let mut t = thg();
+    for p in [P0, P1, P2, P3] {
+        yes(&mut t, p, true);
+    }
+    spell(&mut t, P2, "Step Between Worlds", &[]);
+    let choices = asked_of(&t, |d| matches!(d, Decision::YesNo { .. }));
+    assert!(team_by_team(&choices), "{choices:?}");
+    assert!(team_by_team(&drawers(&t)), "{:?}", drawers(&t));
+    for p in [P0, P1, P2, P3] {
+        assert_eq!(t.hand_size(p), 7, "{p:?}");
+    }
 }
 
 #[test]
@@ -572,7 +658,7 @@ fn flux_discard_is_caused_by_the_spell() {
 
 #[test]
 fn anje_s_ravager_attack_requirements_and_draws() {
-    cr!("508.1d", "508.1h", "506.4");
+    cr!("508.1a", "508.1d", "302.6");
     ruling!(
         "Anje's Ravager",
         "If Anje's Ravager can't attack for any reason (such as being tapped or having come under that player's control that turn), then it doesn't attack. If there's a cost associated with having it attack, its controller isn't forced to pay that cost, so it doesn't have to attack in that case either."
