@@ -165,10 +165,7 @@ fn lighthouse_chronologist_in_a_two_player_game() {
     let mut t = TestGame::new(2);
     chronologist(&mut t, P0);
     chronologist(&mut t, P0);
-    assert_eq!(
-        next_turns(&mut t, 8),
-        vec![P1, P0, P0, P0, P1, P0, P0, P0]
-    );
+    assert_eq!(next_turns(&mut t, 8), vec![P1, P0, P0, P0, P1, P0, P0, P0]);
 }
 
 #[test]
@@ -180,10 +177,7 @@ fn lighthouse_chronologist_in_a_four_player_game() {
     );
     let mut t = TestGame::new(4);
     chronologist(&mut t, P0);
-    assert_eq!(
-        next_turns(&mut t, 8),
-        vec![P1, P0, P2, P0, P3, P0, P0, P1]
-    );
+    assert_eq!(next_turns(&mut t, 8), vec![P1, P0, P2, P0, P3, P0, P0, P1]);
     // Three players.
     let mut t = TestGame::new(3);
     chronologist(&mut t, P0);
@@ -368,7 +362,8 @@ fn each_emissary_of_grudges_has_its_own_chosen_opponent() {
         let mut t = TestGame::new(3);
         let ems = [emissary(&mut t, P0, P1), emissary(&mut t, P0, P2)];
         let spell = bolt(&mut t, P2, P0);
-        t.activate(P0, ems[which], 0, &[o(spell)]).expect("Emissary");
+        t.activate(P0, ems[which], 0, &[o(spell)])
+            .expect("Emissary");
         t.answer_targets(P0, &[Entity::Player(P2)]);
         t.resolve_all();
         if redirected {
