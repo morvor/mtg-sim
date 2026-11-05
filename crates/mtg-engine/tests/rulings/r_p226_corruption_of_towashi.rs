@@ -126,7 +126,8 @@ fn corruption_of_towashi_draws_when_a_modal_double_faced_card_is_cast_or_played_
     // if they enter with their back faces up" predates the Marvel's Spider-Man CR update
     // effective 2025-09-19 (docs/rulings-exemptions/rulings-P225.tsv); a modal
     // double-faced permanent that enters back face up is now a transformed permanent as
-    // it enters (CR 701.27g), and so enters transformed (provisional).
+    // it enters (CR 701.27g), and so enters transformed (register
+    // mdfc-back-face-up-enters-transformed, decided by the user Nov 5).
     cr!("701.27g", "712.11b", "712.13", "712.12");
     interp!("mdfc-back-face-up-enters-transformed");
     // Eddie Brock cast as Venom, Lethal Protector.
