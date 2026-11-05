@@ -746,7 +746,8 @@ impl Renderer<'_> {
                                 .trim_start()
                                 .to_string();
                         }
-                        format!("a number of {n} equal to {k}")
+                        // "reveals X cards from their hand, where X is ...".
+                        format!("{{alt:a number of {n} equal to {k}|X {n}, where X is {k}}}")
                     }
                     _ => self.sel(&what, Case::Obj),
                 };

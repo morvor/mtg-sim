@@ -98,9 +98,10 @@ fn a_sorcery_front_face_cant_be_put_onto_the_battlefield_or_transformed_into() {
 #[test]
 fn only_a_double_faced_permanent_back_face_up_is_transformed() {
     cr!("701.27g");
-    // (The rulings of Oculus Whelp and Corruption of Towashi that also exclude modal
-    // double-faced permanents predate those being able to transform; the current
-    // CR 701.27a and 701.27g don't exclude them — see `transform_rules.rs` and
+    // (The 2023-04-14 rulings of Oculus Whelp and Corruption of Towashi that also exclude
+    // modal double-faced permanents predate the Marvel's Spider-Man CR update effective
+    // 2025-09-19, which let modal double-faced cards transform; the current CR 701.27a
+    // and 701.27g don't exclude them — see `transform_rules.rs` and
     // docs/rulings-exemptions/rulings-P225.tsv.)
     supported("Oculus Whelp");
     let whelp_triggers = |t: &mut TestGame| {
@@ -124,12 +125,59 @@ fn only_a_double_faced_permanent_back_face_up_is_transformed() {
 }
 
 #[test]
+fn a_modal_double_faced_card_played_or_cast_back_face_up_is_a_transformed_permanent() {
+    // CR 701.27g defines a transformed permanent by the face that's up, whatever put it
+    // there: a modal double-faced permanent that entered back face up is one too (no
+    // ruling since the Marvel's Spider-Man CR update effective 2025-09-19 covers it).
+    cr!("701.27g", "712.12", "712.11b", "712.13");
+    supported("Mutagen Connoisseur");
+    const PATHWAY: &str = "Brightclimb Pathway // Grimclimb Pathway";
+    // "This creature gets +1/+0 for each transformed permanent you control."
+    for (choice, transformed) in [(0, false), (1, true)] {
+        let mut t = TestGame::new(2);
+        let mutagen = t.battlefield(P0, "Mutagen Connoisseur");
+        let base = t.pt(mutagen).0;
+        let land = t.hand(P0, PATHWAY);
+        t.answer(
+            P0,
+            DecisionKind::Option,
+            mtg_engine::decision::Answer::Index(choice),
+        );
+        t.play_land(P0, land).unwrap();
+        let land = t.g.current(land);
+        assert_eq!(
+            name_of(&t, land),
+            ["Brightclimb Pathway", "Grimclimb Pathway"][choice]
+        );
+        assert_eq!(t.pt(mutagen).0, base + transformed as i32);
+    }
+    // Monica Rambeau cast as Photon, Living Light.
+    let mut t = TestGame::new(2);
+    let mutagen = t.battlefield(P0, "Mutagen Connoisseur");
+    let base = t.pt(mutagen).0;
+    t.lands(P0, "Plains", 4);
+    t.lands(P0, "Mountain", 1);
+    let monica = t.hand(P0, "Monica Rambeau // Photon, Living Light");
+    t.cast(P0, monica)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    t.resolve_all();
+    let photon = t.g.current(monica);
+    assert_eq!(name_of(&t, photon), "Photon, Living Light");
+    assert_eq!(face(&t, photon), FaceState::Back);
+    assert_eq!(t.pt(mutagen).0, base + 1);
+}
+
+#[test]
 fn turning_a_permanent_face_up_isnt_transforming() {
     cr!("701.27b", "701.27a");
     ruling!(
         "Norn's Inquisitor",
         "A face-up permanent turning face down doesn't count as transforming, nor does a face-down permanent turning face up."
     );
+    // Its first sentence uses the old term: since the Marvel's Spider-Man CR update
+    // effective 2025-09-19, modal double-faced permanents can transform too (CR 701.27a,
+    // 712.3); this test checks only its second sentence, still current.
     ruling!(
         "Corruption of Towashi",
         "Similarly, only transforming double-faced permanents (including transforming double-faced cards and Incubator tokens) can transform."

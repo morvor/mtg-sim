@@ -40,6 +40,7 @@ fn outside_the_battlefield(l: &str, text: &str, ctx: &CompileContext) -> Option<
             },
             zone: FunctionZone::AnywhereExcept(ZoneKind::Battlefield),
             is_cda: false,
+            as_cast: false,
         }),
         text,
     )])

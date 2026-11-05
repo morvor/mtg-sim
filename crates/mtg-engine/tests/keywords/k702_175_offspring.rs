@@ -382,7 +382,7 @@ fn without_offspring_as_it_enters_the_paid_cost_does_nothing() {
 
 #[test]
 fn creature_spells_you_cast_gain_offspring_as_you_cast_them() {
-    cr!("702.175a", "610.5", "400.7b");
+    cr!("702.175a", "610.5", "601.2a", "400.7b");
     assert_supported("Zinnia, Valley's Voice");
     ruling!(
         "Zinnia, Valley's Voice",

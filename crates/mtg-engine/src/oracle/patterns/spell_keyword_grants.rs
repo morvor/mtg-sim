@@ -152,21 +152,24 @@ fn s_spell_keyword_grant(l: &str, text: &str, ctx: &CompileContext) -> Option<Ve
         None => (first, None),
     };
     // "Elemental permanent spells you cast from your hand gain evoke {4} as you cast
-    // them." (they have it as they're cast).
+    // them.": a one-shot grant as they're cast (CR 610.5, `StaticAbility::as_cast`).
     let gain;
-    let first = match first.strip_suffix(" as you cast them") {
+    let (first, as_cast) = match first.strip_suffix(" as you cast them") {
         Some(r) => {
             let (subject, granted) = r.split_once(" gain ")?;
             gain = format!("{subject} have {granted}");
-            gain.as_str()
+            (gain.as_str(), true)
         }
-        None => first,
+        None => (first, false),
     };
     // Cards in a hand.
     if let Some((subject, granted)) = first.split_once(" has ") {
         if let Some(f) = hand_cards(subject) {
             let kws = keywords(granted, ctx)?;
             let mods = mods(kws, cost_sentence)?;
+            if as_cast {
+                return None;
+            }
             let mut s = StaticAbility::new(StaticEffect::Continuous { affected: f, mods });
             s.condition = lead_cond;
             return Some(vec![AbilityDef::new(AbilityKind::Static(s), text)]);
@@ -211,6 +214,7 @@ fn s_spell_keyword_grant(l: &str, text: &str, ctx: &CompileContext) -> Option<Ve
     let mut conds: Vec<Condition> = subj.conds;
     conds.extend(lead_cond);
     let mut s = StaticAbility::new(StaticEffect::Continuous { affected, mods });
+    s.as_cast = as_cast;
     s.condition = match conds.len() {
         0 => None,
         1 => conds.pop(),

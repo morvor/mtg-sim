@@ -51,7 +51,11 @@ fn mana_maze_uses_the_color_the_spell_had_as_it_was_cast() {
 fn electrolyze_then_protection(t: &mut TestGame, targets: &[Entity]) -> usize {
     supported("Teferi's Protection");
     t.set_step(P1, Step::PrecombatMain);
-    let amounts: Vec<i64> = if targets.len() == 2 { vec![1, 1] } else { vec![2] };
+    let amounts: Vec<i64> = if targets.len() == 2 {
+        vec![1, 1]
+    } else {
+        vec![2]
+    };
     t.answer_targets(P1, targets);
     t.answer(P1, DecisionKind::Divide, Answer::Numbers(amounts));
     cast_card(t, P1, "Electrolyze");
@@ -145,7 +149,11 @@ fn cant_be_countered_still_gets_the_counterspells_other_effects() {
         // P1's Exclude ("Counter target creature spell. Draw a card.") targets it.
         let hand = t.hand_size(P1);
         cast_resolve_at(&mut t, P1, "Exclude", &[obj(bears)]);
-        assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "veil {veil}");
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            1,
+            "veil {veil}"
+        );
         assert_eq!(t.hand_size(P1), hand + 1, "P1 drew a card");
     }
 }
@@ -206,7 +214,11 @@ fn dragons_disciple_needs_a_dragon_card() {
     t.hand(P0, "Dragon's Disciple");
     t.answer_yes(P0, true);
     let a = t.enter(P0, "Dragon's Disciple");
-    assert_eq!(plus1(&t, a), 0, "\"Dragon\" in the name isn't a Dragon card");
+    assert_eq!(
+        plus1(&t, a),
+        0,
+        "\"Dragon\" in the name isn't a Dragon card"
+    );
     // Nor is another Dragon's Disciple on the battlefield a Dragon.
     t.answer_yes(P0, true);
     let b = t.enter(P0, "Dragon's Disciple");
@@ -259,6 +271,85 @@ fn rith_excess_damage_to_creatures_and_planeswalkers() {
         crate::r_p108_common::end_step(&mut t, P0);
         assert_eq!(dragons(&t), excess, "{extra}");
     }
+}
+
+#[test]
+fn rith_counts_deathtouch_damage_beyond_1_as_excess_but_not_on_planeswalkers() {
+    cr!("120.4a", "120.10");
+    ruling!(
+        "Rith, Liberated Primeval",
+        "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage, so any amount greater than that will cause excess damage to be dealt"
+    );
+    supported("Rith, Liberated Primeval");
+    supported("Typhoid Rats");
+    let dragons = |t: &TestGame| crate::r_p108_common::tokens_with(t, P0, "Dragon");
+    // Typhoid Rats (deathtouch) deals `n` to P1's Hill Giant (3/3) or to a planeswalker
+    // (`n` more than 1 below its loyalty is never excess there).
+    let run = |n: u32, walker: bool| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rith, Liberated Primeval");
+        let rats = t.battlefield(P0, "Typhoid Rats");
+        let victim = if walker {
+            let pw = t.battlefield(P1, "Gideon, Ally of Zendikar");
+            assert_eq!(t.counters(pw, "loyalty"), 4);
+            pw
+        } else {
+            t.battlefield(P1, "Hill Giant")
+        };
+        t.g.deal_damage(rats, obj(victim), n, false);
+        t.settle();
+        crate::r_p108_common::end_step(&mut t, P0);
+        dragons(&t)
+    };
+    assert_eq!(
+        run(2, false),
+        1,
+        "2 deathtouch damage to a 3/3: 1 is excess"
+    );
+    assert_eq!(
+        run(1, false),
+        0,
+        "1 deathtouch damage is lethal, none excess"
+    );
+    // Deathtouch doesn't matter for a planeswalker: 2 or 4 damage to loyalty 4 isn't excess.
+    assert_eq!(run(2, true), 0);
+    assert_eq!(run(4, true), 0);
+}
+
+#[test]
+fn rith_counts_excess_damage_whoever_dealt_it() {
+    cr!("120.4a", "120.10");
+    ruling!(
+        "Rith, Liberated Primeval",
+        "For example, if a 4/4 creature an opponent controls is dealt 2 damage by a spell you control and later that turn is dealt 3 damage by a spell another player controls, Rith"
+    );
+    supported("Rith, Liberated Primeval");
+    let dragons = |t: &TestGame| crate::r_p108_common::tokens_with(t, P0, "Dragon");
+    // P1's Air Elemental (4/4): P0's Shock, then (with `bolt`) P1's own Lightning Bolt.
+    let run = |bolt: bool| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rith, Liberated Primeval");
+        let elemental = t.battlefield(P1, "Air Elemental");
+        t.lands(P0, "Mountain", 1);
+        let shock = t.hand(P0, "Shock");
+        t.cast(P0, shock).target(obj(elemental)).go();
+        t.resolve_all();
+        if bolt {
+            t.lands(P1, "Mountain", 1);
+            let b = t.hand(P1, "Lightning Bolt");
+            t.cast(P1, b).target(obj(elemental)).go();
+            t.resolve_all();
+            assert!(!t.on_battlefield(elemental));
+        }
+        crate::r_p108_common::end_step(&mut t, P0);
+        dragons(&t)
+    };
+    assert_eq!(
+        run(true),
+        1,
+        "5 damage to a 4/4: 1 excess, the last 3 from P1's spell"
+    );
+    assert_eq!(run(false), 0);
 }
 
 #[test]
@@ -380,7 +471,10 @@ fn sparkshaper_visionary_planeswalker_creature_needs_continuous_control() {
 #[test]
 fn deification_hexproof_planeswalker_can_be_attacked() {
     cr!("702.11a", "508.1b");
-    ruling!("Deification", "A planeswalker with hexproof may still be attacked.");
+    ruling!(
+        "Deification",
+        "A planeswalker with hexproof may still be attacked."
+    );
     supported("Deification");
     let mut t = TestGame::new(2);
     // The planeswalker type chosen is the first one offered, Ajani.
@@ -442,7 +536,10 @@ fn ultra_magnus_put_onto_the_battlefield_attacking_didnt_attack() {
     supported("Ultra Magnus, Tactician // Ultra Magnus, Armored Carrier");
     supported("Kiln Walker");
     let mut t = TestGame::new(2);
-    let magnus = t.battlefield(P0, "Ultra Magnus, Tactician // Ultra Magnus, Armored Carrier");
+    let magnus = t.battlefield(
+        P0,
+        "Ultra Magnus, Tactician // Ultra Magnus, Armored Carrier",
+    );
     let walker = t.hand(P0, "Kiln Walker");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(walker)]);

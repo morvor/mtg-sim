@@ -342,32 +342,47 @@ pub fn turn_face_up_by(g: &mut Game, id: ObjectId, by: PlayerId) -> bool {
     crate::merge::turned_face(g, id, false);
     g.recompute();
     // CR 614.1e: "As [this] is turned face up, ..." replacement effects apply as it turns
-    // face up, before anything sees it face up.
-    let effects: Vec<(crate::eval::Ctx, Effect)> = g
-        .obj(id)
-        .chars
-        .abilities
-        .iter()
-        .filter_map(|a| match &a.kind {
-            AbilityKind::Static(s) => match &s.effect {
-                StaticEffect::Replacement(ReplacementDef {
-                    event: ReplacementEvent::TurnedFaceUp,
-                    action: ReplacementAction::AsEnters(e),
-                    ..
-                }) => {
-                    let mut ctx = crate::eval::Ctx::for_object(g, id);
-                    ctx.link = a.link;
-                    Some((ctx, (**e).clone()))
-                }
+    // face up, before anything sees it face up. One that makes it a copy of another
+    // creature as it's turned face up (Vesuvan Shapeshifter) gives it that creature's
+    // "as [this] is turned face up" abilities, which apply too (as for entering, CR
+    // 614.12; Vesuvan Shapeshifter's rulings): a second pass applies the ones it didn't
+    // have before.
+    let mut applied: Vec<u64> = Vec::new();
+    for pass in 0..2 {
+        if pass > 0 {
+            g.recompute();
+        }
+        let effects: Vec<(u64, crate::eval::Ctx, Effect)> = g
+            .obj(id)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| !applied.contains(&a.uid))
+            .filter_map(|a| match &a.kind {
+                AbilityKind::Static(s) => match &s.effect {
+                    StaticEffect::Replacement(ReplacementDef {
+                        event: ReplacementEvent::TurnedFaceUp,
+                        action: ReplacementAction::AsEnters(e),
+                        ..
+                    }) => {
+                        let mut ctx = crate::eval::Ctx::for_object(g, id);
+                        ctx.link = a.link;
+                        Some((a.uid, ctx, (**e).clone()))
+                    }
+                    _ => None,
+                },
                 _ => None,
-            },
-            _ => None,
-        })
-        .collect();
-    for (mut ctx, e) in effects {
-        let before = g.effects.len();
-        g.exec(&e, &mut ctx);
-        crate::layers::as_enters_copiable(g, id, before);
+            })
+            .collect();
+        if effects.is_empty() || g.obj(id).face_down || !g.is_live(id) {
+            break;
+        }
+        for (uid, mut ctx, e) in effects {
+            applied.push(uid);
+            let before = g.effects.len();
+            g.exec(&e, &mut ctx);
+            crate::layers::as_enters_copiable(g, id, before);
+        }
     }
     g.emit(Event::TurnedFaceUp {
         obj: id,
