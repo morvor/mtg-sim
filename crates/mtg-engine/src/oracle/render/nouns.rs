@@ -1180,7 +1180,8 @@ impl Renderer<'_> {
                 np.post.push(format!(
                     "from the graveyard of the player who controlled that creature the last time it became blocked by {that}"
                 ));
-                np.zone_said = true;
+                // (The card is in that graveyard: the zone is said by the phrase.)
+                np.zone = None;
             }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {
