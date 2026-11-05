@@ -234,6 +234,80 @@ fn a_loop_another_target_would_end_is_not_a_draw() {
     assert_eq!(t.named_on_battlefield("Faceless Devourer").len(), 3);
 }
 
+/// An agent that chooses, as each target, a Faceless Devourer that holds another Faceless
+/// Devourer (`true`) or one that holds something else (`false`), when there is one.
+struct DevourerHolding(bool);
+
+impl Agent for DevourerHolding {
+    fn name(&self) -> &str {
+        "devourer-holding"
+    }
+    fn decide(&mut self, g: &Game, p: PlayerId, d: &Decision) -> Answer {
+        match d {
+            Decision::ChooseTargets { candidates, .. } => {
+                let holds_devourer = |o: ObjectId| {
+                    g.obj(o)
+                        .linked
+                        .values()
+                        .flatten()
+                        .any(|l| g.is_live(*l) && g.obj(*l).chars.name == "Faceless Devourer")
+                };
+                match candidates
+                    .iter()
+                    .find(|e| matches!(e, Entity::Object(o) if holds_devourer(*o) == self.0))
+                {
+                    Some(e) => Answer::Entities(vec![*e]),
+                    None => Answer::Default,
+                }
+            }
+            _ => PassiveAgent.decide(g, p, d),
+        }
+    }
+}
+
+#[test]
+fn a_loop_through_a_devourer_holding_another_card_is_not_a_draw() {
+    cr!("104.4b", "732.5");
+    interp!("mandatory-loop-detection");
+    // Two Faceless Devourers that look alike, but one holds a Soltari Foot Soldier and the
+    // other a Devourer: exiling the first returns the Soltari, whose entering triggers
+    // nothing, and the chain ends. P0 keeps choosing the Devourer that holds a Devourer,
+    // but could stop the loop any time around.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 9);
+    let a = t.battlefield(P0, "Faceless Devourer");
+    let soltari = t.battlefield(P1, "Soltari Foot Soldier");
+    let b = t.hand(P0, "Faceless Devourer");
+    t.cast(P0, b).go();
+    t.answer_targets(P0, &[Entity::Object(soltari)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(soltari));
+    let c = t.hand(P0, "Faceless Devourer");
+    t.cast(P0, c).go();
+    t.answer_targets(P0, &[Entity::Object(a)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(a));
+    // B holds the Soltari and C holds A: a Devourer entering now has two Devourers to
+    // choose from, alike but for the card each holds.
+    let d = t.hand(P0, "Faceless Devourer");
+    t.g.set_agents(vec![
+        Box::new(DevourerHolding(true)),
+        Box::new(PassiveAgent),
+    ]);
+    t.cast(P0, d).go();
+    run_while_looping(&mut t, 3000);
+    assert!(still_looping(&t), "not a draw: {:?}", t.g.result);
+    // Exiling the Devourer that holds the Soltari ends the chain.
+    t.g.set_agents(vec![
+        Box::new(DevourerHolding(false)),
+        Box::new(PassiveAgent),
+    ]);
+    run_while_looping(&mut t, 200);
+    assert_eq!(t.g.result, None);
+    assert!(!still_looping(&t));
+    assert_eq!(t.named_on_battlefield("Soltari Foot Soldier").len(), 1);
+}
+
 #[test]
 fn a_loop_another_order_of_its_triggers_would_end_is_not_a_draw() {
     cr!("104.4b", "732.5", "603.3b");

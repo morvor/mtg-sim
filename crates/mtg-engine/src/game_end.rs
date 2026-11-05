@@ -664,10 +664,25 @@ pub(crate) fn note_decision(g: &mut Game, d: &crate::decision::Decision) {
 }
 
 /// Whether `candidates` are objects in one zone that the loop detection can't tell apart
-/// (the same characteristics and status, `Game::loop_object_key`): whichever of them is
-/// chosen, the game state is the same.
+/// (the same characteristics and status, `Game::loop_object_key`) and that hold the same
+/// cards (the objects linked to them, CR 607, such as the cards exiled with them):
+/// whichever of them is chosen, the game state is the same, and so is what comes back
+/// when it leaves.
 fn alike(g: &Game, candidates: &[Entity]) -> bool {
-    let key = |e: &Entity| e.object().map(|o| (g.obj(o).zone, g.loop_object_key(o)));
+    let key = |e: &Entity| {
+        e.object().map(|o| {
+            let obj = g.obj(o);
+            let mut held: Vec<String> = obj
+                .linked
+                .values()
+                .flatten()
+                .filter(|l| g.is_live(**l))
+                .map(|l| g.loop_object_key(*l))
+                .collect();
+            held.sort();
+            (obj.zone, g.loop_object_key(o), held)
+        })
+    };
     match candidates.split_first() {
         Some((first, rest)) => {
             let k = key(first);
