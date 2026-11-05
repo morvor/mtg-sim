@@ -985,7 +985,7 @@ fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
         let copies: Vec<ObjectId> = players
             .into_iter()
             .flat_map(|p| {
-                let Some(c) = crate::copy::copy_spell(g, spell, p, false) else {
+                let Some(c) = crate::copy::copy_spell_quiet(g, spell, p) else {
                     return vec![];
                 };
                 let mut v = vec![c];
@@ -994,6 +994,10 @@ fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
             })
             .collect();
         order_simultaneous_stack_objects(g, &copies);
+        let before: Vec<Vec<Entity>> = copies
+            .iter()
+            .map(|c| crate::copy::chosen_targets(g, *c))
+            .collect();
         if new_targets {
             for c in &copies {
                 if !crate::copy::has_chosen_targets(g, *c) {
@@ -1004,6 +1008,9 @@ fn each_other_player_copies(g: &mut Game, ctx: &mut Ctx, new_targets: bool) {
                     crate::target_rules::change_targets(g, p, *c, TargetChange::ChooseNew, None);
                 }
             }
+        }
+        for (c, b) in copies.iter().zip(&before) {
+            crate::copy::announce_unchanged_targets(g, *c, b);
         }
     }
 }
