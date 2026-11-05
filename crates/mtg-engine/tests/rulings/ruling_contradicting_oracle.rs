@@ -2,10 +2,13 @@
 //! decision of Nov 5; register `ruling-contradicting-oracle-gives-way`). The parts of such
 //! a ruling that contradict the card are listed in `docs/rulings-exemptions/` and logged in
 //! `docs/RULING_DISCREPANCIES.md`; these tests pin what the Oracle text says instead.
-//! (Homicide Investigator: `r_p005_dies.rs`; Rimescale Dragon: `r_p096_lockdown.rs`.)
+//! (Homicide Investigator: `r_p005_dies.rs`; Rimescale Dragon: `r_p096_lockdown.rs`; Run Out
+//! of Town: `r_p140_tuck.rs`.)
 
 use crate::r_p056_common::{tap, tapped, untap_step_of};
 use crate::r_s01_common::{attack_with, supported};
+use mtg_engine::events::MoveCause;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -104,4 +107,75 @@ fn citanul_druid_grows_for_each_opponents_artifact_spells_but_not_its_controller
     cast_ornithopter(&mut t, P1);
     cast_ornithopter(&mut t, P3);
     assert_eq!(plus_counters(&t, druid), 2);
+}
+
+/// Puts one card of each of `names` into `p`'s graveyard.
+fn fill_graveyard(t: &mut TestGame, p: PlayerId, names: &[&str]) -> Vec<ObjectId> {
+    names.iter().map(|n| t.graveyard(p, n)).collect()
+}
+
+/// Five cards with five different mana values (0 to 4).
+const FIVE_MANA_VALUES: [&str; 5] = [
+    "Forest",
+    "Llanowar Elves",
+    "Grizzly Bears",
+    "Centaur Courser",
+    "Hill Giant",
+];
+
+#[test]
+fn sanguine_spy_counts_mana_values_among_cards_in_your_graveyard() {
+    cr!("603.4", "202.3");
+    interp!("ruling-contradicting-oracle-gives-way");
+    // Oracle: "At the beginning of your end step, if there are five or more mana values
+    // among cards in your graveyard, you may pay 2 life. If you do, draw a card." Its ruling
+    // (2022-04-29) counts them "among cards you control", where the same note in the
+    // Streets of New Capenna Release Notes (2022-04-20) says "among cards in your
+    // graveyard" (a transcription error; exempt in docs/rulings-exemptions/rulings-P093.tsv).
+    // What it says of the check holds: it's made as the ability triggers and again as it
+    // resolves.
+    ruling!(
+        "Sanguine Spy",
+        "If you no longer have five or more mana values among those cards when the ability resolves, you may not pay 2 life."
+    );
+    supported("Sanguine Spy");
+    // Five mana values in the graveyard: it triggers, and P0 pays 2 life to draw.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sanguine Spy");
+    fill_graveyard(&mut t, P0, &FIVE_MANA_VALUES);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "it triggers");
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    // One of them leaves the graveyard before it resolves: four mana values, so no life is
+    // paid and no card drawn.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sanguine Spy");
+    let cards = fill_graveyard(&mut t, P0, &FIVE_MANA_VALUES);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.g.move_object(cards[4], Zone::Exile, MoveCause::Effect, None);
+    t.g.flush_events();
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(t.hand_size(P0), hand);
+    // Permanents with five mana values don't count: four in the graveyard, no trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Sanguine Spy");
+    for name in FIVE_MANA_VALUES {
+        t.battlefield(P0, name);
+    }
+    fill_graveyard(&mut t, P0, &FIVE_MANA_VALUES[..4]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "four mana values in the graveyard");
+    assert_eq!(t.life(P0), 20);
 }

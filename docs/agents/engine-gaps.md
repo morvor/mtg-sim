@@ -867,8 +867,11 @@ ruling-conflicts-2.
   bottom. They do not need to reveal the order those cards were put into the library this way." The Oracle
   text has the owner choose, the ruling the controller; they differ for a permanent another player controls.
   The engine follows the Oracle text (`run_out_of_town_follows_its_oracle_text` in
-  `tests/rulings/r_p140_tuck.rs`, which cites no ruling), as for Desynchronize, Unlucky Drop, Aether Gust and
-  Sudden Setback, whose rulings say the owner chooses. Left uncited.
+  `tests/rulings/r_p140_tuck.rs`), as for Desynchronize, Unlucky Drop, Aether Gust and
+  Sudden Setback, whose rulings say the owner chooses. Resolved by ruling-conflicts-3, case 1: the Streets of
+  New Capenna Release Notes (2022-04-20) have the same note with "owner" for "controller" (twice); a
+  transcription error, set aside under `ruling-contradicting-oracle-gives-way` (`rulings-P140.tsv`, logged in
+  `docs/RULING_DISCREPANCIES.md`); its third sentence is cited.
 - **Caller of the Untamed** (rulings-P025, left uncited). Ruling 2016-08-23: "If you have more than one Caller
   of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you
   drafted that aren’t in your deck. You’ll choose which one to copy at the time you choose the value of X while
@@ -878,7 +881,9 @@ ruling-conflicts-2.
   chosen is one with that mana value". The two differ only when two exiled cards share a mana value (which
   one is copied: chosen during activation by the ruling, as the ability resolves by the interpretation). Not a
   CR conflict: CR 107.3c and 607.3 support the ruling; following it needs a non-target choice made during
-  activation.
+  activation. Resolved by ruling-conflicts-3, case 2 (A): 601.2b's sentence for an X defined by a later choice
+  (CR effective 2016-09-30, explained with Caller of the Untamed in the Kaladesh Update Bulletin) has the card
+  chosen as X is announced; the engine now does so (`kw/choice_defining_x.rs`), and the ruling is cited.
 - **Araumi of the Dead Tide** (rulings-P024, left uncited). Ruling 2020-11-10: "If the creature card has {X}
   in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are
   created. X will be 0 for those tokens." Araumi grants encore with "The encore cost is equal to its mana
@@ -894,7 +899,12 @@ ruling-conflicts-2.
   107.3h for both (X is 0 for the cost: `a_scavenged_card_s_x_is_0` in `tests/rulings/r_s27_mana_value_x.rs`
   and `araumi_encore_cost_and_tokens_have_x_0` in `tests/rulings/r_p024_x_values.rs`, which cites no
   ruling); the Araumi ruling's second sentence (the tokens' X is 0) holds either way. Undecided: the user
-  decides with ruling-conflicts-2.
+  decides with ruling-conflicts-2. Investigated in ruling-conflicts-3, case 6 (D): the ruling is in the Commander
+  Legends Release Notes as is (2020-11-06), 107.3h dates from the CR effective 2015-01-23 (the Fate Reforged
+  Update Bulletin: "Any other time, X is 0."), and no change since explains it; the engine keeps X 0
+  (provisional `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`), the second sentence is cited, and the ruling is
+  logged in `docs/RULING_DISCREPANCIES.md` as inconsistent; the user decides whether its first clause is set
+  aside.
 - **Arbiter of Knollridge** (rulings-P014, left uncited). Oracle: "When this creature enters, each player's
   life total becomes the highest life total among all players." Ruling 2007-10-01: "In other multiplayer
   formats, each player's life total is set to the highest life total within their range of influence. These
@@ -917,7 +927,11 @@ ruling-conflicts-2.
   (the archived CR texts weren't reachable from that session). Arbiter's other two rulings (life-gain triggers,
   Two-Headed Giant) are cited. The engine follows CR 801.10 and 801.11: with Alice controlling it, Alice, Barry
   and Doug become 8 and Carrie keeps 11 (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`
-  in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator.
+  in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator. Investigated
+  in ruling-conflicts-3, case 7 (D): the CR current as of 2007-10-01 already had 801.10 and 801.11 word for word
+  (as 601.10 and 601.11; its Coat of Arms example was then narrower still, the players in range of both), so no
+  rules change explains the ruling; logged in `docs/RULING_DISCREPANCIES.md` as inconsistent, uncited until the
+  user decides (recommended: set aside).
 - **Fiery Annihilation** (rulings-P047, left uncited). Oracle: "Fiery Annihilation deals 5 damage to target
   creature. Exile up to one target Equipment attached to that creature. If that creature would die this turn,
   exile it instead." Ruling 2024-11-08: "If the target creature is an illegal target when Fiery Annihilation
