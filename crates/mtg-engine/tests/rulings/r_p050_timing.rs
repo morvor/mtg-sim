@@ -196,6 +196,122 @@ fn red_hulk_reflexive_trigger_once_for_every_counter_put() {
     }
 }
 
+#[test]
+fn etched_slith_reflexive_trigger_once_for_each_counter_put() {
+    // The one-counter form of the template: Etched Slith's own ruling (filed in batch P129)
+    // says what Red Hulk's test pins for a card with no ruling of its own.
+    cr!("603.12", "603.12a", "614.1a");
+    interp!("reflexive-per-counters-put");
+    ruling!(
+        "Etched Slith",
+        "the reflexive ability will trigger once for each +1/+1 counter you put on it this way"
+    );
+    supported("Etched Slith");
+    for doubling in [false, true] {
+        let mut t = TestGame::new(2);
+        let slith = t.battlefield(P0, "Etched Slith");
+        if doubling {
+            t.battlefield(P0, "Doubling Season");
+        }
+        crate::r_p031_common::hit(&mut t, slith);
+        assert_eq!(triggers_named(&t, "Etched Slith"), 1);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.resolve();
+        let n = if doubling { 2 } else { 1 };
+        assert_eq!(t.counters(slith, "+1/+1"), n);
+        assert_eq!(
+            triggers_named(&t, "Etched Slith"),
+            n as usize,
+            "Doubling Season: {doubling}"
+        );
+    }
+}
+
+/// Craig Boone attacks with Grizzly Bears, with `setup`'s permanents; returns the number
+/// of quest counters put on it and of reflexive triggers on the stack.
+fn boone_attack(setup: &[&str]) -> (u32, usize) {
+    boone_attack_with(setup, &[])
+}
+
+/// [`boone_attack`], with `theirs` on P1's battlefield too.
+fn boone_attack_with(setup: &[&str], theirs: &[&str]) -> (u32, usize) {
+    let mut t = TestGame::new(2);
+    for name in theirs {
+        supported(name);
+        t.battlefield(P1, name);
+    }
+    let boone = t.battlefield(P0, "Craig Boone, Novac Guard");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let dreadmaw = t.battlefield(P1, "Colossal Dreadmaw");
+    for name in setup {
+        supported(name);
+        t.battlefield(P0, name);
+    }
+    attack_with(
+        &mut t,
+        &[(boone, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
+    for _ in 0..3 {
+        t.answer_targets(P0, &[obj(dreadmaw)]);
+    }
+    t.resolve();
+    (
+        t.counters(boone, "quest"),
+        triggers_named(&t, "Craig Boone, Novac Guard"),
+    )
+}
+
+#[test]
+fn reflexive_count_per_n_counters_rounds_down_and_needs_a_counter_put() {
+    cr!("603.12", "603.12a", "614.1a");
+    interp!("reflexive-per-counters-put");
+    ruling!(
+        "Craig Boone, Novac Guard",
+        "the reflexive triggered ability will trigger once for every two quest counters placed on Craig Boone this way"
+    );
+    // Hardened Scales only adds to +1/+1 counters: two quest counters, one trigger.
+    assert_eq!(boone_attack(&["Hardened Scales"]), (2, 1));
+    // Doubling Season and Hardened Scales: still four quest counters, two triggers.
+    assert_eq!(boone_attack(&["Doubling Season", "Hardened Scales"]), (4, 2));
+    // Solemnity: no counter can be put on it, so it didn't "do", and nothing triggers.
+    assert_eq!(boone_attack(&["Solemnity"]), (0, 0));
+    // An opponent's Vorinclex, Monstrous Raider halves the two to one: fewer than two
+    // put, but some, triggers it once (the provisional part of the entry).
+    assert_eq!(
+        boone_attack_with(&[], &["Vorinclex, Monstrous Raider"]),
+        (1, 1)
+    );
+    // The same template with +1/+1 counters (Dimension X Pizzasaur, "put two +1/+1
+    // counters on target creature. When you do, ..."): Hardened Scales makes it three,
+    // which is two put once (rounded down); Doubling Season then makes it six, three times.
+    supported("Dimension X Pizzasaur");
+    for (setup, put, times) in [
+        (&[][..], 2, 1),
+        (&["Hardened Scales"][..], 3, 1),
+        (&["Hardened Scales", "Doubling Season"][..], 6, 3),
+    ] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        for name in setup {
+            t.battlefield(P0, name);
+        }
+        t.answer_targets(P0, &[obj(bears)]);
+        t.enter(P0, "Dimension X Pizzasaur");
+        t.settle();
+        for _ in 0..3 {
+            t.answer_targets(P0, &[]);
+        }
+        t.resolve();
+        assert_eq!(t.counters(bears, "+1/+1"), put, "{setup:?}");
+        assert_eq!(
+            triggers_named(&t, "Dimension X Pizzasaur"),
+            times,
+            "{setup:?}"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------------------
 // Mishra, Claimed by Gix
 // ---------------------------------------------------------------------------------------

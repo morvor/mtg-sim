@@ -151,7 +151,7 @@ fn cruel_ultimatum(respond: fn(&mut TestGame)) -> (TestGame, usize, usize) {
 
 #[test]
 fn cruel_ultimatum_illegal_target_does_nothing() {
-    cr!("608.2b", "702.11d");
+    cr!("608.2b", "702.11c", "702.11d");
     ruling!(
         "Cruel Ultimatum",
         "If the target opponent is an illegal target as Cruel Ultimatum tries to resolve, it won't resolve and none of its effects will happen. (I'm not going to list them all here because it would just be disappointing to hear all of the things you won't get to do.)"
@@ -198,7 +198,7 @@ fn cruel_ultimatum_finishes_resolving_before_both_players_lose() {
 
 #[test]
 fn vizkopa_confessor_illegal_target_no_life_paid_no_reveal() {
-    cr!("608.2b", "702.11d");
+    cr!("608.2b", "702.11c", "702.11d");
     ruling!(
         "Vizkopa Confessor",
         "If the target opponent is an illegal target when Vizkopa Confessor's last ability tries to resolve, it won't resolve and none of its effects will happen. You won't pay life and no player will reveal any cards."
@@ -238,7 +238,7 @@ fn vizkopa_confessor_illegal_target_no_life_paid_no_reveal() {
 
 #[test]
 fn stolen_grain_illegal_target_no_life() {
-    cr!("608.2b", "702.11d");
+    cr!("608.2b", "702.11c", "702.11d");
     ruling!(
         "Stolen Grain",
         "If the targeted opponent is an illegal target by the time Stolen Grain resolves, the ability doesn’t resolve. You won’t gain life."
@@ -278,7 +278,7 @@ fn suffer_the_past(respond: fn(&mut TestGame)) -> TestGame {
 
 #[test]
 fn suffer_the_past_player_illegal_cards_legal() {
-    cr!("608.2b", "608.2c", "702.11d");
+    cr!("608.2b", "608.2c", "702.11c", "702.11d");
     ruling!(
         "Suffer the Past",
         "If the targeted player becomes an illegal target by the time Suffer the Past resolves but the targeted cards don’t, you still exile the cards and gain life. The player won’t be lose any life, though."

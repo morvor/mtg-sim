@@ -2253,6 +2253,9 @@ impl Game {
                     .stack_obj
                     .filter(|s| self.obj(*s).is_spell())
                     .or(ctx.source);
+                // It triggers once for each time its event happened (CR 603.12a); the
+                // count is used up here, not carried into the ability's own resolution.
+                let times = ctx.reflexive_times.take().unwrap_or(1).max(1);
                 let mut saved = ctx.clone();
                 saved.resolving_controller = None;
                 if saved.reflexive_parent.is_none() {
@@ -2263,8 +2266,6 @@ impl Game {
                 if let Some(p) = performer {
                     body = performed_by(body, p);
                 }
-                // It triggers once for each time its event happened (CR 603.12a).
-                let times = ctx.reflexive_times.take().unwrap_or(1).max(1);
                 for i in 0..times {
                     if i > 0 {
                         self.trigger_order += 1;
