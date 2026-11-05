@@ -905,3 +905,26 @@ ruling-conflicts-2.
   (provisional `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`), the second sentence is cited, and the ruling is
   logged in `docs/RULING_DISCREPANCIES.md` as inconsistent; the user decides whether its first clause is set
   aside.
+- **Arbiter of Knollridge** (rulings-P014, left uncited). Oracle: "When this creature enters, each player's
+  life total becomes the highest life total among all players." Ruling 2007-10-01: "In other multiplayer
+  formats, each player's life total is set to the highest life total within their range of influence. These
+  changes happen at the same time. For example, if each player has a range of influence of one, and the players
+  in the game are Alice (4 life), Barry (8 life), Carrie (11 life), and Doug (7 life), in that order, then
+  Alice's life total will become 8 and Barry and Doug's life totals will each become 11." CR 801.10: "Spells and
+  abilities can’t affect objects or players outside their controller’s range of influence. The parts of the
+  effect that attempt to affect an out-of-range object or player will do nothing. The rest of the effect will
+  work normally." CR 801.11: "If a spell or ability requires information from the game, it gets only
+  information from within its controller’s range of influence. It doesn’t see objects or events outside its
+  controller’s range of influence." and its second example: "In the same game, Rob is sitting to the right of
+  Alex. Coat of Arms will boost Rob’s creatures based on what creatures are controlled by players within Alex’s
+  range of influence, including the player sitting to Alex’s left, who’s out of Rob’s range of influence." The
+  ruling measures each affected player's own range; the CR measures the controller's, and no controller gives
+  the ruling's example (the three players within the controller's range all get the same total; the fourth is
+  unaffected). The other rulings on range of influence use the controller's range: Imperial Mask (2007-05-01)
+  "Only teammates within the range of influence of Imperial Mask's controller will get a token." and
+  Benediction of Moons (2006-02-01) "... players who have been eliminated or who are outside your range of
+  influence don't count toward the total." Not checked: whether the Comprehensive Rules of 2007 said otherwise
+  (the archived CR texts weren't reachable from that session). Arbiter's other two rulings (life-gain triggers,
+  Two-Headed Giant) are cited. The engine follows CR 801.10 and 801.11: with Alice controlling it, Alice, Barry
+  and Doug become 8 and Carrie keeps 11 (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`
+  in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator.

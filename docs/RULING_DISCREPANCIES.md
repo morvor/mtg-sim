@@ -201,6 +201,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Halsin (layers 7b, 7c and 7d in timestamp order, CR 613.4, 613.7).
 - Recorded: tests `tests/rulings/misattached_rulings.rs` (`halsin_sets_base_power_and_toughness_under_effects_that_modify_them`, `halsin_overwrites_earlier_base_power_and_toughness_and_later_ones_overwrite_it`), citing them under Gut, whose Skeleton token is the token Halsin animates.
 
+### Scuttletide: a ruling about a trigger on attackers declared against you
+- Kind: misattached
+- Status: open for review
+- Ruling, Scuttletide (2021-06-18): "The triggered ability triggers when creatures are declared as attackers attacking you or a planeswalker you control. It will not trigger if an effect puts a creature onto the battlefield attacking you or a planeswalker you control."
+- Conflicts with: Scuttletide has no triggered ability: "{1}, Discard a card: Create a 0/3 blue Crab creature token. / Delirium — Crabs you control get +1/+1 as long as there are four or more card types among cards in your graveyard."
+- Evidence: the card the ruling describes isn't identified: no other card in the data has this ruling, and no Modern Horizons 2 card (the set of Scuttletide and of the ruling's date) has a trigger on creatures attacking you or a planeswalker you control. Scuttletide's other rulings include three about Clue tokens ("The token is named Clue Token ...", 2021-06-18), which fit Hard Evidence ("Create a 0/3 blue Crab creature token. Investigate."), another Modern Horizons 2 card that makes Crabs and has no rulings of its own in the data; so rulings of neighbouring cards were filed under Scuttletide, and this one probably came from another card of the set's release notes (an inference). The only card in the data whose Oracle text both has such a trigger and makes Clues is Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate."), which also has no rulings of its own, but its printing in the data is from Murders at Karlov Manor Commander (released 2024-02-09), after the ruling's date, and it isn't a Modern Horizons 2 card, so it isn't likely to be the card the 2021 release notes described.
+- Engine: an ability that triggers when a creature attacks you or a planeswalker you control triggers on attackers declared that way (CR 508.3a) and not for a creature put onto the battlefield attacking (CR 508.4).
+- Recorded: test `tests/rulings/r_p011_combat.rs` (`creatures_put_onto_the_battlefield_attacking_werent_declared`), with Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate.") standing in for the card it describes and Scuttletide on the battlefield, citing it under Scuttletide.
+
 ## Outdated rulings
 
 ### Aetherplasm: "This allows it to dodge abilities like Deathgazer's."
@@ -370,7 +379,7 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- None at the moment. Work item ruling-conflicts-3 took up the craft copy ruling (now an
+- (Done.) Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed) and Araumi of the
   Dead Tide (an inconsistent entry above, for the user to decide). It also compared the 69
@@ -382,3 +391,9 @@ decides whether they become a conflict case.
   the card (Failure // Comply's "Opponents" for "Players", Choose Your Demise's "library"
   for "graveyard"); only Run Out of Town's and Sanguine Spy's contradict it. The rest weren't
   read one by one.
+- **Arbiter of Knollridge** (rulings-P014): its ruling (2007-10-01) sets each player's life
+  total to the highest life total within that player's own range of influence (its example
+  has Alice become 8 and Barry and Doug 11), against CR 801.10 and 801.11, under which the
+  ability affects and sees only what is within its controller's range (801.11's second Coat
+  of Arms example), as the Imperial Mask and Benediction of Moons rulings say. Left uncited;
+  the texts are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
