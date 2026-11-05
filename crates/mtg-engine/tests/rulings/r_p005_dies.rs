@@ -291,6 +291,42 @@ fn homicide_investigator_triggers_on_its_own_death_unless_its_a_token() {
 }
 
 #[test]
+fn homicide_investigator_investigates_once_for_creatures_dying_together() {
+    cr!("603.2c", "603.10a");
+    // Oracle: "Whenever one or more nontoken creatures you control die, investigate. This
+    // ability triggers only once each turn." Creatures dying together are one event: one
+    // trigger, also when the Investigator dies with them. (Its 2024-04-12 ruling "If
+    // Homicide Investigator dies at the same time as one or more other nontoken creatures
+    // you control, Homicide Investigator's ability triggers for each of them." contradicts
+    // this text; it's left uncited.)
+    supported("Homicide Investigator");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Homicide Investigator");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    wrath(&mut t, P0);
+    assert!(t.named_on_battlefield("Homicide Investigator").is_empty());
+    assert_eq!(clues(&t, P0), 1);
+    // Only once each turn: a second death that turn doesn't trigger it; the next turn's
+    // does.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Homicide Investigator");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let lions = t.battlefield(P0, "Savannah Lions");
+    kill(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(clues(&t, P0), 1);
+    kill(&mut t, giant);
+    t.resolve_all();
+    assert_eq!(clues(&t, P0), 1);
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    kill(&mut t, lions);
+    t.resolve_all();
+    assert_eq!(clues(&t, P0), 2);
+}
+
+#[test]
 fn thieving_amalgam_owner_left_the_game() {
     cr!("603.10a", "800.4a", "704.3");
     ruling!(
