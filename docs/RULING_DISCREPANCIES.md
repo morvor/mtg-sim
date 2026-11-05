@@ -1,0 +1,340 @@
+# Ruling discrepancies
+
+Wizards rulings (Scryfall's `data/rulings.jsonl.gz`) that the engine doesn't follow in full,
+or tests on another card than the one the data attaches them to. This is where a human
+checks each finding and reports it to Wizards of the Coast; nothing here changes how the
+engine plays. The user's decision of Nov 5: "It looks like some rulings are applied as a
+template, and are therefore occasionally incorrect. ... We should still keep a detailed
+account of all of the instances though, so they can be checked by a human, and reported to
+Wizards of the Coast if erroneous."
+
+**Kinds.**
+- **template error**: the ruling's words contradict the card's own Oracle text, and it is
+  (most likely) a copy of a similar card's ruling. Policy `ruling-contradicting-oracle-gives-way`
+  (`docs/interpretations/sources.md`, decided by the user Nov 5): the Oracle text wins
+  (CR 108.1); the parts of the ruling that agree with it stay cited.
+- **misattached**: the ruling describes another card. Policy (decided by the user Nov 5):
+  it is tested on the card it describes and cited under the card it is attached to (the
+  `ruling!` macro needs that), with a comment naming the card it describes; the attached
+  card is set up in the test when it can take part. Being misattached is never a reason to
+  exempt a ruling.
+- **inconsistent**: the ruling contradicts other rulings on the same question.
+- **outdated**: the ruling is older than a dated rules change or Oracle change, but is
+  still published.
+- **narrower than stated**: the ruling is right in the situation it was written for, but its
+  words state a rule that is wrong elsewhere.
+
+**Statuses.** *open for review*: not yet checked by a human. *reported*: reported to Wizards
+of the Coast (say when and where). *confirmed*: Wizards changed or confirmed the ruling (say
+how).
+
+**Entries.** Each entry gives the card the ruling is attached to and the ruling, verbatim
+with its `published_at` date (`- Ruling, <card> (<date>): "<text>"`, one line each); the
+source it conflicts with, quoted and dated; the evidence (the likely origin, release notes,
+rules changes); what the engine does; and where it is recorded (exemption files, tests and
+register ids, in backticks; test paths are relative to `crates/mtg-engine`). Oracle texts
+and rulings are quoted from Scryfall's bulk data in `data/` (`oracle_cards.jsonl.gz` and
+`rulings.jsonl.gz`, both updated 2026-09-24, per `data/manifest.json`); an Oracle text
+quoted without a date is the text of that snapshot. Rules text is quoted from
+`data/comprehensive-rules.txt` (effective 2026-09-25); earlier rules text from the archived
+Comprehensive Rules at https://github.com/pit142857/mtg-cr (commit 8351b94f; the files are
+named by upload date and state their own effective dates). Release notes and update
+bulletins were outside these sessions' allowed network hosts (magic.wizards.com,
+web.archive.org); where an entry cites one, it was read from a mirror of the Wizards article
+archive or from search results, as the work item named in the entry says.
+
+**Keeping it complete.** `cargo test -p mtg-data` (`ruling_discrepancies_log_is_complete`)
+and `cargo run --release -q -p mtg-tools -- rulings-coverage --check` fail when a rulings
+exemption whose reason calls the ruling outdated, superseded, overridden, inconsistent,
+misattached or a template error, or cites `ruling-contradicting-oracle-gives-way`, has no
+entry here quoting that ruling under that card; when a quoted ruling isn't word for word one
+of that card's rulings, or has another date; and when a file, test or register id an entry
+names doesn't exist (`crates/mtg-data/src/discrepancies.rs`). To add an instance, add an
+entry under its kind with every field and run `cargo test -p mtg-data`. A contradiction with
+no clear explanation goes to the coordinator as a conflict case first.
+
+## Template errors
+
+### Homicide Investigator: "triggers for each of them"
+- Kind: template error
+- Status: open for review
+- Ruling, Homicide Investigator (2024-04-12): "If Homicide Investigator dies at the same time as one or more other nontoken creatures you control, Homicide Investigator's ability triggers for each of them."
+- Conflicts with: the card's Oracle text, printed so in Murders at Karlov Manor (2024-02-09), its only set: "Whenever one or more nontoken creatures you control die, investigate. This ability triggers only once each turn." Creatures dying together are one event for a "one or more" trigger (CR 603.2c: "An ability triggers only once each time its trigger event occurs. However, it can trigger repeatedly if one event contains multiple occurrences."), and the second sentence forbids a second trigger that turn.
+- Evidence: the ruling is Midnight Reaper's, word for word with the name swapped: "If Midnight Reaper dies at the same time as one or more other nontoken creatures you control, Midnight Reaper's ability triggers for each of them." (2018-10-05; Guilds of Ravnica release notes, 2018-09-20), right for Midnight Reaper's per-creature trigger ("Whenever a nontoken creature you control dies, ..."). Homicide Investigator's other 2024-04-12 ruling is Midnight Reaper's companion ruling, in the same order ("Midnight Reaper's ability triggers when it dies if it's not a token.", 2018-10-05); it agrees with the card and is cited. The two are the only Murders at Karlov Manor rulings dated after 2024-02-02. Rulings on the same template say the opposite: G'raha Tia ("Whenever one or more other creatures and/or artifacts you control die, draw a card. This ability triggers only once each turn.") "If G'raha Tia and one or more other creatures and/or artifacts you control die at the same time, its last ability will trigger once (as long as it hasn't already triggered this turn)." (2025-06-06). No rules or Oracle change explains it: 603.2c reads the same in the CR effective 2024-04-12 and today. Investigated in work item ruling-conflicts-2, case 2 (conclusion D).
+- Engine: one Clue when nontoken creatures you control die together, the Investigator among them, and at most one each turn, as the Oracle text says.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P005.tsv`; register `homicide-investigator-triggers-once`, `ruling-contradicting-oracle-gives-way`; test `tests/rulings/r_p005_dies.rs` (`homicide_investigator_investigates_once_for_creatures_dying_together`).
+
+### Rimescale Dragon: "all permanents" for "Creatures"
+- Kind: template error
+- Status: open for review
+- Ruling, Rimescale Dragon (2006-07-15): "Rimescale Dragon’s last ability affects all permanents with ice counters on them, whether or not it put the ice counters on them."
+- Conflicts with: the card's Oracle text, printed so in Coldsnap (2006-07-21), its only set: "Creatures with ice counters on them don't untap during their controllers' untap steps." CR 109.2: "If a spell or ability uses a description of an object that includes a card type or subtype, but doesn’t refer to a specific zone or include the word “card,” “spell,” “source,” or “scheme,” it means a permanent of that card type or subtype on the battlefield."
+- Evidence: the ruling is Rimefeather Owl's ruling of the same day, word for word with the name swapped: "Rimefeather Owl’s last ability affects all permanents with ice counters on them, whether or not it put the ice counters on them." (2006-07-15), right for the Owl ("Permanents with ice counters on them are snow."). The Dragon was printed "Creatures" and its Oracle text has always said so; its only Oracle change is the reminder text ("snow source", Kaldheim, 2021). No other ruling in the data widens the card types its card affects. Its "whether or not it put the ice counters on them" agrees with the card. Investigated in work item ruling-conflicts-2, case 4 (conclusion D in part).
+- Engine: only creatures with ice counters on them don't untap, whoever put the counters there; a Forest with an ice counter untaps, and so does a land iced while it was animated, once it isn't a creature.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P096.tsv` (its "all permanents"; the "whether or not" clause stays cited); register `rimescale-dragon-creatures-only`, `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_p096_lockdown.rs` (`rimescale_dragon_freezes_creatures_with_ice_counters_from_any_source_but_not_other_permanents`, `rimescale_dragon_lets_a_land_iced_while_animated_untap_once_its_not_a_creature`).
+
+### Combat Celebrant: "untaps all of your creatures" for "untap all other creatures you control"
+- Kind: template error
+- Status: open for review
+- Ruling, Combat Celebrant (2017-04-18): "Combat Celebrant's ability untaps all of your creatures, not just the ones that are attacking."
+- Conflicts with: the card's Oracle text: "If this creature hasn't been exerted this turn, you may exert it as it attacks. When you do, untap all other creatures you control and after this phase, there is an additional combat phase. (An exerted creature won't untap during your next untap step.)" "All of your creatures" includes Combat Celebrant; "other" leaves it tapped.
+- Evidence: the ruling's point, "not just the ones that are attacking", agrees with the card; only its noun phrase drops "other". It is in the Amonkhet release notes directly under the card's text (2017-04-14, per work item ruling-conflicts-2; not re-read here). Likely origin (an inference): Lightning Runner's Aether Revolt ruling, "You untap all creatures you control, including ones that aren't attacking." (2017-02-09), written for the same design without "other" ("If you pay, untap all creatures you control, and after this phase, there is an additional combat phase."). Combat Celebrant's ruling about exerting several Celebrants in one combat ("... all of your creatures are untapped only during the current combat phase ...", 2017-04-18) is consistent with "other": each Celebrant's ability untaps the others.
+- Engine: untaps every other creature you control, attacking or not; the exerted Combat Celebrant, tapped by attacking, stays tapped.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P056.tsv` (its "untaps all of your creatures"; "not just the ones that are attacking" stays cited); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/ruling_contradicting_oracle.rs` (`combat_celebrant_untaps_all_other_creatures_but_not_itself`), `tests/rulings/r_p056_extra_phases.rs` (`combat_celebrant_untaps_all_other_creatures_and_adds_a_combat_without_a_main_phase`).
+
+### Citanul Druid: "all players" for "an opponent"
+- Kind: template error
+- Status: open for review
+- Ruling, Citanul Druid (2004-10-04): "In multiplayer games it affects all players."
+- Conflicts with: the card's Oracle text: "Whenever an opponent casts an artifact spell, put a +1/+1 counter on this creature." CR 102.2: "In a two-player game, a player’s opponent is the other player." CR 102.3: "In a multiplayer game between teams, a player’s teammates are the other players on their team, and the player’s opponents are all players not on their team." Read as written, "all players" includes the Druid's controller and teammates.
+- Evidence: the ruling is the multiplayer note of Gatherer's first batch of rulings (2004-10-04), which says "opponents" or "opposing players" on every other card whose ability applies only to opponents: Malignant Growth "In multiplayer games it affects all opponents.", Havoc "In a multiplayer game, it affects all opponents.", Invoke Prejudice "In a multi-player game, it affects all opposing players.", Aura of Silence "Aura of Silence affects all opponents in a multiplayer game.", Lifetap, Lifeblood, Powerleech, Underworld Dreams, Grim Feast, Roots of Life and Misers' Cage (all 2004-10-04), Kismet and Frozen Aether (2007-02-01). It says "all players" only where the ability applies to every player: Thieves' Auction "In multi-player games, it affects all players and players make choices in turn order.", Sphere of Resistance and Spellshock "It affects all players, including you.", Dueling Grounds and Crumbling Sanctuary "The ability affects all players." (all 2004-10-04). Citanul Druid's note is Malignant Growth's sentence with "players" for "opponents". Its evident intent, that every opponent's artifact spells count, is what the card's text already says, and the ruling has no other content. No version of the card's text says "player": it was printed in Antiquities (1994-03-04) as "Druid gains a +1/+1 counter each time opponent casts an artifact." (two-player wording, as quoted by third-party card databases in search results on 2026-11-05; no scan was checked, since the sites that carry printed texts, such as mtgjson.com and Gatherer, were outside this session's allowed network hosts), which the Oracle text renders "an opponent". Decided under the policy by register-decisions-nov5 (Nov 5).
+- Engine: every opponent's artifact spells put a counter on it, in free-for-all and team games; its controller's and teammates' don't.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P178.tsv`; register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/ruling_contradicting_oracle.rs` (`citanul_druid_grows_for_each_opponents_artifact_spells_but_not_its_controllers`).
+
+## Inconsistent rulings
+
+### Gnoll War Band: opponents who have left the game aren't counted
+- Kind: inconsistent
+- Status: open for review
+- Ruling, Gnoll War Band (2022-06-10): "Opponents who have left the game will not be counted when determining how many opponents have been dealt damage this turn."
+- Conflicts with: the other rulings on the same question, which count them: Spinerock Knoll "At the time the last ability resolves, you'll get to play the card if a player who is currently your opponent, or a player who was your opponent at the time they left the game, has been dealt 7 damage over the course of the turn." (2007-10-01); Sygg, River Cutthroat "As the end step begins, Sygg’s ability checks whether a player who is currently your opponent, or a player who was your opponent at the time they left the game, has lost 3 or more life over the course of the turn." (2008-05-01); Moonshae Pixie, from Gnoll War Band's own set with the same structure: "If an opponent was dealt combat damage this turn and subsequently lost the game, Moonshae Pixie's second ability still counts that player when determining how many cards its controller should draw." (2024-04-12); and about a dozen more from 2008 to 2024 (Notorious Throng, Cryptborn Horror, Thought Sponge, Chandra's Incinerator, Belbe, Corrupted Observer, Rakdos, Lord of Riots, Tymna the Weaver, Ludevic, Necro-Alchemist, Dunerider Outlaw, Teysa, Opulent Oligarch, Kaito, Bane of Nightmares). The card: "This spell costs {1} less to cast for each opponent who was dealt damage this turn." The CR leaves the question open (800.4i: "If an effect requires information about a specific player, the effect uses the current information about that player if they are still in the game; otherwise, the effect uses the last known information about that player before they left the game. If an effect requires information from the game about actions players have taken, the effect can find actions that were taken by a player who has left the game. ...").
+- Evidence: no wording sets the card apart from the others (any damage or combat damage, a cost reduction or a count; see the register entry), and the rulings before and after it agree with each other, so no rules change explains it: 800.4i's first sentence dates from the CR of 2007-10-01 (as 600.4e) and its second from the CR effective 2019-08-23 (as 800.4h), both before this ruling (archived CR texts). Likely origin (an inference): the template for counts of opponents a player has now, "Opponents who have left the game aren't counted when determining how many tokens to create." (encore cards such as Phyrexian Triniform, 2020-11-10), applied to a count of what happened this turn. Investigated in work item ruling-conflicts-1, case 2 (conclusion C); set aside by the user's decision of Nov 5.
+- Engine: counts every opponent who was dealt damage this turn, including those who have since left the game, as for every "for each opponent who ... this turn" count.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P186.tsv`; register `history-counts-players-who-left`; test `tests/cards/value_results_history.rs` (`gnoll_war_band_counts_opponents_who_were_dealt_damage`).
+
+## Narrower than stated
+
+### Tempt with Glory and the other tempting offers: "starting with the opponent on your left"
+- Kind: narrower than stated
+- Status: open for review
+- Ruling, Tempt with Glory (2013-10-17): "Your opponents decide in turn order whether or not they accept the offer, starting with the opponent on your left. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+- Ruling, Tempt with Discovery (2013-10-17): "Your opponents decide in turn order whether or not they accept the offer, starting with the opponent on your left. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+- Ruling, Tempt with Immortality (2013-10-17): "Your opponents decide in turn order whether or not they accept the offer, starting with the opponent on your left. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+- Ruling, Tempt with Reflections (2013-10-17): "Your opponents decide in turn order whether or not they accept the offer, starting with the opponent on your left. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+- Ruling, Tempt with Vengeance (2013-10-17): "Your opponents decide in turn order whether or not they accept the offer, starting with the opponent on your left. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+- Ruling, Tempt with Bunnies (2024-07-26): "Your opponents decide in turn order whether or not they accept the offer, starting with the next opponent in turn order. Each opponent will know the decisions of previous opponents in turn order when making their decision."
+- Conflicts with: CR 101.4: "If multiple players would make choices and/or take actions at the same time, the active player (the player whose turn it is) makes any choices required, then the next player in turn order (usually the player seated to the active player’s left) makes any choices required, followed by the remaining nonactive players in turn order. ..." Tempt with Mayhem (2024-06-07): "Starting with the next opponent in turn order (or the active player, if that player is one of your opponents), each opponent in turn order decides whether or not to copy the spell ...".
+- Evidence: the rulings describe the caster's own turn: every one of these cards is a sorcery, so its caster is normally the active player, and the opponent on the left (the next player in turn order) decides first. Cast on another player's turn (with an effect such as Leyline of Anticipation's "You may cast spells as though they had flash."), 101.4 has the active player decide first, as Tempt with Mayhem's ruling says for the one tempting offer that is an instant; Extract a Confession (2024-02-02) and Flare of Malice (2024-06-07) add the same qualification for their sacrifices ("or, if you cast ... on an opponent's turn, starting with the opponent whose turn it is"). The 2013 text (Commander 2013, 2013-10-17) is on five cards; Tempt with Bunnies (2024-07-26) words it "starting with the next opponent in turn order", with the same gap. Investigated in work item ruling-conflicts-1, case 16 (conclusion A: the sources agree for the caster's own turn).
+- Engine: the opponents decide in APNAP order (CR 101.4): on the caster's turn the next player in turn order first, on another player's turn the active player first if it's an opponent; each knows the earlier decisions (101.4b).
+- Recorded: no exemption: the rulings stay cited for the caster's own turn; tests `tests/rulings/r_s16_tempting_offer.rs` (`opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices`, `off_turn_the_active_opponent_decides_first`, `tempt_with_bunnies_draws_and_makes_rabbits_for_each_player`).
+
+## Misattached rulings
+
+### Astarion, the Decadent: Astarion's Thirst's ruling about X
+- Kind: misattached
+- Status: open for review
+- Ruling, Astarion, the Decadent (2022-06-10): "Use the creature's power as it last existed on the battlefield to determine the value of X."
+- Conflicts with: Astarion, the Decadent has no X and nothing based on power: "Deathtouch, lifelink / At the beginning of your end step, choose one — • Feed — Target opponent loses life equal to the amount of life they lost this turn. • Friends — You gain life equal to the amount of life you gained this turn." The ruling describes Astarion's Thirst: "Exile target creature. Put X +1/+1 counters on a commander creature you control, where X is the power of the creature exiled this way."
+- Evidence: the Commander Legends: Battle for Baldur's Gate release notes (Jess Dunks, 2022-06-01) list the ruling under Astarion's Thirst (work item ruling-conflicts-1, case 18), which has no rulings in the data. Astarion's Thirst's flavor text is a quote attributed to Astarion ("—Astarion, the Decadent"), which may be how the two were paired (an inference).
+- Engine: Astarion's Thirst uses the exiled creature's power as it last existed on the battlefield (CR 608.2h).
+- Recorded: test `tests/rulings/misattached_rulings.rs` (`astarions_thirst_counts_the_exiled_creatures_last_known_power`), citing it under Astarion, the Decadent, which takes part as the commander creature that gets the counters; its earlier exemption (rulings-P194) is withdrawn.
+
+### Clive, Ifrit's Dominant: Clive's Hideaway's rulings
+- Kind: misattached
+- Status: open for review
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): "Clive's Hideaway's last ability only cares if you control four or more legendary creatures at the time it resolves. You don't even have to control four or more legendary creatures when you activate it."
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): "If the exiled card is a land card, you may play it only if you have an available land play remaining this turn."
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): "You play the card while Clive's Hideaway's last ability is resolving and still on the stack. You can't wait to play it later in the turn."
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): ""Hideaway N" means "When this permanent enters, look at the top N cards of your library. Exile one of them face down and put the rest on the bottom of your library in a random order. The exiled card gains ‘The player who controls the permanent that exiled this card may look at this card in the exile zone.'""
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): "Any player who has controlled a permanent with a hideaway ability since a card was exiled with it may look at that card."
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): "If you cast a spell "without paying its mana cost," you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the spell has any mandatory additional costs, those must be paid to cast the spell."
+- Ruling, Clive, Ifrit's Dominant // Ifrit, Warden of Inferno (2025-06-06): "If a spell has {X} in its mana cost, you must choose 0 as the value of X when playing it without paying its mana cost."
+- Conflicts with: Clive, Ifrit's Dominant // Ifrit, Warden of Inferno has no hideaway ability and no card to play without paying its mana cost (Clive: "When Clive enters, you may discard your hand, then draw cards equal to your devotion to red. ... {4}{R}{R}, {T}: Exile Clive, then return it to the battlefield transformed under its owner's control. ..."). The rulings describe Clive's Hideaway: "Hideaway 4 (...) {T}: Add {C}. {2}, {T}: You may play the exiled card without paying its mana cost if you control four or more legendary creatures."
+- Evidence: FINAL FANTASY release-note rulings (2025-06-06) about Clive's Hideaway's last ability: three name Clive's Hideaway, and the four general notes, on hideaway and on playing a card without paying its mana cost, fit only it. Clive's Hideaway itself has only the Town note in the data. Read for Clive's Hideaway, they agree with the CR (602.1b, 608.2g, 608.2h, 305.2a, 305.2b, 305.3): work item ruling-conflicts-2, case 5 (conclusion A, misattached).
+- Engine: as the rulings say, for Clive's Hideaway.
+- Recorded: test `tests/keywords/k702_075_hideaway.rs` (`clives_hideaway_checks_its_legendary_creatures_and_plays_the_card_as_the_ability_resolves`), citing the three under Clive, which is one of the four legendary creatures there; the four general notes are cited on other cards with the same text.
+
+### Squall, SeeD Mercenary: Starting Town's rulings
+- Kind: misattached
+- Status: open for review
+- Ruling, Squall, SeeD Mercenary (2025-06-06): "If an effect restarts the game, Starting Town will enter tapped in the new game unless it's your first, second, or third turn of that game."
+- Ruling, Squall, SeeD Mercenary (2025-06-06): "Starting Town's first ability cares about how many turns you have taken, not necessarily how many turns the game has had, in case you take an extra turn."
+- Ruling, Squall, SeeD Mercenary (2025-06-06): "If Starting Town enters during another player's turn, it'll enter tapped no matter how many turns they've taken."
+- Conflicts with: Squall counts no turns: "Rough Divide — Whenever a creature you control attacks alone, it gains double strike until end of turn. / Whenever Squall deals combat damage to a player, return target permanent card with mana value 3 or less from your graveyard to the battlefield." The rulings name and describe Starting Town: "This land enters tapped unless it's your first, second, or third turn of the game. / {T}: Add {C}. / {T}, Pay 1 life: Add one mana of any color."
+- Evidence: each names Starting Town; Starting Town has only the Town note in the data. Both are FINAL FANTASY cards (rulings dated 2025-06-06).
+- Engine: as the rulings say, for Starting Town.
+- Recorded: tests `tests/rulings/r_p097_interactions.rs` (`starting_town_enters_tapped_on_other_players_turns`, `starting_town_counts_the_turns_of_a_restarted_game`) and `tests/rulings/r_p098_misc.rs` (`starting_town_counts_the_turns_you_have_taken`, where Squall takes part: its trigger returns a Starting Town from its controller's graveyard on that player's third turn, the game's sixth, and it enters untapped), citing them under Squall. Squall can't make a Starting Town enter on another player's turn, and the restart test has no use for it.
+
+### Gut, True Soul Zealot: Halsin, Emerald Archdruid's rulings
+- Kind: misattached
+- Status: open for review
+- Ruling, Gut, True Soul Zealot (2022-06-10): "Effects that modify a creature's power and/or toughness, such as the one created by Titanic Growth, will apply to the creature no matter when they started to take effect. The same is true for any counters that change its power and/or toughness and effects that switch power and toughness."
+- Ruling, Gut, True Soul Zealot (2022-06-10): "Halsin, Emerald Archdruid's activated ability overwrites any previous effects that set the creature's base power and toughness to specific values. Any power- or toughness-setting effects that start to apply after Halsin's ability resolves will overwrite this effect."
+- Conflicts with: Gut sets no power or toughness: "Whenever you attack, you may sacrifice another creature or an artifact. If you do, create a 4/1 black Skeleton creature token with menace that's tapped and attacking. (...) / Choose a Background (...)". The rulings describe Halsin, Emerald Archdruid: "{1}: Until end of turn, target token you control becomes a green Bear creature with base power and toughness 4/4 in addition to its other colors and types."
+- Evidence: the second names Halsin; the two are the usual pair of rulings for an effect that sets base power and toughness (e.g. Warden of the First Tree, 2014-11-24). Halsin has only the Background notes in the data. Both are Commander Legends: Battle for Baldur's Gate cards (rulings dated 2022-06-10).
+- Engine: as the rulings say, for Halsin (layers 7b, 7c and 7d in timestamp order, CR 613.4, 613.7).
+- Recorded: tests `tests/rulings/misattached_rulings.rs` (`halsin_sets_base_power_and_toughness_under_effects_that_modify_them`, `halsin_overwrites_earlier_base_power_and_toughness_and_later_ones_overwrite_it`), citing them under Gut, whose Skeleton token is the token Halsin animates.
+
+## Outdated rulings
+
+### Aetherplasm: "This allows it to dodge abilities like Deathgazer's."
+- Kind: outdated
+- Status: open for review
+- Ruling, Aetherplasm (2006-02-01): "The creature you put onto the battlefield may be the Aetherplasm you just returned to your hand. This allows it to dodge abilities like Deathgazer's."
+- Conflicts with: CR 509.3d: "An ability that reads “Whenever [a creature] becomes blocked by a creature, . . .” triggers once for each creature that blocks the specified creature. ... In addition, it will trigger if a creature is put onto the battlefield blocking that creature. ..." Deathgazer: "Whenever this creature blocks or becomes blocked by a nonblack creature, destroy that creature at end of combat."
+- Evidence: the ruling applied 309.4 of the CRs from 2006-05-01 to 2009-05-01: "Abilities that trigger on a creature becoming blocked trigger only at the first point the creature becomes blocked that combat. They will trigger if a creature becomes blocked by a creature declared as a blocker, by a creature that's put into play as a blocker, or by an effect, but only if the attacking creature hadn't yet been blocked that combat. ..." The M10 CR ("effective as of July 11, 2009") deleted 309.4 and gave "Whenever a creature blocks [this creature]" (renamed "Whenever [this creature] becomes blocked by a creature" in the CR effective 2009-09-04) one trigger for each blocking creature; the CR effective 2010-02-01 added its sentence for a creature put onto the battlefield blocking (all from the archived CR texts). Work item ruling-conflicts-1, case 1 (conclusion B); accepted by the user Nov 5. The ruling's first sentence is still right.
+- Engine: Deathgazer's ability triggers again for the Aetherplasm put back onto the battlefield blocking it, and destroys it at end of combat.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P006.tsv` (its second sentence); register `put-onto-battlefield-blocking-retriggers-becomes-blocked-by`; test `tests/rulings/r_p006_activated_bounce.rs` (`aetherplasm_can_put_itself_back_but_deathgazer_sees_the_new_blocker`).
+
+### Blitz Hellion: "its owner doesn't shuffle their library"
+- Kind: outdated
+- Status: open for review
+- Ruling, Blitz Hellion (2009-05-01): "Blitz Hellion’s last ability triggers at the end of each turn in which it’s on the battlefield. If it’s not on the battlefield by the time this ability resolves, nothing happens. Blitz Hellion stays wherever it is, and its owner doesn’t shuffle their library."
+- Conflicts with: CR 701.24c: "If an effect would cause a player to shuffle one or more specific objects into a library, that library is shuffled even if none of those objects are in the zone they’re expected to be in or an effect causes all of those objects to be moved to another zone or remain in their current zone." (since the Magic Origins CR, effective 2015-07-17). Later rulings follow it: Etrata, the Silencer "... it remains in its new zone and Etrata's owner shuffles their library." (2018-10-05); Serra Avatar "If Serra Avatar is no longer in your graveyard when its triggered ability resolves, you still shuffle your library." (2022-12-08).
+- Evidence: the ruling stated the rule of its time, written into the CR effective 2010-02-01 (701.15c: "... but none of those objects are in the zone they're expected to be in, that library is not shuffled.") and still in the CR effective 2015-03-27 (701.16c). The Magic Origins CR reversed it, as Wizards' "Magic Origins Update Bulletin—Comprehensive Rules Changes" (Matt Tabak, 2015-07-16; read from a mirror of the Wizards archive) says: "Under old rules, you wouldn't shuffle your library, but that's changing." Work item ruling-conflicts-1, case 3 (conclusion B); accepted by the user Nov 5. "Blitz Hellion stays wherever it is" is still right.
+- Engine: the owner's library is shuffled; Blitz Hellion stays where it is.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P180.tsv`; register `self-shuffle-gone-library-still-shuffled`; tests `tests/rulings/r_p180_tuck.rs` (`end_step_self_shuffles_leave_a_creature_that_left_where_it_is`, `serra_avatar_gone_from_the_graveyard_still_shuffles_the_library`).
+
+### Cyclopean Tomb: "you must remove a mire counter"
+- Kind: outdated
+- Status: open for review
+- Ruling, Cyclopean Tomb (2008-08-01): "The delayed triggered ability created when Cyclopean Tomb is put into a graveyard from the battlefield triggers during each of your upkeeps for the rest of the game. As it resolves, you must remove a mire counter from a land that had a mire counter put on it by that instance of Cyclopean Tomb, but it doesn't matter where the mire counter you remove came from. For instance, you could remove mire counters that were put on the land by Gilder Bairn."
+- Conflicts with: the card's Oracle text since the September 2008 Update Bulletin (Mark L. Gottlieb, 2008-09-24): "When this artifact is put into a graveyard from the battlefield, at the beginning of each of your upkeeps for the rest of the game, remove all mire counters from a land that a mire counter was put onto with this artifact but that a mire counter has not been removed from with this artifact."
+- Evidence: the ruling paraphrases the wording of the July 2008 Update Bulletin (Mark L. Gottlieb, 2008-07-09): "remove a mire counter from a land that a mire counter was put onto with Cyclopean Tomb", which the September bulletin replaced so that the card "basically does what it says it does" (both read from a mirror of the Wizards archive). Work item ruling-conflicts-1, case 6 (conclusion B in part); accepted by the user Nov 5. The rest of the ruling (each upkeep for the rest of the game; the counters' source doesn't matter) is still right.
+- Engine: each upkeep, all mire counters are removed from one such land (its controller's choice among those that still have mire counters), which then no longer qualifies.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P197.tsv`; register `cyclopean-tomb-land-choice`; tests `tests/cards/m_cyclopean_tomb.rs` (`after_it_dies_each_upkeep_one_of_its_lands_loses_its_mire_counters`, `all_mire_counters_go_whatever_their_source_and_the_land_then_no_longer_qualifies`).
+
+### Krosan Adaptation: storm's token copies "considered to have been created"
+- Kind: outdated
+- Status: open for review
+- Ruling, Krosan Adaptation (2019-11-12): "For effects that look for or modify the creation of tokens, the token copies of Krosan Adaptation are considered to have been “created” and those effects will apply."
+- Conflicts with: CR 111.13: "A copy of a permanent spell becomes a token as it resolves. The token has the characteristics of the spell that became that token. The token is not “created” for the purposes of any replacement effects or triggered abilities that refer to creating a token." CR 608.3f: "... A token put onto the battlefield this way is no longer a copy of a spell and is not “created” for the purposes of any rules or effects that refer to creating a token." Frontline Heroism (2024-11-08): "The token that a resolving copy of a permanent spell becomes isn't "created" and won't interact with abilities that care about tokens being created, such as the first ability of Doubling Season."
+- Evidence: a Mystery Booster playtest card's ruling (2019-11-12), under the Kaladesh-era definition of "create" (put a token onto the battlefield). The Zendikar Rising CR (effective 2020-09-25) added 111.11 and 608.3b, today's 111.13 and 608.3f (archived CR texts: absent from the CR effective 2020-08-07); Wizards' "Comprehensive Rules Changes" for Zendikar Rising (Matt Tabak, 2020-09-22, per work item ruling-conflicts-1, case 7, conclusion B). The card is legal in no format (deferred, docs/DEFERRED.md); the record is kept.
+- Engine: the token copies of a permanent spell are not "created".
+- Recorded: exemption `docs/rulings-exemptions/rulings-P076.tsv`; test `tests/rulings/r_p076_spells_and_mana.rs` (`krosan_adaptation_storm_copy_token_is_not_created`).
+
+### Jade Statue: Golem "in addition to those creature types"
+- Kind: outdated
+- Status: open for review
+- Ruling, Jade Statue (2013-09-20): "If Jade Statue is animated by some other effect, you get an artifact creature with whatever power, toughness, and creature types (if any) are specified by that effect. If you subsequently use Jade Statue's ability during combat, it will become 3/6 and gain the creature type Golem in addition to those creature types until end of combat."
+- Conflicts with: CR 205.1b: "... Some effects state that an object becomes a “[creature type or types] artifact creature”; these effects also allow the object to retain all of its prior card types and subtypes other than creature types, but replace any existing creature types." The card: "{2}: This artifact becomes a 3/6 Golem artifact creature until end of combat. Activate only during combat."
+- Evidence: the sentence was added by the Throne of Eldraine CR (effective 2019-10-04; archived CR texts: absent from the CR effective 2019-08-23), announced in "Comprehensive Rules Changes" (Eli Shiffrin, 2019-09-27, per work item ruling-conflicts-1, case 8, conclusion B). Chimeric Staff's ruling (2009-10-01) already reset the creature types the same way. The ruling's other parts (the other effect's power, toughness and types; 3/6 by the later timestamp) are still right.
+- Engine: Jade Statue animated by another effect becomes a 3/6 Golem artifact creature, losing the other effect's creature types.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P186.tsv`; test `tests/rulings/r_p186_animated.rs` (`jade_statue_animated_by_another_effect_becomes_a_3_6_golem`).
+
+### Deranged Assistant: "it can't be reversed for any reason"
+- Kind: outdated
+- Status: open for review
+- Ruling, Deranged Assistant (2025-01-24): "Once Deranged Assistant’s ability has been activated, it can’t be reversed for any reason. If you activate it while casting a spell and discover you can’t produce enough mana to pay that spell’s costs, the spell is reversed. The spell returns to whatever zone you were casting it from. You may reverse other mana abilities you activated while casting the spell, but Deranged Assistant’s ability can’t be reversed. You’ll still have any mana the ability produced, and the milled card will still be in your graveyard."
+- Conflicts with: CR 605.1a: "An activated ability is a mana ability if it meets all of the following criteria: it doesn’t require a target (see rule 115.6), it could add mana to a player’s mana pool when it resolves, it’s not a loyalty ability (see rule 606, “Loyalty Abilities”), and its cost and effect don’t move any card to or from a library. ..." The card: "{T}, Mill a card: Add {C}. (Activate only as an instant. ...)". Millikin, with the same text (2026-08-05): "Millikin’s ability is not a mana ability. Players can respond to it, and it can’t be activated in the middle of paying for a cost. A recent update to rule 605.1a has made any abilities that move cards to or from libraries no longer mana abilities."
+- Evidence: the library clause entered 605.1a with the CR revision effective 2026-08-07 (MagicCompRules 20260807, per work item ruling-conflicts-1, case 9, conclusion B; the archived CR effective 2026-04-17 doesn't have it, the CR in this repo, effective 2026-09-25, does). The ruling (2025-01-24; the same content in release notes since 2018-11-29) describes it as a mana ability activated while casting a spell. Its outcome still holds when the ability is activated with priority before a cast that is then reversed (CR 733.1).
+- Engine: the ability isn't a mana ability: it uses the stack and can't be activated while a spell is being cast.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P219.tsv`; tests `tests/rulings/r_p219_mill_resolution.rs` (`millikin_is_not_a_mana_ability`, `deranged_assistant_mana_survives_a_reversed_cast`).
+
+### Mossfire Egg and the other Eggs: "This is a mana ability"
+- Kind: outdated
+- Status: open for review
+- Ruling, Mossfire Egg (2008-08-01): "This is a mana ability, which means it can be activated as part of the process of casting a spell or activating another ability. If that happens you get the mana right away, but you don’t get to look at the drawn card until you have finished casting that spell or activating that ability."
+- Conflicts with: CR 605.1a (as for Deranged Assistant: an ability whose cost or effect moves a card to or from a library isn't a mana ability; a draw does, CR 121.1). The Eggs: "{2}, {T}, Sacrifice this artifact: Add {R}{G}. Draw a card. (Activate only as an instant.)" (Mossfire Egg). Chromatic Sphere, the same shape (2026-08-05): "Chromatic Sphere’s ability is not a mana ability. Players can respond to it, and it can’t be activated in the middle of paying for a cost. A recent update to rule 605.1a has made any abilities that move cards to or from libraries no longer mana abilities."
+- Evidence: the ruling (2008-08-01) is on all five Eggs (Mossfire Egg, Skycloud Egg, Sungrass Egg, Shadowblood Egg, Darkwater Egg), written when mana abilities had no library criterion; outdated by the CR revision effective 2026-08-07 (work item ruling-conflicts-1, case 10, conclusion B). The Eggs' Oracle texts now say "(Activate only as an instant.)".
+- Engine: the Eggs' abilities use the stack.
+- Recorded: exemption `docs/rulings-exemptions/rulings-S22.tsv`; test `tests/rulings/r_s22_mana_abilities.rs` (`an_egg_that_draws_a_card_is_not_a_mana_ability`).
+
+### Charmed Pendant: "The ability is still a mana ability"
+- Kind: outdated
+- Status: open for review
+- Ruling, Charmed Pendant (2004-10-04): "The ability is still a mana ability (and doesn’t use the stack) even though you can only activate it when you could cast an instant."
+- Conflicts with: CR 605.1a (as above; milling moves a card from a library, CR 701.17a). The card: "{T}, Mill a card: For each colored mana symbol in the milled card's mana cost, add one mana of that color. (Activate only as an instant. ...)"
+- Evidence: the ruling (2004-10-04) predates the library criterion, added by the CR revision effective 2026-08-07 (work item ruling-conflicts-1, case 20, folded into case 10; conclusion B). "(Activate only as an instant.)" is now reminder text.
+- Engine: the ability uses the stack.
+- Recorded: exemption `docs/rulings-exemptions/rulings-S22.tsv`; test `tests/cards/c4_mana_symbols.rs` (`charmed_pendant_adds_one_mana_for_each_colored_symbol_of_the_milled_card`).
+
+### Modal double-faced cards: "can't be transformed"
+- Kind: outdated
+- Status: open for review
+- Ruling, Valakut Awakening // Valakut Stoneforge (2020-09-25): "A modal double-faced card can't be transformed or be put onto the battlefield transformed. Ignore any instruction to transform a modal double-faced card or to put one onto the battlefield transformed."
+- Ruling, Akoum Warrior // Akoum Teeth (2020-09-25): "A modal double-faced card can’t be transformed or be put onto the battlefield transformed. Ignore any instruction to transform a modal double-faced card or to put one onto the battlefield transformed."
+- Conflicts with: CR 701.27a: "To transform a permanent, turn it over so that its other face is up. Only permanents represented by double-faced tokens and double-faced cards can transform." CR 712.14a: "If a spell or ability puts a double-faced card onto the battlefield “transformed” or “converted,” it enters the battlefield with its back face up. ..."
+- Evidence: the note is on 73 modal double-faced cards (63 with a straight apostrophe, 10 with a curly one; dated 2020-09-25, 2021-02-05, 2024-06-07 and 2024-11-08), written under the CR that let only transforming double-faced cards and tokens transform; the Marvel's Spider-Man CR (effective 2025-09-19) let modal double-faced cards transform and be put onto the battlefield or cast transformed (archived CR texts: the CR effective 2025-07-25 still said, in 701.27a, "Only transforming tokens and permanents represented by transforming double-faced cards can transform."); Wizards' ruling of 2025-09-19 on the Spider-Man cards (Gwen Stacy // Ghost-Spider and four others): "A modal double-faced card can be transformed or be put onto the battlefield transformed. This is a change from previous rules. ..." (cited in tests/rulings/r_s17_transform_modal.rs). Work item ruling-conflicts-1, with cases 11, 12 and 21 (conclusion B).
+- Engine: a modal double-faced permanent transforms if its other face has a permanent type, and one put onto the battlefield transformed enters back face up if that face is a permanent face.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P001.tsv`; tests `tests/rulings/r_s17_transform_modal.rs` (`a_modal_double_faced_card_transforms_only_into_a_permanent_face`), `tests/actions/a701_027_transform.rs` (`a_modal_double_faced_permanent_can_transform`).
+
+### Oculus Whelp, Mutagen Connoisseur, Invasion of Pyrulea: modal double-faced permanents "are never transformed permanents"
+- Kind: outdated
+- Status: open for review
+- Ruling, Oculus Whelp (2023-04-14): "A “transformed permanent” is a double-faced permanent with its back face up. Notably, modal double-faced permanents and melded permanents are never transformed permanents, no matter which faces are up."
+- Ruling, Mutagen Connoisseur (2023-04-14): "A "transformed permanent" is a double-faced permanent with its back face up. Notably, modal double-faced permanents and melded permanents are never transformed permanents, no matter which faces are up."
+- Ruling, Invasion of Pyrulea // Gargantuan Slabhorn (2023-04-14): "A “transformed permanent” is a double-faced permanent with its back face up. Notably, modal double-faced permanents and melded permanents are never transformed permanents, no matter which faces are up."
+- Conflicts with: CR 701.27g: "Some spells and abilities refer to a “transformed permanent.” This phrase refers to a double-faced permanent on the battlefield with its back face up. ... Similarly, an object represented by more than one card, such as a melded or merged permanent, is never considered a transformed permanent, even if it has components that are back face up. ..."
+- Evidence: the ruling (2023-04-14) followed 701.27g of its day ("a permanent on the battlefield with its back face up that’s also a transforming double-faced card or a transforming token", unchanged through the CR effective 2025-07-25), outdated by the same Marvel's Spider-Man CR update (effective 2025-09-19), dated in the entry for the modal double-faced cards' "can't be transformed" above. Work item ruling-conflicts-1, case 11 (conclusion B). Its melded half is still right.
+- Engine: a modal double-faced permanent with its back face up is a transformed permanent; a melded one isn't.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P225.tsv`; tests `tests/actions/a701_027_transform.rs` (`a_transformed_permanent_is_a_double_faced_permanent_with_its_back_face_up`), `tests/rulings/r_p225_transform_faces.rs` (`only_a_double_faced_permanent_back_face_up_is_transformed`, `a_modal_double_faced_card_played_or_cast_back_face_up_is_a_transformed_permanent`).
+
+### Corruption of Towashi: modal double-faced permanents "can't enter transformed"
+- Kind: outdated
+- Status: open for review
+- Ruling, Corruption of Towashi (2023-04-14): "Only a transforming double-faced permanent can enter the battlefield "transformed," and only if it enters with its back face up. Notably, melded permanents can't enter transformed, and modal double-faced permanents can't enter transformed, even if they enter with their back faces up."
+- Conflicts with: CR 701.27g (as above) and 712.14a; the card: "Whenever a permanent you control transforms or a permanent you control enters transformed, you may draw a card. Do this only once each turn."
+- Evidence: the ruling (2023-04-14) followed 701.27g and 712.14a of its day ("transforming double-faced card"), outdated by the same Marvel's Spider-Man CR update (effective 2025-09-19), dated in the entry for the modal double-faced cards' "can't be transformed" above. Work item ruling-conflicts-1, case 12 (conclusion B). Its other points (only if it enters with its back face up; melded permanents can't enter transformed) are still right. That a modal double-faced card cast or played with its back face up "enters transformed" is the register's reading (decided by the user Nov 5).
+- Engine: a modal double-faced permanent that enters with its back face up enters transformed and triggers Corruption of Towashi; a melded one doesn't.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P225.tsv`; register `mdfc-back-face-up-enters-transformed`; tests `tests/rulings/r_p226_corruption_of_towashi.rs` (`corruption_of_towashi_draws_when_a_modal_double_faced_card_is_cast_or_played_back_face_up`, `corruption_of_towashi_doesnt_draw_for_a_melded_permanent`).
+
+### The Sieges: copies that aren't transforming double-faced cards
+- Kind: outdated
+- Status: open for review
+- Ruling, Invasion of Segovia // Caetus, Sea Tyrant of Segovia (2023-04-14): "If a permanent that is represented by a transforming double-faced card becomes a copy of a Siege, it will be exiled as that Siege's triggered ability resolves, then it will be cast transformed. Note that this applies only to transforming double-faced cards, not to modal double-faced cards that can normally be played using either face."
+- Ruling, Invasion of Theros // Ephara, Ever-Sheltering (2023-04-14): "If a permanent that is represented by a transforming double-faced card becomes a copy of a Siege, it will be exiled as that Siege’s triggered ability resolves, then it will be cast transformed. Note that this applies only to transforming double-faced cards, not to modal double-faced cards that can normally be played using either face."
+- Ruling, Invasion of Segovia // Caetus, Sea Tyrant of Segovia (2023-04-14): "If a token or a card that isn't represented by a transforming double-faced card becomes a copy of a Siege, it can't be cast as its triggered ability resolves. It will remain in exile. If it's a token, it will cease to exist the next time state-based actions are performed."
+- Ruling, Invasion of Theros // Ephara, Ever-Sheltering (2023-04-14): "If a token or a card that isn’t represented by a transforming double-faced card becomes a copy of a Siege, it can’t be cast as its triggered ability resolves. It will remain in exile. If it’s a token, it will cease to exist the next time state-based actions are performed."
+- Conflicts with: CR 712.11a: "If a double-faced card or a copy of a double-faced card is cast as a spell “transformed” or “converted,” it’s put on the stack with its back face up."
+- Evidence: the rulings (2023-04-14; each text on 6 or 29 Sieges, with a straight or a curly apostrophe) followed 712.11a, 712.8c and 712.11d of their day, which let only a transforming double-faced card be cast transformed (unchanged through the CR effective 2025-07-25), outdated by the same Marvel's Spider-Man CR update (effective 2025-09-19), dated in the entry for the modal double-faced cards' "can't be transformed" above. Work item ruling-conflicts-1, case 21 (conclusion B in part). Each is outdated only for a modal double-faced card; for tokens, single-faced cards and transforming double-faced cards they are still right and cited.
+- Engine: a modal double-faced card that became a copy of a Siege is exiled and cast transformed (as its own back face) when the Siege is defeated.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P225.tsv`; tests `tests/rulings/r_s17_transform_battles.rs` (`a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed`, `a_copy_of_a_siege_thats_not_a_transforming_double_faced_card_stays_in_exile`).
+
+### Norn's Inquisitor and Corruption of Towashi: "Only transforming double-faced permanents ... can transform"
+- Kind: outdated
+- Status: open for review
+- Ruling, Norn's Inquisitor (2023-04-14): "Only transforming double-faced permanents (including transforming double-faced cards and Incubator tokens) can transform. A face-up permanent turning face down doesn't count as transforming, nor does a face-down permanent turning face up."
+- Ruling, Corruption of Towashi (2023-04-14): "Similarly, only transforming double-faced permanents (including transforming double-faced cards and Incubator tokens) can transform. A face-up permanent turning face down doesn't count as transforming, nor does a face-down permanent turning face up."
+- Conflicts with: CR 701.27a: "... Only permanents represented by double-faced tokens and double-faced cards can transform."
+- Evidence: the rulings' first sentence (2023-04-14) followed 701.27a of its day, outdated by the same Marvel's Spider-Man CR update (effective 2025-09-19), dated in the entry for the modal double-faced cards' "can't be transformed" above. Their second sentence (turning face up or face down isn't transforming) is still right and cited, with a dated comment (work item ruling-conflicts-1, with cases 11, 12 and 21).
+- Engine: a modal double-faced permanent can transform (to a permanent face); turning a permanent face up isn't transforming.
+- Recorded: no exemption: cited for the second sentence; tests `tests/rulings/r_p225_transform_faces.rs` (`turning_a_permanent_face_up_isnt_transforming`), `tests/actions/a701_027_transform.rs` (`a_modal_double_faced_permanent_can_transform`).
+
+### The Golden-Gear Colossus: "only transforming double-faced cards and transforming tokens can transform"
+- Kind: outdated
+- Status: open for review
+- Ruling, Tetzin, Gnome Champion // The Golden-Gear Colossus (2023-11-10): "You can target any double-faced artifact you control with The Golden-Gear Colossus's triggered ability, but only transforming double-faced cards and transforming tokens can transform. Choosing an artifact represented by a modal double-faced card (Pestilent Cauldron from Strixhaven, for example) won't cause that permanent to transform."
+- Conflicts with: CR 701.27a (as above). The Golden-Gear Colossus: "Whenever The Golden-Gear Colossus enters or attacks, transform up to one other target double-faced artifact you control. ..."
+- Evidence: the ruling (2023-11-10) gives the old rule as its reason, outdated by the same Marvel's Spider-Man CR update (effective 2025-09-19), dated in the entry for the modal double-faced cards' "can't be transformed" above. Its example still holds for another reason: Pestilent Cauldron's other face, Restorative Burst, is a sorcery, and a permanent doesn't transform into an instant or sorcery face (CR 701.27d). A modal double-faced artifact whose other face is a permanent face (Tergrid's Lantern, the back face of Tergrid, God of Fright) would transform. Cited for its example, with a dated comment (work item ruling-conflicts-1, with cases 11, 12 and 21).
+- Engine: the Colossus can target any double-faced artifact you control; a modal double-faced one transforms only if its other face is a permanent face.
+- Recorded: no exemption: cited for its example; test `tests/rulings/r_p226_golden_gear_colossus.rs` (`golden_gear_colossus_can_target_pestilent_cauldron_but_it_doesnt_transform`).
+
+### Dance of the Dead: two Dances on one creature
+- Kind: outdated
+- Status: open for review
+- Ruling, Dance of the Dead (2004-10-04): "If more than one Dance of the Dead ends up on a creature, each contributes a +1/+1. But you only have to pay the untap cost once. You may pay for each one, however, and untap the card more than once during upkeep."
+- Conflicts with: the card's Oracle text since the Masters Edition Update Bulletin (Mark L. Gottlieb, 2007-08-29, per work item ruling-conflicts-1, case 14): "Enchant creature card in a graveyard / When this Aura enters, if it's on the battlefield, it loses "enchant creature card in a graveyard" and gains "enchant creature put onto the battlefield with this Aura." ..."; its later ruling (2008-04-01): "Once the creature is returned to the battlefield, Dance of the Dead can't be attached to anything other than it (unless Dance of the Dead somehow manages to put a different creature onto the battlefield). Attempting to move Dance of the Dead to another creature won't work."
+- Evidence: the ruling (2004-10-04) was written for the older wording, a generic "enchant creature" Aura that another effect (Aura Graft) could move onto a creature another Dance enchanted. The current "enchant creature put onto the battlefield with this Aura" is linked to its own trigger (CR 607.1a, 607.2c), so another Dance can't be moved onto the creature (303.4j) or created attached to it (707.2, 303.4i). Work item ruling-conflicts-1, case 14 (conclusion B).
+- Engine: a second Dance of the Dead can't be moved onto or created attached to the first Dance's creature.
+- Recorded: exemption `docs/rulings-exemptions/gap-zone-moves.tsv`; test `tests/rulings/animate_dead.rs` (`a_second_dance_of_the_dead_cant_join_the_first_on_its_creature`).
+
+### Lich: "leaves the battlefield"
+- Kind: outdated
+- Status: open for review
+- Ruling, Lich (2004-10-04): "If you have multiple Lich cards on the battlefield, you must sacrifice a permanent for each damage done to you for each Lich. This is because the sacrifice is a triggered ability. But you only draw one card for each life gained regardless of how many Liches you have. This is because the draw is a replacement effect and not a triggered one. You lose if any one of the Liches leaves the battlefield."
+- Ruling, Lich (2010-08-15): "The last ability will cause you to lose the game even if you somehow manage to have a life total greater than 0 at the time the Lich leaves the battlefield or if some other effect would prevent you from losing for having 0 life. If, on the other hand, some effect such as that from Platinum Angel says that you can't lose the game then even the last ability of the Lich cannot cause you to do so. The ability will just resolve and the game will continue as normal."
+- Conflicts with: the card's Oracle text since the September 2010 Update Bulletin (Matt Tabak, 2010-09-22; the Oracle update was announced for 2010-09-24): "When this enchantment is put into a graveyard from the battlefield, you lose the game." Wizards' rewrite of the second ruling (2011-01-01): "The last ability will cause you to lose the game even if you somehow manage to have a life total greater than 0 at the time the Lich is put into the graveyard ...".
+- Evidence: both rulings were written for "When Lich leaves play/the battlefield, you lose the game" (2004-10-04, Gatherer's first batch; 2010-08-15, the Magic 2011 rulings); the September 2010 bulletin narrowed it ("the printed card says you lose when Lich is destroyed, but that was broadened to Lich leaving the battlefield"), and only the second ruling was reworded (2011-01-01) while the 2010-08-15 version stays published. Work item ruling-conflicts-2, case 3 (conclusion B in part). The rest of both rulings is still right and cited.
+- Engine: only a Lich put into a graveyard from the battlefield makes you lose; exiled, bounced or under Rest in Peace, it doesn't.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P096.tsv`; tests `tests/rulings/r_p096_lich.rs` (`lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability`, `multiple_liches_sacrifice_for_each_but_draw_only_once`, `lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose`).
+
+## Not yet investigated
+
+Possible further instances found while compiling this log. They haven't been through the
+conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
+decides whether they become a conflict case.
+
+- **The craft copy ruling** (24 cards with craft, 2023-11-10, e.g. Oteclan Landmark //
+  Oteclan Levitator): "If a card that isn't a transforming double-faced card becomes a copy
+  of a card with craft, it'll stay in exile if you activate the craft ability. It won't
+  return to the battlefield." Since the Marvel's Spider-Man CR (effective 2025-09-19) a modal
+  double-faced card can be put onto the battlefield transformed (712.14a), so a modal
+  double-faced permanent that became a copy of a craft card would return as its own back
+  face, as the Siege rulings' case does (above). The ruling is cited for a single-faced copy
+  (Phyrexian Metamorph: `tests/keywords/k702_167_craft.rs`, `tests/rulings/r_s03_craft.rs`);
+  the engine's craft return (`kw/craft.rs`) puts any double-faced card back face up, untested
+  for a modal one.
+- **Work item ruling-conflicts-3** (separate): Run Out of Town (the ruling has the permanent's
+  controller choose top or bottom, the Oracle text its owner) and Caller of the Untamed (the
+  card to copy chosen during activation, against the decided `x-defined-by-target`).

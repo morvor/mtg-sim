@@ -143,6 +143,12 @@ Acquisitions and Deal Broker). Don't implement those; note anything new you run 
 - Rulings with no engine-testable content (release notes, presentation, tournament policy)
   may be listed in `docs/rulings-exemptions/<batch>.tsv` as `Card<TAB>substring<TAB>reason`.
   `mtg-tools rulings-coverage --card "Name"` / `--text "substring"` shows per-ruling status.
+- A ruling whose words contradict the card's Oracle text with no dated change to explain it
+  gives way to the Oracle text (register `ruling-contradicting-oracle-gives-way`: exempt that
+  part, keep citing the rest), and a ruling the data attaches to the wrong card is tested on
+  the card it describes and cited under the card it's attached to (never exempt). Every such
+  ruling, and every outdated or inconsistent one, gets an entry in `docs/RULING_DISCREPANCIES.md`
+  (checked by `cargo test -p mtg-data`); see the rulings brief in `docs/agents/worker.md`.
 
 ## Commands
 

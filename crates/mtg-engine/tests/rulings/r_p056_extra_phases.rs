@@ -430,10 +430,11 @@ fn natures_will_triggers_once_per_combat_damage_step() {
 #[test]
 fn combat_celebrant_untaps_all_other_creatures_and_adds_a_combat_without_a_main_phase() {
     cr!("701.43a", "500.8", "506.1");
-    ruling!(
-        "Combat Celebrant",
-        "Combat Celebrant's ability untaps all of your creatures, not just the ones that are attacking."
-    );
+    // Its "untaps all of your creatures" would include Combat Celebrant itself, which the
+    // card's "untap all other creatures you control" leaves tapped: that part gives way to
+    // the Oracle text (exempt in docs/rulings-exemptions/rulings-P056.tsv; pinned in
+    // ruling_contradicting_oracle.rs). The rest is cited here.
+    ruling!("Combat Celebrant", "not just the ones that are attacking");
     ruling!(
         "Combat Celebrant",
         "There's no main phase between your combat phases"
