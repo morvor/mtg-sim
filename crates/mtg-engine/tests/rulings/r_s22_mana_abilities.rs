@@ -11,8 +11,9 @@ use mtg_engine::*;
 #[test]
 fn an_egg_that_draws_a_card_is_not_a_mana_ability() {
     cr!("605.1a", "605.5", "602.2");
-    // The Eggs' ruling "This is a mana ability, which means it can be activated as part of
-    // the process of casting a spell" predates the current CR 605.1a: an ability whose
+    // The Eggs' ruling (2008-08-01) "This is a mana ability, which means it can be activated
+    // as part of the process of casting a spell" predates the library clause added to CR
+    // 605.1a in the CR revision effective 2026-08-07: an ability whose
     // effect moves a card from a library (draws) isn't a mana ability, and the Eggs'
     // Oracle text now reads "(Activate only as an instant.)" (the ruling is exempt, see
     // docs/rulings-exemptions/rulings-S22.tsv). Mossfire Egg: "{2}, {T}, Sacrifice this
@@ -31,10 +32,7 @@ fn an_egg_that_draws_a_card_is_not_a_mana_ability() {
     t.resolve();
     assert_eq!(t.hand_size(P0), hand + 1);
     let pool = &t.g.player(P0).mana_pool;
-    assert_eq!(
-        (pool.count(ManaType::R), pool.count(ManaType::G)),
-        (1, 1)
-    );
+    assert_eq!((pool.count(ManaType::R), pool.count(ManaType::G)), (1, 1));
 }
 
 /// P0 casts Pir's Whim ("For each player, choose friend or foe. Each friend searches

@@ -129,7 +129,9 @@ fn when_you_next(l: &str, b: &mut Builder) -> Option<Effect> {
             let r = rest.strip_prefix(" by spending ")?;
             let (n, r) = crate::oracle::phrases::parse_number(r)?;
             let Value::Const(n) = n else { return None };
-            let eff = r.trim_start().strip_prefix("or more mana to activate it, ")?;
+            let eff = r
+                .trim_start()
+                .strip_prefix("or more mana to activate it, ")?;
             (Some(n), eff)
         }
     };
@@ -154,7 +156,11 @@ fn when_you_next(l: &str, b: &mut Builder) -> Option<Effect> {
         conds.push(TriggerCond::Where {
             trigger: Box::new(c),
             cond: Condition::Custom(
-                format!("{}{n}", crate::kw::activation_mana_spent::MANA_SPENT_TO_ACTIVATE).into(),
+                format!(
+                    "{}{n}",
+                    crate::kw::activation_mana_spent::MANA_SPENT_TO_ACTIVATE
+                )
+                .into(),
             ),
         });
     }
@@ -205,10 +211,15 @@ inventory::submit! { EffectPattern { name: "triggers 5: copy the next [ability] 
 fn casts_a_card(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = end(l);
     let head = l.strip_suffix(" card")?;
-    if !(head.contains(" cast a ") || head.contains(" casts a ") || head.contains(" cast an ") || head.contains(" casts an ")) {
+    if !(head.contains(" cast a ")
+        || head.contains(" casts a ")
+        || head.contains(" cast an ")
+        || head.contains(" casts an "))
+    {
         return None;
     }
-    let (t, it, p) = crate::oracle::triggers::parse_trigger_condition(&format!("whenever {head} spell"))?;
+    let (t, it, p) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever {head} spell"))?;
     let TriggerCond::CastSpell { who, filter } = t else {
         return None;
     };
@@ -322,7 +333,9 @@ fn exiled_and_or(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let mut player = PlayerRef::You;
     for part in [a, b] {
         let phrase = match part.strip_suffix(" in your graveyard") {
-            Some(cards) => format!("whenever one or more {cards} are put into exile from your graveyard"),
+            Some(cards) => {
+                format!("whenever one or more {cards} are put into exile from your graveyard")
+            }
             None => format!("whenever one or more {part} are put into exile"),
         };
         let (t, _, p) = crate::oracle::triggers::parse_trigger_condition(&phrase)?;
@@ -447,7 +460,10 @@ fn one_of_those_cards_with_that_name(l: &str, b: &mut Builder) -> Option<Effect>
     {
         return None;
     }
-    crate::oracle::effects::parse_sentence(&format!("put a card exiled with ~ with that name {r}"), b)
+    crate::oracle::effects::parse_sentence(
+        &format!("put a card exiled with ~ with that name {r}"),
+        b,
+    )
 }
 
 inventory::submit! { EffectPattern { name: "triggers 5: put one of those cards with that name", priority: 100, parse: one_of_those_cards_with_that_name } }
@@ -545,7 +561,9 @@ fn source_put_into_exile(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     if end(l) != "~ is put into exile" {
         return None;
     }
-    crate::oracle::triggers::parse_trigger_condition("when ~ is put into exile from the battlefield")
+    crate::oracle::triggers::parse_trigger_condition(
+        "when ~ is put into exile from the battlefield",
+    )
 }
 
 inventory::submit! { TriggerPattern { name: "triggers 5: ~ is put into exile", priority: 100, parse: source_put_into_exile } }
@@ -570,9 +588,9 @@ fn sacrifice_when_you_lose_control(l: &str, prev: &mut Effect, _b: &mut Builder)
     fn returns(e: &mut Effect) -> Option<&mut Body> {
         match e {
             Effect::Seq(v) => v.last_mut().and_then(returns),
-            Effect::DelayedTrigger { body, once: true, .. }
-                if matches!(&body.effect, Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield) =>
-            {
+            Effect::DelayedTrigger {
+                body, once: true, ..
+            } if matches!(&body.effect, Effect::Move { to, .. } if to.zone == ZoneKind::Battlefield) => {
                 Some(body)
             }
             _ => None,
@@ -617,17 +635,23 @@ const ENTERED: Var = vars::USER + 43104;
 
 /// "Return target permanent card ... to the battlefield under their control. When that
 /// permanent enters, return up to one target permanent card with equal or lesser mana
-/// value from your graveyard to the battlefield." (Jailbreak): the permanent enters as the
-/// instruction is performed, so the ability triggers as it's created, like a reflexive
-/// one (CR 603.12), choosing its targets only then (Jailbreak ruling); it does nothing if
-/// the card didn't enter the battlefield. "That permanent" is the new object (CR 400.7).
+/// value from your graveyard to the battlefield." (Jailbreak): a reflexive triggered
+/// ability (CR 603.12: a resolving spell that instructs an action and creates a trigger
+/// "when [something happens] this way"; "that permanent" stands for "this way"), checked
+/// as it's created and choosing its targets only then (Jailbreak ruling); it does nothing
+/// if the card didn't enter the battlefield. "That permanent" is the new object (CR
+/// 400.7). The zone check below stands in for "entered during this resolution", which is
+/// the same for Jailbreak (nothing in the spell follows the return).
 fn when_that_permanent_enters(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let lower = l.to_lowercase();
     let l = end(&lower);
-    let Some(eff) = ["when that permanent enters, ", "when that creature enters, ", "when it enters, "]
-        .into_iter()
-        .find_map(|p| l.strip_prefix(p))
-    else {
+    let Some(eff) = [
+        "when that permanent enters, ",
+        "when that creature enters, ",
+        "when it enters, ",
+    ]
+    .into_iter()
+    .find_map(|p| l.strip_prefix(p)) else {
         return false;
     };
     // After an instruction that put an object onto the battlefield.
@@ -695,7 +719,13 @@ fn until_end_of_players_next_turn_whenever(l: &str, b: &mut Builder) -> Option<E
     let (eff, event) = r.split_once(" whenever they ")?;
     let (inner, _, _) =
         crate::oracle::triggers::parse_trigger_condition(&format!("whenever a player {event}"))?;
-    if !matches!(inner, TriggerCond::CastSpell { who: PlayerRel::Any, .. }) {
+    if !matches!(
+        inner,
+        TriggerCond::CastSpell {
+            who: PlayerRel::Any,
+            ..
+        }
+    ) {
         return None;
     }
     let body = crate::oracle::effects::parse_trigger_body(

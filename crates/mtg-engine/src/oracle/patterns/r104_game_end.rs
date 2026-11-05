@@ -125,6 +125,12 @@ fn win_or_lose(l: &str, b: &mut Builder) -> Option<Effect> {
         None if l.starts_with("that player ") && matches!(b.it_player, PlayerRef::Target(_)) => {
             b.it_player.clone()
         }
+        // "When that creature dies, its owner loses the game.": the owner (controller) of
+        // the object "it" is, as for any other instruction (`effects::player_ref`), not of
+        // a target the ability may not have.
+        None if l.starts_with("its owner ") || l.starts_with("its controller ") => {
+            crate::oracle::effects::player_ref(&l, b)?.0
+        }
         None => who,
     };
     Some(if win {

@@ -321,11 +321,12 @@ fn a_delayed_ability_counts_transformations_since_it_was_created_not_since_it_tr
 
 #[test]
 fn a_transformed_permanent_is_a_double_faced_permanent_with_its_back_face_up() {
-    cr!("701.27g");
-    ruling!(
-        "Mutagen Connoisseur",
-        "melded permanents are never transformed permanents"
-    );
+    cr!("701.27g", "712.3");
+    // (Mutagen Connoisseur's 2023-04-14 ruling "Notably, modal double-faced permanents and
+    // melded permanents are never transformed permanents" isn't cited: its modal
+    // double-faced half predates the Marvel's Spider-Man CR update effective 2025-09-19,
+    // which let modal double-faced cards transform; see
+    // docs/rulings-exemptions/rulings-P225.tsv.)
     supported("Mutagen Connoisseur");
     let mut t = TestGame::new(2);
     // "This creature gets +1/+0 for each transformed permanent you control."
@@ -341,7 +342,7 @@ fn a_transformed_permanent_is_a_double_faced_permanent_with_its_back_face_up() {
     // Front face up again: not a transformed permanent, though it was one.
     transform(&mut t, prowler);
     assert_eq!(t.pt(mutagen).0, base);
-    // A modal double-faced permanent that transformed is one too (CR 712.9).
+    // A modal double-faced permanent that transformed is one too (CR 701.27a, 712.3).
     let monica = t.battlefield(P0, "Monica Rambeau // Photon, Living Light");
     assert_eq!(t.pt(mutagen).0, base);
     transform(&mut t, monica);
