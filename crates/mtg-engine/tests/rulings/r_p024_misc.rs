@@ -168,6 +168,55 @@ fn identity_thief_copies_the_face_shown_of_a_double_faced_permanent() {
     let back = t.named_on_battlefield("Delver of Secrets");
     assert_eq!(back.len(), 1, "{}", t.dump_log());
     assert_eq!(t.obj_now(back[0]).controller, P1);
+    // A melded permanent: P1's Brisela, Voice of Nightmares (melded at P1's end step by
+    // Gisela's ability). The Thief is a Brisela with mana value 0 and can't meld; both
+    // cards return front face up.
+    supported("Gisela, the Broken Blade");
+    supported("Bruna, the Fading Light");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Gisela, the Broken Blade");
+    t.battlefield(P1, "Bruna, the Fading Light");
+    t.set_step(P1, Step::PrecombatMain);
+    t.answer_yes(P1, true);
+    t.advance_to(P1, Step::End);
+    t.settle();
+    t.resolve_all();
+    let brisela = t.named_on_battlefield("Brisela, Voice of Nightmares");
+    assert_eq!(brisela.len(), 1, "{}", t.dump_log());
+    assert_eq!(mv_now(&mut t, brisela[0]), 11);
+    t.advance_to(P0, Step::Upkeep);
+    let thief = thief_attacks_copying(&mut t, brisela[0]);
+    assert_eq!(name_of(&t, thief), "Brisela, Voice of Nightmares");
+    assert_eq!(mv_now(&mut t, thief), 0);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Gisela, the Broken Blade").len(), 1, "{}", t.dump_log());
+    assert_eq!(t.named_on_battlefield("Bruna, the Fading Light").len(), 1);
+    // Only the Thief (a copy until end of turn) is a Brisela.
+    assert_eq!(t.named_on_battlefield("Brisela, Voice of Nightmares"), vec![thief]);
+}
+
+#[test]
+fn identity_thief_copying_a_hamlet_captain_that_became_a_permeating_mass() {
+    cr!("707.3", "510.2");
+    ruling!("Identity Thief", "For example, if you target a Hamlet Captain that has become a copy of Permeating Mass, Identity Thief will become a Permeating Mass.");
+    supported("Permeating Mass");
+    supported("Hamlet Captain");
+    // The ruling's example: P1's Permeating Mass ("Whenever this creature deals combat
+    // damage to a creature, that creature becomes a copy of Permeating Mass.") is blocked
+    // by P0's Hamlet Captain, which becomes a Permeating Mass; the Thief copies it.
+    let mut t = TestGame::new(2);
+    let mass = t.battlefield(P1, "Permeating Mass");
+    let captain = t.battlefield(P0, "Hamlet Captain");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(&[(mass, Entity::Player(P0))], &[(captain, mass)]);
+    t.resolve_all();
+    assert_eq!(name_of(&t, captain), "Permeating Mass");
+    t.advance_to(P0, Step::Upkeep);
+    let thief = thief_attacks_copying(&mut t, captain);
+    assert_eq!(name_of(&t, thief), "Permeating Mass");
+    assert_eq!(t.pt(thief), (1, 3));
 }
 
 // --- Undefined characteristics, nothing to copy ---------------------------------------------
@@ -705,4 +754,72 @@ fn progenitor_mimics_gained_trigger_is_copiable() {
     t.settle();
     t.resolve_all();
     assert_eq!(new_tokens(&t, P0, &before).len(), 3);
+}
+
+// --- Stolen Identity (cipher) ---------------------------------------------------------------
+
+#[test]
+fn stolen_identity_can_be_encoded_on_its_new_token_if_its_a_creature() {
+    cr!("702.99a", "608.2c");
+    ruling!("Stolen Identity", "If the token you create is a copy of a creature, you can exile Stolen Identity encoded on that token.");
+    use mtg_engine::kw::cipher::encoded_on;
+    // A copy of P1's Hill Giant: P0's only creature, the token, is offered and chosen.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    lands_for(&mut t, P0, "{4}{U}{U}");
+    let card = t.hand(P0, "Stolen Identity");
+    let before = t.g.battlefield.clone();
+    t.cast(P0, card).target(obj(giant)).go();
+    let from = t.asked().len();
+    t.answer_choose_moved(P0, &[]);
+    t.clear_answers();
+    t.resolve_all();
+    let toks = new_tokens(&t, P0, &before);
+    assert_eq!(toks.len(), 1);
+    let offered: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered, vec![vec![obj(toks[0])]]);
+    // P0 chooses it (the token didn't exist when the spell was cast: P0's agent picks the
+    // creature offered).
+    struct FirstOffered(Box<dyn mtg_engine::decision::Agent>);
+    impl mtg_engine::decision::Agent for FirstOffered {
+        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
+            match d {
+                Decision::ChooseEntities { candidates, .. } if !candidates.is_empty() => {
+                    Answer::Entities(vec![candidates[0]])
+                }
+                _ => self.0.decide(g, p, d),
+            }
+        }
+    }
+    let mut t = TestGame::new(2);
+    {
+        let mut agents = t.g.agents.0.lock().unwrap();
+        let inner = std::mem::replace(&mut agents[0], Box::new(mtg_engine::decision::PassiveAgent));
+        agents[0] = Box::new(FirstOffered(inner));
+    }
+    let giant = t.battlefield(P1, "Hill Giant");
+    lands_for(&mut t, P0, "{4}{U}{U}");
+    let card = t.hand(P0, "Stolen Identity");
+    let before = t.g.battlefield.clone();
+    t.cast(P0, card).target(obj(giant)).go();
+    t.resolve_all();
+    let toks = new_tokens(&t, P0, &before);
+    assert_eq!(toks.len(), 1);
+    assert_eq!(encoded_on(&t.g, t.g.current(card)), Some(toks[0]), "{}", t.dump_log());
+    assert!(t.in_exile("Stolen Identity"));
+    // A copy of a noncreature artifact: no creature to encode it on.
+    let mut t = TestGame::new(2);
+    let stone = t.battlefield(P1, "Mind Stone");
+    lands_for(&mut t, P0, "{4}{U}{U}");
+    let card = t.hand(P0, "Stolen Identity");
+    t.cast(P0, card).target(obj(stone)).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Mind Stone").len(), 2);
+    assert!(t.in_graveyard(P0, "Stolen Identity"));
 }
