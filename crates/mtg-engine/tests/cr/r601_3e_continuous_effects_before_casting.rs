@@ -75,3 +75,24 @@ fn a_room_door_made_an_artifact_by_an_effect_gets_an_artifact_spell_reduction() 
     let card = t.hand(P0, "Bottomless Pool // Locker Room");
     assert!(!offered(&mut t, P0, card, CastMethod::Half(1)));
 }
+
+#[test]
+fn a_granted_flashback_still_counts_while_an_effect_applies_to_spells() {
+    cr!("601.3e", "702.34a");
+    // With Celestial Dawn in play the spell's characteristics are computed as it would be
+    // on the stack; the flashback Snapcaster Mage gave the card in the graveyard still
+    // lets it be cast from there.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Celestial Dawn");
+    t.lands(P0, "Plains", 3);
+    let bolt = t.graveyard(P0, "Lightning Bolt");
+    let mage = t.hand(P0, "Snapcaster Mage");
+    t.answer_targets(P0, &[Entity::Object(bolt)]);
+    t.cast(P0, mage).go();
+    t.resolve_all();
+    let method = CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback);
+    assert!(offered(&mut t, P0, bolt, method.clone()));
+    t.cast(P0, bolt).method(method).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+}

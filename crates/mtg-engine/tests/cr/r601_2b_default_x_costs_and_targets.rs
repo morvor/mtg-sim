@@ -34,6 +34,7 @@ fn offered_max(t: &TestGame) -> i64 {
 #[test]
 fn the_default_x_of_a_discard_x_cost_is_the_number_of_cards_in_hand() {
     cr!("601.2b", "601.2h", "107.3a");
+    interp!("default-numbers");
     // Conflagrate: "Flashback—{R}{R}, Discard X cards." Six Mountains, two cards in hand.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -50,6 +51,7 @@ fn the_default_x_of_a_discard_x_cost_is_the_number_of_cards_in_hand() {
 #[test]
 fn the_default_x_of_an_exile_x_cards_cost_is_the_number_of_cards_to_exile() {
     cr!("601.2b", "601.2h", "107.3a");
+    interp!("default-numbers");
     // Flash of Insight: "Flashback—{1}{U}, Exile X blue cards from your graveyard." One
     // other blue card there.
     let mut t = TestGame::new(2);
@@ -79,6 +81,7 @@ fn the_default_x_of_an_exile_x_cards_cost_is_the_number_of_cards_to_exile() {
 #[test]
 fn the_default_x_of_a_remove_x_counters_cost_is_the_counters_there_are() {
     cr!("601.2b", "601.2h", "107.3a");
+    interp!("default-numbers");
     // Light Up the Night: "Flashback—{3}{R}, Remove X loyalty counters from among
     // planeswalkers you control. If you cast this spell this way, X can't be 0." Jace
     // Beleren enters with three loyalty counters; eight Mountains.
@@ -96,6 +99,7 @@ fn the_default_x_of_a_remove_x_counters_cost_is_the_counters_there_are() {
 #[test]
 fn the_default_x_of_a_sacrifice_x_cost_is_the_permanents_there_are() {
     cr!("601.2b", "601.2h", "107.3a");
+    interp!("default-numbers");
     // Firecat Blitz: "Flashback—{R}{R}, Sacrifice X Mountains." Two Mountains and four
     // Islands: six mana, but only two Mountains to sacrifice.
     let mut t = TestGame::new(2);
@@ -111,6 +115,7 @@ fn the_default_x_of_a_sacrifice_x_cost_is_the_permanents_there_are() {
 #[test]
 fn the_default_x_of_x_targets_is_the_number_of_legal_targets() {
     cr!("601.2b", "601.2c", "107.3a");
+    interp!("default-numbers");
     // Plant Tadpoles ({X}{U}{U} Sorcery — Omen): "Tap X target creatures." Six Islands
     // (X up to 4 by mana), two creatures.
     let mut t = TestGame::new(2);

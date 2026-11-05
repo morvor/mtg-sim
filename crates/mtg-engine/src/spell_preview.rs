@@ -23,7 +23,9 @@ pub fn spell_characteristics(
     opt: &CastOption,
 ) -> Characteristics {
     let printed = g.option_characteristics(card, opt);
-    if g.obj(card).zone == Zone::Stack || !spell_effects_in_play(g) {
+    if g.obj(card).zone == Zone::Stack
+        || !(spell_effects_in_play(g) || own_effects_on_the_stack(&printed))
+    {
         return printed;
     }
     let mut h = g.clone();
@@ -73,21 +75,43 @@ pub fn spell_characteristics(
 }
 
 /// Whether a continuous effect that may apply to spells is in play: a static ability of a
-/// permanent (or an object in the command zone) whose affected objects include spells, an
-/// effect of a resolved spell or ability that applies to spells, or an effect waiting for
-/// the next spell cast. Otherwise a spell has its printed characteristics.
+/// permanent (or an object in the command zone, or a spell on the stack) whose affected
+/// objects include spells or that grants abilities to spells cast with a permission
+/// (CR 611.3d), an effect of a resolved spell or ability that applies to spells, or an
+/// effect waiting for the next spell cast. Otherwise a spell has its printed
+/// characteristics.
 pub fn spell_effects_in_play(g: &Game) -> bool {
     !g.next_spell_effects.is_empty()
         || g.effects
             .iter()
             .any(|e| matches!(&e.affected, Affected::Filter(f) if mentions_spells(f)))
-        || g.battlefield.iter().chain(g.command.iter()).any(|id| {
-            g.obj(*id).chars.abilities.iter().any(|a| {
-                matches!(&a.kind, AbilityKind::Static(s)
-                    if matches!(&s.effect, StaticEffect::Continuous { affected, .. }
-                        if mentions_spells(affected)))
+        || g.battlefield
+            .iter()
+            .chain(g.command.iter())
+            .chain(g.stack.iter())
+            .any(|id| {
+                g.obj(*id).chars.abilities.iter().any(|a| {
+                    matches!(&a.kind, AbilityKind::Static(s)
+                    if match &s.effect {
+                        StaticEffect::Continuous { affected, .. } => mentions_spells(affected),
+                        StaticEffect::CastGrant { .. } => true,
+                        _ => false,
+                    })
+                })
             })
-        })
+}
+
+/// Whether the spell's own characteristics include a non-characteristic-defining static
+/// ability with a continuous effect that functions on the stack ("as long as this spell is
+/// on the stack", "this spell ... wherever it is"): one its printed characteristics don't
+/// show applied.
+fn own_effects_on_the_stack(c: &Characteristics) -> bool {
+    c.abilities.iter().any(|a| {
+        matches!(&a.kind, AbilityKind::Static(s)
+            if !s.is_cda
+                && matches!(s.zone, FunctionZone::Stack | FunctionZone::Anywhere | FunctionZone::AnywhereExcept(_))
+                && matches!(s.effect, StaticEffect::Continuous { .. }))
+    })
 }
 
 /// Whether a filter of affected objects can match spells.
@@ -97,7 +121,10 @@ fn mentions_spells(f: &Filter) -> bool {
         | Filter::SpellOnStack
         | Filter::InZone(ZoneKind::Stack)
         | Filter::CastBy(_)
-        | Filter::CastFrom(_) => true,
+        | Filter::CastFrom(_)
+        | Filter::CastWithCost(_)
+        | Filter::Targets(_)
+        | Filter::StackTargets(_) => true,
         Filter::And(v) | Filter::Or(v) => v.iter().any(mentions_spells),
         _ => false,
     }
