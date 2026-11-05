@@ -105,23 +105,30 @@ fn disciple_phased_out_lets_others_phase_in_and_phases_in_with_them() {
     );
     for disciple_first in [true, false] {
         let mut t = TestGame::new(2);
-        // P0's Bears phase out with the Disciple's ability.
+        // P0's Bears phase out with the Disciple's ability (or, entering after it, by
+        // another effect); so does P1's Hill Giant.
         let early = if disciple_first {
             None
         } else {
             Some(t.battlefield(P0, "Grizzly Bears"))
         };
+        let giant = t.battlefield(P1, "Hill Giant");
         let d = disciple_enters(&mut t, &[], &[]);
         let bears = early.unwrap_or_else(|| {
             let b = t.battlefield(P0, "Grizzly Bears");
             mtg_engine::keyword_impls::phase_out(&mut t.g, vec![b]);
             b
         });
-        assert!(phased_out(&t, bears));
+        assert!(phased_out(&t, bears) && phased_out(&t, giant));
         // The Disciple phases out too.
         mtg_engine::keyword_impls::phase_out(&mut t.g, vec![d]);
         t.g.recompute();
         assert!(phased_out(&t, d));
+        // P1's untap step, while the Disciple is phased out: the Giant phases in normally.
+        assert_eq!(t.g.turn.active, P0);
+        to_upkeep(&mut t, P1);
+        assert!(!phased_out(&t, giant), "disciple first: {disciple_first}");
+        assert!(phased_out(&t, d) && phased_out(&t, bears));
         // P0's untap step: both phase in at the same time.
         to_upkeep(&mut t, P0);
         assert!(!phased_out(&t, d), "disciple first: {disciple_first}");
@@ -279,7 +286,7 @@ fn ramses_wins_when_an_attacked_player_loses_for_any_reason() {
 
 #[test]
 fn ramses_ignores_attacks_on_planeswalkers_and_late_assassins() {
-    cr!("508.1", "506.3", "508.4");
+    cr!("508.1", "508.2a", "506.3", "508.4");
     ruling!(
         "Ramses, Assassin Lord",
         "For the last ability to trigger, an Assassin you controlled must have attacked the player. Attacking a planeswalker the player controls won’t count."

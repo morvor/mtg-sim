@@ -1446,23 +1446,18 @@ impl Game {
                 }
                 out
             }
-            // "Becomes blocked" by an effect (Curtain of Light) or by a creature put onto
-            // the battlefield blocking, not by blockers being declared (handled above):
-            // it triggers if the attacker was unblocked (CR 509.3c; the event is emitted
-            // only then).
+            // "Becomes blocked" by an effect that names no blocking creature (Curtain of
+            // Light, CR 509.1h): it triggers, as the attacker was unblocked (CR 509.3c; the
+            // event is emitted only then). Blockers being declared are handled above, and a
+            // creature that an effect makes block it or that's put onto the battlefield
+            // blocking it by its `BlockAdded` event (combat.rs), so only once.
             (
                 TriggerCond::BlocksOrBecomesBlocked(f),
                 Event::BecameBlocked { attacker, blockers },
             ) => {
-                let declared = |b: &ObjectId| {
-                    self.combat
-                        .as_ref()
-                        .is_some_and(|c| c.blockers.iter().any(|x| x.id == *b && x.declared))
-                };
-                if !blockers.iter().any(declared) && self.matches(*attacker, f, &ctx) {
+                if blockers.is_empty() && self.matches(*attacker, f, &ctx) {
                     one(EventInfo {
                         object: Some(*attacker),
-                        other: blockers.first().copied(),
                         ..Default::default()
                     })
                 } else {

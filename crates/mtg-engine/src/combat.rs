@@ -3585,10 +3585,10 @@ pub fn combat_trigger_matches(
                 .iter()
                 .enumerate()
                 .filter(|(i, (a, t))| {
-                    // The attacker as it was declared: for a look-back ("if they were
-                    // attacked this turn by an Assassin you controlled"), what it has
-                    // become since doesn't matter (CR 608.2i; Ramses, Assassin Lord
-                    // rulings).
+                    // The attacker as it was declared (CR 508.2a): for a look-back ("if
+                    // they were attacked this turn by an Assassin you controlled"), what
+                    // it has become since and who controls it now don't matter
+                    // (CR 608.2i; Ramses, Assassin Lord rulings).
                     let matched = match as_declared.get(*i) {
                         Some((chars, controller)) => {
                             let view = crate::eval::AsDeclared {

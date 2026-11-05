@@ -2,8 +2,8 @@
 //! the battlefield (CR 603.6a), "summoning sickness" by control (CR 302.6), the
 //! power/toughness an animation sets overwrites earlier setting effects but not
 //! modifications and counters (CR 613.4), counters stay when it stops being a creature
-//! (CR 122.2), "if you control two or more other lands" as lands enter at the same time
-//! (CR 614.12, 305.7), several instances of a gained ability (CR 113.2c), and ward gained
+//! (CR 122.1), "if you control two or more other lands" as lands enter at the same time
+//! (CR 614.12, 305.4), several instances of a gained ability (CR 113.2c), and ward gained
 //! after the land became a target (CR 702.21a).
 
 use crate::r_p018_common::*;

@@ -1,6 +1,6 @@
 //! Rulings batch P018 — "discard two cards unless you discard a [type] card" (CR 701.9,
-//! 118.12), revealing cards until a card is found (CR 701.20), and naming a card as a
-//! spell resolves (CR 608.2c, 201.3).
+//! 118.12a), revealing cards until a card is found (CR 701.20), and naming a card as a
+//! spell resolves (CR 608.2c, 201.4).
 
 use crate::r_p018_common::*;
 use crate::r_s01_common::{asked_since, stack_library, supported};
@@ -231,7 +231,9 @@ fn demonic_consultation_must_name_a_real_card() {
         "Demonic Consultation",
         "You must name a card that actually exists in the game of Magic."
     );
-    // "Chartreuse" isn't a card: it names nothing. A real card not in the game is fine.
+    // "Chartreuse" isn't a card: it names nothing (so no revealed card has the chosen
+    // name, and the whole library is exiled). A real card not in the game is fine.
+    interp!("default-card-name");
     for (name, valid) in [("Chartreuse", false), ("Black Lotus", true)] {
         let mut t = TestGame::new(2);
         t.answer(P0, DecisionKind::Name, Answer::Text(name.into()));

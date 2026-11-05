@@ -2,7 +2,7 @@
 //! the mana spent on the spell's total cost counts, not mana paid for another ability's
 //! cost; targets are chosen before the cost is paid (CR 601.2c, 601.2h); what's checked
 //! as the spell resolves (CR 608.2b); "you" in a granted ability (CR 109.5); "can't play
-//! lands" and "can't cast" don't stop putting cards onto the battlefield (CR 305.2,
+//! lands" and "can't cast" don't stop putting cards onto the battlefield (CR 305.4,
 //! 101.2), nor counter spells already cast; counters a creature enters with (CR 614.1c).
 
 use crate::r_p018_common::*;

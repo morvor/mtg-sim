@@ -1,6 +1,6 @@
 //! Rulings batch P018 — color and type changes: an effect that sets colors overwrites
 //! earlier ones (CR 105.3, 613.1e, 613.7), setting land types (CR 305.7), "in addition to"
-//! (CR 205.1b), effects that apply as a permanent enters (CR 613.1, 614.12), colorless
+//! (CR 205.1b), effects that apply as a permanent enters (CR 613.1, 611.3c), colorless
 //! isn't a card type (CR 105.2c), "the color or colors of your choice" (CR 105.1),
 //! phasing doesn't make a permanent enter again (CR 702.26d), a target-zero spell
 //! (CR 115.1, 601.2c), and the timestamp of a conditional static ability (CR 613.7a).
@@ -81,7 +81,7 @@ fn nightcreep_makes_lands_swamps_keeping_supertypes() {
 
 #[test]
 fn dralnus_crusade_goblins_enter_as_black_zombies() {
-    cr!("613.1", "614.12", "205.1b", "105.3");
+    cr!("613.1", "611.3c", "205.1b", "105.3");
     ruling!(
         "Dralnu's Crusade",
         "Under Dralnu's Crusade, Goblins are black only, not black in addition to any other colors. They are, however, Zombies in addition to their other creature types. As one enters the battlefield, it is already a black Goblin Zombie (and perhaps some other creature types) with +1/+1; it doesn't enter and then become a black Goblin Zombie and get +1/+1."

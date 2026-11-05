@@ -1,9 +1,10 @@
 //! Rulings batch P018 — combat and ramp: permission to play a card from a graveyard
 //! (CR 601.2, 305.1, 305.2), putting lands onto the battlefield isn't playing them
 //! (CR 305.4), optional "you may put it onto the battlefield" (CR 609.3), mana emptying
-//! between steps (CR 500.4), "becomes blocked" by an effect (CR 509.1h, 702.19e,
-//! 702.45a), illegal targets (CR 608.2b), the same object for one or several "target"
-//! words (CR 115.3), and effects on all players.
+//! between steps (CR 500.5), "becomes blocked" by an effect or by a creature put onto the
+//! battlefield blocking (CR 509.1h, 509.3c, 702.19d, 702.45a), illegal targets
+//! (CR 608.2b), the same object for one or several "target" words (CR 115.3), and effects
+//! on all players.
 
 use crate::r_p018_common::*;
 use crate::r_p212_common::back_face;
@@ -13,6 +14,7 @@ use crate::r_s04_common::{add_mana, on_stack};
 use crate::r_s09_common::legal_attack;
 use crate::r_s20_common::{tap_for_mana, to_beginning_of_combat};
 use crate::r_s25_common::targets_of;
+use mtg_engine::combat::block_by_effect;
 use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::CastMethod;
@@ -173,7 +175,7 @@ fn kaldrings_card_left_unplayed_stays_in_the_graveyard() {
 
 #[test]
 fn kaldring_follows_normal_timing_and_land_plays() {
-    cr!("305.2", "305.3", "307.1", "601.3");
+    cr!("305.2", "305.3", "117.1a", "601.3");
     ruling!(
         "Jorn, God of Winter // Kaldring, the Rimestaff",
         "You must follow the normal timing permissions and restrictions for the card when you play it. To play a land this way, you must have a land play available. Notably, if you activate Kaldring's ability during an opponent's turn, you won't be able to cast a spell that way unless it has flash and you won't be able to play a land that way at all."
@@ -390,7 +392,7 @@ fn curtain(t: &mut TestGame, attacker: ObjectId) {
 
 #[test]
 fn curtain_of_light_has_targets_only_during_combat() {
-    cr!("506.4", "509.1h", "115.1");
+    cr!("511.3", "509.1h", "115.1");
     ruling!(
         "Curtain of Light",
         "An attacking unblocked creature exists from the time the defending player chooses not to block that creature until the combat phase ends. Curtain of Light doesn’t have any legal targets outside of the combat phase."
@@ -412,8 +414,10 @@ fn curtain_of_light_has_targets_only_during_combat() {
     t.cast(P1, c).target(bears).go();
     t.resolve_all();
     assert!(t.g.combat.as_ref().is_some_and(|c| c.is_blocked(bears)));
-    // After combat, no target.
+    // After combat, no target: the combat phase is over and the Bears aren't an attacking
+    // creature any more (CR 511.3).
     t.advance_to(P0, Step::PostcombatMain);
+    assert!(!t.g.is_attacking(bears));
     let c2 = t.hand(P1, "Curtain of Light");
     add_mana(&mut t, P1, ManaType::W, 2);
     t.g.turn.priority = Some(P1);
@@ -448,6 +452,48 @@ fn curtain_of_light_triggers_bushido_and_trample_hits_the_player() {
     assert!(t.g.combat.as_ref().is_some_and(|c| c.is_blocked(wurm)));
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 14);
+}
+
+#[test]
+fn bushido_triggers_once_when_blocking_starts_other_than_by_declaring_blockers() {
+    cr!("509.3a", "509.3c", "509.4", "702.45a");
+    supported("Flash Foliage");
+    // Flash Foliage: "Create a 1/1 green Saproling creature token that's blocking target
+    // creature attacking you." The unblocked Devoted Retainer becomes blocked by a
+    // creature put onto the battlefield blocking it: bushido 1 triggers, once.
+    let mut t = TestGame::new(2);
+    let retainer = t.battlefield(P0, "Devoted Retainer");
+    unblocked(&mut t, retainer);
+    add_mana(&mut t, P1, ManaType::G, 3);
+    let foliage = t.hand(P1, "Flash Foliage");
+    t.cast(P1, foliage).target(retainer).go();
+    t.resolve_all();
+    assert!(t.g.combat.as_ref().is_some_and(|c| c.is_blocked(retainer)));
+    assert_eq!(tokens(&t, P1).len(), 1);
+    assert_eq!(t.pt(retainer), (2, 2), "bushido 1 triggered once");
+    // The Saproling (1/1) and the Retainer (2/2) deal their damage: the Saproling dies.
+    t.advance_to(P0, Step::EndOfCombat);
+    assert!(tokens(&t, P1).is_empty());
+    assert!(t.on_battlefield(retainer));
+    assert_eq!(t.life(P1), 20);
+    // An effect makes a creature block the unblocked Retainer: once too.
+    let mut t = TestGame::new(2);
+    let retainer = t.battlefield(P0, "Devoted Retainer");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    unblocked(&mut t, retainer);
+    assert!(block_by_effect(&mut t.g, bears, retainer));
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.pt(retainer), (2, 2), "attacker made blocked by an effect");
+    // An effect makes the Retainer block while it isn't blocking: once (CR 509.3a).
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let retainer = t.battlefield(P1, "Devoted Retainer");
+    unblocked(&mut t, bears);
+    assert!(block_by_effect(&mut t.g, retainer, bears));
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.pt(retainer), (2, 2), "blocker made to block by an effect");
 }
 
 // ---------------------------------------------------------------------------
@@ -533,5 +579,4 @@ fn martial_glory_may_target_the_same_creature_twice() {
     );
     assert_eq!(t.pt(a), (8, 5));
     assert_eq!(t.pt(b), (2, 5));
-    let _ = Answer::Default;
 }

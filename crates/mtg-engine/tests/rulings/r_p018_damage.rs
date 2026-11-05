@@ -1,10 +1,10 @@
 //! Rulings batch P018 — "whenever [this] deals damage" triggers: any damage, not only
 //! combat damage (CR 120.1, 603.2); once per damage event however many things are dealt
-//! damage (CR 510.2, 603.2c); damage dealt at the same time as lethal damage (CR 603.10a,
+//! damage (CR 510.2, 603.2c); damage dealt at the same time as lethal damage (CR 603.2,
 //! 704.3); a triggered ability isn't lifelink (CR 702.15b); redirection and prevention
 //! (CR 614.9, 615); delayed triggers following an object (CR 603.7c, 400.7); untapping
 //! in other players' untap steps (CR 502.3); and permanent cards with a subtype (CR 205.3,
-//! 308.3).
+//! 308.2).
 
 use crate::r_p018_common::*;
 use crate::r_p212_common::move_eq;
@@ -141,12 +141,13 @@ fn deals_damage_triggers_on_noncombat_damage_too() {
 
 #[test]
 fn greatbow_doyen_ignores_damage_from_an_archer_spell() {
-    cr!("109.2", "603.2");
+    cr!("109.2", "109.2c", "603.2");
     ruling!(
         "Greatbow Doyen",
         "The second ability triggers only when an Archer permanent you control deals damage to a creature. It won’t trigger when an Archer spell you control deals damage."
     );
     supported("Greatbow Doyen");
+    supported("Tamanoa");
     let volley = crate::r_s01_common::custom_card(
         "Archer's Volley",
         "Kindred Instant — Elf Archer",
@@ -156,6 +157,9 @@ fn greatbow_doyen_ignores_damage_from_an_archer_spell() {
     );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Greatbow Doyen");
+    // Tamanoa: "Whenever a noncreature source you control deals damage, you gain that
+    // much life." A source can be a spell (CR 109.2c): that one does trigger.
+    t.battlefield(P0, "Tamanoa");
     let giant = t.battlefield(P1, "Hill Giant");
     let spell = t.custom(P0, volley, Zone::Hand(P0));
     add_mana(&mut t, P0, ManaType::R, 1);
@@ -163,6 +167,7 @@ fn greatbow_doyen_ignores_damage_from_an_archer_spell() {
     t.resolve_all();
     assert_eq!(t.obj_now(giant).damage, 2);
     assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P0), 22);
 }
 
 // ---------------------------------------------------------------------------
@@ -658,12 +663,23 @@ fn vampiric_link_gains_all_the_damage_dealt() {
 
 #[test]
 fn witherscale_wurm_doesnt_give_itself_wither() {
-    cr!("702.80a", "120.3e");
+    cr!("702.80a", "120.3d", "120.3e");
     ruling!(
         "Witherscale Wurm",
         "Witherscale Wurm’s first ability does *not* give Witherscale Wurm wither."
     );
     supported("Witherscale Wurm");
+    supported("Darksteel Myr");
+    // Blocked by an indestructible 0/1: the Wurm's 9 damage is marked on it (with wither
+    // it would be nine -1/-1 counters, and the Myr would die).
+    let mut t = TestGame::new(2);
+    let wurm = t.battlefield(P0, "Witherscale Wurm");
+    let myr = t.battlefield(P1, "Darksteel Myr");
+    t.attack(&[(wurm, Entity::Player(P1))], &[(myr, wurm)]);
+    assert!(t.on_battlefield(myr));
+    assert_eq!(t.obj_now(myr).damage, 9);
+    assert_eq!(t.counters(myr, counters::MINUS1), 0);
+    // Blocked by a Hill Giant: the Giant gains wither, the Wurm doesn't.
     let mut t = TestGame::new(2);
     let wurm = t.battlefield(P0, "Witherscale Wurm");
     let giant = t.battlefield(P1, "Hill Giant");
@@ -730,11 +746,12 @@ fn hypnotic_specter_and_redirected_or_prevented_damage() {
     );
     supported("Hypnotic Specter");
     supported("Jade Monolith");
+    supported("Harm's Way");
     supported("Pariah");
     // (setup, whether it triggers)
     type Setup = fn(&mut TestGame, ObjectId, ObjectId) -> Entity;
     let cases: [(&str, Setup, bool); 4] = [
-        // P1's Jade Monolith redirects the Specter's damage to P1's Bears to P1.
+        // P1's Jade Monolith redirects the Specter's damage to P1's Craw Wurm to P1.
         (
             "to an opponent",
             |t, specter, bears| {
@@ -747,16 +764,15 @@ fn hypnotic_specter_and_redirected_or_prevented_damage() {
             },
             true,
         ),
-        // P0's own Jade Monolith redirects it to P0.
+        // P1's Harm's Way ("The next 2 damage that a source of your choice would deal to
+        // you and/or permanents you control this turn is dealt to any target instead.")
+        // redirects the Specter's damage to P1 to P0, its controller.
         (
             "to a nonopponent",
-            |t, specter, bears| {
-                let mono = t.battlefield(P0, "Jade Monolith");
-                add_mana(t, P0, ManaType::C, 1);
-                t.answer_choose(P0, &[Entity::Object(specter)]);
-                t.activate(P0, mono, 0, &[Entity::Object(bears)]).unwrap();
-                t.resolve();
-                Entity::Object(bears)
+            |t, specter, _| {
+                t.answer_choose(P1, &[Entity::Object(specter)]);
+                cast_resolve(t, P1, "Harm's Way", &[Entity::Player(P0)]);
+                Entity::Player(P1)
             },
             false,
         ),
@@ -795,6 +811,18 @@ fn hypnotic_specter_and_redirected_or_prevented_damage() {
         assert_eq!(t.stack_len(), usize::from(triggers), "{what}");
         t.resolve_all();
         assert_eq!(t.hand_size(P1), usize::from(!triggers), "{what}");
+        // Where the damage went.
+        let (p0, p1, wurm) = match what {
+            "to an opponent" => (20, 18, 0),
+            "to a nonopponent" => (18, 20, 0),
+            "to a creature" => (20, 20, 2),
+            _ => (20, 20, 0),
+        };
+        assert_eq!(
+            (t.life(P0), t.life(P1), t.obj_now(bears).damage),
+            (p0, p1, wurm),
+            "{what}"
+        );
     }
 }
 
