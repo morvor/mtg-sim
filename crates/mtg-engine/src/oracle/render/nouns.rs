@@ -1786,7 +1786,12 @@ impl Renderer<'_> {
                 && np.post[0].starts_with("attacking ");
         // "cards in your graveyard with four or more card types among them": a quality
         // of the cards together, said after where they are.
-        let group_last = |p: &String| p.starts_with("with ") && p.ends_with(" among them");
+        // Likewise "black cards from your graveyard with fifteen or more black mana symbols
+        // among their mana costs" (an exile cost's cards chosen together).
+        let group_last = |p: &String| {
+            p.starts_with("with ")
+                && (p.ends_with(" among them") || p.ends_with(" among their mana costs"))
+        };
         let group_posts: Vec<String> = if np.zone.is_some_and(|z| z != ZoneKind::Battlefield) {
             np.post.iter().filter(|p| group_last(p)).cloned().collect()
         } else {

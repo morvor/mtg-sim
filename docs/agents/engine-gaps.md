@@ -862,3 +862,22 @@ ruling-conflicts-2.
   ice counters on them, whether or not it put the ice counters on them." Other cards put ice counters on
   noncreature permanents (e.g. Rimefeather Owl), so "all permanents" and "creatures" give different results;
   the engine lets a noncreature permanent with an ice counter untap.
+- **Run Out of Town** (rulings-P140). Oracle: "The owner of target nonland permanent puts it on their choice
+  of the top or bottom of their library." Ruling 2022-04-29: "That permanent's controller chooses whether to
+  put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to
+  mutate or meld, for example), that permanent's controller puts all of them on the top or all of them on the
+  bottom. They do not need to reveal the order those cards were put into the library this way." The Oracle
+  text has the owner choose, the ruling the controller; they differ for a permanent another player controls.
+  The engine follows the Oracle text (`run_out_of_town_follows_its_oracle_text` in
+  `tests/rulings/r_p140_tuck.rs`, which cites no ruling), as for Desynchronize, Unlucky Drop, Aether Gust and
+  Sudden Setback, whose rulings say the owner chooses. Left uncited.
+- **Caller of the Untamed** (rulings-P025, left uncited). Ruling 2016-08-23: "If you have more than one Caller
+  of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you
+  drafted that aren’t in your deck. You’ll choose which one to copy at the time you choose the value of X while
+  activating the ability." The decided interpretation `x-defined-by-target`
+  (`docs/interpretations/stack-casting-costs.md`, "Decided by the user, Nov 4") has, in its Affects line, "the
+  card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card
+  chosen is one with that mana value". The two differ only when two exiled cards share a mana value (which
+  one is copied: chosen during activation by the ruling, as the ability resolves by the interpretation). Not a
+  CR conflict: CR 107.3c and 607.3 support the ruling; following it needs a non-target choice made during
+  activation.

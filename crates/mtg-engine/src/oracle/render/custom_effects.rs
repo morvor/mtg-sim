@@ -198,6 +198,19 @@ impl Renderer<'_> {
                     k => format!("up to {}", number_word(k as i32)),
                 };
                 let max = if *max == "x" { "X".to_string() } else { max.to_string() };
+                // "You may cast up to three of the copies" / "any number of spells with
+                // total mana value 6 or less from among the copies" (`copies_7.rs`).
+                if *zones == "copies" {
+                    if *max == u32::MAX.to_string() {
+                        return Some(format!(
+                            "you may cast {count} of the copies without paying their mana costs"
+                        ));
+                    }
+                    let spells = spell_kinds(types, true);
+                    return Some(format!(
+                        "you may cast {count} {spells} with total mana value {max} or less from among the copies without paying their mana costs"
+                    ));
+                }
                 let spells = spell_kinds(types, true);
                 let from = if *zones == "linked" {
                     "from among cards exiled with ~".to_string()
