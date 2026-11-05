@@ -131,6 +131,10 @@ fn find_anchor(l: &str) -> Option<Anchor> {
         let Some(i) = l.find(head) else {
             continue;
         };
+        // "blocking or blocked by target creature": not a relation read here.
+        if l[..i].ends_with(" or") || l[..i].ends_with(" and") {
+            continue;
+        }
         let after = &l[i + head.len()..];
         for (w, when) in WINDOWS {
             let Some(j) = after.find(w) else {
@@ -418,5 +422,9 @@ mod tests {
             assert_eq!(a.noun, noun, "{s}");
         }
         assert!(find_anchor(" destroy target creature blocked this turn").is_none());
+        assert!(find_anchor(
+            " destroy all creatures blocking or blocked by target creature this turn"
+        )
+        .is_none());
     }
 }

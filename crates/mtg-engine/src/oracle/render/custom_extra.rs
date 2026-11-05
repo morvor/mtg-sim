@@ -128,9 +128,12 @@ impl Renderer<'_> {
             let TriggerCond::CastSpell { filter, .. } = t.as_ref() else {
                 return None;
             };
-            let saved = self.default_head.replace("spell");
-            let n = self.noun(filter, Num::Many);
-            self.default_head = saved;
+            let one = self.noun(filter, Num::One);
+            let n = if one.ends_with(" spell") {
+                plural(&one)
+            } else {
+                format!("{one} spells")
+            };
             self.target_vars
                 .push((var, format!("one of those {n}"), false));
             return Some(String::new());
@@ -203,19 +206,6 @@ impl Renderer<'_> {
 
     /// `Filter::Custom` qualities put into words here: (adjective?, words).
     pub(crate) fn custom_filter_extra(&mut self, name: &str) -> Option<(bool, String)> {
-        // Glyph of Reincarnation (`kw/block_history.rs`).
-        if let Some(r) =
-            name.strip_prefix(crate::kw::block_history::OWNED_BY_CONTROLLER_WHEN_BLOCKED)
-        {
-            let slot: u8 = r.split(':').next()?.parse().ok()?;
-            let by = self.sel(&Sel::Target(slot), Case::Obj);
-            return Some((
-                false,
-                format!(
-                    "owned by the player who controlled that creature the last time it became blocked by {by}"
-                ),
-            ));
-        }
         if name.starts_with(crate::kw::choice_grammar::OF_A_TYPE_CHOSEN) {
             return Some((false, "of a type chosen this way".into()));
         }

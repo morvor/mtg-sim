@@ -1163,6 +1163,25 @@ impl Renderer<'_> {
                 np.other = true;
                 np.zone_said = true;
             }
+            // "from the graveyard of the player who controlled that creature the last time
+            // it became blocked by that Wall" (Glyph of Reincarnation, `kw/block_history.rs`).
+            Filter::Custom(name)
+                if name.starts_with(crate::kw::block_history::OWNED_BY_CONTROLLER_WHEN_BLOCKED) =>
+            {
+                let slot = name[crate::kw::block_history::OWNED_BY_CONTROLLER_WHEN_BLOCKED.len()..]
+                    .split(':')
+                    .next()
+                    .and_then(|x| x.parse::<usize>().ok());
+                let that = slot
+                    .and_then(|i| self.targets.get(i))
+                    .and_then(|t| t.text.strip_prefix("target "))
+                    .map(|n| format!("that {n}"))
+                    .unwrap_or_else(|| "that creature".into());
+                np.post.push(format!(
+                    "from the graveyard of the player who controlled that creature the last time it became blocked by {that}"
+                ));
+                np.zone_said = true;
+            }
             Filter::Custom(name) => {
                 if let Some(q) = super::custom_filters::custom_rel(name) {
                     use super::custom_filters::CustomQuality as Q;

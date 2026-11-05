@@ -186,6 +186,7 @@ fn glyph_of_delusion_targets_a_creature_the_target_wall_blocked() {
         "Glyph of Delusion",
         "Can be cast at any time after the wall blocked a creature"
     );
+    interp!("anchor-target-chosen-first");
     supported("Glyph of Delusion");
     let mut t = TestGame::new(2);
     let wall = t.battlefield(P0, "Wall of Stone");

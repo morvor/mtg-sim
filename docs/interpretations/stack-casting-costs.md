@@ -267,3 +267,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Rose, Cutthroat Raider; Cathodion, Myr Moonvessel, Su-Chi (dying); Crime Novelist (sacrificing an artifact); Bone Miser, Waste Not, Mishra, Excavation Prodigy (discarding).
 - Code: `crates/mtg-engine/src/ability.rs` (`is_triggered_mana_ability`: only triggers on a mana ability or on mana being added); `crates/mtg-engine/src/triggers.rs` (a found trigger resolves at once only if `is_mana_ability`).
 - Tests: `tests/rulings/r_p110_mana_misc.rs` (`rose_triggers_for_any_junk_sacrifice`, `mana_triggers_on_a_mana_abilitys_cost_use_the_stack`).
+
+## anchor-target-chosen-first: A target that another target is described by ("target creature that target Wall blocked this turn") is chosen first
+- Kind: interpretation
+- Status: decided
+- Rules: 601.2c "The player announces their choice of an appropriate object or player for each target the spell requires. ..." / 115.1 "Some spells and abilities require their controller to choose one or more targets for them. ..." / 608.2b "... the spell or ability is countered if all its targets, for every instance of the word "target," are now illegal. ..."
+- Question: Glyph of Delusion: "Put X glyph counters on target creature that target Wall blocked this turn, ..." The first target is described by the second. The CR announces all the targets as one step and gives no order among instances of "target", but a creature is "an appropriate object" only relative to the Wall chosen.
+- Decision: The engine asks for the Wall first (it is the spell's first target slot) and then offers only the creatures that Wall blocked this turn; on resolution each target is checked again against the other as chosen (CR 608.2b). The same for "creatures that were blocked by target Wall this turn" and the other anchored block relations (`history_6.rs`).
+- Alternatives: Ask in the text's order and check the pair once both are chosen (the same legal pairs; only the order of the questions differs).
+- Why: The legal pairs are the same either way; choosing the anchor first lets each question list only legal choices.
+- Affects: Glyph of Delusion; Glyph of Reincarnation (one target).
+- Code: `crates/mtg-engine/src/oracle/patterns/history_6.rs` (`anchored_block_history`).
+- Tests: `tests/cards/c6_history_permissions.rs` (`glyph_of_delusion_targets_a_creature_the_target_wall_blocked`).
