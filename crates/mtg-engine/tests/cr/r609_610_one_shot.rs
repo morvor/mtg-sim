@@ -388,35 +388,37 @@ fn simultaneous_phase_ins_are_simultaneous() {
     assert!(t.g.untils.is_empty());
 }
 
-#[test]
-fn spells_gain_abilities_as_theyre_cast() {
-    // CR 610.5: "Red instant spells you cast have lifelink" makes a spell gain lifelink as
-    // it's cast (a one-shot effect): it keeps it after the source leaves. A spell cast
-    // before the source existed doesn't gain it.
-    cr!("610.5");
+/// "Red instant spells you cast gain lifelink as you cast them" (`as_cast`, CR 610.5) or
+/// "Red instant spells you cast have lifelink".
+fn lifelink_lens(as_cast: bool) -> CardDef {
+    let mut s = StaticAbility::new(StaticEffect::Continuous {
+        affected: Filter::and(vec![
+            Filter::Spell,
+            Filter::Type(CardType::Instant),
+            Filter::Color(Color::Red),
+            Filter::ControlledBy(PlayerRel::You),
+        ]),
+        mods: vec![Modification::AddKeyword(
+            mtg_engine::keywords::Keyword::new(KeywordKind::Lifelink),
+        )],
+    });
+    s.as_cast = as_cast;
+    permanent(
+        "Lifelink Lens",
+        &[CardType::Enchantment],
+        vec![AbilityDef::new(AbilityKind::Static(s), "static")],
+    )
+}
+
+/// Casts a Lightning Bolt, then puts the Lens onto the battlefield and casts another one
+/// that gains lifelink; the Lens leaves before both resolve. Returns P0's life after the
+/// later and the earlier Bolt resolve.
+fn bolts_around_a_lifelink_lens(as_cast: bool) -> (i32, i32) {
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 2);
     let early = t.hand(P0, "Lightning Bolt");
     t.cast(P0, early).target(P1).go();
-    let source = t.custom(
-        P0,
-        permanent(
-            "Lifelink Lens",
-            &[CardType::Enchantment],
-            vec![continuous(
-                Filter::and(vec![
-                    Filter::Spell,
-                    Filter::Type(CardType::Instant),
-                    Filter::Color(Color::Red),
-                    Filter::ControlledBy(PlayerRel::You),
-                ]),
-                vec![Modification::AddKeyword(
-                    mtg_engine::keywords::Keyword::new(KeywordKind::Lifelink),
-                )],
-            )],
-        ),
-        Zone::Battlefield,
-    );
+    let source = t.custom(P0, lifelink_lens(as_cast), Zone::Battlefield);
     let bolt = t.hand(P0, "Lightning Bolt");
     let spell = t.cast(P0, bolt).target(P1).go();
     assert!(t.obj_now(spell).has_keyword(KeywordKind::Lifelink));
@@ -424,8 +426,26 @@ fn spells_gain_abilities_as_theyre_cast() {
     t.recompute();
     assert!(t.obj_now(spell).has_keyword(KeywordKind::Lifelink));
     t.resolve();
-    assert_eq!(t.life(P0), 23);
+    let later = t.life(P0);
     t.resolve();
-    assert_eq!(t.life(P0), 23);
     assert_eq!(t.life(P1), 14);
+    (later, t.life(P0))
+}
+
+#[test]
+fn spells_gain_abilities_as_theyre_cast() {
+    // CR 610.5: "Red instant spells you cast gain lifelink as you cast them" makes a spell
+    // gain lifelink as it's put on the stack (a one-shot effect): it keeps it after the
+    // source leaves. A spell put on the stack before the source existed doesn't gain it.
+    cr!("610.5", "601.2a");
+    assert_eq!(bolts_around_a_lifelink_lens(true), (23, 23));
+}
+
+#[test]
+fn a_have_grant_to_spells_you_cast_stays_after_the_cast() {
+    // "Red instant spells you cast have lifelink" is a continuous effect (CR 611.3a-b),
+    // but the engine grants it as the spell is cast and keeps it after the cast, and a
+    // spell already on the stack doesn't get it: a known deviation, see the entry.
+    interp!("cast-grant-have-after-cast");
+    assert_eq!(bolts_around_a_lifelink_lens(false), (23, 23));
 }

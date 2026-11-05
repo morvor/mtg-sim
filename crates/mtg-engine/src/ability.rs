@@ -422,6 +422,13 @@ pub struct StaticAbility {
     /// Characteristic-defining abilities apply first within their layer and in all zones
     /// (CR 604.3, 613.3).
     pub is_cda: bool,
+    /// "[Spells] you cast gain [ability] as you cast them" (Zinnia, Valley's Voice;
+    /// Ashling, the Limitless): a one-shot effect applied as the spell is put on the stack
+    /// (CR 610.5, 601.2a), which the spell keeps even if this ability stops applying
+    /// while it's cast. "[Spells] you cast have [ability]" (false) is a continuous effect
+    /// that applies only while its source still applies to the spell (CR 611.3a-b).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub as_cast: bool,
 }
 
 impl StaticAbility {
@@ -431,6 +438,7 @@ impl StaticAbility {
             effect,
             zone: FunctionZone::Battlefield,
             is_cda: false,
+            as_cast: false,
         }
     }
 }
@@ -1560,9 +1568,10 @@ pub enum Filter {
     /// A spell on the stack, described by a static ability that affects spells
     /// continuously ("Instant and sorcery spells you control have lifelink", CR 611.3a):
     /// it applies to whichever spells match while they're on the stack, including one
-    /// whose control changed. (A static ability granting abilities to `Spell`s makes them
-    /// gain the abilities as they're cast instead, CR 610.5; see
-    /// `next_spell::is_cast_grant`.)
+    /// whose control changed. (A static ability granting abilities to `Spell`s, "spells
+    /// you cast have ...", grants them as they're cast and while it still applies to the
+    /// spell, CR 611.3a-b; "... gain ... as you cast them" is a one-shot grant, CR 610.5;
+    /// see `next_spell::is_cast_grant` and `StaticAbility::as_cast`.)
     SpellOnStack,
     /// Nonland permanents / cards etc. are expressed with Not(Type(Land)).
     Token,
