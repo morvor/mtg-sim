@@ -34,7 +34,8 @@ pub struct EndState {
     /// Objects (by controller) involved in the current stretch of mandatory actions.
     #[serde(skip)]
     pub loop_controllers: BTreeSet<PlayerId>,
-    /// `actions_taken` at the last forced priority pass, to notice other decisions.
+    /// `actions_taken - forced_asks` at the last forced priority pass (plus the decisions
+    /// since that keep the stretch going), to notice other decisions.
     #[serde(skip)]
     pub loop_mark: u64,
     /// Forced priority passes in the current stretch of mandatory actions.
@@ -511,23 +512,7 @@ impl Game {
     /// exactly as many targets or objects as there are candidates) is no optional action
     /// for [`Game::check_mandatory_loop`].
     pub(crate) fn note_forced_decision(&mut self, d: &crate::decision::Decision) {
-        use crate::decision::Decision;
-        let forced = match d {
-            Decision::ChooseTargets {
-                candidates,
-                min,
-                max,
-                ..
-            }
-            | Decision::ChooseEntities {
-                candidates,
-                min,
-                max,
-                ..
-            } => *min == *max && candidates.len() == *min as usize,
-            _ => false,
-        };
-        if forced {
+        if single_answer(d) {
             self.end.forced_asks += 1;
         }
     }
@@ -655,7 +640,30 @@ pub(crate) fn note_decision(g: &mut Game, d: &crate::decision::Decision) {
         Decision::Order { .. } => true,
         _ => false,
     };
-    if required && g.end.loop_mark == g.actions_taken {
+    // `loop_mark` counts the decisions other than those with a single possible answer
+    // (see `check_mandatory_loop`); those are left out of the count already.
+    if required && !single_answer(d) && g.end.loop_mark == g.actions_taken - g.end.forced_asks {
         g.end.loop_mark += 1;
+    }
+}
+
+/// A decision with a single possible answer: choosing exactly as many targets or objects
+/// as there are candidates.
+fn single_answer(d: &crate::decision::Decision) -> bool {
+    use crate::decision::Decision;
+    match d {
+        Decision::ChooseTargets {
+            candidates,
+            min,
+            max,
+            ..
+        }
+        | Decision::ChooseEntities {
+            candidates,
+            min,
+            max,
+            ..
+        } => *min == *max && candidates.len() == *min as usize,
+        _ => false,
     }
 }
