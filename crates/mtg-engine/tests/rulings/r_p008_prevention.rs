@@ -233,14 +233,16 @@ fn cant_be_prevented_doesnt_stop_effects_that_dont_say_prevent() {
     );
     // Impractical Joke resolved; Divine Presence ("If a source would deal 4 or more damage
     // to a permanent or player, it deals 3 damage to that permanent or player instead.")
-    // still reduces Lava Axe's 5 to 3.
+    // still reduces Lava Axe's 5 to 3, while Healing Salve's shield on P1 prevents none of
+    // it.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Divine Presence");
     cast_x(&mut t, P0, "Impractical Joke", NORMAL, None, &[]);
     t.resolve_all();
+    salve(&mut t, pl(P1));
     cast_x(&mut t, P0, "Lava Axe", NORMAL, None, &[pl(P1)]);
     t.resolve_all();
-    assert_eq!(t.life(P1), 17, "reduced to 3");
+    assert_eq!(t.life(P1), 17, "reduced to 3, not prevented");
     // Questing Beast: its 4 combat damage is reduced to 3 by Divine Presence, while a
     // Healing Salve shield on P1 doesn't prevent any of it.
     let mut t = TestGame::new(2);
