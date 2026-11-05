@@ -61,3 +61,9 @@ source was sacrificed to a generic cost wouldn't find the card in the graveyard;
 does that ("the sacrificed card" of Rescue from the Underworld goes through the cost's moved
 objects and is tested). The same question without a cost (Harvester Troll, no ruling) is out of the
 entry's scope.
+
+**Not in this item.** While it was landing, later batches added two more entries to "Apparent
+conflicts (Nov 5)": Run Out of Town (rulings-P140: the ruling has the permanent's controller choose
+top or bottom, the Oracle text its owner) and Caller of the Untamed (rulings-P025: the ruling chooses
+the card to copy during activation, the decided `x-defined-by-target` as the ability resolves). They
+are new cases for the coordinator to add.
