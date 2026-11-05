@@ -18,6 +18,14 @@ use crate::types::*;
 
 pub struct BlockHistory;
 
+/// `Filter::Custom` prefix: a card owned by the player who controlled the creature in the
+/// variable `<var>` the last time it became blocked this turn by the target in `<slot>`
+/// (`<prefix><slot>:<var>`): "the graveyard of the player who controlled that creature the
+/// last time it became blocked by that Wall" (Glyph of Reincarnation). The creature is the
+/// one that was blocked (as it last existed on the battlefield if it has died since).
+pub const OWNED_BY_CONTROLLER_WHEN_BLOCKED: &str =
+    "block history:owned by the player who controlled it when it became blocked by:";
+
 fn record_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId) {
     let ctl = g.obj(attacker).controller;
     if let Some(c) = g.combat.as_mut() {
@@ -38,6 +46,35 @@ fn record_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId) {
 impl KeywordRules for BlockHistory {
     fn kinds(&self) -> &'static [KeywordKind] {
         &[]
+    }
+
+    fn custom_filter(
+        &self,
+        g: &Game,
+        name: &str,
+        id: ObjectId,
+        ctx: &crate::eval::Ctx,
+    ) -> Option<bool> {
+        let r = name.strip_prefix(OWNED_BY_CONTROLLER_WHEN_BLOCKED)?;
+        let (slot, var) = r.split_once(':')?;
+        let (slot, var): (usize, crate::ability::Var) = (slot.parse().ok()?, var.parse().ok()?);
+        let blocker = ctx
+            .targets
+            .get(slot)
+            .and_then(|t| t.first())
+            .and_then(|e| e.object());
+        let attacker = ctx
+            .vars
+            .get(&var)
+            .and_then(|v| v.first())
+            .and_then(|e| e.object());
+        let (Some(blocker), Some(attacker)) = (blocker, attacker) else {
+            return Some(false);
+        };
+        Some(
+            controller_when_blocked_by(g, blocker, attacker)
+                .is_some_and(|p| g.obj(id).owner == p),
+        )
     }
 
     fn on_event(&self, g: &mut Game, ev: &Event) {

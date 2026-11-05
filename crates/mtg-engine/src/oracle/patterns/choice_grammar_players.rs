@@ -154,8 +154,18 @@ fn choose_a_player(l: &str, b: &mut Builder) -> Option<Effect> {
                 )),
             ))
         }
+        // "choose a player who cast one or more sorcery spells this turn" (Backdraft):
+        // the player's history, as for a target player.
+        _ if rest.starts_with("who ") && compared_with_you(rest).is_none() => {
+            let (q, tail) = super::history_filters_4::player_qualifier(rest)?;
+            if !tail.trim().is_empty() {
+                return None;
+            }
+            Some(q)
+        }
         _ => Some(compared_with_you(rest)?),
     };
+    let spells = quality.as_ref().and_then(|q| cast_spells_referent(rest, q));
     // "choose an opponent" alone is the core's (the ETB-style choice).
     if quality.is_none() && !matches!(base, PlayerFilter::NotYou) {
         return None;
@@ -171,7 +181,40 @@ fn choose_a_player(l: &str, b: &mut Builder) -> Option<Effect> {
         "the chosen player".into(),
         Sel::Players(PlayerRef::Var(CHOSEN_PLAYER)),
     ));
+    if let Some(named) = spells {
+        b.named.push(named);
+    }
     Some(e)
+}
+
+/// "who cast one or more sorcery spells this turn": "those sorcery spells" are the spells
+/// with those qualities the chosen player cast this turn.
+fn cast_spells_referent(rest: &str, q: &PlayerFilter) -> Option<(String, Sel)> {
+    let noun = rest
+        .strip_prefix("who cast one or more ")?
+        .strip_suffix(" this turn")?;
+    let PlayerFilter::History(c) = q else {
+        return None;
+    };
+    let Condition::Compare(Value::EventsThisTurn(t, Tally::Events), Cmp::Ge, Value::Const(1)) =
+        c.as_ref()
+    else {
+        return None;
+    };
+    let TriggerCond::CastSpell {
+        who: PlayerRel::Iterated,
+        filter,
+    } = t.as_ref()
+    else {
+        return None;
+    };
+    Some((
+        format!("those {noun}"),
+        Sel::ThisTurn(Box::new(TriggerCond::CastSpell {
+            who: PlayerRel::Var(CHOSEN_PLAYER),
+            filter: filter.clone(),
+        })),
+    ))
 }
 
 inventory::submit! { EffectPattern { name: "choice grammar: choose a player [described]", priority: 87, parse: choose_a_player } }
