@@ -78,6 +78,16 @@ Done by the planner as a separate pass after the first placement (no subagent wa
 
 Independent review (integrator, Nov 4): `check_plan.py` re-run against a fresh live list (55 texts, all placed once) and shown to fail when a list row is removed or duplicated; all 178 drill and review probes re-run with the same results; `round3/autoprobe.py` re-run on the 17 texts gives the listed failing pieces (for Chaos Moon "count the number of permanents." alone compiles; the "If the number is odd" sentence after it fails); 16 further neutral-card probes agree with the families' stated gaps (and show "Each player who discarded a card with the greatest mana value among cards discarded this way draws a card" compiles, a base for Timesifter); the one-off searches re-run; the 38 deferred texts are each named in DEFERRED.md's categories; every cited CR rule and existing file exists. Corrections: Psychic Battle and Grip of Chaos are hand-written, not compiled, and each shares a construct with a tail card (Timesifter, Chef's Kiss), noted in method step 5, the two lists and briefs.
 
+## Round 6 result
+
+Measured Nov 5 at 22cdf3b0, after all five cards6 items had landed (`mtg-tools unsupported --paper --by-card`, `mtg-tools card-coverage`, `round6/check_plan.py`: OK, every live unsupported text placed exactly once).
+
+- Unsupported paper cards: **52 before** (55 texts), **35 after** (38 texts). Fully supported: 32,059 → **32,076 / 32,111** (99.9%).
+- All 17 tail texts were done, above the projection of 9-13: cards6-manual-defs 377794fb (River Song, Vesuvan Shapeshifter), cards6-referents-grammar c0c186bc (Chef's Kiss, Chaos Moon, Captain America, First Avenger, Toggo, Goblin Weaponsmith), cards6-copies-casting 463d0d64 (Uldaros Theorix, Baron Helmut Zemo), cards6-history-permissions 853c100d (Glyph of Reincarnation, Glyph of Delusion, Backdraft, Xanathar, Guild Kingpin), cards6-per-player-results 22cdf3b0 (Lim-Dûl's Vault, The Toymaker's Trap, Timesifter, Guff Rewrites History, Rootweaver Druid).
+- Cards still unsupported outside DEFERRED.md: **none**.
+- Deferred: **35 cards, 38 texts** (`round6/deferred.tsv`, unchanged): sticker sheets 24 cards / 27 texts; digital-only mechanics 3 (Pearl Collector, Tenacious Pup, Sigardian Evangel); Contraptions 1 (Steamflogger Boss); dexterity 2 (Chaos Orb, Falling Star); Conspiracy face-down draft 5 (Illusionary Informant, Whispergear Sneak, Archdemon of Paliano, Agent of Acquisitions, Deal Broker). The digital-version "Name Sticker" Goblin row stays recorded, not counted.
+- Not yet done for the new cards: `docs/verified-cards.tsv` needs an every-card sweep (they sit below verified); Captain America, Chaos Moon, Toggo, Glyph of Delusion, Xanathar and the five cards6-per-player-results cards still fail the Oracle round trip (renderer wording only).
+
 ## Files
 
 - `items/cards6-<slug>.md` — the briefs; `items/cards6-<slug>.texts.tsv` — each item's texts (cards blocked, normalized text, example card, piece kind, failing piece, family, previous item, note).
