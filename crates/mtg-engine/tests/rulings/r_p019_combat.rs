@@ -76,7 +76,7 @@ fn a_reselected_creature_still_attacked_the_player_it_was_declared_attacking() {
 
 #[test]
 fn reselecting_doesnt_trigger_attack_abilities_and_ignores_attack_costs() {
-    cr!("508.7a", "508.7b");
+    cr!("508.7a", "508.7b", "508.1h");
     ruling!(
         "Capricopian",
         "Reselecting which player a creature is attacking doesn’t cause “whenever this creature attacks” abilities to trigger."
