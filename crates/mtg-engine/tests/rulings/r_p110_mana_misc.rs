@@ -1,7 +1,7 @@
 //! Rulings batch P110 — more abilities that add mana: "the third time this ability has
 //! resolved this turn" (CR 707.10b, 608.2b), first main phases (CR 505.1a, 505.1b),
 //! delayed mana (CR 603.7), triggered mana abilities (CR 605.1b, 605.4a), mana emptying
-//! (CR 106.4, 500.4), and the conditions of a few mana triggers.
+//! (CR 106.4, 500.5), and the conditions of a few mana triggers.
 
 use crate::r_p110_common::*;
 use crate::r_s01_common::attack_with;
@@ -114,8 +114,8 @@ fn soulbright_flamekin_counts_its_own_resolutions_and_copies() {
     trample(&mut t, a, (ManaType::C, 2), target);
     t.resolve_all();
     assert_eq!(pool_total(&t, P0), 0, "two resolutions, no mana");
+    // (No mana is left to pay for the Rings this time.)
     t.clear_answers();
-    t.answer_yes(P0, false);
     t.answer_yes(P0, true);
     trample(&mut t, a, (ManaType::C, 2), target);
     t.resolve_all();
@@ -187,7 +187,7 @@ fn conduit_of_storms_mana_comes_even_if_it_left() {
 
 #[test]
 fn mana_sculpts_delayed_mana() {
-    cr!("608.2b", "603.7", "702.16");
+    cr!("608.2b", "603.7", "113.6g");
     ruling!(
         "Mana Sculpt",
         "If the target spell is an illegal target when Mana Sculpt tries to resolve, it won't resolve and none of its effects will happen. You won't add mana at the beginning of your next main phase. If the target is legal but not countered (probably because an effect says that spell can't be countered) and you control a Wizard, you'll still add mana."
@@ -220,7 +220,11 @@ fn mana_sculpts_delayed_mana() {
         t.resolve_all();
         pool_total(&t, P0)
     };
-    assert_eq!(run("Abrupt Decay", false), 2, "not countered, still the mana");
+    assert_eq!(
+        run("Abrupt Decay", false),
+        2,
+        "not countered, still the mana"
+    );
     assert_eq!(run("Grizzly Bears", false), 2);
     assert_eq!(run("Grizzly Bears", true), 0, "illegal target: no mana");
 }
@@ -229,7 +233,8 @@ fn mana_sculpts_delayed_mana() {
 
 #[test]
 fn rose_triggers_for_any_junk_sacrifice() {
-    cr!("605.1b", "605.4a", "603.2");
+    cr!("605.1b", "605.4a", "603.2", "605.5a");
+    interp!("mana-trigger-from-a-mana-ability-cost");
     ruling!(
         "Rose, Cutthroat Raider",
         "Rose's last ability triggers when you sacrifice a Junk for any reason, not just to activate a Junk's activated ability."
@@ -244,11 +249,50 @@ fn rose_triggers_for_any_junk_sacrifice() {
     let kci = t.battlefield(P0, "Krark-Clan Ironworks");
     let junk = create_token(&mut t, P0, "Junk");
     t.answer_choose(P0, &[obj(junk)]);
-    assert!(crate::r_s20_common::tap_for_mana(&mut t, P0, kci, "Sacrifice"));
+    assert!(crate::r_s20_common::tap_for_mana(
+        &mut t,
+        P0,
+        kci,
+        "Sacrifice"
+    ));
+    assert!(t.g.pending_triggers.is_empty());
     t.settle();
     assert!(t.g.stack.is_empty());
     assert_eq!(pool_of(&t, P0, ManaType::C), 2);
     assert_eq!(pool_of(&t, P0, ManaType::R), 1);
+    // The same mana, while paying for a spell: Rose's {R} and the Ironworks' {C}{C} cast
+    // Hill Giant ({3}{R}).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rose, Cutthroat Raider");
+    let kci = t.battlefield(P0, "Krark-Clan Ironworks");
+    let junk = create_token(&mut t, P0, "Junk");
+    t.lands(P0, "Wastes", 1);
+    t.answer_choose(P0, &[obj(junk)]);
+    assert!(crate::r_s20_common::tap_for_mana(
+        &mut t,
+        P0,
+        kci,
+        "Sacrifice"
+    ));
+    let giant = t.hand(P0, "Hill Giant");
+    t.cast(P0, giant).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
+    // A trigger with a target isn't a mana ability, even from a mana ability's cost:
+    // Blood Artist's, when a creature is sacrificed to Ashnod's Altar.
+    let mut t = TestGame::new(2);
+    let artist = t.battlefield(P0, "Blood Artist");
+    let altar = t.battlefield(P0, "Ashnod's Altar");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[obj(b)]);
+    assert!(crate::r_s20_common::tap_for_mana(
+        &mut t,
+        P0,
+        altar,
+        "Sacrifice"
+    ));
+    t.settle();
+    assert!(ability_on_stack(&t, artist));
     // Sacrificed for its own ability: the trigger uses the stack.
     let mut t = TestGame::new(2);
     let rose = t.battlefield(P0, "Rose, Cutthroat Raider");
@@ -349,7 +393,7 @@ fn iridescent_tiger_triggers_if_cast_from_anywhere() {
 
 #[test]
 fn bounty_of_the_luxa_gone_draws_without_counters() {
-    cr!("603.10", "608.2h", "122.8");
+    cr!("400.7", "608.2h");
     ruling!(
         "Bounty of the Luxa",
         "If Bounty of the Luxa leaves the battlefield while its triggered ability is on the stack, you can't remove any flood counters from it, even if it had one before it left the battlefield. You won't put one on it as the ability resolves, but you will draw a card."
@@ -400,7 +444,7 @@ fn neheb_adds_mana_for_cards_discarded_not_drawn() {
 
 #[test]
 fn radhas_mana_empties_before_blockers() {
-    cr!("106.4", "500.4");
+    cr!("106.4", "500.5");
     ruling!(
         "Radha, Heir to Keld",
         "You lose the mana produced by Radha's ability before blockers are declared if you don't spend it first."
@@ -442,7 +486,7 @@ fn carpet_of_flowers_may_target_a_different_opponent_each_turn() {
 
 #[test]
 fn misty_salons_x_is_fixed_as_it_resolves() {
-    cr!("608.2h", "709.5h", "111.4");
+    cr!("608.2h", "709.5h");
     ruling!(
         "Smoky Lounge // Misty Salon",
         "The value of X is calculated only once, as Misty Salon's ability resolves. Changes in the number of unlocked doors among Rooms you control that occur after the ability resolves won't affect the power or toughness of the token."

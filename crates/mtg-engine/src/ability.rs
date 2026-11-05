@@ -374,6 +374,13 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             _ => false,
         }
     }
+    from_mana_ability(trigger) && could_be_triggered_mana_ability(body)
+}
+
+/// Whether a triggered ability with this body is a mana ability when it triggers from
+/// activating or resolving an activated mana ability (CR 605.1b): it has no targets and
+/// could add mana.
+pub fn could_be_triggered_mana_ability(body: &Body) -> bool {
     // CR 605.1b: unlike an activated mana ability (CR 605.1a), a triggered mana ability
     // may also move cards to or from a library ("add {G} and draw a card").
     fn could_add_mana(e: &Effect) -> bool {
@@ -391,10 +398,7 @@ pub fn is_triggered_mana_ability(trigger: &TriggerCond, body: &Body) -> bool {
             _ => false,
         }
     }
-    from_mana_ability(trigger)
-        && body.targets.is_empty()
-        && body.modal.is_none()
-        && could_add_mana(&body.effect)
+    body.targets.is_empty() && body.modal.is_none() && could_add_mana(&body.effect)
 }
 
 impl TriggeredAbility {

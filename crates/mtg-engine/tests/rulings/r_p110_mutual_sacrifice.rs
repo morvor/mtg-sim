@@ -90,7 +90,7 @@ fn each_player_chooses_in_turn_order_then_all_are_sacrificed_at_once() {
     ] {
         // P0 has four creatures (the Blood Artist among the chosen ones), P1 has four.
         let picks: Vec<usize> = (0..n).collect();
-        let (t, mine, theirs, seen, from) = each_player_sacrifices(spell, P0, 4, 4, &picks);
+        let (t, mine, _, seen, from) = each_player_sacrifices(spell, P0, 4, 4, &picks);
         assert_eq!(sacrifice_choosers(&t, from), vec![P0, P1], "{spell}");
         // When P1 chose, P0's choice was known and nothing had been sacrificed yet.
         assert_eq!(seen.len(), 1, "{spell}");
@@ -102,7 +102,6 @@ fn each_player_chooses_in_turn_order_then_all_are_sacrificed_at_once() {
         assert_eq!(creatures(&t, P0).len(), 4 - n, "{spell}");
         assert_eq!(creatures(&t, P1).len(), 4 - n, "{spell}");
         assert_eq!(blood_artist_triggers(&t), 2 * n, "{spell}");
-        let _ = theirs;
     }
     // On P1's turn, P1 chooses first (and P0, who cast the spell, chooses second).
     let (t, ..) = each_player_sacrifices("Tergrid's Shadow", P1, 2, 2, &[0, 1]);

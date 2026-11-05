@@ -231,3 +231,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Relentless Dead and any other "you may pay {X}. If you do, ... target ... with mana value X" trigger.
 - Code: `crates/mtg-engine/src/trigger_x.rs` (`choose_before_targets`); `crates/mtg-engine/src/triggers.rs` (`put_trigger_on_this_stack`).
 - Tests: `tests/rulings/r_p132_graveyard_triggers.rs` (`relentless_dead_both_abilities_trigger_and_each_payment_is_chosen_on_resolution`).
+
+## mana-trigger-from-a-mana-ability-cost: A trigger on an event of paying a mana ability's cost is a triggered mana ability
+- Kind: interpretation
+- Status: provisional
+- Rules: 605.1b "A triggered ability is a mana ability if it meets all of the following criteria: it doesn’t require a target (see rule 115.6), it triggers from the activation or resolution of an activated mana ability (see rule 605.1a) or from mana being added to a player’s mana pool, and it could add mana to a player’s mana pool when it resolves." / 605.4a "A triggered mana ability doesn’t go on the stack, so it can’t be targeted, countered, or otherwise responded to. Rather, it resolves immediately after the mana ability that triggered it, without waiting for priority." / 602.2b "The remainder of the process for activating an ability is identical to the process for casting a spell listed in rules 601.2b–i. ..."
+- Question: Rose, Cutthroat Raider: "Whenever you sacrifice a Junk, add {R}." When the Junk is sacrificed to pay the cost of an activated mana ability (Krark-Clan Ironworks: "Sacrifice an artifact: Add {C}{C}."), does Rose's ability trigger "from the activation" of that mana ability?
+- Decision: Yes. Paying the costs is part of activating the ability (602.2b, 601.2h), so an ability without a target that could add mana and that triggers on an event of the payment (or of the mana ability's resolution) is a triggered mana ability and resolves immediately; one with a target (Blood Artist's) or that couldn't add mana still waits for the stack (605.5a). The engine recognizes it when it triggers: the innermost ability being activated is a mana ability.
+- Alternatives: Count only triggers worded on the mana ability itself ("is tapped for mana", "whenever a land's ability causes you to add mana") as triggering from it, so Rose's would use the stack whatever the reason for the sacrifice.
+- Why: The text of 605.1b covers the whole activation, not only its resolution, and the sacrifice happens while the mana ability is activated. A judge could read "triggers from the activation" more narrowly, so the entry is provisional.
+- Affects: abilities that add mana on sacrificing, discarding, paying life or other events a mana ability's cost can cause (Rose, Cutthroat Raider's Junk; Bone Miser's land discard if a mana ability's cost discarded one).
+- Code: `crates/mtg-engine/src/triggers.rs` (`is_mana_ability_trigger`); `crates/mtg-engine/src/ability.rs` (`could_be_triggered_mana_ability`).
+- Tests: `tests/rulings/r_p110_mana_misc.rs` (`rose_triggers_for_any_junk_sacrifice`).

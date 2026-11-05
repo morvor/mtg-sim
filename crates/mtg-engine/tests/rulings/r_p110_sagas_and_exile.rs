@@ -29,9 +29,9 @@ fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
     t.g.turn.priority = Some(p);
     t.g.recompute();
     let card = t.g.current(card);
-    t.g.legal_actions(p).iter().any(
-        |a| matches!(a, mtg_engine::decision::Action::Cast { card: c, .. } if *c == card),
-    )
+    t.g.legal_actions(p)
+        .iter()
+        .any(|a| matches!(a, mtg_engine::decision::Action::Cast { card: c, .. } if *c == card))
 }
 
 /// The checks shared by the "you may play that card" rulings, for a land card `land` and
@@ -227,7 +227,7 @@ fn arni_chapter_one_with_an_illegal_target_no_fight() {
 
 #[test]
 fn arni_chapter_two_targets() {
-    cr!("714.2b", "603.3d", "608.2b", "115.10");
+    cr!("714.2b", "603.3d", "608.2b");
     ruling!(
         "Arni Slays the Troll",
         "If you choose no targets for the chapter II ability, you’ll simply add {R} as the ability resolves. However, if you do choose a target creature you control, and that creature is an illegal target as the ability resolves, the ability won’t resolve. You won’t add {R} in that case."
@@ -305,7 +305,12 @@ fn the_bath_song_final_chapter_targets() {
     t.answer_targets(P0, &[obj(card)]);
     chapter(&mut t, "The Bath Song", 3);
     let c = t.g.current(card);
-    t.g.move_object(c, Zone::Exile, mtg_engine::events::MoveCause::Effect, Some(P1));
+    t.g.move_object(
+        c,
+        Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        Some(P1),
+    );
     t.resolve_all();
     assert_eq!(pool_total(&t, P0), 0);
     // A legal target: shuffled in, {U}{U}.
