@@ -337,7 +337,10 @@ fn tawnos_copy_of_mirrorworks_trigger_pays_its_cost_separately() {
     let thopters = t.named_on_battlefield("Ornithopter");
     assert_eq!(thopters.len(), 3);
     assert_eq!(
-        thopters.iter().filter(|o| t.obj_now(**o).is_token()).count(),
+        thopters
+            .iter()
+            .filter(|o| t.obj_now(**o).is_token())
+            .count(),
         2
     );
 }
