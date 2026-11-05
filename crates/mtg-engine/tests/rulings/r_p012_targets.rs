@@ -24,7 +24,7 @@ fn dmg(t: &TestGame, id: ObjectId) -> u32 {
 
 #[test]
 fn gandalfs_sanction_with_an_illegal_target_deals_no_damage() {
-    cr!("608.2b", "120.4a");
+    cr!("608.2b");
     ruling!(
         "Gandalf's Sanction",
         "If the target creature is an illegal target by the time Gandalf's Sanction tries to resolve, the spell won't resolve. It won't deal damage to any player."
