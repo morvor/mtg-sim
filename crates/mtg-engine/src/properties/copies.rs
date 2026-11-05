@@ -197,6 +197,22 @@ fn printed_values(def: &Arc<CardDef>, face: FaceState, names: &[&str]) -> Values
     values(&c, names)
 }
 
+/// The copiable values a new copy of `orig` (on the battlefield with `face` up) has: the
+/// original's, as modified by the copy's status (CR 707.3, 110.5b): a copy enters
+/// unflipped, so a copy of a flipped flip card has the card's normal characteristics.
+fn copy_expected(
+    t: &TestGame,
+    orig: ObjectId,
+    def: &Arc<CardDef>,
+    face: FaceState,
+    names: &[&str],
+) -> Values {
+    if face == FaceState::Flipped {
+        return printed_values(def, FaceState::Front, names);
+    }
+    values(&t.g.obj(orig).copiable, names)
+}
+
 fn compare(
     out: &mut CardResult,
     card: &str,
@@ -465,7 +481,7 @@ pub fn check_card(def: &Arc<CardDef>) -> CardResult {
             {
                 let mut t = fixture();
                 let orig = enter(&mut t, P0, def, face);
-                let expected = values(&t.g.obj(orig).copiable, &names);
+                let expected = copy_expected(&t, orig, def, face, &names);
                 t.answer_choose(P1, &[]);
                 t.answer_yes(P1, false);
                 let before = t.g.objects.len();
@@ -526,7 +542,7 @@ pub fn check_card(def: &Arc<CardDef>) -> CardResult {
             {
                 let mut t = fixture();
                 let orig = enter(&mut t, P0, def, face);
-                let expected = values(&t.g.obj(orig).copiable, &names);
+                let expected = copy_expected(&t, orig, def, face, &names);
                 let target = t.custom(P1, vanilla("Copy Target"), Zone::Battlefield);
                 let mut ctx = crate::eval::Ctx::new(None, P1);
                 ctx.set_var(ORIG, vec![Entity::Object(orig)]);
@@ -555,7 +571,7 @@ pub fn check_card(def: &Arc<CardDef>) -> CardResult {
             {
                 let mut t = fixture();
                 let orig = enter(&mut t, P0, def, face);
-                let expected = values(&t.g.obj(orig).copiable, &names);
+                let expected = copy_expected(&t, orig, def, face, &names);
                 if let Some(cloner) = clone_card(&t.g.obj(orig).chars.clone()) {
                     t.answer_choose(P1, &[Entity::Object(orig)]);
                     t.answer_choose(P1, &[]);

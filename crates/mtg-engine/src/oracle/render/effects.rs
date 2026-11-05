@@ -943,9 +943,10 @@ impl Renderer<'_> {
                 self.effect(&e)
             }
             // "~ deals damage to each opponent equal to the number of lands that player
-            // controls": the amount for each player (dealt one player at a time).
+            // controls", "it deals damage to each opponent equal to the number of cards in
+            // that player's hand": the amount for each player (dealt one player at a time).
             Effect::ForEachPlayer { who, effect }
-                if matches!(effect.as_ref(), Effect::DealDamage { source: Sel::This, to: Sel::Players(PlayerRef::Iterated), .. })
+                if matches!(effect.as_ref(), Effect::DealDamage { to: Sel::Players(PlayerRef::Iterated), .. })
                     && matches!(who, PlayerRef::EachOpponent | PlayerRef::EachPlayer) =>
             {
                 let inner = self.effect(effect);

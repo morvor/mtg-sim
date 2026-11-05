@@ -162,6 +162,15 @@ The user resumed normal work, at the normal pace.
 - **No new card data for now.** Once everything works properly, the user will update the data stores in data/ themselves, and then new cards get supported. Until then, no Scryfall refresh.
 - **Later:** compile every hand-written card, and support new cards after the user's data update ("Later", below).
 
+### Hold (user, Nov 5, 17:45 UTC)
+
+The weekly usage window showed a warning from about 15:40 (reset Fri Nov 6, 09:00 UTC). The user: "Each worker should land its batch then stop, but wait on my go ahead to resume them."
+
+- Each worker lands the item it is on, then stops.
+- cards-1 and cards-2 had already finished their queues, so they get nothing new.
+- **Don't resume or top up any worker until the user says go**, even after the reset. Check-ins during the hold only confirm the landings and log them.
+- On the user's go, resume each worker with its remaining queue: compile P048, P049; rulings-2 P055; rulings-1 after P042; mutation and structure after their current items; cards-1 and cards-2 from the pool (P059 P060 P061 P067 ...).
+
 ### Worker roster
 
 The coordinator keeps this current. Every session is a cloud session tagged `mtg-sim-worker`. "Handing off" means the session lands its current item, stops, and is then replaced by a fresh session.

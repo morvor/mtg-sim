@@ -1211,7 +1211,7 @@ impl Game {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let sources = crate::copy_rules::token_copy_sources(self, of, ctx);
                 let players = self.eval_players(controller, ctx);
-                let fixed = self.fix_mods(mods, ctx);
+                let fixed = self.fix_mods(&crate::granted_captures::confine_to_created(mods), ctx);
                 let mut created = Vec::new();
                 for p in players {
                     for s in &sources {
@@ -1229,6 +1229,8 @@ impl Game {
                 }
                 // "tokens created with ~" (CR 607.1d), as for other created tokens.
                 self.link_to_creator(ctx, &created);
+                // "the exiled card" of an ability the exceptions gave them.
+                crate::granted_captures::keep_created_exiled(self, ctx, &created);
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),
@@ -3906,14 +3908,16 @@ impl Game {
 
     /// CR 607.2c, 607.1d: objects an ability created or put onto the battlefield are
     /// linked to that ability of its source ("created with ~", "put onto the battlefield
-    /// with ~").
+    /// with ~"), also when the source left the battlefield before the ability resolved: to
+    /// the source as it last existed, as the cards an ability exiles are (`move_objects`).
+    /// Arcane Artisan's ruling: "If Arcane Artisan leaves the battlefield before its
+    /// activated ability has resolved, the token that ability creates will still be exiled
+    /// at the beginning of the next end step." The source itself, put back onto the
+    /// battlefield, isn't linked to its old self.
     pub(crate) fn link_to_creator(&mut self, ctx: &Ctx, objs: &[ObjectId]) {
         let Some(src) = ctx.source else { return };
-        if !self.is_live(src) {
-            return;
-        }
         for o in objs {
-            if *o == src || !self.is_live(*o) {
+            if *o == src || self.current(src) == *o || !self.is_live(*o) {
                 continue;
             }
             self.objects[src.0 as usize]
