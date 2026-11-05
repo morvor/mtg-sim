@@ -60,7 +60,6 @@ fn none(_: &mut TestGame, _: ObjectId) {}
 /// The card's triggers go on the stack above the spell; the spell is countered; the
 /// triggers still resolve (`check`).
 fn run(c: &Case) {
-    eprintln!("case: {}", c.card);
     supported(c.card);
     let mut t = TestGame::new(2);
     let src = t.battlefield(P0, c.card);
