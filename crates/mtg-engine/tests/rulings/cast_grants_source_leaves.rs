@@ -257,7 +257,7 @@ fn party_thrasher_sacrificed_for_mana_while_a_spell_is_cast_from_exile_takes_con
 
 #[test]
 fn herigast_can_be_sacrificed_for_the_emerge_cost_it_grants() {
-    cr!("601.2f", "611.3b", "702.119a");
+    cr!("601.2f", "702.119a");
     ruling!(
         "Herigast, Erupting Nullkite",
         "Once you begin to cast a spell using an emerge ability granted by Herigast, losing control of Herigast won't affect it. You can finish casting it as normal."

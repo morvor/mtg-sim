@@ -379,8 +379,8 @@ fn a_copy_of_a_siege_thats_not_a_transforming_double_faced_card_stays_in_exile()
     // predates the Marvel's Spider-Man CR update effective 2025-09-19: a modal
     // double-faced card that becomes a copy of a Siege is now cast transformed too, CR
     // 712.11a, 712.11d — see
-    // `a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed`. The
-    // cards tested here are still right.)
+    // `a_modal_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transformed` and
+    // docs/rulings-exemptions/rulings-P225.tsv. The cards tested here are still right.)
     // A single-faced card (Grizzly Bears) and a meld card (Graf Rats) that became copies of
     // Invasion of Theros and got a defense counter: defeated, they're exiled and stay
     // there.
@@ -449,7 +449,7 @@ fn a_transforming_double_faced_card_that_became_a_copy_of_a_siege_is_cast_transf
     // (The ruling's next sentence, "Note that this applies only to transforming
     // double-faced cards, not to modal double-faced cards that can normally be played
     // using either face.", predates the Marvel's Spider-Man CR update effective
-    // 2025-09-19: see the next test.)
+    // 2025-09-19: see the next test and docs/rulings-exemptions/rulings-P225.tsv.)
     // P0's Ashling, Rekindled becomes a copy of Invasion of Theros, with a defense
     // counter. Defeated, it's exiled and cast transformed: as Ashling, Rimebound (its own
     // back face), not as Ephara.
