@@ -712,8 +712,9 @@ impl Game {
                 );
                 let o = self.obj(new_id);
                 if o.is(CardType::Planeswalker) {
-                    // A printed loyalty of X: the X chosen for the spell it was (CR
-                    // 107.3m), 0 if it wasn't cast with one.
+                    // A printed loyalty of X: the X of the spell that became it (CR
+                    // 107.3m; a copy of a spell has the original's, 707.10), 0 if it
+                    // didn't enter as a spell resolving.
                     let loyalty = if o.chars.loyalty_is_x {
                         Some(o.cast.as_ref().and_then(|c| c.x).unwrap_or(0))
                     } else {
