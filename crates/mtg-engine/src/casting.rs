@@ -4496,6 +4496,7 @@ impl Game {
                 paid.objects.extend(sub.objects);
                 paid.sacrificed.extend(sub.sacrificed);
                 paid.exiled.extend(sub.exiled);
+                paid.moved_self.extend(sub.moved_self);
                 paid.tapped.extend(sub.tapped);
                 paid.untapped.extend(sub.untapped);
             }

@@ -8,7 +8,7 @@
 //! it went.
 
 use crate::r_p079_common::concede;
-use crate::r_s01_common::supported;
+use crate::r_s01_common::{custom_card, supported};
 use crate::r_s06_common::activate_containing;
 use crate::r_s25_common::cast_new;
 use mtg_engine::decision::Answer;
@@ -23,7 +23,7 @@ fn obj(id: ObjectId) -> Entity {
 
 #[test]
 fn krav_sacrificed_to_its_own_ability_puts_its_counters_on_nothing() {
-    cr!("602.2b", "400.7j", "122.1a");
+    cr!("602.2b", "400.7j");
     ruling!(
         "Krav, the Unredeemed",
         "Krav can be sacrificed to pay the cost for its own ability. The +1/+1 counters won't be put on anything."
@@ -181,8 +181,65 @@ fn shifty_doppelganger_exiled_by_its_own_cost_returns_from_exile() {
 }
 
 #[test]
+fn discard_this_card_cost_puts_the_effects_counter_on_the_card_in_the_graveyard() {
+    cr!("400.7j", "701.9a", "122.1a");
+    interp!("cost-moved-source-found-only-by-own-cost");
+    // A creature card with "{1}, Discard this card: Put a +1/+1 counter on this card." The
+    // cost discards the source itself, so "this card" is the card in the graveyard, where
+    // the counter adds to its power and toughness (CR 122.1a).
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 1);
+    let card = t.custom(
+        P0,
+        custom_card(
+            "Test Discarder",
+            "Creature — Human",
+            "{2}",
+            Some((1, 1)),
+            "{1}, Discard this card: Put a +1/+1 counter on this card.",
+        ),
+        mtg_engine::object::Zone::Hand(P0),
+    );
+    activate_containing(&mut t, P0, card, "+1/+1 counter").unwrap();
+    assert!(t.in_graveyard(P0, "Test Discarder"));
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Test Discarder"));
+    assert_eq!(t.counters(card, "+1/+1"), 1);
+    t.g.recompute();
+    assert_eq!(t.pt(card), (2, 2));
+}
+
+#[test]
+fn kogla_and_yidaro_discarded_by_its_own_cost_is_shuffled_from_the_graveyard() {
+    cr!("400.7j", "701.9a");
+    supported("Kogla and Yidaro");
+    // "{2}{R}{G}, Discard this card: Destroy up to one target artifact or enchantment.
+    // Shuffle this card into your library from your graveyard, then draw a card." The cost
+    // discards the source itself, so "this card" is the card in the graveyard. ("From your
+    // graveyard" names the zone, so this instruction finds the card there whatever the
+    // cost; the test above is the one that depends on the cost part.)
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Forest", 2);
+    let kogla = t.hand(P0, "Kogla and Yidaro");
+    let thopter = t.battlefield(P1, "Ornithopter");
+    let library = t.library_size(P0);
+    t.answer_targets(P0, &[obj(thopter)]);
+    activate_containing(&mut t, P0, kogla, "Destroy up to one target artifact").unwrap();
+    t.clear_answers();
+    assert!(t.in_graveyard(P0, "Kogla and Yidaro"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Ornithopter"));
+    // Shuffled in (one card more), then one drawn.
+    assert!(!t.in_graveyard(P0, "Kogla and Yidaro"), "{}", t.dump_log());
+    assert_eq!(t.library_size(P0), library);
+    assert_eq!(t.hand_size(P0), 1);
+}
+
+#[test]
 fn jhoira_puts_time_counters_on_the_card_its_cost_exiled() {
-    cr!("400.7j", "702.62a");
+    cr!("400.7j", "702.62a", "702.62b");
     // "{2}, Exile a nonland card from your hand: Put four time counters on the exiled card.
     // If it doesn't have suspend, it gains suspend." (The card CR 400.7j's cost clause was
     // first written for, as 400.7g in 2011.)
@@ -200,4 +257,10 @@ fn jhoira_puts_time_counters_on_the_card_its_cost_exiled() {
         .has_keyword(mtg_engine::keywords::KeywordKind::Suspend));
     // Jhoira wasn't moved: its card is still on the battlefield, untouched.
     assert!(t.on_battlefield(jhoira));
+    // The card is suspended (CR 702.62b): at P0's next upkeep the suspend it gained
+    // removes a time counter from it (CR 702.62a).
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.in_exile("Hill Giant"));
+    assert_eq!(t.counters(giant, "time"), 3);
 }
