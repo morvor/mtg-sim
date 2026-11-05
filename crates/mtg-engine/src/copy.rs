@@ -158,6 +158,23 @@ pub fn copy_spell_quiet(g: &mut Game, spell: ObjectId, controller: PlayerId) -> 
     Some(id)
 }
 
+/// Undoes [`copy_spell_quiet`] for a copy that turns out not to be created (CR 707.10e: its
+/// specified target isn't a legal target for it): it leaves the stack with everything
+/// putting it there set up (keep this in step with `copy_spell_quiet`), and the events
+/// emitted since `events_before` (that the spell was copied) are withdrawn before anything
+/// could trigger on them. The object stays out of every zone.
+pub(crate) fn uncreate_copy(g: &mut Game, copy: ObjectId, events_before: usize) {
+    g.stack.retain(|x| *x != copy);
+    g.saved_ctx.remove(&copy);
+    // Its spliced text (copy_splices).
+    g.effects.retain(|ef| ef.source != Some(copy));
+    g.special.prepare_spells.retain(|x| *x != copy);
+    g.objects[copy.0 as usize].zone = Zone::Nowhere;
+    g.events.truncate(events_before);
+    g.dirty = true;
+    g.recompute();
+}
+
 /// Makes `mods` exceptions of the copy effect that created the spell copy `copy`
 /// ("except the copy isn't legendary", CR 707.9b): a copy effect on it that copies its
 /// own copiable values with those exceptions, lasting for as long as it exists (a copy

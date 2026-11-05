@@ -3945,6 +3945,12 @@ impl Game {
         paid: &mut PaidCost,
     ) -> Result<(), Illegal> {
         let bad = |s: &str| Err(Illegal(s.to_string()));
+        // CR 601.2h: the parts of a cost are paid one after another; what paying one
+        // changed (a +1/+1 counter removed) is seen by the next ("sacrifice a creature
+        // with power 1 or greater", Falco Spara's ruling).
+        if self.dirty {
+            self.recompute();
+        }
         match part {
             CostPart::Tap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;

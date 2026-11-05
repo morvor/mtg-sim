@@ -4807,6 +4807,32 @@ impl Renderer<'_> {
                 return format!("{}. X can't be greater than {cap}", s.trim_end_matches('.'));
             }
         }
+        // "~ deals damage to target player equal to ... and you gain that much life": the
+        // amount is noted once (`patterns/value_results.rs`), said as the damage dealt.
+        if let [Effect::StoreValue { var, value }, Effect::DealDamage {
+            source,
+            amount: Value::Var(a),
+            to,
+        }, Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::Var(b),
+        }] = v
+        {
+            let noted = crate::oracle::patterns::value_results::DAMAGE_AMOUNT;
+            if *var == noted && *a == noted && *b == noted {
+                return self.seq(&[
+                    Effect::DealDamage {
+                        source: source.clone(),
+                        amount: value.clone(),
+                        to: to.clone(),
+                    },
+                    Effect::GainLife {
+                        who: PlayerRef::You,
+                        n: Value::Prev,
+                    },
+                ]);
+            }
+        }
         // "[that player may pay any amount of mana.] ~ deals 2 damage to that player.
         // Prevent X of that damage, where X is the amount of mana that player paid this
         // way." (Errant Minion; `patterns/prevention_4.rs`).

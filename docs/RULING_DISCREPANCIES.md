@@ -411,12 +411,48 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: only a Lich put into a graveyard from the battlefield makes you lose; exiled, bounced or under Rest in Peace, it doesn't.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P096.tsv`; tests `tests/rulings/r_p096_lich.rs` (`lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability`, `multiple_liches_sacrifice_for_each_but_draw_only_once`, `lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose`).
 
+### Sarkhan the Mad: "whether or not to redirect the damage dealt by that Dragon"
+- Kind: outdated
+- Status: open for review
+- Ruling, Sarkhan the Mad (2010-06-15): "If you target an opponent with the third ability, you choose separately for each Dragon creature you control whether or not to redirect the damage dealt by that Dragon to a planeswalker that player controls."
+- Conflicts with: CR 306.7: "Previously, planeswalkers were subject to a redirection effect that allowed a player to have noncombat damage that would be dealt to an opponent be dealt to a planeswalker under that opponent’s control instead. This rule has been removed and certain cards have received errata in the Oracle card reference to deal damage directly to planeswalkers." The card's Oracle text: "−4: Each Dragon creature you control deals damage equal to its power to target player or planeswalker."
+- Evidence: the ruling applied 306.7 of the CRs from 2010 to early 2018 (CR effective 2010-04-23 and still in the CR effective 2018-01-19: "If noncombat damage would be dealt to a player by a source controlled by an opponent, that opponent may have that source deal that damage to a planeswalker the first player controls instead. This is a redirection effect ..."). The Dominaria CR (effective 2018-04-27) replaced it with today's text (all from the archived CR texts). Work item rulings-P008.
+- Engine: the Dragons deal their damage to the target, the player or the planeswalker; no redirection choice is asked.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; test `tests/rulings/r_p008_planeswalkers.rs` (`sarkhan_the_mad_dragons_damage_the_target_with_no_redirection`).
+
+### Manticore of the Gauntlet: "If you can't choose a target opponent"
+- Kind: outdated
+- Status: open for review
+- Ruling, Manticore of the Gauntlet (2017-04-18): "If you can't choose a target opponent when you put Manticore of the Gauntlet's triggered ability on the stack (most likely because your opponents have hexproof), the ability is removed from the stack and you won't put a -1/-1 counter on any creature."
+- Conflicts with: the card's Oracle text: "When this creature enters, put a -1/-1 counter on target creature you control. This creature deals 3 damage to target opponent or planeswalker." With its opponents hexproof, a planeswalker can still be targeted (one its controller controls too), and CR 603.3d removes a triggered ability from the stack only "If a choice is required when the triggered ability goes on the stack but no legal choices can be made for it".
+- Evidence: the ruling is the Amonkhet release notes' (2017-04-14), written for the printed text they quote: "When Manticore of the Gauntlet enters the battlefield, put a -1/-1 counter on target creature you control. Manticore of the Gauntlet deals 3 damage to target opponent." The Dominaria Oracle Changes (Eli Shiffrin, 2018-04-13; the Oracle update that went with the Comprehensive Rules effective 2018-04-27, which removed planeswalker damage redirection, see the Sarkhan the Mad entry) list Manticore of the Gauntlet among the cards given errata to deal damage to planeswalkers: "Abilities that damage “target opponent” have been changed to “target opponent or planeswalker” with the same exception listed above. These spells and abilities can target a planeswalker you control." (both from the ormos mirror). Found in the review of work item rulings-P008. What the ruling says happens when the ability has no legal target (removed from the stack, no -1/-1 counter) still holds and is cited.
+- Engine: with P1 hexproof, the ability targets a planeswalker of P1's, or P0's own when it's the only one, and is put on the stack; with no planeswalker on the battlefield either, it's removed from the stack and no -1/-1 counter is put on a creature.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; tests `tests/rulings/r_p008_targets.rs` (`etb_burn_with_no_legal_opponent_isnt_put_on_the_stack`, `manticore_of_the_gauntlet_targets_a_planeswalker_when_its_opponents_have_hexproof`).
+
+### The Fallen: "only to opponents of its current controller"
+- Kind: outdated
+- Status: open for review
+- Ruling, The Fallen (2007-09-16): "The Fallen’s ability causes it to deal damage only to opponents of its current controller. If The Fallen has dealt damage to you, and then you gain control of it, you won’t be damaged during your upkeep."
+- Conflicts with: the card's Oracle text: "At the beginning of your upkeep, this creature deals 1 damage to each opponent and planeswalker it has dealt damage to this game." A planeswalker it has dealt damage to is dealt damage whoever controls it, The Fallen's controller included.
+- Evidence: the ruling is older than planeswalkers (Lorwyn, 2007-10-12) and was written for an ability that dealt damage only to opponents; the Dominaria Oracle Changes (Eli Shiffrin, 2018-04-13; the Oracle update that went with the Comprehensive Rules effective 2018-04-27, which removed planeswalker damage redirection) list The Fallen among the cards given errata for that change (ormos mirror), which gave it today's "each opponent and planeswalker". Found in the review of work item rulings-P008. The second sentence still holds and is cited, and so does the first among players.
+- Engine: under P1's control, The Fallen deals 1 damage at P1's upkeep to P1's own planeswalker it dealt damage to earlier, and none to P0, whom it has never dealt damage to.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; tests `tests/rulings/r_p008_combat_lki.rs` (`the_fallen_damages_only_its_current_controllers_opponents`, `the_fallen_damages_the_planeswalkers_it_has_dealt_damage_to`).
+
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
+- **Fiery Annihilation** (rulings-P047): its ruling (2024-11-08) that the target Equipment
+  isn't exiled whenever the target creature is an illegal target, against Searing Blaze's
+  (2010-03-01) and Memory's Journey's (2011-09-22) that a target described by another illegal
+  target ("target creature that player ... controls", "target cards from their graveyard") is
+  still affected or still legal. The two readings of CR 608.2b's last sentences ("If part of the
+  effect requires information about an illegal target, it fails to determine any such
+  information. ...") and a lead to check against the archived rules (whether that sentence
+  replaced one that said the opposite after 2011, which would make the older rulings
+  outdated) are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)". Left uncited.
 - **Stone Calendar** (rulings-P033): its ruling "You may choose not to apply Stone Calendar’s
   cost reduction effect." (2004-10-04) against its Oracle text "Spells you cast cost {1}
   less to cast." (no "up to"; a reduction is part of the total cost, CR 601.2f, with no

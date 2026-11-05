@@ -328,9 +328,7 @@ fn player_action(x: &str, f: Filter, card: bool, b: &Builder) -> Option<(Value, 
 fn target_player_action(x: &str, b: &mut Builder) -> Option<(Value, String)> {
     let saved = (b.targets.len(), b.it_player.clone());
     let found = target_player(x, b).and_then(|(who, r)| {
-        let r = r
-            .strip_prefix(" has ")
-            .or_else(|| r.strip_prefix(" "))?;
+        let r = r.strip_prefix(" has ").or_else(|| r.strip_prefix(" "))?;
         action_after(who, r, Filter::Any, true)
     });
     if found.is_none() {
@@ -410,7 +408,11 @@ fn object_history_cond(r: &str) -> Option<(TriggerCond, String)> {
             TriggerCond::LeavesBattlefield,
             you(),
         ),
-        (" that left the battlefield", TriggerCond::LeavesBattlefield, None),
+        (
+            " that left the battlefield",
+            TriggerCond::LeavesBattlefield,
+            None,
+        ),
         (" that died", TriggerCond::Dies, None),
         (
             " that were put into your graveyard from the battlefield",
@@ -470,7 +472,10 @@ fn object_history_cond(r: &str) -> Option<(TriggerCond, String)> {
 /// battlefield (CR 608.2h), each once.
 fn history_aggregate(op: AggOp, stat: Stat, r: &str) -> Option<(Value, String)> {
     let (cond, rest) = object_history_cond(r)?;
-    if !matches!(cond, TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)) {
+    if !matches!(
+        cond,
+        TriggerCond::Dies(_) | TriggerCond::LeavesBattlefield(_)
+    ) {
         return None;
     }
     let sel = Sel::Before(Box::new(Sel::ThisTurn(Box::new(cond))));
@@ -2631,19 +2636,32 @@ fn each_draws_then_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
 
 inventory::submit! { super::EffectPattern { name: "value results: each opponent draws, then [instruction counting this way]", priority: 5, parse: each_draws_then_this_way } }
 
-/// "~ deals damage to target player equal to ... and you gain that much life": the life
-/// gained is the damage actually dealt (CR 120.4b, 608.2c).
+/// The amount of damage an instruction says to deal, for "and you gain that much life".
+pub(crate) const DAMAGE_AMOUNT: Var = vars::USER + 7525;
+
+/// "~ deals damage to target player equal to ... and you gain that much life": "that
+/// much" is the amount the instruction says to deal, determined once, even if an effect
+/// makes the source deal more or less damage than that (Kaya, Orzhov Usurper ruling;
+/// CR 608.2c, 614.1a, 615.1a).
 fn damage_and_gain_that_much(l: &str, b: &mut Builder) -> Option<Effect> {
     let first = end(l).strip_suffix(" and you gain that much life")?;
     let e = crate::oracle::effects::parse_clause(first, b)?;
-    if !matches!(e, Effect::DealDamage { .. }) {
+    let Effect::DealDamage { source, amount, to } = e else {
         return None;
-    }
+    };
     Some(Effect::seq(vec![
-        e,
+        Effect::StoreValue {
+            var: DAMAGE_AMOUNT,
+            value: amount,
+        },
+        Effect::DealDamage {
+            source,
+            amount: Value::Var(DAMAGE_AMOUNT),
+            to,
+        },
         Effect::GainLife {
             who: PlayerRef::You,
-            n: Value::Prev,
+            n: Value::Var(DAMAGE_AMOUNT),
         },
     ]))
 }

@@ -30,7 +30,11 @@ pub fn team_lives(t: &TestGame) -> (i32, i32) {
 pub fn assert_team_change(t: &TestGame, before: (i32, i32), gain: i32, loss: i32, what: &str) {
     let now = team_lives(t);
     assert_eq!(now.0 - before.0, gain, "{what}: your team's life change");
-    assert_eq!(before.1 - now.1, loss, "{what}: the opposing team's life loss");
+    assert_eq!(
+        before.1 - now.1,
+        loss,
+        "{what}: the opposing team's life loss"
+    );
     // The teammates share the life total.
     assert_eq!(t.life(P1), now.0, "{what}: shared total");
     assert_eq!(t.life(P3), now.1, "{what}: shared total");
