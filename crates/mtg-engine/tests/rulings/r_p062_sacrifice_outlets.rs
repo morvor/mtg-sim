@@ -84,6 +84,7 @@ fn one_death_seen(t: &mut TestGame) {
 #[test]
 fn falkenrath_aristocrat_can_sacrifice_itself() {
     cr!("602.2b", "118.3", "700.4");
+    interp!("cost-moved-source-found-only-by-own-cost");
     ruling!(
         "Falkenrath Aristocrat",
         "You can sacrifice Falkenrath Aristocrat to pay the cost of its own ability. It won't receive a counter or gain indestructible, but it will enable abilities that check when or if a creature dies."
@@ -97,6 +98,12 @@ fn falkenrath_aristocrat_can_sacrifice_itself() {
     assert_eq!(triggers_on_stack(&t, "dies"), 1);
     one_death_seen(&mut t);
     assert!(t.in_graveyard(P0, "Falkenrath Aristocrat"));
+    // The card it became in the graveyard gains nothing: a generic cost ("Sacrifice a
+    // creature") paid with the source doesn't make "Falkenrath Aristocrat" in the effect
+    // mean that card (interpretation cost-moved-source-found-only-by-own-cost).
+    t.g.recompute();
+    assert!(!has_kw(&t, fa, KeywordKind::Indestructible));
+    assert_eq!(t.counters(fa, "+1/+1"), 0);
 }
 
 #[test]
@@ -118,6 +125,7 @@ fn defiant_salvager_sacrificing_an_artifact_creature_gets_one_counter() {
 #[test]
 fn defiant_salvager_can_sacrifice_itself() {
     cr!("602.2b", "118.3", "700.4");
+    interp!("cost-moved-source-found-only-by-own-cost");
     ruling!(
         "Defiant Salvager",
         "You can sacrifice Defiant Salvager to activate its own ability. It won't receive a counter, but abilities that trigger on the sacrifice or watch for a creature dying will see it."
@@ -130,11 +138,14 @@ fn defiant_salvager_can_sacrifice_itself() {
     assert_eq!(triggers_on_stack(&t, "dies"), 1);
     one_death_seen(&mut t);
     assert!(t.in_graveyard(P0, "Defiant Salvager"));
+    // Not on the card in the graveyard either (CR 122.1a would allow one there).
+    assert_eq!(t.counters(salvager, "+1/+1"), 0);
 }
 
 #[test]
 fn bloodflow_connoisseur_can_sacrifice_itself_and_nothing_happens() {
     cr!("602.2b", "118.3");
+    interp!("cost-moved-source-found-only-by-own-cost");
     ruling!(
         "Bloodflow Connoisseur",
         "You can sacrifice Bloodflow Connoisseur to pay the cost for its own ability. In this case, nothing happens as the ability resolves."
@@ -148,6 +159,8 @@ fn bloodflow_connoisseur_can_sacrifice_itself_and_nothing_happens() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Bloodflow Connoisseur"));
     assert_eq!(t.counters(bears, "+1/+1"), 0);
+    // Nor on the card in the graveyard (CR 122.1a would allow one there).
+    assert_eq!(t.counters(bc, "+1/+1"), 0);
 }
 
 #[test]
@@ -161,7 +174,14 @@ fn goblin_trashmaster_can_sacrifice_itself() {
     let mut t = TestGame::new(2);
     let tm = t.battlefield(P0, "Goblin Trashmaster");
     let thopter = t.battlefield(P1, "Ornithopter");
-    sac_to(&mut t, P0, tm, "Destroy target artifact", tm, &[obj(thopter)]);
+    sac_to(
+        &mut t,
+        P0,
+        tm,
+        "Destroy target artifact",
+        tm,
+        &[obj(thopter)],
+    );
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Goblin Trashmaster"));
     assert!(t.in_graveyard(P1, "Ornithopter"));
@@ -280,7 +300,8 @@ fn vampire_warlords_regeneration_shield_must_exist_before_it_is_destroyed() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.lands(P1, "Swamp", 3);
     let murder = t.hand(P1, "Murder");
-    t.cast_with(P1, murder, &[obj(warlord)]).expect("cast Murder");
+    t.cast_with(P1, murder, &[obj(warlord)])
+        .expect("cast Murder");
     sac_to(&mut t, P0, warlord, "Regenerate", bears, &[]);
     t.resolve_all();
     assert!(t.on_battlefield(warlord));
@@ -291,7 +312,8 @@ fn vampire_warlords_regeneration_shield_must_exist_before_it_is_destroyed() {
     t.battlefield(P0, "Grizzly Bears");
     t.lands(P1, "Swamp", 3);
     let murder = t.hand(P1, "Murder");
-    t.cast_with(P1, murder, &[obj(warlord)]).expect("cast Murder");
+    t.cast_with(P1, murder, &[obj(warlord)])
+        .expect("cast Murder");
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Vampire Warlord"));
 }
@@ -441,7 +463,11 @@ fn viscera_seer_sacrificing_an_attacker_or_too_late() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(giant, bears)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(giant, bears)]),
+    );
     let seen = crate::r_s01_common::watch(
         &mut t,
         P0,
@@ -543,7 +569,11 @@ fn cartel_aristocrat_chooses_the_color_on_resolution() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let from = t.asked().len();
     sac_to(&mut t, P0, ca, "protection", bears, &[]);
-    assert_eq!(color_choices_since(&t, from), 0, "chosen as it was activated");
+    assert_eq!(
+        color_choices_since(&t, from),
+        0,
+        "chosen as it was activated"
+    );
     t.resolve_all();
     assert_eq!(color_choices_since(&t, from), 1);
     assert!(has_kw(&t, ca, KeywordKind::Protection));

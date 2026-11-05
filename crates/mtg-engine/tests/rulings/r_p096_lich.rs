@@ -139,11 +139,19 @@ fn lich_at_0_life_leaving_loses_by_state_based_action_first() {
 
 #[test]
 fn lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose() {
-    cr!("104.3b", "603.6c", "104.3d");
+    cr!("104.3b", "603.6c", "104.3e", "101.2");
     ruling!(
         "Lich",
         "The last ability will cause you to lose the game even if you somehow manage to have a life total greater than 0 at the time the Lich is put into the graveyard or if some other effect would prevent you from losing for having 0 life. If, on the other hand, some effect such as that from Platinum Angel says that you can't lose the game then even the last ability of the Lich cannot cause you to do so. The ability will just resolve and the game will continue as normal."
     );
+    ruling!(
+        "Lich",
+        "or if some other effect would prevent you from losing for having 0 life. If, on the other hand, some effect such as that from Platinum Angel says that you can't lose the game then even the last ability of the Lich cannot cause you to do so. The ability will just resolve and the game will continue as normal."
+    );
+    // (Also in the 2010-08-15 version of the ruling above, which says "at the time the Lich
+    // leaves the battlefield": the Oracle wording before the September 2010 Update Bulletin
+    // (2010-09-22); Wizards reworded it on 2011-01-01. See
+    // docs/rulings-exemptions/rulings-P096.tsv.)
     // A Lich put onto the battlefield without its enters replacement: P0 is at 20 life when
     // it's destroyed, and still loses to its trigger.
     let mut t = TestGame::new(3);
@@ -179,13 +187,70 @@ fn lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose() {
 }
 
 #[test]
+fn lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability() {
+    cr!("603.2", "603.2g", "614.6", "704.5a");
+    ruling!(
+        "Lich",
+        "Note that usually you will have 0 or less life at the time Lich leaves the battlefield causing you to lose as a State-Based Action before the last ability can even go on the stack."
+    );
+    // The last ability has said "When Lich is put into a graveyard from the battlefield"
+    // since the September 2010 Update Bulletin (2010-09-22; Oracle update announced for
+    // 2010-09-24); before it, "When Lich leaves the battlefield"
+    // (docs/rulings-exemptions/rulings-P096.tsv). Its owner leaving the game is covered by
+    // an_opponent_stealing_lich_makes_you_lose_but_doesnt_change_their_life.
+    // A Lich at 20 life (put onto the battlefield without its enters replacement) exiled
+    // by Erase: no trigger, P0 stays in the game.
+    let mut t = TestGame::new(3);
+    let l = t.battlefield(P0, "Lich");
+    cast_new(&mut t, P1, "Erase", &[Entity::Object(l)]);
+    t.resolve();
+    assert!(t.in_exile("Lich"));
+    assert_eq!(triggers_on_stack(&t, "you lose the game"), 0);
+    t.resolve_all();
+    assert!(!t.has_lost(P0));
+    assert_eq!(t.life(P0), 20);
+    // Destroyed while P1 controls Rest in Peace ("If a card or token would be put into a
+    // graveyard from anywhere, exile it instead."): the replaced event triggers nothing.
+    let mut t = TestGame::new(3);
+    t.battlefield(P1, "Rest in Peace");
+    let l = t.battlefield(P0, "Lich");
+    cast_new(&mut t, P1, "Disenchant", &[Entity::Object(l)]);
+    t.resolve();
+    assert!(t.in_exile("Lich"));
+    assert_eq!(triggers_on_stack(&t, "you lose the game"), 0);
+    t.resolve_all();
+    assert!(!t.has_lost(P0));
+    // Two Liches at 0 life: one returned to its owner's hand doesn't trigger, and the
+    // other still keeps P0 from losing for having 0 life.
+    let mut t = TestGame::new(3);
+    let l = lich(&mut t);
+    let l2 = lich(&mut t);
+    cast_new(&mut t, P1, "Boomerang", &[Entity::Object(l)]);
+    t.resolve();
+    assert!(t.in_hand(P0, "Lich"));
+    assert_eq!(triggers_on_stack(&t, "you lose the game"), 0);
+    assert!(!t.has_lost(P0));
+    // The last Lich exiled at 0 life: P0 loses as a state-based action.
+    cast_new(&mut t, P1, "Erase", &[Entity::Object(l2)]);
+    t.resolve();
+    assert!(t.has_lost(P0));
+}
+
+#[test]
 fn multiple_liches_sacrifice_for_each_but_draw_only_once() {
     cr!("603.2", "614.1a", "616.1");
-    // Not cited: "If you have multiple Lich cards on the battlefield, you must sacrifice a
-    // permanent for each damage done to you for each Lich. ... You lose if any one of the
-    // Liches leaves the battlefield." Its last sentence (a Lich leaving the battlefield
-    // some other way than to a graveyard) conflicts with the current Oracle text; see the
-    // P096 report. The parts that agree are tested here.
+    ruling!(
+        "Lich",
+        "If you have multiple Lich cards on the battlefield, you must sacrifice a permanent for each damage done to you for each Lich. This is because the sacrifice is a triggered ability. But you only draw one card for each life gained regardless of how many Liches you have. This is because the draw is a replacement effect and not a triggered one."
+    );
+    // (The ruling's last sentence, "You lose if any one of the Liches leaves the
+    // battlefield.", was written for the Oracle text "When Lich leaves play, you lose the
+    // game" ("leaves the battlefield" from Magic 2010), which the September 2010 Update
+    // Bulletin (2010-09-22) changed to "When Lich is put into a graveyard from the
+    // battlefield, you lose the game": see
+    // lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability and
+    // docs/rulings-exemptions/rulings-P096.tsv. "Any one of the Liches" still holds for a
+    // Lich put into a graveyard: lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose.)
     let mut t = TestGame::new(2);
     lich(&mut t);
     lich(&mut t);
