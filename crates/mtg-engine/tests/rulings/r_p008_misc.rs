@@ -423,3 +423,73 @@ fn two_enters_triggers_are_ordered_by_their_controller() {
         assert_ne!(firsts[0], firsts[1], "{name}: {firsts:?}");
     }
 }
+
+#[test]
+fn soulfire_eruption_next_target_is_chosen_after_the_previous_card_is_exiled() {
+    cr!("608.2f", "401.5");
+    ruling!(
+        "Soulfire Eruption",
+        "If you're playing with the top card of your library revealed (perhaps because of Courser of Kruphix), you'll see the new top card of your library after each time a card is exiled while Soulfire Eruption's ability is resolving."
+    );
+    // Three players; P0 plays with the top card revealed (Courser of Kruphix) and targets
+    // P1, P2 and P2's creature. After P1 is dealt damage (Lightning Bolt exiled), P0 sees
+    // Craw Wurm on top and then chooses between P2 and the creature.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Courser of Kruphix");
+    let ancients = t.battlefield(P2, "Indomitable Ancients");
+    t.library_top(P0, "Shock");
+    t.library_top(P0, "Craw Wurm");
+    t.library_top(P0, "Lightning Bolt");
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| {
+            matches!(d, mtg_engine::decision::Decision::ChooseEntities { prompt, .. }
+                if prompt == "Choose the next target")
+        },
+        |g| {
+            let top = *g.player(P0).library.last().expect("a library");
+            (g.player(P1).life, g.obj(top).chars.name.to_string())
+        },
+    );
+    t.answer_targets(P0, &[pl(P1), pl(P2), obj(ancients)]);
+    t.answer_choose(P0, &[obj(ancients)]);
+    lands_for_cost(&mut t, P0, "Soulfire Eruption");
+    let card = t.hand(P0, "Soulfire Eruption");
+    t.cast(P0, card).go();
+    t.resolve_all();
+    assert_eq!(
+        seen.lock().unwrap().clone(),
+        vec![(19, "Craw Wurm".to_string())],
+        "asked once, after P1's card"
+    );
+    // The creature was chosen next: Craw Wurm (6) to it, Shock (1) to P2.
+    assert_eq!((dmg(&t, ancients), t.life(P2)), (6, 19));
+}
+
+#[test]
+fn lithomantic_barrage_can_be_targeted_by_counterspells() {
+    cr!("101.2", "608.2c");
+    ruling!(
+        "Lithomantic Barrage",
+        "Spells and abilities that counter spells can still target Lithomantic Barrage. Such a spell or ability won’t counter Lithomantic Barrage, but any additional effects of that spell or ability will still happen."
+    );
+    supported("Lithomantic Barrage");
+    let mut t = TestGame::new(2);
+    let knight = t.battlefield(P1, "White Knight");
+    let s = cast_x(
+        &mut t,
+        P0,
+        "Lithomantic Barrage",
+        NORMAL,
+        None,
+        &[obj(knight)],
+    );
+    let hand = t.hand_size(P1);
+    // Dismiss: "Counter target spell. Draw a card."
+    cast_new(&mut t, P1, "Dismiss", &[obj(s)]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), hand + 1, "P1 drew a card");
+    assert!(t.in_graveyard(P1, "Dismiss"));
+    assert!(!t.on_battlefield(knight), "Barrage resolved: 5 to a white creature");
+}
