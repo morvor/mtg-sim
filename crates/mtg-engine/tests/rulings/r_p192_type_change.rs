@@ -167,11 +167,10 @@ fn armed_with_proof_clue_creature_cant_become_attached() {
     assert!(t.obj_now(herring).is(CardType::Creature));
     add_mana(&mut t, P0, ManaType::C, 2);
     // The equip ability can be activated, but it doesn't attach.
-    let ok = activate_containing(&mut t, P0, herring, "Equip").is_ok()
-        || {
-            t.answer_targets(P0, &[obj(bears)]);
-            activate_containing(&mut t, P0, herring, "Equip").is_ok()
-        };
+    let ok = activate_containing(&mut t, P0, herring, "Equip").is_ok() || {
+        t.answer_targets(P0, &[obj(bears)]);
+        activate_containing(&mut t, P0, herring, "Equip").is_ok()
+    };
     assert!(ok, "the equip ability couldn't be activated");
     t.resolve_all();
     assert_eq!(attached_to(&t, herring), None);
@@ -429,7 +428,11 @@ fn rootpath_purifier_lands_escape_blood_moon() {
         assert_eq!(subtypes_now(&t, gate), vec!["Mountain"]);
         t.battlefield(P0, "Rootpath Purifier");
         t.g.recompute();
-        assert_eq!(subtypes_now(&t, gate), vec!["Gate"], "moon first: {moon_first}");
+        assert_eq!(
+            subtypes_now(&t, gate),
+            vec!["Gate"],
+            "moon first: {moon_first}"
+        );
         assert!(tap_for_mana(&mut t, P0, gate, "{W}"));
         assert_eq!(subtypes_now(&t, theirs), vec!["Mountain"]);
     }
@@ -653,7 +656,11 @@ fn rude_awakening_doesnt_animate_lands_that_arrive_later() {
     let early = t.battlefield(P0, "Forest");
     let theirs = t.battlefield(P1, "Forest");
     choose_modes(&mut t, P0, &[1]);
-    t.answer(P0, DecisionKind::OptionalCost, mtg_engine::decision::Answer::Bool(false));
+    t.answer(
+        P0,
+        DecisionKind::OptionalCost,
+        mtg_engine::decision::Answer::Bool(false),
+    );
     cast_and_resolve(&mut t, P0, "Rude Awakening", &[]);
     t.g.recompute();
     assert!(t.obj_now(early).is(CardType::Creature));
