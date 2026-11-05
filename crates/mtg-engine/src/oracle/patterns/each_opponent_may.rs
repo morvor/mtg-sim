@@ -50,6 +50,14 @@ fn each_opponent_may(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let r = l.strip_prefix("then ").unwrap_or(l);
     let r = r.strip_prefix("each opponent may ")?;
+    // "You" in the text is the controller, but in the performer's wording it would be the
+    // opponent ("... onto the battlefield under your control").
+    if format!(" {r} ")
+        .split(|c: char| !c.is_alphanumeric() && c != '\'')
+        .any(|w| matches!(w, "you" | "your" | "you're" | "yours"))
+    {
+        return None;
+    }
     let text = as_performer(r);
     let saved_targets = b.targets.len();
     let Some(effect) = parse_clause(&text, b) else {

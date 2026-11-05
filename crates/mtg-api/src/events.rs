@@ -425,9 +425,17 @@ pub fn describe_event(g: &Game, viewer: Viewer, e: &Event) -> Option<EventView> 
             ev("game", format!("{} lost the game", player_name(*player)))
         }
         Event::PlayerWon { player } => ev("game", format!("{} won the game", player_name(*player))),
-        Event::Searched { player } => ev(
+        Event::Searched { player, library } if player == library => ev(
             "search",
             format!("{} searched their library", player_name(*player)),
+        ),
+        Event::Searched { player, library } => ev(
+            "search",
+            format!(
+                "{} searched {}'s library",
+                player_name(*player),
+                player_name(*library)
+            ),
         ),
         Event::Shuffled { player } => ev(
             "shuffle",
