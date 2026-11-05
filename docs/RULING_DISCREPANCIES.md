@@ -392,6 +392,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: only a Lich put into a graveyard from the battlefield makes you lose; exiled, bounced or under Rest in Peace, it doesn't.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P096.tsv`; tests `tests/rulings/r_p096_lich.rs` (`lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability`, `multiple_liches_sacrifice_for_each_but_draw_only_once`, `lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose`).
 
+### Ronom Hulk: "though there are no snow instants or sorceries"
+- Kind: outdated
+- Status: open for review
+- Ruling, Ronom Hulk (2006-07-15): "Ronom Hulk can’t be targeted by snow spells (though there are no snow instants or sorceries) or abilities of snow sources, it can’t be enchanted by snow Auras, it can’t be equipped by snow Equipment (though there are none), it can’t be blocked by snow creatures, and all damage that would be dealt to it by snow sources is prevented."
+- Conflicts with: the card pool since Kaldheim (released 2021-02-05), which printed snow instants and sorceries: Frost Bite and Graven Lore ("Snow Instant"), Blizzard Brawl, Blessing of Frost, Blood on the Snow, Search for Glory and Tundra Fumarole ("Snow Sorcery"), all with Kaldheim as their first set in the data.
+- Evidence: the ruling was written for Coldsnap (Ronom Hulk's set, 2006), when the snow supertype appeared only on permanents. Only the parenthetical aside is outdated; it states a fact about the cards printed, not a rule. The second aside ("snow Equipment (though there are none)") still holds in the data. Found in work item rulings-P087.
+- Engine: protection from snow applies to snow spells like any other quality (CR 702.16b): Frost Bite can't target Ronom Hulk.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P087.tsv` (the first aside); test `tests/rulings/r_p087_mechanics.rs` (`ronom_hulk_protection_from_snow`).
+
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the

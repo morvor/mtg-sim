@@ -164,6 +164,17 @@ fn ronom_hulk_protection_from_snow() {
     let plating = t.battlefield(P1, "Glacial Plating");
     assert!(!t.g.attach(plating, obj(hulk)));
     assert!(t.g.attach(plating, obj(bears)));
+    // Snow Equipment can't equip it (there are none: a custom one).
+    let blade = crate::r_s01_common::custom_card(
+        "Snow Blade",
+        "Snow Artifact — Equipment",
+        "{1}",
+        None,
+        "Equipped creature gets +1/+0.\nEquip {1}",
+    );
+    let blade = t.custom(P0, blade, Zone::Battlefield);
+    assert!(!t.g.attach(blade, obj(hulk)));
+    assert!(t.g.attach(blade, obj(bears)));
     // Damage from a snow source is prevented; from another source it isn't.
     let musher = t.battlefield(P1, "Zombie Musher");
     t.g.deal_damage(musher, obj(hulk), 3, false);
