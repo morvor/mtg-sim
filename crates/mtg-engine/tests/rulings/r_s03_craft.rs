@@ -265,3 +265,74 @@ fn a_copy_of_a_craft_card_that_isnt_double_faced_stays_in_exile() {
     let sepulcher = one(&t, "Consuming Sepulcher");
     assert_eq!(t.obj_now(sepulcher).face, FaceState::Back);
 }
+
+/// `id` becomes a copy of `of` (as a copy effect such as Cytoshape's would make it).
+fn become_copy_of(t: &mut TestGame, id: ObjectId, of: ObjectId) {
+    run_effect(
+        t,
+        Some(id),
+        P0,
+        Effect::BecomeCopy {
+            what: Sel::This,
+            of: Sel::Target(0),
+            duration: mtg_engine::ability::Duration::Permanent,
+        },
+        &[Entity::Object(of)],
+    );
+}
+
+/// The craft copy ruling (2023-11-10) was written when only a transforming double-faced
+/// card could be put onto the battlefield transformed (712.14a then: "a card that isn't a
+/// transforming double-faced card ... stays in its current zone"). Since the Marvel's
+/// Spider-Man CR update (effective 2025-09-19) any double-faced card can: a modal
+/// double-faced card that became a copy of a card with craft returns as its own back face,
+/// unless that face is an instant or sorcery (the ruling is exempt for modal double-faced
+/// cards in docs/rulings-exemptions/rulings-P204.tsv and logged in
+/// docs/RULING_DISCREPANCIES.md; for a card that isn't double-faced it's cited above).
+#[test]
+fn a_modal_double_faced_card_that_became_a_copy_of_a_craft_card_returns_as_its_own_back_face() {
+    cr!("702.167a", "712.14a", "707.2", "307.4");
+    ruling!(
+        "Eddie Brock // Venom, Lethal Protector",
+        "if an effect attempts to put a modal double-faced card onto the battlefield transformed, it will enter transformed if its back face has a permanent type. If it doesn't, it will simply stay in its current zone."
+    );
+    supported("Oteclan Landmark // Oteclan Levitator");
+    // Oteclan Landmark: "Craft with artifact {2}{W}". Each double-faced permanent becomes a
+    // copy of it, then crafts, exiling an Ornithopter.
+    for (dfc, returns_as) in [
+        // A modal double-faced card: back as its own back face, a creature.
+        (
+            "Eddie Brock // Venom, Lethal Protector",
+            Some("Venom, Lethal Protector"),
+        ),
+        // A transforming double-faced card: back as its own back face too.
+        ("Delver of Secrets // Insectile Aberration", Some("Insectile Aberration")),
+        // A modal double-faced card whose back face is a sorcery stays in exile.
+        ("Pestilent Cauldron // Restorative Burst", None),
+    ] {
+        let mut t = TestGame::new(2);
+        let landmark = t.battlefield(P0, "Oteclan Landmark // Oteclan Levitator");
+        let copy = t.battlefield(P0, dfc);
+        become_copy_of(&mut t, copy, landmark);
+        assert_eq!(t.obj_now(copy).chars.name, "Oteclan Landmark", "{dfc}");
+        let thopter = t.battlefield(P0, "Ornithopter");
+        t.lands(P0, "Plains", 3);
+        craft(&mut t, copy, &[thopter]);
+        t.resolve_all();
+        assert!(t.in_exile("Ornithopter"), "{dfc}");
+        let now = t.g.current(copy);
+        match returns_as {
+            Some(back) => {
+                assert_eq!(t.zone(now), Zone::Battlefield, "{dfc}");
+                let o = t.obj_now(now);
+                assert_eq!(o.face, FaceState::Back, "{dfc}");
+                assert_eq!(o.chars.name, back, "{dfc}");
+                assert_eq!(o.controller, P0, "{dfc}");
+            }
+            None => assert_eq!(t.zone(now), Zone::Exile, "{dfc}"),
+        }
+        // It never returns as the craft card's back face.
+        assert!(t.named_on_battlefield("Oteclan Levitator").is_empty(), "{dfc}");
+        assert!(t.on_battlefield(landmark), "{dfc}");
+    }
+}
