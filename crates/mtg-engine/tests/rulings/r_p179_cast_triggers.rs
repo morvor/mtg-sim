@@ -224,19 +224,6 @@ fn consecrated_sphinx_draws_two_or_none() {
     }
 }
 
-/// Puts the back face of a modal double-faced card onto the battlefield (as if it had
-/// been played as that face).
-pub fn battlefield_back(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
-    let id = t.battlefield(p, name);
-    let back = mtg_engine::object::FaceState::Back;
-    let base = t.g.obj(id).card.clone().unwrap().characteristics(back);
-    let o = &mut t.g.objects[id.0 as usize];
-    o.face = back;
-    o.base = base;
-    t.g.recompute();
-    id
-}
-
 /// P0 activates Tergrid's Lantern targeting P1 (who controls a Plains, plus Grizzly Bears
 /// if `bears`, and holds Opt if `card`), with P1's yes/no answers queued. Returns the
 /// game and the yes/no prompts P1 was asked.

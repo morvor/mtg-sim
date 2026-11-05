@@ -13,7 +13,7 @@ pub use crate::r_p177_common::{cast_resolve, ffa};
 pub use crate::r_s01_common::{give_mana_for, supported, tokens, triggers_on_stack};
 pub use crate::r_s02_common::{can_activate, can_cast, create_token, destroy};
 pub use crate::r_s04_common::{stack_items, top_of_stack};
-pub use crate::r_s06_common::{activate_containing, damage};
+pub use crate::r_s06_common::{activate_containing, damage, give_control};
 pub use crate::r_s14_common::triggers_from;
 pub use crate::r_s24_common::{choose_creature_type, enter_together};
 pub use crate::r_s33_common::{set_life, two_headed_giant};
@@ -47,4 +47,17 @@ pub fn fill_hand(t: &mut TestGame, p: PlayerId, n: usize) {
             .create_card_object(filler_card(), p, mtg_engine::object::Zone::Hand(p));
         t.g.players[p.idx()].hand.push(id);
     }
+}
+
+/// Puts the back face of a modal double-faced card onto the battlefield (as if it had
+/// been played as that face).
+pub fn battlefield_back(t: &mut TestGame, p: PlayerId, name: &str) -> ObjectId {
+    let id = t.battlefield(p, name);
+    let back = mtg_engine::object::FaceState::Back;
+    let base = t.g.obj(id).card.clone().unwrap().characteristics(back);
+    let o = &mut t.g.objects[id.0 as usize];
+    o.face = back;
+    o.base = base;
+    t.g.recompute();
+    id
 }
