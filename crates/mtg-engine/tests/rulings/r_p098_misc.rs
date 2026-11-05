@@ -483,12 +483,17 @@ fn starting_town_counts_the_turns_you_have_taken() {
         "Squall, SeeD Mercenary",
         "Starting Town's first ability cares about how many turns you have taken, not necessarily how many turns the game has had, in case you take an extra turn."
     );
-    // Scryfall files this Starting Town ruling under Squall, SeeD Mercenary (whose
-    // Commander precon reprinted Starting Town); the behavior is Starting Town's.
+    // Scryfall's data attaches this Starting Town ruling to Squall, SeeD Mercenary (a
+    // misattached ruling: it is cited under Squall, the card it's attached to, and tested
+    // on Starting Town, the card it describes); Squall takes part by returning a Starting
+    // Town from its controller's graveyard.
     supported("Starting Town");
+    supported("Squall, SeeD Mercenary");
     // "This land enters tapped unless it's your first, second, or third turn of the game."
     // P1's third turn is the game's sixth turn.
     let mut t = TestGame::new(2);
+    let squall = t.battlefield(P1, "Squall, SeeD Mercenary");
+    let buried = t.graveyard(P1, "Starting Town");
     let enters_untapped = |t: &mut TestGame, p: PlayerId| {
         let town = t.hand(p, "Starting Town");
         t.play_land(p, town).unwrap();
@@ -502,6 +507,15 @@ fn starting_town_counts_the_turns_you_have_taken() {
     t.advance_to(P1, Step::PrecombatMain);
     assert!(t.g.turn.number >= 6);
     assert!(enters_untapped(&mut t, P1));
+    // Later that turn Squall attacks alone (gaining double strike) and deals combat damage
+    // to P0: its trigger returns the Starting Town from P1's graveyard, which enters
+    // untapped too, as it's still P1's third turn.
+    t.answer_targets(P1, &[obj(buried)]);
+    attack_with(&mut t, &[(squall, Entity::Player(P0))]);
+    t.advance_to(P1, Step::EndOfCombat);
+    let returned = t.g.current(buried);
+    assert_eq!(t.zone(returned), Zone::Battlefield, "{}", t.dump_log());
+    assert!(!t.obj_now(returned).tapped);
     // P0's fourth turn: tapped.
     t.advance_to(P0, Step::PrecombatMain);
     assert!(!enters_untapped(&mut t, P0));

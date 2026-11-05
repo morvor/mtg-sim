@@ -1079,14 +1079,14 @@ fn distribute_to_the_token(g: &mtg_engine::game::Game, d: &Decision) -> Option<A
     distribute_to(g, d, true)
 }
 
-fn distribute_to_a_nontoken(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+pub fn distribute_to_a_nontoken(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
     distribute_to(g, d, false)
 }
 
 /// P0's Invasion of Alara (protected by P1) is defeated; P0 casts Awaken the Maelstrom
 /// (if it can) with P0 drawing and `destroy` destroyed. Returns the decisions index before
 /// it was cast.
-fn awaken(t: &mut TestGame, destroy_it: Option<ObjectId>) -> usize {
+pub fn awaken(t: &mut TestGame, destroy_it: Option<ObjectId>) -> usize {
     supported("Invasion of Alara // Awaken the Maelstrom");
     // No nonland cards in the library: its enters ability finds nothing.
     t.g.players[0].library.clear();

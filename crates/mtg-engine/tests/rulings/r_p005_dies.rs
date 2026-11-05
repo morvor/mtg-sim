@@ -293,16 +293,20 @@ fn homicide_investigator_triggers_on_its_own_death_unless_its_a_token() {
 #[test]
 fn homicide_investigator_investigates_once_for_creatures_dying_together() {
     cr!("603.2c", "603.10a");
-    interp!("homicide-investigator-triggers-once");
+    interp!(
+        "homicide-investigator-triggers-once",
+        "ruling-contradicting-oracle-gives-way"
+    );
     // Oracle: "Whenever one or more nontoken creatures you control die, investigate. This
     // ability triggers only once each turn." Creatures dying together are one event: one
     // trigger, also when the Investigator dies with them. Its 2024-04-12 ruling "If
     // Homicide Investigator dies at the same time as one or more other nontoken creatures
     // you control, Homicide Investigator's ability triggers for each of them." contradicts
     // both sentences of this text: it is Midnight Reaper's per-creature ruling (Guilds of
-    // Ravnica release notes, 2018-09-20) with the name swapped. It's left uncited, and not
-    // exempt, pending the user's decision (register homicide-investigator-triggers-once,
-    // provisional).
+    // Ravnica release notes, 2018-09-20) with the name swapped. By the user's decision of
+    // Nov 5 (the card's text wins over a ruling that contradicts it) it gives way: exempt
+    // in docs/rulings-exemptions/rulings-P005.tsv and logged in
+    // docs/RULING_DISCREPANCIES.md for review.
     supported("Homicide Investigator");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Homicide Investigator");
