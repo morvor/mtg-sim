@@ -70,3 +70,14 @@ pub fn to_graveyard(t: &mut TestGame, id: ObjectId) {
         None,
     );
 }
+
+/// Returns `id` to its owner's hand (as an effect would).
+pub fn to_hand(t: &mut TestGame, id: ObjectId) {
+    let owner = t.g.obj(id).owner;
+    t.g.move_object(
+        id,
+        mtg_engine::object::Zone::Hand(owner),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
+}
