@@ -712,7 +712,14 @@ impl Game {
                 );
                 let o = self.obj(new_id);
                 if o.is(CardType::Planeswalker) {
-                    if let Some(l) = o.chars.loyalty {
+                    // A printed loyalty of X: the X chosen for the spell it was (CR
+                    // 107.3m), 0 if it wasn't cast with one.
+                    let loyalty = if o.chars.loyalty_is_x {
+                        Some(o.cast.as_ref().and_then(|c| c.x).unwrap_or(0))
+                    } else {
+                        o.chars.loyalty
+                    };
+                    if let Some(l) = loyalty {
                         if l > 0 {
                             counters_to_add.insert(0, (counters::LOYALTY.into(), l as u32));
                         }

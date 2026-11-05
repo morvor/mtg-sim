@@ -41,6 +41,7 @@ pub fn token_characteristics(spec: &TokenSpec) -> Characteristics {
         power: spec.power,
         toughness: spec.toughness,
         loyalty: None,
+        loyalty_is_x: false,
         defense: None,
         hand_modifier: None,
         life_modifier: None,
