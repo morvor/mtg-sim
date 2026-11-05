@@ -90,7 +90,7 @@ fn prowl_option(g: &Game, p: PlayerId, card: ObjectId, cost: &Cost) -> Option<Ca
     let o = g.obj(card);
     let mut opt = CastOption::normal(FaceState::Front);
     opt.method = CastMethod::Keyword(KeywordKind::Prowl);
-    let chars = g.option_characteristics(card, &opt);
+    let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
     if o.zone != Zone::Hand(p)
         && (!g.permitted_cards(p).contains(&card) || !g.permission_allows(p, card, &chars, false))
     {
