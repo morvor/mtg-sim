@@ -3575,13 +3575,34 @@ pub fn combat_trigger_matches(
                 attacker,
                 recipient,
             },
-            Event::AttackersDeclared { attackers, .. },
+            Event::AttackersDeclared {
+                attackers,
+                as_declared,
+                ..
+            },
         ) => Some(
             attackers
                 .iter()
-                .filter(|(a, t)| {
-                    g.matches(*a, attacker, ctx) && recipient_matches(g, recipient, *t, ctx)
+                .enumerate()
+                .filter(|(i, (a, t))| {
+                    // The attacker as it was declared (CR 508.2a): for a look-back ("if
+                    // they were attacked this turn by an Assassin you controlled"), what
+                    // it has become since and who controls it now don't matter
+                    // (CR 608.2i; Ramses, Assassin Lord rulings).
+                    let matched = match as_declared.get(*i) {
+                        Some((chars, controller)) => {
+                            let view = crate::eval::AsDeclared {
+                                id: *a,
+                                chars,
+                                controller: *controller,
+                            };
+                            g.matches_view(&view, *a, attacker, ctx)
+                        }
+                        None => g.matches(*a, attacker, ctx),
+                    };
+                    matched && recipient_matches(g, recipient, *t, ctx)
                 })
+                .map(|(_, x)| x)
                 .map(|(a, t)| EventInfo {
                     object: Some(*a),
                     player: Some(entity_defender(g, *t)),
