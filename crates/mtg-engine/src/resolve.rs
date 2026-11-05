@@ -722,7 +722,7 @@ impl Game {
                 // "Put two quest counters on ~. When you do, ...": four put on it (Doubling
                 // Season) is putting two quest counters twice, so the reflexive ability
                 // triggers twice (Craig Boone, Novac Guard ruling; CR 603.12a).
-                ctx.reflexive_times = (got.len() == 1 && k > 0).then_some(placed / k);
+                ctx.reflexive_times = (got.len() == 1 && k > 0).then(|| placed / k);
                 // "Put a quest counter on this enchantment. When you do, if it has four or
                 // more quest counters on it, ..." (Earthbender Ascension): "it" is what got
                 // the counters. A choice among "them" ("Put a deathtouch counter on either
