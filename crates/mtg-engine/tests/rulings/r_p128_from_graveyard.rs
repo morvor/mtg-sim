@@ -13,7 +13,7 @@ use mtg_engine::*;
 
 #[test]
 fn return_abilities_can_be_activated_only_from_the_graveyard() {
-    cr!("113.6k", "602.5b", "602.2");
+    cr!("113.6m", "602.2");
     ruling!(
         "Stitchwing Skaab",
         "Stitchwing Skaab's last ability can only be activated while it's in your graveyard."
@@ -90,7 +90,7 @@ fn return_abilities_can_be_activated_only_from_the_graveyard() {
 
 #[test]
 fn bloodsoaked_champions_own_attack_satisfies_raid() {
-    cr!("113.6k", "602.5b", "508.1");
+    cr!("113.6m", "602.1b", "508.1");
     ruling!(
         "Bloodsoaked Champion",
         "The activated ability can be activated only if Bloodsoaked Champion is in your graveyard. Notably, if it attacks and then dies later in the turn, you can use its ability to return it to the battlefield, as its attack satisfies its own activation instruction."
@@ -113,7 +113,7 @@ fn bloodsoaked_champions_own_attack_satisfies_raid() {
 
 #[test]
 fn coffin_puppets_can_sacrifice_the_last_swamp() {
-    cr!("602.5b", "602.2b", "601.2h");
+    cr!("602.1b", "602.2b", "601.2h");
     ruling!(
         "Coffin Puppets",
         "The ability works even if you sacrifice your last swamp to activate it. It only checks for a swamp on activation."
@@ -136,7 +136,7 @@ fn coffin_puppets_can_sacrifice_the_last_swamp() {
 
 #[test]
 fn cult_conscript_needs_a_death_this_turn_from_any_zone() {
-    cr!("602.5b", "700.4");
+    cr!("602.1b", "700.4");
     ruling!(
         "Cult Conscript",
         "Similarly, Cult Conscript didn't need to be any specific zone at the time that creature died."
@@ -187,7 +187,7 @@ fn sekki_can_sacrifice_any_spirits() {
 
 #[test]
 fn evershrike_puts_only_an_aura_that_can_enchant_it() {
-    cr!("608.2", "303.4a", "303.4i");
+    cr!("608.2", "303.4i");
     ruling!(
         "Evershrike",
         "You can't put an Aura onto the battlefield this way unless that Aura can legally be attached to Evershrike. For example, you can't put an Aura card with \"enchant player\" onto the battlefield this way."
@@ -221,7 +221,7 @@ fn evershrike_puts_only_an_aura_that_can_enchant_it() {
 
 #[test]
 fn deathpact_angels_cleric_token() {
-    cr!("707.2", "111.4", "201.2");
+    cr!("707.2", "111.3");
     ruling!(
         "Deathpact Angel",
         "The activated ability is part of the Cleric token's copiable values. Any copy of that creature token will also have that ability."
@@ -260,7 +260,7 @@ fn deathpact_angels_cleric_token() {
 
 #[test]
 fn slimefoot_and_squee_target_is_optional_but_an_illegal_one_fizzles() {
-    cr!("608.2b", "115.4", "601.2c");
+    cr!("608.2b", "601.2c", "113.6m");
     ruling!(
         "Slimefoot and Squee",
         "You don't have to choose a target to activate the last ability. However, if you do, and that target is illegal at the time the ability tries to resolve, it won't resolve and none of its effects will happen. Slimefoot and Squee won't be returned to the battlefield."
@@ -288,7 +288,7 @@ fn slimefoot_and_squee_target_is_optional_but_an_illegal_one_fizzles() {
 
 #[test]
 fn graveyard_triggers_need_the_card_in_the_graveyard_as_the_event_happens() {
-    cr!("113.6k", "603.2", "603.10");
+    cr!("113.6m", "603.2", "603.10");
     ruling!(
         "Prized Amalgam",
         "Prized Amalgam's ability triggers only if it's in your graveyard immediately after an appropriate creature enters the battlefield. A Prized Amalgam that's already on the battlefield won't be returned at the beginning of the next end step if it's put into your graveyard later."
@@ -344,7 +344,7 @@ fn graveyard_triggers_need_the_card_in_the_graveyard_as_the_event_happens() {
 
 #[test]
 fn wolfbat_triggers_only_on_the_second_draw() {
-    cr!("603.2", "113.6k", "121.2");
+    cr!("603.2", "113.6m", "121.2");
     ruling!(
         "Wolfbat",
         "The triggered ability can trigger only once each turn. It doesn't matter whether Wolfbat was in your graveyard when the first card was drawn. If it's not in your graveyard when the second card is drawn, the ability can't trigger at all that turn. It won't trigger when the third or fourth card is drawn."
@@ -375,7 +375,7 @@ fn wolfbat_triggers_only_on_the_second_draw() {
 
 #[test]
 fn vengevine_counts_the_whole_turn_but_must_be_in_the_graveyard() {
-    cr!("603.4", "113.6k", "601.2i");
+    cr!("603.4", "113.6m", "601.2i");
     ruling!(
         "Vengevine",
         "Vengevine's triggered ability checks the spells you cast over the course of the entire turn, not just the ones you cast while Vengevine is in your graveyard."
@@ -414,7 +414,7 @@ fn vengevine_counts_the_whole_turn_but_must_be_in_the_graveyard() {
 
 #[test]
 fn return_triggers_with_a_payment_can_be_responded_to() {
-    cr!("603.3", "608.2", "117.3a");
+    cr!("603.3", "608.2", "608.2g");
     ruling!(
         "Forsaken Miner",
         "You choose whether to pay {B} as the triggered ability is resolving. Once the ability starts resolving, it's too late for anyone to respond by removing Forsaken Miner from your graveyard to stop you from bringing it back."
@@ -463,7 +463,7 @@ fn return_triggers_with_a_payment_can_be_responded_to() {
 
 #[test]
 fn silversmote_ghoul_counts_all_life_gained_this_turn() {
-    cr!("119.9", "603.4");
+    cr!("113.6m", "603.4");
     ruling!(
         "Silversmote Ghoul",
         "Silversmote Ghoul's first ability looks at how much life you've gained in the turn, even if it wasn't on the battlefield or in your graveyard when you gained life. It doesn't care if you also lost life, even if you lost more life than you gained."
@@ -555,7 +555,7 @@ fn nether_shadows_upkeep_trigger_cannot_loop() {
 
 #[test]
 fn skeleton_crew_returning_doesnt_trigger_itself() {
-    cr!("603.6d", "113.6", "603.10a");
+    cr!("113.6", "603.10", "603.10a");
     ruling!(
         "Skeleton Crew",
         "Resolving Skeleton Crew's last ability won't cause its second ability to trigger."

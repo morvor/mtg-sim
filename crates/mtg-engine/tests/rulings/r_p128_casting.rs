@@ -13,7 +13,7 @@ use mtg_engine::*;
 
 #[test]
 fn casting_from_the_graveyard_or_exile_keeps_normal_timing_and_costs() {
-    cr!("601.3", "117.1a", "307.1", "601.2f");
+    cr!("601.3", "117.1a", "601.2f");
     ruling!(
         "Risen Executioner",
         "Risen Executioner’s last ability doesn’t change when you can cast it."
@@ -402,7 +402,7 @@ fn syrix_must_be_cast_as_its_trigger_resolves() {
 
 #[test]
 fn sproutback_trudge_cost_reduction() {
-    cr!("601.2f", "118.7d", "202.3a", "119.9");
+    cr!("601.2f", "118.7a", "202.3");
     ruling!(
         "Sproutback Trudge",
         "Sproutback Trudge’s ability counts the total amount of life gained without considering any life you lost during that turn. For example, if you lost 3 life and gained 4 life earlier in the turn, Sproutback Trudge will cost {3}{G}{G}."
@@ -445,7 +445,7 @@ fn sproutback_trudge_cost_reduction() {
 
 #[test]
 fn demilichs_reduction_applies_to_an_additional_generic_cost() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7c");
     ruling!(
         "Demilich",
         "While casting Demilich, if you are required to pay an additional cost that includes a generic mana component, Demilich's cost reduction effect can apply to it."

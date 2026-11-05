@@ -9,7 +9,6 @@ use crate::r_p128_common::*;
 use crate::r_s17_common::enter_transformed;
 use crate::r_s25_common::name_now;
 use mtg_engine::decision::{Answer, Decision};
-use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -160,7 +159,7 @@ fn saheeli_token_copy_gets_enters_abilities() {
 
 #[test]
 fn phasing_out_ends_for_as_long_as_durations_and_takes_attachments() {
-    cr!("702.26d", "702.26e", "611.2b");
+    cr!("702.26d", "702.26f", "702.26g", "611.2b");
     ruling!(
         "Spectral Adversary",
         "Any continuous effects with a \"for as long as\" duration ignore phased-out objects. If ignoring those objects causes the effect's conditions to no longer be met, the duration will expire."
@@ -283,7 +282,7 @@ fn kardurs_vicious_return_discards_in_turn_order_at_once() {
 
 #[test]
 fn decayed_cant_block_and_is_sacrificed_after_attacking() {
-    cr!("702.147a", "506.4");
+    cr!("702.147a", "509.1b");
     ruling!(
         "Falcon Abomination",
         "Decayed represents a static ability and a triggered ability. \"Decayed\" means \"This creature can't block\" and \"When this creature attacks, sacrifice it at end of combat.\""
@@ -520,13 +519,12 @@ fn restricted_red_mana_keeps_its_restriction_while_it_stays() {
                 .has_keyword(mtg_engine::keywords::KeywordKind::Haste),
             "{keeper}"
         );
-        let _ = ManaType::R;
     }
 }
 
 #[test]
 fn runic_repetition_targets() {
-    cr!("115.1", "702.34a", "708.2", "611.2a");
+    cr!("115.1", "702.34a", "708.2", "400.7");
     ruling!(
         "Runic Repetition",
         "The card could have been exiled for any reason, not just because it was cast using flashback."

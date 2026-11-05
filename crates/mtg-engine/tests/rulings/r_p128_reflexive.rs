@@ -580,7 +580,7 @@ fn tapping_triggers_need_you_to_tap_the_opponents_creature() {
 
 #[test]
 fn isareth_returned_creature() {
-    cr!("508.1", "614.1a", "700.4", "611.2a");
+    cr!("508.1", "614.1a", "700.4", "611.2a", "400.7j");
     ruling!(
         "Isareth the Awakener",
         "Because all attacking creatures are chosen at once, a creature returned this way can't attack during the same combat as it returns, even if it has haste."
@@ -642,7 +642,7 @@ fn overseer_triggers_for_each_creature_entering_with_it() {
 
 #[test]
 fn shire_shirriff_leaving_early_means_nothing_is_exiled() {
-    cr!("610.3c", "603.12");
+    cr!("610.3b", "603.12");
     ruling!(
         "Shire Shirriff",
         "If Shire Shirriff leaves the battlefield before its last ability resolves, you can still sacrifice a token. However, when you do, the target creature won't be exiled when the \"reflexive\" triggered ability resolves."
@@ -824,7 +824,7 @@ fn iroh_gifts_return_when_the_opponent_leaves_and_need_legal_targets() {
 
 #[test]
 fn three_dog_aura_copies() {
-    cr!("707.2", "303.4f", "702.16c", "603.6a");
+    cr!("707.2", "303.4i", "702.16c", "603.6a");
     ruling!(
         "Three Dog, Galaxy News DJ",
         "Any enters-the-battlefield abilities of the copied Aura will trigger when the tokens enter the battlefield."
@@ -864,7 +864,7 @@ fn three_dog_aura_copies() {
 
 #[test]
 fn numa_and_blaster_hulk_keep_their_division_when_a_target_is_illegal() {
-    cr!("608.2b", "601.2d", "115.7");
+    cr!("608.2b", "601.2d");
     ruling!(
         "Numa, Joraga Chieftain",
         "If some of the creatures are illegal targets as the reflexive triggered ability tries to resolve, the original distribution of counters still applies and the counters that would have been put on illegal targets are lost."
