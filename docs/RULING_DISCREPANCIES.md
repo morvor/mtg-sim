@@ -328,6 +328,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: only a Lich put into a graveyard from the battlefield makes you lose; exiled, bounced or under Rest in Peace, it doesn't.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P096.tsv`; tests `tests/rulings/r_p096_lich.rs` (`lich_leaving_the_battlefield_except_to_a_graveyard_doesnt_trigger_its_last_ability`, `multiple_liches_sacrifice_for_each_but_draw_only_once`, `lich_last_ability_loses_whatever_the_life_total_unless_you_cant_lose`).
 
+### Sarkhan the Mad: "whether or not to redirect the damage dealt by that Dragon"
+- Kind: outdated
+- Status: open for review
+- Ruling, Sarkhan the Mad (2010-06-15): "If you target an opponent with the third ability, you choose separately for each Dragon creature you control whether or not to redirect the damage dealt by that Dragon to a planeswalker that player controls."
+- Conflicts with: CR 306.7: "Previously, planeswalkers were subject to a redirection effect that allowed a player to have noncombat damage that would be dealt to an opponent be dealt to a planeswalker under that opponent’s control instead. This rule has been removed and certain cards have received errata in the Oracle card reference to deal damage directly to planeswalkers." The card's Oracle text: "−4: Each Dragon creature you control deals damage equal to its power to target player or planeswalker."
+- Evidence: the ruling applied 306.7 of the CRs from 2010 to early 2018 (CR effective 2010-04-23 and still in the CR effective 2018-01-19: "If noncombat damage would be dealt to a player by a source controlled by an opponent, that opponent may have that source deal that damage to a planeswalker the first player controls instead. This is a redirection effect ..."). The Dominaria CR (effective 2018-04-27) replaced it with today's text (all from the archived CR texts). Work item rulings-P008.
+- Engine: the Dragons deal their damage to the target, the player or the planeswalker; no redirection choice is asked.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P008.tsv`; test `tests/rulings/r_p008_planeswalkers.rs` (`sarkhan_the_mad_dragons_damage_the_target_with_no_redirection`).
+
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the

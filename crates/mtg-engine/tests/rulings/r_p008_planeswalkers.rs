@@ -291,3 +291,33 @@ fn goblin_bomb_losing_a_flip_with_no_fuse_counters_does_nothing() {
     t.resolve_all();
     assert_eq!(t.counters(bomb, "fuse"), 1);
 }
+
+/// Sarkhan the Mad's −4 under the current rules: the damage goes to the target, player or
+/// planeswalker; there is no per-Dragon choice to redirect it to a planeswalker (its 2010
+/// ruling about that choice is outdated since CR 306.7 was removed, effective 2018-04-27;
+/// `docs/rulings-exemptions/rulings-P008.tsv`, `docs/RULING_DISCREPANCIES.md`).
+#[test]
+fn sarkhan_the_mad_dragons_damage_the_target_with_no_redirection() {
+    cr!("306.7", "115.1");
+    for target_walker in [false, true] {
+        let mut t = TestGame::new(2);
+        let s = pw(&mut t, P0, "Sarkhan the Mad", 7);
+        t.battlefield(P0, "Shivan Dragon");
+        let theirs = pw(&mut t, P1, "Chandra, Torch of Defiance", 6);
+        let target = if target_walker { obj(theirs) } else { pl(P1) };
+        loyalty(&mut t, P0, s, 2, &[target]);
+        let from = t.asked().len();
+        t.resolve_all();
+        if target_walker {
+            assert_eq!((t.life(P1), t.counters(theirs, "loyalty")), (20, 1));
+        } else {
+            assert_eq!((t.life(P1), t.counters(theirs, "loyalty")), (15, 6));
+        }
+        assert!(
+            t.asked()[from..]
+                .iter()
+                .all(|(_, d)| matches!(d, Decision::Priority { .. })),
+            "no redirection choice"
+        );
+    }
+}
