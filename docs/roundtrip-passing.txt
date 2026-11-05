@@ -1807,6 +1807,7 @@ Barktooth Warbeard
 Barkweave Crusher
 Barl's Cage
 Baron Bertram Graywater
+Baron Helmut Zemo
 Baron Sengir
 Baron Strucker, HYDRA Overlord
 Baron, Airship Kingdom
@@ -24681,6 +24682,7 @@ The Book of Exalted Deeds
 The Boulder, Ready to Rumble
 The Brute
 The Cabbage Merchant
+The Capitoline Triad
 The Cauldron of Eternity
 The Cave of Two Lovers
 The Caves of Androzani
@@ -26011,6 +26013,7 @@ Ulamog's Reclaimer
 Ulamog, the Ceaseless Hunger
 Ulamog, the Infinite Gyre
 Ulcerate
+Uldaros Theorix
 Ulna Alley Shopkeep
 Ulrich of the Krallenhorde // Ulrich, Uncontested Alpha
 Ulrich's Kindred
