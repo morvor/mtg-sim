@@ -128,10 +128,7 @@ fn ramos_counts_the_spells_colors() {
 
 /// P0 attacks with `attackers` (P1 blocking as given), and combat ends.
 fn fight(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
-    let a: Vec<_> = attackers
-        .iter()
-        .map(|a| (*a, Entity::Player(P1)))
-        .collect();
+    let a: Vec<_> = attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
     attack_with(t, &a);
     block_and_finish(t, P1, blocks);
 }
@@ -154,7 +151,10 @@ fn each_lifelink_creatures_combat_damage_is_one_life_gain_event() {
     supported("Karlov of the Ghost Council");
     supported("Qala, Ajani's Pridemate");
     supported("Lifelink");
-    for (name, per) in [("Karlov of the Ghost Council", 2), ("Qala, Ajani's Pridemate", 1)] {
+    for (name, per) in [
+        ("Karlov of the Ghost Council", 2),
+        ("Qala, Ajani's Pridemate", 1),
+    ] {
         // Two lifelinkers deal combat damage at once: two triggers.
         let mut t = TestGame::new(2);
         let k = t.battlefield(P0, name);
@@ -236,15 +236,23 @@ fn end_step_intervening_if_triggers_check_as_the_step_begins_and_on_resolution()
         t.resolve_all();
         assert_eq!(plus1(&t, sc), if untap { 0 } else { 1 }, "untap: {untap}");
     }
-    // One tapped creature: it doesn't trigger.
+    // One tapped creature: it doesn't trigger, and tapping a second one during the end
+    // step is too late.
     let mut t = TestGame::new(2);
-    add(&mut t, P0, "Sunstar Chaplain");
+    let sc = add(&mut t, P0, "Sunstar Chaplain");
     let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
     t.advance_to(P0, Step::PostcombatMain);
     tap(&mut t, a);
+    t.answer_targets(P0, &[obj(sc)]);
     t.advance_to(P0, Step::End);
     t.settle();
     assert_eq!(triggers_on_stack(&t, "two or more tapped creatures"), 0);
+    tap(&mut t, b);
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "two or more tapped creatures"), 0);
+    t.advance_to(P1, Step::Upkeep);
+    assert_eq!(plus1(&t, sc), 0);
 
     // Fractal Tender: a counter put on it earlier in the turn: a Fractal. A counter put
     // on it only during the end step: none.
@@ -400,7 +408,12 @@ fn permanents_entering_together_trigger_each_others_abilities() {
     let a = t.battlefield(P0, "Elite Vanguard");
     let b = t.battlefield(P0, "Elite Vanguard");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    cast_card(&mut t, P0, "Eerie Interlude", &[obj(k), obj(a), obj(b), obj(bears)]);
+    cast_card(
+        &mut t,
+        P0,
+        "Eerie Interlude",
+        &[obj(k), obj(a), obj(b), obj(bears)],
+    );
     t.resolve_all();
     t.advance_to(P0, Step::End);
     t.settle();
@@ -598,12 +611,16 @@ fn together_forever_cant_be_activated_before_the_counters_kill_the_creature() {
     t.answer_targets(P0, &[obj(elves)]);
     crate::r_p038_common::enter(&mut t, P0, "Decimator Beetle");
     assert!(top_is_trigger(&t));
-    let ok = t.g.run_until(10_000, |g| g.turn.step != Step::PrecombatMain);
+    let ok =
+        t.g.run_until(10_000, |g| g.turn.step != Step::PrecombatMain);
     assert!(ok);
     assert!(t.in_graveyard(P0, "Llanowar Elves"));
     let seen = seen.lock().unwrap().clone();
     assert!(!seen.is_empty());
-    assert!(seen.iter().all(|x| !x), "no priority with the 0/0 Elves around");
+    assert!(
+        seen.iter().all(|x| !x),
+        "no priority with the 0/0 Elves around"
+    );
 }
 
 #[test]

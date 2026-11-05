@@ -5,7 +5,7 @@
 
 use crate::r_p034_common::*;
 use crate::r_p038_common::{add, kill, next_p0_upkeep};
-use crate::r_s01_common::{attack_with, stack_library, supported, tokens};
+use crate::r_s01_common::{asked_since, attack_with, stack_library, supported, tokens};
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -18,7 +18,7 @@ fn obj(id: ObjectId) -> Entity {
 
 #[test]
 fn voodoo_doll_cost_x_is_counted_on_activation_and_the_damage_on_resolution() {
-    cr!("608.2h", "107.3a");
+    cr!("608.2h", "107.3c");
     ruling!(
         "Voodoo Doll",
         "Each X in the cost of Voodoo Doll's third ability is the number of pin counters"
@@ -78,7 +78,11 @@ fn upkeep_counters_then_count_use_last_known_counters() {
     kill(&mut t, atl);
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 2);
-    assert_eq!(t.counters(atl, "muster"), 0, "the card in the graveyard has none");
+    assert_eq!(
+        t.counters(atl, "muster"),
+        0,
+        "the card in the graveyard has none"
+    );
 
     // The Magic Mirror with two knowledge counters draws two cards.
     let mut t = TestGame::new(2);
@@ -100,27 +104,37 @@ fn wilfred_mott_looks_at_as_many_cards_as_its_last_known_time_counters() {
         "use the number of time counters it had on it the last time it was on the battlefield"
     );
     supported("Wilfred Mott");
-    // One time counter, destroyed in response: X is 1, so only the top card is looked at
-    // and the Grizzly Bears second from the top can't be chosen.
-    for (killed, bears_found) in [(true, false), (false, true)] {
+    // One time counter, destroyed in response: X is 1 (not 0, not 2), so the Ornithopter
+    // on top can be put onto the battlefield but the Grizzly Bears second from the top
+    // isn't among the cards looked at. On the battlefield it gets its second counter and
+    // looks at both.
+    for killed in [true, false] {
         let mut t = TestGame::new(2);
         let wilfred = add(&mut t, P0, "Wilfred Mott");
         put(&mut t, wilfred, "time", 1);
         next_p0_upkeep(&mut t);
         t.settle();
-    t.settle();
         // (The draw step comes after the upkeep: the library is set up now.)
-        let bears = stack_library(&mut t, P0, &["Plains", "Grizzly Bears"])[1];
+        let lib = stack_library(&mut t, P0, &["Ornithopter", "Grizzly Bears"]);
         if killed {
             kill(&mut t, wilfred);
         }
-        t.answer_choose(P0, &[obj(bears)]);
+        let from = t.asked().len();
+        t.answer_choose(P0, &[obj(lib[0])]);
         t.resolve_all();
-        assert_eq!(
-            !t.named_on_battlefield("Grizzly Bears").is_empty(),
-            bears_found,
-            "killed: {killed}"
-        );
+        let offered: Vec<Entity> = asked_since(&t, from)
+            .into_iter()
+            .filter_map(|(_, d)| match d {
+                mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => {
+                    Some(candidates)
+                }
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert!(offered.contains(&obj(lib[0])), "killed: {killed}");
+        assert_eq!(offered.contains(&obj(lib[1])), !killed, "killed: {killed}");
+        assert!(t.on_battlefield(lib[0]), "killed: {killed}");
     }
 }
 
@@ -220,11 +234,18 @@ fn yisan_searches_with_its_last_known_verse_counters_including_the_cost_counter(
     let bears = t.library_top(P0, "Grizzly Bears");
     pool(&mut t, P0, ManaType::G, 3);
     t.activate(P0, yisan, 0, &[]).unwrap();
-    assert_eq!(t.counters(yisan, "verse"), 2, "the cost put a verse counter");
+    assert_eq!(
+        t.counters(yisan, "verse"),
+        2,
+        "the cost put a verse counter"
+    );
     kill(&mut t, yisan);
     t.answer_choose(P0, &[obj(bears)]);
     t.resolve_all();
-    assert!(t.on_battlefield(bears), "mana value 2 = its two verse counters");
+    assert!(
+        t.on_battlefield(bears),
+        "mana value 2 = its two verse counters"
+    );
     assert!(!t.on_battlefield(elves));
 }
 
@@ -243,7 +264,11 @@ fn herald_of_ilharg_deals_its_last_known_counters_in_damage() {
     assert!(top_is_trigger(&t));
     kill(&mut t, herald);
     t.resolve_all();
-    assert_eq!(t.life(P1), 17, "three counters as it last existed, not five");
+    assert_eq!(
+        t.life(P1),
+        17,
+        "three counters as it last existed, not five"
+    );
 }
 
 #[test]
@@ -297,7 +322,7 @@ fn combat_damage_triggers_count_their_sources_last_known_counters() {
 
 #[test]
 fn sphinx_bone_wand_deals_no_damage_if_it_left_before_the_counter() {
-    cr!("608.2c", "400.7");
+    cr!("400.7");
     ruling!(
         "Sphinx-Bone Wand",
         "you won’t be able to put a charge counter on it. As a result, it won’t deal damage."
@@ -393,9 +418,17 @@ fn galloping_lizrog_trigger_still_removes_counters_after_it_left() {
     assert!(top_is_trigger(&t));
     kill(&mut t, lizrog);
     t.answer_yes(P0, true);
-    t.answer(P0, DecisionKind::Number, mtg_engine::decision::Answer::Number(2));
+    t.answer(
+        P0,
+        DecisionKind::Number,
+        mtg_engine::decision::Answer::Number(2),
+    );
     t.resolve_all();
-    assert_eq!(t.counters(bears, counters::PLUS1), 0, "the counters were removed");
+    assert_eq!(
+        t.counters(bears, counters::PLUS1),
+        0,
+        "the counters were removed"
+    );
     assert_eq!(t.counters(lizrog, counters::PLUS1), 0);
 }
 
@@ -420,4 +453,3 @@ fn quarantine_field_exiles_nothing_if_it_left_before_its_trigger_resolved() {
     t.resolve_all();
     assert!(t.on_battlefield(bears));
 }
-

@@ -91,11 +91,19 @@ fn spinal_parasite_counters_and_its_ability() {
         .collect();
     assert_eq!(kinds_asked.len(), 1);
     assert_eq!(kinds_asked[0].0, P0, "the Parasite's controller chooses");
-    assert_eq!(
-        plus1(&t, bears) + t.counters(bears, "stun"),
-        1,
-        "one counter removed"
-    );
+    let Decision::ChooseOption { options, .. } = &kinds_asked[0].1 else {
+        unreachable!()
+    };
+    // (Options read "+1/+1 counter", "stun counter".)
+    let chosen = options[1].trim_end_matches(" counter");
+    assert!(chosen == "stun" || chosen == counters::PLUS1, "{options:?}");
+    let other = if chosen == "stun" {
+        counters::PLUS1
+    } else {
+        "stun"
+    };
+    assert_eq!(t.counters(bears, chosen), 0, "the chosen kind was removed");
+    assert_eq!(t.counters(bears, other), 1, "and only one counter");
 
     // A permanent without counters is a legal target.
     let mut t = TestGame::new(2);
@@ -110,7 +118,7 @@ fn spinal_parasite_counters_and_its_ability() {
 
 #[test]
 fn walking_ballista_with_damage_runs_out_of_toughness() {
-    cr!("704.5g", "118.3");
+    cr!("704.5g");
     ruling!(
         "Walking Ballista",
         "it will be destroyed immediately after you activate the ability a second time"
@@ -276,7 +284,7 @@ fn ramos_cant_pay_for_a_spell_with_the_counters_it_gets_from_it() {
 
 #[test]
 fn surge_node_can_target_itself() {
-    cr!("118.3", "608.2c");
+    cr!("602.2b", "601.2h");
     ruling!(
         "Surge Node",
         "the ability will remove a counter from Surge Node and then put one onto it"
@@ -306,7 +314,10 @@ fn umezawas_jitte_mode_is_chosen_on_activation() {
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
     let ab = t.activate(P0, jitte, 0, &[]).unwrap().unwrap();
     let si = t.obj_now(ab).stack.clone().unwrap();
-    assert_eq!(si.chosen.iter().map(|c| c.mode).collect::<Vec<_>>(), vec![Some(2)]);
+    assert_eq!(
+        si.chosen.iter().map(|c| c.mode).collect::<Vec<_>>(),
+        vec![Some(2)]
+    );
     let from = t.asked().len();
     t.resolve_all();
     assert!(!asked_since(&t, from)
@@ -354,7 +365,7 @@ fn sporoloth_ancient_grants_its_ability_to_every_creature_you_control() {
 
 #[test]
 fn magmatic_core_with_no_age_counters_has_no_targets() {
-    cr!("601.2c", "603.3d");
+    cr!("601.2c", "601.2d", "603.3d");
     ruling!(
         "Magmatic Core",
         "If Magmatic Core has no age counters on it, the only number of targets the ability can have is zero."
@@ -369,7 +380,10 @@ fn magmatic_core_with_no_age_counters_has_no_targets() {
     assert!(top_is_trigger(&t));
     let top = *t.g.stack.last().unwrap();
     let si = t.obj_now(top).stack.clone().unwrap();
-    assert!(si.chosen.iter().all(|c| c.targets.iter().all(|s| s.is_empty())));
+    assert!(si
+        .chosen
+        .iter()
+        .all(|c| c.targets.iter().all(|s| s.is_empty())));
     t.resolve_all();
     assert_eq!(t.obj_now(bears).damage, 0);
     assert_eq!(t.counters(core, "age"), 0);
@@ -377,7 +391,7 @@ fn magmatic_core_with_no_age_counters_has_no_targets() {
 
 #[test]
 fn empowered_autogenerator_is_a_mana_ability() {
-    cr!("605.1a", "605.3a");
+    cr!("605.1a", "605.3b");
     ruling!(
         "Empowered Autogenerator",
         "Empowered Autogenerator's activated ability is a mana ability. It doesn't use the stack"
@@ -498,7 +512,7 @@ fn junk_creating_spells_with_illegal_targets_create_no_junk() {
     assert!(top_is_trigger(&t));
     kill(&mut t, ramos);
     t.resolve_all();
-    assert!(tokens(&t, P1).is_empty());
+    assert!(tokens(&t, P0).is_empty() && tokens(&t, P1).is_empty());
     // With the target still there, its controller gets the Junk.
     let mut t = TestGame::new(2);
     let ramos = t.battlefield(P1, "Ramos, Dragon Engine");
@@ -507,4 +521,44 @@ fn junk_creating_spells_with_illegal_targets_create_no_junk() {
     t.resolve_all();
     assert!(!t.on_battlefield(ramos));
     assert_eq!(tokens(&t, P1).len(), 1);
+}
+
+#[test]
+fn camp_creates_no_junk_if_its_target_is_illegal() {
+    // C.A.M.P.: "Whenever fortified land is tapped for mana, put a +1/+1 counter on target
+    // creature you control. If that creature shares a color with the mana that land
+    // produced, create a Junk token."
+    cr!("608.2b");
+    ruling!(
+        "C.A.M.P.",
+        "If each target chosen is illegal as that spell or ability tries to resolve, it won't resolve"
+    );
+    supported("C.A.M.P.");
+    // (target, destroyed in response, Junk tokens): a green creature for the Forest's {G}
+    // gets the counter and makes a Junk; a colorless one only gets the counter; a green
+    // one destroyed in response, nothing.
+    for (name, gone, junk) in [
+        ("Llanowar Elves", false, 1),
+        ("Ornithopter", false, 0),
+        ("Llanowar Elves", true, 0),
+    ] {
+        let mut t = TestGame::new(2);
+        let camp = t.battlefield(P0, "C.A.M.P.");
+        let forest = t.battlefield(P0, "Forest");
+        t.g.attach(camp, obj(forest));
+        t.g.recompute();
+        let c = t.battlefield(P0, name);
+        t.answer_targets(P0, &[obj(c)]);
+        t.activate(P0, forest, 0, &[]).unwrap();
+        t.settle();
+        assert!(top_is_trigger(&t), "{name}");
+        if gone {
+            kill(&mut t, c);
+        }
+        t.resolve_all();
+        assert_eq!(tokens(&t, P0).len(), junk, "{name} gone: {gone}");
+        if !gone {
+            assert_eq!(plus1(&t, c), 1, "{name}");
+        }
+    }
 }

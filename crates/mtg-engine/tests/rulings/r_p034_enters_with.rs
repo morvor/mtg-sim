@@ -64,11 +64,23 @@ fn apocalypse_hydra_doubles_its_counters_from_x_5_using_the_chosen_x() {
     );
     let mut t = TestGame::new(2);
     pool(&mut t, P0, ManaType::C, 4);
-    let h = cast_x(&mut t, P0, "Apocalypse Hydra", 4, &[ManaType::R, ManaType::G]);
+    let h = cast_x(
+        &mut t,
+        P0,
+        "Apocalypse Hydra",
+        4,
+        &[ManaType::R, ManaType::G],
+    );
     assert_eq!(plus1(&t, h), 4);
     let mut t = TestGame::new(2);
     pool(&mut t, P0, ManaType::C, 5);
-    let h = cast_x(&mut t, P0, "Apocalypse Hydra", 5, &[ManaType::R, ManaType::G]);
+    let h = cast_x(
+        &mut t,
+        P0,
+        "Apocalypse Hydra",
+        5,
+        &[ManaType::R, ManaType::G],
+    );
     assert_eq!(plus1(&t, h), 10);
     // With Krosan Drover (mana value 6 or greater costs {2} less), X = 5 costs only {3}
     // for X: the Hydra still enters with ten.
@@ -76,8 +88,18 @@ fn apocalypse_hydra_doubles_its_counters_from_x_5_using_the_chosen_x() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Krosan Drover");
     pool(&mut t, P0, ManaType::C, 3);
-    let h = cast_x(&mut t, P0, "Apocalypse Hydra", 5, &[ManaType::R, ManaType::G]);
-    assert_eq!(t.g.player(P0).mana_pool.total(), 0, "only five mana was spent");
+    let h = cast_x(
+        &mut t,
+        P0,
+        "Apocalypse Hydra",
+        5,
+        &[ManaType::R, ManaType::G],
+    );
+    assert_eq!(
+        t.g.player(P0).mana_pool.total(),
+        0,
+        "only five mana was spent"
+    );
     assert_eq!(plus1(&t, h), 10);
 }
 
@@ -237,7 +259,7 @@ fn galloping_lizrog_can_double_the_counters_it_entered_with() {
 
 #[test]
 fn realm_seekers_counts_the_cards_in_hand_as_it_enters() {
-    cr!("614.1c", "614.12");
+    cr!("614.1c");
     ruling!(
         "Realm Seekers",
         "If Realm Seekers enters the battlefield directly from a player's hand without being cast, it counts itself"
@@ -326,7 +348,11 @@ fn winding_constrictor_sees_a_permanent_entering_as_an_artifact() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Winding Constrictor");
     let jace = t.enter(P0, "Jace Beleren");
-    assert_eq!(t.counters(jace, counters::LOYALTY), 3, "not an artifact or creature");
+    assert_eq!(
+        t.counters(jace, counters::LOYALTY),
+        3,
+        "not an artifact or creature"
+    );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Winding Constrictor");
     t.battlefield(P0, "Mycosynth Lattice");

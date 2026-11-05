@@ -52,17 +52,29 @@ fn spark_rupture_planeswalkers_lose_all_abilities_and_can_gain_new_ones() {
         "loses all abilities it has, not only loyalty abilities. The resulting creature may gain abilities after Spark Rupture"
     );
     supported("Spark Rupture");
-    supported("Jace Beleren");
+    supported("Ugin, the Ineffable");
     supported("Jump");
+    // Ugin, the Ineffable's static ability ("Colorless spells you cast cost {2} less to
+    // cast") goes along with its loyalty abilities: Mind Stone costs {2} again.
     let mut t = TestGame::new(2);
-    let jace = t.battlefield(P0, "Jace Beleren");
-    t.battlefield(P0, "Spark Rupture");
-    assert!(t.obj_now(jace).is(CardType::Creature));
-    assert_eq!(t.pt(jace), (3, 3));
-    assert!(t.obj_now(jace).chars.abilities.is_empty());
-    cast_card(&mut t, P0, "Jump", &[obj(jace)]);
+    let ugin = t.battlefield(P0, "Ugin, the Ineffable");
+    let free = t.hand(P0, "Mind Stone");
+    t.cast(P0, free).go();
     t.resolve_all();
-    assert!(t.obj_now(jace).has_keyword(KeywordKind::Flying));
+    assert!(t.on_battlefield(free), "Ugin's static ability applies");
+    t.battlefield(P0, "Spark Rupture");
+    assert!(t.obj_now(ugin).is(CardType::Creature));
+    assert_eq!(t.pt(ugin), (4, 4));
+    assert!(t.obj_now(ugin).chars.abilities.is_empty());
+    let ms = t.hand(P0, "Mind Stone");
+    assert!(
+        t.cast(P0, ms).try_go().is_err(),
+        "no cost reduction any more"
+    );
+    // It can gain abilities afterwards.
+    cast_card(&mut t, P0, "Jump", &[obj(ugin)]);
+    t.resolve_all();
+    assert!(t.obj_now(ugin).has_keyword(KeywordKind::Flying));
 }
 
 #[test]
@@ -313,7 +325,11 @@ fn dockworker_drone_passes_on_its_minus1_counters_too() {
     put(&mut t, dd, counters::MINUS1, 2);
     assert!(!t.on_battlefield(dd));
     t.resolve_all();
-    assert_eq!(t.counters(sa, "growth"), 2, "a +1/+1 counter was put on the Giant");
+    assert_eq!(
+        t.counters(sa, "growth"),
+        2,
+        "a +1/+1 counter was put on the Giant"
+    );
     assert_eq!((plus1(&t, giant), minus1(&t, giant)), (0, 1));
     assert_eq!(t.pt(giant), (2, 2));
 }
@@ -415,16 +431,41 @@ fn rottenmouth_viper_opponent_may_always_lose_4_life() {
         "An opponent can always choose not to sacrifice a nonland permanent or discard a card"
     );
     supported("Rottenmouth Viper");
-    let mut t = TestGame::new(2);
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    let giant = t.hand(P1, "Hill Giant");
-    // P1 chooses nothing to sacrifice or discard, though it could.
-    t.answer_choose(P1, &[]);
-    crate::r_p038_common::enter(&mut t, P0, "Rottenmouth Viper");
-    t.resolve_all();
-    assert_eq!(t.life(P1), 16);
-    assert!(t.on_battlefield(bears));
-    assert_eq!(t.zone(giant), mtg_engine::object::Zone::Hand(P1));
+    // P1 is offered its Grizzly Bears and the Hill Giant in its hand, and may choose
+    // neither (losing 4 life) or one of them (losing none).
+    for pick in [None, Some("bears"), Some("giant")] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let giant = t.hand(P1, "Hill Giant");
+        let chosen = match pick {
+            Some("bears") => vec![obj(bears)],
+            Some(_) => vec![obj(giant)],
+            None => vec![],
+        };
+        t.answer_choose(P1, &chosen);
+        let from = t.asked().len();
+        crate::r_p038_common::enter(&mut t, P0, "Rottenmouth Viper");
+        t.resolve_all();
+        let offers: Vec<_> = crate::r_s01_common::asked_since(&t, from)
+            .into_iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseEntities {
+                    candidates, min, ..
+                } if p == P1 => Some((candidates, min)),
+                _ => None,
+            })
+            .collect();
+        // (The first choice; discarding the Giant then asks which card to discard.)
+        assert!(!offers.is_empty(), "{pick:?}");
+        assert_eq!(offers[0].1, 0, "choosing nothing is allowed");
+        assert!(offers[0].0.contains(&obj(bears)) && offers[0].0.contains(&obj(giant)));
+        assert_eq!(t.life(P1), if pick.is_none() { 16 } else { 20 }, "{pick:?}");
+        assert_eq!(t.on_battlefield(bears), pick != Some("bears"));
+        assert_eq!(
+            t.zone(giant) == mtg_engine::object::Zone::Hand(P1),
+            pick != Some("giant")
+        );
+    }
 }
 
 #[test]
@@ -450,41 +491,131 @@ fn thief_of_blood_removes_loyalty_but_not_player_counters() {
     assert_eq!(plus1(&t, bears), 0);
 }
 
+const NISSA: &str = "Nissa, Steward of Elements";
+
+/// P0 casts Nissa, Steward of Elements with X = `x` (paying {X}{G}{U} from the pool) and
+/// returns the spell.
+fn cast_nissa(t: &mut TestGame, x: u32) -> ObjectId {
+    pool(t, P0, ManaType::G, 1);
+    pool(t, P0, ManaType::U, 1);
+    pool(t, P0, ManaType::C, x);
+    let nissa = t.hand(P0, NISSA);
+    t.cast(P0, nissa).x(x as i64).go()
+}
+
 #[test]
 fn nissa_with_x_0_dies_before_her_abilities_can_be_activated() {
-    cr!("306.5b", "107.3m", "704.5i");
+    cr!("306.5b", "107.3m", "704.5i", "117.5");
     ruling!(
         "Nissa, Steward of Elements",
         "If X is 0, Nissa enters the battlefield with no loyalty"
     );
+    supported(NISSA);
+    // X = 0: she's put into the graveyard before P0 gets priority with her on the
+    // battlefield.
     let mut t = TestGame::new(2);
-    pool(&mut t, P0, ManaType::G, 1);
-    pool(&mut t, P0, ManaType::U, 1);
-    let nissa = t.hand(P0, "Nissa, Steward of Elements");
-    t.cast(P0, nissa).x(0).go();
-    t.resolve_all();
-    assert!(t.in_graveyard(P0, "Nissa, Steward of Elements"));
-    // With X = 2, she enters with two loyalty counters (her printed loyalty is X, CR
-    // 107.3m; the engine used to give her none).
+    let seen = watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::Priority { .. }),
+        |g| {
+            g.battlefield
+                .iter()
+                .any(|o| g.obj(*o).chars.name == "Nissa, Steward of Elements")
+        },
+    );
+    cast_nissa(&mut t, 0);
+    let ok =
+        t.g.run_until(10_000, |g| g.turn.step != Step::PrecombatMain);
+    assert!(ok);
+    assert!(t.in_graveyard(P0, NISSA));
+    let seen = seen.lock().unwrap().clone();
+    assert!(!seen.is_empty());
+    assert!(
+        seen.iter().all(|on| !on),
+        "no priority with Nissa on the battlefield"
+    );
+    // With X = 2, she enters with two loyalty counters (her printed loyalty is X).
     let mut t = TestGame::new(2);
-    pool(&mut t, P0, ManaType::G, 1);
-    pool(&mut t, P0, ManaType::U, 1);
-    pool(&mut t, P0, ManaType::C, 2);
-    let nissa = t.hand(P0, "Nissa, Steward of Elements");
-    t.cast(P0, nissa).x(2).go();
+    let nissa = cast_nissa(&mut t, 2);
     t.resolve_all();
+    assert!(t.on_battlefield(nissa));
+    assert_eq!(t.counters(nissa, counters::LOYALTY), 2);
+}
+
+#[test]
+fn a_printed_loyalty_of_x_is_the_x_of_the_spell_the_permanent_was() {
+    // Nissa, Steward of Elements (loyalty X) enters with the X of the spell that became
+    // her (CR 107.3m with 306.5b); a copy of that spell has the same X (CR 707.10) and
+    // becomes a token with that many (608.3f). Put onto the battlefield any other way, or
+    // as what a permanent copying her entered as, she has 0 for X (plus what a copy
+    // exception adds, CR 707.9).
+    cr!("306.5b", "107.3m", "707.10", "608.3f", "707.2", "707.9b");
+    supported(NISSA);
+    supported("Lithoform Engine");
+    supported("Felidar Guardian");
+    supported("Spark Double");
+
+    // A copy of the Nissa spell cast with X = 3 enters as a token with three.
+    let mut t = TestGame::new(2);
+    let engine = t.battlefield(P0, "Lithoform Engine");
+    let nissa = cast_nissa(&mut t, 3);
+    pool(&mut t, P0, ManaType::C, 4);
+    t.activate(P0, engine, 2, &[obj(nissa)]).unwrap();
+    t.resolve(); // the Engine's ability: the copy goes on the stack
+    t.resolve(); // the copy
+    let token = t
+        .named_on_battlefield(NISSA)
+        .into_iter()
+        .find(|o| t.obj_now(*o).is_token())
+        .expect("the copy became a token");
+    assert_eq!(t.counters(token, counters::LOYALTY), 3);
+
+    // Flickered by Felidar Guardian, a Nissa cast with X = 2 returns with no loyalty: she
+    // wasn't cast as she entered this time.
+    let mut t = TestGame::new(2);
+    let nissa = cast_nissa(&mut t, 2);
+    t.resolve_all();
+    let nissa = t.g.current(nissa);
+    assert_eq!(t.counters(nissa, counters::LOYALTY), 2);
+    t.answer_targets(P0, &[obj(nissa)]);
+    t.answer_yes(P0, true);
+    crate::r_p038_common::enter(&mut t, P0, "Felidar Guardian");
+    t.resolve_all();
+    assert!(t.named_on_battlefield(NISSA).is_empty());
+    assert!(t.in_graveyard(P0, NISSA));
+
+    // Spark Double entering as a copy of that Nissa: X is 0 for it (its own spell had no
+    // X, and the original's X and counters aren't copied), so it has just the additional
+    // loyalty counter.
+    let mut t = TestGame::new(2);
+    let nissa = cast_nissa(&mut t, 2);
+    t.resolve_all();
+    let nissa = t.g.current(nissa);
+    t.answer_choose(P0, &[obj(nissa)]);
+    let sd = cast_card(&mut t, P0, "Spark Double", &[]);
+    t.resolve_all();
+    let sd = t.g.current(sd);
+    assert!(t.on_battlefield(sd) && t.on_battlefield(nissa), "it isn't legendary");
+    assert_eq!(t.obj_now(sd).chars.name, NISSA);
+    assert_eq!(t.counters(sd, counters::LOYALTY), 1);
     assert_eq!(t.counters(nissa, counters::LOYALTY), 2);
 }
 
 #[test]
 fn a_phased_out_token_phases_in_and_triggers_king_of_the_oathbreakers() {
-    cr!("702.26a", "702.26b");
+    cr!("702.26a", "702.26c", "702.26d");
     ruling!(
         "King of the Oathbreakers",
         "A phased-out token will phase in at the beginning of its controller's untap step"
     );
+    ruling!(
+        "Ripples of Potential",
+        "A phased-out token will phase in at the beginning of its controller's untap step"
+    );
     supported("King of the Oathbreakers");
     supported("Lingering Souls");
+    supported("Ripples of Potential");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "King of the Oathbreakers");
     cast_card(&mut t, P0, "Lingering Souls", &[]);
@@ -501,6 +632,26 @@ fn a_phased_out_token_phases_in_and_triggers_king_of_the_oathbreakers() {
     assert!(!phased_out(&t, target));
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 3, "a new tapped Spirit");
+
+    // Ripples of Potential phases out a Spirit token it proliferated: the token stays on
+    // the battlefield with its counters through P1's turn and phases in at P0's untap step.
+    let mut t = TestGame::new(2);
+    cast_card(&mut t, P0, "Lingering Souls", &[]);
+    t.resolve_all();
+    let spirit = tokens(&t, P0)[0];
+    put(&mut t, spirit, counters::PLUS1, 1);
+    t.answer_choose(P0, &[obj(spirit)]);
+    t.answer_choose(P0, &[obj(spirit)]);
+    cast_card(&mut t, P0, "Ripples of Potential", &[]);
+    t.resolve_all();
+    assert!(phased_out(&t, spirit));
+    t.advance_to(P1, Step::Upkeep);
+    assert!(phased_out(&t, spirit));
+    assert!(t.g.battlefield.contains(&spirit), "it still exists");
+    t.advance_to(P0, Step::Upkeep);
+    assert!(!phased_out(&t, spirit));
+    assert_eq!(t.g.current(spirit), spirit, "the same object");
+    assert_eq!(plus1(&t, spirit), 2);
 }
 
 #[test]
@@ -522,7 +673,11 @@ fn for_as_long_as_effects_end_when_their_object_phases_out() {
     supported("Talon Gates of Madara");
     supported("Ripples of Potential");
     supported("Sower of Temptation");
-    for how in ["Galadriel's Dismissal", "Talon Gates of Madara", "Ripples of Potential"] {
+    for how in [
+        "Galadriel's Dismissal",
+        "Talon Gates of Madara",
+        "Ripples of Potential",
+    ] {
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P1, "Grizzly Bears");
         t.answer_targets(P0, &[obj(bears)]);
@@ -568,7 +723,10 @@ fn the_magic_mirror_doesnt_count_adventurer_cards() {
     pool(&mut t, P0, ManaType::U, 3);
     pool(&mut t, P0, ManaType::C, 5);
     let mm = t.hand(P0, "The Magic Mirror");
-    assert!(t.cast(P0, mm).try_go().is_err(), "costs {{6}}{{U}}{{U}}{{U}}");
+    assert!(
+        t.cast(P0, mm).try_go().is_err(),
+        "costs {{6}}{{U}}{{U}}{{U}}"
+    );
     t.graveyard(P0, "Divination");
     t.cast(P0, mm).go();
     assert_eq!(t.g.player(P0).mana_pool.total(), 0);
@@ -592,4 +750,45 @@ fn diary_of_dreams_is_a_book_artifact() {
     t.activate(P0, dd, 0, &[]).unwrap();
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn denry_klin_puts_its_counters_on_each_nontoken_creature_you_control_entering() {
+    // Its Oracle wording: "Whenever a nontoken creature you control enters, if Denry Klin
+    // has counters on it, put the same number of each kind of counter on that creature."
+    cr!("603.4", "122.6");
+    ruling!(
+        "Denry Klin, Editor in Chief",
+        "if Denry has counters on it, put the same number of each kind of counter on that creature"
+    );
+    supported("Denry Klin, Editor in Chief");
+    supported("Raise the Alarm");
+    let mut t = TestGame::new(2);
+    let denry = t.battlefield(P0, "Denry Klin, Editor in Chief");
+    // Without counters: no trigger.
+    crate::r_p038_common::enter(&mut t, P0, "Grizzly Bears");
+    assert_eq!(t.stack_len(), 0);
+    put(&mut t, denry, counters::PLUS1, 2);
+    put(&mut t, denry, "vigilance", 1);
+    // A nontoken creature you control: the same number of each kind.
+    let bears = crate::r_p038_common::enter(&mut t, P0, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!((plus1(&t, bears), t.counters(bears, "vigilance")), (2, 1));
+    assert_eq!((plus1(&t, denry), t.counters(denry, "vigilance")), (2, 1));
+    // Tokens and an opponent's creature: none.
+    cast_card(&mut t, P0, "Raise the Alarm", &[]);
+    t.resolve_all();
+    let soldiers = tokens(&t, P0);
+    assert_eq!(soldiers.len(), 2);
+    assert!(soldiers.iter().all(|s| total_counters(&t, *s) == 0));
+    let theirs = crate::r_p038_common::enter(&mut t, P1, "Grizzly Bears");
+    t.resolve_all();
+    assert_eq!(total_counters(&t, theirs), 0);
+    // Denry's counters gone by the time the trigger resolves: there's nothing to copy.
+    let late = crate::r_p038_common::enter(&mut t, P0, "Hill Giant");
+    assert!(top_is_trigger(&t));
+    t.g.remove_counters(obj(denry), counters::PLUS1, 2);
+    t.g.remove_counters(obj(denry), "vigilance", 1);
+    t.resolve_all();
+    assert_eq!(total_counters(&t, late), 0);
 }
