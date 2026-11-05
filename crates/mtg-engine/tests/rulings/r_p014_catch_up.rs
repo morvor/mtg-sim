@@ -94,13 +94,24 @@ fn arbiter_of_knollridge_in_two_headed_giant_one_member_gains() {
     let mut t = thg();
     t.g.lose_life(P3, 12);
     t.settle();
-    t.answer_choose(P2, &[pl(P2)]);
-    t.answer_choose(P0, &[pl(P0)]);
+    // Ajani's Pridemate: "Whenever you gain life, put a +1/+1 counter on this creature."
+    let cat2 = t.battlefield(P2, "Ajani's Pridemate");
+    let cat3 = t.battlefield(P3, "Ajani's Pridemate");
+    // P2's team (18 life) chooses P3; P0's team already has the highest total.
+    t.answer_choose(P2, &[pl(P3)]);
+    t.answer_choose(P0, &[pl(P1)]);
     let from = t.g.turn_events.len();
     enter(&mut t, P0, "Arbiter of Knollridge");
     t.resolve_all();
-    assert_eq!(life_changes(&t, from), vec![(P2, 12)]);
+    assert_eq!(life_changes(&t, from), vec![(P3, 12)]);
     assert_eq!(lives(&t), vec![30, 30, 30, 30]);
+    assert_eq!(
+        (
+            t.counters(cat2, counters::PLUS1),
+            t.counters(cat3, counters::PLUS1)
+        ),
+        (0, 1)
+    );
 }
 
 /// The Scryfall ruling "In other multiplayer formats, each player's life total is set to
