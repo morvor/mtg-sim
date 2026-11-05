@@ -293,6 +293,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the ability uses the stack.
 - Recorded: exemption `docs/rulings-exemptions/rulings-S22.tsv`; test `tests/cards/c4_mana_symbols.rs` (`charmed_pendant_adds_one_mana_for_each_colored_symbol_of_the_milled_card`).
 
+### Kurkesh, Onakke Ancient and Illusionist's Bracers: a mana ability's three criteria
+- Kind: outdated
+- Status: open for review
+- Ruling, Kurkesh, Onakke Ancient (2014-07-18): "A mana ability is an ability that (1) could add mana when it resolves, (2) isn't a loyalty ability, and (3) doesn't require a target."
+- Ruling, Illusionist's Bracers (2013-04-15): "A mana ability is an ability that (1) isn't a loyalty ability, (2) doesn't target, and (3) could add mana when it resolves."
+- Conflicts with: CR 605.1a: "An activated ability is a mana ability if it meets all of the following criteria: it doesn’t require a target (see rule 115.6), it could add mana to a player’s mana pool when it resolves, it’s not a loyalty ability (see rule 606, “Loyalty Abilities”), and its cost and effect don’t move any card to or from a library. ..." Chromatic Sphere (2026-08-05): "Chromatic Sphere’s ability is not a mana ability. Players can respond to it, and it can’t be activated in the middle of paying for a cost. A recent update to rule 605.1a has made any abilities that move cards to or from libraries no longer mana abilities." Kurkesh: "Whenever you activate an ability of an artifact, if it isn't a mana ability, you may pay {R}. If you do, copy that ability. ..." Illusionist's Bracers: "Whenever an ability of equipped creature is activated, if it isn't a mana ability, copy that ability. ..."
+- Evidence: both rulings define a mana ability by the three criteria of the CR of their time (Kurkesh's for Magic 2015, 2014-07-18; the 2013-04-15 text is also on Drain Power, Pygmy Hippo, Imprison, Burning-Tree Shaman and Tsabo's Web); the library criterion entered 605.1a with the CR revision effective 2026-08-07, as for Deranged Assistant above (work item ruling-conflicts-1, case 9). Every criterion they list is still required, and they still hold for every ability that doesn't move a card to or from a library; as definitions, they now also admit abilities that aren't mana abilities, such as Chromatic Sphere's ("{1}, {T}, Sacrifice this artifact: Add one mana of any color. Draw a card. (Activate only as an instant.)") and Deranged Assistant's ("{T}, Mill a card: Add {C}. (Activate only as an instant. ...)"), so Kurkesh and the Bracers copy those. No words of the rulings are wrong, only their completeness, so nothing is exempted: both stay cited for what they say (Kurkesh's in rulings batch P019, by the rulings-P019 reviewer; the Bracers' in S27).
+- Engine: activated abilities whose cost or effect moves a card to or from a library aren't mana abilities and use the stack; Kurkesh copies Chromatic Sphere's ability and Illusionist's Bracers copies Deranged Assistant's.
+- Recorded: tests `tests/rulings/r_p019_activation_copies.rs` (`kurkesh_doesnt_copy_mana_abilities`, `abilities_that_add_mana_and_draw_or_mill_are_copied_as_non_mana_abilities`), `tests/rulings/r_s27_copy_abilities.rs` (`illusionist_s_bracers_doesn_t_copy_a_mana_ability`).
+
 ### Modal double-faced cards: "can't be transformed"
 - Kind: outdated
 - Status: open for review
