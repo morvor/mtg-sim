@@ -647,9 +647,25 @@ impl Game {
         o.next.is_none() && o.zone != Zone::Nowhere
     }
 
+    /// The objects a "for as long as" duration about them can still see: the phased-out
+    /// ones are left out (CR 702.26f).
+    fn seen_by_duration(&self, v: &[ObjectId]) -> Vec<Entity> {
+        v.iter()
+            .filter(|o| !self.obj(**o).phased_out)
+            .map(|o| Entity::Object(*o))
+            .collect()
+    }
+
+    /// Whether a "for as long as it has a [kind] counter on it" duration still sees the
+    /// object with such a counter: it's live and not phased out (CR 611.2b, 702.26f).
+    fn has_counter_seen(&self, o: ObjectId, kind: &str) -> bool {
+        self.is_live(o) && !self.obj(o).phased_out && self.obj(o).counter(kind) > 0
+    }
+
     fn expire_dependent_effects(&mut self) {
         // "For as long as it has a [kind] counter on it" (CR 611.2b): an object that no
-        // longer has one stops being affected for good.
+        // longer has one stops being affected for good. A phased-out one can't be seen to
+        // have one, so it stops too (CR 702.26f).
         for i in 0..self.effects.len() {
             let (Duration::WhileAffectedHasCounter(kind), Affected::Objects(v)) =
                 (&self.effects[i].duration, &self.effects[i].affected)
@@ -659,7 +675,7 @@ impl Game {
             let keep: Vec<ObjectId> = v
                 .iter()
                 .copied()
-                .filter(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0)
+                .filter(|o| self.has_counter_seen(*o, kind))
                 .collect();
             if keep.len() != v.len() {
                 self.effects[i].affected = Affected::Objects(keep);
@@ -678,7 +694,7 @@ impl Game {
             let keep: Vec<ObjectId> = v
                 .iter()
                 .copied()
-                .filter(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0)
+                .filter(|o| self.has_counter_seen(*o, kind))
                 .collect();
             if keep.len() != v.len() {
                 self.rule_effects[i].objects = Some(keep);
@@ -723,14 +739,12 @@ impl Game {
         let mut remove: Vec<u32> = Vec::new();
         for e in &self.effects {
             // "For as long as that creature has a bounty counter on it, it has ...": a
-            // condition about the objects the effect applies to (CR 611.2b).
+            // condition about the objects the effect applies to (CR 611.2b), which can't
+            // see a phased-out one (CR 702.26f).
             let about_affected = match (&e.duration, &e.affected) {
                 (Duration::WhileCondition(c), Affected::Objects(v)) => {
                     let mut ctx = Ctx::new(e.source, e.controller);
-                    ctx.set_var(
-                        vars::AFFECTED,
-                        v.iter().map(|o| Entity::Object(*o)).collect(),
-                    );
+                    ctx.set_var(vars::AFFECTED, self.seen_by_duration(v));
                     Some(!self.eval_cond(c, &ctx))
                 }
                 _ => None,
@@ -849,16 +863,13 @@ impl Game {
         match (d, objects) {
             (Duration::WhileCondition(c), Some(v)) => {
                 let mut ctx = Ctx::new(source, controller);
-                ctx.set_var(
-                    vars::AFFECTED,
-                    v.iter().map(|o| Entity::Object(*o)).collect(),
-                );
+                ctx.set_var(vars::AFFECTED, self.seen_by_duration(v));
                 !self.eval_cond(c, &ctx)
             }
             // CR 611.2b: none of them has such a counter (any more).
-            (Duration::WhileAffectedHasCounter(kind), Some(v)) => !v
-                .iter()
-                .any(|o| self.is_live(*o) && self.obj(*o).counter(kind) > 0),
+            (Duration::WhileAffectedHasCounter(kind), Some(v)) => {
+                !v.iter().any(|o| self.has_counter_seen(*o, kind))
+            }
             _ => self.effect_expired(d, source, controller),
         }
     }
