@@ -68,6 +68,12 @@ pub struct Ctx {
     /// [`crate::event_causes::Cause::of`].
     #[serde(default)]
     pub cause: Option<crate::event_causes::Cause>,
+    /// For an effect a replacement effect deferred until after the event ("draw that many
+    /// cards instead", run after the rest of the event, CR 121.7): the replacement effects
+    /// already applied to the event it replaced, which don't apply again to the events it
+    /// causes (CR 614.5).
+    #[serde(skip)]
+    pub repl_applied: Vec<crate::replacement::ReplKey>,
     /// The effects performed with this context are paying a cost (CR 118, 602.2b): counters
     /// they put aren't put by an effect ([`crate::events::CounterOrigin::Cost`]).
     #[serde(default)]
