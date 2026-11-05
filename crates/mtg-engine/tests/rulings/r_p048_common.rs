@@ -9,9 +9,9 @@ use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
+pub use crate::r_p053_common::concede;
 pub use crate::r_p124_common::*;
 pub use crate::r_p127_common::{move_to, named_by, tap};
-pub use crate::r_p053_common::concede;
 
 /// The tokens `p` controls with the subtype `subtype`.
 pub fn tokens_of(t: &TestGame, p: PlayerId, subtype: &str) -> usize {

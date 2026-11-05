@@ -25,13 +25,10 @@ fn audience_for(n: usize, under: PlayerId) -> (TestGame, ObjectId) {
 /// The modes `p` was offered by its last mode choice since decision `from` (None if not
 /// asked).
 fn offered_modes(t: &TestGame, p: PlayerId, from: usize) -> Option<Vec<usize>> {
-    t.asked()[from..]
-        .iter()
-        .rev()
-        .find_map(|(q, d)| match d {
-            Decision::ChooseModes { available, .. } if *q == p => Some(available.clone()),
-            _ => None,
-        })
+    t.asked()[from..].iter().rev().find_map(|(q, d)| match d {
+        Decision::ChooseModes { available, .. } if *q == p => Some(available.clone()),
+        _ => None,
+    })
 }
 
 /// Advances to `p`'s next upkeep, answering its mode choice with `mode`, and resolves

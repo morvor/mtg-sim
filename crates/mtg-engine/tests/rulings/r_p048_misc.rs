@@ -25,12 +25,11 @@ fn fracture(t: &mut TestGame, target: ObjectId) -> Vec<ObjectId> {
     cast_new(t, P0, "Fractured Identity", &[obj(target)]);
     t.resolve_all();
     assert!(!t.on_battlefield(target));
-    let new: Vec<ObjectId> = t
-        .g
-        .permanents()
-        .filter(|o| o.is_token() && !before.contains(&o.id))
-        .map(|o| o.id)
-        .collect();
+    let new: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.is_token() && !before.contains(&o.id))
+            .map(|o| o.id)
+            .collect();
     let owners: Vec<PlayerId> = new.iter().map(|o| t.obj(*o).controller).collect();
     assert_eq!(owners, vec![P0, P2], "one token each for P0 and P2");
     new
@@ -48,7 +47,10 @@ fn fractured_identitys_tokens_have_enters_abilities_and_replacements() {
     let v = t.battlefield(P1, "Elvish Visionary");
     let hands = (t.hand_size(P0), t.hand_size(P2));
     fracture(&mut t, v);
-    assert_eq!((t.hand_size(P0), t.hand_size(P2)), (hands.0 + 1, hands.1 + 1));
+    assert_eq!(
+        (t.hand_size(P0), t.hand_size(P2)),
+        (hands.0 + 1, hands.1 + 1)
+    );
     // Spike Feeder: "This creature enters with two +1/+1 counters on it."
     supported("Spike Feeder");
     let mut t = TestGame::new(3);
@@ -85,7 +87,11 @@ fn fractured_identity_copies_only_the_copiable_values() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     put_counters(&mut t, bears, "+1/+1", 1);
     attach_new(&mut t, P1, "Holy Strength", obj(bears));
-    modify_until_eot(&mut t, bears, vec![Modification::ModifyPT(Value::c(3), Value::c(3))]);
+    modify_until_eot(
+        &mut t,
+        bears,
+        vec![Modification::ModifyPT(Value::c(3), Value::c(3))],
+    );
     tap(&mut t, bears);
     for tok in fracture(&mut t, bears) {
         assert_eq!(name_now(&t, tok), "Grizzly Bears");
@@ -96,7 +102,11 @@ fn fractured_identity_copies_only_the_copiable_values() {
     // A 1/1 Zombie token, pumped: the tokens are 1/1 Zombies.
     let mut t = TestGame::new(3);
     let z = create_token(&mut t, P1, "Zombie");
-    modify_until_eot(&mut t, z, vec![Modification::ModifyPT(Value::c(2), Value::c(2))]);
+    modify_until_eot(
+        &mut t,
+        z,
+        vec![Modification::ModifyPT(Value::c(2), Value::c(2))],
+    );
     for tok in fracture(&mut t, z) {
         assert!(t.obj(tok).chars.has_subtype("Zombie"));
         assert_eq!(t.pt(tok), (1, 1));
@@ -153,7 +163,9 @@ fn declaration_in_stone_exiles_only_creatures_sharing_the_targets_name() {
     modify_until_eot(
         &mut t,
         b,
-        vec![Modification::AddKeyword(Keyword::new(KeywordKind::Hexproof))],
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Hexproof,
+        ))],
     );
     cast_new(&mut t, P0, "Declaration in Stone", &[obj(a)]);
     t.resolve_all();
@@ -222,7 +234,11 @@ fn oversimplify_counts_power_as_the_creatures_last_existed() {
     let cmdr = t.battlefield(P1, "Craw Wurm");
     t.g.objects[cmdr.0 as usize].is_commander = true;
     t.g.players[1].commander_names.push("Craw Wurm".into());
-    modify_until_eot(&mut t, cmdr, vec![Modification::ModifyPT(Value::c(2), Value::c(0))]);
+    modify_until_eot(
+        &mut t,
+        cmdr,
+        vec![Modification::ModifyPT(Value::c(2), Value::c(0))],
+    );
     t.battlefield(P0, "Hill Giant");
     t.answer(P1, DecisionKind::YesNo, Answer::Bool(true));
     cast_new(&mut t, P0, "Oversimplify", &[]);
@@ -335,7 +351,9 @@ fn baffling_ends_abilities_are_independent() {
     modify_until_eot(
         &mut t,
         bears,
-        vec![Modification::AddKeyword(Keyword::new(KeywordKind::Hexproof))],
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Hexproof,
+        ))],
     );
     t.resolve_all();
     assert!(t.on_battlefield(bears));
@@ -477,7 +495,13 @@ fn alirios_untaps_only_in_untap_steps_without_a_reflection_or_by_effects() {
     assert!(t.obj_now(alirios).tapped);
     // An effect untaps it (Kiora's Follower: "{T}: Untap another target permanent.").
     let follower = t.battlefield(P0, "Kiora's Follower");
-    activate_with(&mut t, P0, follower, "Untap another target permanent", &[obj(alirios)]);
+    activate_with(
+        &mut t,
+        P0,
+        follower,
+        "Untap another target permanent",
+        &[obj(alirios)],
+    );
     t.resolve_all();
     assert!(!t.obj_now(alirios).tapped);
     // Tapped again, then the Reflection leaves: still tapped until the next untap step.
@@ -567,7 +591,11 @@ fn removal_whose_target_changes_before_resolution() {
     t.answer_targets(P0, &[obj(bears)]);
     t.cast(P0, card).method(CastMethod::Half(1)).go();
     let lib = t.library_size(P0);
-    modify_until_eot(&mut t, bears, vec![Modification::ModifyPT(Value::c(3), Value::c(3))]);
+    modify_until_eot(
+        &mut t,
+        bears,
+        vec![Modification::ModifyPT(Value::c(3), Value::c(3))],
+    );
     t.resolve_all();
     assert!(t.on_battlefield(bears));
     assert_eq!(t.zone(t.g.current(card)), Zone::Graveyard(P0));

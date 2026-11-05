@@ -57,7 +57,12 @@ fn harmless_offering_cant_be_refused() {
     supported("Harmless Offering");
     let mut t = TestGame::new(2);
     let ring = t.battlefield(P0, "Sol Ring");
-    cast_new(&mut t, P0, "Harmless Offering", &[Entity::Player(P1), obj(ring)]);
+    cast_new(
+        &mut t,
+        P0,
+        "Harmless Offering",
+        &[Entity::Player(P1), obj(ring)],
+    );
     let from = t.asked().len();
     t.resolve_all();
     assert_eq!(controller(&mut t, ring), P1);

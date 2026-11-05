@@ -99,12 +99,11 @@ fn may_skip_attack(creature: &str, obstacle: Obstacle, setup: fn(&mut TestGame))
     let mut t = TestGame::new(2);
     setup(&mut t);
     t.advance_to(P1, Step::Upkeep);
-    let tokens: Vec<ObjectId> = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P1 && o.is_token())
-        .map(|o| o.id)
-        .collect();
+    let tokens: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.is_token())
+            .map(|o| o.id)
+            .collect();
     for tok in tokens {
         tap(&mut t, tok);
     }
@@ -173,11 +172,10 @@ fn pursued_whales_tax_is_added_before_cost_reductions() {
     t.lands(P1, "Wastes", 3);
     let bolt = t.hand(P1, "Lightning Bolt");
     let spell = t.cast_with(P1, bolt, &[obj(whale)]).expect("cast");
-    let tapped = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P1 && o.tapped)
-        .count();
+    let tapped =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.tapped)
+            .count();
     assert_eq!(tapped, 3);
     assert_eq!(t.g.mana_value_of(spell), 1);
 }

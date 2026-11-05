@@ -114,7 +114,11 @@ fn berserkers_frenzy_blocks_must_be_legal_and_costs_can_be_declined() {
     frenzied_attack(&mut t, &[angel, bears]);
     assert!(!legal_blocks(&mut t, P1, &[(ogre, angel)]));
     assert!(legal_blocks(&mut t, P1, &[(ogre, bears)]));
-    t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![(ogre, angel)]));
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(ogre, angel)]),
+    );
     let from = t.asked().len();
     to_blocks(&mut t);
     assert!(block_deciders(&t, from).contains(&P0));
@@ -131,7 +135,11 @@ fn berserkers_frenzy_blocks_must_be_legal_and_costs_can_be_declined() {
         let ogre = t.battlefield(P1, "Gray Ogre");
         t.lands(P1, "Wastes", 1);
         frenzied_attack(&mut t, &[archangel, bears]);
-        t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![(ogre, bears)]));
+        t.answer(
+            P0,
+            DecisionKind::Blockers,
+            Answer::Blockers(vec![(ogre, bears)]),
+        );
         t.answer_yes(P1, pays);
         t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![]));
         let from = t.asked().len();
@@ -196,7 +204,11 @@ fn ranger_class_doesnt_change_when_creatures_can_be_cast() {
         ranger_class(&mut t, 3);
         lands_for_cost(&mut t, P0, creature);
         let top = t.library_top(P0, creature);
-        assert_eq!(castable(&mut t, P0, top), main, "{creature} in P0's main phase");
+        assert_eq!(
+            castable(&mut t, P0, top),
+            main,
+            "{creature} in P0's main phase"
+        );
         t.set_step(P1, Step::PrecombatMain);
         assert_eq!(castable(&mut t, P0, top), theirs, "{creature} in P1's turn");
     }
@@ -436,11 +448,7 @@ fn green_dragons_poison_breath_outlasts_it_and_isnt_deathtouch() {
     let giant = t.battlefield(P1, "Hill Giant");
     to_combat(&mut t, P0);
     let from = t.asked().len();
-    t.answer(
-        P0,
-        DecisionKind::Damage,
-        Answer::Numbers(vec![1, 5]),
-    );
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![1, 5]));
     t.attack(&[(maw, Entity::Player(P1))], &[(giant, maw)]);
     let lethal = t.asked()[from..].iter().find_map(|(_, d)| match d {
         Decision::AssignCombatDamage { lethal, .. } => Some(lethal.clone()),
@@ -487,7 +495,9 @@ fn zariel_emblems(t: &mut TestGame, n: usize) {
     supported("Zariel, Archduke of Avernus");
     for _ in 0..n {
         let z = t.battlefield(P0, "Zariel, Archduke of Avernus");
-        t.g.objects[z.0 as usize].counters.insert("loyalty".into(), 6);
+        t.g.objects[z.0 as usize]
+            .counters
+            .insert("loyalty".into(), 6);
         activate_with(t, P0, z, "emblem", &[]);
         t.resolve_all();
     }
@@ -581,7 +591,11 @@ fn several_zariel_emblems_give_several_combats_with_no_untap_between_them() {
     );
     t.advance_to(P0, Step::EndOfCombat);
     t.settle();
-    assert_eq!(t.stack_len(), 2, "both trigger at the end of the first combat");
+    assert_eq!(
+        t.stack_len(),
+        2,
+        "both trigger at the end of the first combat"
+    );
     t.resolve_all();
     assert!(!t.obj_now(bears).tapped);
     // First additional combat: the Bears attack again.
@@ -618,9 +632,10 @@ fn sculpted_sunburst_chooses_on_resolution_without_targeting() {
     let elves = t.battlefield(P1, "Llanowar Elves");
     let from = t.asked().len();
     cast_new(&mut t, P0, "Sculpted Sunburst", &[]);
-    assert!(t.asked()[from..]
-        .iter()
-        .all(|(_, d)| !matches!(d, Decision::ChooseTargets { .. } | Decision::ChooseEntities { .. })));
+    assert!(t.asked()[from..].iter().all(|(_, d)| !matches!(
+        d,
+        Decision::ChooseTargets { .. } | Decision::ChooseEntities { .. }
+    )));
     // P0 chooses the Hill Giant; P1 chooses its hexproof Gladecover Scout; the rest are
     // exiled.
     t.answer_choose(P0, &[obj(giant)]);

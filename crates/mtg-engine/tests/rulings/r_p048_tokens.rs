@@ -59,7 +59,11 @@ fn start(t: &mut TestGame, card: &str, how: Start, target: ObjectId) {
                 .target(bears)
                 .go();
             // The mutating spell resolves (merging on top); its ability targets the object.
-            t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(0));
+            t.answer(
+                P0,
+                DecisionKind::Option,
+                mtg_engine::decision::Answer::Index(0),
+            );
             t.answer_targets(P0, &[obj(target)]);
             t.resolve();
             t.settle();
@@ -76,7 +80,12 @@ const CASES: &[(&str, Start, &str, &str)] = &[
     ("Bovine Intervention", Start::Cast, "Grizzly Bears", "Ox"),
     ("Harsh Annotation", Start::Cast, "Grizzly Bears", "Inkling"),
     ("Crib Swap", Start::Cast, "Grizzly Bears", "Shapeshifter"),
-    ("Incubation // Incongruity", Start::CastHalf, "Grizzly Bears", "Frog"),
+    (
+        "Incubation // Incongruity",
+        Start::CastHalf,
+        "Grizzly Bears",
+        "Frog",
+    ),
     ("Pongify", Start::Cast, "Grizzly Bears", "Ape"),
     ("Transmogrifying Wand", Start::Wand, "Grizzly Bears", "Ox"),
     ("Sawtusk Demolisher", Start::Mutate, "Sol Ring", "Beast"),
@@ -84,7 +93,12 @@ const CASES: &[(&str, Start, &str, &str)] = &[
     ("Angelic Ascension", Start::Cast, "Grizzly Bears", "Angel"),
     ("Stroke of Midnight", Start::Cast, "Grizzly Bears", "Human"),
     ("Cavalier of Dawn", Start::Enter, "Grizzly Bears", "Golem"),
-    ("Soul of Emancipation", Start::Enter, "Grizzly Bears", "Angel"),
+    (
+        "Soul of Emancipation",
+        Start::Enter,
+        "Grizzly Bears",
+        "Angel",
+    ),
 ];
 
 #[test]
@@ -215,7 +229,12 @@ fn a_legal_target_that_isnt_destroyed_still_gives_its_controller_the_token() {
         ("Bovine Intervention", Start::Cast, "Darksteel Myr", "Ox"),
         ("Transmogrifying Wand", Start::Wand, "Darksteel Myr", "Ox"),
         ("Pongify", Start::Cast, "Darksteel Myr", "Ape"),
-        ("Sawtusk Demolisher", Start::Mutate, "Darksteel Ingot", "Beast"),
+        (
+            "Sawtusk Demolisher",
+            Start::Mutate,
+            "Darksteel Ingot",
+            "Beast",
+        ),
         ("Stroke of Midnight", Start::Cast, "Darksteel Myr", "Human"),
         ("Cavalier of Dawn", Start::Enter, "Darksteel Myr", "Golem"),
     ];
@@ -227,7 +246,11 @@ fn a_legal_target_that_isnt_destroyed_still_gives_its_controller_the_token() {
         t.resolve_all();
         assert!(t.on_battlefield(victim), "{card}: not destroyed");
         assert_eq!(t.obj_now(victim).controller, P1, "{card}: P1 keeps it");
-        assert_eq!(tokens_by_player(&t, token), vec![0, 1], "{card}: P1's token");
+        assert_eq!(
+            tokens_by_player(&t, token),
+            vec![0, 1],
+            "{card}: P1's token"
+        );
     }
 }
 
@@ -282,7 +305,11 @@ fn for_each_permanent_destroyed_or_put_into_a_graveyard_counts_only_those() {
     let mut t = TestGame::new(2);
     let ring = t.battlefield(P1, "Sol Ring");
     let ingot = t.battlefield(P1, "Darksteel Ingot");
-    t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(true));
+    t.answer(
+        P0,
+        DecisionKind::YesNo,
+        mtg_engine::decision::Answer::Bool(true),
+    );
     t.answer_targets(P0, &[obj(ring), obj(ingot)]);
     t.enter(P0, "Terastodon");
     t.resolve_all();
@@ -293,7 +320,11 @@ fn for_each_permanent_destroyed_or_put_into_a_graveyard_counts_only_those() {
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Rest in Peace");
     let ring = t.battlefield(P1, "Sol Ring");
-    t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(true));
+    t.answer(
+        P0,
+        DecisionKind::YesNo,
+        mtg_engine::decision::Answer::Bool(true),
+    );
     t.answer_targets(P0, &[obj(ring)]);
     t.enter(P0, "Terastodon");
     t.resolve_all();
@@ -312,7 +343,11 @@ fn terastodon_can_target_permanents_of_different_players() {
     let a = t.battlefield(P1, "Sol Ring");
     let b = t.battlefield(P2, "Sol Ring");
     let c = t.battlefield(P0, "Sol Ring");
-    t.answer(P0, DecisionKind::YesNo, mtg_engine::decision::Answer::Bool(true));
+    t.answer(
+        P0,
+        DecisionKind::YesNo,
+        mtg_engine::decision::Answer::Bool(true),
+    );
     t.answer_targets(P0, &[obj(a), obj(b), obj(c)]);
     t.enter(P0, "Terastodon");
     t.resolve_all();
