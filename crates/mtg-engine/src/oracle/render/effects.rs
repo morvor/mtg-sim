@@ -2765,10 +2765,30 @@ impl Renderer<'_> {
                 self.gap("targets changed by a player other than you")
             }
             Effect::ReselectTargetsAtRandom { what, except } => {
-                let w = self.sel(what, Case::Obj);
+                // "the spell and the copy": a spell and the copy just made of it.
+                let w = match what {
+                    Sel::Union(v)
+                        if v.len() == 2 && matches!(v[1], Sel::Var(x) if x == vars::CREATED) =>
+                    {
+                        "the spell and the copy".to_string()
+                    }
+                    _ => self.sel(what, Case::Obj),
+                };
+                // "you or a permanent you control": each thing a new target can't be.
+                let one = |r: &mut Self, e: &Sel| match e {
+                    Sel::All(f) => r.noun_det(f, super::nouns::Det::A),
+                    other => r.sel(other, Case::Obj),
+                };
                 match except {
+                    Some(Sel::Union(v)) => {
+                        let parts: Vec<String> = v.iter().map(|e| one(self, e)).collect();
+                        format!(
+                            "reselect the targets at random for {w}. the new targets can't be {}",
+                            parts.join(" or ")
+                        )
+                    }
                     Some(e) => {
-                        let e = self.sel(e, Case::Obj);
+                        let e = one(self, e);
                         format!("reselect the targets at random for {w}. the new targets can't be {e}")
                     }
                     None => format!("reselect the targets at random for {w}"),
