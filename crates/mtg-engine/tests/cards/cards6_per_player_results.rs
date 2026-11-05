@@ -85,7 +85,7 @@ fn lim_duls_vault_without_paying_life_puts_the_five_back_on_top() {
 
 #[test]
 fn lim_duls_vault_pays_life_to_look_at_the_next_five() {
-    cr!("608.2c", "119.4", "401.4");
+    cr!("608.2c", "119.4");
     ruling!("Lim-Dûl's Vault", "Step 3b: Put those five cards on the bottom of your library in the order you want. Pay 1 life. Return to step 1.");
     compiles("Lim-Dûl's Vault");
     let mut t = TestGame::new(2);
@@ -181,7 +181,8 @@ fn pick(t: &mut TestGame, p: PlayerId, labels: &[&str], label: &str) {
 
 #[test]
 fn the_toymakers_trap_wrong_guess_costs_the_guessed_life_and_draws() {
-    cr!("608.2c", "607.2a");
+    cr!("608.2c");
+    interp!("number-guess-range");
     compiles("The Toymaker's Trap");
     let mut t = TestGame::new(2);
     let trap = t.battlefield(P0, "The Toymaker's Trap");
@@ -213,7 +214,7 @@ fn the_toymakers_trap_wrong_guess_costs_the_guessed_life_and_draws() {
 
 #[test]
 fn the_toymakers_trap_remembers_numbers_only_for_its_own_object() {
-    cr!("400.7", "607.2a");
+    cr!("608.2c");
     ruling!(
         "The Toymaker's Trap",
         "it has no memory of which numbers were chosen for its effect before. The same is true if you control a second copy of it."
@@ -245,19 +246,41 @@ fn the_toymakers_trap_remembers_numbers_only_for_its_own_object() {
 }
 
 #[test]
-fn the_toymakers_trap_choice_is_secret_until_revealed() {
-    cr!("608.2c");
-    ruling!("The Toymaker's Trap", "To secretly choose a number, write a number from 1 to 5 down without showing it to anyone else.");
+fn the_toymakers_trap_that_left_and_returned_has_no_memory_of_its_numbers() {
+    cr!("400.7");
+    ruling!(
+        "The Toymaker's Trap",
+        "If The Toymaker's Trap leaves the battlefield and later returns to the battlefield, it has no memory of which numbers were chosen for its effect before."
+    );
     compiles("The Toymaker's Trap");
-    let def = card("The Toymaker's Trap");
-    let text = format!("{:?}", def.faces[0].chars.abilities);
-    // The number is chosen secretly, then the guess, then the reveal.
-    let secret = text
-        .find("the next choices are secret")
-        .expect("a secret choice");
-    let guess = text.find("a player guessed").expect("a guess");
-    let reveal = text.find("reveal the secret choices").expect("a reveal");
-    assert!(secret < guess && guess < reveal);
+    let mut t = TestGame::new(2);
+    let old = t.battlefield(P0, "The Toymaker's Trap");
+    t.g.modal_history.numbers.insert(old, vec![1, 2, 3, 4]);
+    // It's exiled and returns: a new object (CR 400.7).
+    let mv = |t: &mut TestGame, id: ObjectId, to: mtg_engine::object::Zone| {
+        t.g.move_object_ev(mtg_engine::replacement::MoveEv {
+            obj: id,
+            to,
+            pos: mtg_engine::ability::LibraryPosition::Top,
+            cause: mtg_engine::events::MoveCause::Effect,
+            by: Some(P0),
+            etb: mtg_engine::replacement::EtbInfo {
+                controller: Some(P0),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .expect("moved")
+    };
+    let exiled = mv(&mut t, old, mtg_engine::object::Zone::Exile);
+    let back = mv(&mut t, exiled, mtg_engine::object::Zone::Battlefield);
+    pick(&mut t, P0, &["1", "2", "3", "4", "5"], "1");
+    pick(&mut t, P1, &["1", "2", "3", "4", "5"], "2");
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(last_options(&t, P0), ["1", "2", "3", "4", "5"]);
+    assert!(t.on_battlefield(back));
+    assert_eq!(t.life(P1), 18);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +311,7 @@ fn timesifter_tied_players_repeat_until_the_tie_is_broken() {
     cr!("500.7", "608.2c");
     ruling!("Timesifter", "Each time there's a tie for the highest cost, only the players involved in the tie continue.");
     ruling!("Timesifter", "A land card has a mana value of 0.");
+    interp!("greatest-card-unique-player");
     compiles("Timesifter");
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Timesifter");
