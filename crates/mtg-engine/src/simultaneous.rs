@@ -886,7 +886,8 @@ fn plan(
                     g.record_apnap_choice(p, objs.clone());
                 }
             }
-            let moves = g.destination_moves(objs, to, ctx);
+            let mut moves = g.destination_moves(objs, to, ctx);
+            g.put_by_chooser(what, to, ctx, &mut moves);
             Plan::Move {
                 moves,
                 battlefield: to.zone == ZoneKind::Battlefield,
@@ -1375,11 +1376,16 @@ fn perform_plans(
     for i in 0..plans.len() {
         let these: Vec<MoveEv> = match &plans[i] {
             Some(Plan::Move { moves, .. }) => moves.clone(),
-            Some(Plan::Search { found, to, .. }) if !found.is_empty() => {
+            Some(Plan::Search {
+                found,
+                to,
+                searcher,
+                ..
+            }) if !found.is_empty() => {
                 let found = found.clone();
                 let to = to.clone();
                 let before = frames.enter(i, ctx);
-                let m = g.destination_moves(found, &to, ctx);
+                let m = g.found_card_moves(*searcher, found, &to, ctx);
                 frames.leave(i, ctx, before, true);
                 m
             }

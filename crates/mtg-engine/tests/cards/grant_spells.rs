@@ -1,5 +1,5 @@
 //! Keywords granted to spells as they're cast from a zone
-//! (`src/oracle/patterns/k702_038_051.rs`, `casting::as_spell_filter`; CR 601.2, 610.5):
+//! (`src/oracle/patterns/k702_038_051.rs`, `casting::as_spell_filter`; CR 601.2, 611.3a):
 //! "Spells you cast from exile have convoke." (Hoarding Broodlord), "Noncreature spells you
 //! cast from exile have convoke." (Party Thrasher).
 
@@ -56,7 +56,7 @@ fn castable_by_convoke(granter: &str) -> bool {
 
 #[test]
 fn spells_cast_from_exile_have_convoke() {
-    cr!("702.51a", "610.5");
+    cr!("702.51a", "611.3a");
     for n in ["Hoarding Broodlord", "Party Thrasher"] {
         let c = card(n);
         assert!(

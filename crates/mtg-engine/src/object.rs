@@ -355,7 +355,8 @@ pub struct EventInfo {
     pub attack_declaration: bool,
     /// The controller of the spell or ability that caused the event, when the event
     /// records it ("whenever a spell or ability an opponent controls causes you to discard
-    /// a card").
+    /// a card"). For a permanent entering the battlefield, the player who put it there
+    /// (`Event::ZoneChange::by`; CR 110.2a), read by `PlayerRef::TriggerMover`.
     #[serde(default)]
     pub caused_by: Option<PlayerId>,
     /// For a "one or more" trigger (CR 603.2c), the players of its batch of events, each

@@ -1,5 +1,5 @@
 //! Keywords granted to spells you cast and to cards in your hand
-//! (`oracle/patterns/spell_keyword_grants.rs`; CR 610.5, 613.1f): costs equal to each
+//! (`oracle/patterns/spell_keyword_grants.rs`; CR 611.3a, 610.5, 613.1f): costs equal to each
 //! spell's or card's own mana cost (CR 702.119a, 702.152a, 702.143a, 702.94a), quoted
 //! keyword lines, "the first spell you cast from exile each turn".
 
@@ -24,7 +24,7 @@ fn keyword_count(t: &TestGame, id: ObjectId, k: KeywordKind) -> usize {
 
 #[test]
 fn herigast_creature_spells_have_emerge_for_their_mana_cost() {
-    cr!("702.119a", "610.5");
+    cr!("702.119a", "611.3a");
     assert_supported(&["Herigast, Erupting Nullkite"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Herigast, Erupting Nullkite");
@@ -54,7 +54,10 @@ fn herigast_creature_spells_have_emerge_for_their_mana_cost() {
 
 #[test]
 fn henzie_big_creature_spells_have_blitz_for_their_mana_cost() {
-    cr!("702.152a", "610.5");
+    // CR 611.3d: blitz lets the spell be cast, so its battlefield half (haste, "draw a
+    // card") lasts after Henzie's grant to the spell.
+    cr!("702.152a", "611.3a", "611.3d", "400.7b");
+    interp!("cast-grant-have-after-cast");
     assert_supported(&["Henzie \"Toolbox\" Torre"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Henzie \"Toolbox\" Torre");
@@ -138,7 +141,7 @@ fn aminatou_enchantment_cards_in_hand_have_miracle() {
 
 #[test]
 fn zhulodok_colorless_spells_from_hand_have_two_cascades() {
-    cr!("702.85a", "702.85c", "610.5");
+    cr!("702.85a", "702.85c", "611.3a");
     assert_supported(&["Zhulodok, Void Gorger"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Zhulodok, Void Gorger");
@@ -158,7 +161,7 @@ fn zhulodok_colorless_spells_from_hand_have_two_cascades() {
 
 #[test]
 fn wild_magic_sorcerer_first_spell_from_exile_has_cascade() {
-    cr!("702.85a", "610.5", "715.4");
+    cr!("702.85a", "611.3a", "715.4");
     assert_supported(&["Wild-Magic Sorcerer"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Wild-Magic Sorcerer");
@@ -183,7 +186,7 @@ fn wild_magic_sorcerer_first_spell_from_exile_has_cascade() {
 
 #[test]
 fn ashling_elemental_permanent_spells_from_hand_gain_evoke() {
-    cr!("702.74a", "610.5");
+    cr!("702.74a", "610.5", "601.2a");
     assert_supported(&["Ashling, the Limitless"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Ashling, the Limitless");
@@ -207,7 +210,7 @@ fn ashling_elemental_permanent_spells_from_hand_gain_evoke() {
 
 #[test]
 fn abaddon_spells_with_mana_value_up_to_the_life_lost_have_cascade() {
-    cr!("702.85a", "610.5");
+    cr!("702.85a", "611.3a");
     assert_supported(&["Abaddon the Despoiler"]);
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Abaddon the Despoiler");

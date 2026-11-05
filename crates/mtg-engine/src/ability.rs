@@ -422,6 +422,13 @@ pub struct StaticAbility {
     /// Characteristic-defining abilities apply first within their layer and in all zones
     /// (CR 604.3, 613.3).
     pub is_cda: bool,
+    /// "[Spells] you cast gain [ability] as you cast them" (Zinnia, Valley's Voice;
+    /// Ashling, the Limitless): a one-shot effect applied as the spell is put on the stack
+    /// (CR 610.5, 601.2a), which the spell keeps even if this ability stops applying
+    /// while it's cast. "[Spells] you cast have [ability]" (false) is a continuous effect
+    /// that applies only while its source still applies to the spell (CR 611.3a-b).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub as_cast: bool,
 }
 
 impl StaticAbility {
@@ -431,6 +438,7 @@ impl StaticAbility {
             effect,
             zone: FunctionZone::Battlefield,
             is_cda: false,
+            as_cast: false,
         }
     }
 }
@@ -1267,6 +1275,11 @@ pub enum PlayerRef {
     /// once (CR 603.2c): "the number of opponents dealt damage this way", "each of those
     /// opponents".
     TriggerPlayers,
+    /// The player who put the triggering object onto the battlefield (CR 110.2a: the
+    /// player whose spell, ability or action put it there, who may not be its controller):
+    /// "Whenever a player puts a Swamp onto the battlefield, ~ deals 3 damage to that
+    /// player" (Thelon's Chant). The triggering player if no such player is recorded.
+    TriggerMover,
     /// The active player.
     ActivePlayer,
     /// "The attacking player": the active player (CR 506.2). With shared team turns, one
@@ -1560,9 +1573,10 @@ pub enum Filter {
     /// A spell on the stack, described by a static ability that affects spells
     /// continuously ("Instant and sorcery spells you control have lifelink", CR 611.3a):
     /// it applies to whichever spells match while they're on the stack, including one
-    /// whose control changed. (A static ability granting abilities to `Spell`s makes them
-    /// gain the abilities as they're cast instead, CR 610.5; see
-    /// `next_spell::is_cast_grant`.)
+    /// whose control changed. (A static ability granting abilities to `Spell`s, "spells
+    /// you cast have ...", grants them as they're cast and while it still applies to the
+    /// spell, CR 611.3a-b; "... gain ... as you cast them" is a one-shot grant, CR 610.5;
+    /// see `next_spell::is_cast_grant` and `StaticAbility::as_cast`.)
     SpellOnStack,
     /// Nonland permanents / cards etc. are expressed with Not(Type(Land)).
     Token,
@@ -4997,6 +5011,15 @@ pub enum Effect {
         who: PlayerRef,
         how: TargetChange,
         to: Option<Sel>,
+    },
+    /// "Reselect its target at random" (Grip of Chaos), "reselect the targets at random for
+    /// the spell and the copy. The new targets can't be you or a permanent you control."
+    /// (Chef's Kiss): each target of each selected spell or ability is chosen again at
+    /// random among its legal targets other than `except` (CR 115.7d), see
+    /// [`crate::target_rules::reselect_at_random`].
+    ReselectTargetsAtRandom {
+        what: Sel,
+        except: Option<Sel>,
     },
     /// "[this] becomes a copy of [object]" (CR 707).
     BecomeCopy {
