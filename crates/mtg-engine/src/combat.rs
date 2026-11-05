@@ -1106,6 +1106,19 @@ pub fn best_attack(
     options: &[(ObjectId, Vec<Entity>)],
     reqs: &[AttackRequirement],
 ) -> (u32, Vec<(ObjectId, Entity)>) {
+    best_attack_paying(g, options, reqs, &[], &[])
+}
+
+/// [`best_attack`], with the creatures of `paying` free to attack whatever they could
+/// attack paying its cost, and each (creature, target) of `paid` an attack it may make
+/// paying its cost.
+fn best_attack_paying(
+    g: &Game,
+    options: &[(ObjectId, Vec<Entity>)],
+    reqs: &[AttackRequirement],
+    paying: &[ObjectId],
+    paid: &[(ObjectId, Entity)],
+) -> (u32, Vec<(ObjectId, Entity)>) {
     let rules = attack_rules(g, options);
     // Creatures that can't attack without paying a cost aren't required to (CR 508.1d).
     let free: Vec<(ObjectId, Vec<Entity>)> = options
@@ -1115,7 +1128,11 @@ pub fn best_attack(
                 *c,
                 ts.iter()
                     .copied()
-                    .filter(|t| required_attack_cost(g, *c, *t).is_none())
+                    .filter(|t| {
+                        paying.contains(c)
+                            || paid.contains(&(*c, *t))
+                            || required_attack_cost(g, *c, *t).is_none()
+                    })
                     .collect::<Vec<_>>(),
             )
         })
@@ -1216,8 +1233,38 @@ pub(crate) fn attack_declaration_legal_with(
     max: u32,
 ) -> bool {
     let rules = attack_rules(g, options);
-    attack_restrictions_ok(g, &rules, options, decl)
-        && obeyed_attack_requirements(g, reqs, decl) >= max
+    if !attack_restrictions_ok(g, &rules, options, decl) {
+        return false;
+    }
+    let obeyed = obeyed_attack_requirements(g, reqs, decl);
+    if obeyed < max {
+        return false;
+    }
+    // A creature that can't attack at all without paying a cost isn't required to attack
+    // (CR 508.1d), but once it attacks, paying that cost, its requirements are obeyed as
+    // far as possible: it can attack whatever it could attack for a cost (Furygale
+    // Flocking rulings). A creature with a cost only to attack some players or
+    // planeswalkers may attack another one for free, or the one it pays for, instead.
+    // And a requirement obeyed by paying a cost doesn't excuse disobeying another one
+    // that could be obeyed for free.
+    let paid: Vec<(ObjectId, Entity)> = decl
+        .iter()
+        .copied()
+        .filter(|(a, t)| required_attack_cost(g, *a, *t).is_some())
+        .collect();
+    if paid.is_empty() {
+        return true;
+    }
+    let paying: Vec<ObjectId> = paid
+        .iter()
+        .filter(|(a, _)| {
+            options.iter().any(|(c, ts)| {
+                c == a && ts.iter().all(|t| required_attack_cost(g, *a, *t).is_some())
+            })
+        })
+        .map(|(a, _)| *a)
+        .collect();
+    obeyed >= best_attack_paying(g, options, reqs, &paying, &paid).0
 }
 
 /// Declare attackers step turn-based action (CR 508.1).
