@@ -480,7 +480,7 @@ pub fn attach(
         if is_own && opt.alt_cost.is_some() {
             continue;
         }
-        let chars = g.option_characteristics(card, &opt);
+        let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
         for perm in allowing(g, p, card, &chars, false) {
             // "as an Adventure": only that way (CR 715.3).
             if perm.terms.cast_face.is_some_and(|f| f != opt.face) {

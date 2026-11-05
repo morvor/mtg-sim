@@ -83,12 +83,12 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Status: decided
 - Rules: 107.3 "Many objects use the letter X as a placeholder for a number that needs to be determined. Some objects have abilities that define the value of X; the rest let their controller choose the value of X." / 601.2b "... If the spell has a variable cost that will be paid as it’s being cast (such as an {X} in its mana cost; see rule 107.3), the player announces the value of that variable. ..."
 - Question: Which number does a player choose when the agent doesn't say?
-- Decision: X in a spell's cost: the greatest legal value whose total cost could be paid. Every other number (X of an activated ability, "choose a number", join forces, morph and other X costs): the least allowed, usually 0 (suspend's X: the least payable value of at least 1).
+- Decision: X in a spell's cost: the greatest legal value the spell could be cast with: its total cost, the parts that use X included ("discard X cards", "sacrifice X Mountains", "remove X counters"), could be paid, and it would have enough legal targets and modes for that X ("tap X target creatures"). The ChooseX decision offers values up to that one (the check is optimistic: it rules out only values that can't work). Every other number (X of an activated ability, "choose a number", join forces, morph and other X costs): the least allowed, usually 0 (suspend's X: the least payable value of at least 1).
 - Alternatives: Always the least (an X spell cast for 0 usually does nothing); always the greatest (abilities would spend everything).
 - Why: Casting an X spell signals intent to use it; for the other numbers, spend least.
 - Affects: every X and number decision.
-- Code: `crates/mtg-engine/src/casting.rs` (`ChooseX` for spells and for abilities); `crates/mtg-engine/src/game.rs` (`ask_number`); `crates/mtg-engine/src/kw/` (join_forces, morph_face_up, optional_cost_x, spell_cost_grammar, suspend); `crates/mtg-engine/src/mana_abilities.rs`.
-- Tests: `tests/cr/interp_decision_defaults.rs` (`a_default_x_is_the_greatest_affordable_and_a_default_number_the_least`).
+- Code: `crates/mtg-engine/src/casting.rs` (`ChooseX` for spells and for abilities); `crates/mtg-engine/src/default_x.rs`; `crates/mtg-engine/src/game.rs` (`ask_number`); `crates/mtg-engine/src/kw/` (join_forces, morph_face_up, optional_cost_x, spell_cost_grammar, suspend); `crates/mtg-engine/src/mana_abilities.rs`.
+- Tests: `tests/cr/interp_decision_defaults.rs` (`a_default_x_is_the_greatest_affordable_and_a_default_number_the_least`); `tests/cr/r601_2b_default_x_costs_and_targets.rs`.
 
 ## default-order-as-listed: Default orderings keep the listed order (triggers: the first listed goes on the stack first)
 - Kind: policy

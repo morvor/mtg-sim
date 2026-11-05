@@ -629,7 +629,7 @@ impl Game {
                     && !crate::kw::target_forbidden(self, spec, e, source_obj)
             }
             Entity::Object(o) => {
-                if !self.is_live(o) {
+                if !self.is_live(o) || ctx.casting_card == Some(o) {
                     return false;
                 }
                 let ob = self.obj(o);
