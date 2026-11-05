@@ -568,6 +568,12 @@ impl Game {
                 .and_then(|e| e.player)
                 .into_iter()
                 .collect(),
+            PlayerRef::TriggerMover => ctx
+                .event
+                .as_ref()
+                .and_then(|e| e.caused_by.or(e.player))
+                .into_iter()
+                .collect(),
             PlayerRef::TriggerPlayers => ctx
                 .event
                 .as_ref()

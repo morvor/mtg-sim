@@ -88,7 +88,10 @@ fn bind_duration_players(g: &Game, d: &Duration, ctx: &Ctx) -> Duration {
     };
     if !matches!(
         r,
-        PlayerRef::TriggerPlayer | PlayerRef::Target(_) | PlayerRef::Iterated
+        PlayerRef::TriggerPlayer
+            | PlayerRef::TriggerMover
+            | PlayerRef::Target(_)
+            | PlayerRef::Iterated
     ) {
         return d.clone();
     }
