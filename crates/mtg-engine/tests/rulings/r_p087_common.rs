@@ -77,3 +77,18 @@ pub fn set_loyalty(t: &mut TestGame, id: ObjectId, n: u32) {
 pub fn is_tapped(t: &TestGame, id: ObjectId) -> bool {
     t.obj_now(id).tapped
 }
+
+/// Every candidate offered by the object choices (`ChooseEntities`) asked since decision
+/// `from`.
+pub fn entity_candidates(t: &TestGame, from: usize) -> Vec<Entity> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => {
+                Some(candidates.clone())
+            }
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
