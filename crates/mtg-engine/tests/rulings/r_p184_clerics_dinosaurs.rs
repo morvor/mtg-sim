@@ -23,6 +23,7 @@ fn try_cast(t: &mut TestGame, card: ObjectId, kicked: bool) -> bool {
 #[test]
 fn edgewalker_reduces_a_hybrid_symbol_paid_with_white_or_black() {
     cr!("601.2f", "118.7", "107.4e");
+    interp!("hybrid-half-for-a-reduction");
     ruling!(
         "Edgewalker",
         "If a spell has hybrid mana symbols in its mana cost, you choose which half you will be paying before determining the total cost. If you choose to pay such a cost with {W} or {B}, Edgewalker can reduce that part of the cost."

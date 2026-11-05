@@ -408,7 +408,16 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- None at the moment. Work item ruling-conflicts-3 took up the craft copy ruling (now an
+- **Stone Calendar** (rulings-P033): its ruling "You may choose not to apply Stone Calendar’s
+  cost reduction effect." (2004-10-04) against its Oracle text "Spells you cast cost {1}
+  less to cast." (no "up to"; a reduction is part of the total cost, CR 601.2f, with no
+  choice to decline it, and Semblance Anvil's "Semblance Anvil's cost reduction effect is
+  mandatory." (2011-01-01) says so for the same wording). Likely origin: the printed text
+  "Your spells cost up to 1 less to cast" (as other databases and Scryfall's Italian
+  printing still show it), which the English Oracle text no longer has; the date of that
+  Oracle change wasn't found. Left uncited; the engine always applies the reduction
+  (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
+- Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
   Dead Tide and Arbiter of Knollridge (inconsistent entries above, for the user to decide).
