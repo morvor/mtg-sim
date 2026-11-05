@@ -7,7 +7,8 @@
 //!
 //! ```text
 //! ### <Card>: <what is wrong>
-//! - Kind: template error | misattached | inconsistent | outdated | narrower than stated
+//! - Kind: template error | transcription error | misattached | inconsistent | outdated |
+//!   narrower than stated
 //! - Status: open for review | reported | confirmed
 //! - Ruling, <Card Name> (<published_at>): "<the ruling's text, verbatim>"   (one or more)
 //! - Conflicts with: <the Oracle text, CR rule or other rulings, quoted with dates>
@@ -19,9 +20,9 @@
 //! [`check`] (run by `cargo test -p mtg-data` and `mtg-tools rulings-coverage --check`)
 //! keeps the log complete and exact:
 //! - every rulings exemption (`docs/rulings-exemptions/*.tsv`) whose reason calls the ruling
-//!   outdated, superseded, overridden, inconsistent, misattached or a template error, or
-//!   cites the policy `ruling-contradicting-oracle-gives-way` ([`needs_log`]), has an entry
-//!   quoting that ruling under that card;
+//!   outdated, superseded, overridden, inconsistent, misattached, a template error or a
+//!   transcription error, or cites the policy `ruling-contradicting-oracle-gives-way`
+//!   ([`needs_log`]), has an entry quoting that ruling under that card;
 //! - every entry has every field, a known kind and status, and at least one ruling; each
 //!   quoted ruling is one of that card's rulings, word for word (compared after
 //!   [`normalize_text`](crate::normalize_text)), with its `published_at` date;
@@ -38,6 +39,7 @@ pub const LOG: &str = "docs/RULING_DISCREPANCIES.md";
 /// The kinds of discrepancy.
 pub const KINDS: &[&str] = &[
     "template error",
+    "transcription error",
     "misattached",
     "inconsistent",
     "outdated",
@@ -67,6 +69,7 @@ pub const LOGGED_REASONS: &[&str] = &[
     "inconsistent",
     "misattach",
     "template error",
+    "transcription error",
     "ruling-contradicting-oracle-gives-way",
 ];
 
@@ -473,6 +476,7 @@ mod tests {
             "policy ruling-contradicting-oracle-gives-way, ..."
         ));
         assert!(needs_log("Contradicts the card (template error; ...)"));
+        assert!(needs_log("Contradicts the card (transcription error; ...)"));
         assert!(needs_log("the CR 605.1a update supersedes it"));
         assert!(needs_log("Misattachment in Scryfall data"));
         assert!(!needs_log("a non-outdated note"));
