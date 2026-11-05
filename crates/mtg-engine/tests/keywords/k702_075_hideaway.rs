@@ -4,18 +4,25 @@ use crate::common_k702_011_017::{assert_supported, give_mana_for};
 use crate::common_k702_027_037::activate_named;
 use crate::common_k702_052_066::{destroy, on_top, stack_triggers};
 use mtg_engine::ability::AbilityKind;
+use mtg_engine::decision::Action;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::zones;
 use mtg_engine::*;
 
 /// Puts four named cards on top of P0's library (the last one on top) and returns them.
 fn stack_library(t: &mut TestGame) -> Vec<ObjectId> {
-    ["Grizzly Bears", "Counterspell", "Llanowar Elves", "Lightning Bolt"]
-        .iter()
-        .map(|n| on_top(t, P0, n))
-        .collect()
+    [
+        "Grizzly Bears",
+        "Counterspell",
+        "Llanowar Elves",
+        "Lightning Bolt",
+    ]
+    .iter()
+    .map(|n| on_top(t, P0, n))
+    .collect()
 }
 
 /// The ids of the bottom `n` cards of `p`'s library.
@@ -456,9 +463,7 @@ fn spinerock_knoll_counts_all_damage_dealt_to_an_opponent_this_turn() {
             mtg_engine::ability::Effect::DealDamage {
                 source: mtg_engine::ability::Sel::Target(0),
                 amount: mtg_engine::ability::Value::c(n),
-                to: mtg_engine::ability::Sel::Players(mtg_engine::ability::PlayerRef::Player(
-                    P1,
-                )),
+                to: mtg_engine::ability::Sel::Players(mtg_engine::ability::PlayerRef::Player(P1)),
             },
             &[Entity::Object(src)],
         );
@@ -604,4 +609,152 @@ fn fight_rigging_plays_the_exiled_card_once_you_control_a_big_creature() {
         );
         assert_eq!(t.zone(cards[0]) == Zone::Exile, !played);
     }
+}
+
+const CLIVE: &str = "Clive, Ifrit's Dominant // Ifrit, Warden of Inferno";
+/// Vanilla legendary creatures (no abilities that change costs or land plays).
+const LEGENDS: [&str; 3] = [
+    "Isamaru, Hound of Konda",
+    "Caelorna, Coral Tyrant",
+    "Barktooth Warbeard",
+];
+
+/// Clive's Hideaway enters and hides `top` (put on top of P0's library); returns the land
+/// and the exiled card.
+fn clives_hideaway(t: &mut TestGame, top: &str) -> (ObjectId, ObjectId) {
+    let card = on_top(t, P0, top);
+    let land = t.enter(P0, "Clive's Hideaway");
+    t.answer_choose(P0, &[Entity::Object(card)]);
+    t.resolve_all();
+    assert_eq!(t.zone(card), Zone::Exile);
+    assert!(t.obj_now(card).face_down);
+    (land, card)
+}
+
+/// Activates Clive's Hideaway's "{2}, {T}: You may play the exiled card ..." (untapping it
+/// first and giving P0 the mana), answering yes or no to playing the card.
+fn activate_clives_hideaway(t: &mut TestGame, land: ObjectId, play: bool) {
+    let now = t.g.current(land);
+    t.g.objects[now.0 as usize].tapped = false;
+    t.lands(P0, "Wastes", 2);
+    t.answer_yes(P0, play);
+    let text = play_ability(t, land);
+    activate_named(t, P0, land, &text, 0).unwrap();
+    assert_eq!(t.stack_len(), 1);
+}
+
+#[test]
+fn clives_hideaway_checks_its_legendary_creatures_and_plays_the_card_as_the_ability_resolves() {
+    cr!("702.75a", "607.2a", "602.1b", "608.2h", "608.2g", "305.2a", "305.2b", "305.3", "406.3a");
+    // Scryfall's data (source wotc, 2025-06-06) attaches these three FINAL FANTASY
+    // release-note rulings for Clive's Hideaway to Clive, Ifrit's Dominant, which has no
+    // exiled card to play (Clive's Hideaway itself has only the Town note). They are tested
+    // here on Clive's Hideaway; Clive is one of the legendary creatures it counts.
+    ruling!(
+        "Clive, Ifrit's Dominant // Ifrit, Warden of Inferno",
+        "Clive's Hideaway's last ability only cares if you control four or more legendary creatures at the time it resolves. You don't even have to control four or more legendary creatures when you activate it."
+    );
+    ruling!(
+        "Clive, Ifrit's Dominant // Ifrit, Warden of Inferno",
+        "If the exiled card is a land card, you may play it only if you have an available land play remaining this turn."
+    );
+    ruling!(
+        "Clive, Ifrit's Dominant // Ifrit, Warden of Inferno",
+        "You play the card while Clive's Hideaway's last ability is resolving and still on the stack. You can't wait to play it later in the turn."
+    );
+    assert_supported("Clive's Hideaway");
+    // Clive goes onto the battlefield without its enters trigger ("you may discard your
+    // hand"), which would otherwise go on the stack above the hideaway ability.
+    let four = |t: &mut TestGame| -> Vec<ObjectId> {
+        let mut v: Vec<ObjectId> = LEGENDS.iter().map(|n| t.battlefield(P0, n)).collect();
+        v.push(t.battlefield(P0, CLIVE));
+        v
+    };
+
+    // Three legendary creatures as it's activated, four (Clive arrives) as it resolves:
+    // the exiled card is cast while the ability resolves (it's on the stack once the
+    // ability is gone).
+    let mut t = TestGame::new(2);
+    let (land, bears) = clives_hideaway(&mut t, "Grizzly Bears");
+    for n in LEGENDS {
+        t.battlefield(P0, n);
+    }
+    activate_clives_hideaway(&mut t, land, true);
+    t.battlefield(P0, CLIVE);
+    t.resolve();
+    assert_eq!(t.zone(bears), Zone::Stack);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Battlefield);
+
+    // Four as it's activated, three (Clive destroyed) as it resolves: nothing is played.
+    let mut t = TestGame::new(2);
+    let (land, bears) = clives_hideaway(&mut t, "Grizzly Bears");
+    let legends = four(&mut t);
+    activate_clives_hideaway(&mut t, land, true);
+    destroy(&mut t, legends[3]);
+    assert_eq!(t.zone(legends[3]), Zone::Graveyard(P0));
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    t.clear_answers();
+
+    // An exiled land: not played with no land play left (CR 305.2b), played with one
+    // (face up, counting as the land play, CR 305.2a, 406.3a).
+    let mut t = TestGame::new(2);
+    let (land, forest) = clives_hideaway(&mut t, "Forest");
+    four(&mut t);
+    t.g.players[0].lands_played_this_turn = 1;
+    activate_clives_hideaway(&mut t, land, true);
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Exile);
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 1);
+    t.g.players[0].lands_played_this_turn = 0;
+    activate_clives_hideaway(&mut t, land, true);
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Battlefield);
+    assert!(!t.obj_now(forest).face_down);
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 1);
+
+    // Not on another player's turn (CR 305.3), even with no land played.
+    let mut t = TestGame::new(2);
+    let (land, forest) = clives_hideaway(&mut t, "Forest");
+    four(&mut t);
+    t.set_step(P1, Step::PrecombatMain);
+    activate_clives_hideaway(&mut t, land, true);
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Exile);
+    assert_eq!(t.g.player(P0).lands_played_this_turn, 0);
+
+    // On P0's own turn outside a main phase it is played: a land played while an ability
+    // resolves ignores the timing of the special action.
+    let mut t = TestGame::new(2);
+    let (land, forest) = clives_hideaway(&mut t, "Forest");
+    four(&mut t);
+    t.set_step(P0, Step::DeclareBlockers);
+    activate_clives_hideaway(&mut t, land, true);
+    t.resolve_all();
+    assert_eq!(t.zone(forest), Zone::Battlefield);
+
+    // Declined while the ability resolves: the card stays exiled and can't be cast later
+    // (the ability gives no lasting permission), even with mana for it; another activation
+    // can still cast it.
+    let mut t = TestGame::new(2);
+    let (land, bolt) = clives_hideaway(&mut t, "Lightning Bolt");
+    four(&mut t);
+    activate_clives_hideaway(&mut t, land, false);
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Exile);
+    t.clear_answers();
+    t.lands(P0, "Mountain", 1);
+    t.g.turn.priority = Some(P0);
+    let now = t.g.current(bolt);
+    assert!(!t
+        .g
+        .legal_actions(P0)
+        .iter()
+        .any(|a| matches!(a, Action::Cast { card, .. } if *card == now)));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_clives_hideaway(&mut t, land, true);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert_eq!(t.life(P1), 17);
 }

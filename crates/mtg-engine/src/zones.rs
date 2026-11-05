@@ -40,6 +40,11 @@ pub struct ZoneState {
     /// The top card of each library its owner may currently look at because of an effect
     /// ("you may look at the top card of your library any time", CR 401.5).
     pub looked_top: Vec<(PlayerId, ObjectId)>,
+    /// The top cards of other players' libraries a player may currently look at because
+    /// of an effect, as (viewer, card) ("you may look at the top card of their library
+    /// any time", CR 401.5).
+    #[serde(default)]
+    pub looked_top_by: Vec<(PlayerId, ObjectId)>,
     /// How many special actions are being taken right now (CR 401.5).
     #[serde(default)]
     pub special_actions: u32,
@@ -189,6 +194,17 @@ pub fn own_move_replacements(
 /// The objects that paying the cost of the spell or ability being resolved moved to a
 /// public zone, as the new objects they became there (CR 400.7j).
 pub const COST_MOVED: Var = vars::USER + 130;
+/// The ability's source, as the new object it became in a public zone, when a cost part
+/// about the source itself moved it there ("Sacrifice ~", "Discard this card", "Exile ~
+/// from your hand"). Instructions about the source follow it there only then: "Discard
+/// two cards, Sacrifice Plague Reaver: ... Return Plague Reaver to the battlefield ..."
+/// returns it from the graveyard, but "{1}, Sacrifice a creature: Exile Ghost Council of
+/// Orzhova. ..." paid by sacrificing Ghost Council itself leaves it in the graveyard, and
+/// "Sacrifice a creature: Put a +1/+1 counter on ~" paid with ~ puts the counter on nothing
+/// (CR 400.7j; their rulings; interpretation `cost-moved-source-found-only-by-own-cost`).
+/// References to what the cost moved as such ([`COST_MOVED`]: "the sacrificed card") find
+/// it whatever the cost's wording.
+pub const COST_MOVED_SELF: Var = vars::USER + 133;
 /// The cards an exile cost of the spell or ability being resolved exiled, as the new
 /// objects they became in exile ("the exiled card", CR 400.7j). Other objects the cost
 /// moved (sacrificed permanents, discarded cards) aren't among them.
@@ -199,7 +215,8 @@ pub const COST_REVEALED: Var = vars::USER + 7522;
 
 /// CR 400.7j: if the cost of a spell or ability causes an object to move to a public zone,
 /// the spell or ability's effects can find that object. Records, for the objects used to
-/// pay the cost, the new objects they became in public zones ([`COST_MOVED`]), and the
+/// pay the cost, the new objects they became in public zones ([`COST_MOVED`]; the source,
+/// when a cost part about the source itself moved it, also [`COST_MOVED_SELF`]), and the
 /// cards the exile cost exiled ([`COST_EXILED`]).
 pub fn record_cost_moved(
     g: &Game,
@@ -217,6 +234,14 @@ pub fn record_cost_moved(
         .collect();
     if !moved.is_empty() {
         vars.insert(COST_MOVED, moved);
+    }
+    let moved_self: Vec<Entity> = paid
+        .moved_self
+        .iter()
+        .filter_map(|o| now_in(o, &|z| z.is_public()))
+        .collect();
+    if !moved_self.is_empty() {
+        vars.insert(COST_MOVED_SELF, moved_self);
     }
     // Cards discarded to pay the cost ("the discarded card"): cards that left a hand
     // for a public zone other than by being exiled.
@@ -730,6 +755,21 @@ fn looks_at_top(g: &Game, p: PlayerId) -> bool {
         .has_mod(|m| matches!(m, PlayerModification::Custom(n) if n == LOOK_AT_TOP_CARD))
 }
 
+/// The players whose library's top card an effect lets `viewer` look at any time
+/// ("you may look at the top card of their library any time", CR 401.5), other than
+/// `viewer`.
+fn looks_at_others_top(g: &Game, viewer: PlayerId) -> Vec<PlayerId> {
+    let mut out = Vec::new();
+    for m in &g.player(viewer).mods {
+        if let PlayerModification::LookAtTopCardOf(PlayerRef::Player(q)) = m {
+            if *q != viewer && !out.contains(q) {
+                out.push(*q);
+            }
+        }
+    }
+    out
+}
+
 /// The card on top of `p`'s library that's revealed because of an effect, if any.
 pub fn revealed_top(g: &Game, p: PlayerId) -> Option<ObjectId> {
     g.zones
@@ -751,6 +791,7 @@ pub fn can_see_in_library(g: &Game, viewer: PlayerId, id: ObjectId) -> bool {
     }
     revealed_top(g, owner) == Some(id)
         || (viewer == owner && g.zones.looked_top.contains(&(owner, id)))
+        || g.zones.looked_top_by.contains(&(viewer, id))
 }
 
 /// Runs a special action (CR 116): while it's being taken, a new top card of a library
@@ -777,6 +818,16 @@ pub fn update_revealed_tops(g: &mut Game) {
     if g.special.casting > 0 || g.zones.special_actions > 0 {
         return;
     }
+    // Other players' top cards a player may look at (CR 401.5).
+    let mut by = Vec::new();
+    for viewer in g.player_ids() {
+        for q in looks_at_others_top(g, viewer) {
+            if let Some(t) = g.library_top(q) {
+                by.push((viewer, t));
+            }
+        }
+    }
+    g.zones.looked_top_by = by;
     for p in g.player_ids() {
         let lib_top = g.library_top(p);
         let looked = if looks_at_top(g, p) { lib_top } else { None };
@@ -805,6 +856,9 @@ pub fn update_revealed_tops(g: &mut Game) {
                 *slot = new;
             }
             for (_, t) in g.zones.looked_top.iter_mut().filter(|(_, t)| *t == top) {
+                *t = new;
+            }
+            for (_, t) in g.zones.looked_top_by.iter_mut().filter(|(_, t)| *t == top) {
                 *t = new;
             }
             g.dirty = true;

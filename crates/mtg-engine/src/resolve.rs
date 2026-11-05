@@ -316,13 +316,14 @@ impl Game {
                 face_down,
                 link,
             } => {
-                // As for moving it: what an earlier part of the effect moved (CR 400.7j).
+                // As for moving it: what an earlier part of the effect or the cost moved
+                // (CR 400.7j).
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
                     .filter_map(|o| {
                         let e = Entity::Object(o);
-                        let found = self.found_after_effect_move(e, ctx);
+                        let found = self.found_after_move(e, ctx);
                         crate::zones::target_not_source_moved(ctx, what, e, found).object()
                     })
                     .collect();
@@ -2786,19 +2787,12 @@ impl Game {
 
     /// CR 400.7j: an object an earlier part of the same effect moved to a public zone can
     /// be found by later parts of it ("Exile target creature and put two time counters on
-    /// it"): the object it became, when that instruction recorded it.
+    /// it"): the object it became, when that instruction recorded it. So can an object the
+    /// cost moved; the ability's source only when a cost part about the source itself
+    /// moved it ([`crate::zones::COST_MOVED_SELF`]): "Exile ~" after ~ was sacrificed to
+    /// pay "Sacrifice a creature" leaves it in the graveyard (Ghost Council of Orzhova's
+    /// ruling).
     pub(crate) fn found_after_move(&self, e: Entity, ctx: &Ctx) -> Entity {
-        self.found_moved(e, ctx, true)
-    }
-
-    /// [`Game::found_after_move`] for what an earlier part of the effect itself moved, not
-    /// its cost: "Exile ~" after ~ was sacrificed to pay for the ability leaves it in the
-    /// graveyard (Ghost Council of Orzhova's ruling).
-    pub(crate) fn found_after_effect_move(&self, e: Entity, ctx: &Ctx) -> Entity {
-        self.found_moved(e, ctx, false)
-    }
-
-    fn found_moved(&self, e: Entity, ctx: &Ctx, by_cost: bool) -> Entity {
         let Entity::Object(o) = e else {
             return e;
         };
@@ -2811,14 +2805,19 @@ impl Game {
                 .get(v)
                 .is_some_and(|v| v.contains(&Entity::Object(now)))
         };
-        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
-        // ~: ... Return ~ to the battlefield ...", CR 400.7j), and "~" after an earlier
+        // What the cost of the spell or ability moved to a public zone ("Sacrifice ~: ...
+        // Return ~ to the battlefield ...", CR 400.7j), and "~" after an earlier
         // instruction about ~ itself moved it, even if later instructions acted on other
         // objects ("Return this card from your graveyard to the battlefield. You may put an
         // Aura card ... onto the battlefield attached to it. If you don't, exile this
         // creature.").
+        let by_cost = if ctx.source == Some(o) {
+            recorded(&crate::zones::COST_MOVED_SELF)
+        } else {
+            recorded(&crate::zones::COST_MOVED)
+        };
         let moved = recorded(&vars::IT)
-            || (by_cost && recorded(&crate::zones::COST_MOVED))
+            || by_cost
             || (ctx.source == Some(o) && recorded(&crate::zones::SOURCE_MOVED));
         if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
             Entity::Object(now)

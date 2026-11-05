@@ -3974,6 +3974,7 @@ impl Game {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
                 paid.sacrificed.push(s);
+                paid.moved_self.push(s);
                 if self.sacrifice(s, p).is_none() && self.is_live(s) {
                     return bad("can't sacrifice");
                 }
@@ -4022,6 +4023,7 @@ impl Game {
             CostPart::DiscardSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
+                paid.moved_self.push(s);
                 if self.discard_for_cost(p, s, src).is_none() {
                     return bad("can't discard");
                 }
@@ -4077,6 +4079,7 @@ impl Game {
             CostPart::ExileSelf => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
                 paid.objects.push(s);
+                paid.moved_self.push(s);
                 self.exile_object(s, src);
             }
             CostPart::Exile {
@@ -4540,6 +4543,7 @@ impl Game {
                 paid.objects.extend(sub.objects);
                 paid.sacrificed.extend(sub.sacrificed);
                 paid.exiled.extend(sub.exiled);
+                paid.moved_self.extend(sub.moved_self);
                 paid.tapped.extend(sub.tapped);
                 paid.untapped.extend(sub.untapped);
             }
@@ -4654,6 +4658,11 @@ pub struct PaidCost {
     /// The cards among `objects` that an exile cost exiled ("the exiled card",
     /// CR 400.7j).
     pub exiled: Vec<ObjectId>,
+    /// The source, when a cost part about the source itself moved it ("Sacrifice ~",
+    /// "Discard this card", "Exile ~ from your hand"): the instructions about the source
+    /// follow it to the zone that part put it in (CR 400.7j; see
+    /// [`crate::zones::COST_MOVED_SELF`]).
+    pub moved_self: Vec<ObjectId>,
     /// The permanents among `objects` that a "tap an untapped [permanent]" cost tapped
     /// ("the creature tapped this way").
     pub tapped: Vec<ObjectId>,
