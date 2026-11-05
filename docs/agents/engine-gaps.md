@@ -927,4 +927,8 @@ ruling-conflicts-2.
   (the archived CR texts weren't reachable from that session). Arbiter's other two rulings (life-gain triggers,
   Two-Headed Giant) are cited. The engine follows CR 801.10 and 801.11: with Alice controlling it, Alice, Barry
   and Doug become 8 and Carrie keeps 11 (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`
-  in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator.
+  in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator. Investigated
+  in ruling-conflicts-3, case 7 (D): the CR current as of 2007-10-01 already had 801.10 and 801.11 word for word
+  (as 601.10 and 601.11; its Coat of Arms example was then narrower still, the players in range of both), so no
+  rules change explains the ruling; logged in `docs/RULING_DISCREPANCIES.md` as inconsistent, uncited until the
+  user decides (recommended: set aside).

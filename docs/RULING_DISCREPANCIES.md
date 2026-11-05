@@ -138,6 +138,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: X is 0 for the encore cost Araumi gives (no X is announced) and for the tokens, as for scavenge.
 - Recorded: no exemption until the user decides; register `x-in-a-cost-equal-to-a-cards-mana-cost-is-0` (provisional); tests `tests/rulings/r_p024_x_values.rs` (`araumi_encore_cost_and_tokens_have_x_0`), `tests/rulings/r_s27_mana_value_x.rs` (`a_scavenged_card_s_x_is_0`).
 
+### Arbiter of Knollridge: each player's own range of influence
+- Kind: inconsistent
+- Status: open for review
+- Ruling, Arbiter of Knollridge (2007-10-01): "In other multiplayer formats, each player's life total is set to the highest life total within their range of influence. These changes happen at the same time. For example, if each player has a range of influence of one, and the players in the game are Alice (4 life), Barry (8 life), Carrie (11 life), and Doug (7 life), in that order, then Alice's life total will become 8 and Barry and Doug's life totals will each become 11."
+- Conflicts with: CR 801.10: "Spells and abilities can’t affect objects or players outside their controller’s range of influence. The parts of the effect that attempt to affect an out-of-range object or player will do nothing. The rest of the effect will work normally." CR 801.11: "If a spell or ability requires information from the game, it gets only information from within its controller’s range of influence. It doesn’t see objects or events outside its controller’s range of influence." The other rulings on range of influence, which use the controller's: Imperial Mask (2007-05-01) "Only teammates within the range of influence of Imperial Mask's controller will get a token. ..."; Benediction of Moons (2006-02-01) "... In a Free-for-All multiplayer game, players who have been eliminated or who are outside your range of influence don't count toward the total." The card: "When this creature enters, each player's life total becomes the highest life total among all players."
+- Evidence: the example uses each affected player's own range: Alice's {Doug, Alice, Barry} gives 8, Barry's {Alice, Barry, Carrie} and Doug's {Carrie, Doug, Alice} give Carrie's 11. No controller fits it under the CR: only Alice has Alice, Barry and Doug in range, and Carrie, whose 11 they get, is outside Alice's range. The CR said the same when the ruling was written (Lorwyn, 2007-10-01; archived CR texts): the CR current as of 2007-10-01 had 801.10 and 801.11 word for word as 601.10 and 601.11, and 601.11's second example then narrowed what an affected player's object sees to "players within range of both Rob and the controller of Coat of Arms" (changed to the controller's whole range in the CR effective 2011-05-01), which gives Barry 8 and Doug 7, not 11; so no rules change explains the ruling. Read alone, its first sentence could mean the controller's range ("their" for the Arbiter's controller), but the example rules that out. Found by work item rulings-P014; investigated in work item ruling-conflicts-3, case 7 (conclusion D: the user decides; recommended: set it aside as inconsistent with 801.10, 801.11 and the other rulings, as Gnoll War Band's was). Its other two rulings (life-gain triggers; Two-Headed Giant teams, 2010-06-15) are cited.
+- Engine: with a limited range of influence, the ability affects only the players within its controller's range and sets each to the highest life total among the players within that range (Alice controlling it: Alice, Barry and Doug become 8; Carrie, out of range, keeps 11).
+- Recorded: no exemption until the user decides (the ruling stays uncited); test `tests/rulings/r_p014_catch_up.rs` (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`).
+
 ## Narrower than stated
 
 ### Tempt with Glory and the other tempting offers: "starting with the opponent on your left"
@@ -379,21 +388,15 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- (Done.) Work item ruling-conflicts-3 took up the craft copy ruling (now an
+- None at the moment. Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
-  the Untamed (the ruling agrees with CR 601.2b; the engine was changed) and Araumi of the
-  Dead Tide (an inconsistent entry above, for the user to decide). It also compared the 69
-  release-notes files in the ormos mirror (2013 to 2022) with the data, card by card, for
-  notes the data has with at most four words changed (about 1,100, most for grammar such as
-  "they" for "he or she", or later rules updates). Of the 25 or so whose changed words are
-  about who, where or what (owner, controller, opponent, graveyard, library, can or can't),
-  read by hand, the others are rewordings or corrections that bring the note in line with
-  the card (Failure // Comply's "Opponents" for "Players", Choose Your Demise's "library"
-  for "graveyard"); only Run Out of Town's and Sanguine Spy's contradict it. The rest weren't
-  read one by one.
-- **Arbiter of Knollridge** (rulings-P014): its ruling (2007-10-01) sets each player's life
-  total to the highest life total within that player's own range of influence (its example
-  has Alice become 8 and Barry and Doug 11), against CR 801.10 and 801.11, under which the
-  ability affects and sees only what is within its controller's range (801.11's second Coat
-  of Arms example), as the Imperial Mask and Benediction of Moons rulings say. Left uncited;
-  the texts are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
+  the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
+  Dead Tide and Arbiter of Knollridge (inconsistent entries above, for the user to decide).
+  It also compared the 69 release-notes files in the ormos mirror (2013 to 2022) with the
+  data, card by card, for notes the data has with at most four words changed (about 1,100,
+  most for grammar such as "they" for "he or she", or later rules updates). Of the 25 or so
+  whose changed words are about who, where or what (owner, controller, opponent, graveyard,
+  library, can or can't), read by hand, the others are rewordings or corrections that bring
+  the note in line with the card (Failure // Comply's "Opponents" for "Players", Choose Your
+  Demise's "library" for "graveyard"); only Run Out of Town's and Sanguine Spy's contradict
+  it. The rest weren't read one by one.
