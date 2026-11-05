@@ -8,13 +8,94 @@
 //! processed yet count too (CR 608.2h: the value is determined as the instruction is
 //! performed).
 
-use crate::ability::{Tally, TriggerCond};
+use crate::ability::{Filter, Tally, TriggerCond};
 use crate::eval::Ctx;
 use crate::events::Event;
-use crate::object::EventInfo;
 use crate::game::Game;
+use crate::object::EventInfo;
+use crate::object::Characteristics;
+use crate::types::{ObjectId, PlayerId};
 use crate::object::Zone;
 use std::collections::BTreeSet;
+use std::sync::Arc;
+
+/// A damage event of this turn (`TurnHistory::damage_as_dealt`): its index in
+/// `Game::turn_events` and what its source was as it dealt the damage.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct DamageAsDealt {
+    pub index: usize,
+    pub source: ObjectId,
+    pub controller: PlayerId,
+    pub chars: Arc<Characteristics>,
+}
+
+/// Records the damage event about to be added to this turn's events (called as it's
+/// processed, before it's pushed onto `Game::turn_events`).
+pub fn record_damage(g: &mut Game, source: ObjectId) {
+    let o = g.obj(source);
+    let rec = DamageAsDealt {
+        index: g.turn_events.len(),
+        source,
+        controller: o.controller,
+        chars: Arc::new(o.chars.clone()),
+    };
+    g.history.damage_as_dealt.push(rec);
+}
+
+/// `cond` matched against the `index`th event of this turn (`None`: not yet processed).
+/// "[Quality] sources that dealt damage this turn" means what the sources were as they
+/// dealt it, not what they are now (a creature that was a Pirate then counts even if it
+/// isn't one now, CR 608.2h).
+fn matches_at(
+    g: &Game,
+    cond: &TriggerCond,
+    ctx: &Ctx,
+    index: Option<usize>,
+    ev: &Event,
+) -> Vec<EventInfo> {
+    if let (
+        TriggerCond::DealsDamage {
+            source,
+            to,
+            combat_only,
+        },
+        Event::Damage { source: s, .. },
+    ) = (cond, ev)
+    {
+        let seen = index.and_then(|i| {
+            g.history
+                .damage_as_dealt
+                .iter()
+                .find(|r| r.index == i && r.source == *s)
+        });
+        if let Some(seen) = seen {
+            let view = crate::eval::AsDeclared {
+                id: *s,
+                chars: &seen.chars,
+                controller: seen.controller,
+            };
+            if !g.matches_view(&view, *s, source, ctx) {
+                return vec![];
+            }
+            let any = TriggerCond::DealsDamage {
+                source: Filter::Any,
+                to: to.clone(),
+                combat_only: *combat_only,
+            };
+            return g.trigger_matches_ctx(&any, ctx, ev);
+        }
+    }
+    matches_of(g, cond, ctx, ev)
+}
+
+/// This turn's events (processed ones with their index), then the current action's.
+fn turn_events_indexed(g: &Game) -> impl Iterator<Item = (Option<usize>, &Event)> {
+    g.turn_events
+        .iter()
+        .enumerate()
+        .map(|(i, e)| (Some(i), e))
+        .chain(g.events.iter().map(|e| (None, e)))
+}
 
 /// The matches of this turn's event `ev` for `cond`. A permanent's entering the
 /// battlefield is matched as the permanent entered, under the control it entered under
@@ -63,8 +144,9 @@ pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -
         TriggerCond::DealtExcessDamage { .. } => g.excess_ahead.as_slice(),
         _ => &[],
     };
-    for ev in g.turn_events.iter().chain(g.events.iter()).chain(ahead) {
-        for info in matches_of(g, cond, ctx, ev) {
+    let events = turn_events_indexed(g).chain(ahead.iter().map(|e| (None, e)));
+    for (i, ev) in events {
+        for info in matches_at(g, cond, ctx, i, ev) {
             match tally {
                 Tally::Events => n += 1,
                 Tally::Amount => n += info.amount.max(0) as i64,
@@ -94,8 +176,8 @@ pub fn event_objects_this_turn(
     ctx: &Ctx,
 ) -> Vec<crate::types::ObjectId> {
     let mut out = Vec::new();
-    for ev in g.turn_events.iter().chain(g.events.iter()) {
-        for info in matches_of(g, cond, ctx, ev) {
+    for (i, ev) in turn_events_indexed(g) {
+        for info in matches_at(g, cond, ctx, i, ev) {
             let o = match cond {
                 TriggerCond::DealsDamage { .. } => info.other.or(info.object),
                 _ => info.spell.or(info.object),
