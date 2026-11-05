@@ -703,7 +703,7 @@ fn is_create(e: &Effect) -> bool {
 /// Whether the last instruction of `e` created several kinds of tokens ("a 1/1 ... token
 /// and a Food token"): `vars::CREATED` then holds only the last kind, so a follow-up
 /// about "them" can't be expressed with it.
-fn several_kinds(e: &Effect) -> bool {
+pub(crate) fn several_kinds(e: &Effect) -> bool {
     match e {
         Effect::Seq(v) => {
             v.iter().rev().take_while(|x| is_create(x)).count() > 1

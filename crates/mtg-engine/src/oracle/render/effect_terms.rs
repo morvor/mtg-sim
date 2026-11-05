@@ -67,6 +67,56 @@ fn one_of_each_sacrifice(e: &Effect) -> Option<Vec<Filter>> {
 impl Renderer<'_> {
     /// The instruction, if this module words it.
     pub(crate) fn effect_terms(&mut self, e: &Effect) -> Option<String> {
+        // "Then exile all other Nightmare tokens you control" (after creating a token):
+        // other than the tokens just created (`patterns/other_than_created.rs`), worded
+        // as "other".
+        let not_created = |f: &Filter| {
+            matches!(f, Filter::Not(n) if matches!(n.as_ref(),
+                Filter::In(s) if matches!(s.as_ref(), Sel::Var(v) if *v == vars::CREATED)))
+        };
+        let other = |v: &[Filter]| -> Option<Sel> {
+            v.iter().any(not_created).then(|| {
+                Sel::All(Filter::And(
+                    v.iter()
+                        .map(|f| {
+                            if not_created(f) {
+                                Filter::Other
+                            } else {
+                                f.clone()
+                            }
+                        })
+                        .collect(),
+                ))
+            })
+        };
+        match e {
+            Effect::Exile {
+                what: Sel::All(Filter::And(v)),
+                face_down,
+                link,
+            } if other(v).is_some() => {
+                return Some(self.effect(&Effect::Exile {
+                    what: other(v)?,
+                    face_down: *face_down,
+                    link: *link,
+                }));
+            }
+            Effect::Destroy {
+                what: Sel::All(Filter::And(v)),
+                no_regen,
+            } if other(v).is_some() => {
+                return Some(self.effect(&Effect::Destroy {
+                    what: other(v)?,
+                    no_regen: *no_regen,
+                }));
+            }
+            Effect::SacrificeObjects {
+                what: Sel::All(Filter::And(v)),
+            } if other(v).is_some() => {
+                return Some(self.effect(&Effect::SacrificeObjects { what: other(v)? }));
+            }
+            _ => {}
+        }
         match e {
             // "For each color, return up to one target creature card of that color from
             // your graveyard to your hand": five targets, one of each color (CR 105.1).

@@ -1206,9 +1206,10 @@ impl Game {
         // CR 604.3; "this spell has flash as long as ...", CR 601.3d).
         let self_only = filter_is_self(affected);
         // Alternatives in several zones ("creatures you control and creature cards you own
-        // that aren't on the battlefield"): each alternative's zone.
+        // that aren't on the battlefield", "Noble creatures you control and Lesson spells
+        // you control"): each alternative in its own zone, the battlefield if it names none.
         let zones = match zone {
-            None => crate::eval::alternative_zones(affected),
+            None => crate::eval::alternative_zones_or_battlefield(affected),
             Some(_) => None,
         };
         live.iter()
@@ -1217,7 +1218,10 @@ impl Game {
                 let obj = self.obj(*o);
                 let in_zone = match (zone, &zones) {
                     (Some(z), _) => obj.zone.kind() == Some(z),
-                    (None, Some(zs)) => obj.zone.kind().is_some_and(|k| zs.contains(&k)),
+                    (None, Some(zs)) => {
+                        obj.zone.kind().is_some_and(|k| zs.contains(&k))
+                            && self.matches_alternative_of_its_zone(*o, affected, ctx)
+                    }
                     (None, None) => obj.zone == Zone::Battlefield || (self_only && *o == src),
                 };
                 in_zone && !obj.phased_out && self.matches(*o, affected, ctx)
