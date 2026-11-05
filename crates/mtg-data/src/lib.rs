@@ -4,6 +4,7 @@
 //! * [`rulings`] — Scryfall bulk-data rulings, keyed by Oracle ID.
 //! * [`tags`] — Scryfall oracle tags (functional card tags).
 //! * [`interpretations`] — the interpretation register (`docs/interpretations/`).
+//! * [`discrepancies`] — the log of erroneous rulings (`docs/RULING_DISCREPANCIES.md`).
 //! * [`rules`] — the Magic: The Gathering Comprehensive Rules, parsed into
 //!   numbered rules and glossary entries.
 //!
@@ -13,6 +14,7 @@
 //! The global accessors ([`cards`], [`rulings`], [`comprehensive_rules`]) load lazily
 //! and cache for the lifetime of the process.
 
+pub mod discrepancies;
 pub mod interpretations;
 pub mod rules;
 pub mod rulings;

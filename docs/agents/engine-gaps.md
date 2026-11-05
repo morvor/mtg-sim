@@ -845,8 +845,9 @@ ruling-conflicts-2.
   them, nothing dated makes either outdated). The 2024-04-12 ruling "... Homicide Investigator's ability triggers
   for each of them." is Midnight Reaper's per-creature ruling (2018-09-20) with the name swapped, against both
   sentences of the Oracle text ("one or more ... die"; "triggers only once each turn"). The engine follows the
-  Oracle text (register `homicide-investigator-triggers-once`, provisional); the ruling stays OPEN, not exempt,
-  until the user decides (with Rimescale Dragon below).
+  Oracle text (register `homicide-investigator-triggers-once`). Decided by the user on Nov 5 (policy
+  `ruling-contradicting-oracle-gives-way`): the ruling is exempt in `docs/rulings-exemptions/rulings-P005.tsv` and logged
+  in `docs/RULING_DISCREPANCIES.md` (item register-decisions-nov5).
 - **Lich** (rulings-P096): resolved, ruling-conflicts-2 case 3, conclusion B in part. The September 2010 Update
   Bulletin (Matt Tabak, 2010-09-22; Oracle update announced to go live 2010-09-24) changed "When Lich leaves the
   battlefield, you lose the game" to "When Lich is put into a graveyard from the battlefield, you lose the game";
@@ -857,8 +858,8 @@ ruling-conflicts-2.
 - **Rimescale Dragon** (rulings-P096): ruling-conflicts-2 case 4, conclusion D in part. The ruling is Rimefeather
   Owl's same-day ruling (2006-07-15) with the name swapped. Its "whether or not it put the ice counters on them"
   is cited; its "all permanents" contradicts the Oracle (and printed) "Creatures", which the engine follows
-  (register `rimescale-dragon-creatures-only`, provisional). The user decides together with Homicide
-  Investigator; no exemption until then.
+  (register `rimescale-dragon-creatures-only`). Decided by the user on Nov 5 with Homicide Investigator: "all
+  permanents" is exempt in `rulings-P096.tsv` and logged in `docs/RULING_DISCREPANCIES.md`.
 - **Run Out of Town** (rulings-P140). Oracle: "The owner of target nonland permanent puts it on their choice
   of the top or bottom of their library." Ruling 2022-04-29: "That permanent's controller chooses whether to
   put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to

@@ -171,16 +171,19 @@ fn a_modal_double_faced_card_played_or_cast_back_face_up_is_a_transformed_perman
 #[test]
 fn turning_a_permanent_face_up_isnt_transforming() {
     cr!("701.27b", "701.27a");
+    // Both rulings' first sentence ("[Similarly,] only transforming double-faced permanents
+    // (including transforming double-faced cards and Incubator tokens) can transform.") uses
+    // the old term: since the Marvel's Spider-Man CR update effective 2025-09-19, modal
+    // double-faced permanents can transform too (CR 701.27a, 712.3; logged as outdated in
+    // docs/RULING_DISCREPANCIES.md). This test cites and checks only their second sentence,
+    // still current.
     ruling!(
         "Norn's Inquisitor",
         "A face-up permanent turning face down doesn't count as transforming, nor does a face-down permanent turning face up."
     );
-    // Its first sentence uses the old term: since the Marvel's Spider-Man CR update
-    // effective 2025-09-19, modal double-faced permanents can transform too (CR 701.27a,
-    // 712.3); this test checks only its second sentence, still current.
     ruling!(
         "Corruption of Towashi",
-        "Similarly, only transforming double-faced permanents (including transforming double-faced cards and Incubator tokens) can transform."
+        "A face-up permanent turning face down doesn't count as transforming, nor does a face-down permanent turning face up."
     );
     supported("Norn's Inquisitor");
     let mut t = TestGame::new(2);

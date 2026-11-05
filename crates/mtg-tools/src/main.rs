@@ -15,7 +15,9 @@
 //!   none stale, none the compiler can now parse, none duplicated, every card tested.
 //! * `rulings-coverage [--write PATH] [--check] [--card NAME] [--text SUBSTR]` — which
 //!   Scryfall rulings are cited by tests (via `ruling!(...)`) or exempted
-//!   (`docs/rulings-exemptions/*.tsv`); `--card`/`--text` print per-ruling status.
+//!   (`docs/rulings-exemptions/*.tsv`); `--card`/`--text` print per-ruling status. `--check`
+//!   also checks the log of erroneous rulings (`docs/RULING_DISCREPANCIES.md`,
+//!   `mtg_data::discrepancies`).
 //! * `unsupported [--limit N] [--filter TEXT] [--card NAME] [--paper] [--single]` — dump
 //!   unsupported ability texts with counts (`--card`: only that card's texts, by exact name,
 //!   case-insensitive; `--paper`: only the cards `card-coverage` counts; `--single`: only
@@ -1066,6 +1068,12 @@ fn rulings_coverage(args: &[String]) {
     for u in &missing_reason {
         println!("  EXEMPTION WITHOUT REASON {u}");
     }
+    // The log of erroneous rulings: every exemption that sets a ruling aside as outdated,
+    // inconsistent, misattached or contradicting the Oracle text has an entry there.
+    let log_problems = mtg_data::discrepancies::check(&repo_root());
+    for p in &log_problems {
+        println!("  RULING LOG {p}");
+    }
     let status = |comment: &str, oracle_id: &str| -> &'static str {
         let key = (oracle_id.to_string(), comment.to_string());
         if matched.contains(&key) {
@@ -1177,7 +1185,12 @@ fn rulings_coverage(args: &[String]) {
         std::fs::write(repo_root().join(&path), &md).expect("write report");
         println!("wrote {path}");
     }
-    if check && !(unmatched.is_empty() && unmatched_ex.is_empty() && missing_reason.is_empty()) {
+    if check
+        && !(unmatched.is_empty()
+            && unmatched_ex.is_empty()
+            && missing_reason.is_empty()
+            && log_problems.is_empty())
+    {
         std::process::exit(1);
     }
 }

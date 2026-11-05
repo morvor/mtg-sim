@@ -663,8 +663,9 @@ fn rimescale_dragon_freezes_creatures_with_ice_counters_from_any_source_but_not_
     // Owl's ruling of the same day word for word. Its holding, "whether or not it put the
     // ice counters on them", agrees with the card and is cited; its "all permanents"
     // contradicts the card's "Creatures" (CR 109.2), which the engine follows: a Forest with
-    // an ice counter untaps (register rimescale-dragon-creatures-only, provisional, pending
-    // the user's decision).
+    // an ice counter untaps. By the user's decision of Nov 5 (the card's text wins over a
+    // ruling that contradicts it) that part gives way: exempt in
+    // docs/rulings-exemptions/rulings-P096.tsv and logged in docs/RULING_DISCREPANCIES.md.
     ruling!(
         "Rimescale Dragon",
         "whether or not it put the ice counters on them"
@@ -673,7 +674,10 @@ fn rimescale_dragon_freezes_creatures_with_ice_counters_from_any_source_but_not_
         "Rimefeather Owl",
         "Rimefeather Owl’s last ability affects all permanents with ice counters on them, whether or not it put the ice counters on them."
     );
-    interp!("rimescale-dragon-creatures-only");
+    interp!(
+        "rimescale-dragon-creatures-only",
+        "ruling-contradicting-oracle-gives-way"
+    );
     supported("Rimescale Dragon");
     supported("Rimefeather Owl");
     let mut t = TestGame::new(2);
