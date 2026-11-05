@@ -112,7 +112,11 @@ pub fn token_characteristics_in(
     // token's copiable values, a copy of the token refers to it too (CR 201.5a, 707.2).
     if let Some(src) = ctx.source {
         for a in chars.abilities.iter_mut() {
-            if crate::granted_by::refers_to_granter(a) {
+            // (Only its characteristic-defining abilities: an ability the token grants
+            // that names the token, "Sacrifice Rock" in Toggo's Rock, is bound to the
+            // token as the other object acquires it, see `layers::acquired_ability`.)
+            let cda = matches!(&a.kind, AbilityKind::Static(st) if st.is_cda);
+            if cda && crate::granted_by::refers_to_granter(a) {
                 *a = crate::granted_by::bind_granter(a, src);
             }
         }

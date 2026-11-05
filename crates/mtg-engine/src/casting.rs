@@ -2059,6 +2059,8 @@ impl Game {
         if !moved.is_empty() {
             self.saved_ctx.entry(id).or_default().vars.extend(moved);
         }
+        // Amounts to divide that the costs set (CR 601.2d, 601.2h).
+        self.divide_after_costs(id)?;
         // CR 700.14: the player expends N for each N reached by this payment.
         let spent = paid.mana_spent.len() as u32;
         if spent > 0 {
@@ -2260,13 +2262,21 @@ impl Game {
                 player: Some(p),
                 ..Default::default()
             });
-            // (A card being considered for casting is judged as the spell it would be.)
+            // (A card being considered for casting is judged as the spell it would be: with
+            // the characteristics of the face, half or way it would be cast, CR 601.3e,
+            // 702.103b. A spell being cast has those already.)
             let applies = match &cm.applies_to {
                 CostTarget::Spells(f) => {
                     self.player_rel_matches(cm.who, p, &ctx)
-                        && crate::spell_costs::spells_change_applies(
-                            self, card, f, &cm.change, &ctx,
-                        )
+                        && if self.obj(card).zone == Zone::Stack {
+                            crate::spell_costs::spells_change_applies(
+                                self, card, f, &cm.change, &ctx,
+                            )
+                        } else {
+                            crate::spell_costs::spells_change_applies_as(
+                                self, card, chars, f, &cm.change, &ctx,
+                            )
+                        }
                 }
                 _ => false,
             };
@@ -3044,6 +3054,8 @@ impl Game {
             si.cast.loyalty_removed = paid.loyalty_removed;
         }
         self.saved_ctx.insert(id, ctx.clone());
+        // Amounts to divide that the costs set (CR 601.2d, 601.2h).
+        self.divide_after_costs(id)?;
         self.record_activation(p, src, a.uid);
         // CR 702.29c: discarding a card to pay a cycling ability's cost is cycling it.
         if a.text == "Cycling"

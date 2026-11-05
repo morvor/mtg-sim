@@ -100,7 +100,7 @@ fn is_stack_target(b: &Builder, n: u8) -> bool {
 }
 
 /// "target spell [or ability] [with a single target | that targets only ...]".
-fn stack_target(s: &str, b: &mut Builder) -> Option<Sel> {
+pub(crate) fn stack_target(s: &str, b: &mut Builder) -> Option<Sel> {
     let (head, qualifier) = split_targets_qualifier(end(s));
     let (mut spec, rest) = parse_target(head)?;
     if !end(rest).is_empty() {

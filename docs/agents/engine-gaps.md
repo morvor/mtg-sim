@@ -832,3 +832,65 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   (stack.rs:1042 drops `saved_ctx`; no storm/epic/casualty card references it), bestowed Aura status ending at
   the next SBA check, Word of Command's resolution window.
 - UI-only: "discard up to N" asking twice, per-card dredge prompt, ordering identical tokens.
+
+---
+
+## Flagged by rulings-P005 (Nov 5)
+
+Found by the rulings-P005 reviewer (landed as `e9d133e3`); not fixed there.
+
+1. **Castability of a card not yet on the stack ignores continuous effects that would apply to the spell.**
+   - Rule: CR 601.3e, last sentence: when determining whether a player may begin to cast a spell, the
+     spell's characteristics are determined as if it were on the stack, including effects that would apply
+     to it there.
+   - Where: `casting.rs` `total_cost_and_x` uses `option_characteristics` for a card not on the stack. That
+     returns the printed characteristics of the chosen half / Adventure / back face / face-down spell and
+     doesn't apply continuous effects. Permission and prohibition checks have the same limitation. A proper
+     fix needs layer computation for a card that isn't on the stack yet.
+   - Repro (castable, but no longer listed in `legal_actions`; casting it directly works):
+     - Celestial Dawn + Pearl Medallion, one Plains: Ice (Fire // Ice) isn't offered.
+     - Encroaching Mycosynth + Etherium Sculptor, four Islands: Locker Room isn't offered.
+   - Introduced by the P005 fix (the old code got these right by accident); rare combinations only.
+2. **The default X ignores costs and target counts that depend on X.**
+   - Rule: CR 601.2b/601.2f/601.2h (X is chosen with the costs and targets it implies; the cast must be
+     payable); `Answer::Default` should fall back to a legal choice (CLAUDE.md, `default-first-listed-choice`).
+   - Where: on `Answer::Default` the engine picks the largest X from mana alone, without checking costs like
+     "discard X", "exile X cards", "sacrifice X", "remove X counters", or how many targets X needs. The cast
+     then fails.
+   - Repro: Conflagrate, Flash of Insight, Summons of Saruman, Light Up the Night, Firecat Blitz, Plant
+     Tadpoles, each cast with the default answer and enough mana but too few cards/permanents for the largest X.
+3. **Flashback (and other casts from the graveyard) offered when the only target is the card itself.**
+   - Rule: CR 601.2c with 115.1 / 601.2a: the card is on the stack while targets are chosen, so it can't
+     target itself in the graveyard.
+   - Where: `targets_possible` doesn't leave out the card being cast (it must still include an activated
+     ability's source).
+   - Repro: Mystic Retrieval, Recoup, Sorceress's Schemes in a graveyard that holds no other instant or
+     sorcery card: listed in `legal_actions` via flashback, and the cast fails with "no legal targets".
+
+## Apparent conflicts (Nov 5)
+
+Rulings that rulings-2 left uncited (OPEN) because they seem to contradict the card's current Oracle text
+(data/oracle_cards.jsonl.gz, snapshot 2026-09-24); the engine follows the Oracle text. For
+ruling-conflicts-2.
+
+- **Homicide Investigator** (rulings-P005): see `docs/agents/items/ruling-conflicts-2.md`.
+- **Lich** (rulings-P096, landed `f21a66a1`). Oracle: "When this enchantment is put into a graveyard from the
+  battlefield, you lose the game." Two rulings say "leaves the battlefield":
+  - 2004-10-04: "If you have multiple Lich cards on the battlefield, you must sacrifice a permanent for each
+    damage done to you for each Lich. This is because the sacrifice is a triggered ability. But you only draw
+    one card for each life gained regardless of how many Liches you have. This is because the draw is a
+    replacement effect and not a triggered one. You lose if any one of the Liches leaves the battlefield."
+    Only the last sentence conflicts; the rest is tested in `tests/rulings/r_p096_lich.rs` (uncited).
+  - 2010-08-15: "The last ability will cause you to lose the game even if you somehow manage to have a life
+    total greater than 0 at the time the Lich leaves the battlefield or if some other effect would prevent you
+    from losing for having 0 life. If, on the other hand, some effect such as that from Platinum Angel says
+    that you can't lose the game then even the last ability of the Lich cannot cause you to do so. The ability
+    will just resolve and the game will continue as normal."
+  - The 2011-01-01 version of the second ruling ("... at the time the Lich is put into the graveyard ...")
+    agrees with the Oracle text and is cited. The "leaves the battlefield" wording probably comes from older
+    Oracle text (not verified: the repo has one Oracle snapshot).
+- **Rimescale Dragon** (rulings-P096). Oracle: "Creatures with ice counters on them don't untap during their
+  controllers' untap steps." Ruling 2006-07-15: "Rimescale Dragon’s last ability affects all permanents with
+  ice counters on them, whether or not it put the ice counters on them." Other cards put ice counters on
+  noncreature permanents (e.g. Rimefeather Owl), so "all permanents" and "creatures" give different results;
+  the engine lets a noncreature permanent with an ice counter untap.
