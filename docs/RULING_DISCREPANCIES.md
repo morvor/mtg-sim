@@ -165,6 +165,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Halsin (layers 7b, 7c and 7d in timestamp order, CR 613.4, 613.7).
 - Recorded: tests `tests/rulings/misattached_rulings.rs` (`halsin_sets_base_power_and_toughness_under_effects_that_modify_them`, `halsin_overwrites_earlier_base_power_and_toughness_and_later_ones_overwrite_it`), citing them under Gut, whose Skeleton token is the token Halsin animates.
 
+### Scuttletide: a ruling about a trigger on attackers declared against you
+- Kind: misattached
+- Status: open for review
+- Ruling, Scuttletide (2021-06-18): "The triggered ability triggers when creatures are declared as attackers attacking you or a planeswalker you control. It will not trigger if an effect puts a creature onto the battlefield attacking you or a planeswalker you control."
+- Conflicts with: Scuttletide has no triggered ability: "{1}, Discard a card: Create a 0/3 blue Crab creature token. / Delirium — Crabs you control get +1/+1 as long as there are four or more card types among cards in your graveyard."
+- Evidence: the card the ruling describes isn't identified: no other card in the data has this ruling, and no Modern Horizons 2 card (the set of Scuttletide and of the ruling's date) has a trigger on creatures attacking you or a planeswalker you control. Scuttletide's other rulings include three about Clue tokens ("The token is named Clue Token ...", 2021-06-18), which fit Hard Evidence ("Create a 0/3 blue Crab creature token. Investigate."), another Modern Horizons 2 card that makes Crabs and has no rulings of its own in the data; so rulings of neighbouring cards were filed under Scuttletide, and this one probably came from another card of the set's release notes (an inference). The only card in the data whose Oracle text both has such a trigger and makes Clues is Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate."), which also has no rulings of its own, but its printing in the data is from Murders at Karlov Manor Commander (released 2024-02-09), after the ruling's date, and it isn't a Modern Horizons 2 card, so it isn't likely to be the card the 2021 release notes described.
+- Engine: an ability that triggers when a creature attacks you or a planeswalker you control triggers on attackers declared that way (CR 508.3a) and not for a creature put onto the battlefield attacking (CR 508.4).
+- Recorded: test `tests/rulings/r_p011_combat.rs` (`creatures_put_onto_the_battlefield_attacking_werent_declared`), with Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate.") standing in for the card it describes and Scuttletide on the battlefield, citing it under Scuttletide.
+
 ## Outdated rulings
 
 ### Aetherplasm: "This allows it to dodge abilities like Deathgazer's."
@@ -338,3 +347,8 @@ decides whether they become a conflict case.
 - **Work item ruling-conflicts-3** (separate): Run Out of Town (the ruling has the permanent's
   controller choose top or bottom, the Oracle text its owner) and Caller of the Untamed (the
   card to copy chosen during activation, against the decided `x-defined-by-target`).
+- **Araumi of the Dead Tide** (rulings-P024): its ruling (2020-11-10) lets any X be chosen
+  for the encore cost "equal to its mana cost", against CR 107.3h and the opposite rulings of
+  Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same
+  wording for scavenge. Left uncited; the texts are in `docs/agents/engine-gaps.md`,
+  "Apparent conflicts (Nov 5)".

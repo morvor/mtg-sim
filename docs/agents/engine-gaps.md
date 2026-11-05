@@ -879,3 +879,19 @@ ruling-conflicts-2.
   one is copied: chosen during activation by the ruling, as the ability resolves by the interpretation). Not a
   CR conflict: CR 107.3c and 607.3 support the ruling; following it needs a non-target choice made during
   activation.
+- **Araumi of the Dead Tide** (rulings-P024, left uncited). Ruling 2020-11-10: "If the creature card has {X}
+  in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are
+  created. X will be 0 for those tokens." Araumi grants encore with "The encore cost is equal to its mana
+  cost." (reminder: "Exile the creature card and pay its mana cost: ..."). CR 107.3h: "If an effect instructs a
+  player to pay an object’s mana cost that includes {X}, the value of X is treated as 0 unless the object is a
+  spell on the stack. In that case, the value of X is the value chosen or determined for it as the spell was
+  cast." (and 107.3g: "If a card in any zone other than the stack has an {X} in its mana cost, the value of
+  {X} is treated as 0, even if the value of X is defined somewhere within its text."). Varolz, the
+  Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08), which grant scavenge with the same wording
+  ("The scavenge cost is equal to its mana cost."), have the opposite ruling: "If the creature card you
+  scavenge has {X} in its mana cost, X is 0." Only Araumi's first sentence conflicts (107.3a, letting the
+  player announce an X in an activation cost, would support it if 107.3h didn't apply). The engine follows CR
+  107.3h for both (X is 0 for the cost: `a_scavenged_card_s_x_is_0` in `tests/rulings/r_s27_mana_value_x.rs`
+  and `araumi_encore_cost_and_tokens_have_x_0` in `tests/rulings/r_p024_x_values.rs`, which cites no
+  ruling); the Araumi ruling's second sentence (the tokens' X is 0) holds either way. Undecided: the user
+  decides with ruling-conflicts-2.
