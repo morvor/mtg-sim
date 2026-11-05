@@ -728,3 +728,94 @@ fn a_card_returned_at_random_by_a_spell_is_seen_by_everyone() {
         assert!(seen, "{spell}: P1 saw the returned card: {p1_events:?}");
     }
 }
+
+/// An agent that records what its player sees of The Toymaker's Trap's choices when asked
+/// to guess (an option among numbers), then guesses 1.
+struct GuessSpy(std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>, ObjectId);
+
+impl mtg_engine::decision::Agent for GuessSpy {
+    fn decide(
+        &mut self,
+        game: &mtg_engine::game::Game,
+        player: PlayerId,
+        decision: &Decision,
+    ) -> mtg_engine::decision::Answer {
+        if let Decision::ChooseOption { options, .. } = decision {
+            if options.first().map(String::as_str) == Some("1") {
+                let o = observe(game, Some(player));
+                let trap = o.battlefield.iter().find(|v| v.id == self.1 .0).unwrap();
+                self.0.lock().unwrap().push(trap.choices.clone());
+                return mtg_engine::decision::Answer::Index(0);
+            }
+        }
+        match decision {
+            Decision::Priority { .. } => {
+                mtg_engine::decision::Answer::Action(mtg_engine::decision::Action::Pass)
+            }
+            Decision::DeclareAttackers { .. } => mtg_engine::decision::Answer::Attackers(vec![]),
+            Decision::DeclareBlockers { .. } => mtg_engine::decision::Answer::Blockers(vec![]),
+            _ => mtg_engine::decision::Answer::Default,
+        }
+    }
+}
+
+#[test]
+fn the_toymakers_trap_number_is_hidden_from_the_guesser_until_revealed() {
+    cr!("608.2c");
+    interp!("hidden-information");
+    ruling!(
+        "The Toymaker's Trap",
+        "To secretly choose a number, write a number from 1 to 5 down without showing it to anyone else."
+    );
+    let mut t = TestGame::new(2);
+    let trap = t.battlefield(P0, "The Toymaker's Trap");
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.set_agent(P1, Box::new(GuessSpy(seen.clone(), trap)));
+    // P0 chooses 3 (P1 guesses 1: wrong); next upkeep 5 among the four left.
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(2),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    let choices = |t: &TestGame, v: PlayerId| {
+        observe(&t.g, Some(v))
+            .battlefield
+            .into_iter()
+            .find(|o| o.id == trap.0)
+            .unwrap()
+            .choices
+    };
+    // Revealed after the guess (with the opponent P0 picked to guess).
+    let shown = choices(&t, P1);
+    assert!(
+        shown.len() == 1 && shown[0].starts_with("P0 chose 3"),
+        "{shown:?}"
+    );
+    assert_eq!(t.life(P1), 19);
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(3),
+    );
+    t.advance_to(P1, mtg_engine::turn::Step::Upkeep);
+    t.advance_to(P0, mtg_engine::turn::Step::Upkeep);
+    t.resolve_all();
+    let shown = choices(&t, P1);
+    assert!(
+        shown.len() == 1 && shown[0].starts_with("P0 chose 5"),
+        "{shown:?}"
+    );
+    // While guessing, P1 saw only that P0 had chosen, both times (not the number, nor the
+    // earlier one).
+    let seen = seen.lock().unwrap();
+    assert_eq!(
+        *seen,
+        vec![
+            vec!["P0 chose secretly".to_string()],
+            vec!["P0 chose secretly".to_string()]
+        ]
+    );
+    assert_eq!(t.life(P1), 18);
+}

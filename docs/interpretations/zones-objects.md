@@ -149,6 +149,18 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/choices.rs` (`CHOSEN_OBJECT_POWER`); `crates/mtg-engine/src/oracle/patterns/additional_cost_choices.rs` (`choose_object_as_cost`).
 - Tests: `tests/cards/c5_costs_sets.rs` (`close_encounter_uses_the_chosen_creatures_power`).
 
+## guff-players-who-controlled: "Each player who controlled one of those permanents" are the last known controllers of the targets the spell moved
+- Kind: interpretation
+- Status: decided
+- Rules: 608.2h "If an effect requires information from the game ..., the answer is determined only once, when the effect is applied. If the effect requires information from a specific object, including the source of the ability itself, the effect uses the current information of that object if it’s in the public zone it was expected to be in; if it’s no longer in that zone, ... the effect uses the object’s last known information. ..." / 608.2b "... The spell or ability won’t perform any actions on [illegal targets] or make any of those targets perform any actions. ..."
+- Question: Guff Rewrites History shuffles the targeted permanents into their owners' libraries, then "Each player who controlled one of those permanents exiles cards ...". Who are those players: the owners, the controllers as they were targeted, or as they left the battlefield? And a target that became illegal?
+- Decision: The players who controlled one of the targets the spell acted on (its legal targets as it resolves), as each last existed on the battlefield. A player who controlled another player's permanent exiles from their own library, though the permanent went into its owner's; a player with no such permanent (no target was chosen for them, or theirs became illegal) doesn't exile.
+- Alternatives: (A) The owners (the players whose libraries got the permanents); (B) include the controller of an illegal target.
+- Why: "Controlled" names the controller, not the owner; the permanents are no longer on the battlefield, so their last known information is used (608.2h); "those permanents" are the ones the previous instruction shuffled.
+- Affects: Guff Rewrites History.
+- Code: `crates/mtg-engine/src/oracle/patterns/per_player_results_6.rs` (`each_player_who_controlled`).
+- Tests: `tests/cards/cards6_per_player_results.rs` (`guff_rewrites_history_each_controller_casts_the_card_they_exiled`, `guff_rewrites_history_a_player_whose_target_became_illegal_exiles_nothing`).
+
 ## cost-moved-source-found-only-by-own-cost: An ability's instructions about its own source follow the source to where the cost moved it only when a cost part about the source itself moved it
 - Kind: interpretation
 - Status: provisional
