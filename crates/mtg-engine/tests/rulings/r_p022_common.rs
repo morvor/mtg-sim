@@ -8,14 +8,14 @@
 #![allow(dead_code)]
 
 pub use crate::r_p021_common::{
-    assert_printed_giant, cant_copy_what_enters_with_it, dress, dressed_giant, giant_growth,
+    animate_land, assert_printed_giant, cant_copy_what_enters_with_it, dress, dressed_giant, giant_growth,
     legendary, modify, untap,
 };
 pub use crate::r_p023_common::{hydra_cast_with_x3, is_wolf};
 pub use crate::r_p024_common::*;
 pub use crate::r_s01_common::{asked_since, stack_library};
 pub use crate::r_p026_common::{activate_for_tokens, one};
-pub use crate::r_s06_common::give_control;
+pub use crate::r_s06_common::{attach_new, give_control};
 pub use crate::r_s26_common::{dress_up, fresh};
 pub use mtg_engine::object::Zone;
 use mtg_engine::ability::AbilityKind;

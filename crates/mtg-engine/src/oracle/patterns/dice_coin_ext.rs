@@ -336,6 +336,12 @@ inventory::submit! { EffectPattern { name: "a705 flip until you lose or N times"
 fn p_may_have_become(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let i = l.find("you may have ~ become ")?;
+    // Only a leading phrase ("until end of turn, ") may come first: in "put a +1/+1
+    // counter on ~, then you may have ~ become a copy of ..." (Spirit of Resilience) the
+    // choice covers only the second instruction (see `parse_clause`).
+    if l[..i].contains(", then ") || l[..i].contains(" and ") {
+        return None;
+    }
     let rewritten = format!(
         "{}~ becomes {}",
         &l[..i],
