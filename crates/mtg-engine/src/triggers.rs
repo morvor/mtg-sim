@@ -347,6 +347,23 @@ impl Game {
                     if gone && !looks_back(trigger, ev) {
                         continue;
                     }
+                    // CR 603.10a: an event that looks back is seen only by abilities that
+                    // existed immediately before it (a card returning from its graveyard
+                    // doesn't see itself leave the graveyard).
+                    if !gone && looks_back(trigger, ev) {
+                        if let Event::ZoneChange {
+                            lookback: Some(lb), ..
+                        } = ev
+                        {
+                            if !lb
+                                .sources
+                                .iter()
+                                .any(|(id, _, x)| *id == src && x.uid == a.uid)
+                            {
+                                continue;
+                            }
+                        }
+                    }
                     // "Creatures dying don't cause abilities to trigger" (Hushbringer).
                     if !on_sacrifice(trigger)
                         && crate::kw::torpor::suppressed_for(
@@ -1064,6 +1081,7 @@ impl Game {
                     new,
                     to: Zone::Battlefield,
                     cause,
+                    by,
                     ..
                 },
             ) => {
@@ -1072,6 +1090,8 @@ impl Game {
                         object: Some(*new),
                         player: Some(self.obj(*new).controller),
                         cause: Some(*cause),
+                        // The player who put it onto the battlefield (CR 110.2a).
+                        caused_by: *by,
                         ..Default::default()
                     })
                 } else {

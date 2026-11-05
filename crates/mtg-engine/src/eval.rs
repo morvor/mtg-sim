@@ -568,6 +568,12 @@ impl Game {
                 .and_then(|e| e.player)
                 .into_iter()
                 .collect(),
+            PlayerRef::TriggerMover => ctx
+                .event
+                .as_ref()
+                .and_then(|e| e.caused_by.or(e.player))
+                .into_iter()
+                .collect(),
             PlayerRef::TriggerPlayers => ctx
                 .event
                 .as_ref()
@@ -1485,11 +1491,7 @@ impl Game {
             Value::Count(f) => crate::relational::count(self, f, ctx)
                 .unwrap_or_else(|| self.objects_matching(f, ctx).len() as i64),
             Value::CountSel(s) => self.eval_sel(s, ctx).len() as i64,
-            Value::CountPlayers(f) => self
-                .players_in_game()
-                .into_iter()
-                .filter(|p| self.player_filter_matches(f, *p, ctx))
-                .count() as i64,
+            Value::CountPlayers(f) => crate::aggregates::count_players(self, f, ctx),
             Value::PowerOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .iter()

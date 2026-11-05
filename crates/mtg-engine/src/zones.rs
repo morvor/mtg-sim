@@ -319,9 +319,23 @@ pub const COST_RETURNED: Var = vars::USER + 132;
 /// return ~ when it was one of the targets (CR 400.7, 608.2b).
 pub const SOURCE_MOVED: Var = vars::USER + 18301;
 
-/// Records that the instruction about `what` moved `moved` (see [`SOURCE_MOVED`]).
+/// Records that the instruction about `what` moved `moved` (see [`SOURCE_MOVED`]): `~`,
+/// or the card itself by the filter for its own card ("return this card from your
+/// graveyard to the battlefield").
 pub fn note_source_moved(ctx: &mut Ctx, what: &Sel, moved: &[ObjectId]) {
-    if matches!(what, Sel::This) && !moved.is_empty() {
+    fn own_card(f: &Filter) -> bool {
+        match f {
+            Filter::Custom(n) => n == crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT,
+            Filter::And(v) => v.iter().any(own_card),
+            _ => false,
+        }
+    }
+    let about_source = match what {
+        Sel::This => true,
+        Sel::All(f) => own_card(f),
+        _ => false,
+    };
+    if about_source && !moved.is_empty() {
         ctx.vars
             .entry(SOURCE_MOVED)
             .or_default()

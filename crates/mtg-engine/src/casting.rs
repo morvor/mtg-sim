@@ -1599,7 +1599,7 @@ impl Game {
             lookback,
         });
         // CR 601.2a: effects that apply to the spell as it's cast begin now (CR 610.5,
-        // 611.2f).
+        // 611.2f, 611.3a).
         crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
         self.keep_granted_casting_keyword(card, id, &opt.method);
@@ -2038,7 +2038,7 @@ impl Game {
                 )));
             }
         }
-        // Abilities granted depending on the mana spent (CR 601.2i, 610.5).
+        // Abilities granted depending on the mana spent (CR 601.2i, 611.3a).
         crate::next_spell::grant_after_payment(self, id);
         if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
             // With any mana another player already spent on it (assist, CR 702.132a).

@@ -41,7 +41,9 @@ fn there_theyre_their_halves_with_mana_value_2_or_less_can_be_cast() {
         .asked()
         .into_iter()
         .filter_map(|(_, d)| match d {
-            Decision::ChooseOption { options, .. } if options.iter().any(|o| o.contains("There")) => {
+            Decision::ChooseOption { options, .. }
+                if options.iter().any(|o| o.contains("There")) =>
+            {
                 Some(options)
             }
             _ => None,
@@ -54,12 +56,11 @@ fn there_theyre_their_halves_with_mana_value_2_or_less_can_be_cast() {
     );
     // They're was cast (and exiled by the Sword's replacement effect).
     assert!(t.in_exile(THERE));
-    let cast_theyre = t
-        .g
-        .history
-        .spells_cast
-        .iter()
-        .any(|(_, s)| t.g.obj(*s).chars.name == "They're");
+    let cast_theyre =
+        t.g.history
+            .spells_cast
+            .iter()
+            .any(|(_, s)| t.g.obj(*s).chars.name == "They're");
     assert!(cast_theyre);
 }
 
@@ -86,7 +87,8 @@ fn a_card_whose_halves_all_have_too_high_a_mana_value_cant_be_chosen() {
 #[test]
 fn krosan_adaptation_storm_copy_token_is_not_created() {
     // Krosan Adaptation's 2019 ruling ("the token copies ... are considered to have been
-    // “created” and those effects will apply") is superseded by CR 111.13 and 608.3f: a
+    // “created” and those effects will apply") predates the Comprehensive Rules change of
+    // 2020-09-22 (Zendikar Rising), which added what are now CR 111.13 and 608.3f: a
     // copy of a permanent spell becomes a token as it resolves, and that token isn't
     // "created" for replacement effects such as Parallel Lives.
     cr!("111.13", "608.3f", "702.40a");
@@ -101,11 +103,10 @@ fn krosan_adaptation_storm_copy_token_is_not_created() {
     t.resolve_all();
     crate::r_s25_common::cast_new(&mut t, P0, "Krosan Adaptation", &[Entity::Object(bears)]);
     t.resolve_all();
-    let auras: Vec<&mtg_engine::object::GameObject> = t
-        .g
-        .permanents()
-        .filter(|o| o.chars.name == "Krosan Adaptation")
-        .collect();
+    let auras: Vec<&mtg_engine::object::GameObject> =
+        t.g.permanents()
+            .filter(|o| o.chars.name == "Krosan Adaptation")
+            .collect();
     assert_eq!(auras.len(), 2, "the card and one token, not doubled");
     assert_eq!(auras.iter().filter(|o| o.is_token()).count(), 1);
     assert_eq!(t.pt(bears), (4, 2));

@@ -242,7 +242,14 @@ impl Renderer<'_> {
             _ => None,
         };
         if let Some(c) = &t.intervening_if {
-            let c = self.condition(c);
+            // "if you didn't attack with a creature this turn": you declared no
+            // attackers this turn (CR 508.1).
+            let c = match c {
+                Condition::Not(x) if matches!(x.as_ref(), Condition::Custom(n) if n == "you_attacked_this_turn") => {
+                    "you didn't attack with a creature this turn".to_string()
+                }
+                c => self.condition(c),
+            };
             s.push_str(&format!(", if {c}"));
         }
         // (Only the first instruction can be read as the intervening clause.)

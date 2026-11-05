@@ -402,7 +402,7 @@ fn spells_you_control_have_deathtouch_applies_to_a_spell_gained_control_of() {
     supported("Pestilent Spirit");
     supported("Commandeer");
     // "Instant and sorcery spells you control have deathtouch." is a continuous effect
-    // (not one spells gain as they're cast, CR 610.5): P1's Shock, now controlled by P0,
+    // (not one granted to spells as they're cast, CR 601.2a): P1's Shock, now controlled by P0,
     // has deathtouch, and its 2 damage destroys P1's Hill Giant.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Pestilent Spirit");

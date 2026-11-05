@@ -597,6 +597,7 @@ fn s_discard_caused_by(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec
                 FunctionZone::Battlefield
             },
             is_cda: false,
+            as_cast: false,
         }),
         text,
     )])
