@@ -17,9 +17,9 @@
 
 use super::{EffectPattern, FollowupPattern};
 use crate::ability::*;
+use crate::kw::each_player_collect::{COLLECT, COLLECTED, PICK};
 use crate::oracle::effects::{parse_clause, parse_sentence, player_ref, Builder};
 use crate::oracle::phrases::*;
-use crate::kw::each_player_collect::{COLLECT, COLLECTED, PICK};
 use crate::scry_rules::{OPTED, OPT_IN};
 
 /// The players who accepted the most recent "each [player] may [instruction]".
@@ -51,10 +51,43 @@ enum Subject {
 /// Base verbs a third-person form may be turned into (the whitelist keeps nouns and
 /// other words ending in "s" from being "conjugated").
 const VERBS: &[&str] = &[
-    "ante", "attach", "become", "bid", "cast", "choose", "control", "copy", "create", "discard",
-    "discover", "draw", "exile", "gain", "get", "have", "investigate", "look", "lose",
-    "mill", "own", "pay", "play", "proliferate", "put", "reveal", "return", "sacrifice",
-    "scry", "search", "separate", "shuffle", "surveil", "take", "tap", "untap", "do",
+    "ante",
+    "attach",
+    "become",
+    "bid",
+    "cast",
+    "choose",
+    "control",
+    "copy",
+    "create",
+    "discard",
+    "discover",
+    "draw",
+    "exile",
+    "gain",
+    "get",
+    "have",
+    "investigate",
+    "look",
+    "lose",
+    "mill",
+    "own",
+    "pay",
+    "play",
+    "proliferate",
+    "put",
+    "reveal",
+    "return",
+    "sacrifice",
+    "scry",
+    "search",
+    "separate",
+    "shuffle",
+    "surveil",
+    "take",
+    "tap",
+    "untap",
+    "do",
 ];
 
 /// The base form of a third-person singular verb ("draws" → "draw", "searches" →
@@ -64,7 +97,10 @@ fn base_form(w: &str) -> Option<&'static str> {
         "has" => "have".into(),
         "does" => "do".into(),
         _ if w.ends_with("ies") => format!("{}y", &w[..w.len() - 3]),
-        _ if ["ches", "shes", "sses", "xes"].iter().any(|s| w.ends_with(s)) => {
+        _ if ["ches", "shes", "sses", "xes"]
+            .iter()
+            .any(|s| w.ends_with(s)) =>
+        {
             w[..w.len() - 2].to_string()
         }
         _ => w.strip_suffix('s')?.to_string(),
@@ -75,7 +111,12 @@ fn base_form(w: &str) -> Option<&'static str> {
 /// Whether `t` mentions "you" (the ability's controller) as a word.
 fn mentions_you(t: &str) -> bool {
     t.split(|c: char| !c.is_alphanumeric() && c != '\'')
-        .any(|w| matches!(w, "you" | "your" | "yours" | "yourself" | "you're" | "you've"))
+        .any(|w| {
+            matches!(
+                w,
+                "you" | "your" | "yours" | "yourself" | "you're" | "you've"
+            )
+        })
 }
 
 /// Whether predicate `r` joins a clause with another player as its subject ("loses the
@@ -97,10 +138,12 @@ fn joins_another_subject(r: &str) -> bool {
         "its owner",
         "any number of target",
     ];
-    [", then ", " then ", ", and ", " and ", ", "].iter().any(|sep| {
-        r.match_indices(sep)
-            .any(|(at, _)| SUBJECTS.iter().any(|s| r[at + sep.len()..].starts_with(s)))
-    })
+    [", then ", " then ", ", and ", " and ", ", "]
+        .iter()
+        .any(|sep| {
+            r.match_indices(sep)
+                .any(|(at, _)| SUBJECTS.iter().any(|s| r[at + sep.len()..].starts_with(s)))
+        })
 }
 
 /// The predicate `r` (after a third-person subject, lowercase) worded for "you": the
@@ -115,8 +158,17 @@ pub(crate) fn as_you(r: &str) -> Option<String> {
     let mut t = format!(" {verb} {} ", rest.trim());
     // Possessives of other things ("their owners' hands", "their mana costs") stay.
     const KEEP: &[&str] = &[
-        "owner", "owners", "owner's", "owners'", "controller", "controllers", "controller's",
-        "controllers'", "mana", "power", "toughness",
+        "owner",
+        "owners",
+        "owner's",
+        "owners'",
+        "controller",
+        "controllers",
+        "controller's",
+        "controllers'",
+        "mana",
+        "power",
+        "toughness",
     ];
     let words: Vec<String> = t.split(' ').map(str::to_string).collect();
     let mut out: Vec<String> = Vec::with_capacity(words.len());
@@ -313,7 +365,10 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             if let Some((pf, pred)) = super::history_filters_4::player_qualifier(r) {
                 if !r.starts_with("who ") {
                     let cond = Condition::PlayerMatches(PlayerRef::You, pf);
-                    return Some((Subject::Each(who, Some(cond)), pred.trim_start().to_string()));
+                    return Some((
+                        Subject::Each(who, Some(cond)),
+                        pred.trim_start().to_string(),
+                    ));
                 }
             }
             return Some((Subject::Each(who, None), r.to_string()));
@@ -330,14 +385,22 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
             // can do what they do ("They discard that card.").
             let players_only = matches!(
                 split_word(r).0,
-                "discard" | "draw" | "mill" | "search" | "shuffle" | "sacrifice" | "pay"
-                    | "investigate" | "scry" | "surveil" | "create"
+                "discard"
+                    | "draw"
+                    | "mill"
+                    | "search"
+                    | "shuffle"
+                    | "sacrifice"
+                    | "pay"
+                    | "investigate"
+                    | "scry"
+                    | "surveil"
+                    | "create"
             ) || (matches!(split_word(r).0, "lose" | "gain")
                 && (r.ends_with(" life") || r.contains(" life ")));
             if p == "they "
                 && !players_only
-                && (b.group.is_some()
-                    || super::pronoun_groups::plural_referent(&b.it, b.ctx))
+                && (b.group.is_some() || super::pronoun_groups::plural_referent(&b.it, b.ctx))
             {
                 return None;
             }
@@ -354,7 +417,13 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
         .strip_prefix("enchanted player ")
         .or_else(|| l.strip_prefix("enchanted opponent "))
     {
-        if !b.ctx.type_line.subtypes.iter().any(|s| s.as_str() == "Aura") {
+        if !b
+            .ctx
+            .type_line
+            .subtypes
+            .iter()
+            .any(|s| s.as_str() == "Aura")
+        {
             return None;
         }
         let who = PlayerRef::ControllerOf(Box::new(Sel::AttachedTo));
@@ -403,12 +472,18 @@ fn subject(l: &str, b: &mut Builder) -> Option<(Subject, String)> {
     let (who, rest) = player_ref(l, b)?;
     if matches!(
         who,
-        PlayerRef::You | PlayerRef::EachPlayer | PlayerRef::EachOpponent | PlayerRef::EachOtherPlayer
+        PlayerRef::You
+            | PlayerRef::EachPlayer
+            | PlayerRef::EachOpponent
+            | PlayerRef::EachOtherPlayer
     ) {
         return None;
     }
     // "its controller"/"its owner": later "that player" is that player.
-    if matches!(who, PlayerRef::ControllerOf(_) | PlayerRef::OwnerOf(_) | PlayerRef::DefendingPlayer) {
+    if matches!(
+        who,
+        PlayerRef::ControllerOf(_) | PlayerRef::OwnerOf(_) | PlayerRef::DefendingPlayer
+    ) {
         b.it_player = who.clone();
     }
     Some((Subject::One(who), rest.trim_start().to_string()))
@@ -566,11 +641,7 @@ pub(crate) fn instruction(text: &str, orig: Option<&str>, b: &mut Builder) -> Op
 /// in the base form, as after "each" or "they") as an instruction for "you". Returns
 /// whether it's optional ("may [instruction]"), the instruction (for "may", the whole
 /// optional instruction for a one-player subject, `one`), and the hoisted amount.
-fn predicate(
-    pred: &str,
-    one: bool,
-    b: &mut Builder,
-) -> Option<(bool, Effect, Option<Value>)> {
+fn predicate(pred: &str, one: bool, b: &mut Builder) -> Option<(bool, Effect, Option<Value>)> {
     let (pred, hoisted) = hoist_value(pred, b)?;
     let (may, pred) = match pred.strip_prefix("may ") {
         Some(r) => (true, r.to_string()),
@@ -716,9 +787,7 @@ pub(crate) fn delay_subject_inside(who: &PlayerRef, e: &Effect) -> Option<Effect
         Effect::Seq(v) if !v.is_empty() => (&v[..v.len() - 1], &v[v.len() - 1]),
         e => (&[][..], e),
     };
-    if !stores.iter().all(|x| matches!(x, Effect::Store { .. }))
-        || super::r107_numbers::uses_x(e)
-    {
+    if !stores.iter().all(|x| matches!(x, Effect::Store { .. })) || super::r107_numbers::uses_x(e) {
         return None;
     }
     // `who`, naming the stored variables instead of the objects stored in them.
@@ -749,7 +818,9 @@ pub(crate) fn delay_subject_inside(who: &PlayerRef, e: &Effect) -> Option<Effect
     // ability resolves).
     let text = after.to_string();
     if !text.contains("ControllerOf")
-        || ["\"This\"", "Target", "Trigger"].iter().any(|p| text.contains(p))
+        || ["\"This\"", "Target", "Trigger"]
+            .iter()
+            .any(|p| text.contains(p))
     {
         return None;
     }
@@ -910,13 +981,30 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                     },
                     _ => e.clone(),
                 };
-                Effect::seq(vec![
-                    e,
+                let both = Effect::seq(vec![
+                    e.clone(),
                     Effect::AsPlayer {
-                        who: other,
+                        who: other.clone(),
                         effect: Box::new(theirs),
                     },
-                ])
+                ]);
+                // "You and that player each gain that much life" when that player is you:
+                // you gain twice that much life as one life-gaining event (CR 119.9;
+                // Angel of Destiny ruling).
+                match &e {
+                    Effect::GainLife {
+                        who: PlayerRef::You,
+                        n,
+                    } => Effect::If {
+                        cond: Condition::PlayerMatches(other.clone(), PlayerFilter::You),
+                        then: Box::new(Effect::GainLife {
+                            who: PlayerRef::You,
+                            n: Value::Mul(Box::new(n.clone()), Box::new(Value::c(2))),
+                        }),
+                        otherwise: Box::new(both),
+                    },
+                    _ => both,
+                }
             })
         }
         Subject::Each(who, cond) => {
@@ -939,7 +1027,11 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
             // the players choose in APNAP order, then the cards are put onto the
             // battlefield at the same time (CR 101.4).
             if let Some((choose, put)) = split_choice_move(&e) {
-                let players = if may { PlayerRef::Var(ACCEPTED) } else { who.clone() };
+                let players = if may {
+                    PlayerRef::Var(ACCEPTED)
+                } else {
+                    who.clone()
+                };
                 let mut v = Vec::new();
                 if may {
                     v.extend(opt_in(who, &guard));
@@ -969,7 +1061,17 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
             // "Each player chooses six lands they control, then sacrifices the rest": the
             // players choose in APNAP order, then all the rest are sacrificed at once
             // (CR 101.4).
-            if let (false, None, Effect::KeepAndSacrificeRest { who: PlayerRef::You, among, keep, up_to }) = (may, &cond, &e) {
+            if let (
+                false,
+                None,
+                Effect::KeepAndSacrificeRest {
+                    who: PlayerRef::You,
+                    among,
+                    keep,
+                    up_to,
+                },
+            ) = (may, &cond, &e)
+            {
                 return Some(Effect::KeepAndSacrificeRest {
                     who,
                     among: among.clone(),
@@ -1051,7 +1153,10 @@ fn each_who_didnt_put(l: &str, b: &mut Builder) -> Option<Effect> {
     let (who, r) = if let Some(r) = l.strip_prefix("each opponent who didn't ") {
         (PlayerFilter::Opponent, r)
     } else {
-        (PlayerFilter::Any, l.strip_prefix("each player who didn't ")?)
+        (
+            PlayerFilter::Any,
+            l.strip_prefix("each player who didn't ")?,
+        )
     };
     let e = instruction(&as_you(r)?, Some(r), b)?;
     let put_one = PlayerFilter::Controls(
@@ -1090,7 +1195,9 @@ fn each_who_didnt_discard(l: &str, b: &mut Builder) -> Option<Effect> {
         )
     };
     let (desc, rest) = r.split_once(" this way ")?;
-    let desc = desc.strip_prefix("a ").or_else(|| desc.strip_prefix("an "))?;
+    let desc = desc
+        .strip_prefix("a ")
+        .or_else(|| desc.strip_prefix("an "))?;
     let quality = super::card_flow_search::card_filter(desc, b)?;
     let e = instruction(&as_you(rest)?, Some(rest), b)?;
     // The cards a player discarded are cards they owned (CR 701.9a: from their hand).
@@ -1341,9 +1448,15 @@ mod tests {
             Some("search your library for a card")
         );
         // "you" in the predicate is the controller, not the subject.
-        assert_eq!(as_you("mills cards equal to the number of cards in your hand"), None);
+        assert_eq!(
+            as_you("mills cards equal to the number of cards in your hand"),
+            None
+        );
         // A joined clause with another subject isn't part of the subject's instruction.
-        assert_eq!(as_you("loses the game, then each player gains 1 life"), None);
+        assert_eq!(
+            as_you("loses the game, then each player gains 1 life"),
+            None
+        );
         assert_eq!(as_you("draws a card and target player mills a card"), None);
         // Not a verb.
         assert_eq!(as_you("cards equal to"), None);

@@ -25,8 +25,10 @@ fn shuffled(t: &TestGame) -> Vec<PlayerId> {
 #[test]
 fn end_step_self_shuffles_leave_a_creature_that_left_where_it_is() {
     cr!("701.24c");
-    // The ruling's "nothing happens ... its owner doesn't shuffle their library" yields to
-    // CR 701.24c; only its "stays wherever it is" is followed.
+    // Blitz Hellion's ruling (2009-05-01) "nothing happens ... its owner doesn't shuffle
+    // their library" applied the old rule (CR 701.16c before the Magic Origins update of
+    // 2015-07-16: "that library is not shuffled"); current CR 701.24c shuffles the library
+    // (exempt as outdated, rulings-P180.tsv). Only its "stays wherever it is" is followed.
     interp!("self-shuffle-gone-library-still-shuffled");
     ruling!("Blitz Hellion", "Blitz Hellion stays wherever it is");
     ruling!(
@@ -63,6 +65,35 @@ fn end_step_self_shuffles_leave_a_creature_that_left_where_it_is() {
                 assert_eq!(shuffled(&t), vec![P0], "{name}");
             }
         }
+    }
+}
+
+#[test]
+fn serra_avatar_gone_from_the_graveyard_still_shuffles_the_library() {
+    cr!("701.24c");
+    interp!("self-shuffle-gone-library-still-shuffled");
+    ruling!(
+        "Serra Avatar",
+        "If Serra Avatar is no longer in your graveyard when its triggered ability resolves, you still shuffle your library."
+    );
+    supported("Serra Avatar");
+    for leave in [false, true] {
+        let mut t = TestGame::new(2);
+        let avatar = t.battlefield(P0, "Serra Avatar");
+        move_to(&mut t, avatar, Zone::Graveyard(P0));
+        t.settle();
+        assert_eq!(t.stack_len(), 1, "its graveyard trigger");
+        if leave {
+            move_to(&mut t, avatar, Zone::Exile);
+        }
+        t.resolve_all();
+        let avatar = t.g.current(avatar);
+        if leave {
+            assert_eq!(t.zone(avatar), Zone::Exile, "it stays in exile");
+        } else {
+            assert_eq!(t.zone(avatar), Zone::Library(P0));
+        }
+        assert_eq!(shuffled(&t), vec![P0], "the library is shuffled either way");
     }
 }
 

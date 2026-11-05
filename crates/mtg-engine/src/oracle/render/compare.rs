@@ -349,6 +349,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               choice of word has no rules meaning.",
     },
     Equivalence {
+        pattern: r"\bwhen ~ (enters?) and when (?:it|~) ",
+        replacement: "when ~ $1 or ",
+        why: "\"When ~ enters and whenever it attacks, ...\" is one triggered ability with two \
+              trigger conditions (CR 603.1b), which triggers when either event happens, as \
+              \"Whenever ~ enters or attacks, ...\" does (CR 603.2).",
+    },
+    Equivalence {
         pattern: r"\bis put into a graveyard from the battlefield\b",
         replacement: "dies",
         why: "CR 700.4: \"dies\" means \"is put into a graveyard from the battlefield\".",

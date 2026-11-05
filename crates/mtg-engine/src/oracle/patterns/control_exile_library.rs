@@ -101,7 +101,7 @@ fn positions(s: &str, owner_subject: bool) -> Option<Vec<LibraryPosition>> {
     }
     let (first, rest) = one_position(s, owner_subject)?;
     let rest = rest.trim();
-    // "in any order": the owner arranges them anyway (CR 401.4).
+    // "in any order": see `any_order`.
     if rest.is_empty() || rest == "in any order" {
         return Some(vec![first]);
     }
@@ -175,7 +175,14 @@ fn p_put_into_library(l: &str, b: &mut Builder) -> Option<Effect> {
     let tail = tail.trim();
     // "Their library" isn't the owner's here unless the owner is the subject.
     let ps = positions(tail, false)?;
-    Some(place(what, PlayerRef::You, ps))
+    let mut e = place(what, PlayerRef::You, ps);
+    // "... in any order": you arrange them, whoever owns them.
+    if end(tail).ends_with(" in any order") {
+        if let Effect::Move { to, .. } = &mut e {
+            to.arranged_by = Some(PlayerRef::You);
+        }
+    }
+    Some(e)
 }
 
 /// "[object]'s owner puts it on their choice of the top or bottom of their library", "the
