@@ -349,3 +349,44 @@ fn ertha_jos_copy_of_a_modal_ability_keeps_its_mode() {
     assert!(t.obj_now(giant).chars.has_subtype("Coward"));
     assert_eq!(t.pt(kargan), (3, 1));
 }
+
+#[test]
+fn verraks_copy_of_a_modal_ability_keeps_its_mode() {
+    cr!("707.10", "700.2g");
+    ruling!(
+        "Verrak, Warped Sengir",
+        "If the ability is modal (that is, if it says, “Choose one —” or similar), the mode is copied and can’t be changed."
+    );
+    // No real card has a modal activated ability with a life cost, so a custom artifact:
+    // "{1}, Pay 2 life: Choose one — • You gain 5 life. • Draw a card."
+    let relic = crate::r_s01_common::custom_card(
+        "Modal Relic",
+        "Artifact",
+        "{1}",
+        None,
+        "{1}, Pay 2 life: Choose one —\n• You gain 5 life.\n• Draw a card.",
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Verrak, Warped Sengir");
+    let relic = t.custom(P0, relic, mtg_engine::object::Zone::Battlefield);
+    t.lands(P0, "Wastes", 1);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    activate_containing(&mut t, P0, relic, "Choose one")
+        .unwrap()
+        .unwrap();
+    t.settle();
+    assert_eq!(t.life(P0), 18);
+    // Pay 2 life again and copy it.
+    t.answer_yes(P0, true);
+    let from = t.asked().len();
+    t.resolve();
+    assert_eq!(t.life(P0), 16);
+    let both = abilities_from(&t, relic);
+    assert_eq!(both.len(), 2);
+    assert!(both.iter().all(|a| modes_on_stack(&t, *a) == vec![0]));
+    assert!(!asked_modes_or_x(&t, from));
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 26);
+    assert_eq!(t.hand_size(P0), hand);
+}

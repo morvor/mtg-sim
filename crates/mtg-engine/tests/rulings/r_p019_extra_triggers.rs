@@ -84,7 +84,7 @@ fn virtue_of_knowledge_copies_stack_one_extra_time_each() {
 
 #[test]
 fn virtue_of_knowledge_doesnt_affect_a_two_headed_giant_teammates_abilities() {
-    cr!("603.2d", "810.1");
+    cr!("603.2d");
     ruling!(
         "Virtue of Knowledge // Vantress Visions",
         "In a Two-Headed Giant game, Virtue of Knowledge does not affect triggered abilities of permanents your teammate controls."
