@@ -358,8 +358,11 @@ pub fn change_targets_among(
 /// "target", CR 115.9a) is chosen again at random among all its legal targets, which may
 /// include the original one, except those in `except`. A target with no such legal target
 /// stays unchanged (CR 115.7d). Only the final set of targets is evaluated (CR 115.7e):
-/// if a later choice makes an earlier new target illegal, nothing changes. Modes and the
-/// division of damage or counters are kept (CR 115.7f). Returns true if a target changed.
+/// if a later choice makes an earlier new target illegal, or makes a target that stayed
+/// and was legal illegal (CR 115.7d), nothing changes. Modes and the division of damage
+/// or counters are kept (CR 115.7f). A target reselected as the one it was is unchanged:
+/// it doesn't become a target again (interpretation `random-reselection-same-target`).
+/// Returns true if a target changed.
 pub fn reselect_at_random(g: &mut Game, id: ObjectId, except: &[Entity]) -> bool {
     if !g.is_live(id) || g.obj(id).zone != Zone::Stack {
         return false;
@@ -380,6 +383,10 @@ pub fn reselect_at_random(g: &mut Game, id: ObjectId, except: &[Entity]) -> bool
                 })
             })
             .collect();
+    let legal_before: Vec<bool> = instances
+        .iter()
+        .map(|i| legal_at(g, id, &body, &orig, *i))
+        .collect();
     let mut cur = orig.clone();
     for i in &instances {
         let Some(spec) = spec_of(&body, &cur, *i) else {
@@ -407,7 +414,17 @@ pub fn reselect_at_random(g: &mut Game, id: ObjectId, except: &[Entity]) -> bool
         .copied()
         .filter(|i| entity_at(&cur, *i) != entity_at(&orig, *i))
         .collect();
-    if changed.is_empty() || !changed.iter().all(|i| legal_at(g, id, &body, &cur, *i)) {
+    // CR 115.7d, 115.7e: the new targets are legal and leave no target that stayed and
+    // was legal illegal, in the final set.
+    let final_ok = instances.iter().enumerate().all(|(j, i)| {
+        let legal = legal_at(g, id, &body, &cur, *i);
+        if changed.contains(i) {
+            legal
+        } else {
+            !legal_before[j] || legal
+        }
+    });
+    if changed.is_empty() || !final_ok {
         return false;
     }
     let controller = g.obj(id).controller;

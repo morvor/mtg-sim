@@ -67,6 +67,22 @@ fn the_effects_last_until_end_of_turn() {
 }
 
 #[test]
+fn the_odd_turns_pump_and_extra_mana_end_with_that_turn() {
+    cr!("611.2a", "514.2");
+    // Odd on P1's turn (3 permanents); a fourth permanent makes P0's upkeep even.
+    let (mut t, ogre, mountain) = upkeep_with(0);
+    assert_eq!(t.pt(ogre), (3, 3));
+    t.battlefield(P1, "Island");
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    // Only the even effects apply: 1/1 (not 2/2), and the Mountain makes only {C} (the
+    // odd turn's additional {R} ended with that turn).
+    assert_eq!(t.pt(ogre), (1, 1));
+    t.activate(P1, mountain, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P1), vec![ManaType::C]);
+}
+
+#[test]
 fn in_two_headed_giant_it_triggers_once_per_upkeep() {
     cr!("805.4");
     ruling!(
