@@ -41,28 +41,43 @@ fn playable(t: &mut TestGame, p: PlayerId, id: ObjectId) -> bool {
 
 #[test]
 fn nivix_permission_ends_as_your_next_turn_starts() {
-    cr!("611.2b", "500.7");
+    cr!("611.2a");
     ruling!(
         "Nivix, Aerie of the Firemind",
         "\"Until your next turn\" means the effect wears off as soon as your next turn starts, even before you untap."
     );
-    let mut t = TestGame::new(2);
-    let nivix = t.battlefield(P0, "Nivix, Aerie of the Firemind");
-    let bolt = t.library_top(P0, "Lightning Bolt");
-    mana(&mut t, P0, ManaType::U, 1);
-    mana(&mut t, P0, ManaType::R, 1);
-    mana(&mut t, P0, ManaType::C, 2);
-    t.activate(P0, nivix, 1, &[]).unwrap();
+    /// A game where P0 exiled a Lightning Bolt with Nivix's ability on their turn (and has
+    /// a Mountain for it), and the Bolt.
+    fn exiled_bolt() -> (TestGame, ObjectId) {
+        let mut t = TestGame::new(2);
+        let nivix = t.battlefield(P0, "Nivix, Aerie of the Firemind");
+        let bolt = t.library_top(P0, "Lightning Bolt");
+        mana(&mut t, P0, ManaType::U, 1);
+        mana(&mut t, P0, ManaType::R, 1);
+        mana(&mut t, P0, ManaType::C, 2);
+        t.activate(P0, nivix, 1, &[]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.zone(bolt), Zone::Exile);
+        t.lands(P0, "Mountain", 1);
+        (t, bolt)
+    }
+    // Up to the end of the opponent's turn: cast from exile.
+    let (mut t, bolt) = exiled_bolt();
+    t.advance_to(P1, Step::End);
+    let b = t.g.current(bolt);
+    assert!(t.cast(P0, b).target(Entity::Player(P1)).try_go().is_ok());
     t.resolve_all();
-    assert_eq!(t.zone(bolt), Zone::Exile);
-    t.lands(P0, "Mountain", 1);
-    // During the opponent's turn: castable.
-    t.advance_to(P1, Step::Upkeep);
-    assert!(playable(&mut t, P0, bolt));
+    assert_eq!(t.life(P1), 17);
     // P0's next turn: not even in its upkeep.
+    let (mut t, bolt) = exiled_bolt();
+    t.advance_to(P1, Step::End);
+    assert!(playable(&mut t, P0, bolt));
     t.advance_to(P0, Step::Upkeep);
     assert!(!playable(&mut t, P0, bolt));
+    let b = t.g.current(bolt);
+    assert!(t.cast(P0, b).target(Entity::Player(P1)).try_go().is_err());
     assert_eq!(t.zone(bolt), Zone::Exile);
+    assert_eq!(t.life(P1), 20);
 }
 
 #[test]
@@ -73,7 +88,10 @@ fn voldaren_estate_mana_casts_spells_with_the_vampire_type() {
         "A Vampire spell is a spell with the creature type Vampire on its type line, regardless of whether the word \"Vampire\" is in its name."
     );
     supported("Knight of the Ebon Legion");
-    for (name, ok) in [("Knight of the Ebon Legion", true), ("Vampire's Bite", false)] {
+    for (name, ok) in [
+        ("Knight of the Ebon Legion", true),
+        ("Vampire's Bite", false),
+    ] {
         let mut t = TestGame::new(2);
         let estate = t.battlefield(P0, "Voldaren Estate");
         let target = t.battlefield(P0, "Grizzly Bears");
@@ -102,7 +120,7 @@ fn howlpack_alpha_gives_a_werewolf_wolf_only_one_bonus() {
 
 #[test]
 fn mishras_factory_that_entered_this_turn_cant_attack_or_tap() {
-    cr!("302.6", "302.1");
+    cr!("302.6", "508.1a");
     ruling!(
         "Mishra's Factory",
         "A noncreature permanent that becomes a creature can attack, and its {T} abilities can be activated, only if its controller has continuously controlled that permanent since the beginning of their most recent turn."
@@ -130,7 +148,7 @@ fn mishras_factory_that_entered_this_turn_cant_attack_or_tap() {
 
 #[test]
 fn aladdin_takes_one_artifact_per_activation() {
-    cr!("602.1", "613.1b");
+    cr!("602.1", "613.1b", "611.2b");
     ruling!(
         "Aladdin",
         "Aladdin's ability can take control of more than one artifact, although only one each time the ability is used."
@@ -184,7 +202,8 @@ fn reflecting_pool_sees_land_type_changes() {
     assert!(t.g.attach(seas, obj(forest)));
     t.g.recompute();
     t.g.players[P0.idx()].mana_pool = Default::default();
-    assert!(tap_for_mana(&mut t, P0, pool, "Add"));
+    let opts = pool_options(&mut t, pool);
+    assert!(opts.iter().all(|o| !o.contains('G')), "{opts:?}");
     let p = &t.g.player(P0).mana_pool;
     assert_eq!((p.count(ManaType::U), p.count(ManaType::G)), (1, 0));
 }
@@ -196,15 +215,18 @@ fn reflecting_pool_considers_replacement_effects() {
         "Reflecting Pool",
         "Any replacement effects are considered by Reflecting Pool when determining the types of mana a land can produce."
     );
-    // Under Ritual of Subdual, a Forest could produce only colorless mana: so can the
-    // Pool (its mana is colorless either way, and no color is offered).
+    // Under Naked Singularity ("If tapped for mana, ... Forests produce {B} instead of any
+    // other type"), a Forest could produce only {B}: so that's what the Pool (which has no
+    // basic land type, so its own mana isn't replaced) can produce, not {G}.
+    supported("Naked Singularity");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Ritual of Subdual");
+    t.battlefield(P0, "Naked Singularity");
     let pool = t.battlefield(P0, "Reflecting Pool");
     t.battlefield(P0, "Forest");
     let opts = pool_options(&mut t, pool);
     assert!(opts.iter().all(|o| !o.contains('G')), "{opts:?}");
-    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::C), 1);
+    let p = &t.g.player(P0).mana_pool;
+    assert_eq!((p.count(ManaType::B), p.count(ManaType::G)), (1, 0));
 }
 
 #[test]
@@ -247,7 +269,9 @@ fn vesuva_cant_copy_a_land_entering_with_it() {
     let cands = crate::r_s03_common::choice_candidates(&t, from, "");
     assert!(!cands.is_empty());
     let mountain = ids[1].unwrap();
-    assert!(cands.iter().all(|c| !c.contains(&obj(mountain)) && !c.contains(&obj(m))));
+    assert!(cands
+        .iter()
+        .all(|c| !c.contains(&obj(mountain)) && !c.contains(&obj(m))));
     assert_eq!(t.obj_now(ids[0].unwrap()).chars.name, "Forest");
 }
 
@@ -290,7 +314,7 @@ fn vesuva_and_mycosynth_gardens_copy_what_a_copy_copies() {
 
 #[test]
 fn magosi_skips_your_next_turn_even_without_the_counter() {
-    cr!("608.2b", "614.10");
+    cr!("609.3", "614.10");
     ruling!(
         "Magosi, the Waterveil",
         "As Magosi’s third ability resolves, you’ll skip your next turn even if you don’t put an eon counter on Magosi (because it’s left the battlefield by then, perhaps)."
@@ -400,7 +424,7 @@ fn deaths_shadow_is_13_13_off_the_battlefield() {
 
 #[test]
 fn south_wind_avatar_triggers_once_per_lifelink_creature() {
-    cr!("702.15b", "120.3f", "603.2c");
+    cr!("702.15e", "120.3f", "603.2c");
     ruling!(
         "South Wind Avatar",
         "Each creature with lifelink dealing combat damage causes a separate life-gaining event."
@@ -429,7 +453,7 @@ fn south_wind_avatar_triggers_once_per_lifelink_creature() {
 
 #[test]
 fn drannith_magistrate_doesnt_stop_other_zones_otherwise() {
-    cr!("101.2", "305.1", "602.1");
+    cr!("305.1", "602.1");
     ruling!(
         "Drannith Magistrate",
         "Effects may put cards from other zones onto the battlefield under an opponent's control."
@@ -455,11 +479,10 @@ fn drannith_magistrate_doesnt_stop_other_zones_otherwise() {
     let zombie = t.graveyard(P1, "Dregscape Zombie");
     mana(&mut t, P1, ManaType::B, 1);
     t.g.turn.priority = Some(P1);
-    let unearth = t
-        .g
-        .legal_actions(P1)
-        .into_iter()
-        .find(|a| matches!(a, Action::Activate { source, .. } if *source == zombie));
+    let unearth =
+        t.g.legal_actions(P1)
+            .into_iter()
+            .find(|a| matches!(a, Action::Activate { source, .. } if *source == zombie));
     assert!(unearth.is_some());
     // A land from the graveyard with Crucible of Worlds.
     t.battlefield(P1, "Crucible of Worlds");
@@ -547,7 +570,7 @@ fn adagia_copy(t: &mut TestGame, a: ObjectId, target: ObjectId) {
 
 #[test]
 fn adagia_aura_copy_chooses_what_it_enchants_without_targeting() {
-    cr!("303.4f", "702.11b", "702.16b");
+    cr!("303.4f", "702.11b", "702.16c");
     ruling!(
         "Adagia, Windswept Bastion",
         "If Adagia creates a token copy of an Aura, you choose what the token is enchanting as it enters the battlefield. This doesn’t target the player or permanent it will enchant, so a player or permanent with hexproof may be chosen this way. The chosen recipient must be able to legally be enchanted by the Aura, so a player or permanent with protection from one of the Aura’s qualities can’t be chosen this way. If there’s nothing legal for the Aura token to enchant, the token is never created."
@@ -568,7 +591,9 @@ fn adagia_aura_copy_chooses_what_it_enchants_without_targeting() {
     adagia_copy(&mut t, a, aura);
     let cands = crate::r_s03_common::choice_candidates(&t, from, "");
     assert!(cands.iter().any(|c| c.contains(&obj(scout))), "{cands:?}");
-    assert!(cands.iter().all(|c| !c.contains(&obj(hydra)) && !c.contains(&obj(bears))));
+    assert!(cands
+        .iter()
+        .all(|c| !c.contains(&obj(hydra)) && !c.contains(&obj(bears))));
     let toks = tokens(&t, P0);
     assert_eq!(toks.len(), 1);
     assert_eq!(attached_to(&t, toks[0]), Some(obj(scout)));
@@ -601,7 +626,12 @@ fn adagia_copy_of_a_nonlegendary_permanent_is_the_only_legendary_one() {
         .map(|s| t.g.obj(*s).chars.supertypes.contains(Supertype::Legendary))
         .collect();
     assert_eq!(legendary.iter().filter(|l| **l).count(), 1);
-    assert!(!t.g.obj(stone).chars.supertypes.contains(Supertype::Legendary));
+    assert!(!t
+        .g
+        .obj(stone)
+        .chars
+        .supertypes
+        .contains(Supertype::Legendary));
 }
 
 #[test]
@@ -638,6 +668,7 @@ fn adagia_copy_of_a_token_uses_its_original_characteristics() {
 #[test]
 fn valakut_counts_other_mountains_as_it_resolves() {
     cr!("603.4");
+    interp!("other-than-trigger-object");
     ruling!(
         "Valakut, the Molten Pinnacle",
         "If a Mountain you control leaves the battlefield between the time Valakut's second ability triggers and the time it resolves, be aware if that was the Mountain that caused Valakut's ability to trigger or not. If it was, Valakut's count isn't affected; if it wasn't, Valakut's count goes down by one."
@@ -656,11 +687,54 @@ fn valakut_counts_other_mountains_as_it_resolves() {
         t.resolve_all();
         assert_eq!(t.life(P1), 20 - damage, "{remove_new}");
     }
+    // A fifth Mountain entering with only four others doesn't trigger it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Valakut, the Molten Pinnacle");
+    t.lands(P0, "Mountain", 4);
+    t.enter(P0, "Mountain");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn roiling_canopy_counts_forests_besides_the_one_that_entered() {
+    cr!("603.4");
+    interp!("other-than-trigger-object");
+    // "Whenever a Forest you control enters, if you control at least five other Forests,
+    // target creature you control gets +3/+3 until end of turn."
+    // Four others: no trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Roiling Canopy");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 4);
+    t.enter(P0, "Forest");
+    t.settle();
+    assert_eq!(t.stack_len(), 0);
+    // Five others, then one of them or the new one leaves before it resolves.
+    for (remove_new, pt) in [(true, (5, 5)), (false, (2, 2))] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Roiling Canopy");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let old = t.lands(P0, "Forest", 5);
+        t.answer_targets(P0, &[obj(bears)]);
+        let new = t.enter(P0, "Forest");
+        t.settle();
+        assert_eq!(t.stack_len(), 1);
+        move_to(
+            &mut t,
+            if remove_new { new } else { old[0] },
+            Zone::Hand(P0),
+        );
+        t.resolve_all();
+        assert_eq!(t.pt(bears), pt, "{remove_new}");
+    }
+    assert_eq!(t.pt(bears), (2, 2));
 }
 
 #[test]
 fn valakut_counts_mountains_entering_together() {
     cr!("603.6a", "603.4");
+    interp!("other-than-trigger-object");
     ruling!(
         "Valakut, the Molten Pinnacle",
         "If multiple Mountains enter under your control at the same time, Valakut's second ability could trigger that many times. Each ability takes into consideration the other Mountains that entered at the same time as the one that caused it to trigger."
@@ -720,7 +794,7 @@ fn peter_parkers_camera_copy_of_a_linked_ability_stays_linked() {
 
 #[test]
 fn library_of_leng_decides_for_each_discarded_card() {
-    cr!("614.1a", "616.1");
+    cr!("614.1a", "401.4");
     ruling!(
         "Library of Leng",
         "If more than one card is discarded due to a single effect, the Library allows you to decide whether or not to use it on each of the cards. You get to decide the order the cards are placed on the library if more than one goes there."
@@ -747,22 +821,34 @@ fn library_of_leng_decides_for_each_discarded_card() {
         .filter(|c| matches!(t.zone(**c), Zone::Graveyard(_)))
         .count();
     assert_eq!((on_top, in_gy), (1, 1));
-    // Both on top: the top card is one of them.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Library of Leng");
-    let x = t.hand(P0, "Grizzly Bears");
-    let y = t.hand(P0, "Hill Giant");
-    t.set_step(P1, Step::PrecombatMain);
-    let rot = t.hand(P1, "Mind Rot");
-    mana(&mut t, P1, ManaType::B, 1);
-    mana(&mut t, P1, ManaType::C, 2);
-    t.answer_yes(P0, true);
-    t.answer_yes(P0, true);
-    t.cast(P1, rot).target(Entity::Player(P0)).go();
-    t.resolve_all();
-    let lib = &t.g.player(P0).library;
-    let top2: Vec<ObjectId> = lib[lib.len() - 2..].to_vec();
-    assert!(top2.contains(&t.g.current(x)) && top2.contains(&t.g.current(y)));
+    // Both on top, in the order P0 chooses: either can end up on top.
+    let mut tops = vec![];
+    for order in [vec![0usize, 1], vec![1, 0]] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Library of Leng");
+        let x = t.hand(P0, "Grizzly Bears");
+        let y = t.hand(P0, "Hill Giant");
+        t.set_step(P1, Step::PrecombatMain);
+        let rot = t.hand(P1, "Mind Rot");
+        mana(&mut t, P1, ManaType::B, 1);
+        mana(&mut t, P1, ManaType::C, 2);
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order));
+        let from = t.asked().len();
+        t.cast(P1, rot).target(Entity::Player(P0)).go();
+        t.resolve_all();
+        let ordered = t.asked()[from..]
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. }))
+            .count();
+        assert_eq!(ordered, 1);
+        let lib = &t.g.player(P0).library;
+        let top2: Vec<ObjectId> = lib[lib.len() - 2..].to_vec();
+        assert!(top2.contains(&t.g.current(x)) && top2.contains(&t.g.current(y)));
+        tops.push(t.g.obj(top2[1]).chars.name.clone());
+    }
+    assert_ne!(tops[0], tops[1]);
 }
 
 /// P0's hand size after their cleanup step with seven cards in hand and `first` then
@@ -782,7 +868,7 @@ fn hand_after_cleanup(first: &str, second: &str) -> usize {
 
 #[test]
 fn library_of_leng_and_null_profusion_apply_in_timestamp_order() {
-    cr!("402.2", "613.7", "514.1");
+    cr!("402.2", "613.11", "514.1");
     ruling!(
         "Library of Leng",
         "If multiple effects modify your hand size, apply them in timestamp order."

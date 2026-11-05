@@ -146,13 +146,23 @@ fn erhnam_djinns_may_target_the_same_creature() {
     t.battlefield(P0, "Erhnam Djinn");
     t.battlefield(P0, "Erhnam Djinn");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    t.battlefield(P1, "Hill Giant");
+    let giant = t.battlefield(P1, "Hill Giant");
     t.answer_targets(P0, &[obj(bears)]);
     t.answer_targets(P0, &[obj(bears)]);
     next_upkeep(&mut t, P0);
     assert_eq!(t.stack_len(), 2);
+    // Both abilities target the Bears (neither answer was refused for the Hill Giant).
+    for id in t.g.stack.clone() {
+        let chosen = &t.g.obj(id).stack.as_ref().unwrap().chosen;
+        let targets: Vec<&Entity> = chosen
+            .iter()
+            .flat_map(|c| c.targets.iter().flatten())
+            .collect();
+        assert_eq!(targets, vec![&obj(bears)]);
+    }
     t.resolve_all();
     assert!(t.obj_now(bears).has_keyword(KeywordKind::Landwalk));
+    assert!(!t.obj_now(giant).has_keyword(KeywordKind::Landwalk));
 }
 
 #[test]
@@ -182,7 +192,7 @@ fn erhnam_djinn_targets_any_opponents_creature_in_multiplayer() {
 
 #[test]
 fn phelia_returns_the_card_even_if_she_is_gone() {
-    cr!("603.7c", "610.3");
+    cr!("603.7", "603.7c");
     ruling!(
         "Phelia, Exuberant Shepherd",
         "The exiled card will return to the battlefield at the beginning of the end step even if Phelia is no longer on the battlefield."
@@ -309,7 +319,10 @@ fn armament_dragon_counters_for_illegal_targets_are_lost() {
 #[test]
 fn iron_bully_can_target_itself() {
     cr!("603.3d", "115.1");
-    ruling!("Iron Bully", "Iron Bully can be the target of its own ability.");
+    ruling!(
+        "Iron Bully",
+        "Iron Bully can be the target of its own ability."
+    );
     let mut t = TestGame::new(2);
     let new_id = ObjectId(t.g.objects.len() as u32 + 1);
     t.answer_targets(P0, &[obj(new_id)]);
@@ -361,7 +374,7 @@ fn glint_hawk_chooses_an_artifact_or_sacrifice_on_resolution() {
 
 #[test]
 fn arna_kennerud_aura_token_that_cant_attach_isnt_created() {
-    cr!("303.4f", "702.5a");
+    cr!("303.4i", "702.5a", "301.5e");
     ruling!(
         "Arna Kennerüd, Skycaptain",
         "If, for any reason, an Aura token that would be created with Arna Kennerüd's last ability can't be attached to the appropriate creature, that token isn't created."
@@ -392,4 +405,23 @@ fn arna_kennerud_aura_token_that_cant_attach_isnt_created() {
     let toks = tokens(&t, P0);
     assert_eq!(toks.len(), 1);
     assert_eq!(attached_to(&t, toks[0]), Some(obj(bears)));
+    // An Equipment token that can't be attached is created unattached: Gate Smasher ("can
+    // be attached only to a creature with toughness 4 or greater") on an Earth Elemental
+    // with a -1/-1 counter (3/4). Doubling its counters first leaves it 3 toughness.
+    supported("Gate Smasher");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Arna Kennerüd, Skycaptain");
+    let elemental = t.battlefield(P0, "Earth Elemental");
+    t.g.add_counters(obj(elemental), counters::MINUS1, 1, None);
+    let smasher = t.battlefield(P0, "Gate Smasher");
+    assert!(t.g.attach(smasher, obj(elemental)));
+    t.g.recompute();
+    assert_eq!(t.pt(elemental), (6, 4));
+    attack_with(&mut t, &[(elemental, Entity::Player(P1))]);
+    t.resolve_all();
+    assert_eq!(t.counters(elemental, counters::MINUS1), 2);
+    let toks = tokens(&t, P0);
+    assert_eq!(toks.len(), 1);
+    assert_eq!(t.g.obj(toks[0]).chars.name, "Gate Smasher");
+    assert_eq!(attached_to(&t, toks[0]), None);
 }

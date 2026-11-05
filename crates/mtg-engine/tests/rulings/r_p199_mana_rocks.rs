@@ -35,7 +35,7 @@ fn playable(t: &mut TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn rabid_wombat_shrinks_as_soon_as_an_aura_leaves() {
-    cr!("613.4c", "303.4c");
+    cr!("613.4c", "611.3a");
     ruling!(
         "Rabid Wombat",
         "If an Aura is removed from the Wombat, its power and toughness change immediately."
@@ -107,7 +107,8 @@ fn twinning_glass_allows_additional_costs_but_not_alternative_ones() {
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
     assert_eq!(untapped_lands(&t, P0), 0);
-    // Evoke: Mulldrifter cast this way is cast normally (it stays on the battlefield).
+    // Evoke: Mulldrifter cast this way is cast normally (it stays on the battlefield). No way
+    // to cast it with evoke is offered, though P0 would take one.
     let mut t = TestGame::new(2);
     let glass = t.battlefield(P0, "Twinning Glass");
     t.lands(P0, "Wastes", 1);
@@ -121,17 +122,19 @@ fn twinning_glass_allows_additional_costs_but_not_alternative_ones() {
     let drifter = t.hand(P0, "Mulldrifter");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(drifter)]);
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.activate(P0, glass, 0, &[]).unwrap();
     let from = t.asked().len();
     t.resolve_all();
-    let methods: Vec<_> = t.asked()[from..]
+    let offered: Vec<String> = t.asked()[from..]
         .iter()
-        .filter_map(|(_, d)| match d {
-            Decision::ChooseCastingMethod { options, .. } => Some(options.clone()),
-            _ => None,
+        .flat_map(|(_, d)| match d {
+            Decision::ChooseCastingMethod { options, .. }
+            | Decision::ChooseOption { options, .. } => options.clone(),
+            _ => vec![],
         })
         .collect();
-    assert!(methods.iter().flatten().all(|m| !format!("{m:?}").contains("Evoke")));
+    assert!(offered.iter().all(|m| !m.contains("Evoke")), "{offered:?}");
     assert!(t.on_battlefield(drifter));
 }
 
@@ -170,28 +173,43 @@ fn thrumming_stone_ripple_may_cast_either_half_of_a_split_card() {
                 _ => None,
             })
             .collect();
-        assert_eq!(offered, vec![vec!["Cast Hit".to_string(), "Cast Run".to_string()]]);
+        assert_eq!(
+            offered,
+            vec![vec!["Cast Hit".to_string(), "Cast Run".to_string()]]
+        );
         assert_eq!(t.zone(revealed), Zone::Stack);
         assert_eq!(t.g.player(P0).mana_pool.total(), 0);
         t.resolve_all();
         assert_eq!(t.zone(revealed), Zone::Graveyard(P0));
         // Hit twice: both Bears; Hit and Run: one.
-        assert_eq!(2 - t.named_on_battlefield("Grizzly Bears").len(), sacrificed);
+        assert_eq!(
+            2 - t.named_on_battlefield("Grizzly Bears").len(),
+            sacrificed
+        );
         assert_eq!(t.life(P1), 20 - 2 * sacrificed as i32);
     }
 }
 
 #[test]
 fn shivan_gorge_damage_is_colorless() {
-    cr!("105.2c", "120.3");
+    cr!("105.2c", "609.7c");
     ruling!("Shivan Gorge", "The damage has no color. It is not red.");
+    supported("Sphere of Law");
+    // Sphere of Law ("If a red source would deal damage to you, prevent 2 of that damage")
+    // doesn't prevent the damage the Gorge deals, though {R} was spent on the ability.
     let mut t = TestGame::new(2);
+    t.battlefield(P1, "Sphere of Law");
     let gorge = t.battlefield(P0, "Shivan Gorge");
     t.lands(P0, "Mountain", 3);
     t.activate(P0, gorge, 1, &[]).unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
-    assert!(t.obj_now(gorge).chars.colors.is_colorless());
+    // A red source's damage is prevented.
+    let shock = t.hand(P0, "Shock");
+    t.lands(P0, "Mountain", 1);
+    t.cast(P0, shock).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
 }
 
 /// Activates Guardian Idol's "becomes a 2/2 Golem artifact creature" with mana in pool.
@@ -251,7 +269,7 @@ fn guardian_idol_keeps_its_counters_while_not_a_creature() {
 
 #[test]
 fn gauntlet_of_power_leaving_can_make_marked_damage_lethal() {
-    cr!("704.5g", "120.6", "514.2");
+    cr!("704.5g", "120.6");
     ruling!(
         "Gauntlet of Power",
         "Because damage remains marked on a creature until the damage is removed as the turn ends, nonlethal damage dealt to a creature of the chosen color may become lethal if Gauntlet of Power leaves the battlefield during that turn."
@@ -271,7 +289,7 @@ fn gauntlet_of_power_leaving_can_make_marked_damage_lethal() {
 
 #[test]
 fn gauntlet_of_power_without_a_chosen_color_does_nothing() {
-    cr!("607.2a", "106.6a");
+    cr!("607.2d");
     ruling!(
         "Gauntlet of Power",
         "If Gauntlet of Power is somehow on the battlefield with no color chosen for its first ability, no creatures get +1/+1 and its last ability never triggers. It still won't affect colorless creatures or basic lands tapped for colorless mana."
@@ -310,7 +328,7 @@ fn karn(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn karn_chooses_how_much_mana_to_pay_as_the_ability_resolves() {
-    cr!("608.2c", "107.1b");
+    cr!("608.2c", "608.2d");
     ruling!(
         "Karn, Living Legacy",
         "For Karn’s second loyalty ability, you don’t choose how much mana to pay until the ability resolves."
@@ -348,7 +366,7 @@ fn karn_chooses_how_much_mana_to_pay_as_the_ability_resolves() {
 
 #[test]
 fn karn_paying_no_mana_looks_at_nothing() {
-    cr!("608.2c");
+    cr!("608.2c", "107.1c");
     ruling!(
         "Karn, Living Legacy",
         "If you don’t pay any mana, you won’t look at any cards or put any into your hand."
@@ -377,13 +395,12 @@ fn karns_emblem_can_tap_summoning_sick_artifact_creatures() {
     let k = karn(&mut t);
     t.activate(P0, k, 2, &[]).unwrap();
     t.resolve_all();
-    let emblem = t
-        .g
-        .command
-        .iter()
-        .copied()
-        .find(|id| t.g.obj(*id).controller == P0)
-        .expect("emblem");
+    let emblem =
+        t.g.command
+            .iter()
+            .copied()
+            .find(|id| t.g.obj(*id).controller == P0)
+            .expect("emblem");
     let thopter = t.battlefield_sick(P0, "Ornithopter");
     t.answer_choose(P0, &[obj(thopter)]);
     t.activate(P0, emblem, 0, &[Entity::Player(P1)]).unwrap();
@@ -394,7 +411,7 @@ fn karns_emblem_can_tap_summoning_sick_artifact_creatures() {
 
 #[test]
 fn static_net_leaving_before_its_trigger_resolves_exiles_nothing() {
-    cr!("610.3c", "603.3");
+    cr!("610.3b", "603.3");
     ruling!(
         "Static Net",
         "If Static Net leaves the battlefield before its first ability resolves, the target permanent won't be exiled."
@@ -411,7 +428,7 @@ fn static_net_leaving_before_its_trigger_resolves_exiles_nothing() {
 
 #[test]
 fn static_net_returns_the_card_immediately_after_it_leaves() {
-    cr!("610.3a", "610.3");
+    cr!("610.3", "610.3c");
     ruling!(
         "Static Net",
         "Static Net's first ability creates two one-shot effects: one that exiles the permanent when the ability resolves, and another that returns the exiled card to the battlefield immediately after Static Net leaves the battlefield."
@@ -422,8 +439,8 @@ fn static_net_returns_the_card_immediately_after_it_leaves() {
     let net = t.enter(P0, "Static Net");
     t.resolve_all();
     assert_eq!(t.zone(bears), Zone::Exile);
-    // Two Powerstone-and-life abilities aside, the card comes back as Net leaves, with
-    // nothing on the stack.
+    // The card comes back (under its owner's control) as the Net leaves, with nothing on
+    // the stack.
     move_to(&mut t, net, Zone::Graveyard(P0));
     assert_eq!(t.stack_len(), 0);
     assert!(t.on_battlefield(bears));
@@ -475,10 +492,7 @@ fn the_golden_throne_is_gone_before_the_life_loss_is_checked() {
     let throne = t.battlefield(P0, "The Golden Throne");
     t.set_step(P1, Step::PrecombatMain);
     let s = t.custom(P1, spell, Zone::Hand(P1));
-    t.cast(P1, s)
-        .target(throne)
-        .target(Entity::Player(P0))
-        .go();
+    t.cast(P1, s).target(throne).target(Entity::Player(P0)).go();
     t.resolve_all();
     assert!(t.has_lost(P0));
 }
@@ -502,7 +516,7 @@ fn the_golden_throne_doesnt_apply_when_you_cant_lose() {
 
 #[test]
 fn the_golden_throne_doesnt_apply_when_an_opponent_wins() {
-    cr!("104.2a", "104.3h");
+    cr!("104.2b", "104.1");
     ruling!(
         "The Golden Throne",
         "If an effect states that an opponent wins the game, The Golden Throne's effect doesn't apply."
@@ -561,10 +575,22 @@ fn locus_copies_have_the_same_x_and_mode() {
     mana(&mut t, P0, ManaType::W, 3);
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
     t.answer(P0, DecisionKind::X, Answer::Number(3));
+    let from = t.asked().len();
     t.activate(P0, atalya, 0, &[]).unwrap();
     t.resolve_all();
     // Gain 3 life, twice.
     assert_eq!(t.life(P0), 26);
+    // The mode and X were chosen once, for the original: none for the copy.
+    let asked = t.asked();
+    let modes = asked[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseModes { .. }))
+        .count();
+    let xs = asked[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseX { .. }))
+        .count();
+    assert_eq!((modes, xs), (1, 1));
 }
 
 #[test]
@@ -666,7 +692,7 @@ fn visions_of_phyrexia_doesnt_trigger_after_any_card_is_played_from_exile() {
 
 #[test]
 fn visions_of_phyrexia_card_follows_timing_rules_and_costs() {
-    cr!("601.2", "307.1");
+    cr!("601.2", "302.1");
     ruling!(
         "Visions of Phyrexia",
         "You must follow all normal timing rules for a card you play using Visions of Phyrexia's first ability and, if it's a spell, you must pay its costs to cast it."
@@ -688,7 +714,7 @@ fn visions_of_phyrexia_card_follows_timing_rules_and_costs() {
 
 #[test]
 fn the_great_henge_draws_even_if_the_creature_left() {
-    cr!("608.2b", "608.2c");
+    cr!("609.3", "608.2c");
     ruling!(
         "The Great Henge",
         "Once The Great Henge's last ability has triggered, you'll draw a card even if you can't put a +1/+1 counter on the creature for some reason (most likely because it has left the battlefield)."
@@ -711,21 +737,48 @@ fn the_great_henge_is_cast_without_priority_in_between() {
         "The Great Henge",
         "Once you announce that you're casting a spell, no player may take actions until the spell has been paid for."
     );
+    // P0 casts it with their priority, through the game loop: the one action proposes it,
+    // determines its cost ({1}{G}{G} with Colossal Dreadmaw) and pays it, and no player
+    // (P1 holds a Shock and a Mountain) is asked anything in between.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Colossal Dreadmaw");
     let henge = t.hand(P0, "The Great Henge");
     t.lands(P0, "Forest", 3);
+    t.hand(P1, "Shock");
+    t.lands(P1, "Mountain", 1);
+    t.g.turn.passes = 0;
+    t.answer(
+        P0,
+        DecisionKind::Priority,
+        Answer::Action(Action::Cast {
+            card: henge,
+            method: CastMethod::Normal,
+        }),
+    );
     let from = t.asked().len();
-    t.cast(P0, henge).go();
-    assert!(!t.asked()[from..]
+    t.g.advance();
+    let asked = t.asked();
+    assert_eq!(t.zone(henge), Zone::Stack);
+    assert_eq!(untapped_lands(&t, P0), 0);
+    assert!(
+        asked[from..].iter().all(|(p, _)| *p == P0),
+        "{:?}",
+        &asked[from..]
+    );
+    let priority = asked[from..]
         .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+        .filter(|(_, d)| matches!(d, Decision::Priority { .. }))
+        .count();
+    assert_eq!(priority, 1);
+    // P0 keeps priority; once they pass, P1 may respond to the spell, already paid for.
+    t.g.advance();
+    assert_eq!(t.g.turn.priority, Some(P1));
     assert_eq!(t.zone(henge), Zone::Stack);
 }
 
 #[test]
 fn the_great_henge_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "The Great Henge",
         "The cost reduction ability reduces only the generic mana in The Great Henge's cost. The colored mana must still be paid."
@@ -804,6 +857,21 @@ fn powerstone_tokens_are_predefined_and_their_mana_pays_for_abilities() {
     t.resolve_all();
     assert!(t.obj_now(factory).is(CardType::Creature));
     assert!(t.obj_now(stones[0]).tapped);
+    // With only Powerstones: an artifact spell (Mind Stone), then an artifact's ability.
+    let mut t = TestGame::new(2);
+    let stones: Vec<ObjectId> = (0..3)
+        .map(|_| crate::r_s02_common::create_token(&mut t, P0, "Powerstone"))
+        .collect();
+    let rock = t.hand(P0, "Mind Stone");
+    t.cast(P0, rock).go();
+    t.resolve_all();
+    let rock = t.named_on_battlefield("Mind Stone")[0];
+    let hand = t.hand_size(P0);
+    t.activate(P0, rock, 1, &[]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.zone(rock), Zone::Graveyard(P0));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(stones.iter().all(|s| t.obj_now(*s).tapped));
 }
 
 #[test]

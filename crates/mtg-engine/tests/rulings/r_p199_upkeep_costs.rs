@@ -98,6 +98,32 @@ fn karplusan_minotaur_wins_only_flips_its_controller_flipped() {
     t.resolve_all();
     assert!(t.on_battlefield(mino));
     assert_eq!(t.life(P1), 19);
+    // "Only coin flips caused by cards that say 'win' and/or 'lose' anywhere on them have
+    // a winner or loser": P0's flip for Mana Clash (heads or tails only) is neither won nor
+    // lost, so neither of the Minotaur's abilities triggers.
+    supported("Mana Clash");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Karplusan Minotaur");
+    let clash = t.hand(P0, "Mana Clash");
+    t.lands(P0, "Mountain", 1);
+    load(&mut t, &[true, true]);
+    t.cast(P0, clash).target(Entity::Player(P1)).go();
+    t.resolve();
+    let flips: Vec<(bool, bool)> = t
+        .turn_events
+        .iter()
+        .chain(t.g.events.iter())
+        .filter_map(|e| match e {
+            Event::CoinFlipped {
+                player, won, lost, ..
+            } if *player == P0 => Some((*won, *lost)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(flips, vec![(false, false)]);
+    assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (20, 20));
 }
 
 #[test]
@@ -129,6 +155,8 @@ fn yawgmoth_demon_may_keep_its_artifacts() {
         "The sacrificing of an artifact is not mandatory. You can choose not to sacrifice an artifact but will pay the consequences."
     );
     supported("Yawgmoth Demon");
+    // Keeping the artifact: the Demon is tapped and deals 2 damage to P0 (it, not the
+    // artifact that wasn't sacrificed).
     let mut t = TestGame::new(2);
     let demon = t.battlefield(P0, "Yawgmoth Demon");
     let rock = t.battlefield(P0, "Mind Stone");
@@ -138,6 +166,40 @@ fn yawgmoth_demon_may_keep_its_artifacts() {
     assert!(t.on_battlefield(rock));
     assert!(t.obj_now(demon).tapped);
     assert_eq!(t.life(P0), 18);
+    // Sacrificing it: nothing else happens.
+    let mut t = TestGame::new(2);
+    let demon = t.battlefield(P0, "Yawgmoth Demon");
+    let rock = t.battlefield(P0, "Mind Stone");
+    next_upkeep(&mut t, P0);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(rock)]);
+    t.resolve_all();
+    assert_eq!(t.zone(rock), Zone::Graveyard(P0));
+    assert!(!t.obj_now(demon).tapped);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn archdemon_of_greed_that_cant_sacrifice_a_human_deals_its_damage() {
+    cr!("118.12", "608.2c");
+    // "Sacrifice a Human. If you can't, tap this creature and it deals 9 damage to you.":
+    // "it" is the Archdemon, not the Human that couldn't be sacrificed.
+    let mut t = TestGame::new(2);
+    let demon = crate::r_p079_common::back_face(&mut t, P0, "Ravenous Demon // Archdemon of Greed");
+    next_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert!(t.on_battlefield(demon));
+    assert!(t.obj_now(demon).tapped);
+    assert_eq!(t.life(P0), 11);
+    // With a Human: it's sacrificed instead.
+    let mut t = TestGame::new(2);
+    let demon = crate::r_p079_common::back_face(&mut t, P0, "Ravenous Demon // Archdemon of Greed");
+    let human = t.battlefield(P0, "Elite Vanguard");
+    next_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.zone(human), Zone::Graveyard(P0));
+    assert!(!t.obj_now(demon).tapped);
+    assert_eq!(t.life(P0), 20);
 }
 
 #[test]
@@ -184,13 +246,39 @@ fn xathrid_demon_must_sacrifice_another_creature_if_it_can() {
 }
 
 #[test]
+fn it_after_sacrificing_a_creature_other_than_this_is_the_sacrificed_creature() {
+    cr!("608.2c");
+    // "~" there only qualifies what's sacrificed: "its" is the sacrificed creature, as
+    // before any instruction about ~ itself.
+    let demon = custom_card(
+        "Probe Demon",
+        "Creature — Demon",
+        "{4}",
+        Some((5, 5)),
+        "At the beginning of your upkeep, sacrifice a creature other than Probe Demon. You \
+         gain life equal to its toughness.",
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, demon, Zone::Battlefield);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    next_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Graveyard(P0));
+    assert_eq!(t.life(P0), 22);
+}
+
+#[test]
 fn circling_vultures_is_sacrificed_unless_a_creature_card_is_exiled() {
     cr!("118.12", "608.2c");
     ruling!(
         "Circling Vultures",
         "When the ability resolves, you choose whether to sacrifice the creature or perform the other action. If you can't perform the other action, then you must sacrifice the creature."
     );
-    for (in_gy, exile, stays) in [(true, true, true), (true, false, false), (false, true, false)] {
+    for (in_gy, exile, stays) in [
+        (true, true, true),
+        (true, false, false),
+        (false, true, false),
+    ] {
         let mut t = TestGame::new(2);
         let v = t.battlefield(P0, "Circling Vultures");
         let bears = in_gy.then(|| t.graveyard(P0, "Grizzly Bears"));
@@ -217,12 +305,18 @@ fn wayward_angel_with_threshold_is_only_black() {
     );
     let mut t = TestGame::new(2);
     let angel = t.battlefield(P0, "Wayward Angel");
-    assert_eq!(t.obj_now(angel).chars.colors, ColorSet::single(Color::White));
+    assert_eq!(
+        t.obj_now(angel).chars.colors,
+        ColorSet::single(Color::White)
+    );
     for _ in 0..7 {
         t.graveyard(P0, "Grizzly Bears");
     }
     t.g.recompute();
-    assert_eq!(t.obj_now(angel).chars.colors, ColorSet::single(Color::Black));
+    assert_eq!(
+        t.obj_now(angel).chars.colors,
+        ColorSet::single(Color::Black)
+    );
     assert_eq!(t.pt(angel), (7, 7));
 }
 
@@ -251,11 +345,19 @@ fn charnel_troll_can_discard_a_creature_card_before_its_upkeep_trigger_resolves(
     t.resolve();
     assert_eq!(t.counters(troll, counters::PLUS1), 1);
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // A second creature card, so the exile is a choice; choosing none isn't allowed.
+    let giant = t.graveyard(P0, "Hill Giant");
+    let gy_bears = t.g.current(bears);
+    t.answer_choose(P0, &[]);
     let from = t.asked().len();
     t.resolve_all();
-    // The Bears were exiled without a choice to keep them, and the Troll stays.
+    // One of them was exiled anyway (no option to keep both), and the Troll stays.
     assert_eq!(yes_no_questions(&t, P0, from), 0);
-    assert!(t.in_exile("Grizzly Bears"));
+    let exiled = [gy_bears, giant]
+        .iter()
+        .filter(|c| t.zone(**c) == Zone::Exile)
+        .count();
+    assert_eq!(exiled, 1);
     assert!(t.on_battlefield(troll));
     assert_eq!(t.counters(troll, counters::PLUS1), 2);
 }
@@ -331,7 +433,10 @@ fn two_waterspout_djinns_must_return_different_islands() {
         t.resolve_all();
         assert_eq!(t.named_on_battlefield("Waterspout Djinn").len(), kept);
         assert_eq!(t.named_on_battlefield("Island").len(), 0);
-        assert_eq!(hand_names(&t, P0).iter().filter(|n| *n == "Island").count(), islands);
+        assert_eq!(
+            hand_names(&t, P0).iter().filter(|n| *n == "Island").count(),
+            islands
+        );
     }
 }
 
@@ -398,7 +503,10 @@ fn unless_costs_are_chosen_on_resolution_even_without_control() {
             assert_eq!(t.on_battlefield(id), pay, "{name} {pay}");
         }
     }
-    for (name, fodder) in [("Contamination", "Grizzly Bears"), ("Endless Wurm", "Glorious Anthem")] {
+    for (name, fodder) in [
+        ("Contamination", "Grizzly Bears"),
+        ("Endless Wurm", "Glorious Anthem"),
+    ] {
         for pay in [true, false] {
             let mut t = TestGame::new(2);
             let id = t.battlefield(P0, name);
@@ -462,7 +570,7 @@ fn tombstone_stairwell_tokens_are_controlled_by_each_player() {
 
 #[test]
 fn sheltering_ancient_counters_may_go_on_any_opponents_creatures() {
-    cr!("702.24a", "118.3");
+    cr!("702.24a", "608.2d");
     ruling!(
         "Sheltering Ancient",
         "You may choose a different creature to put each counter on, but you can also choose the same creature multiple times. The creatures don’t have to be controlled by the same opponent."
@@ -485,7 +593,7 @@ fn sheltering_ancient_counters_may_go_on_any_opponents_creatures() {
 
 #[test]
 fn forsaken_city_may_exile_a_card_while_untapped() {
-    cr!("603.5", "502.3");
+    cr!("603.5", "118.12");
     ruling!(
         "Forsaken City",
         "You may choose to exile a card in your hand even if Forsaken City is already untapped."

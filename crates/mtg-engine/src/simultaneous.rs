@@ -1410,13 +1410,20 @@ fn perform_plans(
             g.shuffle_library(*owner);
         }
     }
-    // Discards: each chosen card, once everyone has chosen.
+    // Discards: the chosen cards, once everyone has chosen, at the same time (CR 701.9a,
+    // 404.3).
+    let mut discards: Vec<(usize, (PlayerId, ObjectId))> = Vec::new();
     for (i, plan) in plans.iter().enumerate() {
         if let Some(Plan::Discard { player, cards }) = plan {
-            for c in cards {
-                if let Some(n) = g.discard(*player, *c, ctx.source) {
-                    out[i].discarded.push(n);
-                }
+            discards.extend(cards.iter().map(|c| (i, (*player, *c))));
+        }
+    }
+    if !discards.is_empty() {
+        let cards: Vec<(PlayerId, ObjectId)> = discards.iter().map(|(_, pc)| *pc).collect();
+        let res = g.discard_together(&cards, ctx.source);
+        for ((i, _), n) in discards.into_iter().zip(res) {
+            if let Some(n) = n {
+                out[i].discarded.push(n);
             }
         }
     }

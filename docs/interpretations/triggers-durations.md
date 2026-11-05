@@ -98,7 +98,7 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Why: The words "other creatures" are set against "a creature" (the one that entered); that meaning comes from the printed card and shouldn't flip when an effect changes the source's types.
 - Affects: Portcullis; Lifeline ("if another creature is on the battlefield": the dying creature is no longer on the battlefield either way, so the outcome is the same); the same reading for subtypes: Valakut, the Molten Pinnacle and Roiling Canopy ("Whenever a Mountain you control enters, if you control at least five other Mountains", on a land that isn't a Mountain: the Mountains besides the one that entered, as Valakut's ruling says).
 - Code: `crates/mtg-engine/src/oracle/patterns/other_than_trigger_object.rs` (`rebind_other`), called from `crates/mtg-engine/src/oracle/triggers.rs`.
-- Tests: `tests/rulings/r_p039_creature_count.rs` (`portcullis_checks_the_creature_count_again_on_resolution`, `animated_portcullis_counts_itself_among_the_other_creatures`); `tests/rulings/r_p199_lands_and_legends.rs` (`valakut_counts_other_mountains_as_it_resolves`, `valakut_counts_mountains_entering_together`).
+- Tests: `tests/rulings/r_p039_creature_count.rs` (`portcullis_checks_the_creature_count_again_on_resolution`, `animated_portcullis_counts_itself_among_the_other_creatures`); `tests/rulings/r_p199_lands_and_legends.rs` (`valakut_counts_other_mountains_as_it_resolves`, `valakut_counts_mountains_entering_together`, `roiling_canopy_counts_forests_besides_the_one_that_entered`).
 
 
 ## choose-for-each-player-distinct-objects: Nihiloor's choices "for each opponent" are of different creatures
