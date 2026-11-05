@@ -83,7 +83,15 @@ fn saw_in_half_copying_a_clone() {
     let mut t = TestGame::new(2);
     let clone = cloned_angel(&mut t, P1);
     let before = t.g.battlefield.clone();
-    cast_spell(&mut t, P0, "Saw in Half", "{2}{B}", &[obj(clone)], None, None);
+    cast_spell(
+        &mut t,
+        P0,
+        "Saw in Half",
+        "{2}{B}",
+        &[obj(clone)],
+        None,
+        None,
+    );
     let toks = new_tokens(&t, P1, &before);
     assert_eq!(toks.len(), 2);
     for c in toks {
@@ -176,7 +184,9 @@ fn brenard_copying_a_clone_that_died() {
     let c = toks[0];
     assert_angel(&t, c, false);
     // A 1/1 Food Golem artifact creature, +2/+2 and trample from Brenard.
-    assert!(has_subtype(&t, c, "Food") && has_subtype(&t, c, "Golem") && has_subtype(&t, c, "Angel"));
+    assert!(
+        has_subtype(&t, c, "Food") && has_subtype(&t, c, "Golem") && has_subtype(&t, c, "Angel")
+    );
     assert!(is_artifact(&t, c) && is_creature(&t, c));
     assert_eq!(t.pt(c), (3, 3));
     assert!(has_kw(&t, c, KeywordKind::Trample));
@@ -227,11 +237,20 @@ fn tawnos_copying_an_artifact_token_thats_copying_something_else() {
     );
     let orni = t.battlefield(P1, "Ornithopter");
     t.answer_choose(P0, &[obj(orni)]);
-    cast_spell(&mut t, P0, "Cytoshape", "{1}{G}{U}", &[obj(thopter)], None, None);
+    cast_spell(
+        &mut t,
+        P0,
+        "Cytoshape",
+        "{1}{G}{U}",
+        &[obj(thopter)],
+        None,
+        None,
+    );
     assert_eq!(name_of(&t, thopter), "Ornithopter");
     t.lands(P0, "Wastes", 2);
     let before = t.g.battlefield.clone();
-    t.activate(P0, tawnos, 0, &[obj(thopter)]).expect("activation");
+    t.activate(P0, tawnos, 0, &[obj(thopter)])
+        .expect("activation");
     t.resolve_all();
     let toks = new_tokens(&t, P0, &before);
     assert_eq!(toks.len(), 1);
@@ -257,14 +276,26 @@ fn becoming_a_copy_of_a_clone_becomes_what_it_copies() {
         let clone = cloned_angel(&mut t, P1);
         let bears = t.battlefield(P0, "Grizzly Bears");
         t.answer_choose(P0, &[obj(clone)]);
-        let cost = if spell == "Cytoshape" { "{1}{G}{U}" } else { "{2}{U}" };
+        let cost = if spell == "Cytoshape" {
+            "{1}{G}{U}"
+        } else {
+            "{2}{U}"
+        };
         cast_spell(&mut t, P0, spell, cost, &[obj(bears)], None, None);
         assert_angel(&t, bears, true);
     }
     let mut t = TestGame::new(2);
     let clone = cloned_angel(&mut t, P1);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    cast_spell(&mut t, P0, "True Polymorph", "{4}{U}{U}", &[obj(bears), obj(clone)], None, None);
+    cast_spell(
+        &mut t,
+        P0,
+        "True Polymorph",
+        "{4}{U}{U}",
+        &[obj(bears), obj(clone)],
+        None,
+        None,
+    );
     assert_angel(&t, bears, true);
 }
 
@@ -277,7 +308,8 @@ fn shapesharer_copying_a_clone() {
     let sharer = t.battlefield(P0, "Shapesharer");
     let clone = cloned_angel(&mut t, P1);
     lands_for(&mut t, P0, "{2}{U}");
-    t.activate(P0, sharer, 0, &[obj(sharer), obj(clone)]).expect("activation");
+    t.activate(P0, sharer, 0, &[obj(sharer), obj(clone)])
+        .expect("activation");
     t.resolve_all();
     assert_angel(&t, sharer, true);
 }
@@ -293,7 +325,7 @@ fn saheeli_sublime_artificer_copying_a_clone() {
     let mirror = t.battlefield(P0, "Mirage Mirror");
     let clone = cloned_angel(&mut t, P0);
     t.answer_targets(P0, &[obj(mirror)]);
-            t.answer_targets(P0, &[obj(clone)]);
+    t.answer_targets(P0, &[obj(clone)]);
     activate_containing(&mut t, P0, saheeli, "becomes a copy").expect("−2");
     t.resolve_all();
     assert_angel(&t, mirror, true);
@@ -305,7 +337,10 @@ fn mass_copy_effects_of_a_modified_copy() {
     cr!("707.3", "707.9b", "613.1a");
     ruling!("Nanogene Conversion", "If the targeted creature is itself copying a creature, each other creature will become whatever it's copying, as modified by that copy effect.");
     ruling!("Mirrorweave", "If the targeted creature is itself copying a creature, each other creature will become whatever it’s copying, as modified by that copy effect. For example, if you target a Cemetery Puca that’s copying a Grizzly Bears (a 2/2 creature with no abilities), each other creature will become a Grizzly Bears with the Cemetery Puca ability.");
-    for (spell, cost) in [("Nanogene Conversion", "{3}{U}"), ("Mirrorweave", "{2}{W}{U}")] {
+    for (spell, cost) in [
+        ("Nanogene Conversion", "{3}{U}"),
+        ("Mirrorweave", "{2}{W}{U}"),
+    ] {
         let mut t = TestGame::new(2);
         let mimic = mimic_bears(&mut t, P0);
         let giant = t.battlefield(P1, "Hill Giant");
@@ -324,7 +359,15 @@ fn mass_copy_effects_of_a_modified_copy() {
     t.resolve_all();
     assert_eq!(name_of(&t, puca), "Grizzly Bears");
     let giant = t.battlefield(P0, "Hill Giant");
-    cast_spell(&mut t, P0, "Mirrorweave", "{2}{W}{U}", &[obj(puca)], None, None);
+    cast_spell(
+        &mut t,
+        P0,
+        "Mirrorweave",
+        "{2}{W}{U}",
+        &[obj(puca)],
+        None,
+        None,
+    );
     assert_eq!(name_of(&t, giant), "Grizzly Bears");
     assert_eq!(t.pt(giant), (2, 2));
     assert_eq!(abilities_with(&t, giant, "Whenever a creature dies"), 1);

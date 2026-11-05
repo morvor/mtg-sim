@@ -37,7 +37,10 @@ fn copies_enters_abilities(card: &str, make: MakeCopy) {
     choose_creature_type(&mut t, P0, "Elf");
     let toks = make(&mut t, auto);
     assert_eq!(toks.len(), 1, "{card}");
-    assert!(has_subtype(&t, toks[0], "Elf"), "{card}: no creature type chosen");
+    assert!(
+        has_subtype(&t, toks[0], "Elf"),
+        "{card}: no creature type chosen"
+    );
     // "Other creatures you control of the chosen type get +1/+1": the token's lord.
     assert_eq!(t.pt(elf), (2, 2), "{card}");
 }
@@ -62,7 +65,8 @@ fn tempestra(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
     t.answer_choose(P0, &[obj(orni)]);
     lands_for(t, P0, "{2}{R}");
     let before = t.g.battlefield.clone();
-    t.activate(P0, tempestra, 0, &[obj(what)]).expect("activation");
+    t.activate(P0, tempestra, 0, &[obj(what)])
+        .expect("activation");
     t.resolve_all();
     new_tokens(t, P0, &before)
 }
@@ -71,17 +75,34 @@ fn the_fire_crystal(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
     let crystal = t.battlefield(P0, "The Fire Crystal");
     lands_for(t, P0, "{4}{R}{R}");
     let before = t.g.battlefield.clone();
-    t.activate(P0, crystal, 0, &[obj(what)]).expect("activation");
+    t.activate(P0, crystal, 0, &[obj(what)])
+        .expect("activation");
     t.resolve_all();
     new_tokens(t, P0, &before)
 }
 
 fn flash_photography(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
-    cast_spell(t, P0, "Flash Photography", "{2}{U}{U}", &[obj(what)], None, None)
+    cast_spell(
+        t,
+        P0,
+        "Flash Photography",
+        "{2}{U}{U}",
+        &[obj(what)],
+        None,
+        None,
+    )
 }
 
 fn relms_sketching(t: &mut TestGame, what: ObjectId) -> Vec<ObjectId> {
-    cast_spell(t, P0, "Relm's Sketching", "{2}{U}{U}", &[obj(what)], None, None)
+    cast_spell(
+        t,
+        P0,
+        "Relm's Sketching",
+        "{2}{U}{U}",
+        &[obj(what)],
+        None,
+        None,
+    )
 }
 
 #[test]
@@ -133,7 +154,10 @@ fn faerie_artisans_token_has_the_copied_enters_abilities() {
 #[test]
 fn dual_nature_token_has_the_copied_enters_abilities() {
     cr!("707.2", "707.5", "603.6a", "614.1c");
-    ruling!("Dual Nature", "If the original creature has any \"enters\" abilities, the copy will also have those.");
+    ruling!(
+        "Dual Nature",
+        "If the original creature has any \"enters\" abilities, the copy will also have those."
+    );
     supported("Dual Nature");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Dual Nature");
@@ -169,18 +193,17 @@ fn tempt_with_reflections_enters_triggers_wait_and_go_on_the_stack_in_apnap_orde
     assert_eq!(tokens, vec![3, 1, 1], "{}", t.dump_log());
     // Every enters trigger is on the stack, none resolved yet: P0's at the bottom, then
     // P1's, then P2's on top.
-    let controllers: Vec<PlayerId> = t
-        .g
-        .stack
-        .iter()
-        .filter(|s| {
-            matches!(
-                t.g.obj(**s).stack.as_ref().map(|i| &i.kind),
-                Some(StackKind::Triggered { .. })
-            )
-        })
-        .map(|s| t.g.obj(*s).controller)
-        .collect();
+    let controllers: Vec<PlayerId> =
+        t.g.stack
+            .iter()
+            .filter(|s| {
+                matches!(
+                    t.g.obj(**s).stack.as_ref().map(|i| &i.kind),
+                    Some(StackKind::Triggered { .. })
+                )
+            })
+            .map(|s| t.g.obj(*s).controller)
+            .collect();
     assert_eq!(controllers, vec![P0, P0, P0, P1, P2]);
     let lives = |t: &TestGame| (t.life(P0), t.life(P1), t.life(P2));
     assert_eq!(lives(&t), (20, 20, 20));
@@ -301,11 +324,12 @@ fn mimic_vat_token_copy_of_a_noncreature_card_has_haste() {
     assert_eq!(name_of(&t, tok), "Mutavault");
     assert!(!is_creature(&t, tok));
     assert!(has_kw(&t, tok, KeywordKind::Haste));
-    // It becomes a creature: it can attack (and tap for its ability) right away.
+    // It becomes a creature: it attacks the turn it was created.
     t.lands(P0, "Wastes", 1);
     activate_containing(&mut t, P0, tok, "becomes a 2/2").expect("animate");
     t.resolve_all();
     assert!(is_creature(&t, tok) && has_kw(&t, tok, KeywordKind::Haste));
-    t.set_step(P0, Step::BeginningOfCombat);
-    assert!(crate::r_s02_common::can_attack(&mut t, tok));
+    crate::r_s01_common::attack_with(&mut t, &[(tok, Entity::Player(P1))]);
+    crate::r_s01_common::block_and_finish(&mut t, P1, &[]);
+    assert_eq!(t.life(P1), 18);
 }

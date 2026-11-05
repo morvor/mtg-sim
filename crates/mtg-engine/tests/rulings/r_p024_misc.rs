@@ -1,10 +1,10 @@
 //! Rulings batch P024 — the rest: attack requirements (CR 508.1d, 508.1h), becoming a copy
 //! of a revealed card (CR 701.20, 707.2), triggers that are too late (CR 603.2), copies of
-//! double-faced permanents (CR 707.8, 712.14a), undefined characteristics (CR 707.2),
-//! nothing to copy (CR 608.2), copy effects overwriting each other (CR 613.2, 613.7),
-//! attack triggers for each player (CR 506.2, 508.1), demonstrate (CR 702.144a), the
-//! legend rule (CR 704.5j), modes in order (CR 700.2, 608.2c), tokens entering one at a
-//! time (CR 608.2c, 603.2), replacement effects (CR 614, 616.1) and multiple triggers.
+//! double-faced and melded permanents (CR 707.8, 712.8, 701.42b), undefined characteristics
+//! (CR 612.6), nothing to copy (CR 607.2a), copy effects overwriting each other (CR 613.2,
+//! 613.7), attack triggers for each player (CR 508.1m, 802.2), demonstrate (CR 702.144a),
+//! the legend rule (CR 704.5j), modes in order (CR 700.2, 608.2c), tokens entering one at
+//! a time (CR 608.2c, 603.2), replacement effects (CR 614, 616.1) and multiple triggers.
 
 use crate::r_p024_common::*;
 use crate::r_s09_common::{legal_attack, to_combat};
@@ -51,9 +51,20 @@ fn nahiris_target_doesnt_attack_if_it_cant_or_it_costs_something() {
         }
         to_combat(&mut t, P0);
         assert_eq!(legal_attack(&mut t, &[]), case != "free", "{case}");
+        // P0 declares no attackers: that's replaced by the Bears attacking only when it
+        // can attack for free.
+        let attacks = crate::r_s09_common::declare(&mut t, P0, &[]);
         if case == "free" {
-            assert!(legal_attack(&mut t, &[(bears, Entity::Player(P1))]));
+            assert_eq!(
+                attacks,
+                vec![(t.g.current(bears), Entity::Player(P1))],
+                "{case}"
+            );
+        } else {
+            assert!(attacks.is_empty(), "{case}: {attacks:?}");
         }
+        // Ghostly Prison's {2} wasn't paid.
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 0, "{case}");
     }
 }
 
@@ -93,20 +104,36 @@ fn shapeshifters_marrow_becomes_a_revealed_creature_card_permanently() {
 
 #[test]
 fn nascent_metamorph_copies_nothing_if_no_creature_card_is_revealed() {
-    cr!("701.20a", "608.2c");
+    cr!("701.20a");
     ruling!("Nascent Metamorph", "If the target opponent has no creature cards in their library, Nascent Metamorph doesn't become a copy of anything. The cards are returned to that library in a random order.");
     supported("Nascent Metamorph");
     let mut t = TestGame::new(2);
     let meta = t.battlefield(P0, "Nascent Metamorph");
-    t.library_top(P1, "Forest");
-    let size = t.library_size(P1);
+    // P1's library: six named lands on top of the 30 fillers, no creature card.
+    for land in ["Forest", "Island", "Swamp", "Mountain", "Plains", "Wastes"] {
+        t.library_top(P1, land);
+    }
+    let names = |t: &TestGame| -> Vec<String> {
+        t.g.players[1]
+            .library
+            .iter()
+            .map(|c| t.obj(*c).chars.name.to_string())
+            .collect()
+    };
+    let before = names(&t);
     t.answer_targets(P0, &[Entity::Player(P1)]);
     crate::r_s01_common::attack_with(&mut t, &[(meta, Entity::Player(P1))]);
     t.resolve_all();
     assert_eq!(name_of(&t, meta), "Nascent Metamorph");
     assert_eq!(t.pt(meta), (1, 1));
-    assert_eq!(t.library_size(P1), size);
-    assert!(t.g.players[1].library.iter().any(|c| t.obj(*c).chars.name == "Forest"));
+    // All the cards are back, in a random order (keeping the six lands on top in their
+    // order would be a 1 in 36!/30! chance).
+    let after = names(&t);
+    let (mut a, mut b) = (before.clone(), after.clone());
+    a.sort();
+    b.sort();
+    assert_eq!(a, b);
+    assert_ne!(after, before);
 }
 
 // --- Identity Thief ---------------------------------------------------------------------------
@@ -150,7 +177,10 @@ fn identity_thief_is_too_late_for_attack_triggers() {
 
 #[test]
 fn identity_thief_copies_the_face_shown_of_a_double_faced_permanent() {
-    cr!("707.8", "712.8e", "712.8g", "202.3b", "202.3c", "701.27c", "712.14", "712.21c");
+    cr!(
+        "707.8", "712.8e", "712.8g", "202.3b", "202.3c", "701.27c", "712.14", "712.21c", "701.42b",
+        "701.42c"
+    );
     ruling!("Identity Thief", "If the targeted creature is a double-faced or melded permanent, Identity Thief copies the face shown. Because Identity Thief is not a double-faced card or meld card, it won't be able to transform or meld. If it copies a melded permanent or the back face of a double-faced card, its mana value will be 0. Exiled double-faced cards and exiled meld cards will return with their front faces up.");
     let mut t = TestGame::new(2);
     let delver = t.battlefield(P1, "Delver of Secrets // Insectile Aberration");
@@ -191,10 +221,45 @@ fn identity_thief_copies_the_face_shown_of_a_double_faced_permanent() {
     t.advance_to(P0, Step::End);
     t.settle();
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Gisela, the Broken Blade").len(), 1, "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Gisela, the Broken Blade").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.named_on_battlefield("Bruna, the Fading Light").len(), 1);
     // Only the Thief (a copy until end of turn) is a Brisela.
-    assert_eq!(t.named_on_battlefield("Brisela, Voice of Nightmares"), vec![thief]);
+    assert_eq!(
+        t.named_on_battlefield("Brisela, Voice of Nightmares"),
+        vec![thief]
+    );
+    // A copy of a meld card can't meld: the Thief copying P1's Gisela ("At the beginning of
+    // your end step, if you both own and control Gisela, the Broken Blade and a creature
+    // named Bruna, the Fading Light, exile them, then meld them into Brisela, Voice of
+    // Nightmares.") with P0's own Bruna. At P0's end step both are exiled and stay exiled.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bruna, the Fading Light");
+    let gisela = t.battlefield(P1, "Gisela, the Broken Blade");
+    let thief = thief_attacks_copying(&mut t, gisela);
+    assert_eq!(name_of(&t, thief), "Gisela, the Broken Blade");
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert!(
+        t.named_on_battlefield("Brisela, Voice of Nightmares")
+            .is_empty(),
+        "{}",
+        t.dump_log()
+    );
+    assert!(
+        t.in_exile("Identity Thief") && t.in_exile("Bruna, the Fading Light"),
+        "{}",
+        t.dump_log()
+    );
+    // P1's Gisela came back, front face up.
+    let back = t.named_on_battlefield("Gisela, the Broken Blade");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.obj_now(back[0]).controller, P1);
 }
 
 #[test]
@@ -223,7 +288,7 @@ fn identity_thief_copying_a_hamlet_captain_that_became_a_permeating_mass() {
 
 #[test]
 fn volraths_shapeshifter_keeps_its_own_undefined_characteristics() {
-    cr!("612.6", "202.2", "202.3");
+    cr!("612.6", "202.2", "202.2e", "202.3");
     ruling!("Volrath's Shapeshifter", "If the top card in the graveyard has any other undefined characteristics, then those characteristics are not acquired and the shapeshifter uses the characteristic from its own card.");
     supported("Volrath's Shapeshifter");
     let mut t = TestGame::new(2);
@@ -243,12 +308,15 @@ fn volraths_shapeshifter_keeps_its_own_undefined_characteristics() {
     t.graveyard(P0, "Hill Giant");
     t.g.recompute();
     assert_eq!(mv_now(&mut t, shifter), 4);
-    assert_eq!(t.obj_now(shifter).chars.colors, ColorSet::single(Color::Red));
+    assert_eq!(
+        t.obj_now(shifter).chars.colors,
+        ColorSet::single(Color::Red)
+    );
 }
 
 #[test]
 fn assimilation_aegis_with_nothing_exiled_doesnt_change_the_creature() {
-    cr!("608.2c", "702.6a");
+    cr!("607.2a", "702.6a");
     ruling!("Assimilation Aegis", "If there are no creature cards exiled with Assimilation Aegis when its second ability resolves, the creature Assimilation Aegis is attached to won't become a copy of anything else. It will remain just as it was.");
     supported("Assimilation Aegis");
     let mut t = TestGame::new(2);
@@ -260,14 +328,17 @@ fn assimilation_aegis_with_nothing_exiled_doesnt_change_the_creature() {
     t.answer_targets(P0, &[obj(bears)]);
     activate_containing(&mut t, P0, aegis, "Equip").expect("equip");
     t.resolve_all();
-    assert_eq!(crate::r_s06_common::attached_to(&t, aegis), Some(obj(bears)));
+    assert_eq!(
+        crate::r_s06_common::attached_to(&t, aegis),
+        Some(obj(bears))
+    );
     assert_eq!(name_of(&t, bears), "Grizzly Bears");
     assert_eq!(t.pt(bears), (2, 2));
 }
 
 #[test]
 fn valki_with_no_exiled_card_of_that_mana_value_does_nothing() {
-    cr!("608.2c", "107.3a");
+    cr!("607.2a", "107.3a");
     ruling!("Valki, God of Lies // Tibalt, Cosmic Impostor", "If there are no creature cards exiled with Valki with mana value equal to the value of X as Valki's activated ability resolves, nothing happens. God of Lies, indeed.");
     supported("Valki, God of Lies // Tibalt, Cosmic Impostor");
     let mut t = TestGame::new(2);
@@ -286,7 +357,7 @@ fn valki_with_no_exiled_card_of_that_mana_value_does_nothing() {
 
 #[test]
 fn sakashima_the_impostor_that_copies_nothing_is_a_3_1_human_rogue() {
-    cr!("707.5", "614.12");
+    cr!("614.1c", "614.12");
     ruling!("Sakashima the Impostor", "If there is no creature on the battlefield or if you don't choose a creature as Sakashima enters, Sakashima remains a 3/1 Human Rogue.");
     supported("Sakashima the Impostor");
     for creature in [false, true] {
@@ -372,31 +443,56 @@ fn mirror_of_the_forebears_last_resolved_copy_wins_and_all_wear_off_together() {
 
 #[test]
 fn echoing_assault_triggers_once_for_each_player_attacked() {
-    cr!("508.1", "603.2c", "802.2");
+    cr!("508.1m", "603.2c", "802.2");
     ruling!("Echoing Assault", "If you attack multiple players in the same declare attackers step, Echoing Assault's last ability triggers once for each player you attacked.");
     supported("Echoing Assault");
+    // "Whenever you attack a player, choose target nontoken creature that's attacking that
+    // player. Create a token that's a copy of that creature, except it's 1/1. The token
+    // enters tapped and attacking that player." P0 attacks P1 with a Hill Giant and a
+    // Grizzly Bears and P2 with a Craw Wurm: two triggers, not three.
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Echoing Assault");
     let giant = t.battlefield(P0, "Hill Giant");
     let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P0, "Craw Wurm");
     let before = t.g.battlefield.clone();
-    t.answer_targets(P0, &[obj(giant)]);
-    t.answer_targets(P0, &[obj(bears)]);
-    crate::r_s01_common::attack_with(&mut t, &[(giant, Entity::Player(P1)), (bears, Entity::Player(P2))]);
+    crate::r_s01_common::attack_with(
+        &mut t,
+        &[
+            (giant, Entity::Player(P1)),
+            (bears, Entity::Player(P1)),
+            (wurm, Entity::Player(P2)),
+        ],
+    );
     assert_eq!(t.stack_len(), 2);
     t.resolve_all();
     let toks = new_tokens(&t, P0, &before);
     assert_eq!(toks.len(), 2);
-    let mut names: Vec<String> = toks.iter().map(|c| name_of(&t, *c)).collect();
-    names.sort();
-    assert_eq!(names, vec!["Grizzly Bears", "Hill Giant"]);
+    let attacking = |t: &TestGame, c: ObjectId| {
+        t.g.combat
+            .as_ref()
+            .and_then(|cb| cb.attackers.iter().find(|a| a.id == c))
+            .and_then(|a| a.target)
+    };
+    let mut seen = vec![];
+    for c in toks {
+        let name = name_of(&t, c);
+        let at = if name == "Craw Wurm" { P2 } else { P1 };
+        assert!(["Hill Giant", "Grizzly Bears", "Craw Wurm"].contains(&name.as_str()));
+        assert_eq!(attacking(&t, c), Some(Entity::Player(at)), "{name}");
+        assert_eq!(t.pt(c), (1, 1));
+        assert!(t.obj_now(c).tapped);
+        seen.push(at);
+    }
+    seen.sort();
+    assert_eq!(seen, vec![P1, P2]);
 }
 
 // --- Hofri Ghostforge --------------------------------------------------------------------------
 
 #[test]
 fn hofri_makes_no_token_if_the_card_cant_be_exiled() {
-    cr!("608.2c", "400.7");
+    cr!("118.12", "400.7");
     ruling!("Hofri Ghostforge", "If you can't exile the card, perhaps because another effect moved the card before the triggered ability started resolving, you won't create a token.");
     supported("Hofri Ghostforge");
     for moved in [false, true] {
@@ -408,7 +504,12 @@ fn hofri_makes_no_token_if_the_card_cant_be_exiled() {
         assert_eq!(t.stack_len(), 1);
         if moved {
             let card = t.g.current(giant);
-            t.g.move_object(card, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+            t.g.move_object(
+                card,
+                Zone::Hand(P0),
+                mtg_engine::events::MoveCause::Effect,
+                None,
+            );
             t.settle();
         }
         t.resolve_all();
@@ -473,10 +574,26 @@ fn esix_copies_of_a_legendary_creature_are_legendary() {
     t.answer_choose(P0, &[obj(isamaru)]);
     // Raise the Alarm: two Isamaru tokens instead of two Soldiers; P0 keeps the original.
     t.answer_choose(P0, &[obj(isamaru)]);
+    let from = t.asked().len();
     let toks = cast_spell(&mut t, P0, "Raise the Alarm", "{1}{W}", &[], None, None);
-    assert!(t.dump_log().matches("Isamaru, Hound of Konda").count() >= 3);
+    // The legend rule chose among the original and the two legendary token copies.
+    let legend: Vec<Vec<Entity>> = crate::r_p027_common::choices_since(&t, from)
+        .into_iter()
+        .map(|(c, _)| c)
+        .filter(|c| c.len() == 3)
+        .collect();
+    assert_eq!(legend.len(), 1, "{}", t.dump_log());
+    for e in &legend[0] {
+        let o = t.g.obj(e.object().unwrap());
+        assert_eq!(o.chars.name, "Isamaru, Hound of Konda");
+        assert!(o.chars.supertypes.contains(Supertype::Legendary));
+    }
+    assert!(legend[0].contains(&obj(isamaru)));
     assert!(toks.is_empty(), "{}", t.dump_log());
-    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda"), vec![isamaru]);
+    assert_eq!(
+        t.named_on_battlefield("Isamaru, Hound of Konda"),
+        vec![isamaru]
+    );
     assert!(t.named_on_battlefield("Soldier Token").is_empty());
 }
 
@@ -494,9 +611,17 @@ fn sakashima_leaving_makes_the_legend_rule_apply_again() {
     // Sakashima leaves: P0 keeps one of the two Isamarus.
     t.answer_choose(P0, &[obj(b)]);
     let s = t.g.current(s);
-    t.g.move_object(s, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        s,
+        Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.settle();
-    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda"), vec![t.g.current(b)]);
+    assert_eq!(
+        t.named_on_battlefield("Isamaru, Hound of Konda"),
+        vec![t.g.current(b)]
+    );
     assert!(t.in_graveyard(P0, "Isamaru, Hound of Konda"));
 }
 
@@ -521,7 +646,11 @@ fn sublime_epiphany_performs_its_modes_in_order() {
         // Cards in P1's hand: the Crawler's toughness.
         t.hand(P1, "Forest");
         t.hand(P1, "Forest");
-        let back = if bounce == "Destiny Spinner" { spinner } else { crawler };
+        let back = if bounce == "Destiny Spinner" {
+            spinner
+        } else {
+            crawler
+        };
         lands_for(&mut t, P1, "{1}{G}");
         let bears = t.hand(P1, "Grizzly Bears");
         let spell = t.cast(P1, bears).go();
@@ -541,7 +670,12 @@ fn sublime_epiphany_performs_its_modes_in_order() {
         assert_eq!(t.hand_size(P1), hand + 2, "{bounce}");
         if bounce == "Destiny Spinner" {
             // It was there as the Bears would be countered.
-            assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+            assert_eq!(
+                t.named_on_battlefield("Grizzly Bears").len(),
+                1,
+                "{}",
+                t.dump_log()
+            );
             // The Crawler saw the draw.
             assert_eq!(t.life(P0), 19);
         } else {
@@ -558,7 +692,15 @@ fn sublime_epiphany_returns_a_creature_and_copies_it_as_it_last_existed() {
     ruling!("Sublime Epiphany", "If you choose the third and fourth modes and target the same creature you control both times, you'll return it and then create a token that's a copy of it, using its copiable values as it last appeared on the battlefield. This is because the legality of targets is checked only as the spell begins to resolve, before any actions are performed.");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");
-    let toks = cast_spell(&mut t, P0, "Sublime Epiphany", "{4}{U}{U}", &[obj(giant), obj(giant)], Some(&[2, 3]), None);
+    let toks = cast_spell(
+        &mut t,
+        P0,
+        "Sublime Epiphany",
+        "{4}{U}{U}",
+        &[obj(giant), obj(giant)],
+        Some(&[2, 3]),
+        None,
+    );
     assert!(t.in_hand(P0, "Hill Giant"));
     assert_eq!(toks.len(), 1);
     assert_eq!(name_of(&t, toks[0]), "Hill Giant");
@@ -601,7 +743,15 @@ fn saheelis_artistry_tokens_enter_one_at_a_time() {
     let mut t = TestGame::new(2);
     let orni = t.battlefield(P0, "Ornithopter");
     let weaver = t.battlefield(P0, "Reckless Fireweaver");
-    let toks = cast_spell(&mut t, P0, "Saheeli's Artistry", "{4}{U}{U}", &[obj(orni), obj(weaver)], Some(&[0, 1]), None);
+    let toks = cast_spell(
+        &mut t,
+        P0,
+        "Saheeli's Artistry",
+        "{4}{U}{U}",
+        &[obj(orni), obj(weaver)],
+        Some(&[0, 1]),
+        None,
+    );
     assert_eq!(toks.len(), 2);
     assert_eq!(t.life(P1), 17, "{}", t.dump_log());
 }
@@ -612,7 +762,15 @@ fn saheelis_artistry_may_target_one_artifact_creature_twice() {
     ruling!("Saheeli's Artistry", "If you choose both modes, you may target a single artifact creature twice and get two copies of that artifact creature.");
     let mut t = TestGame::new(2);
     let orni = t.battlefield(P0, "Ornithopter");
-    let toks = cast_spell(&mut t, P0, "Saheeli's Artistry", "{4}{U}{U}", &[obj(orni), obj(orni)], Some(&[0, 1]), None);
+    let toks = cast_spell(
+        &mut t,
+        P0,
+        "Saheeli's Artistry",
+        "{4}{U}{U}",
+        &[obj(orni), obj(orni)],
+        Some(&[0, 1]),
+        None,
+    );
     assert_eq!(toks.len(), 2);
     for c in toks {
         assert_eq!(name_of(&t, c), "Ornithopter");
@@ -625,7 +783,15 @@ fn saheelis_artistry_artifact_exception_is_copiable() {
     ruling!("Saheeli's Artistry", "If you chose the second mode, the token is an artifact in addition to its other types. This is a copiable value of the token that other effects may copy.");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
-    let toks = cast_spell(&mut t, P0, "Saheeli's Artistry", "{4}{U}{U}", &[obj(bears)], Some(&[1]), None);
+    let toks = cast_spell(
+        &mut t,
+        P0,
+        "Saheeli's Artistry",
+        "{4}{U}{U}",
+        &[obj(bears)],
+        Some(&[1]),
+        None,
+    );
     assert_eq!(toks.len(), 1);
     assert!(is_artifact(&t, toks[0]));
     let clone = clone_of(&mut t, P0, toks[0]);
@@ -705,6 +871,47 @@ fn infinite_reflections_apply_in_the_order_you_choose() {
             assert_ne!(name_of(&t, bears), other);
         }
     }
+    // The two Reflections' choices read alike; which copy effect wins is seen with another
+    // one: Essence of the Wild ("Creatures you control enter as a copy of this creature.")
+    // and an Infinite Reflection on the Hill Giant. The one applied last wins.
+    supported("Essence of the Wild");
+    let orders: [(Respond, &str); 2] = [
+        (apply_essence_first, "Hill Giant"),
+        (apply_reflection_first, "Essence of the Wild"),
+    ];
+    for (first, wins) in orders {
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P0, "Hill Giant");
+        t.battlefield(P0, "Essence of the Wild");
+        crate::r_s06_common::attach_new(&mut t, P0, "Infinite Reflection", obj(giant));
+        crate::r_s03_common::respond(&mut t, P0, first);
+        let from = t.asked().len();
+        let bears = t.enter(P0, "Grizzly Bears");
+        t.resolve_all();
+        assert_eq!(name_of(&t, bears), wins, "{:?}", &t.asked()[from..]);
+    }
+}
+
+type Respond = fn(&mtg_engine::game::Game, &Decision) -> Option<Answer>;
+
+/// Applies first the copy replacement effect whose text mentions "enchanted creature"
+/// (Infinite Reflection's) when `reflection`, or the other one.
+fn replacement_first(d: &Decision, reflection: bool) -> Option<Answer> {
+    match d {
+        Decision::ChooseReplacement { options } => options
+            .iter()
+            .position(|o| o.contains("enchanted creature") == reflection)
+            .map(Answer::Index),
+        _ => None,
+    }
+}
+
+fn apply_essence_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    replacement_first(d, false)
+}
+
+fn apply_reflection_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    replacement_first(d, true)
 }
 
 // --- Multiple triggers, copiable triggered abilities -----------------------------------------
@@ -771,8 +978,6 @@ fn stolen_identity_can_be_encoded_on_its_new_token_if_its_a_creature() {
     let before = t.g.battlefield.clone();
     t.cast(P0, card).target(obj(giant)).go();
     let from = t.asked().len();
-    t.answer_choose_moved(P0, &[]);
-    t.clear_answers();
     t.resolve_all();
     let toks = new_tokens(&t, P0, &before);
     assert_eq!(toks.len(), 1);
@@ -786,23 +991,8 @@ fn stolen_identity_can_be_encoded_on_its_new_token_if_its_a_creature() {
     assert_eq!(offered, vec![vec![obj(toks[0])]]);
     // P0 chooses it (the token didn't exist when the spell was cast: P0's agent picks the
     // creature offered).
-    struct FirstOffered(Box<dyn mtg_engine::decision::Agent>);
-    impl mtg_engine::decision::Agent for FirstOffered {
-        fn decide(&mut self, g: &mtg_engine::game::Game, p: PlayerId, d: &Decision) -> Answer {
-            match d {
-                Decision::ChooseEntities { candidates, .. } if !candidates.is_empty() => {
-                    Answer::Entities(vec![candidates[0]])
-                }
-                _ => self.0.decide(g, p, d),
-            }
-        }
-    }
     let mut t = TestGame::new(2);
-    {
-        let mut agents = t.g.agents.0.lock().unwrap();
-        let inner = std::mem::replace(&mut agents[0], Box::new(mtg_engine::decision::PassiveAgent));
-        agents[0] = Box::new(FirstOffered(inner));
-    }
+    crate::r_s03_common::respond(&mut t, P0, crate::r_s03_common::first_cipher_candidate);
     let giant = t.battlefield(P1, "Hill Giant");
     lands_for(&mut t, P0, "{4}{U}{U}");
     let card = t.hand(P0, "Stolen Identity");
@@ -811,7 +1001,12 @@ fn stolen_identity_can_be_encoded_on_its_new_token_if_its_a_creature() {
     t.resolve_all();
     let toks = new_tokens(&t, P0, &before);
     assert_eq!(toks.len(), 1);
-    assert_eq!(encoded_on(&t.g, t.g.current(card)), Some(toks[0]), "{}", t.dump_log());
+    assert_eq!(
+        encoded_on(&t.g, t.g.current(card)),
+        Some(toks[0]),
+        "{}",
+        t.dump_log()
+    );
     assert!(t.in_exile("Stolen Identity"));
     // A copy of a noncreature artifact: no creature to encode it on.
     let mut t = TestGame::new(2);

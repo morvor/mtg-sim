@@ -1,7 +1,7 @@
 //! Rulings batch P024 — a triggered ability that copies an object that has left its zone
-//! by the time it resolves uses the object's last known information (CR 608.2h, 707.2,
-//! 113.7a), and its "you may pay" cost can still be paid (CR 608.2c); the object a
-//! triggered ability refers to is fixed as it triggers (CR 603.2, 603.7c).
+//! by the time it resolves uses the object's last known information (CR 608.2h, 707.2),
+//! and its "you may pay" cost can still be paid (CR 118.12); the object a triggered
+//! ability refers to is fixed as it triggers (CR 603.2).
 
 use crate::r_p024_common::*;
 use mtg_engine::ability::Modification;
@@ -31,7 +31,12 @@ fn clone_enters_and_dies(
     t.answer_choose(p, &[obj(orig)]);
     let clone = t.enter(p, "Clone");
     t.settle();
-    assert_eq!(t.stack_len(), 1, "{source} didn't trigger: {}", t.dump_log());
+    assert_eq!(
+        t.stack_len(),
+        1,
+        "{source} didn't trigger: {}",
+        t.dump_log()
+    );
     // The Clone leaves before the ability resolves: in the graveyard, it's a Clone.
     kill(&mut t, clone);
     assert!(t.in_graveyard(p, "Clone"));
@@ -44,33 +49,51 @@ fn clone_enters_and_dies(
 
 #[test]
 fn inalla_copies_a_wizard_that_left_as_it_last_existed() {
-    cr!("608.2h", "707.2", "608.2c");
+    cr!("608.2h", "707.2", "118.12");
     ruling!("Inalla, Archmage Ritualist", "If the creature that caused Inalla's ability to trigger has already left the battlefield by the time the ability resolves, you can still pay {1}. If you do, you'll create a token with the copiable values of the characteristics of that creature as it last existed on the battlefield.");
-    let (t, toks) =
-        clone_enters_and_dies("Inalla, Archmage Ritualist", "{1}", P0, "Prodigal Sorcerer", |_| {});
+    let (t, toks) = clone_enters_and_dies(
+        "Inalla, Archmage Ritualist",
+        "{1}",
+        P0,
+        "Prodigal Sorcerer",
+        |_| {},
+    );
     assert_eq!(toks.len(), 1, "{}", t.dump_log());
     assert_eq!(name_of(&t, toks[0]), "Prodigal Sorcerer");
     assert!(has_kw(&t, toks[0], KeywordKind::Haste));
-    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 1, "{{1}} wasn't paid");
+    assert_eq!(
+        crate::r_s01_common::tapped_lands(&t, P0),
+        1,
+        "{{1}} wasn't paid"
+    );
 }
 
 #[test]
 fn minion_reflector_copies_a_creature_that_left_as_it_last_existed() {
-    cr!("608.2h", "707.2", "608.2c");
+    cr!("608.2h", "707.2", "118.12");
     ruling!("Minion Reflector", "If the creature that caused Minion Reflector’s ability to trigger has already left the battlefield by the time the ability resolves, you can still pay {2}. If you do, you’ll still put a token onto the battlefield. That token has the copiable values of the characteristics of that nontoken creature as it last existed on the battlefield.");
     let (t, toks) = clone_enters_and_dies("Minion Reflector", "{2}", P0, "Hill Giant", |_| {});
     assert_eq!(toks.len(), 1, "{}", t.dump_log());
     assert_eq!(name_of(&t, toks[0]), "Hill Giant");
     assert!(has_kw(&t, toks[0], KeywordKind::Haste));
-    assert_eq!(abilities_with(&t, toks[0], "At the beginning of the end step, sacrifice"), 1);
+    assert_eq!(
+        abilities_with(&t, toks[0], "At the beginning of the end step, sacrifice"),
+        1
+    );
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
 }
 
 #[test]
 fn riku_copies_a_creature_that_left_as_it_last_existed() {
-    cr!("608.2h", "707.2", "608.2c");
+    cr!("608.2h", "707.2", "118.12");
     ruling!("Riku of Two Reflections", "If the creature that caused Riku's second ability to trigger has already left the battlefield by the time the ability resolves, you can still pay {G}{U}. If you do, you'll still put a token onto the battlefield. That token has the copiable values of the characteristics of that creature as it last existed on the battlefield.");
-    let (t, toks) = clone_enters_and_dies("Riku of Two Reflections", "{G}{U}", P0, "Hill Giant", |_| {});
+    let (t, toks) = clone_enters_and_dies(
+        "Riku of Two Reflections",
+        "{G}{U}",
+        P0,
+        "Hill Giant",
+        |_| {},
+    );
     assert_eq!(toks.len(), 1, "{}", t.dump_log());
     assert_eq!(name_of(&t, toks[0]), "Hill Giant");
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
@@ -78,13 +101,18 @@ fn riku_copies_a_creature_that_left_as_it_last_existed() {
 
 #[test]
 fn bramble_sovereign_copies_a_creature_that_left_as_it_last_existed() {
-    cr!("608.2h", "707.2", "608.2c");
+    cr!("608.2h", "707.2", "118.12");
     ruling!("Bramble Sovereign", "If the entering creature leaves the battlefield before Bramble Sovereign's ability resolves, use that creature's last known existence on the battlefield to determine the token's characteristics.");
     // P1's Clone: P1 (its controller as it last existed) creates the token.
     let (t, toks) = clone_enters_and_dies("Bramble Sovereign", "{1}{G}", P1, "Hill Giant", |_| {});
     assert_eq!(toks.len(), 1, "{}", t.dump_log());
     assert_eq!(name_of(&t, toks[0]), "Hill Giant");
     assert_eq!(t.obj_now(toks[0]).controller, P1);
+    assert_eq!(
+        crate::r_s01_common::tapped_lands(&t, P0),
+        2,
+        "{{1}}{{G}} wasn't paid"
+    );
 }
 
 #[test]
@@ -127,19 +155,32 @@ fn molten_echoes_copies_a_creature_that_left_as_it_last_existed() {
 
 #[test]
 fn cadric_may_still_copy_a_legendary_permanent_that_changed() {
-    cr!("608.2h", "707.2", "608.2c", "603.2");
+    cr!("608.2h", "707.2", "118.12", "603.2");
     ruling!("Cadric, Soul Kindler", "If the legendary permanent that entered the battlefield is no longer on the battlefield, no longer under the same player’s control, or no longer legendary when the triggered ability resolves, the ability’s controller may still pay {1} to copy it. If it’s no longer on the battlefield, use its copiable characteristics as it last existed on the battlefield to determine the characteristics of the token copy.");
     supported("Cadric, Soul Kindler");
-    for change in ["dies", "control", "nonlegendary"] {
+    // "clone dies": P0's Clone entered as a copy of P1's Isamaru (so it's a legendary
+    // permanent that entered) and dies: as it last existed it was an Isamaru, though the
+    // card in the graveyard is a Clone.
+    for change in ["dies", "clone dies", "control", "nonlegendary"] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Cadric, Soul Kindler");
         t.lands(P0, "Wastes", 1);
         let before = t.g.battlefield.clone();
-        let isamaru = t.enter(P0, "Isamaru, Hound of Konda");
+        let isamaru = if change == "clone dies" {
+            let orig = t.battlefield(P1, "Isamaru, Hound of Konda");
+            t.answer_choose(P0, &[obj(orig)]);
+            t.enter(P0, "Clone")
+        } else {
+            t.enter(P0, "Isamaru, Hound of Konda")
+        };
         t.settle();
         assert_eq!(t.stack_len(), 1, "{change}");
         match change {
             "dies" => kill(&mut t, isamaru),
+            "clone dies" => {
+                kill(&mut t, isamaru);
+                assert!(t.in_graveyard(P0, "Clone"));
+            }
             "control" => crate::r_s06_common::give_control(&mut t, isamaru, P1),
             _ => crate::r_s26_common::modify_until_eot(
                 &mut t,
@@ -154,7 +195,10 @@ fn cadric_may_still_copy_a_legendary_permanent_that_changed() {
         let c = toks[0];
         assert_eq!(name_of(&t, c), "Isamaru, Hound of Konda", "{change}");
         // The token copies the copiable values: it's legendary.
-        assert!(t.obj_now(c).chars.supertypes.contains(Supertype::Legendary), "{change}");
+        assert!(
+            t.obj_now(c).chars.supertypes.contains(Supertype::Legendary),
+            "{change}"
+        );
         assert!(has_kw(&t, c, KeywordKind::Haste));
         assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 1);
     }
@@ -224,7 +268,7 @@ fn vesuvan_duplimancy_copies_the_spells_original_target() {
 
 #[test]
 fn riku_copies_a_spell_that_left_the_stack_as_it_last_existed() {
-    cr!("608.2h", "707.10", "608.2c");
+    cr!("608.2h", "707.10", "118.12");
     ruling!("Riku of Two Reflections", "If the spell that caused Riku's first ability to trigger has left the stack by the time the ability resolves, you can still pay {U}{R}. If you do, you'll copy the spell as it last existed on the stack.");
     supported("Riku of Two Reflections");
     let mut t = TestGame::new(2);
@@ -244,6 +288,8 @@ fn riku_copies_a_spell_that_left_the_stack_as_it_last_existed() {
     lands_for(&mut t, P0, "{U}{R}");
     t.answer_yes(P0, true);
     t.resolve_all();
-    // The copy of the Bolt as it last existed: 3 damage to P1.
+    // The copy of the Bolt as it last existed: 3 damage to P1, for {U}{R} (and the
+    // Mountain that paid for the Bolt).
     assert_eq!(t.life(P1), 17, "{}", t.dump_log());
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 3);
 }

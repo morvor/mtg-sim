@@ -7,7 +7,7 @@
 #![allow(dead_code)]
 
 pub use crate::r_p023_common::{
-    assert_angel, assert_wolf, cloned_angel, clone_of, dressed_wolf, enter_copying, is_wolf,
+    assert_angel, assert_wolf, clone_of, cloned_angel, dressed_wolf, enter_copying, is_wolf,
     mv_now, token_of, unsick, wolf_token,
 };
 pub use crate::r_p025_common::{creature_spec, is_creature, plus1};

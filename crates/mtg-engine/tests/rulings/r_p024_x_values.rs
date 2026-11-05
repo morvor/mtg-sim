@@ -23,10 +23,21 @@ fn hydra_with_x0(t: &mut TestGame, id: ObjectId) {
 #[test]
 fn stolen_identity_copy_of_an_x_permanent_has_x_0() {
     cr!("107.3", "202.3e", "707.2");
-    ruling!("Stolen Identity", "If the copied permanent has {X} in its mana cost, X is considered to be zero.");
+    ruling!(
+        "Stolen Identity",
+        "If the copied permanent has {X} in its mana cost, X is considered to be zero."
+    );
     let mut t = TestGame::new(2);
     let hydra = hydra_cast_with_x3(&mut t, P0);
-    let toks = cast_spell(&mut t, P0, "Stolen Identity", "{4}{U}{U}", &[obj(hydra)], None, None);
+    let toks = cast_spell(
+        &mut t,
+        P0,
+        "Stolen Identity",
+        "{4}{U}{U}",
+        &[obj(hydra)],
+        None,
+        None,
+    );
     assert_eq!(toks.len(), 1);
     hydra_with_x0(&mut t, toks[0]);
 }
@@ -35,7 +46,10 @@ fn stolen_identity_copy_of_an_x_permanent_has_x_0() {
 fn riku_copies_a_creature_with_x_0_but_a_spell_with_its_x() {
     cr!("107.3", "202.3e", "707.2", "707.10");
     ruling!("Riku of Two Reflections", "If the creature had {X} in its mana cost, X must be 0. Note this is different from an {X} found in the mana cost of a copied spell.");
-    ruling!("Riku of Two Reflections", "If the copied spell has {X} in its mana cost, the value of X is copied.");
+    ruling!(
+        "Riku of Two Reflections",
+        "If the copied spell has {X} in its mana cost, the value of X is copied."
+    );
     supported("Riku of Two Reflections");
     // A creature: the token's X is 0.
     let mut t = TestGame::new(2);
@@ -77,7 +91,10 @@ fn riku_copies_a_modal_spell_with_its_mode() {
     lands_for(&mut t, P0, "{R}{W}");
     let charm = t.hand(P0, "Boros Charm");
     // "Boros Charm deals 4 damage to target player or planeswalker."
-    t.cast(P0, charm).modes(&[0]).target(Entity::Player(P1)).go();
+    t.cast(P0, charm)
+        .modes(&[0])
+        .target(Entity::Player(P1))
+        .go();
     lands_for(&mut t, P0, "{U}{R}");
     t.answer_yes(P0, true);
     let from = t.asked().len();
@@ -87,7 +104,11 @@ fn riku_copies_a_modal_spell_with_its_mode() {
     assert!(!t.asked()[from..]
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseModes { .. })));
-    assert!(!has_kw(&t, bears, mtg_engine::keywords::KeywordKind::DoubleStrike));
+    assert!(!has_kw(
+        &t,
+        bears,
+        mtg_engine::keywords::KeywordKind::DoubleStrike
+    ));
 }
 
 #[test]
@@ -110,7 +131,7 @@ fn mimic_vat_copy_of_an_x_card_has_x_0() {
     assert_eq!(toks.len(), 1);
     hydra_with_x0(&mut t, toks[0]);
     // Protean Hydra ({X}{G}, a 0/0 that enters with X +1/+1 counters): its copy enters
-    // with none and dies.
+    // with none (P0's Soul Warden sees it enter) and dies.
     let mut t = TestGame::new(2);
     let vat = t.battlefield(P0, "Mimic Vat");
     let protean = t.battlefield(P1, "Protean Hydra");
@@ -118,11 +139,14 @@ fn mimic_vat_copy_of_an_x_card_has_x_0() {
     kill(&mut t, protean);
     t.resolve_all();
     assert!(t.in_exile("Protean Hydra"));
+    supported("Soul Warden");
+    t.battlefield(P0, "Soul Warden");
     t.lands(P0, "Wastes", 3);
     activate_containing(&mut t, P0, vat, "Create a token").expect("activation");
     t.resolve_all();
-    assert!(t.dump_log().contains("Protean Hydra"));
+    assert_eq!(t.life(P0), 21, "{}", t.dump_log());
     assert!(t.named_on_battlefield("Protean Hydra").is_empty());
+    assert!(t.in_exile("Protean Hydra"));
 }
 
 #[test]
@@ -167,7 +191,8 @@ fn araumi_encore_cost_and_tokens_have_x_0() {
     let hydra = t.graveyard(P0, HYDRA);
     let fodder = t.graveyard(P0, "Shock");
     t.answer_choose(P0, &[obj(fodder)]);
-    t.activate(P0, araumi, 0, &[obj(hydra)]).expect("activation");
+    t.activate(P0, araumi, 0, &[obj(hydra)])
+        .expect("activation");
     t.resolve_all();
     // Encore {X}{G}{G}: X is 0, so {G}{G}, though P0 would announce 3.
     t.lands(P0, "Forest", 5);
@@ -179,7 +204,9 @@ fn araumi_encore_cost_and_tokens_have_x_0() {
         .chars
         .abilities
         .iter()
-        .find(|a| a.text == "Encore" && matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+        .find(|a| {
+            a.text == "Encore" && matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_))
+        })
         .map(|a| a.uid)
         .expect("encore");
     let before = t.g.battlefield.clone();

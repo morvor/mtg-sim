@@ -51,7 +51,10 @@ fn artisan_of_forms_with_an_illegal_target_remains_what_it_was_a_copy_of() {
     t.resolve_all();
     assert_eq!(yes_no_asked(&t, P0, from), 0);
     assert_eq!(name_of(&t, artisan), "Hill Giant");
-    assert_eq!(abilities_with(&t, artisan, "Whenever you cast a spell that targets"), 1);
+    assert_eq!(
+        abilities_with(&t, artisan, "Whenever you cast a spell that targets"),
+        1
+    );
 }
 
 #[test]
@@ -115,7 +118,8 @@ fn three_steps_ahead_resolves_the_modes_with_legal_targets() {
     ruling!("Three Steps Ahead", "If the first and/or second modes are chosen, then Three Steps Ahead has one or more targets. If so, and all its targets are illegal as it tries to resolve, Three Steps Ahead won’t resolve and none of its effects will happen. If at least one target is still legal, the spell will resolve and modes with legal targets (and the third mode, if chosen) will have their effects.");
     supported("Three Steps Ahead");
     // (spell target countered first, creature target killed) → (countered, token, draws)
-    for (spell_gone, creature_gone) in [(false, false), (false, true), (true, false), (true, true)] {
+    for (spell_gone, creature_gone) in [(false, false), (false, true), (true, false), (true, true)]
+    {
         let mut t = TestGame::new(2);
         let giant = t.battlefield(P0, "Hill Giant");
         // P0 casts Grizzly Bears, then (holding priority) all three modes of Three Steps
@@ -126,7 +130,11 @@ fn three_steps_ahead_resolves_the_modes_with_legal_targets() {
         lands_for(&mut t, P0, "{U}{1}{U}{3}{2}");
         let tsa = t.hand(P0, "Three Steps Ahead");
         t.g.turn.priority = Some(P0);
-        t.cast(P0, tsa).modes(&[0, 1, 2]).target(obj(spell)).target(obj(giant)).go();
+        t.cast(P0, tsa)
+            .modes(&[0, 1, 2])
+            .target(obj(spell))
+            .target(obj(giant))
+            .go();
         if spell_gone {
             // Countered by a Cancel cast on top of Three Steps Ahead.
             lands_for(&mut t, P0, "{1}{U}{U}");
@@ -142,7 +150,11 @@ fn three_steps_ahead_resolves_the_modes_with_legal_targets() {
         t.resolve_all();
         let toks = new_tokens(&t, P0, &before);
         let resolves = !(spell_gone && creature_gone);
-        assert_eq!(toks.len(), usize::from(!creature_gone), "{spell_gone} {creature_gone}");
+        assert_eq!(
+            toks.len(),
+            usize::from(!creature_gone),
+            "{spell_gone} {creature_gone}"
+        );
         // The Bears never resolve: countered by one spell or the other.
         assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
         assert!(t.in_graveyard(P0, "Grizzly Bears"));
@@ -154,7 +166,7 @@ fn three_steps_ahead_resolves_the_modes_with_legal_targets() {
 
 #[test]
 fn fleeting_reflection_with_an_illegal_second_target_still_untaps_and_gives_hexproof() {
-    cr!("608.2b", "608.2c");
+    cr!("608.2b");
     ruling!("Fleeting Reflection", "If the second target creature is an illegal target as Fleeting Reflection tries to resolve, the first target creature will still gain hexproof until end of turn, and you’ll still untap it if it was tapped.");
     supported("Fleeting Reflection");
     let mut t = TestGame::new(2);
@@ -298,20 +310,30 @@ fn blue_suns_twilight_with_an_illegal_target_makes_no_token() {
 
 #[test]
 fn tilonallis_skinshifter_with_an_illegal_target_remains_a_0_1_attacker() {
-    cr!("608.2b", "603.3d", "508.1");
+    cr!("608.2b", "603.3d", "508.1m");
     ruling!("Tilonalli's Skinshifter", "If the target of the ability of Tilonalli’s Skinshifter becomes an illegal target, Tilonalli’s Skinshifter won’t become a copy of anything. It will remain a 0/1 attacking creature.");
     supported("Tilonalli's Skinshifter");
     let mut t = TestGame::new(2);
     let skin = t.battlefield(P0, "Tilonalli's Skinshifter");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.answer_targets(P0, &[obj(bears)]);
-    attack_with(&mut t, &[(skin, Entity::Player(P1)), (bears, Entity::Player(P1))]);
+    attack_with(
+        &mut t,
+        &[(skin, Entity::Player(P1)), (bears, Entity::Player(P1))],
+    );
     assert_eq!(t.stack_len(), 1);
     kill(&mut t, bears);
     t.resolve_all();
     assert_eq!(name_of(&t, skin), "Tilonalli's Skinshifter");
     assert_eq!(t.pt(skin), (0, 1));
-    assert!(t.g.combat.as_ref().unwrap().attackers.iter().any(|a| a.id == skin));
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .unwrap()
+        .attackers
+        .iter()
+        .any(|a| a.id == skin));
 }
 
 #[test]
