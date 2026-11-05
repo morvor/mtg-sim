@@ -329,7 +329,14 @@ fn two_channel_harms_loop_until_a_player_declines() {
     );
     // P0's Channel Harm targets P1's Craw Wurm; P1's targets P0's Hill Giant. P1 bolts
     // P0. Whoever stops the loop, no damage is dealt.
-    for (p0_yes, p1_yes) in [(1, 0), (2, 1), (1, 1), (0, 0)] {
+    // (P0's yeses, P1's yeses, times P0 and P1 are asked): the answers alternate, P0
+    // first, until someone says no.
+    for (p0_yes, p1_yes, asked) in [
+        (1, 0, (1, 1)),
+        (2, 1, (2, 2)),
+        (1, 1, (2, 1)),
+        (0, 0, (1, 0)),
+    ] {
         let mut t = TestGame::new(2);
         let giant = add(&mut t, P0, "Hill Giant");
         let wurm = add(&mut t, P1, "Craw Wurm");
@@ -344,8 +351,16 @@ fn two_channel_harms_loop_until_a_player_declines() {
         }
         t.answer_yes(P1, false);
         t.set_step(P1, Step::PrecombatMain);
+        let from = t.asked().len();
         bolt(&mut t, P1, pl(P0));
         t.resolve_all();
+        let yes_no = |p: PlayerId| {
+            t.asked()[from..]
+                .iter()
+                .filter(|(q, d)| *q == p && matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+                .count()
+        };
+        assert_eq!((yes_no(P0), yes_no(P1)), asked, "{p0_yes}/{p1_yes}");
         assert_eq!(t.life(P0), 20);
         assert_eq!(t.life(P1), 20);
         assert_eq!(dmg(&t, giant), 0, "{p0_yes}/{p1_yes}");
