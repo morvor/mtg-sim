@@ -5,7 +5,10 @@
 //!   pair, declared (CR 509.1) or created by an effect (CR 509.3, 509.4), for
 //!   [`Filter::BlockRelation`] ("creatures that were blocked by that creature this
 //!   combat", "creatures it was blocking that had become blocked by only that creature
-//!   this combat", "creatures that were blocked by target Wall this turn").
+//!   this combat", "creatures that were blocked by target Wall this turn"). A creature
+//!   put onto the battlefield blocking is blocking, but for effects it never "blocked"
+//!   (CR 509.4): what it blocked and what was blocked by it this combat or this turn
+//!   leave out those blocks (`TurnHistory::entered_blocking`), while it is blocking now.
 //! * `TurnHistory::attacks`: every declared attack, with the defending player (CR 508.1,
 //!   508.5): "a player it has already attacked this turn".
 
@@ -26,8 +29,19 @@ pub struct BlockHistory;
 pub const OWNED_BY_CONTROLLER_WHEN_BLOCKED: &str =
     "block history:owned by the player who controlled it when it became blocked by:";
 
-fn record_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId) {
+/// Records that `blocker` blocks `attacker`: declared, made to block by an effect, or
+/// put onto the battlefield blocking it (`entered`, CR 509.4).
+fn record_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool) {
     let ctl = g.obj(attacker).controller;
+    let pair = (blocker, attacker);
+    if entered {
+        if !g.history.entered_blocking.contains(&pair) {
+            g.history.entered_blocking.push(pair);
+        }
+    } else {
+        // It blocks that attacker for real now (a later combat, or an effect).
+        g.history.entered_blocking.retain(|p| *p != pair);
+    }
     if let Some(c) = g.combat.as_mut() {
         if !c.block_history.contains(&(blocker, attacker)) {
             c.block_history.push((blocker, attacker));
@@ -81,12 +95,15 @@ impl KeywordRules for BlockHistory {
         match ev {
             Event::BlockersDeclared { blocks } => {
                 for (b, a) in blocks {
-                    record_block(g, *b, *a);
+                    record_block(g, *b, *a, false);
                 }
             }
             Event::BlockAdded {
-                blocker, attacker, ..
-            } => record_block(g, *blocker, *attacker),
+                blocker,
+                attacker,
+                entered,
+                ..
+            } => record_block(g, *blocker, *attacker, *entered),
             Event::AttackersDeclared { attackers, .. } => {
                 for (a, t) in attackers {
                     let dp = crate::combat::entity_defender(g, *t);
@@ -130,7 +147,12 @@ pub fn block_relation(
     others: &[ObjectId],
     when: BlockWhen,
 ) -> bool {
-    let pairs = pairs(g, when);
+    let mut pairs = pairs(g, when);
+    // "Creatures it blocked this turn", "creatures that were blocked by it this combat": a
+    // creature put onto the battlefield blocking never blocked (CR 509.4).
+    if when != BlockWhen::Now && rel != BlockRel::BlockedOnlyBy {
+        pairs.retain(|p| !g.history.entered_blocking.contains(p));
+    }
     let blocking = |b: ObjectId, a: ObjectId| pairs.contains(&(b, a));
     match rel {
         BlockRel::Blocking => others.iter().any(|o| blocking(id, *o)),

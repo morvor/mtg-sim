@@ -8,7 +8,8 @@
 //!   chosen before the targets described by it ([`Filter::BlockRelation`] with
 //!   `Sel::Target`), and like every target checked again on resolution (CR 608.2b). The
 //!   blocks are the turn's block history (`kw/block_history.rs`): declared blocks and
-//!   blocks created by effects (CR 509.1, 509.3), kept after the creatures leave combat.
+//!   blocks created by effects (CR 509.1, 509.3), kept after the creatures leave combat;
+//!   a Wall put onto the battlefield blocking never blocked (CR 509.4).
 //! * "For each creature that died this way, put a creature card from the graveyard of the
 //!   player who controlled that creature the last time it became blocked by that Wall onto
 //!   the battlefield under its owner's control." (Glyph of Reincarnation): the controller

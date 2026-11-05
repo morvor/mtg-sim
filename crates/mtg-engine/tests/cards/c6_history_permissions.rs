@@ -53,7 +53,7 @@ fn spy(
 }
 
 /// P0 controls Xanathar, Guild Kingpin; its upkeep ability, targeting P1, has resolved in
-/// P0's upkeep (P1 drew a filler in their turn before).
+/// P0's upkeep (P1 drew the Island it puts on top of P1's library, in P1's turn before).
 fn xanathar_upkeep(t: &mut TestGame) {
     t.battlefield(P0, "Xanathar, Guild Kingpin");
     t.library_top(P1, "Island");
@@ -274,7 +274,7 @@ fn a_permission_over_each_opponents_library_top_card() {
     t.custom(P0, lens, mtg_engine::object::Zone::Battlefield);
     let bolt = t.library_top(P1, "Lightning Bolt");
     let forest = t.library_top(P2, "Forest");
-    // (P1 and P2 draw a filler in their turns before P0's.)
+    // (P1 and P2 draw these Islands in their turns before P0's.)
     t.library_top(P1, "Island");
     t.library_top(P2, "Island");
     t.advance_to(P0, Step::Upkeep);
@@ -620,6 +620,50 @@ fn glyph_of_delusion_still_affects_the_creature_once_the_wall_has_left() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Wall of Stone"));
     assert_eq!(t.counters(bears, "glyph"), 2);
+}
+
+#[test]
+fn a_wall_put_onto_the_battlefield_blocking_never_blocked() {
+    cr!("509.4");
+    interp!("entered-blocker-never-blocked");
+    let mut t = TestGame::new(2);
+    let plasm = t.battlefield(P0, "Aetherplasm");
+    let wall_card = t.hand(P0, "Wall of Stone");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    ready(&mut t, bears);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    // Aetherplasm blocks the Bears, returns to P0's hand and puts Wall of Stone onto the
+    // battlefield blocking them.
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(wall_card)]);
+    attack_and_block(&mut t, P1, &[bears], P0, &[(plasm, bears)]);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Aetherplasm"));
+    let wall = t.named_on_battlefield("Wall of Stone");
+    assert_eq!(wall.len(), 1);
+    let wall = wall[0];
+    let blockers =
+        t.g.combat
+            .as_ref()
+            .map(|c| c.blockers_of(bears))
+            .unwrap_or_default();
+    assert_eq!(blockers, vec![wall], "the Wall is blocking the Bears");
+    // But it never blocked them: Glyph of Delusion has no creature to target with it ...
+    let delusion = t.hand(P0, "Glyph of Delusion");
+    mana(&mut t, P0);
+    assert!(t
+        .cast_with(P0, delusion, &[Entity::Object(wall), Entity::Object(bears)])
+        .is_err());
+    t.clear_answers();
+    // ... and Glyph of Reincarnation targeting it destroys nothing.
+    t.advance_to(P1, Step::PostcombatMain);
+    let glyph = t.hand(P0, "Glyph of Reincarnation");
+    mana(&mut t, P0);
+    t.cast_with(P0, glyph, &[Entity::Object(wall)]).unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert!(t.on_battlefield(wall), "a legal target as it resolved");
 }
 
 #[test]
