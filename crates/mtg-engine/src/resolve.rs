@@ -285,7 +285,16 @@ impl Game {
                 face_down,
                 link,
             } => {
-                let objs = self.resolve_objects(what, ctx);
+                // As for moving it: what an earlier part of the effect moved (CR 400.7j).
+                let objs: Vec<ObjectId> = self
+                    .resolve_objects(what, ctx)
+                    .into_iter()
+                    .filter_map(|o| {
+                        let e = Entity::Object(o);
+                        let found = self.found_after_move(e, ctx);
+                        crate::zones::target_not_source_moved(ctx, what, e, found).object()
+                    })
+                    .collect();
                 let prev_link = self.current_link;
                 self.current_link = ctx.link;
                 // "... can't cause you to sacrifice or exile [permanents]" (CR 701.21).
@@ -2730,13 +2739,19 @@ impl Game {
             return e;
         }
         let now = self.current(o);
-        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
-        // ~: ... Return ~ to the battlefield ...", CR 400.7j).
-        let moved = [vars::IT, crate::zones::COST_MOVED].iter().any(|v| {
+        let recorded = |v: &Var| {
             ctx.vars
                 .get(v)
                 .is_some_and(|v| v.contains(&Entity::Object(now)))
-        });
+        };
+        // Also what the cost of the spell or ability moved to a public zone ("Sacrifice
+        // ~: ... Return ~ to the battlefield ...", CR 400.7j), and "~" after an earlier
+        // instruction about ~ itself moved it, even if later instructions acted on other
+        // objects ("Return this card from your graveyard to the battlefield. You may put an
+        // Aura card ... onto the battlefield attached to it. If you don't, exile this
+        // creature.").
+        let moved = [vars::IT, crate::zones::COST_MOVED].iter().any(recorded)
+            || (ctx.source == Some(o) && recorded(&crate::zones::SOURCE_MOVED));
         if moved && !matches!(self.obj(now).zone, Zone::Hand(_) | Zone::Library(_)) {
             Entity::Object(now)
         } else {
@@ -3390,10 +3405,7 @@ impl Game {
             Some(
                 self.eval_filter_specific(f, ctx)
                     .into_iter()
-                    .map(|o| match self.current(o) {
-                        n if self.obj(n).zone.is_public() => n,
-                        _ => o,
-                    })
+                    .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
                     .collect(),
             )
         } else {

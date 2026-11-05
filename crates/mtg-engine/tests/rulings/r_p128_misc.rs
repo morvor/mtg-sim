@@ -575,3 +575,44 @@ fn runic_repetition_targets() {
     t.lands(P0, "Island", 3);
     assert!(!castable(&mut t, P0, rr), "no flashback in exile");
 }
+
+#[test]
+fn jayas_phoenix_copy_resolves_first_even_if_the_ability_is_countered() {
+    cr!("707.10", "603.7a", "608.1");
+    ruling!(
+        "Jaya's Phoenix",
+        "The copy of the loyalty ability resolves before the loyalty ability it's copying. It resolves even if that loyalty ability is countered."
+    );
+    supported("Jaya's Phoenix");
+    supported("Ajani Goldmane");
+    supported("Stifle");
+    for counter in [false, true] {
+        let mut t = TestGame::new(2);
+        let ph = t.battlefield(P0, "Jaya's Phoenix");
+        let ajani = t.enter(P0, "Ajani Goldmane");
+        t.resolve_all();
+        attack_with(&mut t, &[(ph, Entity::Player(P1))]);
+        t.advance_to(P0, Step::PostcombatMain);
+        t.resolve_all();
+        assert_eq!(t.life(P1), 17);
+        // "+1: You gain 2 life." The Phoenix's delayed ability triggers and copies it.
+        activate_containing(&mut t, P0, ajani, "gain 2 life").unwrap();
+        t.settle();
+        assert_eq!(t.stack_len(), 2, "the loyalty ability and the Phoenix's trigger");
+        t.resolve();
+        t.settle();
+        assert_eq!(t.stack_len(), 2, "the loyalty ability and its copy");
+        let original = t.g.stack[0];
+        if counter {
+            cast_new(&mut t, P1, "Stifle", &[obj(original)]);
+            t.resolve();
+            assert_eq!(t.stack_len(), 1, "only the copy is left");
+        }
+        // The copy is on top: it resolves first.
+        t.resolve();
+        assert_eq!(t.life(P0), 22, "counter: {counter}");
+        assert_eq!(t.stack_len(), usize::from(!counter), "counter: {counter}");
+        t.resolve_all();
+        assert_eq!(t.life(P0), if counter { 22 } else { 24 });
+    }
+}

@@ -919,3 +919,108 @@ fn numa_and_blaster_hulk_keep_their_division_when_a_target_is_illegal() {
         assert_eq!(t.life(P1), 20);
     }
 }
+
+/// The text of the ability on the stack `id`.
+fn stack_text(t: &TestGame, id: ObjectId) -> String {
+    match t.g.obj(id).stack.as_ref().map(|si| &si.kind) {
+        Some(mtg_engine::object::StackKind::Triggered { ability, .. }) => ability.text.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Yannik enters under P0's control. Its "partner with" ability (P0 may search for Nikara,
+/// who isn't in the library) is resolved first when it's on top; its exile ability waits
+/// on the stack.
+fn yannik_enters(t: &mut TestGame) -> ObjectId {
+    supported("Yannik, Scavenging Sentinel");
+    t.answer_targets(P0, &[Entity::Player(P0)]);
+    let y = t.enter(P0, "Yannik, Scavenging Sentinel");
+    t.settle();
+    assert_eq!(t.stack_len(), 2, "its two enters abilities");
+    let top = *t.g.stack.last().unwrap();
+    if !stack_text(t, top).contains("exile another creature") {
+        t.resolve();
+        t.settle();
+    }
+    let top = *t.g.stack.last().unwrap();
+    assert!(stack_text(t, top).contains("exile another creature"));
+    y
+}
+
+#[test]
+fn yannik_leaving_first_exiles_nothing_and_its_reflexive_ability_doesnt_trigger() {
+    cr!("610.3b", "603.12");
+    ruling!(
+        "Yannik, Scavenging Sentinel",
+        "If Yannik leaves the battlefield before its triggered ability resolves, you won't exile any creature you control. Yannik's reflexive triggered ability won't trigger."
+    );
+    for leaves in [false, true] {
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P0, "Hill Giant");
+        t.answer_choose(P0, &[obj(giant)]);
+        let y = yannik_enters(&mut t);
+        t.answer_targets(P0, &[obj(y)]);
+        let n = t.stack_len();
+        if leaves {
+            destroy(&mut t, y);
+        }
+        t.resolve();
+        t.settle();
+        assert_eq!(t.on_battlefield(giant), leaves, "leaves: {leaves}");
+        // The reflexive ability is waiting only if the Giant was exiled.
+        assert_eq!(t.stack_len(), n - 1 + usize::from(!leaves), "leaves: {leaves}");
+        t.resolve_all();
+        if !leaves {
+            assert_eq!(t.counters(y, counters::PLUS1), 3, "the Giant's power");
+        }
+    }
+}
+
+#[test]
+fn yannik_exiling_a_token_still_distributes_counters() {
+    cr!("111.7", "603.12", "608.2h");
+    ruling!(
+        "Yannik, Scavenging Sentinel",
+        "If a token is exiled this way, it will cease to exist and won't return to the battlefield. It will still let the ability distribute counters."
+    );
+    let mut t = TestGame::new(2);
+    let tok = create_token(&mut t, P0, "Soldier");
+    put_counters(&mut t, tok, counters::PLUS1, 2);
+    assert_eq!(t.pt(tok), (3, 3));
+    t.answer_choose(P0, &[obj(tok)]);
+    let y = yannik_enters(&mut t);
+    t.answer_targets(P0, &[obj(y)]);
+    t.resolve_all();
+    // Three counters (the token's power as it last existed) on Yannik.
+    assert_eq!(t.counters(y, counters::PLUS1), 3);
+    assert!(tokens(&t, P0).is_empty(), "the token ceased to exist");
+    // Yannik leaves: nothing returns.
+    destroy(&mut t, y);
+    t.resolve_all();
+    assert!(t.g.battlefield.is_empty());
+}
+
+#[test]
+fn yannik_counters_for_an_illegal_target_are_lost() {
+    cr!("608.2b", "601.2d");
+    ruling!(
+        "Yannik, Scavenging Sentinel",
+        "If one of the target creatures becomes an illegal target in response to the reflexive triggered ability, the +1/+1 counters that would have been put on that creature are lost. They can't be put on another legal target."
+    );
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.answer_choose(P0, &[obj(giant)]);
+    yannik_enters(&mut t);
+    t.answer_targets(P0, &[obj(bears), obj(elves)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 2]));
+    let n = t.stack_len();
+    t.resolve();
+    t.settle();
+    assert_eq!(t.stack_len(), n, "the reflexive ability");
+    assert!(!t.on_battlefield(giant), "exiled");
+    bounce(&mut t, elves);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 1, "only its share");
+}

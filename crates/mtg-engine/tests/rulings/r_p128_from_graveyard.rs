@@ -80,9 +80,11 @@ fn return_abilities_can_be_activated_only_from_the_graveyard() {
         t.answer(P0, DecisionKind::X, Answer::Number(0));
         activate_containing(&mut t, P0, c, "Return ~").unwrap();
         t.resolve_all();
-        // (Evershrike's own ability exiles it again when no Aura is put onto the
-        // battlefield; see `evershrike_puts_only_an_aura_that_can_enchant_it`.)
-        if card != "Evershrike" {
+        if card == "Evershrike" {
+            // With X = 0 no Aura is put onto it: it's exiled again (see
+            // `evershrike_is_returned_then_exiled_without_an_aura`).
+            assert!(is_in(&t, c, Zone::Exile), "{card}");
+        } else {
             assert!(t.on_battlefield(c), "{card}");
         }
     }
@@ -215,7 +217,65 @@ fn evershrike_puts_only_an_aura_that_can_enchant_it() {
             assert_eq!(t.pt(es), (6, 4));
         } else {
             assert!(is_in(&t, a, Zone::Hand(P0)), "{aura}");
+            // No Aura was put onto it: it's exiled.
+            assert!(is_in(&t, es, Zone::Exile), "{aura}");
         }
+    }
+}
+
+#[test]
+fn evershrike_is_returned_then_exiled_without_an_aura() {
+    cr!("400.7j", "608.2", "603.2");
+    ruling!(
+        "Evershrike",
+        "You can activate Evershrike's ability with X = 0. If you do, you'll return Evershrike to the battlefield from your graveyard, then exile it. (There are no Aura cards with mana value 0.)"
+    );
+    ruling!(
+        "Evershrike",
+        "You can activate Evershrike's ability even if you have no Auras in your hand, or if you have an Aura in your hand that you don't want to put on it or can't put on it. In either case, you'll return Evershrike to the battlefield from your graveyard, then exile it. No player has the opportunity to cast spells or activate abilities while Evershrike is on the battlefield."
+    );
+    supported("Evershrike");
+    supported("Soul Warden");
+    // (Aura card in hand, X, whether P0 chooses to put an Aura onto it) -> it stays
+    let cases: [(Option<&str>, i64, bool, bool); 5] = [
+        // X = 0: there are no Aura cards with mana value 0.
+        (Some("Rancor"), 0, true, false),
+        // No Aura card in hand.
+        (None, 2, true, false),
+        // An Aura P0 doesn't want to put onto it.
+        (Some("Rancor"), 1, false, false),
+        // An Aura that can't enchant it.
+        (Some("Curse of the Pierced Heart"), 2, true, false),
+        // (Control: an Aura is put onto it.)
+        (Some("Rancor"), 1, true, true),
+    ];
+    for (aura, x, put, stays) in cases {
+        let what = format!("{aura:?} X={x} put={put}");
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Soul Warden");
+        let es = t.graveyard(P0, "Evershrike");
+        t.lands(P0, "Plains", 2);
+        t.lands(P0, "Wastes", x as usize);
+        let a = aura.map(|n| t.hand(P0, n));
+        t.answer(P0, DecisionKind::X, Answer::Number(x));
+        t.answer_yes(P0, put);
+        if let Some(a) = a {
+            t.answer_choose(P0, &[obj(a)]);
+        }
+        activate_containing(&mut t, P0, es, "Return ~").unwrap();
+        assert_eq!(t.stack_len(), 1, "{what}");
+        t.resolve();
+        // It entered the battlefield (Soul Warden's ability triggered) and, without an
+        // Aura, was exiled while the ability was still resolving: by the time anyone
+        // could act, it's gone.
+        t.settle();
+        assert_eq!(triggers_on_stack(&t, "gain 1 life"), 1, "{what}: it entered");
+        assert_eq!(t.on_battlefield(es), stays, "{what}");
+        if !stays {
+            assert!(is_in(&t, es, Zone::Exile), "{what}");
+        }
+        t.resolve_all();
+        assert_eq!(t.life(P0), 21, "{what}");
     }
 }
 
@@ -500,6 +560,29 @@ fn sandmans_characteristic_defining_ability_works_in_the_graveyard() {
     t.lands(P0, "Forest", 1);
     t.g.recompute();
     assert_eq!(t.pt(s), (4, 4));
+}
+
+#[test]
+fn nethergoyfs_characteristic_defining_ability_works_in_the_graveyard_and_hand() {
+    cr!("604.3", "113.6a");
+    ruling!(
+        "Nethergoyf",
+        "The ability that defines Nethergoyf's power and toughness works in all zones, not just the battlefield."
+    );
+    supported("Nethergoyf");
+    let mut t = TestGame::new(2);
+    let ng = t.graveyard(P0, "Nethergoyf");
+    t.g.recompute();
+    // Only itself (a creature card) in the graveyard.
+    assert_eq!(t.pt(ng), (1, 2));
+    t.graveyard(P0, "Forest");
+    t.graveyard(P0, "Lightning Bolt");
+    t.g.recompute();
+    assert_eq!(t.pt(ng), (3, 4), "creature, land, instant");
+    // In the hand too.
+    let in_hand = t.hand(P0, "Nethergoyf");
+    t.g.recompute();
+    assert_eq!(t.pt(in_hand), (3, 4));
 }
 
 #[test]
