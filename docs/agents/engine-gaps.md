@@ -918,3 +918,17 @@ ruling-conflicts-2.
   Two-Headed Giant) are cited. The engine follows CR 801.10 and 801.11: with Alice controlling it, Alice, Barry
   and Doug become 8 and Carrie keeps 11 (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`
   in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator.
+- **Fiery Annihilation** (rulings-P047, left uncited). Oracle: "Fiery Annihilation deals 5 damage to target
+  creature. Exile up to one target Equipment attached to that creature. If that creature would die this turn,
+  exile it instead." Ruling 2024-11-08: "If the target creature is an illegal target when Fiery Annihilation
+  begins to resolve, the target Equipment (if any) won't be exiled." Searing Blaze's ruling (2010-03-01) on the
+  same structure (a second target described by the first: "target creature that player or that planeswalker's
+  controller controls") goes the other way: "If either target is illegal by the time Searing Blaze resolves, it
+  still deals damage to the other target." (cited in `tests/rulings/r_p007_targets.rs` with the player given
+  hexproof). CR 608.2b says only that "If part of the effect requires information about an illegal target, it
+  fails to determine any such information", which is about effects, not about a later target's requirement. The
+  engine agrees with Fiery Annihilation's ruling when the creature has left the battlefield (the Equipment is no
+  longer attached to it, so it's no longer a legal target: fixed in rulings-P047, `target_legality` in
+  `eval.rs`; `fiery_annihilation_equipment_target` in `tests/rulings/r_p047_die_exile.rs`), and with Searing
+  Blaze's when the creature is still there but illegal (protection from red): the Equipment, still attached to
+  it, is still a legal target and is exiled.

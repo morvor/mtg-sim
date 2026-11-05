@@ -598,6 +598,14 @@ fn anje_s_ravager_attack_requirements_and_draws() {
     t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.hand_size(P0), 0);
+    // Came under P0's control this turn (summoning sick): it doesn't attack.
+    let mut t = TestGame::new(2);
+    let r = t.battlefield_sick(P0, "Anje's Ravager");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+    t.advance_to(P0, Step::EndOfCombat);
+    assert!(!t.g.obj(r).tapped);
+    assert_eq!(t.hand_size(P0), 0);
     // Propaganda's cost: not forced to pay, so it needn't attack.
     let mut t = TestGame::new(2);
     let r = t.battlefield(P0, "Anje's Ravager");

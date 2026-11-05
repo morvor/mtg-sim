@@ -358,3 +358,8 @@ decides whether they become a conflict case.
   ability affects and sees only what is within its controller's range (801.11's second Coat
   of Arms example), as the Imperial Mask and Benediction of Moons rulings say. Left uncited;
   the texts are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
+- **Fiery Annihilation** (rulings-P047): its ruling (2024-11-08) that the target Equipment
+  isn't exiled whenever the target creature is an illegal target, against Searing Blaze's
+  (2010-03-01) that a target described by another illegal target ("target creature that
+  player ... controls") is still affected. Left uncited; the texts are in
+  `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".
