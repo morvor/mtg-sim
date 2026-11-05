@@ -668,7 +668,7 @@ fn a_wall_put_onto_the_battlefield_blocking_never_blocked() {
 
 #[test]
 fn glyph_of_delusion_targets_creatures_switched_into_or_out_of_the_walls_block() {
-    cr!("509.1", "115.1");
+    cr!("509.1", "506.4", "115.1");
     // The third case of the ruling: a block an ability switches (Sorrow's Path) counts, both
     // for the attacker switched into the Wall's block and the one switched out of it. This
     // is the case its "switched into or out of the block by an ability" is about, not a

@@ -26,7 +26,7 @@ fn make_commander(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn astarions_thirst_counts_the_exiled_creatures_last_known_power() {
-    cr!("608.2h", "903.3");
+    cr!("608.2h", "903.3d");
     // Scryfall's data attaches this ruling to Astarion, the Decadent, which has no X; it
     // belongs to Astarion's Thirst ("Exile target creature. Put X +1/+1 counters on a
     // commander creature you control, where X is the power of the creature exiled this
@@ -116,22 +116,28 @@ fn halsin_sets_base_power_and_toughness_under_effects_that_modify_them() {
     );
     let mut t = TestGame::new(2);
     let (halsin, skeleton) = skeleton_from_gut(&mut t);
-    // Before Halsin's ability: Titanic Growth (+4/+4), a +1/+1 counter, and a switch.
-    t.lands(P0, "Forest", 3);
+    // Before Halsin's ability: Titanic Growth (+4/+4), Rush of Adrenaline (+2/+1, so that
+    // the switch shows on the result), a +1/+1 counter, and a switch.
+    t.lands(P0, "Forest", 2);
     let growth = t.hand(P0, "Titanic Growth");
     t.cast(P0, growth).target(Entity::Object(skeleton)).go();
     t.resolve_all();
+    t.lands(P0, "Mountain", 1);
+    let rush = t.hand(P0, "Rush of Adrenaline");
+    t.cast(P0, rush).target(Entity::Object(skeleton)).go();
+    t.resolve_all();
+    assert_eq!(t.pt(skeleton), (10, 6));
     put_counters(&mut t, skeleton, "+1/+1", 1);
-    assert_eq!(t.pt(skeleton), (9, 6));
+    assert_eq!(t.pt(skeleton), (11, 7));
     t.lands(P0, "Island", 1);
     let twist = t.hand(P0, "Twisted Image");
     t.cast(P0, twist).target(Entity::Object(skeleton)).go();
     t.resolve_all();
-    assert_eq!(t.pt(skeleton), (6, 9));
-    // Halsin's ability sets base 4/4 (layer 7b); the earlier pump, counter and switch all
-    // still apply on top of it (layers 7c and 7d).
+    assert_eq!(t.pt(skeleton), (7, 11));
+    // Halsin's ability sets base 4/4 (layer 7b); the earlier pumps and counter still apply
+    // on top of it (layer 7c: 11/10), and so does the earlier switch (layer 7d: 10/11).
     halsin_makes_a_bear(&mut t, halsin, skeleton);
-    assert_eq!(t.pt(skeleton), (9, 9));
+    assert_eq!(t.pt(skeleton), (10, 11));
     let o = t.obj_now(skeleton);
     assert!(o.chars.has_subtype("Bear") && o.chars.has_subtype("Skeleton"));
     assert!(o.chars.colors.contains(mtg_engine::types::Color::Green));

@@ -4,7 +4,7 @@
 //! `docs/RULING_DISCREPANCIES.md`; these tests pin what the Oracle text says instead.
 //! (Homicide Investigator: `r_p005_dies.rs`; Rimescale Dragon: `r_p096_lockdown.rs`.)
 
-use crate::r_p056_common::{tap, tapped};
+use crate::r_p056_common::{tap, tapped, untap_step_of};
 use crate::r_s01_common::{attack_with, supported};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -39,6 +39,12 @@ fn combat_celebrant_untaps_all_other_creatures_but_not_itself() {
     assert!(!tapped(&t, idle));
     // ... and Combat Celebrant, tapped by attacking (CR 508.1f), stays tapped.
     assert!(tapped(&t, celebrant));
+    // Exerted, it doesn't untap during its controller's next untap step either (CR
+    // 701.43a), while the Hill Giant, tapped again, does.
+    tap(&mut t, idle);
+    untap_step_of(&mut t, P0);
+    assert!(tapped(&t, celebrant));
+    assert!(!tapped(&t, idle));
 }
 
 /// The +1/+1 counters on the permanent.
@@ -67,6 +73,13 @@ fn citanul_druid_grows_for_each_opponents_artifact_spells_but_not_its_controller
     // and no one else.
     supported("Citanul Druid");
     supported("Ornithopter");
+    // Two players: the other player is its controller's opponent (CR 102.2).
+    let mut t = TestGame::new(2);
+    let druid = t.battlefield(P0, "Citanul Druid");
+    cast_ornithopter(&mut t, P0);
+    assert_eq!(plus_counters(&t, druid), 0);
+    cast_ornithopter(&mut t, P1);
+    assert_eq!(plus_counters(&t, druid), 1);
     // Free-for-all: both opponents' artifact spells count; its controller's doesn't.
     let mut t = TestGame::new(3);
     let druid = t.battlefield(P0, "Citanul Druid");

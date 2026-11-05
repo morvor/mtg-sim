@@ -94,7 +94,9 @@ reviewer reported, and remaining gaps.
 >      read the ruling) and that the assertions would fail if the engine got it wrong (no
 >      tautologies, no asserting only the setup, no testing the harness). When unsure,
 >      temporarily break the engine behavior and confirm the test fails. A ruling!
->      citation must sit in a test that sets up that card.
+>      citation must sit in a test that sets up that card (a misattached ruling: in a test
+>      of the card it describes, cited under the attached card with a comment naming the
+>      card described, and the attached card set up when it can take part).
 >    - Shared rulings: when cards sharing a ruling word the relevant ability differently,
 >      each wording needs a test.
 >    - Exemptions (docs/cr-exemptions, docs/rulings-exemptions): only for content with no
