@@ -835,38 +835,6 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
 
 ---
 
-## Flagged by rulings-P005 (Nov 5)
-
-Found by the rulings-P005 reviewer (landed as `e9d133e3`); not fixed there.
-
-1. **Castability of a card not yet on the stack ignores continuous effects that would apply to the spell.**
-   - Rule: CR 601.3e, last sentence: when determining whether a player may begin to cast a spell, the
-     spell's characteristics are determined as if it were on the stack, including effects that would apply
-     to it there.
-   - Where: `casting.rs` `total_cost_and_x` uses `option_characteristics` for a card not on the stack. That
-     returns the printed characteristics of the chosen half / Adventure / back face / face-down spell and
-     doesn't apply continuous effects. Permission and prohibition checks have the same limitation. A proper
-     fix needs layer computation for a card that isn't on the stack yet.
-   - Repro (castable, but no longer listed in `legal_actions`; casting it directly works):
-     - Celestial Dawn + Pearl Medallion, one Plains: Ice (Fire // Ice) isn't offered.
-     - Encroaching Mycosynth + Etherium Sculptor, four Islands: Locker Room isn't offered.
-   - Introduced by the P005 fix (the old code got these right by accident); rare combinations only.
-2. **The default X ignores costs and target counts that depend on X.**
-   - Rule: CR 601.2b/601.2f/601.2h (X is chosen with the costs and targets it implies; the cast must be
-     payable); `Answer::Default` should fall back to a legal choice (CLAUDE.md, `default-first-listed-choice`).
-   - Where: on `Answer::Default` the engine picks the largest X from mana alone, without checking costs like
-     "discard X", "exile X cards", "sacrifice X", "remove X counters", or how many targets X needs. The cast
-     then fails.
-   - Repro: Conflagrate, Flash of Insight, Summons of Saruman, Light Up the Night, Firecat Blitz, Plant
-     Tadpoles, each cast with the default answer and enough mana but too few cards/permanents for the largest X.
-3. **Flashback (and other casts from the graveyard) offered when the only target is the card itself.**
-   - Rule: CR 601.2c with 115.1 / 601.2a: the card is on the stack while targets are chosen, so it can't
-     target itself in the graveyard.
-   - Where: `targets_possible` doesn't leave out the card being cast (it must still include an activated
-     ability's source).
-   - Repro: Mystic Retrieval, Recoup, Sorceress's Schemes in a graveyard that holds no other instant or
-     sorcery card: listed in `legal_actions` via flashback, and the cast fails with "no legal targets".
-
 ## Apparent conflicts (Nov 5)
 
 Rulings that rulings-2 left uncited (OPEN) because they seem to contradict the card's current Oracle text
@@ -894,3 +862,22 @@ ruling-conflicts-2.
   ice counters on them, whether or not it put the ice counters on them." Other cards put ice counters on
   noncreature permanents (e.g. Rimefeather Owl), so "all permanents" and "creatures" give different results;
   the engine lets a noncreature permanent with an ice counter untap.
+- **Run Out of Town** (rulings-P140). Oracle: "The owner of target nonland permanent puts it on their choice
+  of the top or bottom of their library." Ruling 2022-04-29: "That permanent's controller chooses whether to
+  put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to
+  mutate or meld, for example), that permanent's controller puts all of them on the top or all of them on the
+  bottom. They do not need to reveal the order those cards were put into the library this way." The Oracle
+  text has the owner choose, the ruling the controller; they differ for a permanent another player controls.
+  The engine follows the Oracle text (`run_out_of_town_follows_its_oracle_text` in
+  `tests/rulings/r_p140_tuck.rs`, which cites no ruling), as for Desynchronize, Unlucky Drop, Aether Gust and
+  Sudden Setback, whose rulings say the owner chooses. Left uncited.
+- **Caller of the Untamed** (rulings-P025, left uncited). Ruling 2016-08-23: "If you have more than one Caller
+  of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you
+  drafted that aren’t in your deck. You’ll choose which one to copy at the time you choose the value of X while
+  activating the ability." The decided interpretation `x-defined-by-target`
+  (`docs/interpretations/stack-casting-costs.md`, "Decided by the user, Nov 4") has, in its Affects line, "the
+  card is chosen as the ability resolves, so X must be the mana value of one of those cards and the card
+  chosen is one with that mana value". The two differ only when two exiled cards share a mana value (which
+  one is copied: chosen during activation by the ruling, as the ability resolves by the interpretation). Not a
+  CR conflict: CR 107.3c and 607.3 support the ruling; following it needs a non-target choice made during
+  activation.
