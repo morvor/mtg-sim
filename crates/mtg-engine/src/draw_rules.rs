@@ -177,6 +177,21 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                 },
             ..
         } => g.objects_matching(filter, ctx).len() as i64 >= g.eval_value(count, ctx),
+        // "You may remove two +1/+1 counters from it. If you do, ...": the removal is a cost
+        // (CR 118.12) that can't be paid in part (CR 118.3): each object or player must
+        // have that many such counters, and an object that has left its zone has none
+        // (CR 400.7; Verazol, the Split Current rulings).
+        Effect::RemoveCounters { what, kind, n } => {
+            let n = g.eval_value(n, ctx).max(0) as u32;
+            let count = |c: &std::collections::BTreeMap<CounterKind, u32>| match kind {
+                Some(k) => c.get(k.as_str()).copied().unwrap_or(0),
+                None => c.values().sum(),
+            };
+            g.eval_sel(what, ctx).into_iter().all(|e| match e {
+                Entity::Object(o) => g.is_live(o) && count(&g.obj(o).counters) >= n,
+                Entity::Player(p) => count(&g.player(p).counters) >= n,
+            })
+        }
         // Named effects a keyword implements (e.g. exiling craft materials, CR 702.167a).
         Effect::Custom(name) => crate::kw::custom_effect_possible(g, name, ctx).unwrap_or(true),
         // "You may search ...": a player who can't search libraries can't choose to (so
