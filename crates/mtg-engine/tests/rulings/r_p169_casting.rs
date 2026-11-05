@@ -234,3 +234,68 @@ fn don_and_raph_affinity_instances_are_cumulative() {
     assert_eq!(run(2), (2, true));
 }
 
+
+#[test]
+fn sudden_substitution_control_ends_when_its_controller_leaves() {
+    cr!("800.4a", "701.12b");
+    ruling!(
+        "Sudden Substitution",
+        "In a multiplayer game, if the controller of one of the objects leaves the game after Sudden Substitution resolves, the effect that gave them control of the spell or permanent expires. If the spell is still on the stack, the player who gains control of it this way can't choose new targets for it."
+    );
+    let mut t = TestGame::new(3);
+    let wurm = t.battlefield(P2, "Colossal Dreadmaw");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // P1's Shock targets P0's Bears.
+    mana(&mut t, P1, ManaType::R, 1);
+    let shock = t.hand(P1, "Shock");
+    let spell = t.cast(P1, shock).target(bears).go();
+    // P0 exchanges P1's Shock and P2's Dreadmaw: P2 controls Shock, P1 the Dreadmaw.
+    mana(&mut t, P0, ManaType::U, 4);
+    let ss = t.hand(P0, "Sudden Substitution");
+    t.answer_targets(P0, &[obj(spell)]);
+    t.answer_targets(P0, &[obj(wurm)]);
+    // P2 keeps Shock's target.
+    t.answer_yes(P2, false);
+    t.cast(P0, ss).go();
+    t.resolve();
+    assert_eq!(t.obj_now(spell).controller, P2);
+    assert_eq!(t.obj_now(wurm).controller, P1);
+    // P2 leaves the game: P1 controls Shock again and isn't asked for new targets.
+    let from = t.asked().len();
+    t.g.lose_game(P2);
+    t.g.flush_events();
+    t.settle();
+    assert!(t.g.stack.contains(&spell));
+    assert_eq!(t.obj_now(spell).controller, P1);
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })));
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(t.obj_now(wurm).controller, P1);
+
+    // The other one leaves: P1 (controlling P2's Dreadmaw) leaves, and the Dreadmaw goes
+    // back to P2 (P1's own Shock leaves the game with P1).
+    let mut t = TestGame::new(3);
+    let wurm = t.battlefield(P2, "Colossal Dreadmaw");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    mana(&mut t, P1, ManaType::R, 1);
+    let shock = t.hand(P1, "Shock");
+    let spell = t.cast(P1, shock).target(bears).go();
+    mana(&mut t, P0, ManaType::U, 4);
+    let ss = t.hand(P0, "Sudden Substitution");
+    t.answer_targets(P0, &[obj(spell)]);
+    t.answer_targets(P0, &[obj(wurm)]);
+    t.answer_yes(P2, false);
+    t.cast(P0, ss).go();
+    t.resolve();
+    assert_eq!(t.obj_now(wurm).controller, P1);
+    t.g.lose_game(P1);
+    t.g.flush_events();
+    t.settle();
+    t.g.recompute();
+    assert_eq!(t.obj_now(wurm).controller, P2);
+    assert!(!t.g.stack.contains(&spell));
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+}
