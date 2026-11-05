@@ -1825,9 +1825,16 @@ impl Game {
                     // The copy effect this creates has its own exceptions (CR 707.9); if
                     // it's applied after one it would have entered with, that one's
                     // exceptions (and linked triggered abilities) don't happen
-                    // (CR 707.9e, 707.9g).
-                    m.etb.copy_exceptions = std::mem::take(&mut m.etb.own_copy_exceptions);
-                    m.etb.copy_extras = std::mem::take(&mut m.etb.own_copy_extras);
+                    // (CR 707.9e, 707.9g). The exceptions the entering permanent's own
+                    // "enter as a copy ..., except ..." ability added are that ability's:
+                    // a copy effect from another source (Essence of the Wild's) has none
+                    // of them, and once the permanent enters as a copy of something else,
+                    // its own ability no longer applies (CR 614.12).
+                    let own = cand.source == Some(m.obj);
+                    let exceptions = std::mem::take(&mut m.etb.own_copy_exceptions);
+                    let extras = std::mem::take(&mut m.etb.own_copy_extras);
+                    m.etb.copy_exceptions = if own { exceptions } else { Vec::new() };
+                    m.etb.copy_extras = if own { extras } else { Vec::new() };
                     m.etb.copy_of = Some(*o);
                     m.etb.copy_values = Some((*o, Box::new(self.obj(*o).copiable.clone())));
                     m.etb.copy_effect = Some(self.new_effect_id());

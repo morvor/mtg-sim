@@ -1,7 +1,9 @@
 //! "creatures that blocked or were blocked by it this turn", "creatures that were blocked
 //! by that creature this turn" (Venomous Breath, Glyph of Doom): who blocked whom this
 //! turn, from the turn's block declarations and blocks added by effects (CR 509.1,
-//! 509.3). The creature named is the one a delayed triggered ability remembers
+//! 509.3); a creature put onto the battlefield blocking never blocked (CR 509.4,
+//! interpretation `entered-blocker-never-blocked`). The creature named is the one a
+//! delayed triggered ability remembers
 //! ([`crate::oracle::patterns::delayed_grammar::REFERENT`]); a creature that left the
 //! battlefield since is a new object that blocked nothing (CR 400.7).
 
@@ -32,8 +34,12 @@ fn blocks_this_turn(g: &Game) -> Vec<(ObjectId, ObjectId)> {
     for e in &g.turn_events {
         match e {
             Event::BlockersDeclared { blocks } => out.extend(blocks.iter().copied()),
+            // (Not one put onto the battlefield blocking: it never blocked, CR 509.4.)
             Event::BlockAdded {
-                blocker, attacker, ..
+                blocker,
+                attacker,
+                entered: false,
+                ..
             } => out.push((*blocker, *attacker)),
             _ => {}
         }

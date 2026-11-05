@@ -28,6 +28,14 @@ pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<Fa
             vec![]
         };
     }
+    let mut faces = faces;
+    // CR 702.102a: a split card with fuse in its caster's hand may also be cast as both
+    // halves, a spell with the combined characteristics (CR 702.102b).
+    if let crate::object::Zone::Hand(p) = g.obj(card).zone {
+        if crate::casting::fusable_from_hand(g, p, card) {
+            faces.push(FaceState::Fused);
+        }
+    }
     faces
         .into_iter()
         .filter(|face| {

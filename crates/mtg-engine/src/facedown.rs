@@ -323,7 +323,9 @@ pub fn turn_face_up_by(g: &mut Game, id: ObjectId, by: PlayerId) -> bool {
         return false;
     }
     // CR 701.40g, 701.58g: one represented by an instant or sorcery card is revealed and
-    // stays face down; "turned face up" abilities don't trigger.
+    // stays face down; "turned face up" abilities don't trigger. The same for any other
+    // face-down permanent (CR 110.4; interpretation
+    // `face-down-instant-or-sorcery-stays-face-down`).
     let front = revealed_characteristics(g, id);
     // CR 730.2g: so is a merged permanent that contains an instant or sorcery card.
     if front.is(CardType::Instant)
