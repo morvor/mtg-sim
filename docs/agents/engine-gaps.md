@@ -835,38 +835,6 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
 
 ---
 
-## Flagged by rulings-P005 (Nov 5)
-
-Found by the rulings-P005 reviewer (landed as `e9d133e3`); not fixed there.
-
-1. **Castability of a card not yet on the stack ignores continuous effects that would apply to the spell.**
-   - Rule: CR 601.3e, last sentence: when determining whether a player may begin to cast a spell, the
-     spell's characteristics are determined as if it were on the stack, including effects that would apply
-     to it there.
-   - Where: `casting.rs` `total_cost_and_x` uses `option_characteristics` for a card not on the stack. That
-     returns the printed characteristics of the chosen half / Adventure / back face / face-down spell and
-     doesn't apply continuous effects. Permission and prohibition checks have the same limitation. A proper
-     fix needs layer computation for a card that isn't on the stack yet.
-   - Repro (castable, but no longer listed in `legal_actions`; casting it directly works):
-     - Celestial Dawn + Pearl Medallion, one Plains: Ice (Fire // Ice) isn't offered.
-     - Encroaching Mycosynth + Etherium Sculptor, four Islands: Locker Room isn't offered.
-   - Introduced by the P005 fix (the old code got these right by accident); rare combinations only.
-2. **The default X ignores costs and target counts that depend on X.**
-   - Rule: CR 601.2b/601.2f/601.2h (X is chosen with the costs and targets it implies; the cast must be
-     payable); `Answer::Default` should fall back to a legal choice (CLAUDE.md, `default-first-listed-choice`).
-   - Where: on `Answer::Default` the engine picks the largest X from mana alone, without checking costs like
-     "discard X", "exile X cards", "sacrifice X", "remove X counters", or how many targets X needs. The cast
-     then fails.
-   - Repro: Conflagrate, Flash of Insight, Summons of Saruman, Light Up the Night, Firecat Blitz, Plant
-     Tadpoles, each cast with the default answer and enough mana but too few cards/permanents for the largest X.
-3. **Flashback (and other casts from the graveyard) offered when the only target is the card itself.**
-   - Rule: CR 601.2c with 115.1 / 601.2a: the card is on the stack while targets are chosen, so it can't
-     target itself in the graveyard.
-   - Where: `targets_possible` doesn't leave out the card being cast (it must still include an activated
-     ability's source).
-   - Repro: Mystic Retrieval, Recoup, Sorceress's Schemes in a graveyard that holds no other instant or
-     sorcery card: listed in `legal_actions` via flashback, and the cast fails with "no legal targets".
-
 ## Apparent conflicts (Nov 5)
 
 Rulings that rulings-2 left uncited (OPEN) because they seem to contradict the card's current Oracle text
