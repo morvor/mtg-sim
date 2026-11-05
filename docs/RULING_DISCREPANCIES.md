@@ -165,6 +165,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Halsin (layers 7b, 7c and 7d in timestamp order, CR 613.4, 613.7).
 - Recorded: tests `tests/rulings/misattached_rulings.rs` (`halsin_sets_base_power_and_toughness_under_effects_that_modify_them`, `halsin_overwrites_earlier_base_power_and_toughness_and_later_ones_overwrite_it`), citing them under Gut, whose Skeleton token is the token Halsin animates.
 
+### Scuttletide: a ruling about a trigger on attackers declared against you
+- Kind: misattached
+- Status: open for review
+- Ruling, Scuttletide (2021-06-18): "The triggered ability triggers when creatures are declared as attackers attacking you or a planeswalker you control. It will not trigger if an effect puts a creature onto the battlefield attacking you or a planeswalker you control."
+- Conflicts with: Scuttletide has no triggered ability: "{1}, Discard a card: Create a 0/3 blue Crab creature token. / Delirium — Crabs you control get +1/+1 as long as there are four or more card types among cards in your graveyard."
+- Evidence: the card the ruling describes isn't identified: no other card in the data has this ruling, and no Modern Horizons 2 card (the set of Scuttletide and of the ruling's date) has a trigger on creatures attacking you or a planeswalker you control. Scuttletide's other rulings include three about Clue tokens ("The token is named Clue Token ...", 2021-06-18), which fit Hard Evidence ("Create a 0/3 blue Crab creature token. Investigate."), another Modern Horizons 2 card that makes Crabs and has no rulings of its own in the data; so rulings of neighbouring cards were filed under Scuttletide, and this one probably came from another card of the set's release notes (an inference). The only card in the data whose Oracle text both has such a trigger and makes Clues is Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate."), which also has no rulings of its own, but its printing in the data is from Murders at Karlov Manor Commander (released 2024-02-09), after the ruling's date, and it isn't a Modern Horizons 2 card, so it isn't likely to be the card the 2021 release notes described.
+- Engine: an ability that triggers when a creature attacks you or a planeswalker you control triggers on attackers declared that way (CR 508.3a) and not for a creature put onto the battlefield attacking (CR 508.4).
+- Recorded: test `tests/rulings/r_p011_combat.rs` (`creatures_put_onto_the_battlefield_attacking_werent_declared`), with Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate.") standing in for the card it describes and Scuttletide on the battlefield, citing it under Scuttletide.
+
 ## Outdated rulings
 
 ### Aetherplasm: "This allows it to dodge abilities like Deathgazer's."
@@ -238,6 +247,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Evidence: the ruling (2004-10-04) predates the library criterion, added by the CR revision effective 2026-08-07 (work item ruling-conflicts-1, case 20, folded into case 10; conclusion B). "(Activate only as an instant.)" is now reminder text.
 - Engine: the ability uses the stack.
 - Recorded: exemption `docs/rulings-exemptions/rulings-S22.tsv`; test `tests/cards/c4_mana_symbols.rs` (`charmed_pendant_adds_one_mana_for_each_colored_symbol_of_the_milled_card`).
+
+### Kurkesh, Onakke Ancient and Illusionist's Bracers: a mana ability's three criteria
+- Kind: outdated
+- Status: open for review
+- Ruling, Kurkesh, Onakke Ancient (2014-07-18): "A mana ability is an ability that (1) could add mana when it resolves, (2) isn't a loyalty ability, and (3) doesn't require a target."
+- Ruling, Illusionist's Bracers (2013-04-15): "A mana ability is an ability that (1) isn't a loyalty ability, (2) doesn't target, and (3) could add mana when it resolves."
+- Conflicts with: CR 605.1a: "An activated ability is a mana ability if it meets all of the following criteria: it doesn’t require a target (see rule 115.6), it could add mana to a player’s mana pool when it resolves, it’s not a loyalty ability (see rule 606, “Loyalty Abilities”), and its cost and effect don’t move any card to or from a library. ..." Chromatic Sphere (2026-08-05): "Chromatic Sphere’s ability is not a mana ability. Players can respond to it, and it can’t be activated in the middle of paying for a cost. A recent update to rule 605.1a has made any abilities that move cards to or from libraries no longer mana abilities." Kurkesh: "Whenever you activate an ability of an artifact, if it isn't a mana ability, you may pay {R}. If you do, copy that ability. ..." Illusionist's Bracers: "Whenever an ability of equipped creature is activated, if it isn't a mana ability, copy that ability. ..."
+- Evidence: both rulings define a mana ability by the three criteria of the CR of their time (Kurkesh's for Magic 2015, 2014-07-18; the 2013-04-15 text is also on Drain Power, Pygmy Hippo, Imprison, Burning-Tree Shaman and Tsabo's Web); the library criterion entered 605.1a with the CR revision effective 2026-08-07, as for Deranged Assistant above (work item ruling-conflicts-1, case 9). Every criterion they list is still required, and they still hold for every ability that doesn't move a card to or from a library; as definitions, they now also admit abilities that aren't mana abilities, such as Chromatic Sphere's ("{1}, {T}, Sacrifice this artifact: Add one mana of any color. Draw a card. (Activate only as an instant.)") and Deranged Assistant's ("{T}, Mill a card: Add {C}. (Activate only as an instant. ...)"), so Kurkesh and the Bracers copy those. No words of the rulings are wrong, only their completeness, so nothing is exempted: both stay cited for what they say (Kurkesh's in rulings batch P019, by the rulings-P019 reviewer; the Bracers' in S27).
+- Engine: activated abilities whose cost or effect moves a card to or from a library aren't mana abilities and use the stack; Kurkesh copies Chromatic Sphere's ability and Illusionist's Bracers copies Deranged Assistant's.
+- Recorded: tests `tests/rulings/r_p019_activation_copies.rs` (`kurkesh_doesnt_copy_mana_abilities`, `abilities_that_add_mana_and_draw_or_mill_are_copied_as_non_mana_abilities`), `tests/rulings/r_s27_copy_abilities.rs` (`illusionist_s_bracers_doesn_t_copy_a_mana_ability`).
 
 ### Modal double-faced cards: "can't be transformed"
 - Kind: outdated
@@ -343,3 +362,9 @@ decides whether they become a conflict case.
   Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08) on the same
   wording for scavenge. Left uncited; the texts are in `docs/agents/engine-gaps.md`,
   "Apparent conflicts (Nov 5)".
+- **Arbiter of Knollridge** (rulings-P014): its ruling (2007-10-01) sets each player's life
+  total to the highest life total within that player's own range of influence (its example
+  has Alice become 8 and Barry and Doug 11), against CR 801.10 and 801.11, under which the
+  ability affects and sees only what is within its controller's range (801.11's second Coat
+  of Arms example), as the Imperial Mask and Benediction of Moons rulings say. Left uncited;
+  the texts are in `docs/agents/engine-gaps.md`, "Apparent conflicts (Nov 5)".

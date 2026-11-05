@@ -366,6 +366,7 @@ Agility
 Agna Qel'a
 Agonasaur Rex
 Agonizing Demise
+Agonizing Memories
 Agonizing Remorse
 Agonizing Syphon
 Agony Warp
@@ -7908,6 +7909,7 @@ Fae Flight
 Fae of Wishes // Granted
 Faebloom Trick
 Faeburrow Elder
+Faerie Artisans
 Faerie Bladecrafter
 Faerie Conclave
 Faerie Dreamthief
@@ -14809,6 +14811,7 @@ Marshals' Pathcruiser
 Marshdrinker Giant
 Marshmist Titan
 Martha Jones
+Martial Coup
 Martial Glory
 Martial Impetus
 Martial Law
@@ -15906,6 +15909,7 @@ Multiversal Passage
 Multiversal Recruitment
 Mummy Paramount
 Munda's Vanguard
+Munda, Ambush Leader
 Mundungu
 Mungha Wurm
 Munitions Expert
@@ -17606,6 +17610,7 @@ Pestilent Wolf
 Pests of Honor
 Pet Avengers
 Petalmane Baku
+Petals of Insight
 Peter Parker's Camera
 Petradon
 Petrahydrox
@@ -18225,6 +18230,7 @@ Primordial Sage
 Primordial Wurm
 Prince Imrahil the Fair
 Princess Lucrezia
+Priority Boarding
 Prism Array
 Prism Ring
 Prismabasher
@@ -23399,6 +23405,7 @@ Stomp and Howl
 Stomped by the Foot
 Stomper Cub
 Stomping Ground
+Stomping Slabs
 Stone Calendar
 Stone Catapult
 Stone Docent
@@ -23525,6 +23532,7 @@ Stormwing Entity
 Storvald, Frost Giant Jarl
 Story Circle
 Story Seeker
+Storybook Ride
 Storyteller Pixie
 Storyweave
 Strafe
@@ -26680,6 +26688,7 @@ Vessel of Volatility
 Vestige of Emrakul
 Vesuva
 Vesuvan Drifter
+Vesuvan Duplimancy
 Veteran Adventurer
 Veteran Armorer
 Veteran Armorsmith
@@ -27670,6 +27679,7 @@ White Orchid Phantom
 White Plume Adventurer
 White Scarab
 White Shield Crusader
+White Sun's Twilight
 White Sun's Zenith
 White Tiger, Amulet Keeper
 White Ward
@@ -28375,6 +28385,7 @@ Zimone's Experiment
 Zimone's Hypothesis
 Zimone, Paradox Sculptor
 Zimone, Quandrix Prodigy
+Zinnia, Valley's Voice
 Zirda, the Dawnwaker
 Zndrsplt, Eye of Wisdom
 Zo-Zu the Punisher

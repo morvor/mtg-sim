@@ -34,7 +34,8 @@ pub struct EndState {
     /// Objects (by controller) involved in the current stretch of mandatory actions.
     #[serde(skip)]
     pub loop_controllers: BTreeSet<PlayerId>,
-    /// `actions_taken` at the last forced priority pass, to notice other decisions.
+    /// `actions_taken - forced_asks` at the last forced priority pass (plus the decisions
+    /// since that keep the stretch going), to notice other decisions.
     #[serde(skip)]
     pub loop_mark: u64,
     /// Forced priority passes in the current stretch of mandatory actions.
@@ -511,25 +512,43 @@ impl Game {
     /// exactly as many targets or objects as there are candidates) is no optional action
     /// for [`Game::check_mandatory_loop`].
     pub(crate) fn note_forced_decision(&mut self, d: &crate::decision::Decision) {
-        use crate::decision::Decision;
-        let forced = match d {
-            Decision::ChooseTargets {
-                candidates,
-                min,
-                max,
-                ..
-            }
-            | Decision::ChooseEntities {
-                candidates,
-                min,
-                max,
-                ..
-            } => *min == *max && candidates.len() == *min as usize,
-            _ => false,
-        };
-        if forced {
+        if single_answer(d) {
             self.end.forced_asks += 1;
         }
+    }
+
+    /// An object as [`Game::loop_fingerprint`] sees it: its characteristics and status,
+    /// not its id.
+    fn loop_object_key(&self, id: ObjectId) -> String {
+        let o = self.obj(id);
+        let pt = if o.is_creature() {
+            (o.power(), o.toughness())
+        } else {
+            (0, 0)
+        };
+        // Its abilities, types and colors: what the continuous effects on it add up to
+        // (see the distinct effects in `loop_fingerprint`).
+        let mut abilities: Vec<&str> = o.chars.abilities.iter().map(|a| a.text.as_str()).collect();
+        abilities.sort_unstable();
+        format!(
+            "{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
+            o.chars.name,
+            abilities,
+            o.chars.card_types,
+            o.chars.subtypes,
+            o.chars.supertypes,
+            o.chars.colors,
+            o.controller.0,
+            o.tapped,
+            o.damage,
+            o.counters,
+            o.face_down,
+            pt,
+            // Object ids change with every zone change (CR 400.7), so only whether it's
+            // attached.
+            o.attached_to.is_some(),
+            o.stack.as_ref().map(|s| s.x)
+        )
     }
 
     /// A fingerprint of the game state that doesn't depend on object ids (which change with
@@ -538,38 +557,7 @@ impl Game {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         // Everything that could make a repetition end on its own must be part of the
         // fingerprint (a creature shrinking each time around isn't a loop).
-        let obj = |id: ObjectId| {
-            let o = self.obj(id);
-            let pt = if o.is_creature() {
-                (o.power(), o.toughness())
-            } else {
-                (0, 0)
-            };
-            // Its abilities, types and colors: what the continuous effects on it add up
-            // to (see the distinct effects below).
-            let mut abilities: Vec<&str> =
-                o.chars.abilities.iter().map(|a| a.text.as_str()).collect();
-            abilities.sort_unstable();
-            format!(
-                "{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{:?}|{}|{:?}|{:?}|{:?}",
-                o.chars.name,
-                abilities,
-                o.chars.card_types,
-                o.chars.subtypes,
-                o.chars.supertypes,
-                o.chars.colors,
-                o.controller.0,
-                o.tapped,
-                o.damage,
-                o.counters,
-                o.face_down,
-                pt,
-                // Object ids change with every zone change (CR 400.7), so only whether
-                // it's attached.
-                o.attached_to.is_some(),
-                o.stack.as_ref().map(|s| s.x)
-            )
-        };
+        let obj = |id: ObjectId| self.loop_object_key(id);
         let sorted = |ids: &[ObjectId]| {
             let mut v: Vec<String> = ids.iter().map(|i| obj(*i)).collect();
             v.sort();
@@ -647,15 +635,80 @@ pub fn custom_effect(g: &mut Game, name: &str, ctx: &crate::eval::Ctx) -> bool {
 /// of an ability that has to have targets, the order of simultaneous triggered abilities
 /// — is part of the mandatory actions around it, so it doesn't interrupt a stretch of
 /// them (CR 104.4b, 732.5: no player can be forced to end a loop, and choosing what the
-/// looping objects call for doesn't end it).
+/// looping objects call for doesn't end it), as long as its options can't make a
+/// difference: a fixed number of targets among candidates that are alike, the order of
+/// identical triggered abilities. Choosing between different targets or triggers could be
+/// the way to stop the loop (CR 104.4b: "with no way to stop"; CR 732.5 lets a player be
+/// made to take an action an object involved in the loop calls for), so like any other
+/// decision it interrupts the stretch.
 pub(crate) fn note_decision(g: &mut Game, d: &crate::decision::Decision) {
     use crate::decision::Decision;
+    // `loop_mark` counts the decisions other than those with a single possible answer
+    // (see `check_mandatory_loop`); those are left out of the count already.
+    if g.end.loop_mark != g.actions_taken - g.end.forced_asks || single_answer(d) {
+        return;
+    }
     let required = match d {
-        Decision::ChooseTargets { min, .. } => *min >= 1,
-        Decision::Order { .. } => true,
+        Decision::ChooseTargets {
+            candidates,
+            min,
+            max,
+            ..
+        } => *min >= 1 && min == max && alike(g, candidates),
+        Decision::Order { items, .. } => items.iter().all(|i| *i == items[0]),
         _ => false,
     };
-    if required && g.end.loop_mark == g.actions_taken {
+    if required {
         g.end.loop_mark += 1;
+    }
+}
+
+/// Whether `candidates` are objects in one zone that the loop detection can't tell apart
+/// (the same characteristics and status, `Game::loop_object_key`) and that hold the same
+/// cards (the objects linked to them, CR 607, such as the cards exiled with them):
+/// whichever of them is chosen, the game state is the same, and so is what comes back
+/// when it leaves.
+fn alike(g: &Game, candidates: &[Entity]) -> bool {
+    let key = |e: &Entity| {
+        e.object().map(|o| {
+            let obj = g.obj(o);
+            let mut held: Vec<String> = obj
+                .linked
+                .values()
+                .flatten()
+                .filter(|l| g.is_live(**l))
+                .map(|l| g.loop_object_key(*l))
+                .collect();
+            held.sort();
+            (obj.zone, g.loop_object_key(o), held)
+        })
+    };
+    match candidates.split_first() {
+        Some((first, rest)) => {
+            let k = key(first);
+            k.is_some() && rest.iter().all(|e| key(e) == k)
+        }
+        None => false,
+    }
+}
+
+/// A decision with a single possible answer: choosing exactly as many targets or objects
+/// as there are candidates.
+fn single_answer(d: &crate::decision::Decision) -> bool {
+    use crate::decision::Decision;
+    match d {
+        Decision::ChooseTargets {
+            candidates,
+            min,
+            max,
+            ..
+        }
+        | Decision::ChooseEntities {
+            candidates,
+            min,
+            max,
+            ..
+        } => *min == *max && candidates.len() == *min as usize,
+        _ => false,
     }
 }

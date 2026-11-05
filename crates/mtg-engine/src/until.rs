@@ -23,6 +23,11 @@ pub enum UntilKind {
     Exiled(Vec<(ObjectId, Zone)>),
     /// Permanents phased out this way.
     PhasedOut(Vec<ObjectId>),
+    /// Permanents phased out this way that couldn't phase in when the event happened
+    /// ("Permanents can't phase in."): the second one-shot effect is over, and they
+    /// still don't phase in during their controller's untap step (CR 610.4a), so they
+    /// stay phased out unless another effect phases them in.
+    HeldPhasedOut(Vec<ObjectId>),
 }
 
 /// A pending "until" effect.
@@ -156,21 +161,22 @@ pub fn exec_phase_out_until(g: &mut Game, objs: Vec<ObjectId>, until: &UntilEven
 /// A permanent phased out by an "until" effect doesn't phase in during its controller's
 /// untap step (CR 610.4a).
 pub fn held_phased_out(g: &Game, id: ObjectId) -> bool {
-    g.untils
-        .iter()
-        .any(|u| matches!(&u.kind, UntilKind::PhasedOut(v) if v.contains(&id)))
+    g.untils.iter().any(|u| {
+        matches!(&u.kind, UntilKind::PhasedOut(v) | UntilKind::HeldPhasedOut(v) if v.contains(&id))
+    })
 }
 
 /// A permanent that phases in because of another effect is no longer waiting: the second
 /// one-shot effect won't happen, even if it phases out again (CR 610.4a).
 pub fn phased_in_otherwise(g: &mut Game, id: ObjectId) {
     for u in g.untils.iter_mut() {
-        if let UntilKind::PhasedOut(v) = &mut u.kind {
+        if let UntilKind::PhasedOut(v) | UntilKind::HeldPhasedOut(v) = &mut u.kind {
             v.retain(|o| *o != id);
         }
     }
-    g.untils
-        .retain(|u| !matches!(&u.kind, UntilKind::PhasedOut(v) if v.is_empty()));
+    g.untils.retain(|u| {
+        !matches!(&u.kind, UntilKind::PhasedOut(v) | UntilKind::HeldPhasedOut(v) if v.is_empty())
+    });
 }
 
 /// Performs the second one-shot effects of every "until" effect whose event has
@@ -180,15 +186,17 @@ pub fn check_untils(g: &mut Game) {
     if g.untils.is_empty() {
         return;
     }
-    let (done, keep): (Vec<UntilEffect>, Vec<UntilEffect>) = std::mem::take(&mut g.untils)
-        .into_iter()
-        .partition(|u| ended(g, Some(u.source), u.controller, &u.until));
+    let (done, keep): (Vec<UntilEffect>, Vec<UntilEffect>) =
+        std::mem::take(&mut g.untils).into_iter().partition(|u| {
+            !matches!(u.kind, UntilKind::HeldPhasedOut(_))
+                && ended(g, Some(u.source), u.controller, &u.until)
+        });
     g.untils = keep;
     if done.is_empty() {
         return;
     }
     let mut moves: Vec<MoveEv> = Vec::new();
-    let mut phase_in: Vec<ObjectId> = Vec::new();
+    let mut phase_in: Vec<(ObjectId, UntilEffect)> = Vec::new();
     for u in done {
         match u.kind {
             UntilKind::Exiled(v) => {
@@ -223,17 +231,35 @@ pub fn check_untils(g: &mut Game) {
                     });
                 }
             }
-            UntilKind::PhasedOut(v) => {
-                phase_in.extend(
-                    v.into_iter()
-                        .filter(|o| g.is_live(*o) && g.obj(*o).phased_out),
-                );
+            UntilKind::PhasedOut(ref v) => {
+                for o in v.iter().copied() {
+                    if g.is_live(o) && g.obj(o).phased_out {
+                        phase_in.push((o, u.clone()));
+                    }
+                }
+            }
+            UntilKind::HeldPhasedOut(_) => {}
+        }
+    }
+    let mut held: Vec<UntilEffect> = Vec::new();
+    for (o, u) in phase_in {
+        crate::keyword_impls::phase_in(g, o);
+        if g.obj(o).phased_out {
+            // It can't phase in (CR 610.4a).
+            match held.iter_mut().find(|h| h.id == u.id) {
+                Some(h) => {
+                    if let UntilKind::HeldPhasedOut(v) = &mut h.kind {
+                        v.push(o);
+                    }
+                }
+                None => held.push(UntilEffect {
+                    kind: UntilKind::HeldPhasedOut(vec![o]),
+                    ..u
+                }),
             }
         }
     }
-    for o in phase_in {
-        crate::keyword_impls::phase_in(g, o);
-    }
+    g.untils.extend(held);
     if !moves.is_empty() {
         g.move_objects(moves);
     }

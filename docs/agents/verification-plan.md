@@ -214,7 +214,7 @@ Rulings queues from Nov 4 22:55:
 - **compile:** P001, P008.
 - **cards-2:** P025, P199, P140, P027.
 - **structure, after ruling-conflicts-1:** P110, P073.
-- **Next in the pool (Nov 5, 09:45):** the old lists are done; take open batches in id order after P042 (P043 ...). Assigned 11:45: cards-2 P029+P033, rulings-2 P036, P040, rulings-1 P041, P042, mutation P019, P022, cards-1 P014+P018.
+- **Next in the pool (Nov 5, 09:45):** the old lists are done; take open batches in id order: P059 P060 P061 P067 P068 P069 ... Assigned by 13:45: compile P008, P048, P049; rulings-2 P040, P050, P055; cards-2 P029+P033; rulings-1 P041, P042; mutation P019, P022; cards-1 P043+P047.
 - **compile:** `roundtrip-gaps-5`.
 - **mutation:** P031, P180. **rulings-1:** P186, P074, P118, P152. **rulings-2:** P052, P039, P183, P066.
 - Next in the rulings pool: P010 P156 P096 P015 P134 P174 P097 P004 P075 P102 ...
