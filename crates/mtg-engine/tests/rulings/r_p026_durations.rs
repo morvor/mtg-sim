@@ -120,6 +120,9 @@ fn shapesharer_copy_lasts_until_your_next_untap_step_even_if_skipped() {
     let sharer = t.battlefield(P0, "Shapesharer");
     let giant = t.battlefield(P1, "Hill Giant");
     t.battlefield(P0, "Stasis");
+    // A tapped land shows that P0's untap step is skipped.
+    let land = t.battlefield(P0, "Wastes");
+    t.g.tap(land);
     lands_for(&mut t, P0, "{2}{U}");
     t.activate(P0, sharer, 0, &[obj(sharer), obj(giant)])
         .expect("activation");
@@ -131,6 +134,7 @@ fn shapesharer_copy_lasts_until_your_next_untap_step_even_if_skipped() {
     // P0's untap step is skipped, but the effect has ended by P0's upkeep.
     t.advance_to(P0, Step::Upkeep);
     assert_eq!(t.g.turn.active, P0);
+    assert!(t.obj_now(land).tapped);
     assert_eq!(name_of(&t, sharer), "Shapesharer");
 }
 
@@ -225,7 +229,7 @@ fn dimir_doppelganger_new_copy_overwrites_the_old() {
 
 #[test]
 fn corpse_dance_and_echo_chamber_grant_haste_only_until_end_of_turn() {
-    cr!("514.2", "611.2a", "603.7b");
+    cr!("514.2", "611.2a");
     ruling!(
         "Corpse Dance",
         "The effect only grants Haste until the end of the current turn. If the creature somehow manages to stick around until a later turn, it will no longer have Haste."

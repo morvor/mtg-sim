@@ -100,7 +100,7 @@ fn spell(
 
 #[test]
 fn token_copy_spells_copy_only_the_printed_creature() {
-    cr!("707.2", "707.9b", "111.4");
+    cr!("707.2", "707.9b");
     ruling!(
         "Sublime Epiphany",
         "The token copies exactly what is printed on the creature and nothing else (unless that creature is a token or is copying something else; see below)."
@@ -524,7 +524,7 @@ fn ability(t: &mut TestGame, source: &str, cost: &str, target: ObjectId) -> Obje
 
 #[test]
 fn token_copy_abilities_copy_only_the_printed_creature() {
-    cr!("707.2", "707.9b", "602.2");
+    cr!("707.2", "707.9b");
     ruling!(
         "Tempestra, Dame of Games",
         "The token copies exactly what was printed on the original creature, with the listed exception (unless that creature is copying something else or is a token; see below)."
@@ -936,7 +936,7 @@ fn attacking_token_copies_copy_only_the_printed_creature() {
 
 #[test]
 fn rionya_tokens_copy_only_the_printed_creature() {
-    cr!("707.2", "107.3a");
+    cr!("707.2");
     ruling!(
         "Rionya, Fire Dancer",
         "The tokens copy exactly what is printed on the creature and nothing else (unless that creature is a token or is copying something else; see below)."

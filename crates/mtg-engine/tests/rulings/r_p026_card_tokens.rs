@@ -240,7 +240,7 @@ fn mimic_vat_copies_the_card_exiled_with_it_as_the_ability_resolves() {
 
 #[test]
 fn mimic_vat_and_flameshadow_tokens_are_exiled_whoever_controls_them() {
-    cr!("603.7c", "603.7", "610.3");
+    cr!("603.7c", "603.7");
     ruling!(
         "Mimic Vat",
         "The token is exiled at the beginning of the next end step regardless of who controls it at that time, whether the exiled card is still exiled at that time, or whether Mimic Vat is still on the battlefield at that time."
@@ -288,7 +288,7 @@ fn mimic_vat_and_flameshadow_tokens_are_exiled_whoever_controls_them() {
 
 #[test]
 fn soul_separator_zombie_size_is_locked_in_from_the_graveyard_card() {
-    cr!("608.2h", "604.3", "611.2c");
+    cr!("608.2h", "604.3");
     ruling!(
         "Soul Separator",
         "The power and toughness of the Zombie token are set as it’s created based on the card as it last existed in your graveyard. They won’t update if the exiled card’s power and toughness change."
@@ -326,7 +326,7 @@ fn soul_separator_zombie_size_is_locked_in_from_the_graveyard_card() {
 
 #[test]
 fn dollhouse_of_horrors_token_counts_itself() {
-    cr!("707.9b", "613.4c", "604.1");
+    cr!("707.9b", "613.4c");
     ruling!(
         "Dollhouse of Horrors",
         "The token creature counts itself when counting Constructs you control."
@@ -353,7 +353,7 @@ fn dollhouse_of_horrors_token_counts_itself() {
 
 #[test]
 fn nahiri_checks_her_loyalty_as_the_ability_resolves() {
-    cr!("608.2b", "115.7", "606.3");
+    cr!("608.2b");
     ruling!(
         "Nahiri, the Unforgiving",
         "The last loyalty ability will check Nahiri's loyalty as the ability tries to resolve to see if the target is still legal. If it's not, the ability won't resolve and none of its effects will happen. The card won't be exiled and no token will be created."
