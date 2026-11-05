@@ -73,6 +73,10 @@ fn a_creature_cast_with_cascade_isnt_damaged_by_let_the_galaxy_burn() {
         "If the spell you cast with the cascade ability is a creature, it will have entered the battlefield this turn when Let the Galaxy Burn resolves and will not take damage from Let the Galaxy Burn's effect."
     );
     supported("Let the Galaxy Burn");
+    // A misattached ruling: Scryfall files it under Knight Rampager, but it describes Let
+    // the Galaxy Burn ("Cascade ... Let the Galaxy Burn deals X plus 2 damage to each
+    // creature that didn't enter this turn."). It's tested on Let the Galaxy Burn, with
+    // Knight Rampager as the creature cast with cascade (user policy, Nov 5).
     // Let the Galaxy Burn with X = 0 (mana value 6) cascades into Knight Rampager (5).
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
