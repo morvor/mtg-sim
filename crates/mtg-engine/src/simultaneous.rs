@@ -12,6 +12,9 @@
 //!   copy a creature entering with it), and choices for replacement effects that modify
 //!   how they enter are made only then, in APNAP order (CR 616.1);
 //! * the permanents they sacrifice are sacrificed together (CR 701.21a);
+//! * the token copies they create of the objects they chose are created together, so
+//!   none of them enters early enough to affect how the others enter (CR 614.12;
+//!   Zndrsplt's Judgment);
 //! * the cards they discard are discarded once all of them have chosen;
 //! * "[effect] unless they pay [life / sacrifice ... / discard ...]": each decides whether
 //!   to pay and chooses what to pay with, then the payments are made with the others'
@@ -56,7 +59,7 @@ use crate::events::{Event, MoveCause};
 use crate::game::Game;
 use crate::keywords::KeywordKind;
 use crate::object::Zone;
-use crate::replacement::{EtbInfo, MoveEv};
+use crate::replacement::{EtbInfo, MoveEv, TokenCreate};
 use crate::types::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -627,6 +630,11 @@ enum Plan {
     /// Life the player chose to pay for "[effect] unless they pay N life", paid together
     /// with the other players' actions (CR 101.4, 118.12).
     PayLife { player: PlayerId, cost: Cost },
+    /// Tokens to create (controller, token, how many, source), created together with the
+    /// other players' (CR 101.4, 614.12).
+    Tokens {
+        tokens: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+    },
     /// Performed for this player in turn (CR 608.2f).
     Exec(Effect),
 }
@@ -635,6 +643,7 @@ enum Plan {
 #[derive(Debug, Default)]
 struct Outcome {
     moved: Vec<Option<ObjectId>>,
+    created: Vec<ObjectId>,
     sacrificed: Vec<(ObjectId, ObjectId)>,
     discarded: Vec<ObjectId>,
     damage_from: usize,
@@ -683,6 +692,10 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
         // (Orzhov Advokist): the players choose in turn, then the counters are put on all
         // the chosen objects (CR 101.4, 608.2e, 608.2f).
         Effect::AddCounters { what, .. } => chosen_by(g, &[what], ctx, p),
+        // "Each friend creates a token that's a copy of a creature they control"
+        // (Zndrsplt's Judgment): the players choose in turn, then the tokens are created
+        // (CR 101.4, 608.2e).
+        Effect::CreateTokenCopy { of, .. } => has_choice(of) && chosen_by(g, &[of], ctx, p),
         // Whoever makes the choices: no control changes until all are made.
         Effect::GainControl { .. } => true,
         // "For each creature, its controller sacrifices it unless they pay X life" (Killing
@@ -798,6 +811,8 @@ fn plan_choice_cost(
 
 /// The objects a player chose to put counters on, until the counters are put on them.
 const PLANNED_COUNTERS: Var = vars::USER + 10_141;
+/// The objects a player chose to create token copies of, until the tokens are created.
+const PLANNED_TOKEN_COPIES: Var = vars::USER + 10_142;
 
 /// Makes `p`'s choices for `e` (CR 101.4) and returns what they'll do.
 fn plan(
@@ -1153,6 +1168,56 @@ fn plan(
                 n: Value::Const(g.eval_value(n, ctx) as i32),
             })
         }
+        // "Each friend creates a token that's a copy of a creature they control": the
+        // creature is chosen now, and the tokens are created at the same time once every
+        // player has chosen (Zndrsplt's Judgment's rulings; CR 101.4), as
+        // `Effect::CreateTokenCopy` creates them.
+        Effect::CreateTokenCopy {
+            of,
+            count,
+            controller,
+            tapped,
+            attacking,
+            mods,
+        } if plannable(g, e, ctx, p) => {
+            let chosen = g.resolve_sel(of, ctx);
+            if let Some(p) = p {
+                let objs = chosen.iter().filter_map(|e| e.object()).collect();
+                g.record_apnap_choice(p, objs);
+            }
+            ctx.vars.insert(PLANNED_TOKEN_COPIES, chosen);
+            if *attacking {
+                // What each token attacks is chosen as it's created: in turn.
+                return Plan::Exec(Effect::CreateTokenCopy {
+                    of: Sel::Var(PLANNED_TOKEN_COPIES),
+                    count: count.clone(),
+                    controller: controller.clone(),
+                    tapped: *tapped,
+                    attacking: *attacking,
+                    mods: mods.clone(),
+                });
+            }
+            let n = g.eval_value(count, ctx).max(0) as u32;
+            let sources =
+                crate::copy_rules::token_copy_sources(g, &Sel::Var(PLANNED_TOKEN_COPIES), ctx);
+            let players = g.eval_players(controller, ctx);
+            let fixed = g.fix_mods(mods, ctx);
+            let mut tokens = Vec::new();
+            for q in players {
+                for s in &sources {
+                    let spec = TokenCreate {
+                        chars: g.obj(*s).copiable.clone(),
+                        card: g.obj(*s).card.clone(),
+                        tapped: *tapped,
+                        attacking: None,
+                        copy_of: Some(*s),
+                        copy_exceptions: fixed.clone(),
+                    };
+                    tokens.push((q, spec, n, ctx.source));
+                }
+            }
+            Plan::Tokens { tokens }
+        }
         Effect::LoseLife { who, n } => Plan::Exec(Effect::LoseLife {
             who: who.clone(),
             n: Value::Const(g.eval_value(n, ctx) as i32),
@@ -1416,6 +1481,22 @@ fn perform_plans(
             g.shuffle_library(*owner);
         }
     }
+    // Tokens: created at the same time (CR 101.4, 614.12).
+    let mut tokens = Vec::new();
+    let mut created_by = Vec::new();
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::Tokens { tokens: these }) = plan {
+            for t in these {
+                tokens.push(t.clone());
+                created_by.push(i);
+            }
+        }
+    }
+    if !tokens.is_empty() {
+        for (i, made) in created_by.into_iter().zip(g.create_tokens_together(tokens)) {
+            out[i].created.extend(made);
+        }
+    }
     // Discards: the chosen cards, once everyone has chosen, at the same time (CR 701.9a,
     // 404.3).
     let mut discards: Vec<(usize, (PlayerId, ObjectId))> = Vec::new();
@@ -1473,6 +1554,15 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
         Plan::Nothing | Plan::Exec(_) => {}
         Plan::Control(grant) => crate::control_change::record(grant.as_ref(), ctx),
         Plan::PayLife { .. } => ctx.prev_happened = true,
+        Plan::Tokens { .. } => {
+            // As `Effect::CreateTokenCopy` records them: "tokens created with ~" (CR
+            // 607.1d) and "those tokens".
+            g.link_to_creator(ctx, &outcome.created);
+            ctx.set_var(
+                vars::CREATED,
+                outcome.created.into_iter().map(Entity::Object).collect(),
+            );
+        }
         Plan::Move { battlefield, .. } => {
             let res: Vec<ObjectId> = outcome.moved.into_iter().flatten().collect();
             // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
