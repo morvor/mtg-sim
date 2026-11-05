@@ -187,7 +187,7 @@ fn kefnet_s_revealed_card_stays_revealed_until_the_ability_resolves() {
     let div = t.g.find_in_zone(Zone::Hand(P0), "Divination")[0];
     assert_eq!(t.stack_len(), 1);
     assert!(is_revealed(&t.g, div));
-    // Still revealed when P1 gets priority with the ability on the stack.
+    // Revealed while the ability is on the stack; no longer once it has resolved.
     t.resolve();
     assert!(t.g.stack.is_empty());
     assert!(!is_revealed(&t.g, div));
