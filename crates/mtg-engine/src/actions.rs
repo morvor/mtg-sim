@@ -2129,20 +2129,87 @@ impl Game {
         out
     }
 
+    /// Creates tokens for several players at the same time: "each friend creates a token
+    /// that's a copy of a creature they control", once all of them have chosen (CR 101.4).
+    /// Each creation is subject to replacement effects (CR 614.1), then all the tokens enter
+    /// the battlefield in one simultaneous event, so none of them affects how the others
+    /// enter (CR 614.12). Returns, for each creation, the tokens it made.
+    pub(crate) fn create_tokens_together(
+        &mut self,
+        batch: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+    ) -> Vec<Vec<ObjectId>> {
+        if self.dirty {
+            self.recompute();
+        }
+        let mut out = vec![Vec::new(); batch.len()];
+        let mut moves = Vec::new();
+        let mut made_by = Vec::new();
+        for (i, (controller, spec, count, source)) in batch.into_iter().enumerate() {
+            if count == 0 {
+                continue;
+            }
+            for e in self.replace(ReplEvent::CreateTokens {
+                controller,
+                spec: Box::new(spec),
+                count,
+                source,
+            }) {
+                match e {
+                    ReplEvent::CreateTokens {
+                        controller,
+                        spec,
+                        count,
+                        ..
+                    } => {
+                        for _ in 0..count {
+                            moves.push((controller, self.token_entry(controller, &spec)));
+                            made_by.push(i);
+                        }
+                    }
+                    e => self.execute_repl_event(e),
+                }
+            }
+        }
+        let entered = self.enter_tokens(moves);
+        self.run_post_replacement_effects();
+        self.recompute();
+        for (i, new) in made_by.into_iter().zip(entered) {
+            if let Some(id) = new {
+                let o = self.obj(id);
+                if o.kind == ObjKind::Token && o.zone == Zone::Battlefield && o.next.is_none() {
+                    out[i].push(id);
+                }
+            }
+        }
+        out
+    }
+
     /// Creates `count` tokens: they enter the battlefield at the same time, so their
     /// controller orders their timestamps (CR 613.7m) — which decides, for example, which
     /// of several Roles attached at once is kept (CR 303.7a).
     fn perform_create_tokens(&mut self, controller: PlayerId, spec: &TokenCreate, count: u32) {
-        let moves: Vec<MoveEv> = (0..count)
-            .map(|_| self.token_entry(controller, spec))
+        let moves: Vec<(PlayerId, MoveEv)> = (0..count)
+            .map(|_| (controller, self.token_entry(controller, spec)))
             .collect();
-        for new in self.move_objects(moves).into_iter().flatten() {
-            *self.history.tokens_created.entry(controller).or_insert(0) += 1;
-            self.emit(Event::TokenCreated {
-                obj: new,
-                controller,
-            });
+        self.enter_tokens(moves);
+    }
+
+    /// Puts new tokens onto the battlefield in one simultaneous event, each under the
+    /// given player's control, and records their creation. Returns, for each move, the
+    /// token on the battlefield (if it got there).
+    fn enter_tokens(&mut self, moves: Vec<(PlayerId, MoveEv)>) -> Vec<Option<ObjectId>> {
+        let (controllers, moves): (Vec<PlayerId>, Vec<MoveEv>) = moves.into_iter().unzip();
+        let entered = self.move_objects(moves);
+        for (controller, new) in controllers.into_iter().zip(&entered) {
+            if let Some(new) = *new {
+                *self.history.tokens_created.entry(controller).or_insert(0) += 1;
+                self.emit(Event::TokenCreated {
+                    obj: new,
+                    controller,
+                });
+            }
         }
+        entered
     }
 
     /// A new token object for `spec` and its move onto the battlefield.
