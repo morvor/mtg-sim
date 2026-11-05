@@ -218,12 +218,16 @@ fn the_owner_chooses_top_or_bottom_for_aether_gust_desynchronize_and_unlucky_dro
     }
 }
 
-/// Run Out of Town's Oracle text has the owner choose top or bottom; its ruling (left
-/// uncited) says the controller chooses. The engine follows the Oracle text (see
-/// "Apparent conflicts (Nov 5)" in docs/agents/engine-gaps.md).
+/// Run Out of Town's Oracle text has the owner choose top or bottom ("The owner of target
+/// nonland permanent puts it on their choice of the top or bottom of their library."). Its
+/// ruling (2022-04-29) says the permanent's controller chooses, where the same note in the
+/// Streets of New Capenna Release Notes (2022-04-20) says its owner: a transcription error,
+/// which gives way to the Oracle text (exempt in docs/rulings-exemptions/rulings-P140.tsv,
+/// logged in docs/RULING_DISCREPANCIES.md). The ruling's third sentence is cited below.
 #[test]
 fn run_out_of_town_follows_its_oracle_text() {
     cr!("608.2d");
+    interp!("ruling-contradicting-oracle-gives-way");
     for bottom in [false, true] {
         let mut t = TestGame::new(2);
         let goblin = t.battlefield(P1, "Raging Goblin");
@@ -239,6 +243,77 @@ fn run_out_of_town_follows_its_oracle_text() {
         assert!(!asked_since(&t, from)
             .iter()
             .any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseOption { .. })));
+    }
+}
+
+/// Run Out of Town on a melded permanent P1 owns and P0 controls: P1, its owner, puts both
+/// cards on top or both on the bottom, in the order P1 chooses, and nothing is revealed.
+/// The ruling's "that permanent's controller puts all of them on the top or all of them on
+/// the bottom" gives way to the Oracle text's owner (see above); its last sentence holds.
+#[test]
+fn run_out_of_town_puts_a_melded_permanent_all_on_top_or_all_on_the_bottom() {
+    cr!("712.21a", "401.4", "608.2d");
+    interp!("ruling-contradicting-oracle-gives-way");
+    ruling!(
+        "Run Out of Town",
+        "They do not need to reveal the order those cards were put into the library this way."
+    );
+    for bottom in [false, true] {
+        // P1's two orders put the two cards the two ways round.
+        let mut uppers = vec![];
+        for flip in [false, true] {
+            let mut t = TestGame::new(2);
+            let rats = t.exile(P1, "Graf Rats");
+            let scav = t.exile(P1, "Midnight Scavengers");
+            let host = mtg_engine::merge::meld(&mut t.g, rats, scav, card("Chittering Host"), P1)
+                .expect("meld");
+            t.g.recompute();
+            give_control(&mut t, host, P0);
+            assert_eq!(t.obj(host).controller, P0);
+            t.answer(P1, DecisionKind::Option, Answer::Index(bottom as usize));
+            let order = if flip { vec![1, 0] } else { vec![0, 1] };
+            t.answer(P1, DecisionKind::Order, Answer::Indices(order));
+            // P0's answers would be the opposite, were P0 asked.
+            t.answer(P0, DecisionKind::Option, Answer::Index(!bottom as usize));
+            let from = t.asked().len();
+            cast_lots(&mut t, P0, "Run Out of Town", &[obj(host)]);
+            t.resolve_all();
+            let len = t.library_size(P1);
+            let melded: Vec<(usize, String)> =
+                t.g.player(P1)
+                    .library
+                    .iter()
+                    .rev()
+                    .enumerate()
+                    .map(|(i, c)| (i, t.obj(*c).chars.name.to_string()))
+                    .filter(|(_, n)| n == "Graf Rats" || n == "Midnight Scavengers")
+                    .collect();
+            let pos: Vec<usize> = melded.iter().map(|(i, _)| *i).collect();
+            let want = if bottom {
+                vec![len - 2, len - 1]
+            } else {
+                vec![0, 1]
+            };
+            assert_eq!(pos, want, "bottom={bottom}");
+            uppers.push(melded[0].1.clone());
+            // Only P1 decides: top or bottom, and the order.
+            let deciders: Vec<PlayerId> = asked_since(&t, from)
+                .iter()
+                .filter(|(_, d)| {
+                    matches!(
+                        d,
+                        Decision::Order { .. } | Decision::ChooseOption { .. }
+                    )
+                })
+                .map(|(p, _)| *p)
+                .collect();
+            assert!(
+                deciders.contains(&P1) && !deciders.contains(&P0),
+                "{deciders:?}"
+            );
+            assert!(t.g.reveals.revealed.is_empty(), "nothing revealed");
+        }
+        assert_ne!(uppers[0], uppers[1], "bottom={bottom}: {uppers:?}");
     }
 }
 

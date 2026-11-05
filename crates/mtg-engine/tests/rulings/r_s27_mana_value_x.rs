@@ -105,6 +105,7 @@ fn dark_tutelage_a_revealed_card_s_x_is_0() {
 #[test]
 fn a_scavenged_card_s_x_is_0() {
     cr!("107.3h", "702.97a");
+    interp!("x-in-a-cost-equal-to-a-cards-mana-cost-is-0");
     ruling!(
         "Young Deathclaws",
         "If the creature card you scavenge has {X} in its mana cost, X is 0."
