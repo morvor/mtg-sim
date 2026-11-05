@@ -116,6 +116,26 @@ fn treasure_nabbers_of_several_players_pass_the_artifact_around() {
     assert_eq!(controller(&mut t, ring), P2, "C's effect still applies");
     t.advance_to(P0, Step::Upkeep);
     assert_eq!(controller(&mut t, ring), P0, "A has it back");
+
+    // "If B or C taps the artifact for mana, one of them will take it from the other":
+    // B taps it during B's turn; C's Nabber takes it until the end of C's next turn.
+    let mut t = ffa(3);
+    t.battlefield(P1, "Treasure Nabber");
+    let nc = t.battlefield(P2, "Treasure Nabber");
+    let ring = t.battlefield(P0, "Sol Ring");
+    tap_for_mana(&mut t, P0, ring);
+    t.resolve_all();
+    assert_eq!(controller(&mut t, ring), P1);
+    t.advance_to(P1, Step::PrecombatMain);
+    t.g.untap(ring);
+    tap_for_mana(&mut t, P1, ring);
+    assert_eq!(triggers_from(&t, nc), 1, "P1 is C's opponent");
+    t.resolve_all();
+    assert_eq!(controller(&mut t, ring), P2, "C took it from B");
+    t.advance_to(P2, Step::End);
+    assert_eq!(controller(&mut t, ring), P2);
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(controller(&mut t, ring), P0, "all the effects have ended");
 }
 
 #[test]
