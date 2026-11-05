@@ -8,6 +8,7 @@ use crate::r_p007_common::*;
 use crate::r_p008_common::*;
 use crate::r_s01_common::supported;
 use crate::r_s02_common::can_cast;
+use crate::r_s05_common::move_to;
 use crate::r_s25_common::{cast_new, keep_copy_targets, lands_for_cost};
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::{CastMethod, Zone};
@@ -143,9 +144,21 @@ fn nahiris_wrath_mana_values_of_the_discarded_cards() {
         if cast_it {
             assert_eq!(t.life(P1), 17, "Fiery Temper's madness cast");
         } else {
-            assert!(t.in_exile("Fiery Temper") || t.in_graveyard(P0, "Fiery Temper"));
+            assert!(t.in_graveyard(P0, "Fiery Temper"), "madness declined");
         }
     }
+    // A discarded card leaves the graveyard before Nahiri's Wrath resolves: its mana value
+    // still counts.
+    let mut t = TestGame::new(2);
+    let target = t.battlefield(P1, "Indomitable Ancients");
+    let bears = t.hand(P0, "Grizzly Bears");
+    let giant = t.hand(P0, "Hill Giant");
+    nahiris_wrath(&mut t, &[bears, giant], NORMAL, &[obj(target)]);
+    let gone = t.g.current(bears);
+    assert_eq!(t.zone(gone), Zone::Graveyard(P0));
+    move_to(&mut t, gone, Zone::Exile);
+    t.resolve_all();
+    assert_eq!(dmg(&t, target), 6, "2 + 4");
 }
 
 #[test]

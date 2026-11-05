@@ -251,12 +251,14 @@ pub fn record_cost_moved(
         vars.insert(COST_MOVED_SELF, moved_self);
     }
     // Cards discarded to pay the cost ("the discarded card"): cards that left a hand
-    // for a public zone other than by being exiled.
+    // for a public zone other than by an exile cost, wherever the discard put them (a
+    // graveyard, or exile for a card with madness, CR 702.35a; Nahiri's Wrath's ruling:
+    // "the mana values of the discarded cards in whatever zone they were put into").
     let discarded: Vec<Entity> = paid
         .objects
         .iter()
         .filter(|o| matches!(g.obj(**o).zone, Zone::Hand(_)) && !paid.exiled.contains(o))
-        .filter_map(|o| now_in(o, &|z| matches!(z, Zone::Graveyard(_))))
+        .filter_map(|o| now_in(o, &|z| z.is_public()))
         .collect();
     if !discarded.is_empty() {
         vars.insert(crate::discard_rules::DISCARDED, discarded);
