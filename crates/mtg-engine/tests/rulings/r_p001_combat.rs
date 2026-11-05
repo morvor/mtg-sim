@@ -195,6 +195,20 @@ fn furygale_tokens_with_a_cost_to_attack_that_player_or_to_attack_at_all() {
     );
     supported("Ghostly Prison");
     supported("Brainwash");
+    supported("Blazing Archon");
+    // P1 controls Blazing Archon ("Creatures can't attack you."): the P1 tokens can't
+    // attack P1, so they may attack P2 or not attack; the P2 tokens still must attack P2.
+    let mut t = TestGame::new(3);
+    let (p1s, p2s) = furygale(&mut t);
+    t.battlefield(P1, "Blazing Archon");
+    let p2_attack: Vec<(ObjectId, Entity)> = p2s.iter().map(|c| (*c, pl(P2))).collect();
+    assert!(legal(&mut t, &p2_attack));
+    let mut decl = p2_attack.clone();
+    decl.push((p1s[0], pl(P2)));
+    assert!(legal(&mut t, &decl));
+    decl.push((p1s[1], pl(P1)));
+    assert!(!legal(&mut t, &decl));
+    assert!(!legal(&mut t, &p2_attack[..1]));
     // P1 controls Ghostly Prison: a cost to attack P1. The P1 tokens may attack P2 or
     // not attack; the P2 tokens still must attack P2.
     let mut t = TestGame::new(3);
