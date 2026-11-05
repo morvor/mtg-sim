@@ -163,6 +163,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the opponents decide in APNAP order (CR 101.4): on the caster's turn the next player in turn order first, on another player's turn the active player first if it's an opponent; each knows the earlier decisions (101.4b).
 - Recorded: no exemption: the rulings stay cited for the caster's own turn; tests `tests/rulings/r_s16_tempting_offer.rs` (`opponents_decide_in_turn_order_from_your_left_knowing_earlier_choices`, `off_turn_the_active_opponent_decides_first`, `tempt_with_bunnies_draws_and_makes_rabbits_for_each_player`).
 
+### Lightning, Army of One: "a source you control" for Stagger's "a source"
+- Kind: narrower than stated
+- Status: open for review
+- Ruling, Lightning, Army of One (2025-06-06): "If another effect (or effects) modifies how much damage a source you control would deal—by preventing some of it, for example—the player being dealt damage or the controller of the permanent being dealt damage chooses the order in which any such effects (including Lightning's) apply. If all of the damage is prevented, Lightning's effect no longer applies."
+- Ruling, Lightning, Army of One (2025-06-06): "If damage dealt by a source you control is being divided or assigned among multiple permanents and/or players, that damage is divided or assigned before doubling. For example, if you attack with a 5/5 creature with trample and it's blocked by a 2/2 creature, you can assign 2 damage to the blocker and 3 damage to the defending player. Those amounts are then doubled to 4 and 6, respectively."
+- Conflicts with: nothing they say: both are right for sources Lightning's controller controls. But the card's Oracle text doubles damage from any source: "Stagger — Whenever Lightning deals combat damage to a player, until your next turn, if a source would deal damage to that player or a permanent that player controls, it deals double that damage instead." The rulings' "a source you control" reads as if it applied only to those.
+- Evidence: both are Twinflame Tyrant's rulings (Foundations, 2024-11-08), word for word with the name swapped, right for its "If a source you control would deal damage to an opponent or a permanent an opponent controls, it deals double that damage instead."; Lightning's third ruling of the same day ("The damage is dealt by the same source as the original source of damage. ...") is Twinflame Tyrant's too. The same holds for other players' sources: CR 616.1 has the affected player or controller choose the order whoever controls the source, and CR 601.2d and 510.1 divide or assign damage before any replacement applies. Found in work item rulings-P040 (Nov 5); not a contradiction, so nothing is exempted.
+- Engine: Stagger doubles damage from any source, including the damaged player's own and a third player's, to that player and their permanents until Lightning's controller's next turn; the damaged player orders it with prevention effects whoever controls the source.
+- Recorded: no exemption: the rulings stay cited; tests `tests/rulings/r_p040_multipliers.rs` (`the_player_dealt_damage_orders_multipliers_and_prevention`, `lightning_stagger_doubles_damage_from_any_source_to_that_player_until_your_next_turn`).
+
 ## Misattached rulings
 
 ### Astarion, the Decadent: Astarion's Thirst's ruling about X
@@ -425,7 +435,16 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
-- None at the moment. Work item ruling-conflicts-3 took up the craft copy ruling (now an
+- **Stone Calendar** (rulings-P033): its ruling "You may choose not to apply Stone Calendar’s
+  cost reduction effect." (2004-10-04) against its Oracle text "Spells you cast cost {1}
+  less to cast." (no "up to"; a reduction is part of the total cost, CR 601.2f, with no
+  choice to decline it, and Semblance Anvil's "Semblance Anvil's cost reduction effect is
+  mandatory." (2011-01-01) says so for the same wording). Likely origin: the printed text
+  "Your spells cost up to 1 less to cast" (as other databases and Scryfall's Italian
+  printing still show it), which the English Oracle text no longer has; the date of that
+  Oracle change wasn't found. Left uncited; the engine always applies the reduction
+  (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
+- Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
   Dead Tide and Arbiter of Knollridge (inconsistent entries above, for the user to decide).

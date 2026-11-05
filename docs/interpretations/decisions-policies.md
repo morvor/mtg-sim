@@ -160,7 +160,7 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Why: Accepted: naming nothing never helps the player who failed to name a card, and the engine makes no strategic choices.
 - Affects: "choose a card name" cards such as Pithing Needle, and hidden agenda, only when the agent gives no valid name.
 - Code: `crates/mtg-engine/src/choices.rs` (`ChoiceKind::CardName`, `valid_card_name`); `crates/mtg-engine/src/kw/hidden_agenda.rs`.
-- Tests: `tests/cr/interp_decision_defaults.rs` (`a_default_card_name_names_nothing`).
+- Tests: `tests/cr/interp_decision_defaults.rs` (`a_default_card_name_names_nothing`); `tests/rulings/r_p033_misc.rs` (`council_of_the_absolute_names_one_half_of_a_split_card`: both halves of a split card named at once).
 
 ## test-harness-defaults: TestGame's scripted agents pass, keep, and attack and block with nothing
 - Kind: policy
