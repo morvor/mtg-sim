@@ -260,7 +260,7 @@ fn doom_foretold_triggers_for_each_player_of_the_team() {
 
 #[test]
 fn doom_foretold_a_player_who_can_sacrifice_must() {
-    cr!("701.21a", "603.3b");
+    cr!("701.21a");
     ruling!(
         "Doom Foretold",
         "If the player can sacrifice a nonland, nontoken permanent, that player must do so. They can't choose to rush toward their doom."

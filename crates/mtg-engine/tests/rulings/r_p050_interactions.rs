@@ -132,7 +132,7 @@ fn sorin_the_mirthless_unrevealed_card_stays_on_top() {
 
 #[test]
 fn obzedat_controlled_until_end_of_turn_returns_at_your_next_upkeep() {
-    cr!("603.7a", "603.7d", "610.3c", "110.2");
+    cr!("603.7a", "603.7e", "610.3c", "110.2");
     ruling!(
         "Obzedat, Ghost Council",
         "If you gain control of Obzedat \"until end of turn,\" you'll control it during your end step and you choose whether to exile it. If you do, it returns to the battlefield under its owner's control at the beginning of your next upkeep, not its owner's next upkeep."
@@ -230,7 +230,7 @@ fn kaya_usurper(setup: fn(&mut TestGame)) -> TestGame {
 
 #[test]
 fn kaya_orzhov_usurper_gains_the_number_of_cards_not_the_damage() {
-    cr!("614.1a", "615.1a", "608.2c");
+    cr!("614.1a", "615.1a", "608.2h");
     ruling!(
         "Kaya, Orzhov Usurper",
         "Kaya's last ability causes you to gain life equal to the number of cards the target player owns in exile, even if an effect causes her to deal more or less than that amount of damage to that player."
@@ -379,7 +379,7 @@ fn liliana_zombie_cards_entering_the_graveyard_later_may_be_cast() {
 
 #[test]
 fn sol_kanar_controlled_by_an_opponent() {
-    cr!("603.3a", "700.2b", "102.2");
+    cr!("603.3a", "700.2b");
     ruling!(
         "Sol'Kanar the Tainted",
         "Once Sol'kanar the Tainted is controlled by your opponent, its ability triggers during that player's end step and that player makes all choices for it. That player draws a card for its first mode and gains life for its second mode, that player's opponents lose life for its second mode, and that player chooses one of their opponents for its last mode."

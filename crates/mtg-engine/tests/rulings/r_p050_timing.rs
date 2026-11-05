@@ -202,7 +202,7 @@ fn red_hulk_reflexive_trigger_once_for_every_counter_put() {
 
 #[test]
 fn mishra_lost_to_phyrexia_enters_attacking_without_attacking_triggers() {
-    cr!("506.3", "508.3a", "701.42a");
+    cr!("508.4", "508.3a", "701.42a");
     ruling!(
         "Mishra, Claimed by Gix",
         "Mishra, Lost to Phyrexia enters the battlefield tapped and attacking, but since it wasn't declared as an attacker, no abilities that trigger when a creature attacks will trigger."
@@ -240,7 +240,7 @@ fn mishra_lost_to_phyrexia_enters_attacking_without_attacking_triggers() {
 
 #[test]
 fn hostile_hostel_phasing_doesnt_change_the_face() {
-    cr!("702.26d", "702.26a", "712.8e");
+    cr!("702.26d", "702.26c", "712.8e");
     ruling!(
         "Hostile Hostel // Creeping Inn",
         "Phasing out or phasing in doesn't affect which face of a double-faced card is face up."
@@ -294,7 +294,7 @@ fn into_postcombat_main(t: &mut TestGame) {
 
 #[test]
 fn sorin_of_house_markov_needn_t_have_been_there_when_you_gained_life() {
-    cr!("603.4", "712.10");
+    cr!("603.4");
     ruling!(
         "Sorin of House Markov // Sorin, Ravenous Neonate",
         "Sorin of House Markov doesn't need to have been on the battlefield when you gained the life. For example, if you gained 3 or more life during your upkeep and you cast Sorin of House Markov during your first main phase, its last ability will trigger at the beginning of your postcombat main phase."
@@ -355,7 +355,7 @@ fn sorin_of_house_markov_triggers_once_and_only_if_life_was_already_gained() {
 
 #[test]
 fn sorin_ravenous_neonate_counts_life_gained_ignoring_life_lost() {
-    cr!("119.3", "608.2c");
+    cr!("119.3");
     ruling!(
         "Sorin of House Markov // Sorin, Ravenous Neonate",
         "Sorin, Ravenous Neonate's second loyalty ability counts the total amount of life you gained without taking into account any life you lost during that turn. For example, if you gained 3 life and lost 3 life earlier in the turn, Sorin, Ravenous Neonate will deal 3 damage to the target."
