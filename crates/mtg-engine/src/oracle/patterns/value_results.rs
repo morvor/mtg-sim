@@ -52,6 +52,10 @@ pub fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
     if let Some(v) = super::notes_5::value(s) {
         return Some(v);
     }
+    // "the number they guessed" (`choices_6`).
+    if let Some(v) = super::choices_6::value(s) {
+        return Some(v);
+    }
     // A player's state as the turn began (`history_conditions_4`).
     if let Some(v) = super::history_conditions_4::value_atom(s, b) {
         return Some(v);

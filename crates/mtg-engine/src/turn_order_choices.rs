@@ -29,6 +29,7 @@ pub fn order(
             .map(|i| g.seat_in_turn_order(you, i))
             .find(|p| g.player(*p).in_game() && g.opponents(you).contains(p))
             .unwrap_or(you),
+        TurnOrderStart::Active => g.turn.active,
     };
     // The default direction (`SeatSide::Left`) is turn order, which goes to the right once
     // the game's turn order has been reversed; a chosen direction (or right) goes around

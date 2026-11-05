@@ -8,6 +8,11 @@
 //!   if the ability is later countered or its targets become illegal.
 //! * With every mode already chosen, no mode can be chosen, so the ability is removed from
 //!   the stack (CR 700.2b, 603.3c).
+//!
+//! Also the numbers chosen for an object by "choose a number between 1 and 5 that hasn't
+//! been chosen" ([`crate::ability::ChoiceKind::NumberNotChosen`]): kept for that object
+//! only, so a permanent that leaves and returns, or a second copy, has no memory of them
+//! (The Toymaker's Trap's rulings).
 
 use crate::ability::ModeChooser;
 use crate::game::Game;
@@ -20,6 +25,21 @@ use std::collections::BTreeMap;
 pub struct ModalHistory {
     /// (source object, ability uid) → (mode index, turn number) for each choice.
     pub chosen: BTreeMap<(ObjectId, u64), Vec<(usize, u32)>>,
+    /// Source object → the numbers chosen for it by "that hasn't been chosen" choices.
+    pub numbers: BTreeMap<ObjectId, Vec<i32>>,
+}
+
+/// The numbers from `min` to `max` not yet chosen for `src`.
+pub fn unchosen_numbers(g: &Game, src: ObjectId, min: i32, max: i32) -> Vec<i32> {
+    let chosen = g.modal_history.numbers.get(&src);
+    (min..=max)
+        .filter(|n| !chosen.is_some_and(|v| v.contains(n)))
+        .collect()
+}
+
+/// Records that `n` was chosen for `src`.
+pub fn record_number(g: &mut Game, src: ObjectId, n: i32) {
+    g.modal_history.numbers.entry(src).or_default().push(n);
 }
 
 /// Whose ability a stack object is: the source and the ability's uid; a spell is its own
