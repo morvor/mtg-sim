@@ -63,10 +63,13 @@ fn chandra_pyromaster_chooses_only_among_the_cards_just_exiled() {
     for _ in 0..9 {
         t.library_top(P0, "Grizzly Bears");
     }
-    let shock = t.library_top(P0, "Shock");
+    t.library_top(P0, "Shock");
     t.g.objects[c.0 as usize].activations_this_turn.clear();
     let from = t.asked().len();
-    t.answer_choose_moved(P0, &[obj(old)]);
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[pl(P1)]);
+    }
     loyalty(&mut t, P0, c, 2, &[]);
     t.resolve_all();
     let offered: Vec<Entity> = t.asked()[from..]
@@ -78,8 +81,9 @@ fn chandra_pyromaster_chooses_only_among_the_cards_just_exiled() {
         .flatten()
         .collect();
     assert!(!offered.contains(&obj(old)), "the Bolt from the 0 ability");
-    assert!(offered.contains(&obj(t.g.current(shock))) || t.in_graveyard(P0, "Shock"));
-    assert_eq!(t.life(P1), 20, "the Bolt wasn't copied");
+    // Shock, the only instant exiled this way, is copied three times (not the Bolt: 9).
+    assert_eq!(t.life(P1), 20 - 2 * 3);
+    assert_eq!(t.zone(old), Zone::Exile);
 }
 
 #[test]
