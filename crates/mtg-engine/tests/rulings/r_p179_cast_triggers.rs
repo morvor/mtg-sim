@@ -108,7 +108,7 @@ fn lone_wolf_of_the_natterknolls_draws_even_if_the_spell_is_countered() {
 
 #[test]
 fn natterknolls_you_may_act_between_the_trigger_and_the_spell() {
-    cr!("117.3b", "608.2");
+    cr!("117.3b");
     ruling!(
         "Hermit of the Natterknolls",
         "You may cast spells or activate abilities after the first ability of Hermit of the Natterknolls has resolved but before the spell that caused it to trigger has resolved."
@@ -552,7 +552,7 @@ fn alms_collector_counts_the_draw_instructions() {
 
 #[test]
 fn hamletback_goliath_uses_power_on_resolution_or_last_known() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Hamletback Goliath",
         "The value of X is determined as the ability begins resolving. If the other creature is no longer on the battlefield, its last known existence on the battlefield is checked to determine its power."

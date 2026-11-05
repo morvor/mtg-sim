@@ -33,9 +33,11 @@ fn halo_fountain_creature_tapped_for_mana_can_be_untapped_for_the_cost() {
     let mut t = TestGame::new(2);
     let fountain = t.battlefield(P0, "Halo Fountain");
     let pilgrim = t.battlefield(P0, "Avacyn's Pilgrim");
-    t.battlefield(P0, "Plains");
+    let plains = t.battlefield(P0, "Plains");
     activate_containing(&mut t, P0, fountain, "Citizen").expect("activate");
     assert!(!t.obj_now(pilgrim).tapped);
+    // The Pilgrim's {W} paid the cost: the Plains is untouched.
+    assert!(!t.obj_now(plains).tapped);
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 1);
     // Control: a creature with no mana ability, untapped, can't be untapped for the cost.
@@ -45,6 +47,34 @@ fn halo_fountain_creature_tapped_for_mana_can_be_untapped_for_the_cost() {
     t.battlefield(P0, "Plains");
     assert!(!can_activate(&mut t, P0, fountain));
     assert!(activate_containing(&mut t, P0, fountain, "Citizen").is_err());
+}
+
+#[test]
+fn halo_fountain_payer_chooses_which_creature_to_tap_for_mana() {
+    cr!("601.2g");
+    ruling!(
+        "Halo Fountain",
+        "you may both tap it for mana and untap it to pay costs for Halo Fountain's activated abilities."
+    );
+    supported("Llanowar Elves");
+    // Avacyn's Pilgrim ({W}) and Llanowar Elves ({G}) untapped, a Plains, no tapped
+    // creature: one creature is tapped for mana and untapped for the cost, and which one
+    // is the payer's choice. Tapping the Pilgrim pays {W} and leaves the Plains untapped;
+    // tapping the Elves leaves {G} unused and the Plains pays {W}.
+    for pick_pilgrim in [true, false] {
+        let mut t = TestGame::new(2);
+        let fountain = t.battlefield(P0, "Halo Fountain");
+        let pilgrim = t.battlefield(P0, "Avacyn's Pilgrim");
+        let elves = t.battlefield(P0, "Llanowar Elves");
+        let plains = t.battlefield(P0, "Plains");
+        let pick = if pick_pilgrim { pilgrim } else { elves };
+        t.answer_choose(P0, &[Entity::Object(pick)]);
+        activate_containing(&mut t, P0, fountain, "Citizen").expect("activate");
+        assert!(!t.obj_now(pilgrim).tapped && !t.obj_now(elves).tapped);
+        assert_eq!(t.obj_now(plains).tapped, !pick_pilgrim, "pick pilgrim: {pick_pilgrim}");
+        t.resolve_all();
+        assert_eq!(tokens(&t, P0).len(), 1);
+    }
 }
 
 #[test]
@@ -204,7 +234,7 @@ fn relic_vial_leaving_with_the_clerics_triggers_for_each_creature() {
 
 #[test]
 fn relic_vial_trigger_resolves_without_a_cleric() {
-    cr!("603.4", "113.7a");
+    cr!("113.7a");
     ruling!(
         "Relic Vial",
         "Once Relic Vial’s ability has triggered, that ability resolves even if you no longer control a Cleric."

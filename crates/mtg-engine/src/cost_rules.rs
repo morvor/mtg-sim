@@ -641,7 +641,6 @@ pub(crate) fn untap_candidates_tappable_for_mana(
     p: PlayerId,
     filter: &Filter,
     src: Option<ObjectId>,
-    untaps_src: bool,
     ctx: &Ctx,
 ) -> Vec<ObjectId> {
     let sources = crate::mana_abilities::mana_sources(g, p, None);
@@ -650,7 +649,6 @@ pub(crate) fn untap_candidates_tappable_for_mana(
         .filter(|o| {
             let ob = g.obj(*o);
             !ob.tapped
-                && !(untaps_src && Some(*o) == src)
                 && Some(*o) != src
                 && crate::counter_rules::can_untap_for_cost(g, *o)
                 && sources.iter().any(|s| s.obj == *o && s.taps())
@@ -682,7 +680,7 @@ pub(crate) fn untap_part_payable_with_mana(
                 && crate::counter_rules::can_untap_for_cost(g, *o)
         })
         .count();
-    tapped + untap_candidates_tappable_for_mana(g, p, filter, src, untaps_src, ctx).len() >= n
+    tapped + untap_candidates_tappable_for_mana(g, p, filter, src, ctx).len() >= n
 }
 
 /// Before paying a cost with a mana payment and "Untap N tapped [permanents] you control"
@@ -704,10 +702,29 @@ pub(crate) fn tap_untap_candidates_for_mana(
         let tapped = g
             .objects_matching(filter, ctx)
             .into_iter()
-            .filter(|o| g.obj(*o).tapped && !(untaps_src && Some(*o) == src))
+            .filter(|o| {
+                g.obj(*o).tapped
+                    && !(untaps_src && Some(*o) == src)
+                    && crate::counter_rules::can_untap_for_cost(g, *o)
+            })
             .count();
         let short = n.saturating_sub(tapped);
-        let cands = untap_candidates_tappable_for_mana(g, p, filter, src, untaps_src, ctx);
+        if short == 0 {
+            continue;
+        }
+        let mut cands = untap_candidates_tappable_for_mana(g, p, filter, src, ctx);
+        // Which permanents to tap for mana is the payer's choice (the mana they make, and
+        // any other effect of their mana abilities, can differ).
+        if cands.len() > short {
+            cands = g.ask_objects(
+                p,
+                src,
+                "Choose permanents to tap for mana and then untap for the cost",
+                cands,
+                short as u32,
+                short as u32,
+            );
+        }
         for o in cands.into_iter().take(short) {
             let uid = crate::mana_abilities::mana_sources(g, p, None)
                 .into_iter()

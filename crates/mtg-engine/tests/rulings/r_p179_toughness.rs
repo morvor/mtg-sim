@@ -30,7 +30,7 @@ fn pumped_bears(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn sacrificed_creature_toughness_is_last_known() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Severed Strands",
         "The amount of life gained is equal to the sacrificed creature's toughness as it last existed on the battlefield."
@@ -235,7 +235,7 @@ fn angelic_chorus_ignores_phasing_control_changes_and_animation() {
 
 #[test]
 fn arnyn_checks_power_and_toughness_as_the_creature_last_existed() {
-    cr!("603.10a", "113.7a");
+    cr!("603.10a");
     ruling!(
         "Arnyn, Deathbloom Botanist",
         "Arnyn's last ability cares about the power or toughness of a creature that died as it last existed on the battlefield."
@@ -561,7 +561,7 @@ fn severed_strands_target_legality() {
 
 #[test]
 fn kin_tree_invocation_x_once_and_a_0_0_token() {
-    cr!("608.2h", "704.5f", "111.7");
+    cr!("608.2h", "704.5f");
     ruling!(
         "Kin-Tree Invocation",
         "If you control no creatures as Kin-Tree Invocation resolves, you’ll put a 0/0 token onto the battlefield."
@@ -661,7 +661,7 @@ fn ayli_checks_the_team_life_total_in_two_headed_giant() {
 
 #[test]
 fn ayli_exile_resolves_whatever_happens_to_your_life() {
-    cr!("113.7a");
+    cr!("602.5");
     ruling!(
         "Ayli, Eternal Pilgrim",
         "Once you've activated Ayli's last ability, it doesn't matter what happens to your life total."
@@ -721,7 +721,7 @@ fn abzan_beastmaster_checks_toughness_on_resolution() {
 
 #[test]
 fn verdant_suns_avatar_uses_toughness_on_resolution() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Verdant Sun's Avatar",
         "The entering creature's toughness is determined as the ability of Verdant Sun's Avatar resolves. If that creature has left the battlefield, use its toughness as it last existed on the battlefield. If the creature's toughness was less than 0, your life total won't change."
@@ -805,7 +805,7 @@ fn fruit_of_the_first_tree_uses_last_known_toughness() {
 
 #[test]
 fn wolverine_riders_uses_the_elfs_toughness_on_resolution() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Wolverine Riders",
         "Use the toughness of the creature as the last ability resolves to determine how much life you gain. If the Elf is no longer on the battlefield at that time, use its toughness from when it was last on the battlefield."
