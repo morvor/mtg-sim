@@ -554,8 +554,7 @@ fn spell_type_before_types(s: &str) -> Option<(Filter, bool, &str)> {
     let s = s.trim_start();
     let (w, rest) = split_word(s);
     let (next, after) = split_word(rest);
-    if !matches!(next, "instant" | "sorcery") || !matches!(split_word(after).0, "or" | "and/or")
-    {
+    if !matches!(next, "instant" | "sorcery") || !matches!(split_word(after).0, "or" | "and/or") {
         return None;
     }
     let st @ Filter::Subtype(_) = head_noun(w)? else {

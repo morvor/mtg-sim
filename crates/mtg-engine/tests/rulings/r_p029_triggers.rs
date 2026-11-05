@@ -37,7 +37,7 @@ fn electrolyze(t: &mut TestGame, p: PlayerId, a: Entity, b: Entity) -> ObjectId 
 
 #[test]
 fn mirrorwing_dragon_triggers_on_any_player_s_spell_targeting_only_it() {
-    cr!("115.9c", "603.2", "707.10d");
+    cr!("115.9c", "603.2");
     ruling!(
         "Mirrorwing Dragon",
         "The ability triggers whenever a player casts an instant or sorcery spell that targets only Mirrorwing Dragon and no other object or player."
@@ -77,7 +77,7 @@ fn mage_game(other: bool) -> (TestGame, ObjectId, Option<ObjectId>) {
 
 #[test]
 fn beamsplitter_mage_triggers_on_your_spell_targeting_only_it_with_another_creature() {
-    cr!("115.9c", "603.4", "115.10b");
+    cr!("115.9c", "603.4", "707.10e");
     ruling!(
         "Beamsplitter Mage",
         "The ability triggers whenever you cast an instant or sorcery spell that targets only Beamsplitter Mage and no other object or player, and only if you control another creature that spell could target. If you cast an instant or sorcery spell that has multiple targets and Beamsplitter Mage is chosen as the target in each instance, Beamsplitter Mage’s ability will trigger."
@@ -132,7 +132,7 @@ fn beamsplitter_mage_triggers_on_your_spell_targeting_only_it_with_another_creat
 
 #[test]
 fn beamsplitter_mage_doesnt_copy_without_another_creature_on_resolution() {
-    cr!("603.4", "115.10b");
+    cr!("603.4", "707.10e");
     ruling!(
         "Beamsplitter Mage",
         "If you don’t control another creature the spell could target as Beamsplitter Mage’s triggered ability resolves, you don’t copy that spell."
@@ -150,6 +150,66 @@ fn beamsplitter_mage_doesnt_copy_without_another_creature_on_resolution() {
     assert_eq!(t.g.stack, vec![growth]);
     t.resolve_all();
     assert_eq!(t.pt(mage), (5, 5));
+}
+
+#[test]
+fn beamsplitter_mage_s_copy_isnt_created_if_it_cant_target_the_chosen_creature() {
+    cr!("707.10e", "707.10");
+    ruling!(
+        "Beamsplitter Mage",
+        "In some rare cases, the original spell can target another creature but the copy can’t (most likely because an effect modified the characteristics of the original spell on the stack and won’t modify the copy). If the copy can’t target the chosen creature, the copy isn’t created."
+    );
+    supported("Blind Seer");
+    supported("Paladin en-Vec");
+    supported("Brute Force");
+    // P0's Brute Force (red: "Target creature gets +3/+3 until end of turn.") at the Mage;
+    // Blind Seer ("{1}{U}: Target spell or permanent becomes the color of your choice until
+    // end of turn.") makes the spell green. Paladin en-Vec (protection from black and from
+    // red) can be targeted by the green original but not by the red copy: choosing it
+    // creates no copy.
+    for seer in [true, false] {
+        let (mut t, mage, bears) = mage_game(true);
+        let paladin = t.battlefield(P0, "Paladin en-Vec");
+        let blind = t.battlefield(P0, "Blind Seer");
+        let force = cast_new(&mut t, P0, "Brute Force", &[obj(mage)]);
+        t.settle();
+        assert_eq!(triggered_from(&t, mage), 1);
+        if seer {
+            t.lands(P0, "Island", 1);
+            t.lands(P0, "Wastes", 1);
+            t.answer_targets(P0, &[obj(force)]);
+            t.answer(P0, DecisionKind::Option, Answer::Index(4)); // green
+            activate_containing(&mut t, P0, blind, "becomes the color").unwrap();
+            t.resolve();
+            assert!(t.obj(force).chars.colors.contains(Color::Green), "the spell is green");
+            assert!(!t.obj(force).chars.colors.contains(Color::Red));
+        }
+        let from = t.asked().len();
+        t.answer_choose(P0, &[obj(paladin)]);
+        t.resolve();
+        let offered: Vec<Vec<Entity>> = t.asked()[from..]
+            .iter()
+            .filter_map(|(_, d)| match d {
+                mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => {
+                    Some(candidates.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        if seer {
+            // The Paladin could be chosen; the copy couldn't target it.
+            assert!(offered.iter().any(|c| c.contains(&obj(paladin))), "{offered:?}");
+            assert!(spell_copies(&t).is_empty());
+        } else {
+            // The red spell couldn't target the Paladin: only the Bears.
+            assert!(offered.iter().all(|c| !c.contains(&obj(paladin))), "{offered:?}");
+            let copies = spell_copies(&t);
+            assert_eq!(copies.len(), 1);
+            assert_eq!(targets_of(&t, copies[0]), vec![obj(bears.unwrap())]);
+        }
+        t.resolve_all();
+        assert_eq!(t.pt(paladin), (2, 2));
+    }
 }
 
 #[test]
@@ -272,7 +332,7 @@ fn mirror_sheen_copies_a_spell_with_several_targets_one_of_them_you() {
 
 #[test]
 fn mirari_triggers_once_per_spell_and_is_legendary() {
-    cr!("603.2", "704.5j");
+    cr!("603.2c", "704.5j");
     ruling!(
         "Mirari",
         "It triggers once per spell, so you can’t get multiple copies of a spell using this card. And since this card is legendary, you can’t control more than one."
@@ -299,7 +359,7 @@ fn mirari_triggers_once_per_spell_and_is_legendary() {
 
 #[test]
 fn cloven_casting_triggers_once_per_multicolored_instant_or_sorcery() {
-    cr!("603.2", "105.4");
+    cr!("603.2c", "105.2");
     ruling!(
         "Cloven Casting",
         "This ability triggers only once for each multicolored instant or sorcery spell you cast. You can’t use a single Cloven Casting to copy the same spell twice."
@@ -337,7 +397,7 @@ fn cloven_casting_triggers_once_per_multicolored_instant_or_sorcery() {
 
 #[test]
 fn jin_gitaxias_counters_only_the_first_opponent_spell_each_turn_in_all() {
-    cr!("603.2h", "701.6a");
+    cr!("603.2", "701.6a");
     ruling!(
         "Jin-Gitaxias, Progress Tyrant",
         "Jin-Gitaxias's last ability triggers once each turn, not once each turn per opponent."
@@ -393,7 +453,7 @@ fn kalamax_considers_instants_cast_before_it_was_tapped() {
 
 #[test]
 fn primal_amulet_transforms_after_the_spell_is_cast_so_wellspring_cant_pay_for_it() {
-    cr!("601.2i", "603.3", "712.10");
+    cr!("601.2i", "603.3", "701.27a");
     ruling!(
         "Primal Amulet // Primal Wellspring",
         "Primal Amulet's last ability triggers once you've completed casting a spell. Notably, you can't use Primal Wellspring to pay for the spell that gives Primal Amulet its fourth counter."
@@ -423,7 +483,7 @@ fn primal_amulet_transforms_after_the_spell_is_cast_so_wellspring_cant_pay_for_i
 
 #[test]
 fn primal_wellspring_s_trigger_happens_after_it_leaves_and_its_mana_buys_anything() {
-    cr!("106.6", "603.7c", "106.4");
+    cr!("106.6", "603.7", "106.4");
     ruling!(
         "Primal Amulet // Primal Wellspring",
         "The delayed triggered ability from Primal Wellspring's mana ability will trigger even if Primal Wellspring leaves the battlefield before that mana is spent."

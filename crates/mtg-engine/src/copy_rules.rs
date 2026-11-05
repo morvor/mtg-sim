@@ -238,13 +238,16 @@ pub(crate) fn legal_for_each_target(g: &Game, id: ObjectId, e: Entity) -> bool {
 }
 
 /// Puts a copy of `spell` onto the stack under `controller`'s control with each of its
-/// targets changed to `e`.
+/// targets changed to `e`. If `e` isn't a legal target for the copy itself, the copy isn't
+/// created (CR 707.10d-e): an effect that changed the original on the stack (its color,
+/// say) doesn't apply to the copy, so the original could target `e` while the copy can't.
 fn copy_targeting(
     g: &mut Game,
     spell: ObjectId,
     controller: PlayerId,
     e: Entity,
 ) -> Option<ObjectId> {
+    let events_before = g.events.len();
     let copy = crate::copy::copy_spell_quiet(g, spell, controller)?;
     if let Some(si) = g.objects[copy.0 as usize].stack.as_mut() {
         for m in si.chosen.iter_mut() {
@@ -254,6 +257,20 @@ fn copy_targeting(
                 }
             }
         }
+    }
+    g.dirty = true;
+    g.recompute();
+    if !legal_for_each_target(g, copy, e) {
+        // Never created: undo putting it on the stack, and what that announced.
+        g.stack.retain(|x| *x != copy);
+        g.saved_ctx.remove(&copy);
+        g.effects.retain(|ef| ef.source != Some(copy));
+        g.special.prepare_spells.retain(|x| *x != copy);
+        g.objects[copy.0 as usize].zone = Zone::Nowhere;
+        g.events.truncate(events_before);
+        g.dirty = true;
+        g.recompute();
+        return None;
     }
     g.emit(crate::events::Event::BecameTarget {
         target: e,

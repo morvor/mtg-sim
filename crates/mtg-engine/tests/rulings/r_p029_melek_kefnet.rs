@@ -174,7 +174,7 @@ fn reveal_prompts(t: &TestGame, from: usize) -> usize {
 
 #[test]
 fn kefnet_s_revealed_card_stays_revealed_until_the_ability_resolves() {
-    cr!("701.20a", "701.20b", "603.3");
+    cr!("701.20a", "701.20b");
     ruling!(
         "God-Eternal Kefnet",
         "If you reveal a card this way, it remains revealed until Kefnet's triggered ability finishes resolving."
@@ -350,7 +350,7 @@ fn from_top(t: &TestGame, p: PlayerId, id: ObjectId) -> Option<usize> {
 
 #[test]
 fn another_player_s_god_leaves_with_the_player_who_put_it_onto_the_battlefield() {
-    cr!("800.4a", "603.3", "104.4a");
+    cr!("800.4a", "704.5a", "704.5g");
     ruling!(
         "God-Eternal Kefnet",
         "In a multiplayer game, if you put another player's God onto the battlefield under your control, it will be exiled as you leave the game. If you were still the controller of that God, you would control its triggered ability but you have left the game; that ability won't resolve and the card remains in exile. Similarly, if you lose the game at the same time that another player's God that you put onto the battlefield is destroyed, it remains in its owner's graveyard."

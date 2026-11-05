@@ -109,7 +109,7 @@ fn copying_triggers_resolve_first_and_copy_a_countered_spell() {
 
 #[test]
 fn primal_wellspring_copies_a_countered_spell() {
-    cr!("707.10", "608.2h", "603.7c");
+    cr!("707.10", "608.2h", "603.7", "106.6");
     ruling!(
         "Primal Amulet // Primal Wellspring",
         "Primal Wellspring's delayed triggered ability can copy the spell even if that spell is countered before the ability resolves."
@@ -139,7 +139,7 @@ fn primal_wellspring_copies_a_countered_spell() {
 
 #[test]
 fn lucky_clover_s_ability_and_copy_resolve_first_even_if_the_adventure_is_countered() {
-    cr!("707.10", "608.2h", "405.5", "715.4");
+    cr!("707.10", "608.2h", "405.5", "715.3");
     ruling!(
         "Lucky Clover",
         "Lucky Clover's ability and the copy it creates both resolve before the Adventure spell. They resolve even if the Adventure spell is countered before the copy is created."
