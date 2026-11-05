@@ -106,6 +106,61 @@ fn each_lifelink_creature_is_a_separate_life_gaining_event() {
 }
 
 #[test]
+fn lisette_triggers_once_per_life_gaining_event() {
+    cr!("119.9", "603.2c", "702.15b");
+    ruling!(
+        "Valentin, Dean of the Vein // Lisette, Dean of the Root",
+        "An ability that triggers “whenever you gain life” triggers just once for each life-gaining event, no matter how much life you gain."
+    );
+    ruling!(
+        "Valentin, Dean of the Vein // Lisette, Dean of the Root",
+        "Each creature with lifelink dealing combat damage causes a separate life-gaining event. For example, if two creatures you control with lifelink deal combat damage at the same time, a “whenever you gain life” ability will trigger twice. However, if a single creature you control with lifelink deals combat damage to multiple creatures, players, and/or planeswalkers at the same time (perhaps because it has trample or was blocked by more than one creature), the ability will trigger only once."
+    );
+    const LISETTE: &str = "Valentin, Dean of the Vein // Lisette, Dean of the Root";
+    supported(LISETTE);
+    // "Whenever you gain life, you may pay {1}. If you do, put a +1/+1 counter on each
+    // creature you control ...", paid each time it resolves. 4 life at once: once.
+    let mut t = TestGame::new(2);
+    crate::r_p079_common::back_face(&mut t, P0, LISETTE);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    cast_resolve(&mut t, P0, "Festival of Trokin", &[]);
+    assert_eq!(t.life(P0), 24);
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    // Two lifelinkers deal combat damage at once: twice.
+    let mut t = TestGame::new(2);
+    crate::r_p079_common::back_face(&mut t, P0, LISETTE);
+    let a = t.battlefield(P0, "Child of Night");
+    let b = t.battlefield(P0, "Child of Night");
+    t.lands(P0, "Forest", 3);
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+    }
+    t.attack(&[(a, pl(P1)), (b, pl(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 24);
+    assert_eq!(t.counters(a, "+1/+1"), 2);
+    // One lifelinker blocked by two creatures deals damage to both at once: once.
+    let mut t = TestGame::new(2);
+    crate::r_p079_common::back_face(&mut t, P0, LISETTE);
+    let child = t.battlefield(P0, "Child of Night");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let e1 = t.battlefield(P1, "Llanowar Elves");
+    let e2 = t.battlefield(P1, "Llanowar Elves");
+    t.lands(P0, "Forest", 3);
+    for _ in 0..3 {
+        t.answer_yes(P0, true);
+    }
+    t.attack(&[(child, pl(P1))], &[(e1, child), (e2, child)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(e1) && !t.on_battlefield(e2));
+    assert_eq!(t.life(P0), 22);
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+}
+
+#[test]
 fn heliod_triggers_once_for_life_gained_for_each() {
     cr!("119.9", "603.2c");
     ruling!(
