@@ -106,9 +106,9 @@ impl KeywordRules for Choices5Filters {
             let (Some(spell), Some(p)) = (spell, ctx.iter_player) else {
                 return true;
             };
-            if !g.is_live(spell) {
-                return true;
-            }
+            // A spell countered (or otherwise gone) by now is still copied, as it last
+            // existed on the stack (CR 707.10; Zevlor's ruling): `copy_with_target`
+            // checks that it can be.
             let mut cands: Vec<Entity> = vec![Entity::Player(p)];
             cands.extend(
                 g.permanents()
