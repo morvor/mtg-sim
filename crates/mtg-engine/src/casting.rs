@@ -2838,9 +2838,18 @@ impl Game {
         let mut ctx = Ctx::new(Some(src), p);
         ctx.ability_uid = a.uid;
         ctx.link = a.link;
+        // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the activation
+        // cost (at most one) is announced, before the value of X: with one that has no
+        // {X} paid instead of a cost with {X}, X is 0 (Gavi, Nest Warden's ruling; the
+        // abilities' counterpart of CR 107.3b).
+        let alt = self.announce_alternative_activation_cost(p, src, a, act);
+        let alt_without_x = alt.as_ref().is_some_and(|c| {
+            !c.mana.as_ref().is_some_and(|m| m.has_x()) && !c.parts.iter().any(cost_part_has_x)
+        });
         // X in the cost.
-        let has_x = act.cost.mana.as_ref().is_some_and(|m| m.has_x())
-            || act.cost.parts.iter().any(|c| cost_part_has_x(c));
+        let has_x = !alt_without_x
+            && (act.cost.mana.as_ref().is_some_and(|m| m.has_x())
+                || act.cost.parts.iter().any(|c| cost_part_has_x(c)));
         let mut x = 0i64;
         if has_x {
             let mut max = crate::activation_costs::x_bound(self, p, act);
@@ -2892,7 +2901,6 @@ impl Game {
         ctx.x = x as i32;
         if act.is_mana_ability {
             // CR 605.3: pay costs, then resolve immediately without using the stack.
-            let alt = self.announce_alternative_activation_cost(p, src, a, act);
             let (cost, x_left) =
                 self.ability_total_cost_and_x(p, src, a, act, None, x as u32, alt.as_ref());
             let spend = SpendContext {
@@ -3009,9 +3017,6 @@ impl Game {
                 stack_obj: Some(id),
             });
         }
-        // CR 602.2b, 601.2b, 118.9a: an alternative cost to pay rather than the
-        // activation cost (at most one) is announced.
-        let alt = self.announce_alternative_activation_cost(p, src, a, act);
         // CR 602.2b, 601.2b: how each Phyrexian symbol of the cost that will be paid
         // (the activation cost or the alternative cost) will be paid.
         let announced = match &alt {
