@@ -175,6 +175,7 @@ fn dark_apostle_waits_for_the_next_noncreature_spell() {
     assert!(has_kw(&mut t, spell, KeywordKind::Cascade));
     assert_eq!(cascades(&t), 1);
     // Positive control: the Silencer removes a printed cascade (Violent Outburst's).
+    supported("Violent Outburst");
     let mut t = TestGame::new(2);
     t.custom(P0, silencer(), Zone::Battlefield);
     stack_library(&mut t, P0, &["Opt", "Opt", "Opt"]);
