@@ -448,14 +448,16 @@ impl TestGame {
         r
     }
 
-    /// Plays a land from hand.
+    /// Plays a land (from hand, or from wherever an effect allows) as the priority action
+    /// a player takes: a special action, during which a new top card of a library isn't
+    /// revealed (CR 116.2a, 401.5), followed by a check of its events for triggers.
     pub fn play_land(
         &mut self,
         p: PlayerId,
         card: ObjectId,
     ) -> Result<(), crate::casting::Illegal> {
         self.g.turn.priority = Some(p);
-        self.g.play_land(p, card)
+        self.g.perform_action(p, Action::PlayLand { card })
     }
 
     /// Checks SBAs and puts triggers on the stack (as happens before priority).
