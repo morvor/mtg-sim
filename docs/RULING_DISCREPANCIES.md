@@ -447,15 +447,6 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: protection from snow applies to snow spells like any other quality (CR 702.16b): Frost Bite can't target Ronom Hulk.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P087.tsv` (the first aside); test `tests/rulings/r_p087_mechanics.rs` (`ronom_hulk_protection_from_snow`).
 
-### Relentless Assault: "A creature that attacks each turn if able must attack only once that turn"
-- Kind: outdated
-- Status: open for review
-- Ruling, Relentless Assault (2025-09-19): "A creature that attacks each turn if able must attack only once that turn. It is not forced into each attack that turn. However, a creature that attacks each combat if able must attack again if it can."
-- Conflicts with: the Oracle texts of today: no card says "attacks each turn if able"; the cards that did now say "each combat" (Berserkers of Blood Ridge: "This creature attacks each combat if able.").
-- Evidence: the Ixalan Oracle Changes (Eli Shiffrin, 2017-09-28; ormos mirror, capture 2017-09-28): "we've decided to simplify and change the 60 cards that must attack or block "each turn" to instead attack or block "each combat." This is a functional change only for turns with multiple combats—Juggernaut has to attack in every combat it can." The ruling's first two sentences describe the template that change retired (the data's date is a republication; Conspiracy's 2014-05-29 ruling on Cogwork Tracker still says it "must still attack each turn if able"). Found in work item rulings-P055. Its last sentence still holds and is cited.
-- Engine: a creature that attacks each combat if able (Berserkers of Blood Ridge) attacks in the additional combat Relentless Assault creates, even when its controller declares no attackers; no card has the "each turn" requirement.
-- Recorded: exemption `docs/rulings-exemptions/rulings-P055.tsv`; test `tests/rulings/r_p055_combat_phases.rs` (`relentless_assault_attack_triggers_and_requirements_in_each_combat`).
-
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the

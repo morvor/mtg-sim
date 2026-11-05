@@ -559,7 +559,7 @@ fn worst_fears_controls_the_next_turn_the_player_actually_takes() {
 
 #[test]
 fn worst_fears_controls_only_the_player() {
-    cr!("723.5", "723.6", "723.5a");
+    cr!("723.3", "723.5", "723.6");
     ruling!(
         "Worst Fears",
         "You only control the player. You don't control any of their permanents, spells, or abilities."
@@ -597,7 +597,7 @@ fn worst_fears_controls_only_the_player() {
 
 #[test]
 fn worst_fears_controller_makes_only_legal_choices_and_master_warcraft_takes_precedence() {
-    cr!("723.5", "723.7");
+    cr!("723.5", "508.1c");
     ruling!(
         "Worst Fears",
         "You can't make any illegal decisions or illegal choices—you can't do anything that player couldn't do. You can't make choices or decisions for that player that aren't called for by the game rules or by any cards, permanents, spells, abilities, and so on. If an effect causes another player to make decisions that the affected player would normally make (such as Master Warcraft does), that effect takes precedence. In other words, if the affected player wouldn't make a decision, you wouldn't make that decision on their behalf."

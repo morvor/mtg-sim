@@ -70,12 +70,11 @@ fn relentless_assault_attack_triggers_and_requirements_in_each_combat() {
         "Relentless Assault",
         "Abilities that trigger when a creature attacks, blocks, or is blocked will trigger during each combat that turn."
     );
-    // Its first two sentences ("each turn") are outdated: the Ixalan Oracle changes
-    // (2017-09-28) made every such card attack "each combat" (exempted in
-    // docs/rulings-exemptions/rulings-P055.tsv; logged in docs/RULING_DISCREPANCIES.md).
+    // The ruling's last sentence; its first two (a creature that attacks "each turn" if
+    // able) are tested in `relentless_assault_each_turn_requirement_is_met_by_one_attack`.
     ruling!(
         "Relentless Assault",
-        "A creature that attacks each turn if able must attack only once that turn. It is not forced into each attack that turn. However, a creature that attacks each combat if able must attack again if it can."
+        "However, a creature that attacks each combat if able must attack again if it can."
     );
     supported("Relentless Assault");
     let mut t = TestGame::new(2);
@@ -123,6 +122,101 @@ fn relentless_assault_attack_triggers_and_requirements_in_each_combat() {
     t.resolve_all();
     assert!(attacking(&t, hero));
     assert_eq!(tokens(&t, P0).len(), 4);
+}
+
+/// A creature with "This creature attacks each turn if able." The cards with that text
+/// today (Minotaur Younghorn, Mogis's Chosen and the other Theros challenge-deck cards;
+/// every legal card was changed to "each combat" by the Ixalan Oracle changes of
+/// 2017-09-28) aren't legal in any format and are deferred (docs/DEFERRED.md), so it's
+/// built by hand: a requirement to attack each combat that applies only while the
+/// creature hasn't attacked this turn.
+fn each_turn_attacker(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    use mtg_engine::ability::*;
+    use mtg_engine::object::Characteristics;
+    use mtg_engine::types::CardTypeSet;
+    t.custom(
+        p,
+        CardDef::custom(Characteristics {
+            name: "Each-Turn Brute".into(),
+            card_types: CardTypeSet::single(CardType::Creature),
+            power: Some(3),
+            toughness: Some(3),
+            abilities: vec![AbilityDef::new(
+                AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(
+                    Restriction::MustAttack(Filter::and(vec![
+                        Filter::Source,
+                        Filter::Not(Box::new(Filter::AttackedThisTurn)),
+                    ])),
+                ))),
+                "This creature attacks each turn if able.",
+            )],
+            ..Default::default()
+        }),
+        Zone::Battlefield,
+    )
+}
+
+#[test]
+fn relentless_assault_each_turn_requirement_is_met_by_one_attack() {
+    cr!("505.1a", "500.8", "508.1d");
+    ruling!(
+        "Relentless Assault",
+        "A creature that attacks each turn if able must attack only once that turn. It is not forced into each attack that turn."
+    );
+    // P0 declares no attackers in either combat: the Brute is forced to attack in the
+    // first, not in the additional one; Berserkers of Blood Ridge ("attacks each combat
+    // if able") attacks in both.
+    let mut t = TestGame::new(2);
+    let brute = each_turn_attacker(&mut t, P0);
+    let berserkers = t.battlefield(P0, "Berserkers of Blood Ridge");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, P0, &[], P1);
+    declare(&mut t, P0, &[], P1);
+    to_nth(&mut t, Step::DeclareAttackers, 1);
+    assert!(attacking(&t, brute));
+    assert!(attacking(&t, berserkers));
+    t.advance_to(P0, Step::PostcombatMain);
+    cast_sorcery(&mut t, P0, "Relentless Assault", &[]);
+    t.resolve_all();
+    assert!(!t.obj_now(brute).tapped);
+    to_nth(&mut t, Step::DeclareAttackers, 2);
+    assert!(!attacking(&t, brute), "not forced into the second attack");
+    assert!(attacking(&t, berserkers));
+    to_nth(&mut t, Step::EndOfCombat, 2);
+    assert_eq!(t.life(P1), 20 - 3 - 4 - 4);
+    // It may still attack again if its controller chooses.
+    let mut t = TestGame::new(2);
+    let brute = each_turn_attacker(&mut t, P0);
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, P0, &[], P1);
+    declare(&mut t, P0, &[brute], P1);
+    to_nth(&mut t, Step::DeclareAttackers, 1);
+    assert!(attacking(&t, brute));
+    t.advance_to(P0, Step::PostcombatMain);
+    cast_sorcery(&mut t, P0, "Relentless Assault", &[]);
+    t.resolve_all();
+    to_nth(&mut t, Step::DeclareAttackers, 2);
+    assert!(attacking(&t, brute));
+    // Unable to attack in the first combat (tapped), it must attack in the second.
+    let mut t = TestGame::new(2);
+    let brute = each_turn_attacker(&mut t, P0);
+    t.g.tap(brute);
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, P0, &[], P1);
+    declare(&mut t, P0, &[], P1);
+    to_nth(&mut t, Step::DeclareAttackers, 1);
+    assert!(!attacking(&t, brute));
+    t.advance_to(P0, Step::PostcombatMain);
+    cast_sorcery(&mut t, P0, "Relentless Assault", &[]);
+    t.resolve_all();
+    // Relentless Assault untaps only creatures that attacked: untap it now.
+    assert!(t.obj_now(brute).tapped);
+    t.g.untap(brute);
+    to_nth(&mut t, Step::DeclareAttackers, 2);
+    assert!(
+        attacking(&t, brute),
+        "first able to attack in the second combat"
+    );
 }
 
 #[test]

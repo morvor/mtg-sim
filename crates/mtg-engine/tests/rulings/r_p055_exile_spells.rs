@@ -846,7 +846,7 @@ fn long_rest_sets_the_life_total_by_gaining_or_losing_life() {
 
 #[test]
 fn experimental_overloads_weird_keeps_its_size() {
-    cr!("608.2h", "111.4");
+    cr!("608.2h", "111.3");
     ruling!(
         "Experimental Overload",
         "The value of X is determined only as Experimental Overload resolves. The Weird's power and toughness don't change if the number of instant and sorcery cards in your graveyard changes."
