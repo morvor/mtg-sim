@@ -8,7 +8,6 @@
 use crate::r_p195_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
-use mtg_engine::mana::ManaType;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -194,7 +193,8 @@ fn butch_deloria_counts_a_rogue_snake_once() {
     assert_eq!(t.pt(b), (3, 3));
 }
 
-/// P0 casts Ghouls' Night Out with a Grizzly Bears in each graveyard; returns them.
+/// P0 casts Ghouls' Night Out with a creature card in each graveyard (P0's Grizzly
+/// Bears, P1's Hill Giant); returns them.
 fn ghouls(t: &mut TestGame) -> Vec<ObjectId> {
     let a = t.graveyard(P0, "Grizzly Bears");
     let b = t.graveyard(P1, "Hill Giant");
@@ -347,5 +347,4 @@ fn urzas_saga_is_not_an_urzas_mine_or_power_plant() {
     t.g.untap(tower);
     t.activate(P0, tower, 0, &[]).unwrap();
     assert_eq!(t.g.player(P0).mana_pool.total(), 4);
-    let _ = ManaType::C;
 }

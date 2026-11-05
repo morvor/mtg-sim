@@ -6,8 +6,6 @@
 //! copies aren't cast; "each opponent" in Two-Headed Giant.
 
 use crate::r_p195_common::*;
-use mtg_engine::mana::ManaType;
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::*;
@@ -306,7 +304,8 @@ fn dormant_gomazoa_triggers_on_spells_targeting_you() {
         assert!(on_stack(&t, s));
         assert_eq!(t.life(P0), 20);
     }
-    // A spell with another target as well (Fireball split between you and a creature).
+    // A spell with another target as well (Arc Lightning divided between you and a
+    // creature).
     let mut t = TestGame::new(2);
     let g = gomazoa(&mut t);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -518,5 +517,4 @@ fn anje_madness_discard_draws_last() {
     assert_eq!(t.hand_size(P0), hand - 1);
     t.resolve();
     assert_eq!(t.hand_size(P0), hand);
-    let _ = (Zone::Exile, ManaType::R);
 }

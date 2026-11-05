@@ -378,8 +378,7 @@ fn shriekwood_devourer_counts_declared_attackers_on_resolution() {
         "The value of X is calculated only once, as Shriekwood Devourer's last ability resolves. This means that the value of X may be different than you had hoped when attackers were declared if attacking creatures have left the battlefield or their power has changed."
     );
     supported("Shriekwood Devourer");
-    // Bears (2) attack with Ghalta-made Dinosaur... use a plain case: the Bears attack; X
-    // is read on resolution after they get +3/+3.
+    // The Bears attack; X is read on resolution, after they get +3/+3.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Shriekwood Devourer");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -393,8 +392,8 @@ fn shriekwood_devourer_counts_declared_attackers_on_resolution() {
     cast_at(&mut t, P0, "Giant Growth", &[obj(bears)]);
     t.resolve();
     assert_eq!(untap_up_to(&mut t, &lands, 5), 5);
-    // A creature put onto the battlefield attacking isn't counted: Ghalta's Dinosaur
-    // token (X/X) enters after the trigger; only the Bears count.
+    // A creature put onto the battlefield attacking isn't counted: a 6/6 enters
+    // attacking after the trigger; only the Bears count.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Shriekwood Devourer");
     let bears = t.battlefield(P0, "Grizzly Bears");

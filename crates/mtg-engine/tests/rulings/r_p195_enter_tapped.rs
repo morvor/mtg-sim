@@ -6,7 +6,6 @@
 use crate::r_p195_common::*;
 use crate::r_s01_common::stack_library;
 use mtg_engine::decision::{Answer, Decision};
-use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -179,13 +178,14 @@ fn amulet_of_vigor_needs_a_permanent_that_enters_tapped() {
     t.battlefield(P0, "Amulet of Vigor");
     let c = t.enter(P0, "Tranquil Cove");
     t.settle();
-    let triggers = t.stack_len();
-    assert!(triggers >= 2);
-    t.resolve();
-    // The Cove's life-gain trigger may be among them; resolve until it untaps.
+    // Two Amulet triggers and the Cove's life-gain trigger.
+    assert_eq!(t.stack_len(), 3);
+    // Resolve until the first Amulet trigger untaps the Cove; one Amulet trigger is
+    // still waiting.
     while tapped(&t, c) {
         t.resolve();
     }
+    assert!(t.stack_len() >= 1);
     tap(&mut t, c);
     t.resolve_all();
     assert!(!tapped(&t, c));
@@ -295,5 +295,4 @@ fn sands_of_time_skipped_untap_and_upkeep_toggle() {
     assert_eq!(t.g.player(P1).mana_pool.total(), 1);
     t.advance_to(P1, Step::Draw);
     assert_eq!(t.g.player(P1).mana_pool.total(), 0);
-    let _ = ManaType::G;
 }

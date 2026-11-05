@@ -489,8 +489,7 @@ fn torchling_redirects_spells_that_target_only_it() {
     kill(&mut t, bears);
     lots(&mut t, P0);
     assert!(t.activate(P0, tl, 2, &[obj(s)]).is_err());
-    // Shock at Torchling, no other legal target... a Shock can always target a player:
-    // use Giant Growth with only Torchling as a creature: the target doesn't change.
+    // Giant Growth at Torchling with no other creature: the target doesn't change.
     let mut t = TestGame::new(2);
     let tl = t.battlefield(P0, "Torchling");
     let s = cast_at(&mut t, P0, "Giant Growth", &[obj(tl)]);
@@ -542,5 +541,54 @@ fn tap_or_untap_is_chosen_on_resolution() {
                 .any(|(_, d)| matches!(d, Decision::ChooseOption { .. })));
             assert_eq!(tapped(&t, bears), !untap, "{name} untap={untap}");
         }
+    }
+}
+
+#[test]
+fn upkeep_untap_triggers_only_once_and_is_not_an_activated_ability() {
+    cr!("503.1a", "603.2", "302.6");
+    ruling!(
+        "Brass Man",
+        "Reworded so that it triggers only once at beginning of upkeep, instead of being an activated ability usable any time during your upkeep."
+    );
+    ruling!(
+        "Island Fish Jasconius",
+        "Reworded so that it triggers only once at beginning of upkeep, instead of being an activated ability usable any time during your upkeep."
+    );
+    // (card, mana to pay)
+    for (name, color, cost) in [
+        ("Brass Man", ManaType::C, 1),
+        ("Island Fish Jasconius", ManaType::U, 3),
+    ] {
+        supported(name);
+        let mut t = TestGame::new(2);
+        if name == "Island Fish Jasconius" {
+            t.battlefield(P0, "Island");
+        }
+        let c = t.battlefield(P0, name);
+        let activated = t
+            .obj_now(c)
+            .chars
+            .abilities
+            .iter()
+            .filter(|a| matches!(a.kind, mtg_engine::ability::AbilityKind::Activated(_)))
+            .count();
+        assert_eq!(activated, 0, "{name}: has an activated ability");
+        tap(&mut t, c);
+        t.advance_to(P0, Step::Upkeep);
+        t.settle();
+        // It didn't untap in the untap step; exactly one trigger.
+        assert!(tapped(&t, c), "{name}");
+        assert_eq!(t.stack_len(), 1, "{name}");
+        assert!(top_is_trigger_of(&t, c), "{name}");
+        mana(&mut t, P0, color, cost * 2);
+        t.answer_yes(P0, true);
+        t.resolve();
+        assert!(!tapped(&t, c), "{name}: not untapped");
+        // Tapped again later in the upkeep: there's no second chance this upkeep.
+        tap(&mut t, c);
+        assert_eq!(t.stack_len(), 0, "{name}");
+        t.advance_to(P0, Step::Draw);
+        assert!(tapped(&t, c), "{name}");
     }
 }
