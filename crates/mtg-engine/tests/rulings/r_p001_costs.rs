@@ -451,15 +451,16 @@ fn the_sacrifice_is_exactly_one_creature() {
         "Collateral Damage",
     ] {
         supported(name);
-        let targets: Vec<Entity> = match name {
-            "Bone Splinters" | "Collateral Damage" => vec![pl(P1)],
-            _ => vec![],
-        };
         // Without a creature, it can't be cast.
         let mut t = TestGame::new(2);
         give_mana_for(&mut t, P0, name);
         let card = t.hand(P0, name);
         let victim = t.battlefield(P1, "Hill Giant");
+        let targets: Vec<Entity> = match name {
+            "Bone Splinters" => vec![obj(victim)],
+            "Collateral Damage" => vec![pl(P1)],
+            _ => vec![],
+        };
         t.g.recompute();
         assert!(!castable(&mut t, P0, card), "{name}");
         for e in &targets {
@@ -473,12 +474,7 @@ fn the_sacrifice_is_exactly_one_creature() {
         assert!(castable(&mut t, P0, card), "{name}");
         let from = t.asked().len();
         t.answer_choose(P0, &[obj(a), obj(b)]);
-        let tgt = if name == "Bone Splinters" {
-            vec![obj(victim)]
-        } else {
-            targets
-        };
-        for e in &tgt {
+        for e in &targets {
             t.answer_targets(P0, &[*e]);
         }
         t.cast(P0, card).go();

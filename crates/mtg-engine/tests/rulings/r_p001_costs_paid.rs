@@ -257,7 +257,7 @@ fn biophagus_mana_doubled_gives_each_creature_a_counter() {
 
 #[test]
 fn a_storage_land_is_tapped_for_mana_only_if_it_makes_mana() {
-    cr!("106.12", "605.1a");
+    cr!("106.12", "106.12a");
     ruling!(
         "Bottomless Vault",
         "It is only considered “tapped for mana” if you activate its mana ability and generate mana from it."
