@@ -82,7 +82,11 @@ fn toughness_assigners_dont_change_power() {
             t.set_step(P1, Step::BeginningOfCombat);
             attack_with(&mut t, &[(wurm, pl(P0))]);
             block_and_finish(&mut t, P0, &[(c, wurm)]);
-            assert_eq!(t.obj_now(wurm).damage, q as u32, "{card}: blocker assigns toughness");
+            assert_eq!(
+                t.obj_now(wurm).damage,
+                q as u32,
+                "{card}: blocker assigns toughness"
+            );
         }
         // ... but its power is unchanged.
         assert_eq!(t.pt(c).0, p, "{card}");
@@ -95,7 +99,11 @@ fn toughness_assigners_dont_change_power() {
         let (p, _) = t.pt(c);
         cast_new(&mut t, P0, "Hunt the Weak", &[obj(c), obj(dreadmaw)]);
         t.resolve_all();
-        assert_eq!(t.obj_now(dreadmaw).damage, (p + 1) as u32, "{card}: fight uses power");
+        assert_eq!(
+            t.obj_now(dreadmaw).damage,
+            (p + 1) as u32,
+            "{card}: fight uses power"
+        );
     }
 }
 
@@ -188,7 +196,11 @@ fn menace_gained_after_blocks_doesnt_unblock() {
         let wall = t.battlefield(P1, "Colossal Dreadmaw");
         attack_with(&mut t, &[(c, pl(P1))]);
         assert_eq!(t.g.min_blockers(c), 1, "{card}");
-        t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(wall, c)]));
+        t.answer(
+            P1,
+            DecisionKind::Blockers,
+            Answer::Blockers(vec![(wall, c)]),
+        );
         t.advance_to(P0, Step::DeclareBlockers);
         delirium(&mut t, P0);
         t.g.recompute();
@@ -282,7 +294,7 @@ fn geist_stays_in_combat_after_losing_delirium() {
 
 #[test]
 fn mournwillow_checks_power_as_blockers_are_chosen() {
-    cr!("611.2c", "509.1a");
+    cr!("611.2c", "509.1b");
     ruling!(
         "Mournwillow",
         "Because the last ability’s effect doesn’t change the characteristics of any permanents, the set of creatures affected is constantly updated. Any creature with power 2 or less at the moment blockers are chosen will be unable to block."
@@ -380,7 +392,11 @@ fn deathcap_cultivator_deathtouch_is_checked_as_damage_is_dealt() {
         block_and_finish(&mut t, P1, &[(wurm, dc), (giant, bears)]);
         assert!(!t.on_battlefield(bears));
         // The Bears' death made four types, but too late: the Wurm survives the 2 damage.
-        assert_eq!(t.on_battlefield(wurm), !with_creature, "creature card before: {with_creature}");
+        assert_eq!(
+            t.on_battlefield(wurm),
+            !with_creature,
+            "creature card before: {with_creature}"
+        );
     }
 }
 
@@ -478,7 +494,11 @@ fn creatures_put_onto_the_battlefield_attacking_werent_declared() {
     t.set_step(P1, Step::BeginningOfCombat);
     attack_with(&mut t, &[(bears, obj(jace))]);
     t.resolve_all();
-    assert_eq!(tokens(&t, P0).len(), 1, "declared attacking a planeswalker P0 controls");
+    assert_eq!(
+        tokens(&t, P0).len(),
+        1,
+        "declared attacking a planeswalker P0 controls"
+    );
     let giant = t.battlefield(P1, "Hill Giant");
     mtg_engine::combat::put_onto_battlefield_attacking(&mut t.g, giant, pl(P0));
     t.g.recompute();
@@ -486,7 +506,11 @@ fn creatures_put_onto_the_battlefield_attacking_werent_declared() {
     t.g.flush_events();
     t.settle();
     t.resolve_all();
-    assert_eq!(tokens(&t, P0).len(), 1, "put onto the battlefield attacking: no trigger");
+    assert_eq!(
+        tokens(&t, P0).len(),
+        1,
+        "put onto the battlefield attacking: no trigger"
+    );
 }
 
 #[test]
@@ -519,8 +543,14 @@ fn attacking_tokens_enter_tapped_and_may_attack_something_else() {
     let ooze = tokens(&t, P0)[0];
     assert!(t.obj_now(ooze).has_keyword(KeywordKind::Vigilance));
     assert!(t.obj_now(ooze).tapped);
-    assert_eq!(t.g.combat.as_ref().unwrap().attack_target(ooze), Some(obj(jace)));
-    assert_eq!(t.g.combat.as_ref().unwrap().attack_target(blob), Some(pl(P1)));
+    assert_eq!(
+        t.g.combat.as_ref().unwrap().attack_target(ooze),
+        Some(obj(jace))
+    );
+    assert_eq!(
+        t.g.combat.as_ref().unwrap().attack_target(blob),
+        Some(pl(P1))
+    );
     // P0 was asked to choose what it attacks, with both options offered.
     let offered = t.asked().iter().any(|(p, d)| {
         *p == P0
@@ -566,6 +596,9 @@ fn hasran_ogress_pays_or_takes_damage_on_resolution() {
             .any(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. }));
         assert!(asked, "asked as it resolves");
         assert_eq!(t.life(P0), if pay { 20 } else { 17 });
-        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), if pay { 2 } else { 0 });
+        assert_eq!(
+            crate::r_s01_common::tapped_lands(&t, P0),
+            if pay { 2 } else { 0 }
+        );
     }
 }

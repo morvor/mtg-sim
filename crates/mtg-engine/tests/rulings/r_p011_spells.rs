@@ -128,7 +128,15 @@ fn harnessed_lightning_energy_is_chosen_as_it_resolves() {
         .iter()
         .all(|(_, d)| !matches!(d, Decision::Priority { .. })));
     assert_eq!(dmg(&t, wurm), 4, "3 energy gained + 1 already there");
-    assert_eq!(t.g.player(P0).counters.iter().filter(|(k, _)| k.as_str() == counters::ENERGY).map(|(_, n)| *n).sum::<u32>(), 0);
+    assert_eq!(
+        t.g.player(P0)
+            .counters
+            .iter()
+            .filter(|(k, _)| k.as_str() == counters::ENERGY)
+            .map(|(_, n)| *n)
+            .sum::<u32>(),
+        0
+    );
 }
 
 #[test]
@@ -183,9 +191,17 @@ fn sacrifice_costs_take_exactly_one() {
     );
     // (card, two permanents of the kind, a permanent of another kind, target)
     let cases = [
-        ("Shrapnel Blast", ["Mind Stone", "Ornithopter"], "Grizzly Bears"),
+        (
+            "Shrapnel Blast",
+            ["Mind Stone", "Ornithopter"],
+            "Grizzly Bears",
+        ),
         ("Final Flare", ["Grizzly Bears", "Pacifism"], "Mind Stone"),
-        ("Kazuul's Fury // Kazuul's Cliffs", ["Grizzly Bears", "Hill Giant"], "Mind Stone"),
+        (
+            "Kazuul's Fury // Kazuul's Cliffs",
+            ["Grizzly Bears", "Hill Giant"],
+            "Mind Stone",
+        ),
     ];
     for (card, kinds, other) in cases {
         supported(card);
@@ -211,7 +227,8 @@ fn sacrifice_costs_take_exactly_one() {
         }
         let from = t.asked().len();
         t.answer_choose(P0, &[obj(a), obj(b)]);
-        t.cast_with(P0, c, &[target]).unwrap_or_else(|e| panic!("{card}: {e:?}"));
+        t.cast_with(P0, c, &[target])
+            .unwrap_or_else(|e| panic!("{card}: {e:?}"));
         let sacrificed = [a, b].iter().filter(|x| !t.on_battlefield(**x)).count();
         assert_eq!(sacrificed, 1, "{card}");
         let asked = t.asked()[from..]
@@ -255,7 +272,11 @@ fn maximum_hand_size_is_checked_only_in_cleanup() {
         t.advance_to(P0, Step::End);
         t.resolve_all();
         // Steaming Sauna's end step draw (when unlocked) — still more than seven.
-        assert_eq!(t.hand_size(P0), if sauna { 11 } else { 10 }, "end step: nothing discarded yet");
+        assert_eq!(
+            t.hand_size(P0),
+            if sauna { 11 } else { 10 },
+            "end step: nothing discarded yet"
+        );
         t.advance_to(P1, Step::Upkeep);
         assert_eq!(t.hand_size(P0), if sauna { 11 } else { 7 }, "Sauna {sauna}");
     }
@@ -356,7 +377,11 @@ fn cantrips_with_an_illegal_target_do_nothing() {
             }
             t.resolve_all();
             assert_eq!(t.hand_size(P0), hand + legal as usize, "{card} {legal}");
-            assert_eq!(t.life(P0), 20 + if legal { life } else { 0 }, "{card} {legal}");
+            assert_eq!(
+                t.life(P0),
+                20 + if legal { life } else { 0 },
+                "{card} {legal}"
+            );
         }
     }
 }
@@ -378,7 +403,10 @@ fn sheltering_boughs_with_an_illegal_target_doesnt_enter() {
             bounce(&mut t, bears);
         }
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield("Sheltering Boughs").len(), legal as usize);
+        assert_eq!(
+            t.named_on_battlefield("Sheltering Boughs").len(),
+            legal as usize
+        );
         assert_eq!(t.in_graveyard(P0, "Sheltering Boughs"), !legal);
         // The hand lost the Bears when bounced (+1) but no card was drawn.
         assert_eq!(t.hand_size(P0), hand + 1, "legal {legal}");
@@ -431,7 +459,11 @@ fn donatello_checks_for_an_artifact_twice() {
             exile_now(&mut t, stone.unwrap());
         }
         t.resolve_all();
-        assert_eq!(t.hand_size(P0), hand + draws as usize, "{artifact} {remove}");
+        assert_eq!(
+            t.hand_size(P0),
+            hand + draws as usize,
+            "{artifact} {remove}"
+        );
     }
 }
 

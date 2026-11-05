@@ -1057,10 +1057,14 @@ impl Game {
         // The condition is checked before the card moves to the stack: a card whose own
         // ability gives it flash where it is now (Graveyard Shift with five mana values in
         // the graveyard, itself among them) may begin to be cast with flash even if moving
-        // it would end the condition.
+        // it would end the condition. (Not for a spell cast face down: it has no abilities,
+        // CR 708.2.)
         let before_moving = {
             let o = self.obj(card);
-            o.zone != Zone::Stack && o.face == opt.face && o.chars.has_keyword(KeywordKind::Flash)
+            o.zone != Zone::Stack
+                && o.face == opt.face
+                && !matches!(opt.method, CastMethod::FaceDown(_))
+                && o.chars.has_keyword(KeywordKind::Flash)
         };
         let instant_speed = chars.is(CardType::Instant)
             || chars.has_keyword(KeywordKind::Flash)

@@ -112,7 +112,13 @@ fn demonlord_belzenlok_repeats_and_deals_damage_once() {
     stack_library(
         &mut t,
         P0,
-        &["Forest", "Craw Wurm", "Colossal Dreadmaw", "Grizzly Bears", "Hill Giant"],
+        &[
+            "Forest",
+            "Craw Wurm",
+            "Colossal Dreadmaw",
+            "Grizzly Bears",
+            "Hill Giant",
+        ],
     );
     let hand = t.hand_size(P0);
     t.enter(P0, "Demonlord Belzenlok");
@@ -232,7 +238,10 @@ fn yusri_free_spells_have_x_0_and_keep_additional_costs() {
         .is_err());
     let stone = t.battlefield(P0, "Mind Stone");
     let life = t.life(P1);
-    t.cast(P0, blast).method(CastMethod::Free).target(pl(P1)).go();
+    t.cast(P0, blast)
+        .method(CastMethod::Free)
+        .target(pl(P1))
+        .go();
     t.resolve_all();
     assert!(!t.on_battlefield(stone));
     assert_eq!(t.life(P1), life - 5);
@@ -278,7 +287,10 @@ fn orcish_burn_to_you_needs_a_legal_target() {
         t.resolve_all();
         assert_eq!(t.life(P0), if legal { 17 } else { 20 });
         assert_eq!(t.hand_size(P0), hand + legal as usize);
-        assert_eq!(crate::r_p009_common::dmg(&t, giant), if legal { 2 } else { 0 });
+        assert_eq!(
+            crate::r_p009_common::dmg(&t, giant),
+            if legal { 2 } else { 0 }
+        );
 
         let mut t = TestGame::new(2);
         let giant = t.battlefield(P1, "Hill Giant");
@@ -333,7 +345,10 @@ fn non_human_cannonball_negative_result_deals_no_damage() {
 #[test]
 fn grim_feast_watches_every_opponent() {
     cr!("102.3");
-    ruling!("Grim Feast", "It affects all opposing players in a multiplayer game.");
+    ruling!(
+        "Grim Feast",
+        "It affects all opposing players in a multiplayer game."
+    );
     supported("Grim Feast");
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Grim Feast");
@@ -367,9 +382,7 @@ fn murmuring_bosk_is_a_forest_but_not_basic() {
         t.asked()[from..]
             .iter()
             .filter_map(|(p, d)| match d {
-                Decision::ChooseEntities { candidates, .. } if *p == P0 => {
-                    Some(candidates.clone())
-                }
+                Decision::ChooseEntities { candidates, .. } if *p == P0 => Some(candidates.clone()),
                 _ => None,
             })
             .flatten()

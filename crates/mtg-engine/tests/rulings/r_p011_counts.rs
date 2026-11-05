@@ -284,7 +284,11 @@ fn sources_in_the_graveyard_count_themselves() {
             kill(&mut t, us);
         }
         t.resolve_all();
-        assert_eq!(tokens(&t, P0).len(), 1 + dies as usize, "Undead Servant dies: {dies}");
+        assert_eq!(
+            tokens(&t, P0).len(),
+            1 + dies as usize,
+            "Undead Servant dies: {dies}"
+        );
     }
 
     // Sunflare Shaman: one Elemental card in the graveyard; the Shaman is destroyed in
@@ -358,7 +362,11 @@ fn card_types_among_graveyard_cards() {
     supported("Scuttletide");
     let mut t = TestGame::new(2);
     let st = t.battlefield(P0, "Scuttletide");
-    for n in ["Snow-Covered Forest", "Isamaru, Hound of Konda", "Vedalken Aethermage"] {
+    for n in [
+        "Snow-Covered Forest",
+        "Isamaru, Hound of Konda",
+        "Vedalken Aethermage",
+    ] {
         t.graveyard(P0, n);
     }
     t.lands(P0, "Island", 1);
@@ -448,7 +456,14 @@ fn sewer_crocodile_needs_five_different_mana_values() {
     for (fifth, lands) in [(false, 4), (true, 1)] {
         let mut t = TestGame::new(2);
         let sc = t.battlefield(P0, "Sewer Crocodile");
-        for n in ["Ornithopter", "Memnite", "Llanowar Elves", "Grizzly Bears", "Divination", "Opt"] {
+        for n in [
+            "Ornithopter",
+            "Memnite",
+            "Llanowar Elves",
+            "Grizzly Bears",
+            "Divination",
+            "Opt",
+        ] {
             t.graveyard(P0, n);
         }
         if fifth {
@@ -456,12 +471,21 @@ fn sewer_crocodile_needs_five_different_mana_values() {
         }
         t.lands(P0, "Island", lands);
         assert!(t.activate(P0, sc, 0, &[]).is_ok(), "fifth {fifth}");
-        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), lands, "fifth {fifth}");
+        assert_eq!(
+            crate::r_s01_common::tapped_lands(&t, P0),
+            lands,
+            "fifth {fifth}"
+        );
         if !fifth {
             // With four values one Island isn't enough.
             let mut t = TestGame::new(2);
             let sc = t.battlefield(P0, "Sewer Crocodile");
-            for n in ["Ornithopter", "Llanowar Elves", "Grizzly Bears", "Divination"] {
+            for n in [
+                "Ornithopter",
+                "Llanowar Elves",
+                "Grizzly Bears",
+                "Divination",
+            ] {
                 t.graveyard(P0, n);
             }
             t.lands(P0, "Island", 1);
@@ -484,7 +508,13 @@ fn sewer_crocodile_cost_is_locked_before_mana_abilities() {
     // Values 0, 1, 2, 3, 4: the cost is {U}, paid by Molt Tender exiling one of them.
     let mut t = TestGame::new(2);
     let sc = t.battlefield(P0, "Sewer Crocodile");
-    for n in ["Ornithopter", "Llanowar Elves", "Grizzly Bears", "Divination", "Hill Giant"] {
+    for n in [
+        "Ornithopter",
+        "Llanowar Elves",
+        "Grizzly Bears",
+        "Divination",
+        "Hill Giant",
+    ] {
         t.graveyard(P0, n);
     }
     let mt = t.battlefield(P0, "Molt Tender");
@@ -499,7 +529,13 @@ fn sewer_crocodile_cost_is_locked_before_mana_abilities() {
     // Getting the mana first (outside the activation) leaves four values: {3}{U}.
     let mut t = TestGame::new(2);
     let sc = t.battlefield(P0, "Sewer Crocodile");
-    for n in ["Ornithopter", "Llanowar Elves", "Grizzly Bears", "Divination", "Hill Giant"] {
+    for n in [
+        "Ornithopter",
+        "Llanowar Elves",
+        "Grizzly Bears",
+        "Divination",
+        "Hill Giant",
+    ] {
         t.graveyard(P0, n);
     }
     let mt = t.battlefield(P0, "Molt Tender");
@@ -554,7 +590,11 @@ fn voracious_reader_reductions_apply_after_increases_and_x() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
     let bm = t.hand(P0, "Borrowed Malevolence");
-    t.cast(P0, bm).modes(&[0, 1]).target(bears).target(giant).go();
+    t.cast(P0, bm)
+        .modes(&[0, 1])
+        .target(bears)
+        .target(giant)
+        .go();
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 2);
     t.resolve_all();
     assert_eq!(t.pt(giant), (2, 2));
@@ -597,11 +637,15 @@ fn corrupted_grafstone_cant_add_colorless() {
     let from = t.asked().len();
     assert!(tap_for_mana(&mut t, P0, cg, "Add"));
     assert_eq!(
-        t.g.player(P0).mana_pool.count(mtg_engine::mana::ManaType::R),
+        t.g.player(P0)
+            .mana_pool
+            .count(mtg_engine::mana::ManaType::R),
         1
     );
     assert_eq!(
-        t.g.player(P0).mana_pool.count(mtg_engine::mana::ManaType::C),
+        t.g.player(P0)
+            .mana_pool
+            .count(mtg_engine::mana::ManaType::C),
         0
     );
     for (_, d) in &t.asked()[from..] {
@@ -615,7 +659,7 @@ fn corrupted_grafstone_cant_add_colorless() {
 
 #[test]
 fn gandalfs_sanction_excess_ignores_prevention_and_indestructible() {
-    cr!("120.4a", "120.6");
+    cr!("120.4a", "120.6", "615.1");
     ruling!(
         "Gandalf's Sanction",
         "Excess damage caused by a spell or ability is similar to how combat damage from a creature with trample is handled. Start with the amount of damage being dealt to the creature and determine what is \"lethal.\" This is the creature's toughness minus the amount of damage that it already has marked on it, but ignoring any replacement or prevention effects that will modify this damage. Also ignore whether the creature has an ability such as indestructible that will result in it not being destroyed by this damage."
@@ -637,6 +681,22 @@ fn gandalfs_sanction_excess_ignores_prevention_and_indestructible() {
     t.resolve_all();
     assert!(t.on_battlefield(myr));
     assert_eq!(t.life(P1), 17);
+    // A Hill Giant with a shield preventing the next 3 damage: lethal is still 3 (the
+    // prevention is ignored), so 1 is excess and dealt to P1; the shield prevents the 3.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Plains", 1);
+    let salve = t.hand(P1, "Healing Salve");
+    t.cast(P1, salve).modes(&[1]).target(obj(giant)).go();
+    t.resolve_all();
+    t.set_step(P0, Step::PrecombatMain);
+    fill_graveyard(&mut t, P0, "Opt", 4);
+    cast_card(&mut t, P0, "Gandalf's Sanction", &[obj(giant)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(giant));
+    assert_eq!(dmg(&t, giant), 0);
+    assert_eq!(t.life(P1), 19);
 }
 
 #[test]

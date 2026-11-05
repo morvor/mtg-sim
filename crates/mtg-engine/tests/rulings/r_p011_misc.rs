@@ -129,10 +129,18 @@ fn pyromancer_ascension_copy_resolves_first_even_if_the_original_is_countered() 
     change_copy_targets(&mut t, P0, &[Some(obj(giant))]);
     let copies = resolve_until_copies(&mut t);
     assert_eq!(copies.len(), 1);
-    assert_eq!(t.g.stack.last(), Some(&copies[0]), "the copy is above the original");
+    assert_eq!(
+        t.g.stack.last(),
+        Some(&copies[0]),
+        "the copy is above the original"
+    );
     t.resolve();
     assert!(!t.on_battlefield(giant));
-    assert_eq!(t.zone(bolt), Zone::Stack, "the original hasn't resolved yet");
+    assert_eq!(
+        t.zone(bolt),
+        Zone::Stack,
+        "the original hasn't resolved yet"
+    );
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
     // The original is countered in response to the trigger: the copy is still created.
