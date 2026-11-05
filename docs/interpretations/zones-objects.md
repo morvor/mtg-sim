@@ -149,6 +149,18 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/choices.rs` (`CHOSEN_OBJECT_POWER`); `crates/mtg-engine/src/oracle/patterns/additional_cost_choices.rs` (`choose_object_as_cost`).
 - Tests: `tests/cards/c5_costs_sets.rs` (`close_encounter_uses_the_chosen_creatures_power`).
 
+## limited-free-basics-have-a-basic-land-type: Limited decks add only the five non-snow basic lands beyond the card pool
+- Kind: policy
+- Status: decided
+- Rules: 100.2b "In limited play (a way of playing in which each player gets the same quantity of unopened Magic product such as booster packs and creates their own deck using only this product and basic land cards), each deck has a minimum deck size of 40 cards." / Wastes ruling: "In Limited events (including Sealed Deck and Booster Draft), Wastes must be in your card pool to be included in your deck. You can't add Wastes to your card pool in the same way that you can add other basic lands." (the same for Snow-Covered Wastes and the basic snow lands)
+- Question: 100.2b lets a limited deck use "basic land cards" beyond the product; which basic land cards may be added that way?
+- Decision: Only basic lands with a basic land type (Plains, Island, Swamp, Mountain, Forest) that aren't snow; Wastes, Snow-Covered Wastes and the basic snow lands count against the card pool like any other card.
+- Alternatives: Any basic land card (the letter of 100.2b): contradicts the Wastes and snow-land rulings, which reflect tournament procedure (the land station offers only the five basics).
+- Why: The rulings state the procedure explicitly; the engine's limited deck check models tournament limited play.
+- Affects: Wastes, Snow-Covered Wastes, Snow-Covered Plains/Island/Swamp/Mountain/Forest in `check_limited`.
+- Code: `crates/mtg-engine/src/deck.rs` (`is_free_limited_basic`).
+- Tests: `tests/rulings/r_p192_statics_costs.rs` (`wastes_must_come_from_the_limited_card_pool`).
+
 ## face-down-instant-or-sorcery-stays-face-down: A face-down permanent represented by an instant or sorcery card stays face down when an effect would turn it face up
 - Kind: interpretation
 - Status: decided
