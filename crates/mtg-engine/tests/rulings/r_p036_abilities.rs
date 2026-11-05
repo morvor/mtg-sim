@@ -250,6 +250,23 @@ fn trickbind_cant_stop_turning_a_morph_face_up() {
     let tb = t.hand(P1, "Trickbind");
     lands_for_cost(&mut t, P1, "Trickbind");
     assert!(!castable(&mut t, P1, tb));
+    // The other side: the "When this creature is turned face up" trigger does use the
+    // stack and can be countered, but the creature stays face up (with its megamorph
+    // counter); only the trigger's effect is lost.
+    let mut t = TestGame::new(2);
+    let fd = crate::r_s12_common::morph(&mut t, P0, "Den Protector");
+    let card = t.graveyard(P0, "Hill Giant");
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 1);
+    t.answer_targets(P0, &[obj(card)]);
+    assert!(crate::r_s11_common::turn_face_up(&mut t, P0, fd));
+    assert!(!t.obj_now(fd).face_down);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    counter_top(&mut t, P1, "Trickbind");
+    assert!(!t.obj_now(fd).face_down);
+    assert_eq!(t.counters(t.g.current(fd), "+1/+1"), 1);
+    assert!(t.in_graveyard(P0, "Hill Giant"));
 }
 
 // --- Delayed triggers ------------------------------------------------------------------

@@ -158,20 +158,22 @@ fn spell_blast_ignores_alternative_and_additional_costs_and_reductions() {
     supported("Burst Lightning");
     supported("Think Twice");
     // Frogmite ({4}, affinity for artifacts) cast for {0}: mana value 4.
-    let mut t = TestGame::new(2);
-    turn_of(&mut t, P1);
-    for _ in 0..4 {
-        t.battlefield(P1, "Ornithopter");
-    }
-    let fm = t.hand(P1, "Frogmite");
-    let frog = t.cast(P1, fm).go();
-    assert_eq!(crate::r_s01_common::tapped_lands(&t, P1), 0);
     for (x, legal) in [(0, false), (4, true)] {
-        let (c, _) = offered_for(&mut t, P0, "Spell Blast", Some(x), &[obj(frog)]);
+        let mut t = TestGame::new(2);
+        turn_of(&mut t, P1);
+        for _ in 0..4 {
+            t.battlefield(P1, "Ornithopter");
+        }
+        let fm = t.hand(P1, "Frogmite");
+        let frog = t.cast(P1, fm).go();
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P1), 0);
+        let (c, s) = offered_for(&mut t, P0, "Spell Blast", Some(x), &[obj(frog)]);
         assert_eq!(c.contains(&obj(frog)), legal, "Frogmite, X = {x}");
-        t.resolve_all();
-        if t.g.stack.is_empty() {
-            break;
+        assert_eq!(s.is_some(), legal, "Frogmite, X = {x}");
+        if legal {
+            t.resolve();
+            assert!(!on_stack(&t, frog));
+            assert!(t.in_graveyard(P1, "Frogmite"));
         }
     }
     // Burst Lightning ({R}) kicked for {4}: mana value 1.
@@ -532,6 +534,29 @@ fn second_guess_counts_cast_copies_but_not_other_copies() {
     assert!(c.contains(&obj(gs)));
     assert!(!c.contains(&obj(copies[0])));
 
+    // A copy made between the first and second casts doesn't count either: P1's
+    // Pyromatics (first, replicated once) puts a copy on the stack; Shock, cast next, is
+    // the second spell cast, not the third.
+    supported("Pyromatics");
+    let mut t = TestGame::new(2);
+    turn_of(&mut t, P1);
+    t.lands(P1, "Mountain", 4);
+    let pyro = t.hand(P1, "Pyromatics");
+    t.answer(P1, DecisionKind::OptionalCost, Answer::Number(1));
+    t.answer_yes(P1, false); // keep the copy's target
+    let pyro = t.cast(P1, pyro).target(P0).go();
+    t.settle();
+    t.resolve(); // replicate: one copy
+    let copies = crate::r_s25_common::spell_copies(&t);
+    assert_eq!(copies.len(), 1);
+    let shock = cast_new(&mut t, P1, "Shock", &[Entity::Player(P0)]);
+    let (c, s) = offered_for(&mut t, P0, "Second Guess", None, &[obj(shock)]);
+    assert_eq!(c, vec![obj(shock)]);
+    assert!(!c.contains(&obj(pyro)) && !c.contains(&obj(copies[0])));
+    t.resolve();
+    assert!(resolved(&t, s.unwrap()));
+    assert!(!on_stack(&t, shock));
+
     // Isochron Scepter casts its copy: P0's Shock is first, the Scepter's copy second.
     let mut t = TestGame::new(2);
     let bolt = t.hand(P0, "Lightning Bolt");
@@ -714,6 +739,23 @@ fn double_negative_needs_both_spells_on_the_stack() {
     cast_new(&mut t, P0, "Double Negative", &[]);
     t.resolve();
     assert!(!on_stack(&t, bolt) && !on_stack(&t, copy));
+    assert_eq!(t.life(P0), 20);
+    // A spell and its copy from an ability (replicate).
+    supported("Pyromatics");
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Mountain", 4);
+    let pyro = t.hand(P1, "Pyromatics");
+    t.answer(P1, DecisionKind::OptionalCost, Answer::Number(1));
+    t.answer_yes(P1, false); // keep the copy's target
+    let pyro = t.cast(P1, pyro).target(P0).go();
+    t.settle();
+    t.resolve(); // replicate: one copy
+    let copy = crate::r_s25_common::spell_copies(&t)[0];
+    t.answer_targets(P0, &[obj(pyro), obj(copy)]);
+    cast_new(&mut t, P0, "Double Negative", &[]);
+    t.resolve();
+    assert!(!on_stack(&t, pyro) && !on_stack(&t, copy));
+    t.resolve_all();
     assert_eq!(t.life(P0), 20);
     // A spell that already resolved can't be targeted.
     let mut t = TestGame::new(2);

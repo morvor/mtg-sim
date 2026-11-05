@@ -263,7 +263,7 @@ fn counterlash_free_cast_pays_additional_costs_but_not_alternative_ones() {
 
 #[test]
 fn counterlash_ignores_type_timing_but_not_other_restrictions() {
-    cr!("608.2g", "307.1", "601.3");
+    cr!("608.2g", "302.1", "601.3");
     ruling!(
         "Counterlash",
         "You cast the card in your hand as part of the resolution of Counterlash. Timing restrictions based on the card’s type (such as creature or sorcery) are ignored. Other restrictions are not (such as “Cast [this card] only during combat”)."
@@ -301,8 +301,51 @@ fn counterlash_ignores_type_timing_but_not_other_restrictions() {
     lands_for_cost(&mut t, P0, "Counterlash");
     cast_new(&mut t, P0, "Counterlash", &[obj(bolt)]);
     t.answer_choose(P0, &[obj(mandate)]);
+    let from = t.asked().len();
     t.resolve();
-    assert!(!t.in_hand(P0, "Mandate of Peace"));
+    assert!(chosen_from(&t, from).iter().any(|c| c.contains(&obj(mandate))));
+    // Mandate of Peace was cast: it's on the stack, and resolving it ends combat, exiling
+    // itself.
+    let m = t.g.current(mandate);
+    assert!(on_stack(&t, m));
+    t.resolve();
+    assert_eq!(t.zone(t.g.current(m)), mtg_engine::object::Zone::Exile);
+}
+
+#[test]
+fn counterlash_free_cast_obeys_prohibitions_from_other_effects() {
+    cr!("608.2g", "601.3");
+    ruling!(
+        "Counterlash",
+        "Timing restrictions based on the card’s type (such as creature or sorcery) are ignored. Other restrictions are not"
+    );
+    supported("Rule of Law");
+    // Rule of Law ("Each player can't cast more than one spell each turn."): Counterlash is
+    // P0's spell this turn, so it can't cast another while Counterlash resolves.
+    let (mut t, bolt) = counterlash(false);
+    t.battlefield(P1, "Rule of Law");
+    let shock = t.hand(P0, "Shock");
+    lands_for_cost(&mut t, P0, "Counterlash");
+    cast_new(&mut t, P0, "Counterlash", &[obj(bolt)]);
+    t.answer_choose(P0, &[obj(shock)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    let from = t.asked().len();
+    t.resolve();
+    assert!(!on_stack(&t, bolt));
+    assert!(!chosen_from(&t, from).iter().any(|c| c.contains(&obj(shock))));
+    assert!(t.in_hand(P0, "Shock"));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    // Control: without Rule of Law the Shock is cast.
+    let (mut t, bolt) = counterlash(false);
+    let shock = t.hand(P0, "Shock");
+    lands_for_cost(&mut t, P0, "Counterlash");
+    cast_new(&mut t, P0, "Counterlash", &[obj(bolt)]);
+    t.answer_choose(P0, &[obj(shock)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.resolve();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
 }
 
 // --- Choices on resolution and optional payments -------------------------------------------
@@ -650,7 +693,7 @@ fn equinox_ignores_damage_that_kills_a_land_creature() {
 
 #[test]
 fn equinox_ignores_random_destruction() {
-    cr!("608.2b");
+    cr!("701.8a");
     ruling!(
         "Equinox",
         "Equinox will not counter a spell that has a random chance of destroying a land."
